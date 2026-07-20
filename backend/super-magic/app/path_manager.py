@@ -33,6 +33,8 @@ class PathManager(BasePathManager):
                 skills/      ← skills 配置
                 .env         ← Magic 全局环境变量
             .tmp/            ← 临时文件（按需创建）
+        ~/.magic/            ← 个人 Magic 目录（按需创建）
+            skills/          ← 个人 skills（按需创建）
 
     目录创建约定：
     - 框架层预创建目录由父类负责
@@ -457,6 +459,12 @@ class PathManager(BasePathManager):
         return cls._magic_skills_dir
 
     @classmethod
+    def get_personal_skills_dir(cls) -> Path:
+        """获取个人 skills 目录路径（~/.magic/skills，按需创建）"""
+        cls._ensure_app_initialization()
+        return Path.home() / cls._magic_dir_name / cls._magic_skills_dir_name
+
+    @classmethod
     def get_agents_skills_dir(cls) -> Path:
         """获取外部扩展 skills 目录路径（.workspace/.agents/skills，按需创建）"""
         cls._ensure_app_initialization()
@@ -473,6 +481,24 @@ class PathManager(BasePathManager):
         """获取个人级环境变量文件路径（~/.magic/super-magic.env）"""
         cls._ensure_app_initialization()
         return Path.home() / ".magic" / "super-magic.env"
+
+    @classmethod
+    def get_cli_manager_dir(cls) -> Path:
+        """获取第三方 CLI 持久化根目录（~/.magic/cli）。"""
+        cls._ensure_app_initialization()
+        return Path.home() / ".magic" / "cli"
+
+    @classmethod
+    def get_cli_manager_bin_dir(cls) -> Path:
+        """获取第三方 CLI 稳定命令入口目录（~/.magic/cli/bin）。"""
+        cls._ensure_app_initialization()
+        return cls.get_cli_manager_dir() / "bin"
+
+    @classmethod
+    def get_cli_manager_registry_file(cls) -> Path:
+        """获取第三方 CLI 持久化注册表文件路径。"""
+        cls._ensure_app_initialization()
+        return cls.get_cli_manager_dir() / "registry.json"
 
     @classmethod
     def get_process_env_paths(cls) -> list[Path]:

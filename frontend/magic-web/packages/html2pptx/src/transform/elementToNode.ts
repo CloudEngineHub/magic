@@ -1,36 +1,39 @@
-import type { ElementNode, PPTNode, PPTNodeBase, SlideConfig } from "../types/index"
-import { pxToInch } from "../utils/unit"
+import type { ElementNode } from "../ir/dom"
+import type { PPTNode, PPTNodeBase } from "../ir/node"
+import type { SlideConfig } from "../api/options"
+import { pxToInch } from "../shared/unit"
 import {
 	hasBackgroundImage,
 	hasMultipleGradientBackgrounds,
 	isImageElement,
-	isTableElement,
-	isMediaElement,
-	isCanvasOrSvgElement,
 	hasShapeContent,
-} from "../utils/element"
-import { calculateZOrder } from "../filter/sortByZOrder"
+} from "../shared/element-predicates"
+import { calculateZOrder } from "../collector/sortByZOrder"
 import {
 	parseShape,
 	parseFragmentedShapeNodes,
 	parseBorderLines,
 	parseImage,
 	parseTextNodes,
-	parseTable,
-	parseMedia,
 } from "../parsers"
+import { dispatchPrimaryParsers } from "../registry/element-registry"
 
 /**
- * 将 ElementNode 转换为 PPTNode 数组
- * 一个 DOM 元素可能产生多个绘制节点（如背景图 + 背景色 + 文本）
+ * Convert an ElementNode into PPTNode objects
+ *
+ * Node emission strategy:
+ *   1) Primary elements (IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG) -> dispatched by element-registry
+ *   2) General style artifacts (background image / shape / per-side border / text) -> appended in fixed pipeline order
+ *      (order-sensitive, affects zOrder and overlap between artifacts)
  */
 export function elementToNode(
 	node: ElementNode,
 	config: SlideConfig,
 	iWindow: Window,
+	options: { elementNodeMap?: Map<Element, ElementNode> } = {},
 ): PPTNode[] {
 	const nodes: PPTNode[] = []
-	const { rect, element } = node
+	const { rect } = node
 
 	const base: PPTNodeBase = {
 		type: "",
@@ -41,60 +44,24 @@ export function elementToNode(
 		zOrder: calculateZOrder(node),
 	}
 
-	// 1. 处理 IMG 标签
-	if (isImageElement(node)) {
-		const imageNode = parseImage(node, base, config, iWindow)
-		if (imageNode) nodes.push(imageNode)
-	}
+	const primary = dispatchPrimaryParsers(node, { base, config, iWindow })
+	if (primary.length > 0) nodes.push(...primary)
 
-	// 1.5 处理 TABLE 标签
-	if (isTableElement(node)) {
-		const tableNode = parseTable(node, base, config, iWindow)
-		if (tableNode) nodes.push(tableNode)
-	}
-
-	// 1.6 处理媒体元素 (VIDEO, AUDIO)
-	if (isMediaElement(node)) {
-		const mediaNode = parseMedia(node, base, config, iWindow)
-		if (mediaNode) nodes.push(mediaNode)
-	}
-
-	// 1.7 处理 Canvas/SVG 元素 - 使用截图方式
-	if (isCanvasOrSvgElement(node)) {
-		nodes.push({
-			...base,
-			type: "image",
-			src: "",
-			sizing: "stretch",
-			capture: "snapdom",
-			captureElement: element,
-		})
-	}
-
-	// 2. 处理背景图 (优先级最高，在底层)
 	const isMultiGradientBg = hasMultipleGradientBackgrounds(node.style.backgroundImage)
+	const hasBgImage = !isMultiGradientBg && hasBackgroundImage(node)
 
 	if (isMultiGradientBg) {
-		// 多值渐变背景（如网格线叠加效果）无法用 PPT 原生渐变还原
-		// 降级：仅截取元素 CSS 背景（不含子元素），保留视觉效果
-		nodes.push({
-			...base,
-			zOrder: base.zOrder - 1,
-			type: "image",
-			src: "",
-			sizing: "stretch",
-			capture: "snapdom",
-			captureElement: element,
-			captureBackgroundOnly: true,
-		})
-	} else if (hasBackgroundImage(node)) {
+		// The default implementation does not screenshot-fallback multi-gradient backgrounds; extensions can override this.
+	} else if (hasBgImage) {
 		const bgImageNode = parseImage(node, { ...base, zOrder: base.zOrder - 1 }, config, iWindow)
 		if (bgImageNode) nodes.push(bgImageNode)
 	}
 
-	// 3. 处理形状 (背景色、边框、圆角)
 	if (hasShapeContent(node)) {
-		const shapeBase = isImageElement(node) ? { ...base, zOrder: base.zOrder - 1 } : base
+		// CSS paint order: background-color < background-image < content
+		// When a background image exists, the shape fill needs a lower zOrder
+		const shapeZOrder = hasBgImage ? base.zOrder - 2 : (isImageElement(node) ? base.zOrder - 1 : base.zOrder)
+		const shapeBase = { ...base, zOrder: shapeZOrder }
 		const fragmentedShapeNodes = isMultiGradientBg ? [] : parseFragmentedShapeNodes(node, shapeBase, config)
 		if (fragmentedShapeNodes.length > 0) {
 			nodes.push(...fragmentedShapeNodes)
@@ -104,29 +71,34 @@ export function elementToNode(
 		}
 	}
 
-	// 3.05 处理单边边框（用线条模拟）
 	const borderLines = parseBorderLines(node, base, config)
 	if (borderLines.length > 0) nodes.push(...borderLines)
 
-	// 4. 处理文本：每个直接文本节点生成一个独立文本框
-	const textNodes = parseTextNodes(node, { ...base, zOrder: base.zOrder + 1 }, config)
+	const textBase = { ...base, zOrder: base.zOrder + 1 }
+	const textNodes = parseTextNodes(node, textBase, config, {
+		elementNodeMap: options.elementNodeMap,
+	})
 	if (textNodes.length > 0) nodes.push(...textNodes)
 
 	return nodes
 }
 
 /**
- * 批量转换元素
+ * Transform elements in batch
  */
 export function transformElements(
 	elements: ElementNode[],
 	config: SlideConfig,
 	iWindow: Window,
+	_options: {
+		textMergeMode?: unknown
+		elementNodeMap?: Map<Element, ElementNode>
+	} = {},
 ): PPTNode[] {
 	const allNodes: PPTNode[] = []
 
 	for (const el of elements) {
-		const nodes = elementToNode(el, config, iWindow)
+		const nodes = elementToNode(el, config, iWindow, _options)
 		allNodes.push(...nodes)
 	}
 

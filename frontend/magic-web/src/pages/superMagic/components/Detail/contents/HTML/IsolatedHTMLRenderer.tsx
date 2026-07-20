@@ -25,11 +25,23 @@ import {
 	virtualStorageRegistry,
 	type VirtualStorageRuntimeContext,
 } from "./utils/virtual-storage"
+import {
+	clearIframeRenderLifecycleTimeout,
+	createIframeRenderLifecycleState,
+	mapSandboxTelemetryToLifecycleReport,
+	reportIframeRenderLifecycleStage,
+	startIframeRenderLifecycleSession,
+	type IframeRenderLifecycleStage,
+	type IframeRenderLifecycleContext,
+} from "./telemetry/iframeRenderLifecycle"
+import {
+	HTML_SANDBOX_TELEMETRY_MESSAGE,
+	normalizeHtmlSandboxTelemetryMessage,
+} from "@dtyq/html-sandbox/telemetry"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
 import { StylePanel } from "./components/StylePanel"
-import { ZoomControls } from "./components/StylePanel/controls"
 import type { HTMLEditorV2Ref, SaveResult } from "./iframe-bridge/types/props"
 import type {
 	ImageUploadRequestPayload,
@@ -157,6 +169,10 @@ interface IsolatedHTMLRendererProps {
 	scaleContentDimensions?: CanonicalContentDimensions | null
 	waitForSettledContentMetrics?: boolean
 	autoFitScalePaddingFactor?: number
+	autoFitVerticalPadding?: number
+	manualScale?: number | null
+	onManualScaleChange?: (scale: number | null) => void
+	onScaleRatioChange?: (scale: number) => void
 	disableDynamicResourceInterception?: boolean
 	disableIframeDocumentClickBridge?: boolean // **重要** 控制HTML预览增强组件内部是否禁用 iframe 到父层的通用 DOM_CLICK 桥接
 	onRenderReady?: () => void //控制HTML预览组件的skeleton结束时机
@@ -175,6 +191,24 @@ interface IsolatedHTMLRendererProps {
 function isHtmlImagesUploadPath(path: string): boolean {
 	const normalized = normalizeProjectPath(path.trim().replace(/^\.\//, ""))
 	return normalized === "images" || normalized.startsWith("images/")
+}
+
+/**
+ * 根据目录和文件名，生成上传文件路径
+ * @param path
+ * @param fileName
+ * @returns
+ */
+function resolveImageUploadRequestPath(path: string, fileName: string): string {
+	const trimmedPath = path.trim() || "./images"
+	const pathWithoutTrailingSlash = trimmedPath.replace(/\/+$/, "")
+	const normalized = normalizeProjectPath(pathWithoutTrailingSlash.replace(/^\.\//, ""))
+	const isDirectoryPath = trimmedPath.endsWith("/") || normalized === "images"
+
+	if (!isDirectoryPath) return trimmedPath
+
+	const uploadDirectory = normalized === "images" ? "./images" : pathWithoutTrailingSlash
+	return `${uploadDirectory}/${fileName}`
 }
 
 interface MagicI18nLangSubscribeRequest {
@@ -201,6 +235,30 @@ const useStyles = createStyles(({ css }) => {
 				display: none;
 				width: 0;
 				height: 0;
+			}
+		`,
+		pptManualZoomScrollbar: css`
+			scrollbar-width: thin;
+			scrollbar-color: rgb(var(--muted-foreground-rgb) / 0.45) transparent;
+
+			&::-webkit-scrollbar {
+				width: 8px;
+				height: 8px;
+			}
+
+			&::-webkit-scrollbar-track {
+				background: transparent;
+			}
+
+			&::-webkit-scrollbar-thumb {
+				border: 2px solid transparent;
+				border-radius: 9999px;
+				background-color: rgb(var(--muted-foreground-rgb) / 0.45);
+				background-clip: content-box;
+			}
+
+			&::-webkit-scrollbar-thumb:hover {
+				background-color: rgb(var(--muted-foreground-rgb) / 0.7);
 			}
 		`,
 		iframe: css`
@@ -257,6 +315,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			scaleContentDimensions,
 			waitForSettledContentMetrics = false,
 			autoFitScalePaddingFactor = 1,
+			autoFitVerticalPadding = 0,
+			manualScale,
+			onManualScaleChange,
+			onScaleRatioChange,
 			disableDynamicResourceInterception = false,
 			disableIframeDocumentClickBridge = false,
 			onRenderReady,
@@ -318,6 +380,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const hasRenderedOnceRef = useRef(false) // 跟踪 iframe 是否至少已渲染一次
 		const hasNotifiedRenderReadyRef = useRef(false)
 		const hasIframeI18nSubscriberRef = useRef(false)
+		const renderLifecycleRef = useRef(createIframeRenderLifecycleState())
 		// Fallback timer: unblocks scaling when sandbox never sends contentMetrics
 		const contentMetricsFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -343,7 +406,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			isScaleReady,
 			isManualZoom,
 			handleScaleChange,
-			handleResetZoom,
 			getContentWrapperStyle,
 			getIframeStyle,
 		} = useZoomControls({
@@ -361,30 +423,116 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentMetricsOverride: scalingContentMetrics,
 			waitForSettledContentMetrics: shouldWaitForSettledContentMetrics,
 			autoFitScalePaddingFactor,
+			autoFitVerticalPadding,
+			manualScale,
+			onManualScaleChange,
+		})
+
+		useEffect(() => {
+			if (isPptRender && isScaleReady) {
+				onScaleRatioChange?.(scaleRatio)
+			}
+		}, [isPptRender, isScaleReady, onScaleRatioChange, scaleRatio])
+
+		const buildRenderLifecycleContext = useMemoizedFn((): IframeRenderLifecycleContext => {
+			const lifecycle = renderLifecycleRef.current
+
+			return {
+				sessionId: lifecycle.sessionId,
+				elapsedMs: Date.now() - lifecycle.startedAt,
+				sandboxType,
+				renderMode: externalRenderSiteUrl ? "cross-origin" : "same-origin",
+				shellUrl: htmlSandboxShellUrl,
+				shellOrigin: externalRenderSiteOrigin || window.location.origin,
+				targetOrigin: iframeTargetOrigin,
+				postMessageTargetStrategy,
+				source: {
+					depth: 0,
+					fileId: fileId || "",
+					path: htmlRelativeFolderPath || "",
+				},
+				fileId: fileId || "",
+				relativeFilePath: htmlRelativeFolderPath || "",
+				isPptRender: Boolean(isPptRender),
+				isFullscreen: Boolean(isFullscreen),
+				isEditMode: Boolean(isEditMode),
+				isPlaybackMode: Boolean(isPlaybackMode),
+				isVisible: Boolean(isVisible),
+				shouldApplyScaling,
+				isScaleReady,
+				iframeLoaded,
+				contentInjected,
+				contentLength: content.length,
+			}
+		})
+
+		const reportRenderLifecycleStage = useMemoizedFn(
+			(
+				stage: IframeRenderLifecycleStage,
+				extra: Record<string, unknown> = {},
+				options: { once?: boolean } = { once: true },
+			) => {
+				reportIframeRenderLifecycleStage({
+					logger,
+					lifecycle: renderLifecycleRef.current,
+					getContext: buildRenderLifecycleContext,
+					stage,
+					extra,
+					options,
+				})
+			},
+		)
+
+		const clearRenderLifecycleTimeout = useMemoizedFn(() => {
+			clearIframeRenderLifecycleTimeout(renderLifecycleRef.current)
+		})
+
+		const startRenderLifecycleSession = useMemoizedFn((reason: string) => {
+			startIframeRenderLifecycleSession({
+				logger,
+				lifecycleRef: renderLifecycleRef,
+				getContext: buildRenderLifecycleContext,
+				reason,
+			})
 		})
 
 		// 跟踪缩放准备就绪时机以避免后续渲染时闪烁
 		useEffect(() => {
 			if (isScaleReady && isVisible) {
 				hasRenderedOnceRef.current = true
+				reportRenderLifecycleStage("scale_ready")
 			}
-		}, [isScaleReady, isVisible])
+		}, [isScaleReady, isVisible, reportRenderLifecycleStage])
 		//控制HTML预览组件的skeleton结束时机
 		useEffect(() => {
 			hasNotifiedRenderReadyRef.current = false
+			if (content) {
+				startRenderLifecycleSession("content_changed")
+			} else {
+				clearRenderLifecycleTimeout()
+			}
 			setScalingContentMetrics(null)
 			if (contentMetricsFallbackTimerRef.current) {
 				clearTimeout(contentMetricsFallbackTimerRef.current)
 				contentMetricsFallbackTimerRef.current = null
 			}
-		}, [content])
+		}, [clearRenderLifecycleTimeout, content, startRenderLifecycleSession])
 
 		const notifyRenderReady = useMemoizedFn(() => {
 			if (hasNotifiedRenderReadyRef.current) return
 
 			hasNotifiedRenderReadyRef.current = true
+			reportRenderLifecycleStage("render_ready")
+			reportRenderLifecycleStage("render_success")
+			clearRenderLifecycleTimeout()
 			onRenderReady?.()
 		})
+
+		useEffect(() => {
+			return () => {
+				clearRenderLifecycleTimeout()
+			}
+		}, [clearRenderLifecycleTimeout])
 
 		// Handle zoom request from iframe (trackpad pinch-to-zoom)
 		const handleIframeZoomRequest = useMemoizedFn((delta: number) => {
@@ -900,6 +1048,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			},
 		)
 
+		const handleIframeElementLoad = useMemoizedFn(() => {
+			reportRenderLifecycleStage("shell_loaded")
+		})
+
+		const handleIframeElementError = useMemoizedFn(() => {
+			reportRenderLifecycleStage("shell_load_failed", {
+				reason: "iframe_element_error",
+			})
+		})
+
 		const refreshIframeContent = useMemoizedFn(() => {
 			if (!virtualStorageContext) return
 			hasIframeI18nSubscriberRef.current = false
@@ -934,11 +1092,27 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						},
 						iframeTargetOrigin,
 					)
+					reportRenderLifecycleStage("set_content_sent", {
+						fullContentLength: fullContent.length,
+						markerId,
+						dynamicInterceptionEnabled: Boolean(
+							dynamicResourceInterceptionConfig?.enable,
+						),
+					})
 					setProcessedSourceCode(fullContent)
 				} else {
+					reportRenderLifecycleStage("set_content_failed", {
+						reason: "iframe_or_content_window_unavailable",
+					})
 					console.error("iframe或contentWindow不可用")
 				}
 			} catch (postError) {
+				reportRenderLifecycleStage("set_content_failed", {
+					reason: "post_message_failed",
+					errorMessage:
+						postError instanceof Error ? postError.message : String(postError),
+					errorStack: postError instanceof Error ? postError.stack : undefined,
+				})
 				console.error("发送消息到iframe时出错:", postError)
 			}
 		})
@@ -1166,9 +1340,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						duration: 0,
 					})
 
+					const suggestedUploadPath = isStructuredRequest(data)
+						? data.suggestedPath
+						: "./images"
+					const uploadPath = resolveImageUploadRequestPath(suggestedUploadPath, file.name)
 					const uploadResult = await uploadImageFileToProject({
 						file,
-						path: isStructuredRequest(data) ? data.suggestedPath : "./images",
+						path: uploadPath,
 						fileSize: file.size,
 					})
 					const previewUrl = await fileToBase64(file)
@@ -1274,7 +1452,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"renderComplete",
 					"pageFullyLoaded",
 					"contentMetrics",
-					"iframeError",
 					"linkClicked",
 					"DOWNLOAD_IMAGE",
 					"REQUEST_IMAGE_UPLOAD",
@@ -1291,6 +1468,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"MAGIC_SEND_MESSAGE_REQUEST",
 					"MAGIC_I18N_LANG_SUBSCRIBE",
 					"DRAG_POSITION_RESPONSE",
+					HTML_SANDBOX_TELEMETRY_MESSAGE,
 					MEDIA_MESSAGE_TYPES.SPEAKER_EDITED,
 					MEDIA_MESSAGE_TYPES.IMAGE_URL_REQUEST,
 				]),
@@ -1325,16 +1503,20 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			const isExpectedSource = event.source === iframeRef.current?.contentWindow
 			const isAllowedType = messageType ? iframeMessageTypes.has(messageType) : false
 			const shouldStrictlyValidatePreviewSource =
-				Boolean(onContentMetrics || onRenderReady) &&
 				Boolean(messageType) &&
 				[
 					"iframeReady",
+					"pageLoaded",
 					"contentLoaded",
 					"domReady",
 					"renderComplete",
 					"pageFullyLoaded",
 					"contentMetrics",
 				].includes(messageType)
+			const isAllowedTelemetryOrigin =
+				messageType === HTML_SANDBOX_TELEMETRY_MESSAGE &&
+				Boolean(event.origin) &&
+				(event.origin === iframeTargetOrigin || event.origin === window.location.origin)
 
 			// 只处理来自iframe的消息，兼容钉钉 WebView source 不一致
 			if (!isExpectedSource && !isAllowedType) {
@@ -1365,38 +1547,38 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			try {
 				// 处理旧协议消息（没有 version 字段的）
 
-				if (event.data && event.data.type === "iframeError") {
-					const payload = event.data.payload || {}
-					logger.error(
-						"iframe 内部错误",
-						buildMessageLogContext(event, messageType, {
-							isExpectedSource,
-							isAllowedType,
-							errorType: payload.errorType,
-							errorMessage: payload.message,
-							errorStack: payload.stack,
-							errorSource: payload.source,
-							errorLineno: payload.lineno,
-							errorColno: payload.colno,
-						}),
+				if (event.data && event.data.type === HTML_SANDBOX_TELEMETRY_MESSAGE) {
+					const telemetryMessage = normalizeHtmlSandboxTelemetryMessage(event.data)
+					if (!telemetryMessage || !isAllowedTelemetryOrigin) return
+					const lifecycleReport = mapSandboxTelemetryToLifecycleReport(
+						telemetryMessage.payload,
+						event.origin,
 					)
+
+					if (lifecycleReport) {
+						reportRenderLifecycleStage(lifecycleReport.stage, lifecycleReport.extra, {
+							once: false,
+						})
+					}
 					return
 				}
 
 				if (event.data && event.data.type === "iframeReady") {
 					// iframe已准备好接收内容
+					reportRenderLifecycleStage("iframe_ready", {
+						origin: event.origin,
+					})
 					setIframeLoaded(true)
-				} else if (
-					event.data &&
-					event.data.type === "pageLoaded" &&
-					(externalRenderSiteOrigin
-						? event.origin === externalRenderSiteOrigin
-						: isExpectedSource)
-				) {
+				} else if (event.data && event.data.type === "pageLoaded") {
 					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
+					reportRenderLifecycleStage("page_loaded", {
+						origin: event.origin,
+						isExpectedSource,
+					})
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "contentLoaded") {
 					// 内容已写入iframe，但可能还未完成渲染
+					reportRenderLifecycleStage("content_loaded")
 					// 如果处于编辑模式，重置 contentInjected 状态以触发脚本重新注入
 					// 因为 setContent 会清除 iframe 中的所有脚本，需要重新注入编辑脚本
 					if (isEditMode) {
@@ -1410,11 +1592,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 				} else if (event.data && event.data.type === "domReady") {
 					// DOM树构建完成
+					reportRenderLifecycleStage("dom_ready")
 				} else if (event.data && event.data.type === "renderComplete") {
 					// iframe渲染真正完成，现在可以安全地计算缩放比例
+					reportRenderLifecycleStage("render_complete")
 					notifyRenderReady()
 				} else if (event.data && event.data.type === "pageFullyLoaded") {
 					// 页面完全加载完成（包括图片、样式表等）
+					reportRenderLifecycleStage("page_fully_loaded")
 					notifyRenderReady()
 					// When sandbox doesn't support contentMetrics, unblock scaling after timeout
 					if (shouldWaitForSettledContentMetrics) {
@@ -1442,6 +1627,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						contentHeight > 0
 					) {
 						const metricsPhase = event.data?.phase === "settled" ? "settled" : "initial"
+						reportRenderLifecycleStage(
+							metricsPhase === "settled"
+								? "content_metrics_settled"
+								: "content_metrics_initial",
+							{
+								contentWidth,
+								contentHeight,
+								hasHorizontalOverflow: event.data?.hasHorizontalOverflow === true,
+								hasVerticalOverflow: event.data?.hasVerticalOverflow === true,
+								verticalScrollbarWidth: Math.max(
+									0,
+									Number(event.data?.verticalScrollbarWidth) || 0,
+								),
+							},
+						)
 						// Real settled metrics arrived — cancel fallback timer
 						if (metricsPhase === "settled" && contentMetricsFallbackTimerRef.current) {
 							clearTimeout(contentMetricsFallbackTimerRef.current)
@@ -1630,20 +1830,69 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 		})
 		// 处理 iframe 内容更新：同源 /husky.html 和跨域渲染站都必须等 shell ready。
+		const injectIframeContent = useMemoizedFn(
+			(reason: "content_changed" | "visible_resume") => {
+				hasRenderedOnceRef.current = false
+				try {
+					refreshIframeContent()
+					setContentInjected(true)
+					reportRenderLifecycleStage(
+						"content_injected",
+						{
+							reason,
+						},
+						{ once: reason !== "visible_resume" },
+					)
+				} catch (error) {
+					reportRenderLifecycleStage("content_inject_failed", {
+						reason: "refresh_iframe_content_failed",
+						errorMessage: error instanceof Error ? error.message : String(error),
+						errorStack: error instanceof Error ? error.stack : undefined,
+					})
+					console.error("处理iframe内容时出错:", error)
+					setContentInjected(false)
+				}
+			},
+		)
+
 		useDeepCompareEffect(() => {
 			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
 			if (!iframeLoaded) return
 			if (!virtualStorageContext) return
 
-			hasRenderedOnceRef.current = false
-			try {
-				refreshIframeContent()
-				setContentInjected(true)
-			} catch (error) {
-				console.error("处理iframe内容时出错:", error)
-				setContentInjected(false)
-			}
-		}, [content, iframeLoaded, htmlSandboxShellUrl, virtualStorageContext])
+			injectIframeContent("content_changed")
+		}, [
+			content,
+			iframeLoaded,
+			htmlSandboxShellUrl,
+			injectIframeContent,
+			sandboxType,
+			virtualStorageContext,
+		])
+
+		const previousIsVisibleRef = useRef(Boolean(isVisible))
+		useEffect(() => {
+			const wasVisible = previousIsVisibleRef.current
+			const nextVisible = Boolean(isVisible)
+			previousIsVisibleRef.current = nextVisible
+
+			if (!isPptRender) return
+			if (!nextVisible || wasVisible) return
+			if (hasNotifiedRenderReadyRef.current) return
+			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
+			if (!iframeLoaded) return
+			if (!virtualStorageContext) return
+
+			injectIframeContent("visible_resume")
+		}, [
+			content,
+			iframeLoaded,
+			injectIframeContent,
+			isPptRender,
+			isVisible,
+			sandboxType,
+			virtualStorageContext,
+		])
 
 		useEffect(() => {
 			if (!isPptRender) return
@@ -1748,17 +1997,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								toolbarClassName,
 							)}
 						/>
-						{/* 缩放控件 - 绝对定位在工具栏下方 */}
-						{isPptRender && (
-							<div className="absolute bottom-[10px] right-[10px] z-50 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60">
-								<ZoomControls
-									currentScale={scaleRatio}
-									onScaleChange={handleScaleChange}
-									onResetZoom={handleResetZoom}
-									disabled={isSaving}
-								/>
-							</div>
-						)}
 					</>
 				)}
 
@@ -1767,6 +2005,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					ref={containerRef}
 					className={cx(
 						hideVerticalScroll && styles.hiddenScrollbar,
+						isPptRender && isManualZoom && styles.pptManualZoomScrollbar,
 						cn(
 							"relative flex min-h-0 w-full flex-1 flex-col",
 							shouldApplyScaling && isFullscreen && "bg-black",
@@ -1801,6 +2040,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									)}
 									title="Isolated HTML Content"
 									src={htmlSandboxShellUrl}
+									onLoad={handleIframeElementLoad}
+									onError={handleIframeElementError}
 									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 									allow="fullscreen"
 									allowFullScreen

@@ -144,6 +144,18 @@ export const RequestUrl = {
 	getAgentMarketList: "/api/v2/admin/super-magic/agents/markets/queries",
 	/** 更新员工市场信息 */
 	updateAgentMarketInfo: "/api/v2/admin/super-magic/agents/markets/${id}",
+	/** 更新员工市场分类 */
+	updateAgentMarketCategoryRelation: "/api/v2/admin/super-magic/agents/markets/${id}/category",
+	/** 员工市场分类列表 */
+	getAgentMarketCategoryList: "/api/v2/admin/super-magic/agents/categories/queries",
+	/** 员工市场分类详情 */
+	getAgentMarketCategoryDetail: "/api/v2/admin/super-magic/agents/categories/${id}",
+	/** 创建员工市场分类 */
+	createAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories",
+	/** 更新员工市场分类 */
+	updateAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories/${id}",
+	/** 删除员工市场分类 */
+	deleteAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories/${id}",
 	/** Skill版本列表 */
 	getSkillVersionList: "/api/v1/admin/skills/versions/queries",
 	/** Skill 市场列表 */
@@ -161,6 +173,53 @@ export const RequestUrl = {
 	testAiPowerConnection: "/api/v1/admin/ai-abilities/connectivity-test",
 	/** 获取全局配置 */
 	getGlobalConfig: "/api/v1/settings/global",
+	/** —————— 平台管理 - PPT模板 —————— */
+	/** 查询PPT模板列表 */
+	querySlidesTemplates: "/api/v1/admin/slides-templates/queries",
+	/** 获取PPT模板详情 */
+	getSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 创建PPT模板 */
+	createSlidesTemplate: "/api/v1/admin/slides-templates",
+	/** 更新PPT模板 */
+	updateSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 更新PPT模板状态 */
+	updateSlidesTemplateStatus: "/api/v1/admin/slides-templates/${id}/status",
+	/** 更新PPT模板排序 */
+	updateSlidesTemplateSort: "/api/v1/admin/slides-templates/${id}/sort",
+	/** 删除PPT模板 */
+	deleteSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 更新PPT模板标签 */
+	updateSlidesTemplateTags: "/api/v1/admin/slides-templates/${id}/tags",
+	/** 查询PPT模板分类列表 */
+	querySlidesTemplateCategories: "/api/v1/admin/slides-template-categories/queries",
+	/** 获取PPT模板分类详情 */
+	getSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 创建PPT模板分类 */
+	createSlidesTemplateCategory: "/api/v1/admin/slides-template-categories",
+	/** 更新PPT模板分类 */
+	updateSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 更新PPT模板分类状态 */
+	updateSlidesTemplateCategoryStatus: "/api/v1/admin/slides-template-categories/${id}/status",
+	/** 更新PPT模板分类排序 */
+	updateSlidesTemplateCategorySort: "/api/v1/admin/slides-template-categories/${id}/sort",
+	/** 删除PPT模板分类 */
+	deleteSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 查询PPT模板标签列表 */
+	querySlidesTemplateTags: "/api/v1/admin/slides-template-tags/queries",
+	/** 获取PPT模板标签树 */
+	getSlidesTemplateTagTree: "/api/v1/admin/slides-template-tags/tree",
+	/** 获取PPT模板标签详情 */
+	getSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
+	/** 创建PPT模板标签 */
+	createSlidesTemplateTag: "/api/v1/admin/slides-template-tags",
+	/** 更新PPT模板标签 */
+	updateSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
+	/** 更新PPT模板标签状态 */
+	updateSlidesTemplateTagStatus: "/api/v1/admin/slides-template-tags/${id}/status",
+	/** 更新PPT模板标签排序 */
+	updateSlidesTemplateTagSort: "/api/v1/admin/slides-template-tags/${id}/sort",
+	/** 删除PPT模板标签 */
+	deleteSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
 
 	/** 权限 */
 	/** 获取我的权限列表 */

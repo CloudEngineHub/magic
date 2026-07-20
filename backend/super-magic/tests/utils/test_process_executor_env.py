@@ -75,3 +75,20 @@ def test_build_filtered_env_loads_env_paths_in_order(tmp_path, monkeypatch):
     assert env["MOCK_SKILL_ONLY"] == "mock-skill-only"
     assert env["MOCK_WORKSPACE_ONLY"] == "mock-workspace-only"
     assert env["MOCK_PERSONAL_ONLY"] == "mock-personal-only"
+
+
+def test_build_filtered_env_prepends_cli_manager_bin(tmp_path, monkeypatch):
+    process_executor, path_manager = _import_process_executor(monkeypatch)
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    cli_bin = tmp_path / "persistent" / "cli" / "bin"
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setattr(path_manager, "get_project_root", lambda: project_root)
+    monkeypatch.setattr(path_manager, "get_process_env_paths", lambda: [])
+    monkeypatch.setattr(path_manager, "get_personal_env_file", lambda: tmp_path / "personal.env")
+    monkeypatch.setattr(path_manager, "get_cli_manager_bin_dir", lambda: cli_bin)
+
+    env = process_executor._build_filtered_env()
+
+    assert env["PATH"].split(":")[0] == str(cli_bin)

@@ -33,16 +33,16 @@ describe("MobileShellSidebarToggleButton", () => {
 	it("opens the sidebar and shows the close affordance when the drawer is open", () => {
 		render(<MobileShellSidebarToggleButton testId="shell-menu-toggle" />)
 
-		const toggle = screen.getByTestId("shell-menu-toggle")
+		const toggle = screen.getByTestId("shell-menu-toggle-open")
 		expect(toggle).toHaveAttribute("aria-label", "打开菜单")
 
 		fireEvent.click(toggle)
 		expect(shellOutletMock.openSidebar).toHaveBeenCalledTimes(1)
 
 		shellOutletMock.isSidebarOpen = true
-		render(<MobileShellSidebarToggleButton testId="shell-menu-toggle-open" />)
+		render(<MobileShellSidebarToggleButton testId="shell-menu-toggle" />)
 
-		expect(screen.getByTestId("shell-menu-toggle-open")).toHaveAttribute(
+		expect(screen.getByTestId("shell-menu-toggle-close")).toHaveAttribute(
 			"aria-label",
 			"关闭侧栏",
 		)
@@ -53,10 +53,9 @@ describe("MobileShellSidebarToggleButton", () => {
 
 		render(<MobileShellSidebarToggleButton testId="shell-menu-toggle" />)
 
-		fireEvent.click(screen.getByTestId("shell-menu-toggle"))
+		fireEvent.click(screen.getByTestId("shell-menu-toggle-close"))
 
 		expect(shellOutletMock.closeSidebar).toHaveBeenCalledTimes(1)
 		expect(shellOutletMock.openSidebar).not.toHaveBeenCalled()
 	})
-
 })

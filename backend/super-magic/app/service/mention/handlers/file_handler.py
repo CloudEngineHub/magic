@@ -1,7 +1,9 @@
 """File mention handler"""
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from app.path_manager import PathManager
 from app.service.mention.base import BaseMentionHandler, logger
 
 if TYPE_CHECKING:
@@ -10,6 +12,12 @@ from app.service.mention.utils.canvas_project_detector import find_parent_canvas
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
+
+_TEMPORARY_FILE_NOTIFICATION = (
+    "These files are stored in `.tmp` and will be removed automatically by the expiration policy. "
+    "If any file or derived result must persist, move or copy it to a workspace path outside `.tmp` before "
+    "completing the task."
+)
 
 _PROJECT_TYPE_LABELS = {
     "design": "canvas",
@@ -37,8 +45,27 @@ def _file_category(file_path: str) -> str:
     return "file"
 
 
+def _is_temporary_workspace_path(file_path: str) -> bool:
+    """判断文件路径是否位于 PathManager 定义的工作区临时目录下。"""
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = PathManager.get_workspace_dir() / path
+
+    normalized_path = Path(os.path.normpath(str(path)))
+    temporary_directory = Path(os.path.normpath(str(PathManager.get_tmp_dir())))
+    try:
+        normalized_path.relative_to(temporary_directory)
+        return True
+    except ValueError:
+        return False
+
+
 class FileHandler(BaseMentionHandler):
     """处理文件类型的mention（file、project_file、upload_file）"""
+
+    def __init__(self) -> None:
+        """初始化当前构建周期内的临时文件路径集合。"""
+        self._temporary_file_paths: List[str] = []
 
     def get_type(self) -> str:
         return "file"
@@ -50,9 +77,38 @@ class FileHandler(BaseMentionHandler):
             return _PROJECT_TYPE_TIPS[project_type]
         return "Read and understand the referenced file or directory before proceeding"
 
+    async def get_final_tip(self, agent_context: Optional["AgentContext"] = None) -> str:
+        """在全部文件 mention 处理完成后统一生成临时文件提示。"""
+        if not self._temporary_file_paths:
+            return ""
+
+        notification = self._build_temporary_file_notification()
+        self._temporary_file_paths.clear()
+        if agent_context is not None:
+            try:
+                agent_context.horizon.push_notification(
+                    "temporary_file_mention",
+                    notification,
+                )
+                return ""
+            except Exception as error:
+                logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
+        return f"{notification}\n\nRead and understand the referenced files before proceeding."
+
+    def _build_temporary_file_notification(self) -> str:
+        """构建包含临时文件列表的统一英文提示。"""
+        file_list = "\n".join(f"- `{file_path}`" for file_path in self._temporary_file_paths)
+        return (
+            "The user directly submitted the following files through the chat input:\n"
+            f"{file_list}\n\n{_TEMPORARY_FILE_NOTIFICATION}"
+        )
+
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
         file_path = mention.get("file_path", "") or ""
         file_url = mention.get("file_url", "")
+
+        if _is_temporary_workspace_path(original_file_path) and file_path not in self._temporary_file_paths:
+            self._temporary_file_paths.append(file_path)
 
         context_lines = [f"{index}. [@file_path:{file_path}]"]
 

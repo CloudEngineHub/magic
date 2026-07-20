@@ -1,23 +1,22 @@
-"""SystemSkillsProvider：从 agents/skills/ 和 agents/crews/*/skills/ 目录加载内置系统 skill
+"""SystemSkillsProvider：聚合本地已可直接读取的 skill
 
-系统 skill 已内置于项目中，无需安装，最高优先级。
-同时扫描数字员工（crew）的专属 skill 目录，对外统一以 system 来源呈现。
+本地 skill 无需安装，对外统一以 system 来源呈现。
+扫描目录与 GlobalSkillManager 保持一致，确保 find_skills 和 read_skills 的结果一致。
 搜索时联合匹配 name / description / name-cn / description-cn / 目录名。
 """
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 from agentlang.logger import get_logger
 from agentlang.skills.loader import SkillLoader
-from app.utils.async_file_utils import async_exists, async_iterdir
 from app.core.skill_utils.providers.base import (
     FetchedSkill,
     SkillCandidate,
     SkillProvider,
     SkillProviderId,
 )
+from app.utils.async_file_utils import async_exists, async_iterdir
 
 logger = get_logger(__name__)
 
@@ -25,29 +24,15 @@ _loader = SkillLoader()
 
 
 class SystemSkillsProvider(SkillProvider):
-    """内置系统 skill 来源（agents/skills/ 及 agents/crews/*/skills/ 目录）"""
+    """本地可用 skill 聚合来源。"""
 
     id = SkillProviderId.SYSTEM
 
-    def _get_skills_root(self) -> Path:
-        from app.path_manager import PathManager
-        return PathManager.get_agents_dir() / "skills"
+    def _get_local_skills_roots(self) -> list[Path]:
+        """返回 read_skills 当前可读取的全部本地 Skill 根目录。"""
+        from app.core.skill_utils.manager import GlobalSkillManager
 
-    def _get_crew_skills_roots(self) -> list[Path]:
-        """返回所有 crew 的 skills 目录路径列表（agents/crews/*/skills/）"""
-        from app.path_manager import PathManager
-        crews_root = PathManager.get_crew_root_dir()
-        if not crews_root.exists():
-            return []
-        try:
-            return [
-                entry / "skills"
-                for entry in crews_root.iterdir()
-                if entry.is_dir() and not entry.name.startswith(".")
-            ]
-        except Exception as e:
-            logger.warning(f"[system_skills] 遍历 crews 目录失败: {e}")
-            return []
+        return GlobalSkillManager.get_skills_dirs()
 
     async def _scan_dir(self, skills_dir: Path) -> list[dict]:
         """扫描单个 skills 目录，返回 skill 元数据列表"""
@@ -83,13 +68,18 @@ class SystemSkillsProvider(SkillProvider):
         return results
 
     async def _load_all(self) -> list[dict]:
-        """扫描 agents/skills/ 和所有 crew skills 目录，返回完整 skill 元数据列表"""
-        results = await self._scan_dir(self._get_skills_root())
+        """按读取优先级扫描全部本地目录，并对同名目录去重。"""
+        results: list[dict] = []
+        loaded_names: set[str] = set()
 
-        crew_roots = await asyncio.to_thread(self._get_crew_skills_roots)
-        for crew_root in crew_roots:
-            crew_results = await self._scan_dir(crew_root)
-            results.extend(crew_results)
+        for skills_root in self._get_local_skills_roots():
+            root_results = await self._scan_dir(skills_root)
+            for skill in root_results:
+                normalized_name = skill["dir_name"].casefold()
+                if normalized_name in loaded_names:
+                    continue
+                results.append(skill)
+                loaded_names.add(normalized_name)
 
         return results
 
@@ -142,19 +132,9 @@ class SystemSkillsProvider(SkillProvider):
                     source_url=f"system://{skill_id}",
                 )
 
-        # 先查 agents/skills/
-        local_path = self._get_skills_root() / skill_id
-        if await async_exists(local_path):
-            return FetchedSkill(
-                local_path=local_path,
-                version="system",
-                source_url=f"system://{skill_id}",
-            )
-
-        # 再查 crew skills 目录
-        crew_roots = await asyncio.to_thread(self._get_crew_skills_roots)
-        for crew_root in crew_roots:
-            candidate = crew_root / skill_id
+        # 按 read_skills 的读取优先级查找全部本地目录。
+        for skills_root in self._get_local_skills_roots():
+            candidate = skills_root / skill_id
             if await async_exists(candidate):
                 return FetchedSkill(
                     local_path=candidate,
@@ -163,7 +143,7 @@ class SystemSkillsProvider(SkillProvider):
                 )
 
         raise FileNotFoundError(
-            f"[system_skills] skill '{skill_id}' 不存在于 agents/skills/ 或任何 crew skills 目录"
+            f"[system_skills] skill '{skill_id}' 不存在于任何本地 Skill 目录"
         )
 
     async def resolve_latest(self, ref: SkillCandidate | str) -> str | None:

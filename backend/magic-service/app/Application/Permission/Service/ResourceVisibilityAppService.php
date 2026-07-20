@@ -147,6 +147,7 @@ class ResourceVisibilityAppService extends AbstractKernelAppService
     ): void {
         switch ($resourceType) {
             case ResourceType::SUPER_MAGIC_AGENT:
+            case ResourceType::APPLICATION_MENU:
                 $this->checkOrgAdmin($permissionDataIsolation);
                 break;
             default:

@@ -1,5 +1,4 @@
 import { useMemoizedFn } from "ahooks"
-import { isEmpty } from "lodash-es"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -26,7 +25,6 @@ const FOREGROUND_SYNC_DEDUPE_MS = 1000
 
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
-	checkNowDebounced?: () => void
 }
 
 interface PullMessageParams {
@@ -38,6 +36,8 @@ interface PullMessageParams {
 	updatePageToken?: boolean
 	refreshMessages?: boolean
 	callback?: () => void
+	/** 仅权威全量同步传入；过期代次响应不得写回 store。 */
+	syncGeneration?: number
 }
 
 interface PullMessageResult {
@@ -97,7 +97,7 @@ function shouldContinueForegroundRecovery(pulledItems: any[], recoveryAnchorAppM
 /**
  * 管理当前话题的消息拉取、增量同步、前台恢复和分页加载。
  */
-export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicMessagesParams) {
+export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 	// topic_id和page_token的映射
 	const topicPageTokenMap = useRef<Record<string, string>>({})
 	const topicNotHaveMoreMessageMap = useRef<Record<string, boolean>>({})
@@ -180,26 +180,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					order,
 				})
 				const pulledItems = response?.items || []
-				const renderableMessages = pulledItems
-					.filter(shouldIncludeFetchedMessage)
-					?.map((item: any) => {
-						const data = item?.seq?.message?.general_agent_card
-							? item?.seq?.message?.general_agent_card
-							: item?.seq?.message
-						return {
-							...data,
-							seq_id: item?.seq?.seq_id,
-							messageStatus: item?.seq?.message?.status,
-						}
-					})
-					.filter((item: any) => !isEmpty(item))
-				const hasAttachments = renderableMessages.some(
-					(item: any) =>
-						item?.attachments?.length > 0 || item?.tool?.attachments?.length > 0,
-				)
-				if (hasAttachments) {
-					checkNowDebounced?.()
-				}
 				if (updatePageToken && response?.page_token) {
 					// 服务端返回的 page_token 既供“手动加载更多”继续向旧消息翻页，
 					// 也供前台恢复场景继续拼接第二段补拉窗口。
@@ -243,6 +223,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			updatePageToken = true,
 			refreshMessages = false,
 			callback,
+			syncGeneration,
 		}: PullMessageParams) => {
 			if (
 				topicNotHaveMoreMessageMap.current[chat_topic_id] &&
@@ -252,9 +233,12 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				console.log("没有更多消息")
 				if (selectedTopicRef.current?.chat_topic_id === chat_topic_id)
 					setIsSelectedTopicMessagesReady(true)
-				return
+				return {
+					didPullSucceed: true,
+					pulledItems: [],
+				} satisfies PullMessageResult
 			}
-			const { didPullSucceed, pulledItems } = await fetchMessagesPage({
+			const pullResult = await fetchMessagesPage({
 				conversation_id,
 				chat_topic_id,
 				page_token,
@@ -263,7 +247,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				updatePageToken,
 				callback,
 			})
-			if (!didPullSucceed) return
+			const { didPullSucceed, pulledItems } = pullResult
+			if (!didPullSucceed) return pullResult
+			if (
+				syncGeneration !== undefined &&
+				!superMagicStore.isTopicSyncCurrent(chat_topic_id, syncGeneration)
+			) {
+				return pullResult
+			}
 			if (refreshMessages) {
 				// 增量模式保留现有 messages/buffer 状态，只把最新节点逐条灌进 store，
 				// 让现有的去重、流式和 buffer 逻辑继续生效。
@@ -282,6 +273,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (selectedTopicRef.current?.chat_topic_id === chat_topic_id) {
 				setIsSelectedTopicMessagesReady(true)
 			}
+			return pullResult
 		},
 	)
 
@@ -308,11 +300,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		const topicMeta = superMagicStore.topicMeta.get(topicId)
 		// buffer 存的是队列对象，不是数组；恢复判断只需要知道是否还有未消费消息。
 		const hasBufferedMessages = (superMagicStore.buffer.get(topicId)?.messages?.length ?? 0) > 0
+		const hasPendingStream = (topicMeta?.content?.size ?? 0) > 0
 		const legacyTopicStatus = (topic as Topic & { status?: TaskStatus }).status
 		const topicTaskStatus = topic.task_status || legacyTopicStatus
 		return (
 			topicTaskStatus === TaskStatus.RUNNING ||
 			hasBufferedMessages ||
+			hasPendingStream ||
 			Boolean(topicMeta?.isStream) ||
 			Boolean(topicMeta?.isStreamLoading)
 		)
@@ -323,13 +317,18 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	 * 除前台恢复外，其余场景继续使用既有的一次请求模型。
 	 */
 	const updateTopicMessages = useMemoizedFn(
-		({
+		async ({
 			refreshMessages = false,
 			messageCount = FULL_TOPIC_SYNC_MESSAGE_COUNT,
-		}: { refreshMessages?: boolean; messageCount?: number } = {}) => {
+			syncGeneration,
+		}: {
+			refreshMessages?: boolean
+			messageCount?: number
+			syncGeneration?: number
+		} = {}): Promise<PullMessageResult> => {
 			// if (selectedTopic?.id && selectedWorkspace) {
 			if (selectedTopic?.id) {
-				pullMessage({
+				return pullMessage({
 					conversation_id: selectedTopic.chat_conversation_id,
 					chat_topic_id: selectedTopic.chat_topic_id,
 					page_token: "",
@@ -337,7 +336,12 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					limit: messageCount,
 					updatePageToken: true,
 					refreshMessages,
+					syncGeneration,
 				})
+			}
+			return {
+				didPullSucceed: false,
+				pulledItems: [],
 			}
 		},
 	)
@@ -366,61 +370,96 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		// 这里做一个很轻的去重，避免同一轮恢复打出多次全量回拉。
 		if (now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
 		lastForegroundSyncAtRef.current = now
-		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(
-			currentSelectedTopic.chat_topic_id,
-		)
-		let aggregatedPulledItems: any[] = []
-		const firstPageResult = await fetchMessagesPage({
-			conversation_id: currentSelectedTopic.chat_conversation_id,
-			chat_topic_id: currentSelectedTopic.chat_topic_id,
-			page_token: "",
-			order: "desc",
-			limit: FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT,
-			updatePageToken: true,
-		})
-		if (!firstPageResult.didPullSucceed) return
-		aggregatedPulledItems = dedupePulledItemsByAppMessageId(
-			firstPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
-		)
-
-		const shouldFetchSecondPage =
-			shouldContinueForegroundRecovery(
-				firstPageResult.pulledItems,
-				recoveryAnchorAppMessageId,
-			) && Boolean(firstPageResult.response?.page_token)
-		if (shouldFetchSecondPage) {
-			const secondPageResult = await fetchMessagesPage({
+		const topicId = currentSelectedTopic.chat_topic_id
+		const syncGeneration =
+			typeof superMagicStore.beginTopicSync === "function"
+				? superMagicStore.beginTopicSync(topicId)
+				: null
+		let didSyncSucceed = false
+		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(topicId)
+		try {
+			let aggregatedPulledItems: any[] = []
+			const firstPageResult = await fetchMessagesPage({
 				conversation_id: currentSelectedTopic.chat_conversation_id,
-				chat_topic_id: currentSelectedTopic.chat_topic_id,
-				page_token: firstPageResult.response?.page_token || "",
+				chat_topic_id: topicId,
+				page_token: "",
 				order: "desc",
-				limit: FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT,
+				limit: FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT,
 				updatePageToken: true,
 			})
-			if (secondPageResult.didPullSucceed) {
-				aggregatedPulledItems = dedupePulledItemsByAppMessageId([
-					...aggregatedPulledItems,
-					...secondPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
-				])
+			if (!firstPageResult.didPullSucceed) return
+			if (
+				syncGeneration !== null &&
+				!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
+			)
+				return
+			aggregatedPulledItems = dedupePulledItemsByAppMessageId(
+				firstPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
+			)
+
+			const shouldFetchSecondPage =
+				shouldContinueForegroundRecovery(
+					firstPageResult.pulledItems,
+					recoveryAnchorAppMessageId,
+				) && Boolean(firstPageResult.response?.page_token)
+			if (shouldFetchSecondPage) {
+				const secondPageResult = await fetchMessagesPage({
+					conversation_id: currentSelectedTopic.chat_conversation_id,
+					chat_topic_id: topicId,
+					page_token: firstPageResult.response?.page_token || "",
+					order: "desc",
+					limit: FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT,
+					updatePageToken: true,
+				})
+				if (
+					syncGeneration !== null &&
+					!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
+				)
+					return
+				if (secondPageResult.didPullSucceed) {
+					aggregatedPulledItems = dedupePulledItemsByAppMessageId([
+						...aggregatedPulledItems,
+						...secondPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
+					])
+				}
+			}
+
+			if (
+				syncGeneration !== null &&
+				!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
+			)
+				return
+			// 前台恢复是“权威快照重建”场景，因此把两段分页结果先聚合后一次性写回，
+			// 避免中间态列表先显示一半，再被第二次分页重排。
+			superMagicStore.initializeMessages(topicId, aggregatedPulledItems)
+			didSyncSucceed = true
+			if (!initialLoadedTopicsRef.current.has(topicId)) {
+				initialLoadedTopicsRef.current.add(topicId)
+				// 恢复请求是异步的，避免旧话题回包提前关闭新话题的初始 loading。
+				if (selectedTopicRef.current?.chat_topic_id === topicId)
+					setIsMessagesInitialLoading(false)
+			}
+			if (selectedTopicRef.current?.chat_topic_id === topicId) {
+				setIsSelectedTopicMessagesReady(true)
+			}
+			delete foregroundRecoveryAnchorRef.current[topicId]
+		} finally {
+			const completed =
+				syncGeneration === null
+					? true
+					: superMagicStore.completeTopicSync(topicId, syncGeneration, {
+							succeeded: didSyncSucceed,
+							taskStatus:
+								selectedTopicRef.current?.task_status ||
+								selectedTopicRef.current?.status,
+							latestSeqId: didSyncSucceed
+								? superMagicStore.getLatestMessageSeqId(topicId)
+								: undefined,
+						})
+			if (completed && selectedTopicRef.current?.chat_topic_id === topicId) {
+				superMagicStore.setActiveTopicId(topicId)
 			}
 		}
-
-		// 前台恢复是“权威快照重建”场景，因此把两段分页结果先聚合后一次性写回，
-		// 避免中间态列表先显示一半，再被第二次分页重排。
-		superMagicStore.initializeMessages(
-			currentSelectedTopic.chat_topic_id,
-			aggregatedPulledItems,
-		)
-		if (!initialLoadedTopicsRef.current.has(currentSelectedTopic.chat_topic_id)) {
-			initialLoadedTopicsRef.current.add(currentSelectedTopic.chat_topic_id)
-			// 恢复请求是异步的，避免旧话题回包提前关闭新话题的初始 loading。
-			if (selectedTopicRef.current?.chat_topic_id === currentSelectedTopic.chat_topic_id)
-				setIsMessagesInitialLoading(false)
-		}
-		if (selectedTopicRef.current?.chat_topic_id === currentSelectedTopic.chat_topic_id) {
-			setIsSelectedTopicMessagesReady(true)
-		}
-		delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
 	})
 
 	/**
@@ -447,15 +486,47 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	// "null -> topic" 这一帧会先泄露上一轮的 ready/loading，导致外层误判为空会话。
 	// 这里在 layout effect 里同步重置，确保首屏拿到的是当前 topic 的真实初始化状态。
 	useLayoutEffect(() => {
-		superMagicStore.setActiveTopicId(selectedTopic?.chat_topic_id || null)
+		const topicId = selectedTopic?.chat_topic_id || ""
+		const syncGeneration =
+			topicId && typeof superMagicStore.beginTopicSync === "function"
+				? superMagicStore.beginTopicSync(topicId)
+				: null
+		let cancelled = false
+		// 切换期间先让所有话题处于不可见状态，避免服务端快照返回前恢复旧 StreamState。
+		superMagicStore.setActiveTopicId(null)
 		setIsSelectedTopicMessagesReady(false)
-		const topicId = selectedTopic?.chat_topic_id
 		if (topicId && !initialLoadedTopicsRef.current.has(topicId)) {
 			setIsMessagesInitialLoading(true)
 		} else {
 			setIsMessagesInitialLoading(false)
 		}
-		updateTopicMessages()
+		void updateTopicMessages({
+			syncGeneration: syncGeneration ?? undefined,
+		}).then((pullResult) => {
+			if (cancelled) return
+			if (syncGeneration === null) {
+				superMagicStore.setActiveTopicId(topicId || null)
+				return
+			}
+			if (selectedTopicRef.current?.chat_topic_id !== topicId) return
+			const completed = superMagicStore.completeTopicSync(topicId, syncGeneration, {
+				succeeded: pullResult.didPullSucceed,
+				taskStatus:
+					selectedTopicRef.current?.task_status || selectedTopicRef.current?.status,
+				latestSeqId: pullResult.didPullSucceed
+					? superMagicStore.getLatestMessageSeqId(topicId)
+					: undefined,
+			})
+			if (!completed) return
+			superMagicStore.setActiveTopicId(topicId || null)
+		})
+
+		return () => {
+			cancelled = true
+			if (syncGeneration !== null) {
+				superMagicStore.cancelTopicSync(topicId, syncGeneration)
+			}
+		}
 	}, [
 		selectedTopic?.id,
 		selectedTopic?.chat_topic_id,

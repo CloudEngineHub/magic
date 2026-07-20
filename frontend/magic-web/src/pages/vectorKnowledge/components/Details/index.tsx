@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react"
 import { Flex } from "antd"
 import { IconChevronLeft } from "@tabler/icons-react"
 import { useDebounceFn, useMemoizedFn } from "ahooks"
-import { FlowRouteType } from "@/types/flow"
 import MagicIcon from "@/components/base/MagicIcon"
 import { useSearchParams } from "react-router-dom"
+import { useLocation } from "react-router"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useTranslation } from "react-i18next"
 import SubSider from "./components/SubSider"
@@ -14,15 +14,27 @@ import RecallTest from "./components/RecallTest"
 import type { Knowledge } from "@/types/knowledge"
 import { KnowledgeApi } from "@/apis"
 import Document from "./components/Document"
-import { RouteName } from "@/routes/constants"
+import { cn } from "@/lib/utils"
+import { getVectorKnowledgeListRoute } from "@/pages/vectorKnowledge/utils"
 
-export default function VectorKnowledgeDetail() {
+interface VectorKnowledgeDetailProps {
+	knowledgeBaseCode?: string
+	showHeader?: boolean
+	contentClassName?: string
+}
+
+export default function VectorKnowledgeDetail({
+	knowledgeBaseCode: knowledgeBaseCodeProp,
+	showHeader = true,
+	contentClassName,
+}: VectorKnowledgeDetailProps) {
 	const { styles } = useVectorKnowledgeDetailStyles()
 
 	const [searchParams] = useSearchParams()
-	const knowledgeBaseCode = searchParams.get("code") || ""
+	const knowledgeBaseCode = knowledgeBaseCodeProp || searchParams.get("code") || ""
 
 	const navigate = useNavigate()
+	const location = useLocation()
 
 	const { t } = useTranslation("flow")
 
@@ -49,12 +61,7 @@ export default function VectorKnowledgeDetail() {
 	 * 上一步 - 返回上一页
 	 */
 	const handleBack = useMemoizedFn(() => {
-		navigate({
-			name: RouteName.Flows,
-			params: {
-				type: FlowRouteType.VectorKnowledge,
-			},
-		})
+		navigate(getVectorKnowledgeListRoute(location.pathname))
 	})
 
 	// 获取知识库详情
@@ -62,14 +69,14 @@ export default function VectorKnowledgeDetail() {
 		if (knowledgeBaseCode) {
 			updateKnowledgeDetail(knowledgeBaseCode)
 		}
-	}, [knowledgeBaseCode])
+	}, [knowledgeBaseCode, updateKnowledgeDetail])
 
 	// 根据当前页面显示不同的内容
 	const PageContent = useMemo(() => {
 		if (knowledgeDetail && currentDetailPage === "document") {
 			return (
 				<Document
-					className={styles.rightContainer}
+					className={cn(styles.rightContainer, contentClassName)}
 					knowledgeBaseCode={knowledgeBaseCode}
 					sourceType={knowledgeDetail.source_type}
 					userOperation={knowledgeDetail.user_operation}
@@ -79,7 +86,7 @@ export default function VectorKnowledgeDetail() {
 
 		if (knowledgeDetail && currentDetailPage === "setting") {
 			return (
-				<div className={styles.rightContainer}>
+				<div className={cn(styles.rightContainer, contentClassName)}>
 					<Setting
 						knowledgeBase={knowledgeDetail}
 						updateKnowledgeDetail={updateKnowledgeDetail}
@@ -90,7 +97,7 @@ export default function VectorKnowledgeDetail() {
 
 		if (currentDetailPage === "recallTest") {
 			return (
-				<div className={styles.rightContainer}>
+				<div className={cn(styles.rightContainer, contentClassName)}>
 					<RecallTest knowledgeBaseCode={knowledgeBaseCode} />
 				</div>
 			)
@@ -98,20 +105,28 @@ export default function VectorKnowledgeDetail() {
 
 		return null
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [knowledgeBaseCode, currentDetailPage, knowledgeDetail])
+	}, [
+		knowledgeBaseCode,
+		currentDetailPage,
+		knowledgeDetail,
+		contentClassName,
+		styles.rightContainer,
+	])
 
 	return (
 		<Flex className={styles.wrapper}>
 			<Flex vertical className={styles.leftContainer}>
-				<Flex className={styles.header} align="center" gap={14}>
-					<MagicIcon
-						component={IconChevronLeft}
-						size={24}
-						className={styles.arrow}
-						onClick={handleBack}
-					/>
-					<div>{t("common.knowledgeDatabase")}</div>
-				</Flex>
+				{showHeader ? (
+					<Flex className={styles.header} align="center" gap={14}>
+						<MagicIcon
+							component={IconChevronLeft}
+							size={24}
+							className={styles.arrow}
+							onClick={handleBack}
+						/>
+						<div>{t("common.knowledgeDatabase")}</div>
+					</Flex>
+				) : null}
 				{knowledgeDetail && (
 					<SubSider
 						knowledgeDetail={knowledgeDetail}

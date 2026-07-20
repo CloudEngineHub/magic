@@ -219,9 +219,7 @@ class StopRunningTaskSubscriber extends ConsumerMessage
             }
 
             // 创建数据隔离对象
-            $dataIsolation = new DataIsolation();
-            $dataIsolation->setCurrentUserId($event->getUserId());
-            $dataIsolation->setCurrentOrganizationCode($event->getOrganizationCode());
+            $dataIsolation = DataIsolation::create($event->getOrganizationCode(), $event->getUserId());
 
             // 按话题处理任务，为每个话题加锁
             $totalSuccessCount = 0;

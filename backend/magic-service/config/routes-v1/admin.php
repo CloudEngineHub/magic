@@ -19,6 +19,9 @@ use App\Interfaces\Permission\Facade\PermissionApi;
 use App\Interfaces\Permission\Facade\RoleApi;
 use App\Interfaces\Provider\Facade\AiAbilityApi;
 use App\Interfaces\Provider\Facade\ServiceProviderApi;
+use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateApi;
+use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateCategoryApi;
+use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateTagApi;
 use Hyperf\HttpServer\Router\Router;
 
 // 组织管理后台路由
@@ -155,6 +158,39 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::get('/{functionCode}', [FunctionPermissionAdminApi::class, 'show']);
         Router::put('/{functionCode}', [FunctionPermissionAdminApi::class, 'save']);
         Router::post('/batch', [FunctionPermissionAdminApi::class, 'batchSave']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 幻灯片模板管理
+    Router::addGroup('/slides-template-categories', static function () {
+        Router::post('/queries', [AdminSlidesTemplateCategoryApi::class, 'queries']);
+        Router::get('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'detail']);
+        Router::post('', [AdminSlidesTemplateCategoryApi::class, 'create']);
+        Router::put('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'update']);
+        Router::put('/{id:\d+}/status', [AdminSlidesTemplateCategoryApi::class, 'updateStatus']);
+        Router::put('/{id:\d+}/sort', [AdminSlidesTemplateCategoryApi::class, 'updateSort']);
+        Router::delete('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    Router::addGroup('/slides-template-tags', static function () {
+        Router::post('/queries', [AdminSlidesTemplateTagApi::class, 'queries']);
+        Router::get('/tree', [AdminSlidesTemplateTagApi::class, 'tree']);
+        Router::get('/{id:\d+}', [AdminSlidesTemplateTagApi::class, 'detail']);
+        Router::post('', [AdminSlidesTemplateTagApi::class, 'create']);
+        Router::put('/{id:\d+}', [AdminSlidesTemplateTagApi::class, 'update']);
+        Router::put('/{id:\d+}/status', [AdminSlidesTemplateTagApi::class, 'updateStatus']);
+        Router::put('/{id:\d+}/sort', [AdminSlidesTemplateTagApi::class, 'updateSort']);
+        Router::delete('/{id:\d+}', [AdminSlidesTemplateTagApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    Router::addGroup('/slides-templates', static function () {
+        Router::post('/queries', [AdminSlidesTemplateApi::class, 'queries']);
+        Router::get('/{id:\d+}', [AdminSlidesTemplateApi::class, 'detail']);
+        Router::post('', [AdminSlidesTemplateApi::class, 'create']);
+        Router::put('/{id:\d+}', [AdminSlidesTemplateApi::class, 'update']);
+        Router::put('/{id:\d+}/tags', [AdminSlidesTemplateApi::class, 'updateTags']);
+        Router::put('/{id:\d+}/status', [AdminSlidesTemplateApi::class, 'updateStatus']);
+        Router::put('/{id:\d+}/sort', [AdminSlidesTemplateApi::class, 'updateSort']);
+        Router::delete('/{id:\d+}', [AdminSlidesTemplateApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 });
 

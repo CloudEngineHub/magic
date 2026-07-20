@@ -22,6 +22,7 @@ const TestConnection = lazy(
 interface ServiceConfigProps {
 	providerOptions: DefaultOptionType[]
 	currentProvider: string // 当前选择的服务商
+	currentProviderConfig?: PlatformPackage.ProviderConfig
 	onProviderChange?: (provider: string) => void
 	onConnectivityTest?: () => Promise<TestConnectionResultLike>
 	connectivityTestLoading?: boolean
@@ -30,6 +31,7 @@ interface ServiceConfigProps {
 const ServiceConfig = ({
 	providerOptions,
 	currentProvider,
+	currentProviderConfig,
 	onProviderChange,
 	onConnectivityTest,
 }: ServiceConfigProps) => {
@@ -46,7 +48,7 @@ const ServiceConfig = ({
 	}
 
 	// 获取配置字段
-	const configFields = getServiceFields(code, currentProvider)
+	const configFields = getServiceFields(code, currentProvider, currentProviderConfig)
 
 	const supportConnectivityTest = useMemo(() => {
 		if (!code) return false

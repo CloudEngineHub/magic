@@ -1,13 +1,13 @@
 /**
- * html2pptx 统一日志
+ * Unified html2pptx logging.
  *
- * 使用方式：
- *   1. 入口处调用 configureLogger(options) 配置一次
- *   2. 任意文件直接 import { log } from "./logger" 使用
- *   3. 需要子模块前缀时用 createScopedLog("sandbox")
+ * Usage:
+ *   1. Call configureLogger(options) once at the entry point.
+ *   2. Import { log } from "./logger" directly from any file.
+ *   3. Use createScopedLog("sandbox") when a submodule prefix is needed.
  */
 
-// ─── 内部级别（仅包内使用，对外不暴露）────────────────────────
+// Internal levels, only used inside this package and not exposed publicly.
 export const LogLevel = {
 	L1: 10,
 	L2: 20,
@@ -23,7 +23,7 @@ export type LogFn = (
 	context?: Record<string, unknown>,
 ) => void
 
-// ─── 对外接口（与 console 完全兼容）────────────────────────────
+// Public interface, fully compatible with console.
 export interface ExternalLogger {
 	debug?(...args: unknown[]): void
 	info?(...args: unknown[]): void
@@ -33,7 +33,7 @@ export interface ExternalLogger {
 
 export type LogLevelLabel = "debug" | "info" | "warn" | "error"
 
-// ─── 内部级别 → 标准方法名（一张映射表搞定）────────────────────
+// Internal level to standard method mapping.
 const LevelToMethod: Record<LogLevelValue, LogLevelLabel> = {
 	10: "debug",
 	20: "info",
@@ -48,7 +48,7 @@ const LabelToValue: Record<LogLevelLabel, LogLevelValue> = {
 	error: 40,
 }
 
-// ─── 全局配置 ──────────────────────────────────────────────────
+// Global configuration.
 export interface LoggerOptions {
 	minLevel?: LogLevelLabel
 	logger?: ExternalLogger

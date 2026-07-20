@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrAudioConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrMarkerFileConfig;
@@ -20,6 +21,12 @@ use Hyperf\Logger\LoggerFactory;
 
 /**
  * ASR 录音服务实现.
+ *
+ * Every method takes a DataIsolation as its FIRST parameter so the
+ * sandbox-gateway call underneath forwards User-Authorization to
+ * the in-pod super-magic agent's AuthMiddleware. The downstream
+ * agent's HTTP API requires that header; the request will 401
+ * otherwise.
  */
 class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterface
 {
@@ -31,6 +38,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function startTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $sourceDir,
@@ -79,6 +87,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_START,
@@ -119,6 +128,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function finishTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir,
@@ -162,6 +172,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_FINISH,
@@ -202,7 +213,68 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
         }
     }
 
+    public function queryTask(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        string $taskKey,
+        string $workspaceDir = '.workspace'
+    ): AsrRecorderResponse {
+        $requestData = [
+            'task_key' => $taskKey,
+            'workspace_dir' => $workspaceDir,
+        ];
+
+        try {
+            $this->logger->info('ASR Recorder: Querying task', [
+                'sandbox_id' => $sandboxId,
+                'task_key' => $taskKey,
+                'workspace_dir' => $workspaceDir,
+            ]);
+
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
+                $sandboxId,
+                'POST',
+                SandboxEndpoints::ASR_TASK_QUERY,
+                $requestData
+            );
+
+            $response = AsrRecorderResponse::fromGatewayResult($result);
+
+            if ($response->isSuccess()) {
+                $this->logger->info('ASR Recorder: Task query request successful', [
+                    'sandbox_id' => $sandboxId,
+                    'task_key' => $taskKey,
+                    'status' => $response->getStatus(),
+                    'file_path' => $response->getFilePath(),
+                ]);
+            } else {
+                $this->logger->error('ASR Recorder: Failed to query task', [
+                    'sandbox_id' => $sandboxId,
+                    'task_key' => $taskKey,
+                    'code' => $response->code,
+                    'message' => $response->message,
+                ]);
+            }
+
+            return $response;
+        } catch (Exception $e) {
+            $this->logger->error('ASR Recorder: Unexpected error during query task', [
+                'sandbox_id' => $sandboxId,
+                'task_key' => $taskKey,
+                'error' => $e->getMessage(),
+            ]);
+
+            return AsrRecorderResponse::fromApiResponse([
+                'code' => -1,
+                'message' => 'Unexpected error: ' . $e->getMessage(),
+                'data' => [],
+            ]);
+        }
+    }
+
     public function cancelTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir = '.workspace'
@@ -221,6 +293,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_CANCEL,

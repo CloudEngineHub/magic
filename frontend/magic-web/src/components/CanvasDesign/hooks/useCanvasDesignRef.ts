@@ -100,6 +100,7 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				if (!canvas) return null
 				return canvas.exportDocument({ includeTemporary: false })
 			},
+			getCanvasInstance: () => canvas,
 			refreshResources: async (resources) => {
 				if (!canvas) return
 				await runWithConcurrency(

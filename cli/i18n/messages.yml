@@ -71,7 +71,7 @@ zh_Hans:
   imageBuildCommandImagePrefixHelp: "镜像前缀，例如ghcr.io/dtyq/"
   imageBuildCommandProgressModeHelp: |
     进度模式（镜像构建日志输出格式）
-    支持"auto"(默认), "none",  "plain", "quiet", "rawjson", "tty"
+    支持"auto"(默认), "none", "plain", "quiet", "rawjson", "tty"
     参考docker buildx build的--progress选项
   imageBuildCommandPullHelp: "构建时拉取最新镜像"
   imageBuildCommandNoCacheHelp: "构建时不使用缓存"
@@ -90,6 +90,27 @@ zh_Hans:
   imageBuildCommandFailedToBuildImage: "构建镜像 %[1]s 失败: %[2]v"
   imageBuildCommandImageNotFound: "镜像 %[1]s 不存在"
   imageBuildCommandBuildingAllImages: "构建所有镜像"
+  subtreeCommandShort: "subtree管理"
+  subtreePublishCommandShort: "分发subtree"
+  subtreePublishCommandArgAllHelp: "选择全部subtree，将会分发magicrew.yml中声明的全部subtree"
+  subtreePublishCommandArgDestURLHelp: "目标仓库的URL，仅可在指定单一subtree作为目标时使用"
+  subtreePublishCommandArgDestGitBaseHelp: |
+    目标仓库目录路径或URL的基础路径
+    例如设为https://example.org/时，子仓库some-subtree向https://example.org/some-repo推送
+  subtreePublishCommandArgInitHelp: |
+    当目标仓库为本地路径时初始化仓库的行为，可选参数:
+      none: 不初始化目标仓库
+      worktree: 初始化为带worktree的普通git仓库
+      bare: 初始化为裸仓库
+  subtreePublishCommandArgBranchHelp: "要分发的分支名。分发时会从主仓库的该分支拆分subtree，并推送到子仓库的同名分支"
+  subtreePublishCommandArgForceHelp: "强制推送到远端"
+  errorSubtreePublishBothDestGitBaseDestURLNotSet: "destURL和destGitBase均未设置，没有可推送的地址"
+  errorSubtreePublishBadInitType: '不支持的仓库初始化方式 "%s"'
+  errorSubtreePublishNoSuchSubtree: 'magicrew.yml中没有声明subtree "%s"'
+  errorSubtreePublishNoSubtreeToPublish: "没有指定要分发的subtree"
+  errorSubtreePublishOnlyOneSubtreeAllowed: "使用destURL时只允许选择一个subtree"
+  errorFailedSplit: 'subtree拆分失败: %v'
+  doSubtreeSplitFor: '拆分subtree "%s"'
 
 zh_Hant:
   trueMark: "✓"
@@ -175,14 +196,34 @@ zh_Hant:
       "git-tags": 目前HEAD提交的所有標籤，如"v1.0.0"、"1.0.0"，如有變更則加上"-dirty"
       "branch": 目前工作目錄的分支，如"someDevBranch"
     多個策略用逗號分隔，例如 "latest,commit,nightly-date"
-    預設策略為"latest"# zh_Hant
+    預設策略為"latest"
   imageBuildCommandFailedToGetCommitHash: "無法取得目前HEAD提交的雜湊: %[1]v"
   imageBuildCommandFailedToGetCommitTags: "無法取得目前HEAD提交的標籤: %[1]v"
   imageBuildCommandFailedToReadDockerfile: "無法讀取Dockerfile: %[1]v"
   imageBuildCommandFailedToBuildImage: "建構映像 %[1]s 失敗: %[2]v"
   imageBuildCommandImageNotFound: "映像 %[1]s 不存在"
   imageBuildCommandBuildingAllImages: "建構所有映像"
-
+  subtreeCommandShort: "subtree管理"
+  subtreePublishCommandShort: "分發subtree"
+  subtreePublishCommandArgAllHelp: "選擇全部subtree，將會分發magicrew.yml中宣告的全部subtree"
+  subtreePublishCommandArgDestURLHelp: "目標倉庫的URL，僅可在指定單一subtree作為目標時使用"
+  subtreePublishCommandArgDestGitBaseHelp: |
+    目標倉庫目錄路徑或URL的基礎路徑
+    例如設為https://example.org/時，子倉庫some-subtree會推送至https://example.org/some-repo
+  subtreePublishCommandArgInitHelp: |
+    當目標倉庫為本地路徑時初始化倉庫的行為，可選參數:
+      none: 不初始化目標倉庫
+      worktree: 初始化為帶worktree的普通git倉庫
+      bare: 初始化為裸倉庫
+  subtreePublishCommandArgBranchHelp: "要分發的分支名。分發時會從主倉庫的該分支拆分subtree，並推送到子倉庫的同名分支"
+  subtreePublishCommandArgForceHelp: "強制推送到遠端"
+  errorSubtreePublishBothDestGitBaseDestURLNotSet: "destURL和destGitBase均未設定，沒有可推送的地址"
+  errorSubtreePublishBadInitType: '不支援的倉庫初始化方式 "%s"'
+  errorSubtreePublishNoSuchSubtree: 'magicrew.yml中沒有宣告subtree "%s"'
+  errorSubtreePublishNoSubtreeToPublish: "沒有指定要分發的subtree"
+  errorSubtreePublishOnlyOneSubtreeAllowed: "使用destURL時只允許選擇一個subtree"
+  errorFailedSplit: 'subtree拆分失敗: %v'
+  doSubtreeSplitFor: '拆分subtree "%s"'
 
 ja_JP:
   trueMark: "✓"
@@ -275,6 +316,27 @@ ja_JP:
   imageBuildCommandFailedToBuildImage: "イメージ %[1]s のビルドに失敗しました: %[2]v"
   imageBuildCommandImageNotFound: "イメージ %[1]s が存在しません"
   imageBuildCommandBuildingAllImages: "すべてのイメージをビルド"
+  subtreeCommandShort: "subtree管理"
+  subtreePublishCommandShort: "subtreeを配布"
+  subtreePublishCommandArgAllHelp: "すべてのsubtreeを選択し、magicrew.ymlで宣言されたすべてのsubtreeを配布します"
+  subtreePublishCommandArgDestURLHelp: "宛先リポジトリのURL。単一のsubtreeを対象として指定する場合のみ使用できます"
+  subtreePublishCommandArgDestGitBaseHelp: |
+    宛先リポジトリのディレクトリパスまたはURLのベースパス
+    例: https://example.org/ に設定すると、子リポジトリsome-subtreeはhttps://example.org/some-repoへプッシュされます
+  subtreePublishCommandArgInitHelp: |
+    宛先リポジトリがローカルパスの場合のリポジトリ初期化動作。指定可能な値:
+      none: 宛先リポジトリを初期化しない
+      worktree: worktree付きの通常のgitリポジトリとして初期化
+      bare: bareリポジトリとして初期化
+  subtreePublishCommandArgBranchHelp: "配布するブランチ名。配布時にはメインリポジトリのこのブランチからsubtreeを分割し、子リポジトリの同名ブランチへプッシュします"
+  subtreePublishCommandArgForceHelp: "リモートへ強制プッシュ"
+  errorSubtreePublishBothDestGitBaseDestURLNotSet: "destURLとdestGitBaseのどちらも設定されていないため、プッシュ先のアドレスがありません"
+  errorSubtreePublishBadInitType: 'サポートされていないリポジトリ初期化方式 "%s"'
+  errorSubtreePublishNoSuchSubtree: 'magicrew.ymlにsubtree "%s" は宣言されていません'
+  errorSubtreePublishNoSubtreeToPublish: "配布するsubtreeが指定されていません"
+  errorSubtreePublishOnlyOneSubtreeAllowed: "destURLを使用する場合はsubtreeを1つだけ選択できます"
+  errorFailedSplit: 'subtreeの分割に失敗しました: %v'
+  doSubtreeSplitFor: 'subtree "%s" を分割'
 
 en_US:
   trueMark: "✓"
@@ -367,3 +429,24 @@ en_US:
   imageBuildCommandFailedToBuildImage: "Failed to build image %[1]s: %[2]v"
   imageBuildCommandImageNotFound: "Image %[1]s does not exist"
   imageBuildCommandBuildingAllImages: "Building all images"
+  subtreeCommandShort: "Manage subtrees"
+  subtreePublishCommandShort: "Publish subtree"
+  subtreePublishCommandArgAllHelp: "Select all subtrees and publish all subtrees declared in magicrew.yml"
+  subtreePublishCommandArgDestURLHelp: "Destination repository URL. Can only be used when a single subtree is selected as the target"
+  subtreePublishCommandArgDestGitBaseHelp: |
+    Base directory path or URL for destination repositories
+    For example, if set to https://example.org/, the child repository some-subtree will be pushed to https://example.org/some-repo
+  subtreePublishCommandArgInitHelp: |
+    Repository initialization behavior when the destination repository is a local path. Available values:
+      none: Do not initialize the destination repository
+      worktree: Initialize as a regular git repository with a worktree
+      bare: Initialize as a bare repository
+  subtreePublishCommandArgBranchHelp: "Branch name to publish. The subtree will be split from this branch in the main repository and pushed to the same branch in the child repository"
+  subtreePublishCommandArgForceHelp: "Force push to the remote"
+  errorSubtreePublishBothDestGitBaseDestURLNotSet: "Neither destURL nor destGitBase is set; there is no destination address to push to"
+  errorSubtreePublishBadInitType: 'Unsupported repository initialization type "%s"'
+  errorSubtreePublishNoSuchSubtree: 'subtree "%s" is not declared in magicrew.yml'
+  errorSubtreePublishNoSubtreeToPublish: "No subtree specified for publishing"
+  errorSubtreePublishOnlyOneSubtreeAllowed: "Only one subtree can be selected when using destURL"
+  errorFailedSplit: 'Failed to split subtree: %v'
+  doSubtreeSplitFor: 'Splitting subtree "%s"'

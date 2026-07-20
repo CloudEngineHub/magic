@@ -1,4 +1,4 @@
-import { PlusIcon, X } from "lucide-react"
+import { Maximize2, PlusIcon, X } from "lucide-react"
 import {
 	Fragment,
 	useCallback,
@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { usePortalContainer } from "../ui/custom/PortalContainerContext"
 import styles from "./SourceList.module.css"
 import { cn } from "../../lib/utils"
+import { getMediaResourcePathKind } from "../../canvas/utils/mediaResourcePathKind"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 /** 素材槽位：空槽为「+ 标签」；已配置时由列表内置铺满预览与 hover 删除 */
 export interface SourceListSlotOption {
@@ -32,6 +34,9 @@ export interface SourceListSlotOption {
 	onRemoveResource?: () => void
 	/** 删除按钮无障碍标签 */
 	removeResourceAriaLabel?: string
+	onPreviewResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	/** 预览按钮无障碍标签 */
+	previewResourceAriaLabel?: string
 }
 
 /**
@@ -174,6 +179,17 @@ export default function SourceList(props: SourceListProps) {
 									resourcePath) ||
 								""
 							: ""
+					const resourceKind = resourcePath
+						? getMediaResourcePathKind(resourcePath)
+						: "other"
+					const previewResource =
+						resourcePath && resourceKind !== "other"
+							? ({
+									path: resourcePath,
+									fileName: resourceDisplayName,
+									kind: resourceKind,
+								} satisfies MediaResourceFullscreenPreviewItem)
+							: null
 					const slotContent = resourcePath ? (
 						<>
 							<div className={styles.sourceItemInnerFilled}>
@@ -185,6 +201,29 @@ export default function SourceList(props: SourceListProps) {
 									inlineOriginal
 								/>
 							</div>
+							{previewResource && entry.onPreviewResource ? (
+								<button
+									type="button"
+									className={styles.sourceItemPreviewButton}
+									aria-label={
+										entry.previewResourceAriaLabel ?? resourceDisplayName
+									}
+									onPointerDown={(e) => {
+										e.stopPropagation()
+									}}
+									onClick={(e) => {
+										e.preventDefault()
+										e.stopPropagation()
+										entry.onPreviewResource?.(previewResource)
+									}}
+								>
+									<Maximize2
+										size={14}
+										className={styles.sourceItemPreviewIcon}
+										aria-hidden
+									/>
+								</button>
+							) : null}
 							<button
 								type="button"
 								className={styles.sourceItemRemoveButton}

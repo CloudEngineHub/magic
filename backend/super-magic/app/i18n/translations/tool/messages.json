@@ -203,6 +203,58 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "convert_pptx_to_slide_template.before": {
+        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
+        "en_US": "Converting {{file_name}} to a slide template"
+    },
+    "convert_pptx_to_slide_template.after_success": {
+        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
+        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
+    },
+    "convert_pptx_to_slide_template.error": {
+        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
+        "en_US": "PPTX to slide template conversion failed: {{error}}"
+    },
+    "convert_pptx_to_slide_template.detail_title": {
+        "zh_CN": "PPTX 转幻灯片模板",
+        "en_US": "PPTX to Slide Template"
+    },
+    "convert_pptx_to_slide_template.detail_error_title": {
+        "zh_CN": "PPTX 转幻灯片模板失败",
+        "en_US": "PPTX to Slide Template Failed"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"
@@ -687,6 +739,10 @@
         "zh_CN": "不支持的音频文件格式: {{format}}",
         "en_US": "Unsupported audio file format: {{format}}"
     },
+    "audio_understanding.file_corrupted": {
+        "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
+        "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
+    },
     "audio_understanding.project_folder_not_exists": {
         "zh_CN": "需要创建项目文件夹，正在处理...",
         "en_US": "Folder creation needed, processing..."
@@ -700,8 +756,8 @@
         "en_US": "Unknown audio file"
     },
     "audio_understanding.unknown_status_code": {
-        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}",
-        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}"
+        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}。请使用相同参数重试音频转译一次；若再次失败再向用户说明。",
+        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}. Retry the audio transcription once with the same inputs; if it fails again, explain the situation to the user."
     },
     "audio_understanding.transcription_progress_message": {
         "zh_CN": "{{percentage}}%",
@@ -958,6 +1014,22 @@
     "create_slide_project.empty_project": {
         "zh_CN": "空项目",
         "en_US": "empty project"
+    },
+    "create_self_media_project.success": {
+        "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
+        "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
+    },
+    "create_self_media_project.exception": {
+        "zh_CN": "自媒体项目创建异常，请重试",
+        "en_US": "Self-media project creation failed, please retry"
+    },
+    "create_self_media_post.success": {
+        "zh_CN": "自媒体内容 {{post_name}}（{{post_id}}）就绪",
+        "en_US": "Self-media post {{post_name}} ({{post_id}}) ready"
+    },
+    "create_self_media_post.exception": {
+        "zh_CN": "自媒体内容创建异常，请重试",
+        "en_US": "Self-media post creation failed, please retry"
     },
     "create_slide.rewrite_success_with_file": {
         "zh_CN": "重写 {{file_name}} 成功",
@@ -1236,8 +1308,8 @@
         "en_US": "Sub-agent call failed: {{error}}"
     },
     "call_subagent.assign": {
-        "zh_CN": "{{agent_name}} 子智能体",
-        "en_US": "{{agent_name}} sub-agent"
+        "zh_CN": "{{agent_name}}",
+        "en_US": "{{agent_name}}"
     },
     "call_subagent.running": {
         "zh_CN": "{{agent_name}} 正在执行任务",
@@ -1647,37 +1719,89 @@
         "zh_CN": "路径有误，将尝试解决...",
         "en_US": "Path error, attempting to resolve..."
     },
-    "find_skills.searching": {
-        "zh_CN": "正在检索「{{keywords}}」",
-        "en_US": "Searching for \"{{keywords}}\""
+    "find_skills.searching.local": {
+        "zh_CN": "正在查看本地可用技能",
+        "en_US": "Listing locally available skills"
     },
-    "find_skills.searched": {
-        "zh_CN": "已检索「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\", found {{total}} candidates"
+    "find_skills.searching.local_keyword": {
+        "zh_CN": "正在查看本地技能「{{keywords}}」",
+        "en_US": "Listing local skills for \"{{keywords}}\""
     },
-    "find_skills.searched_with_providers": {
-        "zh_CN": "已检索「{{keywords}}」（来源：{{providers}}），共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\" (sources: {{providers}}), found {{total}} candidates"
+    "find_skills.searching.online": {
+        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
+        "en_US": "Searching online skills for \"{{keywords}}\""
+    },
+    "find_skills.searching.auto": {
+        "zh_CN": "正在检索技能「{{keywords}}」",
+        "en_US": "Searching skills for \"{{keywords}}\""
+    },
+    "find_skills.searched.local": {
+        "zh_CN": "已查看本地可用技能，共找到 {{total}} 个",
+        "en_US": "Listed locally available skills, {{total}} found"
+    },
+    "find_skills.searched.local_keyword": {
+        "zh_CN": "已查看本地技能「{{keywords}}」，共找到 {{total}} 个",
+        "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
+    },
+    "find_skills.searched.online": {
+        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+    },
+    "find_skills.searched.auto": {
+        "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched skills for \"{{keywords}}\", found {{total}} candidates"
     },
     "find_skills.keywords_all": {
         "zh_CN": "全部",
         "en_US": "all"
     },
     "install_skills.installing": {
-        "zh_CN": "正在安装：{{ids}}",
-        "en_US": "Installing: {{ids}}"
+        "zh_CN": "正在安装技能：{{ids}}",
+        "en_US": "Installing skills: {{ids}}"
+    },
+    "install_skills.installing.workspace": {
+        "zh_CN": "正在往当前项目安装技能：{{ids}}",
+        "en_US": "Installing skills to current project: {{ids}}"
+    },
+    "install_skills.installing.personal": {
+        "zh_CN": "正在往个人目录安装技能：{{ids}}",
+        "en_US": "Installing skills to personal directory: {{ids}}"
     },
     "install_skills.success": {
-        "zh_CN": "成功安装 {{count}} 个 skill",
+        "zh_CN": "成功安装 {{count}} 个技能",
         "en_US": "Installed {{count}} skill(s) successfully"
     },
+    "install_skills.success.workspace": {
+        "zh_CN": "成功安装 {{count}} 个技能到当前项目",
+        "en_US": "Installed {{count}} skill(s) to current project"
+    },
+    "install_skills.success.personal": {
+        "zh_CN": "成功安装 {{count}} 个技能到个人目录",
+        "en_US": "Installed {{count}} skill(s) to personal directory"
+    },
     "install_skills.upgraded": {
-        "zh_CN": "成功升级 {{count}} 个 skill",
+        "zh_CN": "成功升级 {{count}} 个技能",
         "en_US": "Upgraded {{count}} skill(s) successfully"
     },
+    "install_skills.upgraded.workspace": {
+        "zh_CN": "成功升级 {{count}} 个技能（当前项目）",
+        "en_US": "Upgraded {{count}} skill(s) in current project"
+    },
+    "install_skills.upgraded.personal": {
+        "zh_CN": "成功升级 {{count}} 个技能（个人目录）",
+        "en_US": "Upgraded {{count}} skill(s) in personal directory"
+    },
     "install_skills.mixed_success": {
-        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个 skill",
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能",
         "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s)"
+    },
+    "install_skills.mixed_success.workspace": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（当前项目）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in current project"
+    },
+    "install_skills.mixed_success.personal": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（个人目录）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in personal directory"
     },
     "install_skills.failed": {
         "zh_CN": "安装失败（共 {{count}} 个）",
@@ -1686,6 +1810,14 @@
     "install_skills.partial": {
         "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败",
         "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed"
+    },
+    "install_skills.partial.workspace": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（当前项目）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (current project)"
+    },
+    "install_skills.partial.personal": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（个人目录）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (personal directory)"
     },
     "upgrade_sandbox.success": {
         "zh_CN": "沙箱升级请求已提交",
@@ -2191,6 +2323,214 @@
         "zh_CN": "变量值",
         "en_US": "Value"
     },
+    "cli_manager.apply.before": {
+        "zh_CN": "正在{{mode}}持久化 CLI「{{name}}」",
+        "en_US": "Persisting CLI \"{{name}}\" with {{mode}} mode"
+    },
+    "cli_manager.apply.after_success": {
+        "zh_CN": "CLI「{{name}}」已持久化",
+        "en_US": "CLI \"{{name}}\" persisted"
+    },
+    "cli_manager.apply.after_failed": {
+        "zh_CN": "CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to persist CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.list.before": {
+        "zh_CN": "正在查看持久化 CLI（校验：{{validate}}）",
+        "en_US": "Listing persisted CLIs (validate: {{validate}})"
+    },
+    "cli_manager.list.after_success": {
+        "zh_CN": "读取到 {{count}} 个持久化 CLI",
+        "en_US": "Found {{count}} persisted CLI(s)"
+    },
+    "cli_manager.list.after_failed": {
+        "zh_CN": "查看持久化 CLI 失败：{{error}}",
+        "en_US": "Failed to list persisted CLIs: {{error}}"
+    },
+    "cli_manager.remove.before": {
+        "zh_CN": "正在移除持久化 CLI「{{name}}」",
+        "en_US": "Removing persisted CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_success": {
+        "zh_CN": "CLI「{{name}}」的持久化已移除",
+        "en_US": "Persistence removed for CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_failed": {
+        "zh_CN": "移除 CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to remove persistence for CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.detail.apply_success_title": {
+        "zh_CN": "CLI 持久化完成",
+        "en_US": "CLI Persistence Complete"
+    },
+    "cli_manager.detail.apply_failed_title": {
+        "zh_CN": "CLI 持久化失败",
+        "en_US": "CLI Persistence Failed"
+    },
+    "cli_manager.detail.list_success_title": {
+        "zh_CN": "持久化 CLI 列表",
+        "en_US": "Persisted CLIs"
+    },
+    "cli_manager.detail.list_failed_title": {
+        "zh_CN": "持久化 CLI 读取失败",
+        "en_US": "Persisted CLI List Failed"
+    },
+    "cli_manager.detail.remove_success_title": {
+        "zh_CN": "CLI 持久化已移除",
+        "en_US": "CLI Persistence Removed"
+    },
+    "cli_manager.detail.remove_failed_title": {
+        "zh_CN": "CLI 持久化移除失败",
+        "en_US": "CLI Persistence Remove Failed"
+    },
+    "cli_manager.detail.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "cli_manager.detail.mode": {
+        "zh_CN": "模式",
+        "en_US": "Mode"
+    },
+    "cli_manager.detail.commands": {
+        "zh_CN": "命令",
+        "en_US": "Commands"
+    },
+    "cli_manager.detail.strategy": {
+        "zh_CN": "策略",
+        "en_US": "Strategy"
+    },
+    "cli_manager.detail.package_manager": {
+        "zh_CN": "包管理器",
+        "en_US": "Package manager"
+    },
+    "cli_manager.detail.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "cli_manager.detail.bin_dir": {
+        "zh_CN": "命令入口目录",
+        "en_US": "Command bin directory"
+    },
+    "cli_manager.detail.command_routes": {
+        "zh_CN": "命令路由",
+        "en_US": "Command Routes"
+    },
+    "cli_manager.detail.command_entry": {
+        "zh_CN": "命令入口",
+        "en_US": "Command entry"
+    },
+    "cli_manager.detail.command_target": {
+        "zh_CN": "真实目标",
+        "en_US": "Real target"
+    },
+    "cli_manager.detail.registry_file": {
+        "zh_CN": "注册表",
+        "en_US": "Registry file"
+    },
+    "cli_manager.detail.app_links": {
+        "zh_CN": "原路径软链",
+        "en_US": "Original path links"
+    },
+    "cli_manager.detail.config_dirs": {
+        "zh_CN": "配置目录",
+        "en_US": "Config directories"
+    },
+    "cli_manager.detail.env_keys": {
+        "zh_CN": "依赖环境变量",
+        "en_US": "Required env keys"
+    },
+    "cli_manager.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "cli_manager.detail.count": {
+        "zh_CN": "数量",
+        "en_US": "Count"
+    },
+    "cli_manager.detail.validation": {
+        "zh_CN": "校验",
+        "en_US": "Validation"
+    },
+    "cli_manager.detail.remove_state": {
+        "zh_CN": "删除状态目录",
+        "en_US": "Remove state"
+    },
+    "cli_manager.detail.removed_paths": {
+        "zh_CN": "已移除路径数",
+        "en_US": "Removed paths"
+    },
+    "cli_manager.detail.ok": {
+        "zh_CN": "正常",
+        "en_US": "OK"
+    },
+    "cli_manager.detail.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "cli_manager.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "yes"
+    },
+    "cli_manager.detail.no": {
+        "zh_CN": "否",
+        "en_US": "no"
+    },
+    "cli_manager.error.confirmation_required": {
+        "zh_CN": "需要用户明确确认",
+        "en_US": "Explicit user confirmation is required"
+    },
+    "cli_manager.error.command_name_reserved": {
+        "zh_CN": "命令名属于系统保留名称：{{command}}",
+        "en_US": "Command name is reserved: {{command}}"
+    },
+    "cli_manager.error.command_name_conflict": {
+        "zh_CN": "命令名已被占用：{{command}}",
+        "en_US": "Command name is already in use: {{command}}"
+    },
+    "cli_manager.error.command_path_conflict": {
+        "zh_CN": "当前 PATH 中已有同名命令：{{command}}",
+        "en_US": "A command with the same name already exists in PATH: {{command}}"
+    },
+    "cli_manager.error.command_not_found_after_install": {
+        "zh_CN": "安装后未找到命令：{{command}}",
+        "en_US": "Command was not found after install: {{command}}"
+    },
+    "cli_manager.error.command_path_missing": {
+        "zh_CN": "指定的命令路径不存在：{{command}}",
+        "en_US": "Explicit command path does not exist: {{command}}"
+    },
+    "cli_manager.error.command_path_unknown_command": {
+        "zh_CN": "命令路径不属于本次持久化命令：{{command}}",
+        "en_US": "Command path was provided for an unknown command: {{command}}"
+    },
+    "cli_manager.error.cannot_move_install_root": {
+        "zh_CN": "安装根目录过宽或不安全，不能移动",
+        "en_US": "The inferred install root is too broad or unsafe to move"
+    },
+    "cli_manager.error.cannot_locate_install_root": {
+        "zh_CN": "无法可靠定位安装根目录",
+        "en_US": "Cannot reliably locate the install root"
+    },
+    "cli_manager.error.install_command_required": {
+        "zh_CN": "安装模式需要提供安装命令",
+        "en_US": "Install mode requires an install command"
+    },
+    "cli_manager.error.install_command_failed": {
+        "zh_CN": "安装命令执行失败",
+        "en_US": "Install command failed"
+    },
+    "cli_manager.error.not_found": {
+        "zh_CN": "未找到该持久化 CLI：{{name}}",
+        "en_US": "Persisted CLI not found: {{name}}"
+    },
+    "cli_manager.error.size_limit_exceeded": {
+        "zh_CN": "安装产物超过大小或文件数量限制",
+        "en_US": "Persisted CLI exceeds size or file-count limits"
+    },
+    "cli_manager.error.unknown": {
+        "zh_CN": "CLI 管理操作失败",
+        "en_US": "CLI manager operation failed"
+    },
     "oauth2.list_apps.listing": {
         "zh_CN": "正在查看 OAuth2 应用",
         "en_US": "Listing OAuth2 apps"
@@ -2342,6 +2682,162 @@
     "oauth2.api_docs.remove_failed": {
         "zh_CN": "移除接口文档「{{operation_id}}」失败",
         "en_US": "Failed to remove API doc \"{{operation_id}}\""
+    },
+    "scheduled_task.operation.running": {
+        "zh_CN": "正在处理定时任务",
+        "en_US": "Handling scheduled task"
+    },
+    "scheduled_task.operation.done": {
+        "zh_CN": "定时任务处理完成",
+        "en_US": "Scheduled task operation completed"
+    },
+    "scheduled_task.error.default": {
+        "zh_CN": "定时任务操作失败，请查看工具调用结果。",
+        "en_US": "Scheduled task operation failed. Check the tool result."
+    },
+    "scheduled_task.create.creating": {
+        "zh_CN": "正在创建定时任务「{{target}}」",
+        "en_US": "Creating scheduled task \"{{target}}\""
+    },
+    "scheduled_task.create.created": {
+        "zh_CN": "定时任务「{{target}}」已创建",
+        "en_US": "Scheduled task \"{{target}}\" created"
+    },
+    "scheduled_task.create.failed": {
+        "zh_CN": "创建定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to create scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.list.listing": {
+        "zh_CN": "正在查询定时任务",
+        "en_US": "Listing scheduled tasks"
+    },
+    "scheduled_task.list.listed": {
+        "zh_CN": "已查询定时任务，共 {{count}} 条",
+        "en_US": "Scheduled tasks listed, {{count}} total"
+    },
+    "scheduled_task.list.failed": {
+        "zh_CN": "查询定时任务失败：{{error}}",
+        "en_US": "Failed to list scheduled tasks: {{error}}"
+    },
+    "scheduled_task.get.getting": {
+        "zh_CN": "正在查看定时任务「{{target}}」",
+        "en_US": "Getting scheduled task \"{{target}}\""
+    },
+    "scheduled_task.get.got": {
+        "zh_CN": "已查看定时任务「{{target}}」",
+        "en_US": "Scheduled task \"{{target}}\" loaded"
+    },
+    "scheduled_task.get.failed": {
+        "zh_CN": "查看定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to get scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.update.updating": {
+        "zh_CN": "正在更新定时任务「{{target}}」",
+        "en_US": "Updating scheduled task \"{{target}}\""
+    },
+    "scheduled_task.update.updated": {
+        "zh_CN": "定时任务「{{target}}」已更新",
+        "en_US": "Scheduled task \"{{target}}\" updated"
+    },
+    "scheduled_task.update.failed": {
+        "zh_CN": "更新定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to update scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.delete.deleting": {
+        "zh_CN": "正在删除定时任务「{{target}}」",
+        "en_US": "Deleting scheduled task \"{{target}}\""
+    },
+    "scheduled_task.delete.deleted": {
+        "zh_CN": "定时任务「{{target}}」已删除",
+        "en_US": "Scheduled task \"{{target}}\" deleted"
+    },
+    "scheduled_task.delete.failed": {
+        "zh_CN": "删除定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to delete scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.detail.title": {
+        "zh_CN": "定时任务操作结果",
+        "en_US": "Scheduled task result"
+    },
+    "scheduled_task.detail.list_title": {
+        "zh_CN": "定时任务列表",
+        "en_US": "Scheduled tasks"
+    },
+    "scheduled_task.detail.operation": {
+        "zh_CN": "操作",
+        "en_US": "Operation"
+    },
+    "scheduled_task.detail.result_status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "scheduled_task.detail.success": {
+        "zh_CN": "成功",
+        "en_US": "Success"
+    },
+    "scheduled_task.detail.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "scheduled_task.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "scheduled_task.detail.id": {
+        "zh_CN": "任务 ID",
+        "en_US": "Task ID"
+    },
+    "scheduled_task.detail.task_name": {
+        "zh_CN": "任务名称",
+        "en_US": "Task name"
+    },
+    "scheduled_task.detail.task_describe": {
+        "zh_CN": "任务描述",
+        "en_US": "Description"
+    },
+    "scheduled_task.detail.agent_mode": {
+        "zh_CN": "员工模式",
+        "en_US": "Agent mode"
+    },
+    "scheduled_task.detail.task_status": {
+        "zh_CN": "任务状态",
+        "en_US": "Task status"
+    },
+    "scheduled_task.detail.enabled": {
+        "zh_CN": "启用状态",
+        "en_US": "Enabled"
+    },
+    "scheduled_task.detail.enabled_yes": {
+        "zh_CN": "已启用",
+        "en_US": "Enabled"
+    },
+    "scheduled_task.detail.enabled_no": {
+        "zh_CN": "已禁用",
+        "en_US": "Disabled"
+    },
+    "scheduled_task.detail.deadline": {
+        "zh_CN": "截止时间",
+        "en_US": "Deadline"
+    },
+    "scheduled_task.detail.time_config": {
+        "zh_CN": "时间配置",
+        "en_US": "Time config"
+    },
+    "scheduled_task.detail.total": {
+        "zh_CN": "总数",
+        "en_US": "Total"
+    },
+    "scheduled_task.detail.no_schedules": {
+        "zh_CN": "当前没有匹配的定时任务。",
+        "en_US": "No matching scheduled tasks."
+    },
+    "scheduled_task.detail.all_tasks": {
+        "zh_CN": "全部定时任务",
+        "en_US": "all scheduled tasks"
+    },
+    "scheduled_task.detail.empty": {
+        "zh_CN": "-",
+        "en_US": "-"
     },
     "call_simple_tool.calling": {
         "zh_CN": "正在调用工具流",

@@ -2,8 +2,8 @@
 
 /**
  * Build script
- * Builds the same-origin HTML sandbox shell, widget SDK, obfuscates code,
- * generates icon tags, and builds the main app.
+ * Builds the same-origin HTML sandbox shell, widget SDK, generated icon tags,
+ * edition-contributed build-only pre steps, and finally the main app.
  *
  * Process lifecycle:
  * - Registers SIGINT/SIGTERM/SIGHUP handlers for graceful child cleanup.
@@ -14,10 +14,15 @@
  */
 
 const { spawn } = require("child_process")
+const { existsSync } = require("node:fs")
+const { resolve } = require("node:path")
 const { env } = require("process")
 const { log, printBanner, writeStep, writeStepResult } = require("./lib/banner.cjs")
+const { EDITIONS, resolveEdition } = require("./lib/edition.cjs")
+const { applyLayeredEnvFiles } = require("./lib/env-overlay.cjs")
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000
+const BUILD_STEP_FILE_NAME = "build.step.cjs"
 
 function getShutdownTimeoutMs(envRef = env) {
 	const parsed = Number(envRef.MAGIC_BUILD_SHUTDOWN_TIMEOUT_MS)
@@ -121,8 +126,14 @@ function createBuildController({
 
 			let capturedOutput = ""
 			if (quiet) {
-				if (child.stdout) child.stdout.on("data", (d) => { capturedOutput += d })
-				if (child.stderr) child.stderr.on("data", (d) => { capturedOutput += d })
+				if (child.stdout)
+					child.stdout.on("data", (d) => {
+						capturedOutput += d
+					})
+				if (child.stderr)
+					child.stderr.on("data", (d) => {
+						capturedOutput += d
+					})
 			}
 
 			child.on("close", (code) => {
@@ -130,9 +141,10 @@ function createBuildController({
 				activeChild = null
 
 				if (code !== 0 && code !== null && !isShuttingDown) {
-					const msg = quiet && capturedOutput
-						? `${stepName} failed with exit code ${code}\n${capturedOutput}`
-						: `${stepName} failed with exit code ${code}`
+					const msg =
+						quiet && capturedOutput
+							? `${stepName} failed with exit code ${code}\n${capturedOutput}`
+							: `${stepName} failed with exit code ${code}`
 					reject(new Error(msg))
 				} else {
 					resolve()
@@ -148,9 +160,10 @@ function createBuildController({
 					return
 				}
 
-				const msg = quiet && capturedOutput
-					? `${stepName} failed: ${error.message}\n${capturedOutput}`
-					: `${stepName} failed: ${error.message}`
+				const msg =
+					quiet && capturedOutput
+						? `${stepName} failed: ${error.message}\n${capturedOutput}`
+						: `${stepName} failed: ${error.message}`
 				reject(new Error(msg))
 			})
 		})
@@ -164,34 +177,138 @@ function createBuildController({
 	}
 }
 
+function slugifyStepName(name) {
+	return String(name)
+		.trim()
+		.replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+		.replace(/[^a-zA-Z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.toLowerCase()
+}
+
+function normalizeBuildStep(step) {
+	const layer = step.layer || "base"
+	const name = step.name
+
+	return {
+		id: step.id || `${layer}:${slugifyStepName(name)}`,
+		name,
+		command: step.command,
+		args: step.args || [],
+		quiet: step.quiet !== false,
+		options: step.options || {},
+		layer,
+	}
+}
+
+function createViteBuildStep({ edition, envRef = env } = {}) {
+	return normalizeBuildStep({
+		id: "base:vite-build",
+		name: "Building main application",
+		command: "vite",
+		args: ["build"],
+		quiet: false,
+		options: {
+			env: {
+				...envRef,
+				EDITION: edition,
+				NODE_OPTIONS: mergeNodeOptions(envRef, "--max-old-space-size=16384"),
+			},
+		},
+	})
+}
+
+function resolveBuildStepFile({
+	projectRoot = process.cwd(),
+	edition = resolveEdition(projectRoot),
+	fileExists = existsSync,
+} = {}) {
+	const baseStepFile = resolve(projectRoot, "scripts", BUILD_STEP_FILE_NAME)
+	const enterpriseStepFile = resolve(projectRoot, "enterprise", "scripts", BUILD_STEP_FILE_NAME)
+
+	// Mirrors source overlay lookup: the commercial step file replaces the base
+	// declaration when present, so each edition owns one complete ordered list.
+	if (edition === EDITIONS.enterprise && fileExists(enterpriseStepFile)) {
+		return enterpriseStepFile
+	}
+
+	return baseStepFile
+}
+
+function loadBuildSteps({
+	projectRoot = process.cwd(),
+	edition = resolveEdition(projectRoot),
+} = {}) {
+	const buildStepFile = resolveBuildStepFile({ edition, projectRoot })
+
+	if (!existsSync(buildStepFile)) {
+		throw new Error(`Build step file not found: ${buildStepFile}`)
+	}
+
+	const resolvedBuildStepFile = require.resolve(buildStepFile)
+	delete require.cache[resolvedBuildStepFile]
+
+	const loadedBuildSteps = require(resolvedBuildStepFile)
+	const buildSteps = Array.isArray(loadedBuildSteps) ? loadedBuildSteps : loadedBuildSteps?.steps
+
+	if (!Array.isArray(buildSteps)) {
+		throw new TypeError(`Build step file must export an array: ${buildStepFile}`)
+	}
+
+	return buildSteps
+}
+
+function createBuildPlan({
+	projectRoot = process.cwd(),
+	edition = resolveEdition(projectRoot),
+	buildSteps,
+	envRef = env,
+} = {}) {
+	const selectedBuildSteps = buildSteps || loadBuildSteps({ edition, projectRoot })
+	const preViteSteps = selectedBuildSteps.map((step) => normalizeBuildStep(step))
+
+	return [...preViteSteps, createViteBuildStep({ edition, envRef })]
+}
+
+async function runBuildPlan(
+	controller,
+	plan,
+	{
+		writeStep: writeStepRef = writeStep,
+		writeStepResult: writeStepResultRef = writeStepResult,
+	} = {},
+) {
+	for (let i = 0; i < plan.length; i++) {
+		if (controller.isShutdownRequested()) return
+
+		const step = plan[i]
+		const label = `[${i + 1}/${plan.length}] ${step.name}`
+		writeStepRef(`${label}...`)
+		await controller.runCommand(label, step.command, step.args || [], {
+			quiet: step.quiet,
+			...(step.options || {}),
+		})
+		if (controller.isShutdownRequested()) return
+		writeStepResultRef(true)
+	}
+}
+
 async function main(controller = createBuildController(), processExit = process.exit) {
 	try {
 		controller.registerCleanupHandlers()
-
-		log("Starting build process...\n", "green")
-
-		writeStep("[1/4] Generating icon tags...")
-		await controller.runCommand("[1/4] generate:icon-tags", "pnpm", ["run", "generate:icon-tags"], { quiet: true })
-		if (controller.isShutdownRequested()) return
-		writeStepResult(true)
-
-		writeStep("[2/4] Building husky sandbox...")
-		await controller.runCommand("[2/4] build:iframe", "pnpm", ["run", "build:iframe"], { quiet: true })
-		if (controller.isShutdownRequested()) return
-		writeStepResult(true)
-
-		writeStep("[3/4] Building widget SDK...")
-		await controller.runCommand("[3/4] build:widget", "pnpm", ["run", "build:widget"], { quiet: true })
-		if (controller.isShutdownRequested()) return
-		writeStepResult(true)
-
-		log("\n  [4/4] Building main application...\n", "cyan")
-		await controller.runCommand("[4/4] vite build", "vite", ["build"], {
-			env: {
-				...env,
-				NODE_OPTIONS: mergeNodeOptions(env, "--max-old-space-size=16384"),
-			},
+		const { env: effectiveEnv } = applyLayeredEnvFiles({
+			projectRoot: process.cwd(),
+			mode: "production",
 		})
+
+		// Resolve once and hand the edition to the Vite bundle so build steps and the
+		// bundler agree on which edition (and overlay folders) are active.
+		const edition = resolveEdition()
+		const plan = createBuildPlan({ edition, envRef: effectiveEnv })
+
+		log(`Starting build process (edition: ${edition})...\n`, "green")
+
+		await runBuildPlan(controller, plan)
 		if (controller.isShutdownRequested()) return
 
 		printBanner("Build completed successfully ✨")
@@ -209,9 +326,13 @@ if (require.main === module) {
 }
 
 module.exports = {
+	createBuildPlan,
 	createBuildController,
 	getShutdownTimeoutMs,
 	isChildRunning,
+	loadBuildSteps,
 	main,
 	mergeNodeOptions,
+	resolveBuildStepFile,
+	runBuildPlan,
 }

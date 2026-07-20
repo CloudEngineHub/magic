@@ -13,8 +13,8 @@ logger = get_logger(__name__)
 
 # 可重试的 HTTP 状态码
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-# 最大重试次数
-MAX_RETRIES = 3
+# 最大重试次数，不包含首次尝试
+MAX_RETRIES = 2
 # 重试基础间隔（秒）
 RETRY_BASE_DELAY = 1.0
 
@@ -28,12 +28,12 @@ class DirectDownloadDriver(DownloadDriverInterface):
     async def download(self, url: str, dest: Path, timeout: int = 15) -> DownloadResultItem:
         """通过 aiohttp 直接下载文件，带重试"""
         last_error = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(MAX_RETRIES + 1):
             try:
                 return await self._do_download(url, dest, timeout)
             except RetryableDownloadError as e:
                 last_error = e
-                if attempt < MAX_RETRIES - 1:
+                if attempt < MAX_RETRIES:
                     delay = RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(f"[direct] 下载可重试错误 (第{attempt + 1}次): {url}, 错误: {e}, {delay}s 后重试")
                     await asyncio.sleep(delay)
@@ -41,7 +41,7 @@ class DirectDownloadDriver(DownloadDriverInterface):
             except (asyncio.TimeoutError, aiohttp.ServerTimeoutError, aiohttp.ClientConnectionError) as e:
                 # 网络抖动 / 对端慢响应 / 短暂连接重置等也归入可重试范畴
                 last_error = e
-                if attempt < MAX_RETRIES - 1:
+                if attempt < MAX_RETRIES:
                     delay = RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(
                         f"[direct] 下载网络错误 (第{attempt + 1}次): {url}, "

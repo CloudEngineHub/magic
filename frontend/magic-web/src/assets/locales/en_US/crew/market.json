@@ -13,6 +13,7 @@
 		"starCrew": "Star Crew",
 		"techDev": "Tech & Dev"
 	},
+	"chat": "Chat",
 	"createCrew": "Create Crew",
 	"crewConversation": {
 		"back": "Back",
@@ -195,9 +196,9 @@
 				"team": "Team"
 			},
 			"startChat": "Start chat",
+			"title": "Crew Details",
 			"unpublishedAction": "Unpublished",
-			"unpublishedNotice": "This Crew is not published yet and is currently unavailable. Please publish it on web first.",
-			"title": "Crew Details"
+			"unpublishedNotice": "This Crew is not published yet and is currently unavailable. Please publish it on web first."
 		},
 		"disable": "Disable",
 		"disableConfirm": {
@@ -310,6 +311,9 @@
 	},
 	"noMoreData": "You've seen everything!",
 	"noResults": "No results found.",
+	"pptEmployee": {
+		"delivered": "{{count}} presentations delivered"
+	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",
 		"emptyName": "Untitled Skill",
@@ -364,7 +368,17 @@
 				"publish": "Publish"
 			},
 			"create": {
+				"channelChangeConfirm": {
+					"confirm": "Switch",
+					"content": "Configured or previously used audience data will be cleared.",
+					"title": "Switch publishing channel?"
+				},
 				"fields": {
+					"category": {
+						"label": "Category",
+						"placeholder": "Select a category",
+						"required": "Please select a category"
+					},
 					"details": {
 						"label": "Version Details",
 						"optional": "Optional",
@@ -377,7 +391,6 @@
 						"label": "Publishing Process"
 					},
 					"target": {
-						"helper": "Once selected, the publishing scope cannot be changed",
 						"label": "Publish to",
 						"skillsLibrary": {
 							"steps": {
@@ -534,6 +547,5 @@
 			"updateFailed": "Failed to update skill. Please try again later."
 		},
 		"title": "Update Skill"
-	},
-	"chat": "Chat"
+	}
 }

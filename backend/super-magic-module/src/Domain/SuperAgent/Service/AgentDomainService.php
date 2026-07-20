@@ -99,13 +99,13 @@ class AgentDomainService
         $this->logger = $loggerFactory->get('sandbox');
     }
 
-    public function buildInitAgentContext(DataIsolation $dataIsolation, ProjectEntity $projectEntity, TopicEntity $topicEntity, TaskEntity $taskEntity, string $sandboxId = '', bool $skipInitMessage = false, array $memories = [])
+    public function buildInitAgentContext(DataIsolation $dataIsolation, ProjectEntity $projectEntity, TopicEntity $topicEntity, TaskEntity $taskEntity, string $sandboxId = '', bool $skipInitMessage = false, array $memories = [], array $extraSubscriptionConfigs = [])
     {
         if (empty($sandboxId)) {
             // 默认使用话题id
             $sandboxId = (string) $topicEntity->getId();
         }
-        $authToken = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        $authToken = $dataIsolation->getUserAuthorizationToken() ?? '';
         // todo 初始化数据, 后续有些参数需要精简去掉
         $agentInitContext = AgentInitContext::createDefault();
         $agentInitContext->setMessageId((string) IdGenerator::getSnowId());
@@ -114,7 +114,7 @@ class AgentDomainService
         $agentInitContext->setType(MessageType::Init->value);
         // 设置对象存储的 sts token
         $projectDir = WorkDirectoryUtil::getRootDir($dataIsolation->getCurrentUserId(), $projectEntity->getId());
-        $stsConfig = di(FileAppService::class)->getStsTemporaryCredentialV2(
+        $stsConfig = di(FileAppService::class)->getDualEndpointStsCredentialV2(
             $projectEntity->getUserOrganizationCode(),
             StorageBucketType::SandBox->value,
             $projectDir,
@@ -122,21 +122,28 @@ class AgentDomainService
             false
         );
         $agentInitContext->setUploadConfig($stsConfig);
-        // 设置消息回调接口
-        $subscriptionConfig = [
+        // 设置消息回调接口（数组格式，支持多个订阅目标）
+        $systemSubscriptionItem = [
             'method' => 'POST',
             'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/tasks/deliver-message',
+            'auth_scheme' => 'header_token',
             'headers' => [
-                'token' => config('super-magic.sandbox.token', ''),
+                'token' => '',
             ],
         ];
-        $agentInitContext->setMessageSubscriptionConfig($subscriptionConfig);
+        if (count($extraSubscriptionConfigs) > 0) {
+            $agentInitContext->setMessageSubscriptionConfig(
+                array_merge([$systemSubscriptionItem], $extraSubscriptionConfigs)
+            );
+        } else {
+            $agentInitContext->setMessageSubscriptionConfig($systemSubscriptionItem);
+        }
         // 设置 sts refresh 接口
         $refreshConfig = [
             'method' => 'POST',
             'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/file/refresh-sts-token',
             'headers' => [
-                'token' => config('super-magic.sandbox.token', ''),
+                'token' => '',
             ],
         ];
         $agentInitContext->setStsTokenRefresh($refreshConfig);
@@ -273,7 +280,7 @@ class AgentDomainService
             // pool 守卫能够放行，避免「话题里残留的死 sandbox_id 把 warm pool
             // 永久挡在外面、每次都走冷创建」的退化。
             try {
-                $response = $this->getWorkspaceStatus($sandboxId);
+                $response = $this->getWorkspaceStatus($dataIsolation, $sandboxId);
                 $status = $response->getDataValue('status');
 
                 if (WorkspaceStatus::isReady($status)) {
@@ -373,7 +380,7 @@ class AgentDomainService
             }
 
             // Step 3: Initialize agent
-            $result = $this->agent->initAgent($sandboxId, $agentContext->getInitContext()->toArray());
+            $result = $this->agent->initAgent($dataIsolation, $sandboxId, $agentContext->getInitContext()->toArray());
             if (! $result->isSuccess()) {
                 $this->logger->error('[Sandbox][Domain] Failed to initialize agent', [
                     'sandbox_id' => $sandboxId,
@@ -392,7 +399,7 @@ class AgentDomainService
             }
 
             // Step 4: Wait for workspace ready (with interrupt support)
-            $isReady = $this->waitForWorkspaceReady($sandboxId, interruptChecker: $interruptChecker);
+            $isReady = $this->waitForWorkspaceReady($dataIsolation, $sandboxId, interruptChecker: $interruptChecker);
             if (! $isReady) {
                 $this->logger->info('[Sandbox][Domain] Interrupted during workspace ready wait', [
                     'sandbox_id' => $sandboxId,
@@ -424,19 +431,15 @@ class AgentDomainService
      */
     public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
     {
-        // 获取用户 authorization token，用于沙箱创建时的身份验证
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
-
         $this->logger->debug('[Sandbox][App] Creating sandbox', [
             'project_id' => $projectId,
             'sandbox_id' => $sandboxID,
             'project_oss_path' => $workDir,
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'user_space_root_file_id' => $userSpaceRootFileId,
-            'authorization_provided' => $authorization !== '',
+            'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
         ]);
 
-        $this->gateway->setUserContext($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
         // Stamp the topic id onto the pod labels so the sandbox can be
         // correlated back to its topic (warm pool stamps it at mount time).
         $labels = $topicId !== null ? ['topic-id' => (string) $topicId] : [];
@@ -445,7 +448,7 @@ class AgentDomainService
         if ($agentCode !== null && $agentCode !== '') {
             $labels['agent-code'] = $agentCode;
         }
-        $result = $this->gateway->createSandbox($projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $authorization, $labels);
+        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $labels);
 
         // 添加详细的调试日志，检查 result 对象
         $this->logger->debug('[Sandbox][App] Gateway result analysis', [
@@ -718,7 +721,7 @@ class AgentDomainService
             agent: ! empty($agentProfile) ? $agentProfile : null,
         );
 
-        $result = $this->agent->sendChatMessage($taskContext->getSandboxId(), $chatMessage);
+        $result = $this->agent->sendChatMessage($dataIsolation, $taskContext->getSandboxId(), $chatMessage);
 
         if (! $result->isSuccess()) {
             $this->logger->error('[Sandbox][App] Failed to send chat message to agent', [
@@ -763,7 +766,7 @@ class AgentDomainService
             answer: $answer,
         );
 
-        $result = $this->agent->sendChatMessage($sandboxId, $request);
+        $result = $this->agent->sendChatMessage($dataIsolation, $sandboxId, $request);
 
         if (! $result->isSuccess()) {
             $this->logger->error('[Sandbox][Domain] Failed to send ask_user feedback', [
@@ -811,7 +814,7 @@ class AgentDomainService
             detail: $detail,
         );
 
-        $result = $this->agent->sendChatMessage($sandboxId, $request);
+        $result = $this->agent->sendChatMessage($dataIsolation, $sandboxId, $request);
 
         if (! $result->isSuccess()) {
             $this->logger->error('[Sandbox][Domain] Failed to send user_tool_call feedback', [
@@ -861,7 +864,7 @@ class AgentDomainService
             $reason,
         );
 
-        $response = $this->agent->sendInterruptMessage($sandboxId, $interruptRequest);
+        $response = $this->agent->sendInterruptMessage($dataIsolation, $sandboxId, $interruptRequest);
 
         if (! $response->isSuccess()) {
             $this->logger->error('[Sandbox][App] Failed to send interrupt message to agent', [
@@ -888,16 +891,17 @@ class AgentDomainService
     /**
      * 获取工作区状态.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 工作区状态响应
      */
-    public function getWorkspaceStatus(string $sandboxId): AgentResponse
+    public function getWorkspaceStatus(DataIsolation $dataIsolation, string $sandboxId): AgentResponse
     {
         $this->logger->debug('[Sandbox][App] Getting workspace status', [
             'sandbox_id' => $sandboxId,
         ]);
 
-        $result = $this->agent->getWorkspaceStatus($sandboxId);
+        $result = $this->agent->getWorkspaceStatus($dataIsolation, $sandboxId);
 
         if (! $result->isSuccess()) {
             $this->logger->error('[Sandbox][App] Failed to get workspace status', [
@@ -920,6 +924,7 @@ class AgentDomainService
      * Wait for workspace to be ready with optional interrupt check.
      * Polls workspace status until initialization completes, fails, times out, or is interrupted.
      *
+     * @param DataIsolation $dataIsolation per-call user identity
      * @param string $sandboxId Sandbox ID
      * @param null|callable $interruptChecker Interrupt checker closure, return true to interrupt
      * @param int $maxWaitSeconds Maximum wait time in seconds (default 5 minutes)
@@ -929,6 +934,7 @@ class AgentDomainService
      * @throws SandboxOperationException When initialization fails or error occurs
      */
     public function waitForWorkspaceReady(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         int $maxWaitSeconds = 300,
         int $checkIntervalMs = 100,
@@ -955,7 +961,7 @@ class AgentDomainService
 
             // 2. Check workspace status
             try {
-                $response = $this->getWorkspaceStatus($sandboxId);
+                $response = $this->getWorkspaceStatus($dataIsolation, $sandboxId);
                 $status = $response->getDataValue('status');
 
                 $this->logger->debug('[Sandbox][App] Workspace status check', [
@@ -1027,7 +1033,7 @@ class AgentDomainService
      * @param string $targetMessageId 目标消息ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpoint(string $sandboxId, string $targetMessageId): AgentResponse
+    public function rollbackCheckpoint(DataIsolation $dataIsolation, string $sandboxId, string $targetMessageId): AgentResponse
     {
         $this->logger->debug('[Sandbox][Domain] Rolling back to checkpoint', [
             'sandbox_id' => $sandboxId,
@@ -1036,7 +1042,7 @@ class AgentDomainService
 
         try {
             $request = CheckpointRollbackRequest::create($targetMessageId);
-            $response = $this->agent->rollbackCheckpoint($sandboxId, $request);
+            $response = $this->agent->rollbackCheckpoint($dataIsolation, $sandboxId, $request);
 
             if ($response->isSuccess()) {
                 $this->logger->debug('[Sandbox][Domain] Checkpoint rollback successful', [
@@ -1071,7 +1077,7 @@ class AgentDomainService
      * @param string $targetMessageId 目标消息ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointStart(string $sandboxId, string $targetMessageId): AgentResponse
+    public function rollbackCheckpointStart(DataIsolation $dataIsolation, string $sandboxId, string $targetMessageId): AgentResponse
     {
         $this->logger->debug('[Sandbox][Domain] Starting checkpoint rollback', [
             'sandbox_id' => $sandboxId,
@@ -1080,7 +1086,7 @@ class AgentDomainService
 
         try {
             $request = CheckpointRollbackStartRequest::create($targetMessageId);
-            $response = $this->agent->rollbackCheckpointStart($sandboxId, $request);
+            $response = $this->agent->rollbackCheckpointStart($dataIsolation, $sandboxId, $request);
 
             if ($response->isSuccess()) {
                 $this->logger->debug('[Sandbox][Domain] Checkpoint rollback start successful', [
@@ -1114,7 +1120,7 @@ class AgentDomainService
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointCommit(string $sandboxId): AgentResponse
+    public function rollbackCheckpointCommit(DataIsolation $dataIsolation, string $sandboxId): AgentResponse
     {
         $this->logger->debug('[Sandbox][Domain] Committing checkpoint rollback', [
             'sandbox_id' => $sandboxId,
@@ -1122,7 +1128,7 @@ class AgentDomainService
 
         try {
             $request = CheckpointRollbackCommitRequest::create();
-            $response = $this->agent->rollbackCheckpointCommit($sandboxId, $request);
+            $response = $this->agent->rollbackCheckpointCommit($dataIsolation, $sandboxId, $request);
 
             if ($response->isSuccess()) {
                 $this->logger->debug('[Sandbox][Domain] Checkpoint rollback commit successful', [
@@ -1153,7 +1159,7 @@ class AgentDomainService
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointUndo(string $sandboxId): AgentResponse
+    public function rollbackCheckpointUndo(DataIsolation $dataIsolation, string $sandboxId): AgentResponse
     {
         $this->logger->debug('[Sandbox][Domain] Undoing checkpoint rollback', [
             'sandbox_id' => $sandboxId,
@@ -1161,7 +1167,7 @@ class AgentDomainService
 
         try {
             $request = CheckpointRollbackUndoRequest::create();
-            $response = $this->agent->rollbackCheckpointUndo($sandboxId, $request);
+            $response = $this->agent->rollbackCheckpointUndo($dataIsolation, $sandboxId, $request);
 
             if ($response->isSuccess()) {
                 $this->logger->debug('[Sandbox][Domain] Checkpoint rollback undo successful', [
@@ -1193,7 +1199,7 @@ class AgentDomainService
      * @param string $targetMessageId 目标消息ID
      * @return AgentResponse 检查响应
      */
-    public function rollbackCheckpointCheck(string $sandboxId, string $targetMessageId): AgentResponse
+    public function rollbackCheckpointCheck(DataIsolation $dataIsolation, string $sandboxId, string $targetMessageId): AgentResponse
     {
         $this->logger->debug('[Sandbox][Domain] Checking checkpoint rollback feasibility', [
             'sandbox_id' => $sandboxId,
@@ -1202,7 +1208,7 @@ class AgentDomainService
 
         try {
             $request = CheckpointRollbackCheckRequest::create($targetMessageId);
-            $response = $this->agent->rollbackCheckpointCheck($sandboxId, $request);
+            $response = $this->agent->rollbackCheckpointCheck($dataIsolation, $sandboxId, $request);
 
             if ($response->isSuccess()) {
                 $this->logger->debug('[Sandbox][Domain] Checkpoint rollback check completed', [
@@ -1233,8 +1239,7 @@ class AgentDomainService
      * Ensure sandbox container is running (without agent initialization).
      * Used for export/utility scenarios that only need the sandbox container running.
      *
-     * @param string $userId User ID
-     * @param string $orgCode Organization code
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
      * @param string $sandboxId Sandbox ID
      * @param string $projectId Project ID
      * @param string $workDir Working directory
@@ -1242,12 +1247,12 @@ class AgentDomainService
      * @throws SandboxOperationException When sandbox cannot be started
      */
     public function ensureSandboxRunning(
-        string $userId,
-        string $orgCode,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         string $workDir
     ): string {
+        $userId = $dataIsolation->getCurrentUserId();
         $this->logger->debug('[Sandbox][Domain] Ensuring sandbox container is running', [
             'sandbox_id' => $sandboxId,
             'project_id' => $projectId,
@@ -1294,10 +1299,11 @@ class AgentDomainService
             ]);
         }
 
-        // Create sandbox container
-        $authorization = $this->getAuthorizationByUserId($userId);
-        $this->gateway->setUserContext($userId, $orgCode);
-        $createResult = $this->gateway->createSandbox($projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '', $authorization);
+        // Create sandbox container. Per-call user identity flows through
+        // as a DataIsolation value object – the gateway forwards the
+        // authorization token on the HTTP request so the in-pod
+        // agfs-server / super-magic agent auth middleware can validate it.
+        $createResult = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '');
 
         if (! $createResult->isSuccess()) {
             $this->logger->error('[Sandbox][Domain] Failed to create sandbox container', [
@@ -1505,7 +1511,7 @@ class AgentDomainService
             return null;
         }
 
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
         if ($authorization === '') {
             $this->logger->warning('[Sandbox][WarmPath] Skipping warm pool: no authorization for user', [
                 'user_id' => $dataIsolation->getCurrentUserId(),
@@ -1516,11 +1522,10 @@ class AgentDomainService
 
         try {
             $sandboxId = $this->getWarmPoolSandboxDomainService()->tryAcquireAndMount(
-                userId: $dataIsolation->getCurrentUserId(),
+                dataIsolation: $dataIsolation,
                 projectId: (string) $agentContext->getProjectEntity()->getId(),
                 projectSpaceRootFileId: $projectSpaceRootFileId,
                 userSpaceRootFileId: $userSpaceRootFileId,
-                authorization: $authorization,
                 labels: $this->buildSandboxLabels($topicEntity),
                 topicId: (string) $topicEntity->getId()
             );
@@ -1624,8 +1629,8 @@ class AgentDomainService
             'language' => $dataIsolation->getLanguage(),
         ]);
 
-        // 获取 authorization
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        // 从 DataIsolation 获取 authorization（由 create() 自动填充）
+        $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
 
         // 构建并返回 MessageMetadata 对象
         return new MessageMetadata(

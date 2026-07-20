@@ -55,6 +55,7 @@ import {
 	resolveMessageHeaderTitle,
 } from "@/pages/superMagic/utils/resolve-chat-conversation-display-name"
 import { isTopicShareAllowed } from "@/pages/superMagic/utils/is-topic-share-allowed"
+import { isMagicApp } from "@/utils/devices"
 interface TopicMutationSuccessOptions {
 	onSuccess?: () => Promise<void> | void
 }
@@ -521,6 +522,20 @@ function MessageHeader({
 		)
 	}
 
+	// Magic App on iPad runs the desktop header on a touch surface, so the share
+	// trigger avoids nesting Tooltip and Popover trigger layers on the same tap.
+	const shareButton = (
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			disabled={!isAllowShare}
+			data-testid="message-header-share-button"
+			className={cn(headerIconButtonClassName, sharePopoverVisible && "bg-accent")}
+		>
+			<IconShare3 size={16} className="shrink-0 text-foreground" />
+		</Button>
+	)
+
 	return (
 		<>
 			<div
@@ -692,25 +707,13 @@ function MessageHeader({
 									topicTitle={selectedTopic?.topic_name}
 								>
 									<span>
-										<MagicTooltip title={t("messageHeader.share")}>
-											<span>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													disabled={!isAllowShare}
-													data-testid="message-header-share-button"
-													className={cn(
-														headerIconButtonClassName,
-														sharePopoverVisible && "bg-accent",
-													)}
-												>
-													<IconShare3
-														size={16}
-														className="shrink-0 text-foreground"
-													/>
-												</Button>
-											</span>
-										</MagicTooltip>
+										{isMagicApp ? (
+											shareButton
+										) : (
+											<MagicTooltip title={t("messageHeader.share")}>
+												<span>{shareButton}</span>
+											</MagicTooltip>
+										)}
 									</span>
 								</TopicSharePopover>
 							) : null}

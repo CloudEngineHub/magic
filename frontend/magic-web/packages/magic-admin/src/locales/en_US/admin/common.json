@@ -71,6 +71,7 @@
 		"remove": "Remove",
 		"reset": "Reset",
 		"save": "Save",
+		"search": "Search",
 		"upload": "Upload"
 	},
 	"confirmClose": "Confirm Close",
@@ -89,6 +90,7 @@
 		"actionFailed": "Action Failed",
 		"actionSuccess": "Action Successful",
 		"addSuccess": "Add Successful",
+		"codeConflictRetry": "Template code conflict. A new code has been generated automatically",
 		"copyFailed": "Copy Failed",
 		"copySuccess": "Copy Successful",
 		"createSuccess": "Create Successful",
@@ -169,6 +171,7 @@
 			"providerAccess": "Operations Control",
 			"proxyServer": "Proxy Server",
 			"skillMarket": "Skill Market",
+			"slidesTemplate": "Slide Templates",
 			"systemAgent": "Official crew Management",
 			"systemCapability": "System Capability",
 			"systemSkill": "Skill Management",
@@ -194,8 +197,149 @@
 	"pleaseSelectPlaceholder": "Please select {{name}}",
 	"prePage": "Previous Page",
 	"search": "Search Options",
+	"slidesTemplate": {
+		"addButton": "Add Template",
+		"addTitle": "Add Slide Template",
+		"category": {
+			"addButton": "Add Category",
+			"addTitle": "Add Slide Template Category",
+			"codeRule": "Category code must be PPT-CATE-xxx. The suffix only supports lowercase letters, numbers, and hyphens.",
+			"columns": {
+				"code": "Category Code",
+				"name": "Category Name",
+				"status": "Status",
+				"templateCount": "Templates",
+				"updatedAt": "Updated At"
+			},
+			"editTitle": "Edit Slide Template Category",
+			"fields": {
+				"code": "Category Code",
+				"name": "Category Name",
+				"sort": "Sort",
+				"status": "Status"
+			},
+			"filters": {
+				"code": "Category Code",
+				"keyword": "Keyword",
+				"status": "Status"
+			},
+			"manageButton": "Categories",
+			"manageTitle": "Category Management"
+		},
+		"columns": {
+			"category": "Category",
+			"code": "Template Code",
+			"name": "Template Name",
+			"sort": "Sort",
+			"source": "Source",
+			"status": "Status",
+			"tags": "Tags",
+			"thumbnail": "Cover",
+			"updatedAt": "Updated At",
+			"usageCount": "Usage"
+		},
+		"editTitle": "Edit Slide Template",
+		"featuredTagUnavailable": "The featured tag is not enabled in tag management.",
+		"fields": {
+			"category": "Category",
+			"collage": "Preview Collage",
+			"description": "Description",
+			"featured": "Featured",
+			"label": "Template Name",
+			"previewImages": "Per-slide Preview Images",
+			"previewUrl": "Preview URL",
+			"sort": "Sort",
+			"status": "Status",
+			"tags": "Template Tags",
+			"templateFile": "Template ZIP",
+			"thumbnail": "Cover Image"
+		},
+		"filters": {
+			"category": "Category",
+			"code": "Template Code",
+			"keyword": "Keyword",
+			"status": "Status",
+			"tagMatch": "Tag Match",
+			"tags": "Tags"
+		},
+		"preview": {
+			"empty": "Upload per-slide preview images to view them here.",
+			"nextPage": "Next page",
+			"previousPage": "Previous page"
+		},
+		"source": {
+			"official": "Official",
+			"system": "System Built-in"
+		},
+		"status": {
+			"disabled": "Disabled",
+			"enabled": "Enabled"
+		},
+		"tag": {
+			"addButton": "Add Tag",
+			"addGroupButton": "Add",
+			"addGroupTitle": "Add Slide Template Tag Group",
+			"addTitle": "Add Slide Template Tag",
+			"allOption": "All",
+			"allTagsTitle": "All Tags",
+			"childrenTitle": "Child Tags",
+			"codeHint": "Format: lowercase letters, numbers, and hyphens, for example purpose-annual-report.",
+			"codeRule": "Tag code only supports lowercase letters, numbers, and hyphens.",
+			"columns": {
+				"code": "Tag Code",
+				"name": "Tag Name",
+				"status": "Status",
+				"templateCount": "Templates",
+				"updatedAt": "Updated At"
+			},
+			"editGroupTitle": "Edit Slide Template Tag Group",
+			"editTitle": "Edit Slide Template Tag",
+			"fields": {
+				"code": "Tag Code",
+				"enabled": "Enabled",
+				"name": "Tag Name",
+				"nodeType": "Node Type",
+				"parent": "Parent Group",
+				"sort": "Sort",
+				"status": "Status"
+			},
+			"filters": {
+				"code": "Tag Code",
+				"keyword": "Keyword",
+				"status": "Status"
+			},
+			"groupCodeHint": "Format: lowercase letters, numbers, underscores, or hyphens, ending with _group, for example audience_scene_group.",
+			"groupCodeRule": "Group code only supports lowercase letters, numbers, underscores, and hyphens, and must end with _group.",
+			"groupsTitle": "Groups",
+			"manageButton": "Tags",
+			"manageTitle": "Tag Management",
+			"nodeTypes": {
+				"group": "Group",
+				"tag": "Child Tag"
+			},
+			"quickCreateGroup": "Create Group",
+			"systemBuiltIn": "System Built-in"
+		},
+		"tagMatch": {
+			"all": "All",
+			"any": "Any"
+		},
+		"upload": {
+			"imageDescription": "Click, drag, or paste an image to upload",
+			"imageUploadedDescription": "Image uploaded. Click, drag, or paste to replace it",
+			"onlyImage": "Only image files are supported",
+			"onlyZip": "Only ZIP files are supported",
+			"previewImagesDescription": "Click, drag, or paste multiple images to upload. Drag thumbnails to reorder slides",
+			"previewImagesEmpty": "No per-slide preview images yet. Click or drag images to upload",
+			"previewImagesUploadedDescription": "{{count}} image(s) uploaded. You can add more or drag to reorder",
+			"removePreviewImage": "Remove this preview image",
+			"zipDescription": "Click or drag a ZIP file to upload",
+			"zipUploadedDescription": "ZIP uploaded. Click or drag to replace it"
+		}
+	},
+	"sortOrder": "Sort Order",
 	"status": "Status",
-	"title": "$t(common:platform.name) Admin Dashboard",
+	"title": "{{platformName}} Admin Dashboard",
 	"totalItems": "Total {{total}} items",
 	"unsavedChanges": "You have unsaved changes. Are you sure you want to close?"
 }

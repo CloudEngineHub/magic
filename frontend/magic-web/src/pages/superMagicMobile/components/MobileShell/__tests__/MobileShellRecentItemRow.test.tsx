@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { MobileShellRecentItemRow } from "../MobileShellRecentItemRow"
 import type { MobileShellMenuRecentItem } from "../MobileShellMenuContext"
@@ -86,7 +86,8 @@ describe("MobileShellRecentItemRow", () => {
 	it("navigates on short tap of the title area", () => {
 		const { onRecentNavigate, onOpenActions } = renderRow()
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-1")
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		const titleButton = within(row).getByTestId("mobile-super-shell-recent-title-button")
 		touchStart(titleButton)
 		touchEnd(titleButton)
 
@@ -97,7 +98,8 @@ describe("MobileShellRecentItemRow", () => {
 	it("does not navigate when touch moves beyond threshold before release", () => {
 		const { onRecentNavigate, onOpenActions } = renderRow()
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-1")
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		const titleButton = within(row).getByTestId("mobile-super-shell-recent-title-button")
 		touchStart(titleButton)
 		touchMove(titleButton, 0, 30)
 		touchEnd(titleButton, 0, 30)
@@ -109,7 +111,8 @@ describe("MobileShellRecentItemRow", () => {
 	it("opens actions menu on long press of the title area", () => {
 		const { onRecentNavigate, onOpenActions } = renderRow()
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-1")
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		const titleButton = within(row).getByTestId("mobile-super-shell-recent-title-button")
 		touchStart(titleButton)
 		vi.advanceTimersByTime(500)
 		touchEnd(titleButton)
@@ -125,7 +128,8 @@ describe("MobileShellRecentItemRow", () => {
 	it("does not open actions on long press when project is missing", () => {
 		const { onOpenActions } = renderRow({ project: undefined })
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-1")
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		const titleButton = within(row).getByTestId("mobile-super-shell-recent-title-button")
 		touchStart(titleButton)
 		vi.advanceTimersByTime(500)
 		touchEnd(titleButton)
@@ -136,11 +140,36 @@ describe("MobileShellRecentItemRow", () => {
 	it("opens actions when the more button is clicked", () => {
 		const { onOpenActions } = renderRow()
 
-		fireEvent.click(screen.getByTestId("mobile-super-shell-recent-actions-recent-1"))
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		fireEvent.click(within(row).getByTestId("mobile-super-shell-recent-actions-button"))
 
 		expect(onOpenActions).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "recent-1" }),
 			"more",
 		)
+	})
+
+	it("keeps recent row test ids stable across page prefixes and business ids", () => {
+		renderRow(
+			{
+				id: "project-from-api-1",
+				title: "Recent project",
+			},
+			{ testIdPrefix: "mobile-workspaces-page" },
+		)
+
+		const row = screen.getByTestId("mobile-super-shell-recent-item")
+		expect(
+			within(row).getByTestId("mobile-super-shell-recent-title-button"),
+		).toBeInTheDocument()
+		expect(
+			within(row).getByTestId("mobile-super-shell-recent-actions-button"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-recent-project-from-api-1"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-recent-actions-project-from-api-1"),
+		).not.toBeInTheDocument()
 	})
 })

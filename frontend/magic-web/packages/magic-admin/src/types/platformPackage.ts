@@ -7,6 +7,7 @@ import * as AiPowerTypes from "./platformPackage/aiPower"
 /** 平台套餐 */
 export namespace PlatformPackage {
 	export type GlobalConfig = Common.GlobalConfig
+	export type MaintenanceType = Common.MaintenanceType
 	export type NameI18N = Common.NameI18N
 	export import PackageType = Common.PackageType
 	export import SubscriptionType = Common.SubscriptionType
@@ -43,6 +44,13 @@ export namespace PlatformPackage {
 	export type RoleI18N = MarketTypes.RoleI18N
 	export type AgentMarketItem = MarketTypes.AgentMarketItem
 	export type UpdateAgentMarketInfoParams = MarketTypes.UpdateAgentMarketInfoParams
+	export type AgentMarketCategoryStatus = MarketTypes.AgentMarketCategoryStatus
+	export import AgentMarketCategoryStatusMap = MarketTypes.AgentMarketCategoryStatusMap
+	export type GetAgentMarketCategoryListParams = MarketTypes.GetAgentMarketCategoryListParams
+	export type AgentMarketCategoryListResponse = MarketTypes.AgentMarketCategoryListResponse
+	export type AgentMarketCategoryItem = MarketTypes.AgentMarketCategoryItem
+	export type AdminMarketCategory = MarketTypes.AdminMarketCategory
+	export type SaveAgentMarketCategoryParams = MarketTypes.SaveAgentMarketCategoryParams
 	export type GetAgentVersionReviewListParams = MarketTypes.GetAgentVersionReviewListParams
 	export type AgentVersionReview = MarketTypes.AgentVersionReview
 

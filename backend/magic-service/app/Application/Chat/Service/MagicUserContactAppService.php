@@ -320,6 +320,8 @@ class MagicUserContactAppService extends AbstractAppService
             return PageListAssembler::pageByMysql([], 0, 0, 0);
         }
 
+        $this->appendEmployeeNo($usersDetailDTOList);
+
         // Note: Since this interface is not within RequestContextMiddleware, organization context cannot be obtained
         // Therefore, avatar processing is not performed, and raw data is returned directly
         // Avatar processing requires specific organization context and file service configuration
@@ -414,6 +416,56 @@ class MagicUserContactAppService extends AbstractAppService
             }
         }
         return $usersDetailDTOList;
+    }
+
+    /**
+     * 从组织用户关系中补充员工工号。
+     *
+     * 当前 employee_no 存储在部门用户关系表中，一个用户可能存在多条部门关系，
+     * 因此这里只取同一组织、同一用户的第一个非空工号。
+     *
+     * @param UserDetailDTO[] $users
+     */
+    private function appendEmployeeNo(array $users): void
+    {
+        $userIds = [];
+        foreach ($users as $user) {
+            $userIds[] = $user->getUserId();
+        }
+        $userIds = array_values(array_unique($userIds));
+        if (empty($userIds)) {
+            return;
+        }
+
+        // 该接口支持账号跨组织查询，不能使用当前组织的数据隔离查询。
+        $departmentUsers = $this->departmentUserDomainService->getDepartmentUsersByUserIdsInMagic($userIds);
+        $employeeNoMap = [];
+
+        foreach ($departmentUsers as $departmentUser) {
+            $employeeNo = $departmentUser->getEmployeeNo();
+            if ($employeeNo === '') {
+                continue;
+            }
+
+            $key = $departmentUser->getOrganizationCode() . ':' . $departmentUser->getUserId();
+            if (! isset($employeeNoMap[$key])) {
+                $employeeNoMap[$key] = $employeeNo;
+                continue;
+            }
+
+            if ($employeeNoMap[$key] !== $employeeNo) {
+                $this->logger->warning('同一组织用户存在多个员工工号', [
+                    'organization_code' => $departmentUser->getOrganizationCode(),
+                    'user_id' => $departmentUser->getUserId(),
+                    'employee_nos' => [$employeeNoMap[$key], $employeeNo],
+                ]);
+            }
+        }
+
+        foreach ($users as $user) {
+            $key = $user->getOrganizationCode() . ':' . $user->getUserId();
+            $user->setEmployeeNo($employeeNoMap[$key] ?? '');
+        }
     }
 
     /**

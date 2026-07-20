@@ -1,16 +1,14 @@
 import { useRef } from "react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import AudioRecordingsDesktop from "./AudioRecordingsDesktop"
+import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 
 /** Page shell for PC audio recordings list (CrewMarket-style layout) */
 function AudioRecordingsPageDesktop() {
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
 
 	return (
-		<div
-			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
-			data-testid="audio-recordings-page"
-		>
+		<div className={AUDIO_RECORDINGS_PAGE_SHELL_CLASS} data-testid="audio-recordings-page">
 			<ScrollArea
 				className="min-h-0 flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block"
 				viewportRef={scrollViewportRef}

@@ -75,12 +75,14 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		attachments,
 		resourceId,
 		defaultSelectedFileIds,
+		requiredFileIds,
 		defaultOpenFileId,
 		topicTitle,
 		projectName,
 		projectId,
 		onCancelShare,
 		onSaveSuccess,
+		fileShareUiConfig,
 	} = props
 
 	// Check if user is in free plan
@@ -138,6 +140,9 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		shareProject?: boolean // 是否分享整个项目
 		projectName?: string // 项目原始名称（用于项目分享时显示）
 		fileIds?: string[] // 文件ID列表，用于查询文件详情
+		createdAt?: string
+		updatedAt?: string
+		viewCount?: number
 	} | null>(null)
 
 	// Reset modal key when modal opens to force remount
@@ -222,11 +227,14 @@ export default memo(function ShareModel(props: ShareModalProps) {
 
 	// Generate title based on sharing mode
 	const modalTitle = useMemo(() => {
+		if (fileShareUiConfig?.useRecordingShareCreateTitle) {
+			return t("share.recordingShareCreateTitle")
+		}
 		if (shareMode === ShareMode.File || shareMode === ShareMode.Project) {
 			return t("share.shareFile")
 		}
 		return t("share.shareTopic")
-	}, [shareMode, t])
+	}, [fileShareUiConfig?.useRecordingShareCreateTitle, shareMode, t])
 	const topicShareSubtitle = topicTitle?.trim()
 
 	const handleCancel = useCallback(
@@ -307,18 +315,20 @@ export default memo(function ShareModel(props: ShareModalProps) {
 	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(() => {
 		const actions: ActionsPopup.ActionButtonConfig[] = []
 
-		// 管理分享链接（移动端始终显示）
-		actions.push({
-			key: "manageShare",
-			label: t("share.manageShareLinks"),
-			"data-testid": "mobile-share-manage-links-button",
-			onClick: () => {
-				setActionsPopupVisible(false)
-				// 打开分享管理面板
-				openShareManagementModal()
-				handleCancel()
-			},
-		})
+		// Some product scenes own a specialized share manager, so the generic shortcut is optional.
+		if (!fileShareUiConfig?.hideManageShareLinks) {
+			actions.push({
+				key: "manageShare",
+				label: t("share.manageShareLinks"),
+				"data-testid": "mobile-share-manage-links-button",
+				onClick: () => {
+					setActionsPopupVisible(false)
+					// 打开分享管理面板
+					openShareManagementModal()
+					handleCancel()
+				},
+			})
+		}
 
 		// 取消分享（只有编辑模式才显示）
 		if (shouldShowCancelButton) {
@@ -335,7 +345,13 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		}
 
 		return actions
-	}, [shouldShowCancelButton, t, handleCancelShare, handleCancel])
+	}, [
+		fileShareUiConfig?.hideManageShareLinks,
+		shouldShowCancelButton,
+		t,
+		handleCancelShare,
+		handleCancel,
+	])
 
 	const handleOpenActionsPopup = useCallback(() => {
 		setActionsPopupVisible(true)
@@ -374,10 +390,12 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							types={types}
 							resourceId={resourceId || shareSuccessData?.resourceId}
 							defaultSelectedFileIds={defaultSelectedFileIds}
+							requiredFileIds={requiredFileIds}
 							defaultOpenFileId={defaultOpenFileId}
 							shareMode={shareMode}
 							projectName={projectName}
 							projectId={projectId}
+							fileShareUiConfig={fileShareUiConfig}
 							onCancel={handleCancel}
 							onSaveSuccess={(data) => {
 								// 设置成功数据并显示 ShareSuccessModal
@@ -434,10 +452,12 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							types={types}
 							resourceId={resourceId || shareSuccessData?.resourceId}
 							defaultSelectedFileIds={defaultSelectedFileIds}
+							requiredFileIds={requiredFileIds}
 							defaultOpenFileId={defaultOpenFileId}
 							shareMode={shareMode}
 							projectName={projectName}
 							projectId={projectId}
+							fileShareUiConfig={fileShareUiConfig}
 							onCancel={handleCancel}
 							onSaveSuccess={(data) => {
 								// 设置成功数据并显示 ShareSuccessModal
@@ -509,6 +529,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 								? () => finalCancelShare(shareSuccessData.resourceId || "")
 								: undefined
 						}
+						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 						{...shareSuccessData}
 					/>
 				)}
@@ -572,7 +593,10 @@ export default memo(function ShareModel(props: ShareModalProps) {
 				className="flex max-h-[92dvh] flex-col overflow-hidden bg-[#F7F7F6]"
 				data-testid="mobile-topic-share-sheet"
 			>
-				<div className="min-h-0 flex-1 overflow-y-auto" data-testid="mobile-topic-share-content">
+				<div
+					className="min-h-0 flex-1 overflow-y-auto"
+					data-testid="mobile-topic-share-content"
+				>
 					<MobileTopicShare
 						shareContext={shareContext}
 						extraData={extraData}

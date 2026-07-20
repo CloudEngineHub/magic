@@ -6,7 +6,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
 import type { FileShareItem, ProjectShareItem } from "../types"
 import ProjectNameBadge from "./ProjectNameBadge"
-import { ResourceType, ShareMode, ShareType } from "../../Share/types"
+import { ResourceType, ShareMode, ShareType, type FileShareUiConfig } from "../../Share/types"
 import ShareModal from "../../Share/Modal"
 import ShareSuccessModal from "../../Share/FileShareModal/ShareSuccessModal"
 import {
@@ -17,11 +17,13 @@ import {
 	getRemainingDays,
 	formatExpireAt,
 	convertFileShareItemToShareItem,
+	getShareDisplayName,
 } from "../utils/shareTypeHelpers"
 import { cn } from "@/lib/utils"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import { useShareItemActions } from "../hooks/useShareItemActions"
 import { useShareSuccessModal } from "../hooks/useShareSuccessModal"
+import { isMagicApp } from "@/utils/devices"
 
 // 垂直分隔线组件
 function VerticalSeparator() {
@@ -43,9 +45,16 @@ interface FileShareListNewProps {
 	loading: boolean
 	onCancelShare: (resourceId: string) => void
 	onRefresh: () => void
+	fileShareUiConfig?: FileShareUiConfig
 }
 
-function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShareListNewProps) {
+function FileShareListNew({
+	data,
+	loading,
+	onCancelShare,
+	onRefresh,
+	fileShareUiConfig,
+}: FileShareListNewProps) {
 	const { t } = useTranslation("super")
 	const [shareModalOpen, setShareModalOpen] = useState(false)
 	const [selectedItem, setSelectedItem] = useState<FileShareItem | ProjectShareItem | null>(null)
@@ -116,8 +125,16 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 			<div ref={containerRef} className="flex flex-col gap-2">
 				{data.map((item) => {
 					const isHovered = hoveredId === item.resource_id
+					// Magic App desktop layout has no dependable hover, so pin the action at row end.
+					const showActions = (isHovered || isMagicApp) && !item.deleted_at
 					const badgeStyles = getShareTypeBadgeStyles(item.share_type)
 					const remainingDays = getRemainingDays(item.expire_at)
+					const isProjectShare =
+						item.resource_type === ResourceType.Project || item.share_project === true
+					const displayName = getShareDisplayName(
+						item.title,
+						isProjectShare ? "project" : "file",
+					)
 
 					return (
 						<div
@@ -143,34 +160,31 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 									<div className="flex min-w-0 flex-1 items-center gap-2">
 										{/* 文件名 */}
 										<span className="truncate text-sm font-medium leading-5 text-gray-900">
-											{item.title}
+											{displayName}
 										</span>
 
-										<div className="flex flex-1 justify-between">
+										<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
 											{/* 项目名badge */}
 											<ProjectNameBadge
 												projectId={item.project_id}
 												projectName={item.project_name}
 												className="bg-neutral-100 text-neutral-600"
 											/>
-											{/* 分享类型badge - 悬浮时隐藏 */}
-											{!isHovered && (
-												<Badge
-													variant="secondary"
-													className={cn(
-														"flex-shrink-0 rounded-full px-2 py-1 text-xs leading-none",
-														badgeStyles.bgClassName,
-														badgeStyles.textClassName,
-													)}
-												>
-													{getShareTypeText(item.share_type, t)}
-												</Badge>
-											)}
+											<Badge
+												variant="secondary"
+												className={cn(
+													"flex-shrink-0 rounded-full px-2 py-1 text-xs leading-none",
+													badgeStyles.bgClassName,
+													badgeStyles.textClassName,
+												)}
+											>
+												{getShareTypeText(item.share_type, t)}
+											</Badge>
 										</div>
 									</div>
 
-									{/* 操作按钮 - 只在悬浮时显示，且未删除时显示 */}
-									{isHovered && !item.deleted_at && (
+									{/* 操作按钮 */}
+									{showActions && (
 										<div className="flex flex-shrink-0 items-center gap-1">
 											<Dropdown
 												menu={{
@@ -190,6 +204,7 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 													variant="ghost"
 													size="icon"
 													className="h-7 w-7"
+													aria-label={t("shareManagement.more")}
 													onClick={(e) => e.stopPropagation()}
 												>
 													<IconDots size={16} />
@@ -204,8 +219,8 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 									<span className="flex-shrink-0">
 										{(item.extend?.file_count || 0) > 1
 											? t("shareManagement.multipleFiles", {
-												count: item.extend?.file_count,
-											})
+													count: item.extend?.file_count,
+												})
 											: t("shareManagement.oneFile")}
 									</span>
 									<VerticalSeparator />
@@ -221,9 +236,9 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 												? remainingDays === 0
 													? t("shareManagement.expired")
 													: t("shareManagement.validUntil", {
-														days: remainingDays,
-														date: formatExpireAt(item.expire_at),
-													})
+															days: remainingDays,
+															date: formatExpireAt(item.expire_at),
+														})
 												: t("shareManagement.permanentValid")
 										}
 									></MagicEllipseWithTooltip>
@@ -242,7 +257,9 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 					shareMode={ShareMode.File}
 					resourceId={selectedItem.resource_id}
 					projectId={selectedItem.project_id}
+					projectName={selectedItem.project_name}
 					types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+					fileShareUiConfig={fileShareUiConfig}
 				/>
 			)}
 
@@ -271,6 +288,10 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 						shareSuccessModal.currentItem.main_file_name || t("share.untitled")
 					}
 					fileIds={(shareSuccessModal.currentItem as any).file_ids}
+					createdAt={shareSuccessModal.currentItem.created_at}
+					updatedAt={shareSuccessModal.currentItem.updated_at}
+					viewCount={shareSuccessModal.currentItem.view_count}
+					hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					onEditShare={() => {
 						const item = shareSuccessModal.currentItem
 						shareSuccessModal.close()

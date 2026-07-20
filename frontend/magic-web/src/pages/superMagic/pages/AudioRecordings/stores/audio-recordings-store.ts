@@ -1,10 +1,11 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import type { RecordTaskProgress } from "@/apis/modules/superMagic/recordSummary"
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import {
 	audioRecordingsService,
 	type PagedAudioProjects,
 	type QueryAudioProjectsOptions,
-} from "@/services/audioRecordings"
+} from "@/services/audioRecordings/AudioRecordingsService"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,
@@ -19,7 +20,18 @@ import {
 } from "@/pages/superMagic/utils/paged-list-store"
 import { summaryProgressPoller } from "../services/summary-progress-poller"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
-import { canSubmitSummary, shouldPollSummaryProgress } from "../utils/summary-action-utils"
+import { shouldPollSummaryProgress } from "../utils/summary-action-utils"
+import {
+	buildOptimisticRetryMergeProject,
+	buildOptimisticSummarizingProject,
+	deleteAudioRecordingProjects,
+	renameAudioRecordingProject,
+	resubmitAudioRecordingSummary,
+	retryMergeAudioRecording,
+	submitAudioRecordingSummary,
+} from "../utils/audio-recording-actions"
+import { resolveDatePresetRange } from "../utils/resolve-date-preset-range"
+import type { AudioRecordingsFilterSessionSnapshot } from "../utils/audio-recordings-filter-session"
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -27,16 +39,30 @@ export type SubmitSummaryResult =
 	| { ok: true }
 	| { ok: false; reason: "busy" | "missingParams" | "missingModel" | "api" }
 
+export type RetryMergeResult =
+	| { ok: true }
+	| { ok: false; reason: "busy" | "missingParams" | "api" }
+
+/** Uses progress duration only after backend reports a real value, preserving known local metadata */
+function resolvePatchedDuration(progressDuration: number | undefined, currentDuration: number) {
+	if (Number.isFinite(progressDuration) && progressDuration !== undefined && progressDuration > 0)
+		return progressDuration
+	return currentDuration
+}
+
 /** MobX store for PC audio recordings list: filters, pagination, and fetch lifecycle */
 export class AudioRecordingsStore {
 	list: AudioProjectListItem[] = []
+	optimisticItems: AudioProjectListItem[] = []
 	page = 1
 	pageSize = DEFAULT_PAGE_SIZE
 	keyword = ""
 	summaryFilter: AudioRecordingSummaryFilter = "all"
 	createdAtStart?: number
 	createdAtEnd?: number
-	sortBy: AudioProjectSortBy = "created_at"
+	workspaceId = ALL_RECORDING_GROUP_ID
+	// Default to last-updated ordering so the desktop list matches the mobile recordings entry.
+	sortBy: AudioProjectSortBy = "updated_at"
 	sortOrder: AudioProjectSortOrder = "desc"
 	loading = false
 	loadingMore = false
@@ -62,8 +88,35 @@ export class AudioRecordingsStore {
 		return this.actionSubmittingIds.has(projectId)
 	}
 
-	/**
-	 * Whether the server may return another page.
+	/** Adds an optimistic item to keep track of local uploads/recording placeholders */
+	addOptimisticItem(item: AudioProjectListItem) {
+		this.optimisticItems = [item, ...this.optimisticItems.filter((x) => x.id !== item.id)]
+	}
+
+	/** Clears an optimistic item after it is replaced by an authoritative item */
+	clearOptimisticItem(projectId: string) {
+		this.optimisticItems = this.optimisticItems.filter((x) => x.id !== projectId)
+	}
+
+	/** Updates transfer status properties for an optimistic item during upload */
+	updateOptimisticItemTransfer(
+		projectId: string,
+		status: AudioProjectListItem["transferStatus"],
+		progress?: number,
+	) {
+		this.optimisticItems = this.optimisticItems.map((item) => {
+			if (item.id !== projectId) return item
+			const updatedItem = {
+				...item,
+				transferStatus: status,
+				transferProgress: progress !== undefined ? progress : item.transferProgress,
+			}
+			updatedItem.card_status = resolveCardStatusFromListItem(updatedItem)
+			return updatedItem
+		})
+	}
+
+	/** Whether the server may return another page.
 	 * Uses server pagination (page × pageSize vs total), not client list.length,
 	 * because normalize/tab filters can shrink visible rows without implying more pages.
 	 */
@@ -92,6 +145,7 @@ export class AudioRecordingsStore {
 		this.actionSubmittingIds = new Set()
 		summaryProgressPoller.dispose()
 		this.pollerRegistered = false
+		// Keep optimisticItems across resets to preserve uploading items when switching pages
 	}
 
 	/** Binds progress poller callbacks once per store lifetime */
@@ -104,6 +158,9 @@ export class AudioRecordingsStore {
 			onTaskDone: () => undefined,
 			onTaskMissing: () => undefined,
 		})
+
+		// Trigger background polling for any already existing optimistic items
+		this.registerInProgressTasksForPolling(this.optimisticItems)
 	}
 
 	/** Unregisters poller when the list page unmounts */
@@ -126,6 +183,22 @@ export class AudioRecordingsStore {
 		this.sortOrder = sortOrder
 	}
 
+	/** Restores persisted query filters in one pass before the first list request is built. */
+	hydrateFiltersFromSession(snapshot: AudioRecordingsFilterSessionSnapshot) {
+		const range = resolveDatePresetRange(snapshot.datePreset)
+		this.summaryFilter = snapshot.summaryFilter
+		this.createdAtStart = range.start
+		this.createdAtEnd = range.end
+		this.workspaceId = snapshot.groupId
+		this.sortBy = snapshot.sortBy
+		this.sortOrder = snapshot.sortOrder
+	}
+
+	/** Updates the workspace group used by subsequent list queries */
+	setWorkspaceId(workspaceId: string) {
+		this.workspaceId = workspaceId
+	}
+
 	/** Builds query options from current filter state for service calls */
 	private buildQueryOptions(page: number, keyword: string): QueryAudioProjectsOptions {
 		return {
@@ -137,6 +210,7 @@ export class AudioRecordingsStore {
 			createdAtEnd: this.createdAtEnd,
 			sortBy: this.sortBy,
 			sortOrder: this.sortOrder,
+			workspaceId: this.workspaceId,
 		}
 	}
 
@@ -155,6 +229,102 @@ export class AudioRecordingsStore {
 			this.total = data.total
 			this.registerInProgressTasksForPolling(data.list)
 		})
+	}
+
+	/**
+	 * Patches both authoritative and optimistic caches before the backend responds, so
+	 * PC/H5 list cards immediately switch to the summarizing state after a user action.
+	 */
+	private applyOptimisticSummarizingState(item: AudioProjectListItem) {
+		const listIndex = this.list.findIndex((entry) => entry.id === item.id)
+		const baseItem = listIndex >= 0 ? this.list[listIndex] : item
+		const optimisticItem = buildOptimisticSummarizingProject(baseItem)
+
+		if (listIndex >= 0) {
+			this.list[listIndex] = optimisticItem
+			return
+		}
+		this.optimisticItems = [
+			optimisticItem,
+			...this.optimisticItems.filter((entry) => entry.id !== item.id),
+		]
+	}
+
+	/**
+	 * Restores local caches when an optimistic summary submission fails before the
+	 * backend accepts the task, preventing cards from staying in a false loading state.
+	 */
+	private rollbackOptimisticSummarizingState({
+		itemId,
+		previousListItem,
+		previousOptimisticItem,
+	}: {
+		itemId: string
+		previousListItem?: AudioProjectListItem
+		previousOptimisticItem?: AudioProjectListItem
+	}) {
+		const listIndex = this.list.findIndex((entry) => entry.id === itemId)
+		if (listIndex >= 0 && previousListItem) {
+			this.list[listIndex] = previousListItem
+		}
+
+		if (previousOptimisticItem) {
+			this.optimisticItems = [
+				previousOptimisticItem,
+				...this.optimisticItems.filter((entry) => entry.id !== itemId),
+			]
+			return
+		}
+
+		this.optimisticItems = this.optimisticItems.filter((entry) => entry.id !== itemId)
+	}
+
+	/**
+	 * Patches both authoritative and optimistic caches to reflect an in-progress
+	 * merge recovery, so PC/H5 list cards immediately switch to the "processing" state.
+	 */
+	private applyOptimisticProcessingState(item: AudioProjectListItem) {
+		const listIndex = this.list.findIndex((entry) => entry.id === item.id)
+		const baseItem = listIndex >= 0 ? this.list[listIndex] : item
+		const optimisticItem = buildOptimisticRetryMergeProject(baseItem)
+
+		if (listIndex >= 0) {
+			this.list[listIndex] = optimisticItem
+			return
+		}
+		this.optimisticItems = [
+			optimisticItem,
+			...this.optimisticItems.filter((entry) => entry.id !== item.id),
+		]
+	}
+
+	/**
+	 * Restores local caches when an optimistic merge recovery fails before the
+	 * backend accepts the task, preventing cards from staying in a false "processing" state.
+	 */
+	private rollbackOptimisticProcessingState({
+		itemId,
+		previousListItem,
+		previousOptimisticItem,
+	}: {
+		itemId: string
+		previousListItem?: AudioProjectListItem
+		previousOptimisticItem?: AudioProjectListItem
+	}) {
+		const listIndex = this.list.findIndex((entry) => entry.id === itemId)
+		if (listIndex >= 0 && previousListItem) {
+			this.list[listIndex] = previousListItem
+		}
+
+		if (previousOptimisticItem) {
+			this.optimisticItems = [
+				previousOptimisticItem,
+				...this.optimisticItems.filter((entry) => entry.id !== itemId),
+			]
+			return
+		}
+
+		this.optimisticItems = this.optimisticItems.filter((entry) => entry.id !== itemId)
 	}
 
 	async fetchList(options: { page?: number; keyword?: string } = {}) {
@@ -238,81 +408,163 @@ export class AudioRecordingsStore {
 		const projectId = progress.project_id
 		if (!projectId) return
 
+		// 1. Update matching authoritative item in store.list
 		const index = this.list.findIndex((item) => item.id === projectId)
-		if (index < 0) return
+		if (index >= 0) {
+			const current = this.list[index]
+			const nextPhase = progress.current_phase ?? current.current_phase
+			const nextStatus = progress.phase_status ?? current.phase_status
+			const isFinished = nextStatus === "completed" && nextPhase === "summarizing"
+			const patched: AudioProjectListItem = {
+				...current,
+				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
+				phase_status: nextStatus ?? null,
+				phase_percent: progress.phase_percent ?? current.phase_percent,
+				duration: resolvePatchedDuration(progress.duration_seconds, current.duration),
+				project_status: isFinished ? "finished" : current.project_status,
+				current_topic_status: isFinished ? "finished" : current.current_topic_status,
+				is_summarized: isFinished ? true : current.is_summarized,
+			}
+			patched.card_status = resolveCardStatusFromListItem(patched)
+			patched.is_summarized = patched.card_status === "summarized"
 
-		const current = this.list[index]
-		const nextPhase = progress.current_phase ?? current.current_phase
-		const nextStatus = progress.phase_status ?? current.phase_status
-		const patched: AudioProjectListItem = {
-			...current,
-			current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
-			phase_status: nextStatus ?? null,
-			phase_percent: progress.phase_percent ?? current.phase_percent,
-			project_status:
-				nextStatus === "completed" && nextPhase === "summarizing"
-					? "finished"
-					: current.project_status,
-			current_topic_status:
-				nextStatus === "completed" && nextPhase === "summarizing"
-					? "finished"
-					: current.current_topic_status,
+			runInAction(() => {
+				this.list[index] = patched
+			})
 		}
-		patched.card_status = resolveCardStatusFromListItem(patched)
-		patched.is_summarized = patched.card_status === "summarized"
 
-		runInAction(() => {
-			this.list[index] = patched
-		})
+		// 2. Update matching optimistic item in optimisticItems
+		const optIndex = this.optimisticItems.findIndex((item) => item.id === projectId)
+		if (optIndex >= 0) {
+			const current = this.optimisticItems[optIndex]
+			const nextPhase = progress.current_phase ?? current.current_phase
+			const nextStatus = progress.phase_status ?? current.phase_status
+			const isFinished = nextStatus === "completed" && nextPhase === "summarizing"
+			const patched: AudioProjectListItem = {
+				...current,
+				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
+				phase_status: nextStatus ?? null,
+				phase_percent: progress.phase_percent ?? current.phase_percent,
+				duration: resolvePatchedDuration(progress.duration_seconds, current.duration),
+				project_status: isFinished ? "finished" : current.project_status,
+				current_topic_status: isFinished ? "finished" : current.current_topic_status,
+				is_summarized: isFinished ? true : current.is_summarized,
+			}
+			patched.card_status = resolveCardStatusFromListItem(patched)
+			patched.is_summarized = patched.card_status === "summarized"
+
+			runInAction(() => {
+				this.optimisticItems[optIndex] = patched
+			})
+		}
 	}
 
 	/** Triggers summary for a single list item and starts progress polling */
 	async submitSummary(item: AudioProjectListItem): Promise<SubmitSummaryResult> {
 		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
 
-		if (
-			!canSubmitSummary({
-				task_key: item.task_key,
-				topic_id: item.topic_id,
-				audio_file_id: item.audio_file_id,
-				audio_source: item.audio_source,
-			})
-		) {
-			return { ok: false, reason: "missingParams" }
-		}
-
 		const taskKey = item.task_key
-		const topicId = item.topic_id
-		if (!taskKey || !topicId) return { ok: false, reason: "missingParams" }
-
-		const modelId = await audioRecordingsService.resolveModelIdForSubmit(item.model_id)
-		if (!modelId) return { ok: false, reason: "missingModel" }
+		if (!taskKey) return { ok: false, reason: "missingParams" }
 
 		runInAction(() => {
 			this.submittingIds.add(item.id)
 		})
 
 		try {
-			await audioRecordingsService.submitSummary(item, modelId)
+			const result = await submitAudioRecordingSummary(item)
+			if (!result.ok) return result
 
 			runInAction(() => {
 				const index = this.list.findIndex((entry) => entry.id === item.id)
-				if (index < 0) return
-
-				const optimistic: AudioProjectListItem = {
-					...this.list[index],
-					current_phase: "summarizing",
-					phase_status: "in_progress",
-					card_status: "summarizing",
-					is_summarized: false,
+				if (index >= 0) {
+					this.list[index] = buildOptimisticSummarizingProject(this.list[index])
 				}
-				this.list[index] = optimistic
+
+				const optimisticIndex = this.optimisticItems.findIndex(
+					(entry) => entry.id === item.id,
+				)
+				if (optimisticIndex >= 0) {
+					this.optimisticItems[optimisticIndex] = buildOptimisticSummarizingProject(
+						this.optimisticItems[optimisticIndex],
+					)
+				}
 			})
 
 			summaryProgressPoller.addTask(taskKey)
 			return { ok: true }
-		} catch {
-			return { ok: false, reason: "api" }
+		} finally {
+			runInAction(() => {
+				this.submittingIds.delete(item.id)
+			})
+		}
+	}
+
+	/** Triggers re-summary for a single list item and starts progress polling */
+	async resubmitSummary(item: AudioProjectListItem): Promise<SubmitSummaryResult> {
+		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
+
+		const taskKey = item.task_key
+		if (!taskKey) return { ok: false, reason: "missingParams" }
+		const previousListItem = this.list.find((entry) => entry.id === item.id)
+		const previousOptimisticItem = this.optimisticItems.find((entry) => entry.id === item.id)
+
+		runInAction(() => {
+			this.submittingIds.add(item.id)
+			this.applyOptimisticSummarizingState(item)
+		})
+
+		try {
+			const result = await resubmitAudioRecordingSummary(item)
+			if (!result.ok) {
+				runInAction(() => {
+					this.rollbackOptimisticSummarizingState({
+						itemId: item.id,
+						previousListItem,
+						previousOptimisticItem,
+					})
+				})
+				return result
+			}
+
+			summaryProgressPoller.addTask(taskKey)
+			return { ok: true }
+		} finally {
+			runInAction(() => {
+				this.submittingIds.delete(item.id)
+			})
+		}
+	}
+
+	/** Triggers finish-recording recovery for a merge_failed item and starts progress polling */
+	async retryMerge(item: AudioProjectListItem): Promise<RetryMergeResult> {
+		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
+
+		const taskKey = item.task_key
+		if (!taskKey) return { ok: false, reason: "missingParams" }
+		const previousListItem = this.list.find((entry) => entry.id === item.id)
+		const previousOptimisticItem = this.optimisticItems.find((entry) => entry.id === item.id)
+
+		runInAction(() => {
+			this.submittingIds.add(item.id)
+			this.applyOptimisticProcessingState(item)
+		})
+
+		try {
+			const result = await retryMergeAudioRecording(item)
+			if (!result.ok) {
+				runInAction(() => {
+					this.rollbackOptimisticProcessingState({
+						itemId: item.id,
+						previousListItem,
+						previousOptimisticItem,
+					})
+				})
+				return result
+			}
+
+			// Add to poller for all cases; the poller patches the card to the correct terminal state.
+			summaryProgressPoller.addTask(taskKey)
+			return { ok: true }
 		} finally {
 			runInAction(() => {
 				this.submittingIds.delete(item.id)
@@ -330,7 +582,7 @@ export class AudioRecordingsStore {
 		})
 
 		try {
-			await audioRecordingsService.renameProject(projectId, trimmed)
+			await renameAudioRecordingProject(projectId, trimmed)
 
 			runInAction(() => {
 				const index = this.list.findIndex((entry) => entry.id === projectId)
@@ -366,7 +618,7 @@ export class AudioRecordingsStore {
 		})
 
 		try {
-			await audioRecordingsService.batchDeleteProjects(pendingIds)
+			await deleteAudioRecordingProjects(pendingIds)
 
 			runInAction(() => {
 				const deletedIdSet = new Set(pendingIds)
@@ -404,3 +656,5 @@ export class AudioRecordingsStore {
 		}
 	}
 }
+
+export const audioRecordingsStore = new AudioRecordingsStore()

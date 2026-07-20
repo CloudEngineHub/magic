@@ -17,7 +17,7 @@ vi.mock("../ChatConversationListItem", () => ({
 
 vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 	MobileShellSidebarToggleButton: () => (
-		<button type="button" data-testid="mobile-chats-page-menu-button">
+		<button type="button" data-testid="mobile-shell-menu-button">
 			menu
 		</button>
 	),

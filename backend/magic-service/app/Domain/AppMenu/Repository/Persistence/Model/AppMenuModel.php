@@ -14,6 +14,8 @@ use Hyperf\Snowflake\Concern\Snowflake;
 
 /**
  * @property int $id 雪花ID
+ * @property string $organization_code 组织编码
+ * @property int $source_type 来源类型
  * @property array $name_i18n 应用名称国际化
  * @property string $icon 应用图标标识
  * @property string $icon_url 应用图标图片地址
@@ -37,6 +39,8 @@ class AppMenuModel extends AbstractModel
 
     protected array $fillable = [
         'id',
+        'organization_code',
+        'source_type',
         'name_i18n',
         'icon',
         'icon_url',
@@ -53,6 +57,8 @@ class AppMenuModel extends AbstractModel
 
     protected array $casts = [
         'id' => 'integer',
+        'organization_code' => 'string',
+        'source_type' => 'integer',
         'name_i18n' => 'array',
         'icon' => 'string',
         'icon_url' => 'string',

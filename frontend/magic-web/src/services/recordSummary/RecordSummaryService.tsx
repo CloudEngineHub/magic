@@ -30,7 +30,10 @@ import type {
 	MediaRecorderConfig,
 } from "@/types/recordSummary"
 import i18n from "i18next"
-import { GetRecordingSummaryResultResponse } from "@/apis/modules/superMagic/recordSummary"
+import {
+	FinishRecordingTaskResponse,
+	GetRecordingSummaryResultResponse,
+} from "@/apis/modules/superMagic/recordSummary"
 import { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
@@ -117,6 +120,103 @@ class RecordSummaryService {
 	private silenceDetector: SilenceDetector
 	// 静音提示的 message key
 	private silenceMessageKey = "recording-silence-detected"
+
+	/**
+	 * Build the server-side finish-recording title without depending on list-only display helpers.
+	 * Prefer persisted project/topic names first, then fall back to a stable localized placeholder.
+	 */
+	private resolveFinishRecordingTitle(
+		project: ProjectListItem | null,
+		topic: Topic | null,
+	): string {
+		const projectName = project?.project_name?.trim()
+		if (projectName) return projectName
+
+		const topicName = topic?.topic_name?.trim()
+		if (topicName) return topicName
+
+		return i18n.t("detail.untitled", { ns: "audioRecordings" })
+	}
+
+	/**
+	 * Completes backend audio merge for manual-summary recorded sessions after all chunks settle.
+	 */
+	private async finishRecordedTaskAfterUpload({
+		taskKey,
+		project,
+		topic,
+		asrStreamContent,
+	}: {
+		taskKey: string
+		project: ProjectListItem
+		topic: Topic
+		asrStreamContent: string
+	}): Promise<FinishRecordingTaskResponse> {
+		const response = await SuperMagicApi.finishRecordingTask({
+			task_key: taskKey,
+			generated_title: this.resolveFinishRecordingTitle(project, topic),
+			asr_stream_content: asrStreamContent,
+		})
+
+		if (response.phase !== "merging") {
+			throw new Error(
+				`finish-recording returned unexpected phase: ${response.phase ?? "unknown"}`,
+			)
+		}
+
+		return response
+	}
+
+	/**
+	 * Starts realtime transcription against the active recorder stream.
+	 * Audio capture can run without ASR, so this helper is shared by initial start and mid-session enablement.
+	 */
+	private async startRealtimeTranscription(recordingId: string): Promise<void> {
+		await this.voiceToTextService.waitForWorkerReady(5000)
+		const streamForVoice = this.mediaRecorderService.getMediaRecorderStream()?.clone()
+		if (!streamForVoice) {
+			throw new Error("No media stream available for realtime transcription")
+		}
+		await this.voiceToTextService.startRecording({
+			recordingId,
+			mediaStream: streamForVoice,
+		})
+		this.voiceTimeoutChecker.start()
+		this.startSilenceDetection()
+	}
+
+	/**
+	 * Enables realtime transcription for the current recording after the user turns it on.
+	 */
+	enableTranscriptionForCurrentSession = async (): Promise<void> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (!currentSession || recordSummaryStore.status === "init") {
+			throw new Error("No active recording session")
+		}
+		if (currentSession.transcriptionEnabled) {
+			recordSummaryStore.setTranscriptionEnabled(true)
+			return
+		}
+
+		if (recordSummaryStore.isPaused) {
+			// Paused sessions have no active ASR flow to attach to; resume will start ASR from this flag.
+			const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
+			if (updatedSession) {
+				this.recordingPersistence.saveSession(updatedSession)
+			}
+			recordSummaryStore.setTranscriptionEnabled(true)
+			recordSummaryStore.clearVoiceError()
+			return
+		}
+
+		await this.startRealtimeTranscription(currentSession.id)
+		const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
+		if (updatedSession) {
+			this.recordingPersistence.saveSession(updatedSession)
+		}
+		recordSummaryStore.setTranscriptionEnabled(true)
+		recordSummaryStore.clearVoiceError()
+	}
 	// 用于管理总结过程中的消息提示
 	private summaryMessageService = getSummaryMessageService()
 	// 分片生产监控定时器，用于检测录音是否正常产出分片
@@ -350,6 +450,8 @@ class RecordSummaryService {
 		topic,
 		chatTopic,
 		audioSource,
+		sessionId,
+		transcriptionEnabled = true,
 	}: {
 		workspace: Workspace
 		model: ModelItem
@@ -357,6 +459,8 @@ class RecordSummaryService {
 		topic?: Topic | null
 		chatTopic?: Topic | null
 		audioSource?: AudioSourceConfig
+		sessionId?: string
+		transcriptionEnabled?: boolean
 	}) => {
 		// Guard: prevent concurrent startRecording calls
 		if (recordSummaryStore.isStartingRecord) {
@@ -430,6 +534,8 @@ class RecordSummaryService {
 				model: model,
 				userId: userStore.user.userInfo?.user_id || "",
 				audioSource: audioSource,
+				sessionId: sessionId,
+				transcriptionEnabled,
 			})
 
 			logger.report("开始录音", {
@@ -481,6 +587,7 @@ class RecordSummaryService {
 				model: model,
 				userId: session.userId,
 				audioSource: audioSource,
+				transcriptionEnabled,
 			})
 
 			// Start duration tracking with AudioContext
@@ -497,22 +604,12 @@ class RecordSummaryService {
 				session.project?.id || "",
 			)
 
-			try {
-				// 等待转文字服务准备就绪
-				await this.voiceToTextService.waitForWorkerReady(5000) // 增加超时时间到5秒
-				// 开始语音识别（仅用于文字转换）
-				const streamForVoice = this.mediaRecorderService.getMediaRecorderStream()?.clone()
-				this.voiceToTextService.startRecording({
-					recordingId: session.id,
-					mediaStream: streamForVoice,
-				})
-				// 启动语音超时检测
-				this.voiceTimeoutChecker.start()
-
-				// 启动静音检测
-				this.startSilenceDetection()
-			} catch (error) {
-				this.handleVoiceError(error as Error)
+			if (transcriptionEnabled) {
+				try {
+					await this.startRealtimeTranscription(session.id)
+				} catch (error) {
+					this.handleVoiceError(error as Error)
+				}
 			}
 
 			// Save session to persistence
@@ -967,29 +1064,11 @@ class RecordSummaryService {
 				this.mediaRecorderService.clearPreauthorizedDisplayMedia()
 			}
 
-			// 继续语音识别
-			// Start voice recognition (let it generate a new recording ID)
-			// 开始语音识别（让它生成新的录音ID）
-			const streamForVoice = this.mediaRecorderService.getMediaRecorderStream()?.clone()
-			if (streamForVoice) {
-				await this.voiceToTextService.startRecording({
-					recordingId: currentSession.id,
-					mediaStream: streamForVoice,
-				})
-
-				// Update recording ID after voice service starts
-				// 在语音服务启动后更新录音ID
-				// 录制ID改为使用 session.id，无需额外字段
+			if (currentSession.transcriptionEnabled !== false) {
+				// Keep ASR disabled across pause/resume when the user started this session without transcription.
+				await this.startRealtimeTranscription(currentSession.id)
 				logger.log("Voice recognition restarted with recording ID", currentSession.id)
-			} else {
-				logger.warn("No media stream available for voice recognition")
 			}
-
-			// 启动语音超时检测
-			this.voiceTimeoutChecker.start()
-
-			// 重新启动静音检测
-			this.startSilenceDetection()
 
 			// Resume duration tracking with new AudioContext
 			// IMPORTANT: Use session.totalDuration to restore accumulated time
@@ -1085,19 +1164,21 @@ class RecordSummaryService {
 			// Get the new media stream for voice recognition
 			const newMediaStream = this.mediaRecorderService.getMediaRecorderStream()
 
-			if (newMediaStream) {
+			const currentSession = this.sessionManager.getCurrentSession()
+			if (newMediaStream && currentSession?.transcriptionEnabled !== false) {
 				// Switch audio source in voice to text service
 				await this.voiceToTextService.switchAudioSource(newMediaStream)
 			} else {
 				logger.warn("No media stream available after switching audio source")
 			}
 
-			// Restart silence detection with new media stream
-			this.silenceDetector.stop()
-			this.startSilenceDetection()
+			if (currentSession?.transcriptionEnabled !== false) {
+				// Restart silence detection only when realtime transcription is active.
+				this.silenceDetector.stop()
+				this.startSilenceDetection()
+			}
 
 			// Update session and store with new audio source
-			const currentSession = this.sessionManager.getCurrentSession()
 			if (currentSession) {
 				currentSession.audioSource = audioSourceConfig
 				this.recordingPersistence.saveSession(currentSession)
@@ -1130,8 +1211,9 @@ class RecordSummaryService {
 			await this.mediaRecorderService.switchMicrophoneDevice(deviceId)
 
 			// Update voice-to-text service with the new media stream
+			const currentSession = this.sessionManager.getCurrentSession()
 			const newMediaStream = this.mediaRecorderService.getMediaRecorderStream()
-			if (newMediaStream) {
+			if (newMediaStream && currentSession?.transcriptionEnabled !== false) {
 				await this.voiceToTextService.switchAudioSource(newMediaStream)
 			}
 
@@ -1152,7 +1234,6 @@ class RecordSummaryService {
 					deviceId,
 				},
 			}
-			const currentSession = this.sessionManager.getCurrentSession()
 			if (currentSession) {
 				currentSession.audioSource = updatedAudioSource
 				this.recordingPersistence.saveSession(currentSession)
@@ -1222,22 +1303,12 @@ class RecordSummaryService {
 				recordSummaryStore.setAudioSource(currentAudioSource)
 			}
 
-			// 初始化语音服务
-			try {
-				await this.voiceToTextService.waitForWorkerReady(5000) // 增加超时时间到5秒
-				// 重新开始语音识别，传入 recordingId 以恢复之前的分片队列
-				const streamForVoice = this.mediaRecorderService.getMediaRecorderStream()?.clone()
-				await this.voiceToTextService.startRecording({
-					recordingId: session.id,
-					mediaStream: streamForVoice,
-				})
-
-				// 重新开始静音检测
-				this.startSilenceDetection()
-				// 启动语音超时检测
-				this.voiceTimeoutChecker.start()
-			} catch (error) {
-				this.handleVoiceError(error as Error)
+			if (session.transcriptionEnabled !== false) {
+				try {
+					await this.startRealtimeTranscription(session.id)
+				} catch (error) {
+					this.handleVoiceError(error as Error)
+				}
 			}
 
 			// Resume duration tracking from previous duration
@@ -1487,12 +1558,16 @@ class RecordSummaryService {
 		model_id,
 		note,
 		asr_stream_content,
+		skipSummary = false,
 	}: {
 		onSuccess: (
 			res: GetRecordingSummaryResultResponse & {
 				model_id: string
 				workspace_id: string
 				project_name: string
+				/** Post-finish merge/summary phase from finish-recording API (skipSummary path) */
+				current_phase?: string
+				phase_status?: string
 			},
 		) => void
 		onError: (error: Error) => void
@@ -1505,11 +1580,14 @@ class RecordSummaryService {
 			file_extension: string
 		}
 		asr_stream_content?: string
+		skipSummary?: boolean
 	}) => {
-		logger.report("完成录音，开始生成总结")
+		logger.report(skipSummary ? "完成录音，等待手动总结" : "完成录音，开始生成总结")
 
-		// Show starting message
-		this.summaryMessageService.showStageMessage(SummaryStage.Starting)
+		// Show starting message only when summary will run automatically.
+		if (!skipSummary) {
+			this.summaryMessageService.showStageMessage(SummaryStage.Starting)
+		}
 
 		// 如果正在等待总结，则不进行总结
 		if (recordSummaryStore.isWaitingSummarize) {
@@ -1566,7 +1644,9 @@ class RecordSummaryService {
 			return
 		}
 
-		recordSummaryStore.showWaitingSummarize()
+		if (!skipSummary) {
+			recordSummaryStore.showWaitingSummarize()
+		}
 
 		const handleError = (error: Error) => {
 			recordSummaryStore.hideWaitingSummarize()
@@ -1680,6 +1760,60 @@ class RecordSummaryService {
 			return
 		}
 
+		// Manual-summary mode: finish upload/merge only; list card shows Generate Summary CTA.
+		if (skipSummary) {
+			let finishRecordingResponse: FinishRecordingTaskResponse
+			try {
+				finishRecordingResponse = await this.finishRecordedTaskAfterUpload({
+					taskKey,
+					project: finalProject,
+					topic: finalTopic,
+					asrStreamContent: asr_stream_content || "",
+				})
+			} catch (err) {
+				logger.error("finish recording task failed", err)
+				this.summaryMessageService.showError(
+					i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
+				)
+				handleError(err as Error)
+				return
+			}
+
+			this.summaryMessageService.destroy()
+
+			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+				topicId: finalTopic.id,
+				projectId: finalProject.id,
+				workspaceId: workspace?.id || "",
+			})
+
+			onSuccess({
+				success: true,
+				task_key: taskKey,
+				project_id: finalProject.id,
+				topic_id: finalTopic.id,
+				project_name: finalProject.project_name,
+				project_mode: finalProject.project_mode,
+				chat_topic_id: finalTopic.id,
+				conversation_id: "",
+				workspace_name: workspace?.name || "",
+				model_id: modelId,
+				workspace_id: workspace?.id || "",
+				current_phase: finishRecordingResponse.phase,
+				phase_status: finishRecordingResponse.status,
+			})
+
+			this.cleanupAfterSessionComplete()
+			recordSummaryStore.hideWaitingSummarize()
+			recordSummaryStore.completeRecording()
+
+			if (shouldFetchQueueList) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, {} as any)
+			}
+			return
+		}
+
 		try {
 			// Get model from store or find by model_id
 			const model = recordSummaryStore.businessData.model || this.findModelById(model_id)
@@ -1732,6 +1866,7 @@ class RecordSummaryService {
 
 			onSuccess({
 				...res,
+				project_mode: res.project_mode ?? finalProject?.project_mode,
 				model_id: modelId,
 				workspace_id: workspace?.id || "",
 			})
@@ -1767,6 +1902,7 @@ class RecordSummaryService {
 	completeRecordingWithSummary = ({
 		onSuccess,
 		onError,
+		skipSummary,
 	}: {
 		onSuccess: (
 			res: GetRecordingSummaryResultResponse & {
@@ -1775,6 +1911,7 @@ class RecordSummaryService {
 			},
 		) => void
 		onError: (error: Error) => void
+		skipSummary?: boolean
 	}) => {
 		if (
 			!recordSummaryStore.businessData.workspace ||
@@ -1804,6 +1941,7 @@ class RecordSummaryService {
 			model_id: recordSummaryStore.businessData.model.model_id,
 			note: recordSummaryStore.note,
 			asr_stream_content: asrStreamContent,
+			skipSummary,
 		})
 	}
 

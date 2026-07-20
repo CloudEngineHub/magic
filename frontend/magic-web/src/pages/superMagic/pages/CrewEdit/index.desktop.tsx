@@ -68,7 +68,12 @@ function CrewEditErrorFallback({ error, onBack }: { error: string; onBack: () =>
 			data-testid="crew-edit-error"
 		>
 			<p className="text-sm text-destructive">{error}</p>
-			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack} data-testid="on-back">
+			<button
+				type="button"
+				className="text-sm text-primary hover:underline"
+				onClick={onBack}
+				data-testid="on-back"
+			>
 				{t("backToMyCrew")}
 			</button>
 		</div>
@@ -340,7 +345,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: sidebarWidthPx,
 		isDragging: isDraggingSidebar,
-		handleMouseDown: onSidebarResizeStart,
+		handleResizeStart: onSidebarResizeStart,
 	} = useResizablePanel({
 		minWidth: SIDEBAR_MIN_PX,
 		maxWidth: SIDEBAR_MAX_PX,
@@ -352,7 +357,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: detailPanelWidthPx,
 		isDragging: isDraggingDetail,
-		handleMouseDown: onDetailResizeStart,
+		handleResizeStart: onDetailResizeStart,
 	} = useResizablePanel({
 		minWidth: DETAIL_MIN_PX,
 		maxWidth: DETAIL_MAX_PX,
@@ -391,8 +396,9 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		}
 	}, [selectedProject, store.projectFilesStore])
 
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
 		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -510,6 +516,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			onActiveFileChange={setActiveFileId}
 			onActiveTabChange={handleActiveDetailTabChange}
 			onFullscreenChange={setIsDetailPanelFullscreen}
+			isFullscreen={isDetailPanelFullscreen}
 			onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 			projectId={selectedProject?.id}
 			showFallbackWhenEmpty
@@ -597,6 +604,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 							topicStore={conversation.topicStore}
 							mentionPanelStore={store.mentionPanelStore}
 							projectFilesStore={store.projectFilesStore}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							isConversationPanelCollapsed={
 								shouldShowDetailPanel ? layout.isConversationPanelCollapsed : false
 							}

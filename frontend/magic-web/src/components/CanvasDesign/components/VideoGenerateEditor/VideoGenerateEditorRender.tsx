@@ -44,6 +44,7 @@ import { createAndSubmitVideoGeneration } from "./createAndSubmitVideoGeneration
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
 import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -57,6 +58,7 @@ interface VideoGenerateEditorRenderProps {
 	submitTarget?: "current-element" | "new-element"
 	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 /** 画布内浮动的视频生成编辑器：提示词、模型、输入区与发送 */
@@ -69,6 +71,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		restoreOnMount,
 		submitTarget = "current-element",
 		syncElementSize,
+		onPreviewMediaResource,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
@@ -565,6 +568,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onSelectSource={handleSelectSource}
 				onProjectSelect={handleProjectSelect}
 				onFocusEditor={() => editorRef.current?.focus()}
+				onPreviewMediaResource={onPreviewMediaResource}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}

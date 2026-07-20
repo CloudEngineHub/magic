@@ -21,6 +21,7 @@ import type {
 import type { ReferenceResourcePanelItem, ReferenceResourcePanelSelectContext } from "../../types"
 import { cn } from "../../lib/utils"
 import { useOverflowChange } from "../../hooks/useOverflowChange"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface VideoEditorEmptyReferenceSlotPopoverProps {
 	inputTab: "frame" | "reference"
@@ -160,6 +161,7 @@ interface VideoEditorControlsProps {
 	renderSendButton?: () => React.ReactNode
 	/** 点击顶部栏空白区域（非 SourceList）时聚焦提示词编辑器 */
 	onFocusEditor?: () => void
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 export default function VideoEditorControls(props: VideoEditorControlsProps) {
@@ -172,6 +174,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onProjectSelect,
 		renderSendButton,
 		onFocusEditor,
+		onPreviewMediaResource,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const sourceListScrollerRef = useRef<HTMLDivElement | null>(null)
@@ -206,6 +209,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	} = config
 
 	const removeSlotAriaLabel = t("videoEditor.removeSlotResource", "移除该参考资源")
+	const previewResourceAriaLabel = t("mediaResourceFullscreenPreview.open", "预览媒体资源")
 
 	/** 文生视频走提示词，不作为模式 Tab 展示；仅展示需切换素材类型的模式 */
 	const inputModesForTabs = useMemo(
@@ -278,6 +282,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							resourcePath: path,
 							resourceFileName: frameImageInfos[idx]?.fileName,
 							removeResourceAriaLabel: removeSlotAriaLabel,
+							previewResourceAriaLabel,
+							onPreviewResource: onPreviewMediaResource,
 							onRemoveResource: () => handlers.handleFrameImageRemove(idx),
 						}
 					: {}),
@@ -297,6 +303,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							resourcePath: path,
 							resourceFileName: frameImageInfos[idx]?.fileName,
 							removeResourceAriaLabel: removeSlotAriaLabel,
+							previewResourceAriaLabel,
+							onPreviewResource: onPreviewMediaResource,
 							onRemoveResource: () => handlers.handleFrameImageRemove(idx),
 						}
 					: {}),
@@ -339,6 +347,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		currentFrameImages,
 		frameImageInfos,
 		removeSlotAriaLabel,
+		previewResourceAriaLabel,
+		onPreviewMediaResource,
 		handlers,
 		t,
 	])
@@ -413,6 +423,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					resourcePath: info.path,
 					resourceFileName: info.fileName,
 					removeResourceAriaLabel: removeSlotAriaLabel,
+					previewResourceAriaLabel,
+					onPreviewResource: onPreviewMediaResource,
 					onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 				})
 			})
@@ -442,6 +454,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		supportedReferenceKinds,
 		referenceSlotLabelByType,
 		removeSlotAriaLabel,
+		previewResourceAriaLabel,
+		onPreviewMediaResource,
 		handlers,
 	])
 
@@ -457,7 +471,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				(info) => info.assetType === referenceAssetKind,
 			)
 			const currentInfos = allowedInfos.filter(
-				(info, index) => !option.resourcePath || index !== option.slotIndex,
+				(_info, index) => !option.resourcePath || index !== option.slotIndex,
 			)
 			const currentAssetCounts = currentInfos.reduce(
 				(acc, info) => {

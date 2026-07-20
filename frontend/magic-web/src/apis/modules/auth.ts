@@ -41,7 +41,10 @@ export const generateAuthApi = (fetch: HttpClient) => ({
 	getUserProfile(
 		authorization: string,
 		authCode: string,
-		options?: Pick<RequestConfig, "skipAppInitWait">,
+		options?: Pick<
+			RequestConfig,
+			"skipAppInitWait" | "enableAuthorizationVerification" | "enableErrorMessagePrompt"
+		>,
 	) {
 		return fetch.get<{
 			auth_status: Array<User.MagicOrganization>
@@ -183,11 +186,15 @@ export const generateAuthApi = (fetch: HttpClient) => ({
 	 * @returns
 	 */
 	logout(headers?: HeadersInit, signal?: AbortSignal) {
-		return fetch.delete<any>(genRequestUrl("/api/v1/sessions"), {}, {
-			headers,
-			signal,
-			enableRequestUnion: true,
-			enableAuthorizationVerification: false,
-		})
+		return fetch.delete<any>(
+			genRequestUrl("/api/v1/sessions"),
+			{},
+			{
+				headers,
+				signal,
+				enableRequestUnion: true,
+				enableAuthorizationVerification: false,
+			},
+		)
 	},
 })

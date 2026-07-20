@@ -214,9 +214,9 @@ readonly class AgentAppService
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 工作区状态响应
      */
-    public function getWorkspaceStatus(string $sandboxId): AgentResponse
+    public function getWorkspaceStatus(DataIsolation $dataIsolation, string $sandboxId): AgentResponse
     {
-        return $this->agentDomainService->getWorkspaceStatus($sandboxId);
+        return $this->agentDomainService->getWorkspaceStatus($dataIsolation, $sandboxId);
     }
 
     /**
@@ -278,11 +278,12 @@ readonly class AgentAppService
     /**
      * 回滚到指定的checkpoint.
      *
+     * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param string $sandboxId 沙箱ID
      * @param string $targetMessageId 目标消息ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpoint(string $sandboxId, string $targetMessageId): AgentResponse
+    public function rollbackCheckpoint(DataIsolation $dataIsolation, string $sandboxId, string $targetMessageId): AgentResponse
     {
         $this->logger->info('[Sandbox][App] Rollback checkpoint requested', [
             'sandbox_id' => $sandboxId,
@@ -290,7 +291,7 @@ readonly class AgentAppService
         ]);
 
         // 执行沙箱回滚
-        $response = $this->agentDomainService->rollbackCheckpoint($sandboxId, $targetMessageId);
+        $response = $this->agentDomainService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
 
         // 沙箱回滚失败，记录日志并提前返回
         if (! $response->isSuccess()) {
@@ -357,7 +358,7 @@ readonly class AgentAppService
         $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
 
         // 调用沙箱网关开始回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointStart($sandboxId, $targetMessageId);
+        $sandboxResponse = $this->agentDomainService->rollbackCheckpointStart($dataIsolation, $sandboxId, $targetMessageId);
 
         if (! $sandboxResponse->isSuccess()) {
             $this->logger->error('[Sandbox][App] Sandbox rollback start failed', [
@@ -413,7 +414,7 @@ readonly class AgentAppService
         $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
 
         // 调用沙箱网关提交回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointCommit($sandboxId);
+        $sandboxResponse = $this->agentDomainService->rollbackCheckpointCommit($dataIsolation, $sandboxId);
 
         if (! $sandboxResponse->isSuccess()) {
             $this->logger->error('[Sandbox][App] Sandbox rollback commit failed', [
@@ -471,7 +472,7 @@ readonly class AgentAppService
         $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
 
         // 调用沙箱网关撤销回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointUndo($sandboxId);
+        $sandboxResponse = $this->agentDomainService->rollbackCheckpointUndo($dataIsolation, $sandboxId);
 
         if (! $sandboxResponse->isSuccess()) {
             $this->logger->error('[Sandbox][App] Sandbox rollback undo failed', [
@@ -537,7 +538,7 @@ readonly class AgentAppService
         $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
 
         // 调用领域服务检查回滚可行性
-        $response = $this->agentDomainService->rollbackCheckpointCheck($sandboxId, $targetMessageId);
+        $response = $this->agentDomainService->rollbackCheckpointCheck($dataIsolation, $sandboxId, $targetMessageId);
 
         // 记录检查结果
         if ($response->isSuccess()) {

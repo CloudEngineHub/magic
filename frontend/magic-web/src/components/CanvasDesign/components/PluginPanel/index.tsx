@@ -1,9 +1,9 @@
-import { useSyncExternalStore } from "react"
+import { useState, useSyncExternalStore } from "react"
 
 import { normalizePluginLocale } from "../../canvas/plugins/resolve"
 import { useCanvas } from "../../context/CanvasContext"
 import { useHostUiLocale } from "../../context/HostUiLocaleContext"
-import { noop } from "./constants"
+import { noop, PLUGIN_WINDOW_DEFAULT_HEIGHT } from "./constants"
 import { createPluginSrcDoc } from "./createPluginSrcDoc"
 import { PluginWindow } from "./PluginWindow"
 
@@ -17,6 +17,8 @@ export default function PluginPanel() {
 		() => canvas?.pluginManager.getSnapshot(),
 		() => undefined,
 	)
+	// 高度提到父级，避免 PluginWindow 因 key remount 时重置为默认 360 造成弹变。
+	const [frameHeight, setFrameHeight] = useState(PLUGIN_WINDOW_DEFAULT_HEIGHT)
 
 	const locale = normalizePluginLocale(hostUiLocale)
 	const plugin = snapshot?.activePlugin ?? null
@@ -30,6 +32,8 @@ export default function PluginPanel() {
 			locale={locale}
 			plugin={plugin}
 			sessionId={snapshot?.sessionId ?? 0}
+			frameHeight={frameHeight}
+			setFrameHeight={setFrameHeight}
 		/>
 	)
 }

@@ -375,6 +375,79 @@ describe("PPTSlide", () => {
 				rawSourceCode:
 					'<div class="slide-container" data-width="1920" data-height="1080"></div>',
 				scaleContentDimensions: { width: 1600, height: 900 },
+				autoFitVerticalPadding: 64,
+			}),
+		)
+	})
+
+	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {
+		renderPPTSlide()
+
+		expect(screen.getByTestId("ppt-edit-toolbar")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-slide-render-content")).toHaveClass("min-h-0", "flex-1")
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				className: "h-full",
+			}),
+		)
+	})
+
+	it("向 HTML renderer 传入竖版 PPT 的缩放尺寸", () => {
+		renderPPTSlide({
+			content: '<div class="slide-container" data-width="1080" data-height="1920"></div>',
+		})
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scaleContentDimensions: { width: 1080, height: 1920 },
+			}),
+		)
+	})
+
+	it("向 HTML renderer 传入运行时画布的缩放尺寸", () => {
+		renderPPTSlide({
+			content: '<main class="ft-canvas" style="width: 1080px; height: 1080px"></main>',
+		})
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scaleContentDimensions: { width: 1080, height: 1080 },
+			}),
+		)
+	})
+
+	it("向 HTML renderer 传入当前 slide 激活状态用于选中框挂载", () => {
+		const { rerender } = renderPPTSlide({ isActive: true })
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: true,
+			}),
+		)
+
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={false}
+				content="<div>slide</div>"
+				rawContent="<div>slide</div>"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: false,
 			}),
 		)
 	})

@@ -2,6 +2,7 @@ import {
 	processHtmlContent,
 	collectFileIdsFromHtml,
 } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "@/pages/superMagic/components/Detail/contents/HTML/previewImageProcess"
 import type {
 	ProcessHtmlContentInput,
 	ProcessHtmlContentOutput,
@@ -54,6 +55,7 @@ export class SlideProcessorService {
 				attachmentList: this.config.attachmentList,
 				html_relative_path: relativeFilePath,
 				displayConfig: this.config.displayConfig,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
 			const result: ProcessHtmlContentOutput = await processHtmlContent(input)
@@ -123,6 +125,7 @@ export class SlideProcessorService {
 				html_relative_path: relativeFilePath,
 				displayConfig: this.config.displayConfig,
 				preloadedUrlMapping: urlMapping, // Pass the pre-fetched URL mapping
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
 			const result: ProcessHtmlContentOutput = await processHtmlContent(input)

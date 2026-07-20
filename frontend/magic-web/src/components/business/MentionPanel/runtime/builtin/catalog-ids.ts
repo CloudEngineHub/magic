@@ -8,6 +8,7 @@ export const MentionPanelBuiltinItemId = {
 	SKILLS: "skills",
 	TOOLS: "tools",
 	UPLOAD_FILES: "upload-files",
+	CANVAS_ELEMENTS: "canvas-elements",
 	HISTORIES: "histories",
 	TABS: "tabs",
 } as const

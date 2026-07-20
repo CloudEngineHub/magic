@@ -35,6 +35,14 @@ export const useStyles = createStyles(({ css, isDarkMode, token }) => {
 				display: none;
 			}
 		`,
+		vectorKnowledgeScrollableDiv: css`
+			padding: 0 20px;
+			flex: 1;
+			overflow-y: auto;
+			::-webkit-scrollbar {
+				display: none;
+			}
+		`,
 		scrollWrapper: css`
 			::-webkit-scrollbar {
 				display: none;

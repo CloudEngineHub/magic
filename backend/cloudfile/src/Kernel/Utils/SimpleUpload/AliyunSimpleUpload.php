@@ -1004,9 +1004,13 @@ class AliyunSimpleUpload extends SimpleUpload
 
         $tempCredential = $credential['temporary_credential'];
 
-        // Build endpoint from region
+        // 优先使用临时凭证返回的 endpoint，缺省时再按 region 兼容旧格式
         $region = $tempCredential['region'];
-        $endpoint = "https://{$region}.aliyuncs.com";
+        $endpoint = $tempCredential['endpoint'] ?? "https://{$region}.aliyuncs.com";
+
+        // OSS SDK V4 签名使用标准区域名，需要移除 endpoint 中的协议前缀和内网后缀
+        $signingRegion = preg_replace('/^oss-/', '', $region) ?? $region;
+        $signingRegion = preg_replace('/-internal$/', '', $signingRegion) ?? $signingRegion;
 
         return [
             'endpoint' => $endpoint,
@@ -1015,7 +1019,7 @@ class AliyunSimpleUpload extends SimpleUpload
             'securityToken' => $tempCredential['sts_token'],
             'bucket' => $tempCredential['bucket'],
             'dir' => $tempCredential['dir'],
-            'region' => str_replace('oss-', '', $region), // Remove 'oss-' prefix, oss-ap-southeast-1 -> ap-southeast-1
+            'region' => $signingRegion,
         ];
     }
 

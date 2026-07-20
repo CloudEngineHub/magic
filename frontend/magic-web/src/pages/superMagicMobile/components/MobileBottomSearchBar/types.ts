@@ -5,6 +5,14 @@ export interface MobileBottomSearchBarProps {
 	onValueChange: (value: string) => void
 	testIdPrefix: string
 	clearButtonVisibility?: "focus-or-value" | "value-only"
+	/** "bottom" keeps the docked shell; "inline" renders only the input row for toolbar embedding */
+	layout?: "bottom" | "inline"
+	/** Called on clear-button mouseDown to exit search mode (toolbar inline pattern) */
+	onDismiss?: () => void
+	/** Focus the input on mount — used when toolbar switches into search mode */
+	autoFocus?: boolean
+	onCompositionStart?: () => void
+	onCompositionEnd?: () => void
 	className?: string
 	disabled?: boolean
 }

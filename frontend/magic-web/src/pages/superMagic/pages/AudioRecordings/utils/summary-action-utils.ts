@@ -1,4 +1,4 @@
-import type { AudioProjectAudioSource } from "@/types/audioProject"
+import type { AudioProjectAudioSource, AudioRecordingCardStatus } from "@/types/audioProject"
 
 export type SummaryButtonVariant = "generate" | "retry"
 
@@ -8,6 +8,35 @@ export interface SummarySubmitExtra {
 	audio_file_id?: string
 	audio_source?: AudioProjectAudioSource | null
 	model_id?: string
+}
+
+export interface ResummarySubmitExtra {
+	task_key?: string
+}
+
+export interface DetailSummaryActionEligibilityInput {
+	phase: string | null
+	status: string | null
+	isSubmitting?: boolean
+	extra: SummarySubmitExtra
+}
+
+export type DetailSummaryVisualStatus =
+	| "ready"
+	| "pending"
+	| "generating"
+	| "failed"
+	| "unavailable"
+
+export interface DetailSummaryVisualStateInput extends DetailSummaryActionEligibilityInput {
+	summaryReady: boolean
+	cardStatus?: AudioRecordingCardStatus | null
+}
+
+export interface DetailSummaryVisualState {
+	status: DetailSummaryVisualStatus
+	canGenerate: boolean
+	buttonVariant: SummaryButtonVariant | null
 }
 
 /**
@@ -51,8 +80,8 @@ export function getSummaryButtonVariant(
 	phase: string | null,
 	status: string | null,
 ): SummaryButtonVariant | null {
-	if (phase === "summarizing" && status === "failed") return "retry"
 	if (phase === "merging" && status === "completed") return "generate"
+	if (phase === "summarizing" && status === "failed") return "retry"
 	return null
 }
 
@@ -61,6 +90,71 @@ export function canSubmitSummary(extra: SummarySubmitExtra): boolean {
 	if (!extra.task_key || !extra.topic_id) return false
 	if (extra.audio_source === "imported" && !extra.audio_file_id) return false
 	return true
+}
+
+/** Validates the minimal backend contract required by the re-summary API. */
+export function canSubmitResummary(extra: ResummarySubmitExtra): boolean {
+	return Boolean(extra.task_key)
+}
+
+/** Validates that an item has a task_key for the finish-recording recovery API. */
+export function canRetryMerge(extra: { task_key?: string }): boolean {
+	return Boolean(extra.task_key)
+}
+
+/** Whether an already summarized recording can expose an explicit regenerate action. */
+export function canRegenerateSummarizedSummary(isSubmitting = false): boolean {
+	return !isSubmitting
+}
+
+/** Reuses the card CTA rules so detail header visibility never drifts from the list behavior. */
+export function canGenerateSummaryFromDetail(input: DetailSummaryActionEligibilityInput): boolean {
+	const { phase, status, isSubmitting = false, extra } = input
+	if (!shouldShowSummaryButton(phase, status)) return false
+	if (phase === "summarizing" && status === "failed") {
+		return (
+			canSubmitResummary({ task_key: extra.task_key }) &&
+			canClickSummaryButton(phase, status, isSubmitting)
+		)
+	}
+	if (!canSubmitSummary(extra)) return false
+	return canClickSummaryButton(phase, status, isSubmitting)
+}
+
+/** Resolves the owner detail summary placeholder state without allowing list-only processing states into detail UI. */
+export function resolveDetailSummaryVisualState(
+	input: DetailSummaryVisualStateInput,
+): DetailSummaryVisualState {
+	const { summaryReady, phase, status, cardStatus, isSubmitting = false, extra } = input
+	const canGenerate = canGenerateSummaryFromDetail({ phase, status, isSubmitting, extra })
+	const buttonVariant = canGenerate ? getSummaryButtonVariant(phase, status) : null
+
+	if (summaryReady || cardStatus === "summarized") {
+		return { status: "ready", canGenerate: false, buttonVariant: null }
+	}
+
+	if (
+		cardStatus === "waiting" ||
+		cardStatus === "processing" ||
+		cardStatus === "merge_failed" ||
+		phase === "waiting" ||
+		(phase === "merging" && status !== "completed")
+	) {
+		return { status: "unavailable", canGenerate: false, buttonVariant: null }
+	}
+
+	if (cardStatus === "summary_failed" || (phase === "summarizing" && status === "failed")) {
+		return { status: "failed", canGenerate, buttonVariant }
+	}
+
+	if (
+		cardStatus === "summarizing" ||
+		(phase === "summarizing" && status !== "completed" && status !== "failed")
+	) {
+		return { status: "generating", canGenerate: false, buttonVariant: null }
+	}
+
+	return { status: "pending", canGenerate, buttonVariant }
 }
 
 /** Picks model_id from list item extra first, else API-resolved auto model */
@@ -79,5 +173,17 @@ export function shouldPollSummaryProgress(
 	taskKey: string | undefined,
 ): boolean {
 	if (!taskKey) return false
-	return phase === "summarizing" && status === "in_progress"
+	// Only skip polling when the phase is already in a known terminal state.
+	// We intentionally do NOT require status === "in_progress" because the list
+	// API may return current_phase without a phase_status (null/missing), yet the
+	// backend is still actively processing. resolveCardStatus uses the same
+	// "phase present + not finished" heuristic, so polling must match that breadth.
+	const isTerminal = status === "completed" || status === "failed"
+	if (isTerminal) return false
+	// Poll while merging so the UI learns when merging completes and the
+	// "Generate Summary" button should appear (merging → audio_processed state).
+	if (phase === "merging") return true
+	// Poll while summarizing to track AI generation progress in real time.
+	if (phase === "summarizing") return true
+	return false
 }

@@ -23,6 +23,10 @@ import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxR
 import { isFileInPPTMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import {
+	createPptxSlideConfig,
+	resolvePptScaleContentDimensions,
+} from "./contents/HTML/utils/slide-dimensions"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
@@ -529,12 +533,16 @@ export default function Render(props: any) {
 			})
 
 			const autoSize = !isFileInPPTMode(fileId, attachmentList ?? [])
+			const pptxConfig = createPptxSlideConfig(
+				resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
+			)
 			const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 
 			exportHandle = exportPPTX(preparedHtmlSlides, {
 				fileName: result.fileName,
 				skipFailedPages: true,
 				autoSize,
+				config: pptxConfig,
 				fontResolver: pptFontResolver,
 				logger: pptxExternalLogger,
 				logLevel: "warn",

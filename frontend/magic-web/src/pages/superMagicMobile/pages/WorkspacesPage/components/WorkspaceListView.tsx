@@ -43,6 +43,13 @@ function isWorkspaceRunning(workspace: Workspace) {
 }
 
 /**
+ * Workspace names may be empty or whitespace-only; list rows should still reserve a readable title.
+ */
+function getWorkspaceDisplayName(workspace: Workspace, fallbackName: string) {
+	return workspace.name?.trim() || fallbackName
+}
+
+/**
  * 工作区列表行：支持左滑展示"更多"和"删除"操作按钮。
  * SwipeActionRow 负责手势逻辑与互斥展开，本组件只组装 actions 和行内容。
  */
@@ -59,6 +66,7 @@ function WorkspaceItem({
 }: WorkspaceItemProps) {
 	const { t } = useTranslation("super")
 	const running = isWorkspaceRunning(workspace)
+	const workspaceName = getWorkspaceDisplayName(workspace, t("workspace.unnamedWorkspace"))
 
 	const actions: SwipeAction[] = [
 		{
@@ -120,7 +128,7 @@ function WorkspaceItem({
 				<div className="flex min-w-0 flex-1 flex-col items-start">
 					<div className="flex h-6 w-full min-w-0 items-center gap-1">
 						<p className="min-w-0 shrink truncate text-[16px] font-medium leading-6 text-foreground">
-							{workspace.name || "-"}
+							{workspaceName}
 						</p>
 						{workspace.is_pinned ? (
 							<MobilePinBadge
@@ -195,13 +203,13 @@ function WorkspaceListViewInner({
 	const sharedWorkspaceDescription = t("workspace.collaborationProjectsDescV2")
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-mobile-background" data-testid="workspaces-page">
+		<div
+			className="flex h-full min-h-0 flex-col bg-mobile-background"
+			data-testid="workspaces-page"
+		>
 			{/* Header */}
 			<div className="mobile-page-header">
-				<MobileShellSidebarToggleButton
-					variant="icon"
-					testId="workspaces-page-menu-trigger"
-				/>
+				<MobileShellSidebarToggleButton variant="icon" />
 
 				<p className="min-w-0 flex-1 truncate text-center text-[18px] font-medium leading-6 text-foreground">
 					{t("workspace.workspace")}

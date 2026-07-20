@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Application\File\Service\FileAppService;
 use App\Application\File\Service\FileCleanupAppService;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -77,6 +78,17 @@ class FileConverterAppService extends AbstractAppService
         $projectId = $requestDTO->project_id;
         $taskKey = null;
 
+        // Build the per-call DataIsolation once at the entry point so every
+        // downstream call (processFileConversion -> ensureSandboxRunning /
+        // fileConverterService->convert / fileConverterService->queryConvertResult)
+        // forwards the same User-Authorization header. The token is sourced
+        // from the magic_tokens stable user-token table, NOT from the inbound
+        // HTTP header - same pattern as AsrFileAppService.
+        $dataIsolation = DataIsolation::create(
+            $userAuthorization->getOrganizationCode(),
+            $userId
+        );
+
         $this->logger->info('Received request to convert files', [
             'user_id' => $userId,
             'project_id' => $projectId,
@@ -100,7 +112,7 @@ class FileConverterAppService extends AbstractAppService
 
             // Initialize the task and start processing
             $this->fileConvertStatusManager->initializeTask($taskKey, $userId, count($validFiles), $convertType);
-            $this->processFileConversion($taskKey, $userAuthorization, $requestDTO, $validFiles, $projectEntity);
+            $this->processFileConversion($taskKey, $userAuthorization, $requestDTO, $validFiles, $projectEntity, $dataIsolation);
 
             return [
                 'status' => ConvertStatusEnum::PROCESSING->value,
@@ -138,6 +150,14 @@ class FileConverterAppService extends AbstractAppService
     {
         $userId = $userAuthorization->getId();
 
+        // Build the per-call DataIsolation once at the entry point so the
+        // downstream fileConverterService->queryConvertResult forwards the
+        // User-Authorization header to the in-pod agent's AuthMiddleware.
+        $dataIsolation = DataIsolation::create(
+            $userAuthorization->getOrganizationCode(),
+            $userId
+        );
+
         // Verify user permissions
         if (! $this->fileConvertStatusManager->verifyUserPermission($taskKey, $userId)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::BATCH_ACCESS_DENIED, 'file.convert_access_denied');
@@ -160,8 +180,8 @@ class FileConverterAppService extends AbstractAppService
         }
 
         try {
-            // Call the sandbox gateway to query the conversion result
-            $response = $this->fileConverterService->queryConvertResult($sandboxId, $projectId, $taskKey);
+            // Call the sandbox gateway to query the conversion result.
+            $response = $this->fileConverterService->queryConvertResult($dataIsolation, $sandboxId, $projectId, $taskKey);
 
             if ($response->isSuccess()) {
                 return $this->buildResponseFromConvertResult($response, $taskKey, $userAuthorization);
@@ -200,13 +220,15 @@ class FileConverterAppService extends AbstractAppService
      * @param ConvertFilesRequestDTO $requestDTO the conversion request DTO
      * @param TaskFileEntity[] $validFiles the list of valid files
      * @param ProjectEntity $projectEntity the project entity
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      */
     protected function processFileConversion(
         string $taskKey,
         MagicUserAuthorization $userAuthorization,
         ConvertFilesRequestDTO $requestDTO,
         array $validFiles,
-        ProjectEntity $projectEntity
+        ProjectEntity $projectEntity,
+        DataIsolation $dataIsolation
     ): void {
         $totalFiles = count($validFiles);
         $userId = $userAuthorization->getId();
@@ -249,7 +271,11 @@ class FileConverterAppService extends AbstractAppService
                     'error' => $e->getMessage(),
                 ]);
             }
-            $authorization = $this->agentDomainService->getAuthorizationByUserId($userId);
+            // Per-call token, sourced from the stable user-token table. Also
+            // stamped onto $dataIsolation (above) for every gateway call;
+            // the FileConverterRequest body still carries it because the
+            // in-pod agent reads it from the request JSON too.
+            $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
 
             // Build file keys and get temporary credentials
             $fileKeys = $this->buildFileKeys($validFiles, (int) $projectId, $fullWorkdir, $taskKey);
@@ -259,10 +285,9 @@ class FileConverterAppService extends AbstractAppService
             $stsTemporaryCredential = $this->getStsCredential($userAuthorization, $projectEntity->getWorkDir(), $projectEntity->getUserOrganizationCode());
 
             $this->fileConvertStatusManager->setTaskProgress($taskKey, count($fileKeys) - 1, count($fileKeys), 'Converting files');
-            // Ensure sandbox is running via domain service (App layer orchestration)
+            // Ensure sandbox is running via domain service (App layer orchestration).
             $actualSandboxId = $this->agentDomainService->ensureSandboxRunning(
-                $userId,
-                $userAuthorization->getOrganizationCode(),
+                $dataIsolation,
                 $sandboxId,
                 $projectId,
                 $fullWorkdir
@@ -289,13 +314,13 @@ class FileConverterAppService extends AbstractAppService
             );
 
             $requestId = CoContext::getRequestId() ?: (string) IdGenerator::getSnowId();
-            go(function () use ($taskKey, $userAuthorization, $fileRequest, $projectId, $requestId, $fullWorkdir) {
+            go(function () use ($taskKey, $userAuthorization, $fileRequest, $projectId, $requestId, $fullWorkdir, $dataIsolation) {
                 $fileKeys = $fileRequest->getFileKeys();
                 $actualSandboxId = $fileRequest->getSandboxId();
                 CoContext::setRequestId($requestId);
                 $convertType = $fileRequest->getConvertType();
                 try {
-                    $response = $this->fileConverterService->convert($userAuthorization->getId(), $userAuthorization->getOrganizationCode(), $actualSandboxId, $projectId, $fileRequest, $fullWorkdir);
+                    $response = $this->fileConverterService->convert($dataIsolation, $actualSandboxId, $projectId, $fileRequest, $fullWorkdir);
 
                     if (! $response->isSuccess()) {
                         $this->fileConvertStatusManager->setTaskFailed($taskKey, 'File conversion failed,reason: ' . $response->getMessage());

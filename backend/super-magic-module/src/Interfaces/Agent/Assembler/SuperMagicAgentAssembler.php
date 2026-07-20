@@ -16,6 +16,7 @@ use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\ShadowCode\ShadowCode;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
 use App\Interfaces\Kernel\DTO\PageDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
@@ -24,10 +25,12 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentIconType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentListScope;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\AgentListItemDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\AgentVersionListItemDTO;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\CategoryInfoDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\GetAgentDetailResponseDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\PublishAgentVersionResponseDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\QueryAgentsResponseDTO;
@@ -182,8 +185,6 @@ class SuperMagicAgentAssembler
         array $skills,
         ?bool $isStoreOffline,
         bool $withFileUrl = false,
-        ?string $publishType = null,
-        array $allowedPublishTargetTypes = [],
         ?Operation $operation = null
     ): GetAgentDetailResponseDTO {
         $language = CoContext::getLanguage();
@@ -267,8 +268,6 @@ class SuperMagicAgentAssembler
             fileKey: $agent->getFileKey(),
             fileUrl: $withFileUrl ? $agent->getFileUrl() : null,
             latestPublishedAt: $agent->getLatestPublishedAt(),
-            publishType: $publishType,
-            allowedPublishTargetTypes: $allowedPublishTargetTypes,
             createdAt: $agent->getCreatedAt(),
             updatedAt: $agent->getUpdatedAt(),
             userRole: $operation?->toAlias()
@@ -285,6 +284,8 @@ class SuperMagicAgentAssembler
             publishTargetType: $version->getPublishTargetType()->value,
             isCurrentVersion: $version->isCurrentVersion(),
             publishedAt: $version->getPublishedAt(),
+            categoryId: $version->getCategoryId() ? (string) $version->getCategoryId() : null,
+            categoryIds: $version->getCategoryIds(),
         );
     }
 
@@ -293,6 +294,7 @@ class SuperMagicAgentAssembler
      * @param array<string, array<int, AgentPlaybookEntity>> $playbooksMap
      * @param array<string, AgentMarketEntity> $storeAgentsMap
      * @param array<string, AgentVersionEntity> $latestVersionsMap
+     * @param array<string, array{name: string}> $organizationInfoMap
      */
     public static function createMyAgentsResponseDTO(
         array $agents,
@@ -302,7 +304,8 @@ class SuperMagicAgentAssembler
         array $userAgentsMap,
         int $page,
         int $pageSize,
-        int $total
+        int $total,
+        array $organizationInfoMap = []
     ): QueryAgentsResponseDTO {
         $list = [];
         foreach ($agents as $agent) {
@@ -313,6 +316,8 @@ class SuperMagicAgentAssembler
                 storeAgent: $storeAgentsMap[$agentCode] ?? null,
                 latestVersionEntity: $latestVersionsMap[$agentCode] ?? null,
                 userAgent: $userAgentsMap[$agentCode] ?? null,
+                scope: AgentListScope::CREATED->value,
+                organizationInfo: $organizationInfoMap[$agent->getOrganizationCode()] ?? null,
             );
         }
 
@@ -325,6 +330,7 @@ class SuperMagicAgentAssembler
      * @param array<string, AgentMarketEntity> $storeAgentsMap
      * @param array<string, AgentVersionEntity> $latestVersionsMap
      * @param array<string, MagicUserEntity> $publisherUserMap
+     * @param array<string, array{name: string}> $organizationInfoMap
      */
     public static function createExternalAgentsResponseDTO(
         array $agents,
@@ -338,7 +344,8 @@ class SuperMagicAgentAssembler
         int $total,
         array $agentOperations = [],
         array $publisherUserMap = [],
-        array $creatorUserMap = []
+        array $creatorUserMap = [],
+        array $organizationInfoMap = []
     ): QueryAgentsResponseDTO {
         $list = [];
         foreach ($agents as $agent) {
@@ -353,7 +360,9 @@ class SuperMagicAgentAssembler
                 publisher: isset($storeAgentsMap[$agentCode])
                     ? self::buildAgentPublisher($storeAgentsMap[$agentCode]->getPublisherType(), $agent->getCreator(), $publisherUserMap)
                     : null,
-                creatorInfo: self::buildSimpleCreatorInfo($agent->getCreator(), $creatorUserMap)
+                creatorInfo: self::buildSimpleCreatorInfo($agent->getCreator(), $creatorUserMap),
+                scope: self::resolveAgentListScope($agent, $currentUserId, $userAgentsMap[$agentCode] ?? null),
+                organizationInfo: $organizationInfoMap[$agent->getOrganizationCode()] ?? null
             );
         }
 
@@ -363,6 +372,7 @@ class SuperMagicAgentAssembler
     /**
      * @param array<string, MagicUserEntity> $userMap
      * @param array<string, MagicDepartmentEntity> $memberDepartmentMap
+     * @param array<int, AgentCategoryEntity> $categoryMap
      * @param AgentVersionEntity[] $versions
      */
     public static function createQueryAgentVersionsResponseDTO(
@@ -371,7 +381,8 @@ class SuperMagicAgentAssembler
         int $page,
         int $pageSize,
         int $total,
-        array $memberDepartmentMap = []
+        array $memberDepartmentMap = [],
+        array $categoryMap = []
     ): QueryAgentVersionsResponseDTO {
         $list = [];
         foreach ($versions as $version) {
@@ -393,6 +404,8 @@ class SuperMagicAgentAssembler
                 isCurrentVersion: $version->isCurrentVersion(),
                 versionDescriptionI18n: $version->getVersionDescriptionI18n(),
                 publishTargetValue: $enrichedPublishTargetValue,
+                category: self::buildCategoryInfoDTO($version, $categoryMap),
+                categories: self::buildCategoryInfoDTOs($version, $categoryMap),
             );
         }
 
@@ -441,6 +454,49 @@ class SuperMagicAgentAssembler
     }
 
     /**
+     * @param array<int, AgentCategoryEntity> $categoryMap
+     */
+    private static function buildCategoryInfoDTO(AgentVersionEntity $version, array $categoryMap): ?CategoryInfoDTO
+    {
+        $categoryId = $version->getCategoryId();
+        if ($categoryId === null) {
+            return null;
+        }
+
+        $category = $categoryMap[$categoryId] ?? null;
+        if ($category === null) {
+            return null;
+        }
+
+        return new CategoryInfoDTO(
+            id: (string) $categoryId,
+            name: $category->getI18nName(CoContext::getLanguage()),
+        );
+    }
+
+    /**
+     * @param array<int, AgentCategoryEntity> $categoryMap
+     * @return CategoryInfoDTO[]
+     */
+    private static function buildCategoryInfoDTOs(AgentVersionEntity $version, array $categoryMap): array
+    {
+        $items = [];
+        foreach ($version->getCategoryIds() as $categoryId) {
+            $category = $categoryMap[$categoryId] ?? null;
+            if ($category === null) {
+                continue;
+            }
+
+            $items[] = new CategoryInfoDTO(
+                id: (string) $categoryId,
+                name: $category->getI18nName(CoContext::getLanguage()),
+            );
+        }
+
+        return $items;
+    }
+
+    /**
      * @param array<int, AgentPlaybookEntity> $playbooks
      * @param null|array{type: string, info: array{name: string, avatar: string}} $publisher
      */
@@ -452,7 +508,9 @@ class SuperMagicAgentAssembler
         ?UserAgentEntity $userAgent = null,
         ?Operation $userOperation = null,
         ?array $publisher = null,
-        ?array $creatorInfo = null
+        ?array $creatorInfo = null,
+        ?string $scope = null,
+        ?array $organizationInfo = null
     ): AgentListItemDTO {
         $features = [];
         foreach ($playbooks as $playbook) {
@@ -493,7 +551,25 @@ class SuperMagicAgentAssembler
             publisher: $publisher['info'] ?? null,
             creatorInfo: $creatorInfo,
             userRole: $userOperation?->toAlias(),
+            scope: $scope,
+            organizationInfo: $organizationInfo,
         );
+    }
+
+    private static function resolveAgentListScope(
+        SuperMagicAgentEntity $agent,
+        string $currentUserId,
+        ?UserAgentEntity $userAgent = null
+    ): string {
+        if ($agent->getCreator() === $currentUserId) {
+            return AgentListScope::CREATED->value;
+        }
+
+        if ($agent->getSourceType()->isSystem() || $agent->getSourceType()->isMarket() || $userAgent?->getSourceType()->isMarket()) {
+            return AgentListScope::MARKET_INSTALLED->value;
+        }
+
+        return AgentListScope::TEAM_SHARED->value;
     }
 
     /**

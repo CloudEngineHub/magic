@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { AudioProjectApiItem } from "@/types/audioProject"
 import {
-	isPcListVisible,
 	normalizeAudioProjectList,
 	normalizeAudioProjectListItem,
-	resolveIsProcessingComplete,
 } from "../normalize-audio-project-item"
 import { canSubmitSummary } from "../summary-action-utils"
 
@@ -50,21 +48,6 @@ const SAMPLE_SUMMARIZED: AudioProjectApiItem = {
 	},
 }
 
-describe("resolveIsProcessingComplete", () => {
-	it("returns false for waiting phase", () => {
-		expect(resolveIsProcessingComplete("waiting", null)).toBe(false)
-	})
-
-	it("returns false for merging in progress or failed", () => {
-		expect(resolveIsProcessingComplete("merging", "in_progress")).toBe(false)
-		expect(resolveIsProcessingComplete("merging", "failed")).toBe(false)
-	})
-
-	it("returns true for merging completed", () => {
-		expect(resolveIsProcessingComplete("merging", "completed")).toBe(true)
-	})
-})
-
 describe("normalizeAudioProjectListItem", () => {
 	it("maps nested extra fields for merging completed items as not_summarized", () => {
 		const item = normalizeAudioProjectListItem({
@@ -93,7 +76,7 @@ describe("normalizeAudioProjectListItem", () => {
 		expect(item?.model_id).toBe("mock-model-id")
 	})
 
-	it("keeps summarizing failed items visible without marking summarized", () => {
+	it("keeps summarizing failed items visible and resolves card_status as summary_failed", () => {
 		const item = normalizeAudioProjectListItem({
 			...SAMPLE_MERGING,
 			project_status: "",
@@ -104,7 +87,7 @@ describe("normalizeAudioProjectListItem", () => {
 			},
 		})
 
-		expect(item?.card_status).toBe("summarizing")
+		expect(item?.card_status).toBe("summary_failed")
 		expect(item?.is_summarized).toBe(false)
 	})
 
@@ -118,33 +101,95 @@ describe("normalizeAudioProjectListItem", () => {
 		expect(item?.tags).toHaveLength(4)
 	})
 
-	it("returns null for waiting items", () => {
-		expect(
-			normalizeAudioProjectListItem({
-				...SAMPLE_MERGING,
-				extra: { ...SAMPLE_MERGING.extra, current_phase: "waiting" },
-			}),
-		).toBeNull()
+	it("maps waiting items into the explicit waiting card status", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_MERGING,
+			extra: { ...SAMPLE_MERGING.extra, current_phase: "waiting" },
+		})
+
+		expect(item).not.toBeNull()
+		expect(item?.card_status).toBe("waiting")
+		expect(item?.is_summarized).toBe(false)
 	})
 
-	it("returns null for merging in progress", () => {
-		expect(
-			normalizeAudioProjectListItem({
-				...SAMPLE_MERGING,
-				extra: { ...SAMPLE_MERGING.extra, phase_status: "in_progress" },
-			}),
-		).toBeNull()
+	it("maps merging in progress items as processing", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_MERGING,
+			project_status: "",
+			extra: {
+				...SAMPLE_MERGING.extra,
+				phase_status: "in_progress",
+				task_key: "mock-task-key-processing",
+			},
+		})
+
+		expect(item).not.toBeNull()
+		expect(item?.card_status).toBe("processing")
+		expect(item?.is_summarized).toBe(false)
 	})
 
-	it("marks summarizing phase without finished status as summarizing", () => {
+	it("maps merging failed items as merge_failed", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_MERGING,
+			project_status: "",
+			extra: {
+				...SAMPLE_MERGING.extra,
+				phase_status: "failed",
+				phase_error: "mock merge failure",
+			},
+		})
+
+		expect(item).not.toBeNull()
+		expect(item?.card_status).toBe("merge_failed")
+		expect(item?.is_summarized).toBe(false)
+	})
+
+	it("marks summarizing phase without finished status but status in_progress as summarizing", () => {
 		const item = normalizeAudioProjectListItem({
 			...SAMPLE_SUMMARIZED,
 			project_status: "",
 			current_topic_status: "",
+			extra: {
+				...SAMPLE_SUMMARIZED.extra,
+				phase_status: "in_progress",
+			},
 		})
 
 		expect(item?.card_status).toBe("summarizing")
 		expect(item?.is_summarized).toBe(false)
+	})
+
+	it("lets summarizing in progress override stale finished flags", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_SUMMARIZED,
+			is_summarized: 1,
+			project_status: "finished",
+			current_topic_status: "finished",
+			extra: {
+				...SAMPLE_SUMMARIZED.extra,
+				phase_status: "in_progress",
+			},
+		})
+
+		expect(item?.card_status).toBe("summarizing")
+		expect(item?.is_summarized).toBe(false)
+	})
+
+	it("maps backend duration_seconds when list duration is not hydrated yet", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_SUMMARIZED,
+			project_status: "",
+			current_topic_status: "",
+			extra: {
+				...SAMPLE_SUMMARIZED.extra,
+				duration: undefined,
+				duration_seconds: 23,
+				phase_status: "in_progress",
+			} as AudioProjectApiItem["extra"] & { duration_seconds: number },
+		})
+
+		expect(item?.duration).toBe(23)
+		expect(item?.card_status).toBe("summarizing")
 	})
 
 	it("preserves large string snowflake ids from parseJsonLargeIntAsString output", () => {
@@ -193,25 +238,28 @@ describe("normalizeAudioProjectListItem", () => {
 })
 
 describe("normalizeAudioProjectList", () => {
-	it("filters out APP processing items from the batch", () => {
+	it("keeps waiting and merge-failed items in the batch", () => {
 		const list = normalizeAudioProjectList([
 			SAMPLE_MERGING,
 			{
 				...SAMPLE_MERGING,
-				id: "hidden-waiting",
+				id: "visible-waiting",
 				extra: { ...SAMPLE_MERGING.extra, current_phase: "waiting" },
+			},
+			{
+				...SAMPLE_MERGING,
+				id: "visible-merge-failed",
+				extra: { ...SAMPLE_MERGING.extra, phase_status: "failed" },
 			},
 			SAMPLE_SUMMARIZED,
 		])
 
-		expect(list).toHaveLength(2)
-		expect(list.map((item) => item.id)).toEqual([SAMPLE_MERGING.id, SAMPLE_SUMMARIZED.id])
-	})
-})
-
-describe("isPcListVisible", () => {
-	it("matches resolveIsProcessingComplete", () => {
-		expect(isPcListVisible("waiting", null)).toBe(false)
-		expect(isPcListVisible("merging", "completed")).toBe(true)
+		expect(list).toHaveLength(4)
+		expect(list.map((item) => item.id)).toEqual([
+			SAMPLE_MERGING.id,
+			"visible-waiting",
+			"visible-merge-failed",
+			SAMPLE_SUMMARIZED.id,
+		])
 	})
 })

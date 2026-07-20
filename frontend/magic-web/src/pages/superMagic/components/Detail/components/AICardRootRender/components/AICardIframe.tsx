@@ -44,6 +44,9 @@ function AICardIframe({
 	const [filePathMapping, setFilePathMapping] =
 		useState<Map<string, string>>(EMPTY_FILE_PATH_MAPPING)
 	const [loading, setLoading] = useState(true)
+	// 跨域 shell 下，内容写入 iframe 到真正渲染完成之间存在异步间隙；
+	// 仅凭数据加载完成无法代表页面已经画出来，需额外等待 iframe 上报渲染就绪。
+	const [isRenderReady, setIsRenderReady] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
 	const flattenedFiles = useMemo(
@@ -96,6 +99,7 @@ function AICardIframe({
 
 		let cancelled = false
 		setLoading(true)
+		setIsRenderReady(false)
 		setError(null)
 		setProcessedContent(null)
 		setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
@@ -147,8 +151,13 @@ function AICardIframe({
 
 	const handleRenderReady = useCallback(() => {
 		setLoading(false)
+		setIsRenderReady(true)
 		onLoad?.()
 	}, [onLoad])
+
+	// 数据已加载但 iframe 尚未渲染就绪时仍保持骨架屏，避免出现"loading 消失但页面空白"的间隙。
+	const showLoadingSkeleton =
+		showSkeleton && (loading || (Boolean(processedContent) && !isRenderReady))
 
 	if (error) {
 		return (
@@ -166,7 +175,7 @@ function AICardIframe({
 
 	return (
 		<div className={cn("relative h-full w-full overflow-hidden", className)} style={style}>
-			{loading && showSkeleton && (
+			{showLoadingSkeleton && (
 				<AICardIframeLoadingState label={t("detail.aiCard.detail.loadingCard")} />
 			)}
 			{processedContent && (

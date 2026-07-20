@@ -24,6 +24,11 @@ class SandboxEndpoints
     public const ASR_TASK_FINISH = 'api/asr/task/finish';
 
     /**
+     * ASR 任务查询端点.
+     */
+    public const ASR_TASK_QUERY = 'api/asr/task/query';
+
+    /**
      * ASR 任务取消端点.
      */
     public const ASR_TASK_CANCEL = 'api/asr/task/cancel';

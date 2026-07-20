@@ -1,6 +1,8 @@
-import type { PPTMediaNode, Slide } from "../types/index"
+import type { PPTMediaNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
-import { mediaToBase64 } from "../workers/media"
+import { throwIfAborted, withAbort } from "../sandbox/abort"
+import { fetchArrayBufferWithLimit } from "../shared/fetch"
+import { bytesToDataUrl } from "./data-url"
 
 interface MediaOptions {
 	x: number
@@ -15,36 +17,18 @@ interface MediaOptions {
 	extn?: string
 }
 
-const mediaBase64Cache = new Map<string, Promise<string>>()
-
-// 每次导出独立隔离：以 AbortSignal 为 key，每个导出有自己的任务队列
-const _pendingBySignal = new WeakMap<AbortSignal, Set<Promise<void>>>()
-
-function getPendingTasks(signal: AbortSignal): Set<Promise<void>> {
-	if (!_pendingBySignal.has(signal)) _pendingBySignal.set(signal, new Set())
-	return _pendingBySignal.get(signal)!
-}
-
 /**
- * 等待当前导出会话所有后台视频/音频下载任务完成。
- * 需在 pres.writeFile() 之前调用。
+ * Draw media onto the slide.
+ * In the current export pipeline, media is materialized and written directly in this execution context.
  */
-export async function awaitPendingMedia(signal: AbortSignal): Promise<void> {
-	const tasks = _pendingBySignal.get(signal)
-	if (!tasks || tasks.size === 0) return
-	await Promise.all([...tasks])
-}
-
-/**
- * 绘制媒体到幻灯片。
- * 视频/音频的 base64 下载在 Worker 线程异步完成，不阻塞当前页渲染。
- */
-export function drawMedia(
+export async function drawMedia(
 	slide: Slide,
 	node: PPTMediaNode,
 	signal?: AbortSignal,
-): void {
-	const { x, y, w, h, mediaType, path, data, link, cover, extn } = node
+): Promise<void> {
+	throwIfAborted(signal)
+	const { x, y, w, h, mediaType, path, data, link, extn } = node
+	const cover = resolveCover(node)
 
 	const options: MediaOptions = {
 		x,
@@ -66,7 +50,8 @@ export function drawMedia(
 
 		case "video":
 		case "audio":
-			if (cover && mediaType === "video") options.cover = cover
+			// cover: HTML poster, or the first-frame data URL written by materializeVideoCoverNodes (possibly converted here from transferred bytes)
+			if (cover && mediaType === "video" && cover.startsWith("data:")) options.cover = cover
 			if (extn) options.extn = extn
 
 			if (data) {
@@ -77,24 +62,19 @@ export function drawMedia(
 					options.data = path
 					slide.addMedia(options)
 				} else {
-					// 发给 Worker 异步下载，不阻塞当前页
-					const pendingTasks = signal ? getPendingTasks(signal) : null
-					const task: Promise<void> = getCachedMediaBase64(path, signal)
-						.then((dataUrl) => {
-							options.data = dataUrl
-							slide.addMedia(options)
+					try {
+						options.data = await withAbort({
+							task: fetchAsDataUrl(path, signal),
+							signal,
 						})
-						.catch((error) => {
-							log(LogLevel.L3, "Failed to convert media to base64, fallback to path", {
-								error: String(error),
-							})
-							options.path = path
-							slide.addMedia(options)
+					} catch (error) {
+						throwIfAborted(signal)
+						log(LogLevel.L3, "Failed to convert media to data URL, fallback to path", {
+							error: String(error),
 						})
-						.finally(() => {
-							pendingTasks?.delete(task)
-						})
-					pendingTasks?.add(task)
+						options.path = path
+					}
+					slide.addMedia(options)
 				}
 			} else {
 				log(LogLevel.L3, "Media requires path or data")
@@ -106,14 +86,22 @@ export function drawMedia(
 	}
 }
 
-function getCachedMediaBase64(path: string, signal?: AbortSignal): Promise<string> {
-	const cached = mediaBase64Cache.get(path)
-	if (cached) return cached
+async function fetchAsDataUrl(url: string, signal?: AbortSignal): Promise<string> {
+	const { response, buffer } = await fetchArrayBufferWithLimit(url, signal)
+	if (!response.ok) throw new Error(`Failed to fetch media: ${url} (${response.status})`)
 
-	const task = mediaToBase64(path, signal).catch((error) => {
-		mediaBase64Cache.delete(path)
-		throw error
-	})
-	mediaBase64Cache.set(path, task)
-	return task
+	const mimeType = response.headers.get("content-type") ?? "application/octet-stream"
+	return bytesToDataUrl(buffer, mimeType)
+}
+
+/**
+ * Resolve the video cover: prefer transferred binary bytes converted to a data URL inside the packaging worker,
+ * otherwise fall back to `cover` (poster / first-frame screenshot data URL).
+ */
+function resolveCover(node: PPTMediaNode): string | undefined {
+	const bytes = node.coverBytes
+	if (bytes && bytes.data.byteLength > 0) {
+		return bytesToDataUrl(bytes.data, bytes.mime)
+	}
+	return node.cover
 }

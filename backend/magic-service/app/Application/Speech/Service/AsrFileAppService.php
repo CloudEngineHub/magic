@@ -10,6 +10,7 @@ namespace App\Application\Speech\Service;
 use App\Application\Chat\Service\MagicChatMessageAppService;
 use App\Application\Speech\Assembler\AsrAssembler;
 use App\Application\Speech\Assembler\ChatMessageAssembler;
+use App\Application\Speech\DTO\AsrSandboxMergeResultDTO;
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
 use App\Application\Speech\DTO\ProcessSummaryTaskDTO;
 use App\Application\Speech\DTO\Response\AsrFileDataDTO;
@@ -47,6 +48,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Hyperf\Amqp\Producer;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Coroutine\Coroutine;
@@ -62,6 +64,17 @@ use Throwable;
  */
 class AsrFileAppService extends AbstractAppService
 {
+    private const RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES = 'configured_analysis_files';
+
+    private const RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES = 'template_analysis_files';
+
+    private const RESUMMARY_SUPPORTED_SCOPES = [
+        self::RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES,
+        self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES,
+    ];
+
+    private const ASR_EXTRA_VERSION = 1;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -100,6 +113,8 @@ class AsrFileAppService extends AbstractAppService
         SummaryRequestDTO $summaryRequest,
         MagicUserAuthorization $userAuthorization
     ): array {
+        $sandboxId = null;
+
         try {
             $userId = $userAuthorization->getId();
             $organizationCode = $userAuthorization->getOrganizationCode();
@@ -111,7 +126,8 @@ class AsrFileAppService extends AbstractAppService
 
             // 2. 验证任务状态（如果有file_id则跳过）
             if (! $summaryRequest->hasFileId()) {
-                $this->validationService->validateTaskStatus($summaryRequest->taskKey, $userId);
+                $taskStatus = $this->validationService->validateTaskStatus($summaryRequest->taskKey, $userId);
+                $sandboxId = $taskStatus->sandboxId;
             }
 
             // 3. 验证项目权限
@@ -141,6 +157,7 @@ class AsrFileAppService extends AbstractAppService
                 'success' => true,
                 'task_status' => null,
                 'conversation_id' => $conversationId,
+                'sandbox_id' => $sandboxId,
                 'chat_result' => true,
                 'topic_name' => $topicName,
                 'project_name' => $projectName,
@@ -156,6 +173,7 @@ class AsrFileAppService extends AbstractAppService
                 'error' => $e->getMessage(),
                 'task_status' => null,
                 'conversation_id' => null,
+                'sandbox_id' => $sandboxId,
                 'chat_result' => ['success' => false, 'message_sent' => false, 'error' => $e->getMessage()],
             ];
         }
@@ -375,12 +393,58 @@ class AsrFileAppService extends AbstractAppService
         return $taskStatus ?? new AsrTaskStatusDTO();
     }
 
+    public function loadRecoverFinishRecordingTaskStatus(
+        string $taskKey,
+        string $userId,
+        string $organizationCode
+    ): AsrTaskStatusDTO {
+        $taskStatus = $this->asrTaskDomainService->getTaskStatusWithPermission($taskKey, $userId, $organizationCode);
+        $this->hydrateRecoverSandboxContext($taskStatus);
+        $this->saveTaskStatusToRedis($taskStatus);
+
+        return $taskStatus;
+    }
+
     /**
      * 保存任务状态到Redis.
      */
     public function saveTaskStatusToRedis(AsrTaskStatusDTO $taskStatus, int $ttl = AsrConfig::TASK_STATUS_TTL): void
     {
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
         $this->asrTaskDomainService->saveTaskStatus($taskStatus, $ttl);
+    }
+
+    /**
+     * Persist only the deterministic ASR context needed to rebuild Redis state.
+     *
+     * @param array<string, mixed> $patch
+     */
+    public function syncAsrRecoverableContextToDatabase(AsrTaskStatusDTO $taskStatus, array $patch = []): void
+    {
+        if (empty($taskStatus->projectId)) {
+            return;
+        }
+
+        $context = $this->mergeAssocRecursive(
+            $this->buildAsrRecoverableContext($taskStatus),
+            $patch
+        );
+        $context = $this->removeEmptyAsrExtraValues($context);
+        if (empty($context)) {
+            return;
+        }
+
+        try {
+            $this->audioProjectDomainService->mergeAudioProjectExtra((int) $taskStatus->projectId, [
+                'asr' => $context,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->warning('同步 ASR 可恢复上下文到 DB 失败', [
+                'task_key' => $taskStatus->taskKey,
+                'project_id' => $taskStatus->projectId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -459,13 +523,19 @@ class AsrFileAppService extends AbstractAppService
         // 保存 model_id、ASR 内容、笔记内容、标记内容和语种
         $this->updateTaskStatusFromReport($taskStatus, $modelId, $asrStreamContent, $noteContent, $noteFileType, $markerContent, $language);
 
+        // Per-call DataIsolation. DataIsolation::create() auto-fetches the
+        // user-authorization token from the magic_tokens stable user-token
+        // table, so every downstream SandboxGatewayInterface call in the
+        // matched branch carries User-Authorization.
+        $dataIsolation = DataIsolation::create($organizationCode, $userId);
+
         // 根据状态处理
         return match ($status) {
-            AsrRecordingStatusEnum::START => $this->handleStartRecording($taskStatus, $userId, $organizationCode),
-            AsrRecordingStatusEnum::RECORDING => $this->handleRecordingHeartbeat($taskStatus, $userId, $organizationCode),
-            AsrRecordingStatusEnum::PAUSED => $this->handlePauseRecording($taskStatus),
-            AsrRecordingStatusEnum::STOPPED => $this->handleStopRecording($taskStatus),
-            AsrRecordingStatusEnum::CANCELED => $this->handleCancelRecording($taskStatus),
+            AsrRecordingStatusEnum::START => $this->handleStartRecording($dataIsolation, $taskStatus),
+            AsrRecordingStatusEnum::RECORDING => $this->handleRecordingHeartbeat($dataIsolation, $taskStatus),
+            AsrRecordingStatusEnum::PAUSED => $this->handlePauseRecording($dataIsolation, $taskStatus),
+            AsrRecordingStatusEnum::STOPPED => $this->handleStopRecording($dataIsolation, $taskStatus),
+            AsrRecordingStatusEnum::CANCELED => $this->handleCancelRecording($dataIsolation, $taskStatus),
         };
     }
 
@@ -533,12 +603,20 @@ class AsrFileAppService extends AbstractAppService
                 );
                 $taskStatus->displayDirectory = $newDisplayDirectory;
             }
+            $this->setFinishRecoverableContext($taskStatus, $fileTitle);
+
+            // DataIsolation::create() auto-fetches the user-authorization
+            // token, so every downstream SandboxGatewayInterface call
+            // (merge / ensureSandbox / finishTask / queryTask / ...) in
+            // AsrSandboxService forwards the same User-Authorization header.
+            $dataIsolation = DataIsolation::create($organizationCode, $userId);
 
             // ===== Phase 1: 状态管理 - 开始合并 =====
             $this->asrTaskDomainService->startMergingPhase($taskStatus);
 
             // 合并音频（沙箱会重命名目录但不会通知文件变动）
-            $this->asrSandboxService->mergeAudioFiles($taskStatus, $fileTitle, $organizationCode, AsrTaskStatusEnum::COMPLETED);
+            $this->asrSandboxService->mergeAudioFiles($dataIsolation, $taskStatus, $fileTitle, AsrTaskStatusEnum::COMPLETED);
+            $this->syncAsrRecoverableContextToDatabase($taskStatus);
 
             // ===== Phase 1: 状态管理 - 完成合并 =====
             $this->asrTaskDomainService->completeMergingPhase($taskStatus);
@@ -744,12 +822,108 @@ class AsrFileAppService extends AbstractAppService
         return [
             'success' => true,
             'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
             'summary' => [
                 'status' => 'in_progress',
                 'topic_id' => $taskStatus->topicId,
                 'model_id' => $taskStatus->modelId,
             ],
             'message' => 'Summary is being generated, you will receive updates via WebSocket',
+        ];
+    }
+
+    /**
+     * Manually trigger re-summary for an existing audio project.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    public function triggerResummary(
+        string $taskKey,
+        ?string $modelId,
+        string $analysisScope,
+        array $specifiedAnalysisTypes,
+        MagicUserAuthorization $userAuthorization
+    ): array {
+        $analysisScope = $this->normalizeResummaryAnalysisScope($analysisScope);
+        $specifiedAnalysisTypes = $this->normalizeResummaryAnalysisTypes($specifiedAnalysisTypes);
+
+        $userId = $userAuthorization->getId();
+        $organizationCode = $userAuthorization->getOrganizationCode();
+
+        $taskStatus = $this->asrTaskDomainService->getTaskStatus($taskKey, $userId);
+
+        $audioProject = $this->audioProjectDomainService->getAudioProjectByProjectId(
+            (int) $taskStatus->projectId
+        );
+
+        if ($audioProject === null) {
+            ExceptionBuilder::throw(AsrErrorCode::ProjectNotExist);
+        }
+
+        if (! $this->canManualResummarize($taskStatus)) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        $effectiveTopicId = $taskStatus->topicId;
+        if (empty($effectiveTopicId)) {
+            $effectiveTopicId = (string) $audioProject->getTopicId();
+        }
+        if (empty($effectiveTopicId)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterMissing,
+                'topic_id is required for re-summary'
+            );
+        }
+
+        $effectiveModelId = $modelId;
+        if (empty($effectiveModelId)) {
+            $effectiveModelId = $taskStatus->modelId;
+        }
+        if (empty($effectiveModelId)) {
+            $effectiveModelId = $audioProject->getModelId();
+        }
+        if (empty($effectiveModelId)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterMissing,
+                $this->translator->trans('asr.api.validation.model_id_required')
+            );
+        }
+
+        $this->audioProjectDomainService->updateTopicAndModel(
+            (int) $taskStatus->projectId,
+            (int) $effectiveTopicId,
+            $effectiveModelId
+        );
+
+        $taskStatus->topicId = $effectiveTopicId;
+        $taskStatus->modelId = $effectiveModelId;
+        $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+
+        $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+
+        $this->sendAutoResummaryChatMessage(
+            $taskStatus,
+            $userId,
+            $organizationCode,
+            $analysisScope,
+            $specifiedAnalysisTypes
+        );
+
+        $taskStatus->updateStatus(AsrTaskStatusEnum::COMPLETED);
+        $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+
+        return [
+            'success' => true,
+            'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
+            'summary' => [
+                'status' => 'in_progress',
+                'topic_id' => $taskStatus->topicId,
+                'model_id' => $taskStatus->modelId,
+                'analysis_scope' => $analysisScope,
+                'specified_analysis_types' => $specifiedAnalysisTypes,
+            ],
+            'message' => 'Re-summary is being generated, you will receive updates via WebSocket',
         ];
     }
 
@@ -896,9 +1070,15 @@ class AsrFileAppService extends AbstractAppService
 
             // Already in progress, return current status
             if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING) {
+                if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+                    && ! empty($taskStatus->audioFileId)) {
+                    $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+                }
+
                 return [
                     'success' => true,
                     'task_key' => $taskKey,
+                    'sandbox_id' => $taskStatus->sandboxId,
                     'phase' => $taskStatus->currentPhase,
                     'status' => $taskStatus->phaseStatus,
                     'percent' => $taskStatus->phasePercent,
@@ -915,16 +1095,108 @@ class AsrFileAppService extends AbstractAppService
         $taskStatus->phaseError = null;
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
 
-        // Execute async
+        // Execute async. handleFinishRecording re-resolves the per-user
+        // authorization token internally (it has $userId), so we don't
+        // need to thread it through here.
         $this->executeAsyncFinishRecording($taskStatus, $organizationCode, $generatedTitle);
 
         return [
             'success' => true,
             'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
             'phase' => AsrTaskStatusDTO::PHASE_MERGING,
             'status' => AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS,
             'percent' => 0,
             'message' => 'Finish recording started, query progress via GET /asr/tasks/{task_key}/progress',
+        ];
+    }
+
+    /**
+     * Async trigger finish-recording recovery (immediately return, execute in background).
+     */
+    public function triggerRecoverFinishRecordingAsync(
+        AsrTaskStatusDTO $taskStatus,
+        string $organizationCode,
+        ?string $generatedTitle = null
+    ): array {
+        $taskKey = $taskStatus->taskKey;
+
+        if ($taskStatus->isEmpty()) {
+            ExceptionBuilder::throw(AsrErrorCode::TaskNotExist);
+        }
+
+        if ($taskStatus->recordingStatus === AsrRecordingStatusEnum::CANCELED->value) {
+            ExceptionBuilder::throw(AsrErrorCode::TaskAlreadyCanceled);
+        }
+
+        if (! empty($taskStatus->audioFileId)) {
+            $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
+            return $this->buildRecoverAlreadyCompletedResponse($taskStatus);
+        }
+
+        if ($taskStatus->recordingStatus !== AsrRecordingStatusEnum::STOPPED->value) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        if ($taskStatus->currentPhase !== AsrTaskStatusDTO::PHASE_MERGING) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        $recoverablePhaseStatuses = [
+            AsrTaskStatusDTO::PHASE_STATUS_FAILED,
+            AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS,
+            AsrTaskStatusDTO::PHASE_STATUS_COMPLETED,
+        ];
+        if (! in_array($taskStatus->phaseStatus, $recoverablePhaseStatuses, true)) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS) {
+            $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
+            if ($this->redis->exists($lockName)) {
+                $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+                $this->asrTaskDomainService->saveTaskStatusWithDatabaseSync($taskStatus);
+
+                return [
+                    'success' => true,
+                    'task_key' => $taskKey,
+                    'sandbox_id' => $taskStatus->sandboxId,
+                    'phase' => $taskStatus->currentPhase,
+                    'status' => $taskStatus->phaseStatus,
+                    'percent' => $taskStatus->phasePercent,
+                    'action' => 'finish_recording_already_running',
+                    'message' => 'Finish recording is already running',
+                ];
+            }
+        }
+
+        if ($this->completeRecoverFromExistingAudioFileIfPossible($taskStatus)) {
+            return $this->buildRecoverAlreadyCompletedResponse($taskStatus);
+        }
+
+        if (empty($taskStatus->sandboxId)) {
+            ExceptionBuilder::throw(AsrErrorCode::SandboxIdNotExist);
+        }
+
+        if (! $taskStatus->sandboxTaskCreated) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+        $this->asrTaskDomainService->startMergingPhase($taskStatus);
+
+        $this->executeAsyncRecoverFinishRecording($taskStatus, $organizationCode, $generatedTitle);
+
+        return [
+            'success' => true,
+            'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
+            'phase' => AsrTaskStatusDTO::PHASE_MERGING,
+            'status' => AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS,
+            'percent' => 0,
+            'action' => 'finish_recording_recovery_started',
+            'message' => 'Finish recording recovery has started',
         ];
     }
 
@@ -937,6 +1209,12 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $generatedTitle = null
     ): void {
+        // DataIsolation::create() auto-fetches the user-authorization
+        // token from the stable user-token table, so every downstream
+        // AsrSandboxService call (merge / ensureSandbox / finishTask
+        // / queryTask) forwards the same User-Authorization header.
+        $dataIsolation = DataIsolation::create($organizationCode, $userId);
+
         $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
         $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
         $locked = $this->locker->spinLock($lockName, $lockOwner, AsrConfig::FINISH_RECORDING_LOCK_TTL);
@@ -990,16 +1268,18 @@ class AsrFileAppService extends AbstractAppService
                 );
                 $taskStatus->displayDirectory = $newDisplayDirectory;
             }
+            $this->setFinishRecoverableContext($taskStatus, $fileTitle);
 
             // Update progress: 50%
             $this->asrTaskDomainService->updatePhaseProgress($taskStatus, 50);
 
             $mergeResult = $this->asrSandboxService->mergeAudioFiles(
+                $dataIsolation,
                 $taskStatus,
                 $fileTitle,
-                $organizationCode,
                 AsrTaskStatusEnum::AUDIO_PROCESSED
             );
+            $this->syncAsrRecoverableContextToDatabase($taskStatus);
 
             // Update progress: 80%
             $this->asrTaskDomainService->updatePhaseProgress($taskStatus, 80);
@@ -1027,6 +1307,109 @@ class AsrFileAppService extends AbstractAppService
             $this->asrTaskDomainService->failMergingPhase($taskStatus, $e->getMessage());
 
             $this->logger->error('Finish recording failed', [
+                'task_key' => $taskKey,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        } finally {
+            $this->locker->release($lockName, $lockOwner);
+        }
+    }
+
+    /**
+     * Handle finish-recording recovery logic (can be called by API or cron).
+     */
+    public function handleRecoverFinishRecording(
+        string $taskKey,
+        string $userId,
+        string $organizationCode,
+        ?string $generatedTitle = null
+    ): void {
+        $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
+        $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
+        $locked = $this->locker->spinLock($lockName, $lockOwner, AsrConfig::FINISH_RECORDING_LOCK_TTL);
+
+        if (! $locked) {
+            $this->logger->warning('Failed to acquire finish recording recovery lock', [
+                'task_key' => $taskKey,
+            ]);
+            return;
+        }
+
+        try {
+            // DataIsolation::create() auto-fetches the user-authorization
+            // token from the stable user-token table, so downstream
+            // AsrSandboxService forwards it as User-Authorization header.
+            $dataIsolation = DataIsolation::create($organizationCode, $userId);
+
+            $taskStatus = $this->loadRecoverFinishRecordingTaskStatus($taskKey, $userId, $organizationCode);
+
+            if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+                && $taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING
+                && ! empty($taskStatus->audioFileId)) {
+                $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
+                $this->logger->info('Finish recording recovery already completed', [
+                    'task_key' => $taskKey,
+                ]);
+                return;
+            }
+
+            $projectShown = $this->audioProjectDomainService->showProjectIfExists((int) $taskStatus->projectId);
+            if ($projectShown) {
+                $projectEntity = $this->projectDomainService->getProjectNotUserId((int) $taskStatus->projectId);
+                $this->eventDispatcher->dispatch(new ProjectHiddenStatusUpdatedEvent(
+                    $projectEntity->getId(),
+                    $userId,
+                    $organizationCode,
+                    $projectEntity->getProjectMode(),
+                    false
+                ));
+            }
+
+            $this->asrTaskDomainService->startMergingPhase($taskStatus);
+            $this->asrTaskDomainService->updatePhaseProgress($taskStatus, 10);
+
+            $fileTitle = $this->resolveFinishRecordingFileTitle($taskStatus, $generatedTitle);
+            $this->renameProjectAfterFinishRecording($taskStatus, $fileTitle, $userId);
+            if ($fileTitle !== $this->translator->trans('asr.file_names.original_recording')) {
+                $newDisplayDirectory = $this->directoryService->getNewDisplayDirectory(
+                    $taskStatus,
+                    $fileTitle,
+                    $this->titleGeneratorService
+                );
+                $taskStatus->displayDirectory = $newDisplayDirectory;
+            }
+            $this->setFinishRecoverableContext($taskStatus, $fileTitle);
+
+            if ($taskStatus->sandboxMergeCompleted) {
+                $mergeResult = $this->buildMergeResultFromCheckpoint($taskStatus);
+                $this->completeRecoverFromSandboxMergeResult($taskStatus, $mergeResult);
+                return;
+            }
+
+            if ($this->completeRecoverFromExistingAudioFileIfPossible($taskStatus)) {
+                return;
+            }
+
+            $this->asrTaskDomainService->updatePhaseProgress($taskStatus, 50);
+
+            $mergeResult = $this->asrSandboxService->recoverFinishRecording(
+                $dataIsolation,
+                $taskStatus,
+                $fileTitle,
+                AsrTaskStatusEnum::AUDIO_PROCESSED
+            );
+            $this->persistSandboxMergeCheckpoint($taskStatus, $mergeResult);
+            $this->completeRecoverFromSandboxMergeResult($taskStatus, $mergeResult);
+
+            $this->logger->info('Finish recording recovery completed', [
+                'task_key' => $taskKey,
+                'audio_file_id' => $taskStatus->audioFileId,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->error('Finish recording recovery failed', [
                 'task_key' => $taskKey,
                 'error' => $e->getMessage(),
             ]);
@@ -1071,7 +1454,10 @@ class AsrFileAppService extends AbstractAppService
 
         // ── 2. Idempotent guard ───────────────────────────────────────────────
         if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING
-            && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED) {
+            && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+            && ! empty($taskStatus->audioFileId)) {
+            $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
             $this->logger->info('recoverCompletedMerging: already completed, skipping', [
                 'task_key' => $taskKey,
             ]);
@@ -1272,6 +1658,343 @@ class AsrFileAppService extends AbstractAppService
         }
 
         return ['tasks' => $results];
+    }
+
+    private function persistSandboxMergeCheckpoint(
+        AsrTaskStatusDTO $taskStatus,
+        AsrSandboxMergeResultDTO $mergeResult
+    ): void {
+        $audioPath = $mergeResult->responseData['files']['audio_file']['path'] ?? $mergeResult->filePath;
+        $taskStatus->filePath = is_string($audioPath) && $audioPath !== '' ? $audioPath : $taskStatus->filePath;
+        $taskStatus->sandboxMergeCompleted = true;
+        $taskStatus->sandboxMergeDuration = $mergeResult->duration;
+        $taskStatus->sandboxMergeFileSize = $mergeResult->fileSize;
+        $taskStatus->sandboxFinishResponseJson = json_encode(
+            $mergeResult->responseData,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+
+        $this->saveTaskStatusToRedis($taskStatus);
+    }
+
+    private function buildMergeResultFromCheckpoint(AsrTaskStatusDTO $taskStatus): AsrSandboxMergeResultDTO
+    {
+        $responseData = [];
+        if (! empty($taskStatus->sandboxFinishResponseJson)) {
+            $decoded = json_decode($taskStatus->sandboxFinishResponseJson, true, 512, JSON_THROW_ON_ERROR);
+            $responseData = is_array($decoded) ? $decoded : [];
+        }
+
+        if ($responseData === [] && ! empty($taskStatus->filePath)) {
+            $responseData = [
+                'status' => 'completed',
+                'files' => [
+                    'audio_file' => ['path' => $taskStatus->filePath],
+                ],
+            ];
+        }
+
+        return AsrSandboxMergeResultDTO::fromSandboxResponse([
+            'status' => 'completed',
+            'file_path' => $taskStatus->filePath,
+            'duration' => $taskStatus->sandboxMergeDuration,
+            'file_size' => $taskStatus->sandboxMergeFileSize,
+            'response_data' => $responseData,
+        ]);
+    }
+
+    private function completeRecoverFromSandboxMergeResult(
+        AsrTaskStatusDTO $taskStatus,
+        AsrSandboxMergeResultDTO $mergeResult
+    ): void {
+        $this->asrSandboxService->handleMergeResultFiles($taskStatus, $mergeResult);
+        $this->saveTaskStatusToRedis($taskStatus);
+        $this->asrTaskDomainService->updatePhaseProgress($taskStatus, 80);
+
+        $audioFileId = ! empty($taskStatus->audioFileId) ? (int) $taskStatus->audioFileId : null;
+        $this->audioProjectDomainService->updateRecordingMetadata(
+            (int) $taskStatus->projectId,
+            $mergeResult->duration,
+            $mergeResult->fileSize,
+            'recorded',
+            $audioFileId
+        );
+
+        $this->asrTaskDomainService->completeMergingPhase($taskStatus);
+    }
+
+    private function hydrateRecoverSandboxContext(AsrTaskStatusDTO $taskStatus): void
+    {
+        if (empty($taskStatus->projectId) || empty($taskStatus->userId)) {
+            return;
+        }
+
+        if (! empty($taskStatus->sandboxId)) {
+            $taskStatus->sandboxTaskCreated = true;
+            return;
+        }
+
+        $hiddenTopic = $this->superAgentTopicDomainService->findHiddenTopicByProjectAndUser(
+            (int) $taskStatus->projectId,
+            $taskStatus->userId
+        );
+
+        if ($hiddenTopic !== null) {
+            $taskStatus->sandboxTopicId = $hiddenTopic->getId();
+            $sandboxId = $hiddenTopic->getSandboxId();
+            if ($sandboxId !== '') {
+                $taskStatus->sandboxId = $sandboxId;
+            }
+        }
+
+        $taskStatus->sandboxTaskCreated = ! empty($taskStatus->sandboxId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildAsrRecoverableContext(AsrTaskStatusDTO $taskStatus): array
+    {
+        $context = [
+            'version' => self::ASR_EXTRA_VERSION,
+            'sandbox' => [
+                'sandbox_topic_id' => $taskStatus->sandboxTopicId,
+                'sandbox_id' => $taskStatus->sandboxId,
+                'sandbox_task_created' => $taskStatus->sandboxTaskCreated,
+                'merge_completed' => $taskStatus->sandboxMergeCompleted,
+                'merge_duration' => $taskStatus->sandboxMergeDuration,
+                'merge_file_size' => $taskStatus->sandboxMergeFileSize,
+                'finish_response_json' => $taskStatus->sandboxFinishResponseJson,
+                'workspace_dir' => '.workspace',
+            ],
+            'directories' => [
+                'temp_hidden_directory' => $taskStatus->tempHiddenDirectory,
+                'temp_hidden_directory_id' => $taskStatus->tempHiddenDirectoryId,
+                'display_directory' => $taskStatus->displayDirectory,
+                'display_directory_id' => $taskStatus->displayDirectoryId,
+            ],
+            'finish' => [
+                'source_dir' => $taskStatus->tempHiddenDirectory,
+                'target_dir' => $taskStatus->displayDirectory,
+                'output_filename' => $taskStatus->finishOutputFilename,
+                'expected_audio_file_name' => $taskStatus->expectedAudioFileName,
+            ],
+            'preset_files' => [
+                'note_file_id' => $taskStatus->presetNoteFileId,
+                'note_file_path' => $this->normalizeWorkspaceRelativePath($taskStatus->presetNoteFilePath),
+                'transcript_file_id' => $taskStatus->presetTranscriptFileId,
+                'transcript_file_path' => $this->normalizeWorkspaceRelativePath($taskStatus->presetTranscriptFilePath),
+                'marker_file_id' => $taskStatus->presetMarkerFileId,
+                'marker_file_path' => $this->normalizeWorkspaceRelativePath($taskStatus->presetMarkerFilePath),
+            ],
+            'result_files' => [
+                'audio_file_path' => $this->normalizeWorkspaceRelativePath($taskStatus->filePath),
+                'note_file_id' => $taskStatus->noteFileId,
+                'note_file_name' => $taskStatus->noteFileName,
+                'marker_file_id' => $taskStatus->markerFileId,
+                'marker_file_name' => $taskStatus->markerFileName,
+            ],
+        ];
+
+        return $this->removeEmptyAsrExtraValues($context);
+    }
+
+    private function normalizeWorkspaceRelativePath(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return $path;
+        }
+
+        return AsrAssembler::extractWorkspaceRelativePath($path);
+    }
+
+    private function setFinishRecoverableContext(AsrTaskStatusDTO $taskStatus, string $fileTitle): void
+    {
+        $taskStatus->finishOutputFilename = $fileTitle;
+        $taskStatus->expectedAudioFileName = $fileTitle . '.wav';
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
+    }
+
+    private function completeRecoverFromExistingAudioFileIfPossible(AsrTaskStatusDTO $taskStatus): bool
+    {
+        if (! empty($taskStatus->audioFileId)) {
+            $taskStatus->updateStatus(AsrTaskStatusEnum::AUDIO_PROCESSED);
+            $this->audioProjectDomainService->updateRecordingMetadata(
+                (int) $taskStatus->projectId,
+                null,
+                null,
+                'recorded',
+                (int) $taskStatus->audioFileId
+            );
+            $this->asrTaskDomainService->completeMergingPhase($taskStatus);
+
+            return true;
+        }
+
+        if (empty($taskStatus->projectId)) {
+            $this->logger->info('恢复 finish-recording 时跳过本地音频文件预检查，缺少精确定位字段', [
+                'task_key' => $taskStatus->taskKey,
+                'project_id' => $taskStatus->projectId,
+                'display_directory_id' => $taskStatus->displayDirectoryId,
+                'expected_audio_file_name' => $taskStatus->expectedAudioFileName,
+                'file_path' => $taskStatus->filePath,
+            ]);
+            return false;
+        }
+
+        $audioFile = null;
+        $lookupStrategy = null;
+        if (! empty($taskStatus->displayDirectoryId) && ! empty($taskStatus->expectedAudioFileName)) {
+            $lookupStrategy = 'parent_id_and_name';
+            $audioFile = $this->taskFileDomainService->getByProjectParentAndName(
+                (int) $taskStatus->projectId,
+                (int) $taskStatus->displayDirectoryId,
+                $taskStatus->expectedAudioFileName
+            );
+        } elseif (! empty($taskStatus->filePath)) {
+            $lookupStrategy = 'historical_relative_path';
+            $relativePath = $this->normalizeWorkspaceRelativePath($taskStatus->filePath);
+            if (! empty($relativePath)) {
+                $audioFile = $this->taskFileDomainService->findEntityByRelativePath(
+                    (int) $taskStatus->projectId,
+                    $relativePath
+                );
+                if ($audioFile?->getIsDirectory()) {
+                    $audioFile = null;
+                }
+            }
+        }
+
+        if ($audioFile === null) {
+            $this->logger->info('恢复 finish-recording 时本地文件表未找到目标音频，继续查询沙箱状态', [
+                'task_key' => $taskStatus->taskKey,
+                'project_id' => $taskStatus->projectId,
+                'display_directory_id' => $taskStatus->displayDirectoryId,
+                'expected_audio_file_name' => $taskStatus->expectedAudioFileName,
+                'file_path' => $taskStatus->filePath,
+                'lookup_strategy' => $lookupStrategy,
+            ]);
+            return false;
+        }
+
+        $resolvedPath = $this->buildRelativeFilePathForEntity($audioFile, (int) $taskStatus->projectId);
+        $taskStatus->audioFileId = (string) $audioFile->getFileId();
+        $taskStatus->filePath = $resolvedPath;
+        $taskStatus->displayDirectory = dirname($resolvedPath);
+        $taskStatus->updateStatus(AsrTaskStatusEnum::AUDIO_PROCESSED);
+
+        $this->audioProjectDomainService->updateRecordingMetadata(
+            (int) $taskStatus->projectId,
+            null,
+            null,
+            'recorded',
+            (int) $taskStatus->audioFileId
+        );
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
+        $this->asrTaskDomainService->completeMergingPhase($taskStatus);
+
+        $this->logger->info('恢复 finish-recording 时从本地文件表补齐音频文件并完成合并阶段', [
+            'task_key' => $taskStatus->taskKey,
+            'audio_file_id' => $taskStatus->audioFileId,
+            'audio_file_path' => $taskStatus->filePath,
+        ]);
+
+        return true;
+    }
+
+    private function buildRelativeFilePathForEntity(TaskFileEntity $entity, int $projectId): string
+    {
+        $filesWithParents = $this->taskFileDomainService->getFilesWithParentsByIds(
+            [$entity->getFileId()],
+            $projectId
+        );
+        $fileMap = RelativeFilePathUtil::indexByFileId($filesWithParents);
+        $fileMap[$entity->getFileId()] = $entity;
+
+        return ltrim(RelativeFilePathUtil::buildPathByParentChain($entity, $fileMap), '/');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildRecoverAlreadyCompletedResponse(AsrTaskStatusDTO $taskStatus): array
+    {
+        return [
+            'success' => true,
+            'task_key' => $taskStatus->taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
+            'phase' => $taskStatus->currentPhase,
+            'status' => $taskStatus->phaseStatus,
+            'percent' => $taskStatus->phasePercent,
+            'action' => 'already_completed',
+            'message' => 'Finish recording is already completed',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $patch
+     * @return array<string, mixed>
+     */
+    private function mergeAssocRecursive(array $base, array $patch): array
+    {
+        foreach ($patch as $key => $value) {
+            if (is_array($value) && isset($base[$key]) && is_array($base[$key])) {
+                $base[$key] = $this->mergeAssocRecursive($base[$key], $value);
+                continue;
+            }
+
+            $base[$key] = $value;
+        }
+
+        return $base;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function removeEmptyAsrExtraValues(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $value = $this->removeEmptyAsrExtraValues($value);
+                if ($value === []) {
+                    unset($data[$key]);
+                    continue;
+                }
+                $data[$key] = $value;
+                continue;
+            }
+
+            if ($value === null || $value === '') {
+                unset($data[$key]);
+            }
+        }
+
+        return $data;
+    }
+
+    private function failRecoverMergingPhaseIfPossible(
+        string $taskKey,
+        string $userId,
+        string $organizationCode,
+        string $error
+    ): void {
+        try {
+            $taskStatus = $this->asrTaskDomainService->getTaskStatusWithPermission($taskKey, $userId, $organizationCode);
+            $this->hydrateRecoverSandboxContext($taskStatus);
+            if ($taskStatus->isEmpty()) {
+                return;
+            }
+            $this->asrTaskDomainService->failMergingPhase($taskStatus, $error);
+        } catch (Throwable $statusError) {
+            $this->logger->warning('Failed to mark finish recording recovery as failed', [
+                'task_key' => $taskKey,
+                'error' => $error,
+                'status_error' => $statusError->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -1665,8 +2388,21 @@ class AsrFileAppService extends AbstractAppService
             $fileTitle = $this->translator->trans('asr.file_names.original_recording');
         }
 
+        $this->setFinishRecoverableContext($taskStatus, $fileTitle);
+
+        // Build DataIsolation once for downstream sandbox calls. Note
+        // $taskStatus->userId is the record-ownership identity here.
+        // DataIsolation::create() auto-fetches the user-authorization token.
+        $dataIsolation = DataIsolation::create($organizationCode, $taskStatus->userId);
+
         // Merge audio files and get merge result (includes duration and file_size)
-        $mergeResult = $this->asrSandboxService->mergeAudioFiles($taskStatus, $fileTitle, $organizationCode, AsrTaskStatusEnum::COMPLETED);
+        $mergeResult = $this->asrSandboxService->mergeAudioFiles(
+            $dataIsolation,
+            $taskStatus,
+            $fileTitle,
+            AsrTaskStatusEnum::COMPLETED,
+        );
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
 
         // Update audio project extension with duration and file size
         $this->updateAudioProjectDuration($taskStatus, $mergeResult);
@@ -1860,6 +2596,111 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
+     * 发送重新总结聊天消息.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    private function sendResummaryChatMessage(
+        ProcessSummaryTaskDTO $dto,
+        MagicUserAuthorization $userAuthorization,
+        string $analysisScope,
+        array $specifiedAnalysisTypes
+    ): void {
+        $dedupAcquired = false;
+        $dedupKey = null;
+        try {
+            $taskKey = $dto->taskStatus->taskKey ?? '';
+            $userId = $dto->taskStatus->userId ?: $userAuthorization->getId();
+            if ($taskKey !== '' && $userId !== '') {
+                $requestId = (string) CoContext::getOrSetRequestId();
+                $dedupKey = sprintf(
+                    AsrRedisKeys::SUMMARY_CHAT_DEDUP,
+                    md5($userId . ':' . $taskKey . ':resummary:' . $requestId)
+                );
+                $dedupAcquired = (bool) $this->redis->set($dedupKey, '1', ['nx', 'ex' => AsrConfig::SUMMARY_CHAT_DEDUP_TTL]);
+                if (! $dedupAcquired) {
+                    $this->logger->info('检测到重新总结聊天消息已发送，跳过重复发送', [
+                        'task_key' => $taskKey,
+                        'user_id' => $userId,
+                        'dedup_key' => $dedupKey,
+                    ]);
+                    return;
+                }
+            }
+
+            $audioFileData = $this->buildFileDataFromTaskStatus($dto->taskStatus);
+            $noteFileData = $this->buildNoteFileDataFromTaskStatus($dto->taskStatus);
+            $markerFileData = $this->buildMarkerFileDataFromTaskStatus($dto->taskStatus);
+
+            $topicDynamicParams = null;
+            if (! empty($dto->topicId)) {
+                $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $dto->topicId);
+                $topicDynamicParams = $topicEntity?->getDynamicParams();
+            }
+
+            $resummaryDynamicParams = [
+                'summary_task' => true,
+                're_summary_task' => true,
+                'analysis_scope' => $analysisScope,
+            ];
+            if ($specifiedAnalysisTypes !== []) {
+                $resummaryDynamicParams['specified_analysis_types'] = $specifiedAnalysisTypes;
+            }
+            $dynamicParams = array_merge($topicDynamicParams ?? [], $resummaryDynamicParams);
+
+            $chatRequest = $this->chatMessageAssembler->buildResummaryMessage(
+                $dto,
+                $audioFileData,
+                $noteFileData,
+                $markerFileData,
+                $analysisScope,
+                $specifiedAnalysisTypes,
+                $dynamicParams
+            );
+
+            $messageData = $chatRequest->getData()->getMessage()->getMagicMessage();
+
+            $this->logger->info('sendResummaryChatMessage 准备发送ASR重新总结聊天消息', [
+                'task_key' => $dto->taskStatus->taskKey,
+                'topic_id' => $dto->topicId,
+                'conversation_id' => $dto->conversationId,
+                'model_id' => $dto->modelId,
+                'audio_file_id' => $dto->taskStatus->audioFileId,
+                'audio_file_path' => $dto->taskStatus->filePath,
+                'note_file_id' => $dto->taskStatus->noteFileId,
+                'has_note_file' => $noteFileData !== null,
+                'marker_file_id' => $dto->taskStatus->markerFileId,
+                'has_marker_file' => $markerFileData !== null,
+                'analysis_scope' => $analysisScope,
+                'specified_analysis_types' => $specifiedAnalysisTypes,
+                'message_content' => $messageData->toArray(),
+                'topic_dynamic_params' => $topicDynamicParams,
+                'is_queued' => $this->shouldQueueMessage($dto->topicId),
+                'language' => CoContext::getLanguage(),
+            ]);
+
+            if ($this->shouldQueueMessage($dto->topicId)) {
+                $this->queueChatMessage($dto, $chatRequest, $userAuthorization);
+            } else {
+                $this->magicChatMessageAppService->onChatMessage($chatRequest, $userAuthorization);
+            }
+        } catch (Throwable $e) {
+            if ($dedupAcquired && $dedupKey !== null) {
+                try {
+                    $this->redis->del($dedupKey);
+                } catch (Throwable) {
+                    // ignore
+                }
+            }
+            $this->logger->error('发送重新总结聊天消息失败', [
+                'task_key' => $dto->taskStatus->taskKey,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
      * 检查是否应该队列处理消息.
      */
     private function shouldQueueMessage(string $topicId): bool
@@ -1943,12 +2784,12 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理开始录音.
      */
-    private function handleStartRecording(AsrTaskStatusDTO $taskStatus, string $userId, string $organizationCode): bool
+    private function handleStartRecording(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): bool
     {
         // 每次 start 都检查沙箱是否存在，防止沙箱被回收导致音频丢失. 原因：如果暂停超过 20 分钟，沙箱可能被回收，需要重新启动以确保音频实时合并
         $started = false;
         try {
-            $this->asrSandboxService->startRecordingTask($taskStatus, $userId, $organizationCode);
+            $this->asrSandboxService->startRecordingTask($dataIsolation, $taskStatus);
             $taskStatus->sandboxRetryCount = 0; // 成功后重置重试次数
             $taskStatus->sandboxEnsureAt = time();
             $started = true;
@@ -1965,6 +2806,7 @@ class AsrFileAppService extends AbstractAppService
         if ($started) {
             $taskStatus->sandboxTaskCreated = true;
         }
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
         // 更新状态并设置心跳（原子操作）
         $taskStatus->recordingStatus = AsrRecordingStatusEnum::START->value;
         $taskStatus->isPaused = false;
@@ -1976,8 +2818,9 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理录音心跳,检测沙箱是否还在实时运行，如果没有则重新拉起。
      */
-    private function handleRecordingHeartbeat(AsrTaskStatusDTO $taskStatus, string $userId, string $organizationCode): bool
+    private function handleRecordingHeartbeat(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): bool
     {
+        $userId = $dataIsolation->getCurrentUserId();
         // running/recording 上报时：走一遍 start 流程（拉起沙箱、检查工作区可用、startTask），保证沙箱实时合并音频
         // 为避免高频心跳导致频繁 startTask，这里按 60s 节流；但若沙箱信息缺失/未创建/有失败重试，则立即尝试拉起
         $now = time();
@@ -1993,7 +2836,7 @@ class AsrFileAppService extends AbstractAppService
             $locked = $this->locker->spinLock($lockName, $lockOwner);
             if ($locked) {
                 try {
-                    $this->asrSandboxService->startRecordingTask($taskStatus, $userId, $organizationCode);
+            $this->asrSandboxService->startRecordingTask($dataIsolation, $taskStatus);
                     $taskStatus->sandboxRetryCount = 0;
                     $taskStatus->sandboxTaskCreated = true;
                     $taskStatus->sandboxEnsureAt = $now;
@@ -2011,6 +2854,7 @@ class AsrFileAppService extends AbstractAppService
             }
         }
 
+        $this->syncAsrRecoverableContextToDatabase($taskStatus);
         // 更新状态并设置心跳（原子操作）
         $taskStatus->recordingStatus = AsrRecordingStatusEnum::RECORDING->value;
         $taskStatus->isPaused = false;
@@ -2022,7 +2866,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理暂停录音.
      */
-    private function handlePauseRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handlePauseRecording(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): bool
     {
         // 更新状态并删除心跳（原子操作）
         $taskStatus->recordingStatus = AsrRecordingStatusEnum::PAUSED->value;
@@ -2035,7 +2879,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理停止录音.
      */
-    private function handleStopRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handleStopRecording(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): bool
     {
         // 幂等性检查：如果录音已停止，跳过重复处理
         if ($taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value) {
@@ -2055,7 +2899,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理取消录音.
      */
-    private function handleCancelRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handleCancelRecording(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): bool
     {
         // 幂等性检查：如果录音已取消，跳过重复处理
         if ($taskStatus->recordingStatus === AsrRecordingStatusEnum::CANCELED->value) {
@@ -2073,7 +2917,7 @@ class AsrFileAppService extends AbstractAppService
         // 调用沙箱取消任务（如果沙箱任务已创建）
         if ($taskStatus->sandboxTaskCreated && ! empty($taskStatus->sandboxId)) {
             try {
-                $response = $this->asrSandboxService->cancelRecordingTask($taskStatus);
+                $response = $this->asrSandboxService->cancelRecordingTask($dataIsolation, $taskStatus);
                 $this->logger->info('沙箱录音任务已取消', [
                     'task_key' => $taskStatus->taskKey,
                     'sandbox_id' => $taskStatus->sandboxId,
@@ -2300,6 +3144,41 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
+     * 发送自动重新总结聊天消息.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    private function sendAutoResummaryChatMessage(
+        AsrTaskStatusDTO $taskStatus,
+        string $userId,
+        string $organizationCode,
+        string $analysisScope,
+        array $specifiedAnalysisTypes
+    ): void {
+        $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $taskStatus->topicId);
+        if ($topicEntity === null) {
+            ExceptionBuilder::throw(AsrErrorCode::TopicNotExistSimple);
+        }
+
+        $chatTopicId = $topicEntity->getChatTopicId();
+        $conversationId = $this->magicChatDomainService->getConversationIdByTopicId($chatTopicId);
+
+        $processSummaryTaskDTO = new ProcessSummaryTaskDTO(
+            $taskStatus,
+            $organizationCode,
+            $taskStatus->projectId,
+            $userId,
+            $taskStatus->topicId,
+            $chatTopicId,
+            $conversationId,
+            $taskStatus->modelId ?? ''
+        );
+
+        $userAuthorization = $this->getUserAuthorizationFromUserId($userId);
+        $this->sendResummaryChatMessage($processSummaryTaskDTO, $userAuthorization, $analysisScope, $specifiedAnalysisTypes);
+    }
+
+    /**
      * Execute async finish recording in coroutine.
      */
     private function executeAsyncFinishRecording(
@@ -2330,6 +3209,37 @@ class AsrFileAppService extends AbstractAppService
                 $taskStatus->phaseStatus = AsrTaskStatusDTO::PHASE_STATUS_FAILED;
                 $taskStatus->phaseError = $e->getMessage();
                 $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+            }
+        });
+    }
+
+    /**
+     * Execute async finish-recording recovery in coroutine.
+     */
+    private function executeAsyncRecoverFinishRecording(
+        AsrTaskStatusDTO $taskStatus,
+        string $organizationCode,
+        ?string $generatedTitle
+    ): void {
+        $requestId = CoContext::getRequestId();
+        $language = CoContext::getLanguage();
+        $taskKey = $taskStatus->taskKey;
+        $userId = $taskStatus->userId;
+
+        Coroutine::create(function () use ($taskKey, $userId, $organizationCode, $generatedTitle, $language, $requestId) {
+            di(TranslatorInterface::class)->setLocale($language);
+            CoContext::setLanguage($language);
+            CoContext::setRequestId($requestId);
+
+            try {
+                $this->handleRecoverFinishRecording($taskKey, $userId, $organizationCode, $generatedTitle);
+            } catch (Throwable $e) {
+                $this->logger->error('Async finish recording recovery failed', [
+                    'task_key' => $taskKey,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $this->failRecoverMergingPhaseIfPossible($taskKey, $userId, $organizationCode, $e->getMessage());
             }
         });
     }
@@ -2383,5 +3293,44 @@ class AsrFileAppService extends AbstractAppService
             && in_array($taskStatus->status, [AsrTaskStatusDTO::PHASE_MERGING, AsrTaskStatusEnum::AUDIO_PROCESSED])          // Audio processed
             && $taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value
             && ! empty($taskStatus->audioFileId);                                  // Has audio file
+    }
+
+    private function canManualResummarize(AsrTaskStatusDTO $taskStatus): bool
+    {
+        return $taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value
+            && ! empty($taskStatus->audioFileId)
+            && ! (
+                $taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_SUMMARIZING
+                && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS
+            );
+    }
+
+    private function normalizeResummaryAnalysisScope(string $analysisScope): string
+    {
+        $analysisScope = trim($analysisScope);
+        if ($analysisScope === '') {
+            return self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES;
+        }
+
+        if (! in_array($analysisScope, self::RESUMMARY_SUPPORTED_SCOPES, true)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'analysis_scope must be configured_analysis_files or template_analysis_files'
+            );
+        }
+
+        return $analysisScope;
+    }
+
+    /**
+     * @param array<int|string,mixed> $specifiedAnalysisTypes
+     * @return array<int,string>
+     */
+    private function normalizeResummaryAnalysisTypes(array $specifiedAnalysisTypes): array
+    {
+        $types = array_map(static fn ($type) => trim((string) $type), $specifiedAnalysisTypes);
+        $types = array_filter($types, static fn (string $type) => $type !== '');
+
+        return array_values(array_unique($types));
     }
 }

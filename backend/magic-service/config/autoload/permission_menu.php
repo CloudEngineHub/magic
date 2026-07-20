@@ -177,6 +177,14 @@ return [
             ],
             'tag' => '平台管理',
         ],
+        'platform.setting.slides_template' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理'],
+                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'slides_template', 'label' => '幻灯片模板'],
+            ],
+            'tag' => '平台管理',
+        ],
         'admin.safe.sub_admin' => [
             'path' => [
                 ['key' => 'enterprise_feature', 'label' => '企业功能'],
@@ -216,6 +224,14 @@ return [
                 ['key' => 'model_access_role', 'label' => '模型访问权限'],
             ],
             'tag' => '自定义大模型',
+        ],
+        'admin.ai.application.menu' => [
+            'path' => [
+                ['key' => 'ai_management', 'label' => 'AI管理'],
+                ['key' => 'application_config', 'label' => '应用配置'],
+                ['key' => 'application_menu', 'label' => '应用菜单'],
+            ],
+            'tag' => '应用菜单',
         ],
         'workspace.model.text' => [
             'path' => [

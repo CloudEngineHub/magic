@@ -1,6 +1,6 @@
 import { resolve } from "path"
 import { defineConfig, mergeConfig } from "vitest/config"
-import { getViteEditionConfig } from "./vite/edition"
+import { getOverlayViteConfig } from "./vite/overlay"
 
 const fixAntdLocaleImportExtensions = () => ({
 	name: "fix-antd-locale-import-extensions",
@@ -35,6 +35,10 @@ const getVitestBaseConfig = () => {
 		plugins: [fixAntdLocaleImportExtensions()],
 		resolve: {
 			alias: [
+				{
+					find: "@admin/",
+					replacement: `${resolve(__dirname, "packages/magic-admin/src")}/`,
+				},
 				{
 					find: /^antd\/es\/locale\/[^/]+$/,
 					replacement: resolve(__dirname, "test/mocks/empty-locale.ts"),
@@ -71,6 +75,10 @@ const getVitestBaseConfig = () => {
 					),
 				},
 				{
+					find: "@dtyq/html-sandbox/telemetry",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
+				},
+				{
 					find: "@dtyq/html-sandbox",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
 				},
@@ -81,6 +89,15 @@ const getVitestBaseConfig = () => {
 				{
 					find: "@dtyq/es6-template-strings",
 					replacement: resolve(__dirname, "test/mocks/es6-template-strings.ts"),
+				},
+				// Keep Vitest aligned with app-local package aliases that are normally resolved by Vite.
+				{
+					find: "@dtyq/magic-admin/locales",
+					replacement: resolve(__dirname, "packages/magic-admin/src/locales/index.ts"),
+				},
+				{
+					find: "@dtyq/x-markdown",
+					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
 				},
 			],
 		},
@@ -111,6 +128,7 @@ const getVitestBaseConfig = () => {
 
 export default defineConfig(
 	mergeConfig(getVitestBaseConfig(), {
-		resolve: getViteEditionConfig({ projectRoot: __dirname }).resolve,
+		resolve: getOverlayViteConfig({ projectRoot: __dirname, mode: "test", loadEnv: false })
+			.resolve,
 	}),
 )

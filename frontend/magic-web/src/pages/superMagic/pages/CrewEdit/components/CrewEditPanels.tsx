@@ -6,7 +6,6 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	type MouseEvent,
 	type ReactElement,
 	type ReactNode,
 } from "react"
@@ -21,6 +20,11 @@ const RESIZE_HANDLE_WIDTH = 8
 const DETAIL_PANEL_MIN_WIDTH = 400
 const COLLAPSE_TRIGGER_DRAG_DISTANCE_RATIO = 0.5
 const COLLAPSE_TRIGGER_SIZE_EPSILON = 0.2
+// Portal layers bypass BaseLayoutPc padding, so they must consume safe-area variables directly.
+const topicHistorySafeAreaPortalClassName =
+	"pointer-events-none fixed bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)] z-40"
+const topicHistorySafeAreaDrawerClassName =
+	"pointer-events-auto absolute bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)]"
 
 type TopicHistoryMode = "hidden" | "full-right" | "fixed" | "drawer"
 
@@ -53,9 +57,9 @@ interface CrewEditPanelsProps {
 	/** Width of right conversation panel in px (when expanded) */
 	messagePanelWidthPx: number
 	/** Called when user starts dragging the sidebar resize handle */
-	onSidebarResizeStart?: (e: MouseEvent<HTMLDivElement>) => void
+	onSidebarResizeStart?: (clientX: number) => void
 	/** Called when user starts dragging the detail panel resize handle */
-	onDetailResizeStart?: (e: MouseEvent<HTMLDivElement>) => void
+	onDetailResizeStart?: (clientX: number) => void
 	/** Whether the sidebar handle is currently being dragged */
 	isDraggingSidebar?: boolean
 	/** Whether the detail handle is currently being dragged */
@@ -168,7 +172,8 @@ function CrewEditPanels({
 
 		stopCollapseMonitor()
 
-		const handleMouseMove = (event: globalThis.MouseEvent) => {
+		/** Tracks pointer movement after the detail panel reaches its minimum width. */
+		const handlePointerMove = (event: PointerEvent) => {
 			const currentDetailWidth = detailPanelWidthRef.current
 
 			if (currentDetailWidth > DETAIL_PANEL_MIN_WIDTH + COLLAPSE_TRIGGER_SIZE_EPSILON) {
@@ -192,28 +197,37 @@ function CrewEditPanels({
 			)
 				return
 
-			onToggleConversationPanel()
-			stopCollapseMonitor()
-			document.dispatchEvent(
-				new MouseEvent("mouseup", {
+			/** Ends the active resize with a semantic pointer event when the panel auto-collapses. */
+			const createPointerEndEvent = () => {
+				const init = {
 					clientX: event.clientX,
 					clientY: event.clientY,
 					bubbles: true,
 					cancelable: true,
-				}),
-			)
+				}
+				return typeof PointerEvent === "function"
+					? new PointerEvent("pointerup", init)
+					: new MouseEvent("pointerup", init)
+			}
+
+			onToggleConversationPanel()
+			stopCollapseMonitor()
+			document.dispatchEvent(createPointerEndEvent())
 		}
 
-		const handleMouseUp = () => {
+		/** Stops the collapse monitor when the active resize pointer completes or is cancelled. */
+		const handlePointerEnd = () => {
 			stopCollapseMonitor()
 		}
 
-		document.addEventListener("mousemove", handleMouseMove)
-		document.addEventListener("mouseup", handleMouseUp)
+		document.addEventListener("pointermove", handlePointerMove)
+		document.addEventListener("pointerup", handlePointerEnd)
+		document.addEventListener("pointercancel", handlePointerEnd)
 
 		collapseMonitorCleanupRef.current = () => {
-			document.removeEventListener("mousemove", handleMouseMove)
-			document.removeEventListener("mouseup", handleMouseUp)
+			document.removeEventListener("pointermove", handlePointerMove)
+			document.removeEventListener("pointerup", handlePointerEnd)
+			document.removeEventListener("pointercancel", handlePointerEnd)
 		}
 	}, [
 		hideMessagePanel,
@@ -334,6 +348,10 @@ function CrewEditPanels({
 			: isConversationPanelCollapsed
 				? `calc(100% - ${COLLAPSED_MESSAGE_PANEL_WIDTH + targetRightHandleWidth}px)`
 				: detailPanelWidthPx
+	// Safari 会用 overflow:hidden 裁剪详情区内的 fixed 全屏层，全屏期间需解除祖先裁剪。
+	const detailPanelOverflowClassName = isDetailPanelFullscreen
+		? "overflow-visible"
+		: "overflow-hidden"
 
 	function renderTopicHistoryShell(mode: Exclude<TopicHistoryMode, "hidden">) {
 		const isDrawer = mode === "drawer"
@@ -371,7 +389,7 @@ function CrewEditPanels({
 	return (
 		<div
 			ref={containerRef}
-			className="flex h-full w-full overflow-hidden"
+			className={cn("flex h-full w-full", detailPanelOverflowClassName)}
 			data-testid="crew-edit-panels"
 		>
 			<div
@@ -383,15 +401,18 @@ function CrewEditPanels({
 			</div>
 
 			<TopicResizeHandle
-				onMouseDown={(e) => onSidebarResizeStart?.(e)}
+				onResizeStart={(clientX) => onSidebarResizeStart?.(clientX)}
 				className={cn("shrink-0", isDraggingSidebar && "before:opacity-100")}
 			/>
 
-			<div className="relative flex h-full min-w-0 flex-1 overflow-hidden">
+			<div
+				className={cn("relative flex h-full min-w-0 flex-1", detailPanelOverflowClassName)}
+			>
 				{(showDetailPanel || keepDetailMountedWhenHidden) && (
 					<div
 						className={cn(
-							"h-full min-w-0 overflow-hidden",
+							"h-full min-w-0",
+							detailPanelOverflowClassName,
 							!showDetailPanel &&
 								keepDetailMountedWhenHidden &&
 								"pointer-events-none",
@@ -406,7 +427,9 @@ function CrewEditPanels({
 						}}
 						data-testid="crew-edit-detail-panel"
 					>
-						<div className="h-full w-full min-w-0 overflow-hidden">{detailPanel}</div>
+						<div className={cn("h-full w-full min-w-0", detailPanelOverflowClassName)}>
+							{detailPanel}
+						</div>
 					</div>
 				)}
 
@@ -422,10 +445,10 @@ function CrewEditPanels({
 					>
 						<TopicResizeHandle
 							disabled={isConversationPanelCollapsed || !showDetailPanel}
-							onMouseDown={(e) => {
+							onResizeStart={(clientX) => {
 								resetMinSizeReachedTrackers()
 								startCollapseMonitor()
-								onDetailResizeStart?.(e)
+								onDetailResizeStart?.(clientX)
 							}}
 							className={cn(
 								"h-full w-full shrink-0 transition-opacity duration-150",
@@ -471,9 +494,11 @@ function CrewEditPanels({
 							aria-hidden="true"
 						/>
 						{createPortal(
-							<div className="pointer-events-none fixed inset-y-0 right-0 z-40">
+							<div className={topicHistorySafeAreaPortalClassName}>
 								<div className="pointer-events-auto h-full">
-									{renderTopicHistoryShell(topicHistoryMode as any)}
+									{renderTopicHistoryShell(
+										topicHistoryMode as Exclude<TopicHistoryMode, "hidden">,
+									)}
 								</div>
 							</div>,
 							document.body,
@@ -489,7 +514,7 @@ function CrewEditPanels({
 									data-testid="crew-topic-history-panel-backdrop"
 									onClick={historyLayout?.onClose}
 								/>
-								<div className="pointer-events-auto absolute inset-y-0 right-0">
+								<div className={topicHistorySafeAreaDrawerClassName}>
 									{renderTopicHistoryShell("drawer")}
 								</div>
 							</div>,

@@ -57,14 +57,21 @@ export interface RecordingEditorStartParams {
 	selectedTopic: Topic | null
 	model: ModelItem
 	audioSource: AudioSourceType
+	sessionId?: string
+	/** Whether realtime transcription should start with this recording session */
+	transcriptionEnabled?: boolean
 }
 
 export interface RecordingEditorFinishOptions {
+	/** When true, upload chunks but do not call the summarize API (manual summary later) */
+	skipSummary?: boolean
 	onSuccess?: (
 		res: GetRecordingSummaryResultResponse & {
 			model_id: string
 			workspace_id: string
 			project_name: string
+			current_phase?: string
+			phase_status?: string
 		},
 	) => void
 	onError?: (error: Error) => void

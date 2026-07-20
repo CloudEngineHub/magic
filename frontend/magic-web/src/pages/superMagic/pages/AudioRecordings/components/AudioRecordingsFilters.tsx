@@ -1,11 +1,21 @@
 import { useMemo } from "react"
-import { ArrowDownUp, CalendarRange, Check, ChevronDown, RefreshCw, Search, X } from "lucide-react"
+import {
+	ArrowDownUp,
+	CalendarRange,
+	Check,
+	ChevronDown,
+	FolderClosed,
+	RefreshCw,
+	Search,
+	X,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Input } from "@/components/shadcn-ui/input"
@@ -15,11 +25,23 @@ import type {
 	AudioProjectSortOrder,
 	AudioRecordingSummaryFilter,
 } from "@/types/audioProject"
-import { toEndOfDayTimestamp, toStartOfDayTimestamp } from "../utils/audio-recordings-utils"
+import type { AudioRecordingsDatePreset } from "../utils/resolve-date-preset-range"
+import {
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
+import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
 
-export type AudioRecordingsDatePreset = "all" | "last7" | "last30" | "last90"
+export type { AudioRecordingsDatePreset } from "../utils/resolve-date-preset-range"
 
 type AudioRecordingsSortOption = `${AudioProjectSortBy}_${AudioProjectSortOrder}`
+
+interface AudioRecordingGroup {
+	id: string
+	name: string
+	projectCount: number
+	isVirtual: boolean
+}
 
 interface AudioRecordingsFiltersProps {
 	listCount: number
@@ -29,6 +51,14 @@ interface AudioRecordingsFiltersProps {
 	sortOrder: AudioProjectSortOrder
 	searchKeyword: string
 	isRefreshing: boolean
+	// Group props
+	groups: AudioRecordingGroup[]
+	totalGroupCount: number
+	ungroupedCount: number
+	currentGroupId: string
+	onGroupChange: (groupId: string) => void
+	onManageGroups: () => void
+	// Other actions
 	onSummaryFilterChange: (value: AudioRecordingSummaryFilter) => void
 	onDatePresetChange: (value: AudioRecordingsDatePreset) => void
 	onSortByChange: (value: AudioProjectSortBy) => void
@@ -37,27 +67,6 @@ interface AudioRecordingsFiltersProps {
 	onSearchCompositionStart: () => void
 	onSearchCompositionEnd: () => void
 	onRefresh: () => void
-}
-
-/** Resolves date preset into unix second range for API filters */
-export function resolveDatePresetRange(preset: AudioRecordingsDatePreset): {
-	start?: number
-	end?: number
-} {
-	if (preset === "all") return {}
-
-	const now = new Date()
-	const end = toEndOfDayTimestamp(now)
-	const startDate = new Date(now)
-
-	if (preset === "last7") startDate.setDate(startDate.getDate() - 6)
-	if (preset === "last30") startDate.setDate(startDate.getDate() - 29)
-	if (preset === "last90") startDate.setDate(startDate.getDate() - 89)
-
-	return {
-		start: toStartOfDayTimestamp(startDate),
-		end,
-	}
 }
 
 /** Builds a stable sort option key from field and direction */
@@ -73,51 +82,129 @@ function fromSortOption(option: AudioRecordingsSortOption): {
 	sortBy: AudioProjectSortBy
 	sortOrder: AudioProjectSortOrder
 } {
-	// Sort keys use snake_case fields (e.g. updated_at_desc), so split from the last segment
 	const separatorIndex = option.lastIndexOf("_")
 	const sortBy = option.slice(0, separatorIndex) as AudioProjectSortBy
 	const sortOrder = option.slice(separatorIndex + 1) as AudioProjectSortOrder
 	return { sortBy, sortOrder }
 }
 
-/** Renders summary filter label with optional count badge for trigger and menu rows */
-function SummaryOptionLabel({
-	label,
-	count,
-	variant,
+/** Group selection filter rendering custom folders list and manage entry */
+function AudioRecordingGroupFilter({
+	groups = [],
+	totalGroupCount = 0,
+	ungroupedCount = 0,
+	currentGroupId = ALL_RECORDING_GROUP_ID,
+	onGroupChange,
+	onManageGroups,
 }: {
-	label: string
-	count?: number
-	variant: "trigger" | "menu"
+	groups: AudioRecordingGroup[]
+	totalGroupCount: number
+	ungroupedCount: number
+	currentGroupId: string
+	onGroupChange: (groupId: string) => void
+	onManageGroups: () => void
 }) {
-	if (variant === "trigger") {
-		return (
-			<span className="flex items-baseline gap-1.5 text-lg font-medium text-foreground">
-				<span>{label}</span>
-				{count != null ? (
-					<span className="-ml-1.5" data-testid="audio-recordings-summary-filter-count">
-						（{count}）
-					</span>
-				) : null}
-			</span>
-		)
-	}
+	const { t } = useTranslation(["super", "audioRecordings"])
+	const unnamedGroupLabel = t("super:mobile.recordingEntry.groupSheet.unnamedGroup")
+
+	const currentLabel = useMemo(() => {
+		if (currentGroupId === ALL_RECORDING_GROUP_ID) {
+			return `${t("super:mobile.recordingEntry.groupSheet.all")}（${totalGroupCount}）`
+		}
+		if (currentGroupId === UNGROUPED_RECORDING_GROUP_ID) {
+			return `${t("super:mobile.recordingEntry.groupSheet.ungrouped")}（${ungroupedCount}）`
+		}
+		const matched = groups?.find((g) => g.id === currentGroupId)
+		const groupName = resolveRecordingGroupDisplayName(matched?.name, unnamedGroupLabel)
+		// Fall back visually while the page layer clears stale persisted group ids after metadata loads.
+		return matched
+			? `${groupName}（${matched.projectCount}）`
+			: `${t("super:mobile.recordingEntry.groupSheet.all")}（${totalGroupCount}）`
+	}, [currentGroupId, groups, totalGroupCount, ungroupedCount, unnamedGroupLabel, t])
 
 	return (
-		<span className="flex min-w-0 flex-1 items-center gap-1.5">
-			<span>{label}</span>
-			{count != null ? <span className="text-xs text-muted-foreground">{count}</span> : null}
-		</span>
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<button
+					type="button"
+					className="flex h-8 items-center gap-1 rounded-lg px-2 transition-colors hover:bg-muted/80 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:outline-none data-[state=open]:ring-0"
+					data-testid="audio-recordings-group-filter-trigger"
+				>
+					<span className="max-w-[200px] truncate text-lg font-medium text-foreground">
+						{currentLabel}
+					</span>
+					<ChevronDown className="h-4 w-4 text-muted-foreground" />
+				</button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent
+				align="start"
+				className="max-h-[360px] min-w-[190px] overflow-y-auto"
+			>
+				{/* Menu items use text-sm to match other filter dropdowns in this bar */}
+				<DropdownMenuItem
+					onClick={() => onGroupChange(ALL_RECORDING_GROUP_ID)}
+					className="flex items-center justify-between gap-3 font-medium"
+					data-testid="audio-recordings-group-all"
+				>
+					<span>{t("super:mobile.recordingEntry.groupSheet.all")}</span>
+					<span className="text-xs tabular-nums text-muted-foreground">
+						{totalGroupCount}
+					</span>
+				</DropdownMenuItem>
+
+				{/* Virtual Item: Ungrouped */}
+				<DropdownMenuItem
+					onClick={() => onGroupChange(UNGROUPED_RECORDING_GROUP_ID)}
+					className="flex items-center justify-between gap-3 font-medium"
+					data-testid="audio-recordings-group-ungrouped"
+				>
+					<span>{t("super:mobile.recordingEntry.groupSheet.ungrouped")}</span>
+					<span className="text-xs tabular-nums text-muted-foreground">
+						{ungroupedCount}
+					</span>
+				</DropdownMenuItem>
+
+				{/* Custom folder items */}
+				{groups.map((group) => (
+					<DropdownMenuItem
+						key={group.id}
+						onClick={() => onGroupChange(group.id)}
+						className="flex items-center justify-between gap-3 font-medium"
+						data-testid={`audio-recordings-group-custom-${group.id}`}
+					>
+						<span className="max-w-[120px] truncate">
+							{resolveRecordingGroupDisplayName(group.name, unnamedGroupLabel)}
+						</span>
+						<span className="text-xs tabular-nums text-muted-foreground">
+							{group.projectCount}
+						</span>
+					</DropdownMenuItem>
+				))}
+
+				<DropdownMenuSeparator />
+
+				{/* Manage Action Trigger */}
+				<DropdownMenuItem
+					onClick={(e) => {
+						e.stopPropagation()
+						onManageGroups()
+					}}
+					className="flex items-center gap-2 font-semibold text-primary"
+					data-testid="audio-recordings-group-manage-trigger"
+				>
+					<FolderClosed className="h-4 w-4" />
+					<span>{t("super:mobile.recordingEntry.groupSheet.manageGroups")}</span>
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	)
 }
 
-/** Summary status dropdown using the same trigger pattern as DatePresetFilter */
+/** Summary status filter dropdown positioned on right filter-bar area */
 function SummaryStatusFilter({
-	listCount,
 	summaryFilter,
 	onSummaryFilterChange,
 }: {
-	listCount: number
 	summaryFilter: AudioRecordingSummaryFilter
 	onSummaryFilterChange: (value: AudioRecordingSummaryFilter) => void
 }) {
@@ -142,14 +229,17 @@ function SummaryStatusFilter({
 			<DropdownMenuTrigger asChild>
 				<button
 					type="button"
-					className="flex h-8 items-center gap-1 rounded-lg px-1 transition-colors hover:bg-muted"
+					className="flex h-8 items-center gap-1 rounded-lg px-2.5 transition-colors hover:bg-muted"
 					data-testid="audio-recordings-summary-filter"
 				>
-					<SummaryOptionLabel label={activeLabel} count={listCount} variant="trigger" />
+					<span className="text-xs text-muted-foreground">
+						{t("filters.summaryStatus")}
+					</span>
+					<span className="text-xs text-foreground">{activeLabel}</span>
 					<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
 				</button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="start" className="min-w-[168px]">
+			<DropdownMenuContent align="end" className="min-w-[150px]">
 				{summaryOptions.map((option) => (
 					<DropdownMenuItem
 						key={option.value}
@@ -168,6 +258,20 @@ function SummaryStatusFilter({
 	)
 }
 
+/** Mobile-aligned date presets shared across PC and H5 recording list filters */
+const DATE_PRESETS: AudioRecordingsDatePreset[] = ["all", "today", "week", "month"]
+
+/** Resolves each supported date preset to a literal i18n key for static locale analysis */
+function resolveDatePresetLabel(
+	preset: AudioRecordingsDatePreset,
+	t: (key: string) => string,
+): string {
+	if (preset === "all") return t("super:mobile.recordingEntry.filterSheet.dateRange.all")
+	if (preset === "today") return t("super:mobile.recordingEntry.filterSheet.dateRange.today")
+	if (preset === "week") return t("super:mobile.recordingEntry.filterSheet.dateRange.week")
+	return t("super:mobile.recordingEntry.filterSheet.dateRange.month")
+}
+
 /** Date preset dropdown styled like shared workspace filter controls */
 function DatePresetFilter({
 	datePreset,
@@ -176,21 +280,18 @@ function DatePresetFilter({
 	datePreset: AudioRecordingsDatePreset
 	onDatePresetChange: (value: AudioRecordingsDatePreset) => void
 }) {
-	const { t } = useTranslation("audioRecordings")
+	const { t } = useTranslation(["audioRecordings", "super"])
 
 	const dateOptions = useMemo(
 		() =>
-			[
-				{ value: "all", label: t("filters.dateAll") },
-				{ value: "last7", label: t("filters.dateLast7Days") },
-				{ value: "last30", label: t("filters.dateLast30Days") },
-				{ value: "last90", label: t("filters.dateLast90Days") },
-			] as const,
+			DATE_PRESETS.map((value) => ({
+				value,
+				label: resolveDatePresetLabel(value, t),
+			})),
 		[t],
 	)
 
-	const activeLabel =
-		dateOptions.find((option) => option.value === datePreset)?.label ?? t("filters.dateAll")
+	const activeLabel = resolveDatePresetLabel(datePreset, t)
 
 	return (
 		<DropdownMenu>
@@ -201,7 +302,9 @@ function DatePresetFilter({
 					data-testid="audio-recordings-date-filter"
 				>
 					<CalendarRange className="h-4 w-4 text-muted-foreground" />
-					<span className="text-xs text-muted-foreground">{t("filters.dateRange")}</span>
+					<span className="text-xs text-muted-foreground">
+						{t("super:mobile.recordingEntry.filterSheet.dateRange.label")}
+					</span>
 					<span className="text-xs text-foreground">{activeLabel}</span>
 					<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
 				</button>
@@ -212,6 +315,7 @@ function DatePresetFilter({
 						key={option.value}
 						onClick={() => onDatePresetChange(option.value)}
 						className="flex items-center justify-between gap-2"
+						data-testid={`audio-recordings-date-${option.value}`}
 					>
 						<span>{option.label}</span>
 						{datePreset === option.value ? (
@@ -239,7 +343,6 @@ function SortFilter({
 	const { t } = useTranslation("audioRecordings")
 	const activeOption = toSortOption(sortBy, sortOrder)
 
-	// Only expose descending sort: newest first for updated/created time
 	const sortOptions = useMemo(
 		() =>
 			[
@@ -366,15 +469,20 @@ function RefreshButton({
 	)
 }
 
-/** Single-row filter bar: summary on the left; date, sort, search, and refresh on the right */
+/** Query-only toolbar for desktop list filters; creation actions live in the header action cluster. */
 function AudioRecordingsFilters({
-	listCount,
 	summaryFilter,
 	datePreset,
 	sortBy,
 	sortOrder,
 	searchKeyword,
 	isRefreshing,
+	groups,
+	totalGroupCount,
+	ungroupedCount,
+	currentGroupId,
+	onGroupChange,
+	onManageGroups,
 	onSummaryFilterChange,
 	onDatePresetChange,
 	onSortByChange,
@@ -390,12 +498,22 @@ function AudioRecordingsFilters({
 			data-testid="audio-recordings-filters"
 		>
 			<div className="flex flex-wrap items-center justify-between gap-2.5">
-				<SummaryStatusFilter
-					listCount={listCount}
-					summaryFilter={summaryFilter}
-					onSummaryFilterChange={onSummaryFilterChange}
+				{/* Left Side: Group selection */}
+				<AudioRecordingGroupFilter
+					groups={groups}
+					totalGroupCount={totalGroupCount}
+					ungroupedCount={ungroupedCount}
+					currentGroupId={currentGroupId}
+					onGroupChange={onGroupChange}
+					onManageGroups={onManageGroups}
 				/>
+
+				{/* Right Side: Other search metadata filters and actions */}
 				<div className="flex flex-wrap items-center gap-1.5">
+					<SummaryStatusFilter
+						summaryFilter={summaryFilter}
+						onSummaryFilterChange={onSummaryFilterChange}
+					/>
 					<DatePresetFilter
 						datePreset={datePreset}
 						onDatePresetChange={onDatePresetChange}
@@ -412,6 +530,7 @@ function AudioRecordingsFilters({
 						onSearchCompositionStart={onSearchCompositionStart}
 						onSearchCompositionEnd={onSearchCompositionEnd}
 					/>
+					{/* Refresh stays inside the filter bar because it re-fetches the active query state. */}
 					<RefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />
 				</div>
 			</div>

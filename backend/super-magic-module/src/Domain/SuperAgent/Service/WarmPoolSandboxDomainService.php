@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use DateTimeImmutable;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\WarmPoolSandboxStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WarmPoolSandboxEntity;
@@ -265,17 +266,28 @@ class WarmPoolSandboxDomainService
      * delete via gateway + DB row deleted), so a failed mount never
      * leaves a poisoned row in the pool.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
+     * @param string $projectId 实际项目 ID
+     * @param string $projectSpaceRootFileId 项目空间 root file id
+     * @param string $userSpaceRootFileId 用户空间 root file id（可空）
      * @param array<string, string> $labels Extra pod labels (e.g. ['topic-id' => '123']) stamped onto the pod at mount time
      */
     public function tryAcquireAndMount(
-        string $userId,
+        DataIsolation $dataIsolation,
         string $projectId,
         string $projectSpaceRootFileId,
         string $userSpaceRootFileId,
-        string $authorization,
         array $labels = [],
         ?string $topicId = null
     ): ?string {
+        // Per-call user identity for mountWarmPoolSandbox — that call
+        // reaches into a user-bound pod (agfs /api/v1/mount) so the
+        // pod's in-pod middleware expects User-Authorization.
+        // Caller is expected to have stamped the token on $dataIsolation.
+        $userId = $dataIsolation->getCurrentUserId();
+
+        // getLatestImages only hits the gateway's global image-version
+        // endpoint, no per-user identity required.
         $images = $this->gateway->getLatestImages();
         $latestImage = $images['agent_image'];
         $latestAgfsImage = $images['agfs_image'];
@@ -297,11 +309,11 @@ class WarmPoolSandboxDomainService
 
         try {
             $mountResult = $this->gateway->mountWarmPoolSandbox(
+                $dataIsolation,
                 $sandboxId,
                 $projectId,
                 $projectSpaceRootFileId,
                 $userSpaceRootFileId,
-                $authorization,
                 $labels
             );
         } catch (Throwable $e) {
@@ -334,7 +346,12 @@ class WarmPoolSandboxDomainService
     /**
      * Tear down a claimed-but-broken row: mark dead in DB, best-effort
      * delete pod via gateway, then drop the DB entry. Used by
-     * {@see tryAcquireAndMount()} after a failed mount.
+     * {@see tryAcquireAndMount()} after a failed mount, and by the
+     * reconcile crontab (system-level, no bound user).
+     *
+     * The underlying gateway call ({@see SandboxGatewayInterface::deleteSandbox()})
+     * is a control-plane call (k8s API) and does not need a
+     * DataIsolation.
      */
     public function retireClaimed(WarmPoolSandboxEntity $row, string $reason): void
     {

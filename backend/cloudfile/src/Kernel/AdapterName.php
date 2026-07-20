@@ -86,4 +86,65 @@ class AdapterName
         }
         return $config;
     }
+
+    /**
+     * 根据存储适配器和运行选项解析 endpoint 配置.
+     */
+    public static function applyEndpointOptions(string $adapterName, array $config, array $options = []): array
+    {
+        if (empty($config['endpoint']) || ! is_string($config['endpoint'])) {
+            return $config;
+        }
+
+        $adapterName = self::form($adapterName);
+        $specialConfig = array_merge($config, $options);
+        $config['endpoint'] = self::smartReplaceEndpoint($adapterName, $config['endpoint'], $specialConfig);
+
+        return $config;
+    }
+
+    /**
+     * 根据运行选项智能替换云存储 endpoint.
+     */
+    public static function smartReplaceEndpoint(string $adapterName, string $endpoint, array $specialConfig = []): string
+    {
+        if (self::shouldUseInternalEndpoint($specialConfig)) {
+            switch (self::form($adapterName)) {
+                case self::ALIYUN:
+                    // 阿里云 OSS 内网地址：oss-cn-shenzhen.aliyuncs.com -> oss-cn-shenzhen-internal.aliyuncs.com
+                    if (! str_contains($endpoint, '-internal.aliyuncs.com')) {
+                        $endpoint = str_replace('.aliyuncs.com', '-internal.aliyuncs.com', $endpoint);
+                    }
+                    break;
+                case self::TOS:
+                    // 火山 TOS 内网地址：tos-cn-beijing.volces.com -> tos-cn-beijing.ivolces.com
+                    $endpoint = str_replace('.volces.com', '.ivolces.com', $endpoint);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (! empty($specialConfig['specify_endpoint']) && is_string($specialConfig['specify_endpoint'])) {
+            $endpoint = $specialConfig['specify_endpoint'];
+        }
+
+        return $endpoint;
+    }
+
+    /**
+     * 判断是否需要使用云存储内网 endpoint.
+     */
+    private static function shouldUseInternalEndpoint(array $specialConfig): bool
+    {
+        if (! isset($specialConfig['internal_endpoint'])) {
+            return false;
+        }
+
+        if (is_bool($specialConfig['internal_endpoint'])) {
+            return $specialConfig['internal_endpoint'];
+        }
+
+        return filter_var($specialConfig['internal_endpoint'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
+    }
 }

@@ -22,6 +22,7 @@ import SizeIconPreview from "../ui/custom/SizeIconPreview"
 import SourceList, { type SourceListOption, type SourceListRenderItemParams } from "../SourceList"
 import sourceListStyles from "../SourceList/SourceList.module.css"
 import { cn } from "../../lib/utils"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface ImageEditorReferencePopoverState {
 	slotKey: string
@@ -120,6 +121,7 @@ interface ImageEditorControlsProps {
 	onProjectSelect?: (item: ReferenceResourcePanelItem) => void
 	/** 参考文件删除回调，传入时优先使用（用于同步到 TipTap） */
 	onReferenceFileRemove?: (path: string) => void
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	renderSendButton?: () => React.ReactNode
 }
 
@@ -130,6 +132,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onSelectSource,
 		onProjectSelect,
 		onReferenceFileRemove,
+		onPreviewMediaResource,
 		renderSendButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
@@ -177,6 +180,8 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				resourcePath: info.path,
 				resourceFileName: info.fileName,
 				removeResourceAriaLabel: t("imageEditor.removeReferenceResource", "移除该参考资源"),
+				previewResourceAriaLabel: t("mediaResourceFullscreenPreview.open", "预览媒体资源"),
+				onPreviewResource: onPreviewMediaResource,
 				onRemoveResource: () => {
 					;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(info.path)
 				},
@@ -202,6 +207,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		referenceFileInfos,
 		t,
 		onReferenceFileRemove,
+		onPreviewMediaResource,
 		handlers.handleReferenceFileRemove,
 		canAddReferenceFile,
 		currentReferenceFiles.length,

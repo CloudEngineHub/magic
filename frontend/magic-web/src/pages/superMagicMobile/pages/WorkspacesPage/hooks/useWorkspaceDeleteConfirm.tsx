@@ -16,6 +16,8 @@ interface UseWorkspaceDeleteConfirmOptions {
 export function useWorkspaceDeleteConfirm({ onDeleteWorkspace }: UseWorkspaceDeleteConfirmOptions) {
 	const { t } = useTranslation("super")
 	const [workspacePendingDelete, setWorkspacePendingDelete] = useState<Workspace | null>(null)
+	const workspacePendingDeleteName =
+		workspacePendingDelete?.name?.trim() || t("workspace.unnamedWorkspace")
 
 	/** Show delete confirmation for the given workspace (swipe or more menu). */
 	const requestDeleteWorkspace = useMemoizedFn((workspace: Workspace) => {
@@ -43,7 +45,7 @@ export function useWorkspaceDeleteConfirm({ onDeleteWorkspace }: UseWorkspaceDel
 			visible={Boolean(workspacePendingDelete)}
 			onClose={cancelDeleteWorkspace}
 			title={t("workspace.deleteWorkspace")}
-			entityName={workspacePendingDelete?.name || t("workspace.unnamedWorkspace")}
+			entityName={workspacePendingDeleteName}
 			descriptionSuffix={t("ui.deleteWorkspaceDescriptionWithoutName")}
 			onConfirm={confirmDeleteWorkspace}
 			cancelAriaLabel={t("common.cancel")}

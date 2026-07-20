@@ -28,6 +28,10 @@ function resolveActiveView(pathname: string): string {
 		return "trash"
 	}
 
+	if (matchPath(`/:clusterCode${RoutePath.AudioRecordings}`, pathname)) {
+		return "recording"
+	}
+
 	if (
 		matchPath(`/:clusterCode${RoutePath.SuperWorkspacesList}`, pathname) ||
 		matchPath(`/:clusterCode${RoutePath.SuperSharedWorkspace}`, pathname) ||
@@ -58,6 +62,10 @@ function resolveTestIdPrefix(pathname: string): string {
 
 	if (matchPath(`/:clusterCode${RoutePath.RecycleBin}`, pathname)) {
 		return "mobile-recycle-bin-shell"
+	}
+
+	if (matchPath(`/:clusterCode${RoutePath.AudioRecordings}`, pathname)) {
+		return "mobile-audio-recordings-page"
 	}
 
 	if (matchPath(`/:clusterCode${RoutePath.SuperSharedWorkspace}`, pathname)) {

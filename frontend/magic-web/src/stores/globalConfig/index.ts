@@ -1,14 +1,25 @@
 import { makeAutoObservable } from "mobx"
-import type { PlatformConfig } from "@/apis/types"
+import type { GlobalConfig, PlatformConfig } from "@/apis/types"
 import type { useTranslation } from "react-i18next"
 import { SupportLocales } from "@/constants/locale"
 import MagicCrewLogo from "@/assets/logos/magic-crew.png"
+import { DEFAULT_MAINTENANCE_CONFIG } from "@/constants/maintenance"
 
 export class GlobalConfigStore {
 	globalConfig?: PlatformConfig
+	maintenanceConfig: GlobalConfig = DEFAULT_MAINTENANCE_CONFIG
+	maintenanceConfigReady = false
 
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
+	}
+
+	setMaintenanceConfig(config?: GlobalConfig) {
+		this.maintenanceConfig = {
+			...DEFAULT_MAINTENANCE_CONFIG,
+			...config,
+		}
+		this.maintenanceConfigReady = true
 	}
 
 	/**
@@ -97,7 +108,9 @@ export class GlobalConfigStore {
 	async initGlobalConfig(
 		config: PlatformConfig,
 		i18n: ReturnType<typeof useTranslation>["i18n"],
+		maintenanceConfig?: GlobalConfig,
 	) {
+		this.setMaintenanceConfig(maintenanceConfig)
 		this.globalConfig = {
 			...config,
 			minimal_logo: config.minimal_logo || MagicCrewLogo,

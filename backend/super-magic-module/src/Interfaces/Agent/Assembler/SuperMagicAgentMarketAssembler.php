@@ -54,7 +54,7 @@ class SuperMagicAgentMarketAssembler
     }
 
     /**
-     * @param array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, crew_count:int}> $items
+     * @param array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}> $items
      * @return array<int, CategoryListItemDTO>
      */
     public static function createCategoryListItemDTOs(array $items): array
@@ -66,6 +66,7 @@ class SuperMagicAgentMarketAssembler
                 nameI18n: $item['name_i18n'],
                 logo: $item['logo'],
                 sortOrder: $item['sort_order'],
+                status: $item['status'],
                 crewCount: $item['crew_count'],
             );
         }
@@ -96,6 +97,8 @@ class SuperMagicAgentMarketAssembler
             descriptionI18n: $descriptionI18n,
             icon: $agentMarket->getIcon(),
             iconType: $agentMarket->getIconType()->value,
+            categoryId: $agentMarket->getCategoryId(),
+            categoryIds: $agentMarket->getCategoryIds(),
             versionCode: $agentVersion->getVersion(),
             createdAt: $agentMarket->getCreatedAt() ?? '',
             publishedAt: $agentVersion->getPublishedAt(),
@@ -157,6 +160,7 @@ class SuperMagicAgentMarketAssembler
             publisherType: $agentMarket->getPublisherType()->value,
             publisher: $publisher,
             categoryId: $agentMarket->getCategoryId(),
+            categoryIds: $agentMarket->getCategoryIds(),
             isFeatured: $agentMarket->isFeatured(),
             isAdded: $isAdded,
             latestVersionCode: $latestVersionCode,

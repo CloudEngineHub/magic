@@ -38,6 +38,8 @@ class AgentVersionQuery extends AbstractQuery
      */
     protected ?bool $publishedOnly = null;
 
+    protected ?AgentListSort $sort = null;
+
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -129,5 +131,15 @@ class AgentVersionQuery extends AbstractQuery
     {
         $this->publishedOnly = $publishedOnly;
         return $this;
+    }
+
+    public function getSort(): ?AgentListSort
+    {
+        return $this->sort;
+    }
+
+    public function setSort(?AgentListSort $sort): void
+    {
+        $this->sort = $sort;
     }
 }

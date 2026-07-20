@@ -54,16 +54,16 @@ const MagicMarkmap = memo(
 			instanceRef.current?.instance.current?.setOptions(defaultOptions(zoomSwitch))
 		}, [zoomSwitch])
 
-		const size = useSize(containerRef.current)
+		const size = useSize(containerRef)
 
 		useDebounceEffect(
 			() => {
 				if (size && size.width && size.height) {
-					instanceRef.current?.instance.current?.fit()
+					instanceRef.current?.resize()
 				}
 			},
 			[size?.width, size?.height],
-			{ wait: 500 },
+			{ wait: 150 },
 		)
 
 		const [fullScreenOpen, setFullScreenOpen] = useState(false)

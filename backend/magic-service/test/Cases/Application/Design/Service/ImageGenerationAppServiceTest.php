@@ -171,14 +171,7 @@ final class ImageGenerationAppServiceTest extends TestCase
             ->with($this->isInstanceOf(ProviderDataIsolation::class), $this->identicalTo($expectedCode))
             ->willReturn($this->createAbility($expectedCode, $config));
 
-        return new class(
-            new ImageGenerationDomainService($this->createMock(ImageGenerationRepositoryInterface::class)),
-            $this->createMock(ProjectDomainService::class),
-            new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)),
-            $this->createMock(TaskFileDomainService::class),
-            $aiAbilityDomainService,
-            $this->createMock(UserAiWatermarkPolicyInterface::class),
-        ) extends ImageGenerationAppService {
+        return new class(new ImageGenerationDomainService($this->createMock(ImageGenerationRepositoryInterface::class)), $this->createMock(ProjectDomainService::class), new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)), $this->createMock(TaskFileDomainService::class), $aiAbilityDomainService, $this->createMock(UserAiWatermarkPolicyInterface::class)) extends ImageGenerationAppService {
             public function generateImage(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
             {
                 return $entity;

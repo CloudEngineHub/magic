@@ -29,6 +29,7 @@ import PersonalOrganizationAvatar from "@/assets/resources/personal-organization
 import TeamOrganizationAvatar from "@/assets/resources/team-organization-avatar.svg"
 import { getAvatarUrl } from "@/utils/avatar"
 import { toTestIdSegment } from "@/utils/testid"
+import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void
@@ -55,8 +56,12 @@ const getOrganizationOptions = (
 
 function OrganizationList(props: OrganizationListItemProps) {
 	const { onClose, organizationFilter } = props
-	const { t: tSuper } = useTranslation("super")
-	const { t: tSidebar } = useTranslation("sidebar")
+	const { t: tSuper } = useTranslation("super", {
+		i18n: i18nStore.i18n.instance,
+	})
+	const { t: tSidebar } = useTranslation("sidebar", {
+		i18n: i18nStore.i18n.instance,
+	})
 
 	const { accounts } = useAccountHook()
 	const { clustersConfig } = useClusterConfig()
@@ -150,14 +155,14 @@ function OrganizationList(props: OrganizationListItemProps) {
 			const organizationName = thirdPlatformOrganization.is_personal_organization
 				? tSidebar("organizationSwitch.personalVersion")
 				: thirdPlatformOrganization.organization_name ||
-				magicOrganization?.magic_organization_code ||
-				thirdPlatformOrganization.organization_code
+					magicOrganization?.magic_organization_code ||
+					thirdPlatformOrganization.organization_code
 
 			const logoSource = thirdPlatformOrganization.is_personal_organization
 				? PersonalOrganizationAvatar
 				: thirdPlatformOrganization.organization_logo?.[0]?.url ||
-				magicOrganization?.organization_logo ||
-				TeamOrganizationAvatar
+					magicOrganization?.organization_logo ||
+					TeamOrganizationAvatar
 
 			const baseClassName = cn(
 				"flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[14px] font-normal leading-5 text-foreground transition-colors",

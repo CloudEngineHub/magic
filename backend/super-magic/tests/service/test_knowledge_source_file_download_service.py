@@ -2,6 +2,10 @@ from pathlib import Path
 
 import pytest
 
+from support.storage_sdk_stubs import install_storage_sdk_stubs
+
+install_storage_sdk_stubs()
+
 from app.api.http_dto.knowledge_source_file_download_dto import KnowledgeSourceFileDownloadItem
 from app.service.knowledge_source_file_download_service import KnowledgeSourceFileDownloadService
 
@@ -256,11 +260,6 @@ def test_build_magic_service_headers_includes_user_auth_and_organization(monkeyp
     monkeypatch.setattr(
         "app.service.knowledge_source_file_download_service.InitClientMessageUtil.get_full_config",
         lambda: {
-            "message_subscription_config": {
-                "headers": {
-                    "token": "message-token",
-                },
-            },
             "metadata": {
                 "authorization": "user-token",
                 "organization_code": "DT001",
@@ -271,7 +270,7 @@ def test_build_magic_service_headers_includes_user_auth_and_organization(monkeyp
 
     headers = service.build_magic_service_headers()
 
-    assert headers["token"] == "message-token"
+    assert "token" not in headers
     assert headers["Organization-Code"] == "DT001"
     assert headers["user-id"] == "usi_1"
     assert headers["user-authorization"] == "user-token"

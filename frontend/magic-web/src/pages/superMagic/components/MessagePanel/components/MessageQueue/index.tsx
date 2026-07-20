@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"
+import MobileMessageQueue from "./MobileMessageQueue"
 
 export interface MessageQueueProps {
 	queue: QueuedMessage[]
@@ -28,6 +29,7 @@ export interface MessageQueueProps {
 	onStartEdit: (messageId: string) => void
 	onCancelEdit: () => void
 	className?: string
+	variant?: "default" | "mobile"
 }
 
 const actionButtonBase = cn(
@@ -38,6 +40,7 @@ const actionButtonBase = cn(
 	"disabled:pointer-events-none disabled:opacity-50",
 )
 
+/** Route queue rendering to the mobile prototype card only when callers opt in. */
 function MessageQueue({
 	queue,
 	queueStats,
@@ -47,12 +50,29 @@ function MessageQueue({
 	onStartEdit,
 	onCancelEdit,
 	className,
+	variant = "default",
 }: MessageQueueProps) {
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
 
 	if (queue.length === 0) {
 		return null
+	}
+
+	if (variant === "mobile") {
+		return (
+			<MobileMessageQueue
+				queue={queue}
+				queueStats={queueStats}
+				editingQueueItem={editingQueueItem}
+				onRemoveMessage={onRemoveMessage}
+				onSendMessage={onSendMessage}
+				onStartEdit={onStartEdit}
+				onCancelEdit={onCancelEdit}
+				className={className}
+				variant={variant}
+			/>
+		)
 	}
 
 	const handleToggleExpanded = () => {

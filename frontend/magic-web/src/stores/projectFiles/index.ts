@@ -248,8 +248,27 @@ export class ProjectFilesStore {
 			...file,
 			type: file.type ?? (file.is_directory ? "directory" : "file"),
 		}
+		const fileId = normalizedFile.file_id
 
-		// Add to list
+		if (fileId !== undefined && fileId !== null) {
+			const normalizedFileId = String(fileId)
+			const hasExistingFile = this.workspaceFilesList.some(
+				(item) => String(item.file_id) === normalizedFileId,
+			)
+			if (hasExistingFile) {
+				this.workspaceFilesList = this.workspaceFilesList.map((item) =>
+					String(item.file_id) === normalizedFileId
+						? this.mergeWorkspaceFile(item, normalizedFile)
+						: item,
+				)
+				this.workspaceFileTree = this.updateFileInTree(
+					this.workspaceFileTree,
+					normalizedFile,
+				)
+				return
+			}
+		}
+
 		this.workspaceFilesList = [...this.workspaceFilesList, normalizedFile]
 
 		// Add to tree
@@ -263,6 +282,41 @@ export class ProjectFilesStore {
 			// Add to root level
 			this.workspaceFileTree = [...this.workspaceFileTree, normalizedFile]
 		}
+	}
+
+	private mergeWorkspaceFile(existing: AttachmentItem, incoming: AttachmentItem): AttachmentItem {
+		return {
+			...existing,
+			...incoming,
+			children: incoming.children ?? existing.children,
+		}
+	}
+
+	private updateFileInTree(tree: AttachmentItem[], file: AttachmentItem): AttachmentItem[] {
+		const fileId = file.file_id
+		if (fileId === undefined || fileId === null) return tree
+		const normalizedFileId = String(fileId)
+
+		let updated = false
+		const nextTree = tree.map((node) => {
+			if (String(node.file_id) === normalizedFileId) {
+				updated = true
+				return this.mergeWorkspaceFile(node, file)
+			}
+
+			if (!node.children?.length) return node
+
+			const nextChildren = this.updateFileInTree(node.children, file)
+			if (nextChildren === node.children) return node
+
+			updated = true
+			return {
+				...node,
+				children: nextChildren,
+			}
+		})
+
+		return updated ? nextTree : tree
 	}
 
 	/**

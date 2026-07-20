@@ -127,6 +127,10 @@ export interface MessageEditorProps {
 	onFileUpload?: (files: FileData[]) => void
 	/** task running state - controls send/interrupt button */
 	isTaskRunning?: boolean
+	/** Interrupt callback override */
+	onInterrupt?: () => void
+	/** Extra interrupt button loading state */
+	stopEventLoading?: boolean
 	/** Selected topic */
 	selectedTopic?: Topic | null
 	/** Selected project */
@@ -223,7 +227,7 @@ export interface MessageEditorRef {
 	/** 统一恢复内容：先 updateContent 再 restoreMentionItems，恢复期间抑制 appendTransaction */
 	restoreContent: (content?: JSONContent, mentionItems?: MentionListItem[]) => void
 	/** Focus */
-	focus: ({ enableWhenIsMobile }: { enableWhenIsMobile: boolean }) => void
+	focus: (params?: { enableWhenIsMobile?: boolean; preventScroll?: boolean }) => void
 	/** Set topic models */
 	setModels: (params: {
 		languageModel?: ModelItem | null

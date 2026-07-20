@@ -4,6 +4,7 @@ import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucid
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
 	SidebarGroup,
@@ -19,13 +20,15 @@ import AppsSubMenu from "./AppsSubMenu"
 import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import { getRoutePath, routesPathMatch } from "@/routes/history/helpers"
+import { routesPathMatch } from "@/routes/history/helpers"
 import Divider from "@/components/other/Divider"
 import { useSidebarMarketMenuItems } from "./hooks/useSidebarMarketMenuItems"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { observer } from "mobx-react-lite"
 import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatusPolling"
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
+import { isMagicApp } from "@/utils/devices"
+import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
@@ -44,7 +47,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
-
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
 			event.button === 0 &&
@@ -58,40 +60,15 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	function handleNavigateToRoute(routeName: RouteName, event: MouseEvent<HTMLAnchorElement>) {
 		if (!shouldHandleAnchorClick(event)) return
 		event.preventDefault()
+
+		// Magic App should hand audio recordings back to the native recording tab even on desktop UI.
+		if (routeName === RouteName.AudioRecordings && isMagicApp) {
+			openAudioRecordingsInMagicApp()
+			return
+		}
+
 		if (routesPathMatch(routeName, location.pathname)) return
 		navigate({ name: routeName })
-	}
-
-	function renderSidebarMarketMenuItem({
-		titleKey,
-		routeName,
-		testId,
-		Icon,
-	}: (typeof sidebarMarketMenuItems)[number]) {
-		const title =
-			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
-
-		return (
-			<SidebarMenuItem key={routeName}>
-				<SidebarMenuButton
-					asChild
-					tooltip={collapsed ? title : undefined}
-					data-testid={testId}
-					className="text-sidebar-foreground"
-				>
-					<a
-						href={getRoutePath({ name: routeName }) || "#"}
-						onClick={(event) => handleNavigateToRoute(routeName, event)}
-						className="text-current no-underline"
-					>
-						<Icon className="h-4 w-4 shrink-0" />
-						<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-							{title}
-						</span>
-					</a>
-				</SidebarMenuButton>
-			</SidebarMenuItem>
-		)
 	}
 
 	return (
@@ -138,7 +115,22 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</ChatsSubMenu>
 						</SidebarMenuItem>
-						{sidebarMarketMenuItems.map(renderSidebarMarketMenuItem)}
+						{sidebarMarketMenuItems.map((item) => {
+							const title =
+								item.titleKey === "sidebar:superLobster.title"
+									? t(item.titleKey, clawBrandValues)
+									: t(item.titleKey)
+
+							return (
+								<SidebarMarketMenuItem
+									key={item.routeName}
+									item={item}
+									title={title}
+									collapsed={collapsed}
+									onNavigate={handleNavigateToRoute}
+								/>
+							)
+						})}
 						<SidebarMenuItem>
 							<AppsSubMenu>
 								<SidebarMenuButton

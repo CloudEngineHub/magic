@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { SlideProcessorService } from "../SlideProcessorService"
 import * as htmlProcessor from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "@/pages/superMagic/components/Detail/contents/HTML/previewImageProcess"
 
 // Mock the dependencies
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor")
@@ -48,6 +49,8 @@ describe("SlideProcessorService", () => {
 				fileName: mockConfig.mainFileName, // Uses mainFileName from config
 				attachmentList: mockConfig.attachmentList,
 				html_relative_path: "/slides/",
+				displayConfig: mockConfig.displayConfig,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 				// metadata: mockConfig.metadata, // Not passed in processSlide method
 			})
 		})

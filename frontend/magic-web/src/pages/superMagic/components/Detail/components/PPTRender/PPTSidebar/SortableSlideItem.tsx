@@ -40,6 +40,7 @@ import { observer } from "mobx-react-lite"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { useScreenshotRetry } from "./hooks/useScreenshotRetry"
 import { handlePPTSlideDragStart } from "../../../../MessageEditor/utils/drag"
+import { resolvePptScaleContentDimensions } from "../../../contents/HTML/utils/slide-dimensions"
 
 function SortableSlideItem({
 	item,
@@ -70,10 +71,23 @@ function SortableSlideItem({
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
 	const [renameValue, setRenameValue] = useState("")
 	const [imageLoadError, setImageLoadError] = useState(false)
+	const addToCurrentChatShortcut = useMemo(() => {
+		const isMac =
+			typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC")
+
+		return {
+			modifiers: [isMac ? "⌘" : "Ctrl"],
+			key: "L",
+		}
+	}, [])
 	const visibilityRef = useRef<HTMLDivElement>(null)
 	const hasTriggeredVisibility = useRef(false)
 	// Track previous loading state to detect when content becomes loaded
 	const prevLoadingStateRef = useRef<string | undefined>(item.loadingState)
+	const slideDimensions = useMemo(
+		() => resolvePptScaleContentDimensions(item.content, item.rawContent),
+		[item.content, item.rawContent],
+	)
 
 	// Reset image load error when thumbnail URL changes
 	useEffect(() => {
@@ -230,17 +244,17 @@ function SortableSlideItem({
 
 		if (screenshot?.thumbnailUrl) {
 			return (
-				<div className="rounded-sm border-[1px] border-border">
+				<div className="h-full w-full rounded-sm border-[1px] border-border">
 					<img
 						src={screenshot.thumbnailUrl}
 						alt={`Slide ${item.index + 1}`}
-						className="h-full w-full rounded-sm object-cover"
+						className="h-full w-full rounded-sm object-contain"
 						draggable={false}
-						onError={(e) => {
+						onError={() => {
 							// Image load failed, trigger retry
 							setImageLoadError(true)
 						}}
-						onLoad={(e) => {
+						onLoad={() => {
 							// Image loaded successfully, clear any error state
 							setImageLoadError(false)
 						}}
@@ -302,7 +316,7 @@ function SortableSlideItem({
 					? // Mobile: vertical layout with thumbnail first, no drag cursor
 						"flex h-full w-[140px] shrink-0 cursor-pointer !flex-col gap-1.5"
 					: // Desktop: vertical layout with thumbnail first, drag cursor
-						"flex h-full cursor-grab flex-col active:cursor-grabbing",
+						"flex cursor-grab flex-col active:cursor-grabbing",
 				className,
 			)}
 			onClick={onClick}
@@ -354,17 +368,15 @@ function SortableSlideItem({
 			</div>
 			{/* Slide thumbnail with image preview */}
 			<div
+				data-testid={`ppt-sidebar-slide-thumbnail-${item.id}`}
 				className={cn(
 					"relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border-2 bg-muted p-0.5 shadow-sm transition-shadow group-hover:shadow",
-					isMobile
-						? // Mobile: square aspect ratio with fixed width
-							"aspect-16/9 min-h-[90px] w-full"
-						: // Desktop: fixed height with flexible width
-							"h-full min-h-[90px] w-[100%]",
+					"min-h-[90px] w-full",
 					isActive
 						? "border-primary"
 						: "border-transparent bg-background hover:border-accent",
 				)}
+				style={{ aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}` }}
 			>
 				{renderThumbnail()}
 			</div>
@@ -383,7 +395,7 @@ function SortableSlideItem({
 				</ContextMenuTrigger>
 
 				{/* Context menu */}
-				<ContextMenuContent className="w-48">
+				<ContextMenuContent className="w-56">
 					<ContextMenuItem
 						onClick={(e) => {
 							e.stopPropagation()
@@ -391,7 +403,22 @@ function SortableSlideItem({
 						}}
 					>
 						<MessageSquare className="mr-2 size-4" />
-						{t("fileViewer.addToCurrentChat")}
+						<span>{t("fileViewer.addToCurrentChat")}</span>
+						{!isMobile && (
+							<span className="ml-auto inline-flex items-center gap-1 pl-2">
+								{addToCurrentChatShortcut.modifiers.map((modifier) => (
+									<span
+										key={modifier}
+										className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-[#f5f5f5] px-1 text-xs text-[#6b7280]"
+									>
+										{modifier}
+									</span>
+								))}
+								<span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-[#f5f5f5] px-1 text-xs text-[#6b7280]">
+									{addToCurrentChatShortcut.key}
+								</span>
+							</span>
+						)}
 					</ContextMenuItem>
 					<ContextMenuItem
 						onClick={(e) => {

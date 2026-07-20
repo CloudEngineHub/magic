@@ -16,6 +16,7 @@ import {
 	IconFolders,
 	IconSquareCheck,
 	IconInfoCircle,
+	IconCopy,
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -38,10 +39,14 @@ import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
-import { getAttachmentIndexEntry, type AttachmentIndex } from "../utils/attachmentIndex"
-import { canCreateDesignProjectInMenuTarget } from "../../Detail/contents/Design/utils/designProjectMenuPolicy"
+import type { AttachmentIndex } from "../utils/attachmentIndex"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
+import { copyAttachmentPath, getAttachmentFolderPath } from "../utils/attachmentPath"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+} from "../utils/canvasProjectOperationRisk"
 
 type MenuItem = TopicFilesMenuItem
 
@@ -98,23 +103,6 @@ interface UseContextMenuOptions {
 	treeIndex?: AttachmentIndex
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
-}
-
-function buildFolderPathFromIndex(
-	item: AttachmentItem,
-	treeIndex?: AttachmentIndex,
-): string | undefined {
-	if (!treeIndex || !item.file_id) return undefined
-
-	const entry = getAttachmentIndexEntry(treeIndex, item.file_id)
-	if (!entry) return undefined
-
-	const pathNames = [...treeIndex.getParentItemsById(item.file_id), item]
-		.map((pathItem) => pathItem.name || pathItem.file_name || pathItem.display_filename)
-		.filter(Boolean)
-
-	if (pathNames.length === 0) return "/"
-	return `/${pathNames.join("/")}/`
 }
 
 interface MapDownloadMenuToContextOptions {
@@ -320,24 +308,79 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		attachments = [],
 	} = options
 
+	const openDeleteConfirmWithCanvasRisk = async (item: AttachmentItem) => {
+		const isFolder = Boolean(item.is_directory)
+		const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
+		const canvasRisk = await detectCanvasProjectOperationRisk({
+			attachments,
+			items: [item],
+			operation: "delete",
+		})
+		const impact = getCanvasProjectOperationImpact(canvasRisk)
+		const canvasWarningContent = canvasRisk.shouldWarn
+			? t(
+					impact === "open-failure"
+						? "topicFiles.contextMenu.deleteCanvasOpenFailureRiskContent"
+						: impact === "content-loss"
+							? "topicFiles.contextMenu.deleteCanvasContentLossRiskContent"
+							: "topicFiles.contextMenu.deleteCanvasMixedRiskContent",
+				)
+			: undefined
+
+		if (isMobile) {
+			openDeleteConfirm({
+				attachments,
+				selectedKeys: new Set([getAttachmentKey(item)]),
+				canvasWarning: canvasRisk.shouldWarn,
+				canvasWarningContent,
+				onConfirm: () => handleDeleteItem(item),
+				testIdPrefix: "topic-files-delete-confirm",
+			})
+			return
+		}
+
+		MagicModal.confirm({
+			title: isFolder
+				? t("topicFiles.contextMenu.deleteFolderTip")
+				: t("topicFiles.contextMenu.deleteTip"),
+			content: canvasRisk.shouldWarn
+				? canvasWarningContent
+				: isMagicFolder
+					? t("topicFiles.contextMenu.deleteMagicFolderContent")
+					: isFolder
+						? t("topicFiles.contextMenu.deleteFolderContent", {
+								name: item.name,
+							})
+						: t("topicFiles.contextMenu.deleteContent", {
+								name: item.name,
+							}),
+			variant: "destructive",
+			showIcon: true,
+			icon:
+				isMagicFolder && !canvasRisk.shouldWarn ? (
+					<MagicSystemFolderIcon size={24} />
+				) : undefined,
+			okText: t("topicFiles.contextMenu.delete"),
+			cancelText: t("topicFiles.contextMenu.cancel"),
+			onOk() {
+				handleDeleteItem(item)
+			},
+		})
+	}
+
 	// 获取文件夹路径 - 优先使用 relative_file_path,否则从树结构中计算
 	const getFolderPath = (item: AttachmentItem): string | undefined => {
-		if (item.is_directory && "children" in item) {
-			// 优先使用 relative_file_path
-			if (item.relative_file_path) {
-				return item.relative_file_path
-			}
-
-			const pathFromTree = buildFolderPathFromIndex(item, treeIndex)
-			return pathFromTree || `/${item.name}`
-		}
-		return undefined
+		return getAttachmentFolderPath(item, treeIndex)
 	}
 
 	// 处理复制文件
 	const handleCopyFile = (item: AttachmentItem) => {
 		if (!item.file_id) return
 		onCopyFile?.([item.file_id])
+	}
+
+	const handleCopyPath = async (item: AttachmentItem) => {
+		await copyAttachmentPath({ item, treeIndex, t })
 	}
 
 	// 生成批量下载层菜单项（只有三个选项）
@@ -635,6 +678,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				{
+					key: "copyPath",
+					label: t("topicFiles.contextMenu.copyPath"),
+					icon: <MagicIcon component={IconCopy} stroke={2} size={18} />,
+					onClick: () => {
+						void handleCopyPath(item)
+					},
+				},
 				...(handleEnterMultiSelectMode && !isSelectMode
 					? [
 							{
@@ -663,39 +714,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = Boolean(item.is_directory)
-						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
-						if (isMobile) {
-							openDeleteConfirm({
-								attachments,
-								selectedKeys: new Set([getAttachmentKey(item)]),
-								onConfirm: () => handleDeleteItem(item),
-								testIdPrefix: "topic-files-delete-confirm",
-							})
-							return
-						}
-						MagicModal.confirm({
-							title: isFolder
-								? t("topicFiles.contextMenu.deleteFolderTip")
-								: t("topicFiles.contextMenu.deleteTip"),
-							content: isMagicFolder
-								? t("topicFiles.contextMenu.deleteMagicFolderContent")
-								: isFolder
-									? t("topicFiles.contextMenu.deleteFolderContent", {
-											name: item.name,
-										})
-									: t("topicFiles.contextMenu.deleteContent", {
-											name: item.name,
-										}),
-							variant: "destructive",
-							showIcon: true,
-							icon: isMagicFolder ? <MagicSystemFolderIcon size={24} /> : undefined,
-							okText: t("topicFiles.contextMenu.delete"),
-							cancelText: t("topicFiles.contextMenu.cancel"),
-							onOk() {
-								handleDeleteItem(item)
-							},
-						})
+						void openDeleteConfirmWithCanvasRisk(item)
 					},
 				},
 			)
@@ -869,6 +888,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				{
+					key: "copyPath",
+					label: t("topicFiles.contextMenu.copyPath"),
+					icon: <MagicIcon component={IconCopy} stroke={2} size={18} />,
+					onClick: () => {
+						void handleCopyPath(item)
+					},
+				},
 				...(handleEnterMultiSelectMode && !isSelectMode
 					? [
 							{
@@ -897,39 +924,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = Boolean(item.is_directory)
-						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
-						if (isMobile) {
-							openDeleteConfirm({
-								attachments,
-								selectedKeys: new Set([getAttachmentKey(item)]),
-								onConfirm: () => handleDeleteItem(item),
-								testIdPrefix: "topic-files-delete-confirm",
-							})
-							return
-						}
-						MagicModal.confirm({
-							title: isFolder
-								? t("topicFiles.contextMenu.deleteFolderTip")
-								: t("topicFiles.contextMenu.deleteTip"),
-							content: isMagicFolder
-								? t("topicFiles.contextMenu.deleteMagicFolderContent")
-								: isFolder
-									? t("topicFiles.contextMenu.deleteFolderContent", {
-											name: item.name,
-										})
-									: t("topicFiles.contextMenu.deleteContent", {
-											name: item.name,
-										}),
-							variant: "destructive",
-							showIcon: true,
-							icon: isMagicFolder ? <MagicSystemFolderIcon size={24} /> : undefined,
-							okText: t("topicFiles.contextMenu.delete"),
-							cancelText: t("topicFiles.contextMenu.cancel"),
-							onOk() {
-								handleDeleteItem(item)
-							},
-						})
+						void openDeleteConfirmWithCanvasRisk(item)
 					},
 				},
 			)

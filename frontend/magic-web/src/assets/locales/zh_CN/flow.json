@@ -638,6 +638,7 @@
 		"oldVersionTip": "向量知识库已颠覆性升级，当前旧版向量知识库仍可正常使用，但暂不支持重新向量化，建议重新重新创建新向量知识库使用",
 		"onlySupportJpgPng": "只支持JPG/PNG格式图片",
 		"operation": "操作",
+		"paginationItemsPerPage": "/页",
 		"paragraph": "段落",
 		"paragraphDesc": "此模式根据分隔符和最大块长度将文本拆分为段落，使用拆分文本作为检索的父块",
 		"parentChildSegment": "父子分段",

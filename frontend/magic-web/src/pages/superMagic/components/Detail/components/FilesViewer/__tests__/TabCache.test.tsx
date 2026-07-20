@@ -1,7 +1,17 @@
 import { render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
-import { describe, it, expect, vi } from "vitest"
+import { beforeEach, describe, it, expect, vi } from "vitest"
 import TabCache from "../components/TabCache"
+
+const mockDeviceState = vi.hoisted(() => ({
+	isMagicApp: false,
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMagicApp() {
+		return mockDeviceState.isMagicApp
+	},
+}))
 
 vi.mock("antd", () => ({
 	Tooltip: ({ children }: { children: ReactNode }) => children,
@@ -22,12 +32,20 @@ vi.mock("../components/PlaybackTabContent", () => ({
 	default: () => <div data-testid="playback-tab-content" />,
 }))
 
+vi.mock("../components/KnowledgeBaseTabContent", () => ({
+	default: () => <div data-testid="knowledge-base-tab-content" />,
+}))
+
 // Mock dependencies
 vi.mock("../../../Render", () => ({
 	default: () => <div data-testid="render-component" />,
 }))
 
 describe("TabCache", () => {
+	beforeEach(() => {
+		mockDeviceState.isMagicApp = false
+	})
+
 	const mockTab = {
 		id: "test-tab-1",
 		title: "Test File",
@@ -137,5 +155,29 @@ describe("TabCache", () => {
 
 		expect(screen.queryByTestId("render-component")).not.toBeInTheDocument()
 		expect(screen.getByTitle("Unsplash")).toHaveAttribute("src", "https://unsplash.com")
+	})
+
+	it("uses the legacy browser fullscreen content layer outside Magic App", () => {
+		render(
+			<TabCache tab={mockTab} isActive={true} renderProps={mockRenderProps} isFullscreen />,
+		)
+
+		const container = screen.getByTestId("render-component").parentElement
+		expect(container).toHaveClass("fixed")
+		expect(container).toHaveClass("top-0")
+		expect(container).not.toHaveClass("inset-0")
+	})
+
+	it("keeps Magic App fullscreen content bounded by the safe-area shell", () => {
+		mockDeviceState.isMagicApp = true
+
+		render(
+			<TabCache tab={mockTab} isActive={true} renderProps={mockRenderProps} isFullscreen />,
+		)
+
+		const container = screen.getByTestId("render-component").parentElement
+		expect(container).toHaveClass("absolute")
+		expect(container).toHaveClass("inset-0")
+		expect(container).not.toHaveClass("fixed")
 	})
 })

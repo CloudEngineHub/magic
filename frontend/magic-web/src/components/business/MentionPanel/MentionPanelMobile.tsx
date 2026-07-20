@@ -15,13 +15,14 @@ import { Check, ChevronDown, ChevronLeft, Eraser, Search, X } from "lucide-react
 
 // Types
 import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
+import { MentionItemType } from "./types"
 
 // Components
 import MagicPopup from "../../base-mobile/MagicPopup"
 import MobileMenuItem from "./components/MobileMenuItem"
 import { cn } from "@/lib/utils"
 import {
-	canTogglePendingLeafItem,
+	canTogglePendingItem,
 	getMentionItemSelectionKey,
 	getPendingSourceRootId,
 	getSubmittablePendingEntries,
@@ -111,6 +112,7 @@ const MentionPanelMobile = observer(
 			dataService,
 			catalogBehavior,
 			buildStoreRequest,
+			canToggleMultiSelectItem,
 			...restProps
 		} = props
 
@@ -167,6 +169,15 @@ const MentionPanelMobile = observer(
 			setPendingByKey(new Map())
 		})
 
+		// Mirror desktop multi-select eligibility so folders can be selected as their own mention.
+		const canTogglePendingItemForItem = useCallback(
+			(item: MentionItem) => {
+				if (!canTogglePendingItem(item)) return false
+				return canToggleMultiSelectItem ? canToggleMultiSelectItem(item) : true
+			},
+			[canToggleMultiSelectItem],
+		)
+
 		useEffect(() => {
 			if (!visible) {
 				setInternalSearchQuery("")
@@ -203,7 +214,7 @@ const MentionPanelMobile = observer(
 
 		const togglePendingForItem = useMemoizedFn(
 			(item: MentionItem, options?: { mcpValidated?: boolean }) => {
-				if (!canTogglePendingLeafItem(item)) return
+				if (!canTogglePendingItemForItem(item)) return
 				const key = getMentionItemSelectionKey(item)
 				const sourceRootId = getPendingSourceRootId(state.navigationStack, item)
 				setPendingByKey((prev) => {
@@ -232,6 +243,37 @@ const MentionPanelMobile = observer(
 			prepareMentionItemForPending(item, resolvedRuntime.dataService),
 		)
 
+		// Keep MCP validation and duplicate removal in one path for row and checkbox toggles.
+		const requestPendingToggleForItem = useMemoizedFn(async (item: MentionItem) => {
+			// Root entries only drill into their catalog; selectable rows update the pending map in place.
+			if (isRootDefaultCategoryScreen(state) || !canTogglePendingItemForItem(item)) return
+
+			const key = getMentionItemSelectionKey(item)
+			if (pendingByKey.has(key)) {
+				togglePendingForItem(item)
+				return
+			}
+
+			const pendingPreparation = await ensureMcpItemReadyForPending(item)
+			if (!pendingPreparation.canSelect) return
+
+			togglePendingForItem(item, {
+				mcpValidated: pendingPreparation.mcpValidated,
+			})
+		})
+
+		// Checkbox taps select the current row visually, then only toggle pending selection.
+		const handleItemCheckboxClick = useCallback(
+			async (index: number) => {
+				const selectedItem = state.items[index]
+				if (!selectedItem) return
+
+				actions.selectItem(index)
+				await requestPendingToggleForItem(selectedItem)
+			},
+			[actions, requestPendingToggleForItem, state.items],
+		)
+
 		const handleItemClick = useCallback(
 			async (index: number, event?: React.MouseEvent) => {
 				const selectedItem = state.items[index]
@@ -253,7 +295,13 @@ const MentionPanelMobile = observer(
 						selectedItem,
 						enterFolder: isRightArrow,
 					}) ?? false
-				const enterFolder = isRightArrow || shouldEnterFolderDirectly
+				const isHistoryItem = selectedItem.tags?.includes("history")
+				const isRootDefaultScreen = isRootDefaultCategoryScreen(state)
+				const isFolderRow =
+					selectedItem.type === MentionItemType.FOLDER &&
+					!isHistoryItem &&
+					!isRootDefaultScreen
+				const enterFolder = isRightArrow || shouldEnterFolderDirectly || isFolderRow
 				if (selectedItem.unSelectable && !enterFolder) return
 
 				actions.selectItem(index)
@@ -265,54 +313,45 @@ const MentionPanelMobile = observer(
 					return
 				}
 
-				if (selectedItem.tags?.includes("history")) {
+				if (isHistoryItem) {
 					setTimeout(() => {
 						actions.confirmSelection({ enterFolder: false })
 					}, 100)
 					return
 				}
 
-				// 第一页：类目入口，只下钻不勾选
-				if (isRootDefaultCategoryScreen(state)) {
+				// Root category rows only drill down and never write to the pending selection map.
+				if (isRootDefaultScreen) {
 					const canDrillDown =
 						Boolean(selectedItem.hasChildren || selectedItem.children?.length) &&
-						!selectedItem.tags?.includes("history")
+						!isHistoryItem
 					if (canDrillDown) {
 						setTimeout(() => actions.confirmSelection({ enterFolder: false }), 100)
 					}
 					return
 				}
 
-				if (!canTogglePendingLeafItem(selectedItem)) {
+				if (!canTogglePendingItemForItem(selectedItem)) {
 					const canDrillDown =
-						Boolean(selectedItem.hasChildren || selectedItem.children?.length) &&
-						!selectedItem.tags?.includes("history")
+						Boolean(
+							selectedItem.hasChildren ||
+							selectedItem.children?.length ||
+							selectedItem.type === MentionItemType.FOLDER,
+						) && !isHistoryItem
 					if (canDrillDown) {
-						setTimeout(() => actions.confirmSelection({ enterFolder: false }), 100)
+						setTimeout(() => actions.confirmSelection({ enterFolder }), 100)
 					}
 					return
 				}
 
-				const key = getMentionItemSelectionKey(selectedItem)
-				if (pendingByKey.has(key)) {
-					togglePendingForItem(selectedItem)
-					return
-				}
-
-				const pendingPreparation = await ensureMcpItemReadyForPending(selectedItem)
-				if (!pendingPreparation.canSelect) return
-
-				togglePendingForItem(selectedItem, {
-					mcpValidated: pendingPreparation.mcpValidated,
-				})
+				await requestPendingToggleForItem(selectedItem)
 			},
 			[
 				actions,
-				ensureMcpItemReadyForPending,
-				pendingByKey,
+				canTogglePendingItemForItem,
+				requestPendingToggleForItem,
 				resolvedRuntime.catalogBehavior,
 				state,
-				togglePendingForItem,
 			],
 		)
 
@@ -414,7 +453,8 @@ const MentionPanelMobile = observer(
 
 				const isHistoryItem = item.tags?.includes("history")
 				const key = getMentionItemSelectionKey(item)
-				const showCb = canTogglePendingLeafItem(item) && !isRootDefaultCategoryScreen(state)
+				const showCb =
+					canTogglePendingItemForItem(item) && !isRootDefaultCategoryScreen(state)
 				const rootBadge =
 					isRootDefaultCategoryScreen(state) && totalPending > 0
 						? (rootPendingCounts.get(item.id) ?? 0)
@@ -426,6 +466,9 @@ const MentionPanelMobile = observer(
 						item={item}
 						selected={false}
 						onClick={(e) => handleItemClick(index, e)}
+						onCheckboxClick={() => {
+							void handleItemCheckboxClick(index)
+						}}
 						isSearch={Boolean(state.searchQuery.trim())}
 						t={t}
 						onDelete={isHistoryItem ? handleDeleteHistoryItem : undefined}
@@ -438,7 +481,9 @@ const MentionPanelMobile = observer(
 			[
 				state,
 				t,
+				canTogglePendingItemForItem,
 				handleDeleteHistoryItem,
+				handleItemCheckboxClick,
 				handleItemClick,
 				pendingByKey,
 				rootPendingCounts,

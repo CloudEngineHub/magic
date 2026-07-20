@@ -85,6 +85,7 @@ class TaskFileDomainService
         protected LockerInterface $locker,
         protected TaskFileVersionRepositoryInterface $taskFileVersionRepository,
         protected CacheInterface $cache,
+        protected AgentDomainService $agentDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -2409,9 +2410,10 @@ class TaskFileDomainService
      * @param ProjectEntity $forkProjectEntity 目标项目实体
      * @param ProjectForkEntity $projectForkRecordEntity Fork记录实体
      * @param null|array $fileIds 要复制的文件ID列表（null表示复制所有文件）
+     * @return array<int, int> source file ID => fork file ID
      * @throws Throwable
      */
-    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, ?array $fileIds = null): void
+    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, ?array $fileIds = null): array
     {
         // 初始化基本参数
         $pageSize = 200; // Process 200 files at a time
@@ -2434,7 +2436,7 @@ class TaskFileDomainService
         // Ensure the fork process is still running
         if (! $projectForkRecordEntity->getStatus()->isRunning()) {
             $this->logger->warning(sprintf('Fork process %d is not in running status, current status: %s. Skipping file migration.', $projectForkRecordEntity->getId(), $projectForkRecordEntity->getStatus()->value));
-            return;
+            return [];
         }
 
         // 预计算工作目录路径（避免重复计算）
@@ -2443,9 +2445,15 @@ class TaskFileDomainService
         $targetWorkDirPrefix = WorkDirectoryUtil::getPrefix($forkProjectEntity->getWorkDir());
 
         // 设置用户上下文
-        $this->sandboxGateway->setUserContext(
-            $forkProjectEntity->getUserId(),
-            $forkProjectEntity->getUserOrganizationCode()
+        // Per-call user identity now flows through DataIsolation; the
+        // authorization token is fetched once from the magic_tokens
+        // stable user-token table and reused for every gateway call in
+        // this method's body. Capturing $userCtx in a local variable
+        // here mirrors the previous setUserContext()/clearUserContext()
+        // lifecycle (set at top of the loop, cleared at the end).
+        $userCtx = DataIsolation::create(
+            $forkProjectEntity->getUserOrganizationCode(),
+            $forkProjectEntity->getUserId()
         );
 
         // 根节点单独处理
@@ -2475,7 +2483,7 @@ class TaskFileDomainService
             if ($totalCount > 0 && $processedCount >= $totalCount) {
                 $this->logger->info(sprintf('Fork record %d: All %d files already processed, skipping migration', $forkRecordId, $totalCount));
                 $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FINISHED->value, 100, '');
-                return;
+                return [];
             }
 
             // 分批获取和处理文件
@@ -2516,12 +2524,13 @@ class TaskFileDomainService
                         } else {
                             // 文件拷贝需要通过远程沙箱处理
                             // 处理文件：调用新的沙箱 copy 接口
-                            $copyResult = $this->sandboxGateway->copyFiles([
+                            $copyResult = $this->sandboxGateway->copyFiles(
+                                $userCtx,
                                 [
                                     'source_oss_path' => $sourceFile->getFileKey(),
                                     'target_oss_path' => $newFileKey,
                                 ],
-                            ]);
+                            );
 
                             if (! $copyResult->isSuccess()) {
                                 $this->logger->error(sprintf(
@@ -2610,13 +2619,17 @@ class TaskFileDomainService
             // Mark as finished
             $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FINISHED->value, 100, '');
             $this->logger->info(sprintf('File migration finished for fork record %d.', $forkRecordId));
+            return $sourceToNewIdMap;
         } catch (Throwable $e) {
             $this->logger->error(sprintf('File migration failed for fork record %d: %s', $forkRecordId, $e->getMessage()));
             $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FAILED->value, 0, 'File migration failed');
             throw $e;
         } finally {
             // 确保用户上下文总是被清理
-            $this->sandboxGateway->clearUserContext();
+            // Per-call DataIsolation above is no longer needed after
+            // copyFiles loop; no explicit clear required (the per-call
+            // value object was scoped to this method).
+            unset($userCtx);
         }
     }
 
@@ -3974,12 +3987,17 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyResult = $this->sandboxGateway->copyFiles([
+            $copyUserCtx = DataIsolation::create(
+                $sourceProject->getUserOrganizationCode(),
+                $sourceProject->getUserId()
+            );
+            $copyResult = $this->sandboxGateway->copyFiles(
+                $copyUserCtx,
                 [
                     'source_oss_path' => $fileEntity->getFileKey(),
                     'target_oss_path' => $targetPath,
                 ],
-            ]);
+            );
 
             if (! $copyResult->isSuccess()) {
                 $this->logger->error('Failed to copy file across organizations', [
@@ -4023,12 +4041,17 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyResult = $this->sandboxGateway->copyFiles([
+            $copyUserCtx = DataIsolation::create(
+                $sourceProject->getUserOrganizationCode(),
+                $sourceProject->getUserId()
+            );
+            $copyResult = $this->sandboxGateway->copyFiles(
+                $copyUserCtx,
                 [
                     'source_oss_path' => $fileEntity->getFileKey(),
                     'target_oss_path' => $targetPath,
                 ],
-            ]);
+            );
 
             if (! $copyResult->isSuccess()) {
                 $this->logger->error('Failed to copy file across organizations', [

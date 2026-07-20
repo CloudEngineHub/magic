@@ -1,6 +1,11 @@
 import usePortalTarget from "@/hooks/usePortalTarget"
-import { SCENE_INPUT_IDS, SCENE_ANIMATION_CONFIG } from "../../constants"
+import {
+	SCENE_INPUT_IDS,
+	SCENE_ANIMATION_CONFIG,
+	hasSlidesTemplateRandomDragType,
+} from "../../constants"
 import { createPortal } from "react-dom"
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import type { OptionItem, FieldItem } from "../../panels/types"
 import { AnimatePresence, motion } from "framer-motion"
 import ScenePanelContainer from "../../components/ScenePanelContainer"
@@ -9,6 +14,10 @@ import DefaultMessageEditorContainer from "../../components/editors/DefaultMessa
 import { ScenePanelComponentBaseProps } from "../../types"
 import { useCurrentSceneConfig } from "../../hooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import SlidesTemplateHomeSelectionPreview from "../Slides/SlidesTemplateHomeSelectionPreview"
+import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
+import { useOptionalScenePanelVariant } from "../../stores"
 
 interface DefaultInputContainerProps extends ScenePanelComponentBaseProps {}
 
@@ -17,20 +26,55 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 		topicMode: editorContext?.topicMode,
 	})
 	const isMobile = useIsMobile()
+	const [selectedSlidesTemplate, setSelectedSlidesTemplate] = useState<OptionItem | null>(null)
+	const [selectedSlidesFilters, setSelectedSlidesFilters] = useState<FieldItem[]>([])
+	const slidesFilterChangeRef = useRef<((filterId: string, value: string) => void) | null>(null)
+	const slidesRandomTemplateRequestRef = useRef<(() => void) | null>(null)
+	const [slidesTemplatePickerContainer, setSlidesTemplatePickerContainer] =
+		useState<HTMLDivElement | null>(null)
+	const [isSlidesTemplatePickerOpen, setIsSlidesTemplatePickerOpen] = useState(false)
+	const [isSlidesTemplatePreviewOpen, setIsSlidesTemplatePreviewOpen] = useState(false)
+	const isSlidesMode = editorContext?.topicMode === TopicMode.PPT
+	const variant = useOptionalScenePanelVariant()
+	const isProjectScene = variant === ScenePanelVariant.TopicPage
+
+	useEffect(() => {
+		if (!isSlidesMode) {
+			setSelectedSlidesTemplate(null)
+			setSelectedSlidesFilters([])
+			setIsSlidesTemplatePickerOpen(false)
+		}
+	}, [isSlidesMode])
 
 	const editorPortalTarget = usePortalTarget({
 		portalId: SCENE_INPUT_IDS.INPUT_CONTAINER,
 	})
 
 	const handleTemplateSelect = (template: OptionItem | null) => {
+		setIsSlidesTemplatePickerOpen(false)
+		if (isSlidesMode) setSelectedSlidesTemplate(template)
+		if (!template) return
+
 		console.log("Template selected:", template)
-		editorPortalTarget?.scrollIntoView({ behavior: "smooth", block: "center" })
+		// 项目页的纵向滚动归 MessageList 管理；选择模板不应改变它的位置。
+		// 首页才需要回到工作区顶部，以展示已选择模板的编辑器。
+		if (!isProjectScene) {
+			requestAnimationFrame(() => {
+				const workspaceViewport = document.querySelector<HTMLElement>(
+					'[data-testid="main-workspace-container"] [data-slot="scroll-area-viewport"]',
+				)
+				workspaceViewport?.scrollTo({ top: 0, behavior: "smooth" })
+			})
+		}
 
 		let attemptCount = 0
 		const tryFocus = () => {
 			const editor = editorContext?.editorRef?.current?.editor
 			if (editor && !editor.isDestroyed) {
-				editorContext?.editorRef?.current?.focus?.({ enableWhenIsMobile: false })
+				editorContext?.editorRef?.current?.focus?.({
+					enableWhenIsMobile: false,
+					preventScroll: true,
+				})
 				return
 			}
 			attemptCount++
@@ -41,8 +85,37 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	}
 
 	const handleFilterChange = (filters: FieldItem[]) => {
+		if (isSlidesMode) setSelectedSlidesFilters(filters)
 		console.log("Filters changed:", filters)
 	}
+
+	const handleSlidesFilterChange = (filterId: string, value: string) => {
+		slidesFilterChangeRef.current?.(filterId, value)
+	}
+
+	const handleRandomTemplateRequest = () => {
+		slidesRandomTemplateRequestRef.current?.()
+	}
+
+	const handleEditorRandomDragOver = (event: DragEvent<HTMLDivElement>) => {
+		if (!hasSlidesTemplateRandomDragType(event.dataTransfer)) return
+		event.preventDefault()
+		event.stopPropagation()
+		event.dataTransfer.dropEffect = "none"
+	}
+
+	const handleEditorRandomDrop = (event: DragEvent<HTMLDivElement>) => {
+		if (!hasSlidesTemplateRandomDragType(event.dataTransfer)) return
+		event.preventDefault()
+		event.stopPropagation()
+	}
+
+	const handleSlidesTemplatePickerContainerChange = useCallback(
+		(container: HTMLDivElement | null) => {
+			setSlidesTemplatePickerContainer(container)
+		},
+		[],
+	)
 
 	const editorNode =
 		editorPortalTarget &&
@@ -56,13 +129,44 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 					exit={SCENE_ANIMATION_CONFIG.exit}
 					transition={SCENE_ANIMATION_CONFIG.transition}
 				>
-					<DefaultMessageEditorContainer
-						editorContext={{
-							...editorContext,
-							placeholder,
-						}}
-						editorNodes={editorNodes}
-					/>
+					<div className="flex flex-col gap-2">
+						<div
+							onDragEnterCapture={handleEditorRandomDragOver}
+							onDragOverCapture={handleEditorRandomDragOver}
+							onDropCapture={handleEditorRandomDrop}
+						>
+							<DefaultMessageEditorContainer
+								editorContext={{
+									...editorContext,
+									placeholder,
+								}}
+								editorNodes={editorNodes}
+							/>
+						</div>
+						{isSlidesMode ? (
+							<SlidesTemplateHomeSelectionPreview
+								template={selectedSlidesTemplate}
+								filters={selectedSlidesFilters}
+								onRandomTemplateRequest={handleRandomTemplateRequest}
+								onClear={
+									selectedSlidesTemplate
+										? () => setSelectedSlidesTemplate(null)
+										: undefined
+								}
+								onFilterChange={handleSlidesFilterChange}
+								onTemplatePickerContainerChange={
+									isProjectScene
+										? handleSlidesTemplatePickerContainerChange
+										: undefined
+								}
+								className={isProjectScene ? "gap-2 p-2" : undefined}
+								templatePickerOpen={isSlidesTemplatePickerOpen}
+								onTemplatePickerOpenChange={setIsSlidesTemplatePickerOpen}
+								showTemplateActions={isProjectScene}
+								isTemplatePreviewOpen={isSlidesTemplatePreviewOpen}
+							/>
+						) : null}
+					</div>
 				</motion.div>
 			</AnimatePresence>,
 			editorPortalTarget,
@@ -74,6 +178,15 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 			<ScenePanelContainer
 				panels={panels}
 				loading={isLoading}
+				selectedTemplate={isSlidesMode ? selectedSlidesTemplate : undefined}
+				onSlidesFilterChangeRequestChange={(handler) => {
+					slidesFilterChangeRef.current = handler
+				}}
+				onSlidesRandomTemplateRequestChange={(handler) => {
+					slidesRandomTemplateRequestRef.current = handler
+				}}
+				onSlidesTemplatePreviewOpenChange={setIsSlidesTemplatePreviewOpen}
+				slidesTemplatePickerContainer={slidesTemplatePickerContainer}
 				onTemplateSelect={handleTemplateSelect}
 				onFilterChange={handleFilterChange}
 			/>

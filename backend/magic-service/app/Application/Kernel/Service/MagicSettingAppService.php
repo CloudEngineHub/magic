@@ -7,15 +7,16 @@ declare(strict_types=1);
 
 namespace App\Application\Kernel\Service;
 
+use App\Application\AppMenu\Service\AppMenuAppService;
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\Kernel\DTO\GlobalConfig;
 use App\Domain\AppMenu\Entity\ValueObject\DisplayScope;
-use App\Domain\AppMenu\Service\AppMenuDomainService;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Infrastructure\Core\DataIsolation\ValueObject\OrganizationType;
 use App\Infrastructure\Util\Redis\GlobalConfigCacheUtil;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Hyperf\Redis\Redis;
 
 class MagicSettingAppService extends AbstractKernelAppService
@@ -25,7 +26,7 @@ class MagicSettingAppService extends AbstractKernelAppService
     public function __construct(
         private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
         private readonly Redis $redis,
-        private readonly AppMenuDomainService $appMenuDomainService,
+        private readonly AppMenuAppService $appMenuAppService,
     ) {
     }
 
@@ -124,7 +125,7 @@ class MagicSettingAppService extends AbstractKernelAppService
      *
      * @return array<array{id: string, name_i18n: array, icon: string, icon_url: string, icon_type: int, path: string, open_method: int, sort_order: int, display_scope: int, status: int}>
      */
-    public function getAppMenuModules(OrganizationType $organizationType): array
+    public function getAppMenuModules(OrganizationType $organizationType, ?MagicUserAuthorization $authorization = null): array
     {
         $displayScopes = [DisplayScope::All->value];
         if ($organizationType === OrganizationType::Personal) {
@@ -133,7 +134,9 @@ class MagicSettingAppService extends AbstractKernelAppService
             $displayScopes[] = DisplayScope::TeamOnly->value;
         }
 
-        $applications = $this->appMenuDomainService->getAllEnabled($displayScopes);
+        $applications = $authorization === null
+            ? $this->appMenuAppService->getAllEnabled($displayScopes)
+            : $this->appMenuAppService->getAllVisibleEnabled($authorization, $displayScopes);
 
         $result = [];
         foreach ($applications as $application) {
@@ -150,9 +153,9 @@ class MagicSettingAppService extends AbstractKernelAppService
                 'icon_type' => $application->getIconType(),
                 'path' => $application->getPath(),
                 'open_method' => $application->getOpenMethod(),
-                'sort_order' => $application->getSortOrder(),
+                'sort_order' => $application->getEffectiveSortOrder(),
                 'display_scope' => $application->getDisplayScope(),
-                'status' => $application->getStatus(),
+                'status' => $application->getEffectiveStatus(),
             ];
         }
 

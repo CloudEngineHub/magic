@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { FieldConfigPanel, GuidePanel } from "../panels"
 import {
 	SkillPanelType,
+	OptionViewType,
 	OptionItem,
 	FieldItem,
 	GuideItem,
@@ -15,11 +16,20 @@ import { observer } from "mobx-react-lite"
 import { ScenePanelVariant } from "./LazyScenePanel/types"
 import { useOptionalScenePanelVariant, useOptionalSceneStateStore } from "../stores"
 
+const SlidesTemplatePanel = lazy(() => import("../scenes/Slides/SlidesTemplatePanel"))
+
 interface ScenePanelContainerProps {
 	panels?: SkillPanelConfigArray
 	loading?: boolean
 	readOnly?: boolean
 	compact?: boolean
+	selectedTemplate?: OptionItem | null
+	onSlidesFilterChangeRequestChange?: (
+		handler: ((filterId: string, value: string) => void) | null,
+	) => void
+	onSlidesRandomTemplateRequestChange?: (handler: (() => void) | null) => void
+	onSlidesTemplatePreviewOpenChange?: (open: boolean) => void
+	slidesTemplatePickerContainer?: HTMLDivElement | null
 	onTemplateSelect?: (template: OptionItem | null) => void
 	onFilterChange?: (filters: FieldItem[]) => void
 	onGuideItemClick?: (item: GuideItem) => void
@@ -30,6 +40,11 @@ function ScenePanelContainer({
 	loading = false,
 	readOnly = false,
 	compact = false,
+	selectedTemplate,
+	onSlidesFilterChangeRequestChange,
+	onSlidesRandomTemplateRequestChange,
+	onSlidesTemplatePreviewOpenChange,
+	slidesTemplatePickerContainer,
 	onTemplateSelect,
 	onFilterChange,
 	onGuideItemClick,
@@ -113,10 +128,39 @@ function ScenePanelContainer({
 				className={
 					compact
 						? "flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
-						: "flex flex-col gap-4"
+						: "flex flex-col gap-4 empty:hidden"
 				}
 			>
 				{fieldPanels?.map(({ config, panelKey }) => {
+					if (config.field?.view_type === OptionViewType.SLIDES_PRESET) {
+						return (
+							<Suspense
+								key={panelKey}
+								fallback={<SkillPanelSkeleton variant={variant} />}
+							>
+								<SlidesTemplatePanel
+									config={config}
+									selectedTemplate={selectedTemplate}
+									onFilterChangeRequestChange={onSlidesFilterChangeRequestChange}
+									onRandomTemplateRequestChange={
+										onSlidesRandomTemplateRequestChange
+									}
+									hideTemplateSelector={variant === ScenePanelVariant.TopicPage}
+									templatePickerContainer={slidesTemplatePickerContainer}
+									onTemplateSelect={onTemplateSelect}
+									onFilterChange={onFilterChange}
+									onPresetContentChange={createPresetContentChangeHandler(
+										panelKey,
+									)}
+									readOnly={readOnly}
+									variant={variant}
+									compact={compact}
+									onPreviewOpenChange={onSlidesTemplatePreviewOpenChange}
+								/>
+							</Suspense>
+						)
+					}
+
 					return (
 						<FieldConfigPanel
 							key={panelKey}
@@ -142,6 +186,39 @@ function ScenePanelContainer({
 
 				switch (config.type) {
 					case SkillPanelType.FIELD:
+						if (config.field?.view_type === OptionViewType.SLIDES_PRESET) {
+							return (
+								<Suspense
+									key={key}
+									fallback={<SkillPanelSkeleton variant={variant} />}
+								>
+									<SlidesTemplatePanel
+										config={config}
+										selectedTemplate={selectedTemplate}
+										onFilterChangeRequestChange={
+											onSlidesFilterChangeRequestChange
+										}
+										onRandomTemplateRequestChange={
+											onSlidesRandomTemplateRequestChange
+										}
+										hideTemplateSelector={
+											variant === ScenePanelVariant.TopicPage
+										}
+										templatePickerContainer={slidesTemplatePickerContainer}
+										onTemplateSelect={onTemplateSelect}
+										onFilterChange={onFilterChange}
+										onPresetContentChange={createPresetContentChangeHandler(
+											key,
+										)}
+										readOnly={readOnly}
+										variant={variant}
+										compact={compact}
+										onPreviewOpenChange={onSlidesTemplatePreviewOpenChange}
+									/>
+								</Suspense>
+							)
+						}
+
 						return (
 							<FieldConfigPanel
 								key={key}

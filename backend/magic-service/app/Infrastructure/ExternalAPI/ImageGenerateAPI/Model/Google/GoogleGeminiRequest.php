@@ -47,12 +47,6 @@ class GoogleGeminiRequest extends ImageGenerateRequest
      */
     protected bool $includeThoughts = false;
 
-    /**
-     * 参考图片列表。
-     * 有值时走图生图/图片编辑链路，会转换为 Gemini fileData 或 inlineData。
-     */
-    protected array $referImages = [];
-
     public function __construct(
         string $width = '',
         string $height = '',
@@ -122,16 +116,6 @@ class GoogleGeminiRequest extends ImageGenerateRequest
     public function setIncludeThoughts(bool $includeThoughts): void
     {
         $this->includeThoughts = $includeThoughts;
-    }
-
-    public function getReferImages(): array
-    {
-        return $this->referImages;
-    }
-
-    public function setReferImages(array $referImages): void
-    {
-        $this->referImages = $referImages;
     }
 
     public function getGenerationConfig(): array

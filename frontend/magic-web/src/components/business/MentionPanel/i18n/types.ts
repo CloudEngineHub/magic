@@ -76,6 +76,7 @@ export interface I18nTexts {
 		agents: string
 		skills: string
 		tools: string
+		canvasElements: string
 		projectFiles2: string
 	}
 
@@ -108,6 +109,10 @@ export interface I18nTexts {
 		searchInput: string
 		retryButton: string
 		goBackButton: string
+		previewImage: string
+		viewMode: string
+		listView: string
+		galleryView: string
 		closeButton: string
 		confirmButton: string
 		/** 已选列表内移除单项 */

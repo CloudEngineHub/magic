@@ -1,4 +1,5 @@
 import { SuperMagicApi } from "@/apis"
+import type { RecoverFinishRecordingTaskResponse } from "@/apis/modules/superMagic/recordSummary"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,
@@ -13,6 +14,9 @@ import {
 import { normalizeAudioProjectList } from "@/pages/superMagic/pages/AudioRecordings/utils/normalize-audio-project-item"
 import { resolveAutoSummaryModelId } from "@/pages/superMagic/pages/AudioRecordings/utils/resolve-auto-summary-model-id"
 import { resolveSummaryModelId } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
+
+const DEFAULT_AUDIO_SETTING_TOPIC_ID = "default_audio"
+const BATCH_MOVE_PROJECTS_LIMIT = 20
 
 export interface PagedAudioProjects {
 	list: AudioProjectListItem[]
@@ -32,6 +36,7 @@ export interface QueryAudioProjectsOptions {
 	sortBy: AudioProjectSortBy
 	sortOrder: AudioProjectSortOrder
 	projectIds?: string[]
+	workspaceId?: string
 }
 
 /** Encapsulates audio recordings list API calls and DTO normalization */
@@ -68,9 +73,36 @@ export class AudioRecordingsService {
 		await SuperMagicApi.batchDeleteProjects({ project_ids: projectIds })
 	}
 
-	/** Resolves model_id from list item extra first, else auto model from summary mode API */
+	/** Moves audio projects in App-compatible chunks to avoid oversized batch requests */
+	async batchMoveProjects(projectIds: string[], targetWorkspaceId: string): Promise<void> {
+		for (let index = 0; index < projectIds.length; index += BATCH_MOVE_PROJECTS_LIMIT) {
+			const batch = projectIds.slice(index, index + BATCH_MOVE_PROJECTS_LIMIT)
+			if (batch.length === 0) continue
+			await SuperMagicApi.batchMoveProjects({
+				project_ids: batch,
+				target_workspace_id: targetWorkspaceId,
+			})
+		}
+	}
+
+	/** Reads App-compatible recording settings so H5 manual summary honors the recording setting page */
+	private async resolveRecordingSettingModelId(): Promise<string | undefined> {
+		try {
+			const setting = await SuperMagicApi.getSuperMagicTopicModel({
+				topic_id: DEFAULT_AUDIO_SETTING_TOPIC_ID,
+			})
+			return setting.extra?.model?.model_id || setting.model?.model_id || undefined
+		} catch {
+			return undefined
+		}
+	}
+
+	/** Resolves model_id from list item first, then default_audio settings, else auto model */
 	async resolveModelIdForSubmit(itemModelId?: string): Promise<string | undefined> {
 		if (itemModelId) return itemModelId
+
+		const recordingSettingModelId = await this.resolveRecordingSettingModelId()
+		if (recordingSettingModelId) return recordingSettingModelId
 
 		const autoModelId = await resolveAutoSummaryModelId()
 		return resolveSummaryModelId(undefined, autoModelId)
@@ -98,6 +130,26 @@ export class AudioRecordingsService {
 			topic_id: topicId,
 			model_id: modelId,
 		})
+	}
+
+	/** Triggers the backend re-summary API for an existing ASR task using the resolved model only. */
+	async resubmitSummary(item: AudioProjectListItem, modelId: string): Promise<void> {
+		if (!item.task_key) return
+
+		await SuperMagicApi.resummarizeRecordedTask({
+			task_key: item.task_key,
+			model_id: modelId,
+		})
+	}
+
+	/** Triggers the backend finish-recording recovery API for a merge_failed task.
+	 *  No request body is sent; the backend recovers the task based on the task_key alone. */
+	async retryMerge(item: AudioProjectListItem): Promise<RecoverFinishRecordingTaskResponse> {
+		if (!item.task_key) {
+			throw new Error("task_key is required for retry merge")
+		}
+
+		return SuperMagicApi.recoverFinishRecordingTask({ task_key: item.task_key })
 	}
 
 	/** Loads display title for detail header when navigation state omits projectName */

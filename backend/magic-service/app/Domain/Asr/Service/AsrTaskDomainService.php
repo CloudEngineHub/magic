@@ -146,7 +146,16 @@ readonly class AsrTaskDomainService
     public function saveTaskStatusWithDatabaseSync(AsrTaskStatusDTO $taskStatus, int $ttl = 604800): void
     {
         // 1. Always write to Redis first
-        $this->asrTaskRepository->save($taskStatus, $ttl);
+        $redisSaved = $this->asrTaskRepository->save($taskStatus, $ttl);
+
+        if (! $redisSaved) {
+            $this->logger->error('Redis write failed in saveTaskStatusWithDatabaseSync — Redis/DB may be inconsistent', [
+                'task_key' => $taskStatus->taskKey,
+                'phase_status' => $taskStatus->phaseStatus,
+                'current_phase' => $taskStatus->currentPhase,
+                'project_id' => $taskStatus->projectId,
+            ]);
+        }
 
         // 2. Sync phase state to Database
         if (! empty($taskStatus->projectId)) {
@@ -183,6 +192,30 @@ readonly class AsrTaskDomainService
         }
 
         // 3. Not found
+        ExceptionBuilder::throw(AsrErrorCode::TaskNotExist);
+    }
+
+    /**
+     * Get task status with permission-checked database fallback.
+     */
+    public function getTaskStatusWithPermission(string $taskKey, string $userId, string $orgCode): AsrTaskStatusDTO
+    {
+        $taskStatus = $this->findTaskByKey($taskKey, $userId);
+        if ($taskStatus !== null) {
+            return $taskStatus;
+        }
+
+        $results = $this->batchRebuildFromDatabase([$taskKey], $userId, $orgCode);
+        $taskStatus = $results[$taskKey] ?? null;
+        if ($taskStatus !== null) {
+            $this->logger->info('Task status rebuilt from database with permission check', [
+                'task_key' => $taskKey,
+                'user_id' => $userId,
+                'org_code' => $orgCode,
+            ]);
+            return $taskStatus;
+        }
+
         ExceptionBuilder::throw(AsrErrorCode::TaskNotExist);
     }
 
@@ -465,6 +498,12 @@ readonly class AsrTaskDomainService
         ?string $orgCode = null
     ): AsrTaskStatusDTO {
         $audioFileId = $audioProject->getAudioFileId();
+        $asrExtra = $this->extractAsrExtra($audioProject);
+        $sandbox = $this->getArraySection($asrExtra, 'sandbox');
+        $directories = $this->getArraySection($asrExtra, 'directories');
+        $finish = $this->getArraySection($asrExtra, 'finish');
+        $presetFiles = $this->getArraySection($asrExtra, 'preset_files');
+        $resultFiles = $this->getArraySection($asrExtra, 'result_files');
 
         return new AsrTaskStatusDTO([
             'task_key' => $taskKey,
@@ -480,7 +519,55 @@ readonly class AsrTaskDomainService
             'phase_percent' => $audioProject->getPhasePercent(),
             'phase_error' => $audioProject->getPhaseError(),
             'audio_file_id' => $audioFileId === null ? null : (string) $audioFileId,
+            'sandbox_topic_id' => $sandbox['sandbox_topic_id'] ?? null,
+            'sandbox_id' => $sandbox['sandbox_id'] ?? null,
+            'sandbox_task_created' => $sandbox['sandbox_task_created'] ?? ! empty($sandbox['sandbox_id'] ?? null),
+            'sandbox_merge_completed' => $sandbox['merge_completed'] ?? false,
+            'sandbox_merge_duration' => $sandbox['merge_duration'] ?? null,
+            'sandbox_merge_file_size' => $sandbox['merge_file_size'] ?? null,
+            'sandbox_finish_response_json' => $sandbox['finish_response_json'] ?? null,
+            'temp_hidden_directory' => $directories['temp_hidden_directory'] ?? null,
+            'temp_hidden_directory_id' => $directories['temp_hidden_directory_id'] ?? null,
+            'display_directory' => $directories['display_directory'] ?? null,
+            'display_directory_id' => $directories['display_directory_id'] ?? null,
+            'preset_note_file_id' => $presetFiles['note_file_id'] ?? null,
+            'preset_note_file_path' => $presetFiles['note_file_path'] ?? null,
+            'preset_transcript_file_id' => $presetFiles['transcript_file_id'] ?? null,
+            'preset_transcript_file_path' => $presetFiles['transcript_file_path'] ?? null,
+            'preset_marker_file_id' => $presetFiles['marker_file_id'] ?? null,
+            'preset_marker_file_path' => $presetFiles['marker_file_path'] ?? null,
+            'file_path' => $resultFiles['audio_file_path'] ?? null,
+            'note_file_id' => $resultFiles['note_file_id'] ?? null,
+            'note_file_name' => $resultFiles['note_file_name'] ?? null,
+            'marker_file_id' => $resultFiles['marker_file_id'] ?? null,
+            'marker_file_name' => $resultFiles['marker_file_name'] ?? null,
+            'finish_output_filename' => $finish['output_filename'] ?? null,
+            'expected_audio_file_name' => $finish['expected_audio_file_name'] ?? null,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function extractAsrExtra(AudioProjectEntity $audioProject): array
+    {
+        $extra = $audioProject->getExtra();
+        if (! is_array($extra)) {
+            return [];
+        }
+
+        $asrExtra = $extra['asr'] ?? null;
+        return is_array($asrExtra) ? $asrExtra : [];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function getArraySection(array $data, string $key): array
+    {
+        $section = $data[$key] ?? null;
+        return is_array($section) ? $section : [];
     }
 
     private function resolveTaskStatusFromAudioProject(AudioProjectEntity $audioProject): AsrTaskStatusEnum
@@ -512,6 +599,13 @@ readonly class AsrTaskDomainService
     private function resolveRecordingStatusFromAudioProject(AudioProjectEntity $audioProject): ?string
     {
         if ($audioProject->getAudioFileId() !== null) {
+            return AsrRecordingStatusEnum::STOPPED->value;
+        }
+
+        if (in_array($audioProject->getCurrentPhase(), [
+            AsrTaskStatusDTO::PHASE_MERGING,
+            AsrTaskStatusDTO::PHASE_SUMMARIZING,
+        ], true)) {
             return AsrRecordingStatusEnum::STOPPED->value;
         }
 

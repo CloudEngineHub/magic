@@ -1,24 +1,16 @@
 import type { ReactNode } from "react"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Bot, Box, House, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
-import { useTranslation } from "react-i18next"
 
-import { hasOrganizationAppsShortcuts } from "@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig.shared"
-import { userStore } from "@/models/user"
 import SuperMagicService from "@/pages/superMagic/services"
-import { getNativePort } from "@/platform/native"
-import { MagiClawNavIcon } from "@/pages/superMagicMobile/components/icons/MagiClawNavIcon"
-import useNavigate from "@/routes/hooks/useNavigate"
-import { RouteName } from "@/routes/constants"
 import { MobileSettingsPanel } from "@/layouts/BaseLayoutMobile/components/MobileSettings"
 import { useMobileDocumentThemeControl } from "@/pages/superMagicMobile/components/MobileDocumentTheme"
 import { MobileSettingsProvider } from "@/pages/superMagicMobile/components/MobileShell/MobileSettingsContext"
-import { isMagicApp } from "@/utils/devices"
+import { useSuperMobileShellNavigation } from "@/pages/superMagicMobile/components/MobileShell/hooks/useSuperMobileShellNavigation"
 
 import { MobileShellAppLayout } from "./MobileShellAppLayout"
 import MobileShellSidebar from "./MobileShellSidebar"
-import type { MobileShellMenuNavItem, MobileShellMenuRecentItem } from "./MobileShellMenuContext"
+import type { MobileShellMenuRecentItem } from "./MobileShellMenuContext"
 import { useRecentProjectsForMenu } from "./useRecentProjectsForMenu"
 
 export interface SuperMobileShellOutletContext {
@@ -28,13 +20,6 @@ export interface SuperMobileShellOutletContext {
 }
 
 const SuperMobileShellOutletContext = createContext<SuperMobileShellOutletContext | null>(null)
-
-function openNativeRecordingPage() {
-	void getNativePort().navigation.changeBottomTab({
-		tab: "ai_recording",
-		bottomTabHeight: 0,
-	})
-}
 
 /**
  * 部分移动端页面在过渡态或独立渲染场景下会先于父级 Shell 挂载；这里提供非抛错探针，
@@ -78,16 +63,9 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 		children,
 	} = props
 
-	const navigate = useNavigate({
-		fallbackRoute: { name: RouteName.MobileHome },
-	})
-	const { t } = useTranslation("super")
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 	const pendingNavigationFrameRef = useRef<number[]>([])
-	const shouldShowAppsEntry = hasOrganizationAppsShortcuts({
-		isPersonalOrganization: userStore.user.isPersonalOrganization,
-	})
 	const { recentItems, reloadRecentItems, loadMoreRecentItems, hasMore } =
 		useRecentProjectsForMenu()
 	const { setSidebarOpen: setDocumentThemeSidebarOpen } = useMobileDocumentThemeControl()
@@ -113,28 +91,6 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 		[isSidebarOpen],
 	)
 
-	const navItems = useMemo<MobileShellMenuNavItem[]>(
-		() => [
-			{ key: "home", icon: House, label: t("mobile.shell.navSuper") },
-			{ key: "chats", icon: MessageCircle, label: t("mobile.shell.navChats") },
-			{ key: "workspaces", icon: Box, label: t("mobile.shell.navWorkspaces") },
-			...(isMagicApp
-				? [{ key: "recording", icon: Mic, label: t("mobile.shell.navRecording") }]
-				: []),
-			{ key: "myCrew", icon: Bot, label: t("mobile.shell.navMyCrew") },
-			{
-				key: "magiClaw",
-				icon: MagiClawNavIcon,
-				label: t("mobile.shell.navMagiClaw"),
-			},
-			...(shouldShowAppsEntry
-				? [{ key: "apps", icon: LayoutGrid, label: t("mobile.shell.navApps") }]
-				: []),
-			{ key: "trash", icon: Trash2, label: t("mobile.shell.navTrash") },
-		],
-		[shouldShowAppsEntry, t],
-	)
-
 	const runAfterSidebarCloseFrame = useCallback((action: () => void) => {
 		pendingNavigationFrameRef.current.forEach((frameId) => cancelAnimationFrame(frameId))
 		pendingNavigationFrameRef.current = []
@@ -151,56 +107,12 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 		pendingNavigationFrameRef.current = [firstFrameId]
 	}, [])
 
-	const handleMenuNavigate = useCallback(
-		(key: string) => {
-			setIsSidebarOpen(false)
-			const navigateWithoutViewTransition = (name: RouteName) => {
-				// Sidebar close already animates the shell; page View Transition snapshots stack old/new shells and cause multi-shell flicker.
-				const navigateToRoute = () => navigate({ name, viewTransition: false })
-				if (isSidebarOpen) {
-					runAfterSidebarCloseFrame(navigateToRoute)
-					return
-				}
-				navigateToRoute()
-			}
-
-			if (key === "trash") {
-				// 回收站已是独立路由，侧栏点击应与其他正式导航项保持一致。
-				navigateWithoutViewTransition(RouteName.RecycleBin)
-				return
-			}
-			if (key === "home") {
-				navigateWithoutViewTransition(RouteName.MobileHome)
-				return
-			}
-			if (key === "chats") {
-				navigateWithoutViewTransition(RouteName.SuperChatsList)
-				return
-			}
-			if (key === "recording") {
-				openNativeRecordingPage()
-				return
-			}
-			if (key === "magiClaw") {
-				navigateWithoutViewTransition(RouteName.MagiClaw)
-				return
-			}
-			if (key === "myCrew") {
-				navigateWithoutViewTransition(RouteName.MyCrew)
-				return
-			}
-			if (key === "apps") {
-				navigateWithoutViewTransition(RouteName.SuperApps)
-				return
-			}
-			if (key === "workspaces") {
-				navigateWithoutViewTransition(RouteName.SuperWorkspacesList)
-				return
-			}
-			navigateWithoutViewTransition(RouteName.MobileHome)
-		},
-		[isSidebarOpen, navigate, runAfterSidebarCloseFrame],
-	)
+	const navigationValue = useSuperMobileShellNavigation({
+		activeView,
+		isSidebarOpen,
+		setIsSidebarOpen,
+		runAfterSidebarCloseFrame,
+	})
 
 	/**
 	 * 最近项目点击按项目类型分流：
@@ -225,20 +137,10 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 	const menuValue = useMemo(
 		() => ({
 			activeView,
-			navItems,
+			navItems: navigationValue.navItems,
 			recentItems,
-			onNavigate: handleMenuNavigate,
-			onGoHome: () => {
-				setIsSidebarOpen(false)
-				// Disable page View Transition so shell close animation does not stack with VT snapshots (multi-sidebar flicker).
-				const navigateHome = () =>
-					navigate({ name: RouteName.MobileHome, viewTransition: false })
-				if (isSidebarOpen) {
-					runAfterSidebarCloseFrame(navigateHome)
-					return
-				}
-				navigateHome()
-			},
+			onNavigate: navigationValue.onNavigate,
+			onGoHome: navigationValue.onGoHome,
 			onRecentNavigate: handleRecentNavigate,
 			reloadRecentItems,
 			hasMore,
@@ -246,16 +148,14 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 		}),
 		[
 			activeView,
-			handleMenuNavigate,
 			handleRecentNavigate,
 			hasMore,
-			isSidebarOpen,
 			loadMoreRecentItems,
-			navItems,
-			navigate,
+			navigationValue.navItems,
+			navigationValue.onGoHome,
+			navigationValue.onNavigate,
 			recentItems,
 			reloadRecentItems,
-			runAfterSidebarCloseFrame,
 		],
 	)
 	/** 统一默认侧栏，避免业务页重复实现与维护一整份侧栏 JSX。 */

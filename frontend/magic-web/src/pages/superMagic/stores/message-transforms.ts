@@ -119,6 +119,18 @@ export function shouldNotifyMessageUpdate({
 
 // ─── 工具调用比较 ────────────────────────────────────────────
 
+/**
+ * 压实 tool_calls 数组：剔除稀疏空洞（undefined）与后端真消息里的 null。
+ *
+ * 流式 chunk 用后端 `index` 作为绝对下标写入 streamState.tool_calls
+ * （见 store 内 delta 处理），当 index 跳跃时会留下语义合法的空洞
+ * （"该 tool 的开场 chunk 尚未到达"）。空洞只在数组离开流式域、交给
+ * 假设其稠密的消费方前需要清除，因此统一在读边界调用本函数。
+ */
+export function compactToolCalls(list: ToolCall[] = []): ToolCall[] {
+	return list.filter(Boolean)
+}
+
 export function isToolCallsEqual(a: ToolCall[] = [], b: ToolCall[] = []): boolean {
 	if (a.length !== b.length) return false
 	for (let i = 0; i < a.length; i++) {
@@ -141,9 +153,9 @@ export function isToolCallArgumentsComplete(toolCall: ToolCall): boolean {
 
 export function isToolCallsMatch(a: ToolCall[] = [], b: ToolCall[] = []): boolean {
 	for (let i = 0; i < a.length; i++) {
-		if (a[i].id !== b[i].id) return false
-		if ((a[i].function?.name || "") !== (b[i].function?.name || "")) return false
-		if (!(b[i].function?.arguments || "").startsWith(a[i].function?.arguments || ""))
+		if (a[i]?.id !== b[i]?.id) return false
+		if ((a[i]?.function?.name || "") !== (b[i]?.function?.name || "")) return false
+		if (!(b[i]?.function?.arguments || "").startsWith(a[i]?.function?.arguments || ""))
 			return false
 	}
 	return true
@@ -212,6 +224,14 @@ export function getDefaultTopicMeta(): TopicMeta {
 		isStreamLoading: false,
 		content: new Map(),
 		streamSnapshots: new Map(),
+		finalizedCorrelationIds: new Set(),
+		lastActiveAt: null,
+		inactiveAt: null,
+		lastSyncedAt: null,
+		lastSyncedSeqId: "",
+		syncGeneration: 0,
+		syncState: "idle",
+		renderPolicy: "live",
 	}
 }
 

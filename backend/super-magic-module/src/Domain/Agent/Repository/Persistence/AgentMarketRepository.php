@@ -17,6 +17,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentMarketModel;
 use Dtyq\SuperMagic\Infrastructure\Utils\DateFormatUtil;
+use Hyperf\DbConnection\Db;
 
 /**
  * 市场 Agent 仓储实现.
@@ -91,6 +92,58 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $result;
     }
 
+    public function findById(int $id): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()->find($id);
+        if ($model === null) {
+            return null;
+        }
+
+        return new AgentMarketEntity($model->toArray());
+    }
+
+    public function countByCategoryId(int $categoryId): int
+    {
+        return $this->countByCategoryIds([$categoryId])[$categoryId] ?? 0;
+    }
+
+    public function countByCategoryIds(array $categoryIds, bool $publishedOnly = false, bool $visibleOnly = false): array
+    {
+        $categoryIds = array_values(array_unique(array_filter(array_map('intval', $categoryIds))));
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $models = Db::table('magic_super_magic_agent_category_relations as acr')
+            ->join('magic_super_magic_agent_market as market', 'market.id', '=', 'acr.relation_id')
+            ->select(['acr.category_id'])
+            ->selectRaw('COUNT(*) as agent_count')
+            ->where('acr.relation_type', 'AGENT_MARKET')
+            ->whereIn('acr.category_id', $categoryIds)
+            ->whereNull('acr.deleted_at')
+            ->whereNull('market.deleted_at')
+            ->groupBy('acr.category_id');
+
+        if ($publishedOnly) {
+            $models->where('market.publish_status', PublishStatus::PUBLISHED->value);
+        }
+        if ($visibleOnly) {
+            $models->where('market.is_hidden', false);
+        }
+
+        $models = $models->get();
+
+        $counts = [];
+        foreach ($models as $model) {
+            $categoryId = (int) $this->getRowValue($model, 'category_id');
+            $agentCount = (int) $this->getRowValue($model, 'agent_count');
+            $counts[$categoryId] = $agentCount;
+        }
+
+        return $counts;
+    }
+
     /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.
      */
@@ -155,6 +208,28 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return true;
     }
 
+    public function clearCategoryIdByIds(SuperMagicAgentDataIsolation $dataIsolation, array $ids): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) {
+            return 0;
+        }
+
+        return $this->createBuilder($dataIsolation, $this->agentMarketModel::query())
+            ->whereIn('id', $ids)
+            ->update(['category_id' => null]);
+    }
+
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->agentMarketModel::query());
+
+        return $builder->where('agent_code', $agentCode)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+    }
+
     /**
      * 查询市场员工列表.
      *
@@ -173,13 +248,14 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         }
 
         // 分类筛选
-        if ($query->getCategoryId() !== null) {
-            $builder->where('category_id', $query->getCategoryId());
+        if ($query->getCategoryIds() !== []) {
+            $this->applyCategoryFilter($builder, $query->getCategoryIds());
         }
 
-        // 排序：精选优先，其次 sort_order 非空优先且数值越大越靠前；为空时回落按 id
+        // 排序：精选优先，其次排序值，再按雇佣次数，最后按 id 兜底。
         $builder->orderBy('is_featured', 'DESC');
         $builder->orderBy('sort_order', 'DESC');
+        $builder->orderBy('install_count', 'DESC');
         $builder->orderBy('id', 'DESC');
 
         // 分页查询
@@ -207,6 +283,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array {
@@ -247,6 +324,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         $endTime = trim((string) $endTime);
         if ($endTime !== '') {
             $builder->where('created_at', '<=', DateFormatUtil::normalizeQueryRangeEnd($endTime));
+        }
+
+        if (! empty($categoryIds)) {
+            $this->applyCategoryFilter($builder, $categoryIds);
         }
 
         $idOrder = strtolower($orderBy) === 'asc' ? 'asc' : 'desc';
@@ -331,10 +412,52 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             $model->category_id = $payload['category_id'];
         }
 
+        if (array_key_exists('name_i18n', $payload)) {
+            $model->name_i18n = $payload['name_i18n'];
+        }
+
+        if (array_key_exists('description_i18n', $payload)) {
+            $model->description_i18n = $payload['description_i18n'];
+        }
+
+        if (array_key_exists('role_i18n', $payload)) {
+            $model->role_i18n = $payload['role_i18n'];
+        }
+
+        if (array_key_exists('icon', $payload)) {
+            $model->icon = $payload['icon'];
+        }
+
+        if (array_key_exists('icon_type', $payload)) {
+            $model->icon_type = $payload['icon_type'];
+        }
+
         if ($model->isDirty() === false) {
             return true;
         }
 
         return $model->save();
+    }
+
+    private function applyCategoryFilter($builder, array $categoryIds): void
+    {
+        $categoryIds = array_values(array_unique(array_filter(array_map('intval', $categoryIds))));
+        if ($categoryIds === []) {
+            return;
+        }
+
+        $builder->whereExists(function ($query) use ($categoryIds) {
+            $query->select(Db::raw(1))
+                ->from('magic_super_magic_agent_category_relations as acr')
+                ->whereColumn('acr.relation_id', 'magic_super_magic_agent_market.id')
+                ->where('acr.relation_type', 'AGENT_MARKET')
+                ->whereIn('acr.category_id', $categoryIds)
+                ->whereNull('acr.deleted_at');
+        });
+    }
+
+    private function getRowValue(array|object $row, string $key): mixed
+    {
+        return is_array($row) ? $row[$key] : $row->{$key};
     }
 }

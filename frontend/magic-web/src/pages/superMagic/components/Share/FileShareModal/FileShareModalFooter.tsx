@@ -11,10 +11,12 @@ interface FileShareModalFooterProps {
 	onCancelShare?: () => void
 	isSaving?: boolean
 	isDisabled?: boolean
+	hideManageShareLinks?: boolean
 }
 
 export default memo(function FileShareModalFooter(props: FileShareModalFooterProps) {
-	const { mode, onCancel, onSave, onCancelShare, isSaving, isDisabled } = props
+	const { mode, onCancel, onSave, onCancelShare, isSaving, isDisabled, hideManageShareLinks } =
+		props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
@@ -62,7 +64,7 @@ export default memo(function FileShareModalFooter(props: FileShareModalFooterPro
 		>
 			{/* 左侧按钮 */}
 			<div>
-				{mode === "create" && (
+				{mode === "create" && !hideManageShareLinks && (
 					<Button
 						variant="outline"
 						size="default"

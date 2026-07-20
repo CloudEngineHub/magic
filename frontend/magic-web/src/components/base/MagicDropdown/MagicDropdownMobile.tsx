@@ -122,6 +122,7 @@ function MagicDropdownMobile({
 										icon={menuItem.icon as React.ReactNode}
 										disabled
 										className={menuItem.className as string | undefined}
+										data-testid={menuItem["data-testid"] as string | undefined}
 									/>
 								)
 							}
@@ -144,6 +145,7 @@ function MagicDropdownMobile({
 									variant={variant}
 									disabled={menuItem.disabled as boolean | undefined}
 									className={menuItem.className as string | undefined}
+									data-testid={menuItem["data-testid"] as string | undefined}
 									onClick={() => {
 										// If has children, navigate to submenu instead of executing action
 										if (hasChildren) {

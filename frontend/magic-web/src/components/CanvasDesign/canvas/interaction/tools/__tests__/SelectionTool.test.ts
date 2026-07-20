@@ -44,6 +44,11 @@ type SelectionToolPrivate = {
 	handleTouchDown: (input: CanvasPointerInput) => void
 	handlePendingDirectDragInput: (input: CanvasPointerInput) => void
 	handleViewportGesture: (event: { data: { active: boolean } }) => void
+	tryStartExternalImageDrag: (
+		event: MouseEvent | PointerEvent,
+		originElementId: string,
+		options?: { cancelBubble?: () => void },
+	) => boolean
 	clearPendingDirectDrag: () => void
 	pendingDirectDrag: unknown
 	isViewportGestureActive: boolean
@@ -110,7 +115,7 @@ function createKonvaNode(
 		getClassName: () => options?.className ?? "Group",
 		getParent: () => parent,
 		draggable: vi.fn(),
-	} as CanvasPointerInput["target"]
+	} as unknown as CanvasPointerInput["target"]
 }
 
 function createTouchSelectionTool(options?: {
@@ -372,6 +377,94 @@ describe("SelectionTool pending direct drag", () => {
 		tool.activate()
 
 		expect(tool.isViewportGestureActive).toBe(true)
+	})
+
+	it("tracks external image drags with pointer window events", () => {
+		const node = createNode()
+		const emit = vi.fn()
+		const canvas = {
+			readonly: false,
+			contentLayer: {},
+			elementManager: {
+				getElementData: () => ({
+					id: "image-1",
+					type: "image",
+					src: "oss://image.png",
+				}),
+				getElementInstance: () => ({
+					getNode: () => node,
+				}),
+			},
+			selectionManager: {
+				getSelectedIds: () => ["image-1"],
+				isSelected: () => true,
+				replaceSelection: vi.fn(),
+			},
+			eventEmitter: {
+				emit,
+			},
+			inputManager: {
+				cancelLongPress: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolPrivate
+		const addSpy = vi.spyOn(window, "addEventListener")
+		const removeSpy = vi.spyOn(window, "removeEventListener")
+
+		const downEvent = createPointerEvent("pointerdown", {
+			altKey: true,
+			button: 0,
+			buttons: 1,
+			clientX: 10,
+			clientY: 20,
+			pointerId: 9,
+			pointerType: "mouse",
+		})
+
+		expect(tool.tryStartExternalImageDrag(downEvent, "image-1")).toBe(true)
+		expect(addSpy).toHaveBeenCalledWith("pointermove", expect.any(Function))
+		expect(addSpy).toHaveBeenCalledWith("pointerup", expect.any(Function))
+		expect(addSpy).toHaveBeenCalledWith("pointercancel", expect.any(Function))
+
+		window.dispatchEvent(
+			createPointerEvent("pointermove", {
+				buttons: 1,
+				clientX: 30,
+				clientY: 40,
+				pointerId: 9,
+				pointerType: "mouse",
+			}),
+		)
+		expect(emit).toHaveBeenCalledWith({
+			type: "image:external-drag:move",
+			data: expect.objectContaining({
+				clientX: 30,
+				clientY: 40,
+				imageElementIds: ["image-1"],
+				originElementId: "image-1",
+			}),
+		})
+
+		window.dispatchEvent(
+			createPointerEvent("pointerup", {
+				buttons: 0,
+				clientX: 50,
+				clientY: 60,
+				pointerId: 9,
+				pointerType: "mouse",
+			}),
+		)
+		expect(emit).toHaveBeenCalledWith({
+			type: "image:external-drag:end",
+			data: expect.objectContaining({
+				clientX: 50,
+				clientY: 60,
+				cancelled: false,
+			}),
+		})
+		expect(removeSpy).toHaveBeenCalledWith("pointermove", expect.any(Function))
+		expect(removeSpy).toHaveBeenCalledWith("pointerup", expect.any(Function))
+		expect(removeSpy).toHaveBeenCalledWith("pointercancel", expect.any(Function))
 	})
 
 	it("cancels long press when a touch multi-selection drag is armed", () => {

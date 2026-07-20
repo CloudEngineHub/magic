@@ -57,6 +57,7 @@ enum MagicResourceEnum: string
     case WORKSPACE_AI_MODEL_AUDIT_STATISTICS = 'workspace.ai.model_audit_statistics'; # 工作区-AI管理-模型调用统计
     case ADMIN_AI_MODE = 'platform.ai.mode_management'; # AI管理-模式管理管理
     case ADMIN_AI_ABILITY = 'platform.ai.ability'; # AI管理-能力管理
+    case ADMIN_AI_APPLICATION_MENU = 'admin.ai.application.menu'; # AI管理-应用菜单
     case ADMIN_AI_MODEL_ACCESS_ROLE = 'admin.ai.model_access_role'; # AI管理-自定义大模型-模型访问权限
     case SAFE_ADMIN = 'admin.safe.admin';  # 安全管控-组织管理员
     case SAFE_SUB_ADMIN = 'admin.safe.sub_admin';  # 组织管理后台-安全管控-子管理员
@@ -71,6 +72,7 @@ enum MagicResourceEnum: string
     case PLATFORM_SETTING_PLATFORM_INFO = 'platform.setting.platform_info'; # 平台管理 - 系统设置 - 平台信息
     case PLATFORM_SETTING_MAINTENANCE = 'platform.setting.maintenance'; # 平台管理 - 系统信息 - 维护管理
     case PLATFORM_SETTING_APPLICATION = 'platform.setting.application'; # 平台管理 - 系统设置 - 应用菜单
+    case PLATFORM_SLIDES_TEMPLATE = 'platform.setting.slides_template'; # 平台管理 - 系统设置 - 幻灯片模板
     case PLATFORM_ORGANIZATION_LIST = 'platform.organization.list'; # 平台管理 - 组织管理 - 组织列表
     case PLATFORM_USER_LIST = 'platform.organization.user_list'; # 平台管理 - 组织管理 - 平台用户列表
     case WORKSPACE_ADMIN_AI_AGENT = 'workspace.ai.agent_management'; # AI管理-数字员工
@@ -107,6 +109,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI_MODEL_AUDIT_STATISTICS => 'permission.resource.workspace_ai_model_audit_statistics',
             self::ADMIN_AI_MODE => 'permission.resource.ai_mode',
             self::ADMIN_AI_ABILITY => 'permission.resource.ai_ability',
+            self::ADMIN_AI_APPLICATION_MENU => 'permission.resource.ai_application',
             self::WORKSPACE_ADMIN_AI_AGENT => 'permission.resource.admin_ai_agent',
             self::WORKSPACE_ADMIN_AI_SKILL => 'permission.resource.admin_ai_skill',
             self::ADMIN_AI_MODEL_ACCESS_ROLE => 'permission.resource.admin_ai_model_access_role',
@@ -127,6 +130,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_SETTING_PLATFORM_INFO => 'permission.resource.platform_setting_platform_info',
             self::PLATFORM_SETTING_MAINTENANCE => 'permission.resource.platform_setting_maintenance',
             self::PLATFORM_SETTING_APPLICATION => 'permission.resource.platform_setting_application',
+            self::PLATFORM_SLIDES_TEMPLATE => 'permission.resource.platform_slides_template',
             self::PLATFORM_ORGANIZATION => 'permission.resource.platform_organization',
             self::PLATFORM_ORGANIZATION_LIST => 'permission.resource.platform_organization_list',
             self::PLATFORM_USER_LIST => 'permission.resource.platform_user_list',
@@ -173,6 +177,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI_MODEL_AUDIT_LOG,
             self::WORKSPACE_AI_MODEL_AUDIT_STATISTICS => self::WORKSPACE_AI,
             self::ADMIN_AI_ABILITY,
+            self::ADMIN_AI_APPLICATION_MENU,
             self::WORKSPACE_ADMIN_AI_AGENT,
             self::WORKSPACE_ADMIN_AI_SKILL,
             self::ADMIN_AI_MODEL_ACCESS_ROLE => self::ADMIN_AI,
@@ -189,6 +194,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_SETTING_PLATFORM_INFO => self::PLATFORM_SETTING,
             self::PLATFORM_SETTING_MAINTENANCE => self::PLATFORM_SETTING,
             self::PLATFORM_SETTING_APPLICATION => self::PLATFORM_SETTING,
+            self::PLATFORM_SLIDES_TEMPLATE => self::PLATFORM_SETTING,
             self::PLATFORM_ORGANIZATION_LIST => self::PLATFORM_ORGANIZATION,
             self::PLATFORM_USER_LIST => self::PLATFORM_ORGANIZATION,
         };

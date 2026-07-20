@@ -144,6 +144,7 @@ describe("activateWaitingServiceWorkerAndReload", () => {
 describe("registerAppServiceWorker", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks()
+		window.sessionStorage.clear()
 		devicesState.isMobile = false
 		vi.stubEnv("MAGIC_MOCK", "true")
 		vi.stubEnv("MAGIC_SW_MODE", "on")
@@ -192,6 +193,32 @@ describe("registerAppServiceWorker", () => {
 			"public-cdn.example.com,assets.example.com,cdn.jsdelivr.net",
 		)
 		expect(options).toEqual({ scope: "/" })
+	})
+
+	it("reports the registration URL when Service Worker registration fails", async () => {
+		const register = vi.fn().mockRejectedValue(new Error("registration failed"))
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+		Object.defineProperty(document, "readyState", {
+			configurable: true,
+			value: "complete",
+		})
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: { register },
+		})
+
+		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		expect(consoleError).toHaveBeenCalledWith(
+			"[sw] Failed to register app service worker",
+			expect.objectContaining({
+				error: expect.any(Error),
+				serviceWorkerUrl: expect.stringContaining("/sw.js?"),
+			}),
+		)
 	})
 
 	it("still registers in development when force enable flag is true", async () => {
@@ -331,6 +358,125 @@ describe("registerAppServiceWorker", () => {
 		})
 
 		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		expect(postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" })
+	})
+
+	it("does not auto activate waiting worker again within the reload cooldown", async () => {
+		const postMessage = vi.fn()
+		const register = vi.fn().mockResolvedValue({
+			waiting: { postMessage },
+			addEventListener: vi.fn(),
+			installing: null,
+		})
+
+		vi.spyOn(window.performance, "getEntriesByType").mockImplementation((entryType: string) => {
+			if (entryType === "navigation") {
+				return [{ type: "reload" }] as unknown as PerformanceEntry[]
+			}
+			return []
+		})
+
+		Object.defineProperty(document, "readyState", {
+			configurable: true,
+			value: "complete",
+		})
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				register,
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		registerAppServiceWorker()
+		await flushMicrotasks()
+		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		expect(postMessage).toHaveBeenCalledTimes(1)
+	})
+
+	it("allows auto activation again after the reload cooldown expires", async () => {
+		const postMessage = vi.fn()
+		const register = vi.fn().mockResolvedValue({
+			waiting: { postMessage },
+			addEventListener: vi.fn(),
+			installing: null,
+		})
+		const dateNow = vi.spyOn(Date, "now").mockReturnValue(1_000)
+
+		vi.spyOn(window.performance, "getEntriesByType").mockImplementation((entryType: string) => {
+			if (entryType === "navigation") {
+				return [{ type: "reload" }] as unknown as PerformanceEntry[]
+			}
+			return []
+		})
+
+		Object.defineProperty(document, "readyState", {
+			configurable: true,
+			value: "complete",
+		})
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				register,
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		dateNow.mockReturnValue(61_001)
+		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		expect(postMessage).toHaveBeenCalledTimes(2)
+	})
+
+	it("keeps auto activation safe when session storage is unavailable", async () => {
+		const postMessage = vi.fn()
+		const register = vi.fn().mockResolvedValue({
+			waiting: { postMessage },
+			addEventListener: vi.fn(),
+			installing: null,
+		})
+
+		vi.spyOn(window.sessionStorage, "getItem").mockImplementation(() => {
+			throw new Error("storage unavailable")
+		})
+		vi.spyOn(window.sessionStorage, "setItem").mockImplementation(() => {
+			throw new Error("storage unavailable")
+		})
+
+		vi.spyOn(window.performance, "getEntriesByType").mockImplementation((entryType: string) => {
+			if (entryType === "navigation") {
+				return [{ type: "reload" }] as unknown as PerformanceEntry[]
+			}
+			return []
+		})
+
+		Object.defineProperty(document, "readyState", {
+			configurable: true,
+			value: "complete",
+		})
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				register,
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		expect(() => registerAppServiceWorker()).not.toThrow()
 		await flushMicrotasks()
 
 		expect(postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" })

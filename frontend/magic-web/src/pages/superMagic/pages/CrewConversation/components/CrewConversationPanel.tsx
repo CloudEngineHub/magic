@@ -33,7 +33,7 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { type TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { Button } from "@/components/shadcn-ui/button"
 import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEditor/constants/constant"
@@ -95,6 +95,8 @@ function CrewConversationPanel({
 			}
 		},
 	})
+	const canInterruptTask =
+		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
 	const { handlePullMoreMessage, isMessagesInitialLoading } = useTopicMessages({
 		selectedTopic,
@@ -122,7 +124,7 @@ function CrewConversationPanel({
 		userId: userStore.user.userInfo?.user_id,
 		isStopping: stopEventLoading,
 		setIsStopping: setStopEventLoading,
-		canInterrupt: showLoading,
+		canInterrupt: canInterruptTask,
 	})
 
 	const handleSendMsg = useMemoizedFn(
@@ -164,6 +166,7 @@ function CrewConversationPanel({
 						onSendMessage={messageQueue.sendQueuedMessage}
 						onStartEdit={messageQueue.startEditQueueItem}
 						onCancelEdit={messageQueue.cancelEditQueueItem}
+						variant={isMobile ? "mobile" : "default"}
 					/>
 				</div>
 			) : null
@@ -177,6 +180,7 @@ function CrewConversationPanel({
 		messageQueue.sendQueuedMessage,
 		messageQueue.startEditQueueItem,
 		messageQueue.cancelEditQueueItem,
+		isMobile,
 	])
 
 	const editorContext = useMemo<SceneEditorContext>(() => {
@@ -197,7 +201,7 @@ function CrewConversationPanel({
 			layoutConfig: isMobile ? MOBILE_LAYOUT_CONFIG : DEFAULT_LAYOUT_CONFIG,
 			placeholder: t("super:messageEditor.placeholderLoading"),
 			showLoading,
-			isTaskRunning: showLoading,
+			isTaskRunning: canInterruptTask,
 			stopEventLoading,
 			handleInterrupt,
 			onFileClick,
@@ -241,6 +245,7 @@ function CrewConversationPanel({
 		selectedProject,
 		selectedTopic,
 		showLoading,
+		canInterruptTask,
 		stopEventLoading,
 		onFileClick,
 		store.mentionPanelStore,

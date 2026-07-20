@@ -5,6 +5,10 @@ import * as htmlToImage from "html-to-image"
 import { logger as rootLogger } from "@/utils/log"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { CardFrameRef } from "../components/CardFrame"
+import {
+	WECHAT_COVER_BASE_HEIGHT,
+	WECHAT_HERO_COVER_ASPECT_RATIO,
+} from "../platforms/wechat-official-accounts/wechatCoverDimensions"
 import type { SelfMediaCard, SelfMediaPost } from "../types"
 
 const log = rootLogger.createLogger("useExportZip")
@@ -42,8 +46,6 @@ interface UseExportZipResult {
 const DEFAULT_PIXEL_RATIO = 2
 const PER_CARD_TIMEOUT = 20000
 const LONG_IMAGE_SEPARATOR_COLOR = "#e5e7eb"
-const WECHAT_COVER_BASE_HEIGHT = 540
-const WECHAT_COVER_HORIZONTAL_ASPECT_RATIO = 2.35
 
 function dataUrlToBlob(dataUrl: string): Blob {
 	const [meta, base64] = dataUrl.split(",")
@@ -217,17 +219,15 @@ async function stitchWechatCoverImagesToPngBlob(args: {
 	pixelRatio: number
 }): Promise<Blob> {
 	const { thumbnailFileId, heroFileId, pixelRatio } = args
-	const squareFileId = thumbnailFileId || heroFileId
-	const horizontalFileId = heroFileId || thumbnailFileId
-	if (!squareFileId || !horizontalFileId) throw new Error("Cover images are missing")
+	if (!thumbnailFileId || !heroFileId) throw new Error("Cover images are missing")
 
 	const [squareImage, horizontalImage] = await Promise.all([
-		loadImageFromFileId(squareFileId),
-		loadImageFromFileId(horizontalFileId),
+		loadImageFromFileId(thumbnailFileId),
+		loadImageFromFileId(heroFileId),
 	])
 	const targetHeight = Math.max(1, Math.round(WECHAT_COVER_BASE_HEIGHT * pixelRatio))
 	const squareWidth = targetHeight
-	const horizontalWidth = Math.round(targetHeight * WECHAT_COVER_HORIZONTAL_ASPECT_RATIO)
+	const horizontalWidth = Math.round(targetHeight * WECHAT_HERO_COVER_ASPECT_RATIO)
 	const canvas = document.createElement("canvas")
 	canvas.width = squareWidth + horizontalWidth
 	canvas.height = targetHeight

@@ -216,6 +216,7 @@
 		"validation": {
 			"incomplete": "请完成当前问题",
 			"multiSelectRange": "至少选择 {{min}} 项，最多选择 {{max}} 项",
+			"required": "此项为必填项",
 			"unlimited": "不限"
 		}
 	},
@@ -871,6 +872,19 @@
 				"unknownError": "未知错误",
 				"untitledPost": "未命名帖子"
 			},
+			"coverGeneration": {
+				"prompt": {
+					"heroCover": "21:9 横向封面（heroCover）",
+					"instruction": "先读取 post.json 和文章 HTML。仅使用 generate_image 生成本次缺少的封面，视觉风格需要与文章内容一致；将图片保存到当前文章的 assets 目录，并更新 post.json 中对应的 heroCover 或 thumbnailCover 路径。heroCover 使用 21:9，thumbnailCover 使用 1:1。不要覆盖本次未要求生成的已有封面。",
+					"metadata": "标题：{{title}}\n需要生成：{{coverTypes}}",
+					"opening": "加载并执行 self-media-composer Skill，为 {{mention}} 生成缺少的微信公众号封面。",
+					"thumbnailCover": "1:1 方形封面（thumbnailCover）",
+					"topicName": "[生成封面] {{title}}"
+				},
+				"startFailed": "封面生成任务启动失败",
+				"startFailedWithReason": "封面生成任务启动失败：{{reason}}",
+				"started": "已创建封面生成任务"
+			},
 			"edit": {
 				"addArticleFileToChat": "添加文章文件到输入框",
 				"addCurrentPageToChat": "添加本卡片到当前对话",
@@ -944,11 +958,20 @@
 					"copySuccess": "HTML 已复制",
 					"coverDescription": "将方形封面和横向封面拼接成一张图片，适合上传到公众号素材。",
 					"coverTitle": "封面拼图",
+					"emptyDescription": "根据文章标题和正文，自动生成 1:1 方形封面和 21:9 横向封面。",
+					"emptyTitle": "还没有封面图片",
 					"exportCover": "导出封面图",
+					"generateBoth": "生成封面",
+					"generateHorizontal": "生成横向封面",
+					"generateSquare": "生成方形封面",
+					"generating": "正在创建任务...",
 					"horizontalCover": "横向封面",
 					"htmlCopied": "已复制",
 					"htmlDescription": "复制处理后的文章 HTML，可直接粘贴到微信公众号编辑器。",
 					"htmlTitle": "公众号 HTML",
+					"missingHorizontalTitle": "缺少 21:9 横向封面",
+					"missingSquareTitle": "缺少 1:1 方形封面",
+					"partialDescription": "生成缺少的图片后即可导出完整封面拼图。",
 					"squareCover": "方形封面"
 				}
 			},
@@ -2517,6 +2540,13 @@
 		"exitEdit": "退出编辑",
 		"fetchFailed": "获取队列列表失败",
 		"missingInfo": "项目或话题信息缺失",
+		"mobile": {
+			"collapse": "收起队列",
+			"count": "{{count}} 条",
+			"emptyContent": "⋯",
+			"expand": "展开队列",
+			"title": "队列中"
+		},
 		"operationInProgress": "该消息正在处理中，请稍后再试",
 		"removeFromQueue": "从队列移除",
 		"sendFailed": "发送消息失败",
@@ -2679,6 +2709,146 @@
 			"title": "导航",
 			"workspace": "工作空间"
 		},
+		"recordingEntry": {
+			"active": {
+				"audioSourceUnavailable": "无法获取可用的音频输入，请检查麦克风设备后重试",
+				"backAria": "返回录音列表",
+				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
+				"cancel": "取消录音",
+				"defaultTitle": "当前录音",
+				"enableTranscription": "开启转写",
+				"enableTranscriptionFailed": "开启转写失败，请稍后重试",
+				"enablingTranscription": "开启中",
+				"finishAria": "结束录音并生成纪要",
+				"notesPlaceholder": "边录边记下关键要点...",
+				"pause": "暂停",
+				"permissionDenied": "麦克风权限被拒绝，请允许浏览器访问麦克风后重试",
+				"renameAria": "编辑录音标题",
+				"resume": "继续",
+				"startFailed": "录制启动失败，请检查麦克风权限后重试",
+				"startFailedTitle": "录制出现问题",
+				"startTimedOut": "录音启动超时，请检查麦克风权限后重试",
+				"starting": "正在启动录音",
+				"startingHint": "正在请求麦克风权限并初始化录音，请稍候...",
+				"statusPaused": "已暂停",
+				"statusRecording": "录音中",
+				"tabNotes": "笔记",
+				"tabTranscript": "转写",
+				"transcriptionDisabledDescription": "开启后将实时转写录音内容",
+				"transcriptionDisabledTitle": "实时转写"
+			},
+			"fabAria": "开始录音",
+			"fabComingSoon": "录音功能即将上线",
+			"filterSheet": {
+				"closeAria": "关闭筛选",
+				"dateRange": {
+					"all": "全部时间",
+					"label": "时间范围",
+					"month": "近 30 天",
+					"today": "今天",
+					"week": "近 7 天"
+				},
+				"resetAria": "重置筛选",
+				"title": "筛选"
+			},
+			"groupSheet": {
+				"all": "全部",
+				"backAria": "返回",
+				"closeAria": "关闭分组",
+				"confirmAria": "确认",
+				"createFailed": "分组创建失败",
+				"createSuccess": "分组创建成功",
+				"createTitle": "新建分组",
+				"deleteConfirm": "确定删除「{{name}}」？该分组下的录音将移至未分组。",
+				"deleteGroup": "删除分组",
+				"deleteGroupAria": "删除分组",
+				"deleteTitle": "删除分组",
+				"groupNameLabel": "分组名称",
+				"groupNamePlaceholder": "例如：客户访谈",
+				"manageGroups": "管理分组",
+				"manageTitle": "管理分组",
+				"moreGroupAria": "{{name}} 更多操作",
+				"moveFailed": "移动失败，请稍后重试",
+				"moveSuccess": "移动成功",
+				"newGroup": "新建分组",
+				"rename": "重命名",
+				"renameLabel": "分组名称",
+				"renamePlaceholder": "输入新名称",
+				"renameTitle": "重命名分组",
+				"title": "分组",
+				"ungrouped": "未分组",
+				"unnamedGroup": "未命名分组"
+			},
+			"importComingSoon": "导入功能即将上线",
+			"importSheet": {
+				"closeAria": "关闭",
+				"fromFiles": "从文件导入",
+				"fromFilesSub": "从本机文件中选择音频",
+				"title": "导入音频"
+			},
+			"moreSheet": {
+				"backAria": "返回",
+				"closeAria": "关闭",
+				"comingSoon": "功能即将上线",
+				"confirmAria": "确认",
+				"delete": "删除",
+				"deleteConfirm": "确定删除「{{name}}」？此操作不可撤销。",
+				"deleteTitle": "删除录音",
+				"downloadOriginal": "下载原文件",
+				"generateSummary": "生成总结",
+				"moveToGroup": "移动到分组",
+				"regenerateSummary": "重新生成总结",
+				"rename": "重命名",
+				"renameLabel": "录音名称",
+				"renamePlaceholder": "输入新名称",
+				"share": "分享",
+				"untitled": "未命名录音"
+			},
+			"moveGroupSheet": {
+				"closeAria": "关闭",
+				"title": "移动到分组"
+			},
+			"placeholder": "录音与纪要功能即将上线",
+			"progress": {
+				"transferFailed": "上传失败",
+				"uploading": "正在上传"
+			},
+			"settings": {
+				"autoSummaryEnabled": {
+					"description": "转写完成后自动生成总结",
+					"label": "自动总结"
+				},
+				"backAria": "返回",
+				"closeAria": "关闭",
+				"model": {
+					"description": "用于生成总结的 AI 模型",
+					"label": "AI 模型",
+					"title": "AI 模型"
+				},
+				"saveFailed": "保存设置失败，请稍后重试",
+				"sections": {
+					"summary": "总结",
+					"transcription": "转写"
+				},
+				"settingsAria": "录音设置",
+				"title": "录音设置",
+				"transcriptionEnabled": {
+					"description": "录制开始时自动启用转写",
+					"label": "自动转写"
+				}
+			},
+			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",
+			"summarySheet": {
+				"closeAria": "关闭",
+				"title": "总结状态"
+			},
+			"toolbar": {
+				"clearSearchAria": "退出搜索",
+				"filterAria": "筛选",
+				"searchAria": "搜索",
+				"uploadAria": "上传音频"
+			}
+		},
 		"recycleBin": {
 			"actions": "更多操作",
 			"back": "返回",
@@ -2826,13 +2996,13 @@
 		}
 	},
 	"modeToggle": {
-		"cannotSwitchModeMessage": "当前团队成员不可切换，创建新话题即可启用「<strong>{{modeName}}</strong>」。",
-		"cannotSwitchModeMessageChat": "当前团队成员不可切换，创建新对话即可启用「<strong>{{modeName}}</strong>」。",
+		"cannotSwitchModeMessage": "当前数字员工不可切换，创建新话题即可启用「<strong>{{modeName}}</strong>」。",
+		"cannotSwitchModeMessageChat": "当前数字员工不可切换，创建新对话即可启用「<strong>{{modeName}}</strong>」。",
 		"createNewChat": "创建新对话",
 		"createNewTopic": "创建新话题",
-		"emptySearchResult": "没有匹配的团队成员",
-		"searchPlaceholder": "搜索团队成员",
-		"selectCrew": "选择团队成员",
+		"emptySearchResult": "没有匹配的数字员工",
+		"searchPlaceholder": "搜索数字员工",
+		"selectCrew": "选择数字员工",
 		"selectMode": "选择模式"
 	},
 	"notification": {
@@ -3057,6 +3227,9 @@
 		"createFolderNamePlaceholder": "输入文件夹名",
 		"createSection": "新建文档",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。",
+			"canvasMixedWarning": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。",
+			"canvasOpenFailureWarning": "该操作会删除画布项目入口文件，可能导致画布无法打开。",
 			"emptyLabel": "空文件夹",
 			"fileCount": "{{count}} 个文件",
 			"intro": "将永久删除以下 {{count}} 个项目：",
@@ -3130,6 +3303,9 @@
 		"defaultNameOrganization": "组织分享",
 		"defaultNamePassword": "密码链接",
 		"defaultNamePublic": "公开链接",
+		"defaultOpenFileDescription": "选择访问链接后默认打开的文件",
+		"defaultOpenFileLabel": "默认打开文件",
+		"defaultOpenFileSearchPlaceholder": "搜索文件",
 		"deleteConfirmDescription": "取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmMessage": "确定取消「{{name}}」吗？取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmTitle": "取消分享链接",
@@ -3558,7 +3734,8 @@
 			"contentWillBeSavedTo": "内容将储存至「{{projectName}}」",
 			"organizingRecording": "正在为您整理录音总结，完成后将自动通知您。",
 			"title": "请耐心等候",
-			"understood": "好的"
+			"understood": "好的",
+			"viewOnAudioRecordingsPage": "完成后可在「录音与纪要」页面查看。"
 		}
 	},
 	"recycleBin": {
@@ -3613,32 +3790,32 @@
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
 			"conflictNamesWithEtc": "{{names}} 等文件",
 			"duplicateRestoreTarget": "同批恢复里有同目标同名文件，系统默认仅恢复最新删除的那个",
-			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
-			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
-			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
-			"fileNamesWithEtc": "{{names}} 等文件",
 			"duplicateRestoreTargetTip": "选择中的文件有 {{count}} 个同目标同名文件，系统默认仅恢复最新删除的那个",
 			"errorMessage": "父级检查失败，请稍后重试",
 			"fileConflictConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；原项目根目录已存在同名文件 {{conflictNames}}，这 {{nameConflictCount}} 个文件需要逐个确认。确认继续？",
 			"fileConflictCountConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；另有 {{nameConflictCount}} 个同名文件需要逐个确认。确认继续？",
-			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
-			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
-			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
-			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
+			"fileNamesWithEtc": "{{names}} 等文件",
 			"invalidMessage": "恢复前检查未通过",
 			"locationLabel": "位置",
 			"missingParentMessage": "原{{parentLabel}}已不存在，请选择新的{{locationLabel}}以恢复「{{name}}」。",
 			"mixedTypes": "所选资源类型不一致",
-			"skipNameConflict": "跳过",
-			"processingAllNameConflicts": "处理中...",
-			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
+			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
+			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
 			"nameConflictSkipped": "{{count}} 个同名文件已跳过",
 			"needMoveFiles": "部分项的原项目已不存在，请为这 {{count}} 个文件选择目标项目。",
 			"needMoveProjects": "部分项的原工作区已不存在，请为这 {{count}} 个项目选择目标工作区。",
 			"needMoveTopics": "部分项的原项目已不存在，请为这 {{count}} 个话题选择目标项目。",
 			"noResourcesFound": "未找到可恢复的资源",
 			"parentLabel": "父级",
+			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
+			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"processingAllNameConflicts": "处理中...",
+			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
+			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
+			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
 			"selectionName": "{{count}} 项",
+			"skipNameConflict": "跳过",
 			"skippedMessage": "无需校验父级，可直接恢复",
 			"unknownTarget": "未知"
 		},
@@ -3685,32 +3862,6 @@
 			"workspaces": "工作区 ({{count}})"
 		},
 		"title": "回收站"
-	},
-	"saasKK": {
-		"bottomHint": "如您仍需使用当前服务，可暂时关闭当前窗口。",
-		"closeButton": "暂时关闭提示",
-		"closeGuide": "关闭提示",
-		"copyFailed": "复制失败",
-		"copySuccess": "复制成功",
-		"deployCodeGuide": {
-			"step1Description": "在浏览器中打开 「https://www.letsmagic.cn/login」,点击 「私有部署」",
-			"step2Description": "在 「私有部署识别码」 中输入 「KK」 即可",
-			"title": "填写私有部署识别码指引"
-		},
-		"dialogTitle": "$t(common:platform.name)登录指引",
-		"dingtalkGuide": {
-			"description": "打开 「钉钉」 后,通过左侧栏进入 「工作台」,在工作台中找到 「$t(common:platform.name)」 打开即可。",
-			"title": "钉钉工作台指引"
-		},
-		"loginMethod": "登录方式",
-		"method1Desc": "在 「钉钉工作台 - 全员」 中打开并自动登录",
-		"method1Title": "方式 1 : 钉钉工作台",
-		"method2Desc": "复制链接并在浏览器打开",
-		"method2Title": "方式 2 : 通过链接登录",
-		"method3Desc": "在登录页面「私有部署」配置中输入\"KK\"",
-		"method3Title": "方式 3 : 填写私有部署识别码",
-		"viewGuide": "查看指引",
-		"warningMessage": "当前 SaaS 环境仅供 「KK集团」 组织使用 「司南」 等应用\n如需使用$t(common:platform.name)，请根据下方方式进入使用。"
 	},
 	"scheduleTask": {
 		"clearSearch": "清空搜索",
@@ -3794,6 +3945,7 @@
 		"workspace": "工作空间"
 	},
 	"share": {
+		"accessCount": "访问次数",
 		"accessPassword": "访问密码",
 		"addMembers": "添加成员",
 		"advancedOptions": "高级选项",
@@ -3843,6 +3995,7 @@
 			"prefix": "由",
 			"suffix": "创造"
 		},
+		"createdDate": "创建日期",
 		"days": "天",
 		"departmentOrMemberFileShare": "指定成员可访问文件",
 		"departmentOrMemberFileShareDescription": "指定人员可访问文件：{{fileName}}",
@@ -3919,9 +4072,11 @@
 		"login": "登录",
 		"manage": "管理",
 		"manageShareLinks": "管理分享链接",
+		"modifiedDate": "修改日期",
 		"moreSettings": "更多设置",
 		"multiFileShareName": "文件分享_{{mainFileName}} 等 {{count}} 个文件",
 		"name": "名称",
+		"nativeShareFailed": "分享失败，请稍后重试",
 		"navigation": "导航",
 		"newProjectDescription": "默认状态下，复制生成的项目名称会与原项目保持一致。若需要更清晰地区分不同项目，也可以根据需求自定义名称",
 		"newProjectName": "新项目名称",
@@ -3954,7 +4109,11 @@
 		"projectShareName": "项目分享_{{projectName}}",
 		"publicAccess": "公开访问",
 		"publicAccessDescription": "任何人可通过链接访问，分享内容可能会被搜索引擎收录，请注意数据安全",
+		"pureMode": "纯净模式",
+		"pureModeDescription": "全屏显示入口文件并隐藏头部",
 		"qrCode": "分享二维码",
+		"recordingShareCreateTitle": "分享",
+		"recordingShareName": "录音分享_{{projectName}}",
 		"replay": "重看",
 		"replayWillStartIn": "回放将在 {{countdown}} 秒后自动开始",
 		"resetPassword": "重置密码",
@@ -4008,6 +4167,7 @@
 		"shareProjectDescription": "开启后，访问者将可访问整个项目中的文件。",
 		"shareRange": "分享范围",
 		"shareTitle": "分享",
+		"shareToSystem": "分享至",
 		"shareTopic": "分享话题",
 		"showFileList": "显示文件列表",
 		"showFileListDescription": "开启后，访问者可查看文件列表",
@@ -4078,6 +4238,7 @@
 		"fileShare": "分享的文件",
 		"fileShareDesc": "管理分享过的所有文件",
 		"files": "个文件",
+		"filter": "筛选",
 		"filterStatus": {
 			"active": "分享中",
 			"all": "全部",
@@ -4571,6 +4732,15 @@
 		"batchOperation": "批量操作",
 		"batchOperations": "批量操作",
 		"cancelSelect": "取消",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "该操作会移动画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"title": "画布项目风险提示"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "关于你",
 			"guidelines": "指南",
@@ -4602,6 +4772,9 @@
 			"confirmBatchDelete": "确认删除{{count}}个文件？",
 			"confirmBatchDeleteWithFolders": "选中项包含文件夹，子级未选中文件也将被删除",
 			"confirmBatchDeleteWithMagicSystemFolder": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
+			"copyPath": "复制路径",
+			"copyPathFailed": "复制路径失败",
+			"copyPathSuccess": "已复制路径",
 			"copyTo": "复制至",
 			"createAICardFailed": "创建 AI 卡片项目失败",
 			"createAICardSuccess": "创建 AI 卡片项目成功",
@@ -4631,6 +4804,9 @@
 			"deleteBatchSubject": "选中的 {{count}} 项",
 			"deleteBatchTipMobile": "删除操作确认",
 			"deleteBatchWithFoldersDescription": "将被永久删除，包含文件夹内容和子级未选中文件，此操作无法撤销。",
+			"deleteCanvasContentLossRiskContent": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续删除？",
+			"deleteCanvasMixedRiskContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续删除？",
+			"deleteCanvasOpenFailureRiskContent": "该操作会删除画布项目入口文件，可能导致画布无法打开。是否继续删除？",
 			"deleteContent": "确认删除 {{name}} ?",
 			"deleteFileDescription": "将被永久删除，此操作无法撤销。",
 			"deleteFileFailed": "删除文件失败",
@@ -4723,6 +4899,7 @@
 		"dataCorrectionDescription": "AI 检查表格、数据里的错误，并进行纠正",
 		"dataCorrectionPrompt": "请先读取上述文件及对应元素的内容，然后进行数据校准，数据必须有明确的参考来源、引用出处，避免杜撰、虚构，若为加工数据，则必须通过 Python 脚本运算得出，不得直接得出结论。如果你确认内容里的数据符合上述要求，则向我澄清数据的参考来源、引用出处和计算过程，无需修改；如果你不确定，则你需要在项目中检索是否有相关数据或进行联网搜索来进行确认，校验、修正数据、并在在必要的情况下通过脚本验算后再向我澄清。",
 		"download": "下载",
+		"downloadAbort": "终止下载",
 		"downloadAllTitle": "下载全部",
 		"downloadFailed": "下载失败",
 		"downloadSelected": "下载已选 ({{count}})",

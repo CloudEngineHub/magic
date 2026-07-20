@@ -1,7 +1,9 @@
 import {
 	memo,
 	type ChangeEvent,
+	type Dispatch,
 	type PointerEventHandler,
+	type SetStateAction,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -17,8 +19,7 @@ import {
 	REFERENCE_RESOURCE_SOURCE_TYPES,
 	type ReferenceResourceSourceType,
 } from "../MessageEditor/reference-assets/reference-resource.types"
-import { createPluginChannelToken } from "./runtime/v1"
-import { PLUGIN_WINDOW_DEFAULT_HEIGHT } from "./constants"
+import { createPluginChannelToken, type PluginRuntimeMessage } from "./runtime/v1"
 import {
 	getPluginFilePickerAccept,
 	getPluginReferenceResourceType,
@@ -33,8 +34,15 @@ import { PluginWindowHeader } from "./PluginWindowHeader"
 import { clampPositionToContainer, getInitialPosition, saveCachedPosition } from "./position"
 import { getErrorMessage } from "./resourceUtils"
 import type { PluginFileAsset, PluginFilePickerRequest, PluginWindowPosition } from "./types"
+import { useCanvasImageExternalDragToPlugin } from "./useCanvasImageExternalDragToPlugin"
 import { usePluginRuntimeBridge } from "./usePluginRuntimeBridge"
 import { usePluginView } from "./usePluginView"
+import { useProjectAttachmentDragToPlugin } from "./useProjectAttachmentDragToPlugin"
+
+type CanvasAssetDragTargetMessage = Extract<
+	PluginRuntimeMessage,
+	{ type: "magic-canvas-plugin:canvas-asset-drag-target" }
+>
 
 function isReferenceResourcePanelItem(
 	item: ReferenceResourcePanelItem | undefined,
@@ -47,17 +55,20 @@ export const PluginWindow = memo(function PluginWindow({
 	locale,
 	plugin,
 	sessionId,
+	frameHeight,
+	setFrameHeight,
 }: {
 	canvas: Canvas
 	locale: string
 	plugin: CanvasDesignPlugin
 	sessionId: number
+	frameHeight: number
+	setFrameHeight: Dispatch<SetStateAction<number>>
 }) {
 	const channelToken = useMemo(() => createPluginChannelToken(), [plugin.name, sessionId])
 	const [position, setPosition] = useState<PluginWindowPosition>(() =>
 		getInitialPosition(canvas.container),
 	)
-	const [frameHeight, setFrameHeight] = useState(PLUGIN_WINDOW_DEFAULT_HEIGHT)
 	const dragStartRef = useRef({ pointerX: 0, pointerY: 0, windowX: 0, windowY: 0 })
 	const draggingRef = useRef(false)
 	const positionRef = useRef(position)
@@ -69,6 +80,43 @@ export const PluginWindow = memo(function PluginWindow({
 	const filePickerRequestRef = useRef<PluginFilePickerRequest | null>(null)
 	const projectFileBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
 	const pluginView = usePluginView(plugin, locale, channelToken, canvas.readonly)
+	// 单个插件窗口内维护 asset/path -> 画布元素 id 的临时映射，供后续 generate-and-place 贴近来源图。
+	const sourceElementByAssetKeyRef = useRef(new Map<string, string>())
+
+	useEffect(() => {
+		sourceElementByAssetKeyRef.current.clear()
+		return () => {
+			sourceElementByAssetKeyRef.current.clear()
+		}
+	}, [canvas, channelToken])
+
+	// 连接画布图片拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
+	const { canvasAssetDragGhost, handleCanvasAssetDragTarget, isCanvasAssetDragActive } =
+		useCanvasImageExternalDragToPlugin({
+			canvas,
+			channelToken,
+			iframeRef,
+			plugin,
+			pluginWindowRef,
+			sourceElementByAssetKeyRef,
+		})
+	// 连接项目附件拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
+	const { handleProjectAttachmentDragTarget, isProjectAttachmentDragActive } =
+		useProjectAttachmentDragToPlugin({
+			canvas,
+			channelToken,
+			iframeRef,
+			plugin,
+			pluginWindowRef,
+		})
+
+	const handlePluginAssetDragTarget = useCallback(
+		(target: CanvasAssetDragTargetMessage) => {
+			handleCanvasAssetDragTarget(target)
+			handleProjectAttachmentDragTarget(target)
+		},
+		[handleCanvasAssetDragTarget, handleProjectAttachmentDragTarget],
+	)
 
 	useLayoutEffect(() => {
 		positionRef.current = position
@@ -113,13 +161,16 @@ export const PluginWindow = memo(function PluginWindow({
 		channelToken,
 		filePickerRequestRef,
 		iframeRef,
+		onCanvasAssetDragTarget: handlePluginAssetDragTarget,
 		plugin,
 		pluginWindowRef,
 		setFilePickerRequest,
+		sourceElementByAssetKeyRef,
 		setFrameHeight,
 	})
 
 	const handleClose = useCallback(() => {
+		sourceElementByAssetKeyRef.current.clear()
 		canvas.pluginManager.close(plugin.name)
 	}, [canvas.pluginManager, plugin.name])
 
@@ -300,6 +351,7 @@ export const PluginWindow = memo(function PluginWindow({
 			className={styles.pluginWindow}
 			style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
 			data-canvas-ui-component
+			data-canvas-plugin-window
 			onPointerDown={handlePluginWindowPointerDown}
 		>
 			<input
@@ -333,16 +385,23 @@ export const PluginWindow = memo(function PluginWindow({
 			/>
 
 			{pluginView.srcDoc ? (
-				<PluginRuntimeFrame
-					ref={iframeRef}
-					key={`${plugin.name}-${sessionId}`}
-					height={frameHeight}
-					srcDoc={pluginView.srcDoc}
-					title={pluginView.label}
-				/>
+				<>
+					<PluginRuntimeFrame
+						ref={iframeRef}
+						key={`${plugin.name}-${sessionId}`}
+						height={frameHeight}
+						srcDoc={pluginView.srcDoc}
+						title={pluginView.label}
+					/>
+					{/* 拖拽期间用透明层接管指针，避免 iframe 吃掉宿主侧 mousemove/mouseup。 */}
+					{(isCanvasAssetDragActive || isProjectAttachmentDragActive) && (
+						<div className={styles.canvasAssetDragShield} aria-hidden="true" />
+					)}
+				</>
 			) : (
 				<PluginRuntimeEmpty description={pluginView.description} label={pluginView.label} />
 			)}
+			{canvasAssetDragGhost}
 		</div>
 	)
 })

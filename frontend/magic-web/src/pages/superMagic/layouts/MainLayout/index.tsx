@@ -1,5 +1,6 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { lazy, Suspense, useEffect } from "react"
+import { useMemoizedFn } from "ahooks"
 import SuperMagicService from "../../services"
 import { resolveSuperPopRefreshParams } from "../../utils/resolve-super-pop-refresh-params"
 import GuideTourWrapper from "../../components/LazyGuideTour"
@@ -11,6 +12,7 @@ import SketchWithoutLayout from "@/layouts/BaseLayout/components/Sketch/withoutL
 import { useFeaturedModeListRefreshOnDocumentVisible } from "../../hooks/useFeaturedModeListRefresh"
 import EditionActivityModal from "@/components/business/EditionActivity/Modal"
 import { MobileImagePreviewProvider } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MobileImagePreview"
+import { projectStore, topicStore, workspaceStore } from "../../stores/core"
 
 const MainLayoutDesktop = lazy(() => import("./index.desktop"))
 const MainLayoutMobile = lazy(() => import("@/pages/superMagicMobile/layout/MainLayout"))
@@ -22,6 +24,29 @@ function MainLayout() {
 	const isMobile = useIsMobile()
 
 	useProjectTitle()
+
+	const restoreStateFromPathname = useMemoizedFn((pathname: string) => {
+		const stateParams = resolveSuperPopRefreshParams(pathname)
+		if (!stateParams) return
+
+		const needsRestore =
+			Boolean(
+				stateParams.workspaceId &&
+				workspaceStore.selectedWorkspace?.id !== stateParams.workspaceId,
+			) ||
+			Boolean(
+				stateParams.projectId && projectStore.selectedProject?.id !== stateParams.projectId,
+			) ||
+			Boolean(stateParams.topicId && topicStore.selectedTopic?.id !== stateParams.topicId)
+
+		if (!needsRestore) return
+
+		if (isMobile) {
+			SuperMagicService.refreshState(stateParams)
+		} else {
+			SuperMagicService.initializeState(stateParams)
+		}
+	})
 
 	// 暂时注释掉，因为 appInitPromise 会在 app 初始化完成后自动触发
 	// 后续需要再恢复
@@ -40,24 +65,19 @@ function MainLayout() {
 
 	// Listen to browser back/forward navigation
 	useEffect(() => {
+		restoreStateFromPathname(baseHistory.location.pathname)
+
 		const unsubscribe = baseHistory.listen(({ action, location }) => {
 			// Only handle POP action (browser back/forward)
 			if (action === "POP") {
-				const stateParams = resolveSuperPopRefreshParams(location.pathname)
-				if (!stateParams) return
-
-				if (isMobile) {
-					SuperMagicService.refreshState(stateParams)
-				} else {
-					SuperMagicService.initializeState(stateParams)
-				}
+				restoreStateFromPathname(location.pathname)
 			}
 		})
 
 		return () => {
 			unsubscribe()
 		}
-	}, [isMobile])
+	}, [isMobile, restoreStateFromPathname])
 
 	const Content = isMobile ? MainLayoutMobile : MainLayoutDesktop
 

@@ -115,6 +115,34 @@ function getStagedFileContent(file) {
 }
 
 /**
+ * Heuristic: long quoted strings with multiple path-like segments are usually
+ * directory paths, not base64 credentials (which may contain `/` but rarely
+ * look like `enterprise/src/pages/...`).
+ */
+function isLikelyFilePath(value) {
+    const unquoted = value.replace(/^["'`]|["'`]$/g, '')
+    const slashCount = (unquoted.match(/\//g) || []).length
+    if (slashCount < 2) return false
+
+    const pathSegmentPattern = /\/[a-z][a-z0-9-]*(?:\/|$)/i
+    return pathSegmentPattern.test(unquoted)
+}
+
+/**
+ * Skip quoted strings that are file/directory paths (common false positive for Base64).
+ */
+function isLikelyFilePath(match) {
+    const value = match.slice(1, -1)
+    if (!value.includes('/')) return false
+
+    const segments = value.split('/').filter(Boolean)
+    if (segments.length < 2) return false
+
+    const pathLikeSegment = /^[a-z][a-z0-9._-]*$/i
+    return segments.every((segment) => pathLikeSegment.test(segment))
+}
+
+/**
  * Check if a line is a comment
  */
 function isCommentLine(line, lineNumber, allLines) {
@@ -166,6 +194,11 @@ function checkFile(file) {
 
             // Skip if token is too short (reduce false positives)
             if (pattern.minLength && match[0].length < pattern.minLength) {
+                continue
+            }
+
+            // Skip file/directory paths mistaken for Base64 credentials
+            if (pattern.name === 'Base64 Credentials' && isLikelyFilePath(match[0])) {
                 continue
             }
 

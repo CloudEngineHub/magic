@@ -8,18 +8,13 @@ import {
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) =>
-			key === "mobile.shell.noAvailableQuickActions"
-				? "无可用快捷操作"
-				: key,
+			key === "mobile.shell.noAvailableQuickActions" ? "无可用快捷操作" : key,
 	}),
 }))
 
 describe("computeRecentFloatingMenuPosition", () => {
 	it("places menu below the anchor when there is enough space", () => {
-		const position = computeRecentFloatingMenuPosition(
-			{ clientX: 40, clientY: 100 },
-			5,
-		)
+		const position = computeRecentFloatingMenuPosition({ clientX: 40, clientY: 100 }, 5)
 
 		expect(position).toEqual({ top: 100, left: 40 })
 	})
@@ -90,13 +85,35 @@ describe("MobileShellRecentFloatingMenu", () => {
 		)
 
 		expect(screen.getByTestId("mobile-super-shell-recent-floating-menu")).toBeInTheDocument()
-		expect(screen.getByTestId("mobile-super-shell-recent-floating-menu-empty")).toHaveTextContent(
-			"无可用快捷操作",
-		)
+		expect(
+			screen.getByTestId("mobile-super-shell-recent-floating-menu-empty"),
+		).toHaveTextContent("无可用快捷操作")
 		expect(screen.queryByRole("menuitem")).not.toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("mobile-super-shell-recent-floating-menu-backdrop"))
 
 		expect(onClose).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps floating menu test ids stable across page-specific prefixes", () => {
+		render(
+			<MobileShellRecentFloatingMenu
+				actions={[]}
+				position={{ clientX: 24, clientY: 120 }}
+				testIdPrefix="mobile-workspaces-page"
+				onClose={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-super-shell-recent-floating-menu")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("mobile-super-shell-recent-floating-menu-empty"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-recent-floating-menu"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-recent-floating-menu-empty"),
+		).not.toBeInTheDocument()
 	})
 })

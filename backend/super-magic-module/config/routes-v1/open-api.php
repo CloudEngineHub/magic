@@ -10,6 +10,7 @@ use Dtyq\SuperMagic\Interfaces\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\Sandbox\SkillSandboxApi;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\Sandbox\SuperMagicAgentSandboxApi;
 use Dtyq\SuperMagic\Interfaces\Share\Facade\ShareApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\AiAbilityApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\FileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\TaskApi as InternalTaskApi;
@@ -68,6 +69,11 @@ Router::addGroup(
         Router::addGroup('/super-agent/tasks', static function () {
             // 第三方消息入站
             Router::post('/ingest-third-party-message', [InternalTaskApi::class, 'ingestThirdPartyMessage']);
+        });
+
+        // AI 能力运行时配置
+        Router::addGroup('/ai-abilities', static function () {
+            Router::get('/runtime-config', [AiAbilityApi::class, 'runtimeConfig']);
         });
 
         // 分享管理相关
@@ -148,6 +154,13 @@ Router::addGroup(
         //  获取任务
         Router::get('/task', [OpenTaskApi::class, 'getTask']);
 
+        // 数字员工相关
+        Router::addGroup('/agents', static function () {
+            Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
+            Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
+        });
+
         // 任务相关
         Router::addGroup('/task', static function () {
             // 获取任务下的附件列表
@@ -186,8 +199,6 @@ Router::addGroup(
         Router::addGroup('/projects', static function () {
             // 获取项目列表
             Router::get('/queries', [OpenProjectApi::class, 'index']);
-            // 获取项目基本信息
-            Router::get('/{id}', [OpenProjectApi::class, 'show']);
             // 获取项目附件列表
             Router::post('/{id}/attachments', [OpenProjectApi::class, 'getProjectAttachments']);
         });
@@ -203,3 +214,6 @@ Router::addGroup(
     },
     ['middleware' => [ApiKeyMiddleware::class]]
 );
+
+// 获取项目基本信息（公开接口，无需鉴权；放在 super-magic 鉴权分组之后，确保 /queries 静态路由先于 {id} 动态路由注册，避免 FastRoute 路由遮蔽冲突）
+Router::get('/api/v1/open-api/super-magic/projects/{id}', [OpenProjectApi::class, 'show']);
