@@ -203,16 +203,18 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 	}
 	if (toolCall?.function?.name === "plan") {
 		return (
-			<PlanToolCall
-				toolData={toolData}
-				loading={!toolResponse}
-				classNames={classNames}
-				selectedTopic={selectedTopic}
-				isShare={isShare}
-				onSelectDetail={onSelectDetail}
-				onMouseEnter={onMouseEnter}
-				onMouseLeave={onMouseLeave}
-			/>
+			<Suspense fallback={null}>
+				<PlanToolCall
+					toolData={toolData}
+					loading={isToolLoading}
+					classNames={classNames}
+					selectedTopic={selectedTopic}
+					isShare={isShare}
+					onSelectDetail={onSelectDetail}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
 		)
 	}
 	if (toolCall?.function?.name === "write_file") {
