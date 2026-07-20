@@ -253,19 +253,6 @@ class ServiceProviderApi extends AbstractApi
     }
 
     /**
-     * 获取所有非官方LLM服务商列表
-     * 直接从数据库中查询category为llm且provider_type不为OFFICIAL的服务商
-     * 不依赖于当前组织，适用于需要添加服务商的场景.
-     */
-    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getNonOfficialLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 直接获取所有LLM类型的非官方服务商
-        return $this->adminProviderAppService->queriesServiceProviderTemplates(Category::LLM, $authenticatable->getOrganizationCode());
-    }
-
-    /**
      * 获取所有非官方服务商列表
      * 不依赖于当前组织，适用于需要添加服务商的场景.
      */
@@ -311,17 +298,6 @@ class ServiceProviderApi extends AbstractApi
             $providerCode,
             $modelId === '' ? null : $modelId
         );
-    }
-
-    /**
-     * 获取所有可用的LLM服务商列表（包括官方服务商）.
-     */
-    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getAllAvailableLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 获取所有LLM类型的服务商（包括Official）
-        return $this->adminProviderAppService->getAllAvailableLlmProviders(Category::LLM, $authenticatable->getOrganizationCode());
     }
 
     /**

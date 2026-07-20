@@ -393,31 +393,6 @@ readonly class AdminProviderAppService
     }
 
     /**
-     * 获取所有可用的服务商列表（包括官方服务商），不依赖于组织.
-     *
-     * @param Category $category 服务商分类
-     * @param string $organizationCode 组织编码
-     * @return ProviderConfigModelsDTO[] 所有可用服务商列表
-     */
-    public function getAllAvailableLlmProviders(Category $category, string $organizationCode): array
-    {
-        // 获取所有服务商（包括Official）
-        $serviceProviders = $this->adminProviderDomainService->getAllAvailableProviders($category);
-
-        if (empty($serviceProviders)) {
-            return [];
-        }
-
-        // 过滤服务商
-        $serviceProviders = $this->providerControlPolicy->filterSelectableProviders($organizationCode, $category, $serviceProviders);
-
-        // 处理图标
-        $this->processServiceProviderEntityListIcons($serviceProviders, $organizationCode);
-
-        return $serviceProviders;
-    }
-
-    /**
      * 获取官方组织下的所有可用模型.
      * @return ProviderModelDetailDTO[]
      */

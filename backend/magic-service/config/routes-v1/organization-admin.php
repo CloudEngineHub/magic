@@ -39,10 +39,6 @@ Router::addGroup('/api/v1/organization/admin', static function () {
         Router::post('/by-category', [OrganizationServiceProviderApi::class, 'getOrganizationProvidersByCategory']);
         Router::get('/templates/queries', [OrganizationServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/office-info', [OrganizationServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
-
-        Router::get('/available-llm', [OrganizationServiceProviderApi::class, 'getAllAvailableLlmProviders']);
-        Router::get('/non-official-llm', [OrganizationServiceProviderApi::class, 'getNonOfficialLlmProviders']);
-        Router::get('/non-official/queries', [OrganizationServiceProviderApi::class, 'queriesServiceProviderTemplates']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 非官方组织应用菜单管理
