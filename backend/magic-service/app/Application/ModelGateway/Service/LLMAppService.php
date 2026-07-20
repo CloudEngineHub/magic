@@ -1095,7 +1095,6 @@ class LLMAppService extends AbstractLLMAppService
         $imageGenerateParamsVO->setModel($imageModel->getModelVersion());
         $imageGenerateParamsVO->setUserPrompt($textGenerateImageDTO->getPrompt());
         $imageGenerateParamsVO->setGenerateNum($textGenerateImageDTO->getN());
-        $imageGenerateParamsVO->setSequentialImageGeneration($textGenerateImageDTO->getSequentialImageGeneration());
         $imageGenerateParamsVO->setImageGenerationConfig($textGenerateImageDTO->getImageGenerationConfig());
 
         $size = $textGenerateImageDTO->getSize();
@@ -1793,7 +1792,6 @@ class LLMAppService extends AbstractLLMAppService
         $imageGenerateParamsVO->setModel($modelVersion);
         $imageGenerateParamsVO->setUserPrompt($proxyModelRequest->getPrompt());
         $imageGenerateParamsVO->setGenerateNum($proxyModelRequest->getN());
-        $imageGenerateParamsVO->setSequentialImageGeneration($proxyModelRequest->getSequentialImageGeneration());
         $imageGenerateParamsVO->setImageGenerationConfig($proxyModelRequest->getImageGenerationConfig());
         $imageGenerateParamsVO->setReferenceImages($proxyModelRequest->getImages());
         $imageGenerateParamsVO->setOutputFormat($proxyModelRequest->getOutputFormat());
