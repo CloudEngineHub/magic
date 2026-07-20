@@ -574,7 +574,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // 验证令牌函数 - 修改为无状态验证
-func validateToken(tokenString string) (*JWTClaims, bool) {
+func validateToken(tokenString string, r *http.Request) (*JWTClaims, bool) {
 	// 移除Bearer前缀
 	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 
@@ -600,7 +600,16 @@ func validateToken(tokenString string) (*JWTClaims, bool) {
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			logger.Printf("令牌已过期")
+			logger.Printf(
+				"令牌已过期: method=%s path=%s remote_addr=%s request_id=%s task_id=%s topic_id=%s chat_topic_id=%s",
+				sanitizeLogString(r.Method),
+				sanitizeLogString(r.URL.RequestURI()),
+				sanitizeLogString(r.RemoteAddr),
+				sanitizeLogString(r.Header.Get("X-Request-ID")),
+				sanitizeLogString(r.Header.Get("magic-task-id")),
+				sanitizeLogString(r.Header.Get("magic-topic-id")),
+				sanitizeLogString(r.Header.Get("magic-chat-topic-id")),
+			)
 		} else {
 			//如果开启debug 打印完整的错误信息
 			if debugMode {
@@ -672,7 +681,7 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// 验证令牌
-		claims, valid := validateToken(authHeader)
+		claims, valid := validateToken(authHeader, r)
 		if !valid {
 			http.Error(w, "无效或过期的令牌", http.StatusUnauthorized)
 			return
