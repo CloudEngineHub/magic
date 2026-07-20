@@ -449,7 +449,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 					MOBILE_PREVIEW_BODY_CLASSNAME,
 					isShareRoute && previewDetail?.isFromNode ? styles.bottomGap : styles.popupBody,
 				)}
-				maskClosable={false} // Keep the preview open while debugging outside interactions.
+				maskClosable
 				data-testid="file-preview-detail-popup-root"
 			>
 				<div className="flex min-h-0 flex-1 flex-col bg-background">
