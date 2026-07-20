@@ -45,24 +45,5 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::table('magic_super_agent_message', function (Blueprint $table) {
-            // 删除索引
-            $table->dropIndex('idx_topic_status_sender_seq');
-            $table->dropIndex('idx_status_seq_asc');
-            $table->dropIndex('idx_status_created');
-            $table->dropIndex('idx_status_retry_created');
-            $table->dropIndex('idx_seq_id');
-            $table->dropIndex('idx_task_status');
-
-            // 删除字段
-            $table->dropColumn([
-                'raw_data',
-                'seq_id',
-                'processing_status',
-                'error_message',
-                'retry_count',
-                'processed_at',
-            ]);
-        });
     }
 };

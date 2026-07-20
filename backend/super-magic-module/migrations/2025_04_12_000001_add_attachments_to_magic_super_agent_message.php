@@ -25,9 +25,5 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::table('magic_super_agent_message', function (Blueprint $table) {
-            // 回滚时移除 attachments 字段
-            $table->dropColumn('attachments');
-        });
     }
 };

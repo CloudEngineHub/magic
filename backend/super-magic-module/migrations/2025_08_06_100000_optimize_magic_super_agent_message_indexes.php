@@ -89,8 +89,5 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::table('magic_super_agent_message', function (Blueprint $table) {
-            // 删除新增的索引
-        });
     }
 };
