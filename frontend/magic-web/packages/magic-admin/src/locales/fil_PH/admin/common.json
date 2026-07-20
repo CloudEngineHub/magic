@@ -22,7 +22,7 @@
 	"detail": "Detalye",
 	"file": {
 		"maxSize": "Ang limitasyon ng laki ng bawat file ay {{maxSize}}MB",
-		"onlySupportUploadImage": "Suportado lamang ang pag-upload ng mga larawan sa format na png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Suportado lamang ang pag-upload ng mga larawan sa format na png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Nabigo ang pag-upload ng file, pakisubukang muli"
 	},
 	"filter": "I-filter",
