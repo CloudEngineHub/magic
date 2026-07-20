@@ -431,17 +431,6 @@ class InitClientMessageUtil:
             logger.error(f"保存 metadata.json 失败 (source={source}): {e}")
 
     @classmethod
-    def get_memory(cls) -> Optional[str]:
-        """
-        从 init_client_message 获取 memory 字段
-
-        Returns:
-            Optional[str]: memory 值
-        """
-        config_data = cls.get_full_config()
-        return config_data.get("memory")
-
-    @classmethod
     def get_sts_token_refresh(cls) -> Optional[Dict[str, Any]]:
         """
         从 init_client_message 获取 sts_token_refresh 配置

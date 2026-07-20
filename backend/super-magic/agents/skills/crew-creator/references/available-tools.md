@@ -177,17 +177,6 @@ tools:
 | `convert_pdf` | Convert files to/from PDF format |
 
 <!--zh
-### 记忆管理类
--->
-### Memory Management
-
-| Tool | Description |
-|------|-------------|
-| `create_memory` | Create a new memory entry |
-| `update_memory` | Update an existing memory entry |
-| `delete_memory` | Delete a memory entry |
-
-<!--zh
 ### 任务管理类
 -->
 ### Task Management

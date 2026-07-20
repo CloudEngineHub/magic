@@ -1483,30 +1483,6 @@
         "zh_CN": "技能装备失败",
         "en_US": "Failed to equip Skill"
     },
-    "create_memory.success": {
-        "zh_CN": "{{preview}}",
-        "en_US": "{{preview}}"
-    },
-    "create_memory.error": {
-        "zh_CN": "创建长期记忆时遇到错误",
-        "en_US": "Error creating long-term memory"
-    },
-    "update_memory.success": {
-        "zh_CN": "{{preview}}",
-        "en_US": "{{preview}}"
-    },
-    "update_memory.error": {
-        "zh_CN": "更新长期记忆时遇到错误",
-        "en_US": "Error updating long-term memory"
-    },
-    "delete_memory.success": {
-        "zh_CN": "{{preview}}",
-        "en_US": "{{preview}}"
-    },
-    "delete_memory.error": {
-        "zh_CN": "删除长期记忆时遇到错误",
-        "en_US": "Error deleting long-term memory"
-    },
     "browser.unknown_operation": {
         "zh_CN": "操作浏览器",
         "en_US": "Use Browser"
