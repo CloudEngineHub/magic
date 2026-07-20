@@ -105,6 +105,7 @@ function fallbackWriteText(text: string): void {
 	textarea.setAttribute("readonly", "")
 	document.body.appendChild(textarea)
 	try {
+		textarea.focus()
 		textarea.select()
 		textarea.setSelectionRange(0, text.length)
 		const success = document.execCommand("copy")
