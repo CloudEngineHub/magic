@@ -86,7 +86,7 @@
 	"subtitle": "Promotional Subtitle",
 	"subtitlePlaceholder": "Please enter promotional subtitle, e.g. Most Popular Package",
 	"superMagic": "Package Rights",
-	"superMagicCopyLimit": "$t(common:platform.name) Project Copy Limit",
+	"superMagicCopyLimit": "Project Copy Limit",
 	"superMagicCopyLimitDesc": "Controls the maximum number of projects a user can copy",
 	"team": "Team Package",
 	"teamMemberLimit": "Team Member Limit",

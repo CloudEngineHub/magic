@@ -78,7 +78,7 @@
 	"detail": "详情",
 	"file": {
 		"maxSize": "单个文件上限为 {{maxSize}}MB",
-		"onlySupportUploadImage": "仅支持上传png/jpg/jpeg/gif/webp格式的图片",
+		"onlySupportUploadImage": "仅支持上传png/jpg/jpeg/svg/gif/webp格式的图片",
 		"uploadFail": "文件上传失败，请重试"
 	},
 	"filter": "筛选",

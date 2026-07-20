@@ -22,7 +22,7 @@
 	"detail": "Détail",
 	"file": {
 		"maxSize": "La taille limite d'un fichier est de {{maxSize}}MB",
-		"onlySupportUploadImage": "Seules les images aux formats png/jpg/jpeg/gif/webp sont prises en charge",
+		"onlySupportUploadImage": "Seules les images aux formats png/jpg/jpeg/svg/gif/webp sont prises en charge",
 		"uploadFail": "Échec du téléchargement du fichier, veuillez réessayer"
 	},
 	"filter": "Filtrer",

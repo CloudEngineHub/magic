@@ -22,7 +22,7 @@
 	"detail": "รายละเอียด",
 	"file": {
 		"maxSize": "ขนาดไฟล์สูงสุดคือ {{maxSize}}MB",
-		"onlySupportUploadImage": "รองรับการอัปโหลดภาพรูปแบบ png/jpg/jpeg/gif/webp เท่านั้น",
+		"onlySupportUploadImage": "รองรับการอัปโหลดภาพรูปแบบ png/jpg/jpeg/svg/gif/webp เท่านั้น",
 		"uploadFail": "อัปโหลดไฟล์ล้มเหลว กรุณาลองใหม่อีกครั้ง"
 	},
 	"filter": "กรอง",
