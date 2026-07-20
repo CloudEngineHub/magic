@@ -30,7 +30,7 @@ vi.mock("@/utils/pubsub", () => ({
 	PubSubEvents: {},
 }))
 
-vi.mock("../tools/plan", () => ({
+vi.mock("../tools/microAppPlan", () => ({
 	default: () => <span>micro app plan</span>,
 }))
 

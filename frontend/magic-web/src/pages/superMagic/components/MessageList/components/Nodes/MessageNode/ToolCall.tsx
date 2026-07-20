@@ -12,7 +12,7 @@ import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { MCPTool } from "./tools/MCPTool"
 
 const AskUserToolCall = lazy(() => import("./tools/askUser"))
-const PlanToolCall = lazy(() => import("./tools/plan"))
+const MicroAppPlanToolCall = lazy(() => import("./tools/microAppPlan"))
 
 interface ToolDetail {
 	type?: string
@@ -203,7 +203,7 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 	}
 	if (toolCall?.function?.name === "micro_app_plan") {
 		return (
-			<PlanToolCall
+			<MicroAppPlanToolCall
 				toolData={toolData}
 				loading={!toolResponse}
 				classNames={classNames}

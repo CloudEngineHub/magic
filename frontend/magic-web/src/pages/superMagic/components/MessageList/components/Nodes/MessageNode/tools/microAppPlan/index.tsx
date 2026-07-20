@@ -56,7 +56,7 @@ function PlanSection({
 	)
 }
 
-function PlanToolCall(props: DefaultToolProps) {
+function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const { onMouseEnter, onMouseLeave, loading, classNames, selectedTopic } = props
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
@@ -417,4 +417,4 @@ function PlanToolCall(props: DefaultToolProps) {
 	)
 }
 
-export default observer(PlanToolCall)
+export default observer(MicroAppPlanToolCall)
