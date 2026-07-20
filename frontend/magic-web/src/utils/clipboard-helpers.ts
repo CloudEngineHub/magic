@@ -1,3 +1,5 @@
+import { isInDingTalkEnvironment } from "@/utils/devices"
+
 /**
  * 剪贴板工具函数 - 提供跨平台兼容的剪贴板操作
  *
@@ -18,6 +20,34 @@
  * HTTP 环境或权限被拒绝时自动降级到 execCommand
  */
 async function _writeText(text: string): Promise<void> {
+	// Keep the legacy copy command synchronous in DingTalk WebViews before using the restricted API.
+	if (isInDingTalkEnvironment) {
+		try {
+			fallbackWriteText(text)
+			return
+		} catch (fallbackError) {
+			if (!navigator.clipboard?.writeText) {
+				console.log("[clipboard] DingTalk copy failed", {
+					fallbackError,
+					textLength: text.length,
+				})
+				throw fallbackError
+			}
+
+			try {
+				await navigator.clipboard.writeText(text)
+				return
+			} catch (nativeError) {
+				console.log("[clipboard] DingTalk copy failed", {
+					fallbackError,
+					nativeError,
+					textLength: text.length,
+				})
+				throw fallbackError
+			}
+		}
+	}
+
 	let nativeWriteTextError: unknown
 	if (navigator.clipboard?.writeText) {
 		try {
@@ -31,6 +61,11 @@ async function _writeText(text: string): Promise<void> {
 	try {
 		fallbackWriteText(text)
 	} catch (error) {
+		console.log("[clipboard] Copy failed", {
+			fallbackError: error,
+			nativeError: nativeWriteTextError,
+			textLength: text.length,
+		})
 		if (nativeWriteTextError) {
 			throw nativeWriteTextError
 		}
