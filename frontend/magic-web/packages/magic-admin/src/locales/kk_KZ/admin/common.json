@@ -22,7 +22,7 @@
 	"detail": "Толығырақ",
 	"file": {
 		"maxSize": "Бір файлдың максималды өлшемі {{maxSize}}MB",
-		"onlySupportUploadImage": "Тек png/jpg/jpeg/gif/webp форматындағы суреттер үшін жүктеу қолдайды",
+		"onlySupportUploadImage": "Тек png/jpg/jpeg/svg/gif/webp форматындағы суреттер үшін жүктеу қолдайды",
 		"uploadFail": "Файлды жүктеу сәтсіз аяқталды, қайта көріңіз"
 	},
 	"filter": "Сүзгілеу",

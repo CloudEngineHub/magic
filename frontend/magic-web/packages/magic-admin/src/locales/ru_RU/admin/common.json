@@ -22,7 +22,7 @@
 	"detail": "Подробнее",
 	"file": {
 		"maxSize": "Максимальный размер одного файла {{maxSize}}MB",
-		"onlySupportUploadImage": "Разрешена загрузка только изображений формата png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Разрешена загрузка только изображений формата png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Ошибка загрузки файла, попробуйте снова"
 	},
 	"filter": "Фильтр",

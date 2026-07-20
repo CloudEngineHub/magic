@@ -73,10 +73,13 @@ export const AddGroupModal = memo(
 						return 0
 					})
 					setIcons(sortRes)
-					setSelectedIcon(sortRes[0].key)
-					form.setFieldsValue({
-						icon: sortRes[0].key,
-					})
+					const defaultIconKey = sortRes[0]?.key
+					if (!info && defaultIconKey) {
+						setSelectedIcon(defaultIconKey)
+						form.setFieldsValue({
+							icon: defaultIconKey,
+						})
+					}
 				},
 			},
 		)
@@ -96,7 +99,7 @@ export const AddGroupModal = memo(
 		useEffect(() => {
 			if (info) {
 				form.setFieldsValue(info)
-				const iconKey = icons.find((i) => i.url === info.icon)?.key
+				const iconKey = icons.find((i) => i.url === info.icon || i.key === info.icon)?.key
 				setSelectedIcon(iconKey)
 				setLang(info.name)
 				if (info.description) {
@@ -145,9 +148,8 @@ export const AddGroupModal = memo(
 			const values = await form.validateFields()
 
 			const icon = isModel
-				? values.icon.startsWith("https")
-					? values.icon
-					: icons.find((i) => i.key === values.icon)?.url
+				? (icons.find((i) => i.key === values.icon || i.url === values.icon)?.url ??
+					values.icon)
 				: values.icon
 
 			await onOk?.({
