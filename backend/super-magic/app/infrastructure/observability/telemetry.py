@@ -159,6 +159,19 @@ class _ErrorFirstSamplingProcessor(SpanProcessor):
         self._inner.on_start(span, parent_context)
 
     def on_end(self, span):
+        # OpenAI spans already contain final messages and usage at this point, including
+        # streaming responses. Enrich and retain them before applying normal sampling.
+        is_openai_span = getattr(span, "name", None) == "openai.chat"
+        try:
+            from .openai_integration import enrich_finished_openai_span
+
+            enrich_finished_openai_span(span)
+        except Exception:
+            logger.debug("Failed to enrich finished OpenAI span", exc_info=True)
+        if is_openai_span:
+            self._inner.on_end(span)
+            return
+
         # Always export spans whose status was explicitly set to ERROR
         if span.status and span.status.status_code == StatusCode.ERROR:
             self._inner.on_end(span)
@@ -326,15 +339,6 @@ def setup_telemetry(
     _tracer_provider.add_span_processor(_ErrorFirstSamplingProcessor(batch_processor, sample_ratio))
     logger.info(f"[OpenTelemetry] Sampling: errors=100%, normal={sample_ratio * 100:.0f}% (OTEL_SAMPLING_RATIO={sample_ratio})")
     trace.set_tracer_provider(_tracer_provider)
-
-    # Install non-invasive LLM cost tracking (best-effort)
-    try:
-        from .llm_cost_tracking import install_llm_cost_tracking
-
-        install_llm_cost_tracking()
-    except Exception as e:
-        # Never block telemetry setup, but log the error
-        logger.warning("[OpenTelemetry] Failed to install LLM cost tracking", exc_info=True)
 
     # Setup Metrics
     # Note: Langfuse only supports traces, not metrics. Detect and handle appropriately.

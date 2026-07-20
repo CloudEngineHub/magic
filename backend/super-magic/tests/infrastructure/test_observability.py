@@ -458,6 +458,99 @@ def _mock_span_for_hook() -> MagicMock:
     return span
 
 
+class TestOpenAIResponseHook:
+    @patch("app.infrastructure.observability.openai_integration._get_model_pricing")
+    def test_finished_openai_span_maps_content_cost_and_bypasses_sampling(
+        self,
+        mock_get_pricing,
+    ):
+        from app.infrastructure.observability.openai_integration import enrich_finished_openai_span
+
+        pricing = MagicMock()
+        pricing.get_model_pricing.return_value = {
+            "input_price": 0.01,
+            "output_price": 0.02,
+            "currency": "USD",
+        }
+        mock_get_pricing.return_value = pricing
+
+        proc, inner = TestErrorFirstSamplingProcessor()._processor(ratio=0.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        span = provider.get_tracer("test").start_span("openai.chat")
+        span.set_attribute("gen_ai.input.messages", '[{"role":"user"}]')
+        span.set_attribute("gen_ai.output.messages", '[{"role":"assistant"}]')
+        span.set_attribute("gen_ai.response.model", "test-model")
+        span.set_attribute("gen_ai.usage.input_tokens", 1000)
+        span.set_attribute("gen_ai.usage.output_tokens", 500)
+        span.end()
+
+        assert len(inner.ended) == 1
+        attrs = inner.ended[0].attributes
+        assert attrs["langfuse.observation.input"] == '[{"role":"user"}]'
+        assert attrs["langfuse.observation.output"] == '[{"role":"assistant"}]'
+        assert attrs["gen_ai.usage.cost"] == pytest.approx(0.02)
+        assert enrich_finished_openai_span(inner.ended[0]) is True
+
+    @patch("app.infrastructure.observability.openai_integration._report_to_langfuse")
+    def test_merges_standard_token_usage_into_existing_span(self, mock_report):
+        from app.infrastructure.observability.openai_integration import _response_hook
+
+        span = _mock_span_for_hook()
+        request = {"model": "test-model"}
+        response = SimpleNamespace(
+            model="test-model",
+            usage=SimpleNamespace(prompt_tokens=12, completion_tokens=7, total_tokens=19),
+        )
+
+        _response_hook(span, request, response)
+
+        assert span._attrs["gen_ai.usage.input_tokens"] == 12
+        assert span._attrs["gen_ai.usage.completion_tokens"] == 7
+        assert span._attrs["gen_ai.usage.total_tokens"] == 19
+        mock_report.assert_called_once_with(span, request, response)
+
+    @patch("app.infrastructure.observability.openai_integration._get_model_pricing")
+    @patch("app.infrastructure.observability.openai_integration._get_langfuse_client")
+    @patch("app.infrastructure.observability.openai_integration.OpenAIParser.parse")
+    def test_merges_cost_without_marking_span_as_generation(
+        self,
+        mock_parse,
+        mock_get_client,
+        mock_get_pricing,
+    ):
+        from app.infrastructure.observability.openai_integration import _report_to_langfuse
+
+        token_usage = SimpleNamespace(
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            input_tokens_details=None,
+        )
+        mock_parse.return_value = token_usage
+        mock_get_client.return_value = MagicMock()
+        pricing = MagicMock()
+        pricing.get_model_pricing.return_value = {
+            "input_price": 0.01,
+            "output_price": 0.02,
+            "currency": "USD",
+        }
+        mock_get_pricing.return_value = pricing
+
+        span = _mock_span_for_hook()
+        request = {"model": "test-model"}
+        response = SimpleNamespace(
+            model="test-model",
+            usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500),
+        )
+
+        _report_to_langfuse(span, request, response)
+
+        assert span._attrs["gen_ai.usage.cost"] == pytest.approx(0.02)
+        assert "observation.type" not in span._attrs
+        assert "langfuse.observation.type" not in span._attrs
+
+
 class TestHttpxRequestHook:
     def test_sets_span_name_from_path(self):
         span = _mock_span_for_hook()
