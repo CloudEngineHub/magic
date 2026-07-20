@@ -5,6 +5,7 @@ Provides automatic instrumentation for OpenAI SDK (which uses httpx internally).
 This ensures all LLM API calls are properly traced.
 """
 import logging
+import os
 
 from .constants import (
     Currency,
@@ -12,6 +13,7 @@ from .constants import (
     OpenTelemetryAttributes,
 )
 from .telemetry import is_telemetry_enabled
+from .span_utils import set_observation_io
 
 # Try to import Langfuse SDK, but make it optional
 try:
@@ -158,6 +160,17 @@ def _request_hook(span, request):
             span.set_attribute(OpenTelemetryAttributes.GEN_AI_SYSTEM, "openai")
             span.set_attribute(OpenTelemetryAttributes.GEN_AI_REQUEST_MODEL, str(model))
 
+        # Fill the observation Input column with the request messages/prompt (Langfuse).
+        try:
+            if isinstance(request, dict):
+                input_payload = request.get("messages") or request.get("input") or request.get("prompt")
+            else:
+                input_payload = getattr(request, "messages", None)
+            if input_payload is not None:
+                set_observation_io(span, input_value=input_payload)
+        except Exception:
+            _logger.debug("Failed to set OpenAI observation input", exc_info=True)
+
         _logger.debug(f"Set OpenAI span name: {span_name}")
 
     except Exception as e:
@@ -200,12 +213,55 @@ def _response_hook(span, request, response):
         # Mark as successful
         span.set_attribute(OpenTelemetryAttributes.HTTP_SUCCESS, True)
 
+        # Fill the observation Output column with the completion (Langfuse).
+        try:
+            output_payload = _extract_openai_output(response)
+            if output_payload is not None:
+                set_observation_io(span, output_value=output_payload)
+        except Exception:
+            _logger.debug("Failed to set OpenAI observation output", exc_info=True)
+
         # Report usage and cost to Langfuse
         _report_to_langfuse(span, request, response)
 
     except Exception as e:
         # Log error without exposing response details
         _logger.debug("Error in OpenAI response hook", exc_info=True)
+
+
+def _extract_openai_output(response):
+    """Best-effort extraction of the assistant message(s) from an OpenAI response."""
+    try:
+        choices = getattr(response, "choices", None)
+        if choices is None and isinstance(response, dict):
+            choices = response.get("choices")
+        if not choices:
+            return None
+
+        messages = []
+        for choice in choices:
+            message = getattr(choice, "message", None)
+            if message is None and isinstance(choice, dict):
+                message = choice.get("message")
+            if message is None:
+                continue
+            content = getattr(message, "content", None)
+            if content is None and isinstance(message, dict):
+                content = message.get("content")
+            tool_calls = getattr(message, "tool_calls", None)
+            if tool_calls is None and isinstance(message, dict):
+                tool_calls = message.get("tool_calls")
+            entry = {"content": content}
+            if tool_calls:
+                # tool_calls objects are not JSON-serializable; stringify defensively.
+                entry["tool_calls"] = str(tool_calls)
+            messages.append(entry)
+
+        if not messages:
+            return None
+        return messages[0] if len(messages) == 1 else messages
+    except Exception:
+        return None
 
 
 def _report_to_langfuse(span, request, response):
@@ -388,6 +444,9 @@ def instrument_openai() -> None:
         return
 
     try:
+        # OpenLLMetry only emits prompt/completion content when this is enabled.
+        # Respect an explicit deployment override (for example, privacy-sensitive envs).
+        os.environ.setdefault("TRACELOOP_TRACE_CONTENT", "true")
         OpenAIInstrumentor().instrument(
             request_hook=_request_hook,
             response_hook=_response_hook,

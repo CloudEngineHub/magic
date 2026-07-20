@@ -40,6 +40,7 @@ class Currency(str, Enum):
 class LangfuseAttributes:
     """Langfuse-specific span attribute keys"""
     NAME = "langfuse.name"
+    OBSERVATION_NAME = "langfuse.observation.name"
     OBSERVATION_TYPE = "langfuse.observation.type"
     OBSERVATION_INPUT = "langfuse.observation.input"
     OBSERVATION_OUTPUT = "langfuse.observation.output"
@@ -48,6 +49,17 @@ class LangfuseAttributes:
     TAGS = "langfuse.tags"
     # Prefix for promoting attributes to top-level metadata (filterable)
     TRACE_METADATA_PREFIX = "langfuse.trace.metadata"
+
+    # Observation-level input/output (fills the Input/Output columns of an observation).
+    # Langfuse OTEL integration reads these exact keys; values must be strings (JSON-encoded).
+    OBSERVATION_INPUT = "langfuse.observation.input"
+    OBSERVATION_OUTPUT = "langfuse.observation.output"
+
+    # Trace-level name and input/output (fills the Name/Input/Output columns of a trace).
+    # Should be set on the ROOT span of a trace (e.g. the FastAPI server span).
+    TRACE_NAME = "langfuse.trace.name"
+    TRACE_INPUT = "langfuse.trace.input"
+    TRACE_OUTPUT = "langfuse.trace.output"
 
 
 class LangfuseTraceMetadata:
@@ -89,6 +101,19 @@ class OpenTelemetryAttributes:
 
     # GenAI attributes
     GEN_AI_SYSTEM = "gen_ai.system"
+    # OpenTelemetry GenAI semantic-convention input/output message attributes.
+    # Guance (and other OTEL-native backends) read the Input/Output panels from
+    # these standard keys rather than Langfuse's private langfuse.observation.*
+    # keys, so we write both to maximize backend compatibility.
+    GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages"
+    GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages"
+    # Langfuse official OTEL attribute-mapping keys for observation input/output.
+    # Langfuse's mapping table accepts `gen_ai.prompt`/`gen_ai.completion` (NOT the
+    # `.messages` variants) as first-class input/output sources. Guance's Langfuse-
+    # compatible layer accepts them too (verified via manual OTLP curl). Written
+    # alongside the langfuse.observation.* keys for maximum backend compatibility.
+    GEN_AI_PROMPT = "gen_ai.prompt"
+    GEN_AI_COMPLETION = "gen_ai.completion"
     GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
     GEN_AI_RESPONSE_MODEL = "gen_ai.response.model"
     GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages"

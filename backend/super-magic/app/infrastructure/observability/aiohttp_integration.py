@@ -9,6 +9,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from .telemetry import is_telemetry_enabled
 from .constants import LangfuseAttributes
+from .span_utils import set_observation_io, redact_headers
 
 # Import aiohttp library first to ensure dependency check passes
 # Then import TraceConfig for custom trace configuration
@@ -54,6 +55,17 @@ async def _on_request_start(session, trace_config_ctx, params):
     except Exception as e:
         _logger.debug(f"Failed to set aiohttp span name: {e}")
 
+    # Fill the observation Input column (headers only; request body is a stream we
+    # must not consume here).
+    try:
+        input_payload = {"method": str(params.method), "url": str(params.url)}
+        headers = getattr(params, "headers", None)
+        if headers is not None:
+            input_payload["headers"] = redact_headers(headers)
+        set_observation_io(span, input_value=input_payload)
+    except Exception as e:
+        _logger.debug(f"Failed to set aiohttp observation input: {e}")
+
 
 async def _on_request_end(session, trace_config_ctx, params):
     """Hook to mark aiohttp response errors and capture error bodies."""
@@ -67,6 +79,13 @@ async def _on_request_end(session, trace_config_ctx, params):
 
     status_code = response.status
     span.set_attribute("http.response.status_code", status_code)
+
+    # Fill the observation Output column. We only record the status code here to avoid
+    # consuming the response stream on success; error bodies are captured below.
+    try:
+        set_observation_io(span, output_value={"status_code": status_code})
+    except Exception as e:
+        _logger.debug(f"Failed to set aiohttp observation output: {e}")
 
     if status_code >= 400:
         error_category = "5xx" if status_code >= 500 else "4xx"
