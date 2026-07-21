@@ -71,6 +71,7 @@ interface UseBatchDownloadOptions {
 	onBatchPptExportProgress?: (progress: number) => void
 	onBatchPptExportEnd?: () => void
 	allowEdit?: boolean
+	allowDownload?: boolean
 	// 新增：批量分享回调
 	onBatchShareClick?: (fileIds: string[]) => void
 	// 是否在项目内
@@ -106,6 +107,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		onBatchPptExportProgress,
 		onBatchPptExportEnd,
 		allowEdit,
+		allowDownload,
 		onBatchShareClick,
 		isInProject,
 		downloadProgress,
@@ -117,6 +119,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
 	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
+	const canDownload = allowDownload !== false
 
 	// 批量导出进度控制辅助函数
 	const handleBatchExportStart = (convertType: "pdf" | "ppt") => {
@@ -255,7 +258,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
-		if (selectedItems.size === 0 || !projectId) return
+		if (!canDownload || selectedItems.size === 0 || !projectId) return
 		setBatchLoading(true)
 		let keepLoadingForPolling = false
 		try {
@@ -387,7 +390,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	const handleExportPdfOrPpt = async (convert_type = "pdf") => {
-		if (selectedItems.size === 0) return
+		if (!canDownload || selectedItems.size === 0) return
 		const convertType = convert_type as "pdf" | "ppt"
 		const format = convertType === "pdf" ? "pdf" : "pptx"
 		// Always resolve against the complete attachment tree. The filtered tree can omit
@@ -567,7 +570,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量下载（带二级菜单）
-		...(isInProject
+		...(canDownload && isInProject
 			? [
 					{
 						key: "download",
@@ -619,46 +622,48 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 						],
 					},
 				]
-			: // 不在项目内，暂时只显示一个一级菜单的批量下载（兼容金融模式）
-				[
-					{
-						key: "download-selected",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconDownload size={16} stroke={1.5} />
-								<span>
-									{t("topicFiles.downloadSelected", {
-										count: selectedItems.size,
-									})}
-								</span>
-							</div>
-						),
-						onClick: handleBatchDownload,
-						disabled: batchLoading,
-					},
-					{
-						key: "export-pdf",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconFileTypePdf size={16} stroke={1.5} />
-								<span>{t("topicFiles.exportPdf")}</span>
-							</div>
-						),
-						onClick: () => handleExportPdfOrPpt("pdf"),
-						disabled: batchLoading,
-					},
-					{
-						key: "export-ppt",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconFileTypePpt size={16} stroke={1.5} />
-								<span>{t("topicFiles.exportPpt")}</span>
-							</div>
-						),
-						onClick: () => handleExportPdfOrPpt("ppt"),
-						disabled: batchLoading,
-					},
-				]),
+			: canDownload
+				? // 不在项目内，暂时只显示一个一级菜单的批量下载（兼容金融模式）
+					[
+						{
+							key: "download-selected",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconDownload size={16} stroke={1.5} />
+									<span>
+										{t("topicFiles.downloadSelected", {
+											count: selectedItems.size,
+										})}
+									</span>
+								</div>
+							),
+							onClick: handleBatchDownload,
+							disabled: batchLoading,
+						},
+						{
+							key: "export-pdf",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconFileTypePdf size={16} stroke={1.5} />
+									<span>{t("topicFiles.exportPdf")}</span>
+								</div>
+							),
+							onClick: () => handleExportPdfOrPpt("pdf"),
+							disabled: batchLoading,
+						},
+						{
+							key: "export-ppt",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconFileTypePpt size={16} stroke={1.5} />
+									<span>{t("topicFiles.exportPpt")}</span>
+								</div>
+							),
+							onClick: () => handleExportPdfOrPpt("ppt"),
+							disabled: batchLoading,
+						},
+					]
+				: []),
 		// 批量移动（仅在允许编辑时显示）
 		...(isInProject && allowEdit && !hideMoveTo
 			? [
@@ -726,11 +731,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 	]) as MenuProps["items"]
+	const canShowBatchOperations = showBatchDownload && Boolean(batchMenuItems?.length)
 
 	return {
 		// 状态
 		batchLoading,
-		showBatchDownload,
+		showBatchDownload: canShowBatchOperations,
 
 		// 处理函数
 		handleBatchDownload,
