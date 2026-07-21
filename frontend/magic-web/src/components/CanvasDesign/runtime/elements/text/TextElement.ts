@@ -175,6 +175,13 @@ export class TextElement extends BaseElement<TextElementData> {
 		return this.data.interactionConfig?.aspectRatioLocked ?? true
 	}
 
+	/**
+	 * 文本缩放会重建排版内容和 Konva 文本子节点，因此多选实时缩放时不能只更新外层 Group。
+	 */
+	public override shouldSyncTransformDataInRealtime(): boolean {
+		return true
+	}
+
 	public override async renderToCanvas(
 		ctx: CanvasRenderingContext2D,
 		offsetX: number,

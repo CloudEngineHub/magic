@@ -14,6 +14,7 @@ interface TransformElementStub {
 		},
 	) => Partial<LayerElement>
 	shouldKeepRatio: () => boolean
+	shouldSyncTransformDataInRealtime?: () => boolean
 }
 
 interface TransformManagerPrivate {
@@ -101,6 +102,7 @@ function createSingleDragMoveManager() {
 	const element = {
 		applyTransform,
 		shouldKeepRatio: () => false,
+		shouldSyncTransformDataInRealtime: () => false,
 	}
 	const node = new Konva.Group({ id: "element-1", x: 10, y: 20, width: 100, height: 100 })
 	const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
@@ -142,6 +144,7 @@ function createProxySyncManager() {
 	const element = {
 		applyTransform,
 		shouldKeepRatio: () => false,
+		shouldSyncTransformDataInRealtime: () => false,
 	}
 	const node = {
 		x: vi.fn(),
@@ -191,7 +194,7 @@ function createProxySyncManager() {
 	manager.initialAspectRatio = null
 	manager.transformingElementIds = new Set(["element-1"])
 
-	return { applyTransform, emit, manager, node, requestLayerDraw, update }
+	return { applyTransform, element, emit, manager, node, requestLayerDraw, update }
 }
 
 describe("TransformManager multi-selection proxy sync", () => {
@@ -263,6 +266,56 @@ describe("TransformManager multi-selection proxy sync", () => {
 			"element-1",
 			expect.any(Object),
 			expect.objectContaining({ mode: "data-only", silent: true }),
+		)
+	})
+
+	it("syncs data in realtime for elements that rebuild their internal render nodes", () => {
+		const { element, manager, update } = createProxySyncManager()
+		element.shouldSyncTransformDataInRealtime = () => true
+		manager.multiSelectionProxy = {
+			x: () => 10,
+			y: () => 20,
+			width: () => 200,
+			height: () => 150,
+			scaleX: () => 1,
+			scaleY: () => 1,
+		}
+
+		manager.syncSelectionProxyToElements({ isRealtime: true, isScaling: true })
+
+		expect(update).toHaveBeenCalledTimes(2)
+		expect(update).toHaveBeenNthCalledWith(
+			1,
+			"element-1",
+			expect.any(Object),
+			expect.objectContaining({ mode: "node-only" }),
+		)
+		expect(update).toHaveBeenNthCalledWith(
+			2,
+			"element-1",
+			expect.any(Object),
+			expect.objectContaining({ mode: "data-only", silent: true }),
+		)
+	})
+
+	it("keeps the node-only fast path for ordinary elements during realtime scaling", () => {
+		const { manager, update } = createProxySyncManager()
+		manager.multiSelectionProxy = {
+			x: () => 10,
+			y: () => 20,
+			width: () => 200,
+			height: () => 150,
+			scaleX: () => 1,
+			scaleY: () => 1,
+		}
+
+		manager.syncSelectionProxyToElements({ isRealtime: true, isScaling: true })
+
+		expect(update).toHaveBeenCalledTimes(1)
+		expect(update).toHaveBeenCalledWith(
+			"element-1",
+			expect.any(Object),
+			expect.objectContaining({ mode: "node-only" }),
 		)
 	})
 

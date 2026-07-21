@@ -497,7 +497,9 @@ export class TransformManager {
 				skipImageCropResizeSync,
 			})
 
-			if (isRealtime) return
+			// 大多数元素在实时阶段只需更新 node；文本等需要重建内部渲染结构的元素，
+			// 还必须同步 data，才能让新的排版尺寸实时反映到 Konva 子节点和几何边界。
+			if (isRealtime && !snapshot.element.shouldSyncTransformDataInRealtime()) return
 
 			this.canvas.elementManager.update(elementId, appliedUpdates, {
 				mode: "data-only",

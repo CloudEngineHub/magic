@@ -326,6 +326,15 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	}
 
 	/**
+	 * 是否需要在多选缩放的实时阶段同步 data 层。
+	 *
+	 * 默认元素可以只更新 Konva node；需要重建内部渲染结构的元素可以重写此方法。
+	 */
+	public shouldSyncTransformDataInRealtime(): boolean {
+		return false
+	}
+
+	/**
 	 * 是否需要在 transformer 缩放时保持宽高比
 	 * 子类可以重写此方法来定义是否需要保持比例
 	 * @returns 是否需要保持比例，默认返回 interactionConfig.aspectRatioLocked
