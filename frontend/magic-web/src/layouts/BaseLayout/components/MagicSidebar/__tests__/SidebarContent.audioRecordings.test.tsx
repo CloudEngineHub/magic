@@ -2,13 +2,14 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import SidebarContent from "../SidebarContent"
-import { canShowSlidesTemplateCount } from "../SlidesTemplateSidebarMenuItem"
 
-const { mockIsMagicApp, navigateMock, changeBottomTabMock } = vi.hoisted(() => ({
-	mockIsMagicApp: vi.fn(),
-	navigateMock: vi.fn(),
-	changeBottomTabMock: vi.fn(),
-}))
+const { mockIsMagicApp, navigateMock, changeBottomTabMock, useSlidesTemplateStatisticsMock } =
+	vi.hoisted(() => ({
+		mockIsMagicApp: vi.fn(),
+		navigateMock: vi.fn(),
+		changeBottomTabMock: vi.fn(),
+		useSlidesTemplateStatisticsMock: vi.fn(),
+	}))
 const animatedNumberTextMock = vi.hoisted(() => vi.fn())
 
 afterEach(() => {
@@ -17,8 +18,22 @@ afterEach(() => {
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, options?: { count?: string }) =>
-			key === "slidesTemplates.templateCount" ? `${options?.count} 套` : key,
+		t: (key: string, options?: Record<string, string | number>) => {
+			switch (key) {
+				case "slidesTemplates.compactCount":
+					return `${options?.value} 套`
+				case "slidesTemplates.todayAddedCount":
+					return `今日新增 ${options?.value} 套`
+				case "slidesTemplates.templateTotalCount":
+					return `模板总数 ${options?.value} 套`
+				case "slidesTemplates.statisticsTooltip":
+					return `${options?.title} · 今日新增 ${options?.todayAdded} 套 · 模板总数 ${options?.total} 套`
+				case "slidesTemplates.statisticsTooltipWithoutToday":
+					return `${options?.title} · 模板总数 ${options?.total} 套`
+				default:
+					return key
+			}
+		},
 	}),
 	initReactI18next: {
 		type: "3rdParty",
@@ -95,7 +110,8 @@ vi.mock("@/pages/superMagic/hooks/useResourceStatusPolling", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
-	useSlidesTemplateTotal: () => 101582,
+	useSlidesTemplateStatistics: useSlidesTemplateStatisticsMock,
+	useSlidesTemplateTotal: () => useSlidesTemplateStatisticsMock()?.templateTotal,
 }))
 
 vi.mock("@/pages/superMagic/components/AnimatedNumberText", () => ({
@@ -243,6 +259,11 @@ describe("SidebarContent audio recordings entry", () => {
 describe("SidebarContent slides templates count", () => {
 	beforeEach(() => {
 		animatedNumberTextMock.mockClear()
+		useSlidesTemplateStatisticsMock.mockReset()
+		useSlidesTemplateStatisticsMock.mockReturnValue({
+			templateTotal: 101582,
+			templateCountTodayGrowth: 512,
+		})
 	})
 
 	it("shows the highlighted template count in the collapsed tooltip", () => {
@@ -253,18 +274,18 @@ describe("SidebarContent slides templates count", () => {
 			"hover:!bg-[#fff2ec]",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
-			"sidebar:slidesTemplates.title101,582套",
+			"sidebar:slidesTemplates.title · 今日新增 512 套 · 模板总数 101,582 套",
 		)
 	})
 
-	it("keeps the template count badge beside the title when expanded", () => {
+	it("shows today's growth first and keeps the badge beside the title when expanded", () => {
 		renderSidebarContent()
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
-			"101,582套",
+			"今日新增512套",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
-		expect(animatedNumberTextMock).toHaveBeenCalledWith(101582)
+		expect(animatedNumberTextMock).toHaveBeenCalledWith(512)
 		const title = screen.getByText("sidebar:slidesTemplates.title")
 		const countBadge = screen.getByTestId("sidebar-content-slides-templates-count")
 		expect(countBadge.className).not.toMatch(/scale|translate|rotate/)
@@ -283,35 +304,32 @@ describe("SidebarContent slides templates count", () => {
 		rerender(<SidebarContent collapsed={false} />)
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
-			"101,582套",
+			"今日新增512套",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
 	})
 
-	it("does not animate or recreate the observer for the hidden measurement badge", () => {
-		const disconnect = vi.fn()
-		const resizeObserver = vi.fn(() => ({
-			observe: vi.fn(),
-			disconnect,
-		}))
-		vi.stubGlobal("ResizeObserver", resizeObserver)
-		const { rerender } = renderSidebarContent()
+	it("falls back to the total when today's growth is unavailable", () => {
+		useSlidesTemplateStatisticsMock.mockReturnValue({ templateTotal: 101582 })
 
-		rerender(<SidebarContent collapsed={false} />)
+		renderSidebarContent()
 
-		expect(resizeObserver).toHaveBeenCalledTimes(1)
-		expect(animatedNumberTextMock).toHaveBeenCalledTimes(2)
+		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
+			"模板总数101,582套",
+		)
+		expect(animatedNumberTextMock).toHaveBeenCalledWith(101582)
 	})
 
-	it("uses the measured content width instead of a fixed sidebar breakpoint", () => {
-		const contentWidth = {
-			iconWidth: 16,
-			titleWidth: 48,
-			countWidth: 104,
-			gap: 8,
-		}
+	it("omits today's growth from the collapsed tooltip when the field is unavailable", () => {
+		useSlidesTemplateStatisticsMock.mockReturnValue({ templateTotal: 101582 })
 
-		expect(canShowSlidesTemplateCount({ availableWidth: 184, ...contentWidth })).toBe(true)
-		expect(canShowSlidesTemplateCount({ availableWidth: 182, ...contentWidth })).toBe(false)
+		renderSidebarContent(true)
+
+		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
+			"sidebar:slidesTemplates.title · 模板总数 101,582 套",
+		)
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip"),
+		).not.toHaveTextContent("今日新增")
 	})
 })
