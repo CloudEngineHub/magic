@@ -36,6 +36,7 @@ export type { SelfMediaOpsReviewData } from "./SelfMediaOpsReviewDashboard.helpe
 interface SelfMediaOpsReviewDashboardProps {
 	target: SelfMediaPlatformPostItem | null
 	open: boolean
+	allowEdit?: boolean
 	onClose: () => void
 	onEditData?: (target: SelfMediaPlatformPostItem) => void
 	onSyncData?: (target: SelfMediaPlatformPostItem) => Promise<void> | void
@@ -46,6 +47,7 @@ interface SelfMediaOpsReviewDashboardProps {
 function SelfMediaOpsReviewDashboard({
 	target,
 	open,
+	allowEdit = true,
 	onClose,
 	onEditData,
 	onSyncData,
@@ -216,8 +218,8 @@ function SelfMediaOpsReviewDashboard({
 								target={target}
 								sourceStatus={sourceStatus}
 								syncing={syncing}
-								onSync={handleSync}
-								onEditData={onEditData}
+								onSync={allowEdit && onSyncData ? handleSync : undefined}
+								onEditData={allowEdit ? onEditData : undefined}
 								onClose={onClose}
 							/>
 							<div

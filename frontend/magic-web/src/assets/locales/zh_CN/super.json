@@ -927,15 +927,20 @@
 				"cardFallbackTitle": "卡片 {{index}}",
 				"confirm": "开始导出",
 				"confirmWithCount": "开始导出 ({{count}})",
-				"dialogDescription": "选择要导出的文章、卡片和图片清晰度",
+				"dialogDescription": "选择要导出的文章、卡片、图片格式和输出尺寸",
 				"dialogTitle": "导出预览",
 				"exporting": "导出中...",
 				"failed": "导出失败",
+				"formatLabel": "图片格式",
 				"postSelectorLabel": "选择文章",
 				"running": "导出中 {{current}}/{{total}}",
-				"scaleLabel": "导出清晰度",
+				"scaleLabel": "输出尺寸",
 				"scaleOption": "{{ratio}}x",
+				"scaleOutputCalculating": "正在计算实际尺寸",
+				"scaleOutputLongSize": "长图 {{width}} × {{height}} px",
+				"scaleOutputSingleSize": "单张 {{width}} × {{height}} px",
 				"scaleOutputSize": "{{width}} × {{height}} px",
+				"scaleOutputVariedSize": "尺寸不一，最大边界 {{width}} × {{height}} px",
 				"selectAll": "全选",
 				"selectCards": "选择卡片",
 				"selectNone": "清空",
@@ -943,11 +948,11 @@
 				"success": "导出成功",
 				"type": {
 					"cardsZip": {
-						"description": "将所选卡片分别导出为 PNG，并打包为 ZIP。",
+						"description": "将所选卡片分别导出为 {{format}}，并打包为 ZIP。",
 						"title": "逐张卡片"
 					},
 					"longImage": {
-						"description": "将所选卡片按顺序从上到下纵向拼接后导出为 PNG。",
+						"description": "将所选卡片按顺序从上到下纵向拼接后导出为 {{format}}。",
 						"title": "长图"
 					}
 				},
@@ -1693,6 +1698,27 @@
 						"messages": "消息",
 						"publish": "+",
 						"shopping": "购物"
+					},
+					"metaEdit": {
+						"addSubtitle": "添加副标题",
+						"addTag": "新增标签",
+						"addTags": "添加标签",
+						"addTitle": "添加标题",
+						"deleteTag": "删除标签 {{tag}}",
+						"editField": "编辑{{field}}",
+						"editTag": "编辑标签 {{tag}}",
+						"failed": "内容保存失败，请稍后重试",
+						"finishTags": "完成标签编辑",
+						"newTagPlaceholder": "新标签",
+						"saved": "已同步",
+						"saving": "同步中",
+						"subtitle": "副标题",
+						"tagDuplicate": "标签 {{tag}} 已存在",
+						"tagEmpty": "标签内容不能为空",
+						"tags": "标签",
+						"tagsHint": "用空格或 # 分隔多个标签",
+						"title": "标题",
+						"titleEmpty": "标题不能为空"
 					},
 					"tabs": {
 						"detail": "笔记",

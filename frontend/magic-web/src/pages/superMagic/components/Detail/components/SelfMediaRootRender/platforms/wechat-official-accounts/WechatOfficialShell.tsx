@@ -70,6 +70,8 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		onBackHome,
 		onUpdatePostTitle,
 		onRequestPrePublishAnalysis,
+		onSharePost,
+		shareLoading,
 		onRequestWechatCoverGeneration,
 	} = props
 	const store = useSelfMediaStore()
@@ -173,7 +175,8 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		articleViewRef.current?.stopInspector()
 	}, [])
 
-	const inspectorDisabled = view !== "detail" || rootLoading || !activePost?.article?.fileId
+	const inspectorDisabled =
+		allowEdit === false || view !== "detail" || rootLoading || !activePost?.article?.fileId
 
 	// Auto-stop inspector when view changes
 	useEffect(() => {
@@ -245,7 +248,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 	}, [])
 
 	const handleConfirmExport = useCallback(
-		async ({ postIndex, pixelRatio, exportType }: ExportPreviewConfirmArgs) => {
+		async ({ postIndex, pixelRatio, format, exportType }: ExportPreviewConfirmArgs) => {
 			if (exportType !== "wechatCoverImage") return
 			setIsExporting(true)
 			try {
@@ -255,6 +258,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 					post: target,
 					fileName: target.meta.title || target.meta.feedTitle || target.meta.id,
 					pixelRatio,
+					format,
 				})
 				setExportDialogOpen(false)
 			} finally {
@@ -339,6 +343,8 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				refreshLabel={t("detail.selfMedia.refreshAllData")}
 				refreshDisabled={rootLoading}
 				refreshTestId="wechat-shell-refresh-post-button"
+				onShare={onSharePost}
+				shareLoading={shareLoading}
 				onOpenExport={handleOpenExportDialog}
 				exportLabel={t("detail.selfMedia.export.action")}
 				exportDisabled={isExporting || posts.length === 0}

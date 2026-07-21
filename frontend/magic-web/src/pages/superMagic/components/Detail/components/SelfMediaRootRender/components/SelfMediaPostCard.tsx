@@ -84,6 +84,7 @@ interface SelfMediaPostCardProps {
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
 	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSharePost?: (target: SelfMediaPlatformPostItem) => void
 	onSetPostPublishStatus?: (
 		target: SelfMediaPlatformPostItem,
 		publishStatus?: SelfMediaPostPublishStatus,
@@ -115,6 +116,7 @@ function SelfMediaPostCard({
 	onRenamePost,
 	onDeletePost,
 	onMentionPost,
+	onSharePost,
 	onSetPostPublishStatus,
 	publishedLinkAutoOpenSignal,
 }: SelfMediaPostCardProps) {
@@ -366,6 +368,7 @@ function SelfMediaPostCard({
 			onRenamePost={onRenamePost}
 			onDeletePost={onDeletePost}
 			onMentionPost={onMentionPost}
+			onSharePost={onSharePost}
 			onSetPostPublishStatus={onSetPostPublishStatus}
 			t={t}
 		>

@@ -11,7 +11,7 @@ import { RednoteDetailView, RednoteFooter } from "./detail"
 import RednoteFeedView from "./feed"
 import { RednoteShellContentGate } from "./RednoteShellContentGate"
 import { REDNOTE_PHONE_HEIGHT, REDNOTE_PHONE_WIDTH } from "./rednoteShellConstants"
-import type { SelfMediaAttachmentNode } from "../../types"
+import type { SelfMediaAttachmentNode, SelfMediaPostMetaPatch } from "../../types"
 
 interface PhoneFocusPoint {
 	xPercent: number
@@ -51,6 +51,7 @@ export interface RednoteShellPhoneViewPanelProps {
 	onAddFeedCardToCurrentChat?: (postIndex: number) => void
 	onAddDetailCardToCurrentChat?: (cardIndex: number) => void
 	onAddActivePostDirectoryToCurrentChat?: () => void
+	onUpdatePostMeta?: (patch: SelfMediaPostMetaPatch) => Promise<boolean>
 	phoneFocused?: boolean
 	focusDisabled?: boolean
 	onPhoneFocus?: () => void
@@ -75,6 +76,7 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 		onAddFeedCardToCurrentChat,
 		onAddDetailCardToCurrentChat,
 		onAddActivePostDirectoryToCurrentChat,
+		onUpdatePostMeta,
 		phoneFocused = false,
 		focusDisabled = false,
 		onPhoneFocus,
@@ -248,12 +250,14 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 																onBackHome={onBackHome}
 																backLabel={footerLabels.home}
 																onChangeCard={onChangeDetailCard}
+																allowEdit={allowEdit}
 																onAddCardToCurrentChat={
 																	onAddDetailCardToCurrentChat
 																}
 																onPreviewFocus={
 																	handlePhoneFocusFromEvent
 																}
+																onUpdatePostMeta={onUpdatePostMeta}
 																activeCardExternalRefreshVersion={
 																	activeCardExternalRefreshVersion
 																}

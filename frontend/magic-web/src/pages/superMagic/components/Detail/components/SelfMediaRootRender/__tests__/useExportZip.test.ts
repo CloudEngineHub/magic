@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }))
 vi.mock("html-to-image", () => ({
-	toPng: vi.fn(async () => "data:image/png;base64,AAAA"),
+	toBlob: vi.fn(async () => new Blob(["fallback"], { type: "image/png" })),
 }))
 vi.mock("@/utils/log", () => ({
 	logger: {
@@ -50,6 +50,7 @@ vi.mock("jszip", () => ({ default: MockJSZip }))
 
 import { saveAs } from "file-saver"
 import { useExportZip } from "../hooks/useExportZip"
+import type { SelfMediaPost } from "../types"
 
 describe("useExportZip", () => {
 	const originalCreateElement = document.createElement.bind(document)
@@ -91,7 +92,9 @@ describe("useExportZip", () => {
 		})
 		await waitFor(() => expect(result.current.progress.status).toBe("done"))
 		expect(captureMock).toHaveBeenCalledTimes(2)
-		expect(captureMock).toHaveBeenCalledWith(expect.objectContaining({ pixelRatio: 2 }))
+		expect(captureMock).toHaveBeenCalledWith(
+			expect.objectContaining({ pixelRatio: 2, format: "png" }),
+		)
 		expect(saveAs).toHaveBeenCalledTimes(1)
 		expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), "test.zip")
 		const folder = lastZipRef.current?.folders.First
@@ -120,6 +123,28 @@ describe("useExportZip", () => {
 		expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), "My Article.zip")
 		const folder = lastZipRef.current?.folders["My Article"]
 		expect(folder?.files["01_slide-a.png"]).toBeDefined()
+	})
+
+	it("exports card files with the selected WebP extension", async () => {
+		const captureMock = vi.fn(async () => "data:image/webp;base64,FFFF")
+		const { result } = renderHook(() => useExportZip())
+
+		await act(async () => {
+			await result.current.exportZip({
+				posts: [
+					{
+						meta: { id: "p1", title: "First" },
+						cards: [{ path: "cards/slide-a.html" }],
+					} as SelfMediaPost,
+				],
+				format: "webp",
+				getCardRef: () => ({ capture: captureMock, getIframeElement: () => null }),
+			})
+		})
+
+		await waitFor(() => expect(result.current.progress.status).toBe("done"))
+		expect(captureMock).toHaveBeenCalledWith(expect.objectContaining({ format: "webp" }))
+		expect(lastZipRef.current?.folders.First?.files["01_slide-a.webp"]).toBeDefined()
 	})
 
 	it("forwards the requested pixel ratio to the capture call", async () => {
@@ -190,7 +215,7 @@ describe("useExportZip", () => {
 	})
 
 	it("captures cards in order and stitches them into one long image", async () => {
-		const outputBlob = new Blob(["long-image"], { type: "image/png" })
+		const outputBlob = new Blob(["long-image"], { type: "image/jpeg" })
 		const mockContext = {
 			drawImage: vi.fn((image: HTMLImageElement) => {
 				drawnImageSrcs.push(image.src)
@@ -246,6 +271,7 @@ describe("useExportZip", () => {
 				} as any,
 				fileName: "first-long",
 				pixelRatio: 2,
+				format: "jpg",
 				getCardRef: (cardIdx) => cardRefs[cardIdx],
 			})
 		})
@@ -255,10 +281,12 @@ describe("useExportZip", () => {
 		expect(drawnImageSrcs).toEqual(dataUrls)
 		expect(mockCanvas.width).toBe(1080)
 		expect(mockCanvas.height).toBe(4324)
-		expect(mockContext.fillRect).toHaveBeenCalledTimes(2)
-		expect(mockContext.fillRect).toHaveBeenNthCalledWith(1, 0, 1440, 1080, 2)
-		expect(mockContext.fillRect).toHaveBeenNthCalledWith(2, 0, 2882, 1080, 2)
-		expect(saveAs).toHaveBeenCalledWith(outputBlob, "first-long.png")
+		expect(mockContext.fillRect).toHaveBeenCalledTimes(3)
+		expect(mockContext.fillRect).toHaveBeenNthCalledWith(1, 0, 0, 1080, 4324)
+		expect(mockContext.fillRect).toHaveBeenNthCalledWith(2, 0, 1440, 1080, 2)
+		expect(mockContext.fillRect).toHaveBeenNthCalledWith(3, 0, 2882, 1080, 2)
+		expect(mockCanvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/jpeg", 0.92)
+		expect(saveAs).toHaveBeenCalledWith(outputBlob, "first-long.jpg")
 	})
 
 	it("does not save a partial long image when any card is missing", async () => {
@@ -360,6 +388,7 @@ describe("useExportZip", () => {
 					heroCover: { path: "hero.png", fileId: "hero-file" },
 				} as any,
 				pixelRatio: 2,
+				format: "webp",
 			})
 		})
 
@@ -367,6 +396,7 @@ describe("useExportZip", () => {
 		expect(mockCanvas.height).toBe(1080)
 		expect(mockCanvas.width).toBe(3600)
 		expect(mockContext.drawImage).toHaveBeenCalledTimes(2)
-		expect(saveAs).toHaveBeenCalledWith(outputBlob, "公众号封面-wechat-cover.png")
+		expect(mockCanvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/webp", 0.92)
+		expect(saveAs).toHaveBeenCalledWith(outputBlob, "公众号封面-wechat-cover.webp")
 	})
 })

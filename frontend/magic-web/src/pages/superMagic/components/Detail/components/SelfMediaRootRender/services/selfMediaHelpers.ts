@@ -8,6 +8,21 @@ import type {
 } from "../types"
 import type { SelfMediaPlatform } from "../../../types"
 
+const SELF_MEDIA_PLATFORM_SET: ReadonlySet<string> = new Set([
+	"rednote",
+	"instagram",
+	"x",
+	"facebook",
+	"wechat-official-accounts",
+	"tiktok",
+	"wechat-channels",
+])
+
+export function coerceSelfMediaPlatform(value: unknown): SelfMediaPlatform | null {
+	if (typeof value !== "string" || !value) return null
+	return SELF_MEDIA_PLATFORM_SET.has(value) ? (value as SelfMediaPlatform) : null
+}
+
 /** Shape of any attachment tree node consumed by self-media flows */
 export interface AttachmentNode {
 	file_id?: string
@@ -119,7 +134,7 @@ export function fileDirWithSlash(file: AttachmentNode | null): string {
 }
 
 /** Base filename for an attachment; tree APIs may set `name` or `file_name` */
-function attachmentFileBaseName(node: AttachmentNode | undefined | null): string {
+export function attachmentFileBaseName(node: AttachmentNode | undefined | null): string {
 	if (!node) return ""
 	return String(
 		(node as { name?: string }).name ||

@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react"
-import { Archive, AtSign, PencilLine, RotateCcw, Trash2 } from "lucide-react"
+import { Archive, AtSign, PencilLine, RotateCcw, Share2, Trash2 } from "lucide-react"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -42,6 +42,7 @@ interface SelfMediaPostContextMenuProps {
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
 	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSharePost?: (target: SelfMediaPlatformPostItem) => void
 	onSetPostPublishStatus?: (
 		target: SelfMediaPlatformPostItem,
 		publishStatus?: SelfMediaPostPublishStatus,
@@ -56,6 +57,7 @@ function SelfMediaPostContextMenu({
 	onRenamePost,
 	onDeletePost,
 	onMentionPost,
+	onSharePost,
 	onSetPostPublishStatus,
 	t,
 }: SelfMediaPostContextMenuProps) {
@@ -69,7 +71,13 @@ function SelfMediaPostContextMenu({
 	const publishStatus = item.entry.publishStatus || item.post.meta.publishStatus
 	const isArchived = publishStatus === "archived"
 
-	if (!onDeletePost && !onRenamePost && !onMentionPost && !onSetPostPublishStatus) {
+	if (
+		!onDeletePost &&
+		!onRenamePost &&
+		!onMentionPost &&
+		!onSharePost &&
+		!onSetPostPublishStatus
+	) {
 		return children
 	}
 
@@ -148,6 +156,16 @@ function SelfMediaPostContextMenu({
 							{t("detail.selfMedia.home.renamePost")}
 						</ContextMenuItem>
 					) : null}
+					{onSharePost ? (
+						<ContextMenuItem
+							className="cursor-pointer rounded-[14px] px-3 py-2 text-[13px] font-[760] text-[#18181b] transition-colors focus:bg-[#18181b]/[0.06] data-[highlighted]:bg-[#18181b]/[0.06] [&_svg]:text-[#71717a]"
+							onSelect={() => onSharePost(item)}
+							data-testid={`self-media-home-post-share-menu-${item.entry.id}`}
+						>
+							<Share2 className="size-4" aria-hidden="true" />
+							{t("fileViewer.share")}
+						</ContextMenuItem>
+					) : null}
 					{onSetPostPublishStatus ? (
 						<ContextMenuItem
 							className="cursor-pointer rounded-[14px] px-3 py-2 text-[13px] font-[760] text-[#18181b] transition-colors focus:bg-[#18181b]/[0.06] data-[highlighted]:bg-[#18181b]/[0.06] [&_svg]:text-[#71717a]"
@@ -167,7 +185,8 @@ function SelfMediaPostContextMenu({
 							)}
 						</ContextMenuItem>
 					) : null}
-					{(onMentionPost || onRenamePost || onSetPostPublishStatus) && onDeletePost ? (
+					{(onMentionPost || onRenamePost || onSharePost || onSetPostPublishStatus) &&
+					onDeletePost ? (
 						<ContextMenuSeparator className="mx-1 bg-[#18181b]/[0.06]" />
 					) : null}
 					{onDeletePost ? (

@@ -6,24 +6,10 @@ import {
 	findNodeById,
 	folderPathWithSlash,
 	parseSelfMediaSlices,
+	coerceSelfMediaPlatform,
 	type AttachmentNode,
 	type PlatformSlice,
 } from "../services/selfMediaHelpers"
-
-const SELF_MEDIA_PLATFORM_SET: ReadonlySet<string> = new Set([
-	"rednote",
-	"instagram",
-	"x",
-	"facebook",
-	"wechat-official-accounts",
-	"tiktok",
-	"wechat-channels",
-])
-
-function coerceSelfMediaPlatform(value: unknown): SelfMediaPlatform | null {
-	if (typeof value !== "string" || !value) return null
-	return SELF_MEDIA_PLATFORM_SET.has(value) ? (value as SelfMediaPlatform) : null
-}
 
 /** API often mirrors `magic.project.js` on the self-media root `display_config` */
 function readSelfMediaConfigFromDisplayConfig(meta: unknown): SelfMediaConfig | null {
