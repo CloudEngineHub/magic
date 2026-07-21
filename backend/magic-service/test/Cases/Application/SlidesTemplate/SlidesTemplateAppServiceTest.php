@@ -448,7 +448,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $result = $service->create($dataIsolation, $request);
 
         $this->assertSame($capturedTemplate, $result);
-        $this->assertMatchesRegularExpression('/^PPT-[0-9a-f]+-[0-9]+$/', $result->getCode());
+        $this->assertMatchesRegularExpression('/^SLIDE-[0-9a-f]+-[0-9]+$/', $result->getCode());
         $this->assertSame('OFFICIAL_ORG', $result->getOrganizationCode());
         $this->assertSame('user-1', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());

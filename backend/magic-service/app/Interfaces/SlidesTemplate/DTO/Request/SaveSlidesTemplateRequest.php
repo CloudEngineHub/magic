@@ -22,7 +22,7 @@ class SaveSlidesTemplateRequest extends FormRequest
     {
         return [
             'code' => ['nullable', 'string', 'max:64', 'regex:/^(PPT|SLIDE)-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/'],
-            'category_code' => 'nullable|string|max:64|regex:/^PPT-CATE-[a-z0-9]+(-[a-z0-9]+)*$/',
+            'category_code' => 'nullable|string|max:64|regex:/^(PPT|SLIDE)-CATE-[a-z0-9]+(-[a-z0-9]+)*$/',
             'label' => 'required|array',
             'label.zh_CN' => 'required|string|max:100',
             'label.en_US' => 'required|string|max:100',
