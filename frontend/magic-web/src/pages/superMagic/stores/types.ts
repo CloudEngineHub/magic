@@ -158,7 +158,14 @@ export interface StreamState {
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
+	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
+	recoveryAttempts: number
 	finalMessage?: StreamMessage
+}
+
+export interface StreamRecoveryRequestPayload {
+	topicId: string
+	correlationId: string
 }
 
 export interface ToolStreamStepResult {
@@ -216,6 +223,10 @@ export interface TopicMeta {
 	isStreamLoading: boolean
 	/** 当前话题流式运行时定时器 */
 	timer: ReturnType<typeof window.setTimeout> | null
+	/** 当前话题等待流式恢复的 watchdog 定时器 */
+	recoveryTimer: ReturnType<typeof window.setTimeout> | null
+	/** recoveryTimer 当前关联的流式 correlationId */
+	recoveryCorrelationId: string | null
 	/** 当前流式文本数据映射（Record<当前流式卡片关联id - correlationId，当前流式文本内容>） */
 	content: Map<string, StreamState>
 	/** 不可见期间已完成的流式快照（用于切回后回放打字机） */
