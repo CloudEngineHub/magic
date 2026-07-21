@@ -58,6 +58,12 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::get('/model-pricing-templates/queries', [ServiceProviderApi::class, 'queriesProviderModelPricingTemplates']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
+    // 模型视角管理
+    Router::addGroup('/provider-models', static function () {
+        Router::post('/queries', [ServiceProviderApi::class, 'queriesProviderModels']);
+        Router::post('/groups/queries', [ServiceProviderApi::class, 'queriesProviderModelGroups']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
     // AI能力管理
     Router::addGroup('/ai-abilities', static function () {
         Router::get('', [AiAbilityApi::class, 'queries']);

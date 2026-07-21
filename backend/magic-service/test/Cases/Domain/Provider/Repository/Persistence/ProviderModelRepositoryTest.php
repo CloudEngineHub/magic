@@ -9,8 +9,10 @@ namespace HyperfTest\Cases\Domain\Provider\Repository\Persistence;
 
 use App\Domain\Provider\Entity\ValueObject\ModelType;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\Query\ProviderModelQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Repository\Persistence\ProviderModelRepository;
+use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Provider\Assembler\ProviderConfigAssembler;
 use Hyperf\DbConnection\Db;
 use HyperfTest\Support\UsesDatabaseIsolation;
@@ -189,6 +191,104 @@ class ProviderModelRepositoryTest extends TestCase
         $this->assertSame('100200300', $entity->getModelId());
     }
 
+    public function testQueriesSupportsKeywordAndMultiSelectAdminFilters(): void
+    {
+        $openaiProviderId = $this->insertProvider($this->nextId(), Status::Enabled, 'OpenAI');
+        $volcengineProviderId = $this->insertProvider($this->nextId(), Status::Enabled, 'Volcengine');
+        $openaiConfigId = $this->insertProviderConfig($openaiProviderId, Status::Enabled, 20, 'OpenAI');
+        $volcengineConfigId = $this->insertProviderConfig($volcengineProviderId, Status::Enabled, 10, 'Volcengine');
+
+        $targetId = $this->insertProviderModel(
+            $openaiConfigId,
+            'repo-admin-target',
+            Status::Enabled,
+            30,
+            'Target GPT',
+            'llm',
+            ModelType::LLM
+        );
+        $this->insertProviderModel(
+            $volcengineConfigId,
+            'repo-admin-target',
+            Status::Enabled,
+            40,
+            'Target GPT Volcengine',
+            'llm',
+            ModelType::LLM
+        );
+        $this->insertProviderModel(
+            $openaiConfigId,
+            'repo-admin-embedding',
+            Status::Enabled,
+            50,
+            'Target Embedding',
+            'embedding',
+            ModelType::EMBEDDING
+        );
+
+        $query = new ProviderModelQuery();
+        $query->setKeyword('Target');
+        $query->setCategories(['llm']);
+        $query->setModelTypes([ModelType::LLM]);
+        $query->setStatuses([Status::Enabled]);
+        $query->setServiceProviderConfigIds([$openaiConfigId]);
+        $query->setProviderCodes(['OpenAI']);
+
+        $result = $this->repository()->queries($this->providerDataIsolation(), $query, new Page(1, 20));
+
+        $this->assertSame(1, $result['total']);
+        $this->assertCount(1, $result['list']);
+        $this->assertSame($targetId, $result['list'][0]->getId());
+    }
+
+    public function testQueriesInvalidMultiSelectValuesDoNotBroadenFilters(): void
+    {
+        $providerId = $this->insertProvider($this->nextId(), Status::Enabled, 'OpenAI');
+        $configId = $this->insertProviderConfig($providerId, Status::Enabled, 20, 'OpenAI');
+        $this->insertProviderModel($configId, 'repo-invalid-filter', Status::Disabled, 30, 'Invalid Filter Target');
+
+        $query = new ProviderModelQuery();
+        $query->setKeyword('Invalid Filter Target');
+        $query->setStatuses(['abc']);
+
+        $result = $this->repository()->queries($this->providerDataIsolation(), $query, new Page(1, 20));
+
+        $this->assertSame(0, $result['total']);
+        $this->assertSame([], $result['list']);
+    }
+
+    public function testQueriesModelGroupsPaginatesDistinctModelIdsWithMatchedProviderRecords(): void
+    {
+        $openaiProviderId = $this->insertProvider($this->nextId(), Status::Enabled, 'OpenAI');
+        $volcengineProviderId = $this->insertProvider($this->nextId(), Status::Enabled, 'Volcengine');
+        $openaiConfigId = $this->insertProviderConfig($openaiProviderId, Status::Enabled, 20, 'OpenAI');
+        $volcengineConfigId = $this->insertProviderConfig($volcengineProviderId, Status::Enabled, 10, 'Volcengine');
+
+        $firstModelId = $this->insertProviderModel($openaiConfigId, 'repo-group-first', Status::Enabled, 80, 'Group First');
+        $secondModelId = $this->insertProviderModel($openaiConfigId, 'repo-group-second', Status::Enabled, 60, 'Group Second');
+        $this->insertProviderModel($volcengineConfigId, 'repo-group-second', Status::Disabled, 50, 'Group Second Backup');
+
+        $query = new ProviderModelQuery();
+        $query->setKeyword('repo-group');
+        $query->setCategories(['llm']);
+        $query->setStatuses([Status::Enabled, Status::Disabled]);
+        $query->setProviderCodes(['OpenAI', 'Volcengine']);
+
+        $result = $this->repository()->queriesModelGroups($this->providerDataIsolation(), $query, new Page(1, 1));
+
+        $this->assertSame(2, $result['total']);
+        $this->assertCount(1, $result['list']);
+        $this->assertArrayHasKey('repo-group-first', $result['list']);
+        $this->assertSame($firstModelId, $result['list']['repo-group-first'][0]->getId());
+
+        $secondPage = $this->repository()->queriesModelGroups($this->providerDataIsolation(), $query, new Page(2, 1));
+
+        $this->assertSame(2, $secondPage['total']);
+        $this->assertArrayHasKey('repo-group-second', $secondPage['list']);
+        $this->assertCount(2, $secondPage['list']['repo-group-second']);
+        $this->assertSame($secondModelId, $secondPage['list']['repo-group-second'][0]->getId());
+    }
+
     private function repository(): ProviderModelRepository
     {
         return di(ProviderModelRepository::class);
@@ -199,7 +299,7 @@ class ProviderModelRepositoryTest extends TestCase
         return ProviderDataIsolation::create(currentOrganizationCode: $this->organizationCode);
     }
 
-    private function insertProvider(int $id, Status $status): int
+    private function insertProvider(int $id, Status $status, string $providerCode = 'OpenAI'): int
     {
         $this->providerIds[] = $id;
         $now = date('Y-m-d H:i:s');
@@ -207,7 +307,7 @@ class ProviderModelRepositoryTest extends TestCase
         Db::table('service_provider')->insert([
             'id' => $id,
             'name' => 'Provider ' . $id,
-            'provider_code' => 'OPENAI',
+            'provider_code' => $providerCode,
             'description' => 'repository test provider',
             'icon' => '',
             'provider_type' => 0,
@@ -225,7 +325,7 @@ class ProviderModelRepositoryTest extends TestCase
         return $id;
     }
 
-    private function insertProviderConfig(int $providerId, Status $status, int $sort): int
+    private function insertProviderConfig(int $providerId, Status $status, int $sort, string $providerCode = 'OpenAI'): int
     {
         $id = $this->nextId();
         $this->providerConfigIds[] = $id;
@@ -235,7 +335,7 @@ class ProviderModelRepositoryTest extends TestCase
             'id' => $id,
             'service_provider_id' => $providerId,
             'organization_code' => $this->organizationCode,
-            'provider_code' => 'OPENAI',
+            'provider_code' => $providerCode,
             'config' => ProviderConfigAssembler::encodeConfig(['api_key' => 'test'], (string) $id),
             'status' => $status->value,
             'alias' => '',
@@ -249,8 +349,15 @@ class ProviderModelRepositoryTest extends TestCase
         return $id;
     }
 
-    private function insertProviderModel(int $configId, string $modelId, Status $status, int $sort): int
-    {
+    private function insertProviderModel(
+        int $configId,
+        string $modelId,
+        Status $status,
+        int $sort,
+        ?string $name = null,
+        string $category = 'llm',
+        ModelType $modelType = ModelType::LLM
+    ): int {
         $id = $this->nextId();
         $this->providerModelIds[] = $id;
         $now = date('Y-m-d H:i:s');
@@ -258,11 +365,11 @@ class ProviderModelRepositoryTest extends TestCase
         Db::table('service_provider_models')->insert([
             'id' => $id,
             'service_provider_config_id' => $configId,
-            'name' => 'Model ' . $id,
+            'name' => $name ?? 'Model ' . $id,
             'model_version' => 'version-' . $id,
-            'category' => 'llm',
+            'category' => $category,
             'model_id' => $modelId,
-            'model_type' => ModelType::LLM->value,
+            'model_type' => $modelType->value,
             'config' => json_encode(['temperature' => 0.6], JSON_THROW_ON_ERROR),
             'description' => 'repository test model',
             'sort' => $sort,

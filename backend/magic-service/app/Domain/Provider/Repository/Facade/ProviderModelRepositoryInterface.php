@@ -87,6 +87,11 @@ interface ProviderModelRepositoryInterface
     public function queries(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array;
 
     /**
+     * @return array{total: int, list: array<string, ProviderModelEntity[]>}
+     */
+    public function queriesModelGroups(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array;
+
+    /**
      * 根据查询条件获取按模型类型分组的模型ID列表.
      *
      * @param ProviderDataIsolation $dataIsolation 数据隔离对象
