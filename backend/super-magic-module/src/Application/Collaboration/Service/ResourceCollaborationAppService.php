@@ -141,6 +141,8 @@ class ResourceCollaborationAppService extends AbstractKernelAppService
             $code,
             $targets
         );
+        // 只有移除协作者会导致既有 MARKET 雇佣失效，新增和改角色无需全量扫描。
+        $adapter->afterCollaboratorRemoved($permissionDataIsolation, $code);
     }
 
     /**
@@ -362,11 +364,11 @@ class ResourceCollaborationAppService extends AbstractKernelAppService
                 continue;
             }
 
-            if ($existingMember->getRoleValue() !== $memberRole) {
+            if ($existingMember->getRoleValue() !== $memberRole->value) {
                 $roleUpdates[] = [
                     'target_type' => $memberType->value,
                     'target_id' => $operationPermission->getTargetId(),
-                    'role' => $memberRole,
+                    'role' => $memberRole->value,
                 ];
             }
         }

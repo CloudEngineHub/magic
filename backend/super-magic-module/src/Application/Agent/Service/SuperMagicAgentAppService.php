@@ -39,7 +39,6 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentSkillEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
@@ -1349,36 +1348,25 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     public function hireAgent(Authenticatable $authorization, string $agentMarketCode): void
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
-
-        if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentMarketCode) !== null) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.store_agent_already_added');
-        }
-
-        $marketEntity = $this->superMagicAgentMarketDomainService->getPublishedByAgentCode($agentMarketCode);
-        if ($marketEntity === null) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
-        }
-        $marketType = $marketEntity->getMarketType();
-        if ($marketType === null) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
-        }
-        if ($marketType === AgentMarketType::ORGANIZATION) {
-            if ($marketEntity->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode() || $marketEntity->getId() === null) {
-                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
-            }
-            $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $this->createPermissionDataIsolation($dataIsolation),
-                $dataIsolation->getCurrentUserId(),
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                [(string) $marketEntity->getId()]
-            );
-            if (! in_array((string) $marketEntity->getId(), $visibleMarketIds, true)) {
-                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
-            }
-        }
-
         Db::beginTransaction();
         try {
+            $permissionIsolation = $this->createPermissionDataIsolation($dataIsolation);
+            $marketEntity = $this->superMagicAgentMarketDomainService->getPublishedByAgentCodeForUpdate(
+                $permissionIsolation->getCurrentOrganizationCode(),
+                $agentMarketCode
+            );
+            if ($marketEntity === null) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
+            }
+            $this->assertMarketDiscoverableForUser(
+                $permissionIsolation,
+                $marketEntity,
+                $dataIsolation->getCurrentUserId()
+            );
+            if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentMarketCode) !== null) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.store_agent_already_added');
+            }
+
             // 调用 DomainService 处理业务逻辑
             $agentEntity = $this->superMagicAgentDomainService->hireAgent($dataIsolation, $agentMarketCode);
             $this->appendAgentVisibilityUsers($dataIsolation, $agentEntity->getCode(), [$dataIsolation->getCurrentUserId()]);

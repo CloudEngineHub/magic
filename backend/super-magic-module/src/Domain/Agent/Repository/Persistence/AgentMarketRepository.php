@@ -48,6 +48,60 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return new AgentMarketEntity($model->toArray());
     }
 
+    public function findPublishedByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()
+            ->where('agent_code', $agentCode)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->where(static function ($query) use ($organizationCode) {
+                $query->where('market_type', AgentMarketType::MARKET->value)
+                    ->orWhere(static function ($organizationQuery) use ($organizationCode) {
+                        $organizationQuery->where('market_type', AgentMarketType::ORGANIZATION->value)
+                            ->where('organization_code', $organizationCode);
+                    });
+            })
+            ->lockForUpdate()
+            ->first();
+
+        return $model === null ? null : new AgentMarketEntity($model->toArray());
+    }
+
+    public function findPublishedOrganizationByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()
+            ->where('agent_code', $agentCode)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('organization_code', $organizationCode)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->lockForUpdate()
+            ->first();
+
+        return $model === null ? null : new AgentMarketEntity($model->toArray());
+    }
+
+    public function findPublishedOrganizationIdsByAgentCodes(string $organizationCode, array $agentCodes): array
+    {
+        $agentCodes = array_values(array_unique(array_filter(array_map('strval', $agentCodes))));
+        if ($organizationCode === '' || $agentCodes === []) {
+            return [];
+        }
+
+        // 先转成市场 ID，主列表继续只按货架 ID 过滤，避免新增 agent_code OR 条件。
+        return $this->agentMarketModel::query()
+            ->where('organization_code', $organizationCode)
+            ->whereIn('agent_code', $agentCodes)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
     /**
      * 批量根据 agent_code 列表查询市场状态（仅查询已发布的）.
      */

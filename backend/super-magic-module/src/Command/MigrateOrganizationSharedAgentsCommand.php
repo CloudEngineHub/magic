@@ -11,6 +11,7 @@ use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentMarketAppService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
@@ -40,6 +41,7 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
 {
     public function __construct(
         private readonly SuperMagicAgentVersionDomainService $versionDomainService,
+        private readonly SuperMagicAgentMarketAppService $marketAppService,
         private readonly UserAgentDomainService $userAgentDomainService,
         private readonly ResourceVisibilityDomainService $resourceVisibilityDomainService,
     ) {
@@ -101,6 +103,9 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             'shelf_records' => 0,
             'topic_hit_users' => [],
             'candidate_topic_hire_users' => [],
+            'shelf_eligible_topic_users' => [],
+            'collaboration_eligible_topic_users' => [],
+            'out_of_scope_topic_users_list' => [],
             'created_hires' => 0,
             'compensated_hires' => 0,
             'converted_legacy_ownerships' => 0,
@@ -136,6 +141,18 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             $stats['candidate_topic_hire_users'] = array_values(array_unique(array_merge(
                 $stats['candidate_topic_hire_users'],
                 $result['candidate_topic_hire_users']
+            )));
+            $stats['shelf_eligible_topic_users'] = array_values(array_unique(array_merge(
+                $stats['shelf_eligible_topic_users'],
+                $result['shelf_eligible_topic_users']
+            )));
+            $stats['collaboration_eligible_topic_users'] = array_values(array_unique(array_merge(
+                $stats['collaboration_eligible_topic_users'],
+                $result['collaboration_eligible_topic_users']
+            )));
+            $stats['out_of_scope_topic_users_list'] = array_values(array_unique(array_merge(
+                $stats['out_of_scope_topic_users_list'],
+                $result['out_of_scope_topic_users_list']
             )));
         }
 
@@ -199,17 +216,47 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             static fn (UserAgentEntity $ownership): string => $ownership->getUserId(),
             $existingOwnerships
         ), true);
-        $candidateTopicHireUsers = array_values(array_filter(
-            $topicHitUsers,
-            static fn (string $userId): bool => $userId !== $version->getCreator() && ! isset($existingUserIds[$userId])
-        ));
+        $candidateTopicHireUsers = [];
+        $shelfEligibleTopicUsers = [];
+        $collaborationEligibleTopicUsers = [];
+        $outOfScopeTopicUsers = [];
+        $permissionIsolation = PermissionDataIsolation::create($version->getOrganizationCode(), $version->getCreator());
+        $market = $this->marketAppService->getPublishedMarketForMigration($version->getCode());
+        foreach ($topicHitUsers as $userId) {
+            if ($userId === $version->getCreator() || isset($existingUserIds[$userId])) {
+                continue;
+            }
+            // 首次迁移尚未创建市场记录时保持候选展示，真实执行会先建货架再精确复核。
+            if ($market === null || $market->getId() === null) {
+                $candidateTopicHireUsers[] = $userId;
+                continue;
+            }
+
+            $shelfVisible = $this->isMarketShelfVisible($permissionIsolation, $userId, $market->getId());
+            $discoverable = $this->marketAppService->isOrganizationMarketDiscoverable($permissionIsolation, $market, $userId);
+            if (! $discoverable) {
+                $outOfScopeTopicUsers[] = $userId;
+                continue;
+            }
+
+            $candidateTopicHireUsers[] = $userId;
+            if ($shelfVisible) {
+                $shelfEligibleTopicUsers[] = $userId;
+            }
+            if (! $shelfVisible) {
+                $collaborationEligibleTopicUsers[] = $userId;
+            }
+        }
 
         // dry-run 不写货架，成员共享的最终命中情况必须在真实执行时按当前部门成员关系复核。
         return $this->resultForVersion(
             $version,
             $topicHitUsers,
             $candidateTopicHireUsers,
-            preservedCreatorOwnerships: count($creatorOwnerships)
+            preservedCreatorOwnerships: count($creatorOwnerships),
+            shelfEligibleTopicUsers: $shelfEligibleTopicUsers,
+            collaborationEligibleTopicUsers: $collaborationEligibleTopicUsers,
+            outOfScopeTopicUsersList: $outOfScopeTopicUsers,
         );
     }
 
@@ -253,10 +300,14 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
                 continue;
             }
 
-            $isShelfVisible = $this->isMarketShelfVisible($permissionIsolation, $userId, $marketId);
+            $isMarketDiscoverable = $this->marketAppService->isOrganizationMarketDiscoverable(
+                $permissionIsolation,
+                $market,
+                $userId
+            );
 
             if ($ownership->getSourceType() === AgentSourceType::LOCAL_CREATE) {
-                if ($hasTopicUsage && $isShelfVisible) {
+                if ($hasTopicUsage && $isMarketDiscoverable) {
                     $this->saveMarketOwnership($version, $marketId, $userId, $ownership);
                     ++$stats['converted_legacy_ownerships'];
                     continue;
@@ -266,7 +317,7 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
                 if ($this->deleteOwnership($version, $userId)) {
                     ++$stats['deleted_legacy_ownerships'];
                 }
-                if ($hasTopicUsage && ! $isShelfVisible) {
+                if ($hasTopicUsage) {
                     ++$stats['out_of_scope_topic_users'];
                 }
                 continue;
@@ -274,7 +325,7 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
 
             if ($ownership->getSourceType() === AgentSourceType::MARKET) {
                 // 已雇佣用户若已被移出货架，迁移时同步撤权；范围恢复后需重新雇佣。
-                if (! $isShelfVisible) {
+                if (! $isMarketDiscoverable) {
                     if ($this->deleteOwnership($version, $userId)) {
                         ++$stats['deleted_legacy_ownerships'];
                     }
@@ -300,7 +351,7 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
                 continue;
             }
             $candidateTopicHireUsers[] = $userId;
-            if (! $this->isMarketShelfVisible($permissionIsolation, $userId, $marketId)) {
+            if (! $this->marketAppService->isOrganizationMarketDiscoverable($permissionIsolation, $market, $userId)) {
                 ++$stats['out_of_scope_topic_users'];
                 continue;
             }
@@ -310,18 +361,8 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             ++$stats['created_hires'];
         }
 
-        // 员工可见记录仅保留创建者和有效 MARKET 雇佣者，旧组织/部门范围不得继续放大详情权限。
-        $hiredUserIds = array_map(
-            static fn (UserAgentEntity $ownership): string => $ownership->getUserId(),
-            $this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId)
-        );
-        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
-            $permissionIsolation,
-            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
-            $version->getCode(),
-            VisibilityType::SPECIFIC,
-            array_values(array_unique(array_merge([$version->getCreator()], $hiredUserIds)))
-        );
+        // 迁移完成后按同一领域规则收口失效雇佣和员工兼容可见。
+        $this->marketAppService->syncOrganizationMarketHireAccess($permissionIsolation, $market);
 
         return $this->resultForVersion(
             $version,
@@ -438,6 +479,9 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
         int $outOfScopeTopicUsers = 0,
         int $preservedCreatorOwnerships = 0,
         int $skippedConflictingOwnerships = 0,
+        array $shelfEligibleTopicUsers = [],
+        array $collaborationEligibleTopicUsers = [],
+        array $outOfScopeTopicUsersList = [],
     ): array {
         return [
             'version' => [
@@ -449,6 +493,9 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             'shelf_records' => 1,
             'topic_hit_users' => $topicHitUsers,
             'candidate_topic_hire_users' => $candidateTopicHireUsers,
+            'shelf_eligible_topic_users' => $shelfEligibleTopicUsers,
+            'collaboration_eligible_topic_users' => $collaborationEligibleTopicUsers,
+            'out_of_scope_topic_users_list' => $outOfScopeTopicUsersList,
             'created_hires' => $createdHires,
             'compensated_hires' => $compensatedHires,
             'converted_legacy_ownerships' => $convertedLegacyOwnerships,

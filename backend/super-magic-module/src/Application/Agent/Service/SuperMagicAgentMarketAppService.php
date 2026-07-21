@@ -9,7 +9,7 @@ namespace Dtyq\SuperMagic\Application\Agent\Service;
 
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
@@ -18,7 +18,6 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -103,8 +102,13 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         if ($agentVersion === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
         }
+        $this->fillMarketCategoryIds([$agentMarket]);
 
-        $this->assertMarketShelfVisible($dataIsolation, $agentMarket);
+        $this->assertMarketDiscoverableForUser(
+            $this->createPermissionDataIsolation($dataIsolation),
+            $agentMarket,
+            $dataIsolation->getCurrentUserId()
+        );
 
         $this->updateAgentMarketIcon($dataIsolation, $agentMarket);
 
@@ -142,10 +146,9 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
         $query->setMarketType($requestDTO->getMarketType());
 
-        $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
+        $visibleMarketIds = $this->getVisibleOrganizationMarketIds(
             $this->createPermissionDataIsolation($dataIsolation),
-            $dataIsolation->getCurrentUserId(),
-            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET
+            $dataIsolation->getCurrentUserId()
         );
         $query->setVisibleOrganizationShelf(
             $dataIsolation->getCurrentOrganizationCode(),
@@ -158,6 +161,7 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         // Fetch the published market list.
         $result = $this->superMagicAgentMarketDomainService->queries($query, $page);
         $agentMarkets = $result['list'];
+        $this->fillMarketCategoryIds($agentMarkets);
         $total = $result['total'];
 
         if (empty($agentMarkets)) {
@@ -206,6 +210,29 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             'playbooks_map' => $playbooksMap,
             'total' => $total,
         ];
+    }
+
+    /** 供迁移命令复用与在线接口一致的市场发现判断。 */
+    public function isOrganizationMarketDiscoverable(
+        PermissionDataIsolation $permissionIsolation,
+        AgentMarketEntity $market,
+        string $userId
+    ): bool {
+        return $this->isMarketDiscoverableForUser($permissionIsolation, $market, $userId);
+    }
+
+    /** 为历史迁移读取当前市场记录，资格判断仍由本应用服务统一处理。 */
+    public function getPublishedMarketForMigration(string $agentCode): ?AgentMarketEntity
+    {
+        return $this->superMagicAgentMarketDomainService->getPublishedByAgentCode($agentCode);
+    }
+
+    /** 供迁移命令和协作撤权复用同一套雇佣收口规则。 */
+    public function syncOrganizationMarketHireAccess(
+        PermissionDataIsolation $permissionIsolation,
+        AgentMarketEntity $market
+    ): void {
+        $this->syncOrganizationMarketHireAccessForScopeChange($permissionIsolation, $market);
     }
 
     /**
@@ -260,39 +287,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             $icon['value'] = $fileLink->getUrl();
             $marketEntity->setIcon($icon);
         }
-    }
-
-    private function assertMarketShelfVisible(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        AgentMarketEntity $market
-    ): void {
-        if (! $this->isMarketShelfVisible($dataIsolation, $market)) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $market->getAgentCode()]);
-        }
-    }
-
-    private function isMarketShelfVisible(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        AgentMarketEntity $market
-    ): bool {
-        $marketType = $market->getMarketType();
-        if ($marketType === AgentMarketType::MARKET) {
-            return true;
-        }
-        if ($marketType !== AgentMarketType::ORGANIZATION
-            || $market->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode()
-            || $market->getId() === null) {
-            return false;
-        }
-
-        $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-            $this->createPermissionDataIsolation($dataIsolation),
-            $dataIsolation->getCurrentUserId(),
-            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-            [(string) $market->getId()]
-        );
-
-        return in_array((string) $market->getId(), $visibleMarketIds, true);
     }
 
     /**

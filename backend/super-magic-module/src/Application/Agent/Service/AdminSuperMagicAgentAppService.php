@@ -111,6 +111,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $requestDTO->getOrderBy(),
             $page
         );
+        $this->fillMarketCategoryIds($result['list']);
 
         return $this->adminSuperMagicAgentAssembler->createQueryMarketsResponseDTO(
             $result['list'],
@@ -265,7 +266,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $payload['category_id'] = $categoryIds[0] ?? null;
         }
 
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, $payload)) {
+        if (! $this->updateMarketInfo($dataIsolation, $id, $payload)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
 
@@ -393,7 +394,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $dataIsolation->disabled();
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, [
+        if (! $this->updateMarketInfo($dataIsolation, $id, [
             'category_id' => $categoryIds[0] ?? null,
             'category_ids' => $categoryIds,
         ])) {
@@ -434,37 +435,10 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             );
         }
 
-        $revokedUserIds = [];
-        foreach ($this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId) as $ownership) {
-            $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $permissionIsolation,
-                $ownership->getUserId(),
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                [(string) $marketId]
-            );
-            if (! in_array((string) $marketId, $visibleMarketIds, true)) {
-                $revokedUserIds[] = $ownership->getUserId();
-            }
-        }
-
-        $revokedUserIds = array_values(array_unique($revokedUserIds));
-        if ($revokedUserIds !== []) {
-            $this->userAgentDomainService->deleteUserAgentOwnershipsByMarketSourceAndUsers(
-                $dataIsolation,
-                $marketId,
-                $revokedUserIds
-            );
-        }
-
-        $hiredUserIds = array_map(
-            static fn ($ownership): string => $ownership->getUserId(),
-            $this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId)
-        );
-        $this->saveAgentVisibility(
+        // 货架更新后按“货架或协作权限”收口 MARKET 雇佣，避免误删协作者。
+        $this->syncOrganizationMarketHireAccessForScopeChange(
             $permissionIsolation,
-            $versionEntity->getCode(),
-            VisibilityType::SPECIFIC,
-            array_values(array_unique(array_merge([$versionEntity->getCreator()], $hiredUserIds)))
+            $marketEntity
         );
     }
 
