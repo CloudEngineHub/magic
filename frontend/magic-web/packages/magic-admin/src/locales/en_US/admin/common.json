@@ -115,6 +115,7 @@
 		"ai": "AI Management",
 		"aiSubMenu": {
 			"aiControl": "AI Consumption Control",
+			"applicationMenu": "Application Menu",
 			"customModel": "Custom Model",
 			"dataStatistics": "Data Statistics",
 			"employeePublishReview": "Employee Publish Review",
