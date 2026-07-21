@@ -106,7 +106,6 @@ function createManager() {
 	const visibilityManager = {
 		getDecodedImageRetentionSnapshot: vi.fn<() => DecodedImageRetentionHint[]>(() => []),
 		invalidateImageLoadRequest: vi.fn(),
-		isViewportResourceEpochCurrent: vi.fn((epoch: number) => epoch === 1),
 	}
 	const resourceScheduler = {
 		run: vi.fn(
@@ -287,36 +286,9 @@ describe("ImageResourceManager image resources", () => {
 		expect(eventEmitter.emit).not.toHaveBeenCalled()
 	})
 
-	it("drops stale viewport loads before starting resource work", async () => {
+	it("emits not-found failures even when a low load is aborted", async () => {
 		const { manager, eventEmitter } = createManager()
-		const loadImageInternal = (
-			manager as unknown as {
-				loadImageInternal: (
-					path: string,
-					options: {
-						variant: ImageResourceVariant
-						viewportEpoch: number
-						dropIfViewportStale: boolean
-					},
-				) => Promise<unknown>
-			}
-		).loadImageInternal
-
-		const result = await loadImageInternal.call(manager, "./images/stale.png", {
-			variant: "preview",
-			viewportEpoch: 0,
-			dropIfViewportStale: true,
-		})
-
-		expect(result).toBeNull()
-		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
-		expect(eventEmitter.emit).not.toHaveBeenCalled()
-	})
-
-	it("emits not-found failures even when a low viewport load goes stale", async () => {
-		const { manager, eventEmitter, visibilityManager } = createManager()
-		let isCurrent = true
-		visibilityManager.isViewportResourceEpochCurrent.mockImplementation(() => isCurrent)
+		const controller = new AbortController()
 		;(
 			manager as unknown as {
 				loadPersistentDisplayResource: ReturnType<typeof vi.fn>
@@ -332,7 +304,7 @@ describe("ImageResourceManager image resources", () => {
 			) => {
 				;(entry as { lastFailureReason: "not-found" | null }).lastFailureReason =
 					"not-found"
-				isCurrent = false
+				controller.abort()
 				return null
 			},
 		)
@@ -344,16 +316,14 @@ describe("ImageResourceManager image resources", () => {
 					options: {
 						variant: ImageResourceVariant
 						bypassQueue: boolean
-						viewportEpoch: number
-						dropIfViewportStale: boolean
+						signal: AbortSignal
 					},
 				) => Promise<unknown>
 			}
 		).loadImageInternal.call(manager, "./images/missing.png", {
 			variant: "low",
 			bypassQueue: true,
-			viewportEpoch: 1,
-			dropIfViewportStale: true,
+			signal: controller.signal,
 		})
 
 		expect(result).toBeNull()
@@ -366,8 +336,9 @@ describe("ImageResourceManager image resources", () => {
 		})
 	})
 
-	it("drops stale viewport loads after body fetch before decode", async () => {
-		const { manager, visibilityManager } = createManager()
+	it("drops aborted loads after body fetch before decode", async () => {
+		const { manager } = createManager()
+		const controller = new AbortController()
 		const loadImageResource = (
 			manager as unknown as {
 				loadImageResource: (
@@ -377,10 +348,7 @@ describe("ImageResourceManager image resources", () => {
 					variant: ImageResourceVariant,
 					priority: "visible",
 					retryCount: number,
-					options: {
-						viewportEpoch: number
-						dropIfViewportStale: boolean
-					},
+					options: { signal: AbortSignal },
 				) => Promise<unknown>
 				loadImageBody: ReturnType<typeof vi.fn>
 				estimateImageDecodePixelCost: ReturnType<typeof vi.fn>
@@ -389,18 +357,19 @@ describe("ImageResourceManager image resources", () => {
 		const entry = createEntry()
 		manager.entries.set("images/body-stale.png", entry)
 		;(manager as unknown as { loadImageBody: ReturnType<typeof vi.fn> }).loadImageBody = vi.fn(
-			async () => ({
-				blob: new Blob(["body"]),
-				ossSrc: "https://example.test/body-stale.png",
-				cacheKey: "body-stale",
-				byteSize: 4,
-			}),
+			async () => {
+				controller.abort()
+				return {
+					blob: new Blob(["body"]),
+					ossSrc: "https://example.test/body-stale.png",
+					cacheKey: "body-stale",
+					byteSize: 4,
+				}
+			},
 		)
 		;(
 			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
 		).estimateImageDecodePixelCost = vi.fn()
-		visibilityManager.isViewportResourceEpochCurrent.mockReturnValue(false)
-
 		const result = await loadImageResource.call(
 			manager,
 			"images/body-stale.png",
@@ -409,7 +378,7 @@ describe("ImageResourceManager image resources", () => {
 			"preview",
 			"visible",
 			0,
-			{ viewportEpoch: 1, dropIfViewportStale: true },
+			{ signal: controller.signal },
 		)
 
 		expect(result).toBeNull()
@@ -420,12 +389,61 @@ describe("ImageResourceManager image resources", () => {
 		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
 	})
 
-	it("closes decoded image results when the viewport epoch goes stale before commit", async () => {
-		const { manager, visibilityManager } = createManager()
+	it("passes the pipeline signal to the decode pixel budget gate", async () => {
+		const { manager } = createManager()
+		const controller = new AbortController()
+		const release = vi.fn()
+		const acquire = vi
+			.spyOn(manager.decodePixelBudgetGate, "acquire")
+			.mockResolvedValue(release)
+		const entry = createEntry()
+		const loadImageResource = (
+			manager as unknown as {
+				loadImageResource: (
+					path: string,
+					ossSrc: string,
+					entry: ReturnType<typeof createEntry>,
+					variant: ImageResourceVariant,
+					priority: "visible",
+					retryCount: number,
+					options: { signal: AbortSignal },
+				) => Promise<unknown>
+			}
+		).loadImageResource
+		;(manager as unknown as { loadImageBody: ReturnType<typeof vi.fn> }).loadImageBody = vi.fn(
+			async () => ({
+				blob: new Blob(["body"]),
+				ossSrc: "https://example.test/decode-signal.png",
+				cacheKey: "decode-signal",
+				byteSize: 4,
+			}),
+		)
+		;(
+			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
+		).estimateImageDecodePixelCost = vi.fn(async () => 1)
+		;(manager.canvas.resourceScheduler.run as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+		const result = await loadImageResource.call(
+			manager,
+			"images/decode-signal.png",
+			"https://example.test/decode-signal.png",
+			entry,
+			"preview",
+			"visible",
+			0,
+			{ signal: controller.signal },
+		)
+
+		expect(result).toBeNull()
+		expect(acquire).toHaveBeenCalledWith(1, "visible", controller.signal)
+		expect(release).toHaveBeenCalledTimes(1)
+	})
+
+	it("closes decoded image results when the load is aborted before commit", async () => {
+		const { manager } = createManager()
+		const controller = new AbortController()
 		const close = vi.fn()
 		const release = vi.fn()
-		let isCurrent = true
-		visibilityManager.isViewportResourceEpochCurrent.mockImplementation(() => isCurrent)
 		;(
 			manager.canvas as unknown as {
 				resourceScheduler: {
@@ -435,7 +453,7 @@ describe("ImageResourceManager image resources", () => {
 		).resourceScheduler = {
 			run: vi.fn(async (_kind: string, task: (signal: AbortSignal) => Promise<unknown>) => {
 				const result = await task(new AbortController().signal)
-				isCurrent = false
+				controller.abort()
 				return result
 			}),
 		}
@@ -478,10 +496,7 @@ describe("ImageResourceManager image resources", () => {
 					variant: ImageResourceVariant,
 					priority: "visible",
 					retryCount: number,
-					options: {
-						viewportEpoch: number
-						dropIfViewportStale: boolean
-					},
+					options: { signal: AbortSignal },
 				) => Promise<unknown>
 			}
 		).loadImageResource.call(
@@ -492,7 +507,7 @@ describe("ImageResourceManager image resources", () => {
 			"preview",
 			"visible",
 			0,
-			{ viewportEpoch: 1, dropIfViewportStale: true },
+			{ signal: controller.signal },
 		)
 
 		expect(result).toBeNull()
@@ -573,8 +588,8 @@ describe("ImageResourceManager image resources", () => {
 		expect(entry.displaySlots.preview.resource).toBeNull()
 	})
 
-	it("keeps non-viewport loads active even when the viewport epoch would be stale", async () => {
-		const { manager, visibilityManager } = createManager()
+	it("keeps loads without an abort signal active", async () => {
+		const { manager } = createManager()
 		const previewResource = createImageResource("preview")
 		const entry = createEntry({
 			ossSrc: previewResource.ossSrc,
@@ -589,8 +604,6 @@ describe("ImageResourceManager image resources", () => {
 			},
 		})
 		manager.entries.set("images/non-viewport.png", entry)
-		visibilityManager.isViewportResourceEpochCurrent.mockReturnValue(false)
-
 		const result = await (
 			manager as unknown as {
 				loadImageInternal: (

@@ -22,7 +22,7 @@ describe("VideoResourceManager", () => {
 			magicConfigManager: { config: { methods: { getFileInfo: vi.fn() } } },
 		}
 		manager.loadCachedVideoResource = vi.fn().mockResolvedValue(null)
-		manager.shouldDropStaleViewportLoad = vi.fn(() => false)
+		manager.shouldDropAbortedLoad = vi.fn(() => false)
 		manager.clearCachedFallbackOssSrc = vi.fn()
 		manager.ensureFreshOssSrc = ensureFreshOssSrc
 		manager.loadVideoResource = loadVideoResource
@@ -42,6 +42,30 @@ describe("VideoResourceManager", () => {
 			priority: "near",
 		})
 		expect(result).toEqual({ marker: "loaded" })
+	})
+
+	it("drops video loads when their signal is already aborted", async () => {
+		const manager = Object.create(VideoResourceManager.prototype) as Record<string, unknown>
+		const controller = new AbortController()
+		const increment = vi.fn()
+		controller.abort()
+		manager.destroyed = false
+		manager.canvas = {
+			canvasFileUploadManager: { shouldDeferRemoteResourceLoad: vi.fn(() => false) },
+		}
+		manager.diagnostics = { increment }
+
+		const result = await (
+			manager as unknown as {
+				loadVideoInternal: (
+					path: string,
+					options: { signal: AbortSignal },
+				) => Promise<unknown>
+			}
+		).loadVideoInternal("./videos/aborted.mp4", { signal: controller.signal })
+
+		expect(result).toBeNull()
+		expect(increment).toHaveBeenCalledWith("staleRequestDropCount")
 	})
 
 	it("does not reuse an existing poster when cached metadata advances the version", async () => {
@@ -156,7 +180,7 @@ describe("VideoResourceManager", () => {
 		manager.getOrCreateEntry = vi.fn(() => entry)
 		manager.clearExpiredOssSrc = vi.fn()
 		manager.applyVirtualResourceBypass = vi.fn()
-		manager.shouldDropStaleViewportLoad = vi.fn(() => false)
+		manager.shouldDropAbortedLoad = vi.fn(() => false)
 		manager.diagnostics = { increment: vi.fn() }
 		manager.loadVideoResourcePipeline = vi.fn().mockResolvedValue({
 			ossSrc: "https://oss.test/refreshed.mp4",
@@ -215,7 +239,7 @@ describe("VideoResourceManager", () => {
 		manager.managerInstanceId = 1
 		manager.diagnostics = { increment: vi.fn() }
 		manager.markStaleRequestDrop = vi.fn()
-		manager.shouldDropStaleViewportLoad = vi.fn(() => false)
+		manager.shouldDropAbortedLoad = vi.fn(() => false)
 		manager.canvas = {
 			id: "canvas",
 			resourceScheduler: {
@@ -261,7 +285,7 @@ describe("VideoResourceManager", () => {
 		manager.managerInstanceId = 1
 		manager.diagnostics = { increment: vi.fn() }
 		manager.markStaleRequestDrop = vi.fn()
-		manager.shouldDropStaleViewportLoad = vi.fn(() => false)
+		manager.shouldDropAbortedLoad = vi.fn(() => false)
 		manager.setFailureReason = vi.fn((entry, reason) => {
 			;(entry as { lastFailureReason: unknown }).lastFailureReason = reason
 		})

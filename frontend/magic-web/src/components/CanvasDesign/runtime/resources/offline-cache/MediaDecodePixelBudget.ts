@@ -14,6 +14,9 @@ interface DecodePermitQueueItem {
 	priority: MediaDecodePriority
 	sequence: number
 	resolve: (release: () => void) => void
+	reject: (error: Error) => void
+	signal?: AbortSignal
+	abortListener?: () => void
 }
 
 export function getMediaDecodePriorityRank(priority: MediaDecodePriority): number {
@@ -64,21 +67,33 @@ export class MediaDecodePixelBudgetGate {
 		return this.queue.length
 	}
 
-	public acquire(pixelCost: number, priority: MediaDecodePriority): Promise<() => void> {
+	public acquire(
+		pixelCost: number,
+		priority: MediaDecodePriority,
+		signal?: AbortSignal,
+	): Promise<() => void> {
 		if (this.destroyed) return Promise.resolve(() => undefined)
+		if (signal?.aborted) return Promise.reject(createDecodePermitAbortError())
 
 		const normalizedPixelCost = Math.max(1, Math.ceil(pixelCost))
 		if (this.canStart(normalizedPixelCost)) {
 			return Promise.resolve(this.activate(normalizedPixelCost))
 		}
 
-		return new Promise((resolve) => {
-			this.queue.push({
+		return new Promise((resolve, reject) => {
+			const item: DecodePermitQueueItem = {
 				pixelCost: normalizedPixelCost,
 				priority,
 				sequence: ++this.sequence,
 				resolve,
-			})
+				reject,
+				signal,
+			}
+			if (signal) {
+				item.abortListener = () => this.abortQueuedItem(item)
+				signal.addEventListener("abort", item.abortListener, { once: true })
+			}
+			this.queue.push(item)
 			this.pump()
 		})
 	}
@@ -86,7 +101,10 @@ export class MediaDecodePixelBudgetGate {
 	public destroy(): void {
 		if (this.destroyed) return
 		this.destroyed = true
-		this.queue.forEach((item) => item.resolve(() => undefined))
+		this.queue.forEach((item) => {
+			this.detachAbortListener(item)
+			item.resolve(() => undefined)
+		})
 		this.queue = []
 		this.activePixelCostValue = 0
 	}
@@ -124,7 +142,10 @@ export class MediaDecodePixelBudgetGate {
 
 	private pump(): void {
 		if (this.destroyed) {
-			this.queue.forEach((item) => item.resolve(() => undefined))
+			this.queue.forEach((item) => {
+				this.detachAbortListener(item)
+				item.resolve(() => undefined)
+			})
 			this.queue = []
 			return
 		}
@@ -134,7 +155,29 @@ export class MediaDecodePixelBudgetGate {
 			const item = this.queue[0]
 			if (!this.canStart(item.pixelCost)) return
 			this.queue.shift()
+			this.detachAbortListener(item)
 			item.resolve(this.activate(item.pixelCost))
 		}
 	}
+
+	private abortQueuedItem(item: DecodePermitQueueItem): void {
+		const queueIndex = this.queue.indexOf(item)
+		if (queueIndex < 0) return
+		this.queue.splice(queueIndex, 1)
+		this.detachAbortListener(item)
+		item.reject(createDecodePermitAbortError())
+		this.pump()
+	}
+
+	private detachAbortListener(item: DecodePermitQueueItem): void {
+		if (!item.abortListener) return
+		item.signal?.removeEventListener("abort", item.abortListener)
+		item.abortListener = undefined
+	}
+}
+
+function createDecodePermitAbortError(): Error {
+	const error = new Error("Media decode permit aborted")
+	error.name = "AbortError"
+	return error
 }

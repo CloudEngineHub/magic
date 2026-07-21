@@ -160,7 +160,7 @@ type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
 type UpdateImageRetentionHints = (candidates: ImageCandidate[], lastSeenAt: number) => void
 
 describe("CanvasVisibilityManager video load requests", () => {
-	it("binds viewport video requests to the shared path signal without an epoch", () => {
+	it("binds viewport video requests to the shared path signal", () => {
 		const { ensureFreshOssInfo, manager } = createManager()
 		const requestVideoLoad = (manager as unknown as { requestVideoLoad: RequestVideoLoad })
 			.requestVideoLoad
@@ -176,8 +176,6 @@ describe("CanvasVisibilityManager video load requests", () => {
 				signal: expect.any(AbortSignal),
 			}),
 		)
-		expect(ensureFreshOssInfo.mock.calls[0]?.[1]).not.toHaveProperty("viewportEpoch")
-		expect(ensureFreshOssInfo.mock.calls[0]?.[1]).not.toHaveProperty("dropIfViewportStale")
 	})
 
 	it("dedupes repeated near video url prewarm candidates", () => {
@@ -304,8 +302,6 @@ describe("CanvasVisibilityManager image load requests", () => {
 				signal: expect.any(AbortSignal),
 			}),
 		)
-		expect(loadResource.mock.calls[0]?.[1]).not.toHaveProperty("viewportEpoch")
-		expect(loadResource.mock.calls[0]?.[1]).not.toHaveProperty("dropIfViewportStale")
 	})
 
 	it("downgrades full candidates to preview while viewport movement is active", () => {

@@ -45,8 +45,6 @@ export interface ResolvedVideoOssInfo {
 
 export interface VideoResourceLoadOptions {
 	priority?: CanvasResourceTaskPriority
-	viewportEpoch?: number
-	dropIfViewportStale?: boolean
 	signal?: AbortSignal
 }
 
@@ -197,8 +195,6 @@ export class VideoResourceManager {
 			allowCachedFallback?: boolean
 			priority?: CanvasResourceTaskPriority
 			signal?: AbortSignal
-			viewportEpoch?: number
-			dropIfViewportStale?: boolean
 		},
 	): Promise<ResolvedVideoOssInfo | null> {
 		if (this.destroyed) {
@@ -208,11 +204,11 @@ export class VideoResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		const normalizedPath = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedPath)
 		const result = await this.urlLifecycle.ensureFreshOssInfo(path, entry, options)
-		return this.shouldDropStaleViewportLoad(options) ? null : result
+		return this.shouldDropAbortedLoad(options) ? null : result
 	}
 
 	/** 若缓存过期则重新换链，返回当前可用的 ossSrc */
@@ -223,6 +219,7 @@ export class VideoResourceManager {
 			bypassVirtualResource?: boolean
 			allowCachedFallback?: boolean
 			priority?: CanvasResourceTaskPriority
+			signal?: AbortSignal
 		},
 	): Promise<string | null> {
 		return (await this.ensureFreshOssInfo(path, options))?.ossSrc ?? null
@@ -454,23 +451,8 @@ export class VideoResourceManager {
 		return entry
 	}
 
-	private isViewportLoadStale(options?: VideoResourceLoadOptions): boolean {
-		if (options?.signal?.aborted) return true
-		if (!options?.dropIfViewportStale || typeof options.viewportEpoch !== "number") {
-			return false
-		}
-		const visibilityManager = this.canvas.visibilityManager as
-			| { isViewportResourceEpochCurrent?: (epoch: number) => boolean }
-			| undefined
-		const isCurrent = visibilityManager?.isViewportResourceEpochCurrent
-		return (
-			typeof isCurrent === "function" &&
-			!isCurrent.call(visibilityManager, options.viewportEpoch)
-		)
-	}
-
-	private shouldDropStaleViewportLoad(options?: VideoResourceLoadOptions): boolean {
-		if (!this.isViewportLoadStale(options)) return false
+	private shouldDropAbortedLoad(options?: VideoResourceLoadOptions): boolean {
+		if (!options?.signal?.aborted) return false
 		this.markStaleRequestDrop()
 		return true
 	}
@@ -486,7 +468,7 @@ export class VideoResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		const normalizedPath = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedPath)
 		if (this.clearExpiredOssSrc(entry)) {
@@ -554,7 +536,7 @@ export class VideoResourceManager {
 			this.triggerBackgroundMetadataRefresh(path, normalizedPath, entry)
 			return cachedResource
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		this.clearCachedFallbackOssSrc(entry)
 
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
@@ -565,6 +547,7 @@ export class VideoResourceManager {
 
 		const ossSrc = await this.ensureFreshOssSrc(path, {
 			priority: options?.priority,
+			...(options?.signal ? { signal: options.signal } : {}),
 		})
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
@@ -573,7 +556,7 @@ export class VideoResourceManager {
 		if (!ossSrc) {
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 
 		return this.loadVideoResource(path, normalizedPath, ossSrc, entry, 0, options)
 	}
@@ -831,7 +814,7 @@ export class VideoResourceManager {
 			this.markStaleRequestDrop()
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		if (loaded && entry.ossSrc !== ossSrc) {
 			this.releaseResource({ poster: loaded.poster, metadata: loaded.metadata })
 			return null

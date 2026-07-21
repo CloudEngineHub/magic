@@ -50,4 +50,51 @@ describe("MediaDecodePixelBudget", () => {
 		backgroundRelease()
 		expect(gate.activePixelCost).toBe(0)
 	})
+
+	it("removes an aborted queued permit without waiting for capacity", async () => {
+		const gate = new MediaDecodePixelBudgetGate(10)
+		const firstRelease = await gate.acquire(10, "visible")
+		const controller = new AbortController()
+		const queuedPermit = gate.acquire(10, "near", controller.signal)
+
+		expect(gate.queuedCount).toBe(1)
+		const rejected = expect(queuedPermit).rejects.toMatchObject({ name: "AbortError" })
+		controller.abort()
+		await rejected
+
+		expect(gate.queuedCount).toBe(0)
+		firstRelease()
+		expect(gate.activePixelCost).toBe(0)
+	})
+
+	it("does not leave an aborted signal in the queue when it is already aborted", async () => {
+		const gate = new MediaDecodePixelBudgetGate(10)
+		const firstRelease = await gate.acquire(10, "visible")
+		const controller = new AbortController()
+		controller.abort()
+
+		await expect(gate.acquire(10, "near", controller.signal)).rejects.toMatchObject({
+			name: "AbortError",
+		})
+		expect(gate.queuedCount).toBe(0)
+
+		firstRelease()
+		expect(gate.activePixelCost).toBe(0)
+	})
+
+	it("resolves queued permits during destroy and detaches their abort listeners", async () => {
+		const gate = new MediaDecodePixelBudgetGate(10)
+		const firstRelease = await gate.acquire(10, "visible")
+		const controller = new AbortController()
+		const queuedPermit = gate.acquire(10, "near", controller.signal)
+
+		gate.destroy()
+		const queuedRelease = await queuedPermit
+		controller.abort()
+		queuedRelease()
+		firstRelease()
+
+		expect(gate.queuedCount).toBe(0)
+		expect(gate.activePixelCost).toBe(0)
+	})
 })

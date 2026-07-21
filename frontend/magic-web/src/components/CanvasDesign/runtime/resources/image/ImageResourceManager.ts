@@ -111,8 +111,6 @@ export interface ImageResourceLoadOptions {
 	variant?: ImageResourceVariant
 	priority?: ImageResourceLoadPriority
 	bypassQueue?: boolean
-	viewportEpoch?: number
-	dropIfViewportStale?: boolean
 	/** 由视口调度创建；取消后不应继续占用 fetch 队列。 */
 	signal?: AbortSignal
 	/** 可见性调度发起的显示目标元素；仅用于 full 加载完成后定向唤醒该元素 */
@@ -590,23 +588,8 @@ export class ImageResourceManager {
 		this.diagnostics.increment("staleRequestDropCount")
 	}
 
-	private isViewportLoadStale(options?: ImageResourceLoadOptions): boolean {
-		if (options?.signal?.aborted) return true
-		if (!options?.dropIfViewportStale || typeof options.viewportEpoch !== "number") {
-			return false
-		}
-		const visibilityManager = this.canvas.visibilityManager as
-			| {
-					isViewportResourceEpochCurrent?: (epoch: number) => boolean
-			  }
-			| undefined
-		const isCurrent = visibilityManager?.isViewportResourceEpochCurrent
-		if (typeof isCurrent !== "function") return false
-		return !isCurrent.call(visibilityManager, options.viewportEpoch)
-	}
-
-	private shouldDropStaleViewportLoad(options?: ImageResourceLoadOptions): boolean {
-		if (!this.isViewportLoadStale(options)) return false
+	private shouldDropAbortedLoad(options?: ImageResourceLoadOptions): boolean {
+		if (!options?.signal?.aborted) return false
 		this.markStaleRequestDrop()
 		return true
 	}
@@ -815,9 +798,10 @@ export class ImageResourceManager {
 	private acquireImageDecodePermit(
 		pixelCost: number,
 		priority: ImageResourceLoadPriority,
+		signal?: AbortSignal,
 	): Promise<() => void> {
 		if (this.destroyed) return Promise.resolve(() => undefined)
-		return this.decodePixelBudgetGate.acquire(pixelCost, priority)
+		return this.decodePixelBudgetGate.acquire(pixelCost, priority, signal)
 	}
 
 	private upgradeQueuedPreviewLoad(
@@ -2259,7 +2243,7 @@ export class ImageResourceManager {
 			this.markStaleRequestDrop()
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
@@ -2297,7 +2281,7 @@ export class ImageResourceManager {
 			)
 			if (variant === "low") {
 				const persistentDisplayResource = await persistentLowPromise
-				if (this.shouldDropStaleViewportLoad(options)) return null
+				if (this.shouldDropAbortedLoad(options)) return null
 				if (persistentDisplayResource) return persistentDisplayResource
 			} else {
 				// low 是 bootstrap surface，不应阻塞 preview/full 的网络与 body 加载。
@@ -2312,11 +2296,11 @@ export class ImageResourceManager {
 			this.upgradeQueuedPreviewLoad(normalizedSrc, variant, priority)
 			const result = await loadingRequest.consume(options?.signal)
 			if (this.destroyed) return null
-			const isStaleViewportLoad = this.shouldDropStaleViewportLoad(options)
+			const wasAborted = this.shouldDropAbortedLoad(options)
 			if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
 				return null
 			}
-			if (isStaleViewportLoad) return null
+			if (wasAborted) return null
 			if (!result) {
 				if (variant === "preview") {
 					this.emitPreviewLoadFailed(normalizedSrc, entry)
@@ -2372,11 +2356,11 @@ export class ImageResourceManager {
 
 		const result = await request.consume(options?.signal)
 		if (this.destroyed) return null
-		const isStaleViewportLoad = this.shouldDropStaleViewportLoad(options)
+		const wasAborted = this.shouldDropAbortedLoad(options)
 		if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
 			return null
 		}
-		if (isStaleViewportLoad) return null
+		if (wasAborted) return null
 		if (!result) {
 			if (variant === "preview") {
 				this.emitPreviewLoadFailed(normalizedSrc, entry)
@@ -2438,7 +2422,7 @@ export class ImageResourceManager {
 		priority?: ImageResourceLoadPriority,
 		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		if (variant === "low") {
 			return this.loadLowResourcePipeline(path, normalizedSrc, entry, priority, options)
 		}
@@ -2450,7 +2434,7 @@ export class ImageResourceManager {
 			variant,
 		)
 		if (this.destroyed) return null
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		if (cachedResource) {
 			if (shouldRefreshCached) {
 				this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
@@ -2470,7 +2454,7 @@ export class ImageResourceManager {
 		if (!ossSrc) {
 			ossSrc = await this.exchangeOssSrc(path, entry, { priority })
 			if (this.destroyed) return null
-			if (this.shouldDropStaleViewportLoad(options)) return null
+			if (this.shouldDropAbortedLoad(options)) return null
 			if (!ossSrc) {
 				if (variant === "preview") {
 					this.emitPreviewLoadFailed(normalizedSrc, entry)
@@ -2489,7 +2473,7 @@ export class ImageResourceManager {
 		priority?: ImageResourceLoadPriority,
 		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		const cachedBodyOssSrc = this.bodyCache.getCachedOssSrc(entry)
 		if (cachedBodyOssSrc) {
 			return this.loadImageResource(
@@ -2507,7 +2491,7 @@ export class ImageResourceManager {
 		if (!ossSrc) {
 			ossSrc = await this.exchangeOssSrc(path, entry, { priority })
 			if (this.destroyed) return null
-			if (this.shouldDropStaleViewportLoad(options)) return null
+			if (this.shouldDropAbortedLoad(options)) return null
 		}
 		if (!ossSrc) {
 			return null
@@ -3169,7 +3153,7 @@ export class ImageResourceManager {
 		if (this.destroyed) {
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		const cacheKey = this.getBodyCacheKey(path, ossSrc, entry)
 		const resourceGeneration = this.getPersistentLowGeneration(path)
 		if (
@@ -3211,10 +3195,7 @@ export class ImageResourceManager {
 							if (this.destroyed) {
 								return null
 							}
-							if (
-								sharedSignal.aborted ||
-								this.shouldDropStaleViewportLoad(pipelineOptions)
-							) {
+							if (sharedSignal.aborted) {
 								return null
 							}
 							const response = await fetch(ossSrc, {
@@ -3224,10 +3205,7 @@ export class ImageResourceManager {
 							if (this.destroyed) {
 								return null
 							}
-							if (
-								sharedSignal.aborted ||
-								this.shouldDropStaleViewportLoad(pipelineOptions)
-							) {
+							if (sharedSignal.aborted) {
 								return null
 							}
 							if (!response.ok) {
@@ -3278,10 +3256,7 @@ export class ImageResourceManager {
 							if (this.destroyed) {
 								return null
 							}
-							if (
-								sharedSignal.aborted ||
-								this.shouldDropStaleViewportLoad(pipelineOptions)
-							) {
+							if (sharedSignal.aborted) {
 								return null
 							}
 							if (entry.ossSrc !== ossSrc) return null
@@ -3386,7 +3361,7 @@ export class ImageResourceManager {
 		if (this.destroyed) {
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		if (
 			typeof body.resourceGeneration === "number" &&
 			this.getPersistentLowGeneration(path) !== body.resourceGeneration
@@ -3395,17 +3370,18 @@ export class ImageResourceManager {
 		}
 
 		const decodePixelCost = await this.estimateImageDecodePixelCost(body, variant)
-		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (this.shouldDropAbortedLoad(options)) return null
 		const decodePriority = this.getDecodePriorityForVariant(variant, priority)
 		const releaseDecodePermit = await this.acquireImageDecodePermit(
 			decodePixelCost,
 			decodePriority,
+			options?.signal,
 		)
 		if (this.destroyed) {
 			releaseDecodePermit()
 			return null
 		}
-		if (this.shouldDropStaleViewportLoad(options)) {
+		if (this.shouldDropAbortedLoad(options)) {
 			releaseDecodePermit()
 			return null
 		}
@@ -3416,7 +3392,7 @@ export class ImageResourceManager {
 			const result = await this.canvas.resourceScheduler.run(
 				"image:decode",
 				(signal) => {
-					if (signal.aborted || this.shouldDropStaleViewportLoad(options)) {
+					if (signal.aborted || this.shouldDropAbortedLoad(options)) {
 						return Promise.resolve(null)
 					}
 					return this.sendToWorker(
@@ -3446,7 +3422,7 @@ export class ImageResourceManager {
 				if (result?.imageSource) closeImageSource(result.imageSource)
 				return null
 			}
-			if (this.shouldDropStaleViewportLoad(options)) {
+			if (this.shouldDropAbortedLoad(options)) {
 				if (result?.imageSource) closeImageSource(result.imageSource)
 				return null
 			}
@@ -3473,7 +3449,7 @@ export class ImageResourceManager {
 					this.diagnostics.increment("decodeFailedCount")
 					return null
 				}
-				if (this.shouldDropStaleViewportLoad(options)) {
+				if (this.shouldDropAbortedLoad(options)) {
 					closeImageSource(image)
 					return null
 				}
@@ -3487,7 +3463,7 @@ export class ImageResourceManager {
 				if (image) closeImageSource(image)
 				return null
 			}
-			if (this.shouldDropStaleViewportLoad(options)) {
+			if (this.shouldDropAbortedLoad(options)) {
 				if (image) closeImageSource(image)
 				return null
 			}
