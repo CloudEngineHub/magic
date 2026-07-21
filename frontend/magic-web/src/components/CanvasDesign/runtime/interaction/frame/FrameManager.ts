@@ -13,10 +13,349 @@ import { FrameElement as FrameElementClass } from "../../elements/frame/FrameEle
  */
 export class FrameManager {
 	private canvas: Canvas
+	private dragSession: {
+		elementIds: string[]
+		sourceParentId: string | null
+		targetParentId: string | null
+	} | null = null
+	private dragIndicator: Konva.Rect | null = null
+	private readonly dragEventUnsubscribers: Array<() => void> = []
+	private readonly DRAG_EXIT_PADDING_PX = 8
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
 		this.canvas = canvas
+		this.dragEventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:dragstart", ({ data }) => {
+				this.handleFrameDropDragStart(data.elementIds)
+			}),
+			this.canvas.eventEmitter.on("elements:transform:dragmove", () => {
+				this.handleFrameDropDragMove()
+			}),
+			this.canvas.eventEmitter.on("elements:transform:dragend", () => {
+				this.handleFrameDropDragEnd()
+			}),
+			this.canvas.eventEmitter.on("canvas:readonly", () => {
+				if (this.canvas.readonly) this.cancelFrameDropDrag()
+			}),
+		)
+	}
+
+	private handleFrameDropDragStart(elementIds: string[]): void {
+		this.cancelFrameDropDrag()
+		const uniqueElementIds = Array.from(new Set(elementIds))
+		if (uniqueElementIds.length === 0) return
+
+		const candidates = uniqueElementIds.map((elementId) => {
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (
+				!element ||
+				element.type === ElementTypeEnum.Frame ||
+				element.type === ElementTypeEnum.Group ||
+				this.canvas.elementManager.isTemporary(elementId)
+			) {
+				return null
+			}
+
+			const sourceParentId =
+				this.canvas.elementManager.findParentIdForElement(elementId) ?? null
+			const sourceParent = sourceParentId
+				? this.canvas.elementManager.getElementData(sourceParentId)
+				: undefined
+			if (sourceParentId && sourceParent?.type !== ElementTypeEnum.Frame) return null
+			if (
+				!this.canvas.permissionManager.canReparentElement(element, sourceParent, undefined)
+			) {
+				return null
+			}
+
+			const node = this.canvas.elementManager.getNodeAdapter().getNodeForParenting(elementId)
+			if (!node) return null
+			return {
+				elementId,
+				sourceParentId,
+				node,
+				visualZIndex:
+					element.zIndex ??
+					(typeof node.getAbsoluteZIndex === "function" ? node.getAbsoluteZIndex() : 0),
+				positionInContent: this.getPositionInContent(node),
+			}
+		})
+		if (candidates.some((candidate) => candidate === null)) return
+
+		const validCandidates = candidates as Array<NonNullable<(typeof candidates)[number]>>
+		const sourceParentId = validCandidates[0]?.sourceParentId ?? null
+		// 多选换父级以一个共同父级为事务边界。混合根级和画框子元素时继续普通拖动，
+		// 不猜测多个源画框各自对应的根级插入锚点。
+		if (validCandidates.some((candidate) => candidate.sourceParentId !== sourceParentId)) return
+		validCandidates.sort((left, right) => left.visualZIndex - right.visualZIndex)
+
+		// 拖拽期间统一将节点临时提升到 content layer 顶部：
+		// 画框子元素需要脱离原 Group 的 clip，根级元素则需要避免被更高层级的画框背景盖住。
+		// 按原视觉层级从低到高移动，保证多选元素之间的前后顺序不变。
+		validCandidates.forEach((candidate) => {
+			candidate.node.moveTo(this.canvas.contentLayer)
+			candidate.node.moveToTop()
+			candidate.node.position(candidate.positionInContent)
+		})
+		this.canvas.transformManager.rebaseActiveDragNodePositions(
+			validCandidates.map((candidate) => candidate.elementId),
+		)
+
+		this.dragSession = {
+			elementIds: validCandidates.map((candidate) => candidate.elementId),
+			sourceParentId,
+			targetParentId: sourceParentId,
+		}
+	}
+
+	private handleFrameDropDragMove(): void {
+		const session = this.dragSession
+		if (!session) return
+		const stagePoint = this.canvas.stage.getPointerPosition()
+		if (!stagePoint) return
+
+		const contentPoint = this.getContentPoint(stagePoint)
+		const nextTargetParentId = this.resolveDropTarget(contentPoint, session)
+		if (nextTargetParentId === session.targetParentId) return
+
+		session.targetParentId = nextTargetParentId
+		this.updateDragIndicator(nextTargetParentId, session.sourceParentId)
+	}
+
+	private handleFrameDropDragEnd(): void {
+		const session = this.dragSession
+		if (!session) return
+
+		const elements = this.getSessionElementsInContent(session.elementIds)
+		if (elements.length === session.elementIds.length) {
+			const committed = this.canvas.elementManager.reparentElements({
+				targetParentId: session.targetParentId,
+				elements,
+			})
+			// 拖拽期间目标可能被锁定或删除；提交失败时必须整体恢复原层级，
+			// 否则会出现部分节点停在 content layer、文档树仍指向旧画框的状态。
+			if (!committed) {
+				this.canvas.elementManager.reparentElements({
+					targetParentId: session.sourceParentId,
+					elements,
+					silent: true,
+				})
+			}
+		} else if (elements.length > 0) {
+			// 某个元素在拖拽期间被删除时，不提交剩余元素，但仍尽量把存活节点恢复原父级。
+			this.canvas.elementManager.reparentElements({
+				targetParentId: session.sourceParentId,
+				elements,
+				silent: true,
+			})
+		}
+
+		this.clearFrameDropState()
+	}
+
+	private cancelFrameDropDrag(): void {
+		if (!this.dragSession) {
+			this.clearDragIndicator()
+			return
+		}
+
+		// 取消场景优先恢复到原父级，避免节点停留在 content layer 但文档树仍指向旧父级。
+		const elements = this.getSessionElementsInContent(this.dragSession.elementIds)
+		if (elements.length > 0) {
+			this.canvas.elementManager.reparentElements({
+				targetParentId: this.dragSession.sourceParentId,
+				elements,
+				silent: true,
+			})
+		}
+		this.clearFrameDropState()
+	}
+
+	private clearFrameDropState(): void {
+		this.dragSession = null
+		this.clearDragIndicator()
+	}
+
+	private getPositionInContent(node: Konva.Node): { x: number; y: number } {
+		const absoluteOrigin = node.getAbsoluteTransform().point({ x: 0, y: 0 })
+		return this.getContentPoint(absoluteOrigin)
+	}
+
+	private getSessionElementsInContent(elementIds: readonly string[]): Array<{
+		elementId: string
+		positionInContent: { x: number; y: number }
+	}> {
+		return elementIds.flatMap((elementId) => {
+			const node = this.canvas.elementManager.getNodeAdapter().getNodeForParenting(elementId)
+			return node ? [{ elementId, positionInContent: this.getPositionInContent(node) }] : []
+		})
+	}
+
+	private getContentPoint(stagePoint: { x: number; y: number }): { x: number; y: number } {
+		return this.canvas.contentLayer.getAbsoluteTransform().copy().invert().point(stagePoint)
+	}
+
+	private resolveDropTarget(
+		point: { x: number; y: number },
+		session: NonNullable<FrameManager["dragSession"]>,
+	): string | null {
+		const scale = Math.max(0.001, this.canvas.stage.scaleX())
+		const draggedElements = session.elementIds
+			.map((elementId) => this.canvas.elementManager.getElementData(elementId))
+			.filter((element): element is LayerElement => Boolean(element))
+		const sourceParent = session.sourceParentId
+			? this.canvas.elementManager.getElementData(session.sourceParentId)
+			: undefined
+		if (draggedElements.length !== session.elementIds.length) return null
+
+		const candidates = this.canvas.elementManager
+			.getAllElementIds()
+			.map((id) => {
+				const element = this.canvas.elementManager.getElementData(id)
+				if (!element || element.type !== ElementTypeEnum.Frame) return null
+				if (!this.canvas.elementManager.isElementVisibleInDataTree(id)) return null
+				if (
+					!draggedElements.every((draggedElement) =>
+						this.canvas.permissionManager.canReparentElement(
+							draggedElement,
+							sourceParent,
+							element,
+						),
+					)
+				) {
+					return null
+				}
+				const bounds = this.canvas.geometryCacheManager.getElementBounds(id)
+				const node = this.canvas.elementManager.getNodeAdapter().getNodeForParenting(id)
+				if (!bounds || !node || !this.containsPoint(bounds, point)) return null
+				return {
+					id,
+					bounds,
+					zIndex:
+						typeof node.getAbsoluteZIndex === "function"
+							? node.getAbsoluteZIndex()
+							: (element.zIndex ?? 0),
+				}
+			})
+			.filter(
+				(
+					candidate,
+				): candidate is {
+					id: string
+					bounds: { x: number; y: number; width: number; height: number }
+					zIndex: number
+				} => candidate !== null,
+			)
+
+		candidates.sort((left, right) => right.zIndex - left.zIndex)
+		const topCandidate = candidates[0]
+		if (topCandidate) return topCandidate.id
+
+		// 只在指针已离开所有画框时保留当前目标的退出迟滞；
+		// 若指针进入另一个更高画框，顶层命中应立即接管。
+		if (session.targetParentId) {
+			const activeTarget = this.canvas.elementManager.getElementData(session.targetParentId)
+			const activeBounds = this.canvas.geometryCacheManager.getElementBounds(
+				session.targetParentId,
+			)
+			if (
+				activeTarget?.type === ElementTypeEnum.Frame &&
+				this.canvas.elementManager.isElementVisibleInDataTree(session.targetParentId) &&
+				draggedElements.every((draggedElement) =>
+					this.canvas.permissionManager.canReparentElement(
+						draggedElement,
+						sourceParent,
+						activeTarget,
+					),
+				) &&
+				activeBounds &&
+				this.containsPoint(
+					this.expandRect(activeBounds, this.DRAG_EXIT_PADDING_PX / scale),
+					point,
+				)
+			) {
+				return session.targetParentId
+			}
+		}
+		return null
+	}
+
+	private updateDragIndicator(
+		targetParentId: string | null,
+		sourceParentId: string | null,
+	): void {
+		if (!targetParentId || targetParentId === sourceParentId) {
+			this.clearDragIndicator()
+			return
+		}
+		const bounds = this.canvas.geometryCacheManager.getElementBounds(targetParentId)
+		if (!bounds) {
+			this.clearDragIndicator()
+			return
+		}
+
+		if (!this.dragIndicator) {
+			this.dragIndicator = new Konva.Rect({
+				name: "frame-drop-indicator",
+				listening: false,
+				stroke: "#3B82F6",
+				fill: "rgba(59, 130, 246, 0.08)",
+				dash: [6, 4],
+			})
+			this.canvas.overlayLayer.add(this.dragIndicator)
+		}
+
+		const scale = Math.max(0.001, this.canvas.stage.scaleX())
+		this.dragIndicator.setAttrs({
+			x: bounds.x,
+			y: bounds.y,
+			width: bounds.width,
+			height: bounds.height,
+			strokeWidth: 2 / scale,
+		})
+		this.dragIndicator.moveToTop()
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "FrameManager",
+			reason: "frame-drop-indicator",
+			priority: "input",
+		})
+	}
+
+	private clearDragIndicator(requestDraw: boolean = true): void {
+		if (!this.dragIndicator) return
+		this.dragIndicator.destroy()
+		this.dragIndicator = null
+		if (!requestDraw) return
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "FrameManager",
+			reason: "clear-frame-drop-indicator",
+			priority: "input",
+		})
+	}
+
+	private containsPoint(
+		bounds: { x: number; y: number; width: number; height: number },
+		point: { x: number; y: number },
+	): boolean {
+		return (
+			point.x >= bounds.x &&
+			point.x <= bounds.x + bounds.width &&
+			point.y >= bounds.y &&
+			point.y <= bounds.y + bounds.height
+		)
+	}
+
+	private expandRect(
+		bounds: { x: number; y: number; width: number; height: number },
+		padding: number,
+	): { x: number; y: number; width: number; height: number } {
+		return {
+			x: bounds.x - padding,
+			y: bounds.y - padding,
+			width: bounds.width + padding * 2,
+			height: bounds.height + padding * 2,
+		}
 	}
 
 	/**
@@ -425,6 +764,9 @@ export class FrameManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
-		// 清理资源
+		this.dragEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.dragEventUnsubscribers.length = 0
+		this.dragSession = null
+		this.clearDragIndicator(false)
 	}
 }

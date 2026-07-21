@@ -91,6 +91,7 @@ interface TransformManagerPrivate {
 	isTransformInteractionActive: () => boolean
 	handleTransformerDragmove: () => void
 	syncSelectionProxyToElements: (options: { isRealtime: boolean; isScaling: boolean }) => void
+	rebaseActiveDragNodePositions: (elementIds: readonly string[]) => void
 	isTransforming: (elementId: string) => boolean
 	isElementInActiveTransformInteraction: (elementId: string) => boolean
 }
@@ -198,6 +199,36 @@ function createProxySyncManager() {
 }
 
 describe("TransformManager multi-selection proxy sync", () => {
+	it("rebases proxy node coordinates after nodes move to the content layer", () => {
+		const node = {
+			x: vi.fn(() => 105),
+			y: vi.fn(() => 206),
+		}
+		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
+		manager.multiSelectionProxy = {} as TransformManagerPrivate["multiSelectionProxy"]
+		manager.isProxyInteractionActive = true
+		manager.proxyInitialNodeStates = new Map([
+			[
+				"element-1",
+				{
+					node,
+					element: {} as TransformElementStub,
+					x: 5,
+					y: 6,
+					scaleX: 1,
+					scaleY: 1,
+					shouldKeepRatio: false,
+				},
+			],
+		])
+
+		manager.rebaseActiveDragNodePositions(["element-1"])
+
+		expect(manager.proxyInitialNodeStates.get("element-1")).toEqual(
+			expect.objectContaining({ x: 105, y: 206 }),
+		)
+	})
+
 	it("captures node references for the realtime translation fast path", () => {
 		const node = {
 			id: () => "element-1",

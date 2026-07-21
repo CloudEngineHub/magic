@@ -238,6 +238,32 @@ export class PermissionManager {
 	}
 
 	/**
+	 * 判断元素是否可以改变画框归属。
+	 *
+	 * 换父级同时修改源画框和目标画框的 children，因此源/目标画框锁定时
+	 * 都必须拒绝；这与“元素仍在原画框内部移动”是两种不同的操作。
+	 */
+	public canReparentElement(
+		element: LayerElement | undefined,
+		sourceParent: LayerElement | undefined,
+		targetParent: LayerElement | undefined,
+	): boolean {
+		if (!this.canAddToFrame(element)) return false
+		if (element?.type === ElementTypeEnum.Frame || element?.type === ElementTypeEnum.Group) {
+			return false
+		}
+		if (sourceParent) {
+			if (sourceParent.type !== ElementTypeEnum.Frame) return false
+			if (this.isLocked(sourceParent)) return false
+		}
+		if (targetParent) {
+			if (targetParent.type !== ElementTypeEnum.Frame) return false
+			if (this.isLocked(targetParent) || !this.isVisible(targetParent)) return false
+		}
+		return true
+	}
+
+	/**
 	 * 判断画框是否可以被解除
 	 *
 	 * 不可解除的情况：

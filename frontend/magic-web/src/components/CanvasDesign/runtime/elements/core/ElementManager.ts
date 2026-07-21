@@ -53,6 +53,27 @@ export interface ElementManagerDocumentPatch {
 	elementNameChanges?: CanvasElementNameChange[]
 }
 
+export interface ReparentElementOptions {
+	/** 目标父元素；null 表示移动到根级 content layer */
+	targetParentId: string | null
+	/** 元素当前在 content layer 坐标系中的变换原点 */
+	positionInContent: { x: number; y: number }
+	/** 取消拖拽时只恢复内部状态，不对外发出提交事件 */
+	silent?: boolean
+}
+
+export interface ReparentElementsOptions {
+	/** 目标父元素；null 表示移动到根级 content layer */
+	targetParentId: string | null
+	/** 元素在 content layer 坐标系中的最终变换原点 */
+	elements: Array<{
+		elementId: string
+		positionInContent: { x: number; y: number }
+	}>
+	/** 取消拖拽时只恢复内部状态，不对外发出提交事件 */
+	silent?: boolean
+}
+
 /**
  * 元素管理器 - 管理画布上的所有元素实例
  * 职责：
@@ -1240,6 +1261,32 @@ export class ElementManager {
 	}
 
 	/**
+	 * 为根级指定层级腾出一个插入位。
+	 *
+	 * 使用连续整数层级而不是小数，避免多次拖出同一画框后 zIndex
+	 * 不断逼近导致精度和排序问题。返回被顺延的元素 ID，供增量持久化一并提交。
+	 */
+	private makeRoomForTopLevelZIndex(insertionZIndex: number, amount = 1): string[] {
+		if (amount <= 0) return []
+		const shiftedElementIds: string[] = []
+		const elementsToShift = this.getAllElements()
+			.filter((element) => (element.zIndex ?? 0) >= insertionZIndex)
+			.sort((left, right) => (right.zIndex ?? 0) - (left.zIndex ?? 0))
+
+		elementsToShift.forEach((elementData) => {
+			const element = this.elements.get(elementData.id)
+			if (!element) return
+			element.update({
+				...elementData,
+				zIndex: (elementData.zIndex ?? 0) + amount,
+			} as LayerElement)
+			shiftedElementIds.push(elementData.id)
+		})
+
+		return shiftedElementIds
+	}
+
+	/**
 	 * 获取所有元素 ID
 	 */
 	public getAllElementIds(): string[] {
@@ -1275,6 +1322,225 @@ export class ElementManager {
 		}
 
 		return { parentElement: null, siblings: this.getAllElements() }
+	}
+
+	/**
+	 * 原子地改变多个元素的父级。
+	 *
+	 * 调用方在拖拽过程中可以暂时把节点放到 content layer；这里统一负责将
+	 * content 坐标转换为目标父级局部坐标、维护两侧 children、Konva 父节点、
+	 * zIndex 和文档索引。所有元素先完成校验，再开始修改，避免批量操作只成功一半。
+	 */
+	public reparentElements(options: ReparentElementsOptions): boolean {
+		const items = Array.from(
+			new Map(options.elements.map((item) => [item.elementId, item])).values(),
+		)
+		if (items.length === 0) return false
+
+		const targetParentId = options.targetParentId
+		const targetParentElement = targetParentId ? this.elements.get(targetParentId) : undefined
+		const targetParentData = targetParentElement?.getData()
+		if (
+			targetParentId &&
+			(!targetParentElement || targetParentData?.type !== ElementTypeEnum.Frame)
+		) {
+			return false
+		}
+
+		const targetNodeCandidate = targetParentElement?.getNode()
+		if (targetParentId && !(targetNodeCandidate instanceof Konva.Group)) return false
+		const targetNode =
+			targetNodeCandidate instanceof Konva.Group ? targetNodeCandidate : undefined
+		const contentTransform = this.canvas.contentLayer.getAbsoluteTransform()
+		const getChildren = (data: LayerElement | undefined): LayerElement[] =>
+			data && "children" in data && Array.isArray(data.children) ? [...data.children] : []
+
+		const prepared = items.map((item) => {
+			const element = this.elements.get(item.elementId)
+			const node = element?.getNode()
+			if (!element || !node || this.isTemporary(item.elementId)) return null
+
+			const currentData = element.getData()
+			const sourceParentId = this.findParentIdForElement(item.elementId) ?? null
+			const sourceParentElement = sourceParentId
+				? this.elements.get(sourceParentId)
+				: undefined
+			const sourceParentData = sourceParentElement?.getData()
+			if (sourceParentId && sourceParentData?.type !== ElementTypeEnum.Frame) return null
+
+			const isSilentRestore = options.silent && sourceParentId === targetParentId
+			if (
+				!isSilentRestore &&
+				!this.canvas.permissionManager.canReparentElement(
+					currentData,
+					sourceParentData,
+					targetParentData,
+				)
+			) {
+				return null
+			}
+
+			const stagePosition = contentTransform.point(item.positionInContent)
+			const localPosition = targetNode
+				? targetNode.getAbsoluteTransform().copy().invert().point(stagePosition)
+				: item.positionInContent
+
+			return {
+				...item,
+				element,
+				node,
+				currentData,
+				sourceParentId,
+				sourceParentElement,
+				sourceParentData,
+				localPosition,
+				parentChanged: sourceParentId !== targetParentId,
+			}
+		})
+		if (prepared.some((item) => item === null)) return false
+
+		const validItems = prepared as Array<NonNullable<(typeof prepared)[number]>>
+		const parentChangedItems = validItems.filter((item) => item.parentChanged)
+		const sourceParentIds = new Set(
+			parentChangedItems
+				.map((item) => item.sourceParentId)
+				.filter((id): id is string => Boolean(id)),
+		)
+		// 根级插入位置以源画框为锚点；多个不同源画框同时拖出时没有唯一锚点，
+		// 由交互层拒绝这类混合选区，这里也做最后一道原子校验。
+		if (!targetParentId && sourceParentIds.size > 1) return false
+
+		const nextZIndexById = new Map<string, number | undefined>()
+		validItems.forEach((item) => nextZIndexById.set(item.elementId, item.currentData.zIndex))
+		let shiftedElementIds: string[] = []
+		if (parentChangedItems.length > 0) {
+			if (targetParentId) {
+				let nextZIndex = this.getNextZIndexInLevel(targetParentId)
+				parentChangedItems.forEach((item) => {
+					nextZIndexById.set(item.elementId, nextZIndex++)
+				})
+			} else {
+				const sourceFrame = validItems[0]?.sourceParentData
+				if (sourceFrame?.type !== ElementTypeEnum.Frame) return false
+				const insertionZIndex = (sourceFrame.zIndex ?? 0) + 1
+				shiftedElementIds = this.makeRoomForTopLevelZIndex(
+					insertionZIndex,
+					parentChangedItems.length,
+				)
+				parentChangedItems.forEach((item, index) => {
+					nextZIndexById.set(item.elementId, insertionZIndex + index)
+				})
+			}
+		}
+
+		const nextDataById = new Map<string, LayerElement>()
+		validItems.forEach((item) => {
+			const nextZIndex = nextZIndexById.get(item.elementId)
+			nextDataById.set(item.elementId, {
+				...item.currentData,
+				x: item.localPosition.x,
+				y: item.localPosition.y,
+				...(nextZIndex === undefined ? {} : { zIndex: nextZIndex }),
+			} as LayerElement)
+		})
+
+		const sourceParentNextData = new Map<string, LayerElement>()
+		validItems.forEach((item) => {
+			if (!item.parentChanged || !item.sourceParentId || !item.sourceParentData) return
+			const existing = sourceParentNextData.get(item.sourceParentId) ?? item.sourceParentData
+			sourceParentNextData.set(item.sourceParentId, {
+				...existing,
+				children: getChildren(existing).filter((child) => child.id !== item.elementId),
+			} as LayerElement)
+		})
+
+		if (targetParentElement && targetParentData) {
+			const movedIds = new Set(parentChangedItems.map((item) => item.elementId))
+			const targetChildren = getChildren(targetParentData)
+				.filter((child) => !movedIds.has(child.id))
+				.map((child) => nextDataById.get(child.id) ?? child)
+			const nextTargetData = {
+				...targetParentData,
+				children: [
+					...targetChildren,
+					...parentChangedItems.map(
+						(item) => nextDataById.get(item.elementId) as LayerElement,
+					),
+				],
+			} as LayerElement
+			targetParentElement.update(nextTargetData)
+		}
+		sourceParentNextData.forEach((data, parentId) => {
+			if (parentId !== targetParentId) this.elements.get(parentId)?.update(data)
+		})
+
+		// 先把节点挂到目标容器，再更新元素数据；Frame 的 clip 和局部坐标从这一刻保持一致。
+		validItems.forEach((item) => {
+			item.node.remove()
+			if (targetNode) targetNode.add(item.node as Konva.Shape | Konva.Group)
+			else this.canvas.contentLayer.add(item.node as Konva.Shape | Konva.Group)
+			item.node.position(item.localPosition)
+			item.element.update(nextDataById.get(item.elementId) as LayerElement)
+		})
+
+		this.markDocumentIndexDirty()
+		validItems.forEach((item) => {
+			this.invalidateGeometryForElement(item.elementId)
+			if (item.sourceParentId) {
+				this.invalidateGeometryForElement(item.sourceParentId)
+			}
+		})
+		if (targetParentId) {
+			this.invalidateGeometryForElement(targetParentId)
+		}
+
+		validItems.forEach((item) => {
+			if (item.sourceParentElement instanceof FrameElement)
+				item.sourceParentElement.ensureBorderOnTop()
+		})
+		if (targetParentElement instanceof FrameElement) targetParentElement.ensureBorderOnTop()
+		if (targetParentId) this.reorderChildrenInParentPublic(targetParentId)
+		else this.reorderTopLevelElementsPublic()
+		this.canvas.runtimeScheduler.requestLayerDraw("content", {
+			source: "ElementManager",
+			reason: "reparent-elements",
+			priority: "input",
+		})
+
+		if (!options.silent) {
+			validItems.forEach((item) => {
+				this.emitEvent({
+					type: "element:updated",
+					data: {
+						elementId: item.elementId,
+						data: nextDataById.get(item.elementId) as LayerElement,
+						previousData: item.currentData,
+					},
+				})
+			})
+			this.emitElementChange(
+				Array.from(
+					new Set(
+						[
+							...validItems.map((item) => item.elementId),
+							...validItems.map((item) => item.sourceParentId),
+							targetParentId,
+							...shiftedElementIds,
+						].filter((id): id is string => Boolean(id)),
+					),
+				),
+				{ phase: "commit" },
+			)
+		}
+		return true
+	}
+
+	public reparentElement(elementId: string, options: ReparentElementOptions): boolean {
+		return this.reparentElements({
+			targetParentId: options.targetParentId,
+			elements: [{ elementId, positionInContent: options.positionInContent }],
+			silent: options.silent,
+		})
 	}
 
 	/**

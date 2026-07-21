@@ -279,6 +279,22 @@ export class TransformManager {
 		return this.multiSelectionProxy?.dragDistance() ?? 3
 	}
 
+	/**
+	 * 多选拖拽开始后，外部管理器可能为了跨容器显示把节点临时移动到 content layer。
+	 * Proxy 的快路径保存的是节点父级局部坐标，因此必须在换容器后重建坐标基线，
+	 * 否则下一次 dragmove 会把旧画框局部坐标当成 content 坐标，造成选区跳动。
+	 */
+	public rebaseActiveDragNodePositions(elementIds: readonly string[]): void {
+		if (!this.multiSelectionProxy || !this.isProxyInteractionActive) return
+
+		elementIds.forEach((elementId) => {
+			const snapshot = this.proxyInitialNodeStates.get(elementId)
+			if (!snapshot) return
+			snapshot.x = snapshot.node.x()
+			snapshot.y = snapshot.node.y()
+		})
+	}
+
 	public startMultiSelectionProxyDrag(event: MouseEvent | PointerEvent | TouchEvent): boolean {
 		if (
 			this.canvas.readonly ||
