@@ -79,6 +79,11 @@ class ImageGeneratedEvent extends AbstractEvent
      */
     protected ?string $resolution = null;
 
+    /**
+     * 图片尺寸，原始 size 参数，如 1024x1024.
+     */
+    protected ?string $imageSize = null;
+
     protected array $businessParams = [];
 
     public function getProviderModelId(): string
@@ -159,6 +164,16 @@ class ImageGeneratedEvent extends AbstractEvent
     public function setResolution(?string $resolution): void
     {
         $this->resolution = $resolution;
+    }
+
+    public function getImageSize(): ?string
+    {
+        return $this->imageSize;
+    }
+
+    public function setImageSize(?string $imageSize): void
+    {
+        $this->imageSize = $imageSize;
     }
 
     public function getBusinessParams(): array

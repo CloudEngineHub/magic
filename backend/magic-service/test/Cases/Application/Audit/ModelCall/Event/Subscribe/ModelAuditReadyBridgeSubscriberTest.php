@@ -8,14 +8,17 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Audit\ModelCall\Event\Subscribe;
 
 use App\Application\Audit\ModelCall\Event\Subscribe\ModelAuditReadyBridgeSubscriber;
+use App\Application\ModelGateway\Service\LLMAppService;
 use App\Domain\Audit\ModelCall\Entity\AuditLogEntity;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
+use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Domain\Provider\Service\ProviderModelDomainService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * @internal
@@ -48,6 +51,32 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
 
         $this->assertCount(1, $repository->entities);
         $this->assertFalse($repository->entities[0]->getUsage()['has_audio_output']);
+    }
+
+    public function testImageGeneratedEventBuiltFromImageFlowCarriesImageSize(): void
+    {
+        $requestDTO = new TextGenerateImageDTO();
+        $requestDTO->setModel('gpt-image');
+
+        $service = (new ReflectionClass(LLMAppService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(LLMAppService::class, 'buildImageGenerateEntity');
+
+        $event = $method->invokeArgs($service, [
+            'user-1',
+            'org-1',
+            $requestDTO,
+            1,
+            'provider-model',
+            null,
+            '2026-07-21 12:00:00',
+            123,
+            null,
+            null,
+            '1K',
+            '1024x1536',
+        ]);
+
+        $this->assertSame('1024x1536', $event->getImageSize());
     }
 }
 

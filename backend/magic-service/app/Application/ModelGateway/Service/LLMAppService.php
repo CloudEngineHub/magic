@@ -387,6 +387,7 @@ class LLMAppService extends AbstractLLMAppService
             'model_version' => $providerConfigItem->getModelVersion(),
             'provider_model_id' => $providerConfigItem->getProviderModelId(),
             'image_count' => $auditCount,
+            'image_size' => $imageGenerateRequest->getSize(),
             'response_duration' => $latencyMs,
             'operation_time' => (int) round($startTime * 1000),
             'organization_id' => $authorization->getOrganizationCode(),
@@ -418,6 +419,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setSourceType($sourceType);
         $imageGeneratedEvent->setSourceId($data['source_id'] ?? '');
         $imageGeneratedEvent->setResolution($imageGenerateRequest->getResolution());
+        $imageGeneratedEvent->setImageSize($imageGenerateRequest->getSize());
         $imageGeneratedEvent->setProviderModelId($providerConfigItem->getProviderModelId());
         $imageGeneratedEvent->setBusinessParams($imageGenerateAuditBusinessParams);
 
@@ -1163,7 +1165,8 @@ class LLMAppService extends AbstractLLMAppService
                         'chain' => 'textGenerateImage',
                     ],
                     null,
-                    $imageGenerateRequest->getResolution()
+                    $imageGenerateRequest->getResolution(),
+                    $imageGenerateRequest->getSize()
                 );
 
                 return $generateImageRaw;
@@ -1257,6 +1260,7 @@ class LLMAppService extends AbstractLLMAppService
         // 计算字符串格式的比例，如 "1:1", "3:4"
         $imageGenerateRequest->setWidth($width);
         $imageGenerateRequest->setHeight($height);
+        $imageGenerateRequest->setSize($size);
 
         // 记录调用时间
         $callTime = date('Y-m-d H:i:s');
@@ -1289,7 +1293,8 @@ class LLMAppService extends AbstractLLMAppService
                         'chain' => 'imageEdit',
                     ],
                     null,
-                    $imageGenerateRequest->getResolution()
+                    $imageGenerateRequest->getResolution(),
+                    $imageGenerateRequest->getSize()
                 );
 
                 return $generateImageRaw;
@@ -1864,7 +1869,8 @@ class LLMAppService extends AbstractLLMAppService
                 $modelGatewayDataIsolation->getAccessToken(),
                 ['chain' => 'textGenerateImageV2'],
                 $this->resolveImageTokenUsage($generateImageOpenAIFormat->getUsage()),
-                $imageGenerateRequest->getResolution()
+                $imageGenerateRequest->getResolution(),
+                $imageGenerateRequest->getSize()
             );
         } catch (Exception $e) {
             $errorMessage = $e->getMessage();
@@ -1889,7 +1895,8 @@ class LLMAppService extends AbstractLLMAppService
                     'failure_reason' => $errorMessage,
                 ],
                 null,
-                $imageGenerateRequest->getResolution()
+                $imageGenerateRequest->getResolution(),
+                $imageGenerateRequest->getSize()
             );
         }
 
@@ -2455,7 +2462,8 @@ class LLMAppService extends AbstractLLMAppService
         ?AccessTokenEntity $accessTokenEntity = null,
         array $auditBusinessParams = [],
         ?Usage $usage = null,
-        ?string $resolution = null
+        ?string $resolution = null,
+        ?string $imageSize = null
     ): void {
         // 计算响应时间（毫秒）
         $responseTime = (int) ((microtime(true) - $startTime) * 1000);
@@ -2478,7 +2486,8 @@ class LLMAppService extends AbstractLLMAppService
             $responseTime,
             $accessTokenEntity,
             $usage,
-            $resolution
+            $resolution,
+            $imageSize
         );
         $businessParams = array_merge(
             $requestDTO->getBusinessParams(),
@@ -2486,6 +2495,7 @@ class LLMAppService extends AbstractLLMAppService
                 'model_id' => $requestDTO->getModel(),
                 'provider_model_id' => $providerModelId,
                 'image_count' => $imageCount,
+                'image_size' => $imageSize,
                 'response_duration' => $responseTime,
                 'operation_time' => (int) round($startTime * 1000),
                 'original_model_id' => $requestDTO->getOriginalModelId(),
@@ -2527,7 +2537,8 @@ class LLMAppService extends AbstractLLMAppService
         ?int $responseTime = null,
         ?AccessTokenEntity $accessTokenEntity = null,
         ?Usage $usage = null,
-        ?string $resolution = null
+        ?string $resolution = null,
+        ?string $imageSize = null
     ): ImageGeneratedEvent {
         $imageGeneratedEvent = new ImageGeneratedEvent();
 
@@ -2552,6 +2563,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setCallTime($callTime);
         $imageGeneratedEvent->setResponseTime($responseTime);
         $imageGeneratedEvent->setResolution($resolution);
+        $imageGeneratedEvent->setImageSize($imageSize);
         // 设置原始 model_id（目前用于识别是否动态模型），用于计费服务
         $imageGeneratedEvent->setOriginalModelId($requestDTO->getOriginalModelId());
         $imageGeneratedEvent->setUsage($usage);
