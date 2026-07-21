@@ -19,6 +19,7 @@ import {
 
 interface EmployeeCardProps {
 	employee: StoreAgentView
+	actionPending?: boolean
 	onHire?: (id: string) => void
 	onDismiss?: (id: string) => void
 	onDetails?: (id: string) => void
@@ -28,6 +29,7 @@ interface EmployeeCardProps {
 
 function EmployeeCard({
 	employee,
+	actionPending = false,
 	onHire,
 	onDismiss,
 	onDetails,
@@ -164,9 +166,10 @@ function EmployeeCard({
 												stopCardClick(e)
 												onDismiss?.(employee.id)
 											}}
-											disabled={isEmployeeMarketPrimaryActionDisabled(
-												employee,
-											)}
+											disabled={
+												actionPending ||
+												isEmployeeMarketPrimaryActionDisabled(employee)
+											}
 											data-testid="employee-card-dismiss-button"
 										>
 											<SmartTooltip
@@ -213,9 +216,10 @@ function EmployeeCard({
 												stopCardClick(e)
 												onHire?.(employee.id)
 											}}
-											disabled={isEmployeeMarketPrimaryActionDisabled(
-												employee,
-											)}
+											disabled={
+												actionPending ||
+												isEmployeeMarketPrimaryActionDisabled(employee)
+											}
 											data-testid="employee-card-hire-button"
 										>
 											<SmartTooltip

@@ -48,7 +48,7 @@ describe("MyCrewFilterSheet", () => {
 		expect(onChange).toHaveBeenCalledWith(MY_CREW_MOBILE_FILTER_DEFAULT)
 	})
 
-	it("only switches the classification value without carrying sort state", () => {
+	it("switches to the market classification without changing sort state", () => {
 		const onChange = vi.fn()
 
 		render(
@@ -60,12 +60,12 @@ describe("MyCrewFilterSheet", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("my-crew-filter-type-team-shared"))
+		fireEvent.click(screen.getByTestId("my-crew-filter-type-from-market"))
 
-		expect(onChange).toHaveBeenCalledWith({ type: "teamShared", sort: "updated_at" })
+		expect(onChange).toHaveBeenCalledWith({ type: "fromMarket", sort: "updated_at" })
 	})
 
-	it("always renders team shared type option", () => {
+	it("does not render the removed team shared type option", () => {
 		render(
 			<MyCrewFilterSheet
 				open
@@ -75,7 +75,9 @@ describe("MyCrewFilterSheet", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("my-crew-filter-type-team-shared")).toBeInTheDocument()
+		expect(screen.getByTestId("my-crew-filter-type-created")).toBeInTheDocument()
+		expect(screen.getByTestId("my-crew-filter-type-from-market")).toBeInTheDocument()
+		expect(screen.queryByTestId("my-crew-filter-type-team-shared")).not.toBeInTheDocument()
 	})
 
 	it("renders sort section before type section", () => {

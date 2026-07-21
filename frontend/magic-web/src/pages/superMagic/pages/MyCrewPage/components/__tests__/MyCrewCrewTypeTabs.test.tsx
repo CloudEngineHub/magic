@@ -9,22 +9,28 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("MyCrewCrewTypeTabs", () => {
-	it("renders the team shared tab when enabled", () => {
+	it("renders only created and hired tabs", () => {
 		const onChange = vi.fn()
 
-		render(<MyCrewCrewTypeTabs value="created" onChange={onChange} includeTeamShared />)
+		render(<MyCrewCrewTypeTabs value="created" onChange={onChange} />)
 
-		const teamSharedTab = screen.getByTestId("my-crew-tab-team-shared")
-		expect(teamSharedTab).toHaveTextContent("myCrewPage.crewType.teamShared")
+		expect(screen.getByTestId("my-crew-tab-created")).toHaveTextContent(
+			"myCrewPage.crewType.createdByMe",
+		)
+		expect(screen.getByTestId("my-crew-tab-hired")).toHaveTextContent(
+			"myCrewPage.crewType.hiredByMe",
+		)
+		expect(screen.queryByTestId("my-crew-tab-team-shared")).not.toBeInTheDocument()
 
-		fireEvent.click(teamSharedTab)
+		fireEvent.click(screen.getByTestId("my-crew-tab-hired"))
 
-		expect(onChange).toHaveBeenCalledWith("team-shared")
+		expect(onChange).toHaveBeenCalledWith("hired")
 	})
 
-	it("does not render the team shared tab by default", () => {
-		render(<MyCrewCrewTypeTabs value="created" onChange={vi.fn()} />)
+	it("marks the selected tab", () => {
+		render(<MyCrewCrewTypeTabs value="hired" onChange={vi.fn()} />)
 
-		expect(screen.queryByTestId("my-crew-tab-team-shared")).not.toBeInTheDocument()
+		expect(screen.getByTestId("my-crew-tab-created")).toHaveAttribute("aria-selected", "false")
+		expect(screen.getByTestId("my-crew-tab-hired")).toHaveAttribute("aria-selected", "true")
 	})
 })

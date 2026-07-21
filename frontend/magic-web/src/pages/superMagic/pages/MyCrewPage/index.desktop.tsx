@@ -52,8 +52,7 @@ function MyCrewPage() {
 	const [isCreating, setIsCreating] = useState(false)
 	const [isSortingDialogOpen, setIsSortingDialogOpen] = useState(false)
 	const [selectedAgent, setSelectedAgent] = useState<MyCrewView | null>(null)
-	const { crewTypeTab, setCrewTypeTab, includeTeamShared, isCreatedTab, isTeamSharedTab } =
-		useMyCrewTabs({ includeTeamShared: true })
+	const { crewTypeTab, setCrewTypeTab, isCreatedTab } = useMyCrewTabs()
 	const { isAllowed: canCreateAgent } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.AgentCreate,
 	)
@@ -326,7 +325,6 @@ function MyCrewPage() {
 						<MyCrewCrewTypeTabs
 							value={crewTypeTab}
 							onChange={setCrewTypeTab}
-							includeTeamShared={includeTeamShared}
 							className="max-w-md sm:max-w-lg"
 						/>
 
@@ -398,23 +396,10 @@ function MyCrewPage() {
 												key={employee.id}
 												employee={employee}
 												href={getCrewEditHref(employee.agentCode)}
-												onEdit={
-													isTeamSharedTab ? handleEdit : handleOpenDetails
-												}
+												onEdit={handleOpenDetails}
 												onConversation={handleOpenConversation}
-												onDelete={
-													isTeamSharedTab
-														? handleDeleteCreatedCrew
-														: undefined
-												}
 												onDismiss={handleDismissHiredCrew}
 												onDisable={handleDisableHiredCrew}
-												onPublishToStore={
-													isTeamSharedTab
-														? handleOpenPublishPanel
-														: undefined
-												}
-												isTeamSharedCard={isTeamSharedTab}
 											/>
 										),
 									)}

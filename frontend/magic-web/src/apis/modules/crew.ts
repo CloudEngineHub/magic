@@ -139,7 +139,12 @@ export interface GetStoreAgentsParams {
 	keyword?: string
 	/** Filter by category ID; omit for all */
 	category_id?: string
+	/** Filter by market source; omit to include both public and organization markets. */
+	market_type?: StoreAgentMarketType
 }
+
+/** Market source for store agents. */
+export type StoreAgentMarketType = "MARKET" | "ORGANIZATION"
 
 /** Single store agent item */
 export interface StoreAgentItem {
@@ -159,6 +164,8 @@ export interface StoreAgentItem {
 	playbooks?: CrewPlayBookBaseData[]
 	publisher_type: CrewPublisherType
 	publisher?: CrewPublisher | null
+	/** Market source returned by the store-agent query. */
+	market_type: StoreAgentMarketType
 	category_id: string | null
 	/** Whether the current user has added this agent */
 	is_added: boolean
@@ -619,12 +626,12 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Get store agents list (marketplace).
-	 * POST with body: page, page_size, keyword, category_id.
+	 * POST with body: page, page_size, keyword, category_id, market_type.
 	 * Results include is_added and allow_delete flags for each agent.
 	 * @param params Request body
 	 */
 	getStoreAgents(params: GetStoreAgentsParams = {}) {
-		const { page = 1, page_size = 20, keyword, category_id } = params
+		const { page = 1, page_size = 20, keyword, category_id, market_type } = params
 		return fetch.post<GetStoreAgentsResponse>(
 			genRequestUrl("/api/v2/super-magic/agent-market/queries"),
 			{
@@ -632,6 +639,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 				page_size,
 				keyword,
 				category_id,
+				...(market_type ? { market_type } : {}),
 			},
 		)
 	},

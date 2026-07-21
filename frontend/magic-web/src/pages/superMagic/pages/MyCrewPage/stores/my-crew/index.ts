@@ -11,7 +11,7 @@ import {
 } from "@/pages/superMagic/utils/paged-list-store"
 
 const DEFAULT_PAGE_SIZE = 20
-export type MyCrewListVariant = "created" | "team-shared" | "hired"
+export type MyCrewListVariant = "created" | "hired"
 
 export class MyCrewStore {
 	list: MyCrewView[] = []
@@ -37,15 +37,8 @@ export class MyCrewStore {
 	}
 
 	private resolveListServiceMethod(listVariant: MyCrewListVariant) {
-		switch (listVariant) {
-			case "created":
-				return crewService.getCreatedAgents.bind(crewService)
-			case "team-shared":
-				return crewService.getTeamSharedAgents.bind(crewService)
-			case "hired":
-			default:
-				return crewService.getHiredAgents.bind(crewService)
-		}
+		if (listVariant === "created") return crewService.getCreatedAgents.bind(crewService)
+		return crewService.getHiredAgents.bind(crewService)
 	}
 
 	async fetchAgents(params: GetAgentsParams & { listVariant?: MyCrewListVariant } = {}) {

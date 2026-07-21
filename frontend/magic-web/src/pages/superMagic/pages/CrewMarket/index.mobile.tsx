@@ -18,6 +18,7 @@ import {
 } from "@/pages/superMagic/utils/superMagicCache"
 import { isOfficialBuiltinPublisherType } from "./employee-market/components/employee-card-shared"
 import CategoryFilterMobile from "./components/CategoryFilterMobile"
+import { resolveActiveMarketFilterId, resolveMarketFilterParams } from "./components/market-filter"
 import EmployeeCardMobile from "./employee-market/components/EmployeeCardMobile"
 import { StoreCrewStore } from "./employee-market/stores/store-crew"
 import { crewService, type StoreAgentView } from "@/services/crew/CrewService"
@@ -133,17 +134,18 @@ function CrewMarketMobilePanelBase() {
 		[handleOpenConversation, store],
 	)
 
-	const activeCategoryId = store.categoryId ?? "all"
+	const activeFilterId = resolveActiveMarketFilterId(store.marketType, store.categoryId)
 
 	const handleCategoryChange = useCallback(
-		(categoryId: string) => {
-			if (categoryId === activeCategoryId) return
-			store.fetchAgents({
-				category_id: categoryId === "all" ? undefined : categoryId,
+		(filterId: string) => {
+			if (filterId === activeFilterId) return
+			setSelectedAgent(null)
+			void store.fetchAgents({
+				...resolveMarketFilterParams(filterId),
 				page: 1,
 			})
 		},
-		[activeCategoryId, store],
+		[activeFilterId, store],
 	)
 
 	return (
@@ -177,6 +179,7 @@ function CrewMarketMobilePanelBase() {
 								: {
 										label: t("hire"),
 										testId: "crew-market-mobile-detail-hire-button",
+										disabled: store.isAgentActionPending(selectedAgent.id),
 										onClick: () => handleHire(selectedAgent.id),
 									}
 				}
@@ -187,6 +190,7 @@ function CrewMarketMobilePanelBase() {
 								label: t("dismiss"),
 								icon: <Trash2 className="h-4 w-4" />,
 								testId: "crew-market-mobile-detail-dismiss-button",
+								disabled: store.isAgentActionPending(selectedAgent.id),
 								onClick: () => handleDismiss(selectedAgent),
 							}
 						: undefined
@@ -240,16 +244,13 @@ function CrewMarketMobilePanelBase() {
 					<div className="size-11 shrink-0" aria-hidden />
 				</header>
 
-				{/* Hide filter when API returns no categories (only synthetic "all" would remain). */}
-				{store.shouldShowCategoryFilter ? (
-					<div className="shrink-0 px-3" data-testid="crew-market-mobile-filter">
-						<CategoryFilterMobile
-							categories={store.categories}
-							activeCategoryId={activeCategoryId}
-							onCategoryChange={handleCategoryChange}
-						/>
-					</div>
-				) : null}
+				<div className="shrink-0 px-3" data-testid="crew-market-mobile-filter">
+					<CategoryFilterMobile
+						categories={store.categories}
+						activeCategoryId={activeFilterId}
+						onCategoryChange={handleCategoryChange}
+					/>
+				</div>
 
 				<ScrollEdgeFadeContainer
 					fadeColor="mobile-background"
@@ -258,7 +259,8 @@ function CrewMarketMobilePanelBase() {
 						store.list.length,
 						store.showInitialSkeleton,
 						store.isEmpty,
-						activeCategoryId,
+						activeFilterId,
+						store.marketType,
 					]}
 				>
 					<MagicPullToRefresh
@@ -290,6 +292,7 @@ function CrewMarketMobilePanelBase() {
 										<EmployeeCardMobile
 											key={employee.id}
 											employee={employee}
+											actionPending={store.isAgentActionPending(employee.id)}
 											onHire={handleHire}
 											onDetails={handleDetails}
 											onOpenMarketDetail={handleOpenMarketDetail}

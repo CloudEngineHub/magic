@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { crewService } from "@/services/crew/CrewService"
-import type { GetStoreAgentsParams } from "@/apis/modules/crew"
+import type { GetStoreAgentsParams, StoreAgentMarketType } from "@/apis/modules/crew"
 import type { StoreAgentView, CategoryView } from "@/services/crew/CrewService"
 import {
 	appendUniqueById,
@@ -19,8 +19,11 @@ export class StoreCrewStore {
 	pageSize = DEFAULT_PAGE_SIZE
 	keyword = ""
 	categoryId: string | undefined = undefined
+	/** The market source currently displayed; undefined means the combined view. */
+	marketType: StoreAgentMarketType | undefined = undefined
 	loading = false
 	loadingMore = false
+	pendingActionIds = new Set<string>()
 	/** True after the first page-1 fetch completes; avoids clearing list on search/category refresh. */
 	hasLoadedOnce = false
 	private fetchRequestId = 0
@@ -46,9 +49,8 @@ export class StoreCrewStore {
 		return this.loading && this.list.length === 0 && !this.hasLoadedOnce
 	}
 
-	/** True when the market has real category tabs beyond the synthetic "all" option. */
-	get shouldShowCategoryFilter(): boolean {
-		return this.categories.length > 0
+	isAgentActionPending(id: string): boolean {
+		return this.pendingActionIds.has(id)
 	}
 
 	async fetchCategories() {
@@ -72,7 +74,11 @@ export class StoreCrewStore {
 		const page = params.page ?? 1
 		const pageSize = params.page_size ?? this.pageSize
 		const keyword = resolveKeywordParam(params, this.keyword)
-		const categoryId = "category_id" in params ? params.category_id : this.categoryId
+		const marketType = "market_type" in params ? params.market_type : this.marketType
+		const requestedCategoryId = "category_id" in params ? params.category_id : this.categoryId
+		// Organization-published agents do not carry public-market categories.
+		const categoryId = marketType === "MARKET" ? requestedCategoryId : undefined
+		const marketTypeChanged = marketType !== this.marketType
 		const requestId = beginPageRequest({
 			page,
 			loading: this.loading,
@@ -84,14 +90,18 @@ export class StoreCrewStore {
 		this.loading = true
 
 		if (page === 1) {
-			// Only clear on cold start; keep rows visible during search/category/pull-to-refresh.
-			if (!this.hasLoadedOnce) {
+			// A market tab switch must not briefly show rows from the previous source.
+			// Search/category refreshes retain rows so the page does not jump while loading.
+			if (!this.hasLoadedOnce || marketTypeChanged) {
 				this.list = []
+				this.total = 0
 			}
+			if (marketTypeChanged) this.hasLoadedOnce = false
 			this.page = 1
 			// Align loadMore with in-flight filters before response returns
 			this.keyword = keyword
 			this.categoryId = categoryId
+			this.marketType = marketType
 			this.loadingMore = false
 		}
 
@@ -101,6 +111,7 @@ export class StoreCrewStore {
 				page_size: pageSize,
 				keyword: toOptionalKeyword(keyword),
 				category_id: categoryId,
+				market_type: marketType,
 			})
 			if (!isLatestPageRequest({ requestId, currentRequestId: this.fetchRequestId })) return
 			runInAction(() => {
@@ -110,6 +121,7 @@ export class StoreCrewStore {
 				this.pageSize = data.pageSize
 				this.keyword = keyword
 				this.categoryId = categoryId
+				this.marketType = marketType
 				this.loading = false
 				this.hasLoadedOnce = true
 			})
@@ -134,6 +146,7 @@ export class StoreCrewStore {
 				page_size: this.pageSize,
 				keyword: toOptionalKeyword(this.keyword),
 				category_id: this.categoryId,
+				market_type: this.marketType,
 			})
 			if (!isLatestPageRequest({ requestId, currentRequestId: this.fetchRequestId })) return
 			runInAction(() => {
@@ -153,26 +166,43 @@ export class StoreCrewStore {
 
 	async hireAgent(id: string) {
 		const target = this.list.find((item) => item.id === id)
-		if (!target || target.allowDelete || target.isAdded) return
+		if (!target || target.allowDelete || target.isAdded || this.pendingActionIds.has(id)) return
 
-		await crewService.hireAgent(target.agentCode)
-		runInAction(() => {
-			this.list = this.list.map((item) =>
-				item.id === id ? { ...item, isAdded: true, allowDelete: true } : item,
-			)
-		})
+		this.pendingActionIds.add(id)
+		try {
+			await crewService.hireAgent(target.agentCode)
+			runInAction(() => {
+				const currentTarget = this.list.find((item) => item.id === id)
+				if (!currentTarget) return
+				// Mutate the existing object so an open detail view observes the new state.
+				currentTarget.isAdded = true
+				currentTarget.allowDelete = true
+			})
+		} finally {
+			runInAction(() => {
+				this.pendingActionIds.delete(id)
+			})
+		}
 	}
 
 	async dismissAgent(id: string) {
 		const target = this.list.find((item) => item.id === id)
-		if (!target || !target.allowDelete) return
+		if (!target || !target.allowDelete || this.pendingActionIds.has(id)) return
 
-		await crewService.deleteAgent(target.userCode ?? target.agentCode)
-		runInAction(() => {
-			this.list = this.list.map((item) =>
-				item.id === id ? { ...item, isAdded: false, allowDelete: false } : item,
-			)
-		})
+		this.pendingActionIds.add(id)
+		try {
+			await crewService.deleteAgent(target.userCode ?? target.agentCode)
+			runInAction(() => {
+				const currentTarget = this.list.find((item) => item.id === id)
+				if (!currentTarget) return
+				currentTarget.isAdded = false
+				currentTarget.allowDelete = false
+			})
+		} finally {
+			runInAction(() => {
+				this.pendingActionIds.delete(id)
+			})
+		}
 	}
 
 	/** Refetch categories + agents after locale change (server i18n fields). */
@@ -187,6 +217,7 @@ export class StoreCrewStore {
 			page: 1,
 			keyword: toOptionalKeyword(this.keyword),
 			category_id: this.categoryId,
+			market_type: this.marketType,
 		})
 	}
 
@@ -197,8 +228,10 @@ export class StoreCrewStore {
 		this.pageSize = DEFAULT_PAGE_SIZE
 		this.keyword = ""
 		this.categoryId = undefined
+		this.marketType = undefined
 		this.loading = false
 		this.loadingMore = false
+		this.pendingActionIds.clear()
 		this.hasLoadedOnce = false
 		this.fetchRequestId = 0
 	}

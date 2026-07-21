@@ -21,6 +21,10 @@ import {
 } from "@/pages/superMagic/utils/superMagicCache"
 import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
 import {
+	resolveActiveMarketFilterId,
+	resolveMarketFilterParams,
+} from "@/pages/superMagic/pages/CrewMarket/components/market-filter"
+import {
 	canShowEmployeeMarketDetailPrimaryAction,
 	resolveEmployeeMarketDetailPrimaryActionLabel,
 } from "./components/employee-card-shared"
@@ -175,17 +179,18 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 		[handleOpenConversation, store],
 	)
 
-	const activeCategoryId = store.categoryId ?? "all"
+	const activeFilterId = resolveActiveMarketFilterId(store.marketType, store.categoryId)
 
 	const handleCategoryChange = useCallback(
-		(categoryId: string) => {
-			if (categoryId === activeCategoryId) return
-			store.fetchAgents({
-				category_id: categoryId === "all" ? undefined : categoryId,
+		(filterId: string) => {
+			if (filterId === activeFilterId) return
+			setSelectedAgent(null)
+			void store.fetchAgents({
+				...resolveMarketFilterParams(filterId),
 				page: 1,
 			})
 		},
-		[activeCategoryId, store],
+		[activeFilterId, store],
 	)
 
 	const handleSearch = useCallback(() => {
@@ -211,9 +216,12 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 				primaryAction={
 					selectedAgent && canShowEmployeeMarketDetailPrimaryAction(selectedAgent)
 						? {
-								label: resolveEmployeeMarketDetailPrimaryActionLabel(selectedAgent, t),
+								label: resolveEmployeeMarketDetailPrimaryActionLabel(
+									selectedAgent,
+									t,
+								),
 								variant: selectedAgent.allowDelete ? "destructive" : "default",
-								disabled: false,
+								disabled: store.isAgentActionPending(selectedAgent.id),
 								testId: "crew-market-detail-action-button",
 								onClick: () =>
 									selectedAgent.allowDelete
@@ -275,7 +283,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 
 				<CategoryFilter
 					categories={store.categories}
-					activeCategoryId={activeCategoryId}
+					activeCategoryId={activeFilterId}
 					onCategoryChange={handleCategoryChange}
 				/>
 
@@ -308,6 +316,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 							<EmployeeCard
 								key={employee.id}
 								employee={employee}
+								actionPending={store.isAgentActionPending(employee.id)}
 								onHire={handleHire}
 								onDismiss={handleDismiss}
 								onDetails={handleDetails}

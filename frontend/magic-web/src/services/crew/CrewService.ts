@@ -28,6 +28,7 @@ import {
 	type UpdatePlaybookParams,
 	type StoreCategoryItem,
 	type StoreAgentItem,
+	type StoreAgentMarketType,
 	type StoreAgentMarketDetailResponse,
 	type AgentItem,
 	type UnifiedAgentItem,
@@ -63,6 +64,7 @@ export interface StoreAgentView {
 	playbooks: CrewPlaybookView[]
 	publisherType: string
 	publisherName: string | null
+	marketType: StoreAgentMarketType
 	categoryId: string | null
 	isAdded: boolean
 	allowDelete: boolean
@@ -397,6 +399,7 @@ export class CrewService {
 			})),
 			publisherType: item.publisher_type,
 			publisherName: item.publisher?.name?.trim() || null,
+			marketType: item.market_type,
 			categoryId: item.category_id,
 			isAdded: item.is_added,
 			allowDelete: item.allow_delete,

@@ -533,6 +533,7 @@
 	"subtitle": "发现并雇用你的专属数字员工。",
 	"tabs": {
 		"crewMarket": "员工市场",
+		"organizationShared": "组织共享",
 		"skillsLibrary": "技能库"
 	},
 	"title": "数字员工市场",
