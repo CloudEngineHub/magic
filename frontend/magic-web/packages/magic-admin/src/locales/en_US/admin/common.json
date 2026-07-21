@@ -76,6 +76,14 @@
 	},
 	"confirmClose": "Confirm Close",
 	"detail": "Detail",
+	"file": {
+		"imageLoadFailed": "Image loading failed",
+		"imageSizeTooLarge": "Image cannot exceed {{size}}",
+		"imageSizeTooSmall": "Image size cannot be less than {{width}}x{{height}}",
+		"maxSize": "Single file limit is {{maxSize}}MB",
+		"onlySupportUploadImage": "Only png/jpg/jpeg/svg/gif/webp images are supported",
+		"uploadFail": "File upload failed, please try again"
+	},
 	"filter": "Filter",
 	"invalidPhone": "Invalid phone number",
 	"lang": {
