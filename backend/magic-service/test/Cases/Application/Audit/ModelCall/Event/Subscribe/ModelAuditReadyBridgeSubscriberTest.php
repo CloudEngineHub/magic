@@ -13,6 +13,7 @@ use App\Domain\Audit\ModelCall\Entity\AuditLogEntity;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
+use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Domain\Provider\Service\ProviderModelDomainService;
 use PHPUnit\Framework\TestCase;
@@ -57,6 +58,7 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
     {
         $requestDTO = new TextGenerateImageDTO();
         $requestDTO->setModel('gpt-image');
+        $requestDTO->setImages(['image-1.png', 'image-2.png']);
 
         $service = (new ReflectionClass(LLMAppService::class))->newInstanceWithoutConstructor();
         $method = new ReflectionMethod(LLMAppService::class, 'buildImageGenerateEntity');
@@ -77,6 +79,38 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         ]);
 
         $this->assertSame('1024x1536', $event->getImageSize());
+        $this->assertTrue(method_exists($event, 'getReferenceImageCount'));
+        $this->assertSame(2, $event->getReferenceImageCount());
+    }
+
+    public function testImageGeneratedUsageIncludesReferenceImageCount(): void
+    {
+        $repository = new RecordingAuditLogRepository();
+        $subscriber = new ModelAuditReadyBridgeSubscriber(
+            new ModelCallAuditDomainService($repository),
+            (new ReflectionClass(ProviderModelDomainService::class))->newInstanceWithoutConstructor(),
+            new NullLogger(),
+        );
+        $event = new ImageGeneratedEvent();
+        $event->setOrganizationCode('org-1');
+        $event->setUserId('user-1');
+        $event->setModel('gpt-image');
+        $event->setProviderModelId('provider-model');
+        $event->setImageCount(1);
+        $event->setBusinessParams([
+            'event_id' => '10002',
+            'model_id' => 'gpt-image',
+            'provider_model_id' => 'provider-model',
+            'request_id' => 'request-1',
+            'status' => 'SUCCESS',
+            'image_count' => 1,
+            'reference_image_count' => 2,
+        ]);
+
+        $subscriber->process($event);
+
+        $this->assertCount(1, $repository->entities);
+        $this->assertSame(2, $repository->entities[0]->getUsage()['reference_image_count']);
     }
 }
 

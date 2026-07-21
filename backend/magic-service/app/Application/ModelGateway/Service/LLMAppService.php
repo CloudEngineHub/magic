@@ -21,7 +21,6 @@ use App\Domain\ModelGateway\Entity\AccessTokenEntity;
 use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
 use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
 use App\Domain\ModelGateway\Entity\Dto\EmbeddingsDTO;
-use App\Domain\ModelGateway\Entity\Dto\ImageEditDTO;
 use App\Domain\ModelGateway\Entity\Dto\ImageSearchRequestDTO;
 use App\Domain\ModelGateway\Entity\Dto\ProxyModelRequestInterface;
 use App\Domain\ModelGateway\Entity\Dto\SearchRequestDTO;
@@ -40,7 +39,6 @@ use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
-use App\ErrorCode\ImageGenerateErrorCode;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -1069,270 +1067,6 @@ class LLMAppService extends AbstractLLMAppService
                 throwable: $e
             );
         }
-    }
-
-    public function textGenerateImage(TextGenerateImageDTO $textGenerateImageDTO): array
-    {
-        $accessTokenEntity = $this->validateAccessToken($textGenerateImageDTO);
-
-        $dataIsolation = LLMDataIsolation::create()->disabled();
-
-        $contextData = $this->parseBusinessContext($dataIsolation, $accessTokenEntity, $textGenerateImageDTO);
-        $organizationCode = $contextData['organization_code'];
-        $creator = $contextData['user_id'];
-
-        $modelId = $textGenerateImageDTO->getModel();
-
-        $modelGatewayDataIsolation = $this->createModelGatewayDataIsolationByAccessToken($textGenerateImageDTO->getAccessToken(), $textGenerateImageDTO->getBusinessParams());
-        $imageModelEntry = $this->modelGatewayMapper->getOrganizationImageModel($modelGatewayDataIsolation, $modelId);
-        $imageModel = $imageModelEntry?->getImageModel();
-
-        if (empty($imageModel)) {
-            ExceptionBuilder::throw(ServiceProviderErrorCode::ModelNotFound);
-        }
-
-        $imageGenerateType = ImageGenerateModelType::fromProviderCode($imageModel->getProviderCode(), $imageModel->getModelVersion());
-
-        $imageGenerateParamsVO = new AIImageGenerateParamsVO();
-        $imageGenerateParamsVO->setModel($imageModel->getModelVersion());
-        $imageGenerateParamsVO->setUserPrompt($textGenerateImageDTO->getPrompt());
-        $imageGenerateParamsVO->setGenerateNum($textGenerateImageDTO->getN());
-        $imageGenerateParamsVO->setImageGenerationConfig($textGenerateImageDTO->getImageGenerationConfig());
-
-        $size = $textGenerateImageDTO->getSize();
-        [$width, $height] = explode('x', $size);
-
-        // 计算字符串格式的比例，如 "1:1", "3:4"
-        $ratio = $this->calculateRatio((int) $width, (int) $height);
-        $imageGenerateParamsVO->setRatio($ratio);
-        $imageGenerateParamsVO->setWidth($width);
-        $imageGenerateParamsVO->setHeight($height);
-
-        $data = $imageGenerateParamsVO->toArray();
-        $data['organization_code'] = $organizationCode;
-
-        $imageGenerateRequest = ImageGenerateFactory::createRequestType($imageGenerateType, $imageModel->getModelVersion(), $modelId, $data);
-
-        $imageGenerateRequest->setWatermarkConfig($textGenerateImageDTO->getWatermark());
-
-        $implicitWatermark = new ImplicitWatermark();
-        $implicitWatermark->setOrganizationCode($organizationCode)
-            ->setUserId($creator)
-            ->setTopicId($textGenerateImageDTO->getTopicId());
-
-        $imageGenerateRequest->setImplicitWatermark($implicitWatermark);
-        $imageGenerateRequest->setValidityPeriod(1);
-
-        $errorMessage = '';
-        // 记录调用时间
-        $callTime = date('Y-m-d H:i:s');
-        $startTime = microtime(true);
-
-        $imageGenerateService = ImageGenerateFactory::create($imageGenerateType, $imageModel->getConfig());
-        try {
-            $imageGenerateRequest->setModel($imageModel->getModelVersion());
-            $generateImageRaw = $imageGenerateService->generateImageRawWithWatermark($imageGenerateRequest);
-            if (! empty($generateImageRaw)) {
-                $this->recordImageGenerateMessageLog($imageModel->getModelVersion(), $creator, $organizationCode);
-                $n = $textGenerateImageDTO->getN();
-                // 除了 mj 是 1 次之外，其他都按张数算
-                if (in_array($imageModel->getModelVersion(), ImageGenerateModelType::getMidjourneyModes())) {
-                    $n = 1;
-                }
-
-                $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
-                $auditCount = $textGenerateImageDTO->getN();
-                if (in_array($imageModel->getModelVersion(), ImageGenerateModelType::getMidjourneyModes(), true)) {
-                    $auditCount = 1;
-                }
-
-                // 派发模型调用完成（成功）
-                $this->dispatchImageGeneratedEvent(
-                    $creator,
-                    $organizationCode,
-                    $textGenerateImageDTO,
-                    $n,
-                    $imageModel->getProviderModelId(),
-                    $callTime,
-                    $startTime,
-                    $accessTokenEntity,
-                    [
-                        'model_version' => $imageModel->getModelVersion(),
-                        'provider_name' => $imageModelEntry?->getAttributes()->getProviderName(),
-                        'app_id' => $modelGatewayDataIsolation->getAppId(),
-                        'user_name' => $modelGatewayDataIsolation->getUserName(),
-                        'access_token_type' => $accessTokenEntity->getType()->value,
-                        'chain' => 'textGenerateImage',
-                    ],
-                    null,
-                    $imageGenerateRequest->getResolution(),
-                    $imageGenerateRequest->getSize()
-                );
-
-                return $generateImageRaw;
-            }
-        } catch (Exception $e) {
-            $errorMessage = $e->getMessage();
-            $this->logger->warning('text generate image error:' . $e->getMessage());
-        }
-
-        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
-
-        $imageGenerateFailedEvent = new ImageGenerateFailedEvent();
-        $imageGenerateFailedEvent->setOrganizationCode($organizationCode);
-        $imageGenerateFailedEvent->setUserId($creator);
-        $imageGenerateFailedEvent->setModel($modelId);
-        $imageGenerateFailedEvent->setProviderModelId($imageModel->getProviderModelId());
-        $imageGenerateFailedEvent->setBusinessParams([
-            'chain' => 'textGenerateImage',
-            'model_version' => $imageModel->getModelVersion(),
-            'provider_name' => $imageModelEntry?->getAttributes()->getProviderName(),
-            'original_model_id' => $modelId,
-            'status' => self::AUDIT_STATUS_FAIL,
-            'response_duration' => $latencyMs,
-            'operation_time' => (int) round($startTime * 1000),
-            'user_name' => $modelGatewayDataIsolation->getUserName(),
-            'app_id' => $modelGatewayDataIsolation->getAppId(),
-            'source_id' => $textGenerateImageDTO->getSourceId(),
-            'request_id' => CoContext::getRequestId(),
-            'ak' => $accessTokenEntity->getAccessToken(),
-            'access_token_type' => $accessTokenEntity->getType()->value,
-            'event_id' => (string) IdGenerator::getSnowId(),
-            'failure_reason' => $errorMessage,
-        ]);
-
-        AsyncEventUtil::dispatch($imageGenerateFailedEvent);
-
-        // 派发模型调用完成（失败）
-        ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, $errorMessage);
-    }
-
-    /**
-     * Image editing with uploaded files using volcano image generation models.
-     */
-    public function imageEdit(ImageEditDTO $imageEditDTO): array
-    {
-        $accessTokenEntity = $this->validateAccessToken($imageEditDTO);
-
-        $dataIsolation = LLMDataIsolation::create()->disabled();
-
-        $contextData = $this->parseBusinessContext($dataIsolation, $accessTokenEntity, $imageEditDTO);
-        $organizationCode = $contextData['organization_code'];
-        $creator = $contextData['user_id'];
-
-        $modelId = $imageEditDTO->getModel();
-
-        $modelGatewayDataIsolation = $this->createModelGatewayDataIsolationByAccessToken($imageEditDTO->getAccessToken(), $imageEditDTO->getBusinessParams());
-        $imageModelEntry = $this->modelGatewayMapper->getOrganizationImageModel($modelGatewayDataIsolation, $modelId);
-        $imageModel = $imageModelEntry?->getImageModel();
-
-        if (empty($imageModel)) {
-            ExceptionBuilder::throw(ServiceProviderErrorCode::ModelNotFound);
-        }
-
-        $imageGenerateType = ImageGenerateModelType::fromProviderCode($imageModel->getProviderCode(), $imageModel->getModelVersion());
-
-        $imageGenerateParamsVO = new AIImageGenerateParamsVO();
-        $imageGenerateParamsVO->setModel($imageModel->getModelVersion());
-        $imageGenerateParamsVO->setUserPrompt($imageEditDTO->getPrompt());
-        $imageGenerateParamsVO->setReferenceImages($imageEditDTO->getImages());
-        $data = $imageGenerateParamsVO->toArray();
-        $data['organization_code'] = $organizationCode;
-
-        $imageGenerateRequest = ImageGenerateFactory::createRequestType($imageGenerateType, $imageModel->getModelVersion(), $modelId, $data);
-
-        // 添加水印
-        $watermark = di(WatermarkPolicyInterface::class)->apply($accessTokenEntity);
-        $imageGenerateRequest->setWatermarkConfig($watermark);
-
-        $imageGenerateRequest->setGenerateNum(1); // 图生图默认只能 1
-        $implicitWatermark = new ImplicitWatermark();
-        $imageGenerateRequest->setGenerateNum(1); // 图生图默认只能 1
-        $implicitWatermark->setOrganizationCode($organizationCode)
-            ->setUserId($creator)
-            ->setTopicId($imageEditDTO->getTopicId());
-
-        $imageGenerateRequest->setImplicitWatermark($implicitWatermark);
-        $size = $imageEditDTO->getSize();
-
-        [$width, $height] = explode('x', $size);
-
-        // 计算字符串格式的比例，如 "1:1", "3:4"
-        $imageGenerateRequest->setWidth($width);
-        $imageGenerateRequest->setHeight($height);
-        $imageGenerateRequest->setSize($size);
-
-        // 记录调用时间
-        $callTime = date('Y-m-d H:i:s');
-        $startTime = microtime(true);
-        $imageGenerateService = ImageGenerateFactory::create($imageGenerateType, $imageModel->getConfig());
-        $imageEditFailureMessage = '';
-        try {
-            $imageGenerateRequest->setModel($imageModel->getModelVersion());
-            $generateImageRaw = $imageGenerateService->generateImageRawWithWatermark($imageGenerateRequest);
-            if (! empty($generateImageRaw)) {
-                $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
-
-                // 派发模型调用完成（成功）
-                // 统一触发事件（图生图默认 1 张）
-                $this->dispatchImageGeneratedEvent(
-                    $creator,
-                    $organizationCode,
-                    $imageEditDTO,
-                    1,
-                    $imageModel->getProviderModelId(),
-                    $callTime,
-                    $startTime,
-                    $accessTokenEntity,
-                    [
-                        'model_version' => $imageModel->getModelVersion(),
-                        'provider_name' => $imageModelEntry?->getAttributes()->getProviderName(),
-                        'app_id' => $modelGatewayDataIsolation->getAppId(),
-                        'user_name' => $modelGatewayDataIsolation->getUserName(),
-                        'access_token_type' => $accessTokenEntity->getType()->value,
-                        'chain' => 'imageEdit',
-                    ],
-                    null,
-                    $imageGenerateRequest->getResolution(),
-                    $imageGenerateRequest->getSize()
-                );
-
-                return $generateImageRaw;
-            }
-        } catch (Exception $e) {
-            $imageEditFailureMessage = $e->getMessage();
-            $this->logger->warning('text generate image error:' . $e->getMessage());
-        }
-
-        $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
-
-        $imageGenerateFailedEvent = new ImageGenerateFailedEvent();
-        $imageGenerateFailedEvent->setOrganizationCode($organizationCode);
-        $imageGenerateFailedEvent->setUserId($creator);
-        $imageGenerateFailedEvent->setModel($modelId);
-        $imageGenerateFailedEvent->setProviderModelId($imageModel->getProviderModelId());
-        $imageGenerateFailedEvent->setBusinessParams([
-            'chain' => 'imageEdit',
-            'model_version' => $imageModel->getModelVersion(),
-            'provider_name' => $imageModelEntry?->getAttributes()->getProviderName(),
-            'original_model_id' => $modelId,
-            'status' => self::AUDIT_STATUS_FAIL,
-            'response_duration' => $latencyMs,
-            'operation_time' => (int) round($startTime * 1000),
-            'user_name' => $modelGatewayDataIsolation->getUserName(),
-            'app_id' => $modelGatewayDataIsolation->getAppId(),
-            'source_id' => $imageEditDTO->getSourceId(),
-            'request_id' => CoContext::getRequestId(),
-            'ak' => $accessTokenEntity->getAccessToken(),
-            'access_token_type' => $accessTokenEntity->getType()->value,
-            'event_id' => (string) IdGenerator::getSnowId(),
-            'failure_reason' => $imageEditFailureMessage,
-        ]);
-
-        AsyncEventUtil::dispatch($imageGenerateFailedEvent);
-
-        // 派发模型调用完成（失败）
-        ExceptionBuilder::throw(ImageGenerateErrorCode::NOT_FOUND_ERROR_CODE);
     }
 
     /**
@@ -2473,6 +2207,7 @@ class LLMAppService extends AbstractLLMAppService
 
         // 获取价格配置版本ID
         $priceId = $this->getPriceIdByServiceProviderModelId($serviceProviderModelsId, $organizationCode);
+        $referenceImageCount = $requestDTO instanceof TextGenerateImageDTO ? count($requestDTO->getImages()) : 0;
 
         // 构建并发布事件
         $event = $this->buildImageGenerateEntity(
@@ -2487,7 +2222,8 @@ class LLMAppService extends AbstractLLMAppService
             $accessTokenEntity,
             $usage,
             $resolution,
-            $imageSize
+            $imageSize,
+            $referenceImageCount
         );
         $businessParams = array_merge(
             $requestDTO->getBusinessParams(),
@@ -2496,6 +2232,7 @@ class LLMAppService extends AbstractLLMAppService
                 'provider_model_id' => $providerModelId,
                 'image_count' => $imageCount,
                 'image_size' => $imageSize,
+                'reference_image_count' => $referenceImageCount,
                 'response_duration' => $responseTime,
                 'operation_time' => (int) round($startTime * 1000),
                 'original_model_id' => $requestDTO->getOriginalModelId(),
@@ -2538,7 +2275,8 @@ class LLMAppService extends AbstractLLMAppService
         ?AccessTokenEntity $accessTokenEntity = null,
         ?Usage $usage = null,
         ?string $resolution = null,
-        ?string $imageSize = null
+        ?string $imageSize = null,
+        ?int $referenceImageCount = null
     ): ImageGeneratedEvent {
         $imageGeneratedEvent = new ImageGeneratedEvent();
 
@@ -2564,6 +2302,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setResponseTime($responseTime);
         $imageGeneratedEvent->setResolution($resolution);
         $imageGeneratedEvent->setImageSize($imageSize);
+        $imageGeneratedEvent->setReferenceImageCount($referenceImageCount);
         // 设置原始 model_id（目前用于识别是否动态模型），用于计费服务
         $imageGeneratedEvent->setOriginalModelId($requestDTO->getOriginalModelId());
         $imageGeneratedEvent->setUsage($usage);

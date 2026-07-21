@@ -28,6 +28,11 @@ class ImageGeneratedEvent extends AbstractEvent
 
     protected int $imageCount;
 
+    /**
+     * 请求中参考图数量，用于审计和计费.
+     */
+    protected int $referenceImageCount = 0;
+
     protected ?string $topicId = null;
 
     protected ?string $taskId = null;
@@ -234,6 +239,16 @@ class ImageGeneratedEvent extends AbstractEvent
     public function setImageCount(int $imageCount): void
     {
         $this->imageCount = $imageCount;
+    }
+
+    public function getReferenceImageCount(): int
+    {
+        return $this->referenceImageCount;
+    }
+
+    public function setReferenceImageCount(int $referenceImageCount): void
+    {
+        $this->referenceImageCount = max(0, $referenceImageCount);
     }
 
     public function getTopicId(): ?string

@@ -199,7 +199,10 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             return [];
         }
 
-        $usage = ['count' => (int) ($businessParams['image_count'] ?? 0)];
+        $usage = [
+            'count' => (int) ($businessParams['image_count'] ?? 0),
+            'reference_image_count' => (int) ($businessParams['reference_image_count'] ?? $event->getReferenceImageCount()),
+        ];
         $tokenUsage = $event->getUsage();
         if ($tokenUsage === null || $tokenUsage->getTotalTokens() <= 0) {
             return $usage;
