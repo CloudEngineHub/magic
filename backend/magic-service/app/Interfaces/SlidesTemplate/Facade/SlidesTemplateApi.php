@@ -10,7 +10,6 @@ namespace App\Interfaces\SlidesTemplate\Facade;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
 use App\Infrastructure\Core\AbstractApi;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
-use App\Interfaces\SlidesTemplate\DTO\Request\GetSlidesTemplateFileUrlRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 

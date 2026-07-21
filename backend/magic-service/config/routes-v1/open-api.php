@@ -7,7 +7,9 @@ declare(strict_types=1);
 use App\Interfaces\Chat\Facade\Open\MagicChatOpenApi;
 use App\Interfaces\Flow\Facade\Open\MagicFlowOpenApi;
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
+use App\Interfaces\Middleware\Auth\OpenApiAuthorizationMiddleware;
 use App\Interfaces\ModelGateway\Facade\Open\DataQueryApi;
+use App\Interfaces\SlidesTemplate\Facade\Open\SlidesTemplateOpenApi;
 use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v1/open-api', function () {
@@ -26,6 +28,10 @@ Router::addGroup('/api/v1/open-api', function () {
 Router::addGroup('/api/v1/open-api', function () {
     Router::post('/im/messages/queries', [MagicChatOpenApi::class, 'messageQueries']);
 }, ['middleware' => [ApiKeyMiddleware::class]]);
+
+Router::addGroup('/api/v1/open-api', function () {
+    Router::get('/slides-templates/{code}/file-url', [SlidesTemplateOpenApi::class, 'getFileUrl']);
+}, ['middleware' => [OpenApiAuthorizationMiddleware::class]]);
 
 // Data query APIs
 Router::addGroup('/api/v1/open-api', function () {
