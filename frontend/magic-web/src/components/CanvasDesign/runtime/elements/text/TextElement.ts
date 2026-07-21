@@ -8,6 +8,7 @@ import type {
 import { ElementTypeEnum } from "../../document/types"
 import { BaseElement } from "../core/BaseElement"
 import type { Canvas } from "../../core/Canvas"
+import { getClientPointFromNativeEvent } from "../../interaction/input"
 import { measureRichTextLayout } from "../../text/layout"
 import {
 	cloneRichTextParagraphs,
@@ -293,15 +294,16 @@ export class TextElement extends BaseElement<TextElementData> {
 	 * 设置元素的双击事件监听
 	 */
 	private setupDoubleClick(node: Konva.Node): void {
-		node.on("dblclick", (e) => {
+		node.on("dblclick dbltap", (e) => {
+			const clientPoint = getClientPointFromNativeEvent(e.evt)
 			e.cancelBubble = true
 			this.canvas.eventEmitter.emit({
 				type: "element:dblclick",
 				data: {
 					elementId: this.data.id,
 					elementType: this.data.type,
-					clientX: e.evt?.clientX,
-					clientY: e.evt?.clientY,
+					clientX: clientPoint?.x,
+					clientY: clientPoint?.y,
 				},
 			})
 		})

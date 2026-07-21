@@ -322,7 +322,6 @@ export class TextEditingManager {
 				this.commitEditing()
 			},
 		})
-
 		this.emitEditingStateChange()
 	}
 

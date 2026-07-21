@@ -1,4 +1,5 @@
 import { createElement } from "react"
+import { flushSync } from "react-dom"
 import { createRoot, type Root } from "react-dom/client"
 import type { BaseEditor, BaseRange, Descendant } from "slate"
 import type { RichTextParagraph, TextStyle } from "../../document/types"
@@ -68,7 +69,11 @@ export class TextEditorOverlayHost {
 
 		this.editorRoot = createRoot(this.editorContainer)
 		this.mountOptions = options
-		this.renderEditor()
+		// 平板软键盘只接受用户手势内对已挂载编辑器的聚焦；并发 render 会把 DOM 创建推迟到手势结束后。
+		flushSync(() => {
+			this.renderEditor()
+		})
+		this.focusEditableElementSynchronously()
 
 		this.bindViewportEvents()
 		this.updateEditorPosition()
@@ -140,6 +145,22 @@ export class TextEditorOverlayHost {
 				onBlur: options.onBlur,
 			}),
 		)
+	}
+
+	private focusEditableElementSynchronously(): void {
+		const editableElement = this.editorContainer?.querySelector<HTMLElement>(
+			"[contenteditable='true']",
+		)
+		if (!editableElement) {
+			return
+		}
+
+		try {
+			editableElement.focus({ preventScroll: true })
+		} catch {
+			// Safari 的旧实现不接受 focus options，但仍应在当前手势内完成聚焦。
+			editableElement.focus()
+		}
 	}
 
 	/**

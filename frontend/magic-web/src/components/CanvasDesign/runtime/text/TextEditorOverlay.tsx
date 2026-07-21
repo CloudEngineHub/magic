@@ -182,7 +182,9 @@ export function TextEditorOverlay({
 
 	useEffect(() => {
 		focusFrameRef.current = requestAnimationFrame(() => {
-			editableRef.current?.focus()
+			if (editableRef.current && document.activeElement !== editableRef.current) {
+				editableRef.current.focus()
+			}
 			if (!editableRef.current) {
 				return
 			}
