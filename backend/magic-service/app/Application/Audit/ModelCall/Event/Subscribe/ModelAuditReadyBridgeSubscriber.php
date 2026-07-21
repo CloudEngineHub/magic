@@ -17,11 +17,13 @@ use App\Domain\Audit\ModelCall\Entity\ValueObject\ModelAuditAccessScope;
 use App\Domain\Audit\ModelCall\Factory\AuditLogFactory;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageGenerateFailedEvent;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Domain\ModelGateway\Event\VideoGenerateFailedEvent;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
@@ -58,6 +60,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             ImageGeneratedEvent::class,
             VideoGenerateFailedEvent::class,
             VideoGeneratedEvent::class,
+            SlidesTemplateUsedEvent::class,
             AfterChatCompletionsEvent::class,
             AfterChatCompletionsStreamEvent::class,
             AfterEmbeddingsEvent::class,
@@ -75,6 +78,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             $event instanceof ImageGeneratedEvent => $this->processImageGenerated($event),
             $event instanceof VideoGenerateFailedEvent => $this->processVideoGenerateFailed($event),
             $event instanceof VideoGeneratedEvent => $this->processVideoGenerated($event),
+            $event instanceof SlidesTemplateUsedEvent => $this->processSlidesTemplateUsed($event),
             $event instanceof AfterChatCompletionsStreamEvent => $this->processAfterChatCompletionsStream($event),
             $event instanceof AfterChatCompletionsEvent => $this->processAfterChatCompletions($event),
             $event instanceof AfterEmbeddingsEvent => $this->processAfterEmbeddings($event),
@@ -386,6 +390,54 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
                 'user_name' => (string) ($businessParams['user_name'] ?? ''),
             ],
             usage: $usage,
+            detailInfo: $detailInfo,
+            businessParams: $businessParams,
+            accessScope: $accessScope,
+            eventId: $this->resolveModelAuditEventId($businessParams),
+        );
+    }
+
+    private function processSlidesTemplateUsed(SlidesTemplateUsedEvent $event): void
+    {
+        $template = $event->getTemplate();
+        $businessParams = [
+            'source_id' => $event->getSourceId(),
+            'operation_time' => $event->getCallTime(),
+            'organization_code' => $event->getOrganizationCode(),
+            'organization_id' => $event->getOrganizationCode(),
+            'user_id' => $event->getUserId(),
+            'user_name' => $event->getUserName(),
+            'request_id' => $event->getRequestId(),
+            'status' => AuditStatus::SUCCESS->value,
+            'audit_source_marker' => 'slidesTemplateUse',
+        ];
+        $accessScope = $event->getSourceId() === SourceId::API_PLATFORM
+            ? ModelAuditAccessScope::ApiPlatform
+            : ModelAuditAccessScope::Magic;
+
+        $detailInfo = InvocationDetailInfo::forTool(
+            '',
+            $event->getSourceId(),
+            'slides_template',
+            $template->getCode(),
+            [
+                'template_id' => $template->getId(),
+            ],
+        );
+
+        $this->persistAudit(
+            type: AuditType::SLIDES_TEMPLATE->value,
+            productCode: $template->getCode(),
+            status: AuditStatus::SUCCESS->value,
+            ak: '',
+            operationTime: $event->getCallTime(),
+            allLatency: 0,
+            userInfo: [
+                'organization_code' => $event->getOrganizationCode(),
+                'user_id' => $event->getUserId(),
+                'user_name' => $event->getUserName(),
+            ],
+            usage: ['count' => 1],
             detailInfo: $detailInfo,
             businessParams: $businessParams,
             accessScope: $accessScope,

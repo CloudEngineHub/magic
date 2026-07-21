@@ -12,16 +12,12 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
-use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\ValueObject\Page;
-use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use Qbhy\HyperfAuth\Authenticatable;
-
-use function event_dispatch;
 
 class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
@@ -74,29 +70,6 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         return $template;
     }
 
-    public function getTemplateFileUrl(Authenticatable|BaseDataIsolation $authorization, string $code, array $accessContext = []): SlidesTemplateEntity
-    {
-        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
-        $dataIsolation->setContainOfficialOrganization(true);
-
-        $template = $this->slidesTemplateDomainService->findEnabledByCodeOrFail($dataIsolation, $code);
-        $this->resolveTemplateFileUrl($template);
-        $this->slidesTemplateDomainService->incrementActualUsageCount($dataIsolation, $template->getCode());
-        $this->dispatchSlidesTemplateUsedEvent($this->createSlidesTemplateUsedEvent(
-            $authorization,
-            $dataIsolation,
-            $template,
-            $accessContext
-        ));
-
-        return $template;
-    }
-
-    protected function dispatchSlidesTemplateUsedEvent(SlidesTemplateUsedEvent $event): void
-    {
-        event_dispatch($event);
-    }
-
     private function createPublicQuery(PublicQuerySlidesTemplateRequest $request): SlidesTemplateQuery
     {
         $query = new SlidesTemplateQuery();
@@ -118,31 +91,6 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $dataIsolation,
             $templates,
             SlidesTemplateTagStatus::Enabled
-        );
-    }
-
-    private function createSlidesTemplateUsedEvent(
-        Authenticatable|BaseDataIsolation $authorization,
-        BaseDataIsolation $dataIsolation,
-        SlidesTemplateEntity $template,
-        array $accessContext
-    ): SlidesTemplateUsedEvent {
-        $userId = $dataIsolation->getCurrentUserId();
-        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
-        $userName = $userId;
-
-        if ($authorization instanceof MagicUserAuthorization) {
-            $userId = $authorization->getId();
-            $organizationCode = $authorization->getOrganizationCode();
-            $userName = $authorization->getRealName() ?: $authorization->getNickname() ?: $authorization->getId();
-        }
-
-        return new SlidesTemplateUsedEvent(
-            $userId,
-            $organizationCode,
-            $userName,
-            $template,
-            $accessContext
         );
     }
 }

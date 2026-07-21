@@ -15,6 +15,7 @@ enum AuditType: string
     case VIDEO = 'VIDEO';           // 视频生成
     case SEARCH = 'SEARCH';         // 搜索
     case WEB_SCRAPE = 'WEB_SCRAPE'; // 网页抓取
+    case SLIDES_TEMPLATE = 'SLIDES_TEMPLATE'; // 幻灯片模板
 
     public function label(): string
     {
@@ -25,6 +26,7 @@ enum AuditType: string
             self::VIDEO => '视频生成',
             self::SEARCH => '搜索',
             self::WEB_SCRAPE => '网页抓取',
+            self::SLIDES_TEMPLATE => '幻灯片模板',
         };
     }
 
@@ -41,6 +43,6 @@ enum AuditType: string
      */
     public function isTool(): bool
     {
-        return in_array($this, [self::SEARCH, self::WEB_SCRAPE], true);
+        return in_array($this, [self::SEARCH, self::WEB_SCRAPE, self::SLIDES_TEMPLATE], true);
     }
 }

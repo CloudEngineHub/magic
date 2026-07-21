@@ -45,6 +45,8 @@ final class SourceId
 
     public const string AI_ABILITY_CONNECTIVITY_TEST = 'ai_ability_connectivity_test';
 
+    public const string SLIDES_TEMPLATE_USE = 'slides_template_use';
+
     public const array NON_BILLING_SOURCE_IDS = [
         self::RENAME_TOPIC,
         self::SUMMARY_CONTENT,

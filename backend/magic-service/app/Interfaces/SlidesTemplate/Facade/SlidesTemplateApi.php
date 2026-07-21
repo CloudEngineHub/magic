@@ -46,16 +46,4 @@ class SlidesTemplateApi extends AbstractApi
 
         return SlidesTemplateAssembler::createPublicDetailDTO($template)->toArray();
     }
-
-    public function getFileUrl(GetSlidesTemplateFileUrlRequest $request, string $code): array
-    {
-        $request->validated();
-        $template = $this->slidesTemplateAppService->getTemplateFileUrl(
-            $this->getAuthorization(),
-            $code,
-            $request->getAccessContext()
-        );
-
-        return SlidesTemplateAssembler::createFileUrlDTO($template)->toArray();
-    }
 }

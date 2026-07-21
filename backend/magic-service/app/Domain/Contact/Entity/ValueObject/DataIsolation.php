@@ -9,6 +9,7 @@ namespace App\Domain\Contact\Entity\ValueObject;
 
 use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Infrastructure\Core\AbstractObject;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 
 /**
  * 数据隔离 SaaS化
@@ -103,7 +104,7 @@ class DataIsolation extends AbstractObject
         $static = new self();
         $static->setCurrentOrganizationCode(currentOrganizationCode: $currentOrganizationCode);
         $static->setCurrentUserId(currentUserId: $userId);
-        $agentDomainService = di(\Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService::class);
+        $agentDomainService = di(AgentDomainService::class);
         $static->setUserAuthorizationToken($agentDomainService->getAuthorizationByUserId($userId));
         return $static;
     }
