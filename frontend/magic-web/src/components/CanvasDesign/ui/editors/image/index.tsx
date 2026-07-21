@@ -186,6 +186,7 @@ function ActiveImageMessageEditor({
 				imageElement={imageElement}
 				autoFocus={isRetryEditing}
 				autoFocusAtDocumentEnd={isRetryEditing}
+				preferCurrentRequestOnRestore={isRetryEditing}
 				onPreviewMediaResource={onPreviewMediaResource}
 				isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 			/>

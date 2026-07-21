@@ -58,6 +58,7 @@ import {
 	areCanvasResourcePathsSame,
 	getCanvasResourceFileName,
 } from "../../../runtime/shared/path/canvasResourcePath"
+import { resolveImageEditorRequestToRestore } from "./image-editor-request-restore"
 
 interface UseImageEditorConfigOptions {
 	imageElement: ImageElement
@@ -65,6 +66,8 @@ interface UseImageEditorConfigOptions {
 	originalImageName?: string
 	/** 编辑器 focus 的 ref，上传完成后用于聚焦 */
 	editorFocusRef?: React.RefObject<MessageEditorRef | null>
+	/** 失败重试时优先按已受理任务的请求回填，避免临时草稿覆盖任务输入。 */
+	preferCurrentRequestOnRestore?: boolean
 }
 
 export interface ImageReferenceSlotInfo {
@@ -164,7 +167,13 @@ export interface ImageEditorConfig {
 }
 
 export function useImageEditorConfig(options: UseImageEditorConfigOptions): ImageEditorConfig {
-	const { imageElement, originalImageSrc, originalImageName, editorFocusRef } = options
+	const {
+		imageElement,
+		originalImageSrc,
+		originalImageName,
+		editorFocusRef,
+		preferCurrentRequestOnRestore = false,
+	} = options
 	const { imageModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
@@ -1056,15 +1065,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		// 获取临时请求（统一使用 tempGenerateImageRequest）
 		const tempRequest = elementInstance.getTempGenerateImageRequest()
 		const currentRequest = imageElement.generateImageRequest
-		const requestToRestore = tempRequest
-			? {
-					...currentRequest,
-					...tempRequest,
-					prompt: tempRequest.prompt ?? currentRequest?.prompt,
-					reference_images:
-						tempRequest.reference_images ?? currentRequest?.reference_images,
-				}
-			: currentRequest
+		const requestToRestore = resolveImageEditorRequestToRestore({
+			currentRequest,
+			tempRequest,
+			preferCurrentRequest: preferCurrentRequestOnRestore,
+		})
 
 		if (requestToRestore) {
 			// 恢复模型ID
@@ -1240,6 +1245,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		imageElement.generateImageRequest,
 		syncFromElement,
 		imageModelList,
+		preferCurrentRequestOnRestore,
 		resolvePromptReferencesByPaths,
 		promptPlaceholderTokenConfig,
 		applyBindingStateFromPromptAndReferences,
