@@ -18,7 +18,7 @@ class ProjectDirectoryHandler(BaseMentionHandler):
         return "project_directory"
 
     async def get_tip(self, mention: Dict[str, Any], agent_context: Optional["AgentContext"] = None) -> str:
-        directory_path = self.normalize_path(mention.get("directory_path", ""))
+        directory_path = mention.get("directory_path", "")
         project_type = await detect_project_type(directory_path)
 
         if project_type == "design":
@@ -34,20 +34,20 @@ class ProjectDirectoryHandler(BaseMentionHandler):
         return "Read and understand the referenced file or directory before proceeding"
 
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
-        directory_path = self.normalize_path(mention.get("directory_path", ""))
+        directory_path = mention.get("directory_path", "")
         project_type = await detect_project_type(directory_path)
 
         if project_type == "design":
             context_lines = [
                 f"{index}. [@design_canvas_project:{directory_path}]",
-                f"   - Project type: canvas design project",
+                "   - Project type: canvas design project",
                 f"   - Project path: {directory_path}",
             ]
             logger.info(f"用户prompt添加设计画布项目引用: {directory_path}")
         elif project_type == "slide":
             context_lines = [
                 f"{index}. [@slide_project:{directory_path}]",
-                f"   - Project type: slide project",
+                "   - Project type: slide project",
                 f"   - Project path: {directory_path}",
             ]
             logger.info(f"用户prompt添加幻灯片项目引用: {directory_path}")

@@ -8,6 +8,7 @@ from app.service.mention.handlers import (
     FileHandler,
     MCPHandler,
     ProjectDirectoryHandler,
+    ProjectHandler,
     SkillHandler,
     ToolHandler,
 )
@@ -37,6 +38,7 @@ class MentionContextBuilder:
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()
         handlers['project_directory'] = ProjectDirectoryHandler()
+        handlers['project'] = ProjectHandler()
         handlers['skill'] = SkillHandler()
         return handlers
 

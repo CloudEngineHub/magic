@@ -1912,12 +1912,13 @@ class AgentDomainService
     }
 
     /**
-     * 将跨项目 mention 中的相对 file_path / directory_path 转换为容器内的绝对路径。
+     * 将跨项目 mention 中的相对路径转换为容器内的绝对路径。
      *
-     * - 仅作用于 type=project_file 和 type=project_directory
+     * - type=project_file / type=project_directory：把相对 file_path/directory_path 前缀挂载根
+     * - type=project：整项目挂载，直接注入 project_path = {mountBasePath}/{project_id}
      * - 同项目（project_id === currentProjectId）跳过，走 agent 自身 workspace
      * - file_path/directory_path 已为绝对路径（以 / 开头）跳过，防双前缀
-     * - project_id 缺失或为空时跳过
+     * - project_id 缺失或为空时跳过.
      */
     private function translateCrossProjectPaths(
         array $mentions,
@@ -1936,20 +1937,18 @@ class AgentDomainService
             }
             $type = $mention['type'] ?? null;
 
+            // 统一派发：三类跨项目挂载各自要写入的路径字段
             $pathKey = match ($type) {
+                'project' => 'project_path',
                 'project_file' => 'file_path',
                 'project_directory' => 'directory_path',
                 default => null,
             };
-            if ($pathKey === null || ! isset($mention[$pathKey])) {
+            if ($pathKey === null) {
                 continue;
             }
 
-            $path = (string) $mention[$pathKey];
-            if ($path === '' || str_starts_with($path, '/')) {
-                continue;
-            }
-
+            // 共享 project_id 校验：缺失或同项目则跳过，走 agent 自身 workspace
             $pidRaw = $mention['project_id'] ?? null;
             if ($pidRaw === null || $pidRaw === '') {
                 continue;
@@ -1959,7 +1958,20 @@ class AgentDomainService
                 continue;
             }
 
-            $mentions[$i][$pathKey] = $base . '/' . $pidStr . '/' . ltrim($path, '/');
+            $mountRoot = $base . '/' . $pidStr;
+
+            if ($type === 'project') {
+                // 整项目挂载：直接使用挂载根
+                $mentions[$i][$pathKey] = $mountRoot;
+                continue;
+            }
+
+            // 文件/目录：拼接相对路径；为空或已是绝对路径则跳过（防双前缀）
+            $relativePath = (string) ($mention[$pathKey] ?? '');
+            if ($relativePath === '' || str_starts_with($relativePath, '/')) {
+                continue;
+            }
+            $mentions[$i][$pathKey] = $mountRoot . '/' . ltrim($relativePath, '/');
         }
 
         return $mentions;
