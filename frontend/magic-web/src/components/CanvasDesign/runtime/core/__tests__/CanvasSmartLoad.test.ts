@@ -16,6 +16,7 @@ function createCanvasStub(options: {
 		eventEmitter,
 		resourceUrlWarmupManager: {
 			warmupDocument: vi.fn(),
+			warmupCurrentDocument: vi.fn(),
 		},
 		elementManager: {
 			loadDocumentSmart: vi.fn(() => {

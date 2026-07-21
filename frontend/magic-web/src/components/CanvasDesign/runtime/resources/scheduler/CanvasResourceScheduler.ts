@@ -1,6 +1,8 @@
 export type CanvasResourceTaskKind =
 	| "image:body-fetch"
 	| "image:decode"
+	| "image:persistent-low-restore"
+	| "image:persistent-low-write"
 	| "video:preview"
 	| "video:playback-acquire"
 
@@ -29,6 +31,7 @@ interface CanvasResourceTaskLogMeta {
 	variant?: string
 	cacheKey?: string
 	url?: string
+	signal?: AbortSignal
 }
 
 interface CanvasResourceTask<T> {
@@ -38,14 +41,20 @@ interface CanvasResourceTask<T> {
 	queuedAt: number
 	sequence: number
 	meta: CanvasResourceTaskLogMeta
-	task: () => Promise<T>
+	task: (signal: AbortSignal) => Promise<T>
 	resolve: (value: T) => void
 	reject: (error: unknown) => void
+	abortController: AbortController
+	externalAbortListener?: () => void
 }
 
 const TASK_KIND_LIMITS: Record<CanvasResourceTaskKind, number> = {
 	"image:body-fetch": 6,
 	"image:decode": 4,
+	// 本地 low 只负责快速占位，不能挤占实际 preview/full 解码。
+	"image:persistent-low-restore": 2,
+	// 低清缓存建设完全在后台串行执行，避免首屏形成大规模二次解码/编码竞争。
+	"image:persistent-low-write": 1,
 	"video:preview": 2,
 	"video:playback-acquire": 2,
 }
@@ -67,6 +76,8 @@ function createKindCountRecord(): Record<CanvasResourceTaskKind, number> {
 	return {
 		"image:body-fetch": 0,
 		"image:decode": 0,
+		"image:persistent-low-restore": 0,
+		"image:persistent-low-write": 0,
 		"video:preview": 0,
 		"video:playback-acquire": 0,
 	}
@@ -88,14 +99,18 @@ export class CanvasResourceScheduler {
 
 	public run<T>(
 		kind: CanvasResourceTaskKind,
-		task: () => Promise<T>,
-		options: CanvasResourceTaskLogMeta & { priority?: CanvasResourceTaskPriority },
+		task: (signal: AbortSignal) => Promise<T>,
+		options: CanvasResourceTaskLogMeta & {
+			priority?: CanvasResourceTaskPriority
+			signal?: AbortSignal
+		},
 	): Promise<T> {
 		if (this.destroyed) {
 			return Promise.reject(new Error("CanvasResourceScheduler destroyed"))
 		}
 
 		return new Promise<T>((resolve, reject) => {
+			const abortController = new AbortController()
 			const item: CanvasResourceTask<T> = {
 				id: ++this.taskIdSeed,
 				kind,
@@ -106,6 +121,19 @@ export class CanvasResourceScheduler {
 				task,
 				resolve,
 				reject,
+				abortController,
+			}
+			if (options.signal) {
+				const abortQueuedTask = () => {
+					this.abortTask(item as CanvasResourceTask<unknown>)
+				}
+				item.externalAbortListener = abortQueuedTask
+				if (options.signal.aborted) {
+					abortController.abort()
+					this.rejectTask(item as CanvasResourceTask<unknown>, createAbortError())
+					return
+				}
+				options.signal.addEventListener("abort", abortQueuedTask, { once: true })
 			}
 			this.queue.push(item as CanvasResourceTask<unknown>)
 			this.peakQueuedTotal = Math.max(this.peakQueuedTotal, this.queue.length)
@@ -140,7 +168,7 @@ export class CanvasResourceScheduler {
 			const task = this.queue.shift()
 			if (!task) continue
 			this.rejectedOnDestroyCount += 1
-			task.reject(error)
+			this.rejectTask(task, error)
 		}
 	}
 
@@ -150,14 +178,6 @@ export class CanvasResourceScheduler {
 			if (priorityDiff !== 0) return priorityDiff
 			return a.sequence - b.sequence
 		})
-	}
-
-	private getQueuedCountByKind(kind: CanvasResourceTaskKind): number {
-		let count = 0
-		this.queue.forEach((task) => {
-			if (task.kind === kind) count += 1
-		})
-		return count
 	}
 
 	private findRunnableTaskIndex(): number {
@@ -188,7 +208,7 @@ export class CanvasResourceScheduler {
 
 		let promise: Promise<unknown>
 		try {
-			promise = Promise.resolve(task.task())
+			promise = Promise.resolve(task.task(task.abortController.signal))
 		} catch (error) {
 			promise = Promise.reject(error)
 		}
@@ -203,9 +223,41 @@ export class CanvasResourceScheduler {
 				task.reject(error)
 			})
 			.finally(() => {
+				this.detachExternalAbortListener(task)
 				this.activeTotal = Math.max(0, this.activeTotal - 1)
 				this.activeByKind[task.kind] = Math.max(0, this.activeByKind[task.kind] - 1)
 				this.pump()
 			})
 	}
+
+	private abortTask(task: CanvasResourceTask<unknown>): void {
+		if (!task.abortController.signal.aborted) {
+			task.abortController.abort()
+		}
+		const queueIndex = this.queue.indexOf(task)
+		if (queueIndex < 0) return
+		this.queue.splice(queueIndex, 1)
+		this.rejectTask(task, createAbortError())
+		this.pump()
+	}
+
+	private rejectTask(task: CanvasResourceTask<unknown>, error: Error): void {
+		this.detachExternalAbortListener(task)
+		task.reject(error)
+	}
+
+	private detachExternalAbortListener(task: CanvasResourceTask<unknown>): void {
+		if (!task.externalAbortListener) return
+		// The listener is registered with `once`, so removing it after completion is also safe.
+		// Keeping this cleanup explicit prevents completed tasks from being retained by a long-lived
+		// viewport AbortSignal until the next pan/zoom.
+		task.meta.signal?.removeEventListener("abort", task.externalAbortListener)
+		task.externalAbortListener = undefined
+	}
+}
+
+function createAbortError(): Error {
+	const error = new Error("Canvas resource task aborted")
+	error.name = "AbortError"
+	return error
 }

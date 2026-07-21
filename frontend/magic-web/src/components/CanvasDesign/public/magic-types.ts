@@ -1067,6 +1067,8 @@ export interface GetFileInfoResponse {
 	content_length?: number
 }
 
+export type FileUrlRequestPriority = "critical" | "visible" | "near" | "background"
+
 export interface CanvasFileResourceMeta {
 	status: "exists" | "deleted" | "unknown"
 	fileName?: string
@@ -1465,7 +1467,11 @@ export interface CanvasDesignMethods {
 	 */
 	getFileInfo: (
 		path: string,
-		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
+		options?: {
+			useImageProcess?: boolean
+			forceRefresh?: boolean
+			priority?: FileUrlRequestPriority
+		},
 	) => Promise<GetFileInfoResponse>
 	/**
 	 * 获取资源轻量版本信息；用于 cache hit 后台校验，不应触发 OSS 换链或下载 body
@@ -1492,6 +1498,11 @@ export interface CanvasDesignMethods {
 	 * @returns 例如：/global/super/{workspaceId}/{projectId}
 	 */
 	getVirtualResourceScope?: () => string
+	/**
+	 * 获取图片处理资源的缓存语义签名，例如水印预览模式。
+	 * 签名变化时 CanvasDesign 不应复用旧的持久化 low surface。
+	 */
+	getImageProcessCacheSignature?: () => string
 	/**
 	 * 添加文件至对话（图片/视频等文件元素）
 	 * @param data 文件元素数据数组

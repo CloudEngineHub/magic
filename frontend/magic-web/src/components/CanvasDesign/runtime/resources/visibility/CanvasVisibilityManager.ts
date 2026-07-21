@@ -312,7 +312,11 @@ export class CanvasVisibilityManager {
 	private destroyed = false
 	private lastViewportMovementAt = now()
 	private viewportFullRequestDeferUntil = 0
-	private viewportResourceEpoch = 0
+	/**
+	 * 以媒体 path 为粒度共享取消信号。不能按每次 pan 全量 abort：同一资源在连续拖动中
+	 * 往往仍位于 visible / near 区，应该复用其在飞请求。
+	 */
+	private viewportResourceAbortControllers = new Map<string, AbortController>()
 	private contentLayerHitGraphSuppressed = false
 	private contentLayerPreviousListening: boolean | null = null
 	private readonly renderVisibilityController: CanvasRenderVisibilityController
@@ -350,7 +354,6 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportPan = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
-		this.advanceViewportResourceEpoch()
 		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:pan", false)
@@ -359,7 +362,6 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportScale = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
-		this.advanceViewportResourceEpoch()
 		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:scale", true)
@@ -468,6 +470,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredImages.get(elementId)
 		if (!registered) return
 		this.registeredImages.delete(elementId)
+		this.cancelViewportResourceSignalIfUnused("image", registered.path, this.registeredImages)
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
 		this.imageRetentionHints.delete(elementId)
@@ -502,6 +505,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredVideos.get(elementId)
 		if (!registered) return
 		this.registeredVideos.delete(elementId)
+		this.cancelViewportResourceSignalIfUnused("video", registered.path, this.registeredVideos)
 		this.lastVideoVisibilityState.delete(elementId)
 		this.lastRequestedVideoLoadState.delete(elementId)
 		this.scheduleRefresh("video:unregister", true)
@@ -556,9 +560,6 @@ export class CanvasVisibilityManager {
 
 		const reason = options?.reason ?? "immediate-elements"
 		const priority = options?.priority ?? "critical"
-		if (isViewportResourceBoundReason(reason)) {
-			this.advanceViewportResourceEpoch()
-		}
 		const includeDirectImages = options?.includeDirectImages ?? true
 		const maxImageCount = options?.maxImageCount ?? 48
 		const imageIds: string[] = []
@@ -672,6 +673,9 @@ export class CanvasVisibilityManager {
 		this.lastRequestedVideoLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
 		this.imageRetentionHints.clear()
+		const controllers = this.getViewportResourceAbortControllers()
+		controllers.forEach((controller) => controller.abort())
+		controllers.clear()
 		this.renderVisibilityController.restoreAll()
 		this.canvas.eventEmitter.off("viewport:pan", this.handleViewportPan)
 		this.canvas.eventEmitter.off("viewport:scale", this.handleViewportScale)
@@ -696,17 +700,72 @@ export class CanvasVisibilityManager {
 		)
 	}
 
-	private getCurrentViewportResourceEpoch(): number {
-		return typeof this.viewportResourceEpoch === "number" ? this.viewportResourceEpoch : 0
+	private getViewportResourceSignal(mediaType: "image" | "video", path: string): AbortSignal {
+		const key = this.getViewportResourceAbortKey(mediaType, path)
+		const controllers = this.getViewportResourceAbortControllers()
+		let controller = controllers.get(key)
+		if (!controller || controller.signal.aborted) {
+			controller = new AbortController()
+			controllers.set(key, controller)
+		}
+		return controller.signal
 	}
 
-	private advanceViewportResourceEpoch(): number {
-		this.viewportResourceEpoch = this.getCurrentViewportResourceEpoch() + 1
-		return this.viewportResourceEpoch
+	private getViewportResourceAbortKey(mediaType: "image" | "video", path: string): string {
+		const resolveAbsolutePath =
+			this.canvas.magicConfigManager?.config?.methods?.resolveAbsolutePath
+		return `${mediaType}\0${toCanonicalCanvasResourcePath(path, resolveAbsolutePath)}`
 	}
 
-	public isViewportResourceEpochCurrent(epoch: number): boolean {
-		return !this.destroyed && epoch === this.getCurrentViewportResourceEpoch()
+	private cancelFarViewportResourceSignals(activeKeys: Set<string>): void {
+		const controllers = this.getViewportResourceAbortControllers()
+		controllers.forEach((controller, key) => {
+			if (activeKeys.has(key)) return
+			controller.abort()
+			controllers.delete(key)
+			this.clearViewportResourceLoadRequestState(key)
+		})
+	}
+
+	private clearViewportResourceLoadRequestState(resourceKey: string): void {
+		const clearMatchingStates = <T extends RegisteredImageElement | RegisteredVideoElement>(
+			registered: Map<string, T>,
+			requestedStates: Map<string, unknown>,
+			mediaType: "image" | "video",
+		): void => {
+			registered.forEach((resource, elementId) => {
+				if (this.getViewportResourceAbortKey(mediaType, resource.path) !== resourceKey) {
+					return
+				}
+				requestedStates.delete(elementId)
+			})
+		}
+
+		clearMatchingStates(this.registeredImages, this.lastRequestedLoadState, "image")
+		clearMatchingStates(this.registeredVideos, this.lastRequestedVideoLoadState, "video")
+	}
+
+	private cancelViewportResourceSignalIfUnused(
+		mediaType: "image" | "video",
+		path: string,
+		registered: Map<string, RegisteredImageElement | RegisteredVideoElement>,
+	): void {
+		const key = this.getViewportResourceAbortKey(mediaType, path)
+		const stillRegistered = Array.from(registered.values()).some(
+			(resource) => this.getViewportResourceAbortKey(mediaType, resource.path) === key,
+		)
+		if (stillRegistered) return
+		const controllers = this.getViewportResourceAbortControllers()
+		const controller = controllers.get(key)
+		controller?.abort()
+		controllers.delete(key)
+	}
+
+	private getViewportResourceAbortControllers(): Map<string, AbortController> {
+		if (!(this.viewportResourceAbortControllers instanceof Map)) {
+			this.viewportResourceAbortControllers = new Map()
+		}
+		return this.viewportResourceAbortControllers
 	}
 
 	private queueImmediateImageElement(
@@ -1206,6 +1265,34 @@ export class CanvasVisibilityManager {
 			this.lastVideoVisibilityState.set(elementId, state)
 			if (state === "far") farVideoCount += 1
 		})
+		const activeViewportResourceKeys = new Set<string>()
+		const retainRegisteredResources = (
+			registered: Map<string, RegisteredImageElement | RegisteredVideoElement>,
+			elementIds: Set<string>,
+			mediaType: "image" | "video",
+		) => {
+			elementIds.forEach((elementId) => {
+				if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
+				const resource = registered.get(elementId)
+				if (!resource) return
+				activeViewportResourceKeys.add(
+					this.getViewportResourceAbortKey(mediaType, resource.path),
+				)
+			})
+		}
+		const activeImageIds = new Set([...visibleIds, ...nearIds])
+		const activeVideoIds = new Set([...visibleVideoIds, ...nearVideoIds])
+		retainRegisteredResources(this.registeredImages, activeImageIds, "image")
+		retainRegisteredResources(this.registeredVideos, activeVideoIds, "video")
+		this.cancelFarViewportResourceSignals(activeViewportResourceKeys)
+		if (farDrainReady) {
+			const retainedVideoPaths = new Set<string>()
+			activeVideoIds.forEach((elementId) => {
+				const registered = this.registeredVideos.get(elementId)
+				if (registered) retainedVideoPaths.add(registered.path)
+			})
+			this.canvas.videoResourceManager?.enforcePosterBudget?.(retainedVideoPaths)
+		}
 
 		const durationMs = now() - startedAt
 		const previousSnapshot = this.statsSnapshot
@@ -2003,6 +2090,9 @@ export class CanvasVisibilityManager {
 	}
 
 	private requestImageLoad(candidate: ImageLoadCandidate, reason: string, force = false): void {
+		const signal = isViewportResourceBoundReason(reason)
+			? this.getViewportResourceSignal("image", candidate.path)
+			: undefined
 		const previousState = this.lastRequestedLoadState.get(candidate.elementId)
 		if (
 			!force &&
@@ -2024,25 +2114,24 @@ export class CanvasVisibilityManager {
 			variant: candidate.variant,
 			reason,
 		})
-		const viewportEpoch = isViewportResourceBoundReason(reason)
-			? this.getCurrentViewportResourceEpoch()
-			: undefined
 		const loadOptions = {
 			variant: candidate.variant,
 			priority: candidate.priority,
 			displayTargetElementId: candidate.elementId,
 			displayTargetReason: reason,
-			...(viewportEpoch !== undefined
+			...(signal
 				? {
-						viewportEpoch,
-						dropIfViewportStale: true,
+						signal,
 					}
 				: {}),
 		}
 		void this.canvas.imageResourceManager.loadResource(candidate.path, loadOptions)
 	}
 
-	private requestVideoLoad(candidate: VideoLoadCandidate, _reason: string, force = false): void {
+	private requestVideoLoad(candidate: VideoLoadCandidate, reason: string, force = false): void {
+		const signal = isViewportResourceBoundReason(reason)
+			? this.getViewportResourceSignal("video", candidate.path)
+			: undefined
 		const previousState = this.lastRequestedVideoLoadState.get(candidate.elementId)
 		if (
 			!force &&
@@ -2061,12 +2150,20 @@ export class CanvasVisibilityManager {
 			})
 			void this.canvas.videoResourceManager.ensureFreshOssInfo(candidate.path, {
 				allowCachedFallback: true,
+				priority: candidate.priority,
+				...(signal ? { signal } : {}),
 			})
 			return
 		}
 
 		const element = this.canvas.elementManager.getElementInstance(candidate.elementId) as
-			| { requestPreviewLoad?: (options?: { force?: boolean }) => void }
+			| {
+					requestPreviewLoad?: (options?: {
+						force?: boolean
+						priority?: ImageResourceLoadPriority
+						signal?: AbortSignal
+					}) => void
+			  }
 			| undefined
 		if (!element?.requestPreviewLoad) return
 
@@ -2075,7 +2172,14 @@ export class CanvasVisibilityManager {
 			tier: candidate.tier,
 			requestedAt: now(),
 		})
-
-		element.requestPreviewLoad({ force })
+		element.requestPreviewLoad({
+			force,
+			...(signal
+				? {
+						priority: candidate.priority,
+						signal,
+					}
+				: {}),
+		})
 	}
 }

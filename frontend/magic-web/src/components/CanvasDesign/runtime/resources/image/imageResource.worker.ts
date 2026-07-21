@@ -1,7 +1,11 @@
 import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
 
 export type ImageResourceDecodeVariant = "low" | "preview" | "full"
-export type ImageResourceWorkerRequestType = "decode" | "warmup"
+export type ImageResourceWorkerRequestType =
+	| "decode"
+	| "encode-persistent-low"
+	| "warmup"
+	| "cancel"
 
 export interface ImageResourceWorkerRequest {
 	type?: ImageResourceWorkerRequestType
@@ -13,6 +17,12 @@ export interface ImageResourceWorkerRequest {
 	mainThreadSentAt?: number
 	variant?: ImageResourceDecodeVariant
 	maxEdge?: number
+	/** `cancel` 消息要取消的 decode requestId。 */
+	targetRequestId?: string
+	/** 已由主线程从 decoded resource 派生的 low bitmap；仅 encode-persistent-low 使用。 */
+	imageSource?: ImageBitmap
+	/** decoded source 对应的原始图片信息；仅 encode-persistent-low 使用。 */
+	imageInfo?: ImageResourceWorkerResponse["imageInfo"]
 }
 
 export interface ImageResourceWorkerTimings {
@@ -57,6 +67,7 @@ export interface ImageResourceWorkerResponse {
 	statusCode?: number
 	/** 本次解码变体 */
 	variant?: ImageResourceDecodeVariant
+	cancelled?: boolean
 	timings?: ImageResourceWorkerTimings
 }
 
@@ -112,6 +123,20 @@ function getFileExtensionFromMimeType(mimeType: string): string {
 }
 
 let webpSupported: boolean | null = null
+const cancelledRequestIds = new Set<string>()
+const activeRequestIds = new Set<string>()
+
+function isCancelled(requestId: string): boolean {
+	return cancelledRequestIds.has(requestId)
+}
+
+function createCancelledResponse(
+	requestId: string,
+	variant: ImageResourceDecodeVariant,
+): ImageResourceWorkerResponse {
+	cancelledRequestIds.delete(requestId)
+	return { requestId, variant, cancelled: true, timings: { workerTotalMs: 0 } }
+}
 
 async function checkWebpSupportInWorker(): Promise<boolean> {
 	if (webpSupported !== null) return webpSupported
@@ -326,11 +351,36 @@ async function processRequest(
 	}
 
 	try {
+		if (isCancelled(requestId)) return createCancelledResponse(requestId, variant)
 		if (request.type === "warmup") {
 			return {
 				requestId,
 				variant,
 				timings: completeTimings(),
+			}
+		}
+		if (request.type === "encode-persistent-low") {
+			const imageSource = request.imageSource
+			if (!imageSource || !request.imageInfo) {
+				throw new Error("Missing decoded low source")
+			}
+			try {
+				if (isCancelled(requestId)) return createCancelledResponse(requestId, "low")
+				const persistentDisplayStartedAt = Date.now()
+				const persistentDisplay = await createPersistentDisplayBlob(imageSource, "low")
+				if (isCancelled(requestId)) return createCancelledResponse(requestId, "low")
+				if (persistentDisplay) {
+					markTiming("persistentDisplayMs", persistentDisplayStartedAt)
+				}
+				return {
+					requestId,
+					imageInfo: request.imageInfo,
+					persistentDisplay,
+					variant: "low",
+					timings: completeTimings(),
+				}
+			} finally {
+				imageSource.close()
 			}
 		}
 
@@ -355,6 +405,7 @@ async function processRequest(
 		if (!request.blob) {
 			markTiming("fetchMs", fetchStartedAt)
 		}
+		if (isCancelled(requestId)) return createCancelledResponse(requestId, variant)
 		timings.blobBytes = blob.size
 		const supportsImageBitmap = isImageBitmapSupported()
 		const metadataStartedAt = Date.now()
@@ -364,6 +415,7 @@ async function processRequest(
 			passedFilename,
 			supportsImageBitmap,
 		})
+		if (isCancelled(requestId)) return createCancelledResponse(requestId, variant)
 		markTiming("metadataMs", metadataStartedAt)
 
 		// 根据是否支持 ImageBitmap 决定返回类型
@@ -381,9 +433,17 @@ async function processRequest(
 				variant,
 				maxEdge,
 			})
+			if (isCancelled(requestId)) {
+				imageSource.close()
+				return createCancelledResponse(requestId, variant)
+			}
 			markTiming("imageDecodeMs", imageDecodeStartedAt)
 			const persistentDisplayStartedAt = Date.now()
 			const persistentDisplay = await createPersistentDisplayBlob(imageSource, variant)
+			if (isCancelled(requestId)) {
+				imageSource.close()
+				return createCancelledResponse(requestId, variant)
+			}
 			if (persistentDisplay) {
 				markTiming("persistentDisplayMs", persistentDisplayStartedAt)
 			}
@@ -428,18 +488,30 @@ async function processRequest(
 }
 
 self.onmessage = (e: MessageEvent<ImageResourceWorkerRequest>) => {
-	processRequest(e.data).then((response) => {
-		// 如果响应中包含 ImageBitmap，通过 transferable 传递以实现零拷贝
-		// 如果响应中包含 Blob，直接传递（Blob 也是 transferable，但为了兼容性直接传递）
-		if (response.imageSource) {
-			self.postMessage(response, { transfer: [response.imageSource] })
-		} else if (response.blob) {
-			// Blob 也可以通过 transfer 传递，但为了兼容性直接传递
-			self.postMessage(response)
-		} else {
-			self.postMessage(response)
+	if (e.data.type === "cancel") {
+		if (e.data.targetRequestId && activeRequestIds.has(e.data.targetRequestId)) {
+			cancelledRequestIds.add(e.data.targetRequestId)
 		}
-	})
+		return
+	}
+	activeRequestIds.add(e.data.requestId)
+	processRequest(e.data)
+		.then((response) => {
+			// 如果响应中包含 ImageBitmap，通过 transferable 传递以实现零拷贝
+			// 如果响应中包含 Blob，直接传递（Blob 也是 transferable，但为了兼容性直接传递）
+			if (response.imageSource) {
+				self.postMessage(response, { transfer: [response.imageSource] })
+			} else if (response.blob) {
+				// Blob 也可以通过 transfer 传递，但为了兼容性直接传递
+				self.postMessage(response)
+			} else {
+				self.postMessage(response)
+			}
+		})
+		.finally(() => {
+			activeRequestIds.delete(e.data.requestId)
+			cancelledRequestIds.delete(e.data.requestId)
+		})
 }
 
 const IMAGE_RESOURCE_WORKER_READY_POSTED_AT = Date.now()

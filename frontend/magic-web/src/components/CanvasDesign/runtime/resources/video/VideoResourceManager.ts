@@ -14,6 +14,8 @@ import {
 	type MediaResourceUrlEntry,
 } from "../offline-cache/MediaResourceUrlLifecycle"
 import { VideoPreviewLoader, type VideoPreviewMediaDiag } from "./VideoPreviewLoader"
+import type { CanvasResourceTaskPriority } from "../scheduler/CanvasResourceScheduler"
+import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 
 /** 视频解码后的元信息（时长与原始像素尺寸） */
 export interface LoadedVideoMetadata {
@@ -41,6 +43,18 @@ export interface ResolvedVideoOssInfo {
 	expiresAt: number | null
 }
 
+export interface VideoResourceLoadOptions {
+	priority?: CanvasResourceTaskPriority
+	viewportEpoch?: number
+	dropIfViewportStale?: boolean
+	signal?: AbortSignal
+}
+
+type VideoResourcePipelineLoadOptions = VideoResourceLoadOptions & {
+	/** refresh 失败时保留已有 poster，不把元素切到错误态。 */
+	preservePreviewOnFailure?: boolean
+}
+
 interface VideoResource {
 	poster: VideoPosterSource
 	metadata: LoadedVideoMetadata
@@ -57,15 +71,19 @@ interface ResourceEntry extends MediaResourceUrlEntry {
 	sourceUpdatedAt: string | null
 	contentLength: number | null
 	exchangePromise: Promise<string | null> | null
-	loadingPromise: Promise<LoadedVideoResource | null> | null
+	loadingPromise: SharedAbortableRequest<LoadedVideoResource | null> | null
+	refreshPromise: Promise<boolean> | null
 	resource: VideoResource | null
 	backgroundRefreshPromise: Promise<void> | null
 	lastFailureReason: ResourceLoadFailureReason | null
+	/** refresh 失败后保留旧 poster 展示，但必须成功重新解码后才能作为加载命中。 */
+	resourceNeedsReload: boolean
+	resourceLastAccessAt: number
 }
 
 const MAX_FAILED_RESOURCE_DEBUG_ITEMS = 20
 const VIDEO_PREVIEW_LOAD_TIMEOUT_MS = 15_000
-const VIDEO_PREVIEW_LOAD_CONCURRENCY = 3
+const VIDEO_POSTER_CACHE_MAX_BYTES = 96 * 1024 * 1024
 
 /**
  * 按项目 path 缓存视频：换链、解码首帧海报、合并重复加载请求
@@ -119,10 +137,12 @@ export class VideoResourceManager {
 			onResourceDeleted: (normalizedPath, entry) =>
 				this.handleVideoResourceDeleted(normalizedPath, entry),
 			refreshResource: (path) => this.refreshResource(path),
+			onResourceVersionChanged: (_normalizedPath, entry) => {
+				entry.resourceNeedsReload = true
+			},
 			incrementDiagnostic: (counter) => this.diagnostics.increment(counter),
 		})
 		this.previewLoader = new VideoPreviewLoader({
-			concurrency: VIDEO_PREVIEW_LOAD_CONCURRENCY,
 			timeoutMs: VIDEO_PREVIEW_LOAD_TIMEOUT_MS,
 			isDestroyed: () => this.destroyed,
 			onStaleRequestDrop: () => this.markStaleRequestDrop(),
@@ -135,32 +155,38 @@ export class VideoResourceManager {
 	}
 
 	/** 触发后台加载（不等待完成），用于预热 */
-	public loadResource(path: string): void {
+	public loadResource(path: string, options?: VideoResourceLoadOptions): void {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return
 		}
-		this.loadVideoInternal(path).catch((error) => {
+		this.loadVideoInternal(path, options).catch((error) => {
 			void error
 		})
 	}
 
 	/** 等待加载完成，返回可播放 URL 与海报（通用入口） */
-	public async getResource(path: string): Promise<LoadedVideoResource | null> {
+	public async getResource(
+		path: string,
+		options?: VideoResourceLoadOptions,
+	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
 		}
-		return this.loadVideoInternal(path)
+		return this.loadVideoInternal(path, options)
 	}
 
 	/** 与 getResource 相同实现，语义上用于画布预览场景 */
-	public async getPreviewResource(path: string): Promise<LoadedVideoResource | null> {
+	public async getPreviewResource(
+		path: string,
+		options?: VideoResourceLoadOptions,
+	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
 		}
-		return this.loadVideoInternal(path)
+		return this.loadVideoInternal(path, options)
 	}
 
 	public async ensureFreshOssInfo(
@@ -169,6 +195,10 @@ export class VideoResourceManager {
 			forceRefresh?: boolean
 			bypassVirtualResource?: boolean
 			allowCachedFallback?: boolean
+			priority?: CanvasResourceTaskPriority
+			signal?: AbortSignal
+			viewportEpoch?: number
+			dropIfViewportStale?: boolean
 		},
 	): Promise<ResolvedVideoOssInfo | null> {
 		if (this.destroyed) {
@@ -178,9 +208,11 @@ export class VideoResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		const normalizedPath = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedPath)
-		return this.urlLifecycle.ensureFreshOssInfo(path, entry, options)
+		const result = await this.urlLifecycle.ensureFreshOssInfo(path, entry, options)
+		return this.shouldDropStaleViewportLoad(options) ? null : result
 	}
 
 	/** 若缓存过期则重新换链，返回当前可用的 ossSrc */
@@ -190,6 +222,7 @@ export class VideoResourceManager {
 			forceRefresh?: boolean
 			bypassVirtualResource?: boolean
 			allowCachedFallback?: boolean
+			priority?: CanvasResourceTaskPriority
 		},
 	): Promise<string | null> {
 		return (await this.ensureFreshOssInfo(path, options))?.ossSrc ?? null
@@ -253,8 +286,10 @@ export class VideoResourceManager {
 			failedResources,
 			failedResourcesTruncated: failed > failedResources.length,
 			posterCanvasBytes,
-			activePreviewLoadCount: this.previewLoader.activeCount,
-			queuedPreviewLoadCount: this.previewLoader.queuedCount,
+			activePreviewLoadCount:
+				this.canvas.resourceScheduler.getSnapshot().activeByKind["video:preview"],
+			queuedPreviewLoadCount:
+				this.canvas.resourceScheduler.getSnapshot().queuedByKind["video:preview"],
 		}
 		return buildVideoResourceSnapshot(current, this.diagnostics.snapshot())
 	}
@@ -269,12 +304,30 @@ export class VideoResourceManager {
 		if (!normalizedPath) return false
 
 		const entry = this.getOrCreateEntry(normalizedPath)
-		if (entry.loadingPromise) {
-			await entry.loadingPromise.catch(() => null)
+		const previousRefresh = entry.refreshPromise
+		const refreshPromise = (async () => {
+			if (previousRefresh) {
+				await previousRefresh.catch(() => false)
+			}
+			if (this.destroyed) return false
+			if (entry.loadingPromise) {
+				await entry.loadingPromise.promise.catch(() => null)
+			}
+			if (this.destroyed) return false
+			return this.refreshVideoResourceFromNetwork(path, normalizedPath, entry, {
+				forceRefresh: true,
+				priority: "critical",
+			})
+		})()
+		entry.refreshPromise = refreshPromise
+
+		try {
+			return await refreshPromise
+		} finally {
+			if (entry.refreshPromise === refreshPromise) {
+				entry.refreshPromise = null
+			}
 		}
-		return this.refreshVideoResourceFromNetwork(path, normalizedPath, entry, {
-			forceRefresh: true,
-		})
 	}
 
 	/** 用上传/生成结果直接写入缓存，跳过首次网络解码路径 */
@@ -303,6 +356,44 @@ export class VideoResourceManager {
 		return entry?.resource?.metadata ?? null
 	}
 
+	public needsResourceReload(path: string): boolean {
+		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
+		return this.entries.get(canonical)?.resourceNeedsReload === true
+	}
+
+	/** 仅淘汰已离开 visible/near 集合的 poster；再次进入视口时由 visibility manager 重新加载。 */
+	public enforcePosterBudget(retainedPaths: ReadonlySet<string>): void {
+		if (this.destroyed) return
+		const retainedCanonicalPaths = new Set(
+			Array.from(retainedPaths, (path) => this.canonicalResourcePath(path)),
+		)
+		let totalBytes = 0
+		const candidates: Array<{ path: string; entry: ResourceEntry; bytes: number }> = []
+		this.entries.forEach((entry, path) => {
+			if (!entry.resource) return
+			const bytes = this.getPosterBytes(entry.resource.poster)
+			totalBytes += bytes
+			if (!retainedCanonicalPaths.has(path)) candidates.push({ path, entry, bytes })
+		})
+		if (totalBytes <= VIDEO_POSTER_CACHE_MAX_BYTES) return
+
+		candidates.sort(
+			(left, right) => left.entry.resourceLastAccessAt - right.entry.resourceLastAccessAt,
+		)
+		for (const candidate of candidates) {
+			if (totalBytes <= VIDEO_POSTER_CACHE_MAX_BYTES) break
+			if (!candidate.entry.resource) continue
+			this.releaseResource(candidate.entry.resource)
+			candidate.entry.resource = null
+			candidate.entry.resourceNeedsReload = true
+			totalBytes = Math.max(0, totalBytes - candidate.bytes)
+			this.canvas.eventEmitter.emit({
+				type: "resource:released",
+				data: { path: candidate.path },
+			})
+		}
+	}
+
 	/** 释放缓存与事件监听 */
 	public destroy(): void {
 		if (this.destroyed) return
@@ -315,6 +406,7 @@ export class VideoResourceManager {
 		const pendingError = new Error("VideoResourceManager destroyed")
 		this.previewLoader.destroy(pendingError)
 		this.entries.forEach((entry) => {
+			entry.loadingPromise?.abort()
 			this.releaseResource(entry.resource)
 		})
 		this.entries.clear()
@@ -328,6 +420,7 @@ export class VideoResourceManager {
 			return null
 		}
 		this.setFailureReason(entry, null)
+		entry.resourceLastAccessAt = Date.now()
 
 		return {
 			ossSrc: entry.ossSrc,
@@ -349,16 +442,43 @@ export class VideoResourceManager {
 				contentLength: null,
 				exchangePromise: null,
 				loadingPromise: null,
+				refreshPromise: null,
 				backgroundRefreshPromise: null,
 				resource: null,
 				lastFailureReason: null,
+				resourceNeedsReload: false,
+				resourceLastAccessAt: 0,
 			}
 			this.entries.set(normalizedPath, entry)
 		}
 		return entry
 	}
 
-	private async loadVideoInternal(path: string): Promise<LoadedVideoResource | null> {
+	private isViewportLoadStale(options?: VideoResourceLoadOptions): boolean {
+		if (options?.signal?.aborted) return true
+		if (!options?.dropIfViewportStale || typeof options.viewportEpoch !== "number") {
+			return false
+		}
+		const visibilityManager = this.canvas.visibilityManager as
+			| { isViewportResourceEpochCurrent?: (epoch: number) => boolean }
+			| undefined
+		const isCurrent = visibilityManager?.isViewportResourceEpochCurrent
+		return (
+			typeof isCurrent === "function" &&
+			!isCurrent.call(visibilityManager, options.viewportEpoch)
+		)
+	}
+
+	private shouldDropStaleViewportLoad(options?: VideoResourceLoadOptions): boolean {
+		if (!this.isViewportLoadStale(options)) return false
+		this.markStaleRequestDrop()
+		return true
+	}
+
+	private async loadVideoInternal(
+		path: string,
+		options?: VideoResourceLoadOptions,
+	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
@@ -366,44 +486,66 @@ export class VideoResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		const normalizedPath = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedPath)
-		this.clearExpiredOssSrc(entry)
+		if (this.clearExpiredOssSrc(entry)) {
+			entry.resourceNeedsReload = true
+		}
 		this.applyVirtualResourceBypass(entry)
 
-		if (entry.resource) {
+		if (entry.resource && !entry.resourceNeedsReload) {
 			this.diagnostics.increment("memoryHitCount")
 			this.setFailureReason(entry, null)
 			return this.buildLoadedResource(entry)
 		}
 
-		if (entry.loadingPromise) {
+		if (entry.loadingPromise && !entry.loadingPromise.isAborted) {
 			this.diagnostics.increment("loadingDedupedCount")
-			return entry.loadingPromise
+			return entry.loadingPromise.consume(options?.signal)
 		}
 
-		const promise = this.loadVideoResourcePipeline(path, normalizedPath, entry)
-		entry.loadingPromise = promise
+		const request = new SharedAbortableRequest<LoadedVideoResource | null>(
+			(signal) =>
+				this.loadVideoResourcePipeline(path, normalizedPath, entry, {
+					...options,
+					signal,
+				}),
+			{ abortValue: null },
+		)
+		entry.loadingPromise = request
+		void request.promise.then(
+			() => {
+				if (entry.loadingPromise === request) {
+					entry.loadingPromise = null
+				}
+			},
+			() => {
+				if (entry.loadingPromise === request) {
+					entry.loadingPromise = null
+				}
+			},
+		)
 
-		try {
-			return await promise
-		} finally {
-			if (entry.loadingPromise === promise) {
-				entry.loadingPromise = null
-			}
-		}
+		return request.consume(options?.signal)
 	}
 
 	private async loadVideoResourcePipeline(
 		path: string,
 		normalizedPath: string,
 		entry: ResourceEntry,
+		options?: VideoResourceLoadOptions,
 	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
 		}
-		const cachedResource = await this.loadCachedVideoResource(path, normalizedPath, entry)
+		const cachedResource = await this.loadCachedVideoResource(
+			path,
+			normalizedPath,
+			entry,
+			options,
+		)
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
@@ -412,6 +554,7 @@ export class VideoResourceManager {
 			this.triggerBackgroundMetadataRefresh(path, normalizedPath, entry)
 			return cachedResource
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		this.clearCachedFallbackOssSrc(entry)
 
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
@@ -420,7 +563,9 @@ export class VideoResourceManager {
 			return null
 		}
 
-		const ossSrc = await this.ensureFreshOssSrc(path)
+		const ossSrc = await this.ensureFreshOssSrc(path, {
+			priority: options?.priority,
+		})
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
@@ -428,14 +573,13 @@ export class VideoResourceManager {
 		if (!ossSrc) {
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 
-		return this.previewLoader.enqueue(() =>
-			this.loadVideoResource(path, normalizedPath, ossSrc, entry),
-		)
+		return this.loadVideoResource(path, normalizedPath, ossSrc, entry, 0, options)
 	}
 
-	private clearExpiredOssSrc(entry: ResourceEntry): void {
-		this.urlLifecycle.clearExpiredOssSrc(entry)
+	private clearExpiredOssSrc(entry: ResourceEntry): boolean {
+		return this.urlLifecycle.clearExpiredOssSrc(entry)
 	}
 
 	private clearCachedFallbackOssSrc(entry: ResourceEntry): void {
@@ -479,7 +623,11 @@ export class VideoResourceManager {
 	private async exchangeOssSrc(
 		path: string,
 		entry: ResourceEntry,
-		options?: { forceRefresh?: boolean; bypassVirtualResource?: boolean },
+		options?: {
+			forceRefresh?: boolean
+			bypassVirtualResource?: boolean
+			priority?: CanvasResourceTaskPriority
+		},
 	): Promise<string | null> {
 		return this.urlLifecycle.exchangeOssSrc(path, entry, options)
 	}
@@ -488,19 +636,31 @@ export class VideoResourceManager {
 		path: string,
 		normalizedPath: string,
 		entry: ResourceEntry,
+		options?: VideoResourceLoadOptions,
 	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return null
 		}
+		const previousResourceVersion = entry.resourceVersion
 		const cached = await this.urlLifecycle.getCachedResource(path, entry)
 		if (!cached?.url) return null
-		if (entry.resource) {
+		const resourceVersionChanged =
+			!!previousResourceVersion &&
+			!!entry.resourceVersion &&
+			previousResourceVersion !== entry.resourceVersion
+		if (entry.resource && !resourceVersionChanged) {
+			entry.resourceNeedsReload = false
 			return this.buildLoadedResource(entry)
 		}
 
-		const result = await this.previewLoader.enqueue(() =>
-			this.loadVideoResource(path, normalizedPath, cached.url, entry),
+		const result = await this.loadVideoResource(
+			path,
+			normalizedPath,
+			cached.url,
+			entry,
+			0,
+			options,
 		)
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
@@ -520,26 +680,23 @@ export class VideoResourceManager {
 		path: string,
 		normalizedPath: string,
 		entry: ResourceEntry,
-		options?: { forceRefresh?: boolean },
+		options?: { forceRefresh?: boolean; priority?: CanvasResourceTaskPriority },
 	): Promise<boolean> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return false
 		}
-		const previousOssSrc = entry.ossSrc
-		const previousExpiresAt = entry.expiresAt
-		const previousOssSrcFromCachedFallback = entry.ossSrcFromCachedFallback
-		const previousSourceUrl = entry.sourceUrl
 		const previousSource = entry.source
 		const previousFileName = entry.fileName
 		const previousResourceVersion = entry.resourceVersion
 		const previousSourceUpdatedAt = entry.sourceUpdatedAt
 		const previousContentLength = entry.contentLength
+		const previousResource = entry.resource
 		const restorePreviousResourceMetadata = () => {
-			entry.ossSrc = previousOssSrc
-			entry.expiresAt = previousExpiresAt
-			entry.ossSrcFromCachedFallback = previousOssSrcFromCachedFallback
-			entry.sourceUrl = previousSourceUrl
+			entry.ossSrc = null
+			entry.expiresAt = null
+			entry.ossSrcFromCachedFallback = false
+			entry.sourceUrl = null
 			entry.source = previousSource
 			entry.fileName = previousFileName
 			entry.resourceVersion = previousResourceVersion
@@ -574,11 +731,12 @@ export class VideoResourceManager {
 			const isNotFound = entry.lastFailureReason === "not-found"
 			// 附件已删除：丢弃旧 URL 与解码缓存，避免画布仍显示已删视频
 			if (isNotFound) {
-				const hadSurface = !!entry.resource || !!previousOssSrc || !!options?.forceRefresh
+				const hadSurface = !!entry.resource || !!options?.forceRefresh
 				if (entry.resource) {
 					this.releaseResource(entry.resource)
 					entry.resource = null
 				}
+				entry.resourceNeedsReload = false
 				entry.ossSrc = null
 				entry.ossSrcFromCachedFallback = false
 				entry.expiresAt = null
@@ -592,13 +750,24 @@ export class VideoResourceManager {
 				}
 			} else {
 				restorePreviousResourceMetadata()
+				entry.resourceNeedsReload = true
+				this.canvas.eventEmitter.emit({
+					type: "resource:video:load-failed",
+					data: {
+						path: normalizedPath,
+						reason: entry.lastFailureReason ?? "load-error",
+						preservePreview: Boolean(previousResource),
+					},
+				})
 			}
 			return false
 		}
 
-		const previousResource = entry.resource
 		entry.resource = null
-		const loaded = await this.loadVideoResource(path, normalizedPath, ossSrc, entry)
+		const loaded = await this.loadVideoResource(path, normalizedPath, ossSrc, entry, 0, {
+			...options,
+			preservePreviewOnFailure: Boolean(previousResource),
+		})
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
 			return false
@@ -612,7 +781,12 @@ export class VideoResourceManager {
 			return true
 		}
 		entry.resource = previousResource
+		if (entry.ossSrc && entry.ossSrc !== ossSrc) {
+			entry.resourceNeedsReload = true
+			return false
+		}
 		restorePreviousResourceMetadata()
+		entry.resourceNeedsReload = true
 		return false
 	}
 
@@ -622,6 +796,7 @@ export class VideoResourceManager {
 		ossSrc: string,
 		entry: ResourceEntry,
 		retryCount = 0,
+		options?: VideoResourcePipelineLoadOptions,
 	): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
@@ -630,20 +805,35 @@ export class VideoResourceManager {
 		this.diagnostics.increment("previewLoadAttemptCount")
 		if (retryCount > 0) this.diagnostics.increment("previewLoadRetryCount")
 		const mediaDiag: VideoPreviewMediaDiag = { code: null, message: null }
-		const loaded = await this.canvas.resourceScheduler.run(
-			"video:preview",
-			() => this.previewLoader.extractPreviewResource(ossSrc, mediaDiag),
-			{
-				source: "video-resource:preview",
-				canvasId: this.canvas.id,
-				managerInstanceId: this.managerInstanceId,
-				path: normalizedPath,
-				url: ossSrc,
-				priority: retryCount > 0 ? "critical" : "visible",
-			},
-		)
+		let loaded: LoadedVideoResource | null
+		try {
+			loaded = await this.canvas.resourceScheduler.run(
+				"video:preview",
+				(signal) => this.previewLoader.extractPreviewResource(ossSrc, mediaDiag, signal),
+				{
+					source: "video-resource:preview",
+					canvasId: this.canvas.id,
+					managerInstanceId: this.managerInstanceId,
+					path: normalizedPath,
+					url: ossSrc,
+					priority: retryCount > 0 ? "critical" : (options?.priority ?? "visible"),
+					signal: options?.signal,
+				},
+			)
+		} catch (error) {
+			if (isAbortError(error)) {
+				this.markStaleRequestDrop()
+				return null
+			}
+			throw error
+		}
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
+			return null
+		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
+		if (loaded && entry.ossSrc !== ossSrc) {
+			this.releaseResource({ poster: loaded.poster, metadata: loaded.metadata })
 			return null
 		}
 		if (!loaded && retryCount === 0) {
@@ -653,7 +843,7 @@ export class VideoResourceManager {
 					ossSrc,
 					entry,
 					retryCount,
-				)) ?? (await this.exchangeOssSrc(path, entry))
+				)) ?? (await this.exchangeOssSrc(path, entry, { priority: options?.priority }))
 			if (freshOssSrc) {
 				return this.loadVideoResource(
 					path,
@@ -661,6 +851,7 @@ export class VideoResourceManager {
 					freshOssSrc,
 					entry,
 					retryCount + 1,
+					options,
 				)
 			}
 		}
@@ -670,16 +861,26 @@ export class VideoResourceManager {
 			this.setFailureReason(entry, entry.lastFailureReason ?? "load-error")
 			this.canvas.eventEmitter.emit({
 				type: "resource:video:load-failed",
-				data: { path: normalizedPath, reason: entry.lastFailureReason ?? "load-error" },
+				data: {
+					path: normalizedPath,
+					reason: entry.lastFailureReason ?? "load-error",
+					preservePreview: options?.preservePreviewOnFailure,
+				},
 			})
 			return null
 		}
 
 		this.diagnostics.increment("previewLoadSuccessCount")
+		const previousResource = entry.resource
 		entry.resource = {
 			poster: loaded.poster,
 			metadata: loaded.metadata,
 		}
+		entry.resourceLastAccessAt = Date.now()
+		if (previousResource && previousResource !== entry.resource) {
+			this.releaseResource(previousResource)
+		}
+		entry.resourceNeedsReload = false
 		this.setFailureReason(entry, null)
 		this.canvas.mediaResourceOfflineCacheManager.recordVirtualResourceLoadSuccess(ossSrc)
 
@@ -786,4 +987,17 @@ export class VideoResourceManager {
 		resource.poster.width = 0
 		resource.poster.height = 0
 	}
+
+	private getPosterBytes(poster: VideoPosterSource): number {
+		return Math.max(0, poster.width) * Math.max(0, poster.height) * 4
+	}
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error
+		? error.name === "AbortError"
+		: typeof error === "object" &&
+				error !== null &&
+				"name" in error &&
+				(error as { name?: unknown }).name === "AbortError"
 }

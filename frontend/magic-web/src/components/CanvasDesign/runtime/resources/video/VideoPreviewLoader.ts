@@ -11,7 +11,6 @@ export interface VideoPreviewMediaDiag {
 }
 
 export interface VideoPreviewLoaderOptions {
-	concurrency: number
 	timeoutMs: number
 	isDestroyed: () => boolean
 	onStaleRequestDrop: () => void
@@ -19,67 +18,26 @@ export interface VideoPreviewLoaderOptions {
 	onTimeout: () => void
 }
 
-interface PreviewLoadQueueItem {
-	run: () => void
-	reject: (error: Error) => void
-}
-
 export class VideoPreviewLoader {
-	private activePreviewLoadCount = 0
-	private previewLoadQueue: PreviewLoadQueueItem[] = []
 	private readonly activePreviewDisposers = new Set<() => void>()
 
 	constructor(private readonly options: VideoPreviewLoaderOptions) {}
 
-	public get activeCount(): number {
-		return this.activePreviewLoadCount
-	}
-
-	public get queuedCount(): number {
-		return this.previewLoadQueue.length
-	}
-
-	public enqueue<T>(task: () => Promise<T>): Promise<T> {
-		return new Promise((resolve, reject) => {
-			const run = () => {
-				if (this.options.isDestroyed()) {
-					this.options.onStaleRequestDrop()
-					reject(new Error("VideoPreviewLoader destroyed"))
-					return
-				}
-				this.activePreviewLoadCount += 1
-				void task()
-					.then(resolve, reject)
-					.finally(() => {
-						this.activePreviewLoadCount = Math.max(0, this.activePreviewLoadCount - 1)
-						const nextTask = this.previewLoadQueue.shift()
-						if (nextTask) {
-							nextTask.run()
-						}
-					})
-			}
-
-			if (this.activePreviewLoadCount < this.options.concurrency) {
-				run()
-				return
-			}
-
-			this.previewLoadQueue.push({
-				run,
-				reject: (error) => reject(error),
-			})
-		})
-	}
-
 	public extractPreviewResource(
 		ossSrc: string,
 		mediaDiag?: VideoPreviewMediaDiag,
+		signal?: AbortSignal,
 	): Promise<LoadedVideoResource | null> {
 		if (this.options.isDestroyed()) {
 			this.options.onStaleRequestDrop()
 			return Promise.resolve(null)
 		}
 		return new Promise((resolve) => {
+			if (signal?.aborted) {
+				this.options.onAbort()
+				resolve(null)
+				return
+			}
 			const video = document.createElement("video")
 			video.crossOrigin = "anonymous"
 			video.preload = "auto"
@@ -100,6 +58,9 @@ export class VideoPreviewLoader {
 				if (timeoutId) {
 					clearTimeout(timeoutId)
 					timeoutId = null
+				}
+				if (abortPreview) {
+					signal?.removeEventListener("abort", abortPreview)
 				}
 			}
 
@@ -132,6 +93,7 @@ export class VideoPreviewLoader {
 				finish(null)
 			}
 			this.activePreviewDisposers.add(abortPreview)
+			signal?.addEventListener("abort", abortPreview, { once: true })
 			timeoutId = setTimeout(() => {
 				if (settled) return
 				this.options.onTimeout()
@@ -226,8 +188,7 @@ export class VideoPreviewLoader {
 	}
 
 	public destroy(error = new Error("VideoPreviewLoader destroyed")): void {
-		this.previewLoadQueue.forEach(({ reject }) => reject(error))
-		this.previewLoadQueue = []
+		void error
 		this.activePreviewDisposers.forEach((disposePreview) => disposePreview())
 		this.activePreviewDisposers.clear()
 	}

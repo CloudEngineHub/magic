@@ -16,10 +16,15 @@ interface PendingWorkerRequest {
 	ownerId: string
 	resolve: (response: ImageResourceWorkerResponse) => void
 	reject: (error: Error) => void
+	signal?: AbortSignal
+	abortListener?: () => void
 }
 
 export interface ImageResourceWorkerClientLease {
-	send(request: ImageResourceWorkerRequest): Promise<ImageResourceWorkerResponse>
+	send(
+		request: ImageResourceWorkerRequest,
+		options?: { signal?: AbortSignal },
+	): Promise<ImageResourceWorkerResponse>
 	release(error?: Error): void
 	cancelAll(error?: Error): void
 }
@@ -80,7 +85,7 @@ class SharedImageResourceWorkerClient {
 
 		let released = false
 		return {
-			send: (request) => this.send(owner, request),
+			send: (request, options) => this.send(owner, request, options),
 			cancelAll: (error) => {
 				this.cancelOwnerRequests(
 					owner.ownerId,
@@ -98,6 +103,7 @@ class SharedImageResourceWorkerClient {
 	private send(
 		owner: ImageResourceWorkerOwnerInfo,
 		request: ImageResourceWorkerRequest,
+		options?: { signal?: AbortSignal },
 	): Promise<ImageResourceWorkerResponse> {
 		if (!this.activeOwners.has(owner.ownerId)) {
 			return Promise.reject(new Error("ImageResourceWorkerClient owner released"))
@@ -108,16 +114,35 @@ class SharedImageResourceWorkerClient {
 			)
 		}
 
+		if (options?.signal?.aborted) {
+			return Promise.reject(createAbortError())
+		}
+
 		return new Promise((resolve, reject) => {
+			const abortListener = () => {
+				this.cancelRequest(request.requestId, createAbortError())
+			}
 			this.pendingRequests.set(request.requestId, {
 				ownerId: owner.ownerId,
 				resolve,
 				reject,
+				signal: options?.signal,
+				abortListener,
 			})
+			options?.signal?.addEventListener("abort", abortListener, { once: true })
 			try {
-				this.getWorker().postMessage(request)
+				const transferables: Transferable[] = []
+				if (request.type === "encode-persistent-low" && request.imageSource) {
+					transferables.push(request.imageSource)
+				}
+				if (transferables.length > 0) {
+					this.getWorker().postMessage(request, { transfer: transferables })
+				} else {
+					this.getWorker().postMessage(request)
+				}
 			} catch (error) {
-				this.pendingRequests.delete(request.requestId)
+				request.imageSource?.close()
+				this.removePendingRequest(request.requestId)
 				reject(error instanceof Error ? error : new Error(String(error)))
 			}
 		})
@@ -140,8 +165,11 @@ class SharedImageResourceWorkerClient {
 
 			const { requestId } = message
 			const pending = this.pendingRequests.get(requestId)
-			if (!pending) return
-			this.pendingRequests.delete(requestId)
+			if (!pending) {
+				message.imageSource?.close()
+				return
+			}
+			this.removePendingRequest(requestId)
 			pending.resolve(message)
 		}
 
@@ -171,16 +199,39 @@ class SharedImageResourceWorkerClient {
 	private cancelOwnerRequests(ownerId: string, error: Error): void {
 		this.pendingRequests.forEach((pending, requestId) => {
 			if (pending.ownerId !== ownerId) return
-			this.pendingRequests.delete(requestId)
-			pending.reject(error)
+			this.cancelRequest(requestId, error)
 		})
 	}
 
 	private rejectAll(error: Error): void {
-		this.pendingRequests.forEach((pending) => {
-			pending.reject(error)
+		this.pendingRequests.forEach((_, requestId) => {
+			this.cancelRequest(requestId, error)
 		})
-		this.pendingRequests.clear()
+	}
+
+	private cancelRequest(requestId: string, error: Error): void {
+		const pending = this.removePendingRequest(requestId)
+		if (!pending) return
+		try {
+			this.worker?.postMessage({
+				type: "cancel",
+				requestId: `cancel:${requestId}`,
+				targetRequestId: requestId,
+			})
+		} catch {
+			// A terminating worker cannot receive a cancellation message; rejecting the caller is enough.
+		}
+		pending.reject(error)
+	}
+
+	private removePendingRequest(requestId: string): PendingWorkerRequest | undefined {
+		const pending = this.pendingRequests.get(requestId)
+		if (!pending) return undefined
+		this.pendingRequests.delete(requestId)
+		if (pending.abortListener) {
+			pending.signal?.removeEventListener("abort", pending.abortListener)
+		}
+		return pending
 	}
 
 	private scheduleTerminate(): void {
@@ -204,6 +255,12 @@ class SharedImageResourceWorkerClient {
 		this.worker.terminate()
 		this.worker = null
 	}
+}
+
+function createAbortError(): Error {
+	const error = new Error("Image resource worker request aborted")
+	error.name = "AbortError"
+	return error
 }
 
 const sharedImageResourceWorkerClient = new SharedImageResourceWorkerClient()

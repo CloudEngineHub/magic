@@ -1,66 +1,37 @@
 import { describe, expect, it, vi } from "vitest"
 import { VideoPreviewLoader } from "../video/VideoPreviewLoader"
 
-function createLoader(options?: { concurrency?: number; isDestroyed?: () => boolean }) {
-	return new VideoPreviewLoader({
-		concurrency: options?.concurrency ?? 1,
+function createLoader(options?: { isDestroyed?: () => boolean }) {
+	const onAbort = vi.fn()
+	const loader = new VideoPreviewLoader({
 		timeoutMs: 1000,
 		isDestroyed: options?.isDestroyed ?? (() => false),
 		onStaleRequestDrop: vi.fn(),
-		onAbort: vi.fn(),
+		onAbort,
 		onTimeout: vi.fn(),
 	})
+	return { loader, onAbort }
 }
 
 describe("VideoPreviewLoader", () => {
-	it("queues preview tasks by concurrency and starts the next task after release", async () => {
-		const loader = createLoader({ concurrency: 1 })
-		let finishFirst!: () => void
-		let firstStarted = false
-		let secondStarted = false
+	it("aborts an in-flight preview when its scheduler signal is cancelled", async () => {
+		const { loader, onAbort } = createLoader()
+		const controller = new AbortController()
+		const video = document.createElement("video")
+		vi.spyOn(video, "load").mockImplementation(() => undefined)
+		vi.spyOn(video, "pause").mockImplementation(() => undefined)
+		const createElement = vi.spyOn(document, "createElement").mockReturnValue(video)
 
-		const first = loader.enqueue(
-			() =>
-				new Promise<void>((resolve) => {
-					firstStarted = true
-					finishFirst = resolve
-				}),
+		const preview = loader.extractPreviewResource(
+			"https://example.test/video.mp4",
+			undefined,
+			controller.signal,
 		)
-		const second = loader.enqueue(async () => {
-			secondStarted = true
-		})
+		controller.abort()
 
-		await Promise.resolve()
-		expect(firstStarted).toBe(true)
-		expect(secondStarted).toBe(false)
-		expect(loader.activeCount).toBe(1)
-		expect(loader.queuedCount).toBe(1)
-
-		finishFirst()
-		await first
-		await second
-		await Promise.resolve()
-		expect(secondStarted).toBe(true)
-		expect(loader.activeCount).toBe(0)
-		expect(loader.queuedCount).toBe(0)
-	})
-
-	it("rejects queued preview tasks on destroy", async () => {
-		const loader = createLoader({ concurrency: 1 })
-		let finishFirst!: () => void
-		const first = loader.enqueue(
-			() =>
-				new Promise<void>((resolve) => {
-					finishFirst = resolve
-				}),
-		)
-		const second = loader.enqueue(async () => undefined)
-		const pendingError = new Error("destroyed")
-
-		loader.destroy(pendingError)
-		await expect(second).rejects.toBe(pendingError)
-
-		finishFirst()
-		await first
+		await expect(preview).resolves.toBeNull()
+		expect(onAbort).toHaveBeenCalledTimes(1)
+		expect(video.pause).toHaveBeenCalledTimes(1)
+		createElement.mockRestore()
 	})
 })

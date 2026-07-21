@@ -971,6 +971,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.resourceLoadFailedHandler = ({ data }) => {
 			if (isCurrentResourcePath(data.path)) {
 				this.imageLoadFailureReason = data.reason ?? "load-error"
+				if (data.preservePreview && this.loadedImage) {
+					this.isResourceLoading = false
+					this.isErrorState = false
+					this.canvas.visibilityManager.invalidateImageLoadRequest(
+						data.path,
+						undefined,
+						"refresh-failed",
+						{ scheduleRefresh: false },
+					)
+					return
+				}
 				this.handleImageLoadFailure()
 			}
 		}

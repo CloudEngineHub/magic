@@ -47,6 +47,7 @@ import {
 import { clipboard } from "@/utils/clipboard-helpers"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
 
 interface UseDesignMethodsOptions {
 	projectId?: string
@@ -699,6 +700,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			resolveAbsolutePath,
 			resolveResourcePathCandidates,
 			getVirtualResourceScope,
+			getImageProcessCacheSignature: getPreviewFileUrlWatermarkSignature,
 			addToConversation,
 			downloadFiles,
 			getStorage,

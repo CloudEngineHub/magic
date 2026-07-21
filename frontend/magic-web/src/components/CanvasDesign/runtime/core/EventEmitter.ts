@@ -186,6 +186,8 @@ export interface CanvasEventMap {
 		path: string
 		/** 与 ImageResourceManager 条目一致；便于 UI 区分文件缺失与通用加载失败 */
 		reason?: ResourceLoadFailureReason
+		/** refresh 失败时保留旧 decoded surface，仅使可见性请求状态失效等待重试。 */
+		preservePreview?: boolean
 	} // 图片资源加载失败事件
 	"resource:image:will-close": {
 		path?: string
@@ -197,6 +199,8 @@ export interface CanvasEventMap {
 	"resource:video:load-failed": {
 		path: string
 		reason?: ResourceLoadFailureReason
+		/** refresh 失败时可保留旧 poster，仅使调度状态失效并等待后续重试 */
+		preservePreview?: boolean
 	} // 视频换链/刷新失败（如附件已删除）
 	"resource:remote-load-deferral-released": { path: string; key: string } // 跨画布粘贴远程参考资源迁移完成/结束，允许预览重试
 	"resource:released": { path: string } // 资源生命周期清理事件（供资源 URL 缓存同步）

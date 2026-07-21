@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
 	MediaResourceBodyCache,
+	type MediaResourceBody,
 	type MediaResourceBodyCacheEntry,
 } from "../offline-cache/MediaResourceBodyCache"
+import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 
 function createEntry(
 	overrides: Partial<MediaResourceBodyCacheEntry> = {},
@@ -104,5 +106,61 @@ describe("MediaResourceBodyCache", () => {
 			bodyCacheBytes: 10,
 			bodyFetchInFlightCount: 0,
 		})
+	})
+
+	it("removes superseded requests from global in-flight tracking", async () => {
+		const cache = new MediaResourceBodyCache({ ttlMs: 1000, maxBytes: 1000 })
+		const entry = createEntry()
+		const previousRequest = new SharedAbortableRequest<MediaResourceBody | null>(
+			() => Promise.resolve(null),
+			{ abortValue: null },
+		)
+		const currentRequest = new SharedAbortableRequest<MediaResourceBody | null>(
+			(signal) =>
+				new Promise((resolve) => {
+					if (signal.aborted) {
+						resolve(null)
+						return
+					}
+					signal.addEventListener("abort", () => resolve(null), { once: true })
+				}),
+			{ abortValue: null },
+		)
+		const previousAbort = vi.spyOn(previousRequest, "abort")
+		const currentAbort = vi.spyOn(currentRequest, "abort")
+
+		cache.setInFlight(entry, "old", previousRequest)
+		await previousRequest.promise
+		cache.setInFlight(entry, "new", currentRequest)
+		cache.clearInFlightIfCurrent(entry, previousRequest)
+		cache.abortAll()
+		await currentRequest.promise
+
+		expect(previousAbort).not.toHaveBeenCalled()
+		expect(currentAbort).toHaveBeenCalledOnce()
+	})
+
+	it("aborts an active shared request when clearing an entry", async () => {
+		const cache = new MediaResourceBodyCache({ ttlMs: 1000, maxBytes: 1000 })
+		const entry = createEntry()
+		const request = new SharedAbortableRequest<MediaResourceBody | null>(
+			(signal) =>
+				new Promise((resolve) => {
+					if (signal.aborted) {
+						resolve(null)
+						return
+					}
+					signal.addEventListener("abort", () => resolve(null), { once: true })
+				}),
+			{ abortValue: null },
+		)
+		cache.setInFlight(entry, "active", request)
+		const consumer = request.consume()
+
+		cache.clearEntry(entry)
+
+		await expect(consumer).resolves.toBeNull()
+		expect(request.isAborted).toBe(true)
+		expect(entry.bodyPromise).toBeNull()
 	})
 })

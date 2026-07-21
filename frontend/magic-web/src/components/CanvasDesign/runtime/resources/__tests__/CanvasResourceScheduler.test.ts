@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { CanvasResourceScheduler } from "../scheduler/CanvasResourceScheduler"
 
 interface Deferred<T> {
@@ -66,6 +66,82 @@ describe("CanvasResourceScheduler", () => {
 		deferreds[1].resolve(1)
 		deferreds[2].resolve(2)
 		await expect(Promise.all(promises)).resolves.toEqual([0, 1, 2])
+	})
+
+	it("caps persistent low cache work independently from preview decoding", async () => {
+		const scheduler = new CanvasResourceScheduler()
+		const started: string[] = []
+		const restoreA = createDeferred<string>()
+		const restoreB = createDeferred<string>()
+		const restoreC = createDeferred<string>()
+		const writeA = createDeferred<string>()
+		const writeB = createDeferred<string>()
+
+		const promises = [
+			scheduler.run(
+				"image:persistent-low-restore",
+				() => {
+					started.push("restore-a")
+					return restoreA.promise
+				},
+				{ source: "test", priority: "visible" },
+			),
+			scheduler.run(
+				"image:persistent-low-restore",
+				() => {
+					started.push("restore-b")
+					return restoreB.promise
+				},
+				{ source: "test", priority: "visible" },
+			),
+			scheduler.run(
+				"image:persistent-low-restore",
+				() => {
+					started.push("restore-c")
+					return restoreC.promise
+				},
+				{ source: "test", priority: "visible" },
+			),
+			scheduler.run(
+				"image:persistent-low-write",
+				() => {
+					started.push("write-a")
+					return writeA.promise
+				},
+				{ source: "test", priority: "background" },
+			),
+			scheduler.run(
+				"image:persistent-low-write",
+				() => {
+					started.push("write-b")
+					return writeB.promise
+				},
+				{ source: "test", priority: "background" },
+			),
+		]
+
+		expect(started).toEqual(["restore-a", "restore-b", "write-a"])
+		restoreA.resolve("restore-a")
+		await promises[0]
+		await flushMicrotasks()
+		expect(started).toContain("restore-c")
+
+		restoreB.resolve("restore-b")
+		restoreC.resolve("restore-c")
+		writeA.resolve("write-a")
+		await promises[1]
+		await promises[2]
+		await promises[3]
+		await flushMicrotasks()
+		expect(started).toContain("write-b")
+		writeB.resolve("write-b")
+		await expect(Promise.all(promises)).resolves.toEqual([
+			"restore-a",
+			"restore-b",
+			"restore-c",
+			"write-a",
+			"write-b",
+		])
 	})
 
 	it("starts higher priority queued tasks first", async () => {
@@ -213,5 +289,63 @@ describe("CanvasResourceScheduler", () => {
 				failedCount: 2,
 			}),
 		)
+	})
+
+	it("removes an externally aborted queued task before it starts", async () => {
+		const scheduler = new CanvasResourceScheduler()
+		const activeA = createDeferred<string>()
+		const activeB = createDeferred<string>()
+		const controller = new AbortController()
+		const queuedTask = vi.fn(async () => "queued")
+
+		const activePromises = [
+			scheduler.run("video:preview", () => activeA.promise, {
+				source: "test",
+				priority: "visible",
+			}),
+			scheduler.run("video:preview", () => activeB.promise, {
+				source: "test",
+				priority: "visible",
+			}),
+		]
+		const queuedPromise = scheduler.run("video:preview", queuedTask, {
+			source: "test",
+			priority: "visible",
+			signal: controller.signal,
+		})
+
+		controller.abort()
+
+		await expect(queuedPromise).rejects.toMatchObject({ name: "AbortError" })
+		expect(queuedTask).not.toHaveBeenCalled()
+		expect(scheduler.getSnapshot()).toEqual(
+			expect.objectContaining({ activeTotal: 2, queuedTotal: 0 }),
+		)
+
+		activeA.resolve("active-a")
+		activeB.resolve("active-b")
+		await expect(Promise.all(activePromises)).resolves.toEqual(["active-a", "active-b"])
+	})
+
+	it("forwards cancellation to an active task signal", async () => {
+		const scheduler = new CanvasResourceScheduler()
+		const controller = new AbortController()
+		let taskSignal: AbortSignal | undefined
+
+		const task = scheduler.run(
+			"image:decode",
+			(signal) => {
+				taskSignal = signal
+				return new Promise<string>((resolve) => {
+					signal.addEventListener("abort", () => resolve("cancelled"), { once: true })
+				})
+			},
+			{ source: "test", priority: "visible", signal: controller.signal },
+		)
+
+		expect(taskSignal?.aborted).toBe(false)
+		controller.abort()
+		await expect(task).resolves.toBe("cancelled")
+		expect(taskSignal?.aborted).toBe(true)
 	})
 })

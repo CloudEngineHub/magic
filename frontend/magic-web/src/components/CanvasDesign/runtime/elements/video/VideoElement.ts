@@ -26,7 +26,10 @@ import {
 import { VIDEO_CONFIG } from "./VideoElement.config"
 import type { Canvas } from "../../core/Canvas"
 import type { VideoPlaybackConsumerState } from "../../resources/video/VideoPlaybackManager"
-import type { LoadedVideoResource } from "../../resources/video/VideoResourceManager"
+import type {
+	LoadedVideoResource,
+	VideoResourceLoadOptions,
+} from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { hasVideoGenerationRequestUserIntent } from "../../shared/videoGenerationRequestIntent"
 
@@ -71,7 +74,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		data: { path: string; resource: LoadedVideoResource }
 	}) => void
 	private videoResourceLoadFailedHandler?: (event: {
-		data: { path: string; reason?: ResourceLoadFailureReason }
+		data: {
+			path: string
+			reason?: ResourceLoadFailureReason
+			preservePreview?: boolean
+		}
 	}) => void
 	private isRetryEditing = false
 
@@ -236,16 +243,33 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	private async loadPreviewFromPath(path: string): Promise<void> {
+	private async loadPreviewFromPath(
+		path: string,
+		options?: VideoResourceLoadOptions,
+	): Promise<void> {
 		const loadToken = ++this.previewLoadToken
 		this.previewLoadInFlightPath = path
 		this.isLoadingState = true
 		this.isErrorState = false
 
 		try {
-			const loaded = await this.canvas.videoResourceManager.getPreviewResource(path)
+			const loaded = await this.canvas.videoResourceManager.getPreviewResource(path, options)
 			if (!loaded) {
 				if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+					return
+				}
+				if (options?.signal?.aborted) {
+					this.isLoadingState = false
+					this.schedulePreviewRefresh()
+					return
+				}
+				if (
+					this.renderer.hasPreview() &&
+					this.canvas.videoResourceManager.needsResourceReload(path)
+				) {
+					this.isLoadingState = false
+					this.isErrorState = false
+					this.schedulePreviewRefresh()
 					return
 				}
 				this.isLoadingState = false
@@ -277,14 +301,19 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	public requestPreviewLoad(options?: { force?: boolean }): void {
+	public requestPreviewLoad(options?: VideoResourceLoadOptions & { force?: boolean }): void {
 		const path = this.data.src
 		if (!path || this.isDestroyed) return
 		if (!options?.force) {
-			if (this.renderer.hasPreview()) return
+			if (
+				this.renderer.hasPreview() &&
+				!this.canvas.videoResourceManager.needsResourceReload(path)
+			) {
+				return
+			}
 			if (this.previewLoadInFlightPath && this.previewLoadInFlightPath === path) return
 		}
-		void this.loadPreviewFromPath(path)
+		void this.loadPreviewFromPath(path, options)
 	}
 
 	private handlePollingIssue(): void {
@@ -387,6 +416,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isInlinePlaybackRefreshing = false
 			this.releasePlaybackConsumers()
 			this.renderer.detachPlayback()
+			if (data.preservePreview && this.renderer.hasPreview()) {
+				this.isLoadingState = false
+				this.isErrorState = false
+				this.schedulePreviewRefresh()
+				return
+			}
+
 			this.renderer.resetPreview()
 			this.isLoadingState = false
 			this.isErrorState = true

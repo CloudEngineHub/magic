@@ -1,8 +1,12 @@
+import { SharedAbortableRequest } from "./SharedAbortableRequest"
+
 export interface MediaResourceBody {
 	blob: Blob
 	ossSrc: string
 	cacheKey: string
 	byteSize: number
+	/** 资源 URL/metadata 代际；用于阻止旧 body 在版本变化后继续进入 decode。 */
+	resourceGeneration?: number
 }
 
 export interface MediaResourceBodyCacheEntry {
@@ -10,13 +14,14 @@ export interface MediaResourceBodyCacheEntry {
 	resourceVersion: string | null
 	sourceUpdatedAt: string | null
 	contentLength: number | null
-	bodyPromise: Promise<MediaResourceBody | null> | null
+	bodyPromise: SharedAbortableRequest<MediaResourceBody | null> | null
 	bodyPromiseCacheKey: string | null
 	bodyBlob: Blob | null
 	bodyOssSrc: string | null
 	bodyCacheKey: string | null
 	bodyByteSize: number
 	bodyLastAccessAt: number
+	bodyResourceGeneration?: number | null
 }
 
 export interface MediaResourceBodyCacheState {
@@ -25,6 +30,7 @@ export interface MediaResourceBodyCacheState {
 	bodyCacheKey: string | null
 	bodyByteSize: number
 	bodyLastAccessAt: number
+	bodyResourceGeneration?: number | null
 }
 
 export interface MediaResourceBodyCacheSnapshot {
@@ -40,7 +46,7 @@ export interface MediaResourceBodyCacheOptions {
 }
 
 export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> {
-	private readonly abortControllers = new Set<AbortController>()
+	private readonly inFlightRequests = new Set<SharedAbortableRequest<MediaResourceBody | null>>()
 	private readonly now: () => number
 
 	constructor(private readonly options: MediaResourceBodyCacheOptions) {
@@ -83,26 +89,39 @@ export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> 
 			ossSrc: entry.bodyOssSrc ?? ossSrc,
 			cacheKey,
 			byteSize: entry.bodyByteSize,
+			...(typeof entry.bodyResourceGeneration === "number"
+				? { resourceGeneration: entry.bodyResourceGeneration }
+				: {}),
 		}
 	}
 
-	public getInFlight(entry: TEntry, cacheKey: string): Promise<MediaResourceBody | null> | null {
+	public getInFlight(
+		entry: TEntry,
+		cacheKey: string,
+	): SharedAbortableRequest<MediaResourceBody | null> | null {
 		if (entry.bodyPromiseCacheKey !== cacheKey) return null
+		if (entry.bodyPromise?.isAborted) return null
 		return entry.bodyPromise
 	}
 
 	public setInFlight(
 		entry: TEntry,
 		cacheKey: string,
-		promise: Promise<MediaResourceBody | null>,
+		request: SharedAbortableRequest<MediaResourceBody | null>,
 	): void {
-		entry.bodyPromise = promise
+		entry.bodyPromise = request
 		entry.bodyPromiseCacheKey = cacheKey
+		this.inFlightRequests.add(request)
 	}
 
-	public clearInFlightIfCurrent(entry: TEntry, promise: Promise<MediaResourceBody | null>): void {
-		if (entry.bodyPromise !== promise) return
-		this.clearBodyPromise(entry)
+	public clearInFlightIfCurrent(
+		entry: TEntry,
+		request: SharedAbortableRequest<MediaResourceBody | null>,
+	): void {
+		this.inFlightRequests.delete(request)
+		if (entry.bodyPromise !== request) return
+		entry.bodyPromise = null
+		entry.bodyPromiseCacheKey = null
 	}
 
 	public storeBody(entry: TEntry, body: MediaResourceBody): void {
@@ -111,6 +130,7 @@ export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> 
 		entry.bodyCacheKey = body.cacheKey
 		entry.bodyByteSize = body.byteSize
 		entry.bodyLastAccessAt = this.now()
+		entry.bodyResourceGeneration = body.resourceGeneration ?? null
 	}
 
 	public clearBody(entry: TEntry): void {
@@ -119,9 +139,12 @@ export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> 
 		entry.bodyCacheKey = null
 		entry.bodyByteSize = 0
 		entry.bodyLastAccessAt = 0
+		entry.bodyResourceGeneration = null
 	}
 
 	public clearBodyPromise(entry: TEntry): void {
+		entry.bodyPromise?.abort()
+		if (entry.bodyPromise) this.inFlightRequests.delete(entry.bodyPromise)
 		entry.bodyPromise = null
 		entry.bodyPromiseCacheKey = null
 	}
@@ -170,6 +193,7 @@ export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> 
 			bodyCacheKey: entry.bodyCacheKey,
 			bodyByteSize: entry.bodyByteSize,
 			bodyLastAccessAt: entry.bodyLastAccessAt,
+			bodyResourceGeneration: entry.bodyResourceGeneration ?? null,
 		}
 	}
 
@@ -179,22 +203,11 @@ export class MediaResourceBodyCache<TEntry extends MediaResourceBodyCacheEntry> 
 		entry.bodyCacheKey = state.bodyCacheKey
 		entry.bodyByteSize = state.bodyByteSize
 		entry.bodyLastAccessAt = state.bodyLastAccessAt
-	}
-
-	public createAbortController(): AbortController {
-		const controller = new AbortController()
-		this.abortControllers.add(controller)
-		return controller
-	}
-
-	public releaseAbortController(controller: AbortController): void {
-		this.abortControllers.delete(controller)
+		entry.bodyResourceGeneration = state.bodyResourceGeneration ?? null
 	}
 
 	public abortAll(): void {
-		this.abortControllers.forEach((controller) => {
-			controller.abort()
-		})
-		this.abortControllers.clear()
+		this.inFlightRequests.forEach((request) => request.abort())
+		this.inFlightRequests.clear()
 	}
 }

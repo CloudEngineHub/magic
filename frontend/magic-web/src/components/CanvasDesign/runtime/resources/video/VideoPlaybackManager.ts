@@ -164,6 +164,7 @@ export class VideoPlaybackManager {
 
 		const ossInfo = await this.canvas.videoResourceManager.ensureFreshOssInfo(path, {
 			allowCachedFallback: true,
+			priority: options?.autoPlay ? "critical" : "visible",
 		})
 		if (!ossInfo) {
 			return null
@@ -605,6 +606,7 @@ export class VideoPlaybackManager {
 				fallbackOssInfo ??
 				(await this.canvas.videoResourceManager.ensureFreshOssInfo(session.path, {
 					forceRefresh: true,
+					priority: "critical",
 				}))
 			if (!ossInfo || !this.isTrackedSession(session)) {
 				return false

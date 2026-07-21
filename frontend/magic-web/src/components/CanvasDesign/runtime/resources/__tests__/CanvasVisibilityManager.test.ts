@@ -160,6 +160,26 @@ type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
 type UpdateImageRetentionHints = (candidates: ImageCandidate[], lastSeenAt: number) => void
 
 describe("CanvasVisibilityManager video load requests", () => {
+	it("binds viewport video requests to the shared path signal without an epoch", () => {
+		const { ensureFreshOssInfo, manager } = createManager()
+		const requestVideoLoad = (manager as unknown as { requestVideoLoad: RequestVideoLoad })
+			.requestVideoLoad
+
+		requestVideoLoad.call(manager, createCandidate("near"), "viewport:pan")
+		requestVideoLoad.call(manager, createCandidate("near"), "viewport:scale")
+
+		expect(ensureFreshOssInfo).toHaveBeenCalledTimes(1)
+		expect(ensureFreshOssInfo).toHaveBeenCalledWith(
+			"./videos/a.mp4",
+			expect.objectContaining({
+				allowCachedFallback: true,
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(ensureFreshOssInfo.mock.calls[0]?.[1]).not.toHaveProperty("viewportEpoch")
+		expect(ensureFreshOssInfo.mock.calls[0]?.[1]).not.toHaveProperty("dropIfViewportStale")
+	})
+
 	it("dedupes repeated near video url prewarm candidates", () => {
 		const { ensureFreshOssInfo, manager, requestPreviewLoad } = createManager()
 		const requestVideoLoad = (manager as unknown as { requestVideoLoad: RequestVideoLoad })
@@ -171,6 +191,7 @@ describe("CanvasVisibilityManager video load requests", () => {
 		expect(ensureFreshOssInfo).toHaveBeenCalledTimes(1)
 		expect(ensureFreshOssInfo).toHaveBeenCalledWith("./videos/a.mp4", {
 			allowCachedFallback: true,
+			priority: "near",
 		})
 		expect(requestPreviewLoad).not.toHaveBeenCalled()
 	})
@@ -238,6 +259,55 @@ describe("CanvasVisibilityManager video load requests", () => {
 })
 
 describe("CanvasVisibilityManager image load requests", () => {
+	it("does not reissue an unchanged viewport image request across pan and scale", () => {
+		const emitImageResourceDisplayTarget = vi.fn()
+		const loadResource = vi.fn()
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				imageResourceManager: {
+					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
+					loadResource: typeof loadResource
+				}
+			}
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+		}
+		manager.canvas = {
+			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
+		}
+		manager.lastRequestedLoadState = new Map()
+
+		const candidate = {
+			...createImageCandidate("image-1", "visible"),
+			path: "./images/a.png",
+		}
+		const requestImageLoad = (
+			manager as unknown as {
+				requestImageLoad: (candidate: ImageCandidate, reason: string) => void
+			}
+		).requestImageLoad
+		requestImageLoad.call(manager, candidate, "viewport:pan")
+		requestImageLoad.call(manager, candidate, "viewport:scale")
+
+		expect(loadResource).toHaveBeenCalledTimes(1)
+		expect(loadResource).toHaveBeenCalledWith(
+			"./images/a.png",
+			expect.objectContaining({
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(loadResource.mock.calls[0]?.[1]).not.toHaveProperty("viewportEpoch")
+		expect(loadResource.mock.calls[0]?.[1]).not.toHaveProperty("dropIfViewportStale")
+	})
+
 	it("downgrades full candidates to preview while viewport movement is active", () => {
 		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
 		const deferFullImageCandidateIfNeeded = (
@@ -514,13 +584,11 @@ describe("CanvasVisibilityManager image load requests", () => {
 				}
 			>
 			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
-			viewportResourceEpoch: number
 		}
 		manager.canvas = {
 			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
-		manager.viewportResourceEpoch = 7
 		const requestImageLoad = manager.requestImageLoad.bind(manager)
 
 		requestImageLoad(
@@ -543,17 +611,19 @@ describe("CanvasVisibilityManager image load requests", () => {
 			variant: "full",
 			reason: "viewport:scale",
 		})
-		expect(loadResource).toHaveBeenCalledWith("./images/a.png", {
-			variant: "full",
-			priority: "visible",
-			displayTargetElementId: "image-1",
-			displayTargetReason: "viewport:scale",
-			viewportEpoch: 7,
-			dropIfViewportStale: true,
-		})
+		expect(loadResource).toHaveBeenCalledWith(
+			"./images/a.png",
+			expect.objectContaining({
+				variant: "full",
+				priority: "visible",
+				displayTargetElementId: "image-1",
+				displayTargetReason: "viewport:scale",
+				signal: expect.any(AbortSignal),
+			}),
+		)
 	})
 
-	it("does not bind non-viewport image load requests to a viewport epoch", () => {
+	it("does not attach viewport cancellation to non-viewport image requests", () => {
 		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
 		const manager = Object.create(CanvasVisibilityManager.prototype) as {
@@ -572,13 +642,11 @@ describe("CanvasVisibilityManager image load requests", () => {
 				}
 			>
 			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
-			viewportResourceEpoch: number
 		}
 		manager.canvas = {
 			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
-		manager.viewportResourceEpoch = 7
 
 		manager.requestImageLoad(
 			{
@@ -1165,8 +1233,6 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			requestImmediateImageLoad: typeof requestImmediateImageLoad
-			viewportResourceEpoch: number
-			isViewportResourceEpochCurrent: (epoch: number) => boolean
 		}
 		manager.canvas = {
 			elementManager: {
@@ -1180,7 +1246,6 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			["image-2", { elementId: "image-2", path: "./images/b.png" }],
 			["direct-image", { elementId: "direct-image", path: "./images/direct.png" }],
 		])
-		manager.viewportResourceEpoch = 0
 		manager.requestImmediateImageLoad = requestImmediateImageLoad
 		return { manager, requestImmediateImageLoad }
 	}
@@ -1250,23 +1315,49 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 		})
 	})
 
-	it("advances the viewport resource epoch for viewport focus requests", () => {
-		const { manager } = createImmediateMediaManager({
-			"direct-image": {
-				id: "direct-image",
-				type: ElementTypeEnum.Image,
-				src: "./images/direct.png",
-			},
-		})
+	it("keeps a shared media request alive until far eviction", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as {
+			canvas: { magicConfigManager?: { config?: { methods?: unknown } } }
+			destroyed: boolean
+			getViewportResourceSignal: (mediaType: "image" | "video", path: string) => AbortSignal
+			getViewportResourceAbortKey: (mediaType: "image" | "video", path: string) => string
+			cancelFarViewportResourceSignals: (activeKeys: Set<string>) => void
+			registeredImages: Map<string, { elementId: string; path: string }>
+			registeredVideos: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<string, unknown>
+			lastRequestedVideoLoadState: Map<string, unknown>
+		}
+		manager.canvas = {}
+		manager.destroyed = false
+		manager.registeredImages = new Map([
+			["image-1", { elementId: "image-1", path: "./images/a.png" }],
+			["image-2", { elementId: "image-2", path: "./images/a.png" }],
+			["image-3", { elementId: "image-3", path: "./images/b.png" }],
+		])
+		manager.registeredVideos = new Map([
+			["video-1", { elementId: "video-1", path: "./videos/a.mp4" }],
+		])
+		manager.lastRequestedLoadState = new Map([
+			["image-1", {}],
+			["image-2", {}],
+			["image-3", {}],
+		])
+		manager.lastRequestedVideoLoadState = new Map([["video-1", {}]])
 
-		expect(manager.isViewportResourceEpochCurrent(0)).toBe(true)
+		const initialSignal = manager.getViewportResourceSignal("image", "./images/a.png")
+		const nextSignal = manager.getViewportResourceSignal("image", "./images/a.png")
+		const resourceKey = manager.getViewportResourceAbortKey("image", "./images/a.png")
 
-		manager.requestImmediateMediaLoadForElements(["direct-image"], {
-			reason: "viewport:focus-elements",
-		})
-
-		expect(manager.isViewportResourceEpochCurrent(0)).toBe(false)
-		expect(manager.isViewportResourceEpochCurrent(1)).toBe(true)
+		expect(nextSignal).toBe(initialSignal)
+		expect(initialSignal.aborted).toBe(false)
+		manager.cancelFarViewportResourceSignals(new Set([resourceKey]))
+		expect(initialSignal.aborted).toBe(false)
+		manager.cancelFarViewportResourceSignals(new Set())
+		expect(initialSignal.aborted).toBe(true)
+		expect(manager.lastRequestedLoadState.has("image-1")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-2")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-3")).toBe(true)
+		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(true)
 	})
 })
 

@@ -27,6 +27,7 @@ function createLifecycle(options?: {
 	refreshResource?: ReturnType<typeof vi.fn>
 	resolveResourceUrl?: ReturnType<typeof vi.fn>
 	onResourceMetadataHydrated?: ReturnType<typeof vi.fn>
+	onResourceVersionChanged?: ReturnType<typeof vi.fn>
 }) {
 	const getFileInfo =
 		options?.getFileInfo ??
@@ -72,6 +73,7 @@ function createLifecycle(options?: {
 		onResourceDeleted: vi.fn(),
 		refreshResource: options?.refreshResource ?? vi.fn().mockResolvedValue(true),
 		onResourceMetadataHydrated: options?.onResourceMetadataHydrated,
+		onResourceVersionChanged: options?.onResourceVersionChanged,
 		incrementDiagnostic,
 	})
 	return {
@@ -128,6 +130,177 @@ describe("MediaResourceUrlLifecycle", () => {
 		await lifecycle.exchangeOssSrc("./images/a.png", entry)
 
 		expect(onResourceMetadataHydrated).toHaveBeenCalledWith("workspace/./images/a.png", entry)
+	})
+
+	it("notifies when an exchange discovers a newer resource version", async () => {
+		const onResourceVersionChanged = vi.fn()
+		const getFileInfo = vi.fn().mockResolvedValue({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		const { lifecycle } = createLifecycle({ getFileInfo, onResourceVersionChanged })
+		const entry = createEntry({ resourceVersion: "v1" })
+
+		await lifecycle.exchangeOssSrc("./images/a.png", entry)
+
+		expect(onResourceVersionChanged).toHaveBeenCalledWith(
+			"workspace/./images/a.png",
+			entry,
+			"v1",
+			"v2",
+		)
+	})
+
+	it("forwards a higher priority subscriber while an exchange is already pending", async () => {
+		let resolveFileInfo!: (value: { src: string; fileName: string; expires_at: string }) => void
+		const fileInfoPromise = new Promise<{
+			src: string
+			fileName: string
+			expires_at: string
+		}>((resolve) => {
+			resolveFileInfo = resolve
+		})
+		const getFileInfo = vi.fn(() => fileInfoPromise)
+		const { lifecycle } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const nearRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			priority: "near",
+		})
+		const criticalRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			priority: "critical",
+		})
+
+		expect(getFileInfo).toHaveBeenNthCalledWith(1, "./images/a.png", {
+			useImageProcess: true,
+			forceRefresh: undefined,
+			priority: "near",
+		})
+		expect(getFileInfo).toHaveBeenNthCalledWith(2, "./images/a.png", {
+			useImageProcess: true,
+			priority: "critical",
+		})
+		resolveFileInfo({
+			src: "https://oss.test/image.png",
+			fileName: "image.png",
+			expires_at: "2030-01-01 00:00:00",
+		})
+		await expect(Promise.all([nearRequest, criticalRequest])).resolves.toEqual([
+			"/virtual/image.png",
+			"/virtual/image.png",
+		])
+	})
+
+	it("does not let an older force-refresh race overwrite the newer exchange", async () => {
+		let resolveFirst!: (value: Record<string, unknown>) => void
+		let resolveSecond!: (value: Record<string, unknown>) => void
+		const first = new Promise<Record<string, unknown>>((resolve) => {
+			resolveFirst = resolve
+		})
+		const second = new Promise<Record<string, unknown>>((resolve) => {
+			resolveSecond = resolve
+		})
+		const getFileInfo = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+		const { lifecycle } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const oldRequest = lifecycle.exchangeOssSrc("./images/a.png", entry)
+		const refreshedRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			forceRefresh: true,
+		})
+
+		resolveSecond({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		await refreshedRequest
+		resolveFirst({
+			src: "https://oss.test/image-v1.png",
+			fileName: "image.png",
+			resource_version: "v1",
+		})
+		await oldRequest
+
+		expect(entry.resourceVersion).toBe("v2")
+		expect(entry.exchangePromise).toBeNull()
+	})
+
+	it("does not let an older background metadata probe overwrite a newer exchange", async () => {
+		let resolveMeta!: (value: {
+			status: "exists"
+			fileName: string
+			resourceVersion: string
+			updatedAt: string
+			contentLength: number
+		}) => void
+		const metaPromise = new Promise<{
+			status: "exists"
+			fileName: string
+			resourceVersion: string
+			updatedAt: string
+			contentLength: number
+		}>((resolve) => {
+			resolveMeta = resolve
+		})
+		const getFileResourceMeta = vi.fn(() => metaPromise)
+		const getFileInfo = vi.fn().mockResolvedValue({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		const { lifecycle } = createLifecycle({ getFileInfo, getFileResourceMeta })
+		const entry = createEntry()
+
+		const backgroundRequest = lifecycle.refreshResourceMetadata(
+			"./images/a.png",
+			"images/a.png",
+			entry,
+		)
+		const foregroundRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			forceRefresh: true,
+		})
+		await foregroundRequest
+		resolveMeta({
+			status: "exists",
+			fileName: "image.png",
+			resourceVersion: "v1",
+			updatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 123,
+		})
+		await backgroundRequest
+
+		expect(entry.resourceVersion).toBe("v2")
+		expect(entry.exchangePromise).toBeNull()
+	})
+
+	it("does not let an in-flight exchange overwrite a primed resource", async () => {
+		let resolveFileInfo!: (value: Record<string, unknown>) => void
+		const fileInfoPromise = new Promise<Record<string, unknown>>((resolve) => {
+			resolveFileInfo = resolve
+		})
+		const getFileInfo = vi.fn(() => fileInfoPromise)
+		const { lifecycle } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const oldRequest = lifecycle.exchangeOssSrc("./images/a.png", entry)
+		lifecycle.primeCache("./images/a.png", entry, {
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		resolveFileInfo({
+			src: "https://oss.test/image-v1.png",
+			fileName: "image.png",
+			resource_version: "v1",
+		})
+		await oldRequest
+
+		expect(entry.ossSrc).toBe("https://oss.test/image-v2.png")
+		expect(entry.sourceUrl).toBe("https://oss.test/image-v2.png")
+		expect(entry.resourceVersion).toBe("v2")
+		expect(entry.exchangePromise).toBeNull()
 	})
 
 	it("does not notify hydration during exchange when resource metadata was already known", async () => {
