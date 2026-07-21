@@ -68,7 +68,7 @@ class AgentResourceAdapter extends AbstractSuperMagicAppService implements Colla
         $market = $this->marketEligibilityDomainService
             ->getPublishedOrganizationMarketByAgentCodeForUpdate($permissionIsolation->getCurrentOrganizationCode(), $resourceCode);
         if ($market !== null) {
-            $this->syncOrganizationMarketHireAccessForScopeChange($permissionIsolation, $market);
+            $this->marketEligibilityDomainService->syncOrganizationMarketHireAccess($permissionIsolation, $market);
         }
     }
 

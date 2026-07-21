@@ -44,6 +44,13 @@ interface AgentMarketRepositoryInterface
     public function findPublishedOrganizationIdsByAgentCodes(string $organizationCode, array $agentCodes): array;
 
     /**
+     * 将创建者拥有的组织共享员工转换为市场 ID，避免市场列表依赖 owner 协作权限。
+     *
+     * @return int[]
+     */
+    public function findPublishedOrganizationIdsByPublisher(string $organizationCode, string $publisherId): array;
+
+    /**
      * 批量根据 agent_code 列表查询市场状态（仅查询已发布的）.
      *
      * @param string[] $agentCodes Agent code 列表

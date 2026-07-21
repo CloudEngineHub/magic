@@ -102,6 +102,23 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->all();
     }
 
+    public function findPublishedOrganizationIdsByPublisher(string $organizationCode, string $publisherId): array
+    {
+        if ($organizationCode === '' || $publisherId === '') {
+            return [];
+        }
+
+        return $this->agentMarketModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('publisher_id', $publisherId)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
     /**
      * 批量根据 agent_code 列表查询市场状态（仅查询已发布的）.
      */

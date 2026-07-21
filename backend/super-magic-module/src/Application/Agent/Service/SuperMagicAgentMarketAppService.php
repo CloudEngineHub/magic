@@ -9,7 +9,6 @@ namespace Dtyq\SuperMagic\Application\Agent\Service;
 
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
@@ -146,7 +145,7 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
         $query->setMarketType($requestDTO->getMarketType());
 
-        $visibleMarketIds = $this->getVisibleOrganizationMarketIds(
+        $visibleMarketIds = $this->superMagicAgentMarketDomainService->getDiscoverableOrganizationMarketIds(
             $this->createPermissionDataIsolation($dataIsolation),
             $dataIsolation->getCurrentUserId()
         );
@@ -210,29 +209,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             'playbooks_map' => $playbooksMap,
             'total' => $total,
         ];
-    }
-
-    /** 供迁移命令复用与在线接口一致的市场发现判断。 */
-    public function isOrganizationMarketDiscoverable(
-        PermissionDataIsolation $permissionIsolation,
-        AgentMarketEntity $market,
-        string $userId
-    ): bool {
-        return $this->isMarketDiscoverableForUser($permissionIsolation, $market, $userId);
-    }
-
-    /** 为历史迁移读取当前市场记录，资格判断仍由本应用服务统一处理。 */
-    public function getPublishedMarketForMigration(string $agentCode): ?AgentMarketEntity
-    {
-        return $this->superMagicAgentMarketDomainService->getPublishedByAgentCode($agentCode);
-    }
-
-    /** 供迁移命令和协作撤权复用同一套雇佣收口规则。 */
-    public function syncOrganizationMarketHireAccess(
-        PermissionDataIsolation $permissionIsolation,
-        AgentMarketEntity $market
-    ): void {
-        $this->syncOrganizationMarketHireAccessForScopeChange($permissionIsolation, $market);
     }
 
     /**

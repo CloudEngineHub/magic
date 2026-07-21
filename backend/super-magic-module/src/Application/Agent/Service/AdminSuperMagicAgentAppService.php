@@ -266,13 +266,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $payload['category_id'] = $categoryIds[0] ?? null;
         }
 
-        if (! $this->updateMarketInfo($dataIsolation, $id, $payload)) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
-        }
+        Db::transaction(function () use ($dataIsolation, $id, $payload): void {
+            if (! $this->updateMarketInfo($dataIsolation, $id, $payload)) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+            }
 
-        if (($payload['is_hidden'] ?? null) === true) {
-            $this->revokeHiddenOrganizationSharedMarket($dataIsolation, $id);
-        }
+            // 下架与货架、雇佣关系撤销必须原子提交，避免隐藏后仍保留可用关系。
+            if (($payload['is_hidden'] ?? null) === true) {
+                $this->revokeHiddenOrganizationSharedMarket($dataIsolation, $id);
+            }
+        });
     }
 
     /**
@@ -435,8 +438,8 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             );
         }
 
-        // 货架更新后按“货架或协作权限”收口 MARKET 雇佣，避免误删协作者。
-        $this->syncOrganizationMarketHireAccessForScopeChange(
+        // 货架更新后由市场领域服务收口失去发现资格的 MARKET 雇佣。
+        $this->marketEligibilityDomainService->syncOrganizationMarketHireAccess(
             $permissionIsolation,
             $marketEntity
         );
