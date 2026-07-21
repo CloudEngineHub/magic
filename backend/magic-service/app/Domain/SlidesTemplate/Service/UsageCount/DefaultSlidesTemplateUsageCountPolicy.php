@@ -21,11 +21,12 @@ class DefaultSlidesTemplateUsageCountPolicy implements SlidesTemplateUsageCountP
     public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array
     {
         if (! $this->slidesTemplateRepository) {
-            return ['total' => 0, 'total_usage_count' => 0];
+            return ['total' => 0, 'total_usage_count' => 0, 'template_count_today_growth' => 0];
         }
         return [
             'total' => $this->slidesTemplateRepository->count($dataIsolation, $query),
             'total_usage_count' => $this->slidesTemplateRepository->sumTotalUsageCount($dataIsolation, $query),
+            'template_count_today_growth' => $this->slidesTemplateRepository->countTodayCreated($dataIsolation, $query),
         ];
     }
 }
