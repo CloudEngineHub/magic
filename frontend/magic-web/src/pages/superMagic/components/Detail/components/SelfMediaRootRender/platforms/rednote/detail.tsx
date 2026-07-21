@@ -136,7 +136,9 @@ function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 				<div className="text-[16px] font-semibold leading-6 text-black">{title}</div>
 			) : null}
 			{subtitle ? (
-				<div className="mt-2 text-[14px] leading-6 text-black/80">{subtitle}</div>
+				<div className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-black/80">
+					{subtitle}
+				</div>
 			) : null}
 			{tags.length ? (
 				<div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[15px] font-medium leading-6 text-[#1f6fff]">
