@@ -12,10 +12,6 @@ class TestElement extends BaseElement<LayerElement> {
 		return false
 	}
 
-	public requestResourceRerender(): Konva.Node | null | undefined {
-		return this.rerenderWhenTransformIdle()
-	}
-
 	public setMountedNode(node: Konva.Node | null): void {
 		this.node = node
 	}
@@ -61,7 +57,7 @@ describe("BaseElement transform-idle rerender", () => {
 	it("rerenders immediately when the element is not in an active transform", () => {
 		const { element, rerender } = createElement()
 
-		element.requestResourceRerender()
+		element.rerenderWhenTransformIdle()
 
 		expect(rerender).toHaveBeenCalledTimes(1)
 	})
@@ -82,7 +78,7 @@ describe("BaseElement transform-idle rerender", () => {
 			transforming: true,
 		})
 
-		element.requestResourceRerender()
+		element.rerenderWhenTransformIdle()
 
 		expect(rerender).not.toHaveBeenCalled()
 		handlers.get("elements:transform:dragend")?.()
@@ -109,7 +105,7 @@ describe("BaseElement transform-idle rerender", () => {
 			transforming: true,
 		})
 
-		element.requestResourceRerender()
+		element.rerenderWhenTransformIdle()
 		handlers.get("elements:transform:intentend")?.()
 		rafCallback?.(0)
 

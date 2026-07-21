@@ -101,6 +101,44 @@ describe("getFileResourceMetaByPath", () => {
 		})
 	})
 
+	it("treats a fresh optimistic upload as existing before attachments catch up", async () => {
+		const oldFiles = [
+			fileItem({
+				file_id: "file-existing",
+				relative_file_path: "images/existing.png",
+				file_name: "existing.png",
+			}),
+		]
+		setFileInfoCache(
+			"images/uploaded.png",
+			{
+				src: "https://example.test/uploaded.png?signature=1",
+				fileName: "uploaded.png",
+				resource_version: "file-uploaded:2026-07-21 10:00:00:2048",
+				updated_at: "2026-07-21 10:00:00",
+				content_length: 2048,
+			},
+			oldFiles,
+			undefined,
+			"project-1",
+			undefined,
+			{ allowMissingAttachment: true },
+		)
+
+		await expect(
+			getFileResourceMetaByPath("images/uploaded.png", oldFiles, {
+				designProjectId: "project-1",
+				hasAttachmentSnapshot: true,
+			}),
+		).resolves.toEqual({
+			status: "exists",
+			fileName: "uploaded.png",
+			resourceVersion: "file-uploaded:2026-07-21 10:00:00:2048",
+			updatedAt: "2026-07-21 10:00:00",
+			contentLength: 2048,
+		})
+	})
+
 	it("does not classify an ambiguous historical bare path as deleted", async () => {
 		const files = [
 			fileItem({
@@ -272,7 +310,7 @@ describe("getFileResourceMetaByPath", () => {
 		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
 	})
 
-	it("serves optimistic upload cache only until attachment snapshot changes", async () => {
+	it("keeps optimistic upload cache while attachments catch up", async () => {
 		const oldFiles = [
 			fileItem({
 				file_id: "file-existing",
@@ -316,7 +354,7 @@ describe("getFileResourceMetaByPath", () => {
 				designProjectId: "project-1",
 				hasAttachmentSnapshot: true,
 			}),
-		).resolves.toBeNull()
+		).resolves.toMatchObject({ src: cachedSrc })
 	})
 
 	it("preserves unchanged resource URLs when unrelated attachments change", async () => {
@@ -451,6 +489,12 @@ describe("getFileResourceMetaByPath", () => {
 			).resolves.toMatchObject({ src: cachedSrc })
 
 			nowSpy.mockReturnValue(startTime + 15_001)
+			await expect(
+				getFileResourceMetaByPath("images/new.png", oldFiles, {
+					designProjectId: "project-1",
+					hasAttachmentSnapshot: true,
+				}),
+			).resolves.toEqual({ status: "deleted" })
 			cleanupFileInfoCache(oldFiles, "project-1", { hasAttachmentSnapshot: true })
 			await expect(
 				getFileInfoByPath("images/new.png", oldFiles, {

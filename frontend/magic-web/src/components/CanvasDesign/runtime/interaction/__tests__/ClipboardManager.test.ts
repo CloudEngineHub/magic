@@ -77,6 +77,65 @@ function createClipboardManager(): ClipboardManagerTestHarness {
 }
 
 describe("ClipboardManager frame clipboard trees", () => {
+	it("starts media metadata lookups concurrently so get-file-url can batch them", async () => {
+		const firstImage: ImageElement = {
+			id: "first-image",
+			type: "image",
+			name: "First image",
+			src: "source/first.png",
+			x: 0,
+			y: 0,
+			width: 80,
+			height: 60,
+		}
+		const secondImage: ImageElement = {
+			id: "second-image",
+			type: "image",
+			name: "Second image",
+			src: "source/second.png",
+			x: 100,
+			y: 0,
+			width: 80,
+			height: 60,
+		}
+		let resolveFirstLookup!: (value: { src: string; fileName: string }) => void
+		const firstLookup = new Promise<{ src: string; fileName: string }>((resolve) => {
+			resolveFirstLookup = resolve
+		})
+		const getFileInfo = vi.fn((path: string) => {
+			if (path === firstImage.src) {
+				return firstLookup
+			}
+			return Promise.resolve({
+				src: `https://example.test/${path}`,
+				fileName: path.split("/").pop() ?? "image.png",
+			})
+		})
+		const manager = createClipboardManager()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+
+		const resultPromise = manager.collectClipboardFiles([firstImage, secondImage])
+		await Promise.resolve()
+
+		expect(getFileInfo).toHaveBeenCalledTimes(2)
+		expect(getFileInfo).toHaveBeenNthCalledWith(1, firstImage.src, {
+			useImageProcess: false,
+		})
+		expect(getFileInfo).toHaveBeenNthCalledWith(2, secondImage.src, {
+			useImageProcess: false,
+		})
+
+		resolveFirstLookup({
+			src: "https://example.test/source/first.png",
+			fileName: "first.png",
+		})
+		await expect(resultPromise).resolves.toMatchObject({
+			metadata: [{ elementId: firstImage.id }, { elementId: secondImage.id }],
+		})
+	})
+
 	it("collects media metadata from frame children", async () => {
 		const child: ImageElement = {
 			id: "image-child",
@@ -952,6 +1011,11 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 80,
 			height: 60,
 			status: GenerationStatus.Processing,
+			generateImageRequest: {
+				model_id: "image-model",
+				prompt: "pasted image",
+				reference_images: ["source/image.png"],
+			},
 		}
 		const setOssSrc = vi.fn()
 		const requestImmediateMediaLoadForElements = vi.fn()
@@ -978,6 +1042,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					upload: {
 						sourceElementId: string
 						targetElementId: string
+						sourcePath?: string
 					},
 					nextUploadResult: UploadFileResponse,
 				) => boolean
@@ -986,20 +1051,31 @@ describe("ClipboardManager frame clipboard trees", () => {
 			{
 				sourceElementId: "source-image",
 				targetElementId: "pasted-image",
+				sourcePath: "source/image.png",
 			},
 			uploadResult,
 		)
 
 		expect(applied).toBe(true)
-		expect(convertToPermament).toHaveBeenCalledWith(
-			"pasted-image",
+		const imageResourceUpdates = convertToPermament.mock.calls[0]?.[1]
+		expect(imageResourceUpdates).toEqual(
 			expect.objectContaining({
-				id: "pasted-image",
 				src: "target/image.png",
 				status: GenerationStatus.Completed,
+				errorMessage: undefined,
+				generateImageRequest: expect.objectContaining({
+					reference_images: ["target/image.png"],
+				}),
 			}),
-			{ silent: true },
 		)
+		expect(imageResourceUpdates).not.toHaveProperty("id")
+		expect(imageResourceUpdates).not.toHaveProperty("x")
+		expect(imageResourceUpdates).not.toHaveProperty("y")
+		expect(imageResourceUpdates).not.toHaveProperty("width")
+		expect(imageResourceUpdates).not.toHaveProperty("height")
+		expect(convertToPermament).toHaveBeenCalledWith("pasted-image", imageResourceUpdates, {
+			silent: true,
+		})
 		expect(manager.canvas.imageResourceManager.primeCache).toHaveBeenCalledWith(
 			"target/image.png",
 			uploadResult,
@@ -1052,6 +1128,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					upload: {
 						sourceElementId: string
 						targetElementId: string
+						sourcePath?: string
 					},
 					nextUploadResult: UploadFileResponse,
 				) => boolean
@@ -1065,15 +1142,22 @@ describe("ClipboardManager frame clipboard trees", () => {
 		)
 
 		expect(applied).toBe(true)
-		expect(convertToPermament).toHaveBeenCalledWith(
-			"pasted-video",
+		const videoResourceUpdates = convertToPermament.mock.calls[0]?.[1]
+		expect(videoResourceUpdates).toEqual(
 			expect.objectContaining({
-				id: "pasted-video",
 				src: "target/video.mp4",
 				status: GenerationStatus.Completed,
+				errorMessage: undefined,
 			}),
-			{ silent: true },
 		)
+		expect(videoResourceUpdates).not.toHaveProperty("id")
+		expect(videoResourceUpdates).not.toHaveProperty("x")
+		expect(videoResourceUpdates).not.toHaveProperty("y")
+		expect(videoResourceUpdates).not.toHaveProperty("width")
+		expect(videoResourceUpdates).not.toHaveProperty("height")
+		expect(convertToPermament).toHaveBeenCalledWith("pasted-video", videoResourceUpdates, {
+			silent: true,
+		})
 		expect(manager.canvas.videoResourceManager.primeCache).toHaveBeenCalledWith(
 			"target/video.mp4",
 			uploadResult,

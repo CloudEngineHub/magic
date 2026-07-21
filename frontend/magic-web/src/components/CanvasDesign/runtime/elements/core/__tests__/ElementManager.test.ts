@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ElementManager } from "../ElementManager"
 import type { LayerElement } from "../../../document/types"
 import { CanvasDocumentIndex } from "../CanvasDocumentIndex"
+import { GenerationStatus } from "../../../../public/magic-types"
 
 interface DragManagerHarness {
 	canvas: {
@@ -230,6 +231,60 @@ describe("ElementManager node-only resize sync", () => {
 		expect(node.width()).toBe(160)
 		expect(node.height()).toBe(120)
 		expect(onTransformResize).toHaveBeenCalledWith(160, 120)
+	})
+})
+
+describe("ElementManager transform-safe full updates", () => {
+	it("preserves the live node position and defers structural rerender for resource updates", () => {
+		const node = new Konva.Group({ x: 140, y: 180 })
+		let elementData = {
+			id: "pasted-image",
+			type: "image",
+			x: 12,
+			y: 16,
+			width: 80,
+			height: 60,
+			status: GenerationStatus.Processing,
+		} as LayerElement
+		const updateElement = vi.fn((nextData: LayerElement) => {
+			elementData = nextData
+			return true
+		})
+		const rerenderWhenTransformIdle = vi.fn()
+		const element = {
+			getData: () => elementData,
+			getNode: () => node,
+			update: updateElement,
+			rerenderWhenTransformIdle,
+		}
+		const manager = Object.create(ElementManager.prototype) as {
+			elements: Map<string, typeof element>
+			invalidateGeometryForElement: ReturnType<typeof vi.fn>
+			scheduleContentLayerDraw: ReturnType<typeof vi.fn>
+			update: ElementManager["update"]
+		}
+		manager.elements = new Map([["pasted-image", element]])
+		manager.invalidateGeometryForElement = vi.fn()
+		manager.scheduleContentLayerDraw = vi.fn()
+
+		manager.update(
+			"pasted-image",
+			{
+				src: "target/image.png",
+				status: GenerationStatus.Completed,
+			},
+			{ silent: true },
+		)
+
+		expect(updateElement).toHaveBeenCalledWith(
+			expect.objectContaining({
+				x: 140,
+				y: 180,
+				src: "target/image.png",
+				status: GenerationStatus.Completed,
+			}),
+		)
+		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
 	})
 })
 

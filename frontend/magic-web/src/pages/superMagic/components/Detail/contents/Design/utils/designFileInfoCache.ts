@@ -255,17 +255,6 @@ function isOptimisticMissingAttachmentExpired(
 	return !isOptimisticMissingAttachmentAllowed(entry)
 }
 
-function isOptimisticMissingAttachmentSnapshotStale(
-	entry: CacheEntry,
-	fileItem: FileItem | null,
-	attachmentsSnapshotKey: string | undefined,
-	hasFilesContext: boolean,
-): boolean {
-	if (!hasFilesContext || fileItem || entry.allowMissingAttachment !== true) return false
-	if (attachmentsSnapshotKey === undefined) return false
-	return entry.attachmentsSnapshotKey !== attachmentsSnapshotKey
-}
-
 function isPreviewWatermarkSignatureStale(entry: CacheEntry): boolean {
 	return entry.previewWatermarkSignature !== getPreviewFileUrlWatermarkSignature()
 }
@@ -572,6 +561,39 @@ function buildFileResourceMeta(fileItem: FileItem): CanvasFileResourceMeta {
 	}
 }
 
+function getOptimisticFileResourceMeta(
+	candidates: ReturnType<typeof getResolvedPathCandidates>,
+	designProjectId?: string,
+): CanvasFileResourceMeta | null {
+	for (const candidate of candidates) {
+		const cacheKey = buildScopedPathKey(candidate.normalizedPath, designProjectId)
+		const entry = fileInfoCache.get(cacheKey)
+		if (!entry) continue
+		if (
+			isOptimisticMissingAttachmentExpired(entry, null) ||
+			isCachedFileInfoExpired(entry) ||
+			isPreviewWatermarkSignatureStale(entry)
+		) {
+			deleteMemoryCache(cacheKey)
+			continue
+		}
+		if (!isOptimisticMissingAttachmentAllowed(entry)) continue
+
+		fileInfoCache.delete(cacheKey)
+		fileInfoCache.set(cacheKey, entry)
+		return {
+			status: "exists",
+			fileName: entry.fileInfo.fileName,
+			...(entry.fileInfo.source !== undefined ? { source: entry.fileInfo.source } : {}),
+			resourceVersion: entry.fileInfo.resource_version ?? null,
+			updatedAt: entry.fileInfo.updated_at ?? null,
+			contentLength: entry.fileInfo.content_length ?? null,
+		}
+	}
+
+	return null
+}
+
 function mergeFileItemMetaIntoFileInfo(
 	base: GetFileInfoResponse,
 	fileItem: FileItem | null,
@@ -614,20 +636,11 @@ function shouldInvalidateCachedEntry(
 function getCachedEntryStaleReasons(
 	entry: CacheEntry,
 	fileItem: FileItem | null,
-	attachmentsSnapshotKey: string | undefined,
 	hasFilesContext: boolean,
 ): string[] {
 	return [
 		isCachedFileInfoExpired(entry) ? "expired" : null,
 		isPreviewWatermarkSignatureStale(entry) ? "preview-watermark" : null,
-		isOptimisticMissingAttachmentSnapshotStale(
-			entry,
-			fileItem,
-			attachmentsSnapshotKey,
-			hasFilesContext,
-		)
-			? "optimistic-upload-snapshot"
-			: null,
 		isOptimisticMissingAttachmentExpired(entry, fileItem) ? "optimistic-upload-window" : null,
 		shouldInvalidateCachedEntry(entry, fileItem, hasFilesContext)
 			? "attachment-mismatch"
@@ -1107,7 +1120,6 @@ export async function getFileInfoByPath(
 			const staleReasons = getCachedEntryStaleReasons(
 				cachedEntry,
 				cachedFileItem,
-				attachmentsSnapshotKey,
 				hasAttachmentSnapshot,
 			)
 			if (staleReasons.length > 0) {
@@ -1221,7 +1233,6 @@ export async function getFileInfoByPath(
 				const staleReasons = getCachedEntryStaleReasons(
 					cachedEntry,
 					cachedFileItem,
-					attachmentsSnapshotKey,
 					hasAttachmentSnapshot,
 				)
 				if (staleReasons.length > 0) {
@@ -1368,10 +1379,12 @@ export async function getFileResourceMetaByPath(
 	filesList?: FileItem[],
 	options?: {
 		designProjectBasePath?: string
+		designProjectId?: string
 		attachmentIndex?: DesignAttachmentIndex | null
 		hasAttachmentSnapshot?: boolean
 	},
 ): Promise<CanvasFileResourceMeta> {
+	ensureStorageCacheLoaded()
 	const operationResolution = resolveDesignPathForOperation(filePath, {
 		designProjectBasePath: options?.designProjectBasePath,
 		flatAttachments: getStoreFiles(filesList),
@@ -1410,6 +1423,8 @@ export async function getFileResourceMetaByPath(
 	}
 
 	if (!lookupResult) {
+		const optimisticMeta = getOptimisticFileResourceMeta(candidates, options?.designProjectId)
+		if (optimisticMeta) return optimisticMeta
 		return hasAttachmentSnapshot ? { status: "deleted" } : { status: "unknown" }
 	}
 

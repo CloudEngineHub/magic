@@ -761,13 +761,19 @@ export class ElementManager {
 		// 这样可以确保如果用户在上传过程中拖动元素，位置信息会被正确保留
 		const node = element.getNode()
 		let currentData = element.getData()
-		if (node && !updates.x && !updates.y) {
-			// 如果更新中没有包含位置信息，且节点存在，则从节点读取最新位置
+		if (node) {
+			const hasXUpdate = Object.prototype.hasOwnProperty.call(updates, "x")
+			const hasYUpdate = Object.prototype.hasOwnProperty.call(updates, "y")
 			const nodeX = node.x()
 			const nodeY = node.y()
-			// 只有当节点位置与数据中的位置不同时，才更新位置
-			if (currentData.x !== nodeX || currentData.y !== nodeY) {
-				currentData = { ...currentData, x: nodeX, y: nodeY }
+			const shouldSyncX = !hasXUpdate && currentData.x !== nodeX
+			const shouldSyncY = !hasYUpdate && currentData.y !== nodeY
+			if (shouldSyncX || shouldSyncY) {
+				currentData = {
+					...currentData,
+					...(shouldSyncX ? { x: nodeX } : {}),
+					...(shouldSyncY ? { y: nodeY } : {}),
+				}
 			}
 		}
 
@@ -783,7 +789,7 @@ export class ElementManager {
 			this.markDocumentIndexDirty()
 		}
 		if (needsRerender) {
-			element.rerender()
+			element.rerenderWhenTransformIdle()
 		}
 
 		this.invalidateGeometryForElement(elementId)

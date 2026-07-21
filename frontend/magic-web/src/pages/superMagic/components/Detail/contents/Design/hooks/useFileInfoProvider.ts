@@ -128,11 +128,18 @@ export function useFileInfoProvider(
 		(path: string): Promise<CanvasFileResourceMeta> => {
 			return getFileResourceMetaByPath(path, flatAttachments, {
 				designProjectBasePath,
+				designProjectId,
 				attachmentIndex,
 				hasAttachmentSnapshot: attachmentsReady === true,
 			})
 		},
-		[flatAttachments, designProjectBasePath, attachmentIndex, attachmentsReady],
+		[
+			flatAttachments,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+			attachmentsReady,
+		],
 	)
 
 	/**

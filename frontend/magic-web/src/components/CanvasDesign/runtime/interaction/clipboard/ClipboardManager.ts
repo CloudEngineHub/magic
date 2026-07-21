@@ -929,13 +929,35 @@ export class ClipboardManager {
 		elements: LayerElement[],
 	): Promise<CollectedClipboardFiles> {
 		const mediaElements = this.getClipboardMediaElements(elements)
+		const generationResourceRefs = collectElementResourceReferences(elements).filter(
+			(ref) => !ref.isSelfReferenceOnly,
+		)
+		const [mediaMetadataResults, generationMetadataResults] = await Promise.all([
+			Promise.all(mediaElements.map((element) => this.getCanvasFileMetadata(element))),
+			Promise.all(
+				generationResourceRefs.map((ref, index) => {
+					const fallbackFilename = this.getFilenameFromPath(
+						ref.path,
+						`resource-${index + 1}`,
+					)
+					return this.fetchOriginalFileMetadata({
+						src: ref.path,
+						fallbackFilename,
+						fallbackMimeType: this.getMimeTypeFromFilename(
+							fallbackFilename,
+							"application/octet-stream",
+						),
+					})
+				}),
+			),
+		])
 		const metadataList: CanvasElementClipboardFileMetadata[] = []
 		const files: CanvasElementClipboardWriteFile[] = []
 		let native: CanvasElementClipboardNativeExposure | undefined
 
-		for (let i = 0; i < mediaElements.length; i++) {
+		for (let i = 0; i < mediaMetadataResults.length; i++) {
 			const element = mediaElements[i]
-			const result = await this.getCanvasFileMetadata(element)
+			const result = mediaMetadataResults[i]
 			if (!result) {
 				continue
 			}
@@ -966,22 +988,9 @@ export class ClipboardManager {
 			}
 		}
 
-		const generationResourceRefs = collectElementResourceReferences(elements).filter(
-			(ref) => !ref.isSelfReferenceOnly,
-		)
-
-		for (let i = 0; i < generationResourceRefs.length; i++) {
+		for (let i = 0; i < generationMetadataResults.length; i++) {
 			const ref = generationResourceRefs[i]
-			const fallbackFilename = this.getFilenameFromPath(ref.path, `resource-${i + 1}`)
-			const fallbackMimeType = this.getMimeTypeFromFilename(
-				fallbackFilename,
-				"application/octet-stream",
-			)
-			const result = await this.fetchOriginalFileMetadata({
-				src: ref.path,
-				fallbackFilename,
-				fallbackMimeType,
-			})
+			const result = generationMetadataResults[i]
 			if (!result) {
 				continue
 			}
@@ -1164,7 +1173,36 @@ export class ClipboardManager {
 			...finalElement,
 			src: uploadResult.path,
 			status: GenerationStatus.Completed,
+			errorMessage: undefined,
 		})
+	}
+
+	/**
+	 * 上传完成只能提交资源域字段，不能把异步任务开始时的布局快照带回 ElementManager。
+	 * 多选拖动的实时阶段只更新 Konva node；若这里提交完整元素，旧 x/y 会覆盖正在拖动的位置。
+	 */
+	private getFileElementResourceUpdates(
+		uploadedElement: CanvasFileElement,
+	): Partial<ImageElement> | Partial<VideoElement> {
+		const commonUpdates = {
+			src: uploadedElement.src,
+			status: uploadedElement.status,
+			errorMessage: uploadedElement.errorMessage,
+		}
+
+		if (uploadedElement.type === ElementTypeEnum.Image) {
+			return {
+				...commonUpdates,
+				generateImageRequest: uploadedElement.generateImageRequest,
+				imageGenerationTaskMeta: uploadedElement.imageGenerationTaskMeta,
+				generateHightImageRequest: uploadedElement.generateHightImageRequest,
+			}
+		}
+
+		return {
+			...commonUpdates,
+			generateVideoRequest: uploadedElement.generateVideoRequest,
+		}
 	}
 
 	private getFileElementUploadingPlaceholder(finalElement: CanvasFileElement): CanvasFileElement {
@@ -1675,13 +1713,14 @@ export class ClipboardManager {
 			)
 		}
 		this.primeFileElementResourceCache(uploadedElement, uploadResult)
+		const resourceUpdates = this.getFileElementResourceUpdates(uploadedElement)
 
 		if (this.canvas.elementManager.isTemporary(upload.targetElementId)) {
-			this.canvas.elementManager.convertToPermament(upload.targetElementId, uploadedElement, {
+			this.canvas.elementManager.convertToPermament(upload.targetElementId, resourceUpdates, {
 				silent: true,
 			})
 		} else {
-			this.canvas.elementManager.update(upload.targetElementId, uploadedElement, {
+			this.canvas.elementManager.update(upload.targetElementId, resourceUpdates, {
 				silent: false,
 			})
 		}

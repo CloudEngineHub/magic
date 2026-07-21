@@ -474,11 +474,11 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	}
 
 	/**
-	 * 图片/视频资源状态变化可能需要重建 Konva 节点。
+	 * 元素数据或资源状态变化可能需要重建 Konva 节点。
 	 * 多选拖动/缩放进行中如果立即重建选中节点，会替换 Transformer 正在操作的节点并中断手势；
-	 * 因此选中变换中的元素把这类 rerender 延迟到 dragend/anchorDragend 后的下一帧。
+	 * 因此 ElementManager 和资源回调统一把这类 rerender 延迟到交互结束后的下一帧。
 	 */
-	protected rerenderWhenTransformIdle(): Konva.Node | null | undefined {
+	public rerenderWhenTransformIdle(): Konva.Node | null | undefined {
 		if (this.transformIdleRerenderRafId !== null) {
 			return undefined
 		}
