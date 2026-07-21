@@ -10,6 +10,7 @@ namespace App\Domain\Contact\Entity\ValueObject;
 use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Infrastructure\Core\AbstractObject;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
+use RuntimeException;
 
 /**
  * 数据隔离 SaaS化
@@ -108,7 +109,7 @@ class DataIsolation extends AbstractObject
             $agentDomainService = di(AgentDomainService::class);
             $token = $agentDomainService->getAuthorizationByUserId($userId);
             if ($token === '') {
-                throw new \RuntimeException(sprintf('Failed to obtain User-Authorization token for user [%s]', $userId));
+                throw new RuntimeException(sprintf('Failed to obtain User-Authorization token for user [%s]', $userId));
             }
             $static->setUserAuthorizationToken($token);
         }

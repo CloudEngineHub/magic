@@ -12,6 +12,7 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\DesignMar
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory\DirectoryData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\FileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolData;
 use App\Infrastructure\Core\AbstractDTO;
@@ -59,6 +60,7 @@ final class MentionAttrs extends AbstractDTO
                 MentionType::MCP => new McpData($data),
                 MentionType::TOOL => new ToolData($data),
                 MentionType::PROJECT_DIRECTORY => new DirectoryData($data),
+                MentionType::PROJECT => new ProjectData($data),
                 MentionType::DESIGN_MARKER => new DesignMarkerData($data),
                 MentionType::SKILL => new SkillData($data),
             };
