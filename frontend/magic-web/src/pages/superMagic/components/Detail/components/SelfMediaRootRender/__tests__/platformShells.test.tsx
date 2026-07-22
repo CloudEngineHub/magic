@@ -361,6 +361,7 @@ describe("platform shells", () => {
 		expect(screen.getByTestId("red-detail-dot-2").className).toContain(
 			"w-4 bg-[var(--red-brand)]",
 		)
+		expect(screen.queryByTestId("red-detail-next-button")).not.toBeInTheDocument()
 
 		fireEvent.click(prevButton)
 		expect(screen.getByTestId("red-detail-dot-1").className).toContain(

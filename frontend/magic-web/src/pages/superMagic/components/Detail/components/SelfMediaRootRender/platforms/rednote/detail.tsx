@@ -275,35 +275,36 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 					</div>
 					{showNavigation ? (
 						<>
-							<button
-								type="button"
-								className={cn(
-									"absolute bottom-1/2 left-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
-									"group-hover:opacity-100",
-									currentIndex === 0 && "pointer-events-none opacity-0",
-								)}
-								onPointerDown={handleControlPointerDown}
-								onClick={handlePrevCard}
-								data-testid="red-detail-prev-button"
-								aria-label="Previous card"
-							>
-								<ChevronLeft className="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								className={cn(
-									"absolute bottom-1/2 right-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
-									"group-hover:opacity-100",
-									currentIndex >= post.cards.length - 1 &&
-										"pointer-events-none opacity-0",
-								)}
-								onPointerDown={handleControlPointerDown}
-								onClick={handleNextCard}
-								data-testid="red-detail-next-button"
-								aria-label="Next card"
-							>
-								<ChevronRight className="h-4 w-4" />
-							</button>
+							{currentIndex > 0 ? (
+								<button
+									type="button"
+									className={cn(
+										"absolute bottom-1/2 left-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
+										"group-hover:opacity-100",
+									)}
+									onPointerDown={handleControlPointerDown}
+									onClick={handlePrevCard}
+									data-testid="red-detail-prev-button"
+									aria-label="Previous card"
+								>
+									<ChevronLeft className="h-4 w-4" />
+								</button>
+							) : null}
+							{currentIndex < post.cards.length - 1 ? (
+								<button
+									type="button"
+									className={cn(
+										"absolute bottom-1/2 right-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
+										"group-hover:opacity-100",
+									)}
+									onPointerDown={handleControlPointerDown}
+									onClick={handleNextCard}
+									data-testid="red-detail-next-button"
+									aria-label="Next card"
+								>
+									<ChevronRight className="h-4 w-4" />
+								</button>
+							) : null}
 						</>
 					) : null}
 				</div>
