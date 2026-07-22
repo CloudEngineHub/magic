@@ -19,6 +19,19 @@ use PHPUnit\Framework\TestCase;
  */
 class SizeManagerTest extends TestCase
 {
+    public function testCalculatePixelCountFromExplicitSize(): void
+    {
+        $this->assertSame(2_360_000, SizeManager::calculatePixelCount('2360x1000'));
+        $this->assertSame(2_361_000, SizeManager::calculatePixelCount('2361*1000'));
+    }
+
+    public function testCalculatePixelCountRejectsInvalidSize(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        SizeManager::calculatePixelCount('2K');
+    }
+
     /**
      * 测试 Gemini 3.0 Pro 模型的所有 size 格式和边界情况
      * 验证流程：接受多种类型 size -> 转换成 Size（宽高）-> 转换成 Ratio（比例）-> 验证 ratio 是否正确.
