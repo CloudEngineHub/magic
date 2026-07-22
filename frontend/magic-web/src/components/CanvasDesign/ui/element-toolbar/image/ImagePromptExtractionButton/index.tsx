@@ -20,6 +20,7 @@ import {
 import IconButton from "../../../primitives/custom/IconButton"
 import { Button } from "../../../primitives/shadcn/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/shadcn/popover"
+import useElementToolPopoverAlign from "../../hooks/useElementToolPopoverAlign"
 import { buildImagePromptExtractionPrompt } from "./imagePromptExtractionPrompt"
 import { createImagePromptTextElement } from "./imagePromptExtractionText"
 import styles from "./index.module.css"
@@ -79,6 +80,10 @@ export default function ImagePromptExtractionButton() {
 		id: "image-prompt-extraction-popover",
 		enableWheelForwarding: open && !hasBodyScrollbar,
 		enablePointerPanForwarding: open,
+	})
+	const { align: popoverAlign, contentRef: popoverContentRef } = useElementToolPopoverAlign({
+		open,
+		floatingRef,
 	})
 	const latestRequestKeyRef = useRef(requestKey)
 	const mountedRef = useRef(false)
@@ -262,10 +267,11 @@ export default function ImagePromptExtractionButton() {
 				</div>
 			</PopoverTrigger>
 			<PopoverContent
-				ref={floatingRef}
-				align="end"
-				side="bottom"
+				ref={popoverContentRef}
+				align={popoverAlign}
+				side="top"
 				sideOffset={6}
+				collisionPadding={8}
 				className={styles.content}
 				onOpenAutoFocus={(event) => event.preventDefault()}
 			>
