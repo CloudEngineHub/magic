@@ -61,8 +61,6 @@ export const METRIC_KEY = {
 	AgentDepartments: "agentDepartments",
 	AgentAmount: "agentAmount",
 	AgentTokens: "agentTokens",
-	SuccessRate: "successRate",
-	FailedCalls: "failedCalls",
 	TotalAmount: "totalAmount",
 	TotalTokens: "totalTokens",
 	DailyAmount: "dailyAmount",
@@ -115,7 +113,7 @@ export const DEFAULT_TAB_BY_VIEW = {
 export const TABLE_SCROLL_X = {
 	SilentMembers: 900,
 	Department: 1290,
-	Member: 1350,
+	Member: 1500,
 	Agent: 1350,
 	MemberAgent: 1400,
 	Record: 1120,

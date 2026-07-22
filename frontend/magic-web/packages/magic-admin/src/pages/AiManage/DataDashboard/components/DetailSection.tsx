@@ -445,8 +445,7 @@ function callColumns(
 			titleKey: "department",
 			dataIndex: "department_name_path",
 			width: 180,
-			ellipsis: true,
-			tooltip: true,
+			ellipsis: { showTitle: true },
 			render: displayText,
 		}),
 		createDetailColumn(styles, t, {
@@ -514,8 +513,7 @@ function agentMemberColumns(
 			titleKey: "department",
 			dataIndex: "department_name_path",
 			width: 210,
-			ellipsis: true,
-			tooltip: true,
+			ellipsis: { showTitle: true },
 			render: displayText,
 		}),
 		createDetailColumn(styles, t, {
@@ -633,8 +631,7 @@ function memberUsageColumns(
 			titleKey: "department",
 			dataIndex: "department_name_path",
 			width: "20%",
-			ellipsis: true,
-			tooltip: true,
+			ellipsis: { showTitle: true },
 			render: displayText,
 		}),
 		createDetailColumn(styles, t, {
@@ -660,6 +657,12 @@ function memberUsageColumns(
 			dataIndex: "tokens",
 			width: "14%",
 			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "lastUsedAt",
+			dataIndex: "last_called_at",
+			width: "18%",
+			render: displayText,
 		}),
 	]
 }
@@ -731,8 +734,7 @@ function silentMemberColumns(
 			titleKey: "department",
 			dataIndex: "department_name_path",
 			width: "20%",
-			ellipsis: true,
-			tooltip: true,
+			ellipsis: { showTitle: true },
 			render: displayText,
 		}),
 		createDetailColumn(styles, t, {

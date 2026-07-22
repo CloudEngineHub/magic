@@ -1,5 +1,5 @@
 import { type CSSProperties } from "react"
-import { Tooltip } from "antd"
+import { Skeleton, Tooltip } from "antd"
 import {
 	BarChart3,
 	Bot,
@@ -36,8 +36,6 @@ export function buildMetrics(
 			agentSummary.active_agent_count,
 			agentSummary.agent_total,
 		)
-		const failedCallCount = getAgentFailedCallCount(agentSummary)
-		const successRate = getAgentSuccessRate(agentSummary, failedCallCount)
 		return [
 			metricFromKey(t, METRIC_KEY.AgentTotal, formatNumber(agentSummary.agent_total), "gray"),
 			metricFromKey(
@@ -89,8 +87,6 @@ export function buildMetrics(
 				formatNumber(safeDivide(agentSummary.total_tokens, agentSummary.total_call_count)),
 				"gray",
 			),
-			metricFromKey(t, METRIC_KEY.SuccessRate, formatPercent(successRate), "green"),
-			metricFromKey(t, METRIC_KEY.FailedCalls, formatNumber(failedCallCount), "orange"),
 		]
 	}
 
@@ -104,6 +100,7 @@ export function buildMetrics(
 			memberSummary.employed_member_count - memberSummary.active_member_count,
 			0,
 		)
+		const callingMemberCount = memberSummary.calling_member_count
 
 		return [
 			metricFromKey(
@@ -131,25 +128,19 @@ export function buildMetrics(
 			metricFromKey(
 				t,
 				METRIC_KEY.MemberAvgCalls,
-				formatDecimal(
-					safeDivide(memberSummary.total_call_count, memberSummary.active_member_count),
-				),
+				formatDecimal(safeDivide(memberSummary.total_call_count, callingMemberCount)),
 				"gray",
 			),
 			metricFromKey(
 				t,
 				METRIC_KEY.MemberAvgAmount,
-				formatNumber(
-					safeDivide(memberSummary.total_points, memberSummary.active_member_count),
-				),
+				formatNumber(safeDivide(memberSummary.total_points, callingMemberCount)),
 				"gray",
 			),
 			metricFromKey(
 				t,
 				METRIC_KEY.MemberAvgTokens,
-				formatNumber(
-					safeDivide(memberSummary.total_tokens, memberSummary.active_member_count),
-				),
+				formatNumber(safeDivide(memberSummary.total_tokens, callingMemberCount)),
 				"gray",
 			),
 		]
@@ -161,10 +152,30 @@ export function buildMetrics(
 export function MetricGrid({
 	metrics,
 	styles,
+	loading = false,
+	skeletonCount = 8,
 }: {
 	metrics: MetricCardData[]
 	styles: Record<string, string>
+	loading?: boolean
+	skeletonCount?: number
 }) {
+	if (loading && metrics.length === 0) {
+		return (
+			<div className={styles.metricGrid}>
+				{Array.from({ length: skeletonCount }).map((_, index) => (
+					<div key={index} className={styles.metricCard}>
+						<Skeleton
+							active
+							title={{ width: "58%" }}
+							paragraph={{ rows: 1, width: "42%" }}
+						/>
+					</div>
+				))}
+			</div>
+		)
+	}
+
 	return (
 		<div className={styles.metricGrid}>
 			{metrics.map((item) => {
@@ -181,16 +192,23 @@ export function MetricGrid({
 							} as CSSProperties
 						}
 					>
-						<div className={styles.metricIcon}>
-							<Icon size={16} strokeWidth={1.8} />
-						</div>
-						<div className={styles.metricLabel}>
-							{item.label}{" "}
-							<Tooltip title={item.helper}>
-								<CircleHelp className={styles.metricHelpIcon} size={13} />
-							</Tooltip>
-						</div>
-						<div className={styles.metricValue}>{item.value}</div>
+						<Skeleton
+							active
+							loading={loading}
+							title={{ width: "58%" }}
+							paragraph={{ rows: 1, width: "42%" }}
+						>
+							<div className={styles.metricIcon}>
+								<Icon size={16} strokeWidth={1.8} />
+							</div>
+							<div className={styles.metricLabel}>
+								{item.label}{" "}
+								<Tooltip title={item.helper}>
+									<CircleHelp className={styles.metricHelpIcon} size={13} />
+								</Tooltip>
+							</div>
+							<div className={styles.metricValue}>{item.value}</div>
+						</Skeleton>
 					</div>
 				)
 			})}
@@ -243,40 +261,8 @@ const METRIC_ICON_MAP: Partial<Record<MetricKey, typeof BarChart3>> = {
 	[METRIC_KEY.AgentTokens]: TrendingUp,
 	[METRIC_KEY.AvgAmount]: BarChart3,
 	[METRIC_KEY.AvgTokens]: Database,
-	[METRIC_KEY.SuccessRate]: CircleGauge,
-	[METRIC_KEY.FailedCalls]: UsersRound,
 	[METRIC_KEY.TotalAmount]: BriefcaseBusiness,
 	[METRIC_KEY.TotalTokens]: Database,
-}
-
-function getAgentFailedCallCount(summary: DataDashboard.AgentSummary) {
-	return getFiniteNumber(summary.failed_call_count, 0)
-}
-
-function getAgentSuccessRate(summary: DataDashboard.AgentSummary, failedCallCount: number) {
-	const explicitSuccessRate = normalizeRate(summary.success_rate)
-	if (explicitSuccessRate !== null) return explicitSuccessRate
-
-	const successCallCount = getFiniteNumber(summary.success_call_count, NaN)
-	if (Number.isFinite(successCallCount)) {
-		return safeDivide(successCallCount, summary.total_call_count)
-	}
-
-	if (summary.total_call_count <= 0) return 0
-	return safeDivide(
-		Math.max(summary.total_call_count - failedCallCount, 0),
-		summary.total_call_count,
-	)
-}
-
-function getFiniteNumber(value: number | null | undefined, fallback: number) {
-	return typeof value === "number" && Number.isFinite(value) ? value : fallback
-}
-
-function normalizeRate(value: number | null | undefined) {
-	if (typeof value !== "number" || !Number.isFinite(value)) return null
-	const rate = value
-	return rate > 1 ? rate / 100 : rate
 }
 
 function getMetricIcon(key: string) {

@@ -122,7 +122,7 @@ function AIManagerLayout() {
 			{
 				key: RoutePath.AIDataStatistics,
 				label: t("nav.aiSubMenu.dataStatistics"),
-				hidden: isOfficialOrg || isPersonalOrganization,
+				hidden: isPersonalOrganization,
 				validate: (permissions: string[], isSuperAdmin?: boolean) => {
 					return (
 						isSuperAdmin ||

@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react"
 import { Input, Select } from "antd"
 import { RotateCcw, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { useRequest } from "ahooks"
+import { useMount, useRequest } from "ahooks"
 import {
 	MagicButton,
+	SearchSelect,
 	TimeFilterPanel,
 	TimePresetKey,
 	UserSelect,
@@ -30,6 +31,8 @@ import { useStyles } from "./styles"
 import type { DataDashboardView } from "./consts"
 import {
 	createDefaultTimeRange,
+	displayText,
+	formatNumber,
 	getDateQuery,
 	getDepartmentId,
 	isAgentTab,
@@ -76,12 +79,14 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	const baseQuery = useMemo<DataDashboard.BaseQuery>(() => {
 		const departmentId = getDepartmentId(departments)
 		const normalizedAgentCode = agentCode.trim()
+		const normalizedMemberId = memberId.trim()
 		return {
 			...getDateQuery(timeRange),
 			agent_code: normalizedAgentCode || undefined,
+			user_id: normalizedMemberId || undefined,
 			department_id: departmentId || undefined,
 		}
-	}, [agentCode, departments, timeRange])
+	}, [agentCode, departments, memberId, timeRange])
 
 	const agentQuery = useMemo<DataDashboard.AgentSummaryQuery>(
 		() => ({
@@ -91,13 +96,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		[agentSource, baseQuery],
 	)
 
-	const memberQuery = useMemo<DataDashboard.MemberSummaryQuery>(() => {
-		const normalizedMemberId = memberId.trim()
-		return {
-			...baseQuery,
-			user_id: normalizedMemberId || undefined,
-		}
-	}, [baseQuery, memberId])
+	const memberQuery: DataDashboard.MemberSummaryQuery = baseQuery
 
 	const sourceOptions = useMemo(
 		() => [
@@ -108,6 +107,31 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 			})),
 		],
 		[t],
+	)
+	const {
+		data: agentOptions,
+		loading: agentOptionsLoading,
+		run: runAgentOptions,
+	} = useRequest(() => AIManageApi.getDataDashboardAgentOptions(), { manual: true })
+	const agentSelectOptions = useMemo(
+		() => [
+			{
+				label: t("filters.allDigitalEmployees"),
+				value: ALL_OPTION_VALUE,
+				searchText: t("filters.allDigitalEmployees"),
+			},
+			...(agentOptions?.list ?? []).map((agent) => {
+				const label = agent.agent_name || agent.agent_code
+				return {
+					label,
+					value: agent.agent_code,
+					agentCode: agent.agent_code,
+					agentName: agent.agent_name,
+					searchText: `${agent.agent_name ?? ""} ${agent.agent_code}`,
+				}
+			}),
+		],
+		[agentOptions?.list, t],
 	)
 	const currentTab = useMemo<DashboardTabType>(() => {
 		if (view === VIEW.DigitalEmployeeAnalysis) {
@@ -152,6 +176,10 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		(query: DataDashboard.MemberTabsQuery) => AIManageApi.getDataDashboardMemberTabs(query),
 		{ manual: true },
 	)
+
+	useMount(() => {
+		runAgentOptions()
+	})
 
 	useEffect(() => {
 		setActiveTab(
@@ -209,6 +237,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		view === VIEW.DigitalEmployeeAnalysis ? agentSummaryLoading : memberSummaryLoading
 	const tableLoading =
 		view === VIEW.DigitalEmployeeAnalysis ? agentTabsLoading : memberTabsLoading
+	const metricSkeletonCount = view === VIEW.DigitalEmployeeAnalysis ? 10 : 8
 
 	const resetPage = () => {
 		setPage(1)
@@ -270,6 +299,19 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 							</div>
 						</div>
 						<div className={styles.filterItem}>
+							<div className={styles.filterLabel}>{t("filters.memberId")}</div>
+							<Input
+								allowClear
+								prefix={<Search size={16} />}
+								value={memberId}
+								placeholder={t("filters.memberIdPlaceholder")}
+								onChange={(event) => {
+									setMemberId(event.target.value)
+									resetPage()
+								}}
+							/>
+						</div>
+						<div className={styles.filterItem}>
 							<div className={styles.filterLabel}>{t("filters.department")}</div>
 							<UserSelect
 								selected={departments}
@@ -286,32 +328,51 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						</div>
 						<div className={styles.filterItem}>
 							<div className={styles.filterLabel}>{t("filters.digitalEmployee")}</div>
-							<Input
-								allowClear
-								prefix={<Search size={16} />}
-								value={agentCode}
-								placeholder={t("filters.agentCodePlaceholder")}
-								onChange={(event) => {
-									setAgentCode(event.target.value)
+							<SearchSelect
+								value={agentCode || ALL_OPTION_VALUE}
+								options={agentSelectOptions}
+								loading={agentOptionsLoading}
+								showAvatar={false}
+								searchPlaceholder={t("filters.agentSearchPlaceholder")}
+								dropdownFooter={t("filters.agentOptionsCount", {
+									count: agentOptions?.total ?? 0,
+									formattedCount: formatNumber(agentOptions?.total ?? 0),
+								})}
+								classNames={{ popup: { root: styles.agentSelectPopup } }}
+								optionRender={(option) => {
+									const item = option.data as {
+										value?: string
+										label?: string
+										agentCode?: string
+										agentName?: string | null
+									}
+									if (item.value === ALL_OPTION_VALUE) {
+										return (
+											<div className={styles.agentOptionAll}>
+												{item.label}
+											</div>
+										)
+									}
+									return (
+										<div className={styles.agentOption}>
+											<div className={styles.agentOptionName}>
+												{displayText(item.agentName || item.label)}
+											</div>
+											<div className={styles.agentOptionCode}>
+												{displayText(item.agentCode)}
+											</div>
+										</div>
+									)
+								}}
+								onChange={(value) => {
+									setAgentCode(
+										!value || value === ALL_OPTION_VALUE ? "" : String(value),
+									)
 									resetPage()
 								}}
 							/>
 						</div>
-						{view === VIEW.MemberAnalysis ? (
-							<div className={styles.filterItem}>
-								<div className={styles.filterLabel}>{t("filters.memberId")}</div>
-								<Input
-									allowClear
-									prefix={<Search size={16} />}
-									value={memberId}
-									placeholder={t("filters.memberIdPlaceholder")}
-									onChange={(event) => {
-										setMemberId(event.target.value)
-										resetPage()
-									}}
-								/>
-							</div>
-						) : null}
+
 						{view === VIEW.DigitalEmployeeAnalysis ? (
 							<div className={styles.filterItem}>
 								<div className={styles.filterLabel}>{t("filters.source")}</div>
@@ -328,11 +389,17 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 					</div>
 				</section>
 
-				<MetricGrid metrics={metrics} styles={styles} />
+				<MetricGrid
+					metrics={metrics}
+					styles={styles}
+					loading={summaryLoading}
+					skeletonCount={metricSkeletonCount}
+				/>
 				<Visualization
 					view={view}
 					agentSummary={agentSummary}
 					memberSummary={memberSummary}
+					loading={summaryLoading}
 					styles={styles}
 					t={t}
 				/>
@@ -342,7 +409,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 					tabData={tabData}
 					timeRange={timeRange}
 					pageSize={pageSize}
-					loading={tableLoading || summaryLoading}
+					loading={tableLoading}
 					onTabChange={handleTabChange}
 					onPageChange={handlePageChange}
 				/>

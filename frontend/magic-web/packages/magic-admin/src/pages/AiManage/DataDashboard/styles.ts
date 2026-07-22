@@ -96,6 +96,41 @@ export const useStyles = createStyles(
 				justify-content: space-between;
 			}
 		`,
+		agentSelectPopup: css`
+			.${prefixCls}-select-item-option-content {
+				white-space: normal;
+			}
+		`,
+		agentOption: css`
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			min-width: 0;
+			padding: 2px 0;
+		`,
+		agentOptionAll: css`
+			color: ${token.colorText};
+			font-size: 13px;
+			font-weight: 500;
+			line-height: 20px;
+		`,
+		agentOptionName: css`
+			color: ${token.colorText};
+			font-size: 13px;
+			font-weight: 600;
+			line-height: 20px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
+		agentOptionCode: css`
+			color: ${token.colorTextTertiary};
+			font-size: 12px;
+			line-height: 18px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
 		metricGrid: css`
 			display: grid;
 			grid-template-columns: repeat(4, minmax(0, 1fr));
