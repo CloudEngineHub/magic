@@ -1135,17 +1135,19 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page_size,
 		workspace_type,
 		auto_create,
+		workspace_name,
 	}: {
 		page: number
 		page_size: number
 		workspace_type?: string
 		auto_create?: boolean
+		workspace_name?: string
 	}) {
 		return fetch.get(
 			genRequestUrl(
 				"/api/v1/super-agent/workspaces/queries",
 				{},
-				{ page, page_size, workspace_type, auto_create },
+				{ page, page_size, workspace_type, auto_create, workspace_name },
 			),
 			{
 				enableRequestUnion: true,
