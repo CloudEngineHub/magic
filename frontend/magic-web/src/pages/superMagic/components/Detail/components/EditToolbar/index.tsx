@@ -806,7 +806,7 @@ function EditToolbar({
 						<ActionButton
 							data-testid="detail-header-action-item-share"
 							icon={<Share2 size={16} />}
-							onClick={handleShare}
+							onClick={() => void handleShare()}
 							title={t("ppt.share")}
 							text={t("ppt.share")}
 							showText={shouldShowButtonText}

@@ -12,6 +12,6 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 
 interface SlidesTemplateUsageCountPolicyInterface
 {
-    /** @return array{total: int, total_usage_count: int} */
+    /** @return array{total: int, total_usage_count: int, template_count_today_growth: int} */
     public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array;
 }

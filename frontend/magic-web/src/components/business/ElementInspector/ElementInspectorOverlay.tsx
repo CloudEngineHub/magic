@@ -375,6 +375,9 @@ export function buildAgentPromptContent(
 			? `${info.textContent.slice(0, 60)}…`
 			: info.textContent
 		: ""
+	const elementAttributes = JSON.stringify(info.attributes ?? {})
+	const domContext = JSON.stringify(info.domContext ?? {})
+	const elementHtml = info.elementHtml ?? ""
 
 	// Inspector detail node (title is stored in attrs for serialization/rendering)
 	paragraphs.push({
@@ -390,6 +393,11 @@ export function buildAgentPromptContent(
 					computedStyles: JSON.stringify(computedStylesObj),
 					styleCount: styleLines.length,
 					textContent: textPreview,
+					elementAttributes,
+					resource: info.resource ?? "",
+					domContext,
+					elementHtml,
+					selectorMatchCount: info.selectorMatchCount ?? -1,
 					fileMention,
 				},
 			},

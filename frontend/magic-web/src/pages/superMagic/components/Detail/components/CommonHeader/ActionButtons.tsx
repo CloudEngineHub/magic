@@ -147,6 +147,7 @@ function ActionButtons(props: ActionButtonsProps) {
 		showSimilarSharesDialog,
 		similarShares,
 		isCheckingShare,
+		shareTarget,
 		handleShare: handleFileShare,
 		handleSelectSimilarShare,
 		handleCreateNewShare,
@@ -408,7 +409,12 @@ function ActionButtons(props: ActionButtonsProps) {
 									isNewestFileVersion &&
 									showRefreshButton && (
 										<ActionButton
-											element={<img src={RotateIcon}  data-testid="action-buttons-image"/>}
+											element={
+												<img
+													src={RotateIcon}
+													data-testid="action-buttons-image"
+												/>
+											}
 											onClick={handleRefresh}
 											title={t("fileViewer.refresh")}
 											text={t("fileViewer.refresh")}
@@ -480,7 +486,7 @@ function ActionButtons(props: ActionButtonsProps) {
 									isNewestFileVersion && (
 										<ActionButton
 											icon={IconShare}
-											onClick={handleFileShare}
+											onClick={() => void handleFileShare()}
 											title={t("fileViewer.share")}
 											text={t("fileViewer.share")}
 											showText={showButtonText}
@@ -561,7 +567,7 @@ function ActionButtons(props: ActionButtonsProps) {
 				}}
 				showSuccessModal={showSuccessModal}
 				existingShareInfo={existingShareInfo}
-				currentFile={currentFile}
+				currentFile={shareTarget || currentFile}
 				shareFileId={shareFileId}
 				attachments={attachments}
 				onCancelShare={handleCancelShare}

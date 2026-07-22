@@ -24,12 +24,19 @@ import {
 	type PlatformSlice,
 	type TreeSnapshot,
 } from "./selfMediaHelpers"
+import {
+	buildSharedPostSourceKey,
+	findSharedPostCandidates,
+	loadSharedPosts,
+	type SharedPostCandidate,
+} from "./selfMediaSharedPostFallback"
 
 /** Derived view of the attachment tree required to resolve posts */
 export interface TreeContext {
 	allFiles: AttachmentNode[]
 	folderNode: AttachmentNode | null
 	magicProjectFileId: string | null
+	sharedPosts: SharedPostCandidate[]
 	folderRelativePath: string
 }
 
@@ -39,6 +46,8 @@ export interface SelfMediaSnapshot {
 	loadedPosts: Record<string, SelfMediaPost>
 	error: string | null
 	folderRelativePath: string
+	/** True when visible post.json files replace a missing magic.project.js index. */
+	sharedPostFallback?: boolean
 	/**
 	 * File IDs of card/article/cover assets whose fileId or version changed during
 	 * the last reconcile pass, plus any unindexed assets (embedded images, CSS, etc.)
@@ -74,6 +83,7 @@ const EMPTY_SNAPSHOT: SelfMediaSnapshot = {
 	loadedPosts: {},
 	error: null,
 	folderRelativePath: "/",
+	sharedPostFallback: false,
 }
 
 const log = rootLogger.createLogger("SelfMediaPostsService")
@@ -122,6 +132,7 @@ export class SelfMediaPostsService {
 	private readonly postMeta = new Map<string, PostResolutionMeta>()
 	private lastTreeSnapshot: TreeSnapshot | null = null
 	private lastMagicProjectFileId: string | null = null
+	private lastSharedPostSourceKey: string | null = null
 	private lastFolderFileId: string | null = null
 	private disposed = false
 
@@ -145,7 +156,16 @@ export class SelfMediaPostsService {
 		const magicProjectFileId =
 			findMagicProjectJsUnderSelfMediaRoot(folderNode)?.file_id?.toString() || null
 		const folderRelativePath = folderPathWithSlash(folderNode)
-		return { allFiles, folderNode, magicProjectFileId, folderRelativePath }
+		const sharedPosts = magicProjectFileId
+			? []
+			: findSharedPostCandidates(tree, allFiles, folderNode, folderRelativePath)
+		return {
+			allFiles,
+			folderNode,
+			magicProjectFileId,
+			sharedPosts,
+			folderRelativePath,
+		}
 	}
 
 	/**
@@ -166,6 +186,7 @@ export class SelfMediaPostsService {
 		const ctx = this.resolveTreeContext(args.tree, args.folderFileId)
 		this.lastFolderFileId = args.folderFileId
 		this.lastMagicProjectFileId = ctx.magicProjectFileId
+		this.lastSharedPostSourceKey = buildSharedPostSourceKey(ctx.sharedPosts)
 		this.lastTreeSnapshot = buildTreeSnapshot(ctx.allFiles)
 
 		log.log("🚀 初始化开始", {
@@ -175,7 +196,7 @@ export class SelfMediaPostsService {
 			totalFiles: ctx.allFiles.length,
 		})
 
-		if (!ctx.magicProjectFileId) {
+		if (!ctx.magicProjectFileId && ctx.sharedPosts.length === 0) {
 			log.warn("⚠️ 初始化失败：未找到 magic.project.js", {
 				folderFileId: args.folderFileId,
 				folderRelativePath: ctx.folderRelativePath,
@@ -190,19 +211,57 @@ export class SelfMediaPostsService {
 
 		const startedAt = Date.now()
 		try {
-			const slices = await this.loadRootSlicesInternal(ctx.magicProjectFileId)
+			if (!ctx.magicProjectFileId && ctx.sharedPosts.length > 0) {
+				const sharedPosts = await loadSharedPosts(ctx.sharedPosts, ctx.allFiles)
+				if (this.disposed) return this.snapshot
+				const entriesByPlatform = new Map<SelfMediaPlatform, SelfMediaPostEntry[]>()
+				const loadedPosts: Record<string, SelfMediaPost> = {}
+				for (const sharedPost of sharedPosts) {
+					const key = cacheKey(sharedPost.platform, sharedPost.entry.id)
+					const entries = entriesByPlatform.get(sharedPost.platform) || []
+					entries.push(sharedPost.entry)
+					entriesByPlatform.set(sharedPost.platform, entries)
+					loadedPosts[key] = sharedPost.post
+					this.reindexPost(sharedPost.platform, sharedPost.post, sharedPost.postFileId)
+					this.postMeta.set(key, {
+						platform: sharedPost.platform,
+						entry: sharedPost.entry,
+						postFileId: sharedPost.postFileId,
+					})
+				}
+				this.snapshot = {
+					slices: Array.from(entriesByPlatform, ([platform, postEntries]) => ({
+						platform,
+						postEntries,
+					})),
+					loadedPosts,
+					error: null,
+					folderRelativePath: ctx.folderRelativePath,
+					sharedPostFallback: true,
+				}
+				log.log("✅ 文章目录分享初始化完成", {
+					folderFileId: args.folderFileId,
+					platforms: this.snapshot.slices.length,
+					posts: sharedPosts.length,
+					durationMs: Date.now() - startedAt,
+				})
+				return this.snapshot
+			}
+
+			const slices = await this.loadRootSlicesInternal(ctx.magicProjectFileId as string)
 			if (this.disposed) {
 				log.log("🛑 初始化已中止：加载期间被 dispose", {
 					folderFileId: args.folderFileId,
 				})
 				return this.snapshot
 			}
-			this.indexRoot(ctx.magicProjectFileId)
+			this.indexRoot(ctx.magicProjectFileId as string)
 			this.snapshot = {
 				slices,
 				loadedPosts: {},
 				error: null,
 				folderRelativePath: ctx.folderRelativePath,
+				sharedPostFallback: false,
 			}
 			log.log("✅ 初始化完成", {
 				folderFileId: args.folderFileId,
@@ -251,7 +310,8 @@ export class SelfMediaPostsService {
 		const rootIdentityChanged =
 			this.lastFolderFileId !== args.folderFileId ||
 			this.lastMagicProjectFileId !== ctx.magicProjectFileId ||
-			ctx.magicProjectFileId === null
+			this.lastSharedPostSourceKey !== buildSharedPostSourceKey(ctx.sharedPosts) ||
+			(ctx.magicProjectFileId === null && ctx.sharedPosts.length === 0)
 		if (rootIdentityChanged) {
 			log.log("🔄 reconcile 回落到 initialize：根目录或 magic.project.js 身份变化", {
 				prevFolderFileId: this.lastFolderFileId,
@@ -501,6 +561,7 @@ export class SelfMediaPostsService {
 		this.postMeta.clear()
 		this.lastTreeSnapshot = null
 		this.lastMagicProjectFileId = null
+		this.lastSharedPostSourceKey = null
 		this.lastFolderFileId = null
 	}
 

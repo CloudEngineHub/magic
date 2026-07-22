@@ -103,8 +103,12 @@
 		"title": "Skills Library"
 	},
 	"slidesTemplates": {
-		"templateCount": "{{count}} templates",
-		"title": "Slide Templates"
+		"compactCount": "{{value}} templates",
+		"statisticsTooltip": "{{title}} · {{todayAdded}} added today · {{total}} templates total",
+		"statisticsTooltipWithoutToday": "{{title}} · {{total}} templates total",
+		"templateTotalCount": "Total templates {{value}}",
+		"title": "Slide Templates",
+		"todayAddedCount": "Added today {{value}}"
 	},
 	"superLobster": {
 		"card": {

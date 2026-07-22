@@ -37,7 +37,8 @@ class SlidesTemplateApi extends AbstractApi
 
         return SlidesTemplateAssembler::createCountDTO(
             $result['total'],
-            $result['total_usage_count']
+            $result['total_usage_count'],
+            (int) ($result['template_count_today_growth'] ?? 0)
         )->toArray();
     }
 

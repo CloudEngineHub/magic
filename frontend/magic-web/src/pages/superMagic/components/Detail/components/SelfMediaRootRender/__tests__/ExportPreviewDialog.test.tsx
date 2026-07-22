@@ -29,6 +29,7 @@ vi.mock("../components/CardFrame", () => ({
 				ref,
 				() => ({
 					capture: vi.fn(),
+					getCaptureSize: vi.fn(() => ({ width: 900, height: 1200 })),
 					getIframeElement: vi.fn(() => null),
 				}),
 				[],
@@ -168,11 +169,12 @@ describe("ExportPreviewDialog", () => {
 		expect(onSyncActivePost).not.toHaveBeenCalled()
 	})
 
-	it("passes the sorted subset and chosen pixel ratio to onConfirm", async () => {
+	it("passes the sorted subset, image format, and chosen pixel ratio to onConfirm", async () => {
 		const { onConfirm } = renderDialog({ initialPostIndex: 0 })
 
 		// Deselect card index 1 to prove only the remaining indexes are passed.
 		fireEvent.click(screen.getByTestId("self-media-export-card-item-1"))
+		fireEvent.click(screen.getByTestId("self-media-export-format-option-webp"))
 
 		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
 		expect(onConfirm).toHaveBeenCalledWith(
@@ -180,6 +182,7 @@ describe("ExportPreviewDialog", () => {
 				postIndex: 0,
 				cardIndexes: [0, 2],
 				pixelRatio: 2,
+				format: "webp",
 			}),
 		)
 	})
@@ -196,6 +199,19 @@ describe("ExportPreviewDialog", () => {
 				cardIndexes: [0, 1, 2],
 				exportType: "longImage",
 			}),
+		)
+	})
+
+	it("shows dimensions from the actual card capture size", () => {
+		renderDialog()
+
+		expect(screen.getByTestId("self-media-export-scale-size-2x")).toHaveTextContent(
+			"width=1800,height=2400",
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
+		expect(screen.getByTestId("self-media-export-scale-size-2x")).toHaveTextContent(
+			"width=1800,height=7204",
 		)
 	})
 

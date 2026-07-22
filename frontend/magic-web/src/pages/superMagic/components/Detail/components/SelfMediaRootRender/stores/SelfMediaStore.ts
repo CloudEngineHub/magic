@@ -4,6 +4,7 @@ import type { SelfMediaInitialNavigation, SelfMediaPlatform } from "../../../typ
 import type {
 	SelfMediaPost,
 	SelfMediaPostEntry,
+	SelfMediaPostMetaPatch,
 	SelfMediaPostPublishStatus,
 	SelfMediaView,
 } from "../types"
@@ -64,6 +65,7 @@ export class SelfMediaStore {
 	loading = true
 	error: string | null = null
 	folderRelativePath = "/"
+	sharedPostFallback = false
 
 	activePlatform: SelfMediaPlatform | undefined = undefined
 	activePostIndex = 0
@@ -227,15 +229,27 @@ export class SelfMediaStore {
 	}
 
 	updatePostTitle(index: number, nextTitle: string): void {
+		this.updatePostMeta(index, { title: nextTitle })
+	}
+
+	updatePostMeta(index: number, patch: SelfMediaPostMetaPatch): void {
 		const platform = this.resolvedPlatform
 		const entry = this.postEntries[index]
 		if (!platform || !entry) return
-		this.updatePlatformPostTitle(platform, entry.id, nextTitle)
+		this.updatePlatformPostMeta(platform, entry.id, patch)
 	}
 
 	updatePlatformPostTitle(platform: SelfMediaPlatform, entryId: string, nextTitle: string): void {
-		const title = nextTitle.trim()
-		if (!title) return
+		this.updatePlatformPostMeta(platform, entryId, { title: nextTitle })
+	}
+
+	updatePlatformPostMeta(
+		platform: SelfMediaPlatform,
+		entryId: string,
+		patch: SelfMediaPostMetaPatch,
+	): void {
+		const title = patch.title?.trim()
+		if (patch.title !== undefined && !title) return
 		const slice = this.slices.find((item) => item.platform === platform)
 		const entry = slice?.postEntries.find((item) => item.id === entryId)
 		if (!entry) return
@@ -245,11 +259,12 @@ export class SelfMediaStore {
 			...currentPost,
 			meta: {
 				...currentPost.meta,
-				feedTitle: title,
-				title,
+				...patch,
+				...(title ? { feedTitle: title, title } : {}),
 			},
 		}
 		this.loadedPosts = { ...this.loadedPosts, [key]: nextPost }
+		if (!title) return
 		this.slices = this.slices.map((slice) => {
 			if (slice.platform !== platform) return slice
 			return {
@@ -381,6 +396,7 @@ export class SelfMediaStore {
 				this.loadedPosts = {}
 				this.error = null
 				this.folderRelativePath = "/"
+				this.sharedPostFallback = false
 				this.rootLoading = false
 				this.loading = false
 			})
@@ -399,6 +415,7 @@ export class SelfMediaStore {
 				this.loadedPosts = {}
 				this.error = null
 				this.folderRelativePath = "/"
+				this.sharedPostFallback = false
 				this.rootLoading = false
 				this.loading = false
 			})
@@ -695,6 +712,7 @@ export class SelfMediaStore {
 		if (this.error !== snap.error) {
 			this.error = snap.error
 		}
+		this.sharedPostFallback = snap.sharedPostFallback === true
 	}
 
 	private async loadPostFor(

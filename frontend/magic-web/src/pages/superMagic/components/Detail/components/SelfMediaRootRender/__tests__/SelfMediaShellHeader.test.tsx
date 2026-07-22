@@ -169,6 +169,61 @@ describe("SelfMediaShellHeader", () => {
 		expect(screen.getByTestId("self-media-export-btn")).toHaveClass("max-sm:h-10")
 	})
 
+	it("places the share action between refresh and export", () => {
+		const onShare = vi.fn()
+
+		render(
+			<SelfMediaShellHeader
+				platform="rednote"
+				posts={[{ meta: { id: "post-1", title: "Launch Notes" }, cards: [] }]}
+				activePostIndex={0}
+				view="detail"
+				tabLabels={{ detail: "Notes" }}
+				visibleTabs={["detail"]}
+				onChangeView={vi.fn()}
+				onRefresh={vi.fn()}
+				refreshLabel="Refresh"
+				refreshTestId="shell-refresh"
+				onShare={onShare}
+				onOpenExport={vi.fn()}
+				exportLabel="Export"
+			/>,
+		)
+
+		const refreshButton = screen.getByTestId("shell-refresh")
+		const shareButton = screen.getByTestId("self-media-shell-share-button")
+		const exportButton = screen.getByTestId("self-media-export-btn")
+
+		expect(
+			refreshButton.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(
+			shareButton.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		fireEvent.click(shareButton)
+		expect(onShare).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides the share action when sharing is unavailable", () => {
+		render(
+			<SelfMediaShellHeader
+				platform="rednote"
+				posts={[{ meta: { id: "post-1", title: "Launch Notes" }, cards: [] }]}
+				activePostIndex={0}
+				view="detail"
+				tabLabels={{ detail: "Notes" }}
+				visibleTabs={["detail"]}
+				onChangeView={vi.fn()}
+				onRefresh={vi.fn()}
+				refreshLabel="Refresh"
+				refreshTestId="shell-refresh"
+			/>,
+		)
+
+		expect(screen.queryByTestId("self-media-shell-share-button")).not.toBeInTheDocument()
+	})
+
 	it("renders the pre-publish analysis action inside the shared footer", () => {
 		const onRequestPrePublishAnalysis = vi.fn()
 
