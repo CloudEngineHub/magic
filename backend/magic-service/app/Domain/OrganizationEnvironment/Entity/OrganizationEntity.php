@@ -10,6 +10,7 @@ namespace App\Domain\OrganizationEnvironment\Entity;
 use App\Domain\OrganizationEnvironment\Entity\ValueObject\OrganizationSyncStatus;
 use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\AbstractEntity;
+use App\Infrastructure\Core\DataIsolation\ValueObject\OrganizationType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use DateTime;
 
@@ -228,6 +229,19 @@ class OrganizationEntity extends AbstractEntity
     public function setType(int $type): void
     {
         $this->type = $type;
+    }
+
+    public function isPersonal(): bool
+    {
+        return $this->type === OrganizationType::Personal->value;
+    }
+
+    public function isOwnedBy(string $userId): bool
+    {
+        return $userId !== ''
+            && $this->creatorId !== null
+            && $this->creatorId !== ''
+            && $this->creatorId === $userId;
     }
 
     public function getCreatedAt(): ?DateTime
