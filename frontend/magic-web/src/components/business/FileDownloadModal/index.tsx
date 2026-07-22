@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react"
+import { memo, useCallback, useRef, useState } from "react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { useTranslation } from "react-i18next"
 import { Dialog, DialogContent } from "@/components/shadcn-ui/dialog"
@@ -17,29 +17,46 @@ interface FileDownloadModalProps {
 	downloadUrl: string
 	onDownload?: () => void
 	onCopyLink?: () => void
+	onAfterClose?: () => void
 	/** Raises only this detached desktop dialog when it is opened from another modal. */
 	modalZIndex?: number
 }
 
 /** Renders a lightweight download prompt for downloads triggered outside the normal app tree. */
 export default memo(function FileDownloadModal(props: OpenableProps<FileDownloadModalProps>) {
-	const { open, onClose, fileName, downloadUrl, onDownload, onCopyLink, modalZIndex } = props
+	const {
+		open,
+		onClose,
+		fileName,
+		downloadUrl,
+		onDownload,
+		onCopyLink,
+		onAfterClose,
+		modalZIndex,
+	} = props
 
 	// 内部状态管理 open，用于控制关闭动画
 	// 由于 openLightModal 每次都创建新实例，open 永远是 true，不需要同步
 	const [internalOpen, setInternalOpen] = useState(open)
+	const closeStartedRef = useRef(false)
 
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
 	// 处理关闭：先设置内部状态为 false，等动画完成后调用外部 onClose
 	const handleClose = useCallback(() => {
+		if (closeStartedRef.current) return
+		closeStartedRef.current = true
 		setInternalOpen(false)
 		// 延迟调用 onClose，等待关闭动画
 		setTimeout(() => {
-			onClose?.()
+			try {
+				onAfterClose?.()
+			} finally {
+				onClose?.()
+			}
 		}, 200)
-	}, [onClose])
+	}, [onAfterClose, onClose])
 
 	// Handle download button click
 	const handleDownloadClick = useCallback(() => {

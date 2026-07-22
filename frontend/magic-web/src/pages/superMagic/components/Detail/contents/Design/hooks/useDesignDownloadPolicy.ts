@@ -1,6 +1,7 @@
-import { useMemoizedFn } from "ahooks"
-import type { CanvasFileElement } from "@/components/CanvasDesign/canvas/types"
-import type { MagicPermissions } from "@/components/CanvasDesign/types.magic"
+import type { ReactNode } from "react"
+import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
+import type { MagicPermissions } from "@/components/CanvasDesign/public/magic-types"
+import { useAiImageDownloadPolicy } from "@/pages/superMagic/hooks/useAiImageDownloadPolicy"
 
 export interface HandleHighQualityDownloadOptions {
 	fileElements: CanvasFileElement[]
@@ -10,38 +11,39 @@ export interface HandleHighQualityDownloadOptions {
 
 export interface UseDesignDownloadPolicyResult {
 	permissions: MagicPermissions
-	waterMarkFreeModalVisible: boolean
-	setWaterMarkFreeModalVisible: (visible: boolean) => void
-	downloadFileElements: CanvasFileElement[]
-	setDownloadFileElements: (fileElements: CanvasFileElement[]) => void
-	waterMarkFreeModalInitialized: boolean
+	agreementModal: ReactNode
 	handleHighQualityDownload: (options: HandleHighQualityDownloadOptions) => Promise<void>
-	handleAgreementConfirm: (executeDownload: () => Promise<void>) => Promise<void>
 }
 
 export function useDesignDownloadPolicy(): UseDesignDownloadPolicyResult {
-	const handleSetWaterMarkFreeModalVisible = useMemoizedFn(() => undefined)
-	const handleSetDownloadFileElements = useMemoizedFn(() => undefined)
-	const handleHighQualityDownload = useMemoizedFn(
-		async (options: HandleHighQualityDownloadOptions) => {
-			await options.executeDownload()
+	type PendingCanvasDownload = HandleHighQualityDownloadOptions
+	const {
+		agreementModal,
+		isFreeTrialVersion,
+		shouldUseSingleDownloadEntry,
+		handleDownloadNoWaterMark,
+	} = useAiImageDownloadPolicy<PendingCanvasDownload>({
+		onDownload: async (_mode, pendingDownload) => {
+			await pendingDownload?.executeDownload()
 		},
-	)
-	const handleAgreementConfirm = useMemoizedFn(async (executeDownload: () => Promise<void>) => {
-		await executeDownload()
 	})
+
+	const handleHighQualityDownload = async (options: HandleHighQualityDownloadOptions) => {
+		if (options.skipAgreementCheck) {
+			await options.executeDownload()
+			return
+		}
+
+		handleDownloadNoWaterMark(options)
+	}
 
 	return {
 		permissions: {
 			disabledMarker: false,
-			singleDownloadUsesNoWatermark: false,
+			singleDownloadUsesNoWatermark: shouldUseSingleDownloadEntry,
+			isFreeTrialVersion,
 		},
-		waterMarkFreeModalVisible: false,
-		setWaterMarkFreeModalVisible: handleSetWaterMarkFreeModalVisible,
-		downloadFileElements: [],
-		setDownloadFileElements: handleSetDownloadFileElements,
-		waterMarkFreeModalInitialized: false,
+		agreementModal,
 		handleHighQualityDownload,
-		handleAgreementConfirm,
 	}
 }

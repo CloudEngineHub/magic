@@ -34,6 +34,12 @@ return [
         'failed' => 'Failed to complete image prompt',
         'invalid_response' => 'Image prompt completion returned an invalid response',
     ],
+    'text_content_completion' => [
+        'project_not_exists' => 'Project does not exist: :project_id',
+        'agent_disabled' => 'Text content optimization service is temporarily unavailable',
+        'failed' => 'Failed to optimize text content',
+        'invalid_response' => 'Text content optimization returned an invalid response',
+    ],
     'video_generation' => [
         'project_not_exists' => 'Project does not exist: :project_id',
         'file_dir_not_exists' => 'File directory does not exist: :file_dir',

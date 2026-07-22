@@ -14,7 +14,10 @@ import {
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
 import { resolveSafePreviewUrl } from "@/pages/superMagic/components/Detail/components/FilesViewer/components/previewUrl"
-import { isOssExpired, parseExpiresAt } from "@/components/CanvasDesign/canvas/utils/ossExpiryUtils"
+import {
+	isOssExpired,
+	parseExpiresAt,
+} from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 import type { AttachmentItem } from "../hooks/types"
 

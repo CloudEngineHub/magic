@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasConnection,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { DesignData } from "../../types"
 import { mergeDesignDataByElement } from "../designDataElementMerge"
 
@@ -30,13 +33,25 @@ function frame(id: string, children: LayerElement[] = [], options: Partial<Layer
 	} as LayerElement
 }
 
-function design(elements: LayerElement[], options: Partial<DesignData> = {}): DesignData {
+function connection(
+	id: string,
+	sourceElementId = "source",
+	targetElementId = "target",
+): CanvasConnection {
+	return { id, sourceElementId, targetElementId }
+}
+
+function design(
+	elements: LayerElement[],
+	options: Partial<DesignData> & { connections?: CanvasConnection[] } = {},
+): DesignData {
+	const { connections, ...restOptions } = options
 	return {
 		type: "design",
 		name: "design",
 		version: "2.0.0",
-		canvas: { elements },
-		...options,
+		canvas: { elements, ...(connections ? { connections } : {}) },
+		...restOptions,
 	}
 }
 
@@ -288,6 +303,35 @@ describe("mergeDesignDataByElement", () => {
 				ok: false,
 				reason: "duplicate-element-id",
 				conflictElementIds: ["a"],
+			}),
+		)
+	})
+
+	it("reports duplicate connection ids as a connection-level conflict", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseData = design(elements)
+		const remoteData = design(elements)
+		const localData = design(elements, {
+			connections: [
+				connection("edge", "source", "target"),
+				connection("edge", "target", "other"),
+			],
+		})
+
+		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isConnectionLevelConflict: true,
+				reason: "duplicate-connection-id",
+				connectionConflictIds: ["edge"],
+				connectionConflicts: [
+					expect.objectContaining({
+						connectionId: "edge",
+						reason: "duplicate-connection-id",
+					}),
+				],
 			}),
 		)
 	})

@@ -1,7 +1,7 @@
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
-import { type ImageGenerationTaskMeta } from "@/components/CanvasDesign/types.magic"
+import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import { type ImageGenerationTaskMeta } from "@/components/CanvasDesign/public/magic-types"
 import { normalizePath } from "./utils"
-import { resolveDesignDslPathCandidatesToWorkspaceRelative } from "./designDslPathUtils"
+import { toWorkspaceRelativeCandidates } from "./designPath"
 
 interface ReplaceCanvasFilePathReferencesOptions {
 	oldWorkspaceRelativePath: string
@@ -21,9 +21,9 @@ function shouldReplacePath(
 	if (typeof value !== "string" || !value.trim()) return false
 
 	const oldPath = normalizePath(oldWorkspaceRelativePath)
-	return resolveDesignDslPathCandidatesToWorkspaceRelative(value, designProjectBasePath).some(
-		(resolvedPath) => normalizePath(resolvedPath) === oldPath,
-	)
+	return toWorkspaceRelativeCandidates(value, {
+		designProjectBasePath,
+	}).some((resolvedPath) => normalizePath(resolvedPath) === oldPath)
 }
 
 function replacePathField(

@@ -16,11 +16,9 @@ import type {
 	GetImageGenerationResultParams,
 	ImageGenerationResultResponse,
 	ImageGenerationResultsResponse,
-} from "@/components/CanvasDesign/types.magic"
-import type {
 	GenerateImagesRequest,
 	GenerateImagesResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
@@ -28,10 +26,7 @@ import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { toCanvasGenerateHightImageResponse } from "./useHighImageGeneration"
-import {
-	createDesignWorkspacePathExists,
-	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
-} from "../utils/designDslPathUtils"
+import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
 import {
 	syncFileInfoAfterGenerationComplete,
 	syncFileInfosAfterGenerationComplete,
@@ -386,13 +381,10 @@ function resolveReferenceImagePath(params: {
 	getErrorMessage: () => string
 }): string {
 	const { imagePath, designProjectBasePath, flatAttachments, getErrorMessage } = params
-	const resolved = resolveDesignDslPathToWorkspaceAbsoluteByCandidates(
-		imagePath,
+	const resolved = toWorkspaceAbsoluteApiPathForOperation(imagePath, {
 		designProjectBasePath,
-		{
-			pathExists: createDesignWorkspacePathExists(flatAttachments),
-		},
-	)
+		flatAttachments,
+	})
 	if (!resolved) throw new Error(getErrorMessage())
 	return resolved
 }

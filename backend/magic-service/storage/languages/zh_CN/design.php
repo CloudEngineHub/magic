@@ -34,6 +34,12 @@ return [
         'failed' => '生图提示词补全失败',
         'invalid_response' => '生图提示词补全返回异常',
     ],
+    'text_content_completion' => [
+        'project_not_exists' => '项目不存在: :project_id',
+        'agent_disabled' => '文本内容优化服务暂时不可用',
+        'failed' => '文本内容优化失败',
+        'invalid_response' => '文本内容优化返回异常',
+    ],
     'video_generation' => [
         'project_not_exists' => '项目不存在: :project_id',
         'file_dir_not_exists' => '文件目录不存在: :file_dir',

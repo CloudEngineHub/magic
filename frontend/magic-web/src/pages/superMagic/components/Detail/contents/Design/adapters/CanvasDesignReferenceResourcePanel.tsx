@@ -11,8 +11,8 @@ import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelRendererProps,
 	ReferenceResourcePanelSelectContext,
-} from "@/components/CanvasDesign/types"
-import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/components/MessageEditor/reference-assets/canvasReferenceMention.constants"
+} from "@/components/CanvasDesign/public/props"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/ui/editors/message/reference-assets/canvasReferenceMention.constants"
 import type { ComponentType } from "react"
 import { useEffect } from "react"
 
@@ -29,6 +29,7 @@ interface CanvasMentionPanelProps {
 	lockDismissToExplicitClose?: boolean
 	viewMode?: MentionPanelViewMode
 	galleryOptions?: MentionPanelGalleryOptions
+	enableMultiSelect?: boolean
 	onSelect: (item: MentionItem, context?: ReferenceResourcePanelSelectContext) => void
 	onClose: () => void
 	canToggleMultiSelectItem?: (item: MentionItem) => boolean
@@ -65,6 +66,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		initialLoadOptions,
 		initialNavigationStack,
 		catalogBehavior,
+		enableMultiSelect,
 		onSelect,
 		onClose,
 	} = props
@@ -99,6 +101,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 			lockDismissToExplicitClose
 			viewMode={MentionPanelViewMode.GALLERY}
 			galleryOptions={{ enablePreviewModal: true }}
+			enableMultiSelect={enableMultiSelect}
 			onSelect={(item, context) => {
 				const panelItem = toReferenceResourcePanelItem(item)
 				if (!panelItem) return

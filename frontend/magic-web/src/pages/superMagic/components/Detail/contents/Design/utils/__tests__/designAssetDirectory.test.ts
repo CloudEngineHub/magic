@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { SuperMagicApi } from "@/apis"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import { getOrCreateImagesDirFileId, getOrCreateUploadSubDirFileId } from "../designAssetDirectory"
 
 vi.mock("@/assets/locales/locale-adapters", () => ({

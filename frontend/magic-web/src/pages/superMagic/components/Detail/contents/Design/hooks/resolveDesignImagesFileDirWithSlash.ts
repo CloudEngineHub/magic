@@ -1,5 +1,5 @@
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import {
 	calculateUploadDirectory,
 	getOrCreateUploadSubDirFileId,
