@@ -40,6 +40,11 @@ export interface LocateProjectFileActionOptions {
 	elementId?: string
 }
 
+export interface DownloadActionOptions {
+	/** default 对齐项目文件下载；normal 仅用于 AI 图片带水印下载。 */
+	downloadMode?: "default" | "normal"
+}
+
 /**
  * 根据动作 ID 映射到对应的选项类型
  */
@@ -47,6 +52,8 @@ export interface UserActionOptionsMap {
 	"edit.paste": EditActionOptions
 	"view.focus-element": ViewActionOptions
 	"view.locate-project-file": LocateProjectFileActionOptions
+	"download.image": DownloadActionOptions
+	"download.image-no-watermark": DownloadActionOptions
 }
 
 /**

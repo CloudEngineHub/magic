@@ -25,7 +25,7 @@ import type { Canvas } from "../../../runtime/core/Canvas"
 import fileImage from "../../../assets/svg/file-image.svg"
 import { getShortcutDisplay } from "../../../runtime/shared/lib/index"
 import type { TFunction } from "../../../public/i18n-types"
-import { getLoadedFileElements } from "../../../runtime/shared/ids"
+import { getSelectedFileElements } from "../../../runtime/shared/ids"
 import type { MagicPermissions } from "../../../public/magic-types"
 import type { CanvasDownloadMenuContext } from "./resolveCanvasDownloadMenuContext"
 
@@ -83,20 +83,19 @@ export function getMenuItems({
 	// 判断选中元素的状态
 	const allUnlocked = selectedElements.every((el) => el.locked !== true)
 	const allVisible = selectedElements.every((el) => el.visible !== false)
-	const loadedFileElements = getLoadedFileElements(canvas)
-	const hasLoadedImageElement = loadedFileElements.some((element) => element.type === "image")
-	const hasLoadedVideoElement = loadedFileElements.some((element) => element.type === "video")
+	const selectedFileElements = getSelectedFileElements(canvas)
+	const hasSelectedImageElement = selectedFileElements.some((element) => element.type === "image")
+	const hasSelectedVideoElement = selectedFileElements.some((element) => element.type === "video")
 
 	const selectionKind =
 		downloadMenuContext?.selectionKind ??
-		(hasLoadedVideoElement && hasLoadedImageElement
+		(hasSelectedVideoElement && hasSelectedImageElement
 			? "mixed"
-			: hasLoadedVideoElement
+			: hasSelectedVideoElement
 				? "video-only"
-				: hasLoadedImageElement
+				: hasSelectedImageElement
 					? "image-only"
 					: "none")
-
 	const downloadLabel =
 		selectionKind === "video-only"
 			? translate("menu.downloadVideo", "下载视频")
@@ -138,7 +137,9 @@ export function getMenuItems({
 		icon: FileDown,
 		label: downloadLabel,
 		onClick: async () => {
-			await canvas.userActionRegistry.execute("download.image")
+			await canvas.userActionRegistry.execute("download.image", {
+				downloadMode: "default",
+			})
 		},
 		visible: () => {
 			return canvas.userActionRegistry.canExecute("download.image")
@@ -150,7 +151,9 @@ export function getMenuItems({
 		icon: FileDown,
 		label: translate("menu.downloadImage", "下载图片"),
 		onClick: async () => {
-			await canvas.userActionRegistry.execute("download.image")
+			await canvas.userActionRegistry.execute("download.image", {
+				downloadMode: "normal",
+			})
 		},
 		visible: () => {
 			return canvas.userActionRegistry.canExecute("download.image")
@@ -219,9 +222,12 @@ export function getMenuItems({
 			})
 		},
 		visible: () => {
-			return canvas.userActionRegistry.canExecute("view.locate-project-file", {
-				elementId: currentElementId ?? undefined,
-			})
+			return (
+				!isMultiSelect &&
+				canvas.userActionRegistry.canExecute("view.locate-project-file", {
+					elementId: currentElementId ?? undefined,
+				})
+			)
 		},
 	}
 

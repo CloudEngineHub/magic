@@ -1673,165 +1673,239 @@ export function renameFilesForUpload(files: File[], existingFiles: FileItem[]): 
 	return renamedFiles
 }
 
+export interface PackDownloadFileEntry {
+	/** 元素级唯一键；同一个项目文件可以对应多个画布元素。 */
+	key: string
+	file: FileItem
+	fileName?: string
+	imageProcess?: ImageProcessOptions
+}
+
+export interface PackDownloadFileEntriesOptions {
+	signal?: AbortSignal
+	onProgress?: (progress: number) => void
+	retryCount?: number
+}
+
+export interface PackDownloadFilesResult {
+	successCount: number
+	results: Array<{ success: boolean; fileName: string; error?: unknown }>
+}
+
+function createAbortError(): Error {
+	if (typeof DOMException !== "undefined") {
+		return new DOMException("Download aborted", "AbortError")
+	}
+	const error = new Error("Download aborted")
+	error.name = "AbortError"
+	return error
+}
+
+function throwIfDownloadAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw createAbortError()
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error && error.name === "AbortError"
+}
+
+async function retryDownloadTask<T>(
+	task: () => Promise<T>,
+	retryCount: number,
+	signal?: AbortSignal,
+): Promise<T> {
+	let lastError: unknown
+	for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+		throwIfDownloadAborted(signal)
+		try {
+			return await task()
+		} catch (error) {
+			if (isAbortError(error) || signal?.aborted) throw createAbortError()
+			lastError = error
+		}
+	}
+	throw lastError
+}
+
+function getPackEntryFileName(entry: PackDownloadFileEntry, index: number): string {
+	const rawFileName =
+		entry.fileName ||
+		entry.file.file_name ||
+		entry.file.display_filename ||
+		entry.file.filename ||
+		`file-${index + 1}`
+	const processedFormat = normalizeImageProcessFormat(entry.imageProcess?.format)
+	if (!processedFormat) {
+		if (rawFileName.includes(".")) return rawFileName
+		const originalExtension = entry.file.file_extension
+		return originalExtension ? `${rawFileName}.${originalExtension}` : rawFileName
+	}
+
+	const lastDotIndex = rawFileName.lastIndexOf(".")
+	const baseFileName = lastDotIndex === -1 ? rawFileName : rawFileName.slice(0, lastDotIndex)
+	return `${baseFileName}.${processedFormat}`
+}
+
+function makePackEntryFileNames(entries: PackDownloadFileEntry[]): string[] {
+	const usedFileNames = new Set<string>()
+	return entries.map((entry, index) => {
+		const requestedFileName = getPackEntryFileName(entry, index)
+		const lastDotIndex = requestedFileName.lastIndexOf(".")
+		const baseFileName =
+			lastDotIndex === -1 ? requestedFileName : requestedFileName.slice(0, lastDotIndex)
+		const extension = lastDotIndex === -1 ? "" : requestedFileName.slice(lastDotIndex)
+		let finalFileName = requestedFileName
+		let counter = 1
+		while (usedFileNames.has(finalFileName)) {
+			finalFileName = `${baseFileName}-${counter}${extension}`
+			counter += 1
+		}
+		usedFileNames.add(finalFileName)
+		return finalFileName
+	})
+}
+
 /**
- * 打包下载多个文件的共用函数
- * @param imageFiles 要下载的文件列表
- * @param downloadMode 下载模式（可选）
- * @param zipFileName zip 文件名（可选，默认为 "design-images.zip"）
- * @returns 返回下载结果，包含成功数量和失败信息
+ * 画布裁剪/同源多实例的客户端 ZIP 适配器。
+ * 下载地址仍复用项目文件 API；这里只保留项目批量接口无法表达的逐元素图片处理参数。
  */
+export async function packAndDownloadFileEntries(
+	entries: PackDownloadFileEntry[],
+	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
+	zipFileName = "design-media.zip",
+	options: PackDownloadFileEntriesOptions = {},
+): Promise<PackDownloadFilesResult> {
+	const { loadJSZip } = await import("@/lib/jszip")
+	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
+	const { downloadFileWithAnchor } = await import("@/pages/superMagic/utils/handleFIle")
+	const JSZip = await loadJSZip()
+	const zip = new JSZip()
+	const fileNames = makePackEntryFileNames(entries)
+	const retryCount = options.retryCount ?? 1
+	const sharedDownloadUrlByFileId = new Map<string, string>()
+	let completedCount = 0
+
+	throwIfDownloadAborted(options.signal)
+	const unprocessedFileIds = [
+		...new Set(
+			entries.filter((entry) => !entry.imageProcess).map((entry) => entry.file.file_id),
+		),
+	]
+	if (unprocessedFileIds.length > 0) {
+		try {
+			const downloadUrls = await retryDownloadTask(
+				() =>
+					getTemporaryDownloadUrl({
+						file_ids: unprocessedFileIds,
+						download_mode: downloadMode,
+						is_download: true,
+						enableErrorMessagePrompt: false,
+					}),
+				retryCount,
+				options.signal,
+			)
+			downloadUrls.forEach((item, index) => {
+				const fileId = item.file_id || unprocessedFileIds[index]
+				if (fileId && item.url) sharedDownloadUrlByFileId.set(fileId, item.url)
+			})
+		} catch (error) {
+			if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
+			// 批量取地址失败后由各元素单独重试，确保仍可产出成功子集。
+		}
+	}
+
+	const results = await Promise.all(
+		entries.map(async (entry, index) => {
+			const fileName = fileNames[index]
+			try {
+				let downloadUrl = entry.imageProcess
+					? undefined
+					: sharedDownloadUrlByFileId.get(entry.file.file_id)
+				if (!downloadUrl) {
+					downloadUrl = await retryDownloadTask(
+						async () => {
+							const downloadUrls = await getTemporaryDownloadUrl({
+								file_ids: [entry.file.file_id],
+								download_mode: downloadMode,
+								is_download: true,
+								options: entry.imageProcess
+									? { xMagicImageProcess: entry.imageProcess }
+									: undefined,
+								enableErrorMessagePrompt: false,
+							})
+							const url = downloadUrls?.[0]?.url
+							if (!url) throw new Error(t("design.errors.cannotGetDownloadUrl"))
+							return url
+						},
+						retryCount,
+						options.signal,
+					)
+				}
+
+				const blob = await retryDownloadTask(
+					async () => {
+						throwIfDownloadAborted(options.signal)
+						const response = await fetch(downloadUrl, { signal: options.signal })
+						if (!response.ok) {
+							throw new Error(
+								t("design.errors.downloadImageFailed", {
+									statusText: response.statusText,
+								}),
+							)
+						}
+						return response.blob()
+					},
+					retryCount,
+					options.signal,
+				)
+				zip.file(fileName, blob)
+				return { success: true, fileName }
+			} catch (error) {
+				if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
+				return { success: false, fileName, error }
+			} finally {
+				completedCount += 1
+				options.onProgress?.(entries.length ? (completedCount / entries.length) * 90 : 90)
+			}
+		}),
+	)
+
+	const successCount = results.filter((result) => result.success).length
+	if (successCount === 0) {
+		throw new Error(t("design.errors.noDownloadableImages"))
+	}
+
+	throwIfDownloadAborted(options.signal)
+	const zipBlob = await zip.generateAsync({ type: "blob" }, ({ percent }) => {
+		options.onProgress?.(90 + percent * 0.1)
+	})
+	throwIfDownloadAborted(options.signal)
+
+	const url = URL.createObjectURL(zipBlob)
+	await downloadFileWithAnchor(url, zipFileName, undefined, {
+		onModalClose: () => URL.revokeObjectURL(url),
+	})
+	options.onProgress?.(100)
+
+	return { successCount, results }
+}
+
+/** 兼容设计页已有调用；逐元素能力由 packAndDownloadFileEntries 承担。 */
 export async function packAndDownloadFiles(
 	imageFiles: FileItem[],
 	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
 	zipFileName = "design-images.zip",
 	xMagicImageProcessByFileId?: Record<string, ImageProcessOptions>,
-): Promise<{
-	successCount: number
-	results: Array<{ success: boolean; fileName: string; error?: unknown }>
-}> {
-	const { loadJSZip } = await import("@/lib/jszip")
-	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
-
-	// 加载 JSZip
-	const JSZip = await loadJSZip()
-	const zip = new JSZip()
-
-	const urlMap = new Map<string, string>()
-	const filesWithImageProcess = imageFiles.filter(
-		(file) => !!xMagicImageProcessByFileId?.[file.file_id],
-	)
-	const filesWithoutImageProcess = imageFiles.filter(
-		(file) => !xMagicImageProcessByFileId?.[file.file_id],
-	)
-
-	if (filesWithoutImageProcess.length > 0) {
-		const fileIds = filesWithoutImageProcess.map((file) => file.file_id)
-		const downloadUrls = await getTemporaryDownloadUrl({
-			file_ids: fileIds,
-			download_mode: downloadMode,
-		})
-
-		if (!downloadUrls || downloadUrls.length === 0) {
-			throw new Error(t("design.errors.cannotGetDownloadUrl"))
-		}
-
-		downloadUrls.forEach((item: { file_id?: string; url?: string }, index: number) => {
-			const fileId = item?.file_id || fileIds[index]
-			if (item?.url && fileId) {
-				urlMap.set(fileId, item.url)
-			}
-		})
-	}
-
-	if (filesWithImageProcess.length > 0) {
-		const imageProcessResults = await Promise.all(
-			filesWithImageProcess.map(async (file) => {
-				const xMagicImageProcess = xMagicImageProcessByFileId?.[file.file_id]
-				if (!xMagicImageProcess) return null
-
-				const downloadUrls = await getTemporaryDownloadUrl({
-					file_ids: [file.file_id],
-					download_mode: downloadMode,
-					options: { xMagicImageProcess },
-				})
-				const downloadUrl = downloadUrls?.[0]?.url
-
-				if (!downloadUrl) {
-					throw new Error(t("design.errors.cannotGetDownloadUrl"))
-				}
-
-				return {
-					fileId: file.file_id,
-					url: downloadUrl,
-				}
-			}),
-		)
-
-		for (const item of imageProcessResults) {
-			if (item?.url) {
-				urlMap.set(item.fileId, item.url)
-			}
-		}
-	}
-
-	// 处理文件名冲突
-	const usedFileNames = new Set<string>()
-	const processedFiles = imageFiles.map((file: FileItem, index: number) => {
-		const fileName = file.file_name || file.display_filename || `image-${index + 1}`
-		const processedFormat = normalizeImageProcessFormat(
-			xMagicImageProcessByFileId?.[file.file_id]?.format,
-		)
-		const fileExtension = processedFormat || file.file_extension || "png"
-		const lastDotIndex = fileName.lastIndexOf(".")
-		const baseFileName = lastDotIndex === -1 ? fileName : fileName.slice(0, lastDotIndex)
-
-		// 如果文件名已存在，添加序号
-		let finalFileName = `${baseFileName}.${fileExtension}`
-		let counter = 1
-		while (usedFileNames.has(finalFileName)) {
-			finalFileName = `${baseFileName}-${counter}.${fileExtension}`
-			counter++
-		}
-		usedFileNames.add(finalFileName)
-
-		return {
+): Promise<PackDownloadFilesResult> {
+	return packAndDownloadFileEntries(
+		imageFiles.map((file, index) => ({
+			key: `${file.file_id}:${index}`,
 			file,
-			finalFileName,
-		}
-	})
-
-	// 下载所有图片并添加到 zip
-	const downloadPromises = processedFiles.map(async (item) => {
-		const downloadUrl = urlMap.get(item.file.file_id)
-		if (!downloadUrl) {
-			return {
-				success: false,
-				fileName: item.finalFileName,
-				error: t("design.errors.noDownloadLink"),
-			}
-		}
-
-		try {
-			const response = await fetch(downloadUrl)
-			if (!response.ok) {
-				throw new Error(
-					t("design.errors.downloadImageFailed", {
-						statusText: response.statusText,
-					}),
-				)
-			}
-			const blob = await response.blob()
-			zip.file(item.finalFileName, blob)
-			return { success: true, fileName: item.finalFileName }
-		} catch (error) {
-			return { success: false, fileName: item.finalFileName, error }
-		}
-	})
-
-	const results = await Promise.all(downloadPromises)
-	const successCount = results.filter((r) => r?.success).length
-
-	if (successCount === 0) {
-		throw new Error(t("design.errors.noDownloadableImages"))
-	}
-
-	// 生成 zip 文件
-	const zipBlob = await zip.generateAsync({ type: "blob" })
-
-	// 下载 zip 文件
-	const url = URL.createObjectURL(zipBlob)
-	const link = document.createElement("a")
-	link.href = url
-	link.download = zipFileName
-	document.body.appendChild(link)
-	link.click()
-	document.body.removeChild(link)
-	URL.revokeObjectURL(url)
-
-	return {
-		successCount,
-		results,
-	}
+			imageProcess: xMagicImageProcessByFileId?.[file.file_id],
+		})),
+		downloadMode,
+		zipFileName,
+	)
 }
 
 function normalizeImageProcessFormat(format?: ImageFormat): string | undefined {

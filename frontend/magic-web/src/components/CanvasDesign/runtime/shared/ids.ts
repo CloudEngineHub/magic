@@ -1189,3 +1189,33 @@ export function getLoadedVideoElements(canvas: Canvas): CanvasFileElement[] {
 export function getLoadedFileElements(canvas: Canvas): CanvasFileElement[] {
 	return [...getLoadedImageElements(canvas), ...getLoadedVideoElements(canvas)]
 }
+
+/**
+ * 获取当前选区中的全部图片元素，不依赖图片 body 是否已经解码完成或 src 是否就绪。
+ * 下载动作需要保留未就绪元素，由宿主统一执行整批预检。
+ */
+export function getSelectedImageElements(canvas: Canvas): ImageElement[] {
+	return canvas.selectionManager
+		.getSelectedIds()
+		.map((id) => canvas.elementManager.getElementData(id))
+		.filter((element): element is ImageElement => element?.type === ElementTypeEnum.Image)
+}
+
+/** 获取当前选区中的全部视频元素，不依赖播放器或 src 是否已经就绪。 */
+export function getSelectedVideoElements(canvas: Canvas): CanvasFileElement[] {
+	return canvas.selectionManager
+		.getSelectedIds()
+		.map((id) => canvas.elementManager.getElementData(id))
+		.filter((element): element is CanvasFileElement => element?.type === ElementTypeEnum.Video)
+}
+
+/** 获取当前选区中的全部媒体元素，自动忽略文本、形状等非媒体元素。 */
+export function getSelectedFileElements(canvas: Canvas): CanvasFileElement[] {
+	return canvas.selectionManager
+		.getSelectedIds()
+		.map((id) => canvas.elementManager.getElementData(id))
+		.filter(
+			(element): element is CanvasFileElement =>
+				element?.type === ElementTypeEnum.Image || element?.type === ElementTypeEnum.Video,
+		)
+}

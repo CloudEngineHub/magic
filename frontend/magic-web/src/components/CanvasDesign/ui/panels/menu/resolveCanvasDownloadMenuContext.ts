@@ -1,6 +1,6 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import { AttachmentSource } from "../../../public/magic-types"
-import { getLoadedFileElements, getLoadedImageElements } from "../../../runtime/shared/ids"
+import { getSelectedFileElements, getSelectedImageElements } from "../../../runtime/shared/ids"
 import {
 	getCanvasResourceFileName,
 	toCanonicalCanvasResourcePath,
@@ -24,7 +24,7 @@ const DOWNLOAD_MENU_IMAGE_EXTENSIONS: readonly string[] = [
 ]
 
 export interface CanvasDownloadMenuContext {
-	/** 与 Topic 一致：仅图片、无视频，且每张图在资源管理器缓存中为 AI 源、扩展名为图片 */
+	/** 与 Topic 单文件一致：仅一张图片，且附件元信息表明它是 AI 图片。 */
 	useAiImageSubmenu: boolean
 	selectionKind: "video-only" | "mixed" | "image-only" | "none"
 }
@@ -56,16 +56,16 @@ function isRasterImageFile(fileName: string, path?: string): boolean {
 export async function resolveCanvasDownloadMenuContext(
 	canvas: Canvas,
 ): Promise<CanvasDownloadMenuContext> {
-	const loaded = getLoadedFileElements(canvas)
-	if (loaded.length === 0) {
+	const selectedMedia = getSelectedFileElements(canvas)
+	if (selectedMedia.length === 0) {
 		return {
 			useAiImageSubmenu: false,
 			selectionKind: "none",
 		}
 	}
 
-	const hasVideo = loaded.some((e) => e.type === "video")
-	const hasImage = loaded.some((e) => e.type === "image")
+	const hasVideo = selectedMedia.some((e) => e.type === "video")
+	const hasImage = selectedMedia.some((e) => e.type === "image")
 
 	let selectionKind: CanvasDownloadMenuContext["selectionKind"]
 	if (hasVideo && hasImage) selectionKind = "mixed"
@@ -80,8 +80,9 @@ export async function resolveCanvasDownloadMenuContext(
 		}
 	}
 
-	const imageElements = getLoadedImageElements(canvas)
-	if (imageElements.length === 0) {
+	const imageElements = getSelectedImageElements(canvas)
+	// 项目文件多选下载只有一个入口；AI 图片子菜单只对单文件开放。
+	if (imageElements.length !== 1) {
 		return {
 			useAiImageSubmenu: false,
 			selectionKind,
@@ -89,10 +90,17 @@ export async function resolveCanvasDownloadMenuContext(
 	}
 
 	const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
+	const getFileResourceMeta = canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 	const flags = await Promise.all(
 		imageElements.map(async (img) => {
 			if (!img.src) return false
-			const entry = await canvas.imageResourceManager.getEntry(img.src)
+			const meta = getFileResourceMeta
+				? await getFileResourceMeta(img.src).catch(() => null)
+				: null
+			const entry =
+				meta?.status === "exists"
+					? meta
+					: await canvas.imageResourceManager.getEntry(img.src)
 			if (!entry?.fileName) return false
 			const normalizedSrc = toCanonicalCanvasResourcePath(img.src, resolveAbs)
 			const isImage = isRasterImageFile(entry.fileName, normalizedSrc)

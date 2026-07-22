@@ -200,6 +200,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		afterAddFileToNewTopic,
 		onExitFullscreen,
 		downloadPolicy,
+		projectId,
+		currentFile,
 	})
 
 	const { generateHightImage, getConvertHightConfig } = useHighImageGeneration({

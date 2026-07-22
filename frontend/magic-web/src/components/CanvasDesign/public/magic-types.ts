@@ -878,6 +878,8 @@ export interface CanvasImageSourceDimensions {
  */
 export interface DownloadImageOptions {
 	sourceDimensionsByElementId?: Record<string, CanvasImageSourceDimensions>
+	/** 下载模式由菜单语义决定：default 对齐项目文件普通下载，normal 为 AI 带水印。 */
+	downloadMode?: "default" | "normal"
 }
 
 /**
@@ -1595,6 +1597,8 @@ export interface MagicPermissions {
 	singleDownloadUsesNoWatermark?: boolean
 	/** 与话题文件列表右键菜单一致：个人未付费时在「下载无水印图片」旁展示 VIP */
 	isFreeTrialVersion?: boolean
+	/** 宿主统一计算的文件下载权限；为 false 时菜单与执行层都必须拒绝下载。 */
+	allowFileDownload?: boolean
 }
 
 /** getDefaultItems 可选的 i18n 参数，与 MentionPanel I18nTexts 兼容 */

@@ -14,9 +14,10 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import {
-	packAndDownloadFiles,
-	getZipFileNameFromFiles,
+	packAndDownloadFileEntries,
 	convertFileItemToAttachmentItem,
+	getDesignDirectoryInfo,
+	type PackDownloadFileEntry,
 } from "../utils/utils"
 import { resolveDesignAttachment } from "../utils/designPath"
 import { useTranslation } from "react-i18next"
@@ -28,6 +29,9 @@ import {
 	CanvasImageSourceDimensions,
 	DownloadImageOptions,
 } from "@/components/CanvasDesign/public/magic-types"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { resolveCanvasMediaDownloadPlan } from "../utils/mediaDownloadPlan"
 
 function cropConfigToCropOptions(config: {
 	x: number
@@ -111,6 +115,90 @@ function getDownloadFileName(fileItem: FileItem, format?: ImageFormat): string {
 	return `${rawFileName.slice(0, lastDotIndex)}.${format}`
 }
 
+function getFileNameParts(fileName: string): { baseName: string; extension: string } {
+	const lastDotIndex = fileName.lastIndexOf(".")
+	if (lastDotIndex <= 0) return { baseName: fileName, extension: "" }
+	return {
+		baseName: fileName.slice(0, lastDotIndex),
+		extension: fileName.slice(lastDotIndex),
+	}
+}
+
+function sanitizeDownloadBaseName(name?: string): string {
+	return (name || "")
+		.trim()
+		.replace(/[\\/:*?"<>|]/g, "-")
+		.replace(/\s+/g, " ")
+		.replace(/^\.+|\.+$/g, "")
+}
+
+function getElementDownloadFileName(params: {
+	element: CanvasFileElement
+	fileItem: FileItem
+	imageProcess?: ImageProcessOptions
+	preferElementName?: boolean
+}): string {
+	const { element, fileItem, imageProcess, preferElementName } = params
+	const sourceFileName = getDownloadFileName(fileItem, imageProcess?.format)
+	const { baseName, extension } = getFileNameParts(sourceFileName)
+	const elementName = sanitizeDownloadBaseName(element.name)
+
+	if (preferElementName && elementName) {
+		if (!extension) return elementName
+		const elementBaseName = elementName.toLowerCase().endsWith(extension.toLowerCase())
+			? elementName.slice(0, -extension.length)
+			: elementName
+		return `${elementBaseName}${extension}`
+	}
+	if (imageProcess) return `${baseName}-crop${extension}`
+	return sourceFileName
+}
+
+function getMediaArchiveName(params: {
+	currentFile?: { id: string; name: string }
+	flatAttachments?: FileItem[]
+}): string {
+	const { currentFile, flatAttachments } = params
+	const directoryName =
+		currentFile?.id && flatAttachments
+			? getDesignDirectoryInfo(currentFile, flatAttachments).name
+			: undefined
+	const currentFileBaseName = currentFile?.name
+		? getFileNameParts(currentFile.name).baseName
+		: undefined
+	const baseName = sanitizeDownloadBaseName(directoryName || currentFileBaseName) || "design"
+	return `${baseName}-media.zip`
+}
+
+function getSingleDownloadMode(
+	noWatermark: boolean,
+	downloadOptions?: DownloadImageOptions,
+): DownloadImageMode {
+	if (noWatermark) return DownloadImageMode.HighQuality
+	if (downloadOptions?.downloadMode === "normal") return DownloadImageMode.NormalDownload
+	return DownloadImageMode.Download
+}
+
+function getClientZipDownloadMode(
+	noWatermark: boolean,
+	downloadOptions?: DownloadImageOptions,
+): DownloadImageMode | undefined {
+	if (noWatermark) return DownloadImageMode.HighQuality
+	if (downloadOptions?.downloadMode === "normal") return DownloadImageMode.NormalDownload
+	// default 不显式覆盖，让 getTemporaryDownloadUrl 复用项目文件的全局水印偏好。
+	return undefined
+}
+
+class CanvasMediaDownloadPreflightError extends Error {}
+
+async function retryOnce<T>(task: () => Promise<T>): Promise<T> {
+	try {
+		return await task()
+	} catch {
+		return task()
+	}
+}
+
 function buildImageProcessOptions(params: {
 	fileElement: CanvasFileElement
 	fileItem: FileItem
@@ -159,6 +247,8 @@ interface UseConversationAndDownloadOptions {
 	onExitFullscreen?: () => void | Promise<void>
 	/** 下载策略（企业版可覆盖） */
 	downloadPolicy: UseDesignDownloadPolicyResult
+	projectId?: string
+	currentFile?: { id: string; name: string }
 }
 
 /**
@@ -178,8 +268,11 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 		afterAddFileToNewTopic,
 		onExitFullscreen,
 		downloadPolicy,
+		projectId,
+		currentFile,
 	} = options
 	const { t } = useTranslation("super")
+	const downloadProgress = useDownloadProgress()
 
 	/**
 	 * 添加图片至对话
@@ -278,30 +371,27 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			downloadOptions?: DownloadImageOptions,
 		) => {
 			if (data.length === 0) {
-				throw new Error(t("design.errors.imageSrcEmpty"))
+				throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
 			}
 
 			if (!flatAttachments || flatAttachments.length === 0) {
-				throw new Error(t("design.errors.fileListEmpty"))
+				throw new CanvasMediaDownloadPreflightError(t("design.errors.fileListEmpty"))
 			}
 
-			// 参考文件列表的实现：根据 noWatermark 参数选择下载模式
-			const downloadMode = noWatermark
-				? DownloadImageMode.HighQuality
-				: DownloadImageMode.NormalDownload
+			const resolvedEntries: Array<{
+				element: CanvasFileElement
+				fileItem: FileItem
+				imageProcess?: ImageProcessOptions
+			}> = []
 
-			// 收集所有文件 ID
-			const fileIds: string[] = []
-			const fileItemMap = new Map<string, FileItem>()
-
-			for (const item of data) {
-				if (!item.src) {
-					throw new Error(t("design.errors.imageSrcEmpty"))
+			// 先完整解析选区；任一元素无法映射到项目文件时，整批不启动。
+			for (const element of data) {
+				if (!element.src) {
+					throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
 				}
 
-				// 从 flatAttachments 中查找对应的文件
 				const resolvedFile = resolveDesignAttachment(
-					item.src,
+					element.src,
 					{
 						flatAttachments,
 						designProjectBasePath,
@@ -311,98 +401,142 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				)
 
 				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
-					throw new Error(t("design.errors.fileNotFoundBySrc", { src: item.src }))
+					throw new CanvasMediaDownloadPreflightError(
+						t("design.errors.fileNotFoundBySrc", { src: element.src }),
+					)
 				}
 
-				fileIds.push(resolvedFile.fileItem.file_id)
-				fileItemMap.set(resolvedFile.fileItem.file_id, resolvedFile.fileItem)
-			}
-
-			// 如果只有一个文件，直接下载（可带 crop 的图片处理参数，仅单文件时传入 crop）
-			if (data.length === 1) {
-				const first = data[0]
-				const fileItem = fileItemMap.get(fileIds[0])
-				if (!fileItem) {
-					throw new Error(t("design.errors.fileNotFoundBySrc", { src: first.src }))
-				}
-
-				const xMagicImageProcess = buildImageProcessOptions({
-					fileElement: first,
-					fileItem,
-					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
-				})
-
-				const singleDownloadUrls = await getTemporaryDownloadUrl({
-					file_ids: [fileIds[0]],
-					download_mode: downloadMode,
-					options: xMagicImageProcess ? { xMagicImageProcess } : undefined,
-				})
-
-				const downloadUrlItem = singleDownloadUrls[0]
-				if (!downloadUrlItem?.url) {
-					throw new Error(t("design.errors.cannotGetFileUrl"))
-				}
-
-				const downloadFile = fileItemMap.get(downloadUrlItem.file_id)
-				if (!downloadFile) {
-					throw new Error(t("design.errors.fileNotFoundBySrc", { src: first.src }))
-				}
-
-				const fileName = getDownloadFileName(downloadFile, xMagicImageProcess?.format)
-				downloadFileWithAnchor(downloadUrlItem.url, fileName)
-				return
-			}
-
-			// 多个文件时，打包成 zip（复用共用函数；多文件暂不支持按文件传 crop）
-			// 收集所有文件
-			const imageFiles: FileItem[] = []
-			const xMagicImageProcessByFileId: Record<string, ImageProcessOptions> = {}
-			for (const fileId of fileIds) {
-				const fileItem = fileItemMap.get(fileId)
-				if (fileItem) {
-					imageFiles.push(fileItem)
-				}
-			}
-
-			for (const fileElement of data) {
-				if (!fileElement.src) continue
-
-				const resolvedFile = resolveDesignAttachment(
-					fileElement.src,
-					{
-						flatAttachments,
-						designProjectBasePath,
-						attachmentIndex,
-					},
-					{ mode: "strict-current-canvas" },
-				)
-				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) continue
-
-				const xMagicImageProcess = buildImageProcessOptions({
-					fileElement,
+				const imageProcess = buildImageProcessOptions({
+					fileElement: element,
 					fileItem: resolvedFile.fileItem,
 					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
 				})
-
-				if (xMagicImageProcess) {
-					xMagicImageProcessByFileId[fileItem.file_id] = xMagicImageProcess
+				if (element.type === ElementTypeEnum.Image && element.crop && !imageProcess) {
+					throw new CanvasMediaDownloadPreflightError(t("design.errors.invalidImageCrop"))
 				}
+
+				resolvedEntries.push({
+					element,
+					fileItem: resolvedFile.fileItem,
+					imageProcess,
+				})
 			}
 
-			// 使用共用函数获取 zip 文件名（与 CanvasDesignHeader 保持一致）
-			const zipFileName = getZipFileNameFromFiles(imageFiles, flatAttachments)
+			if (resolvedEntries.length === 1) {
+				const [entry] = resolvedEntries
+				const downloadUrlItem = await retryOnce(async () => {
+					const singleDownloadUrls = await getTemporaryDownloadUrl({
+						file_ids: [entry.fileItem.file_id],
+						download_mode: getSingleDownloadMode(noWatermark, downloadOptions),
+						is_download: true,
+						options: entry.imageProcess
+							? { xMagicImageProcess: entry.imageProcess }
+							: undefined,
+						enableErrorMessagePrompt: false,
+					})
+					const item = singleDownloadUrls[0]
+					if (!item?.url) throw new Error(t("design.errors.cannotGetFileUrl"))
+					return item
+				})
 
-			// 使用共用函数打包下载
-			await packAndDownloadFiles(
-				imageFiles,
-				downloadMode,
-				zipFileName,
-				Object.keys(xMagicImageProcessByFileId).length > 0
-					? xMagicImageProcessByFileId
-					: undefined,
-			)
+				const fileName = getElementDownloadFileName({
+					element: entry.element,
+					fileItem: entry.fileItem,
+					imageProcess: entry.imageProcess,
+					preferElementName: Boolean(entry.imageProcess),
+				})
+				await downloadFileWithAnchor(downloadUrlItem.url, fileName)
+				return
+			}
+
+			const fileIds = resolvedEntries.map((entry) => entry.fileItem.file_id)
+			const hasImageProcess = resolvedEntries.some((entry) => Boolean(entry.imageProcess))
+			const archiveName = getMediaArchiveName({ currentFile, flatAttachments })
+			const downloadPlan = resolveCanvasMediaDownloadPlan({
+				fileIds,
+				hasImageProcess,
+				noWatermark,
+				downloadMode: downloadOptions?.downloadMode,
+			})
+
+			if (downloadPlan.transport === "project-batch") {
+				await downloadProgress.startDownload({
+					projectId,
+					fileIds,
+					fileName: archiveName,
+					label: t("design.messages.mediaDownloading", { count: resolvedEntries.length }),
+					onSuccess: () => {
+						magicToast.success(
+							t("design.messages.mediaDownloadSuccess", {
+								count: resolvedEntries.length,
+							}),
+						)
+					},
+					onError: () => {
+						magicToast.error(t("design.errors.mediaDownloadFailed"))
+					},
+					onCancel: () => {
+						magicToast.info(t("topicFiles.downloadAbort"))
+					},
+				})
+				return
+			}
+
+			const packEntries: PackDownloadFileEntry[] = resolvedEntries.map((entry) => ({
+				key: entry.element.id,
+				file: entry.fileItem,
+				fileName: getElementDownloadFileName({
+					element: entry.element,
+					fileItem: entry.fileItem,
+					imageProcess: entry.imageProcess,
+					preferElementName:
+						Boolean(entry.imageProcess) ||
+						downloadPlan.duplicatedFileIds.has(entry.fileItem.file_id),
+				}),
+				imageProcess: entry.imageProcess,
+			}))
+
+			await downloadProgress.startCustomDownload({
+				label: t("design.messages.mediaDownloading", { count: resolvedEntries.length }),
+				task: ({ signal, reportProgress }) =>
+					packAndDownloadFileEntries(
+						packEntries,
+						getClientZipDownloadMode(noWatermark, downloadOptions),
+						archiveName,
+						{ signal, onProgress: reportProgress, retryCount: 1 },
+					),
+				onSuccess: ({ successCount, results }) => {
+					const failedCount = results.length - successCount
+					if (failedCount > 0) {
+						magicToast.warning(
+							t("design.messages.mediaDownloadPartial", {
+								successCount,
+								failedCount,
+							}),
+						)
+						return
+					}
+					magicToast.success(
+						t("design.messages.mediaDownloadSuccess", { count: successCount }),
+					)
+				},
+				onError: () => {
+					magicToast.error(t("design.errors.mediaDownloadFailed"))
+				},
+				onCancel: () => {
+					magicToast.info(t("topicFiles.downloadAbort"))
+				},
+			})
 		},
-		[flatAttachments, attachmentIndex, designProjectBasePath, t],
+		[
+			attachmentIndex,
+			currentFile,
+			designProjectBasePath,
+			downloadProgress,
+			flatAttachments,
+			projectId,
+			t,
+		],
 	)
 
 	/**
@@ -419,30 +553,30 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			skipAgreementCheck = false,
 			downloadOptions?: DownloadImageOptions,
 		) => {
-			if (data.length === 0) {
-				throw new Error(t("design.errors.imageSrcEmpty"))
-			}
-
-			if (!flatAttachments || flatAttachments.length === 0) {
-				throw new Error(t("design.errors.fileListEmpty"))
+			const runDownload = async () => {
+				try {
+					await executeDownload(data, noWatermark, downloadOptions)
+				} catch (error) {
+					magicToast.error(
+						error instanceof CanvasMediaDownloadPreflightError
+							? error.message || t("design.errors.mediaResolveFailed")
+							: t("design.errors.mediaDownloadFailed"),
+					)
+				}
 			}
 
 			if (!noWatermark) {
-				await executeDownload(data, false, downloadOptions)
+				await runDownload()
 				return
 			}
 
 			await downloadPolicy.handleHighQualityDownload({
 				fileElements: data,
 				skipAgreementCheck,
-				executeDownload: () => {
-					return executeDownload(data, true, downloadOptions).catch((error) => {
-						throw error
-					})
-				},
+				executeDownload: runDownload,
 			})
 		},
-		[flatAttachments, t, downloadPolicy, executeDownload],
+		[t, downloadPolicy, executeDownload],
 	)
 
 	return {

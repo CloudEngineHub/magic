@@ -114,11 +114,10 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		(elementId: string) => {
 			if (!canvas) return
 
-			// 如果当前是多选状态，不改变选中状态
+			// 右键已选元素时保留多选；右键选区外元素时切回单选，避免意外批量下载。
 			if (selectedElementIds.length > 1) {
-				// 多选状态下，如果右键的元素不在选中列表中，将其添加到选中列表
 				if (!selectedElementIds.includes(elementId)) {
-					canvas.selectionManager.select(elementId, true)
+					canvas.selectionManager.replaceSelection([elementId])
 				}
 			} else {
 				// 单选或未选中状态，选中该元素

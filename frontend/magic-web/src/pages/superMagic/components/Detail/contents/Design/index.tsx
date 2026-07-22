@@ -11,7 +11,6 @@ import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDesignMethods } from "./hooks/useDesignMethods"
-import { useConversationAndDownload } from "./hooks/useConversationAndDownload"
 import { useDesignMarker } from "./hooks/useDesignMarker"
 import pubsub from "@/utils/pubsub"
 import { useSuperMagicMarkerManager } from "./marker-manager"
@@ -51,7 +50,6 @@ import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { setCanvasElementResourceGetter } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
 import { useDesignDownloadPolicy } from "./hooks/useDesignDownloadPolicy"
 import { HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX } from "@/pages/superMagic/components/Detail/components/CommonHeader/components/HistoryVersionBanner"
-import { useAiWatermarkPreference } from "@/hooks/useAiWatermarkPreference"
 import type { DesignRemoteUpdateListenerMode } from "./managers/types"
 import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -74,16 +72,6 @@ prewarmCanvasDesignImageWorker("super-magic-design-module")
 const CanvasDesign = lazy(() => import("@/components/CanvasDesign"))
 
 const REMOTE_CANVAS_UPDATE_SUPPRESS_MS = 500
-
-// 懒加载协议弹窗
-const loadWaterMarkFreeModal = async () => {
-	const module = await import("@/pages/superMagic/components/WaterMarkFreeModal")
-	return {
-		default: module.WaterMarkFreeModal,
-	}
-}
-
-const WaterMarkFreeModal = lazy(() => loadWaterMarkFreeModal())
 
 const DESIGN_REMOTE_UPDATE_LISTENER_MODE: DesignRemoteUpdateListenerMode = "file-change" as const
 
@@ -711,43 +699,22 @@ function DesignViewer(props: DesignViewerProps) {
 	])
 
 	const downloadPolicy = useDesignDownloadPolicy()
-	const { isFreeTrialVersion } = useAiWatermarkPreference()
 
 	const designCanvasMagicPermissions = useMemo(
 		() => ({
 			...downloadPolicy.permissions,
-			isFreeTrialVersion,
+			allowFileDownload: allowDownload !== false && (allowEdit || allowDownload === true),
 			elementMenuConversationActions: isNewestVersion && !isShareRoute,
 			showPluginEntry: canUseDesignPlugins(userStore.user.organizationCode),
 		}),
-		[downloadPolicy.permissions, isFreeTrialVersion, isNewestVersion, isShareRoute],
+		[allowDownload, allowEdit, downloadPolicy.permissions, isNewestVersion, isShareRoute],
 	)
-
-	const {
-		waterMarkFreeModalVisible,
-		setWaterMarkFreeModalVisible,
-		downloadFileElements,
-		setDownloadFileElements,
-		waterMarkFreeModalInitialized,
-	} = downloadPolicy
 
 	const handleExitFullscreen = useCallback(async () => {
 		if (isFullscreen) {
 			onFullscreen?.()
 		}
 	}, [isFullscreen, onFullscreen])
-
-	// 获取 executeDownload 方法（用于协议弹窗确认后的直接下载）
-	const { executeDownload } = useConversationAndDownload({
-		flatAttachments,
-		designProjectBasePath,
-		selectedWorkspace,
-		selectedProject,
-		afterAddFileToCurrentTopic: undefined,
-		afterAddFileToNewTopic: undefined,
-		onExitFullscreen: handleExitFullscreen,
-		downloadPolicy,
-	})
 
 	// 使用 SuperMagic Marker Manager（需在 useDesignMethods 之前）
 	const markerManager = useSuperMagicMarkerManager()
@@ -1725,30 +1692,8 @@ function DesignViewer(props: DesignViewerProps) {
 					</>
 				)}
 			</div>
-			{/* 下载无水印图片协议弹窗 */}
-			{(waterMarkFreeModalInitialized || waterMarkFreeModalVisible) && (
-				<Suspense fallback={null}>
-					<WaterMarkFreeModal
-						visible={waterMarkFreeModalVisible}
-						onClose={() => {
-							setWaterMarkFreeModalVisible(false)
-							setDownloadFileElements([])
-						}}
-						onConfirm={async () => {
-							if (downloadFileElements.length > 0 && executeDownload) {
-								// 用户已同意协议，直接执行下载（跳过协议检查）
-								try {
-									await downloadPolicy.handleAgreementConfirm(() =>
-										executeDownload(downloadFileElements, true),
-									)
-								} catch (error) {
-									//
-								}
-							}
-						}}
-					/>
-				</Suspense>
-			)}
+			{/* 与项目文件列表复用同一套 AI 图片无水印协议。 */}
+			{downloadPolicy.agreementModal}
 		</>
 	)
 }
