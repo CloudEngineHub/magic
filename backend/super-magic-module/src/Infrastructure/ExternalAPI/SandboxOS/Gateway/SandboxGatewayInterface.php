@@ -126,7 +126,12 @@ interface SandboxGatewayInterface
     /**
      * 复制文件（同步操作）.
      *
-     * @param array $files 文件复制项目数组
+     * `files` is serialized directly to JSON and must therefore be a
+     * zero-indexed list, even when copying only one file. Passing a single
+     * associative FileCopyItem would serialize as a JSON object and be
+     * rejected by the Sandbox Gateway's `[]FileCopyItem` request contract.
+     *
+     * @param array<int, array{source_oss_path: string, target_oss_path: string}> $files
      */
     public function copyFiles(DataIsolation $dataIsolation, array $files): GatewayResult;
 
