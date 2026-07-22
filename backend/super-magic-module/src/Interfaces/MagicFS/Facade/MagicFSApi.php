@@ -69,6 +69,17 @@ class MagicFSApi extends AbstractApi
     }
 
     /**
+     * 根据项目 ID 获取项目根目录 file_id.
+     * GET /api/v1/open-api/magicfs/projects/{projectId}/root-file-id.
+     */
+    public function getProjectRootFileId(string $projectId): array
+    {
+        $authorization = $this->getCurrentUser();
+
+        return $this->magicFSFileAppService->getProjectRootFileId($authorization, $projectId);
+    }
+
+    /**
      * 批量获取文件版本号
      * POST /api/v1/open-api/magicfs/files/versions.
      */

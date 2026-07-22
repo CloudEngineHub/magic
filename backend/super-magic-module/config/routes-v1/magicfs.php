@@ -16,6 +16,9 @@ use Hyperf\HttpServer\Router\Router;
 Router::addGroup(
     '/api/v1/open-api/magicfs',
     static function () {
+        // 根据项目 ID 获取项目根目录 file_id（agfs-server 动态挂载 referenced-project 时调用）
+        Router::get('/projects/{projectId}/root-file-id', [MagicFSApi::class, 'getProjectRootFileId']);
+
         Router::addGroup('/files', static function () {
             // 列出目录内容
             Router::post('/queries', [MagicFSApi::class, 'listFiles']);

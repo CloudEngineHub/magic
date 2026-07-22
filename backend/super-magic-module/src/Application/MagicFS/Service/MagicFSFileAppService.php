@@ -101,6 +101,30 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
+     * 根据项目 ID 获取项目根目录 file_id.
+     *
+     * agfs-server 在动态挂载 referenced-project 时调用：agent 仅通过挂载路径
+     * 提供 project_id，本端点解析出对应的根目录 file_id 供 magicfs 挂载使用。
+     * 要求当前用户对该项目至少具备 VIEWER 角色。
+     */
+    public function getProjectRootFileId(MagicUserAuthorization $authorization, string $projectId): array
+    {
+        $projectIdInt = (int) $projectId;
+        if ($projectIdInt <= 0) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+        }
+
+        $this->assertProjectAccessible($projectIdInt, $authorization, MemberRole::VIEWER);
+
+        $rootFileId = $this->magicFSFileDomainService->getProjectRootFileId($projectIdInt);
+
+        return [
+            'project_id' => (string) $projectIdInt,
+            'root_file_id' => (string) $rootFileId,
+        ];
+    }
+
+    /**
      * 批量获取文件元数据版本号.
      */
     public function getFileVersions(MagicUserAuthorization $authorization, GetFileVersionsRequestDTO $requestDTO): FileVersionsResponseDTO
