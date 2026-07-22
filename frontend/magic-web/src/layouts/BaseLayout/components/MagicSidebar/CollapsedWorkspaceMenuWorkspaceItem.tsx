@@ -211,7 +211,8 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								variant="ghost"
 								size="sm"
 								className={cn(
-									"h-8 w-full justify-start gap-2 px-2 font-normal [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+									"h-8 w-full justify-start gap-2 px-2 font-normal [-webkit-tap-highlight-color:transparent]",
+									!isActive && "hover:bg-[#fafafa] active:bg-[#fafafa]",
 									isActive && "bg-sidebar-accent",
 								)}
 								onMouseEnter={() => {
