@@ -311,10 +311,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setShareFileInfo,
 		handleShareSave,
 		exportingFiles,
-		isExportingPdf,
-		pdfExportProgress,
-		isExportingPpt,
-		pptExportProgress,
 		createFileAndUpload,
 		createFolderAndUpload,
 		createDesignProject,
@@ -323,7 +319,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		movingFiles,
 		downloadingFolders,
 		isFolderDownloading,
-		resetFileOperations,
 		removeFile,
 	} = useFileOperations({
 		setUserSelectDetail,
@@ -903,7 +898,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		resetFilter()
 		resetUI()
 		resetRename()
-		resetFileOperations()
 		resetVirtualFile()
 		resetVirtualFolder()
 		resetVirtualDesignProject()
@@ -2261,34 +2255,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									? t("topicFiles.copying")
 									: t("topicFiles.moving")
 						}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isExportingPdf}
-						progress={pdfExportProgress}
-						text={t("topicFiles.exportingPdf")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isExportingPpt}
-						progress={pptExportProgress}
-						text={t("topicFiles.exportingPpt")}
 						position="top"
 						width={280}
 						showPercentage={true}
