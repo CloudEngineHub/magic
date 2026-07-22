@@ -53,6 +53,7 @@ function createCanvasMock(
 	options: {
 		hoveredElementId?: string | null
 		selected?: boolean
+		selectionCount?: number
 		touch?: boolean
 		connectionDragging?: boolean
 	} = {},
@@ -60,6 +61,7 @@ function createCanvasMock(
 	const { handlers, eventEmitter } = createEventEmitterMock()
 	let hoveredElementId = options.hoveredElementId ?? null
 	let selected = options.selected ?? false
+	let selectionCount = options.selectionCount ?? (selected ? 1 : 0)
 	let connectionDragging = options.connectionDragging ?? false
 
 	return {
@@ -88,6 +90,7 @@ function createCanvasMock(
 				canUseSelectionToolAffordance: vi.fn(() => true),
 			},
 			selectionManager: {
+				getSelectionCount: vi.fn(() => selectionCount),
 				isSelected: vi.fn(() => selected),
 				replaceSelection: vi.fn(),
 			},
@@ -98,6 +101,10 @@ function createCanvasMock(
 		},
 		setSelected: (nextSelected: boolean) => {
 			selected = nextSelected
+			selectionCount = nextSelected ? Math.max(selectionCount, 1) : 0
+		},
+		setSelectionCount: (nextSelectionCount: number) => {
+			selectionCount = nextSelectionCount
 		},
 		setConnectionDragging: (nextConnectionDragging: boolean) => {
 			connectionDragging = nextConnectionDragging
@@ -192,6 +199,48 @@ describe("ElementCornerActionsDecorator", () => {
 		setConnectionDragging(false)
 		handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
 		expect(rootGroup?.visible()).toBe(true)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("keeps actions hidden when the hovered element is part of a multi-selection", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas } = createCanvasMock({
+			hoveredElementId: "image-1",
+			selected: true,
+			selectionCount: 2,
+		})
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+
+		const rootGroup = group.findOne(".decorator-corner-actions")
+		expect(rootGroup?.visible()).toBe(false)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("hides visible actions when selection changes from single to multiple", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas, handlers, setSelectionCount } = createCanvasMock({
+			hoveredElementId: "image-1",
+			selected: true,
+			selectionCount: 1,
+		})
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+		const rootGroup = group.findOne(".decorator-corner-actions")
+		expect(rootGroup?.visible()).toBe(true)
+
+		setSelectionCount(2)
+		handlers.get("element:select")?.[0]?.({ data: { elementIds: ["image-1", "image-2"] } })
+		expect(rootGroup?.visible()).toBe(false)
+
+		group.fire("mouseenter")
+		expect(rootGroup?.visible()).toBe(false)
 
 		decorator.destroy()
 		stage.destroy()

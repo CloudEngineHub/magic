@@ -268,7 +268,7 @@ export class ElementCornerActionsDecorator {
 			})
 		})
 
-		this.rootGroup.visible(this.isHovering)
+		this.rootGroup.visible(this.isHovering && !this.hasMultipleSelection())
 		this.rootGroup.moveToTop()
 	}
 
@@ -456,7 +456,8 @@ export class ElementCornerActionsDecorator {
 	private syncHoverStateFromCanvas(): void {
 		if (
 			!this.config.canvas.permissionManager.canUseSelectionToolAffordance() ||
-			this.isConnectionDragging()
+			this.isConnectionDragging() ||
+			this.hasMultipleSelection()
 		) {
 			this.hide()
 			return
@@ -485,7 +486,7 @@ export class ElementCornerActionsDecorator {
 	}
 
 	public show(): void {
-		if (this.isConnectionDragging()) {
+		if (this.isConnectionDragging() || this.hasMultipleSelection()) {
 			this.hide()
 			return
 		}
@@ -506,6 +507,10 @@ export class ElementCornerActionsDecorator {
 
 	private isConnectionDragging(): boolean {
 		return this.config.canvas.connectionDragManager?.isDraggingConnection?.() === true
+	}
+
+	private hasMultipleSelection(): boolean {
+		return this.config.canvas.selectionManager.getSelectionCount() > 1
 	}
 
 	private destroyButtonNodes(): void {
