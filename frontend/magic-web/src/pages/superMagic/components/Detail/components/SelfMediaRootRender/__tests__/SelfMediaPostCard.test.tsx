@@ -43,6 +43,8 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.renamePostInput": "Article name",
 				"detail.selfMedia.home.renamePostTitle": "Rename article",
 				"detail.selfMedia.home.mentionPost": "Mention this article",
+				"detail.selfMedia.home.moreActions": "More actions",
+				"fileViewer.share": "Share",
 				"detail.selfMedia.home.opsArtifacts.sourceReady": "Source ready",
 				"detail.selfMedia.home.opsArtifacts.sourceMissing": "Source missing",
 				"detail.selfMedia.home.opsArtifacts.metricsReady": "Metrics ready",
@@ -528,6 +530,15 @@ describe("SelfMediaPostCard", () => {
 		await waitFor(() => expect(onDeletePost).toHaveBeenCalledWith(createPostItem()))
 	})
 
+	it("opens the context menu from the more actions button", async () => {
+		const onDeletePost = vi.fn()
+		renderCard({ onDeletePost })
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-more-post-1"))
+
+		expect(await screen.findByRole("menuitem", { name: "Delete article" })).toBeInTheDocument()
+	})
+
 	it("mentions the article folder from the context menu", async () => {
 		const onMentionPost = vi.fn()
 		renderCard({ onMentionPost })
@@ -536,6 +547,25 @@ describe("SelfMediaPostCard", () => {
 		fireEvent.click(await screen.findByRole("menuitem", { name: "Mention this article" }))
 
 		expect(onMentionPost).toHaveBeenCalledWith(createPostItem())
+	})
+
+	it("shares the article folder between rename and publish status actions", async () => {
+		const onSharePost = vi.fn()
+		renderCard({
+			onRenamePost: vi.fn(),
+			onSharePost,
+			onSetPostPublishStatus: vi.fn(),
+		})
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		const menuItems = await screen.findAllByRole("menuitem")
+		const labels = menuItems.map((item) => item.textContent?.trim())
+
+		expect(labels.indexOf("Rename article")).toBeLessThan(labels.indexOf("Share"))
+		expect(labels.indexOf("Share")).toBeLessThan(labels.indexOf("Pause publishing"))
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Share" }))
+		expect(onSharePost).toHaveBeenCalledWith(createPostItem())
 	})
 
 	it("toggles the manual publish status from the context menu", async () => {

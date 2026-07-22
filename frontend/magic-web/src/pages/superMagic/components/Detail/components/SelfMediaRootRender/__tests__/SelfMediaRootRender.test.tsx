@@ -31,6 +31,7 @@ const mockStore = vi.hoisted(() => ({
 	platforms: ["rednote"],
 	resolvedPlatform: "rednote",
 	rootLoading: false,
+	sharedPostFallback: false,
 	activePostIndex: 0,
 	allPosts: [
 		{
@@ -100,7 +101,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 		default: React.forwardRef(function MockIsolatedHTMLRenderer(
 			props: {
 				content?: string
-				relative_file_path?: string
+				htmlRelativeFolderPath?: string
 			},
 			ref,
 		) {
@@ -109,7 +110,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 				"div",
 				{
 					"data-testid": "self-media-ops-review-html-renderer",
-					"data-relative-file-path": props.relative_file_path,
+					"data-relative-file-path": props.htmlRelativeFolderPath,
 				},
 				props.content,
 			)
@@ -763,6 +764,7 @@ describe("SelfMediaRootRender", () => {
 		mockStore.platforms = ["rednote"]
 		mockStore.resolvedPlatform = "rednote"
 		mockStore.rootLoading = false
+		mockStore.sharedPostFallback = false
 		mockStore.activePostIndex = 0
 		mockStore.allPosts = [
 			{
@@ -875,6 +877,57 @@ describe("SelfMediaRootRender", () => {
 			"self-media-platform-detail-stage",
 		)
 		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+	})
+
+	it("opens the platform detail directly for a standalone shared post", () => {
+		mockStore.sharedPostFallback = true
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("mock-platform-component")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+	})
+
+	it("shows only the shared article list when multiple posts are shared without an index", () => {
+		mockStore.sharedPostFallback = true
+		mockStore.allPosts = [
+			...mockStore.allPosts,
+			{
+				platform: "instagram",
+				index: 0,
+				entry: {
+					id: "instagram-post",
+					name: "Instagram Post",
+					entry: "posts/instagram-post/post.json",
+				},
+				post: {
+					meta: { id: "instagram-post", title: "Instagram Post" },
+					cards: [],
+				},
+			},
+		]
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-home-page")).toBeInTheDocument()
+		expect(screen.getByText("Instagram Post")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-platform-component")).not.toBeInTheDocument()
 	})
 
 	it("restores the article home scroll position after returning from a post editor", async () => {
@@ -1255,6 +1308,7 @@ describe("SelfMediaRootRender", () => {
 		expect(
 			screen.queryByTestId("self-media-footer-pre-publish-analysis"),
 		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-shell-inspector-button")).not.toBeInTheDocument()
 	})
 
 	it("starts analysis from the post manifest entry when the content file id is missing", async () => {
@@ -2960,6 +3014,8 @@ describe("SelfMediaRootRender", () => {
 		expect(await screen.findByTestId("self-media-ops-review-dashboard")).toHaveTextContent(
 			"Operations review",
 		)
+		expect(screen.getByTestId("self-media-ops-review-sync")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-ops-review-edit")).toBeInTheDocument()
 		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("838")
 		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("9.19%")
 		expect(screen.getByTestId("self-media-ops-review-trend")).toHaveTextContent("26")
@@ -2968,13 +3024,64 @@ describe("SelfMediaRootRender", () => {
 		)
 		expect(screen.getByTestId("self-media-ops-review-html-renderer")).toHaveAttribute(
 			"data-relative-file-path",
-			"posts/post-1/ops/review.html",
+			"posts/post-1/ops/",
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-ops-review-close"))
 
 		await waitFor(() => {
 			expect(screen.queryByTestId("self-media-ops-review-dashboard")).not.toBeInTheDocument()
+		})
+	})
+
+	it("keeps operations data visible but hides editing actions in read-only mode", async () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-home-ops-main-column")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-ops-side-column")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+
+		await screen.findByTestId("self-media-ops-review-dashboard")
+		expect(screen.queryByTestId("self-media-ops-review-sync")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-ops-review-edit")).not.toBeInTheDocument()
+	})
+
+	it("closes the operations editor when editing permission is removed", async () => {
+		const { rerender } = render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-edit"))
+		expect(await screen.findByTestId("self-media-ops-metrics-dialog")).toBeInTheDocument()
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("self-media-ops-metrics-dialog")).not.toBeInTheDocument()
 		})
 	})
 

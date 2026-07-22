@@ -125,6 +125,37 @@ describe("dom utils", () => {
 			expect(container.querySelectorAll(selector)).toHaveLength(1)
 		})
 
+		it("should uniquely identify images in a repeated image group", () => {
+			container.innerHTML = `
+				<div class="art-wrap">
+					<img class="art-img" src="images/1.png" />
+					<img class="art-img featured" src="images/2.png" />
+					<img class="art-img" src="images/3.png" />
+				</div>
+			`
+			const images = container.querySelectorAll("img")
+			const selector = getElementSelector(images[1] as HTMLElement)
+
+			expect(selector).toContain("img.art-img.featured:nth-of-type(2)")
+			expect(container.querySelector(selector)).toBe(images[1])
+			expect(container.querySelectorAll(selector)).toHaveLength(1)
+		})
+
+		it("should distinguish identical image groups under repeated wrappers", () => {
+			container.innerHTML = `
+				<section class="article">
+					<div class="art-wrap"><img class="art-img" src="images/1.png" /></div>
+					<div class="art-wrap"><img class="art-img" src="images/2.png" /></div>
+				</section>
+			`
+			const images = container.querySelectorAll("img")
+			const selector = getElementSelector(images[1] as HTMLElement)
+
+			expect(selector).toContain("div.art-wrap:nth-of-type(2)")
+			expect(container.querySelector(selector)).toBe(images[1])
+			expect(container.querySelectorAll(selector)).toHaveLength(1)
+		})
+
 		it("should handle nested elements", () => {
 			container.innerHTML = `
 				<div class="parent">

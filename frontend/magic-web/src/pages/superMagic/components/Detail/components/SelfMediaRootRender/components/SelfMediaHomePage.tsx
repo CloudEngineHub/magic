@@ -75,6 +75,7 @@ import type {
 
 interface SelfMediaHomePageProps {
 	posts: SelfMediaPlatformPostItem[]
+	allowEdit?: boolean
 	attachmentList?: SelfMediaAttachmentNode[]
 	onEnsurePostLoaded?: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onCreateArticle?: () => void
@@ -109,6 +110,7 @@ interface SelfMediaHomePageProps {
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
 	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSharePost?: (target: SelfMediaPlatformPostItem) => void
 	onSetPostPublishStatus?: (
 		target: SelfMediaPlatformPostItem,
 		publishStatus?: SelfMediaPostPublishStatus,
@@ -128,6 +130,7 @@ interface SelfMediaHomePageProps {
 
 function SelfMediaHomePage({
 	posts,
+	allowEdit = true,
 	attachmentList,
 	onEnsurePostLoaded,
 	onCreateArticle,
@@ -144,6 +147,7 @@ function SelfMediaHomePage({
 	onRenamePost,
 	onDeletePost,
 	onMentionPost,
+	onSharePost,
 	onSetPostPublishStatus,
 	onOpenBrandConfig,
 	onRefreshAllData,
@@ -411,35 +415,7 @@ function SelfMediaHomePage({
 								onCreateAICard={onCreateAICard}
 								t={t}
 							/>
-							{hasPosts ? (
-								<section
-									className={cn(
-										"self-media-home-enter-item mb-8",
-										openingPost && "self-media-home-opening-dim",
-									)}
-									style={{ animationDelay: "100ms" }}
-								>
-									<SelfMediaOpsOverviewCard
-										overview={opsOverview}
-										onAction={handleOpsOverviewAction}
-										dailyInsight={homeDailyInsight.insight}
-										dailyInsightStatus={homeDailyInsight.status}
-										healthInsight={opsHealthInsight.insight}
-										healthInsightStatus={opsHealthInsight.status}
-										metricsLoading={isOpsMetricsHydrating}
-										onRegenerateDailyInsight={
-											homeDailyInsightStorage
-												? homeDailyInsight.regenerate
-												: undefined
-										}
-										onDismissDailyInsightAction={
-											homeDailyInsightStorage
-												? homeDailyInsight.dismissAction
-												: undefined
-										}
-									/>
-								</section>
-							) : (
+							{hasPosts ? null : (
 								<SelfMediaHomeEmptyState onCreateArticle={onCreateArticle} t={t} />
 							)}
 							<SelfMediaHomeAICardList
@@ -471,9 +447,40 @@ function SelfMediaHomePage({
 								onRenamePost={onRenamePost}
 								onDeletePost={onDeletePost}
 								onMentionPost={onMentionPost}
+								onSharePost={onSharePost}
 								onSetPostPublishStatus={onSetPostPublishStatus}
 								t={t}
 							/>
+							{hasPosts ? (
+								<section
+									className={cn(
+										"self-media-home-enter-item mt-8",
+										openingPost && "self-media-home-opening-dim",
+									)}
+									style={{ animationDelay: "230ms" }}
+								>
+									<SelfMediaOpsOverviewCard
+										overview={opsOverview}
+										allowEdit={allowEdit}
+										onAction={allowEdit ? handleOpsOverviewAction : undefined}
+										dailyInsight={homeDailyInsight.insight}
+										dailyInsightStatus={homeDailyInsight.status}
+										healthInsight={opsHealthInsight.insight}
+										healthInsightStatus={opsHealthInsight.status}
+										metricsLoading={isOpsMetricsHydrating}
+										onRegenerateDailyInsight={
+											allowEdit && homeDailyInsightStorage
+												? homeDailyInsight.regenerate
+												: undefined
+										}
+										onDismissDailyInsightAction={
+											allowEdit && homeDailyInsightStorage
+												? homeDailyInsight.dismissAction
+												: undefined
+										}
+									/>
+								</section>
+							) : null}
 						</div>
 					</div>
 				</ScrollArea>
@@ -481,9 +488,10 @@ function SelfMediaHomePage({
 			<SelfMediaOpsReviewDashboard
 				open={Boolean(activeOpsReviewTarget)}
 				target={activeOpsReviewTarget}
+				allowEdit={allowEdit}
 				onClose={() => setActiveOpsReviewTarget(null)}
-				onEditData={(target) => onOpenOpsMetrics?.(target)}
-				onSyncData={onPostPublishRefresh}
+				onEditData={allowEdit ? onOpenOpsMetrics : undefined}
+				onSyncData={allowEdit ? onPostPublishRefresh : undefined}
 				onLoadData={onLoadOpsReviewData}
 				dataVersion={activeOpsReviewDataVersion}
 			/>

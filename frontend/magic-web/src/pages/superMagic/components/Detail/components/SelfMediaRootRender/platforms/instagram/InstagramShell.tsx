@@ -34,6 +34,8 @@ function InstagramShell(props: PlatformComponentProps) {
 		onBackHome,
 		onUpdatePostTitle,
 		onRequestPrePublishAnalysis,
+		onSharePost,
+		shareLoading,
 	} = props
 	const store = useSelfMediaStore()
 	const { posts, activePostIndex, activeCardIndex, view, rootLoading } = store
@@ -115,7 +117,7 @@ function InstagramShell(props: PlatformComponentProps) {
 		getFileInfoForIframe: inspectorGetFileInfo,
 	})
 
-	const inspectorDisabled = view === "edit" || rootLoading
+	const inspectorDisabled = allowEdit === false || view === "edit" || rootLoading
 
 	// Auto-stop inspector when view changes
 	useEffect(() => {
@@ -297,6 +299,7 @@ function InstagramShell(props: PlatformComponentProps) {
 		postIndex,
 		cardIndexes,
 		pixelRatio,
+		format,
 		exportType,
 		getCardRef,
 	}: ExportPreviewConfirmArgs) => {
@@ -326,6 +329,7 @@ function InstagramShell(props: PlatformComponentProps) {
 					post: subset,
 					fileName: target.meta.title || target.meta.id,
 					pixelRatio,
+					format,
 					getCardRef: getSubsetCardRef,
 				})
 			} else {
@@ -333,6 +337,7 @@ function InstagramShell(props: PlatformComponentProps) {
 					posts: [subset],
 					zipName: target.meta.title || target.meta.id,
 					pixelRatio,
+					format,
 					getCardRef: (_p, c) => getSubsetCardRef(c),
 				})
 			}
@@ -370,6 +375,8 @@ function InstagramShell(props: PlatformComponentProps) {
 				refreshLabel={t("detail.selfMedia.refreshAllData")}
 				refreshDisabled={rootLoading}
 				refreshTestId="instagram-shell-refresh-post-button"
+				onShare={onSharePost}
+				shareLoading={shareLoading}
 				onOpenExport={handleOpenExportDialog}
 				exportLabel={t("detail.selfMedia.export.action")}
 				exportDisabled={isExporting || posts.length === 0}
