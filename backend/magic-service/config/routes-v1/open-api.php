@@ -32,6 +32,9 @@ Router::addGroup('/api/v1/open-api', function () {
 Router::addGroup('/api/v1/open-api', function () {
     Router::get('/slides-templates/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
 }, ['middleware' => [ApiKeyMiddleware::class]]);
+Router::addGroup('/api/v1/slides-templates', static function () {
+    Router::get('/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
+}, ['middleware' => [ApiKeyMiddleware::class]]);
 
 // Data query APIs
 Router::addGroup('/api/v1/open-api', function () {
