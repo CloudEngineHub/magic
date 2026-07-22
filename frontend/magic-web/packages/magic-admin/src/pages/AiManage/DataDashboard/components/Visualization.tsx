@@ -25,7 +25,7 @@ import {
 	type DataDashboardView,
 } from "../consts"
 import type { DashboardT } from "../types"
-import { formatNumber, formatPercent, safeDivide } from "../remoteUtils"
+import { formatNumber, formatPercent, safeDivide } from "../utils"
 
 interface TrendPoint {
 	period: string
