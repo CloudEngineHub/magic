@@ -16,7 +16,7 @@ use ReflectionClass;
  */
 class SaveSlidesTemplateCategoryRequestTest extends TestCase
 {
-    public function testCodeRuleRequiresUppercasePptCatePrefix(): void
+    public function testCodeRuleAllowsSlidesTemplateCategoryPrefixes(): void
     {
         /** @var SaveSlidesTemplateCategoryRequest $request */
         $request = (new ReflectionClass(SaveSlidesTemplateCategoryRequest::class))->newInstanceWithoutConstructor();
@@ -24,7 +24,9 @@ class SaveSlidesTemplateCategoryRequestTest extends TestCase
         $regex = $this->extractRegexRule((string) $rules['code']);
 
         $this->assertSame(1, preg_match($regex, 'PPT-CATE-business'));
+        $this->assertSame(1, preg_match($regex, 'SLIDE-CATE-business'));
         $this->assertSame(0, preg_match($regex, 'ppt-category-business'));
+        $this->assertSame(0, preg_match($regex, 'SLD-CATE-business'));
     }
 
     private function extractRegexRule(string $rule): string
