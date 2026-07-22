@@ -1,8 +1,7 @@
-import { Loader2, Trash2 } from "lucide-react"
+import { Loader2, Settings2, UsersRound } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
-import { ContactApi, MagicBaseApi } from "@/apis"
+import { ContactApi } from "@/apis"
 import type {
 	MagicBaseColumn,
 	MagicBasePermissionsResponse,
@@ -10,9 +9,9 @@ import type {
 } from "@/apis/modules/magicBase"
 import MagicAvatar from "@/components/base/MagicAvatar"
 import { Badge } from "@/components/shadcn-ui/badge"
-import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/lib/utils"
+import DynamicPermissionPanel from "./DynamicPermissionPanel"
 
 interface PermissionPanelProps {
 	projectId: string
@@ -22,9 +21,9 @@ interface PermissionPanelProps {
 	columns: MagicBaseColumn[]
 	canManagePermissions?: boolean
 	onRefreshPermissions: () => void
+	onRefreshTable: () => void
 }
 
-type PermissionType = "table" | "column" | "row"
 type AssignableSubjectType = "user" | "department"
 
 interface SubjectProfile {
@@ -45,10 +44,6 @@ interface GroupedPermissionRow {
 	subjectId: string
 	name: string
 	tags: GroupedPermissionTag[]
-	deleteItems: Array<{
-		type: PermissionType
-		id: string
-	}>
 }
 
 function matchesSubject(permission: { subject_type: string }) {
@@ -65,17 +60,8 @@ function addUniqueTag(tags: GroupedPermissionTag[], tag: GroupedPermissionTag | 
 	tags.push(tag)
 }
 
-export default function PermissionPanel({
-	projectId,
-	table,
-	permissions,
-	loading,
-	columns,
-	canManagePermissions = true,
-	onRefreshPermissions,
-}: PermissionPanelProps) {
+function StaticPermissionPanel({ permissions, loading, columns }: PermissionPanelProps) {
 	const { t } = useTranslation("super")
-	const [deletingId, setDeletingId] = useState<string | null>(null)
 	const [subjectProfiles, setSubjectProfiles] = useState<Record<string, SubjectProfile>>({})
 	const dynamicColumns = useMemo(
 		() => columns.filter((column) => column.source !== "system" && column.id),
@@ -190,7 +176,6 @@ export default function PermissionPanel({
 							: "microAppPage.databasePanel.permissionUnknownDepartment",
 					),
 				tags: [],
-				deleteItems: [],
 			}
 			groupMap.set(key, group)
 			return group
@@ -207,7 +192,6 @@ export default function PermissionPanel({
 					`microAppPage.databasePanel.permissionLevel.${permission.permission_level}`,
 				)}`,
 			})
-			group.deleteItems.push({ type: "table", id: permission.id })
 		})
 		;(permissions?.column_permissions || []).filter(matchesSubject).forEach((permission) => {
 			const column = dynamicColumns.find((item) => item.id === permission.column_id)
@@ -242,7 +226,6 @@ export default function PermissionPanel({
 						.join(" · "),
 				},
 			)
-			group.deleteItems.push({ type: "column", id: permission.id })
 		})
 		;(permissions?.row_permissions || []).filter(matchesSubject).forEach((permission) => {
 			const group = getGroup(
@@ -276,7 +259,6 @@ export default function PermissionPanel({
 					)}`,
 				},
 			)
-			group.deleteItems.push({ type: "row", id: permission.id })
 		})
 
 		return Array.from(groupMap.values()).sort((a, b) => {
@@ -284,23 +266,6 @@ export default function PermissionPanel({
 			return a.name.localeCompare(b.name)
 		})
 	}, [dynamicColumns, permissions, subjectProfiles, t])
-
-	const handleDelete = async (row: GroupedPermissionRow) => {
-		setDeletingId(row.key)
-		try {
-			await Promise.all(
-				row.deleteItems.map((item) =>
-					MagicBaseApi.deletePermission(projectId, table.id, item.type, item.id),
-				),
-			)
-			toast.success(t("microAppPage.databasePanel.permissionDeleteSuccess"))
-			onRefreshPermissions()
-		} catch (error) {
-			toast.error(t("microAppPage.databasePanel.permissionDeleteFailed"))
-		} finally {
-			setDeletingId(null)
-		}
-	}
 
 	const renderSubjectAvatar = (row: GroupedPermissionRow) => (
 		<MagicAvatar
@@ -316,16 +281,10 @@ export default function PermissionPanel({
 	)
 
 	const renderPermissionRow = (row: GroupedPermissionRow) => {
-		const deleting = deletingId === row.key
 		return (
 			<div
 				key={row.key}
-				className={cn(
-					"grid items-center gap-3 border-b border-border px-3 py-2 text-xs",
-					canManagePermissions
-						? "grid-cols-[minmax(180px,240px)_1fr_40px]"
-						: "grid-cols-[minmax(180px,240px)_1fr]",
-				)}
+				className="grid grid-cols-[minmax(180px,240px)_1fr] items-center gap-3 border-b border-border px-3 py-2 text-xs"
 			>
 				<div className="flex min-w-0 items-center gap-3">
 					{renderSubjectAvatar(row)}
@@ -347,22 +306,6 @@ export default function PermissionPanel({
 						</Badge>
 					))}
 				</div>
-				{canManagePermissions ? (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						disabled={deleting}
-						aria-label={t("microAppPage.databasePanel.permissionDelete")}
-						onClick={() => handleDelete(row)}
-					>
-						{deleting ? (
-							<Loader2 className="size-3.5 animate-spin" />
-						) : (
-							<Trash2 className="size-3.5" />
-						)}
-					</Button>
-				) : null}
 			</div>
 		)
 	}
@@ -393,6 +336,61 @@ export default function PermissionPanel({
 				)}
 				<ScrollBar orientation="horizontal" />
 			</ScrollArea>
+		</div>
+	)
+}
+
+export default function PermissionPanel(props: PermissionPanelProps) {
+	const { t } = useTranslation("super")
+	const [view, setView] = useState<"dynamic" | "static">("dynamic")
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="flex items-center justify-between border-b border-border px-4 py-2">
+				<div className="inline-flex h-8 items-center rounded-md bg-muted p-[3px]">
+					<button
+						type="button"
+						className={cn(
+							"inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs text-muted-foreground transition-colors",
+							view === "dynamic" && "bg-background text-foreground shadow-sm",
+						)}
+						onClick={() => setView("dynamic")}
+					>
+						<Settings2 className="size-3.5" />
+						{t("microAppPage.databasePanel.dynamicPermissions")}
+					</button>
+					<button
+						type="button"
+						className={cn(
+							"inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs text-muted-foreground transition-colors",
+							view === "static" && "bg-background text-foreground shadow-sm",
+						)}
+						onClick={() => setView("static")}
+					>
+						<UsersRound className="size-3.5" />
+						{t("microAppPage.databasePanel.staticPermissions")}
+					</button>
+				</div>
+				<span className="text-xs text-muted-foreground">
+					{view === "dynamic"
+						? t("microAppPage.databasePanel.dynamicPermissionsHint")
+						: t("microAppPage.databasePanel.staticPermissionsHint")}
+				</span>
+			</div>
+
+			<div className="min-h-0 flex-1">
+				{view === "dynamic" ? (
+					<DynamicPermissionPanel
+						projectId={props.projectId}
+						table={props.table}
+						columns={props.columns}
+						canManagePermissions={props.canManagePermissions ?? true}
+						onUpdated={props.onRefreshTable}
+					/>
+				) : (
+					<StaticPermissionPanel {...props} />
+				)}
+			</div>
 		</div>
 	)
 }

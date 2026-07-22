@@ -51,6 +51,15 @@ readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowS
         return $this->storeRepository()->saveRow($payload);
     }
 
+    /**
+     * @param list<MagicBaseRowEntity> $payloads
+     * @return list<MagicBaseRowEntity>
+     */
+    public function saveRows(array $payloads): array
+    {
+        return $this->storeRepository()->saveRows($payloads);
+    }
+
     private function storeRepository(): MagicBaseRowStoreRepositoryInterface
     {
         return $this->mongoRowStoreRepository;

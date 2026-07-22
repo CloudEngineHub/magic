@@ -36,7 +36,7 @@ describe("MagicBaseApi", () => {
 			post: vi.fn().mockResolvedValue({ page: 1, page_size: 20, total: 0, list: [] }),
 			patch: vi.fn().mockResolvedValue({ id: "row-1" }),
 		}
-		const api = generateMagicBaseApi(client)
+		const api = generateMagicBaseApi(client as HttpClient)
 
 		await api.getTables("project-1")
 		await api.getTable("project-1", "table-1")
@@ -77,7 +77,7 @@ describe("MagicBaseApi", () => {
 			post: vi.fn().mockResolvedValue({ id: "row-1" }),
 			patch: vi.fn().mockResolvedValue({ id: "row-1" }),
 		}
-		const api = generateMagicBaseApi(client)
+		const api = generateMagicBaseApi(client as HttpClient)
 
 		await api.createRow("project-1", "table-1", {
 			data: { brand: "Apple" },
@@ -108,5 +108,43 @@ describe("MagicBaseApi", () => {
 			{ record_ids: ["row-1", "row-2"] },
 			{ parseJsonLargeIntAsString: true },
 		)
+	})
+
+	it("updates the complete dynamic permission model through the table endpoint", async () => {
+		const client: MagicBaseHttpClientMock = {
+			get: vi.fn(),
+			post: vi.fn(),
+			patch: vi.fn().mockResolvedValue({
+				id: "table-1",
+				project_id: "project-1",
+				table_key: "todos",
+				table_name: "Todos",
+				status: "enabled",
+				columns: [],
+			}),
+		}
+		const api = generateMagicBaseApi(client as HttpClient)
+		const dynamicPermissions = {
+			table: { read_scope: "public", insert_scope: "private_org" },
+			row: {
+				read_scope: "public",
+				edit_scope: "private_user",
+				delete_scope: "private_user",
+			},
+			columns: {
+				title: { read_scope: "public", edit_scope: "private_user" },
+			},
+		}
+
+		const table = await api.updateDynamicPermissions("project-1", "table-1", {
+			dynamic_permissions: dynamicPermissions,
+		})
+
+		expect(client.patch).toHaveBeenCalledWith(
+			"/api/v1/magicbase/projects/project-1/tables/table-1",
+			{ dynamic_permissions: dynamicPermissions },
+			{ parseJsonLargeIntAsString: true },
+		)
+		expect(table.id).toBe("table-1")
 	})
 })

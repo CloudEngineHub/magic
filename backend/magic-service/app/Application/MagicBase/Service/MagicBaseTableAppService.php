@@ -163,6 +163,20 @@ readonly class MagicBaseTableAppService
             $table->setUpdatedAt($this->now());
             $table = $this->metadataDomainService->saveTable($table);
             $columns = $this->metadataDomainService->listColumns($authorization->getOrganizationCode(), $tableId);
+            if ($nextDynamicPermissions !== null) {
+                foreach ($columns as $column) {
+                    if (! $column instanceof MagicBaseColumnEntity) {
+                        continue;
+                    }
+                    $column->setDynamicPermission(
+                        $nextDynamicPermissions->getColumn($column->getColumnKey())
+                        ?? MagicBaseColumnDynamicPermission::fromArray(null)
+                    );
+                    $column->setUpdatedAt($this->now());
+                    $this->metadataDomainService->saveColumn($column);
+                }
+                $columns = $this->metadataDomainService->listColumns($authorization->getOrganizationCode(), $tableId);
+            }
 
             $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,

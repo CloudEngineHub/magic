@@ -467,6 +467,26 @@
         "zh_CN": "查看数据表",
         "en_US": "View table"
     },
+    "query_magicbase_rows": {
+        "zh_CN": "查询数据记录",
+        "en_US": "Query rows"
+    },
+    "create_magicbase_row": {
+        "zh_CN": "新增数据记录",
+        "en_US": "Create row"
+    },
+    "batch_create_magicbase_rows": {
+        "zh_CN": "批量新增数据记录",
+        "en_US": "Batch create rows"
+    },
+    "delete_magicbase_row": {
+        "zh_CN": "删除数据记录",
+        "en_US": "Delete row"
+    },
+    "batch_delete_magicbase_rows": {
+        "zh_CN": "批量删除数据记录",
+        "en_US": "Batch delete rows"
+    },
     "create_magicbase_table": {
         "zh_CN": "创建数据表",
         "en_US": "Create table"

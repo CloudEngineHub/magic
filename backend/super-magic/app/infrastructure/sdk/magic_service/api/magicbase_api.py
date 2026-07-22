@@ -10,10 +10,23 @@ from ..parameter.create_magicbase_table_parameter import CreateMagicBaseTablePar
 from ..parameter.delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
 from ..parameter.delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
 from ..parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
+from ..parameter.magicbase_row_parameter import (
+    BatchCreateMagicBaseRowsParameter,
+    BatchDeleteMagicBaseRowsParameter,
+    CreateMagicBaseRowParameter,
+    DeleteMagicBaseRowParameter,
+    QueryMagicBaseRowsParameter,
+)
 from ..parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
 from ..parameter.update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
 from ..parameter.update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
 from ..result.magicbase_column_result import MagicBaseColumnResult
+from ..result.magicbase_row_result import (
+    MagicBaseBatchCreateRowsResult,
+    MagicBaseBatchDeleteRowsResult,
+    MagicBaseRowResult,
+    MagicBaseRowsResult,
+)
 from ..result.magicbase_table_result import MagicBaseTableResult, MagicBaseTablesResult
 
 
@@ -74,3 +87,39 @@ class MagicBaseApi(MagicServiceAbstractApi):
             f"/tables/{parameter.table_id}/columns/{parameter.column_id}"
         )
         await self.request_by_parameter_async(parameter, "DELETE", endpoint_path)
+
+    async def query_rows_async(self, parameter: QueryMagicBaseRowsParameter) -> MagicBaseRowsResult:
+        endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}/query"
+        data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
+        return MagicBaseRowsResult(data)
+
+    async def create_row_async(self, parameter: CreateMagicBaseRowParameter) -> MagicBaseRowResult:
+        endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}/rows"
+        data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
+        return MagicBaseRowResult(data)
+
+    async def batch_create_rows_async(
+        self,
+        parameter: BatchCreateMagicBaseRowsParameter,
+    ) -> MagicBaseBatchCreateRowsResult:
+        endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}/rows/batch"
+        data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
+        return MagicBaseBatchCreateRowsResult(data)
+
+    async def delete_row_async(self, parameter: DeleteMagicBaseRowParameter) -> None:
+        endpoint_path = (
+            f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}"
+            f"/rows/{parameter.record_id}"
+        )
+        await self.request_by_parameter_async(parameter, "DELETE", endpoint_path)
+
+    async def batch_delete_rows_async(
+        self,
+        parameter: BatchDeleteMagicBaseRowsParameter,
+    ) -> MagicBaseBatchDeleteRowsResult:
+        endpoint_path = (
+            f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}"
+            "/rows/batch-delete"
+        )
+        data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
+        return MagicBaseBatchDeleteRowsResult(data)

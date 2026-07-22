@@ -22,6 +22,7 @@ Router::addGroup('/api/v1', static function () {
         Router::delete('/tables/{tableId}/columns/{columnId}', [MagicBaseApi::class, 'deleteColumn']);
 
         Router::post('/tables/{tableId}/rows', [MagicBaseApi::class, 'createRow']);
+        Router::post('/tables/{tableId}/rows/batch', [MagicBaseApi::class, 'batchCreateRows']);
         Router::post('/tables/{tableId}/query', [MagicBaseApi::class, 'queryRows']);
         Router::post('/tables/{tableId}/rows/batch-delete', [MagicBaseApi::class, 'batchDeleteRows']);
         Router::get('/tables/{tableId}/rows/{recordId}', [MagicBaseApi::class, 'getRow']);

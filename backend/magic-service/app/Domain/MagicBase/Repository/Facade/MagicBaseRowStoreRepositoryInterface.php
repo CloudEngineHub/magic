@@ -12,4 +12,10 @@ use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 interface MagicBaseRowStoreRepositoryInterface
 {
     public function saveRow(MagicBaseRowEntity $entity): MagicBaseRowEntity;
+
+    /**
+     * @param list<MagicBaseRowEntity> $entities
+     * @return list<MagicBaseRowEntity>
+     */
+    public function saveRows(array $entities): array;
 }

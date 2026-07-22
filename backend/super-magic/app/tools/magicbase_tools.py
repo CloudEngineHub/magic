@@ -9,11 +9,16 @@ from agentlang.tools.tool_result import ToolResult
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import MagicServiceException
 from app.infrastructure.sdk.magic_service.parameter import (
+    BatchCreateMagicBaseRowsParameter,
+    BatchDeleteMagicBaseRowsParameter,
     CreateMagicBaseColumnParameter,
+    CreateMagicBaseRowParameter,
     CreateMagicBaseTableParameter,
     DeleteMagicBaseColumnParameter,
+    DeleteMagicBaseRowParameter,
     DeleteMagicBaseTableParameter,
     GetMagicBaseTableParameter,
+    QueryMagicBaseRowsParameter,
     QueryMagicBaseTablesParameter,
     UpdateMagicBaseColumnParameter,
     UpdateMagicBaseTablePermissionsParameter,
@@ -22,9 +27,9 @@ from app.service.html_app_memory_service import (
     append_pending_migration,
     complete_migration,
     new_migration,
+    read_migrations_state,
     record_column_success,
     record_table_success,
-    read_migrations_state,
     sync_html_app_magicbase_model,
     upsert_column_model,
     upsert_table_model,
@@ -310,12 +315,20 @@ async def _try_reconcile_pending_migrations(project_id: str) -> int:
         return 0
 
 
-def _get_project_id() -> str:
+def _get_project_id(tool_context: Optional[ToolContext] = None) -> str:
     try:
         metadata = InitClientMessageUtil.get_metadata()
     except Exception:
-        return ""
-    return str(metadata.get("project_id") or "").strip()
+        metadata = {}
+
+    persisted_project_id = str(metadata.get("project_id") or "").strip()
+    context_project_id = ""
+    if tool_context is not None:
+        context_project_id = str(tool_context.get_metadata("project_id") or "").strip()
+
+    if context_project_id and persisted_project_id and context_project_id != persisted_project_id:
+        raise ValueError("MagicBase project context does not match the current persisted session")
+    return context_project_id or persisted_project_id
 
 
 def _column_labels(columns: List[Dict[str, Any]]) -> str:
@@ -421,7 +434,10 @@ class QueryMagicTables(BaseTool[QueryMagicbaseTablesParams]):
     name = "query_magicbase_tables"
 
     async def execute(self, tool_context: ToolContext, params: QueryMagicbaseTablesParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot query MagicBase tables.")
 
@@ -469,7 +485,10 @@ class GetMagicTable(BaseTool[GetMagicbaseTableParams]):
     name = "get_magicbase_table"
 
     async def execute(self, tool_context: ToolContext, params: GetMagicbaseTableParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot get MagicBase table.")
 
@@ -485,6 +504,226 @@ class GetMagicTable(BaseTool[GetMagicbaseTableParams]):
         suffix = f" Reconciled {reconciled_count} pending MagicBase migration(s)." if reconciled_count else ""
         content = f"MagicBase table loaded. {_table_summary(table)}.{suffix}"
         return ToolResult(content=content, data={"project_id": project_id, "table": table})
+
+
+class QueryMagicbaseRowsParams(BaseToolParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    filter: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional MagicBase filter object. Query before destructive operations to resolve real record IDs.",
+    )
+    sort: List[Dict[str, str]] = Field(default_factory=list, description="Optional MagicBase sort rules.")
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=1000)
+    select: List[str] = Field(
+        default_factory=list,
+        description="Fields to return. Leave empty to return dynamic and supported system fields.",
+    )
+
+
+@tool(name="query_magicbase_rows")
+class QueryMagicRows(BaseTool[QueryMagicbaseRowsParams]):
+    """Query rows from a MagicBase table in the current project using the current user authorization."""
+    name = "query_magicbase_rows"
+
+    async def execute(self, tool_context: ToolContext, params: QueryMagicbaseRowsParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot query MagicBase rows.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.query_rows_async(
+                QueryMagicBaseRowsParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    filter=params.filter,
+                    sort=params.sort,
+                    page=params.page,
+                    page_size=params.page_size,
+                    select=params.select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to query MagicBase rows: {e}")
+
+        payload = result.to_dict()
+        return ToolResult(
+            content=f"Found {payload['total']} MagicBase row(s); returned {len(payload['rows'])} row(s) on page {payload['page']}.",
+            data={"project_id": project_id, "table_id": params.table_id, **payload},
+        )
+
+
+class CreateMagicbaseRowParams(BaseToolParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    data: Dict[str, Any] = Field(description="Dynamic row values keyed by MagicBase column_key.")
+    select: List[str] = Field(
+        default_factory=list,
+        description="Fields to return after creation. System fields such as id and created_by may be included.",
+    )
+
+
+@tool(name="create_magicbase_row")
+class CreateMagicRow(BaseTool[CreateMagicbaseRowParams]):
+    """Create one MagicBase row as the current authenticated user."""
+    name = "create_magicbase_row"
+
+    async def execute(self, tool_context: ToolContext, params: CreateMagicbaseRowParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot create a MagicBase row.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.create_row_async(
+                CreateMagicBaseRowParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    data=params.data,
+                    select=params.select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to create MagicBase row: {e}")
+
+        row = result.to_dict()
+        return ToolResult(
+            content=f"Created MagicBase row record_id={row.get('id') or row.get('record_id') or ''} in table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, "row": row},
+        )
+
+
+class BatchCreateMagicbaseRowsParams(BaseToolParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    rows: List[Dict[str, Any]] = Field(
+        min_length=1,
+        max_length=200,
+        description="Rows to create, each keyed by MagicBase column_key. Maximum 200 rows per call.",
+    )
+    select: List[str] = Field(default_factory=list, description="Fields to return for every created row.")
+
+
+@tool(name="batch_create_magicbase_rows")
+class BatchCreateMagicRows(BaseTool[BatchCreateMagicbaseRowsParams]):
+    """Batch create MagicBase rows as the current authenticated user."""
+    name = "batch_create_magicbase_rows"
+
+    async def execute(self, tool_context: ToolContext, params: BatchCreateMagicbaseRowsParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot batch create MagicBase rows.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.batch_create_rows_async(
+                BatchCreateMagicBaseRowsParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    rows=params.rows,
+                    select=params.select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to batch create MagicBase rows: {e}")
+
+        payload = result.to_dict()
+        return ToolResult(
+            content=f"Created {payload['created_count']} MagicBase row(s) in table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, **payload},
+        )
+
+
+class DeleteMagicbaseRowParams(BaseToolParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    record_id: str = Field(description="Real MagicBase row id returned by a query or create operation.")
+    confirm_delete: bool = Field(
+        default=False,
+        description="Set to true only after the user explicitly confirms deleting this row.",
+    )
+
+
+@tool(name="delete_magicbase_row")
+class DeleteMagicRow(BaseTool[DeleteMagicbaseRowParams]):
+    """Delete one MagicBase row after explicit user confirmation."""
+    name = "delete_magicbase_row"
+
+    async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseRowParams) -> ToolResult:
+        if not params.confirm_delete:
+            return ToolResult.error("Deleting a MagicBase row requires confirm_delete=true after explicit user confirmation.")
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot delete a MagicBase row.")
+
+        try:
+            await get_magic_service_sdk().magicbase.delete_row_async(
+                DeleteMagicBaseRowParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    record_id=params.record_id,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to delete MagicBase row: {e}")
+
+        return ToolResult(
+            content=f"Deleted MagicBase row record_id={params.record_id} from table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, "record_id": params.record_id},
+        )
+
+
+class BatchDeleteMagicbaseRowsParams(BaseToolParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    record_ids: List[str] = Field(
+        min_length=1,
+        max_length=200,
+        description="Real MagicBase row IDs to delete. Resolve them with query_magicbase_rows first.",
+    )
+    confirm_delete: bool = Field(
+        default=False,
+        description="Set to true only after the user explicitly confirms the complete deletion scope.",
+    )
+
+
+@tool(name="batch_delete_magicbase_rows")
+class BatchDeleteMagicRows(BaseTool[BatchDeleteMagicbaseRowsParams]):
+    """Batch delete MagicBase rows after explicit user confirmation."""
+    name = "batch_delete_magicbase_rows"
+
+    async def execute(self, tool_context: ToolContext, params: BatchDeleteMagicbaseRowsParams) -> ToolResult:
+        if not params.confirm_delete:
+            return ToolResult.error("Batch deleting MagicBase rows requires confirm_delete=true after explicit user confirmation.")
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot batch delete MagicBase rows.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.batch_delete_rows_async(
+                BatchDeleteMagicBaseRowsParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    record_ids=params.record_ids,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to batch delete MagicBase rows: {e}")
+
+        payload = result.to_dict()
+        return ToolResult(
+            content=f"Deleted {payload['deleted_count']} MagicBase row(s) from table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, **payload},
+        )
 
 
 class CreateMagicbaseTableParams(BaseToolParams):
@@ -565,7 +804,10 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
 	"""
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseTableParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot create MagicBase table.")
 
@@ -692,7 +934,10 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
 """
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseColumnParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot create MagicBase column.")
 
@@ -799,7 +1044,10 @@ Before updating an existing table's permissions, confirm the permission intent a
 """
 
     async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseTablePermissionsParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot update MagicBase table permissions.")
 
@@ -869,7 +1117,10 @@ class DeleteMagicTable(BaseTool[DeleteMagicbaseTableParams]):
         if not params.confirm_delete:
             return ToolResult.error("Deleting a MagicBase table requires confirm_delete=true after explicit user confirmation.")
 
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot delete MagicBase table.")
 
@@ -967,7 +1218,10 @@ class UpdateMagicColumn(BaseTool[UpdateMagicbaseColumnParams]):
     name = "update_magicbase_column"
 
     async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseColumnParams) -> ToolResult:
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot update MagicBase column.")
 
@@ -1063,7 +1317,10 @@ class DeleteMagicColumn(BaseTool[DeleteMagicbaseColumnParams]):
         if not params.confirm_delete:
             return ToolResult.error("Deleting a MagicBase column requires confirm_delete=true after explicit user confirmation.")
 
-        project_id = _get_project_id()
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot delete MagicBase column.")
 

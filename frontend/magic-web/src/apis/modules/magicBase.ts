@@ -11,7 +11,7 @@ export interface MagicBasePermissionScope {
 export interface MagicBaseDynamicPermissions {
 	table?: MagicBasePermissionScope
 	row?: MagicBasePermissionScope
-	columns?: unknown[]
+	columns?: Record<string, MagicBasePermissionScope>
 }
 
 export interface MagicBaseColumn {
@@ -69,6 +69,10 @@ export interface MagicBaseQueryRowsResponse {
 export interface MagicBaseRowWriteRequest {
 	data: Record<string, unknown>
 	select?: string
+}
+
+export interface MagicBaseUpdateDynamicPermissionsRequest {
+	dynamic_permissions: MagicBaseDynamicPermissions
 }
 
 export interface MagicBaseBatchDeleteRowsRequest {
@@ -290,6 +294,22 @@ export function generateMagicBaseApi(fetch: HttpClient) {
 					projectId,
 					tableId,
 				}),
+				largeIntConfig,
+			)
+			return normalizeMagicBaseTable(data)
+		},
+
+		async updateDynamicPermissions(
+			projectId: string,
+			tableId: string,
+			body: MagicBaseUpdateDynamicPermissionsRequest,
+		): Promise<MagicBaseTable> {
+			const data = await fetch.patch<RawMagicBaseTable>(
+				genRequestUrl("/api/v1/magicbase/projects/${projectId}/tables/${tableId}", {
+					projectId,
+					tableId,
+				}),
+				body,
 				largeIntConfig,
 			)
 			return normalizeMagicBaseTable(data)

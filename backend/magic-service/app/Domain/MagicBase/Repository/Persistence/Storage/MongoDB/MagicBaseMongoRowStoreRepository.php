@@ -25,17 +25,7 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
 
     public function saveRow(MagicBaseRowEntity $entity): MagicBaseRowEntity
     {
-        $projectId = $entity->getProjectId();
-        $tableId = $entity->getTableId();
-        $recordId = $entity->getRecordId();
-        if ($projectId === null || $tableId === null || $recordId === null) {
-            MagicBaseExceptionBuilder::storageUnavailable('MagicBase row project_id, table_id and record_id are required for MongoDB storage.');
-            throw new LogicException('Unreachable');
-        }
-        if ($entity->getDataOrganizationCode() === '') {
-            MagicBaseExceptionBuilder::storageUnavailable('MagicBase row data_organization_code is required for MongoDB storage.');
-            throw new LogicException('Unreachable');
-        }
+        [$projectId, $tableId] = $this->validateEntity($entity);
 
         $document = $this->toDocument($entity);
         $route = $this->router->route($entity->getDataOrganizationCode(), $projectId);
@@ -56,6 +46,54 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
         }
 
         return new MagicBaseRowEntity($this->fromDocument($document));
+    }
+
+    /**
+     * @param list<MagicBaseRowEntity> $entities
+     * @return list<MagicBaseRowEntity>
+     */
+    public function saveRows(array $entities): array
+    {
+        if ($entities === []) {
+            return [];
+        }
+
+        $operationsByCollection = [];
+        $documents = [];
+        foreach ($entities as $entity) {
+            [$projectId] = $this->validateEntity($entity);
+            $document = $this->toDocument($entity);
+            $collection = $this->router
+                ->route($entity->getDataOrganizationCode(), $projectId)
+                ->getMongoCollection();
+            $operationsByCollection[$collection][] = [
+                'replaceOne' => [
+                    ['_id' => $document['_id']],
+                    $document,
+                    ['upsert' => true],
+                ],
+            ];
+            $documents[] = $document;
+        }
+
+        try {
+            foreach ($operationsByCollection as $collection => $operations) {
+                $this->client->collection($collection)->bulkWrite($operations, ['ordered' => true]);
+            }
+        } catch (Throwable $exception) {
+            di(LoggerFactory::class)->get(static::class)->error('MongoDB row storage batch write failed.', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+            MagicBaseExceptionBuilder::storageUnavailable('MongoDB row storage batch write failed.');
+            throw new LogicException('Unreachable');
+        }
+
+        return array_map(
+            fn (array $document): MagicBaseRowEntity => new MagicBaseRowEntity($this->fromDocument($document)),
+            $documents,
+        );
     }
 
     /**
@@ -96,6 +134,25 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
     private function documentId(string $organizationCode, int $projectId, int $tableId, int $recordId): string
     {
         return implode(':', [$organizationCode, $projectId, $tableId, $recordId]);
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: int}
+     */
+    private function validateEntity(MagicBaseRowEntity $entity): array
+    {
+        $projectId = $entity->getProjectId();
+        $tableId = $entity->getTableId();
+        $recordId = $entity->getRecordId();
+        if ($projectId === null || $tableId === null || $recordId === null) {
+            MagicBaseExceptionBuilder::storageUnavailable('MagicBase row project_id, table_id and record_id are required for MongoDB storage.');
+            throw new LogicException('Unreachable');
+        }
+        if ($entity->getDataOrganizationCode() === '') {
+            MagicBaseExceptionBuilder::storageUnavailable('MagicBase row data_organization_code is required for MongoDB storage.');
+            throw new LogicException('Unreachable');
+        }
+        return [$projectId, $tableId, $recordId];
     }
 
     private function formatDateTime(?DateTimeInterface $value): ?string

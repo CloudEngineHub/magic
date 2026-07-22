@@ -53,7 +53,7 @@ describe("MicroAppDatabasePanel utils", () => {
 	})
 
 	it("uses created_at desc as default sort", () => {
-		expect(getDefaultSort(table)).toEqual({ field: "created_at", order: "desc" })
+		expect(getDefaultSort()).toEqual({ field: "created_at", order: "desc" })
 	})
 
 	it("combines system columns and enabled schema columns", () => {

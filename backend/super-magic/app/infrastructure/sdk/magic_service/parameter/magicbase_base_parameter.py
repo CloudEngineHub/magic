@@ -63,3 +63,7 @@ class MagicBaseBaseParameter(MagicServiceAbstractParameter):
             raise ValueError("project_id is required")
         if not self.project_id.isdigit():
             raise ValueError("project_id must be a numeric string")
+        if not self.user_authorization:
+            raise ValueError("authorization is required for MagicBase agent tools")
+        if not self.organization_code:
+            raise ValueError("organization_code is required for MagicBase agent tools")

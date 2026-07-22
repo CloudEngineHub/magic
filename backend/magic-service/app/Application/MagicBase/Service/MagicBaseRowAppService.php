@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MagicBase\Service;
 
+use App\Application\MagicBase\DTO\BatchCreateRowsRequestDTO;
 use App\Application\MagicBase\DTO\CreateRowRequestDTO;
 use App\Application\MagicBase\DTO\MagicBaseRowDTO;
 use App\Application\MagicBase\Support\MagicBaseAccessControl;
@@ -20,6 +21,8 @@ use Hyperf\DbConnection\Db;
 
 readonly class MagicBaseRowAppService
 {
+    private const MAX_BATCH_CREATE_ROWS = 200;
+
     public function __construct(
         private MagicBaseAccessControl $accessControl,
         private MagicBaseRowQuerySupport $rowQuerySupport,
@@ -58,6 +61,64 @@ readonly class MagicBaseRowAppService
                 $this->selectParserDomainService->parse($requestDTO->getSelect()),
                 $context->getActor(),
             ));
+        });
+    }
+
+    /**
+     * @return array{created_count: int, record_ids: list<string>, rows: list<MagicBaseRowDTO>}
+     */
+    public function batchCreateRows(MagicUserAuthorization $authorization, int $projectId, int $tableId, BatchCreateRowsRequestDTO $requestDTO): array
+    {
+        return Db::transaction(function () use ($authorization, $projectId, $tableId, $requestDTO): array {
+            $rowsData = $requestDTO->getRows();
+            if ($rowsData === []) {
+                MagicBaseExceptionBuilder::parameterMissing('rows');
+            }
+            if (count($rowsData) > self::MAX_BATCH_CREATE_ROWS) {
+                MagicBaseExceptionBuilder::validateFailed('rows');
+            }
+
+            $context = $this->accessControl->requireInsertableTable($authorization, $projectId, $tableId);
+            $entities = [];
+            foreach ($rowsData as $data) {
+                $normalized = $this->rowDomainService->normalizeRowPayload(
+                    $data,
+                    $context->getAccess()->getColumns(),
+                    true,
+                );
+                $entities[] = $this->rowDomainService->buildCreatePayload(
+                    $authorization->getOrganizationCode(),
+                    $context->getActor()->getOrganizationCode(),
+                    $projectId,
+                    $tableId,
+                    $context->getActor()->getUserId(),
+                    $context->getActor(),
+                    $normalized,
+                );
+            }
+
+            $select = $this->selectParserDomainService->parse($requestDTO->getSelect());
+            $rows = array_map(
+                fn (mixed $row): MagicBaseRowDTO => new MagicBaseRowDTO($this->rowQuerySupport->formatRow(
+                    $authorization,
+                    $projectId,
+                    $context->getTable(),
+                    $row,
+                    $context->getAccess(),
+                    $select,
+                    $context->getActor(),
+                )),
+                $this->rowStorageResolver->saveRows($entities),
+            );
+
+            return [
+                'created_count' => count($rows),
+                'record_ids' => array_map(
+                    static fn (MagicBaseRowDTO $row): string => (string) ($row->toArray()['id'] ?? ''),
+                    $rows,
+                ),
+                'rows' => $rows,
+            ];
         });
     }
 

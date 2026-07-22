@@ -1,30 +1,53 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
 
+from agentlang.context.tool_context import ToolContext
 from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.api.magicbase_api import MagicBaseApi
 from app.infrastructure.sdk.magic_service.parameter import (
+    BatchCreateMagicBaseRowsParameter,
+    BatchDeleteMagicBaseRowsParameter,
     CreateMagicBaseColumnParameter,
+    CreateMagicBaseRowParameter,
     CreateMagicBaseTableParameter,
     DeleteMagicBaseColumnParameter,
+    DeleteMagicBaseRowParameter,
     DeleteMagicBaseTableParameter,
     GetMagicBaseTableParameter,
+    QueryMagicBaseRowsParameter,
     QueryMagicBaseTablesParameter,
     UpdateMagicBaseColumnParameter,
     UpdateMagicBaseTablePermissionsParameter,
 )
-from app.infrastructure.sdk.magic_service.result import MagicBaseTableResult, MagicBaseTablesResult
+from app.infrastructure.sdk.magic_service.result import (
+    MagicBaseBatchCreateRowsResult,
+    MagicBaseBatchDeleteRowsResult,
+    MagicBaseRowResult,
+    MagicBaseRowsResult,
+    MagicBaseTableResult,
+    MagicBaseTablesResult,
+)
 from app.tools.magicbase_tools import (
+    BatchCreateMagicbaseRowsParams,
+    BatchCreateMagicRows,
+    BatchDeleteMagicbaseRowsParams,
+    BatchDeleteMagicRows,
+    CreateMagicbaseRowParams,
     CreateMagicbaseTableParams,
     CreateMagicColumn,
+    CreateMagicRow,
     CreateMagicTable,
+    DeleteMagicbaseRowParams,
     DeleteMagicColumn,
+    DeleteMagicRow,
     DeleteMagicTable,
     GetMagicTable,
     MagicbaseColumnDefinition,
+    QueryMagicbaseRowsParams,
     QueryMagicbaseTablesParams,
+    QueryMagicRows,
     QueryMagicTables,
     UpdateMagicColumn,
     UpdateMagicTablePermissions,
@@ -47,6 +70,21 @@ class RecordingMagicBaseApi(MagicBaseApi):
     [
         (QueryMagicTables, "query_magicbase_tables", "查询数据表", "Query tables"),
         (GetMagicTable, "get_magicbase_table", "查看数据表", "View table"),
+        (QueryMagicRows, "query_magicbase_rows", "查询数据记录", "Query rows"),
+        (CreateMagicRow, "create_magicbase_row", "新增数据记录", "Create row"),
+        (
+            BatchCreateMagicRows,
+            "batch_create_magicbase_rows",
+            "批量新增数据记录",
+            "Batch create rows",
+        ),
+        (DeleteMagicRow, "delete_magicbase_row", "删除数据记录", "Delete row"),
+        (
+            BatchDeleteMagicRows,
+            "batch_delete_magicbase_rows",
+            "批量删除数据记录",
+            "Batch delete rows",
+        ),
         (CreateMagicTable, "create_magicbase_table", "创建数据表", "Create table"),
         (CreateMagicColumn, "create_magicbase_column", "创建字段", "Create field"),
         (
@@ -133,6 +171,52 @@ async def test_magicbase_api_uses_expected_endpoint_paths():
 
     await api.delete_column_async(DeleteMagicBaseColumnParameter(project_id="100", table_id="200", column_id="300"))
     assert api.call[1:] == ("DELETE", "/api/v1/magicbase/projects/100/tables/200/columns/300")
+
+    api.response = {"page": 1, "page_size": 20, "total": 1, "list": [{"id": 400}]}
+    rows = await api.query_rows_async(
+        QueryMagicBaseRowsParameter(project_id="100", table_id="200", select=["id"])
+    )
+    assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/query")
+    assert rows.to_dict()["rows"][0]["id"] == "400"
+
+    api.response = {"id": 401, "title": "Created"}
+    row = await api.create_row_async(
+        CreateMagicBaseRowParameter(project_id="100", table_id="200", data={"title": "Created"})
+    )
+    assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/rows")
+    assert row.to_dict()["id"] == "401"
+
+    api.response = {
+        "created_count": 2,
+        "record_ids": [402, 403],
+        "rows": [{"id": 402}, {"id": 403}],
+    }
+    batch_created = await api.batch_create_rows_async(
+        BatchCreateMagicBaseRowsParameter(
+            project_id="100",
+            table_id="200",
+            rows=[{"title": "A"}, {"title": "B"}],
+        )
+    )
+    assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/rows/batch")
+    assert batch_created.to_dict()["record_ids"] == ["402", "403"]
+
+    api.response = {}
+    await api.delete_row_async(
+        DeleteMagicBaseRowParameter(project_id="100", table_id="200", record_id="402")
+    )
+    assert api.call[1:] == ("DELETE", "/api/v1/magicbase/projects/100/tables/200/rows/402")
+
+    api.response = {"deleted_count": 2, "record_ids": [402, 403]}
+    batch_deleted = await api.batch_delete_rows_async(
+        BatchDeleteMagicBaseRowsParameter(
+            project_id="100",
+            table_id="200",
+            record_ids=["402", "403"],
+        )
+    )
+    assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/rows/batch-delete")
+    assert batch_deleted.to_dict()["record_ids"] == ["402", "403"]
 
 
 def test_magicbase_result_normalizes_camel_and_snake_case():
@@ -227,6 +311,154 @@ async def test_query_magicbase_tables_fails_without_project_id():
 
     assert result.ok is False
     assert "Project ID is not available" in result.content
+
+
+def test_magicbase_row_parameter_uses_current_session_identity():
+    with (
+        patch(
+            "app.utils.init_client_message_util.InitClientMessageUtil.get_full_config",
+            return_value={"metadata": {"user_id": "user-1"}},
+        ),
+        patch(
+            "app.utils.init_client_message_util.InitClientMessageUtil.get_user_authorization",
+            return_value="Bearer current-user",
+        ),
+        patch(
+            "app.utils.init_client_message_util.InitClientMessageUtil.get_metadata",
+            return_value={"organization_code": "org-1"},
+        ),
+    ):
+        parameter = CreateMagicBaseRowParameter(
+            project_id="100",
+            table_id="200",
+            data={"title": "Current user row"},
+        )
+
+    parameter.validate()
+    assert parameter.to_headers()["Authorization"] == "Bearer current-user"
+    assert parameter.to_headers()["organization-code"] == "org-1"
+    assert "token" not in parameter.to_headers()
+
+
+@pytest.mark.asyncio
+async def test_magicbase_row_tool_rejects_project_context_mismatch():
+    tool_context = ToolContext(metadata={"project_id": "200"})
+    with patch(
+        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
+        return_value={"project_id": "100"},
+    ):
+        result = await QueryMagicRows().execute(
+            tool_context,
+            QueryMagicbaseRowsParams(table_id="300"),
+        )
+
+    assert result.ok is False
+    assert "does not match" in result.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "params"),
+    [
+        (
+            DeleteMagicRow(),
+            DeleteMagicbaseRowParams(table_id="200", record_id="300"),
+        ),
+        (
+            BatchDeleteMagicRows(),
+            BatchDeleteMagicbaseRowsParams(table_id="200", record_ids=["300", "301"]),
+        ),
+    ],
+)
+async def test_magicbase_delete_tools_require_explicit_confirmation(tool, params):
+    with patch("app.tools.magicbase_tools.get_magic_service_sdk", new_callable=AsyncMock) as get_sdk:
+        result = await tool.execute(ToolContext(metadata={"project_id": "100"}), params)
+
+    assert result.ok is False
+    assert "confirm_delete=true" in result.content
+    get_sdk.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_magicbase_row_tools_forward_expected_payloads():
+    class FakeMagicBase:
+        def __init__(self):
+            self.calls = []
+
+        async def query_rows_async(self, parameter):
+            self.calls.append(("query", parameter))
+            return MagicBaseRowsResult(
+                {"page": 1, "page_size": 20, "total": 1, "list": [{"id": 300, "title": "A"}]}
+            )
+
+        async def create_row_async(self, parameter):
+            self.calls.append(("create", parameter))
+            return MagicBaseRowResult({"id": 301, **parameter.data})
+
+        async def batch_create_rows_async(self, parameter):
+            self.calls.append(("batch_create", parameter))
+            return MagicBaseBatchCreateRowsResult(
+                {
+                    "created_count": len(parameter.rows),
+                    "record_ids": [302, 303],
+                    "rows": [{"id": 302}, {"id": 303}],
+                }
+            )
+
+        async def delete_row_async(self, parameter):
+            self.calls.append(("delete", parameter))
+
+        async def batch_delete_rows_async(self, parameter):
+            self.calls.append(("batch_delete", parameter))
+            return MagicBaseBatchDeleteRowsResult(
+                {"deleted_count": len(parameter.record_ids), "record_ids": parameter.record_ids}
+            )
+
+    class FakeSdk:
+        magicbase = FakeMagicBase()
+
+    tool_context = ToolContext(metadata={"project_id": "100"})
+    with (
+        patch("app.tools.magicbase_tools.InitClientMessageUtil.get_metadata", return_value={"project_id": "100"}),
+        patch("app.tools.magicbase_tools.get_magic_service_sdk", return_value=FakeSdk()),
+    ):
+        query_result = await QueryMagicRows().execute(
+            tool_context,
+            QueryMagicbaseRowsParams(table_id="200", filter={"status": {"eq": "open"}}, select=["id"]),
+        )
+        create_result = await CreateMagicRow().execute(
+            tool_context,
+            CreateMagicbaseRowParams(table_id="200", data={"title": "A"}, select=["id"]),
+        )
+        batch_create_result = await BatchCreateMagicRows().execute(
+            tool_context,
+            BatchCreateMagicbaseRowsParams(table_id="200", rows=[{"title": "A"}, {"title": "B"}]),
+        )
+        delete_result = await DeleteMagicRow().execute(
+            tool_context,
+            DeleteMagicbaseRowParams(table_id="200", record_id="302", confirm_delete=True),
+        )
+        batch_delete_result = await BatchDeleteMagicRows().execute(
+            tool_context,
+            BatchDeleteMagicbaseRowsParams(
+                table_id="200",
+                record_ids=["302", "303"],
+                confirm_delete=True,
+            ),
+        )
+
+    assert query_result.ok is True
+    assert create_result.data["row"]["id"] == "301"
+    assert batch_create_result.data["record_ids"] == ["302", "303"]
+    assert delete_result.ok is True
+    assert batch_delete_result.data["deleted_count"] == 2
+    assert [call[0] for call in FakeSdk.magicbase.calls] == [
+        "query",
+        "create",
+        "batch_create",
+        "delete",
+        "batch_delete",
+    ]
 
 
 @pytest.mark.asyncio

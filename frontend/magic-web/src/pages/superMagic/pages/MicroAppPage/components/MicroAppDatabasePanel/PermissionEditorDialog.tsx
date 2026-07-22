@@ -900,7 +900,6 @@ export default function PermissionEditorDialog({
 				onOk={handleSelectorOk}
 				onCancel={handleSelectorCancel}
 				zIndex={1600}
-				centered
 			/>
 		</>
 	)

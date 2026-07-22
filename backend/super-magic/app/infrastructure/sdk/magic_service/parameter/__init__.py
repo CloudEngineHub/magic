@@ -31,6 +31,13 @@ from .get_magicbase_table_parameter import GetMagicBaseTableParameter
 from .query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
 from .update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
 from .update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
+from .magicbase_row_parameter import (
+    BatchCreateMagicBaseRowsParameter,
+    BatchDeleteMagicBaseRowsParameter,
+    CreateMagicBaseRowParameter,
+    DeleteMagicBaseRowParameter,
+    QueryMagicBaseRowsParameter,
+)
 
 
 __all__ = [
@@ -64,4 +71,9 @@ __all__ = [
     'QueryMagicBaseTablesParameter',
     'UpdateMagicBaseColumnParameter',
     'UpdateMagicBaseTablePermissionsParameter',
+    'BatchCreateMagicBaseRowsParameter',
+    'BatchDeleteMagicBaseRowsParameter',
+    'CreateMagicBaseRowParameter',
+    'DeleteMagicBaseRowParameter',
+    'QueryMagicBaseRowsParameter',
 ]

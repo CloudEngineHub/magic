@@ -7,9 +7,10 @@ description: "Use when an HTML micro-app needs MagicBase persistence, window.Mag
 
 Use this skill when an HTML micro-app needs persistent data, current-user identity, ownership, permissions, or runtime row-level database operations.
 
-MagicBase has two layers:
+MagicBase has three operation surfaces:
 
 - Schema work is done by agent tools before HTML generation: `query_magicbase_tables`, `get_magicbase_table`, `create_magicbase_table`, `create_magicbase_column`, `update_magicbase_table_permissions`, `delete_magicbase_table`, `update_magicbase_column`, and `delete_magicbase_column`.
+- Explicit agent-side data maintenance uses `query_magicbase_rows`, `create_magicbase_row`, `batch_create_magicbase_rows`, `delete_magicbase_row`, and `batch_delete_magicbase_rows`.
 - Runtime row operations are done inside HTML with `window.Magic.db`, using real table IDs returned by MagicBase tools.
 
 Do not expose schema creation inside HTML pages. HTML code should only read and write rows on tables that already exist.
@@ -250,6 +251,15 @@ Destructive schema changes:
 
 - `delete_magicbase_table` and `delete_magicbase_column` are destructive. Use them only after the user explicitly confirms the deletion in the approved plan or follow-up instruction.
 - `update_magicbase_column` expects the complete desired column definition. Call `get_magicbase_table` first, preserve unchanged values, and then pass the final `column_key`, `column_name`, `data_type`, `is_required`, default value, and any field `dynamic_permission` that should remain in effect.
+
+Agent-side row data operations:
+
+- These tools execute through Magic Service with the current session user's `Authorization`, organization, and project context. They are subject to the same project role, table, row, column, dynamic, and static permission checks as ordinary MagicBase calls. They are not service-account or administrator bypasses.
+- The project identity comes from the tool execution context and is checked against the persisted session. Never ask the model or user to provide `project_id`, `authorization`, `organization_code`, a share token, `created_by`, or other actor fields as tool arguments.
+- Use `create_magicbase_row` or `batch_create_magicbase_rows` only when the user explicitly asks to import, initialize, backfill, or enter real business data. Do not insert demo rows merely to populate a generated page or verify CRUD.
+- Batch creation accepts at most 200 rows per call. All rows are validated before the batch write begins. Pass only dynamic business fields from the table schema; MagicBase writes system fields automatically.
+- Before deleting, call `query_magicbase_rows` to resolve the exact real row IDs and show the user the deletion scope. `delete_magicbase_row` and `batch_delete_magicbase_rows` require `confirm_delete=true` after explicit user confirmation.
+- Agent-side row mutations never update `.magicbase/migrations.json` or the MagicBase data-model section in `MICRO-APP.md`; those files describe schema, not business records.
 
 ---
 

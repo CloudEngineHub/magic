@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\MagicBase\Facade;
 
 use App\Application\MagicBase\Assembler\MagicBaseAssembler;
+use App\Application\MagicBase\DTO\BatchCreateRowsRequestDTO;
 use App\Application\MagicBase\DTO\BatchDeleteRowsRequestDTO;
 use App\Application\MagicBase\DTO\BatchPermissionRequestDTO;
 use App\Application\MagicBase\Service\MagicBaseAdminAppService;
@@ -162,6 +163,26 @@ class MagicBaseApi extends AbstractApi
             self::parseId($tableId, '表ID'),
             MagicBaseAssembler::toCreateRowRequestDTO($requestDTO),
         ));
+    }
+
+    public function batchCreateRows(RequestInterface $request, string $projectId, string $tableId): array
+    {
+        $projectId = self::parseId($projectId, '项目ID');
+        $result = $this->rowAppService->batchCreateRows(
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
+            self::parseId($tableId, '表ID'),
+            BatchCreateRowsRequestDTO::fromArray($request->all()),
+        );
+
+        return [
+            'created_count' => $result['created_count'],
+            'record_ids' => $result['record_ids'],
+            'rows' => array_map(
+                static fn (mixed $row) => MagicBaseResponseAssembler::row($row),
+                $result['rows'],
+            ),
+        ];
     }
 
     public function queryRows(RequestInterface $request, string $projectId, string $tableId)

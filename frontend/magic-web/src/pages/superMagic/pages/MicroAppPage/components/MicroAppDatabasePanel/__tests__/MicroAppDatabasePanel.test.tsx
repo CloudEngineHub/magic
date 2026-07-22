@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 	getTable: vi.fn(),
 	queryRows: vi.fn(),
 	getPermissions: vi.fn(),
+	updateDynamicPermissions: vi.fn(),
 	batchSavePermissions: vi.fn(),
-	deletePermission: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -19,12 +19,20 @@ vi.mock("@/apis", () => ({
 		getTable: mocks.getTable,
 		queryRows: mocks.queryRows,
 		getPermissions: mocks.getPermissions,
+		updateDynamicPermissions: mocks.updateDynamicPermissions,
 		batchSavePermissions: mocks.batchSavePermissions,
-		deletePermission: mocks.deletePermission,
 	},
 }))
 
 vi.mock("@/components/business/MemberDepartmentSelector", () => ({
+	default: () => null,
+}))
+
+vi.mock("@/components/base/MagicAvatar", () => ({
+	default: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+}))
+
+vi.mock("../DynamicPermissionPanel", () => ({
 	default: () => null,
 }))
 

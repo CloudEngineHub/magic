@@ -558,6 +558,10 @@ export default function MicroAppDatabasePanel({
 														onRefreshPermissions={() =>
 															refreshPermissions()
 														}
+														onRefreshTable={() => {
+															refreshTable()
+															refreshTables()
+														}}
 													/>
 												</div>
 											) : null}
