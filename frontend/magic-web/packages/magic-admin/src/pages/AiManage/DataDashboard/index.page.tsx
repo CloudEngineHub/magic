@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
-import { Input, Select } from "antd"
-import { RotateCcw, Search } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Select } from "antd"
+import { RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { useMount, useRequest } from "ahooks"
+import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import {
 	MagicButton,
 	SearchSelect,
@@ -35,6 +35,7 @@ import {
 	formatNumber,
 	getDateQuery,
 	getDepartmentId,
+	getMemberId,
 	isAgentTab,
 	isMemberTab,
 	type DashboardTabType,
@@ -49,7 +50,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	const { t } = useTranslation("admin/ai/dataDashboard")
 	const { AIManageApi } = useApis()
 	const { styles } = useStyles({ isMobile })
-	const { fetchMagicDepartmentUser, organizationInfo } = useOrganizationTree()
+	const { fetchMagicDepartmentUser, organizationInfo, searchUser } = useOrganizationTree()
 	const [timeRange, setTimeRange] = useState<TimeRangeValue | null>(() =>
 		createDefaultTimeRange(t("filters.last7Days")),
 	)
@@ -57,8 +58,8 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	const [page, setPage] = useState(1)
 	const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
 	const [departments, setDepartments] = useState<TreeNode[]>([])
+	const [members, setMembers] = useState<TreeNode[]>([])
 	const [agentCode, setAgentCode] = useState("")
-	const [memberId, setMemberId] = useState("")
 	const [agentSource, setAgentSource] = useState<
 		DataDashboard.AgentSourceType | typeof ALL_OPTION_VALUE
 	>(ALL_OPTION_VALUE)
@@ -67,6 +68,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 			? DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
 			: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis],
 	)
+	const previousViewRef = useRef(view)
 
 	const pageText = useMemo(() => {
 		const pageTextKey = PAGE_TEXT_KEY_BY_VIEW[view]
@@ -79,14 +81,14 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	const baseQuery = useMemo<DataDashboard.BaseQuery>(() => {
 		const departmentId = getDepartmentId(departments)
 		const normalizedAgentCode = agentCode.trim()
-		const normalizedMemberId = memberId.trim()
+		const memberId = getMemberId(members)
 		return {
 			...getDateQuery(timeRange),
 			agent_code: normalizedAgentCode || undefined,
-			user_id: normalizedMemberId || undefined,
+			user_id: memberId || undefined,
 			department_id: departmentId || undefined,
 		}
-	}, [agentCode, departments, memberId, timeRange])
+	}, [agentCode, departments, members, timeRange])
 
 	const agentQuery = useMemo<DataDashboard.AgentSummaryQuery>(
 		() => ({
@@ -177,6 +179,15 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		{ manual: true },
 	)
 
+	const resetFilters = useMemoizedFn(() => {
+		setTimeRange(createDefaultTimeRange(t("filters.last7Days")))
+		setDepartments([])
+		setMembers([])
+		setAgentCode("")
+		setAgentSource(ALL_OPTION_VALUE)
+		setPage(1)
+	})
+
 	useMount(() => {
 		runAgentOptions()
 	})
@@ -187,8 +198,11 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 				? DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
 				: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis],
 		)
-		setPage(1)
-	}, [view])
+		if (previousViewRef.current !== view) {
+			resetFilters()
+			previousViewRef.current = view
+		}
+	}, [resetFilters, view])
 
 	useEffect(() => {
 		if (view === VIEW.DigitalEmployeeAnalysis) {
@@ -248,12 +262,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	}
 
 	const handleReset = () => {
-		setTimeRange(createDefaultTimeRange(t("filters.last7Days")))
-		setDepartments([])
-		setAgentCode("")
-		setMemberId("")
-		setAgentSource(ALL_OPTION_VALUE)
-		resetPage()
+		resetFilters()
 	}
 
 	const handleTimeRangeChange = (value: TimeRangeValue | null) => {
@@ -262,7 +271,14 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	}
 
 	const handleDepartmentChange = (selected: TreeNode[]) => {
-		setDepartments(selected.filter((item) => item.dataType === NodeType.Department).slice(-1))
+		const newValue = selected.filter((item) => item.dataType === NodeType.Department).slice(-1)
+		setDepartments(newValue)
+		resetPage()
+	}
+
+	const handleMemberChange = (selected: TreeNode[]) => {
+		const newValue = selected.filter((item) => item.dataType === NodeType.User).slice(-1)
+		setMembers(newValue)
 		resetPage()
 	}
 
@@ -304,15 +320,18 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						</div>
 						<div className={styles.filterItem}>
 							<div className={styles.filterLabel}>{t("filters.memberId")}</div>
-							<Input
-								allowClear
-								prefix={<Search size={16} />}
-								value={memberId}
+							<UserSelect
+								selected={members}
+								setSelected={handleMemberChange}
 								placeholder={t("filters.memberIdPlaceholder")}
-								onChange={(event) => {
-									setMemberId(event.target.value)
-									resetPage()
+								maxTagCount="responsive"
+								departmentSelectorProps={{
+									onFetchData: fetchMagicDepartmentUser,
+									searchUser,
+									maxCount: 1,
+									organization: organizationInfo,
 								}}
+								formItemProps={{ style: { marginBottom: 0 } }}
 							/>
 						</div>
 						<div className={styles.filterItem}>

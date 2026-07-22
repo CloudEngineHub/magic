@@ -44,6 +44,11 @@ export const getDepartmentId = (departments: TreeNode[]) => {
 	return department?.department_id || department?.id
 }
 
+export const getMemberId = (members: TreeNode[]) => {
+	const member = members[0] as (TreeNode & { user_id?: string }) | undefined
+	return member?.user_id || member?.id
+}
+
 export const displayText = (value?: string | number | null) => {
 	if (value === null || value === undefined || value === "") return EMPTY_TEXT
 	return String(value)

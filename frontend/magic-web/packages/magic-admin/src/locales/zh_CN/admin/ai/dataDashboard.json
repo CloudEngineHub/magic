@@ -184,8 +184,8 @@
 		"keyword": "关键字",
 		"keywordPlaceholder": "搜索成员、用户 ID、部门或数字员工",
 		"last7Days": "近 7 天",
-		"memberId": "成员 ID",
-		"memberIdPlaceholder": "请输入成员 ID",
+		"memberId": "成员",
+		"memberIdPlaceholder": "请选择成员",
 		"source": "来源",
 		"time": "统计周期"
 	},

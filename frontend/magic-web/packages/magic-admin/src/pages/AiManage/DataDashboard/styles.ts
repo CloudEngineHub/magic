@@ -323,7 +323,8 @@ export const useStyles = createStyles(
 			}
 		`,
 		detailTableWrap: css`
-			min-height: ${isMobile ? "460px" : "680px"};
+			height: 100%;
+			min-height: 200px;
 			overflow-anchor: none;
 
 			.${prefixCls}-table-placeholder {
@@ -368,19 +369,6 @@ export const useStyles = createStyles(
 			align-items: center;
 			gap: 8px;
 			min-width: 0;
-		`,
-		avatar: css`
-			display: inline-flex;
-			flex: 0 0 30px;
-			align-items: center;
-			justify-content: center;
-			width: 30px;
-			height: 30px;
-			color: ${token.colorTextSecondary};
-			background: ${token.colorFillQuaternary};
-			border: 1px solid ${token.colorBorderSecondary};
-			border-radius: 50%;
-			font-size: 12px;
 		`,
 		entityName: css`
 			color: ${token.colorText};

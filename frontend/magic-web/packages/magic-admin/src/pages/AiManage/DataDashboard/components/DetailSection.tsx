@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import dayjs from "dayjs"
 import { CircleHelp, Download } from "lucide-react"
-import { MagicButton } from "@admin-components"
+import { MagicAvatar, MagicButton } from "@admin-components"
 import { Table, Tabs, Tooltip } from "antd"
 import type { ColumnType, ColumnsType } from "antd/es/table"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
@@ -572,7 +572,7 @@ function agentDepartmentColumns(
 			dataIndex: "department_name_path",
 			width: 260,
 			ellipsis: true,
-			render: (_, row) => renderDepartment(styles, row),
+			render: displayText,
 		}),
 		createDetailColumn(styles, t, {
 			titleKey: "source",
@@ -867,7 +867,9 @@ function renderEntity(styles: Record<string, string>, name?: string | null, meta
 
 	return (
 		<div className={styles.entityCell}>
-			<span className={styles.avatar}>{avatarText}</span>
+			<MagicAvatar shape="circle" size={30}>
+				{avatarText}
+			</MagicAvatar>
 			<div>
 				<div className={styles.entityName}>{displayName}</div>
 				<div className={styles.entityMeta}>{displayText(meta)}</div>
