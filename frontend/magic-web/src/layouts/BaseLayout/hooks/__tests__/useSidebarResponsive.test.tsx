@@ -31,7 +31,7 @@ describe("useSidebarResponsive", () => {
 		})
 	})
 
-	it("persists the user width when the sidebar collapses before the resize debounce", () => {
+	function setupHook() {
 		const initialWidth = sidebarStore.width
 		let panelSize = initialWidth
 		const panelHandle: ImperativePanelHandle = {
@@ -47,15 +47,47 @@ describe("useSidebarResponsive", () => {
 		}
 		const sidebarPanelRef = { current: panelHandle } as RefObject<ImperativePanelHandle>
 
-		const { result } = renderHook(() => useSidebarResponsive({ sidebarPanelRef, initialWidth }))
+		return renderHook(() => useSidebarResponsive({ sidebarPanelRef, initialWidth }))
+	}
+
+	it("commits the final pointer-drag width before a following collapse", () => {
+		const { result } = setupHook()
 
 		act(() => {
+			result.current.handleSidebarDragging(true)
 			result.current.handleSidebarResize(30)
+			result.current.handleSidebarDragging(false)
 			sidebarStore.setCollapsed(true)
-			panelSize = sidebarStore.collapsedSizePercent
-			vi.advanceTimersByTime(100)
 		})
 
 		expect(sidebarStore.width).toBe(30)
+	})
+
+	it("ignores resize callbacks produced by programmatic sidebar animation", () => {
+		const { result } = setupHook()
+		const originalWidth = sidebarStore.width
+
+		act(() => {
+			result.current.handleSidebarResize(30)
+			vi.advanceTimersByTime(100)
+		})
+
+		expect(sidebarStore.width).toBe(originalWidth)
+	})
+
+	it("keeps the latest keyboard width when collapse happens before the debounce", () => {
+		const { result } = setupHook()
+
+		act(() => {
+			result.current.handleSidebarResizeKeyDown({ key: "ArrowRight" } as never)
+			result.current.handleSidebarResize(30)
+			result.current.handleSidebarResizeKeyDown({ key: "ArrowRight" } as never)
+			result.current.handleSidebarResize(31)
+			sidebarStore.setCollapsed(true)
+			result.current.handleSidebarResize(sidebarStore.collapsedSizePercent)
+			vi.advanceTimersByTime(100)
+		})
+
+		expect(sidebarStore.width).toBe(31)
 	})
 })

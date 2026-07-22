@@ -1,7 +1,14 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { forwardRef } from "react"
 import { describe, expect, it, vi } from "vitest"
 import BaseLayoutPc from "../BaseLayoutPc"
+
+const { cancelSidebarAnimationMock, handleSidebarDraggingMock, handleSidebarResizeKeyDownMock } =
+	vi.hoisted(() => ({
+		cancelSidebarAnimationMock: vi.fn(),
+		handleSidebarDraggingMock: vi.fn(),
+		handleSidebarResizeKeyDownMock: vi.fn(() => true),
+	}))
 
 vi.mock("mobx-react-lite", () => ({
 	observer: <T,>(component: T) => component,
@@ -64,7 +71,20 @@ vi.mock("@/components/shadcn-ui/resizable", () => ({
 	) {
 		return <div ref={ref}>{children}</div>
 	}),
-	ResizableHandle: () => <div data-testid="mock-resize-handle" />,
+	ResizableHandle: ({
+		onDragging,
+		onKeyDownCapture,
+	}: {
+		onDragging?: (isDragging: boolean) => void
+		onKeyDownCapture?: React.KeyboardEventHandler<HTMLDivElement>
+	}) => (
+		<div
+			data-testid="mock-resize-handle"
+			onPointerDown={() => onDragging?.(true)}
+			onPointerUp={() => onDragging?.(false)}
+			onKeyDownCapture={onKeyDownCapture}
+		/>
+	),
 }))
 
 vi.mock("@/stores/layout", () => ({
@@ -82,9 +102,12 @@ vi.mock("../components/MagicSidebar", () => ({
 }))
 
 vi.mock("../hooks", () => ({
-	useSidebarAnimation: () => undefined,
+	useSidebarAnimation: () => cancelSidebarAnimationMock,
 	useSidebarResponsive: () => ({
+		getExpandedSidebarSizePercent: vi.fn(() => 20),
+		handleSidebarDragging: handleSidebarDraggingMock,
 		handleSidebarResize: vi.fn(),
+		handleSidebarResizeKeyDown: handleSidebarResizeKeyDownMock,
 		minSidebarSizePercent: 15,
 	}),
 }))
@@ -117,5 +140,15 @@ describe("BaseLayoutPc safe area", () => {
 			"--safe-area-inset-top",
 		)
 		expect(screen.getByTestId("base-layout-pc-main-frame").className).toContain("pr-2")
+
+		const resizeHandle = screen.getByTestId("mock-resize-handle")
+		fireEvent.pointerDown(resizeHandle)
+		fireEvent.pointerUp(resizeHandle)
+		fireEvent.keyDown(resizeHandle, { key: "ArrowRight" })
+
+		expect(handleSidebarDraggingMock).toHaveBeenNthCalledWith(1, true)
+		expect(handleSidebarDraggingMock).toHaveBeenNthCalledWith(2, false)
+		expect(handleSidebarResizeKeyDownMock).toHaveBeenCalled()
+		expect(cancelSidebarAnimationMock).toHaveBeenCalledTimes(2)
 	})
 })

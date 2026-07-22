@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react"
+import { useCallback, useEffect, useRef, type RefObject } from "react"
 import { reaction } from "mobx"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
@@ -29,16 +29,19 @@ function useSidebarAnimation({
 	sidebarPanelRef,
 	getExpandedSidebarSizePercent,
 }: UseSidebarAnimationParams) {
+	const cancelAnimationRef = useRef<() => void>(() => undefined)
+
 	useEffect(() => {
 		let animationFrame: number | null = null
 		let completionTimer: number | null = null
+		let animationRunId = 0
 		let startTime: number | null = null
 		let startSize = 0
 		let isExpanding = false
 
 		const clearPendingAnimation = () => {
 			if (animationFrame !== null) {
-				cancelAnimationFrame(animationFrame)
+				window.cancelAnimationFrame(animationFrame)
 				animationFrame = null
 			}
 			if (completionTimer !== null) {
@@ -47,9 +50,18 @@ function useSidebarAnimation({
 			}
 		}
 
-		const animateResize = (targetSize: number) => {
-			if (!sidebarPanelRef.current) return
+		const cancelPendingAnimation = () => {
+			animationRunId += 1
 			clearPendingAnimation()
+			startTime = null
+		}
+
+		cancelAnimationRef.current = cancelPendingAnimation
+
+		const animateResize = (targetSize: number) => {
+			cancelPendingAnimation()
+			if (!sidebarPanelRef.current) return
+			const currentRunId = animationRunId
 
 			// Get current size
 			const currentSize = sidebarPanelRef.current.getSize()
@@ -68,17 +80,20 @@ function useSidebarAnimation({
 			startSize = currentSize
 
 			const finishAnimation = () => {
+				if (currentRunId !== animationRunId) return
 				if (sidebarPanelRef.current) {
 					sidebarPanelRef.current.resize(targetSize)
 				}
+				animationRunId += 1
 				clearPendingAnimation()
 				startTime = null
 			}
 
 			const animate = (timestamp: number) => {
-				if (!startTime) startTime = timestamp
+				if (currentRunId !== animationRunId) return
+				if (startTime === null) startTime = timestamp
 				if (!sidebarPanelRef.current) {
-					clearPendingAnimation()
+					cancelPendingAnimation()
 					return
 				}
 
@@ -96,13 +111,13 @@ function useSidebarAnimation({
 				sidebarPanelRef.current.resize(newSize)
 
 				if (progress < 1) {
-					animationFrame = requestAnimationFrame(animate)
+					animationFrame = window.requestAnimationFrame(animate)
 				} else {
 					finishAnimation()
 				}
 			}
 
-			animationFrame = requestAnimationFrame(animate)
+			animationFrame = window.requestAnimationFrame(animate)
 			// Background tabs may throttle animation frames. Always enforce the final width.
 			completionTimer = window.setTimeout(finishAnimation, duration + 50)
 		}
@@ -112,7 +127,12 @@ function useSidebarAnimation({
 				collapsed: sidebarStore.collapsed,
 				collapsedSizePercent: sidebarStore.collapsedSizePercent,
 			}),
-			({ collapsed, collapsedSizePercent }) => {
+			({ collapsed, collapsedSizePercent }, previousState) => {
+				// Updating the collapsed pixel width on window resize should only
+				// animate while collapsed. Expanded viewport sync is handled by
+				// useSidebarResponsive.
+				if (!collapsed && previousState?.collapsed === collapsed) return
+
 				const targetSize = collapsed
 					? collapsedSizePercent
 					: getExpandedSidebarSizePercent(window.innerWidth)
@@ -126,9 +146,12 @@ function useSidebarAnimation({
 
 		return () => {
 			dispose()
-			clearPendingAnimation()
+			cancelPendingAnimation()
+			cancelAnimationRef.current = () => undefined
 		}
 	}, [getExpandedSidebarSizePercent, sidebarPanelRef])
+
+	return useCallback(() => cancelAnimationRef.current(), [])
 }
 
 export default useSidebarAnimation

@@ -46,11 +46,32 @@ const BaseLayoutPc = observer(() => {
 	// Cache initial width to avoid re-reading during drag
 	const [initialWidth] = useState(() => sidebarStore.width)
 
-	const { handleSidebarResize, minSidebarSizePercent, getExpandedSidebarSizePercent } =
-		useSidebarResponsive({ sidebarPanelRef, initialWidth })
+	const {
+		handleSidebarDragging,
+		handleSidebarResize,
+		handleSidebarResizeKeyDown,
+		minSidebarSizePercent,
+		getExpandedSidebarSizePercent,
+	} = useSidebarResponsive({ sidebarPanelRef, initialWidth })
 
 	// Handle smooth sidebar animation and restore the responsive expanded width.
-	useSidebarAnimation({ sidebarPanelRef, getExpandedSidebarSizePercent })
+	const cancelSidebarAnimation = useSidebarAnimation({
+		sidebarPanelRef,
+		getExpandedSidebarSizePercent,
+	})
+
+	const handleSidebarDraggingChange = useMemoizedFn((isDragging: boolean) => {
+		if (isDragging) cancelSidebarAnimation()
+		handleSidebarDragging(isDragging)
+	})
+
+	const handleSidebarHandleKeyDown = useMemoizedFn(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (handleSidebarResizeKeyDown(event)) {
+				cancelSidebarAnimation()
+			}
+		},
+	)
 
 	useMount(() => {
 		if (window.location.pathname === "/") {
@@ -123,6 +144,8 @@ const BaseLayoutPc = observer(() => {
 					{() => (
 						<ResizableHandle
 							disabled={sidebarStore.collapsed}
+							onDragging={handleSidebarDraggingChange}
+							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
 								"w-px bg-transparent hover:!bg-transparent",
 								sidebarStore.collapsed
