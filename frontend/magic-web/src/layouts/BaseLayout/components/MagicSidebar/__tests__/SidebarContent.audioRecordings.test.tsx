@@ -269,16 +269,23 @@ describe("SidebarContent slides templates count", () => {
 	it("shows the highlighted template count in the collapsed tooltip", () => {
 		renderSidebarContent(true)
 
-		expect(screen.getByTestId("sidebar-content-slides-templates-button")).toHaveClass(
-			"!text-[#ff6a1f]",
-			"hover:!bg-[#fff2ec]",
-		)
-		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
-			"sidebar:slidesTemplates.title · 今日新增 512 套 · 模板总数 101,582 套",
-		)
+		const menuButton = screen.getByTestId("sidebar-content-slides-templates-button")
+		expect(menuButton).toHaveClass("!text-[#ff6a1f]", "hover:!bg-[#fff2ec]")
+		expect(screen.getByTestId("mock-slides-templates-icon")).toBeVisible()
+		expect(menuButton.querySelector("[data-slides-template-label]")).toBeNull()
+		expect(screen.queryByTestId("sidebar-content-slides-templates-count")).toBeNull()
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-title"),
+		).toHaveTextContent("sidebar:slidesTemplates.title")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-today"),
+		).toHaveTextContent("今日新增 512 套")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-total"),
+		).toHaveTextContent("模板总数 101,582 套")
 	})
 
-	it("shows today's growth first and keeps the badge beside the title when expanded", () => {
+	it("shows today's growth first and allows the complete count to wrap below the title", () => {
 		renderSidebarContent()
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
@@ -286,15 +293,25 @@ describe("SidebarContent slides templates count", () => {
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
 		expect(animatedNumberTextMock).toHaveBeenCalledWith(512)
-		const title = screen.getByText("sidebar:slidesTemplates.title")
+		const title = screen
+			.getByTestId("sidebar-content-slides-templates-button")
+			.querySelector<HTMLElement>("[data-slides-template-label]")
+		if (!title) throw new Error("Expected the visible slides template title to exist")
 		const countBadge = screen.getByTestId("sidebar-content-slides-templates-count")
+		const menuButton = screen.getByTestId("sidebar-content-slides-templates-button")
+		const row = title.closest("[data-slides-template-row]")
+		const content = title.closest("[data-slides-template-content]")
 		expect(countBadge.className).not.toMatch(/scale|translate|rotate/)
-		expect(title).toHaveClass("shrink")
+		expect(countBadge).toHaveClass("rounded-full", "bg-[#fff2ec]")
+		expect(title).toHaveClass("shrink-0", "whitespace-nowrap")
 		expect(title).not.toHaveClass("flex-1")
-		expect(title.nextElementSibling).toBe(countBadge)
-		expect(screen.getByTestId("sidebar-content-slides-templates-button")).not.toHaveClass(
-			"!bg-[#fff2ec]",
-		)
+		expect(row).not.toHaveClass("flex-wrap")
+		expect(content).toHaveClass("flex-wrap", "content-center", "gap-y-0", "min-w-0", "flex-1")
+		expect(menuButton).toHaveClass("!h-8", "py-0")
+		expect(
+			content?.querySelector("[data-testid='sidebar-content-slides-templates-count']"),
+		).toBe(countBadge)
+		expect(menuButton).not.toHaveClass("!bg-[#fff2ec]")
 		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip")).toBeNull()
 	})
 
@@ -325,9 +342,13 @@ describe("SidebarContent slides templates count", () => {
 
 		renderSidebarContent(true)
 
-		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
-			"sidebar:slidesTemplates.title · 模板总数 101,582 套",
-		)
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-title"),
+		).toHaveTextContent("sidebar:slidesTemplates.title")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-total"),
+		).toHaveTextContent("模板总数 101,582 套")
+		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip-today")).toBeNull()
 		expect(
 			screen.getByTestId("sidebar-content-slides-templates-tooltip"),
 		).not.toHaveTextContent("今日新增")

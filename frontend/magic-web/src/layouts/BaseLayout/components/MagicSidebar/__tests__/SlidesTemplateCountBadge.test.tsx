@@ -2,10 +2,9 @@ import { act, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { HTMLAttributes, ReactNode } from "react"
 import {
-	getSlidesTemplateBadgeTargetWidth,
-	shouldUseCompactSlidesTemplateBadge,
 	SLIDES_TEMPLATE_BADGE_ROTATION_INTERVAL,
 	SlidesTemplateCountBadge,
+	shouldStackSlidesTemplateCount,
 } from "../SlidesTemplateCountBadge"
 
 const reducedMotionMock = vi.hoisted(() => ({ value: false }))
@@ -68,7 +67,6 @@ vi.mock("framer-motion", async () => {
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: { value?: string }) => {
-			if (key === "slidesTemplates.compactCount") return `${options?.value} 套`
 			if (key === "slidesTemplates.todayAddedCount") return `今日新增 ${options?.value} 套`
 			return `模板总数 ${options?.value} 套`
 		},
@@ -94,6 +92,25 @@ function getActiveContent() {
 }
 
 describe("SlidesTemplateCountBadge", () => {
+	it("stacks the title and count when the widest rotating label cannot fit", () => {
+		expect(
+			shouldStackSlidesTemplateCount({
+				availableWidth: 180,
+				titleWidth: 48,
+				countWidth: 120,
+				gap: 8,
+			}),
+		).toBe(false)
+		expect(
+			shouldStackSlidesTemplateCount({
+				availableWidth: 174,
+				titleWidth: 48,
+				countWidth: 120,
+				gap: 8,
+			}),
+		).toBe(true)
+	})
+
 	it("continuously rotates between today's growth and the template total", () => {
 		vi.useFakeTimers()
 		render(
@@ -203,41 +220,44 @@ describe("SlidesTemplateCountBadge", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("slides-template-count")).toHaveAttribute(
-			"data-motion-duration",
-			"0",
-		)
 		expect(getActiveContent()).toHaveAttribute("data-motion-duration", "0")
 	})
 
-	it("keeps the badge text and applies ellipsis styles when the row is narrow", () => {
+	it("keeps the complete count text without a tag background or truncation", () => {
+		render(
+			<div data-slides-template-row>
+				<SlidesTemplateCountBadge count={144369} testId="slides-template-count" />
+			</div>,
+		)
+
+		expect(getActiveContent()).toHaveTextContent("模板总数144,369套")
+		expect(screen.getByTestId("slides-template-count")).toHaveClass(
+			"rounded-full",
+			"bg-[#fff2ec]",
+		)
+		expect(getActiveContent().querySelector("[data-slides-template-badge-text]")).toHaveClass(
+			"whitespace-nowrap",
+		)
+	})
+
+	it("uses a smaller stable second line when the rotating labels need to wrap", () => {
+		const onStackedChange = vi.fn()
 		vi.stubGlobal(
 			"ResizeObserver",
 			vi.fn(() => ({ observe: vi.fn(), disconnect: vi.fn() })),
 		)
-		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-			callback(0)
-			return 1
-		})
-		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined)
 		vi.spyOn(window, "getComputedStyle").mockReturnValue({
 			columnGap: "8px",
 			gap: "8px",
 		} as CSSStyleDeclaration)
 		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function () {
-			return this.hasAttribute("data-slides-template-row") ? 182 : 0
+			return this.hasAttribute("data-slides-template-content") ? 174 : 0
 		})
 		vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function () {
 			return this.hasAttribute("data-slides-template-label") ? 48 : 0
 		})
 		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
-			const width = this.hasAttribute("data-slides-template-icon")
-				? 16
-				: this.getAttribute("aria-hidden") === "true"
-					? this.getAttribute("data-slides-template-badge-measure") === "compact"
-						? 80
-						: 104
-					: 0
+			const width = this.getAttribute("aria-hidden") === "true" ? 120 : 0
 			return {
 				bottom: 0,
 				height: 0,
@@ -252,57 +272,33 @@ describe("SlidesTemplateCountBadge", () => {
 		})
 
 		render(
-			<div data-slides-template-row>
-				<span data-slides-template-icon />
+			<div data-slides-template-content>
 				<span data-slides-template-label>AI PPT</span>
-				<SlidesTemplateCountBadge count={144369} testId="slides-template-count" />
+				<SlidesTemplateCountBadge
+					count={144369}
+					testId="slides-template-count"
+					onStackedChange={onStackedChange}
+				/>
 			</div>,
 		)
 
-		expect(getActiveContent()).toHaveTextContent("144,369 套")
-		expect(getActiveContent()).not.toHaveTextContent("模板总数")
 		expect(screen.getByTestId("slides-template-count")).toHaveAttribute(
-			"data-motion-width",
-			"80",
+			"data-slides-template-stacked",
+			"true",
 		)
-		expect(getActiveContent().querySelector("[data-slides-template-badge-text]")).toHaveClass(
-			"min-w-0",
-			"overflow-hidden",
-			"text-ellipsis",
-			"whitespace-nowrap",
+		expect(screen.getByTestId("slides-template-count")).toHaveClass(
+			"basis-full",
+			"text-[9px]",
+			"leading-3",
 		)
-		expect(
-			getActiveContent().querySelector("[data-slides-template-badge-compact]")?.textContent,
-		).toBe("144,369 套")
-	})
-
-	it("clamps the badge width to the remaining row space", () => {
-		expect(
-			shouldUseCompactSlidesTemplateBadge({
-				availableWidth: 184,
-				iconWidth: 16,
-				titleWidth: 48,
-				contentWidth: 104,
-				gap: 8,
-			}),
-		).toBe(false)
-		expect(
-			shouldUseCompactSlidesTemplateBadge({
-				availableWidth: 182,
-				iconWidth: 16,
-				titleWidth: 48,
-				contentWidth: 104,
-				gap: 8,
-			}),
-		).toBe(true)
-		expect(
-			getSlidesTemplateBadgeTargetWidth({
-				availableWidth: 182,
-				iconWidth: 16,
-				contentWidth: 80,
-				gap: 8,
-				compact: true,
-			}),
-		).toBe(80)
+		expect(screen.getByTestId("slides-template-count")).not.toHaveClass(
+			"rounded-full",
+			"bg-[#fff2ec]",
+		)
+		const stackedIcon = getActiveContent().querySelector("img")
+		expect(stackedIcon).toBeInTheDocument()
+		expect(stackedIcon).toHaveClass("h-[9px]", "w-[9px]")
+		expect(getActiveContent().lastElementChild).toBe(stackedIcon)
+		expect(onStackedChange).toHaveBeenCalledWith(true)
 	})
 })
