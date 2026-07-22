@@ -17,7 +17,6 @@ use App\Domain\Audit\ModelCall\Entity\ValueObject\ModelAuditAccessScope;
 use App\Domain\Audit\ModelCall\Factory\AuditLogFactory;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageGenerateFailedEvent;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
@@ -400,7 +399,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
     private function processSlidesTemplateUsed(SlidesTemplateUsedEvent $event): void
     {
         $template = $event->getTemplate();
-        $businessParams = [
+        $businessParams = array_merge($event->getBusinessParams(), [
             'source_id' => $event->getSourceId(),
             'operation_time' => $event->getCallTime(),
             'organization_code' => $event->getOrganizationCode(),
@@ -410,10 +409,8 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             'request_id' => $event->getRequestId(),
             'status' => AuditStatus::SUCCESS->value,
             'audit_source_marker' => 'slidesTemplateUse',
-        ];
-        $accessScope = $event->getSourceId() === SourceId::API_PLATFORM
-            ? ModelAuditAccessScope::ApiPlatform
-            : ModelAuditAccessScope::Magic;
+        ]);
+        $accessScope = $this->resolveAccessScopeForAudit($businessParams);
 
         $detailInfo = InvocationDetailInfo::forTool(
             '',
@@ -429,13 +426,13 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             type: AuditType::SLIDES_TEMPLATE->value,
             productCode: $template->getCode(),
             status: AuditStatus::SUCCESS->value,
-            ak: '',
-            operationTime: $event->getCallTime(),
+            ak: (string) ($businessParams['ak'] ?? ''),
+            operationTime: (int) ($businessParams['operation_time'] ?? $event->getCallTime()),
             allLatency: 0,
             userInfo: [
-                'organization_code' => $event->getOrganizationCode(),
-                'user_id' => $event->getUserId(),
-                'user_name' => $event->getUserName(),
+                'organization_code' => (string) ($businessParams['organization_id'] ?? $event->getOrganizationCode()),
+                'user_id' => (string) ($businessParams['user_id'] ?? $event->getUserId()),
+                'user_name' => (string) ($businessParams['user_name'] ?? $event->getUserName()),
             ],
             usage: ['count' => 1],
             detailInfo: $detailInfo,

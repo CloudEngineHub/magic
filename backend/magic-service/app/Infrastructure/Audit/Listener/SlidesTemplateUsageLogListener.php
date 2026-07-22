@@ -65,7 +65,7 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
             ->setOperation(self::OPERATION)
             ->setSource($this->resolveSource($event->getSourceId()))
             ->setRequestId($this->limitString($event->getRequestId(), 128))
-            ->setContext([]);
+            ->setContext($event->getBusinessParams());
 
         return $entity;
     }

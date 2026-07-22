@@ -20,6 +20,7 @@ class SlidesTemplateUsedEvent extends AbstractEvent
         protected string $userName,
         protected string $requestId,
         protected SlidesTemplateEntity $template,
+        protected array $businessParams = [],
     ) {
     }
 
@@ -58,6 +59,11 @@ class SlidesTemplateUsedEvent extends AbstractEvent
         return $this->template;
     }
 
+    public function getBusinessParams(): array
+    {
+        return $this->businessParams;
+    }
+
     public function toArray(): array
     {
         return [
@@ -68,6 +74,7 @@ class SlidesTemplateUsedEvent extends AbstractEvent
             'user_name' => $this->userName,
             'request_id' => $this->requestId,
             'template_code' => $this->template->getCode(),
+            'business_params' => $this->businessParams,
         ];
     }
 }
