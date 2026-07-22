@@ -20,6 +20,8 @@ import {
 	SidebarMenu,
 } from "@/components/shadcn-ui/sidebar"
 
+const SEARCH_PAGE_SIZE = 20
+
 function WorkspaceList() {
 	const { t } = useTranslation()
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
@@ -28,14 +30,24 @@ function WorkspaceList() {
 	const [searchValue, setSearchValue] = useState("")
 	const [workspaceSearchResults, setWorkspaceSearchResults] = useState<Workspace[]>([])
 	const [projectSearchResults, setProjectSearchResults] = useState<ProjectListItem[]>([])
+	const [isSearchLoading, setIsSearchLoading] = useState(false)
+	const [isLoadingMoreWorkspaces, setIsLoadingMoreWorkspaces] = useState(false)
 	const workspaces = workspaceStore.workspaces
 	const hasRequestedInitialLoadRef = useRef(false)
 	const isInitialWorkspaceListLoading =
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const workspaceListRef = useRef<HTMLDivElement>(null)
+	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 	const searchRequestIdRef = useRef(0)
 	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const searchPageRef = useRef(1)
+	const isSearchLoadingRef = useRef(false)
+	const hasMoreWorkspaceSearchResultsRef = useRef(true)
+	const hasMoreProjectSearchResultsRef = useRef(true)
+	const workspacePageRef = useRef(1)
+	const hasMoreWorkspacesRef = useRef(true)
+	const isLoadingMoreWorkspacesRef = useRef(false)
 	const projectsByWorkspaceId = new Map<string, ProjectListItem[]>()
 	for (const project of projectSearchResults) {
 		const projects = projectsByWorkspaceId.get(project.workspace_id) || []
@@ -74,10 +86,95 @@ function WorkspaceList() {
 			// Keep manual refresh focused on sidebar data caches so the action
 			// updates visible workspace/project lists without issuing extra status-only requests.
 			await superMagicService.silentRefreshSidebarLoadedCaches()
+			workspacePageRef.current = 1
+			hasMoreWorkspacesRef.current = true
 		} finally {
 			setIsRefreshing(false)
 		}
 	}
+
+	const loadMoreWorkspaces = useCallback(async () => {
+		if (
+			isLoadingMoreWorkspacesRef.current ||
+			!hasMoreWorkspacesRef.current ||
+			workspaceStore.isWorkspaceListLoading
+		)
+			return
+
+		isLoadingMoreWorkspacesRef.current = true
+		setIsLoadingMoreWorkspaces(true)
+		try {
+			const nextPage = workspacePageRef.current + 1
+			const nextWorkspaces = await superMagicService.workspace.fetchWorkspaces({
+				page: nextPage,
+				pageSize: SEARCH_PAGE_SIZE,
+				append: true,
+				isAutoSelect: false,
+				isSelectLast: false,
+			})
+			workspacePageRef.current = nextPage
+			hasMoreWorkspacesRef.current = nextWorkspaces.length === SEARCH_PAGE_SIZE
+		} finally {
+			isLoadingMoreWorkspacesRef.current = false
+			setIsLoadingMoreWorkspaces(false)
+		}
+	}, [])
+
+	const loadSearchResults = useCallback(
+		async (workspaceName: string, page: number, append: boolean) => {
+			if (append && isSearchLoadingRef.current) return
+
+			isSearchLoadingRef.current = true
+			setIsSearchLoading(true)
+			const requestId = searchRequestIdRef.current
+			const searchName = workspaceName.trim()
+			try {
+				const [workspaceResponse, projectResponse] = await Promise.all([
+					hasMoreWorkspaceSearchResultsRef.current || !append
+						? SuperMagicApi.getWorkspaces({
+								page,
+								page_size: SEARCH_PAGE_SIZE,
+								workspace_name: searchName,
+							})
+						: Promise.resolve(null),
+					hasMoreProjectSearchResultsRef.current || !append
+						? SuperMagicApi.getProjectsWithCollaboration({
+								page: 1,
+								page_size: 100,
+								project_name: searchName,
+							})
+						: Promise.resolve(null),
+				])
+
+				if (requestId !== searchRequestIdRef.current) return
+
+				const workspaceList = workspaceResponse?.list || []
+				const projectList = projectResponse?.list || []
+				hasMoreWorkspaceSearchResultsRef.current = Boolean(
+					workspaceResponse && page * SEARCH_PAGE_SIZE < workspaceResponse.total,
+				)
+				hasMoreProjectSearchResultsRef.current = false
+				setWorkspaceSearchResults((current) =>
+					append ? [...current, ...workspaceList] : workspaceList,
+				)
+				setProjectSearchResults((current) =>
+					append ? [...current, ...projectList] : projectList,
+				)
+				searchPageRef.current = page
+			} catch {
+				if (requestId === searchRequestIdRef.current && !append) {
+					setWorkspaceSearchResults([])
+					setProjectSearchResults([])
+				}
+			} finally {
+				if (requestId === searchRequestIdRef.current) {
+					isSearchLoadingRef.current = false
+					setIsSearchLoading(false)
+				}
+			}
+		},
+		[],
+	)
 
 	const searchWorkspaces = useCallback(
 		(workspaceName: string) => {
@@ -85,50 +182,71 @@ function WorkspaceList() {
 
 			if (!workspaceName.trim()) {
 				searchRequestIdRef.current += 1
+				searchPageRef.current = 1
+				hasMoreWorkspaceSearchResultsRef.current = true
+				hasMoreProjectSearchResultsRef.current = true
 				setWorkspaceSearchResults(workspaces)
 				setProjectSearchResults([])
 				return
 			}
 
-			const requestId = ++searchRequestIdRef.current
-			searchTimerRef.current = setTimeout(async () => {
-				try {
-					const [workspaceResponse, projectResponse] = await Promise.all([
-						SuperMagicApi.getWorkspaces({
-							page: 1,
-							page_size: 999,
-							workspace_name: workspaceName.trim(),
-						}),
-						SuperMagicApi.getProjectsWithCollaboration({
-							page: 1,
-							page_size: 100,
-							project_name: workspaceName.trim(),
-						}),
-					])
-					if (requestId === searchRequestIdRef.current) {
-						setWorkspaceSearchResults(workspaceResponse?.list || [])
-						setProjectSearchResults(projectResponse?.list || [])
-					}
-				} catch {
-					if (requestId === searchRequestIdRef.current) {
-						setWorkspaceSearchResults([])
-						setProjectSearchResults([])
-					}
-				}
+			searchRequestIdRef.current += 1
+			searchPageRef.current = 1
+			hasMoreWorkspaceSearchResultsRef.current = true
+			hasMoreProjectSearchResultsRef.current = true
+			searchTimerRef.current = setTimeout(() => {
+				void loadSearchResults(workspaceName, 1, false)
 			}, 300)
 		},
-		[workspaces],
+		[loadSearchResults, workspaces],
 	)
+
+	const loadNextPage = useCallback(() => {
+		if (!isSearchMode) {
+			void loadMoreWorkspaces()
+			return
+		}
+
+		if (
+			isSearchLoadingRef.current ||
+			(!hasMoreWorkspaceSearchResultsRef.current && !hasMoreProjectSearchResultsRef.current)
+		)
+			return
+
+		void loadSearchResults(searchValue, searchPageRef.current + 1, true)
+	}, [isSearchMode, loadMoreWorkspaces, loadSearchResults, searchValue])
+
+	useEffect(() => {
+		const sentinel = loadMoreSentinelRef.current
+		if (!sentinel || typeof IntersectionObserver === "undefined") return
+		const scrollContainer = sentinel.closest<HTMLElement>(
+			"[data-testid='sidebar-content-root']",
+		)
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting) loadNextPage()
+			},
+			{ root: scrollContainer, threshold: 1 },
+		)
+		observer.observe(sentinel)
+		return () => observer.disconnect()
+	}, [displayedWorkspaces.length, loadNextPage])
 
 	const handleSearchOpen = useCallback(() => {
 		setWorkspaceSearchResults(workspaces)
 		setProjectSearchResults([])
+		searchPageRef.current = 1
+		hasMoreWorkspaceSearchResultsRef.current = true
+		hasMoreProjectSearchResultsRef.current = true
 		setIsSearchMode(true)
 	}, [workspaces])
 
 	const handleSearchClose = useCallback(() => {
 		if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
 		searchRequestIdRef.current += 1
+		isSearchLoadingRef.current = false
+		setIsSearchLoading(false)
 		setSearchValue("")
 		setWorkspaceSearchResults([])
 		setProjectSearchResults([])
@@ -149,6 +267,7 @@ function WorkspaceList() {
 		hasRequestedInitialLoadRef.current = true
 		void superMagicService.workspace.fetchWorkspaces({
 			page: 1,
+			pageSize: SEARCH_PAGE_SIZE,
 			isAutoSelect: false,
 			isSelectLast: false,
 		})
@@ -172,7 +291,7 @@ function WorkspaceList() {
 		})
 
 		return () => window.cancelAnimationFrame(animationFrameId)
-	}, [selectedWorkspaceId, workspaces.length])
+	}, [selectedWorkspaceId])
 
 	return (
 		<SidebarGroup
@@ -297,6 +416,17 @@ function WorkspaceList() {
 									)}
 								/>
 							))}
+							{isSearchLoading && (
+								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+									<Loader2 className="size-4 animate-spin" />
+								</div>
+							)}
+							{!isSearchMode && isLoadingMoreWorkspaces && (
+								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+									<Loader2 className="size-4 animate-spin" />
+								</div>
+							)}
+							<div ref={loadMoreSentinelRef} className="h-px" aria-hidden="true" />
 						</div>
 					</ScrollArea>
 				</SidebarMenu>
