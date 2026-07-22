@@ -179,22 +179,24 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 		const previousStatus = this.data.status
 		const previousErrorMessage = this.data.errorMessage
+		const previousGenerateVideoRequest = this.data.generateVideoRequest
 
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
-		if (previousStatus === GenerationStatus.Failed) {
-			this.canvas.elementManager.update(
-				this.data.id,
-				{
-					status: undefined,
-					errorMessage: undefined,
-				},
-				{ silent: false },
-			)
-		} else {
-			this.rerender()
-		}
+		// 先固化已提交配置，让提交等待和后续 processing 阶段都能打开生成记录。
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				generateVideoRequest: requestWithId,
+				status: undefined,
+				errorMessage: undefined,
+			},
+			// 接口确认前只更新运行时 UI，避免刷新时恢复出尚未真正创建的任务。
+			{ mode: "data-only", silent: true },
+		)
+		this.isGenerating = true
+		this.rerender()
 		this.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-started",
 			data: { elementId: this.data.id },
@@ -223,18 +225,23 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			return true
 		} catch (error) {
 			this.isGenerating = false
-			if (previousStatus === GenerationStatus.Failed) {
+			const currentElement = this.canvas.elementManager.getElementData(this.data.id)
+			// 只回滚仍属于本次提交的配置，避免覆盖等待期间到达的更新。
+			if (
+				currentElement?.type === ElementTypeEnum.Video &&
+				currentElement.generateVideoRequest === requestWithId
+			) {
 				this.canvas.elementManager.update(
 					this.data.id,
 					{
+						generateVideoRequest: previousGenerateVideoRequest,
 						status: previousStatus,
 						errorMessage: previousErrorMessage,
 					},
-					{ silent: false },
+					{ mode: "data-only", silent: true },
 				)
-			} else {
-				this.rerender()
 			}
+			this.rerender()
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
 				data: { elementId: this.data.id },

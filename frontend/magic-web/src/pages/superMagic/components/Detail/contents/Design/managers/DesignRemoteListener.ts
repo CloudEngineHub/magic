@@ -36,6 +36,7 @@ import {
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { resolveDesignAttachment } from "../utils/designPath"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
+import { isV2Version } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
@@ -129,6 +130,46 @@ function designDataHasMediaMissingFromAttachments(
 		)
 		if (resolvedFile.status === "not-found") missing = true
 	})
+	return missing
+}
+
+/** v2 的生成配置位于 sidecar；processing 占位符缺配置时需要等待附件树同步后重读。 */
+export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
+	let missing = false
+	const walk = (elements: LayerElement[] | undefined): void => {
+		if (!elements?.length || missing) return
+
+		for (const element of elements) {
+			if (element.type === ElementTypeEnum.Image) {
+				const image = element as ImageElement
+				if (
+					(image.status === "pending" || image.status === "processing") &&
+					!image.generateImageRequest &&
+					!image.imageGenerationTaskMeta &&
+					!image.generateHightImageRequest
+				) {
+					missing = true
+					return
+				}
+			} else if (element.type === ElementTypeEnum.Video) {
+				const video = element as VideoElement
+				if (
+					(video.status === "pending" || video.status === "processing") &&
+					!video.generateVideoRequest
+				) {
+					missing = true
+					return
+				}
+			}
+
+			if (element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group) {
+				walk((element as FrameElement | GroupElement).children)
+				if (missing) return
+			}
+		}
+	}
+
+	walk(designData.canvas?.elements)
 	return missing
 }
 
@@ -637,7 +678,7 @@ export class DesignRemoteListener {
 	}
 
 	/**
-	 * file-change 链路：读远端 magic.project.js，必要时等待附件刷新后再次读取；
+	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
 	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignData | null> {
@@ -673,15 +714,23 @@ export class DesignRemoteListener {
 			...flattenFileItems(this.options.attachments ?? []),
 		]
 
-		if (!designDataHasMediaMissingFromAttachments(parsed, storeFiles, dslBase)) return parsed
+		const hasMissingMedia = designDataHasMediaMissingFromAttachments(
+			parsed,
+			storeFiles,
+			dslBase,
+		)
+		const hasPendingGenerationWithoutInfo =
+			isV2Version(parsed.version) && designDataHasPendingMediaWithoutGenerationRequest(parsed)
+		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return parsed
 
 		const projectId = this.options.projectId
-		if (!projectId) return null
+		if (!projectId) return hasMissingMedia ? null : parsed
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
 		} catch {
-			return null
+			// 生成配置同步超时不应阻塞占位符展示；媒体缺失仍沿用原有失败策略。
+			return hasMissingMedia ? null : parsed
 		}
 
 		try {

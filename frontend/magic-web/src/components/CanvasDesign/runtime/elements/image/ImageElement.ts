@@ -373,22 +373,25 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 		const previousStatus = this.data.status
 		const previousErrorMessage = this.data.errorMessage
+		const previousGenerateImageRequest = this.data.generateImageRequest
 
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
-		if (previousStatus === GenerationStatus.Failed) {
-			this.canvas.elementManager.update(
-				this.data.id,
-				{
-					status: undefined,
-					errorMessage: undefined,
-				},
-				{ silent: false },
-			)
-		} else {
-			this.rerender()
-		}
+		// 生成记录以“已提交请求”为准：先写入元素，确保接口等待和轮询阶段都能查看信息。
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				generateImageRequest: requestWithId,
+				status: undefined,
+				errorMessage: undefined,
+			},
+			// 接口确认前只更新运行时 UI，避免刷新时恢复出尚未真正创建的任务。
+			{ mode: "data-only", silent: true },
+		)
+		// update() 在带旧 src 的元素上可能按已完成数据收口本地标记，这里保持本次提交态。
+		this.isGenerating = true
+		this.rerender()
 		this.canvas.eventEmitter.emit({
 			type: "element:image:generate-submit-started",
 			data: { elementId: this.data.id },
@@ -398,7 +401,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 发起图片生成请求
 			await this.canvas.magicConfigManager.config?.methods?.generateImage(requestWithId)
 
-			// 请求成功，保存请求参数到元素，并清除错误状态
+			// 请求成功，确认元素仍存在并清除错误状态
 			const currentElement = this.canvas.elementManager.getElementData(this.data.id)
 			if (currentElement) {
 				this.canvas.elementManager.update(
@@ -433,21 +436,27 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		} catch (error) {
 			this.isGenerating = false
-			if (previousStatus === GenerationStatus.Failed) {
+			const currentElement = this.canvas.elementManager.getElementData(this.data.id)
+			// 只回滚仍属于本次提交的配置，避免覆盖等待期间到达的更新。
+			if (
+				currentElement?.type === ElementTypeEnum.Image &&
+				currentElement.generateImageRequest === requestWithId
+			) {
 				this.canvas.elementManager.update(
 					this.data.id,
 					{
+						generateImageRequest: previousGenerateImageRequest,
 						status: previousStatus,
 						errorMessage: previousErrorMessage,
 					},
-					{ silent: false },
+					{ mode: "data-only", silent: true },
 				)
 			}
+			this.rerender()
 			this.canvas.eventEmitter.emit({
 				type: "element:image:generate-submit-failed",
 				data: { elementId: this.data.id },
 			})
-			this.rerender()
 			return false
 		}
 	}

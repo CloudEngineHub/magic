@@ -2,8 +2,23 @@ import Konva from "konva"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ImageElement } from "../../image/ImageElement"
 import { VideoElement } from "../../video/VideoElement"
-import { GenerationStatus } from "../../../../public/magic-types"
+import {
+	GenerationStatus,
+	type GenerateImageRequest,
+	type GenerateVideoRequest,
+} from "../../../../public/magic-types"
 import { RenderUtils } from "../../../shared/render/RenderUtils"
+import { ElementTypeEnum } from "../../../document/types"
+
+function createDeferred() {
+	let resolve!: () => void
+	let reject!: (reason?: unknown) => void
+	const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise
+		reject = rejectPromise
+	})
+	return { promise, resolve, reject }
+}
 
 describe("ImageElement mounted image node sync", () => {
 	afterEach(() => {
@@ -680,5 +695,175 @@ describe("ImageElement mounted image node sync", () => {
 			expect.any(Function),
 		)
 		expect(element.resourceSubscriptionCleanups).toHaveLength(2)
+	})
+
+	it("exposes an image generation request while submission is pending", async () => {
+		const deferred = createDeferred()
+		const generateImage = vi.fn(() => deferred.promise)
+		const update = vi.fn()
+		type TestImageData = {
+			id: string
+			type: typeof ElementTypeEnum.Image
+			width: number
+			height: number
+			generateImageRequest?: GenerateImageRequest
+		}
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: TestImageData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: {
+				magicConfigManager: { config: { methods: { generateImage: typeof generateImage } } }
+				elementManager: {
+					update: typeof update
+					getElementData: () => TestImageData
+				}
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			pollingManager: { start: ReturnType<typeof vi.fn> }
+			updateImageElementNames: ReturnType<typeof vi.fn>
+			createOssSrcPromise: ReturnType<typeof vi.fn>
+			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			width: 100,
+			height: 100,
+		}
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		update.mockImplementation((_id, updates) => {
+			element.data = { ...element.data, ...updates }
+		})
+		element.canvas = {
+			magicConfigManager: { config: { methods: { generateImage } } },
+			elementManager: {
+				update,
+				getElementData: () => element.data,
+			},
+			eventEmitter: { emit: vi.fn() },
+		}
+		element.pollingManager = { start: vi.fn() }
+		element.updateImageElementNames = vi.fn()
+		element.createOssSrcPromise = vi.fn()
+		element.clearTempGenerateImageRequestPrompt = vi.fn()
+		element.rerender = vi.fn()
+
+		const resultPromise = element.generateImage({
+			model_id: "image-model",
+			prompt: "A product photo",
+		})
+		await Promise.resolve()
+
+		expect(element.data.generateImageRequest).toEqual(
+			expect.objectContaining({
+				model_id: "image-model",
+				prompt: "A product photo",
+				image_id: expect.any(String),
+			}),
+		)
+		expect(update).toHaveBeenNthCalledWith(
+			1,
+			"image-1",
+			expect.objectContaining({ generateImageRequest: element.data.generateImageRequest }),
+			{ mode: "data-only", silent: true },
+		)
+		expect(element.rerender).toHaveBeenCalledTimes(1)
+
+		deferred.resolve()
+		await expect(resultPromise).resolves.toBe(true)
+		expect(update).toHaveBeenNthCalledWith(
+			2,
+			"image-1",
+			expect.objectContaining({ generateImageRequest: element.data.generateImageRequest }),
+			{ silent: false },
+		)
+	})
+
+	it("exposes a video generation request while submission is pending", async () => {
+		const deferred = createDeferred()
+		const generateVideo = vi.fn(() => deferred.promise)
+		const update = vi.fn()
+		type TestVideoData = {
+			id: string
+			type: typeof ElementTypeEnum.Video
+			width: number
+			height: number
+			generateVideoRequest?: GenerateVideoRequest
+		}
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: TestVideoData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: {
+				magicConfigManager: { config: { methods: { generateVideo: typeof generateVideo } } }
+				elementManager: {
+					update: typeof update
+					getElementData: () => TestVideoData
+				}
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			pollingManager: { start: ReturnType<typeof vi.fn> }
+			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+		}
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		update.mockImplementation((_id, updates) => {
+			element.data = { ...element.data, ...updates }
+		})
+		element.canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			elementManager: {
+				update,
+				getElementData: () => element.data,
+			},
+			eventEmitter: { emit: vi.fn() },
+		}
+		element.pollingManager = { start: vi.fn() }
+		element.clearTempGenerateVideoRequest = vi.fn()
+		element.rerender = vi.fn()
+
+		const resultPromise = element.generateVideo({
+			model_id: "video-model",
+			prompt: "A product video",
+		})
+		await Promise.resolve()
+
+		expect(element.data.generateVideoRequest).toEqual(
+			expect.objectContaining({
+				model_id: "video-model",
+				prompt: "A product video",
+				video_id: expect.any(String),
+			}),
+		)
+		expect(update).toHaveBeenNthCalledWith(
+			1,
+			"video-1",
+			expect.objectContaining({ generateVideoRequest: element.data.generateVideoRequest }),
+			{ mode: "data-only", silent: true },
+		)
+		expect(element.rerender).toHaveBeenCalledTimes(1)
+
+		deferred.resolve()
+		await expect(resultPromise).resolves.toBe(true)
+		expect(update).toHaveBeenNthCalledWith(
+			2,
+			"video-1",
+			expect.objectContaining({ generateVideoRequest: element.data.generateVideoRequest }),
+			{ silent: false },
+		)
 	})
 })

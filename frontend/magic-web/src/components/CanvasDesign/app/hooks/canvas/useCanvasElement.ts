@@ -57,12 +57,17 @@ export function useCanvasElements(elementIds?: string[]): LayerElement[] {
 /**
  * 获取单个 Canvas 元素的 Hook
  * @param elementId - 元素 ID
+ * @param options.includeTransient - 是否订阅仅运行时的瞬时更新
  * @returns 元素数据，如果不存在则返回 null
  */
-export function useCanvasElement(elementId: string | null): LayerElement | null {
+export function useCanvasElement(
+	elementId: string | null,
+	options?: { includeTransient?: boolean },
+): LayerElement | null {
 	const { canvas } = useCanvas()
 	const [, forceUpdate] = useReducer((x) => x + 1, 0)
 	const shouldSubscribe = Boolean(canvas) && Boolean(elementId)
+	const includeTransient = options?.includeTransient === true
 
 	// 订阅元素变化事件
 	useCanvasEventWithInstance(
@@ -76,11 +81,11 @@ export function useCanvasElement(elementId: string | null): LayerElement | null 
 			const changedElementIds = data?.elementIds
 			const isTransient = data?.phase === "transient"
 			const matched = !changedElementIds || changedElementIds.includes(elementId)
-			if (matched && !isTransient) {
+			if (matched && (!isTransient || includeTransient)) {
 				forceUpdate()
 			}
 		},
-		[elementId, shouldSubscribe],
+		[elementId, includeTransient, shouldSubscribe],
 	)
 
 	if (!elementId || !canvas) {

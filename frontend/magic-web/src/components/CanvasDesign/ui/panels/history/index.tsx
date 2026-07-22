@@ -21,7 +21,8 @@ export default function MessageHistory() {
 		setPreviewingMediaResource(null)
 	}, [])
 
-	const element = useCanvasElement(messageHistoryElementId)
+	// 提交接口确认前的配置是瞬时数据，也需要立即刷新已打开的生成记录面板。
+	const element = useCanvasElement(messageHistoryElementId, { includeTransient: true })
 
 	useEffect(() => {
 		setPreviewingMediaResource(null)

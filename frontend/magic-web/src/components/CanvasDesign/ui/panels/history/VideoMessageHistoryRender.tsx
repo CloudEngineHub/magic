@@ -89,6 +89,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 		if (!request?.model_id) return undefined
 		return videoModelList.find((model) => model.model_id === request.model_id)
 	}, [videoModelList, request?.model_id])
+	const modelDisplayName = modelInfo?.model_name || request?.model_id
 
 	const frameInputs = useMemo(() => request?.inputs?.frames ?? [], [request?.inputs?.frames])
 	const startFrame = frameInputs.find((frame) => frame.role === "start")
@@ -276,26 +277,24 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 					</div>
 				)}
 
-				<div className={styles.item}>
-					<div className={styles.itemTitle}>{t("messageHistory.model", "模型")}</div>
-					<div className={styles.itemContent}>
-						<div className={styles.model}>
-							<div className={styles.modelIcon}>
-								{modelInfo?.model_icon ? (
-									<img
-										src={modelInfo.model_icon}
-										alt={modelInfo.model_name || request?.model_id}
-									/>
-								) : (
-									<ImagePlus size={16} />
-								)}
-							</div>
-							<div className={styles.modelName}>
-								{modelInfo?.model_name || request?.model_id}
+				{/* 模型可能要等生成服务确认后才补齐，缺失时不展示空信息行。 */}
+				{!!modelDisplayName && (
+					<div className={styles.item}>
+						<div className={styles.itemTitle}>{t("messageHistory.model", "模型")}</div>
+						<div className={styles.itemContent}>
+							<div className={styles.model}>
+								<div className={styles.modelIcon}>
+									{modelInfo?.model_icon ? (
+										<img src={modelInfo.model_icon} alt={modelDisplayName} />
+									) : (
+										<ImagePlus size={16} />
+									)}
+								</div>
+								<div className={styles.modelName}>{modelDisplayName}</div>
 							</div>
 						</div>
 					</div>
-				</div>
+				)}
 
 				{[...generationInfoRows, ...runtimeRows].map((row) => (
 					<div key={row.key} className={styles.item}>
