@@ -27,9 +27,11 @@ use App\Domain\SlidesTemplate\Service\SlidesTemplateColorExtractor;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
+use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
+use App\Infrastructure\Core\DataIsolation\HandleDataIsolationInterface;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
 use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
@@ -37,6 +39,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
@@ -100,6 +103,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                     ThirdPlatformDataIsolationManagerInterface::class => new BaseThirdPlatformDataIsolationManager(),
                     SubscriptionManagerInterface::class => new BaseSubscriptionManager(),
                     OrganizationInfoManagerInterface::class => new BaseOrganizationInfoManager(),
+                    HandleDataIsolationInterface::class => new BaseHandleDataIsolation(),
                     MagicOrganizationEnvDomainService::class => new class extends MagicOrganizationEnvDomainService {
                         public function __construct()
                         {
@@ -148,6 +152,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                     ThirdPlatformDataIsolationManagerInterface::class,
                     SubscriptionManagerInterface::class,
                     OrganizationInfoManagerInterface::class,
+                    HandleDataIsolationInterface::class,
                     MagicOrganizationEnvDomainService::class,
                 ], true);
             }
@@ -195,7 +200,7 @@ class SlidesTemplateAppServiceTest extends TestCase
 
     public function testGetTemplateFileUrlUsesTemplateOrganizationCode(): void
     {
-        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $authorization = $this->makeAuthorization('CURRENT_ORG', 'user-1', 'user-1');
         $template = new SlidesTemplateEntity();
         $template->setOrganizationCode('OFFICIAL_ORG')
             ->setCode('PPT-65f2c8a42d7b0-123456')
@@ -223,7 +228,7 @@ class SlidesTemplateAppServiceTest extends TestCase
             );
 
         $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $result = $service->getTemplateFileUrl($dataIsolation, 'PPT-65f2c8a42d7b0-123456');
+        $result = $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertSame($template, $result);
         $this->assertSame('https://signed.example/OFFICIAL_ORG/slides/templates/business.zip', $result->getTemplateFileUrl());
@@ -343,7 +348,7 @@ class SlidesTemplateAppServiceTest extends TestCase
 
     public function testGetTemplateFileUrlDispatchesTemplateUsedEventAfterUrlResolved(): void
     {
-        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $authorization = $this->makeAuthorization('CURRENT_ORG', 'user-1', 'user-1');
         $template = new SlidesTemplateEntity();
         $template->setOrganizationCode('OFFICIAL_ORG')
             ->setCode('PPT-65f2c8a42d7b0-123456')
@@ -358,7 +363,7 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->willReturn($template);
 
         $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $result = $service->getTemplateFileUrl($dataIsolation, 'PPT-65f2c8a42d7b0-123456');
+        $result = $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertSame($template, $result);
         $this->assertCount(1, $service->dispatchedEvents);
@@ -371,6 +376,32 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame('user-1', $event->getUserName());
         $this->assertNotSame('', $event->getRequestId());
         $this->assertGreaterThan(0, $event->getCallTime());
+    }
+
+    public function testGetTemplateFileUrlDispatchesTemplateUsedEventWithSourceUsername(): void
+    {
+        $authorization = $this->makeAuthorization('CURRENT_ORG', 'user-1', '张三');
+
+        $template = new SlidesTemplateEntity();
+        $template->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-123456')
+            ->setLabel(['zh_CN' => '职场白皮书'])
+            ->setTemplateFileKey('slides/templates/business.zip');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('findEnabledByCodeOrFail')
+            ->willReturn($template);
+
+        $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
+        $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
+
+        $this->assertCount(1, $service->dispatchedEvents);
+        $event = $service->dispatchedEvents[0];
+        $this->assertInstanceOf(SlidesTemplateUsedEvent::class, $event);
+        $this->assertSame('user-1', $event->getUserId());
+        $this->assertSame('张三', $event->getUserName());
     }
 
     public function testGetTemplateFileUrlDispatchesTemplateUsedEventWithDefaultSourceId(): void
@@ -388,7 +419,7 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->willReturn($template);
 
         $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $service->getTemplateFileUrl($this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']), 'PPT-65f2c8a42d7b0-123456');
+        $service->getTemplateFileUrl($this->makeAuthorization('CURRENT_ORG', 'user-1', 'user-1'), 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertCount(1, $service->dispatchedEvents);
         $event = $service->dispatchedEvents[0];
@@ -819,6 +850,17 @@ class SlidesTemplateAppServiceTest extends TestCase
         return $dataIsolation;
     }
 
+    private function makeAuthorization(string $organizationCode, string $userId, string $nickname): MagicUserAuthorization
+    {
+        $authorization = new MagicUserAuthorization();
+        $authorization->setOrganizationCode($organizationCode);
+        $authorization->setId($userId);
+        $authorization->setNickname($nickname);
+        $authorization->setMagicId('magic-1');
+        $authorization->setMagicEnvId(0);
+        return $authorization;
+    }
+
     private function makeAdminSlidesTemplateAppService(
         SlidesTemplateDomainService $domainService,
         ?SlidesTemplateCategoryDomainService $categoryDomainService = null,
@@ -929,17 +971,17 @@ class TestableModelGatewaySlidesTemplateAppService extends ModelGatewaySlidesTem
     }
 
     protected function dispatchSlidesTemplateUsedEvent(
-        SlidesTemplateDataIsolation $dataIsolation,
+        MagicUserAuthorization $authorization,
         SlidesTemplateEntity $template,
         float $startTime
     ): void {
         $requestId = trim(CoContext::getRequestId());
         $this->dispatchedEvents[] = new SlidesTemplateUsedEvent(
-            organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+            organizationCode: $authorization->getOrganizationCode(),
             sourceId: SourceId::SLIDES_TEMPLATE_USE,
             callTime: (int) round($startTime * 1000),
-            userId: $dataIsolation->getCurrentUserId(),
-            userName: $dataIsolation->getCurrentUserId(),
+            userId: $authorization->getId(),
+            userName: $authorization->getNickname(),
             requestId: $requestId === '' ? IdGenerator::getUniqueId32() : $requestId,
             template: $template,
         );

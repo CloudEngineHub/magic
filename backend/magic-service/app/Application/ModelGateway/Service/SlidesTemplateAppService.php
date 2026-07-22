@@ -13,12 +13,11 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
-use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
-use Qbhy\HyperfAuth\Authenticatable;
 
 use function event_dispatch;
 
@@ -29,7 +28,7 @@ class SlidesTemplateAppService extends AbstractLLMAppService
     ) {
     }
 
-    public function getTemplateFileUrl(Authenticatable|BaseDataIsolation $authorization, string $code): SlidesTemplateEntity
+    public function getTemplateFileUrl(MagicUserAuthorization $authorization, string $code): SlidesTemplateEntity
     {
         $startTime = microtime(true);
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
@@ -39,7 +38,7 @@ class SlidesTemplateAppService extends AbstractLLMAppService
         $this->resolveTemplateFileUrl($template);
         $this->slidesTemplateDomainService->incrementActualUsageCount($dataIsolation, $template->getCode());
         $this->dispatchSlidesTemplateUsedEvent(
-            $dataIsolation,
+            $authorization,
             $template,
             $startTime
         );
@@ -58,35 +57,25 @@ class SlidesTemplateAppService extends AbstractLLMAppService
     }
 
     protected function dispatchSlidesTemplateUsedEvent(
-        SlidesTemplateDataIsolation $dataIsolation,
+        MagicUserAuthorization $authorization,
         SlidesTemplateEntity $template,
         float $startTime
     ): void {
         $requestId = trim(CoContext::getRequestId());
         event_dispatch(new SlidesTemplateUsedEvent(
-            organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+            organizationCode: $authorization->getOrganizationCode(),
             sourceId: SourceId::SLIDES_TEMPLATE_USE,
             callTime: (int) round($startTime * 1000),
-            userId: $dataIsolation->getCurrentUserId(),
-            userName: $dataIsolation->getCurrentUserId(),
+            userId: $authorization->getId(),
+            userName: $authorization->getNickname(),
             requestId: $requestId === '' ? IdGenerator::getUniqueId32() : $requestId,
             template: $template,
         ));
     }
 
-    protected function createSlidesTemplateDataIsolation(Authenticatable|BaseDataIsolation $authorization): SlidesTemplateDataIsolation
+    protected function createSlidesTemplateDataIsolation(MagicUserAuthorization $authorization): SlidesTemplateDataIsolation
     {
-        if ($authorization instanceof SlidesTemplateDataIsolation) {
-            return $authorization;
-        }
-
         $dataIsolation = new SlidesTemplateDataIsolation();
-        if ($authorization instanceof BaseDataIsolation) {
-            $dataIsolation->extends($authorization);
-            $dataIsolation->setOfficialOrganizationCodes($authorization->getOfficialOrganizationCodes());
-            return $dataIsolation;
-        }
-
         $this->handleByAuthorization($authorization, $dataIsolation);
         return $dataIsolation;
     }
