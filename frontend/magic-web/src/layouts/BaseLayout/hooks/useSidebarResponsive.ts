@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
-import { reaction } from "mobx"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
 
@@ -49,6 +48,7 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 	const isDraggingRef = useRef(false)
 	const dragEndTimerRef = useRef<number>()
 	const expandedSidebarWidthPxRef = useRef(convertPercentToPx(initialWidth))
+	const expandedSidebarSizePercentRef = useRef(initialWidth)
 	const prevWindowWidthRef = useRef(window.innerWidth)
 	const [minSidebarSizePercent, setMinSidebarSizePercent] = useState(() =>
 		getMinSidebarSizePercent(window.innerWidth),
@@ -101,21 +101,8 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 		// Initial load: keep persisted expanded/collapsed; shrink-triggered collapse runs in handleResize.
 		syncSidebarByViewport(false)
 		window.addEventListener("resize", handleResize)
-		// When user explicitly expands the sidebar, only resize the panel
-		// to the correct size - never force re-collapse here (that would
-		// prevent the user from opening the sidebar on narrow screens).
-		const dispose = reaction(
-			() => sidebarStore.collapsed,
-			(collapsed) => {
-				if (collapsed || !sidebarPanelRef.current) return
-				const nextSizePercent = getExpandedSidebarSizePercent(window.innerWidth)
-				sidebarPanelRef.current.resize(nextSizePercent)
-				sidebarStore.setWidth(nextSizePercent)
-			},
-		)
 
 		return () => {
-			dispose()
 			window.removeEventListener("resize", handleResize)
 		}
 	}, [syncSidebarByViewport])
@@ -125,17 +112,21 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 			if (dragEndTimerRef.current) {
 				window.clearTimeout(dragEndTimerRef.current)
 			}
-			if (isDraggingRef.current && sidebarPanelRef.current) {
-				const finalSize = sidebarPanelRef.current.getSize()
-				expandedSidebarWidthPxRef.current = convertPercentToPx(finalSize)
-				sidebarStore.setWidth(finalSize)
+			if (isDraggingRef.current) {
+				sidebarStore.setWidth(expandedSidebarSizePercentRef.current)
 			}
 			sidebarStore.persistWidth()
 		}
 	}, [sidebarPanelRef])
 
-	const handleSidebarResize = useCallback(() => {
+	const handleSidebarResize = useCallback((sizePercent: number) => {
 		if (sidebarStore.collapsed) return
+
+		// Keep the expanded size from the resize callback. Reading panel.getSize()
+		// after the debounce may return the collapsed size when the user resizes
+		// and immediately collapses the sidebar.
+		expandedSidebarSizePercentRef.current = sizePercent
+		expandedSidebarWidthPxRef.current = convertPercentToPx(sizePercent)
 
 		if (!isDraggingRef.current) {
 			isDraggingRef.current = true
@@ -146,16 +137,15 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 		}
 
 		dragEndTimerRef.current = window.setTimeout(() => {
-			if (sidebarPanelRef.current && isDraggingRef.current) {
-				const finalSize = sidebarPanelRef.current.getSize()
-				expandedSidebarWidthPxRef.current = convertPercentToPx(finalSize)
-				sidebarStore.setWidth(finalSize)
+			if (isDraggingRef.current) {
+				sidebarStore.setWidth(expandedSidebarSizePercentRef.current)
 				isDraggingRef.current = false
 			}
 		}, 100)
-	}, [sidebarPanelRef])
+	}, [])
 
 	return {
+		getExpandedSidebarSizePercent,
 		handleSidebarResize,
 		minSidebarSizePercent,
 	}

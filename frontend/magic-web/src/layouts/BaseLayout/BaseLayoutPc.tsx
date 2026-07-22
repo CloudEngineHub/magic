@@ -46,12 +46,11 @@ const BaseLayoutPc = observer(() => {
 	// Cache initial width to avoid re-reading during drag
 	const [initialWidth] = useState(() => sidebarStore.width)
 
-	// Handle smooth sidebar animation
-	useSidebarAnimation(sidebarPanelRef)
-	const { handleSidebarResize, minSidebarSizePercent } = useSidebarResponsive({
-		sidebarPanelRef,
-		initialWidth,
-	})
+	const { handleSidebarResize, minSidebarSizePercent, getExpandedSidebarSizePercent } =
+		useSidebarResponsive({ sidebarPanelRef, initialWidth })
+
+	// Handle smooth sidebar animation and restore the responsive expanded width.
+	useSidebarAnimation({ sidebarPanelRef, getExpandedSidebarSizePercent })
 
 	useMount(() => {
 		if (window.location.pathname === "/") {

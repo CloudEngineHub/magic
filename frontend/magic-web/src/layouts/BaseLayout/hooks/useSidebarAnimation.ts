@@ -19,18 +19,37 @@ const easingFunctions = {
 
 /**
  * Hook to handle smooth sidebar collapse/expand animation
- * @param sidebarPanelRef - Reference to the resizable panel
  */
-function useSidebarAnimation(sidebarPanelRef: RefObject<ImperativePanelHandle>) {
+interface UseSidebarAnimationParams {
+	sidebarPanelRef: RefObject<ImperativePanelHandle>
+	getExpandedSidebarSizePercent: (viewWidth: number) => number
+}
+
+function useSidebarAnimation({
+	sidebarPanelRef,
+	getExpandedSidebarSizePercent,
+}: UseSidebarAnimationParams) {
 	useEffect(() => {
 		let animationFrame: number | null = null
+		let completionTimer: number | null = null
 		let startTime: number | null = null
 		let startSize = 0
 		let isExpanding = false
-		let isAnimating = false
+
+		const clearPendingAnimation = () => {
+			if (animationFrame !== null) {
+				cancelAnimationFrame(animationFrame)
+				animationFrame = null
+			}
+			if (completionTimer !== null) {
+				window.clearTimeout(completionTimer)
+				completionTimer = null
+			}
+		}
 
 		const animateResize = (targetSize: number) => {
-			if (!sidebarPanelRef.current || isAnimating) return
+			if (!sidebarPanelRef.current) return
+			clearPendingAnimation()
 
 			// Get current size
 			const currentSize = sidebarPanelRef.current.getSize()
@@ -42,18 +61,24 @@ function useSidebarAnimation(sidebarPanelRef: RefObject<ImperativePanelHandle>) 
 
 			// Determine if expanding or collapsing
 			isExpanding = targetSize > currentSize
-			isAnimating = true
 
 			// Ultra-fast animation for snappy feel
 			const duration = 150 // 150ms animation
 			startTime = null
 			startSize = currentSize
 
+			const finishAnimation = () => {
+				if (sidebarPanelRef.current) {
+					sidebarPanelRef.current.resize(targetSize)
+				}
+				clearPendingAnimation()
+				startTime = null
+			}
+
 			const animate = (timestamp: number) => {
 				if (!startTime) startTime = timestamp
 				if (!sidebarPanelRef.current) {
-					isAnimating = false
-					animationFrame = null
+					clearPendingAnimation()
 					return
 				}
 
@@ -73,16 +98,13 @@ function useSidebarAnimation(sidebarPanelRef: RefObject<ImperativePanelHandle>) 
 				if (progress < 1) {
 					animationFrame = requestAnimationFrame(animate)
 				} else {
-					animationFrame = null
-					startTime = null
-					isAnimating = false
+					finishAnimation()
 				}
 			}
 
-			if (animationFrame) {
-				cancelAnimationFrame(animationFrame)
-			}
 			animationFrame = requestAnimationFrame(animate)
+			// Background tabs may throttle animation frames. Always enforce the final width.
+			completionTimer = window.setTimeout(finishAnimation, duration + 50)
 		}
 
 		const dispose = reaction(
@@ -91,9 +113,9 @@ function useSidebarAnimation(sidebarPanelRef: RefObject<ImperativePanelHandle>) 
 				collapsedSizePercent: sidebarStore.collapsedSizePercent,
 			}),
 			({ collapsed, collapsedSizePercent }) => {
-				// Only animate when collapse state changes via button click
-				// Manual dragging is handled entirely by react-resizable-panels
-				const targetSize = collapsed ? collapsedSizePercent : sidebarStore.width
+				const targetSize = collapsed
+					? collapsedSizePercent
+					: getExpandedSidebarSizePercent(window.innerWidth)
 				animateResize(targetSize)
 			},
 			{
@@ -104,11 +126,9 @@ function useSidebarAnimation(sidebarPanelRef: RefObject<ImperativePanelHandle>) 
 
 		return () => {
 			dispose()
-			if (animationFrame) {
-				cancelAnimationFrame(animationFrame)
-			}
+			clearPendingAnimation()
 		}
-	}, [sidebarPanelRef])
+	}, [getExpandedSidebarSizePercent, sidebarPanelRef])
 }
 
 export default useSidebarAnimation
