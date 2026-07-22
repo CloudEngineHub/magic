@@ -304,6 +304,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 			attachments,
 			allowEdit,
+			allowDownload,
 			isInProject,
 			removeFile: () => undefined,
 			onBatchShareClick: (fileIds) => {
@@ -584,6 +585,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									filterBatchDownloadLayerMenuItems
 								}
 								allowDownload={allowDownload}
+								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
 							/>
