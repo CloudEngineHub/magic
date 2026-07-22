@@ -31,6 +31,11 @@ interface UseCrossProjectFileOperationOptions {
 	onSuccess?: (result?: { operationType: "move" | "copy"; fileIds: string[] }) => void
 }
 
+interface EffectiveOperationFileIdsResult {
+	fileIds: string[]
+	dependencyAnalysisFailed: boolean
+}
+
 async function resolveEffectiveOperationFileIds({
 	fileIds,
 	sourceAttachments,
@@ -41,13 +46,19 @@ async function resolveEffectiveOperationFileIds({
 	sourceAttachments: AttachmentItem[]
 	includeHtmlDependencies?: boolean
 	htmlDependencyFileIds?: string[]
-}): Promise<string[]> {
+}): Promise<EffectiveOperationFileIdsResult> {
 	if (!includeHtmlDependencies) {
-		return mergeHtmlStaticDependencyFileIds(fileIds, [], false)
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			dependencyAnalysisFailed: false,
+		}
 	}
 
 	if (htmlDependencyFileIds !== undefined) {
-		return mergeHtmlStaticDependencyFileIds(fileIds, htmlDependencyFileIds, true)
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, htmlDependencyFileIds, true),
+			dependencyAnalysisFailed: false,
+		}
 	}
 
 	try {
@@ -55,11 +66,17 @@ async function resolveEffectiveOperationFileIds({
 			fileIds,
 			attachments: sourceAttachments,
 		})
-		return mergeHtmlStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true)
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
+			dependencyAnalysisFailed: false,
+		}
 	} catch (error) {
 		// Dependency enrichment must not turn an existing file operation into a hard failure.
 		console.error("Failed to resolve HTML static dependencies for file operation:", error)
-		return mergeHtmlStaticDependencyFileIds(fileIds, [], false)
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			dependencyAnalysisFailed: true,
+		}
 	}
 }
 
@@ -197,12 +214,16 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			includeHtmlDependencies?: boolean
 			htmlDependencyFileIds?: string[]
 		}) => {
-			const effectiveFileIds = await resolveEffectiveOperationFileIds({
-				fileIds: data.fileIds || fileIds,
-				sourceAttachments: data.sourceAttachments,
-				includeHtmlDependencies: data.includeHtmlDependencies,
-				htmlDependencyFileIds: data.htmlDependencyFileIds,
-			})
+			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
+				await resolveEffectiveOperationFileIds({
+					fileIds: data.fileIds || fileIds,
+					sourceAttachments: data.sourceAttachments,
+					includeHtmlDependencies: data.includeHtmlDependencies,
+					htmlDependencyFileIds: data.htmlDependencyFileIds,
+				})
+			if (dependencyAnalysisFailed) {
+				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+			}
 			if (!projectId || effectiveFileIds.length === 0) return
 
 			let keepBothIds =
@@ -343,12 +364,16 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			includeHtmlDependencies?: boolean
 			htmlDependencyFileIds?: string[]
 		}) => {
-			const effectiveFileIds = await resolveEffectiveOperationFileIds({
-				fileIds: data.fileIds ?? fileIds,
-				sourceAttachments: data.sourceAttachments,
-				includeHtmlDependencies: data.includeHtmlDependencies,
-				htmlDependencyFileIds: data.htmlDependencyFileIds,
-			})
+			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
+				await resolveEffectiveOperationFileIds({
+					fileIds: data.fileIds ?? fileIds,
+					sourceAttachments: data.sourceAttachments,
+					includeHtmlDependencies: data.includeHtmlDependencies,
+					htmlDependencyFileIds: data.htmlDependencyFileIds,
+				})
+			if (dependencyAnalysisFailed) {
+				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+			}
 			if (!projectId || effectiveFileIds.length === 0) return
 
 			let keepBothIds =

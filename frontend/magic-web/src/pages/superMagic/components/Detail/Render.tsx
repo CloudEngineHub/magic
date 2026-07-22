@@ -221,6 +221,10 @@ export default function Render(props: any) {
 					? unshadow(contentStr)
 					: contentStr
 
+			// Edited content can exceed the save API request-body limit, so this path reuses
+			// the OSS key returned in the current file metadata for direct upload. The key
+			// must come from that metadata only; do not replace it with user input or a
+			// client-constructed cross-project path. Changes are still committed via replaceFile.
 			if (fileKey && projectIdValue) {
 				const uploadedPath = await ossUploadService.uploadContentByFileKey(
 					uploadContent,

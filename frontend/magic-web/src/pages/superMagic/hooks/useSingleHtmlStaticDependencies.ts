@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
 	resolveSingleHtmlStaticDependencies,
 	type HtmlStaticDependencyAttachment,
@@ -24,8 +24,52 @@ const INITIAL_STATE: SingleHtmlStaticDependencyState = {
 }
 
 /**
- * Keeps the potentially large attachment tree in a ref so selection changes (and the initial
- * attachment-tree load) are the only triggers; routine attachment refreshes do not re-download HTML.
+ * Produces a primitive revision for the attachment fields that affect HTML dependency lookup.
+ * This intentionally includes the nested tree order and paths, rather than only the root count.
+ */
+function getAttachmentDependencyRevision(attachments: HtmlStaticDependencyAttachment[]): string {
+	const entries: string[] = []
+	const stack = [...attachments].reverse()
+
+	while (stack.length > 0) {
+		const attachment = stack.pop()
+		if (!attachment) continue
+
+		entries.push(
+			[
+				attachment.file_id || "",
+				attachment.file_name || "",
+				attachment.file_extension || "",
+				attachment.relative_file_path || "",
+				attachment.is_directory ? "directory" : "file",
+				attachment.is_hidden ? "hidden" : "visible",
+				JSON.stringify(attachment.display_config || null),
+			].join("\u0001"),
+		)
+
+		const children = attachment.children || []
+		for (let index = children.length - 1; index >= 0; index -= 1) {
+			stack.push(children[index])
+		}
+	}
+
+	return entries.join("\u0002")
+}
+
+function getAttachmentIndexRevision(attachmentIndex?: AttachmentIndex): string {
+	if (!attachmentIndex) return ""
+
+	return attachmentIndex.allKeys
+		.map((key) => {
+			const entry = attachmentIndex.getEntryByKey(key)
+			return `${key}\u0001${entry?.parentKey || ""}`
+		})
+		.join("\u0002")
+}
+
+/**
+ * Re-runs analysis when the selected file or dependency-relevant attachment metadata changes.
+ * The primitive revisions avoid coupling the effect to transient array and index identities.
  */
 export function useSingleHtmlStaticDependencies({
 	active,
@@ -45,7 +89,14 @@ export function useSingleHtmlStaticDependencies({
 
 	const [state, setState] = useState<SingleHtmlStaticDependencyState>(INITIAL_STATE)
 	const selectedFileId = fileIds.length === 1 ? fileIds[0] : ""
-	const attachmentRootCount = attachments.length
+	const attachmentDependencyRevision = useMemo(
+		() => getAttachmentDependencyRevision(attachments),
+		[attachments],
+	)
+	const attachmentIndexRevision = useMemo(
+		() => getAttachmentIndexRevision(attachmentIndex),
+		[attachmentIndex],
+	)
 
 	useEffect(() => {
 		let cancelled = false
@@ -95,7 +146,7 @@ export function useSingleHtmlStaticDependencies({
 		return () => {
 			cancelled = true
 		}
-	}, [active, attachmentIndex, attachmentRootCount, selectedFileId])
+	}, [active, attachmentDependencyRevision, attachmentIndexRevision, selectedFileId])
 
 	return state
 }

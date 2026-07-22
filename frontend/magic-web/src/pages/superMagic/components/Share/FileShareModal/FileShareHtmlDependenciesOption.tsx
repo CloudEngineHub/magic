@@ -43,6 +43,7 @@ export default function FileShareHtmlDependenciesOption({
 	if (analysisError) {
 		return (
 			<div
+				role="alert"
 				className="text-xs leading-4 text-destructive"
 				data-testid="file-share-html-dependencies-error"
 			>

@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { useCrossProjectFileOperation } from "../useCrossProjectFileOperation"
 import type { AttachmentItem } from "../types"
 import { detectCanvasProjectOperationRisk } from "../../utils/canvasProjectOperationRisk"
@@ -17,6 +18,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		success: vi.fn(),
 		error: vi.fn(),
+		warning: vi.fn(),
 	},
 }))
 
@@ -188,6 +190,36 @@ describe("useCrossProjectFileOperation", () => {
 			expect.objectContaining({
 				file_ids: ["file-1", "assets-folder"],
 			}),
+		)
+	})
+
+	it("warns when dependency analysis falls back to the selected HTML file", async () => {
+		vi.mocked(resolveSingleHtmlStaticDependencies).mockRejectedValue(
+			new Error("dependency analysis failed"),
+		)
+
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeCopyOperation({
+				fileIds: ["file-1"],
+				targetProjectId: "project-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments,
+			})
+		})
+
+		expect(magicToast.warning).toHaveBeenCalledWith("share.htmlDependenciesAnalysisFailed")
+		expect(SuperMagicApi.copyFiles).toHaveBeenCalledWith(
+			expect.objectContaining({ file_ids: ["file-1"] }),
 		)
 	})
 })

@@ -659,6 +659,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			magicToast.warning(t("share.pleaseSelectFiles"))
 			return
 		}
+		if (htmlDependencyAnalysisError) {
+			magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+		}
 
 		setIsSaving(true)
 
@@ -799,6 +802,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareExpiry,
 		shareRange,
 		shareTargets,
+		htmlDependencyAnalysisError,
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
