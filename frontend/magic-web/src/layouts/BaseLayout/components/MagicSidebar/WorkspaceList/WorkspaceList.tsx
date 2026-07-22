@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { Loader2, Plus, RefreshCw, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -31,7 +31,11 @@ function WorkspaceList() {
 	const [workspaceSearchResults, setWorkspaceSearchResults] = useState<Workspace[]>([])
 	const [projectSearchResults, setProjectSearchResults] = useState<ProjectListItem[]>([])
 	const [isSearchLoading, setIsSearchLoading] = useState(false)
+	const [searchPage, setSearchPage] = useState(1)
+	const [hasMoreWorkspaceSearchResults, setHasMoreWorkspaceSearchResults] = useState(true)
 	const [isLoadingMoreWorkspaces, setIsLoadingMoreWorkspaces] = useState(false)
+	const [workspacePage, setWorkspacePage] = useState(1)
+	const [hasMoreWorkspaces, setHasMoreWorkspaces] = useState(true)
 	const workspaces = workspaceStore.workspaces
 	const hasRequestedInitialLoadRef = useRef(false)
 	const isInitialWorkspaceListLoading =
@@ -41,19 +45,15 @@ function WorkspaceList() {
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 	const searchRequestIdRef = useRef(0)
 	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const searchPageRef = useRef(1)
-	const isSearchLoadingRef = useRef(false)
-	const hasMoreWorkspaceSearchResultsRef = useRef(true)
-	const hasMoreProjectSearchResultsRef = useRef(true)
-	const workspacePageRef = useRef(1)
-	const hasMoreWorkspacesRef = useRef(true)
-	const isLoadingMoreWorkspacesRef = useRef(false)
-	const projectsByWorkspaceId = new Map<string, ProjectListItem[]>()
-	for (const project of projectSearchResults) {
-		const projects = projectsByWorkspaceId.get(project.workspace_id) || []
-		projects.push(project)
-		projectsByWorkspaceId.set(project.workspace_id, projects)
-	}
+	const projectsByWorkspaceId = useMemo(() => {
+		const result = new Map<string, ProjectListItem[]>()
+		for (const project of projectSearchResults) {
+			const projects = result.get(project.workspace_id) || []
+			projects.push(project)
+			result.set(project.workspace_id, projects)
+		}
+		return result
+	}, [projectSearchResults])
 	const displayedWorkspaces = isSearchMode
 		? Array.from(
 				new Map(
@@ -86,25 +86,20 @@ function WorkspaceList() {
 			// Keep manual refresh focused on sidebar data caches so the action
 			// updates visible workspace/project lists without issuing extra status-only requests.
 			await superMagicService.silentRefreshSidebarLoadedCaches()
-			workspacePageRef.current = 1
-			hasMoreWorkspacesRef.current = true
+			setWorkspacePage(1)
+			setHasMoreWorkspaces(true)
 		} finally {
 			setIsRefreshing(false)
 		}
 	}
 
 	const loadMoreWorkspaces = useCallback(async () => {
-		if (
-			isLoadingMoreWorkspacesRef.current ||
-			!hasMoreWorkspacesRef.current ||
-			workspaceStore.isWorkspaceListLoading
-		)
+		if (isLoadingMoreWorkspaces || !hasMoreWorkspaces || workspaceStore.isWorkspaceListLoading)
 			return
 
-		isLoadingMoreWorkspacesRef.current = true
 		setIsLoadingMoreWorkspaces(true)
 		try {
-			const nextPage = workspacePageRef.current + 1
+			const nextPage = workspacePage + 1
 			const nextWorkspaces = await superMagicService.workspace.fetchWorkspaces({
 				page: nextPage,
 				pageSize: SEARCH_PAGE_SIZE,
@@ -112,32 +107,30 @@ function WorkspaceList() {
 				isAutoSelect: false,
 				isSelectLast: false,
 			})
-			workspacePageRef.current = nextPage
-			hasMoreWorkspacesRef.current = nextWorkspaces.length === SEARCH_PAGE_SIZE
+			setWorkspacePage(nextPage)
+			setHasMoreWorkspaces(nextWorkspaces.length === SEARCH_PAGE_SIZE)
 		} finally {
-			isLoadingMoreWorkspacesRef.current = false
 			setIsLoadingMoreWorkspaces(false)
 		}
-	}, [])
+	}, [hasMoreWorkspaces, isLoadingMoreWorkspaces, workspacePage])
 
 	const loadSearchResults = useCallback(
 		async (workspaceName: string, page: number, append: boolean) => {
-			if (append && isSearchLoadingRef.current) return
+			if (append && isSearchLoading) return
 
-			isSearchLoadingRef.current = true
 			setIsSearchLoading(true)
 			const requestId = searchRequestIdRef.current
 			const searchName = workspaceName.trim()
 			try {
 				const [workspaceResponse, projectResponse] = await Promise.all([
-					hasMoreWorkspaceSearchResultsRef.current || !append
+					hasMoreWorkspaceSearchResults || !append
 						? SuperMagicApi.getWorkspaces({
 								page,
 								page_size: SEARCH_PAGE_SIZE,
 								workspace_name: searchName,
 							})
 						: Promise.resolve(null),
-					hasMoreProjectSearchResultsRef.current || !append
+					!append
 						? SuperMagicApi.getProjectsWithCollaboration({
 								page: 1,
 								page_size: 100,
@@ -150,17 +143,16 @@ function WorkspaceList() {
 
 				const workspaceList = workspaceResponse?.list || []
 				const projectList = projectResponse?.list || []
-				hasMoreWorkspaceSearchResultsRef.current = Boolean(
-					workspaceResponse && page * SEARCH_PAGE_SIZE < workspaceResponse.total,
+				setHasMoreWorkspaceSearchResults(
+					Boolean(workspaceResponse && page * SEARCH_PAGE_SIZE < workspaceResponse.total),
 				)
-				hasMoreProjectSearchResultsRef.current = false
 				setWorkspaceSearchResults((current) =>
 					append ? [...current, ...workspaceList] : workspaceList,
 				)
 				setProjectSearchResults((current) =>
 					append ? [...current, ...projectList] : projectList,
 				)
-				searchPageRef.current = page
+				setSearchPage(page)
 			} catch {
 				if (requestId === searchRequestIdRef.current && !append) {
 					setWorkspaceSearchResults([])
@@ -168,12 +160,11 @@ function WorkspaceList() {
 				}
 			} finally {
 				if (requestId === searchRequestIdRef.current) {
-					isSearchLoadingRef.current = false
 					setIsSearchLoading(false)
 				}
 			}
 		},
-		[],
+		[hasMoreWorkspaceSearchResults, isSearchLoading],
 	)
 
 	const searchWorkspaces = useCallback(
@@ -182,18 +173,16 @@ function WorkspaceList() {
 
 			if (!workspaceName.trim()) {
 				searchRequestIdRef.current += 1
-				searchPageRef.current = 1
-				hasMoreWorkspaceSearchResultsRef.current = true
-				hasMoreProjectSearchResultsRef.current = true
+				setSearchPage(1)
+				setHasMoreWorkspaceSearchResults(true)
 				setWorkspaceSearchResults(workspaces)
 				setProjectSearchResults([])
 				return
 			}
 
 			searchRequestIdRef.current += 1
-			searchPageRef.current = 1
-			hasMoreWorkspaceSearchResultsRef.current = true
-			hasMoreProjectSearchResultsRef.current = true
+			setSearchPage(1)
+			setHasMoreWorkspaceSearchResults(true)
 			searchTimerRef.current = setTimeout(() => {
 				void loadSearchResults(workspaceName, 1, false)
 			}, 300)
@@ -207,14 +196,18 @@ function WorkspaceList() {
 			return
 		}
 
-		if (
-			isSearchLoadingRef.current ||
-			(!hasMoreWorkspaceSearchResultsRef.current && !hasMoreProjectSearchResultsRef.current)
-		)
-			return
+		if (isSearchLoading || !hasMoreWorkspaceSearchResults) return
 
-		void loadSearchResults(searchValue, searchPageRef.current + 1, true)
-	}, [isSearchMode, loadMoreWorkspaces, loadSearchResults, searchValue])
+		void loadSearchResults(searchValue, searchPage + 1, true)
+	}, [
+		hasMoreWorkspaceSearchResults,
+		isSearchLoading,
+		isSearchMode,
+		loadMoreWorkspaces,
+		loadSearchResults,
+		searchPage,
+		searchValue,
+	])
 
 	useEffect(() => {
 		const sentinel = loadMoreSentinelRef.current
@@ -236,16 +229,14 @@ function WorkspaceList() {
 	const handleSearchOpen = useCallback(() => {
 		setWorkspaceSearchResults(workspaces)
 		setProjectSearchResults([])
-		searchPageRef.current = 1
-		hasMoreWorkspaceSearchResultsRef.current = true
-		hasMoreProjectSearchResultsRef.current = true
+		setSearchPage(1)
+		setHasMoreWorkspaceSearchResults(true)
 		setIsSearchMode(true)
 	}, [workspaces])
 
 	const handleSearchClose = useCallback(() => {
 		if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
 		searchRequestIdRef.current += 1
-		isSearchLoadingRef.current = false
 		setIsSearchLoading(false)
 		setSearchValue("")
 		setWorkspaceSearchResults([])
