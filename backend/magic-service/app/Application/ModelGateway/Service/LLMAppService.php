@@ -1882,87 +1882,6 @@ class LLMAppService extends AbstractLLMAppService
     }
 
     /**
-     * Validate access token.
-     */
-    private function validateAccessToken(ProxyModelRequestInterface $proxyModelRequest): AccessTokenEntity
-    {
-        $accessToken = $this->accessTokenDomainService->getByAccessToken($proxyModelRequest->getAccessToken());
-        if (! $accessToken) {
-            ExceptionBuilder::throw(MagicApiErrorCode::TOKEN_NOT_EXIST);
-        }
-
-        $accessToken->checkModel($proxyModelRequest->getModel());
-        $accessToken->checkIps($proxyModelRequest->getIps());
-        $accessToken->checkExpiredTime(new DateTime());
-
-        return $accessToken;
-    }
-
-    /**
-     * Parse business context data.
-     */
-    private function parseBusinessContext(
-        LLMDataIsolation $dataIsolation,
-        AccessTokenEntity $accessToken,
-        ProxyModelRequestInterface $proxyModelRequest
-    ): array {
-        $context = [
-            'app_code' => null,
-            'organization_code' => null,
-            'user_id' => null,
-            'business_id' => null,
-            'source_id' => $proxyModelRequest->getBusinessParam('source_id') ?? '',
-            'user_name' => $proxyModelRequest->getBusinessParam('user_name') ?? '',
-            'organization_config' => null,
-            'user_config' => null,
-        ];
-
-        if ($accessToken->getType()->isApplication()) {
-            $this->handleApplicationContext($dataIsolation, $accessToken, $proxyModelRequest, $context);
-        }
-
-        if ($accessToken->getType()->isUser()) {
-            $context['user_id'] = $accessToken->getRelationId();
-            $context['source_id'] = $accessToken->getName();
-            // Personal users also have the organization they were in when creating the token
-            $context['organization_code'] = $accessToken->getOrganizationCode();
-        }
-
-        // Organization level token
-        if ($accessToken->getType()->isOrganization()) {
-            $context['organization_code'] = $accessToken->getRelationId();
-        }
-
-        return $context;
-    }
-
-    /**
-     * Handle application-level context data.
-     */
-    private function handleApplicationContext(
-        LLMDataIsolation $dataIsolation,
-        AccessTokenEntity $accessToken,
-        ProxyModelRequestInterface $proxyModelRequest,
-        array &$context
-    ): void {
-        // Organization ID and user ID are required
-        $organizationId = $proxyModelRequest->getBusinessParam('organization_id', true);
-        $context['user_id'] = $proxyModelRequest->getBusinessParam('user_id', true);
-        $context['business_id'] = $proxyModelRequest->getBusinessParam('business_id') ?? '';
-
-        $context['organization_config'] = $this->organizationConfigDomainService->getByAppCodeAndOrganizationCode(
-            $dataIsolation,
-            $accessToken->getRelationId(),
-            $organizationId
-        );
-        $context['organization_config']->checkRpm();
-        $context['organization_config']->checkAmount();
-
-        $context['app_code'] = $accessToken->getRelationId();
-        $context['organization_code'] = $organizationId;
-    }
-
-    /**
      * Call model using Odin.
      */
     private function callWithOdinChat(ModelInterface $odinModel, CompletionDTO $sendMsgDTO): ChatCompletionResponse|ChatCompletionStreamResponse|TextCompletionResponse
@@ -2073,45 +1992,6 @@ class LLMAppService extends AbstractLLMAppService
                 'refresh_point_min_tokens' => $refreshPointMinTokens,
             ],
         ];
-    }
-
-    /**
-     * Calculate the width-to-height ratio.
-     * @return string "1:1", "3:4", "16:9"
-     */
-    private function calculateRatio(int $width, int $height): string
-    {
-        $gcd = $this->gcd($width, $height);
-
-        $ratioWidth = $width / $gcd;
-        $ratioHeight = $height / $gcd;
-
-        return $ratioWidth . ':' . $ratioHeight;
-    }
-
-    /**
-     * Calculate the greatest common divisor using Euclidean algorithm.
-     * Improved version with proper error handling and edge case management.
-     */
-    private function gcd(int $a, int $b): int
-    {
-        // Handle edge case where both numbers are zero
-        if ($a === 0 && $b === 0) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed);
-        }
-
-        // Use absolute values to ensure positive result
-        $a = (int) abs($a);
-        $b = (int) abs($b);
-
-        // Iterative approach to avoid stack overflow for large numbers
-        while ($b !== 0) {
-            $temp = $b;
-            $b = $a % $b;
-            $a = $temp;
-        }
-
-        return $a;
     }
 
     /**
