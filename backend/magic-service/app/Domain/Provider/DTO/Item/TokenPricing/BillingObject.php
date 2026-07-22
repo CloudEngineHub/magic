@@ -144,6 +144,11 @@ final class BillingObject
     private const string IMAGE_COUNT_PATTERN = '/^image_[a-z0-9x_]+_output_count(?:_cost)?$/';
 
     /**
+     * ImageCount 像素条件对象：image_{lte|gt}_{n}w_pixel_output_count[_cost].
+     */
+    private const string IMAGE_PIXEL_COUNT_PATTERN = '/^image_(lte|gt)_([1-9]\d*)w_pixel_output_count(?:_cost)?$/';
+
+    /**
      * Video 动态对象族：video.{resolution}.{modifier}.{duration|token}[.cost].
      */
     private const string VIDEO_OBJECT_PATTERN = '/^video\.([a-z0-9x_]+)\.([a-z_]+(?:\.[a-z_]+)*)\.(duration|token)(?:\.cost)?$/';
@@ -364,6 +369,22 @@ final class BillingObject
     public function toVideoPricing(): ?array
     {
         return self::parseVideoObjectValue($this->value);
+    }
+
+    /**
+     * @return null|array{operator: string, threshold: int, is_cost: bool}
+     */
+    public function toImagePixelPricing(): ?array
+    {
+        if (preg_match(self::IMAGE_PIXEL_COUNT_PATTERN, $this->value, $matches) !== 1) {
+            return null;
+        }
+
+        return [
+            'operator' => $matches[1],
+            'threshold' => (int) $matches[2] * 10000,
+            'is_cost' => $this->isCostObject(),
+        ];
     }
 
     private static function videoObject(string $resolution, string $modifier, string $billingUnit, bool $isCost = false): self

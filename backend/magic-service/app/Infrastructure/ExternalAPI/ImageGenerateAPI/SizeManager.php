@@ -136,6 +136,25 @@ class SizeManager
     }
 
     /**
+     * 根据明确的图片尺寸计算总像素数。
+     */
+    public static function calculatePixelCount(string $size): int
+    {
+        $size = trim($size);
+        if (preg_match('/^(\d+)[x×*](\d+)$/iu', $size, $matches) !== 1) {
+            throw new InvalidArgumentException('Invalid image size');
+        }
+
+        $width = (int) $matches[1];
+        $height = (int) $matches[2];
+        if ($width <= 0 || $height <= 0) {
+            throw new InvalidArgumentException('Image width and height must be greater than zero');
+        }
+
+        return $width * $height;
+    }
+
+    /**
      * 按总像素区间将最终尺寸归档为 1K / 2K / 4K。
      *
      * 这里的分辨率档位用于内部计费和事件透传，不等同于显示器/视频行业中的 4K 定义，
