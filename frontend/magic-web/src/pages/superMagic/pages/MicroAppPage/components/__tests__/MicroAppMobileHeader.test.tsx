@@ -10,6 +10,25 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("MicroAppMobileHeader", () => {
+	it("hides collaborator management when the project is not manageable", () => {
+		render(
+			<MicroAppMobileHeader
+				selectedProject={{ id: "project-1", project_name: "Todo App" } as never}
+				hasEntries
+				isDatabasePanelOpen={false}
+				onBack={vi.fn()}
+				onToggleDatabasePanel={vi.fn()}
+				onPublish={vi.fn()}
+				canManageCollaborators={false}
+				onManageCollaborators={vi.fn()}
+			/>,
+		)
+
+		expect(
+			screen.queryByTestId("micro-app-mobile-manage-collaborators"),
+		).not.toBeInTheDocument()
+	})
+
 	it("shows mobile actions and forwards user interactions", () => {
 		const onBack = vi.fn()
 		const onToggleDatabasePanel = vi.fn()

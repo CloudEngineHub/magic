@@ -56,4 +56,22 @@ describe("MicroAppHeader", () => {
 
 		expect(onToggleDatabasePanel).toHaveBeenCalledTimes(1)
 	})
+
+	it("hides collaborator management when the project is not manageable", () => {
+		renderHeader({
+			canManageCollaborators: false,
+			onManageCollaborators: vi.fn(),
+		})
+
+		expect(screen.queryByTestId("micro-app-manage-collaborators")).not.toBeInTheDocument()
+	})
+
+	it("renders collaborator management when the project is manageable", () => {
+		renderHeader({
+			canManageCollaborators: true,
+			onManageCollaborators: vi.fn(),
+		})
+
+		expect(screen.getByTestId("micro-app-manage-collaborators")).toBeInTheDocument()
+	})
 })

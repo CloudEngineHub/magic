@@ -14,7 +14,7 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import { canManageProject, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -255,8 +255,14 @@ export function useMicroAppPageController(projectId: string) {
 		}
 	})
 
-	const { openManageModal, CollaboratorUpdatePanel, canManageCollaborators } =
-		useCollaboratorUpdatePanel({ selectedProject })
+	const {
+		openManageModal,
+		CollaboratorUpdatePanel,
+		canManageCollaborators: hasCollaboratorManagementCapability,
+	} = useCollaboratorUpdatePanel({ selectedProject })
+	// 能力位只表示当前版本支持协作者管理，项目角色仍决定当前用户是否有权使用该入口。
+	const canManageCollaborators =
+		hasCollaboratorManagementCapability && canManageProject(selectedProject?.user_role)
 
 	const handleManageCollaborators = useMemoizedFn(() => {
 		if (!selectedProject || !canManageCollaborators) return
