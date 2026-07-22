@@ -11,9 +11,15 @@ interface CategoryFilterProps {
 	categories: CategoryView[]
 	activeCategoryId: string
 	onCategoryChange: (categoryId: string) => void
+	showOrganizationShared?: boolean
 }
 
-function CategoryFilter({ categories, activeCategoryId, onCategoryChange }: CategoryFilterProps) {
+function CategoryFilter({
+	categories,
+	activeCategoryId,
+	onCategoryChange,
+	showOrganizationShared = true,
+}: CategoryFilterProps) {
 	const { t } = useTranslation("crew/market")
 
 	return (
@@ -38,24 +44,26 @@ function CategoryFilter({ categories, activeCategoryId, onCategoryChange }: Cate
 				{t("categories.allCrew")}
 			</Button>
 
-			<Button
-				key={ORGANIZATION_MARKET_FILTER_ID}
-				variant={
-					activeCategoryId === ORGANIZATION_MARKET_FILTER_ID ? "outline" : "secondary"
-				}
-				size="sm"
-				className={cn(
-					"h-9 shrink-0 gap-2 rounded-full border-[2px] shadow-xs transition-colors",
-					activeCategoryId === ORGANIZATION_MARKET_FILTER_ID
-						? "border-foreground bg-background text-foreground"
-						: "border-transparent text-muted-foreground hover:text-foreground",
-				)}
-				onClick={() => onCategoryChange(ORGANIZATION_MARKET_FILTER_ID)}
-				data-testid={`category-filter-${ORGANIZATION_MARKET_FILTER_ID}`}
-			>
-				<Building2 className="h-4 w-4 shrink-0" />
-				{t("tabs.organizationShared")}
-			</Button>
+			{showOrganizationShared ? (
+				<Button
+					key={ORGANIZATION_MARKET_FILTER_ID}
+					variant={
+						activeCategoryId === ORGANIZATION_MARKET_FILTER_ID ? "outline" : "secondary"
+					}
+					size="sm"
+					className={cn(
+						"h-9 shrink-0 gap-2 rounded-full border-[2px] shadow-xs transition-colors",
+						activeCategoryId === ORGANIZATION_MARKET_FILTER_ID
+							? "border-foreground bg-background text-foreground"
+							: "border-transparent text-muted-foreground hover:text-foreground",
+					)}
+					onClick={() => onCategoryChange(ORGANIZATION_MARKET_FILTER_ID)}
+					data-testid={`category-filter-${ORGANIZATION_MARKET_FILTER_ID}`}
+				>
+					<Building2 className="h-4 w-4 shrink-0" />
+					{t("tabs.organizationShared")}
+				</Button>
+			) : null}
 
 			{categories.map((category) => {
 				const isActive = activeCategoryId === category.id

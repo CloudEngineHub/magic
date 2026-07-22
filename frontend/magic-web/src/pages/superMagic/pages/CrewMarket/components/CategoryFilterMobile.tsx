@@ -8,6 +8,7 @@ interface CategoryFilterMobileProps {
 	categories: CategoryView[]
 	activeCategoryId: string
 	onCategoryChange: (categoryId: string) => void
+	showOrganizationShared?: boolean
 }
 
 interface TabItem {
@@ -25,12 +26,15 @@ function CategoryFilterMobile({
 	categories,
 	activeCategoryId,
 	onCategoryChange,
+	showOrganizationShared = true,
 }: CategoryFilterMobileProps) {
 	const { t } = useTranslation("crew/market")
 
 	const tabs: TabItem[] = [
 		{ id: ALL_MARKET_FILTER_ID, label: t("categories.allCrew") },
-		{ id: ORGANIZATION_MARKET_FILTER_ID, label: t("tabs.organizationShared") },
+		...(showOrganizationShared
+			? [{ id: ORGANIZATION_MARKET_FILTER_ID, label: t("tabs.organizationShared") }]
+			: []),
 		...categories.map((c) => ({ id: c.id, label: c.name })),
 	]
 

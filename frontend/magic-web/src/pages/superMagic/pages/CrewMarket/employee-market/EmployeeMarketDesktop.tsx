@@ -47,6 +47,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 	const storeRef = useRef(new StoreCrewStore())
 	const store = storeRef.current
 	const { confirm, dialog } = useConfirmDialog()
+	const isPersonalOrganization = userStore.user.isPersonalOrganization
 	const { isAllowed: canCreateAgent } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.AgentCreate,
 	)
@@ -82,6 +83,15 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 			},
 		)
 	}, [store])
+
+	useEffect(() => {
+		if (!isPersonalOrganization || store.marketType !== "ORGANIZATION") return
+
+		// A user can switch organizations without remounting the market page. Clear the
+		// organization-only filter so a personal organization never keeps showing its data.
+		setSelectedAgent(null)
+		void store.fetchAgents({ page: 1, market_type: undefined, category_id: undefined })
+	}, [isPersonalOrganization, store, store.marketType])
 
 	// Debounced keyword search; skip while IME is composing (CJK input).
 	useEffect(() => {
@@ -179,7 +189,12 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 		[handleOpenConversation, store],
 	)
 
-	const activeFilterId = resolveActiveMarketFilterId(store.marketType, store.categoryId)
+	const activeFilterId = resolveActiveMarketFilterId(
+		isPersonalOrganization && store.marketType === "ORGANIZATION"
+			? undefined
+			: store.marketType,
+		store.categoryId,
+	)
 
 	const handleCategoryChange = useCallback(
 		(filterId: string) => {
@@ -285,6 +300,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 					categories={store.categories}
 					activeCategoryId={activeFilterId}
 					onCategoryChange={handleCategoryChange}
+					showOrganizationShared={!isPersonalOrganization}
 				/>
 
 				{store.loading ? (

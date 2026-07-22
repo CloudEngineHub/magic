@@ -37,6 +37,7 @@ function CrewMarketMobilePanelBase() {
 	const navigate = useNavigate()
 	const storeRef = useRef(new StoreCrewStore())
 	const store = storeRef.current
+	const isPersonalOrganization = userStore.user.isPersonalOrganization
 	const [searchKeyword, setSearchKeyword] = useState("")
 	const debouncedKeyword = useDebounce(searchKeyword, { wait: 400 })
 	const [selectedAgent, setSelectedAgent] = useState<StoreAgentView | null>(null)
@@ -57,6 +58,14 @@ function CrewMarketMobilePanelBase() {
 			},
 		)
 	}, [store])
+
+	useEffect(() => {
+		if (!isPersonalOrganization || store.marketType !== "ORGANIZATION") return
+
+		// Keep the mobile market aligned with the active organization after an org switch.
+		setSelectedAgent(null)
+		void store.fetchAgents({ page: 1, market_type: undefined, category_id: undefined })
+	}, [isPersonalOrganization, store, store.marketType])
 
 	// Trigger search on debounced keyword changes, skip initial empty render
 	const isFirstRender = useRef(true)
@@ -134,7 +143,12 @@ function CrewMarketMobilePanelBase() {
 		[handleOpenConversation, store],
 	)
 
-	const activeFilterId = resolveActiveMarketFilterId(store.marketType, store.categoryId)
+	const activeFilterId = resolveActiveMarketFilterId(
+		isPersonalOrganization && store.marketType === "ORGANIZATION"
+			? undefined
+			: store.marketType,
+		store.categoryId,
+	)
 
 	const handleCategoryChange = useCallback(
 		(filterId: string) => {
@@ -249,6 +263,7 @@ function CrewMarketMobilePanelBase() {
 						categories={store.categories}
 						activeCategoryId={activeFilterId}
 						onCategoryChange={handleCategoryChange}
+						showOrganizationShared={!isPersonalOrganization}
 					/>
 				</div>
 
