@@ -12,6 +12,7 @@ import { isEmpty } from "lodash-es"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
+import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 
 export const Attachment = ({
 	attachments,
@@ -33,7 +34,11 @@ export const Attachment = ({
 	}
 
 	const handleDownload = (file_id: string) => {
-		getTemporaryDownloadUrl({ file_ids: [file_id], is_download: true }).then((res: any) => {
+		getTemporaryDownloadUrl({
+			file_ids: [file_id],
+			is_download: true,
+			download_mode: DownloadImageMode.Download,
+		}).then((res: any) => {
 			downloadFileWithAnchor(res[0]?.url)
 		})
 	}
@@ -132,7 +137,13 @@ export const Attachment = ({
 									)}
 								>
 									{isFolder && !display_config ? (
-										<img src={FolderIcon} alt="folder" width={24} height={24}  data-testid="message-attachment-image"/>
+										<img
+											src={FolderIcon}
+											alt="folder"
+											width={24}
+											height={24}
+											data-testid="message-attachment-image"
+										/>
 									) : (
 										<MagicFileIcon
 											type={getAttachmentType(item) || item.file_extension}

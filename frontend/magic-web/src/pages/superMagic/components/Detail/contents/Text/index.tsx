@@ -104,12 +104,7 @@ export default function Text(props: any) {
 		if ((editingContent || editingContent === "") && editingContent !== content) {
 			// 保存文本编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
-			await saveEditContent?.(
-				shadow(editingContent),
-				file_id,
-				enable_shadow,
-				fetchFileVersions,
-			)
+			await saveEditContent?.(editingContent, file_id, enable_shadow, fetchFileVersions)
 			// 更新 content 状态
 			setContent(editingContent)
 		}
