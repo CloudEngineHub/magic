@@ -8,7 +8,7 @@ import type {
 	GenerateExtendedImageRequest,
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { GenerateHightImageResponse as ApiGenerateHightImageResponse } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -29,19 +29,25 @@ import { useDesignFileCopy } from "./useDesignFileCopy"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import {
-	isRelativeDesignDslPath,
-	normalizeDesignApiPath,
-	resolveDesignDslPathCandidatesToWorkspaceRelative,
-	resolveDesignDslPathToWorkspaceRelative,
-	resolveDesignDslPathToWorkspaceAbsolute,
-} from "../utils/designDslPathUtils"
+	isCurrentCanvasResourcePath,
+	isLegacyBareDesignResourcePath,
+	isRelativeDesignPath,
+	resolveDesignPathForOperation,
+	toDesignDslPath,
+	toDesignApiPath,
+	toWorkspaceAbsoluteApiPath,
+	toWorkspaceAbsoluteApiPathForOperation,
+	toWorkspaceRelativeCandidates,
+	toWorkspaceRelativePath,
+} from "../utils/designPath"
 import {
 	buildReferenceImageOptions,
 	getReferenceImageCrop,
-} from "@/components/CanvasDesign/canvas/utils/imageCropUtils"
+} from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { clipboard } from "@/utils/clipboard-helpers"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
 
 interface UseDesignMethodsOptions {
 	projectId?: string
@@ -149,7 +155,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getOrCreateImagesDir,
 	})
 
-	const { completeImagePrompt } = useImagePromptCompletion({
+	const { completeImagePrompt, completeTextContent } = useImagePromptCompletion({
 		projectId,
 		flatAttachments,
 		designProjectBasePath,
@@ -171,6 +177,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		currentFile,
 		flatAttachments,
 		getFileInfoById,
+		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir,
 	})
@@ -178,6 +185,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const { getStorage, saveStorage, getRootStorage, saveRootStorage } = useCanvasStorage({
 		designProjectId,
 		designProjectBasePath,
+		flatAttachments,
+		attachmentIndex,
 	})
 
 	const { addToConversation, downloadFiles } = useConversationAndDownload({
@@ -191,6 +200,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		afterAddFileToNewTopic,
 		onExitFullscreen,
 		downloadPolicy,
+		projectId,
+		currentFile,
 	})
 
 	const { generateHightImage, getConvertHightConfig } = useHighImageGeneration({
@@ -219,10 +230,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const normalizeComparablePath = useCallback(
 		(path?: string) => {
 			if (!path) return ""
-			const resolvedPath = resolveDesignDslPathToWorkspaceRelative(
-				path,
+			const resolvedPath = toWorkspaceRelativePath(path, {
 				designProjectBasePath,
-			)
+			})
 			return resolvedPath
 				.replace(/^\/+|\/+$/g, "")
 				.replace(/\\/g, "/")
@@ -234,10 +244,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const normalizeComparablePathCandidates = useCallback(
 		(path?: string) => {
 			if (!path) return []
-			return resolveDesignDslPathCandidatesToWorkspaceRelative(
-				path,
+			return toWorkspaceRelativeCandidates(path, {
 				designProjectBasePath,
-			).map((candidate) =>
+			}).map((candidate) =>
 				candidate
 					.replace(/^\/+|\/+$/g, "")
 					.replace(/\\/g, "/")
@@ -314,7 +323,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				| "design.errors.expandImageImagesDirUnresolved",
 			options?: { ensureTrailingSlash?: boolean },
 		) => {
-			const resolved = normalizeDesignApiPath(path, designProjectBasePath, options)
+			const resolved = toDesignApiPath(path, { designProjectBasePath }, options)
 			if (!resolved) throw new Error(t(errorKey))
 			return resolved
 		},
@@ -332,29 +341,95 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				| "design.errors.expandImageImagesDirUnresolved",
 			options?: { ensureTrailingSlash?: boolean },
 		) => {
-			const resolved = resolveDesignDslPathToWorkspaceAbsolute(
-				path,
-				designProjectBasePath,
-				options,
-			)
-			if (isRelativeDesignDslPath(path) && !resolved.startsWith("/")) {
+			const resolved =
+				isLegacyBareDesignResourcePath(path) && !options?.ensureTrailingSlash
+					? toWorkspaceAbsoluteApiPathForOperation(
+							path,
+							{
+								designProjectBasePath,
+								flatAttachments,
+								attachmentIndex,
+								attachmentsReady,
+							},
+							options,
+						)
+					: toWorkspaceAbsoluteApiPath(path, { designProjectBasePath }, options)
+			if (!resolved || (isRelativeDesignPath(path) && !resolved.startsWith("/"))) {
 				throw new Error(t(errorKey))
 			}
 			return resolved
 		},
-		[designProjectBasePath, t],
+		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments, t],
 	)
 
 	const resolveAbsolutePath: NonNullable<CanvasDesignMethods["resolveAbsolutePath"]> =
 		useCallback(
 			(path: string) => {
+				if (isLegacyBareDesignResourcePath(path)) {
+					const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
+						designProjectBasePath,
+						flatAttachments,
+						attachmentIndex,
+						attachmentsReady,
+					})
+					// 这里主要服务于资源同一性和缓存 key。无法唯一确认时保留原值，
+					// 让调用侧不命中，而不是错误地把它折叠到当前画布。
+					return resolved ?? path
+				}
 				return resolveWorkspaceAbsoluteApiPath(
 					path,
 					"design.errors.designResourcePathUnresolved",
 				)
 			},
-			[resolveWorkspaceAbsoluteApiPath],
+			[
+				attachmentIndex,
+				attachmentsReady,
+				designProjectBasePath,
+				flatAttachments,
+				resolveWorkspaceAbsoluteApiPath,
+			],
 		)
+
+	const resolveResourcePathCandidates: NonNullable<
+		CanvasDesignMethods["resolveResourcePathCandidates"]
+	> = useCallback(
+		(path: string) => {
+			const ctx = { designProjectBasePath, flatAttachments, attachmentIndex }
+			const candidates = new Set<string>()
+			const addCandidate = (candidate?: string) => {
+				const normalized = candidate?.trim().replace(/\\/g, "/")
+				if (normalized) candidates.add(normalized)
+			}
+
+			addCandidate(path)
+			const operationResolution = resolveDesignPathForOperation(path, {
+				...ctx,
+				attachmentsReady,
+			})
+			if (operationResolution.status === "found") {
+				addCandidate(operationResolution.resolvedPath)
+				addCandidate(toDesignDslPath(operationResolution.resolvedPath, ctx))
+				return Array.from(candidates)
+			}
+			if (isLegacyBareDesignResourcePath(path)) {
+				return Array.from(candidates)
+			}
+
+			const workspacePath = toWorkspaceRelativePath(path, ctx)
+			addCandidate(workspacePath)
+			addCandidate(toDesignDslPath(workspacePath, ctx))
+
+			toWorkspaceRelativeCandidates(path, ctx).forEach((candidate, index) => {
+				if (index === 0 || isCurrentCanvasResourcePath(candidate, ctx)) {
+					addCandidate(candidate)
+					addCandidate(toDesignDslPath(candidate, ctx))
+				}
+			})
+
+			return Array.from(candidates)
+		},
+		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
+	)
 
 	const getVirtualResourceScope = useCallback(() => {
 		return [selectedWorkspace?.id, projectId].filter(Boolean).join("/")
@@ -606,6 +681,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		return {
 			getImageModelList,
 			completeImagePrompt,
+			completeTextContent,
 			getVideoModelList,
 			generateVideo,
 			estimateVideoPoints,
@@ -624,7 +700,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			getFileInfo,
 			getFileResourceMeta,
 			resolveAbsolutePath,
+			resolveResourcePathCandidates,
 			getVirtualResourceScope,
+			getImageProcessCacheSignature: getPreviewFileUrlWatermarkSignature,
 			addToConversation,
 			downloadFiles,
 			getStorage,
@@ -648,6 +726,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	}, [
 		getImageModelList,
 		completeImagePrompt,
+		completeTextContent,
 		getVideoModelList,
 		generateVideo,
 		estimateVideoPoints,
@@ -666,6 +745,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getFileInfo,
 		getFileResourceMeta,
 		resolveAbsolutePath,
+		resolveResourcePathCandidates,
 		getVirtualResourceScope,
 		addToConversation,
 		downloadFiles,

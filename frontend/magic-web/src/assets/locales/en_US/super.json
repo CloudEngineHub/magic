@@ -570,6 +570,9 @@
 			"imageIdNotExists": "Image ID does not exist, cannot query image generation result",
 			"imageSrcEmpty": "Image source address is empty",
 			"imagesDirNotFound": "Cannot get upload target directory, please refresh and try again",
+			"invalidImageCrop": "The image crop is invalid and cannot be downloaded.",
+			"mediaDownloadFailed": "Failed to download media files. Please try again later.",
+			"mediaResolveFailed": "Some media elements could not be mapped to project files. Download was not started.",
 			"noDownloadLink": "No download link",
 			"noDownloadableImages": "No downloadable images",
 			"noFileList": "No file list",
@@ -601,6 +604,9 @@
 		"messages": {
 			"downloadSuccess": "Successfully downloaded {{count}} images",
 			"markerNeedDesignMode": "Markers need to switch to \"Design Mode\". Create a new topic to add markers",
+			"mediaDownloadPartial": "Downloaded {{successCount}} media files; {{failedCount}} failed",
+			"mediaDownloadSuccess": "Successfully downloaded {{count}} media files",
+			"mediaDownloading": "Downloading {{count}} media files...",
 			"packingDownloading": "Packing and downloading {{count}} images..."
 		},
 		"offlineNotice": {

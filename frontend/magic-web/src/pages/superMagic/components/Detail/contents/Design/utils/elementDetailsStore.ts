@@ -1,5 +1,5 @@
 import { isEqual } from "lodash-es"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 
 /**
  * element-details 重字段拆分（与后端 element_details_store.py 对齐）。

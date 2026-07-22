@@ -267,6 +267,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		debug: process.env.NODE_ENV === "development",
 		attachments,
 		duplicateFileHandler: sharedDuplicateHandler,
+		onUpdateAttachments,
 	})
 
 	// 使用hooks

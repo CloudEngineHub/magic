@@ -411,7 +411,7 @@ class ImagePromptCompletionAppService extends DesignAppService
 
     private function sanitizePrompt(string $prompt): string
     {
-        $prompt = stripcslashes(trim($prompt));
+        $prompt = trim($prompt);
         $prompt = preg_replace('/^```[a-zA-Z0-9_-]*\s*|\s*```$/u', '', $prompt) ?? $prompt;
         $prompt = trim($prompt);
 
@@ -421,7 +421,7 @@ class ImagePromptCompletionAppService extends DesignAppService
         }
 
         $prompt = preg_replace('/^(提示词|prompt)\s*[:：]\s*/iu', '', trim($prompt)) ?? $prompt;
-        $prompt = trim($prompt, " \t\n\r\0\x0B\"'“”‘’");
+        $prompt = $this->trimBoundaryQuotes($prompt);
         $prompt = preg_replace('/\s+/u', ' ', $prompt) ?? $prompt;
         $prompt = trim($prompt);
 
@@ -429,6 +429,13 @@ class ImagePromptCompletionAppService extends DesignAppService
             return mb_substr($prompt, 0, self::MAX_PROMPT_LENGTH);
         }
         return $prompt;
+    }
+
+    private function trimBoundaryQuotes(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/\A["\'“”‘’]+|["\'“”‘’]+\z/u', '', $text) ?? $text;
+        return trim($text);
     }
 
     /**

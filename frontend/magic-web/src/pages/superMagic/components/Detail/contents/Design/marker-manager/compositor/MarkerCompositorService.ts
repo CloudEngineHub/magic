@@ -1,14 +1,19 @@
-import type { Marker, MarkerArea, ImageElement } from "@/components/CanvasDesign/canvas/types"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import type {
+	Marker,
+	MarkerArea,
+	ImageElement,
+} from "@/components/CanvasDesign/runtime/document/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
 	UploadPrivateFileResponse,
-} from "@/components/CanvasDesign/types.magic"
-import { getPersistedSourceCrop } from "@/components/CanvasDesign/canvas/utils/imageCropUtils"
+} from "@/components/CanvasDesign/public/magic-types"
+import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { drawMarkerOnCanvas } from "./markerDrawers"
-import { generateUUID } from "@/components/CanvasDesign/canvas/utils/utils"
+import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
+import { getDesignPathFileName } from "../../utils/designPath"
 
 /** 用于合成的图片信息 */
 interface ImageInfoForComposite {
@@ -229,7 +234,7 @@ async function loadImageFromUrl(
 	const naturalHeight = image.naturalHeight
 
 	const urlPath = url.split("?")[0] || ""
-	const filename = urlPath.split("/").pop() || "image.png"
+	const filename = getDesignPathFileName(urlPath) || "image.png"
 
 	return {
 		image,

@@ -4,12 +4,11 @@ import { SuperMagicApi } from "@/apis"
 import type {
 	CompleteImagePromptRequest,
 	CompleteImagePromptResponse,
-} from "@/components/CanvasDesign/types.magic"
+	CompleteTextContentRequest,
+	CompleteTextContentResponse,
+} from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import {
-	createDesignWorkspacePathExists,
-	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
-} from "../utils/designDslPathUtils"
+import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
 
 interface UseImagePromptCompletionOptions {
 	projectId?: string
@@ -23,6 +22,9 @@ interface UseImagePromptCompletionReturn {
 	completeImagePrompt: (
 		params: CompleteImagePromptRequest,
 	) => Promise<CompleteImagePromptResponse>
+	completeTextContent: (
+		params: CompleteTextContentRequest,
+	) => Promise<CompleteTextContentResponse>
 }
 
 export function useImagePromptCompletion(
@@ -68,8 +70,29 @@ export function useImagePromptCompletion(
 		[designProjectBasePath, flatAttachments, projectId, t],
 	)
 
+	const completeTextContent = useCallback(
+		async (params: CompleteTextContentRequest): Promise<CompleteTextContentResponse> => {
+			if (!projectId) {
+				throw new Error(t("design.errors.projectIdNotExistsForGenerate"))
+			}
+
+			const requestParams: CompleteTextContentRequest = {
+				project_id: projectId,
+				user_prompt: params.user_prompt,
+			}
+
+			if (params.model_id) {
+				requestParams.model_id = params.model_id
+			}
+
+			return SuperMagicApi.completeTextContent(requestParams)
+		},
+		[projectId, t],
+	)
+
 	return {
 		completeImagePrompt,
+		completeTextContent,
 	}
 }
 
@@ -80,13 +103,10 @@ function resolveReferenceImagePath(params: {
 	getErrorMessage: () => string
 }): string {
 	const { imagePath, designProjectBasePath, flatAttachments, getErrorMessage } = params
-	const resolved = resolveDesignDslPathToWorkspaceAbsoluteByCandidates(
-		imagePath,
+	const resolved = toWorkspaceAbsoluteApiPathForOperation(imagePath, {
 		designProjectBasePath,
-		{
-			pathExists: createDesignWorkspacePathExists(flatAttachments),
-		},
-	)
+		flatAttachments,
+	})
 	if (!resolved) throw new Error(getErrorMessage())
 	return resolved
 }

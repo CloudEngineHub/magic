@@ -13,6 +13,7 @@ interface UseUploadWithModalOptions {
 	selectedTopic?: any
 	attachments?: AttachmentItem[]
 	duplicateFileHandler?: ReturnType<typeof useDuplicateFileHandler>
+	onUpdateAttachments?: () => void
 }
 
 export function useUploadWithModal({
@@ -21,6 +22,7 @@ export function useUploadWithModal({
 	selectedTopic,
 	attachments = [],
 	duplicateFileHandler: externalDuplicateHandler,
+	onUpdateAttachments,
 }: UseUploadWithModalOptions) {
 	const { t } = useTranslation("super")
 	const workspaceId = selectedProject?.workspace_id
@@ -37,6 +39,7 @@ export function useUploadWithModal({
 				uploadType: "file",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
+				onUpdateAttachments,
 			})
 
 			let firstError: unknown
@@ -90,7 +93,15 @@ export function useUploadWithModal({
 				throw firstError
 			}
 		},
-		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t],
+		[
+			attachments,
+			onUpdateAttachments,
+			projectId,
+			workspaceId,
+			selectedProject,
+			selectedTopic,
+			t,
+		],
 	)
 
 	// 实际上传处理函数（用于文件夹上传）
@@ -100,6 +111,7 @@ export function useUploadWithModal({
 				uploadType: "folder",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
+				onUpdateAttachments,
 			})
 
 			// Folder upload: all files share one upload task.
@@ -137,7 +149,15 @@ export function useUploadWithModal({
 				throw error
 			}
 		},
-		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t],
+		[
+			attachments,
+			onUpdateAttachments,
+			projectId,
+			workspaceId,
+			selectedProject,
+			selectedTopic,
+			t,
+		],
 	)
 
 	// 同名文件处理 handler（优先使用外部传入的共享 handler）

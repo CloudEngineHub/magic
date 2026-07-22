@@ -1,7 +1,7 @@
 import {
 	clearProjectAttachmentDragHoverPlainText,
 	setProjectAttachmentDragHoverPlainText,
-} from "@/components/CanvasDesign/components/MessageEditor/reference-assets/projectAttachmentDragHoverBridge"
+} from "@/components/CanvasDesign/ui/editors/message/reference-assets/projectAttachmentDragHoverBridge"
 import { TabItem } from "../../Detail/components/FilesViewer/types"
 import { AttachmentItem } from "../../TopicFilesButton/hooks"
 import projectFilesStore from "@/stores/projectFiles"

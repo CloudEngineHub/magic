@@ -571,6 +571,9 @@
 			"imageIdNotExists": "图片 ID 不存在，无法查询图片生成结果",
 			"imageSrcEmpty": "图片源地址为空",
 			"imagesDirNotFound": "无法获取上传目标目录，请刷新后重试",
+			"invalidImageCrop": "图片裁剪区域无效，无法下载",
+			"mediaDownloadFailed": "媒体文件下载失败，请稍后重试",
+			"mediaResolveFailed": "部分媒体元素无法映射到项目文件，未开始下载",
 			"noDownloadLink": "无下载链接",
 			"noDownloadableImages": "没有可下载的图片",
 			"noFileList": "没有文件列表",
@@ -602,6 +605,9 @@
 		"messages": {
 			"downloadSuccess": "成功下载 {{count}} 张图片",
 			"markerNeedDesignMode": "标记需切换至「设计模式」，创建新话题即可进行标记",
+			"mediaDownloadPartial": "已下载 {{successCount}} 个媒体文件，{{failedCount}} 个失败",
+			"mediaDownloadSuccess": "成功下载 {{count}} 个媒体文件",
+			"mediaDownloading": "正在下载 {{count}} 个媒体文件...",
 			"packingDownloading": "正在打包下载 {{count}} 张图片..."
 		},
 		"offlineNotice": {

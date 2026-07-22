@@ -1,9 +1,9 @@
 import { CanvasMarkerMentionData } from "@/components/business/MentionPanel/types"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	AREA_MARKER_STYLES,
 	POINT_MARKER_STYLES,
-} from "@/components/CanvasDesign/canvas/interaction/markers/markerStyles"
+} from "@/components/CanvasDesign/runtime/interaction/marker/markers/markerStyles"
 import CanvasMarkerIcon from "@/pages/superMagic/assets/svg/canvas-marker.svg"
 
 interface MarkerNamePrefixProps {
@@ -64,7 +64,12 @@ export default function MarkerNamePrefix({ data }: MarkerNamePrefixProps) {
 				height: pointHeight,
 			}}
 		>
-			<img src={CanvasMarkerIcon} alt="marker" className="h-full w-full object-cover"  data-testid="marker-name-prefix-image"/>
+			<img
+				src={CanvasMarkerIcon}
+				alt="marker"
+				className="h-full w-full object-cover"
+				data-testid="marker-name-prefix-image"
+			/>
 			{markerNumber !== undefined && (
 				<span
 					className="pointer-events-none absolute left-1/2 -translate-x-1/2 -translate-y-1/2 font-semibold text-white"

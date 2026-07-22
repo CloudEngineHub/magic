@@ -6,7 +6,7 @@ import {
 	type ImageElement,
 	type LayerElement,
 	type VideoElement,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -21,21 +21,22 @@ import {
 import {
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
-	isCanvasRelativeResourcePath,
+	isCanvasResourceRootPath,
 	isRemoteOrSpecialPath,
-	normalizePathLocal,
+	toWeakCanvasResourcePath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/canvas/utils/pathUtils"
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import {
-	findFileBySrc,
 	loadMagicProjectJsContent,
 	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
+import { resolveDesignAttachment } from "../utils/designPath"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
+import { isV2Version } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
@@ -58,7 +59,8 @@ interface ToolDesignData {
 
 /**
  * 画布图片/视频 src 仅两类语义：
- * - 当前设计目录内：`./images|videos|audios/...`（含历史裸 `images/...`，在此收口为 `./...`）
+ * - 当前设计目录内：`./images|videos|audios/...`
+ * - 历史裸路径：`images|videos|audios/...`（保留原值，交由过渡迁移按附件树判定）
  * - 工作区路径：`path/to/file` 或 `/path/to/file`（与附件 relative_file_path 对齐时去掉首尾 `/`）
  * 其余（http、blob、data、`//`、file: 等）不参与附件缺失判断。
  */
@@ -68,16 +70,15 @@ function normalizeCanvasMediaSrcForAttachmentWalk(raw: string): string | null {
 	if (isRemoteOrSpecialPath(trimmed)) return null
 	if (/^file:/i.test(trimmed)) return null
 
-	const local = normalizePathLocal(trimmed)
-
-	if (hasCurrentDirectoryPrefix(local)) {
-		const rest = stripCurrentDirectoryPrefix(local)
+	if (hasCurrentDirectoryPrefix(trimmed)) {
+		const rest = stripCurrentDirectoryPrefix(trimmed)
 		if (!rest) return null
 		return formatCanvasRelativeResourcePath(rest)
 	}
 
-	if (isCanvasRelativeResourcePath(local)) {
-		return formatCanvasRelativeResourcePath(stripPathEdgeSlashes(local))
+	const local = toWeakCanvasResourcePath(trimmed)
+	if (isCanvasResourceRootPath(local)) {
+		return stripPathEdgeSlashes(local)
 	}
 
 	if (local.includes("/")) return stripPathEdgeSlashes(local)
@@ -118,8 +119,57 @@ function designDataHasMediaMissingFromAttachments(
 	let missing = false
 	walkCanvasMediaSources(designData.canvas?.elements, (src) => {
 		if (missing) return
-		if (!findFileBySrc(src, storeFiles, designProjectBasePath, index)) missing = true
+		const resolvedFile = resolveDesignAttachment(
+			src,
+			{
+				flatAttachments: storeFiles,
+				designProjectBasePath,
+				attachmentIndex: index,
+			},
+			{ mode: "legacy-recovery" },
+		)
+		if (resolvedFile.status === "not-found") missing = true
 	})
+	return missing
+}
+
+/** v2 的生成配置位于 sidecar；processing 占位符缺配置时需要等待附件树同步后重读。 */
+export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
+	let missing = false
+	const walk = (elements: LayerElement[] | undefined): void => {
+		if (!elements?.length || missing) return
+
+		for (const element of elements) {
+			if (element.type === ElementTypeEnum.Image) {
+				const image = element as ImageElement
+				if (
+					(image.status === "pending" || image.status === "processing") &&
+					!image.generateImageRequest &&
+					!image.imageGenerationTaskMeta &&
+					!image.generateHightImageRequest
+				) {
+					missing = true
+					return
+				}
+			} else if (element.type === ElementTypeEnum.Video) {
+				const video = element as VideoElement
+				if (
+					(video.status === "pending" || video.status === "processing") &&
+					!video.generateVideoRequest
+				) {
+					missing = true
+					return
+				}
+			}
+
+			if (element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group) {
+				walk((element as FrameElement | GroupElement).children)
+				if (missing) return
+			}
+		}
+	}
+
+	walk(designData.canvas?.elements)
 	return missing
 }
 
@@ -628,7 +678,7 @@ export class DesignRemoteListener {
 	}
 
 	/**
-	 * file-change 链路：读远端 magic.project.js，必要时等待附件刷新后再次读取；
+	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
 	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignData | null> {
@@ -646,7 +696,12 @@ export class DesignRemoteListener {
 		}
 
 		if (!parsed) return null
-		if (dslBase) normalizeDesignDataPathsAfterLoad(parsed, dslBase)
+		if (dslBase) {
+			normalizeDesignDataPathsAfterLoad(parsed, dslBase, {
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			})
+		}
 		await hydrateDesignDataDetails(parsed, {
 			attachments: this.options.attachments,
 			flatAttachments: this.options.flatAttachments,
@@ -659,22 +714,35 @@ export class DesignRemoteListener {
 			...flattenFileItems(this.options.attachments ?? []),
 		]
 
-		if (!designDataHasMediaMissingFromAttachments(parsed, storeFiles, dslBase)) return parsed
+		const hasMissingMedia = designDataHasMediaMissingFromAttachments(
+			parsed,
+			storeFiles,
+			dslBase,
+		)
+		const hasPendingGenerationWithoutInfo =
+			isV2Version(parsed.version) && designDataHasPendingMediaWithoutGenerationRequest(parsed)
+		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return parsed
 
 		const projectId = this.options.projectId
-		if (!projectId) return null
+		if (!projectId) return hasMissingMedia ? null : parsed
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
 		} catch {
-			return null
+			// 生成配置同步超时不应阻塞占位符展示；媒体缺失仍沿用原有失败策略。
+			return hasMissingMedia ? null : parsed
 		}
 
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			const again = parseMagicProjectJsContent(content)
 			if (again) {
-				if (dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+				if (dslBase) {
+					normalizeDesignDataPathsAfterLoad(again, dslBase, {
+						flatAttachments: this.options.flatAttachments,
+						attachmentIndex: this.options.attachmentIndex,
+					})
+				}
 				await hydrateDesignDataDetails(again, {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,

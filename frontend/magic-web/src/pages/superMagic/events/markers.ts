@@ -1,5 +1,5 @@
-import type { PaddingInsetConfig, Marker } from "@/components/CanvasDesign/canvas/types"
-import type { IdentifyImageMarkResponse } from "@/components/CanvasDesign/types.magic"
+import type { PaddingInsetConfig, Marker } from "@/components/CanvasDesign/runtime/document/types"
+import type { IdentifyImageMarkResponse } from "@/components/CanvasDesign/public/magic-types"
 import type { CanvasMarkerMentionData } from "@/components/business/MentionPanel/types"
 import type { SuperMagicMessageQueueMessage } from "@/types/chat/intermediate_message"
 
