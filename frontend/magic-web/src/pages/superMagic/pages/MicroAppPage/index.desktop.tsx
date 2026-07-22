@@ -52,6 +52,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		selectedProject,
 		selectedTopic,
 		isReadOnly,
+		canRename,
 		attachments,
 		attachmentList,
 		activeFileId,
@@ -68,12 +69,16 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		handleFileTabsCacheLoaded,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		renameDialogOpen,
+		setRenameDialogOpen,
+		renameSubmitting,
 		isDatabasePanelOpen,
 		setIsDatabasePanelOpen,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
+		handleRenameProject,
 	} = controller
 
 	const topicActions = useScopedMessageHeaderTopicActions({
@@ -168,6 +173,8 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 					onBack={handleBackToMicroApps}
 					onToggleDatabasePanel={handleToggleDatabasePanel}
 					onPublish={handleOpenPublishDialog}
+					canRename={canRename}
+					onRename={() => setRenameDialogOpen(true)}
 					canManageCollaborators={canManageCollaborators}
 					onManageCollaborators={handleManageCollaborators}
 				/>
@@ -314,6 +321,10 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
 				onProjectNameChange={handleProjectNameChange}
+				renameDialogOpen={renameDialogOpen}
+				renameSubmitting={renameSubmitting}
+				onRenameDialogOpenChange={setRenameDialogOpen}
+				onRenameProject={handleRenameProject}
 				collaboratorPanel={CollaboratorUpdatePanel}
 			/>
 			{isDatabasePanelOpen ? (

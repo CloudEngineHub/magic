@@ -79,6 +79,7 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 		selectedProject,
 		selectedTopic,
 		isReadOnly,
+		canRename,
 		attachments,
 		attachmentList,
 		defaultEntryFile,
@@ -88,12 +89,16 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 		handleToggleDatabasePanel,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		renameDialogOpen,
+		setRenameDialogOpen,
+		renameSubmitting,
 		isDatabasePanelOpen,
 		setIsDatabasePanelOpen,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
+		handleRenameProject,
 	} = controller
 
 	const setPreviewDetail = useMemoizedFn((detail: PreviewDetail | null) => {
@@ -166,6 +171,8 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 					onBack={handleBackToMicroApps}
 					onToggleDatabasePanel={handleToggleDatabasePanel}
 					onPublish={handleOpenPublishDialog}
+					canRename={canRename}
+					onRename={() => setRenameDialogOpen(true)}
 					canManageCollaborators={canManageCollaborators}
 					onManageCollaborators={handleManageCollaborators}
 				/>
@@ -230,6 +237,10 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
 				onProjectNameChange={handleProjectNameChange}
+				renameDialogOpen={renameDialogOpen}
+				renameSubmitting={renameSubmitting}
+				onRenameDialogOpenChange={setRenameDialogOpen}
+				onRenameProject={handleRenameProject}
 				collaboratorPanel={CollaboratorUpdatePanel}
 			/>
 			{isDatabasePanelOpen ? (

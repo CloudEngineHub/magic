@@ -1,4 +1,4 @@
-import { ArrowLeft, Database, Rocket, UserRoundPlus } from "lucide-react"
+import { ArrowLeft, Database, PenLine, Rocket, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
@@ -11,6 +11,8 @@ interface MicroAppMobileHeaderProps {
 	onBack: () => void
 	onToggleDatabasePanel: () => void
 	onPublish: () => void
+	canRename?: boolean
+	onRename?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
 }
@@ -23,6 +25,8 @@ export default function MicroAppMobileHeader({
 	onBack,
 	onToggleDatabasePanel,
 	onPublish,
+	canRename,
+	onRename,
 	canManageCollaborators,
 	onManageCollaborators,
 }: MicroAppMobileHeaderProps) {
@@ -45,9 +49,25 @@ export default function MicroAppMobileHeader({
 				<ArrowLeft className="size-[18px]" aria-hidden />
 			</Button>
 
-			<p className="min-w-0 flex-1 truncate px-1 text-base font-medium text-foreground">
-				{projectName}
-			</p>
+			<div className="min-w-0 flex-1">
+				{canRename && onRename ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-9 max-w-full justify-start gap-1.5 px-1"
+						onClick={onRename}
+						data-testid="micro-app-mobile-rename-button"
+					>
+						<span className="truncate text-base font-medium">{projectName}</span>
+						<PenLine className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+					</Button>
+				) : (
+					<p className="truncate px-1 text-base font-medium text-foreground">
+						{projectName}
+					</p>
+				)}
+			</div>
 
 			<div className="flex shrink-0 items-center gap-0.5">
 				<Button

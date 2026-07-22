@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 
 import MicroAppPublishDialog from "./MicroAppPublishDialog"
+import MicroAppRenameDialog from "./MicroAppRenameDialog"
 
 interface MicroAppPageOverlaysProps {
 	projectId?: string
@@ -8,6 +9,10 @@ interface MicroAppPageOverlaysProps {
 	publishDialogOpen: boolean
 	onPublishDialogOpenChange: (open: boolean) => void
 	onProjectNameChange: (projectName: string) => void
+	renameDialogOpen: boolean
+	renameSubmitting: boolean
+	onRenameDialogOpenChange: (open: boolean) => void
+	onRenameProject: (projectName: string) => Promise<boolean>
 	collaboratorPanel: ReactNode
 }
 
@@ -18,6 +23,10 @@ export default function MicroAppPageOverlays({
 	publishDialogOpen,
 	onPublishDialogOpenChange,
 	onProjectNameChange,
+	renameDialogOpen,
+	renameSubmitting,
+	onRenameDialogOpenChange,
+	onRenameProject,
 	collaboratorPanel,
 }: MicroAppPageOverlaysProps) {
 	return (
@@ -28,6 +37,13 @@ export default function MicroAppPageOverlays({
 				projectName={projectName}
 				onProjectNameChange={onProjectNameChange}
 				onOpenChange={onPublishDialogOpenChange}
+			/>
+			<MicroAppRenameDialog
+				open={renameDialogOpen}
+				projectName={projectName}
+				isSubmitting={renameSubmitting}
+				onOpenChange={onRenameDialogOpenChange}
+				onConfirm={onRenameProject}
 			/>
 			{collaboratorPanel}
 		</>

@@ -3255,6 +3255,15 @@
 			"unpublishFailed": "Failed to unpublish. Please retry.",
 			"unpublishSuccess": "Micro app unpublished",
 			"update": "Save settings"
+		},
+		"rename": {
+			"button": "Rename micro app",
+			"description": "Change the project name of this micro app",
+			"failed": "Failed to rename. Please retry.",
+			"nameLabel": "Micro app name",
+			"placeholder": "Enter a micro app name",
+			"success": "Micro app name updated",
+			"title": "Rename micro app"
 		}
 	},
 	"microAppShare": {

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceFn, useDeepCompareEffect, useMemoizedFn } from "ahooks"
+import { useTranslation } from "react-i18next"
 
 import { SuperMagicApi } from "@/apis"
+import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
@@ -14,7 +16,8 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import { canManageProject, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import SuperMagicService from "@/pages/superMagic/services"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -22,12 +25,14 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
 import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
+import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 
 /**
  * 微应用桌面端和移动端共用的数据控制层。
  * 文件加载、默认入口恢复和项目权限只维护一份，页面组件只负责各自的布局。
  */
 export function useMicroAppPageController(projectId: string) {
+	const { t } = useTranslation("super")
 	const store = useAppStore()
 	const { conversation } = store
 	const navigate = useNavigate()
@@ -36,12 +41,19 @@ export function useMicroAppPageController(projectId: string) {
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>(null)
 	const [isFileTabsCacheLoaded, setIsFileTabsCacheLoaded] = useState(false)
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+	const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+	const [renameSubmitting, setRenameSubmitting] = useState(false)
 	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+	const canRename = Boolean(
+		selectedProject?.id &&
+		selectedProject.workspace_id &&
+		(!selectedProject.user_role || canManageProject(selectedProject.user_role)),
+	)
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
 
@@ -61,6 +73,8 @@ export function useMicroAppPageController(projectId: string) {
 		setIsFileTabsCacheLoaded(false)
 		defaultEntryOpenedKeyRef.current = null
 		setPublishDialogOpen(false)
+		setRenameDialogOpen(false)
+		setRenameSubmitting(false)
 		setIsDatabasePanelOpen(false)
 	}, [projectId])
 
@@ -134,12 +148,7 @@ export function useMicroAppPageController(projectId: string) {
 		detailRef.current?.openFileTab(defaultEntryFile)
 	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
 
-	useEffect(() => {
-		store.projectFilesStore.setSelectedProject(selectedProject)
-		return () => {
-			store.projectFilesStore.setSelectedProject(null)
-		}
-	}, [selectedProject, store.projectFilesStore])
+	useMicroAppSelectedProjectSync(store.projectFilesStore, selectedProject)
 
 	useAttachmentsPolling({
 		projectId: selectedProject?.id,
@@ -255,8 +264,14 @@ export function useMicroAppPageController(projectId: string) {
 		}
 	})
 
-	const { openManageModal, CollaboratorUpdatePanel, canManageCollaborators } =
-		useCollaboratorUpdatePanel({ selectedProject })
+	const {
+		openManageModal,
+		CollaboratorUpdatePanel,
+		canManageCollaborators: hasCollaboratorManagementCapability,
+	} = useCollaboratorUpdatePanel({ selectedProject })
+	// 能力位只表示当前版本支持协作者管理，项目角色仍决定当前用户是否有权使用该入口。
+	const canManageCollaborators =
+		hasCollaboratorManagementCapability && canManageProject(selectedProject?.user_role)
 
 	const handleManageCollaborators = useMemoizedFn(() => {
 		if (!selectedProject || !canManageCollaborators) return
@@ -271,12 +286,40 @@ export function useMicroAppPageController(projectId: string) {
 		})
 	})
 
+	const handleRenameProject = useMemoizedFn(async (projectName: string) => {
+		if (!selectedProject?.id || !selectedProject.workspace_id || !canRename) return false
+
+		const nextProjectName = projectName.trim()
+		if (!nextProjectName || nextProjectName === selectedProject.project_name?.trim())
+			return false
+
+		setRenameSubmitting(true)
+		try {
+			await SuperMagicService.project.renameProject(
+				selectedProject.id,
+				nextProjectName,
+				selectedProject.workspace_id,
+			)
+			handleProjectNameChange(nextProjectName)
+			pubsub.publish(PubSubEvents.Update_Project_Name, selectedProject.id, nextProjectName)
+			magicToast.success(t("microAppPage.rename.success"))
+			return true
+		} catch (error) {
+			console.error("Failed to rename micro app:", error)
+			magicToast.error(t("microAppPage.rename.failed"))
+			return false
+		} finally {
+			setRenameSubmitting(false)
+		}
+	})
+
 	return {
 		store,
 		conversation,
 		selectedProject,
 		selectedTopic,
 		isReadOnly,
+		canRename,
 		attachments,
 		attachmentList,
 		activeFileId,
@@ -294,11 +337,15 @@ export function useMicroAppPageController(projectId: string) {
 		handleFileTabsCacheLoaded,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		renameDialogOpen,
+		setRenameDialogOpen,
+		renameSubmitting,
 		isDatabasePanelOpen,
 		setIsDatabasePanelOpen,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
+		handleRenameProject,
 	}
 }
