@@ -318,7 +318,7 @@ class TextContentCompletionAppService extends DesignAppService
 
     private function sanitizeText(string $text): string
     {
-        $text = stripcslashes(trim($text));
+        $text = trim($text);
         $text = preg_replace('/^```[a-zA-Z0-9_-]*\s*|\s*```$/u', '', $text) ?? $text;
         $text = trim($text);
 
@@ -330,11 +330,18 @@ class TextContentCompletionAppService extends DesignAppService
         $text = preg_replace('/^(优化后文本|文本|content|text)\s*[:：]\s*/iu', '', trim($text)) ?? $text;
         $text = str_replace(["\r\n", "\r"], "\n", $text);
         $text = preg_replace('/[ \t]+$/m', '', $text) ?? $text;
-        $text = trim($text, " \t\n\r\0\x0B\"'“”‘’");
+        $text = $this->trimBoundaryQuotes($text);
 
         if (mb_strlen($text) > self::MAX_TEXT_LENGTH) {
             return mb_substr($text, 0, self::MAX_TEXT_LENGTH);
         }
         return $text;
+    }
+
+    private function trimBoundaryQuotes(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/\A["\'“”‘’]+|["\'“”‘’]+\z/u', '', $text) ?? $text;
+        return trim($text);
     }
 }
