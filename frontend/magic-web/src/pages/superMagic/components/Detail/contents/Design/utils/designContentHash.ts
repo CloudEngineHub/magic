@@ -5,7 +5,10 @@ function getComparablePayload(data: DesignData) {
 		type: data.type,
 		name: data.name,
 		version: data.version,
-		canvas: { elements: data.canvas?.elements || [] },
+		canvas: {
+			elements: data.canvas?.elements || [],
+			connections: data.canvas?.connections || [],
+		},
 	}
 }
 

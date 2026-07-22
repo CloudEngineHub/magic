@@ -4,7 +4,6 @@ Checkpoint业务服务
 
 这个模块提供checkpoint相关的业务服务，包括：
 - 创建checkpoint
-- 保存文件快照
 - 获取checkpoint信息
 - 列出所有checkpoint
 - 获取特定checkpoint之后的所有checkpoint
@@ -12,9 +11,8 @@ Checkpoint业务服务
 
 from datetime import datetime
 from typing import Optional, List
-from app.core.entity.checkpoint import CheckpointInfo, FileOperation, ChatHistorySnapshot, VirtualCheckpoint
+from app.core.entity.checkpoint import CheckpointInfo, ChatHistorySnapshot, VirtualCheckpoint
 from app.infrastructure.checkpoint.storage import CheckpointStorage
-from app.infrastructure.checkpoint.file_snapshot_manager import FileSnapshotManager
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.path_manager import PathManager
@@ -31,7 +29,6 @@ class CheckpointService(Base):
 
     def __init__(self):
         self.storage = CheckpointStorage()
-        self.file_snapshot_manager = FileSnapshotManager()
         self.metadata_manager = CheckpointMetadataManager()
         self.chat_history_snapshot_manager = ChatHistorySnapshotManager()
 
@@ -182,51 +179,6 @@ class CheckpointService(Base):
             # 清理可能创建的目录
             await self.storage.delete_checkpoint_directory(message_id)
             raise
-
-    async def save_initial_file_snapshot(self, checkpoint_info: CheckpointInfo, file_path: str, operation: FileOperation) -> None:
-        """保存初始化文件快照"""
-        try:
-            # 创建初始化文件快照
-            file_snapshot = await self.file_snapshot_manager.create_initial_file_snapshot(checkpoint_info.checkpoint_id, file_path, operation)
-
-            if file_snapshot:
-                # 更新checkpoint信息
-                checkpoint_info.file_snapshots.append(file_snapshot)
-                success = await self.metadata_manager.save_checkpoint_info(checkpoint_info)
-
-                if success:
-                    logger.info(f"保存文件快照成功: {file_path} ({operation.value})")
-                else:
-                    logger.error(f"更新checkpoint信息失败: {file_path}")
-            else:
-                logger.warning(f"创建文件快照失败: {file_path}")
-
-        except Exception as e:
-            logger.error(f"保存初始化文件快照失败: {e}")
-
-    async def save_latest_file_snapshot(self, checkpoint_info: CheckpointInfo, file_path: str, operation: FileOperation) -> None:
-        """保存最新文件快照"""
-        try:
-            # 创建最新文件快照
-            file_snapshot = await self.file_snapshot_manager.create_latest_file_snapshot(checkpoint_info.checkpoint_id, file_path, operation)
-
-            if file_snapshot:
-                logger.info(f"保存最新文件快照成功: {file_path} ({operation.value})")
-            else:
-                logger.warning(f"创建最新文件快照失败: {file_path}")
-
-        except Exception as e:
-            logger.error(f"保存最新文件快照失败: {e}")
-
-    async def has_file_snapshot(self, checkpoint_info: CheckpointInfo, file_path: str) -> bool:
-        """检查指定文件是否已有快照（避免重复快照）"""
-        try:
-            # 使用FileSnapshotManager检查快照存在性
-            return await self.file_snapshot_manager.has_snapshot_for_file(checkpoint_info.checkpoint_id, file_path)
-
-        except Exception as e:
-            logger.error(f"检查文件快照失败 {file_path}: {e}")
-            return False
 
     async def get_checkpoint(self, message_id: str) -> Optional[CheckpointInfo]:
         """获取checkpoint信息"""

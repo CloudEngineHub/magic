@@ -11,7 +11,7 @@ import logging
 from typing import Optional
 from opentelemetry.trace import Span
 
-from .constants import LangfuseAttributes
+from .constants import LangfuseAttributes, OpenTelemetryAttributes
 
 # Import MetadataUtil conditionally to handle import errors
 try:
@@ -155,6 +155,149 @@ def get_user_id_from_metadata() -> Optional[str]:
         return None
 
 
+# Header names whose values must never be recorded (case-insensitive).
+_SENSITIVE_HEADERS = frozenset({
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "token",
+    "magic-authorization",
+})
+
+
+def redact_headers(headers) -> dict:
+    """
+    Convert an HTTP headers object to a plain dict, masking sensitive values.
+
+    Accepts anything dict-like or iterable of (key, value) pairs (httpx.Headers,
+    requests headers, aiohttp CIMultiDict, etc.). Sensitive header values are
+    replaced with "<redacted>" to avoid leaking credentials into traces.
+
+    Args:
+        headers: Headers object or iterable of key/value pairs
+
+    Returns:
+        Plain dict with sensitive values masked
+    """
+    result = {}
+    try:
+        items = headers.items() if hasattr(headers, "items") else headers
+        for key, value in items:
+            key_str = key.decode() if isinstance(key, bytes) else str(key)
+            if key_str.lower() in _SENSITIVE_HEADERS:
+                result[key_str] = "<redacted>"
+            else:
+                result[key_str] = value.decode() if isinstance(value, bytes) else str(value)
+    except Exception as e:
+        _logger.debug(f"Failed to redact headers: {e}")
+    return result
+
+
+def _to_langfuse_io_value(value, max_length: int = 10000) -> Optional[str]:
+    """
+    Serialize an input/output value to a string suitable for Langfuse.
+
+    Langfuse reads observation/trace input/output from string attributes. Dicts/lists
+    are JSON-encoded; other types are stringified. Oversized payloads are truncated to
+    keep span attributes bounded.
+
+    Args:
+        value: The value to serialize (dict/list/str/etc.)
+        max_length: Max length of the resulting string before truncation
+
+    Returns:
+        Serialized string, or None if serialization fails or value is None
+    """
+    if value is None:
+        return None
+
+    try:
+        if isinstance(value, (dict, list)):
+            import json
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        else:
+            text = str(value)
+    except Exception as e:
+        _logger.debug(f"Failed to serialize Langfuse IO value: {e}")
+        return None
+
+    if len(text) > max_length:
+        text = text[:max_length] + "...<truncated>"
+    return text
+
+
+def set_observation_io(span: Span, input_value=None, output_value=None) -> None:
+    """
+    Set observation-level input/output on a span for Langfuse.
+
+    Fills the Input/Output columns of the observation in the Langfuse UI. Also
+    writes the OpenTelemetry GenAI semantic-convention attributes
+    (gen_ai.input.messages / gen_ai.output.messages) so that OTEL-native
+    backends such as Guance (观测云), which do not parse Langfuse's private
+    langfuse.observation.* keys, can still populate their Input/Output panels.
+
+    Args:
+        span: OpenTelemetry span to enrich
+        input_value: Value for the Input column (dict/list/str). Skipped if None.
+        output_value: Value for the Output column (dict/list/str). Skipped if None.
+    """
+    if not span or not span.is_recording():
+        return
+
+    if input_value is not None:
+        text = _to_langfuse_io_value(input_value)
+        if text is not None:
+            span.set_attribute(LangfuseAttributes.OBSERVATION_INPUT, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_PROMPT, text)
+
+    if output_value is not None:
+        text = _to_langfuse_io_value(output_value)
+        if text is not None:
+            span.set_attribute(LangfuseAttributes.OBSERVATION_OUTPUT, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_COMPLETION, text)
+
+
+def set_trace_io(span: Span, input_value=None, output_value=None) -> None:
+    """
+    Set trace-level input/output on the ROOT span for Langfuse.
+
+    Fills the Input/Output columns of the trace in the Langfuse UI. Only meaningful
+    on the root span of a trace (e.g. the FastAPI server span). Also writes the
+    OpenTelemetry GenAI semantic-convention attributes
+    (gen_ai.input.messages / gen_ai.output.messages) so that OTEL-native backends
+    such as Guance (观测云) can populate their Input/Output panels.
+
+    Args:
+        span: Root OpenTelemetry span to enrich
+        input_value: Value for the trace Input column. Skipped if None.
+        output_value: Value for the trace Output column. Skipped if None.
+    """
+    if not span or not span.is_recording():
+        return
+
+    if input_value is not None:
+        text = _to_langfuse_io_value(input_value)
+        if text is not None:
+            span.set_attribute(LangfuseAttributes.TRACE_INPUT, text)
+            span.set_attribute(LangfuseAttributes.OBSERVATION_INPUT, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_PROMPT, text)
+
+    if output_value is not None:
+        text = _to_langfuse_io_value(output_value)
+        if text is not None:
+            span.set_attribute(LangfuseAttributes.TRACE_OUTPUT, text)
+            span.set_attribute(LangfuseAttributes.OBSERVATION_OUTPUT, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES, text)
+            span.set_attribute(OpenTelemetryAttributes.GEN_AI_COMPLETION, text)
+
+
 def set_span_name(span: Span, name: str) -> None:
     """
     Set both the OpenTelemetry span name and Langfuse name attribute
@@ -185,5 +328,26 @@ def set_span_name(span: Span, name: str) -> None:
 
     # Set Langfuse name attribute for better display
     span.set_attribute(LangfuseAttributes.NAME, name)
+    span.set_attribute(LangfuseAttributes.OBSERVATION_NAME, name)
 
     _logger.debug(f"Set span name: {name}")
+
+
+def set_trace_name(span: Span, name: str) -> None:
+    """
+    Set the Langfuse trace-level name on the ROOT span.
+
+    The trace Name column in the Langfuse UI is derived from ``langfuse.trace.name``
+    (or the root span). Setting only ``langfuse.name`` or the span name is NOT enough
+    to populate the trace Name column, so call this on the root span (e.g. the FastAPI
+    server span).
+
+    Args:
+        span: Root OpenTelemetry span
+        name: The trace name (e.g. "POST /api/v1/messages")
+    """
+    if not span or not span.is_recording():
+        return
+
+    span.set_attribute(LangfuseAttributes.TRACE_NAME, name)
+    _logger.debug(f"Set trace name: {name}")

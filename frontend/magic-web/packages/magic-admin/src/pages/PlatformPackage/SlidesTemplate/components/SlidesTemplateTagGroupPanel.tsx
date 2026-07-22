@@ -10,7 +10,7 @@ interface SlidesTemplateTagGroupPanelProps {
 	groups: SlidesTemplate.TagItem[]
 	selectedGroupId: string | null
 	hasEditRight: boolean
-	onSelect: (groupId: string) => void
+	onSelect: (groupId: string | null) => void
 	onCreate: () => void
 	onEdit: (group: SlidesTemplate.TagItem) => void
 	onDelete: (group: SlidesTemplate.TagItem) => void
@@ -57,6 +57,25 @@ export const SlidesTemplateTagGroupPanel = memo(
 						{t("slidesTemplate.tag.addGroupButton")}
 					</MagicButton>
 				</Flex>
+				<div
+					role="button"
+					tabIndex={0}
+					style={{
+						borderRadius: 6,
+						background: selectedGroupId === null ? "#f0f5ff" : "transparent",
+						cursor: "pointer",
+						padding: "10px",
+						marginBottom: 4,
+					}}
+					onClick={() => onSelect(null)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" || event.key === " ") onSelect(null)
+					}}
+				>
+					<Typography.Text strong={selectedGroupId === null}>
+						{t("slidesTemplate.tag.allOption")}
+					</Typography.Text>
+				</div>
 				<Flex vertical gap={4} style={{ overflowY: "auto", maxHeight: 500 }}>
 					{groups.map((group) => {
 						const selected = group.id === selectedGroupId

@@ -9,37 +9,9 @@ import { CardActionStrip } from "../../components/CardActionStrip"
 import { CARD_IMAGE_PROCESS } from "../../constants/imageProcess"
 import { useCarousel } from "../../hooks/useCarousel"
 import { useSelfMediaStore } from "../../stores"
-import type { PlatformComponentProps, SelfMediaPost } from "../../types"
+import type { PlatformComponentProps, SelfMediaPost, SelfMediaPostMetaPatch } from "../../types"
 import { rednoteTokens } from "./tokens"
-
-const REDNOTE_STRUCTURED_TAG_KEYS = ["core", "mid", "longtail", "trend"] as const
-
-function splitRednoteTagText(value: unknown): string[] {
-	if (typeof value !== "string" && typeof value !== "number") {
-		return []
-	}
-
-	return String(value)
-		.split(/[\s,，、#]+/)
-		.map((tag) => tag.trim().replace(/^#+/, ""))
-		.filter(Boolean)
-}
-
-function normalizeRednoteTags(tagsRaw: SelfMediaPost["meta"]["tags"]): string[] {
-	const tags =
-		tagsRaw && typeof tagsRaw === "object" && !Array.isArray(tagsRaw)
-			? REDNOTE_STRUCTURED_TAG_KEYS.flatMap((key) => {
-					const value = tagsRaw[key]
-					return Array.isArray(value)
-						? value.flatMap(splitRednoteTagText)
-						: splitRednoteTagText(value)
-				})
-			: Array.isArray(tagsRaw)
-				? tagsRaw.flatMap(splitRednoteTagText)
-				: splitRednoteTagText(tagsRaw)
-
-	return Array.from(new Set(tags))
-}
+import { RednoteDetailMetaEditor } from "./RednoteDetailMetaEditor"
 
 interface DetailViewProps {
 	attachmentList?: PlatformComponentProps["attachmentList"]
@@ -50,6 +22,8 @@ interface DetailViewProps {
 	onAddCardToCurrentChat?: (idx: number) => void
 	/** Increment this value to force-refresh the currently active card */
 	activeCardExternalRefreshVersion?: number
+	allowEdit?: boolean
+	onUpdatePostMeta?: (patch: SelfMediaPostMetaPatch) => Promise<boolean>
 	onPreviewFocus?: (
 		event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
 	) => void
@@ -120,33 +94,33 @@ function RednoteDetailHeader({
 	)
 }
 
-function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
+function RednoteDetailContent({
+	post,
+	allowEdit,
+	onUpdatePostMeta,
+}: {
+	post: SelfMediaPost
+	allowEdit?: boolean
+	onUpdatePostMeta?: (patch: SelfMediaPostMetaPatch) => Promise<boolean>
+}) {
 	const title = post.meta.title || post.meta.feedTitle
 	const subtitle = post.meta.subtitle
-	const tags = normalizeRednoteTags(post.meta.tags)
+	const tags = post.meta.tags
 	const metaLine = [post.meta.time, post.meta.location].filter(Boolean).join(" ")
 
-	if (!title && !subtitle && !tags.length && !metaLine) {
+	if (!title && !subtitle && !tags && !metaLine && !allowEdit) {
 		return null
 	}
 
 	return (
-		<div className="bg-white px-4 py-3 shadow-sm" data-testid="red-detail-content">
-			{title ? (
-				<div className="text-[16px] font-semibold leading-6 text-black">{title}</div>
-			) : null}
-			{subtitle ? (
-				<div className="mt-2 text-[14px] leading-6 text-black/80">{subtitle}</div>
-			) : null}
-			{tags.length ? (
-				<div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[15px] font-medium leading-6 text-[#1f6fff]">
-					{tags.map((tag, idx) => (
-						<span key={`${tag}-${idx}`}>#{tag}</span>
-					))}
-				</div>
-			) : null}
+		<div className="bg-white shadow-sm" data-testid="red-detail-content">
+			<RednoteDetailMetaEditor
+				post={post}
+				allowEdit={allowEdit}
+				onUpdatePostMeta={onUpdatePostMeta}
+			/>
 			{metaLine ? (
-				<div className="mt-3 text-[12px] leading-5 text-[#86909c]">{metaLine}</div>
+				<div className="px-4 pb-3 text-[12px] leading-5 text-[#86909c]">{metaLine}</div>
 			) : null}
 		</div>
 	)
@@ -160,6 +134,8 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 	onChangeCard,
 	activeCardExternalRefreshVersion,
 	onPreviewFocus,
+	allowEdit,
+	onUpdatePostMeta,
 }: DetailViewProps) {
 	const store = useSelfMediaStore()
 	const { activePost: post, activeCardIndex: cardIndex, activePostIndex: postIndex } = store
@@ -299,35 +275,36 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 					</div>
 					{showNavigation ? (
 						<>
-							<button
-								type="button"
-								className={cn(
-									"absolute bottom-1/2 left-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
-									"group-hover:opacity-100",
-									currentIndex === 0 && "pointer-events-none opacity-0",
-								)}
-								onPointerDown={handleControlPointerDown}
-								onClick={handlePrevCard}
-								data-testid="red-detail-prev-button"
-								aria-label="Previous card"
-							>
-								<ChevronLeft className="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								className={cn(
-									"absolute bottom-1/2 right-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
-									"group-hover:opacity-100",
-									currentIndex >= post.cards.length - 1 &&
-										"pointer-events-none opacity-0",
-								)}
-								onPointerDown={handleControlPointerDown}
-								onClick={handleNextCard}
-								data-testid="red-detail-next-button"
-								aria-label="Next card"
-							>
-								<ChevronRight className="h-4 w-4" />
-							</button>
+							{currentIndex > 0 ? (
+								<button
+									type="button"
+									className={cn(
+										"absolute bottom-1/2 left-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
+										"group-hover:opacity-100",
+									)}
+									onPointerDown={handleControlPointerDown}
+									onClick={handlePrevCard}
+									data-testid="red-detail-prev-button"
+									aria-label="Previous card"
+								>
+									<ChevronLeft className="h-4 w-4" />
+								</button>
+							) : null}
+							{currentIndex < post.cards.length - 1 ? (
+								<button
+									type="button"
+									className={cn(
+										"absolute bottom-1/2 right-3 z-10 -translate-y-1/2 rounded-full bg-black/55 p-2 text-white opacity-0 shadow-sm transition-opacity",
+										"group-hover:opacity-100",
+									)}
+									onPointerDown={handleControlPointerDown}
+									onClick={handleNextCard}
+									data-testid="red-detail-next-button"
+									aria-label="Next card"
+								>
+									<ChevronRight className="h-4 w-4" />
+								</button>
+							) : null}
 						</>
 					) : null}
 				</div>
@@ -349,7 +326,11 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 						/>
 					))}
 				</div>
-				<RednoteDetailContent post={post} />
+				<RednoteDetailContent
+					post={post}
+					allowEdit={allowEdit}
+					onUpdatePostMeta={onUpdatePostMeta}
+				/>
 				<RednoteComments post={post} />
 			</div>
 		</div>

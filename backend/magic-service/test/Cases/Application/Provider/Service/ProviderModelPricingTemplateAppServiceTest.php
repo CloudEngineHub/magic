@@ -48,169 +48,58 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         self::assertSame(BillingType::VideoResolutionDuration->value, $templates[0]['code']);
     }
 
-    public function testQueriesDoesNotReturnOfficialPricingByDefault(): void
+    public function testQueriesReturnsModelSpecificTemplateWhenModelIdMatches(): void
     {
-        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig(), $this->officialPricingConfig());
+        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig());
 
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, 'gpt-image-2');
+        $templates = $service->queries(Category::VLM, ProviderCode::VolcengineArk, 'seedream-5-pro');
 
-        self::assertArrayNotHasKey('official_price', $templates[0]['items'][0]);
-        self::assertArrayNotHasKey('official_currency', $templates[0]);
+        self::assertCount(1, $templates);
+        self::assertSame(BillingType::Seedream5ProImage->value, $templates[0]['code']);
     }
 
-    public function testQueriesReturnsOfficialPricingForMatchedModelWhenRequested(): void
+    public function testQueriesSkipsModelSpecificTemplateWhenModelIdMissing(): void
     {
-        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig(), $this->officialPricingConfig());
+        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig());
 
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, 'gpt-image-2', true);
+        $templates = $service->queries(Category::VLM, ProviderCode::VolcengineArk);
 
+        self::assertCount(1, $templates);
         self::assertSame(BillingType::ImageTokens->value, $templates[0]['code']);
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('30.00', $templates[0]['items'][0]['official_price']);
-        self::assertSame('USD', $templates[0]['items'][0]['official_currency']);
-        self::assertSame('30.00', $templates[0]['items'][1]['official_price']);
-        self::assertSame('USD', $templates[0]['items'][1]['official_currency']);
     }
 
-    public function testQueriesDoesNotReturnOfficialPricingWhenModelIdMissing(): void
+    public function testQueriesDeduplicatesMergedTemplateCodes(): void
     {
-        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig(), $this->officialPricingConfig());
+        $config = $this->templatesConfig();
+        $config['defaults'][Category::VLM->value][] = BillingType::ImageTokens->value;
 
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, '   ', true);
+        $service = new ProviderModelPricingTemplateAppService($config);
 
-        self::assertArrayNotHasKey('official_price', $templates[0]['items'][0]);
-        self::assertArrayNotHasKey('official_currency', $templates[0]);
-    }
+        $templates = $service->queries(Category::VLM, ProviderCode::VolcengineArk);
 
-    public function testQueriesDoesNotReturnOfficialPricingForUnmatchedModel(): void
-    {
-        $service = new ProviderModelPricingTemplateAppService($this->templatesConfig(), $this->officialPricingConfig());
-
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, 'unknown-model', true);
-
-        self::assertArrayNotHasKey('official_price', $templates[0]['items'][0]);
-        self::assertArrayNotHasKey('official_currency', $templates[0]);
+        self::assertCount(1, $templates);
+        self::assertSame([BillingType::ImageTokens->value], array_column($templates, 'code'));
     }
 
     public function testApiFallsBackToModelVersionWhenModelIdIsBlank(): void
     {
         $request = $this->createRequest([
             'category' => Category::VLM->value,
-            'provider_code' => ProviderCode::OpenAI->value,
+            'provider_code' => ProviderCode::VolcengineArk->value,
             'model_id' => '   ',
-            'model_version' => 'gpt-image-2',
-            'include_official_pricing' => '1',
+            'model_version' => 'seedream-5-pro',
         ]);
         $api = new ServiceProviderApi($request);
         $serviceProperty = new ReflectionProperty(ServiceProviderApi::class, 'providerModelPricingTemplateAppService');
         $serviceProperty->setValue(
             $api,
-            new ProviderModelPricingTemplateAppService($this->templatesConfig(), $this->officialPricingConfig())
+            new ProviderModelPricingTemplateAppService($this->templatesConfig())
         );
 
         $templates = $api->queriesProviderModelPricingTemplates($request);
 
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('30.00', $templates[0]['items'][0]['official_price']);
-    }
-
-    public function testOpenAiImageInputTokenOfficialPricingExistsInRealConfig(): void
-    {
-        $service = new ProviderModelPricingTemplateAppService(
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php',
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_official_pricing.php'
-        );
-
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, 'gpt-image-1.5', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('8.00', $itemsByBillingObject[BillingObject::IMAGE_INPUT_TOKEN]['official_price']);
-        self::assertSame('8.00', $itemsByBillingObject[BillingObject::IMAGE_INPUT_TOKEN_COST]['official_price']);
-
-        $templates = $service->queries(Category::VLM, ProviderCode::OpenAI, 'gpt-image-2', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('8.00', $itemsByBillingObject[BillingObject::IMAGE_INPUT_TOKEN]['official_price']);
-        self::assertSame('8.00', $itemsByBillingObject[BillingObject::IMAGE_INPUT_TOKEN_COST]['official_price']);
-    }
-
-    public function testGoogleThoughtTokenOfficialPricingExistsInRealConfig(): void
-    {
-        $service = new ProviderModelPricingTemplateAppService(
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php',
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_official_pricing.php'
-        );
-
-        $templates = $service->queries(Category::VLM, ProviderCode::Google, 'gemini-3.1-flash-image-preview', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('3.00', $itemsByBillingObject[BillingObject::THOUGHT_TOKEN]['official_price']);
-        self::assertSame('3.00', $itemsByBillingObject[BillingObject::THOUGHT_TOKEN_COST]['official_price']);
-
-        $templates = $service->queries(Category::VLM, ProviderCode::Google, 'gemini-3-pro-image-preview', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('12.00', $itemsByBillingObject[BillingObject::THOUGHT_TOKEN]['official_price']);
-        self::assertSame('12.00', $itemsByBillingObject[BillingObject::THOUGHT_TOKEN_COST]['official_price']);
-    }
-
-    public function testQwenDatedAliasesOfficialPricingExistsInRealConfig(): void
-    {
-        $service = new ProviderModelPricingTemplateAppService(
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php',
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_official_pricing.php'
-        );
-
-        $modelPriceCases = [
-            'qwen-image-plus-2026-01-09' => '0.20',
-            'qwen-image-2.0-2026-03-03' => '0.20',
-            'qwen-image-edit-plus-2025-10-30' => '0.20',
-            'qwen-image-edit-plus-2025-12-15' => '0.20',
-            'qwen-image-2.0-pro-2026-03-03' => '0.50',
-            'qwen-image-2.0-pro-2026-04-22' => '0.50',
-        ];
-
-        foreach ($modelPriceCases as $modelId => $price) {
-            $templates = $service->queries(Category::VLM, ProviderCode::Qwen, $modelId, true);
-
-            self::assertSame('CNY', $templates[0]['official_currency']);
-            self::assertSame($price, $templates[0]['items'][0]['official_price']);
-            self::assertSame($price, $templates[0]['items'][1]['official_price']);
-        }
-    }
-
-    public function testCloudswayVeoVideoDurationOfficialPricingUsesVideoOnlyPriceInRealConfig(): void
-    {
-        $service = new ProviderModelPricingTemplateAppService(
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php',
-            require dirname(__DIR__, 5) . '/config/autoload/provider_model_official_pricing.php'
-        );
-
-        $templates = $service->queries(Category::VGM, ProviderCode::Cloudsway, 'veo-3.1-fast-generate-preview', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('0.08', $itemsByBillingObject[BillingObject::videoDuration('720p')->value]['official_price']);
-        self::assertSame('0.08', $itemsByBillingObject[BillingObject::videoDurationCost('720p')->value]['official_price']);
-        self::assertSame('0.10', $itemsByBillingObject[BillingObject::videoDuration('1080p')->value]['official_price']);
-        self::assertSame('0.10', $itemsByBillingObject[BillingObject::videoDurationCost('1080p')->value]['official_price']);
-        self::assertSame('0.25', $itemsByBillingObject[BillingObject::videoDuration('4k')->value]['official_price']);
-        self::assertSame('0.25', $itemsByBillingObject[BillingObject::videoDurationCost('4k')->value]['official_price']);
-
-        $templates = $service->queries(Category::VGM, ProviderCode::Cloudsway, 'veo-3.1-generate-preview', true);
-        $itemsByBillingObject = array_column($templates[0]['items'], null, 'billing_object');
-
-        self::assertSame('USD', $templates[0]['official_currency']);
-        self::assertSame('0.20', $itemsByBillingObject[BillingObject::videoDuration('720p')->value]['official_price']);
-        self::assertSame('0.20', $itemsByBillingObject[BillingObject::videoDurationCost('720p')->value]['official_price']);
-        self::assertSame('0.20', $itemsByBillingObject[BillingObject::videoDuration('1080p')->value]['official_price']);
-        self::assertSame('0.20', $itemsByBillingObject[BillingObject::videoDurationCost('1080p')->value]['official_price']);
-        self::assertSame('0.40', $itemsByBillingObject[BillingObject::videoDuration('4k')->value]['official_price']);
-        self::assertSame('0.40', $itemsByBillingObject[BillingObject::videoDurationCost('4k')->value]['official_price']);
+        self::assertCount(1, $templates);
+        self::assertSame(BillingType::Seedream5ProImage->value, $templates[0]['code']);
     }
 
     private function templatesConfig(): array
@@ -230,6 +119,18 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
                         [
                             'billing_object' => BillingObject::IMAGE_OUTPUT_TOKEN_COST,
                             'label' => '图片输出 Token 成本',
+                        ],
+                    ],
+                ],
+                [
+                    'code' => BillingType::Seedream5ProImage->value,
+                    'label' => 'Seedream 5 Pro 图片计费',
+                    'category' => Category::VLM->value,
+                    'billing_type' => BillingType::Seedream5ProImage->value,
+                    'items' => [
+                        [
+                            'billing_object' => BillingObject::IMAGE_REFERENCE_INPUT_COUNT,
+                            'label' => '额外参考输入图片单价',
                         ],
                     ],
                 ],
@@ -266,6 +167,18 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
                     BillingType::VideoResolutionDuration->value,
                 ],
             ],
+            'model_templates' => [
+                [
+                    'provider_code' => ProviderCode::VolcengineArk->value,
+                    'category' => Category::VLM->value,
+                    'model_ids' => [
+                        'seedream-5-pro',
+                    ],
+                    'template_codes' => [
+                        BillingType::Seedream5ProImage->value,
+                    ],
+                ],
+            ],
             'provider_templates' => [
                 [
                     'provider_code' => ProviderCode::OpenAI->value,
@@ -279,33 +192,6 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
                     'category' => Category::VGM->value,
                     'template_codes' => [
                         BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
-                    ],
-                ],
-            ],
-        ];
-    }
-
-    private function officialPricingConfig(): array
-    {
-        return [
-            'source' => 'official_research_2026_05_20',
-            'prices' => [
-                [
-                    'provider_code' => ProviderCode::OpenAI->value,
-                    'category' => Category::VLM->value,
-                    'model_ids' => [
-                        'gpt-image-2',
-                    ],
-                    'currency' => 'USD',
-                    'items' => [
-                        BillingObject::IMAGE_OUTPUT_TOKEN => [
-                            'price' => '30.00',
-                            'price_type' => 'sale',
-                        ],
-                        BillingObject::IMAGE_OUTPUT_TOKEN_COST => [
-                            'price' => '30.00',
-                            'price_type' => 'cost',
-                        ],
                     ],
                 ],
             ],

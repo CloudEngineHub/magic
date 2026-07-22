@@ -23,6 +23,21 @@ export interface BoxModelSides {
 	left: number
 }
 
+export interface InspectedElementDomContext {
+	/** Selector of the selected element's direct parent. */
+	parentSelector: string
+	/** 1-based position among all element children of the direct parent. */
+	siblingIndex: number
+	/** Number of same-tag siblings under the direct parent. */
+	sameTagSiblingCount: number
+	/** 1-based position among same-tag siblings; matches nth-of-type semantics. */
+	sameTagIndex: number
+	/** Compact description of the previous element sibling, when present. */
+	previousSibling?: string
+	/** Compact description of the next element sibling, when present. */
+	nextSibling?: string
+}
+
 export interface InspectedElementInfo {
 	/** CSS selector path to the element */
 	selector: string
@@ -48,6 +63,14 @@ export interface InspectedElementInfo {
 	textContent: string
 	/** Accessible role / aria-label if present */
 	accessibleName?: string
+	/** Normalized resource URL/path for images, links, media, or posters. */
+	resource?: string
+	/** DOM position and nearby sibling context. */
+	domContext?: InspectedElementDomContext
+	/** Sanitized, truncated outerHTML snippet for source matching. */
+	elementHtml?: string
+	/** Number of elements matched by selector in the inspected document. */
+	selectorMatchCount?: number
 }
 
 // ─── Message protocol ────────────────────────────────────────────────────────

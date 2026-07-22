@@ -13,17 +13,15 @@ use App\Infrastructure\Core\AbstractEvent;
 class SlidesTemplateUsedEvent extends AbstractEvent
 {
     public function __construct(
-        protected string $userId,
         protected string $organizationCode,
+        protected string $sourceId,
+        protected int $callTime,
+        protected string $userId,
         protected string $userName,
+        protected string $requestId,
         protected SlidesTemplateEntity $template,
-        protected array $accessContext = []
+        protected array $businessParams = [],
     ) {
-    }
-
-    public function getUserId(): string
-    {
-        return $this->userId;
     }
 
     public function getOrganizationCode(): string
@@ -31,9 +29,29 @@ class SlidesTemplateUsedEvent extends AbstractEvent
         return $this->organizationCode;
     }
 
+    public function getSourceId(): string
+    {
+        return $this->sourceId;
+    }
+
+    public function getCallTime(): int
+    {
+        return $this->callTime;
+    }
+
+    public function getUserId(): string
+    {
+        return $this->userId;
+    }
+
     public function getUserName(): string
     {
         return $this->userName;
+    }
+
+    public function getRequestId(): string
+    {
+        return $this->requestId;
     }
 
     public function getTemplate(): SlidesTemplateEntity
@@ -41,8 +59,22 @@ class SlidesTemplateUsedEvent extends AbstractEvent
         return $this->template;
     }
 
-    public function getAccessContext(): array
+    public function getBusinessParams(): array
     {
-        return $this->accessContext;
+        return $this->businessParams;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'organization_code' => $this->organizationCode,
+            'source_id' => $this->sourceId,
+            'call_time' => $this->callTime,
+            'user_id' => $this->userId,
+            'user_name' => $this->userName,
+            'request_id' => $this->requestId,
+            'template_code' => $this->template->getCode(),
+            'business_params' => $this->businessParams,
+        ];
     }
 }

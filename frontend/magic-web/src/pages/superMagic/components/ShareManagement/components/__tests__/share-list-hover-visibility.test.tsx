@@ -7,13 +7,11 @@ import FileShareListNew from "../FileShareListNew"
 import TopicShareListNew from "../TopicShareListNew"
 
 const mockDeviceState = vi.hoisted(() => ({
-	isMagicApp: false,
+	isNoHoverCoarsePointer: false,
 }))
 
 vi.mock("@/utils/devices", () => ({
-	get isMagicApp() {
-		return mockDeviceState.isMagicApp
-	},
+	isNoHoverCoarsePointer: () => mockDeviceState.isNoHoverCoarsePointer,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -137,7 +135,7 @@ function createTopicShare(overrides: Partial<TopicShareItem> = {}): TopicShareIt
 
 describe("Share management hover action visibility", () => {
 	beforeEach(() => {
-		mockDeviceState.isMagicApp = false
+		mockDeviceState.isNoHoverCoarsePointer = false
 	})
 
 	it("keeps file share actions hidden until hover in a normal browser", () => {
@@ -160,8 +158,8 @@ describe("Share management hover action visibility", () => {
 		expect(screen.getByRole("button", { name: "shareManagement.more" })).toBeInTheDocument()
 	})
 
-	it("pins file share actions in Magic App while keeping the share type badge", () => {
-		mockDeviceState.isMagicApp = true
+	it("pins file share actions in a no-hover browser while keeping the share type badge", () => {
+		mockDeviceState.isNoHoverCoarsePointer = true
 
 		render(
 			<FileShareListNew
@@ -176,8 +174,8 @@ describe("Share management hover action visibility", () => {
 		expect(screen.getByRole("button", { name: "shareManagement.more" })).toBeInTheDocument()
 	})
 
-	it("pins topic share actions in Magic App while keeping the shared time", () => {
-		mockDeviceState.isMagicApp = true
+	it("pins topic share actions in a no-hover browser while keeping the shared time", () => {
+		mockDeviceState.isNoHoverCoarsePointer = true
 
 		render(
 			<TopicShareListNew

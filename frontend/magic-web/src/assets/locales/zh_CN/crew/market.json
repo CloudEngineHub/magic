@@ -13,7 +13,7 @@
 		"starCrew": "明星员工",
 		"techDev": "技术开发"
 	},
-	"chat": "聊天",
+	"conversation": "对话",
 	"createCrew": "创建员工",
 	"crewConversation": {
 		"back": "返回",
@@ -311,7 +311,7 @@
 	"noMoreData": "没有更多数据。",
 	"noResults": "暂无结果。",
 	"pptEmployee": {
-		"delivered": "已交付 <strong>{{count}}</strong> 套"
+		"delivered": "已制作 {{count}} 页"
 	},
 	"skillDetailDialog": {
 		"collapse": "收起",
@@ -367,7 +367,17 @@
 				"publish": "发布"
 			},
 			"create": {
+				"channelChangeConfirm": {
+					"confirm": "确认切换",
+					"content": "已设置或已使用的人群数据将被清空",
+					"title": "确认切换发布渠道？"
+				},
 				"fields": {
+					"category": {
+						"label": "分类",
+						"placeholder": "请选择分类",
+						"required": "请选择分类"
+					},
 					"details": {
 						"label": "版本详情",
 						"optional": "可选",
@@ -380,7 +390,6 @@
 						"label": "发布流程"
 					},
 					"target": {
-						"helper": "选择后不可更改发布范围",
 						"label": "发布到",
 						"skillsLibrary": {
 							"steps": {

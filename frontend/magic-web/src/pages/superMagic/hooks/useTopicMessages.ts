@@ -94,6 +94,15 @@ function shouldContinueForegroundRecovery(pulledItems: any[], recoveryAnchorAppM
 	)
 }
 
+function hasRecoveredCorrelationId(pulledItems: any[], correlationId?: string) {
+	if (!correlationId) return true
+	return pulledItems.some((item) => {
+		const message = item?.seq?.message
+		const rawNode = message?.[message?.type]
+		return rawNode?.correlation_id === correlationId
+	})
+}
+
 /**
  * 管理当前话题的消息拉取、增量同步、前台恢复和分页加载。
  */
@@ -105,6 +114,7 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 	const initialLoadedTopicsRef = useRef<Set<string>>(new Set())
 	const selectedTopicRef = useRef(selectedTopic)
 	const lastForegroundSyncAtRef = useRef(0)
+	const forcedStreamRecoveryCorrelationIdRef = useRef<string>()
 	const foregroundRecoveryAnchorRef = useRef<Record<string, ForegroundRecoveryAnchorState>>({})
 	selectedTopicRef.current = selectedTopic
 
@@ -357,9 +367,12 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 	 * 两段之后仍未追平时，保留已补回的最近消息；极端缺口可接受，避免刚进入页面时误提示用户。
 	 */
 	const syncSelectedTopicOnForeground = useMemoizedFn(async () => {
+		const recoveryCorrelationId = forcedStreamRecoveryCorrelationIdRef.current
+		const force = Boolean(recoveryCorrelationId)
+		forcedStreamRecoveryCorrelationIdRef.current = undefined
 		const currentSelectedTopic = selectedTopicRef.current
 		if (!currentSelectedTopic?.id || document.visibilityState !== "visible") return
-		if (!shouldRunForegroundRecovery(currentSelectedTopic)) {
+		if (!force && !shouldRunForegroundRecovery(currentSelectedTopic)) {
 			// 当前会话已经稳定收尾时，hidden -> visible 不需要再触发恢复补拉；
 			// 同时清理掉这次 hidden 周期留下的锚点，避免后续切页继续误判为待恢复。
 			delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
@@ -368,7 +381,7 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 		const now = Date.now()
 		// 某些浏览器在切回前台时会连续触发 visibilitychange，
 		// 这里做一个很轻的去重，避免同一轮恢复打出多次全量回拉。
-		if (now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
+		if (!force && now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
 		lastForegroundSyncAtRef.current = now
 		const topicId = currentSelectedTopic.chat_topic_id
 		const syncGeneration =
@@ -398,10 +411,12 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 			)
 
 			const shouldFetchSecondPage =
-				shouldContinueForegroundRecovery(
+				Boolean(firstPageResult.response?.page_token) &&
+				(shouldContinueForegroundRecovery(
 					firstPageResult.pulledItems,
 					recoveryAnchorAppMessageId,
-				) && Boolean(firstPageResult.response?.page_token)
+				) ||
+					!hasRecoveredCorrelationId(firstPageResult.pulledItems, recoveryCorrelationId))
 			if (shouldFetchSecondPage) {
 				const secondPageResult = await fetchMessagesPage({
 					conversation_id: currentSelectedTopic.chat_conversation_id,
@@ -461,6 +476,23 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 			}
 		}
 	})
+
+	useEffect(() => {
+		// Store watchdog 只负责识别“渲染已停且长期无有效 chunk”；真正的 HTTP 请求仍由
+		// hook 承担，保持 API、选中话题和 generation 生命周期集中在同一层。
+		const registerStreamRecovery = superMagicStore.registerOnStreamRecoveryRequested
+		if (typeof registerStreamRecovery !== "function") return
+		return registerStreamRecovery(({ topicId, correlationId }) => {
+			const currentSelectedTopic = selectedTopicRef.current
+			if (
+				document.visibilityState !== "visible" ||
+				currentSelectedTopic?.chat_topic_id !== topicId
+			)
+				return
+			forcedStreamRecoveryCorrelationIdRef.current = correlationId
+			void syncSelectedTopicOnForeground()
+		})
+	}, [syncSelectedTopicOnForeground])
 
 	/**
 	 * 手动加载更早的历史消息，继续复用服务端返回的 page_token。

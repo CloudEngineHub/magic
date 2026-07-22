@@ -24,7 +24,6 @@ import MagicModal from "@/components/base/MagicModal"
 import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import { SuperMagicApi } from "@/apis"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -33,6 +32,12 @@ import { useFileActionVisibility } from "@/pages/superMagic/providers/file-actio
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { normalizeMenuItems } from "../utils/menu-items"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
+import { downloadBlobFile } from "@/utils/file"
+import {
+	collectClientBatchExportTargets,
+	getClientBatchItemType,
+	runClientBatchDocumentExport,
+} from "../modules/client-batch-export"
 
 interface UseBatchDownloadOptions {
 	projectId?: string
@@ -58,14 +63,8 @@ interface UseBatchDownloadOptions {
 	removeFile: (fileId: string) => void
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
-	// 批量导出进度回调
-	onBatchPdfExportStart?: () => void
-	onBatchPdfExportProgress?: (progress: number) => void
-	onBatchPdfExportEnd?: () => void
-	onBatchPptExportStart?: () => void
-	onBatchPptExportProgress?: (progress: number) => void
-	onBatchPptExportEnd?: () => void
 	allowEdit?: boolean
+	allowDownload?: boolean
 	// 新增：批量分享回调
 	onBatchShareClick?: (fileIds: string[]) => void
 	// 是否在项目内
@@ -94,13 +93,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		removeFile,
 		getParentPathByFileId,
 		isMoving = false,
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		allowEdit,
+		allowDownload,
 		onBatchShareClick,
 		isInProject,
 		downloadProgress,
@@ -112,31 +106,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
 	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
-
-	// 批量导出进度控制辅助函数
-	const handleBatchExportStart = (convertType: "pdf" | "ppt") => {
-		if (convertType === "pdf") {
-			onBatchPdfExportStart?.()
-		} else {
-			onBatchPptExportStart?.()
-		}
-	}
-
-	const handleBatchExportProgress = (convertType: "pdf" | "ppt", progress: number) => {
-		if (convertType === "pdf") {
-			onBatchPdfExportProgress?.(progress)
-		} else {
-			onBatchPptExportProgress?.(progress)
-		}
-	}
-
-	const handleBatchExportEnd = (convertType: "pdf" | "ppt") => {
-		if (convertType === "pdf") {
-			onBatchPdfExportEnd?.()
-		} else {
-			onBatchPptExportEnd?.()
-		}
-	}
+	const canDownload = allowDownload !== false
 
 	// 退出多选模式的辅助函数
 	const exitSelectMode = () => {
@@ -250,7 +220,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
-		if (selectedItems.size === 0 || !projectId) return
+		if (!canDownload || selectedItems.size === 0 || !projectId) return
 		setBatchLoading(true)
 		let keepLoadingForPolling = false
 		try {
@@ -382,127 +352,119 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	const handleExportPdfOrPpt = async (convert_type = "pdf") => {
-		if (selectedItems.size === 0 || !projectId) return
-		console.log("🔵 导出PDF或PPT:", convert_type)
-		setBatchLoading(true)
-
+		if (!canDownload || selectedItems.size === 0) return
 		const convertType = convert_type as "pdf" | "ppt"
-		// 开始导出
-		handleBatchExportStart(convertType)
+		const format = convertType === "pdf" ? "pdf" : "pptx"
+		// Always resolve against the complete attachment tree. The filtered tree can omit
+		// folder resources while a search is active, which would produce incomplete exports.
+		const sourceItems = attachments.length > 0 ? attachments : filteredFiles
+		const { targets, unsupportedItems } = collectClientBatchExportTargets({
+			items: sourceItems,
+			selectedItems,
+			getItemId,
+			format,
+		})
 
-		const target = convertType === "pdf" ? "_blank" : "_self"
+		if (unsupportedItems.length > 0) {
+			const unsupportedTypes = Array.from(
+				new Set(
+					unsupportedItems.map((item) =>
+						getClientBatchItemType(item, {
+							folder: t("filenameValidator.type.folder"),
+							unknown: t("common.unknown"),
+						}),
+					),
+				),
+			).join(", ")
+			magicToast.error(
+				t("folderUpload.errors.unsupportedFileType", { fileType: unsupportedTypes }),
+			)
+			return
+		}
+
+		if (targets.length === 0) {
+			magicToast.error(
+				t("folderUpload.errors.unsupportedFileType", {
+					fileType: format === "pdf" ? "PDF" : "PPTX",
+				}),
+			)
+			return
+		}
+
+		setBatchLoading(true)
+		const toastId = createRandomUuidV4()
+		magicToast.loading({
+			key: toastId,
+			content:
+				convertType === "pdf"
+					? t("topicFiles.batchExportingPdf")
+					: t("topicFiles.batchExportingPpt"),
+			duration: 0,
+		})
 
 		try {
-			// Collect selected file ids with special filtering for export
-			const selectedFileIds = collectFileIds({
-				items: filteredFiles,
-				selectedItems,
-				getItemId,
-				includeFolderIds: false,
-				filterFn: (item) => {
-					// 处理 display_config 和 index.html 的特殊情况
-					if (item?.display_config && item?.name !== "index.html") {
-						// 这种情况在 collectFileIds 中已经处理了，这里不需要额外过滤
-						return true
-					}
-					// 过滤掉 md 文件转 ppt 的情况
-					if (item?.file_extension === "md" && convertType === "ppt") {
-						return false
-					}
-					return true
-				},
+			const result = await runClientBatchDocumentExport({
+				format,
+				targets,
+				attachments: sourceItems,
+				projectName: selectedProject?.project_name,
 			})
 
-			// 处理 display_config 和 index.html 的特殊情况
-			// 需要单独处理，因为需要获取 appEntryFile
-			const processedFileIds: string[] = []
-			const processDisplayConfigItems = (items: AttachmentItem[], parentSelected = false) => {
-				items.forEach((item) => {
-					const itemId = getItemId(item)
-					const isSelected = parentSelected || selectedItems.has(itemId)
-
-					if (isSelected && item?.display_config && item?.name !== "index.html") {
-						const appEntryFile = getAppEntryFile(
-							item?.children || [],
-							item.display_config,
-						)
-						if (appEntryFile?.file_id) {
-							processedFileIds.push(appEntryFile.file_id)
-						}
-						return
-					}
+			if (result.cancelled) {
+				magicToast.destroy(toastId)
+				return
+			}
+			if (result.unavailable) {
+				magicToast.error({
+					key: toastId,
+					content: t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"),
+					duration: 1000,
 				})
-			}
-			processDisplayConfigItems(filteredFiles)
-
-			// 合并处理后的文件ID
-			const finalFileIds = [
-				...selectedFileIds.filter((id) => !processedFileIds.some((pid) => pid === id)),
-				...processedFileIds,
-			]
-			if (finalFileIds.length === 0) {
-				setBatchLoading(false)
-				handleBatchExportEnd(convertType)
-				console.warn("No exportable files found")
 				return
 			}
-			// Call backend to create batch export file task
-			const data = await SuperMagicApi.exportPdfOrPpt({
-				project_id: projectId,
-				file_ids: finalFileIds,
-				convert_type: convertType,
-			})
-			if (data.status === "completed") {
-				data.download_url && downloadFileWithAnchor(data.download_url, undefined, target)
-				setBatchLoading(false)
-				handleBatchExportEnd(convertType)
+			if (!result.artifact || result.successCount === 0) {
+				magicToast.error({
+					key: toastId,
+					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+					duration: 1000,
+				})
+				return
+			}
+
+			// Use the direct Blob downloader so a successful export does not open the
+			// manual retry/copy download modal used by source-file downloads.
+			const downloadResult = await downloadBlobFile(
+				result.artifact.blob,
+				result.artifact.fileName,
+				format,
+			)
+			if (!downloadResult.success) {
+				throw new Error(downloadResult.message || "Batch export download failed")
+			}
+
+			if (result.failureCount > 0) {
+				magicToast.error({
+					key: toastId,
+					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+					duration: 1000,
+				})
+			} else {
+				magicToast.success({
+					key: toastId,
+					content: t("topicFiles.exportSuccess"),
+					duration: 1000,
+				})
 				exitSelectMode()
-				return
-			}
-
-			if (data.status === "processing") {
-				let timer: NodeJS.Timeout | null = null
-
-				timer = setInterval(async () => {
-					try {
-						const checkData = await SuperMagicApi.checkExportPdfOrPptStatus(
-							data.task_key,
-						)
-						if (checkData.status === "processing") {
-							// 更新进度
-							const progress = checkData.conversion_rate || 0
-							handleBatchExportProgress(convertType, progress)
-						}
-						if (checkData.status === "completed") {
-							console.log("🔵 导出成功:", checkData)
-							// magicToast.success(t("topicFiles.exportSuccess"))
-							checkData.download_url &&
-								downloadFileWithAnchor(checkData.download_url, undefined, target)
-							setBatchLoading(false)
-							handleBatchExportEnd(convertType)
-							exitSelectMode()
-							if (timer) clearInterval(timer)
-						}
-						if (checkData?.status === "failed") {
-							setBatchLoading(false)
-							handleBatchExportEnd(convertType)
-							if (timer) clearInterval(timer)
-							magicToast.error(checkData.message)
-							return
-						}
-					} catch (error) {
-						setBatchLoading(false)
-						handleBatchExportEnd(convertType)
-						if (timer) clearInterval(timer)
-						console.error("Batch export failed:", error)
-					}
-				}, 5000)
 			}
 		} catch (error) {
-			console.log("completed4")
+			console.error("Client batch export failed:", error)
+			magicToast.error({
+				key: toastId,
+				content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+				duration: 1000,
+			})
+		} finally {
 			setBatchLoading(false)
-			handleBatchExportEnd(convertType)
-			console.error("Batch export failed:", error)
 		}
 	}
 
@@ -567,7 +529,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量下载（带二级菜单）
-		...(isInProject
+		...(canDownload && isInProject
 			? [
 					{
 						key: "download",
@@ -619,46 +581,48 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 						],
 					},
 				]
-			: // 不在项目内，暂时只显示一个一级菜单的批量下载（兼容金融模式）
-				[
-					{
-						key: "download-selected",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconDownload size={16} stroke={1.5} />
-								<span>
-									{t("topicFiles.downloadSelected", {
-										count: selectedItems.size,
-									})}
-								</span>
-							</div>
-						),
-						onClick: handleBatchDownload,
-						disabled: batchLoading,
-					},
-					{
-						key: "export-pdf",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconFileTypePdf size={16} stroke={1.5} />
-								<span>{t("topicFiles.exportPdf")}</span>
-							</div>
-						),
-						onClick: () => handleExportPdfOrPpt("pdf"),
-						disabled: batchLoading,
-					},
-					{
-						key: "export-ppt",
-						label: (
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<IconFileTypePpt size={16} stroke={1.5} />
-								<span>{t("topicFiles.exportPpt")}</span>
-							</div>
-						),
-						onClick: () => handleExportPdfOrPpt("ppt"),
-						disabled: batchLoading,
-					},
-				]),
+			: canDownload
+				? // 不在项目内，暂时只显示一个一级菜单的批量下载（兼容金融模式）
+					[
+						{
+							key: "download-selected",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconDownload size={16} stroke={1.5} />
+									<span>
+										{t("topicFiles.downloadSelected", {
+											count: selectedItems.size,
+										})}
+									</span>
+								</div>
+							),
+							onClick: handleBatchDownload,
+							disabled: batchLoading,
+						},
+						{
+							key: "export-pdf",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconFileTypePdf size={16} stroke={1.5} />
+									<span>{t("topicFiles.exportPdf")}</span>
+								</div>
+							),
+							onClick: () => handleExportPdfOrPpt("pdf"),
+							disabled: batchLoading,
+						},
+						{
+							key: "export-ppt",
+							label: (
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<IconFileTypePpt size={16} stroke={1.5} />
+									<span>{t("topicFiles.exportPpt")}</span>
+								</div>
+							),
+							onClick: () => handleExportPdfOrPpt("ppt"),
+							disabled: batchLoading,
+						},
+					]
+				: []),
 		// 批量移动（仅在允许编辑时显示）
 		...(isInProject && allowEdit && !hideMoveTo
 			? [
@@ -726,11 +690,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 	]) as MenuProps["items"]
+	const canShowBatchOperations = showBatchDownload && Boolean(batchMenuItems?.length)
 
 	return {
 		// 状态
 		batchLoading,
-		showBatchDownload,
+		showBatchDownload: canShowBatchOperations,
 
 		// 处理函数
 		handleBatchDownload,

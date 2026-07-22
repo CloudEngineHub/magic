@@ -37,6 +37,8 @@ final class SourceId
 
     public const string DESIGN_IMAGE_PROMPT_COMPLETION = 'design_image_prompt_completion';
 
+    public const string DESIGN_TEXT_CONTENT_COMPLETION = 'design_text_content_completion';
+
     public const string CONNECTIVITY_TEST = 'connectivity_test';
 
     public const string AI_SEARCH = 'ai_search';
@@ -44,6 +46,8 @@ final class SourceId
     public const string FOLLOW_UP_SUGGESTIONS = 'follow_up_suggestions';
 
     public const string AI_ABILITY_CONNECTIVITY_TEST = 'ai_ability_connectivity_test';
+
+    public const string SLIDES_TEMPLATE_USE = 'slides_template_use';
 
     public const array NON_BILLING_SOURCE_IDS = [
         self::RENAME_TOPIC,

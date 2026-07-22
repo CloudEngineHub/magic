@@ -146,6 +146,20 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			attachments: attachments || [],
 		})
 
+		const requestAttachmentsRefresh = useMemoizedFn((reason: string) => {
+			if (refreshAttachments) {
+				void refreshAttachments()
+				return
+			}
+
+			if (!projectId) return
+
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason,
+			})
+		})
+
 		// 使用 UploadWithModal hook 管理上传逻辑
 		const {
 			uploadModalVisible,
@@ -161,6 +175,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 			attachments,
 			duplicateFileHandler: sharedDuplicateHandler,
+			onUpdateAttachments: () => {
+				requestAttachmentsRefresh("topic-files-panel-upload-success")
+			},
 		})
 
 		// 使用文件替换 hook
@@ -170,20 +187,6 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 		})
 
-		const requestAttachmentsRefreshAfterMove = useMemoizedFn((reason: string) => {
-			if (refreshAttachments) {
-				void refreshAttachments()
-				return
-			}
-
-			if (!projectId) return
-
-			requestProjectAttachmentsFullRefresh({
-				projectId,
-				reason,
-			})
-		})
-
 		const projectDetailFilesController = useProjectDetailFilesController({
 			projectId,
 			attachments,
@@ -191,7 +194,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 			setIsSelectMode,
 			onMoveSuccess: () => {
-				requestAttachmentsRefreshAfterMove("topic-files-panel-mobile-move-success")
+				requestAttachmentsRefresh("topic-files-panel-mobile-move-success")
+			},
+			onUpdateAttachments: () => {
+				requestAttachmentsRefresh("topic-files-panel-mobile-upload-success")
 			},
 		})
 
@@ -199,7 +205,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			attachments,
 			onAttachmentsChange,
 			onUpdateAttachments: () => {
-				requestAttachmentsRefreshAfterMove(
+				requestAttachmentsRefresh(
 					"topic-files-panel-mobile-cross-project-operation-success",
 				)
 			},
@@ -304,6 +310,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 			attachments,
 			allowEdit,
+			allowDownload,
 			isInProject,
 			removeFile: () => undefined,
 			onBatchShareClick: (fileIds) => {
@@ -584,6 +591,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									filterBatchDownloadLayerMenuItems
 								}
 								allowDownload={allowDownload}
+								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
 							/>

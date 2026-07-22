@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import { writeUserElementDetails } from "../elementDetailsIo"
 
 vi.mock("@/apis", () => ({

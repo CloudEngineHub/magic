@@ -1,4 +1,4 @@
-import { makeAutoObservable, computed, untracked } from "mobx"
+import { makeAutoObservable, computed } from "mobx"
 import { resizablePanelStore } from "./ResizablePanelStore"
 
 const STORAGE_KEY = "sidebar-state"
@@ -38,7 +38,8 @@ export class SidebarStore {
 			this,
 			{
 				collapsedSizePercent: computed,
-				// width is a plain method, not computed, to avoid MobX tracking
+				// Width reads from a non-observable cache, so it must not be memoized as computed.
+				width: false,
 			},
 			{ autoBind: true },
 		)
@@ -46,30 +47,27 @@ export class SidebarStore {
 		this.setupWindowResize()
 	}
 
-	// Width getter - reads from ResizablePanelStore's non-observable cache
-	// Uses untracked to prevent MobX from tracking this as a dependency
+	// Width getter - reads the latest value from ResizablePanelStore's non-observable cache
 	get width(): number {
-		return untracked(() => {
-			// First check ResizablePanelStore's memory cache (fastest)
-			const cached = resizablePanelStore.panelSizes.get(SIDEBAR_WIDTH_KEY)
-			if (cached !== undefined) {
-				return cached
-			}
+		// First check ResizablePanelStore's memory cache (fastest)
+		const cached = resizablePanelStore.panelSizes.get(SIDEBAR_WIDTH_KEY)
+		if (cached !== undefined) {
+			return cached
+		}
 
-			// If not in cache, read from localStorage
-			const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY)
-			if (saved) {
-				const value = parseFloat(saved)
-				if (!isNaN(value) && value > 0 && value <= 100) {
-					// Cache it for next time
-					resizablePanelStore.panelSizes.set(SIDEBAR_WIDTH_KEY, value)
-					return value
-				}
+		// If not in cache, read from localStorage
+		const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+		if (saved) {
+			const value = parseFloat(saved)
+			if (!isNaN(value) && value > 0 && value <= 100) {
+				// Cache it for next time
+				resizablePanelStore.panelSizes.set(SIDEBAR_WIDTH_KEY, value)
+				return value
 			}
+		}
 
-			// Keep the first-open width stable across large screens.
-			return this.getDefaultWidthPercent()
-		})
+		// Keep the first-open width stable across large screens.
+		return this.getDefaultWidthPercent()
 	}
 
 	private getDefaultWidthPercent = () => {

@@ -656,6 +656,7 @@
 					"randomTemplate": "Inspire Me",
 					"refreshFailed": "Failed to update templates",
 					"refreshing": "Updating...",
+					"replaceTemplate": "Change",
 					"resetCanvasView": "Reset canvas view",
 					"retry": "Retry",
 					"searchPlaceholder": "Pick a template to get started",

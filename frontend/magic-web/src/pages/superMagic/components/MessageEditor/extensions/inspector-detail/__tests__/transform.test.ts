@@ -23,6 +23,11 @@ const labels = {
 	size: "Size",
 	computedStyles: "Computed Styles",
 	textContent: "Text Content",
+	elementAttributes: "Element Attributes",
+	resource: "Resource",
+	domContext: "DOM Context",
+	elementHtml: "Element HTML",
+	selectorMatchCount: "Selector Match Count",
 }
 
 function createInspectedElement(): InspectedElementInfo {
@@ -47,6 +52,18 @@ function createInspectedElement(): InspectedElementInfo {
 			width: "120px",
 			height: "40px",
 		},
+		attributes: { src: "images/submit.png", alt: "Submit" },
+		resource: "images/submit.png",
+		domContext: {
+			parentSelector: "body > main",
+			siblingIndex: 2,
+			sameTagSiblingCount: 3,
+			sameTagIndex: 2,
+			previousSibling: "button.primary text=Cancel",
+			nextSibling: "button.primary text=Next",
+		},
+		elementHtml: '<button src="images/submit.png" alt="Submit">Submit</button>',
+		selectorMatchCount: 1,
 	}
 }
 
@@ -65,6 +82,28 @@ describe("inspector-detail transform", () => {
 		expect(paragraph?.type).toBe("paragraph")
 		expect(inspectorNode?.type).toBe(INSPECTOR_DETAIL_TYPE)
 		expect(inspectorNode?.attrs?.fileMention).toEqual(fileMention)
+	})
+
+	it("preserves resource and DOM context for AI source matching", () => {
+		const content = buildAgentPromptContent(createInspectedElement(), (key) => key)
+		const attrs = content.content?.[0]?.content?.[0]?.attrs
+
+		expect(attrs?.resource).toBe("images/submit.png")
+		expect(JSON.parse(attrs?.elementAttributes)).toEqual({
+			src: "images/submit.png",
+			alt: "Submit",
+		})
+		expect(JSON.parse(attrs?.domContext).sameTagIndex).toBe(2)
+		expect(attrs?.selectorMatchCount).toBe(1)
+
+		const serialized = serializeInspectorContent(content, labels)
+		const lines = serialized.content?.map((node) => node.content?.[0]?.text).filter(Boolean)
+		expect(lines).toContain("Resource: images/submit.png")
+		expect(lines?.some((line) => line?.startsWith("DOM Context: "))).toBe(true)
+		expect(lines?.some((line) => line?.startsWith("Element HTML: "))).toBe(true)
+		expect(lines?.indexOf("Resource: images/submit.png")).toBeLessThan(
+			lines?.findIndex((line) => line?.startsWith("Computed Styles: ")) ?? -1,
+		)
 	})
 
 	it("serializes a paragraph-wrapped inspector file mention back to normal detail paragraphs", () => {

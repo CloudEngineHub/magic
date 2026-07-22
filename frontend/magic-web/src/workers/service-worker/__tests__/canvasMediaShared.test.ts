@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	CANVAS_MEDIA_CACHE_NAME,
+	CANVAS_MEDIA_DB_NAME,
+	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	handleCanvasMediaMessage,
 	handleCanvasMediaRequest,
 	parseVirtualResourceRequest,
@@ -111,7 +113,8 @@ class FakeIndexedDbFactory {
 				db = new FakeDatabase()
 				this.databases.set(name, db)
 			}
-			;(request as unknown as FakeIdbRequest<IDBDatabase>).result = db as unknown as IDBDatabase
+			;(request as unknown as FakeIdbRequest<IDBDatabase>).result =
+				db as unknown as IDBDatabase
 			if (isNew) {
 				request.onupgradeneeded?.call(
 					request,
@@ -159,8 +162,14 @@ function buildVirtualUrl(path: string): string {
 	return `${window.location.origin}/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/${path}`
 }
 
-async function saveCanvasEntry(entry: StoredCanvasEntry): Promise<void> {
-	const openRequest = indexedDB.open("canvas-media-resource-offline-cache-v1", 1)
+async function saveCanvasEntry(
+	entry: StoredCanvasEntry,
+	options?: { dbName?: string; dbVersion?: number },
+): Promise<void> {
+	const openRequest = indexedDB.open(
+		options?.dbName ?? CANVAS_MEDIA_DB_NAME,
+		options?.dbVersion ?? CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
+	)
 	const db = await new Promise<IDBDatabase>((resolve) => {
 		openRequest.onsuccess = () => resolve(openRequest.result)
 	})
@@ -185,6 +194,31 @@ describe("canvasMediaShared", () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks()
+	})
+
+	it("uses a new cache namespace when path key semantics change", () => {
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(2)
+		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v2")
+		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v2")
+	})
+
+	it("does not read metadata from the incompatible v1 path-key namespace", async () => {
+		const requestUrl = buildVirtualUrl("images/example.png")
+		await saveCanvasEntry(
+			{
+				id: "workspace/project/design/demo/image/./images/example.png",
+				namespace: "workspace/project/design/demo",
+				path: "./images/example.png",
+				mediaType: "image",
+				cacheKey: requestUrl,
+				sourceUrl: "https://oss.example.com/images/example.png",
+			},
+			{ dbName: "canvas-media-resource-offline-cache-v1", dbVersion: 1 },
+		)
+
+		const response = await handleCanvasMediaRequest(new Request(requestUrl))
+
+		expect(response?.status).toBe(404)
 	})
 
 	it("parses canvas virtual urls with unicode paths", () => {

@@ -191,6 +191,17 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByTestId("self-media-home-ops-health")).toHaveClass("w-full")
 	})
 
+	it("renders the article list before the operations overview", () => {
+		render(<SelfMediaHomePage posts={[createPostItem()]} onOpenPost={vi.fn()} />)
+
+		const postList = screen.getByTestId("self-media-home-post-list")
+		const opsOverview = screen.getByTestId("self-media-home-ops-overview")
+
+		expect(
+			postList.compareDocumentPosition(opsOverview) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
 	it("lets the compact home header actions adapt to the available width", () => {
 		render(
 			<SelfMediaHomePage

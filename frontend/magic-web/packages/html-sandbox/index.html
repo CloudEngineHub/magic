@@ -690,6 +690,55 @@
 					.replace(runtimeInlinePlaceholderTagPattern, "")
 			}
 
+			function copyArticleSelectionToClipboard() {
+				var body = document.body
+				var selection = window.getSelection ? window.getSelection() : null
+				if (!body || !selection || typeof document.execCommand !== "function") return false
+
+				var comments = body.querySelector("[data-wechat-article-comments='true']")
+				var range = document.createRange()
+				if (comments) {
+					range.setStart(body, 0)
+					range.setEndBefore(comments)
+				} else {
+					range.selectNodeContents(body)
+				}
+				if (range.collapsed) return false
+
+				var previousRanges = []
+				for (var i = 0; i < selection.rangeCount; i += 1) {
+					previousRanges.push(selection.getRangeAt(i).cloneRange())
+				}
+				var activeElement = document.activeElement
+				var scrollX = window.scrollX || 0
+				var scrollY = window.scrollY || 0
+
+				try {
+					selection.removeAllRanges()
+					selection.addRange(range)
+					window.focus()
+					return document.execCommand("copy")
+				} catch (error) {
+					return false
+				} finally {
+					selection.removeAllRanges()
+					for (var j = 0; j < previousRanges.length; j += 1) {
+						selection.addRange(previousRanges[j])
+					}
+					try {
+						if (activeElement && activeElement.focus)
+							activeElement.focus({ preventScroll: true })
+					} catch (error) {
+						// Focus restoration is best-effort for detached article nodes.
+					}
+					try {
+						window.scrollTo({ top: scrollY, left: scrollX, behavior: "auto" })
+					} catch (error) {
+						// Scroll restoration must not change the copy result.
+					}
+				}
+			}
+
 			function handleMessage(event) {
 				try {
 					if (event.data && event.data.type === "setContent") {
@@ -707,6 +756,16 @@
 						applyAnimationState()
 						postToParent({ type: "contentLoaded" })
 						scheduleContentMetrics("initial")
+					} else if (
+						event.source === window.parent &&
+						event.data &&
+						event.data.type === "COPY_ARTICLE_SELECTION"
+					) {
+						postToParent({
+							type: "COPY_ARTICLE_SELECTION_RESULT",
+							requestId: event.data.requestId,
+							success: copyArticleSelectionToClipboard(),
+						})
 					} else if (event.data && event.data.type === "setAnimationState") {
 						isAnimationPaused = !!event.data.paused
 						applyAnimationState()

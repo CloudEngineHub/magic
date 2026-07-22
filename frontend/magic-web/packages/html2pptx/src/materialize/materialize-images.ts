@@ -2,7 +2,7 @@ import type { ResourceLoadError } from "../api/options"
 import type { PPTImageNode, PPTNode } from "../ir/node"
 import { log, LogLevel } from "../logger"
 import { withAbort } from "../sandbox/abort"
-import { computeTargetMaxPx, materializeImage } from "./image-to-base64"
+import { imageToBase64 } from "./image-to-base64"
 
 type ResourceErrorReporter = (error: ResourceLoadError) => void
 
@@ -24,17 +24,16 @@ async function materializePptImageNode(
 	onResourceError?: ResourceErrorReporter,
 ): Promise<void> {
 	const src = node.src
-	if (!src?.trim()) {
+	if (!src?.trim() || src.startsWith("data:")) {
 		node.captureElement = undefined
 		return
 	}
 
 	try {
-		const materialized = await withAbort({
-			task: materializeImage(src, computeTargetMaxPx(node.w, node.h), undefined, signal),
+		node.src = await withAbort({
+			task: imageToBase64(src, signal),
 			signal,
 		})
-		node.src = materialized.dataUrl
 	} catch (error) {
 		if (signal?.aborted) throw error
 		log(LogLevel.L3, "image unreachable, dropping", {

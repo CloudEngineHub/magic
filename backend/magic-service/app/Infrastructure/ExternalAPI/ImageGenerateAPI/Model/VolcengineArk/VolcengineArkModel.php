@@ -176,9 +176,12 @@ class VolcengineArkModel extends AbstractImageGenerate
             'size' => $imageGenerateRequest->getSize(),
             'response_format' => $imageGenerateRequest->getResponseFormat(),
             'watermark' => $imageGenerateRequest->getWatermark(),
-            'sequential_image_generation' => $imageGenerateRequest->getSequentialImageGeneration(),
             'stream' => $imageGenerateRequest->getStream(),
         ];
+
+        if ($imageGenerateRequest->getSequentialImageGeneration()) {
+            $payload['sequential_image_generation'] = $imageGenerateRequest->getSequentialImageGeneration();
+        }
 
         // 如果设置了组图功能选项，则添加 sequential_image_generation_options
         $sequentialOptions = $imageGenerateRequest->getSequentialImageGenerationOptions();
@@ -223,9 +226,12 @@ class VolcengineArkModel extends AbstractImageGenerate
             'size' => $imageGenerateRequest->getSize(),
             'response_format' => $imageGenerateRequest->getResponseFormat(),
             'watermark' => $imageGenerateRequest->getWatermark(),
-            'sequential_image_generation' => $imageGenerateRequest->getSequentialImageGeneration(),
             'stream' => $imageGenerateRequest->getStream(),
         ];
+
+        if ($imageGenerateRequest->getSequentialImageGeneration()) {
+            $payload['sequential_image_generation'] = $imageGenerateRequest->getSequentialImageGeneration();
+        }
 
         // 如果设置了组图功能选项，则添加 sequential_image_generation_options
         $sequentialOptions = $imageGenerateRequest->getSequentialImageGenerationOptions();

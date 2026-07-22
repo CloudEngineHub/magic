@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect } from "react"
 import type {
 	CanvasFileResourceMeta,
+	FileUrlRequestPriority,
 	GetFileInfoResponse,
-} from "@/components/CanvasDesign/types.magic"
-import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/canvas/utils/resourceLoadFailure"
+} from "@/components/CanvasDesign/public/magic-types"
+import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/runtime/resources/media-common/resourceLoadFailure"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { useTranslation } from "react-i18next"
@@ -15,22 +16,6 @@ import {
 	cleanupFileInfoCache,
 } from "../utils/designFileInfoCache"
 import type { GetFileInfoResponseWithFileId } from "../utils/uploadCallbacks"
-
-/**
- * 防抖延迟时间（毫秒）
- * 相同 path 的多次调用会在此时间窗口内合并
- */
-const DEBOUNCE_DELAY_MS = 80
-
-/**
- * 防抖项接口
- */
-interface DebounceItem {
-	timer: NodeJS.Timeout
-	promise: Promise<GetFileInfoResponse>
-	resolve: (value: GetFileInfoResponse) => void
-	reject: (error: Error) => void
-}
 
 interface UseFileInfoProviderOptions {
 	/** 已扁平化的附件列表（从入口传入） */
@@ -47,7 +32,11 @@ interface UseFileInfoProviderOptions {
 interface UseFileInfoProviderReturn {
 	getFileInfo: (
 		path: string,
-		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
+		options?: {
+			useImageProcess?: boolean
+			forceRefresh?: boolean
+			priority?: FileUrlRequestPriority
+		},
 	) => Promise<GetFileInfoResponse>
 	getFileResourceMeta: (
 		path: string,
@@ -58,19 +47,17 @@ interface UseFileInfoProviderReturn {
 		fileName?: string,
 		fileSize?: number,
 	) => Promise<GetFileInfoResponseWithFileId>
-	setFileInfoCache: (path: string, fileInfo: GetFileInfoResponse) => void
+	setFileInfoCache: (
+		path: string,
+		fileInfo: GetFileInfoResponse,
+		options?: { allowMissingAttachment?: boolean },
+	) => void
 }
 
 function createFileNotFoundByPathError(path: string, message: string): Error {
 	const error = new Error(message) as Error & { code?: string; path?: string }
 	error.code = GET_FILE_INFO_NOT_FOUND_ERROR_CODE
 	error.path = path
-	return error
-}
-
-function createFileInfoRequestCancelledError(): Error {
-	const error = new Error("File info request cancelled")
-	error.name = "AbortError"
 	return error
 }
 
@@ -92,9 +79,6 @@ export function useFileInfoProvider(
 	} = options
 	const { t } = useTranslation("super")
 
-	// 存储每个 path 的防抖项
-	const debounceMapRef = useRef<Map<string, DebounceItem>>(new Map())
-
 	// 当文件列表变化时，清理已删除文件的缓存
 	useEffect(() => {
 		cleanupFileInfoCache(flatAttachments, designProjectId, {
@@ -102,96 +86,33 @@ export function useFileInfoProvider(
 		})
 	}, [flatAttachments, designProjectId, attachmentsReady])
 
-	// 组件卸载时清理所有防抖定时器
-	useEffect(() => {
-		const debounceMap = debounceMapRef.current
-		return () => {
-			const cancelledError = createFileInfoRequestCancelledError()
-			debounceMap.forEach((item) => {
-				clearTimeout(item.timer)
-				item.reject(cancelledError)
-			})
-			debounceMap.clear()
-		}
-	}, [])
-
 	/**
-	 * 获取文件信息（带防抖）
-	 * 通过 designFileInfoCache 的 getFileInfoByPath 获取文件信息
-	 * 防抖按 path+options 分组，不同 options 不合并（返回的 URL 不同）
+	 * 获取文件信息。path 解析与 path 缓存保留在宿主层，URL 去重和批处理由统一协调器负责。
 	 */
 	const getFileInfo = useCallback(
-		(
+		async (
 			path: string,
-			opts?: { useImageProcess?: boolean; forceRefresh?: boolean },
+			opts?: {
+				useImageProcess?: boolean
+				forceRefresh?: boolean
+				priority?: FileUrlRequestPriority
+			},
 		): Promise<GetFileInfoResponse> => {
-			const debounceMap = debounceMapRef.current
-			const base = designProjectBasePath
-			const attachmentsSnapshotKey = attachmentIndex?.attachmentsSnapshotKey ?? ""
-			const debounceKey = `${path}\0${opts?.useImageProcess === true ? "1" : "0"}\0${opts?.forceRefresh === true ? "1" : "0"}\0${base ?? ""}\0${attachmentsSnapshotKey}`
-			const resolveFileInfo = async (
-				resolve: (value: GetFileInfoResponse) => void,
-				reject: (error: Error) => void,
-			) => {
-				try {
-					const result = await getFileInfoByPath(path, flatAttachments, {
-						...opts,
-						designProjectBasePath: base,
-						designProjectId,
-						attachmentIndex,
-						attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
-						hasAttachmentSnapshot: attachmentsReady === true,
-					})
-					if (!result) {
-						reject(
-							createFileNotFoundByPathError(
-								path,
-								t("design.errors.fileNotFoundByPath", { path }),
-							),
-						)
-						return
-					}
-					resolve(result)
-				} catch (error) {
-					reject(error as Error)
-				}
-			}
-
-			const existingItem = debounceMap.get(debounceKey)
-			if (existingItem) {
-				clearTimeout(existingItem.timer)
-				const timer = setTimeout(async () => {
-					debounceMap.delete(debounceKey)
-					await resolveFileInfo(existingItem.resolve, existingItem.reject)
-				}, DEBOUNCE_DELAY_MS)
-				existingItem.timer = timer
-				return existingItem.promise
-			}
-
-			const promiseCallbacks: {
-				resolve: (value: GetFileInfoResponse) => void
-				reject: (error: Error) => void
-			} = {} as {
-				resolve: (value: GetFileInfoResponse) => void
-				reject: (error: Error) => void
-			}
-			const promise = new Promise<GetFileInfoResponse>((res, rej) => {
-				promiseCallbacks.resolve = res
-				promiseCallbacks.reject = rej
+			const result = await getFileInfoByPath(path, flatAttachments, {
+				...opts,
+				designProjectBasePath,
+				designProjectId,
+				attachmentIndex,
+				attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
+				hasAttachmentSnapshot: attachmentsReady === true,
 			})
-
-			const timer = setTimeout(async () => {
-				debounceMap.delete(debounceKey)
-				await resolveFileInfo(promiseCallbacks.resolve, promiseCallbacks.reject)
-			}, DEBOUNCE_DELAY_MS)
-
-			debounceMap.set(debounceKey, {
-				timer,
-				promise,
-				resolve: promiseCallbacks.resolve,
-				reject: promiseCallbacks.reject,
-			})
-			return promise
+			if (!result) {
+				throw createFileNotFoundByPathError(
+					path,
+					t("design.errors.fileNotFoundByPath", { path }),
+				)
+			}
+			return result
 		},
 		[
 			t,
@@ -207,11 +128,18 @@ export function useFileInfoProvider(
 		(path: string): Promise<CanvasFileResourceMeta> => {
 			return getFileResourceMetaByPath(path, flatAttachments, {
 				designProjectBasePath,
+				designProjectId,
 				attachmentIndex,
 				hasAttachmentSnapshot: attachmentsReady === true,
 			})
 		},
-		[flatAttachments, designProjectBasePath, attachmentIndex, attachmentsReady],
+		[
+			flatAttachments,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+			attachmentsReady,
+		],
 	)
 
 	/**
@@ -229,6 +157,8 @@ export function useFileInfoProvider(
 			try {
 				const result = await getSharedFileInfoById(fileId, fileName, fileSize, {
 					filesList: flatAttachments,
+					designProjectId,
+					priority: "critical",
 				})
 				return result
 			} catch (error) {
@@ -237,7 +167,7 @@ export function useFileInfoProvider(
 				throw new Error(errorMessage)
 			}
 		},
-		[t, flatAttachments],
+		[t, flatAttachments, designProjectId],
 	)
 
 	/**
@@ -245,7 +175,11 @@ export function useFileInfoProvider(
 	 * 用于外部直接设置缓存，避免重复调用 API
 	 */
 	const setFileInfoCache = useCallback(
-		(path: string, fileInfo: GetFileInfoResponse) => {
+		(
+			path: string,
+			fileInfo: GetFileInfoResponse,
+			opts?: { allowMissingAttachment?: boolean },
+		) => {
 			setSharedFileInfoCache(
 				path,
 				fileInfo,
@@ -253,6 +187,7 @@ export function useFileInfoProvider(
 				designProjectBasePath,
 				designProjectId,
 				attachmentIndex,
+				opts,
 			)
 		},
 		[flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],

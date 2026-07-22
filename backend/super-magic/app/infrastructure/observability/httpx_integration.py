@@ -9,6 +9,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from .telemetry import is_telemetry_enabled
 from .constants import LangfuseAttributes
+from .span_utils import set_observation_io, redact_headers
 
 # Import httpx library first to ensure dependency check passes
 try:
@@ -32,6 +33,27 @@ _httpx_instrumented = False
 
 _logger = logging.getLogger(__name__)
 
+# Max request/response body length captured into span attributes.
+_MAX_BODY_LEN = 5000
+
+
+def _read_httpx_body(request):
+    """Best-effort read of an httpx request body as a bounded string."""
+    try:
+        content = getattr(request, "content", None)
+        if not content:
+            return None
+        if isinstance(content, bytes):
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                return f"<binary data, {len(content)} bytes>"
+        else:
+            text = str(content)
+        return text[:_MAX_BODY_LEN] + "...<truncated>" if len(text) > _MAX_BODY_LEN else text
+    except Exception:
+        return None
+
 
 def _request_hook(span, request):
     """Hook to set httpx request span name from method + path."""
@@ -51,6 +73,19 @@ def _request_hook(span, request):
     except Exception as e:
         _logger.debug(f"Failed to set httpx span name: {e}")
 
+    # Fill the observation Input column
+    try:
+        input_payload = {"method": method, "url": url}
+        headers = getattr(request, "headers", None)
+        if headers is not None:
+            input_payload["headers"] = redact_headers(headers)
+        body = _read_httpx_body(request)
+        if body is not None:
+            input_payload["body"] = body
+        set_observation_io(span, input_value=input_payload)
+    except Exception as e:
+        _logger.debug(f"Failed to set httpx observation input: {e}")
+
 
 def _response_hook(span, request, response):
     """Hook to mark httpx response errors and capture error bodies."""
@@ -59,6 +94,16 @@ def _response_hook(span, request, response):
 
     status_code = response.status_code
     span.set_attribute("http.response.status_code", status_code)
+
+    # Fill the observation Output column for all responses (not only errors).
+    try:
+        output_payload = {"status_code": status_code}
+        out_body = _read_httpx_body(response)
+        if out_body is not None:
+            output_payload["body"] = out_body
+        set_observation_io(span, output_value=output_payload)
+    except Exception as e:
+        _logger.debug(f"Failed to set httpx observation output: {e}")
 
     if status_code >= 400:
         error_category = "5xx" if status_code >= 500 else "4xx"

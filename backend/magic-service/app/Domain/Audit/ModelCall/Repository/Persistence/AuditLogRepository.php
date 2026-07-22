@@ -284,7 +284,11 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
         $builder->where('operation_time', '>=', (int) $filters['start_operation_time']);
         $builder->where('operation_time', '<=', (int) $filters['end_operation_time']);
 
-        $builder->whereNotIn('type', [AuditType::SEARCH->value, AuditType::WEB_SCRAPE->value]);
+        $builder->whereNotIn('type', [
+            AuditType::SEARCH->value,
+            AuditType::WEB_SCRAPE->value,
+            AuditType::SLIDES_TEMPLATE->value,
+        ]);
 
         if (! empty($filters['service_provider_config_id'])) {
             $builder->where('service_provider_config_id', (int) $filters['service_provider_config_id']);

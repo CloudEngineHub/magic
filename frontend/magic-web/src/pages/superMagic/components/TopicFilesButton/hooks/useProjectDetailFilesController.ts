@@ -29,6 +29,7 @@ interface UseProjectDetailFilesControllerOptions {
 	selectedTopic?: any
 	setIsSelectMode: (value: boolean) => void
 	onMoveSuccess?: () => void
+	onUpdateAttachments?: () => void
 }
 
 /**
@@ -41,6 +42,7 @@ export function useProjectDetailFilesController({
 	selectedTopic,
 	setIsSelectMode,
 	onMoveSuccess,
+	onUpdateAttachments,
 }: UseProjectDetailFilesControllerOptions) {
 	const { t } = useTranslation("super")
 	const [shareModalVisible, setShareModalVisible] = useState(false)
@@ -66,6 +68,7 @@ export function useProjectDetailFilesController({
 		selectedTopic,
 		attachments,
 		duplicateFileHandler: sharedDuplicateHandler,
+		onUpdateAttachments,
 	})
 
 	const moveFileHook = useMoveFile({

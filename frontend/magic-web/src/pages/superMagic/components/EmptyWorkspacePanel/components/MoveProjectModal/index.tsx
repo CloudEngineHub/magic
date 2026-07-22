@@ -255,8 +255,9 @@ function MoveProjectModal({
 						</>
 					)}
 				</div>
+				{/* Keep focused controls clear of the scroll viewport edges so their outer ring is not clipped. */}
 				<div
-					className="flex flex-1 flex-col gap-0.5 overflow-y-auto py-0 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
+					className="flex flex-1 flex-col gap-0.5 overflow-y-auto py-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
 					data-testid="move-project-modal-workspace-list"
 				>
 					{isSearchEmpty ? (
@@ -340,7 +341,7 @@ function MoveProjectModal({
 									className={cn(
 										contentItemBaseClass,
 										selectedWorkspaceId === workspace.id &&
-										"border-border bg-fill",
+											"border-border bg-fill",
 									)}
 									onClick={() => setSelectedWorkspaceId(workspace.id)}
 									data-testid="move-project-modal-workspace-item"

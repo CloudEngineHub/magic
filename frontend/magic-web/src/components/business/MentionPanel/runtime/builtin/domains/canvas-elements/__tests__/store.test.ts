@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { isValidElement } from "react"
 import { Folder } from "lucide-react"
-import { ElementTypeEnum, type CanvasDocument } from "@/components/CanvasDesign/canvas/types"
-import { FolderIcon } from "@/components/CanvasDesign/components/ui/icons"
+import {
+	ElementTypeEnum,
+	type CanvasDocument,
+} from "@/components/CanvasDesign/runtime/document/types"
+import { FolderIcon } from "@/components/CanvasDesign/ui/primitives/icons"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { I18nTexts } from "../../../../../i18n/types"
 import { MentionItemType, type MentionItem } from "../../../../../types"

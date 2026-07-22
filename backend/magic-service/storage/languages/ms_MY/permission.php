@@ -118,6 +118,7 @@ return [
         'organization_creator_cannot_be_disabled' => 'Pencipta organisasi tidak boleh dilumpuhkan',
         'current_user_not_organization_creator' => 'Pengguna semasa bukan pencipta organisasi',
         'personal_organization_cannot_grant_admin' => 'Organisasi peribadi tidak boleh menetapkan pentadbir organisasi',
+        'personal_organization_cannot_transfer_owner' => 'Pemilik organisasi peribadi tidak boleh dipindahkan',
         'visibility_config_invalid' => 'Konfigurasi keterlihatan tidak sah',
         'only_organization_admin_can_configure_visibility' => 'Hanya pentadbir organisasi boleh mengkonfigurasi keterlihatan',
         'visibility_type_2_requires_users_or_departments' => 'Apabila jenis keterlihatan ialah 2 (keterlihatan separa), sekurang-kurangnya satu pengguna atau jabatan mesti ditentukan',

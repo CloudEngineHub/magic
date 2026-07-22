@@ -61,7 +61,7 @@ class AsrSandboxService extends AbstractAppService
      * 启动录音任务.
      *
      * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create());
-     *        every downstream SandboxGatewayInterface call forwards that token to the in-pod agent.
+     *                                     every downstream SandboxGatewayInterface call forwards that token to the in-pod agent
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      */
     public function startRecordingTask(

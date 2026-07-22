@@ -11,15 +11,15 @@
  * 这些生命周期与入口行为统一由主 SW `src/sw.ts` 驱动。
  */
 
-export const CANVAS_MEDIA_CACHE_NAME = "canvas-media-resources-v1"
-
-const OFFLINE_CACHE_VERSION = 1
+/**
+ * 路径规范化会参与 IndexedDB id 与 CacheStorage key；语义变化时必须递增此版本。
+ * 主线程离线缓存管理器直接复用这些常量，避免它与 SW 升级不一致。
+ */
+export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 2
 const DB_BASE_NAME = "canvas-media-resource-offline-cache"
-const DB_VERSION = OFFLINE_CACHE_VERSION
-const DB_NAME = `${DB_BASE_NAME}-v${OFFLINE_CACHE_VERSION}`
+export const CANVAS_MEDIA_DB_NAME = `${DB_BASE_NAME}-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
+export const CANVAS_MEDIA_CACHE_NAME = `canvas-media-resources-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 const STORE_NAME = "resources"
-const CACHE_BASE_NAME = "canvas-media-resources"
-const CACHE_NAME = `${CACHE_BASE_NAME}-v${OFFLINE_CACHE_VERSION}`
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
 const VIRTUAL_RESOURCE_PATH_SEGMENT = "/canvas-design-media/"
@@ -53,7 +53,10 @@ type CanvasMediaRefreshResult = {
 }
 
 let maxBytes = DEFAULT_MAX_BYTES
-const inflightResourceMap = new Map<string, Promise<Awaited<ReturnType<typeof fetchResourceBlobOnce>>>>()
+const inflightResourceMap = new Map<
+	string,
+	Promise<Awaited<ReturnType<typeof fetchResourceBlobOnce>>>
+>()
 
 /**
  * 将 `design-resource/` 之后的资源路径规范成与主线程 IndexedDB `entry.path` 可比较的键。
@@ -118,7 +121,7 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 
 function openDb(): Promise<IDBDatabase> {
 	return new Promise((resolve, reject) => {
-		const request = indexedDB.open(DB_NAME, DB_VERSION)
+		const request = indexedDB.open(CANVAS_MEDIA_DB_NAME, CANVAS_MEDIA_OFFLINE_CACHE_VERSION)
 		request.onupgradeneeded = () => {
 			const db = request.result
 			if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -275,11 +278,14 @@ async function deleteEntry(entry: CanvasMediaEntry): Promise<void> {
 	const transaction = db.transaction(STORE_NAME, "readwrite")
 	const store = transaction.objectStore(STORE_NAME)
 	await requestToPromise(store.delete(entry.id as string))
-	const cache = await caches.open(CACHE_NAME)
+	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 	await cache.delete(getCacheKey(entry))
 }
 
-async function touchEntry(entry: CanvasMediaEntry, updates: Partial<CanvasMediaEntry> = {}): Promise<void> {
+async function touchEntry(
+	entry: CanvasMediaEntry,
+	updates: Partial<CanvasMediaEntry> = {},
+): Promise<void> {
 	await saveEntry({
 		...entry,
 		...updates,
@@ -392,7 +398,7 @@ async function putResponseInCache(
 	if (blob.size > maxBytes) return
 
 	await enforceMaxBytes(blob.size, getResourceId(entry))
-	const cache = await caches.open(CACHE_NAME)
+	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 	await cache.put(getCacheKey(entry), response.clone())
 	await touchEntry(entry, {
 		...metadata,
@@ -440,7 +446,9 @@ async function fetchResourceBlobOnce(entry: CanvasMediaEntry) {
 }
 
 /** 刷新单条 Canvas 资源缓存，并返回“是否刷新/是否内容变化”的结果。 */
-export async function refreshCanvasMediaResource(entry: CanvasMediaEntry): Promise<CanvasMediaRefreshResult> {
+export async function refreshCanvasMediaResource(
+	entry: CanvasMediaEntry,
+): Promise<CanvasMediaRefreshResult> {
 	const previousEntry = await getEntryByPath(
 		String(entry.path || "").replace(/^\/+/, ""),
 		normalizeResourceNamespace(entry.namespace),
@@ -478,7 +486,7 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 			return new Response(null, { status: 404 })
 		}
 
-		const cache = await caches.open(CACHE_NAME)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		const cachedResponse = await cache.match(getCacheKey(entry))
 		if (cachedResponse) {
 			await touchEntry(entry)
@@ -500,7 +508,7 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 		if (!entry) {
 			return new Response(null, { status: 404 })
 		}
-		const cache = await caches.open(CACHE_NAME)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		const cachedResponse = await cache.match(getCacheKey(entry))
 		if (cachedResponse) {
 			return buildRangeResponse(cachedResponse, request)

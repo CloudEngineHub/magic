@@ -21,8 +21,11 @@
 	"confirmClose": "Confirmer la Fermeture",
 	"detail": "Détail",
 	"file": {
+		"imageLoadFailed": "Échec du chargement de l'image",
+		"imageSizeTooLarge": "L'image ne peut pas dépasser {{size}}",
+		"imageSizeTooSmall": "La taille de l'image ne peut pas être inférieure à {{width}}x{{height}}",
 		"maxSize": "La taille limite d'un fichier est de {{maxSize}}MB",
-		"onlySupportUploadImage": "Seules les images aux formats png/jpg/jpeg/gif/webp sont prises en charge",
+		"onlySupportUploadImage": "Seules les images aux formats png/jpg/jpeg/svg/gif/webp sont prises en charge",
 		"uploadFail": "Échec du téléchargement du fichier, veuillez réessayer"
 	},
 	"filter": "Filtrer",

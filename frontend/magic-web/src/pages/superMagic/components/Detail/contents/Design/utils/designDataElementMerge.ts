@@ -1,13 +1,15 @@
 import {
-	hasCanvasDocumentElementLevelLocalChanges,
+	hasCanvasDocumentLocalChanges,
 	hashCanvasJson,
-	mergeCanvasDocumentsByElement,
+	mergeCanvasDocuments,
 	refreshCanvasDocumentElementMergeConflictsFromRemote,
+	type CanvasDocumentConnectionMergeConflict,
 	type CanvasDocumentElementMergeConflict,
 	type CanvasDocumentMergeConflictReason,
+	type CanvasDocumentMergeConnectionConflictReason,
 	type CanvasDocumentMergeElementConflictReason,
 	type CanvasDocumentMergeResult,
-} from "@/components/CanvasDesign/model"
+} from "@/components/CanvasDesign/runtime/document"
 import type { DesignData } from "../types"
 
 export type DesignDataElementMergeConflictReason =
@@ -15,38 +17,55 @@ export type DesignDataElementMergeConflictReason =
 	| "document-level-change"
 
 export type DesignDataElementMergeElementConflictReason = CanvasDocumentMergeElementConflictReason
+export type DesignDataElementMergeConnectionConflictReason =
+	CanvasDocumentMergeConnectionConflictReason
+
+interface DesignDataElementMergeChangeSummary {
+	localChangedElementIds: string[]
+	remoteChangedElementIds: string[]
+	localDeletedElementIds: string[]
+	remoteDeletedElementIds: string[]
+	localChangedConnectionIds: string[]
+	remoteChangedConnectionIds: string[]
+	localDeletedConnectionIds: string[]
+	remoteDeletedConnectionIds: string[]
+}
 
 export type DesignDataElementMergeResult =
-	| {
+	| ({
 			ok: true
+			isElementLevelConflict?: false
+			isConnectionLevelConflict?: false
 			mergedData: DesignData
-			localChangedElementIds: string[]
-			remoteChangedElementIds: string[]
-			localDeletedElementIds: string[]
-			remoteDeletedElementIds: string[]
-	  }
-	| {
+	  } & DesignDataElementMergeChangeSummary)
+	| ({
 			ok: false
 			isElementLevelConflict: true
+			isConnectionLevelConflict?: false
 			reason: DesignDataElementMergeElementConflictReason
 			conflictElementIds: string[]
+			connectionConflictIds?: string[]
 			elementConflicts: CanvasDocumentElementMergeConflict[]
 			mergedData: DesignData
-			localChangedElementIds: string[]
-			remoteChangedElementIds: string[]
-			localDeletedElementIds: string[]
-			remoteDeletedElementIds: string[]
-	  }
-	| {
+	  } & DesignDataElementMergeChangeSummary)
+	| ({
 			ok: false
 			isElementLevelConflict?: false
+			isConnectionLevelConflict: true
+			reason: DesignDataElementMergeConnectionConflictReason
+			conflictElementIds: string[]
+			connectionConflictIds: string[]
+			connectionConflicts: CanvasDocumentConnectionMergeConflict[]
+			mergedData: DesignData
+	  } & DesignDataElementMergeChangeSummary)
+	| ({
+			ok: false
+			isElementLevelConflict?: false
+			isConnectionLevelConflict?: false
 			reason: DesignDataElementMergeConflictReason
 			conflictElementIds: string[]
-			localChangedElementIds: string[]
-			remoteChangedElementIds: string[]
-			localDeletedElementIds: string[]
-			remoteDeletedElementIds: string[]
-	  }
+			connectionConflictIds?: string[]
+	  } & DesignDataElementMergeChangeSummary)
 
 function getMetaHash(data: DesignData): string {
 	return hashCanvasJson({
@@ -67,6 +86,10 @@ function createDocumentLevelConflictResult(
 		remoteChangedElementIds: canvasMergeResult.remoteChangedElementIds,
 		localDeletedElementIds: canvasMergeResult.localDeletedElementIds,
 		remoteDeletedElementIds: canvasMergeResult.remoteDeletedElementIds,
+		localChangedConnectionIds: canvasMergeResult.localChangedConnectionIds,
+		remoteChangedConnectionIds: canvasMergeResult.remoteChangedConnectionIds,
+		localDeletedConnectionIds: canvasMergeResult.localDeletedConnectionIds,
+		remoteDeletedConnectionIds: canvasMergeResult.remoteDeletedConnectionIds,
 	}
 }
 
@@ -104,6 +127,10 @@ function wrapCanvasMergeResult(options: {
 		remoteChangedElementIds: canvasMergeResult.remoteChangedElementIds,
 		localDeletedElementIds: canvasMergeResult.localDeletedElementIds,
 		remoteDeletedElementIds: canvasMergeResult.remoteDeletedElementIds,
+		localChangedConnectionIds: canvasMergeResult.localChangedConnectionIds,
+		remoteChangedConnectionIds: canvasMergeResult.remoteChangedConnectionIds,
+		localDeletedConnectionIds: canvasMergeResult.localDeletedConnectionIds,
+		remoteDeletedConnectionIds: canvasMergeResult.remoteDeletedConnectionIds,
 	}
 
 	if (canvasMergeResult.ok) {
@@ -136,10 +163,29 @@ function wrapCanvasMergeResult(options: {
 		}
 	}
 
+	if (canvasMergeResult.isConnectionLevelConflict) {
+		return {
+			ok: false,
+			isConnectionLevelConflict: true,
+			reason: canvasMergeResult.reason,
+			conflictElementIds: canvasMergeResult.conflictElementIds,
+			connectionConflictIds: canvasMergeResult.connectionConflictIds,
+			connectionConflicts: canvasMergeResult.connectionConflicts,
+			mergedData: applyMergedCanvasToDesignData({
+				canvasMergeResult,
+				localData,
+				remoteData,
+				isLocalMetaChanged,
+			}),
+			...changeSummary,
+		}
+	}
+
 	return {
 		ok: false,
 		reason: canvasMergeResult.reason,
 		conflictElementIds: canvasMergeResult.conflictElementIds,
+		connectionConflictIds: canvasMergeResult.connectionConflictIds,
 		...changeSummary,
 	}
 }
@@ -150,7 +196,7 @@ export function mergeDesignDataByElement(options: {
 	remoteData: DesignData
 }): DesignDataElementMergeResult {
 	const { baseData, localData, remoteData } = options
-	const canvasMergeResult = mergeCanvasDocumentsByElement({
+	const canvasMergeResult = mergeCanvasDocuments({
 		baseCanvas: baseData.canvas,
 		localCanvas: localData.canvas,
 		remoteCanvas: remoteData.canvas,
@@ -182,13 +228,13 @@ export function mergeDesignDataByElement(options: {
 	})
 }
 
-export function hasElementLevelLocalChanges(options: {
+export function hasDesignDataLocalChanges(options: {
 	baseData: DesignData
 	localData: DesignData
 }): boolean {
 	return (
 		getMetaHash(options.baseData) !== getMetaHash(options.localData) ||
-		hasCanvasDocumentElementLevelLocalChanges({
+		hasCanvasDocumentLocalChanges({
 			baseCanvas: options.baseData.canvas,
 			localCanvas: options.localData.canvas,
 		})

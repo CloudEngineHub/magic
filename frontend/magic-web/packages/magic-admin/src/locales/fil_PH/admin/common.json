@@ -21,8 +21,11 @@
 	"confirmClose": "Kumpirmahin ang Pagsara",
 	"detail": "Detalye",
 	"file": {
+		"imageLoadFailed": "Nabigo ang pag-load ng larawan",
+		"imageSizeTooLarge": "Hindi maaaring lumampas sa {{size}} ang larawan",
+		"imageSizeTooSmall": "Hindi maaaring mas maliit sa {{width}}x{{height}} ang laki ng larawan",
 		"maxSize": "Ang limitasyon ng laki ng bawat file ay {{maxSize}}MB",
-		"onlySupportUploadImage": "Suportado lamang ang pag-upload ng mga larawan sa format na png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Suportado lamang ang pag-upload ng mga larawan sa format na png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Nabigo ang pag-upload ng file, pakisubukang muli"
 	},
 	"filter": "I-filter",

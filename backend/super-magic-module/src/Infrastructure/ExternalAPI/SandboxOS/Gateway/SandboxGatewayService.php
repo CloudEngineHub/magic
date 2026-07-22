@@ -1107,7 +1107,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         if ($userId !== null && $userId !== '') {
             $headers['magic-user-id'] = $userId;
         }
-        if ($organizationCode !== null && $organizationCode !== '') {
+        if ($organizationCode !== '') {
             $headers['magic-organization-code'] = $organizationCode;
         }
         if ($authorization !== null && $authorization !== '') {

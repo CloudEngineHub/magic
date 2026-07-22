@@ -166,6 +166,13 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
         // 默认过滤已删除的数据
         $query->whereNull('deleted_at');
 
+        $workspaceName = $conditions['workspace_name'] ?? '';
+        unset($conditions['workspace_name']);
+
+        if ($workspaceName !== '') {
+            $query->where('name', 'like', '%' . $workspaceName . '%');
+        }
+
         // 应用查询条件
         foreach ($conditions as $field => $value) {
             // 默认等于查询

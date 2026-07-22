@@ -9,6 +9,29 @@
 		"ok": "OK",
 		"save": "Save"
 	},
+	"connectionConflict": {
+		"deleteConnection": "Delete this connection",
+		"description": "This connection has new synced content and your current changes.",
+		"keepConnection": "Keep this connection",
+		"keepDeleted": "Keep deleted",
+		"restoreNew": "Restore new",
+		"title": "Choose a connection to keep",
+		"useLocal": "Keep mine",
+		"useRemote": "Use new"
+	},
+	"connectionEditor": {
+		"linkedMediaActive": "Linked",
+		"linkedMediaDuplicate": "Already added",
+		"linkedMediaMissingResource": "Missing resource",
+		"linkedMediaOverLimit": "Over limit",
+		"linkedMediaUnavailable": "Unavailable",
+		"linkedMediaUnsupportedMode": "Not supported in current mode",
+		"linkedMediaUnsupportedType": "Unsupported type",
+		"mediaKindAudio": "Audio",
+		"mediaKindImage": "Image",
+		"mediaKindVideo": "Video",
+		"removeConnection": "Remove connection"
+	},
 	"dropOverlay": {
 		"loading": "Loading",
 		"referenceImageLimitReached": "Reference image limit reached",
@@ -174,9 +197,22 @@
 		"projectFilesRoot": "Current Project Files",
 		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
-		"referenceImage": "Reference Image",
+		"referenceImage": "Image",
 		"resolution": "Resolution",
 		"size": "Size"
+	},
+	"imagePromptExtraction": {
+		"createText": "Create Text",
+		"emptyInput": "The current image cannot be used to extract a prompt",
+		"emptyResult": "AI did not generate a valid prompt. Please try again",
+		"failed": "Failed to extract prompt. Please try again",
+		"generate": "Extract Prompt",
+		"generating": "Extracting prompt",
+		"regenerate": "Extract Again",
+		"retry": "Retry",
+		"title": "Extract Image Prompt",
+		"trigger": "Extract Prompt",
+		"unavailable": "Image prompt extraction is currently unavailable"
 	},
 	"layers": {
 		"collapse": "Collapse",
@@ -216,6 +252,7 @@
 		"downloadImageNoWatermark": "Download Image (No Watermark)",
 		"downloadVideo": "Download Video",
 		"hide": "Hide",
+		"locateProjectFile": "Locate in Project Files",
 		"lock": "Lock",
 		"moveDown": "Move Down",
 		"moveToBottom": "Move to Bottom",
@@ -235,9 +272,9 @@
 		"model": "Model",
 		"noPrompt": "No prompt",
 		"prompt": "Prompt",
-		"referenceAudio": "Reference Audio",
-		"referenceImage": "Reference Image",
-		"referenceVideo": "Reference Video",
+		"referenceAudio": "Audio",
+		"referenceImage": "Image",
+		"referenceVideo": "Video",
 		"size": "Size",
 		"title": "Generation History"
 	},
@@ -421,6 +458,20 @@
 	"text": {
 		"defaultName": "Text"
 	},
+	"textContentOptimization": {
+		"apply": "Apply",
+		"emptyInput": "Enter text before optimizing",
+		"emptyResult": "AI did not generate valid text. Please try again",
+		"failed": "Failed to optimize content. Please try again",
+		"finishEditingFirst": "Finish editing the text before optimizing",
+		"generate": "Optimize Content",
+		"generating": "Generating optimized result",
+		"regenerate": "Regenerate",
+		"retry": "Retry",
+		"title": "Content Optimization",
+		"trigger": "Optimize Content",
+		"unavailable": "Content optimization is currently unavailable"
+	},
 	"tools": {
 		"frame": "Frame",
 		"hand": "Hand Tool",
@@ -430,6 +481,9 @@
 		"selection": "Selection Tool",
 		"space": "Space",
 		"text": "Text",
+		"upload": "Upload",
+		"uploadImage": "Upload Image",
+		"uploadVideo": "Upload Video",
 		"videoGenerator": "Video Generator"
 	},
 	"triangle": {
@@ -466,8 +520,8 @@
 		"referenceAssetTotalMinNotMet": "At least {{min}} reference assets are required",
 		"referenceAssetTypeMaxReached": "Up to {{max}} {{assetType}} are allowed",
 		"referenceAssetTypeMinNotMet": "At least {{min}} {{assetType}} are required",
-		"referenceImage": "Reference Image",
-		"referenceImageWithIndex": "Reference image {{index}}",
+		"referenceImage": "Image",
+		"referenceImageWithIndex": "Image {{index}}",
 		"referenceSourceMaterial": "Sources",
 		"referenceVideoMaxReached": "Up to {{max}} reference videos are allowed",
 		"removeSlotResource": "Remove this reference",

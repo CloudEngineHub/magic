@@ -50,7 +50,7 @@ async def test_magic_service_client_resolves_slides_template_file_url_endpoint()
 
     assert client.call == (
         "GET",
-        "/api/v1/slides-templates/ppt%2Fa%20b%3F/file-url",
+        "/api/v1/open-api/slides-templates/ppt%2Fa%20b%3F/file-url",
         None,
         "幻灯片模板文件链接获取",
         {

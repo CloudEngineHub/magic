@@ -17,29 +17,26 @@ import {
 import type {
 	CanvasReferenceElementsContext,
 	ProjectAttachmentMentionNode,
-} from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/public/props"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
 	ReferenceResourceFileInfo,
 	ReferenceResourceTypeFilter,
-} from "@/components/CanvasDesign/components/MessageEditor/reference-assets/reference-resource.types"
+} from "@/components/CanvasDesign/ui/editors/message/reference-assets/reference-resource.types"
 import {
 	classifyReferenceAssetFile,
 	isReferenceAssetTypeCapacityBlocked,
 	isReferenceResourceCurrentlySelected,
 	isReferenceResourceTypeAllowed,
-} from "@/components/CanvasDesign/components/MessageEditor/reference-assets/referenceResourceSelection"
+} from "@/components/CanvasDesign/ui/editors/message/reference-assets/referenceResourceSelection"
 import {
 	isCanvasElementsMentionItemId,
 	MentionPanelCanvasElementsStore,
 	type ActiveCanvasElementsContext,
 	type CanvasElementResolvedFile,
 } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
-import {
-	isDesignDslCanvasRelativeResourcePath,
-	resolveStrictDesignDslCanvasResourceCandidates,
-} from "../utils/designDslPathUtils"
+import { isCurrentCanvasResourcePath, toWorkspaceRelativeCandidates } from "../utils/designPath"
 
 function getExtension(name: string): string {
 	const idx = name.lastIndexOf(".")
@@ -73,11 +70,6 @@ function normalizeCanvasElementResourcePath(path: string): string {
 	})()
 
 	return normalizePathSlashes(urlPath).replace(/^(\.\/)+/, "")
-}
-
-function getPathBasename(path: string): string {
-	const normalized = normalizeCanvasElementResourcePath(path)
-	return normalized.split("/").pop()?.toLowerCase() ?? ""
 }
 
 /**
@@ -147,7 +139,6 @@ interface AttachmentFileLookup {
 	byNormalizedPath: Map<string, AttachmentFileEntry>
 	byNormalizedPathEntries: Map<string, AttachmentFileEntry[]>
 	byNormalizedFileId: Map<string, AttachmentFileEntry>
-	byBasename: Map<string, AttachmentFileEntry[]>
 }
 
 function getFolderLookupKeys(node: ProjectAttachmentMentionNode): string[] {
@@ -310,7 +301,6 @@ export class CanvasDesignMentionDataService implements DataService {
 		const byNormalizedPath = new Map<string, AttachmentFileEntry>()
 		const byNormalizedPathEntries = new Map<string, AttachmentFileEntry[]>()
 		const byNormalizedFileId = new Map<string, AttachmentFileEntry>()
-		const byBasename = new Map<string, AttachmentFileEntry[]>()
 
 		const addFirst = (
 			map: Map<string, AttachmentFileEntry>,
@@ -328,15 +318,6 @@ export class CanvasDesignMentionDataService implements DataService {
 			}
 			if (!bucket.includes(file)) bucket.push(file)
 		}
-		const addBasename = (key: string, file: AttachmentFileEntry) => {
-			if (!key) return
-			const bucket = byBasename.get(key)
-			if (!bucket) {
-				byBasename.set(key, [file])
-				return
-			}
-			if (!bucket.includes(file)) bucket.push(file)
-		}
 
 		for (const file of files) {
 			const normalizedPath = normalizeCanvasElementResourcePath(file.path)
@@ -344,8 +325,6 @@ export class CanvasDesignMentionDataService implements DataService {
 			addFirst(byNormalizedPath, normalizedPath, file)
 			addPathEntry(normalizedPath, file)
 			addFirst(byNormalizedFileId, normalizedFileId, file)
-			addBasename(file.name.toLowerCase(), file)
-			addBasename(getPathBasename(file.path), file)
 		}
 
 		this.attachmentFileLookup = {
@@ -353,9 +332,42 @@ export class CanvasDesignMentionDataService implements DataService {
 			byNormalizedPath,
 			byNormalizedPathEntries,
 			byNormalizedFileId,
-			byBasename,
 		}
 		return this.attachmentFileLookup
+	}
+
+	private findAttachmentFileBySrc(src: string): AttachmentFileEntry | null {
+		const normalizedSrc = normalizeCanvasElementResourcePath(src)
+		if (!normalizedSrc) return null
+
+		const attachmentLookup = this.getAttachmentFileLookup()
+		const rootBasePath = this.getCanvasElementsRootBasePath()
+		const strictCandidates =
+			rootBasePath &&
+			isCurrentCanvasResourcePath(src, { designProjectBasePath: rootBasePath })
+				? toWorkspaceRelativeCandidates(src, { designProjectBasePath: rootBasePath })
+				: null
+
+		if (strictCandidates) {
+			for (const candidate of strictCandidates) {
+				const exact = attachmentLookup.byNormalizedPath.get(
+					normalizeCanvasElementResourcePath(candidate),
+				)
+				if (exact) return exact
+			}
+			const rootRelativeExact = (
+				attachmentLookup.byNormalizedPathEntries.get(normalizedSrc) ?? []
+			).find((file) => this.isAttachmentFileInCanvasElementsRoot(file))
+			if (rootRelativeExact) return rootRelativeExact
+			return null
+		}
+
+		const exact =
+			attachmentLookup.byNormalizedPath.get(normalizedSrc) ??
+			attachmentLookup.byNormalizedFileId.get(normalizedSrc)
+		if (exact) return exact
+
+		return null
 	}
 
 	private isAttachmentFileInCanvasElementsRoot(file: AttachmentFileEntry): boolean {
@@ -366,56 +378,6 @@ export class CanvasDesignMentionDataService implements DataService {
 		if (rootKeys.length === 0) return false
 
 		return rootKeys.some((rootKey) => file.ancestorFolderKeys.includes(rootKey))
-	}
-
-	private findAttachmentFileBySrc(src: string): AttachmentFileEntry | null {
-		const normalizedSrc = normalizeCanvasElementResourcePath(src)
-		if (!normalizedSrc) return null
-
-		const attachmentLookup = this.getAttachmentFileLookup()
-		const rootBasePath = this.getCanvasElementsRootBasePath()
-		const strictCandidates =
-			rootBasePath && isDesignDslCanvasRelativeResourcePath(src)
-				? resolveStrictDesignDslCanvasResourceCandidates(src, rootBasePath)
-				: null
-
-		if (strictCandidates) {
-			for (const candidate of strictCandidates.workspaceRelative) {
-				const exact = attachmentLookup.byNormalizedPath.get(
-					normalizeCanvasElementResourcePath(candidate),
-				)
-				if (exact) return exact
-			}
-			for (const candidate of strictCandidates.rootRelative) {
-				const normalizedCandidate = normalizeCanvasElementResourcePath(candidate)
-				const exact = (
-					attachmentLookup.byNormalizedPathEntries.get(normalizedCandidate) ?? []
-				).find((file) => this.isAttachmentFileInCanvasElementsRoot(file))
-				if (exact) return exact
-			}
-			return null
-		}
-
-		const exact =
-			attachmentLookup.byNormalizedPath.get(normalizedSrc) ??
-			attachmentLookup.byNormalizedFileId.get(normalizedSrc)
-		if (exact) return exact
-
-		const suffix = attachmentLookup.files.find((file) => {
-			const normalizedPath = normalizeCanvasElementResourcePath(file.path)
-			return (
-				normalizedPath.endsWith(`/${normalizedSrc}`) ||
-				normalizedSrc.endsWith(`/${normalizedPath}`)
-			)
-		})
-		if (suffix) return suffix
-
-		const srcBasename = getPathBasename(src)
-		if (!srcBasename) return null
-
-		const basenameMatches = attachmentLookup.byBasename.get(srcBasename) ?? []
-
-		return basenameMatches.length === 1 ? basenameMatches[0] : null
 	}
 
 	private getCanvasElementsRootBasePath(): string | undefined {

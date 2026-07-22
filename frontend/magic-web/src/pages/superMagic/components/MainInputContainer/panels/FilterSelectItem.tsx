@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, type KeyboardEvent } from "react"
 import { ChevronDown, CircleX, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -10,12 +10,15 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { Label } from "@/components/shadcn-ui/label"
+import { Input } from "@/components/shadcn-ui/input"
+import { Button } from "@/components/shadcn-ui/button"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { cn } from "@/lib/utils"
 
 import { useLocaleText } from "./hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "./types"
+import { normalizeFieldCustomInputValue } from "./fieldCustomInput"
 import { isOptionGroup, localeTextToDisplayString } from "./utils"
 import { ScenePanelVariant } from "../components/LazyScenePanel/types"
 import { observer } from "mobx-react-lite"
@@ -50,6 +53,8 @@ function FilterSelectItem({
 	const isCompactMobile = compact && isMobile
 
 	const [drawerOpen, setDrawerOpen] = useState(false)
+	const [desktopOpen, setDesktopOpen] = useState(false)
+	const [customInputValue, setCustomInputValue] = useState("")
 
 	const flatOptions = filter.options.filter((opt): opt is OptionItem => !isOptionGroup(opt))
 	const availableOptions = flatOptions
@@ -63,6 +68,26 @@ function FilterSelectItem({
 	const selectedOption =
 		availableOptions.find(({ optionValue }) => optionValue === filter.current_value)?.option ||
 		null
+	const customInput = filter.custom_input
+	const customInputPlaceholder = lt(customInput?.placeholder) || lt(filter.label)
+	const customInputUnit = lt(customInput?.unit)
+	const normalizedCustomInputValue = customInput
+		? normalizeFieldCustomInputValue(customInputValue, customInput)
+		: null
+	const selectedDisplayValue =
+		lt(selectedOption?.label) ||
+		lt(selectedOption?.value) ||
+		filter.current_value ||
+		placeholder
+
+	useEffect(() => {
+		if (!customInput || !filter.current_value || selectedOption) {
+			setCustomInputValue("")
+			return
+		}
+
+		setCustomInputValue(filter.current_value)
+	}, [customInput, filter.current_value, selectedOption])
 
 	const handleOpenDrawer = useCallback(() => {
 		setDrawerOpen(true)
@@ -85,7 +110,74 @@ function FilterSelectItem({
 		setDrawerOpen(false)
 	}, [])
 
-	if (availableOptions.length === 0) {
+	const handleSubmitCustomInput = useCallback(() => {
+		if (normalizedCustomInputValue === null) return
+
+		onFilterChange?.(filter.data_key, normalizedCustomInputValue)
+		setDrawerOpen(false)
+		setDesktopOpen(false)
+	}, [filter.data_key, normalizedCustomInputValue, onFilterChange])
+
+	const handleCustomInputKeyDown = useCallback(
+		(event: KeyboardEvent<HTMLInputElement>) => {
+			event.stopPropagation()
+			if (event.key !== "Enter") return
+
+			event.preventDefault()
+			handleSubmitCustomInput()
+		},
+		[handleSubmitCustomInput],
+	)
+
+	const customInputControl = customInput ? (
+		<div
+			className={cn("flex items-center gap-2", isMobile ? "w-full" : "w-[248px]")}
+			onPointerDown={(event) => event.stopPropagation()}
+			onClick={(event) => event.stopPropagation()}
+		>
+			<div
+				className={cn(
+					"flex min-w-0 flex-1 items-center rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-ring/20",
+					isMobile ? "h-10" : "h-8",
+					customInputValue && normalizedCustomInputValue === null && "border-destructive",
+				)}
+			>
+				<Input
+					aria-label={customInputPlaceholder}
+					type={customInput.type}
+					inputMode={customInput.integer ? "numeric" : "decimal"}
+					min={customInput.min}
+					max={customInput.max}
+					step={customInput.step ?? (customInput.integer ? 1 : undefined)}
+					value={customInputValue}
+					onChange={(event) => setCustomInputValue(event.target.value)}
+					onKeyDown={handleCustomInputKeyDown}
+					placeholder={customInputPlaceholder}
+					aria-invalid={Boolean(customInputValue && normalizedCustomInputValue === null)}
+					className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+				/>
+				{customInputUnit ? (
+					<span className="shrink-0 whitespace-nowrap pr-3 text-sm text-muted-foreground">
+						{customInputUnit}
+					</span>
+				) : null}
+			</div>
+			<Button
+				type="button"
+				size="sm"
+				disabled={normalizedCustomInputValue === null}
+				onClick={handleSubmitCustomInput}
+				className={cn(
+					"shrink-0 rounded-lg px-3 text-sm font-medium shadow-none",
+					isMobile ? "h-10" : "h-8",
+				)}
+			>
+				{t("actionDrawer.confirm")}
+			</Button>
+		</div>
+	) : null
+
+	if (availableOptions.length === 0 && !customInput) {
 		return null
 	}
 
@@ -126,31 +218,35 @@ function FilterSelectItem({
 								{lt(filter.label)}
 							</span>
 							<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-								{lt(selectedOption?.label) ||
-									lt(selectedOption?.value) ||
-									filter.current_value ||
-									placeholder}
+								{selectedDisplayValue}
 							</span>
 						</>
 					) : (
 						<span className={cn(!hasSelection && "text-muted-foreground")}>
-							{lt(selectedOption?.label) ||
-								lt(selectedOption?.value) ||
-								filter.current_value ||
-								placeholder}
+							{selectedDisplayValue}
 						</span>
 					)}
 					<span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-						{hasSelection && !isCompactMobile ? (
+						{hasSelection ? (
 							<span
 								role="button"
 								tabIndex={0}
 								aria-label={clearText}
+								className={cn(
+									"inline-flex items-center justify-center rounded-full text-muted-foreground/70",
+									isCompactMobile && "-m-2 size-8 active:bg-muted",
+								)}
 								onPointerDown={(event) => {
 									event.preventDefault()
 									event.stopPropagation()
 								}}
 								onClick={(event) => {
+									event.preventDefault()
+									event.stopPropagation()
+									handleClear()
+								}}
+								onKeyDown={(event) => {
+									if (event.key !== "Enter" && event.key !== " ") return
 									event.preventDefault()
 									event.stopPropagation()
 									handleClear()
@@ -233,6 +329,11 @@ function FilterSelectItem({
 									</div>
 								)}
 							</div>
+							{customInputControl ? (
+								<div className="mt-3 border-t border-border pt-3">
+									{customInputControl}
+								</div>
+							) : null}
 						</div>
 					</div>
 				</MagicPopup>
@@ -247,6 +348,8 @@ function FilterSelectItem({
 				{lt(filter.label)}
 			</Label>
 			<Select
+				open={desktopOpen}
+				onOpenChange={setDesktopOpen}
 				value={filter.current_value || ""}
 				onValueChange={(value) => onFilterChange?.(filter.data_key, value)}
 			>
@@ -254,6 +357,7 @@ function FilterSelectItem({
 					id={filter.data_key}
 					className={cn(
 						"group !h-8 w-fit rounded-full bg-background text-foreground dark:!bg-card",
+						"focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0",
 						hasSelection && "[&>svg:last-child]:hidden",
 					)}
 				>
@@ -264,7 +368,7 @@ function FilterSelectItem({
 							className="text-muted-foreground"
 						/>
 					)}
-					<SelectValue placeholder={placeholder} />
+					<SelectValue placeholder={placeholder}>{selectedDisplayValue}</SelectValue>
 					{hasSelection && (
 						<span className="relative inline-flex size-4 shrink-0 items-center justify-center">
 							<ChevronDown className="size-4 text-muted-foreground opacity-50 transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" />
@@ -288,11 +392,23 @@ function FilterSelectItem({
 						</span>
 					)}
 				</SelectTrigger>
-				<SelectContent>
+				<SelectContent
+					align="start"
+					showScrollButtons={false}
+					className={cn(
+						customInputControl &&
+							"w-[272px] min-w-[272px] overflow-hidden rounded-xl border-border/80 p-0 shadow-lg",
+					)}
+					viewportClassName={cn(customInputControl && "p-1.5")}
+				>
 					{availableOptions.length > 0 ? (
 						availableOptions.map(({ option, optionValue }) => {
 							return (
-								<SelectItem key={optionValue} value={optionValue}>
+								<SelectItem
+									key={optionValue}
+									value={optionValue}
+									className={cn(customInputControl && "h-9 rounded-lg pl-3 pr-8")}
+								>
 									<span>
 										{lt(option.label) ?? lt(option.value) ?? optionValue}
 									</span>
@@ -304,6 +420,11 @@ function FilterSelectItem({
 							{emptyText}
 						</div>
 					)}
+					{customInputControl ? (
+						<div className="-mx-1.5 -mb-1.5 mt-1 border-t border-border/70 bg-muted/30 p-2.5">
+							{customInputControl}
+						</div>
+					) : null}
 				</SelectContent>
 			</Select>
 		</div>

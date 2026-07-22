@@ -44,6 +44,13 @@ export namespace PlatformPackage {
 	export type RoleI18N = MarketTypes.RoleI18N
 	export type AgentMarketItem = MarketTypes.AgentMarketItem
 	export type UpdateAgentMarketInfoParams = MarketTypes.UpdateAgentMarketInfoParams
+	export type AgentMarketCategoryStatus = MarketTypes.AgentMarketCategoryStatus
+	export import AgentMarketCategoryStatusMap = MarketTypes.AgentMarketCategoryStatusMap
+	export type GetAgentMarketCategoryListParams = MarketTypes.GetAgentMarketCategoryListParams
+	export type AgentMarketCategoryListResponse = MarketTypes.AgentMarketCategoryListResponse
+	export type AgentMarketCategoryItem = MarketTypes.AgentMarketCategoryItem
+	export type AdminMarketCategory = MarketTypes.AdminMarketCategory
+	export type SaveAgentMarketCategoryParams = MarketTypes.SaveAgentMarketCategoryParams
 	export type GetAgentVersionReviewListParams = MarketTypes.GetAgentVersionReviewListParams
 	export type AgentVersionReview = MarketTypes.AgentVersionReview
 

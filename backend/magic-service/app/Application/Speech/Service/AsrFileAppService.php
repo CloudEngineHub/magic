@@ -2836,7 +2836,7 @@ class AsrFileAppService extends AbstractAppService
             $locked = $this->locker->spinLock($lockName, $lockOwner);
             if ($locked) {
                 try {
-            $this->asrSandboxService->startRecordingTask($dataIsolation, $taskStatus);
+                    $this->asrSandboxService->startRecordingTask($dataIsolation, $taskStatus);
                     $taskStatus->sandboxRetryCount = 0;
                     $taskStatus->sandboxTaskCreated = true;
                     $taskStatus->sandboxEnsureAt = $now;

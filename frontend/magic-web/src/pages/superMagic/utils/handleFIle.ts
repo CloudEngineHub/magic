@@ -309,6 +309,8 @@ const downloadFn = async (url: string, filename?: string, target?: string) => {
 interface DownloadFileWithAnchorOptions {
 	/** Optional desktop modal layer for nested download prompts. */
 	modalZIndex?: number
+	/** Runs once when the download prompt closes. */
+	onModalClose?: () => void
 }
 
 /**
@@ -329,6 +331,7 @@ export const downloadFileWithAnchor = async (
 		fileName: finalFilename || "file",
 		downloadUrl: url,
 		modalZIndex: options?.modalZIndex,
+		onAfterClose: options?.onModalClose,
 		onDownload: () => {
 			downloadFn(url, finalFilename, target)
 		},

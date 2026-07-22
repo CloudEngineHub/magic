@@ -15,7 +15,7 @@ import {
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { resolveDesignProjectBasePathFromAttachments } from "@/pages/superMagic/components/Detail/contents/Design/utils/utils"
-import { resolveDesignDslPathToWorkspaceRelative } from "@/pages/superMagic/components/Detail/contents/Design/utils/designDslPathUtils"
+import { toWorkspaceRelativePath } from "@/pages/superMagic/components/Detail/contents/Design/utils/designPath"
 import { validateMentionWithDataService } from "@/components/business/MentionPanel/utils/dataService"
 import { DraftData, FileData } from "../types"
 import { keyBy } from "lodash-es"
@@ -43,6 +43,8 @@ export function createUploadFileMentionData(fileData: FileData): UploadFileMenti
 		file_extension: extractFileExtension(fileData.file.name),
 		file_size: fileData.file.size,
 		file: fileData.file,
+		relative_file_path: fileData.defaultRelativePath,
+		is_hidden: fileData.isHidden,
 		upload_progress: fileData.progress,
 		upload_status: fileData.status,
 		upload_error: fileData.error,
@@ -276,10 +278,11 @@ export function transformMarkerImagePathsToWorkspaceAbsolute(
 				if (!markerData) return transformedNode
 
 				const imagePath = getCanvasMarkerMentionImagePath(markerData)
-				const workspaceImagePath = resolveDesignDslPathToWorkspaceRelative(
-					imagePath,
-					getBasePathByDesignProjectId(markerData.design_project_id),
-				)
+				const workspaceImagePath = toWorkspaceRelativePath(imagePath, {
+					designProjectBasePath: getBasePathByDesignProjectId(
+						markerData.design_project_id,
+					),
+				})
 
 				// Agent/后端只需要工作区路径；原始相对路径保留在 image_relative 里，供缩略图兜底。
 				const nextMarkerData: CanvasMarkerMentionData = {

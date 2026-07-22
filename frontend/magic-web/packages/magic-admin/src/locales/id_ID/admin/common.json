@@ -21,8 +21,11 @@
 	"confirmClose": "Konfirmasi Tutup",
 	"detail": "Detail",
 	"file": {
+		"imageLoadFailed": "Gagal memuat gambar",
+		"imageSizeTooLarge": "Gambar tidak boleh melebihi {{size}}",
+		"imageSizeTooSmall": "Ukuran gambar tidak boleh kurang dari {{width}}x{{height}}",
 		"maxSize": "Batas ukuran file tunggal adalah {{maxSize}}MB",
-		"onlySupportUploadImage": "Hanya mendukung unggahan gambar format png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Hanya mendukung unggahan gambar format png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Gagal mengunggah file, silakan coba lagi"
 	},
 	"filter": "Filter",

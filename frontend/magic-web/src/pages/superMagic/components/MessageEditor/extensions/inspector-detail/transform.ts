@@ -12,11 +12,21 @@ const KNOWN_LABELS = [
 	"尺寸:",
 	"计算样式:",
 	"文本内容:",
+	"资源信息:",
+	"元素属性:",
+	"DOM 上下文:",
+	"元素片段:",
+	"选择器匹配数:",
 	// en_US
 	"Selector:",
 	"Size:",
 	"Computed Styles:",
 	"Text Content:",
+	"Resource:",
+	"Element Attributes:",
+	"DOM Context:",
+	"Element HTML:",
+	"Selector Match Count:",
 ]
 
 function isInspectorDetailLine(text: string): boolean {
@@ -71,6 +81,11 @@ function extractInspectorAttrs(
 	computedStyles: string
 	styleCount: number
 	textContent: string
+	elementAttributes: string
+	resource: string
+	domContext: string
+	elementHtml: string
+	selectorMatchCount: number
 	fileMention?: TiptapMentionAttributes | null
 } {
 	let selector = ""
@@ -78,6 +93,11 @@ function extractInspectorAttrs(
 	let computedStyles = "{}"
 	let styleCount = 0
 	let textContent = ""
+	let elementAttributes = "{}"
+	let resource = ""
+	let domContext = "{}"
+	let elementHtml = ""
+	let selectorMatchCount = -1
 
 	for (const p of paragraphs) {
 		const text = getFirstText(p)
@@ -126,6 +146,18 @@ function extractInspectorAttrs(
 				.replace(/^(文本内容|Text Content):\s*/, "")
 				.replace(/^"/, "")
 				.replace(/"$/, "")
+		} else if (text.startsWith("资源信息:") || text.startsWith("Resource:")) {
+			resource = text.replace(/^(资源信息|Resource):\s*/, "")
+		} else if (text.startsWith("元素属性:") || text.startsWith("Element Attributes:")) {
+			elementAttributes = text.replace(/^(元素属性|Element Attributes):\s*/, "") || "{}"
+		} else if (text.startsWith("DOM 上下文:") || text.startsWith("DOM Context:")) {
+			domContext = text.replace(/^(DOM 上下文|DOM Context):\s*/, "") || "{}"
+		} else if (text.startsWith("元素片段:") || text.startsWith("Element HTML:")) {
+			elementHtml = text.replace(/^(元素片段|Element HTML):\s*/, "")
+		} else if (text.startsWith("选择器匹配数:") || text.startsWith("Selector Match Count:")) {
+			selectorMatchCount = Number(
+				text.replace(/^(选择器匹配数|Selector Match Count):\s*/, ""),
+			)
 		}
 	}
 
@@ -133,7 +165,20 @@ function extractInspectorAttrs(
 	const tagMatch = selector.match(/(?:^|\s|>)\s*([a-z][a-z0-9]*)/i)
 	const tagName = tagMatch ? tagMatch[1] : ""
 
-	return { title: titleText, selector, tagName, size, computedStyles, styleCount, textContent }
+	return {
+		title: titleText,
+		selector,
+		tagName,
+		size,
+		computedStyles,
+		styleCount,
+		textContent,
+		elementAttributes,
+		resource,
+		domContext,
+		elementHtml,
+		selectorMatchCount,
+	}
 }
 
 /**
@@ -231,6 +276,11 @@ export function serializeInspectorContent(
 		size: string
 		computedStyles: string
 		textContent: string
+		elementAttributes: string
+		resource: string
+		domContext: string
+		elementHtml: string
+		selectorMatchCount: string
 	},
 ): JSONContent {
 	if (!doc.content || doc.content.length === 0) return doc
@@ -248,6 +298,11 @@ export function serializeInspectorContent(
 			size?: string
 			computedStyles?: string
 			textContent?: string
+			elementAttributes?: string
+			resource?: string
+			domContext?: string
+			elementHtml?: string
+			selectorMatchCount?: number
 			fileMention?: TiptapMentionAttributes | null
 		}
 
@@ -263,6 +318,21 @@ export function serializeInspectorContent(
 		// Selector
 		if (attrs.selector) {
 			content.push(para(text(`${labels.selector}: ${attrs.selector}`)))
+		}
+		if (attrs.selectorMatchCount !== undefined && attrs.selectorMatchCount >= 0) {
+			content.push(para(text(`${labels.selectorMatchCount}: ${attrs.selectorMatchCount}`)))
+		}
+		if (attrs.resource) {
+			content.push(para(text(`${labels.resource}: ${attrs.resource}`)))
+		}
+		if (attrs.elementAttributes && attrs.elementAttributes !== "{}") {
+			content.push(para(text(`${labels.elementAttributes}: ${attrs.elementAttributes}`)))
+		}
+		if (attrs.domContext && attrs.domContext !== "{}") {
+			content.push(para(text(`${labels.domContext}: ${attrs.domContext}`)))
+		}
+		if (attrs.elementHtml) {
+			content.push(para(text(`${labels.elementHtml}: ${attrs.elementHtml}`)))
 		}
 
 		// Size
@@ -287,7 +357,6 @@ export function serializeInspectorContent(
 		if (attrs.textContent) {
 			content.push(para(text(`${labels.textContent}: "${attrs.textContent}"`)))
 		}
-
 		return content
 	}
 

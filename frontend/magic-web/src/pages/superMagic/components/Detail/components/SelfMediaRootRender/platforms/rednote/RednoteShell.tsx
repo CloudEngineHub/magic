@@ -15,7 +15,12 @@ import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { useShellMountedViews } from "../../hooks/useShellMountedViews"
 import { useSelfMediaStore } from "../../stores"
-import type { PlatformComponentProps, SelfMediaPost, SelfMediaView } from "../../types"
+import type {
+	PlatformComponentProps,
+	SelfMediaPost,
+	SelfMediaPostMetaPatch,
+	SelfMediaView,
+} from "../../types"
 import { REDNOTE_PHONE_HEIGHT, REDNOTE_PHONE_WIDTH } from "./rednoteShellConstants"
 import { RednoteShellEditViewPanel } from "./RednoteShellEditViewPanel"
 import { RednoteShellPhoneViewPanel } from "./RednoteShellPhoneViewPanel"
@@ -35,7 +40,10 @@ function RednoteShell(props: PlatformComponentProps) {
 		selectedProject,
 		onBackHome,
 		onUpdatePostTitle,
+		onUpdatePostMeta,
 		onRequestPrePublishAnalysis,
+		onSharePost,
+		shareLoading,
 	} = props
 	const store = useSelfMediaStore()
 	const { posts, activePostIndex, view, rootLoading } = store
@@ -120,7 +128,8 @@ function RednoteShell(props: PlatformComponentProps) {
 		getFileInfoForIframe: inspectorGetFileInfo,
 	})
 
-	const inspectorDisabled = view === "edit" || view === "feed" || rootLoading
+	const inspectorDisabled =
+		allowEdit === false || view === "edit" || view === "feed" || rootLoading
 
 	// Auto-stop inspector when view changes
 	useEffect(() => {
@@ -272,6 +281,19 @@ function RednoteShell(props: PlatformComponentProps) {
 		},
 		[activePostEntry, activePostIndex, onUpdatePostTitle, platform, store],
 	)
+	const handleSaveMeta = useCallback(
+		async (patch: SelfMediaPostMetaPatch) => {
+			if (!activePostEntry || !onUpdatePostMeta) return false
+			const saved = await onUpdatePostMeta(
+				{ platform, index: activePostIndex, entry: activePostEntry },
+				patch,
+			)
+			if (saved === false) return false
+			store.updatePostMeta(activePostIndex, patch)
+			return true
+		},
+		[activePostEntry, activePostIndex, onUpdatePostMeta, platform, store],
+	)
 
 	const handleShellPointerDown = useCallback(() => {
 		setPhoneFocused(false)
@@ -285,6 +307,7 @@ function RednoteShell(props: PlatformComponentProps) {
 		postIndex,
 		cardIndexes,
 		pixelRatio,
+		format,
 		exportType,
 		getCardRef,
 	}: ExportPreviewConfirmArgs) => {
@@ -314,6 +337,7 @@ function RednoteShell(props: PlatformComponentProps) {
 					post: subset,
 					fileName: target.meta.title || target.meta.id,
 					pixelRatio,
+					format,
 					getCardRef: getSubsetCardRef,
 				})
 			} else {
@@ -321,6 +345,7 @@ function RednoteShell(props: PlatformComponentProps) {
 					posts: [subset],
 					zipName: target.meta.title || target.meta.id,
 					pixelRatio,
+					format,
 					getCardRef: (_p, c) => getSubsetCardRef(c),
 				})
 			}
@@ -358,6 +383,8 @@ function RednoteShell(props: PlatformComponentProps) {
 				refreshLabel={t("detail.selfMedia.refreshAllData")}
 				refreshDisabled={rootLoading}
 				refreshTestId="rednote-shell-refresh-post-button"
+				onShare={onSharePost}
+				shareLoading={shareLoading}
 				onOpenExport={handleOpenExportDialog}
 				exportLabel={t("detail.selfMedia.export.action")}
 				exportDisabled={isExporting || posts.length === 0}
@@ -422,6 +449,7 @@ function RednoteShell(props: PlatformComponentProps) {
 					}
 					phoneFocused={phoneFocused}
 					onPhoneFocus={handlePhoneFocus}
+					onUpdatePostMeta={allowEdit === false ? undefined : handleSaveMeta}
 				/>
 				<ElementInspectorOverlay
 					active={inspector.active}

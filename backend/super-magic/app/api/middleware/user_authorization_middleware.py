@@ -11,8 +11,8 @@ header，header 的值必须与本地 metadata.json 中的 `authorization` 字�
   立即生效，不需要重启进程。
 - bypass 仅放行 kubelet 探针，其他所有 API 路径必须带
   User-Authorization。
-- 关闭鉴权（USER_AUTH_REQUIRED=false）后所有请求放行，warn 级日志留痕，
-  用于本地开发。
+- 关闭鉴权（USER_AUTH_REQUIRED=false）后所有请求放行，初始化时通过 warn
+  级日志留痕，用于本地开发。
 
 失败语义：
 - metadata 文件缺失 / 不可解析 / 字段为空 + 开启鉴权 -> 503
@@ -75,13 +75,13 @@ class UserAuthorizationMiddleware(BaseHTTPMiddleware):
         else:
             self._enabled = enabled
 
-    async def dispatch(self, request: Request, call_next):
         if not self._enabled:
             logger.warning(
-                "[user-auth] auth disabled (USER_AUTH_REQUIRED=false), allowing %s %s",
-                request.method,
-                request.url.path,
+                "[user-auth] auth disabled (USER_AUTH_REQUIRED=false), all requests will be allowed"
             )
+
+    async def dispatch(self, request: Request, call_next):
+        if not self._enabled:
             return await call_next(request)
 
         if _is_bypass_path(request.url.path):

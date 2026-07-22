@@ -4,17 +4,16 @@ OpenAI SDK library integration for OpenTelemetry
 Provides automatic instrumentation for OpenAI SDK (which uses httpx internally).
 This ensures all LLM API calls are properly traced.
 """
-import json
 import logging
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
-from .telemetry import is_telemetry_enabled
+import os
+
 from .constants import (
-    ObservationType,
+    Currency,
     LangfuseAttributes,
     OpenTelemetryAttributes,
-    Currency,
 )
+from .telemetry import is_telemetry_enabled
+from .span_utils import set_observation_io
 
 # Try to import Langfuse SDK, but make it optional
 try:
@@ -30,8 +29,7 @@ except ImportError:
 
 # Import token usage tracking and pricing
 try:
-    from agentlang.llms.factory import LLMFactory
-    from agentlang.llms.token_usage.models import TokenUsage, OpenAIParser
+    from agentlang.llms.token_usage.models import OpenAIParser
     TOKEN_TRACKING_AVAILABLE = True
 except ImportError as e:
     TOKEN_TRACKING_AVAILABLE = False
@@ -73,13 +71,64 @@ def _get_langfuse_client():
 def _get_model_pricing():
     """Get or create ModelPricing instance"""
     global _model_pricing
-    if _model_pricing is None and TOKEN_TRACKING_AVAILABLE:
-        try:
-            _model_pricing = LLMFactory.pricing
-        except Exception as e:
-            # Log error without exposing configuration details
-            _logger.warning("Failed to initialize ModelPricing", exc_info=True)
+    if _model_pricing is not None:
+        return _model_pricing
+    if not TOKEN_TRACKING_AVAILABLE:
+        return None
+
+    try:
+        from agentlang.llms.factory import LLMFactory
+
+        _model_pricing = LLMFactory.pricing
+    except ImportError as e:
+        _logger.debug("LLMFactory module not available: %s", e)
+    except Exception:
+        # Log error without exposing configuration details
+        _logger.warning("Failed to initialize ModelPricing", exc_info=True)
     return _model_pricing
+
+
+def enrich_finished_openai_span(span) -> bool:
+    """Add Langfuse input/output and cost to a finished OpenAI chat span."""
+    if getattr(span, "name", None) != "openai.chat":
+        return False
+
+    attributes = getattr(span, "_attributes", None)
+    if attributes is None:
+        return True
+
+    input_messages = attributes.get(OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES)
+    output_messages = attributes.get(OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES)
+    if input_messages and not attributes.get(LangfuseAttributes.OBSERVATION_INPUT):
+        attributes[LangfuseAttributes.OBSERVATION_INPUT] = input_messages
+    if output_messages and not attributes.get(LangfuseAttributes.OBSERVATION_OUTPUT):
+        attributes[LangfuseAttributes.OBSERVATION_OUTPUT] = output_messages
+
+    model_name = (
+        attributes.get(OpenTelemetryAttributes.GEN_AI_RESPONSE_MODEL)
+        or attributes.get(OpenTelemetryAttributes.GEN_AI_REQUEST_MODEL)
+    )
+    input_tokens = attributes.get(OpenTelemetryAttributes.GEN_AI_USAGE_INPUT_TOKENS, 0)
+    output_tokens = attributes.get(OpenTelemetryAttributes.GEN_AI_USAGE_OUTPUT_TOKENS, 0) or attributes.get(
+        OpenTelemetryAttributes.GEN_AI_USAGE_COMPLETION_TOKENS,
+        0,
+    )
+    if model_name and (input_tokens or output_tokens):
+        model_pricing = _get_model_pricing()
+        if model_pricing:
+            pricing = model_pricing.get_model_pricing(str(model_name))
+            total_cost = (
+                (int(input_tokens or 0) * pricing.get("input_price", 0.0))
+                + (int(output_tokens or 0) * pricing.get("output_price", 0.0))
+            ) / 1000
+            currency = pricing.get("currency", Currency.USD.value)
+            if currency == Currency.CNY.value and total_cost and model_pricing.exchange_rate:
+                total_cost /= model_pricing.exchange_rate
+            if total_cost > 0:
+                attributes[OpenTelemetryAttributes.GEN_AI_USAGE_COST] = float(total_cost)
+
+    attributes.setdefault(LangfuseAttributes.NAME, "openai.chat")
+    return True
 
 
 def _request_hook(span, request):
@@ -116,6 +165,17 @@ def _request_hook(span, request):
             span.set_attribute(OpenTelemetryAttributes.GEN_AI_SYSTEM, "openai")
             span.set_attribute(OpenTelemetryAttributes.GEN_AI_REQUEST_MODEL, str(model))
 
+        # Fill the observation Input column with the request messages/prompt (Langfuse).
+        try:
+            if isinstance(request, dict):
+                input_payload = request.get("messages") or request.get("input") or request.get("prompt")
+            else:
+                input_payload = getattr(request, "messages", None)
+            if input_payload is not None:
+                set_observation_io(span, input_value=input_payload)
+        except Exception:
+            _logger.debug("Failed to set OpenAI observation input", exc_info=True)
+
         _logger.debug(f"Set OpenAI span name: {span_name}")
 
     except Exception as e:
@@ -142,10 +202,14 @@ def _response_hook(span, request, response):
             if usage:
                 if hasattr(usage, 'prompt_tokens'):
                     span.set_attribute("gen_ai.token_count.prompt", usage.prompt_tokens)
+                    span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_INPUT_TOKENS, usage.prompt_tokens)
                 if hasattr(usage, 'completion_tokens'):
                     span.set_attribute("gen_ai.token_count.completion", usage.completion_tokens)
+                    span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_OUTPUT_TOKENS, usage.completion_tokens)
+                    span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_COMPLETION_TOKENS, usage.completion_tokens)
                 if hasattr(usage, 'total_tokens'):
                     span.set_attribute("gen_ai.token_count.total", usage.total_tokens)
+                    span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_TOTAL_TOKENS, usage.total_tokens)
 
         # Extract model from response if available
         if hasattr(response, 'model'):
@@ -154,12 +218,55 @@ def _response_hook(span, request, response):
         # Mark as successful
         span.set_attribute(OpenTelemetryAttributes.HTTP_SUCCESS, True)
 
+        # Fill the observation Output column with the completion (Langfuse).
+        try:
+            output_payload = _extract_openai_output(response)
+            if output_payload is not None:
+                set_observation_io(span, output_value=output_payload)
+        except Exception:
+            _logger.debug("Failed to set OpenAI observation output", exc_info=True)
+
         # Report usage and cost to Langfuse
         _report_to_langfuse(span, request, response)
 
     except Exception as e:
         # Log error without exposing response details
         _logger.debug("Error in OpenAI response hook", exc_info=True)
+
+
+def _extract_openai_output(response):
+    """Best-effort extraction of the assistant message(s) from an OpenAI response."""
+    try:
+        choices = getattr(response, "choices", None)
+        if choices is None and isinstance(response, dict):
+            choices = response.get("choices")
+        if not choices:
+            return None
+
+        messages = []
+        for choice in choices:
+            message = getattr(choice, "message", None)
+            if message is None and isinstance(choice, dict):
+                message = choice.get("message")
+            if message is None:
+                continue
+            content = getattr(message, "content", None)
+            if content is None and isinstance(message, dict):
+                content = message.get("content")
+            tool_calls = getattr(message, "tool_calls", None)
+            if tool_calls is None and isinstance(message, dict):
+                tool_calls = message.get("tool_calls")
+            entry = {"content": content}
+            if tool_calls:
+                # tool_calls objects are not JSON-serializable; stringify defensively.
+                entry["tool_calls"] = str(tool_calls)
+            messages.append(entry)
+
+        if not messages:
+            return None
+        return messages[0] if len(messages) == 1 else messages
+    except Exception:
+        return None
 
 
 def _report_to_langfuse(span, request, response):
@@ -237,19 +344,6 @@ def _report_to_langfuse(span, request, response):
             _logger.debug("Cannot report to Langfuse: invalid token usage data")
             return
 
-        # Build usage_details dictionary
-        usage_details = {
-            "input": token_usage.input_tokens,
-            "output": token_usage.output_tokens,
-        }
-
-        # Add cache-related tokens if available
-        if token_usage.input_tokens_details:
-            if token_usage.input_tokens_details.cached_tokens:
-                usage_details["cache_read_input_tokens"] = token_usage.input_tokens_details.cached_tokens
-            if token_usage.input_tokens_details.cache_write_tokens:
-                usage_details["cache_write_input_tokens"] = token_usage.input_tokens_details.cache_write_tokens
-
         # Get pricing for the model
         pricing = model_pricing.get_model_pricing(model_name)
 
@@ -290,33 +384,19 @@ def _report_to_langfuse(span, request, response):
                 for key in cost_details:
                     cost_details[key] = cost_details[key] / exchange_rate
 
-        # ---- Langfuse Cost Tracking (OpenTelemetry-first) ----
-        # Langfuse UI shows usage/cost on observations of type `generation`/`embedding`.
-        # With OpenTelemetry ingestion, ensure we mark this span as a generation and attach usage/cost attributes.
+        # Attach usage and cost to the existing OpenAI span instead of creating or marking
+        # a separate generation observation.
         total_cost = sum(cost_details.values()) if cost_details else 0.0
-
-        # Mark span as generation for Langfuse dashboards
-        span.set_attribute(OpenTelemetryAttributes.OBSERVATION_TYPE, ObservationType.GENERATION.value)
-        span.set_attribute(LangfuseAttributes.OBSERVATION_TYPE, ObservationType.GENERATION.value)
 
         # Preferred OTEL usage attributes
         span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_INPUT_TOKENS, int(token_usage.input_tokens))
+        span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_OUTPUT_TOKENS, int(token_usage.output_tokens))
         span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_COMPLETION_TOKENS, int(token_usage.output_tokens))
         span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_TOTAL_TOKENS, int(token_usage.total_tokens))
 
         # Preferred OTEL cost attribute (USD)
         if total_cost > 0:
             span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_COST, float(total_cost))
-
-        # Best-effort: update current generation via Langfuse SDK (requires an active Langfuse generation context)
-        try:
-            langfuse_client.update_current_generation(
-                usage_details=usage_details,
-                cost_details=cost_details if cost_details else None,
-            )
-        except Exception as e:
-            # Log error without exposing usage/cost details
-            _logger.debug("Langfuse update_current_generation skipped", exc_info=True)
 
         _logger.debug(
             f"Reported to Langfuse: model={model_name}, "
@@ -369,6 +449,9 @@ def instrument_openai() -> None:
         return
 
     try:
+        # OpenLLMetry only emits prompt/completion content when this is enabled.
+        # Respect an explicit deployment override (for example, privacy-sensitive envs).
+        os.environ.setdefault("TRACELOOP_TRACE_CONTENT", "true")
         OpenAIInstrumentor().instrument(
             request_hook=_request_hook,
             response_hook=_response_hook,

@@ -33,6 +33,21 @@ export interface StartDownloadOptions {
 	onCancel?: () => void
 }
 
+export interface CustomDownloadTaskContext {
+	signal: AbortSignal
+	reportProgress: (progress: number) => void
+}
+
+export interface StartCustomDownloadOptions<TResult = void> {
+	label?: string
+	successVisibleMs?: number
+	cancelText?: string
+	task: (context: CustomDownloadTaskContext) => Promise<TResult>
+	onSuccess?: (result: TResult) => void
+	onError?: (error: unknown) => void
+	onCancel?: () => void
+}
+
 interface DownloadProgressState {
 	isDownloading: boolean
 	progress: number
@@ -60,6 +75,7 @@ export function useDownloadProgress() {
 	const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const settleRef = useRef<((result: boolean) => void) | null>(null)
 	const onCancelRef = useRef<(() => void) | undefined>()
+	const taskAbortControllerRef = useRef<AbortController | null>(null)
 	const toastIdRef = useRef<string | number | null>(null)
 	const labelRef = useRef<string | undefined>()
 	const cancelTextRef = useRef<string | undefined>()
@@ -112,6 +128,8 @@ export function useDownloadProgress() {
 
 	const cancelDownload = useCallback(() => {
 		taskIdRef.current += 1
+		taskAbortControllerRef.current?.abort()
+		taskAbortControllerRef.current = null
 		resetDownloadProgress()
 		onCancelRef.current?.()
 		onCancelRef.current = undefined
@@ -144,6 +162,8 @@ export function useDownloadProgress() {
 
 			taskIdRef.current += 1
 			const taskId = taskIdRef.current
+			taskAbortControllerRef.current?.abort()
+			taskAbortControllerRef.current = null
 			clearPollTimer()
 			clearResetTimer()
 			settle(false)
@@ -160,6 +180,7 @@ export function useDownloadProgress() {
 			const isCurrentTask = () => taskIdRef.current === taskId
 			const failTask = (error: unknown) => {
 				if (!isCurrentTask()) return false
+				onCancelRef.current = undefined
 				resetDownloadProgress()
 				options.onError?.(error)
 				settle(false)
@@ -170,6 +191,7 @@ export function useDownloadProgress() {
 				if (!isCurrentTask()) return false
 				try {
 					await downloadFileWithAnchor(downloadUrl, options.fileName, options.target)
+					onCancelRef.current = undefined
 					finishDownload(taskId, options.successVisibleMs ?? DEFAULT_SUCCESS_VISIBLE_MS)
 					options.onSuccess?.()
 					settle(true)
@@ -252,9 +274,73 @@ export function useDownloadProgress() {
 		],
 	)
 
+	const startCustomDownload = useCallback(
+		async <TResult>(options: StartCustomDownloadOptions<TResult>): Promise<boolean> => {
+			taskIdRef.current += 1
+			const taskId = taskIdRef.current
+			taskAbortControllerRef.current?.abort()
+			const abortController = new AbortController()
+			taskAbortControllerRef.current = abortController
+			clearPollTimer()
+			clearResetTimer()
+			settle(false)
+			onCancelRef.current = options.onCancel
+			labelRef.current = options.label
+			cancelTextRef.current = options.cancelText
+			setState({
+				isDownloading: true,
+				progress: 0,
+				label: options.label,
+			})
+			showDownloadToast(0, options.label)
+
+			const isCurrentTask = () => taskIdRef.current === taskId
+			const reportProgress = (progress: number) => {
+				if (!isCurrentTask() || abortController.signal.aborted) return
+				const normalized = normalizeProgress(progress)
+				setState((prev) => ({ ...prev, progress: normalized }))
+				showDownloadToast(normalized, options.label)
+			}
+
+			try {
+				const result = await options.task({
+					signal: abortController.signal,
+					reportProgress,
+				})
+				if (!isCurrentTask() || abortController.signal.aborted) return false
+
+				taskAbortControllerRef.current = null
+				onCancelRef.current = undefined
+				finishDownload(taskId, options.successVisibleMs ?? DEFAULT_SUCCESS_VISIBLE_MS)
+				options.onSuccess?.(result)
+				settle(true)
+				return true
+			} catch (error) {
+				if (!isCurrentTask() || abortController.signal.aborted) return false
+
+				taskAbortControllerRef.current = null
+				onCancelRef.current = undefined
+				resetDownloadProgress()
+				options.onError?.(error)
+				settle(false)
+				return false
+			}
+		},
+		[
+			clearPollTimer,
+			clearResetTimer,
+			finishDownload,
+			resetDownloadProgress,
+			settle,
+			showDownloadToast,
+		],
+	)
+
 	useEffect(() => {
 		return () => {
 			taskIdRef.current += 1
+			taskAbortControllerRef.current?.abort()
+			taskAbortControllerRef.current = null
 			clearPollTimer()
 			clearResetTimer()
 			dismissDownloadToast()
@@ -267,6 +353,7 @@ export function useDownloadProgress() {
 		progress: state.progress,
 		label: state.label,
 		startDownload,
+		startCustomDownload,
 		cancelDownload,
 		resetDownloadProgress,
 	}

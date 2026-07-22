@@ -121,8 +121,6 @@ function cleanup_redis_permissions {
 function start_env {
   local env=$1
   local port
-  local api_key
-  local jwt_secret
   local debug
   local redis_port
   local redis_db
@@ -143,24 +141,18 @@ function start_env {
       port=8001
       redis_port=28001
       redis_db=0
-      api_key="test-gateway-api-key"
-      jwt_secret="test-jwt-secret-key"
       debug="true"
       ;;
     pre)
       port=8002
       redis_port=28001  # 使用相同的Redis端口
       redis_db=1
-      api_key="pre-gateway-api-key"
-      jwt_secret="pre-jwt-secret-key"
       debug="true"
       ;;
     prod)
       port=8003
       redis_port=28001  # 使用相同的Redis端口
       redis_db=2
-      api_key="prod-gateway-api-key"
-      jwt_secret="prod-jwt-secret-key"
       debug="false"
       ;;
   esac
@@ -202,7 +194,7 @@ services:
     profiles: ["disabled"]
 EOF
 
-  ENV=$env PORT=$port MAGIC_GATEWAY_PORT=$port MAGIC_GATEWAY_API_KEY=$api_key JWT_SECRET=$jwt_secret MAGIC_GATEWAY_DEBUG=$debug \
+  ENV=$env PORT=$port MAGIC_GATEWAY_PORT=$port MAGIC_GATEWAY_DEBUG=$debug \
     docker compose -p magic-gateway-$env up -d --build
 
   # 移除临时文件

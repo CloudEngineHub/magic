@@ -113,6 +113,15 @@ describe("resolveEmployeeMarketPrimaryActionLabel", () => {
 	it("uses hire when market agent can be hired", () => {
 		expect(resolveEmployeeMarketPrimaryActionLabel(agent({}), createT())).toBe("hire")
 	})
+
+	it("uses the conversation label for an available non-removable agent", () => {
+		expect(
+			resolveEmployeeMarketPrimaryActionLabel(
+				agent({ isAdded: true, allowDelete: false }),
+				createT(),
+			),
+		).toBe("conversation")
+	})
 })
 
 describe("isEmployeeMarketPrimaryActionDisabled", () => {

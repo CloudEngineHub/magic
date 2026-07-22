@@ -10,6 +10,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from .telemetry import is_telemetry_enabled
 from .constants import LangfuseAttributes
+from .span_utils import set_observation_io, redact_headers
 
 # Import requests library first to ensure dependency check passes
 try:
@@ -33,6 +34,28 @@ _requests_instrumented = False
 
 _logger = logging.getLogger(__name__)
 
+# Max request/response body length captured into span attributes.
+_MAX_BODY_LEN = 5000
+
+
+def _bounded_text(text: str) -> str:
+    return text[:_MAX_BODY_LEN] + "...<truncated>" if len(text) > _MAX_BODY_LEN else text
+
+
+def _read_requests_body(body):
+    """Best-effort read of a requests PreparedRequest body as a bounded string."""
+    try:
+        if not body:
+            return None
+        if isinstance(body, bytes):
+            try:
+                return _bounded_text(body.decode("utf-8"))
+            except UnicodeDecodeError:
+                return f"<binary data, {len(body)} bytes>"
+        return _bounded_text(str(body))
+    except Exception:
+        return None
+
 
 def _request_hook(span, request_obj):
     """Hook to set requests span name from method + path."""
@@ -52,6 +75,19 @@ def _request_hook(span, request_obj):
     except Exception as e:
         _logger.debug(f"Failed to set requests span name: {e}")
 
+    # Fill the observation Input column
+    try:
+        input_payload = {"method": method, "url": url}
+        headers = getattr(request_obj, "headers", None)
+        if headers is not None:
+            input_payload["headers"] = redact_headers(headers)
+        body = _read_requests_body(getattr(request_obj, "body", None))
+        if body is not None:
+            input_payload["body"] = body
+        set_observation_io(span, input_value=input_payload)
+    except Exception as e:
+        _logger.debug(f"Failed to set requests observation input: {e}")
+
 
 def _response_hook(span, request_obj, response_obj):
     """Hook to mark requests response errors and capture error bodies."""
@@ -60,6 +96,19 @@ def _response_hook(span, request_obj, response_obj):
 
     status_code = response_obj.status_code
     span.set_attribute("http.response.status_code", status_code)
+
+    # Fill the observation Output column for all responses (not only errors).
+    try:
+        output_payload = {"status_code": status_code}
+        try:
+            out_body = _bounded_text(response_obj.text) if response_obj.text else None
+        except Exception:
+            out_body = None
+        if out_body is not None:
+            output_payload["body"] = out_body
+        set_observation_io(span, output_value=output_payload)
+    except Exception as e:
+        _logger.debug(f"Failed to set requests observation output: {e}")
 
     if status_code >= 400:
         error_category = "5xx" if status_code >= 500 else "4xx"

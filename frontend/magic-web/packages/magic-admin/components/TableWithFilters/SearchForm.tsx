@@ -55,29 +55,31 @@ export const SearchForm = ({ items, buttons, justify, height }: SearchFormProps)
 	}, [items, getComponent])
 
 	const buttonItems = useMemo(() => {
+		if (!buttons || buttons.length === 0) return null
+
 		return (
-			<Flex align="center">
-				{buttons?.map((button) => {
+			<Flex align="center" justify="end" gap={10} wrap="wrap">
+				{buttons.map((button) => {
 					switch (button.buttonType) {
 						case ButtonType.DROPDOWN:
 							return (
-								<Col key={button.text}>
+								<div key={button.text}>
 									<MagicDropdown.Button {...button}>
 										{button.text}
 									</MagicDropdown.Button>
-								</Col>
+								</div>
 							)
 						case ButtonType.NORMAL:
 						default:
 							return (
-								<Col key={button.text} className={styles.button}>
+								<Flex key={button.text} align="center" className={styles.button}>
 									{button.description && (
 										<span className={styles.description}>
 											{button.description}
 										</span>
 									)}
 									<MagicButton {...button}>{button.text}</MagicButton>
-								</Col>
+								</Flex>
 							)
 					}
 				})}
@@ -86,9 +88,17 @@ export const SearchForm = ({ items, buttons, justify, height }: SearchFormProps)
 	}, [buttons, styles.button, styles.description])
 
 	return (
-		<Row gutter={[10, 10]} justify={justify}>
-			{formItems}
-			{buttonItems}
-		</Row>
+		<Flex vertical gap={10}>
+			{formItems && (
+				<Row gutter={[10, 10]} justify={justify}>
+					{formItems}
+				</Row>
+			)}
+			{buttonItems && (
+				<Row gutter={[10, 10]} justify="end">
+					<Col span={24}>{buttonItems}</Col>
+				</Row>
+			)}
+		</Flex>
 	)
 }

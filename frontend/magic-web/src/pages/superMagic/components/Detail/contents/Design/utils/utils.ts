@@ -4,26 +4,27 @@ import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { DesignData } from "../types"
 import { IMAGE_EXTENSIONS } from "@/constants/file"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasConnection,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { t } from "i18next"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
+import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import { ImageFormat, ImageProcessOptions } from "@/utils/image-processing"
 import {
 	ImageGenerationTaskMeta,
 	ImageGenerationTaskTypeMap,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
+import { toDesignProjectBasePath, toDesignDslPath } from "./designPath"
 import {
-	isDesignDslCanvasRelativeResourcePath,
-	normalizeDesignAttachmentPathForCanvas,
-	rewriteLayerElementsPathsForMagicProjectSave,
-	resolveDesignDslPathCandidatesToWorkspaceRelative,
-	resolveStrictDesignDslCanvasResourceCandidates,
-	normalizeMagicProjectDirToBase,
-} from "./designDslPathUtils"
-import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
+	migrateLoadedDesignDataPaths,
+	normalizeDesignPathForTransitionMigration,
+	rewriteDesignLayerPathsForTransitionMigration,
+} from "./designPathTransitionMigration"
 import type { DesignAttachmentIndex } from "./designAttachmentIndex"
+import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
 import { cloneDeep } from "lodash-es"
 import {
 	MAGIC_PROJECT_VERSION_V1,
@@ -43,6 +44,23 @@ function layerTreeHasImageOrVideo(elements: LayerElement[] | undefined): boolean
 		if (children?.length && layerTreeHasImageOrVideo(children)) return true
 	}
 	return false
+}
+
+function getCanvasConnections(canvas: DesignData["canvas"] | null | undefined): CanvasConnection[] {
+	return canvas?.connections ?? []
+}
+
+function buildCanvasPayload(
+	elements: LayerElement[],
+	connections: CanvasConnection[],
+): {
+	elements: LayerElement[]
+	connections?: CanvasConnection[]
+} {
+	return {
+		elements,
+		...(connections.length > 0 ? { connections } : {}),
+	}
 }
 
 /**
@@ -111,9 +129,14 @@ export async function loadMagicProjectJsContent(
  */
 export function generateMagicProjectJsContent(
 	designData: DesignData,
-	options?: { projectBasePath?: string },
+	options?: {
+		projectBasePath?: string
+		flatAttachments?: FileItem[]
+		attachmentIndex?: DesignAttachmentIndex | null
+	},
 ): string {
 	const rawElements = designData.canvas?.elements || []
+	const connections = getCanvasConnections(designData.canvas)
 	const basePath = options?.projectBasePath?.trim()
 	const isV2 = isV2Version(designData.version)
 	const needPathRewrite = !!basePath && layerTreeHasImageOrVideo(rawElements)
@@ -124,15 +147,19 @@ export function generateMagicProjectJsContent(
 		elements = cloneDeep(rawElements)
 	}
 	if (needPathRewrite) {
-		rewriteLayerElementsPathsForMagicProjectSave(elements, basePath as string)
+		rewriteDesignLayerPathsForTransitionMigration(elements, {
+			designProjectBasePath: basePath,
+			flatAttachments: options?.flatAttachments,
+			attachmentIndex: options?.attachmentIndex,
+		})
 	}
 
 	let canvasField: unknown
 	if (isV2) {
 		stripHeavyFields(elements)
-		canvasField = compressCanvasData({ elements })
+		canvasField = compressCanvasData(buildCanvasPayload(elements, connections))
 	} else {
-		canvasField = { elements }
+		canvasField = buildCanvasPayload(elements, connections)
 	}
 
 	const config = {
@@ -165,6 +192,7 @@ export interface MagicProjectJsParseDiagnostics {
 function buildDesignDataFromMagicProjectConfig(
 	config: Record<string, unknown>,
 	elements: LayerElement[],
+	connections: CanvasConnection[] = [],
 ): DesignData {
 	return {
 		type: (config as { type?: string }).type || "design",
@@ -172,8 +200,19 @@ function buildDesignDataFromMagicProjectConfig(
 		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
 		canvas: {
 			elements,
+			...(connections.length > 0 ? { connections } : {}),
 		},
 	}
+}
+
+function getConnectionsFromCanvasObject(
+	canvasObj: {
+		connections?: unknown
+	} | null,
+): CanvasConnection[] {
+	return Array.isArray(canvasObj?.connections)
+		? (canvasObj.connections as CanvasConnection[])
+		: []
 }
 
 /**
@@ -201,11 +240,14 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		}
 
 		const canvasField = (config as { canvas?: unknown }).canvas
-		let canvasObj: { elements?: unknown } | null = null
+		let canvasObj: { elements?: unknown; connections?: unknown } | null = null
 
 		if (isCompressedCanvas(canvasField)) {
 			try {
-				canvasObj = decompressCanvasData(canvasField) as { elements?: unknown } | null
+				canvasObj = decompressCanvasData(canvasField) as {
+					elements?: unknown
+					connections?: unknown
+				} | null
 			} catch (error) {
 				return {
 					data: null,
@@ -214,7 +256,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 				}
 			}
 		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
-			canvasObj = canvasField as { elements?: unknown }
+			canvasObj = canvasField as { elements?: unknown; connections?: unknown }
 		} else {
 			return { data: null, canvasStatus: "invalid" }
 		}
@@ -224,8 +266,9 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		}
 
 		const elements = canvasObj.elements as LayerElement[]
+		const connections = getConnectionsFromCanvasObject(canvasObj)
 		return {
-			data: buildDesignDataFromMagicProjectConfig(config, elements),
+			data: buildDesignDataFromMagicProjectConfig(config, elements, connections),
 			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
 		}
 	} catch (error) {
@@ -258,16 +301,23 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 		// 严格区分 missing/invalid/decompress-failed 的逻辑只给 upgrade diagnostics 使用。
 		const canvasField = (config as { canvas?: unknown }).canvas
 		let elements: LayerElement[] = []
+		let connections: CanvasConnection[] = []
 		if (isCompressedCanvas(canvasField)) {
 			const canvasObj = decompressCanvasData(canvasField) as {
 				elements?: LayerElement[]
+				connections?: unknown
 			} | null
 			elements = canvasObj?.elements || []
+			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
-			elements = (canvasField as { elements?: LayerElement[] } | undefined)?.elements || []
+			const canvasObj = canvasField as
+				| { elements?: LayerElement[]; connections?: unknown }
+				| undefined
+			elements = canvasObj?.elements || []
+			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
 
-		return buildDesignDataFromMagicProjectConfig(config, elements)
+		return buildDesignDataFromMagicProjectConfig(config, elements, connections)
 	} catch {
 		return null
 	}
@@ -1257,7 +1307,7 @@ export function resolveDesignProjectBasePathFromAttachments(options: {
 			: flattenAttachmentsList(attachments ?? [])
 	if (!list.length) return undefined
 	const info = getDesignDirectoryInfo(actualCurrentFile, list)
-	return normalizeMagicProjectDirToBase(info.path)
+	return toDesignProjectBasePath(info.path)
 }
 
 /**
@@ -1285,16 +1335,24 @@ export function resolveDesignDirectoryNameFromAttachments(options: {
 }
 
 /**
- * 画布加载后把图层里的旧绝对路径（如 `/画布名/images/x`）统一为 `./images/x`（与落盘规则一致，就地改写内存数据）
+ * 加载后执行历史路径过渡修复：仅在附件树可确认归属时将旧路径收口为显式 DSL 路径。
  */
 export function normalizeDesignDataPathsAfterLoad(
 	designData: DesignData,
 	projectBasePath: string | undefined,
+	options?: {
+		flatAttachments?: FileItem[]
+		attachmentIndex?: DesignAttachmentIndex | null
+	},
 ): void {
 	if (!projectBasePath?.trim()) return
 	const elements = designData.canvas?.elements
 	if (!elements?.length) return
-	rewriteLayerElementsPathsForMagicProjectSave(elements, projectBasePath.trim())
+	migrateLoadedDesignDataPaths(designData, {
+		designProjectBasePath: projectBasePath,
+		flatAttachments: options?.flatAttachments,
+		attachmentIndex: options?.attachmentIndex,
+	})
 }
 
 /**
@@ -1615,165 +1673,239 @@ export function renameFilesForUpload(files: File[], existingFiles: FileItem[]): 
 	return renamedFiles
 }
 
+export interface PackDownloadFileEntry {
+	/** 元素级唯一键；同一个项目文件可以对应多个画布元素。 */
+	key: string
+	file: FileItem
+	fileName?: string
+	imageProcess?: ImageProcessOptions
+}
+
+export interface PackDownloadFileEntriesOptions {
+	signal?: AbortSignal
+	onProgress?: (progress: number) => void
+	retryCount?: number
+}
+
+export interface PackDownloadFilesResult {
+	successCount: number
+	results: Array<{ success: boolean; fileName: string; error?: unknown }>
+}
+
+function createAbortError(): Error {
+	if (typeof DOMException !== "undefined") {
+		return new DOMException("Download aborted", "AbortError")
+	}
+	const error = new Error("Download aborted")
+	error.name = "AbortError"
+	return error
+}
+
+function throwIfDownloadAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw createAbortError()
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error && error.name === "AbortError"
+}
+
+async function retryDownloadTask<T>(
+	task: () => Promise<T>,
+	retryCount: number,
+	signal?: AbortSignal,
+): Promise<T> {
+	let lastError: unknown
+	for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+		throwIfDownloadAborted(signal)
+		try {
+			return await task()
+		} catch (error) {
+			if (isAbortError(error) || signal?.aborted) throw createAbortError()
+			lastError = error
+		}
+	}
+	throw lastError
+}
+
+function getPackEntryFileName(entry: PackDownloadFileEntry, index: number): string {
+	const rawFileName =
+		entry.fileName ||
+		entry.file.file_name ||
+		entry.file.display_filename ||
+		entry.file.filename ||
+		`file-${index + 1}`
+	const processedFormat = normalizeImageProcessFormat(entry.imageProcess?.format)
+	if (!processedFormat) {
+		if (rawFileName.includes(".")) return rawFileName
+		const originalExtension = entry.file.file_extension
+		return originalExtension ? `${rawFileName}.${originalExtension}` : rawFileName
+	}
+
+	const lastDotIndex = rawFileName.lastIndexOf(".")
+	const baseFileName = lastDotIndex === -1 ? rawFileName : rawFileName.slice(0, lastDotIndex)
+	return `${baseFileName}.${processedFormat}`
+}
+
+function makePackEntryFileNames(entries: PackDownloadFileEntry[]): string[] {
+	const usedFileNames = new Set<string>()
+	return entries.map((entry, index) => {
+		const requestedFileName = getPackEntryFileName(entry, index)
+		const lastDotIndex = requestedFileName.lastIndexOf(".")
+		const baseFileName =
+			lastDotIndex === -1 ? requestedFileName : requestedFileName.slice(0, lastDotIndex)
+		const extension = lastDotIndex === -1 ? "" : requestedFileName.slice(lastDotIndex)
+		let finalFileName = requestedFileName
+		let counter = 1
+		while (usedFileNames.has(finalFileName)) {
+			finalFileName = `${baseFileName}-${counter}${extension}`
+			counter += 1
+		}
+		usedFileNames.add(finalFileName)
+		return finalFileName
+	})
+}
+
 /**
- * 打包下载多个文件的共用函数
- * @param imageFiles 要下载的文件列表
- * @param downloadMode 下载模式（可选）
- * @param zipFileName zip 文件名（可选，默认为 "design-images.zip"）
- * @returns 返回下载结果，包含成功数量和失败信息
+ * 画布裁剪/同源多实例的客户端 ZIP 适配器。
+ * 下载地址仍复用项目文件 API；这里只保留项目批量接口无法表达的逐元素图片处理参数。
  */
+export async function packAndDownloadFileEntries(
+	entries: PackDownloadFileEntry[],
+	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
+	zipFileName = "design-media.zip",
+	options: PackDownloadFileEntriesOptions = {},
+): Promise<PackDownloadFilesResult> {
+	const { loadJSZip } = await import("@/lib/jszip")
+	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
+	const { downloadFileWithAnchor } = await import("@/pages/superMagic/utils/handleFIle")
+	const JSZip = await loadJSZip()
+	const zip = new JSZip()
+	const fileNames = makePackEntryFileNames(entries)
+	const retryCount = options.retryCount ?? 1
+	const sharedDownloadUrlByFileId = new Map<string, string>()
+	let completedCount = 0
+
+	throwIfDownloadAborted(options.signal)
+	const unprocessedFileIds = [
+		...new Set(
+			entries.filter((entry) => !entry.imageProcess).map((entry) => entry.file.file_id),
+		),
+	]
+	if (unprocessedFileIds.length > 0) {
+		try {
+			const downloadUrls = await retryDownloadTask(
+				() =>
+					getTemporaryDownloadUrl({
+						file_ids: unprocessedFileIds,
+						download_mode: downloadMode,
+						is_download: true,
+						enableErrorMessagePrompt: false,
+					}),
+				retryCount,
+				options.signal,
+			)
+			downloadUrls.forEach((item, index) => {
+				const fileId = item.file_id || unprocessedFileIds[index]
+				if (fileId && item.url) sharedDownloadUrlByFileId.set(fileId, item.url)
+			})
+		} catch (error) {
+			if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
+			// 批量取地址失败后由各元素单独重试，确保仍可产出成功子集。
+		}
+	}
+
+	const results = await Promise.all(
+		entries.map(async (entry, index) => {
+			const fileName = fileNames[index]
+			try {
+				let downloadUrl = entry.imageProcess
+					? undefined
+					: sharedDownloadUrlByFileId.get(entry.file.file_id)
+				if (!downloadUrl) {
+					downloadUrl = await retryDownloadTask(
+						async () => {
+							const downloadUrls = await getTemporaryDownloadUrl({
+								file_ids: [entry.file.file_id],
+								download_mode: downloadMode,
+								is_download: true,
+								options: entry.imageProcess
+									? { xMagicImageProcess: entry.imageProcess }
+									: undefined,
+								enableErrorMessagePrompt: false,
+							})
+							const url = downloadUrls?.[0]?.url
+							if (!url) throw new Error(t("design.errors.cannotGetDownloadUrl"))
+							return url
+						},
+						retryCount,
+						options.signal,
+					)
+				}
+
+				const blob = await retryDownloadTask(
+					async () => {
+						throwIfDownloadAborted(options.signal)
+						const response = await fetch(downloadUrl, { signal: options.signal })
+						if (!response.ok) {
+							throw new Error(
+								t("design.errors.downloadImageFailed", {
+									statusText: response.statusText,
+								}),
+							)
+						}
+						return response.blob()
+					},
+					retryCount,
+					options.signal,
+				)
+				zip.file(fileName, blob)
+				return { success: true, fileName }
+			} catch (error) {
+				if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
+				return { success: false, fileName, error }
+			} finally {
+				completedCount += 1
+				options.onProgress?.(entries.length ? (completedCount / entries.length) * 90 : 90)
+			}
+		}),
+	)
+
+	const successCount = results.filter((result) => result.success).length
+	if (successCount === 0) {
+		throw new Error(t("design.errors.noDownloadableImages"))
+	}
+
+	throwIfDownloadAborted(options.signal)
+	const zipBlob = await zip.generateAsync({ type: "blob" }, ({ percent }) => {
+		options.onProgress?.(90 + percent * 0.1)
+	})
+	throwIfDownloadAborted(options.signal)
+
+	const url = URL.createObjectURL(zipBlob)
+	await downloadFileWithAnchor(url, zipFileName, undefined, {
+		onModalClose: () => URL.revokeObjectURL(url),
+	})
+	options.onProgress?.(100)
+
+	return { successCount, results }
+}
+
+/** 兼容设计页已有调用；逐元素能力由 packAndDownloadFileEntries 承担。 */
 export async function packAndDownloadFiles(
 	imageFiles: FileItem[],
 	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
 	zipFileName = "design-images.zip",
 	xMagicImageProcessByFileId?: Record<string, ImageProcessOptions>,
-): Promise<{
-	successCount: number
-	results: Array<{ success: boolean; fileName: string; error?: unknown }>
-}> {
-	const { loadJSZip } = await import("@/lib/jszip")
-	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
-
-	// 加载 JSZip
-	const JSZip = await loadJSZip()
-	const zip = new JSZip()
-
-	const urlMap = new Map<string, string>()
-	const filesWithImageProcess = imageFiles.filter(
-		(file) => !!xMagicImageProcessByFileId?.[file.file_id],
-	)
-	const filesWithoutImageProcess = imageFiles.filter(
-		(file) => !xMagicImageProcessByFileId?.[file.file_id],
-	)
-
-	if (filesWithoutImageProcess.length > 0) {
-		const fileIds = filesWithoutImageProcess.map((file) => file.file_id)
-		const downloadUrls = await getTemporaryDownloadUrl({
-			file_ids: fileIds,
-			download_mode: downloadMode,
-		})
-
-		if (!downloadUrls || downloadUrls.length === 0) {
-			throw new Error(t("design.errors.cannotGetDownloadUrl"))
-		}
-
-		downloadUrls.forEach((item: { file_id?: string; url?: string }, index: number) => {
-			const fileId = item?.file_id || fileIds[index]
-			if (item?.url && fileId) {
-				urlMap.set(fileId, item.url)
-			}
-		})
-	}
-
-	if (filesWithImageProcess.length > 0) {
-		const imageProcessResults = await Promise.all(
-			filesWithImageProcess.map(async (file) => {
-				const xMagicImageProcess = xMagicImageProcessByFileId?.[file.file_id]
-				if (!xMagicImageProcess) return null
-
-				const downloadUrls = await getTemporaryDownloadUrl({
-					file_ids: [file.file_id],
-					download_mode: downloadMode,
-					options: { xMagicImageProcess },
-				})
-				const downloadUrl = downloadUrls?.[0]?.url
-
-				if (!downloadUrl) {
-					throw new Error(t("design.errors.cannotGetDownloadUrl"))
-				}
-
-				return {
-					fileId: file.file_id,
-					url: downloadUrl,
-				}
-			}),
-		)
-
-		for (const item of imageProcessResults) {
-			if (item?.url) {
-				urlMap.set(item.fileId, item.url)
-			}
-		}
-	}
-
-	// 处理文件名冲突
-	const usedFileNames = new Set<string>()
-	const processedFiles = imageFiles.map((file: FileItem, index: number) => {
-		const fileName = file.file_name || file.display_filename || `image-${index + 1}`
-		const processedFormat = normalizeImageProcessFormat(
-			xMagicImageProcessByFileId?.[file.file_id]?.format,
-		)
-		const fileExtension = processedFormat || file.file_extension || "png"
-		const lastDotIndex = fileName.lastIndexOf(".")
-		const baseFileName = lastDotIndex === -1 ? fileName : fileName.slice(0, lastDotIndex)
-
-		// 如果文件名已存在，添加序号
-		let finalFileName = `${baseFileName}.${fileExtension}`
-		let counter = 1
-		while (usedFileNames.has(finalFileName)) {
-			finalFileName = `${baseFileName}-${counter}.${fileExtension}`
-			counter++
-		}
-		usedFileNames.add(finalFileName)
-
-		return {
+): Promise<PackDownloadFilesResult> {
+	return packAndDownloadFileEntries(
+		imageFiles.map((file, index) => ({
+			key: `${file.file_id}:${index}`,
 			file,
-			finalFileName,
-		}
-	})
-
-	// 下载所有图片并添加到 zip
-	const downloadPromises = processedFiles.map(async (item) => {
-		const downloadUrl = urlMap.get(item.file.file_id)
-		if (!downloadUrl) {
-			return {
-				success: false,
-				fileName: item.finalFileName,
-				error: t("design.errors.noDownloadLink"),
-			}
-		}
-
-		try {
-			const response = await fetch(downloadUrl)
-			if (!response.ok) {
-				throw new Error(
-					t("design.errors.downloadImageFailed", {
-						statusText: response.statusText,
-					}),
-				)
-			}
-			const blob = await response.blob()
-			zip.file(item.finalFileName, blob)
-			return { success: true, fileName: item.finalFileName }
-		} catch (error) {
-			return { success: false, fileName: item.finalFileName, error }
-		}
-	})
-
-	const results = await Promise.all(downloadPromises)
-	const successCount = results.filter((r) => r?.success).length
-
-	if (successCount === 0) {
-		throw new Error(t("design.errors.noDownloadableImages"))
-	}
-
-	// 生成 zip 文件
-	const zipBlob = await zip.generateAsync({ type: "blob" })
-
-	// 下载 zip 文件
-	const url = URL.createObjectURL(zipBlob)
-	const link = document.createElement("a")
-	link.href = url
-	link.download = zipFileName
-	document.body.appendChild(link)
-	link.click()
-	document.body.removeChild(link)
-	URL.revokeObjectURL(url)
-
-	return {
-		successCount,
-		results,
-	}
+			imageProcess: xMagicImageProcessByFileId?.[file.file_id],
+		})),
+		downloadMode,
+		zipFileName,
+	)
 }
 
 function normalizeImageProcessFormat(format?: ImageFormat): string | undefined {
@@ -1934,128 +2066,6 @@ export function flattenAttachmentsList(items: FileItem[]): FileItem[] {
 }
 
 /**
- * 从 flatAttachments 中根据 src 找到对应的文件
- * @param src 文件路径或 URL
- * @param flatAttachments 已扁平化的附件列表
- */
-export function findFileBySrc(
-	src: string,
-	flatAttachments: FileItem[],
-	designProjectBasePath?: string,
-	attachmentIndex?: DesignAttachmentIndex | null,
-	options?: {
-		strictCanvasRelativeResource?: boolean
-	},
-): FileItem | null {
-	if (!src || !flatAttachments || flatAttachments.length === 0) {
-		return null
-	}
-	const shouldUseStrictCanvasResourceMatch =
-		options?.strictCanvasRelativeResource === true &&
-		Boolean(designProjectBasePath) &&
-		isDesignDslCanvasRelativeResourcePath(src)
-	const strictCanvasResourceCandidates = shouldUseStrictCanvasResourceMatch
-		? resolveStrictDesignDslCanvasResourceCandidates(src, designProjectBasePath)
-		: null
-	let resolvedCandidates: string[]
-	if (strictCanvasResourceCandidates?.workspaceRelative.length) {
-		resolvedCandidates = strictCanvasResourceCandidates.workspaceRelative
-	} else if (designProjectBasePath && src) {
-		resolvedCandidates = resolveDesignDslPathCandidatesToWorkspaceRelative(
-			src,
-			designProjectBasePath,
-		)
-	} else {
-		resolvedCandidates = [src]
-	}
-	const normalizedCandidates = resolvedCandidates.map((candidate) => normalizePath(candidate))
-	const normalizedSrc = normalizedCandidates[0] || normalizePath(src)
-
-	let fileItem: FileItem | undefined
-
-	if (attachmentIndex) {
-		for (const candidate of normalizedCandidates) {
-			const direct = attachmentIndex.byNormalizedPath.get(candidate)
-			if (direct && !direct.is_directory) {
-				fileItem = direct
-				break
-			}
-			const tail = candidate.startsWith("/") ? candidate.slice(1) : candidate
-			const relaxed = attachmentIndex.byPathWithoutLeadingSlash.get(tail)
-			if (relaxed && !relaxed.is_directory) {
-				fileItem = relaxed
-				break
-			}
-		}
-	}
-
-	// 方法1: 尝试通过 relative_file_path 匹配
-	if (!fileItem) {
-		fileItem = flatAttachments.find((item) => {
-			if (!item.relative_file_path || item.is_directory) return false
-			const itemPath = normalizePath(item.relative_file_path)
-			return normalizedCandidates.includes(itemPath)
-		})
-	}
-
-	if (shouldUseStrictCanvasResourceMatch) {
-		return fileItem || null
-	}
-
-	// 方法1.5: 如果目录名变化，尝试按多段后缀匹配（至少目录 + 文件名）
-	if (!fileItem && normalizedSrc.includes("/")) {
-		const pathParts = normalizedSrc.split("/").filter(Boolean)
-		for (let i = pathParts.length; i > 1; i--) {
-			const pathSuffix = pathParts.slice(-i).join("/")
-			fileItem = flatAttachments.find((item) => {
-				if (!item.relative_file_path || item.is_directory) return false
-				const itemPath = normalizePath(item.relative_file_path)
-				return itemPath.endsWith("/" + pathSuffix) || itemPath === pathSuffix
-			})
-			if (fileItem) break
-		}
-	}
-
-	// 方法2: 如果 src 是 URL，尝试从 URL 中提取路径或文件名
-	if (!fileItem && src.includes("/")) {
-		// 尝试从 URL 中提取文件名
-		const urlParts = src.split("/")
-		const fileName = urlParts[urlParts.length - 1]?.split("?")[0] // 移除查询参数
-
-		if (fileName) {
-			const lower = fileName.trim().toLowerCase()
-			const bucket = attachmentIndex?.byFileName.get(lower)
-			if (bucket?.length) {
-				fileItem = bucket.find((item) => !item.is_directory)
-			}
-			if (!fileItem) {
-				fileItem = flatAttachments.find((item) => {
-					return (
-						!item.is_directory &&
-						(item.file_name === fileName ||
-							item.display_filename === fileName ||
-							item.filename === fileName)
-					)
-				})
-			}
-		}
-	}
-
-	// 方法3: 如果 src 是 file_id，直接匹配
-	if (!fileItem && src && !src.includes("/") && !src.includes("\\")) {
-		const byId = attachmentIndex?.byFileId.get(src)
-		if (byId && !byId.is_directory) fileItem = byId
-		if (!fileItem) {
-			fileItem = flatAttachments.find((item) => {
-				return !item.is_directory && item.file_id === src
-			})
-		}
-	}
-
-	return fileItem || null
-}
-
-/**
  * 将 FileItem 转换为 AttachmentItem 格式
  */
 export function convertFileItemToAttachmentItem(fileItem: FileItem): AttachmentItem {
@@ -2080,7 +2090,11 @@ function mapFileItemToProjectAttachmentMentionNode(
 ): ProjectAttachmentMentionNode | null {
 	const isDir = Boolean(item.is_directory)
 	const rawPath = item.relative_file_path || ""
-	const path = isDir ? rawPath : normalizeDesignAttachmentPathForCanvas(rawPath, projectBasePath)
+	const path = isDir
+		? rawPath
+		: normalizeDesignPathForTransitionMigration(rawPath, {
+				designProjectBasePath: projectBasePath,
+			})
 	const name = (item.file_name || item.display_filename || "").trim()
 	if (!isDir && !name) return null
 	if (isDir && !name && !path && !item.file_id) return null

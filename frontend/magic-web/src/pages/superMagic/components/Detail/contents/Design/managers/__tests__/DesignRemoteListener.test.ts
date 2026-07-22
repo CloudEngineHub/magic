@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { DesignRemoteListener, type DesignRemoteListenerOptions } from "../DesignRemoteListener"
+import {
+	DesignRemoteListener,
+	designDataHasPendingMediaWithoutGenerationRequest,
+	type DesignRemoteListenerOptions,
+} from "../DesignRemoteListener"
+import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import type { DesignData } from "../../types"
 
 const DESIGN_DATA: DesignData = {
@@ -49,6 +54,44 @@ function createListener(
 }
 
 describe("DesignRemoteListener file-change freshness", () => {
+	it("detects nested processing media whose sidecar generation request is not hydrated", () => {
+		const data: DesignData = {
+			...DESIGN_DATA,
+			canvas: {
+				elements: [
+					{
+						id: "frame-1",
+						type: ElementTypeEnum.Frame,
+						name: "Frame",
+						x: 0,
+						y: 0,
+						width: 100,
+						height: 100,
+						children: [
+							{
+								id: "image-1",
+								type: ElementTypeEnum.Image,
+								name: "Generating image",
+								x: 0,
+								y: 0,
+								width: 100,
+								height: 100,
+								status: "processing",
+							},
+						],
+					},
+				],
+			},
+		}
+
+		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(true)
+
+		const image = (data.canvas.elements[0] as { children: Array<Record<string, unknown>> })
+			.children[0]
+		image.generateImageRequest = { prompt: "A product photo" }
+		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(false)
+	})
+
 	it("uses file version when updated_at looks stale", async () => {
 		const listener = createListener()
 		const apply = vi.fn()

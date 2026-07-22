@@ -1,34 +1,41 @@
 ---
 name: cli-manager
-description: Manage persistence for third-party CLI tools in the Super Magic sandbox. Use when the user wants to install, configure, adopt, restore, inspect, or remove a CLI, or when an external skill, webpage, or installer asks to run CLI install commands such as curl|sh, npm install -g, pipx install, uv tool install, go install, cargo install, or brew install.
+description: Manage persistence for user-installed third-party CLI tools in the Super Magic sandbox. Use when the user wants to install, configure, adopt, restore, inspect, or remove a CLI, or when an external skill, webpage, or installer asks to run CLI install commands such as curl|sh, npm install -g, pipx install, uv tool install, go install, cargo install, or brew install. Do not persist runtime-provided CLIs.
 ---
 
 # CLI Manager
 
-Use this skill when the user wants to install a third-party CLI, or when a CLI is already installed and should remain available across future sandbox sessions.
+Use this skill when the user wants to install a user-managed third-party CLI, or when a user-installed CLI should remain available across future sandbox sessions.
 
 This skill is for orchestration only. Do not handle installed artifacts yourself, and do not guess how the tool implements persistence. All persistence, restore, conflict detection, and cleanup actions must go through the Code Mode tools.
 
 ## Principles
 
-1. Before running any third-party CLI install command, decide whether persistence is needed.
-2. Before persisting or removing a CLI, get explicit user confirmation.
-3. For script-based installers such as `curl ... | sh`, `wget ... | bash`, or `sh install.sh`, read the full installer script first and continue only if there is no obvious high-risk behavior.
-4. Store secret values such as API keys, tokens, and licenses with `env-manager`. This skill only records environment variable names.
-5. If a tool fails, stop the current install or remove flow and follow the next steps in `result.content`.
-6. Do not read or rely on `extra_info`, `data`, or other internal fields unless a later tool document explicitly requires it.
-7. Use only the parameters shown in this skill. Never pass `resolution`, `resolution_options`, or other guessed internal parameters.
-8. Do not run the actual install command with `shell_exec`. `cli_manager_apply` is responsible for executing the installer after confirmation.
+1. Separate runtime-provided CLIs from user-managed CLIs before discussing persistence.
+2. `lark-cli`, `dws`, and `teamshare-cli` are provided and updated by the Super Magic runtime. Never install, adopt, or create new persistence records for them with cli-manager.
+3. If the user asks to install one of those runtime-provided CLIs and the command is available, tell the user it is already installed and continue with its platform skill or authentication flow. Do not ask for persistence confirmation.
+4. If a runtime-provided CLI is unavailable, report it as a runtime environment problem. Do not repair it by installing a user-managed copy.
+5. `cli_manager_list` lists only user-managed persisted CLIs. An empty result says nothing about runtime-provided CLIs.
+6. If a runtime-provided CLI already has a legacy user persistence record, explain that the record is redundant. Remove only that legacy record after explicit user confirmation.
+7. Before running any third-party CLI install command, decide whether user persistence is needed.
+8. Before persisting or removing a user-managed CLI, get explicit user confirmation.
+9. For script-based installers such as `curl ... | sh`, `wget ... | bash`, or `sh install.sh`, read the full installer script first and continue only if there is no obvious high-risk behavior.
+10. Store secret values such as API keys, tokens, and licenses with `env-manager`. This skill only records environment variable names.
+11. If a tool fails, stop the current install or remove flow and follow the next steps in `result.content`.
+12. Do not read or rely on `extra_info`, `data`, or other internal fields unless a later tool document explicitly requires it.
+13. Use only the parameters shown in this skill. Never pass `resolution`, `resolution_options`, or other guessed internal parameters.
+14. Do not run the actual install command with `shell_exec`. `cli_manager_apply` is responsible for executing the installer after confirmation.
 
 ## Install Flow
 
-1. Identify the CLI name, command names, install command, relevant config directories, and required environment variable names.
-2. If the install path depends on a remote or local installer script, read the full script and check for obvious risk before continuing.
-3. Tell the user that a normal install can be lost when the sandbox is destroyed, then ask whether they want to persist the CLI.
-4. After the user confirms, call `cli_manager_apply`.
-5. If the install docs require an API key first, load `env-manager` to check or save the required environment variable before continuing.
-6. After install completes, verify and respond based on `result.content`.
-7. If `cli_manager_apply` fails, do not run the CLI with `shell_exec` to turn the flow into a success. Follow the next steps in `result.content` or report that persistence did not complete.
+1. Check whether the requested command is runtime-provided. If it is `lark-cli`, `dws`, or `teamshare-cli`, follow the runtime-provided short circuit above and stop this install flow.
+2. Identify the CLI name, command names, install command, relevant config directories, and required environment variable names.
+3. If the install path depends on a remote or local installer script, read the full script and check for obvious risk before continuing.
+4. Tell the user that a normal user-managed install can be lost when the sandbox is destroyed, then ask whether they want to persist the CLI.
+5. After the user confirms, call `cli_manager_apply`.
+6. If the install docs require an API key first, load `env-manager` to check or save the required environment variable before continuing.
+7. After install completes, verify and respond based on `result.content`.
+8. If `cli_manager_apply` fails, do not run the CLI with `shell_exec` to turn the flow into a success. Follow the next steps in `result.content` or report that persistence did not complete.
 
 Install a new CLI:
 

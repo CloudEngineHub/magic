@@ -21,8 +21,11 @@
 	"confirmClose": "Sahkan Tutup",
 	"detail": "Butiran",
 	"file": {
+		"imageLoadFailed": "Gagal memuatkan imej",
+		"imageSizeTooLarge": "Imej tidak boleh melebihi {{size}}",
+		"imageSizeTooSmall": "Saiz imej tidak boleh kurang daripada {{width}}x{{height}}",
 		"maxSize": "Had saiz fail tunggal ialah {{maxSize}}MB",
-		"onlySupportUploadImage": "Hanya menyokong muat naik imej format png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Hanya menyokong muat naik imej format png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Gagal memuat naik fail, sila cuba lagi"
 	},
 	"filter": "Penapis",

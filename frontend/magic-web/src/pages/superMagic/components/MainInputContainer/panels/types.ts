@@ -18,6 +18,23 @@ export interface LocaleTextMap extends Record<string, string | undefined> {
 export type LocaleText = string | LocaleTextMap
 
 /**
+ * Optional exact-value input displayed alongside predefined field options.
+ *
+ * Number parsing and validation are centralized in fieldCustomInput.ts. Keep visual layout
+ * details out of this contract. Add future input types as a discriminated union instead of
+ * making unrelated properties optional on one broad interface.
+ */
+export interface FieldCustomInputConfig {
+	type: "number"
+	min?: number
+	max?: number
+	step?: number
+	integer?: boolean
+	placeholder?: LocaleText
+	unit?: LocaleText
+}
+
+/**
  * Slide filter configuration
  */
 export interface FieldItem {
@@ -42,6 +59,8 @@ export interface FieldItem {
 	preset_content?: LocaleText
 	// custom placeholder text for the select trigger
 	placeholder?: LocaleText
+	// optional input shown after predefined options for entering an exact value
+	custom_input?: FieldCustomInputConfig
 }
 
 /**
