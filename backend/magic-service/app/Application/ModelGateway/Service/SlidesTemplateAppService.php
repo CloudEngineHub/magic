@@ -37,6 +37,11 @@ class SlidesTemplateAppService extends AbstractLLMAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($modelGatewayDataIsolation);
         $dataIsolation->setContainOfficialOrganization(true);
 
+        $this->pointComponent->checkPointsSufficient(
+            $requestDTO,
+            $modelGatewayDataIsolation
+        );
+
         $template = $this->slidesTemplateDomainService->findEnabledByCodeOrFail($dataIsolation, $code);
         $this->resolveTemplateFileUrl($template);
         $this->slidesTemplateDomainService->incrementActualUsageCount($dataIsolation, $template->getCode());

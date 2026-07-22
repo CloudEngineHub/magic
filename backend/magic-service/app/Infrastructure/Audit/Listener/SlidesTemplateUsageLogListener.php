@@ -65,9 +65,33 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
             ->setOperation(self::OPERATION)
             ->setSource($this->resolveSource($event->getSourceId()))
             ->setRequestId($this->limitString($event->getRequestId(), 128))
-            ->setContext($event->getBusinessParams());
+            ->setContext($this->buildContext($event->getBusinessParams()));
 
         return $entity;
+    }
+
+    private function buildContext(array $businessParams): array
+    {
+        $mapping = [
+            'source' => ['source'],
+            'task_id' => ['task_id', 'magic_task_id'],
+            'topic_id' => ['topic_id', 'magic_topic_id'],
+            'project_id' => ['project_id'],
+            'chat_topic_id' => ['chat_topic_id', 'magic_chat_topic_id'],
+        ];
+
+        $context = [];
+        foreach ($mapping as $contextKey => $paramKeys) {
+            foreach ($paramKeys as $paramKey) {
+                $value = $this->limitString($businessParams[$paramKey] ?? '', 64);
+                if ($value !== null) {
+                    $context[$contextKey] = $value;
+                    break;
+                }
+            }
+        }
+
+        return $context;
     }
 
     private function resolveActorType(string $sourceId): string
