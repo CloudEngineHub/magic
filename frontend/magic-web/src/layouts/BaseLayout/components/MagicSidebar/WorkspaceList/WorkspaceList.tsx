@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
+import { toJS } from "mobx"
+import { useRequest } from "ahooks"
+import { useImmer } from "use-immer"
 import { Loader2, Plus, RefreshCw, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { sidebarStore } from "@/stores/layout"
@@ -27,12 +30,13 @@ function WorkspaceList() {
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
-	const [searchValue, setSearchValue] = useState("")
-	const [workspaceSearchResults, setWorkspaceSearchResults] = useState<Workspace[]>([])
-	const [projectSearchResults, setProjectSearchResults] = useState<ProjectListItem[]>([])
-	const [isSearchLoading, setIsSearchLoading] = useState(false)
-	const [searchPage, setSearchPage] = useState(1)
-	const [hasMoreWorkspaceSearchResults, setHasMoreWorkspaceSearchResults] = useState(true)
+	const [searchState, updateSearchState] = useImmer({
+		value: "",
+		workspaces: [] as Workspace[],
+		projects: [] as ProjectListItem[],
+		page: 1,
+		hasMoreWorkspaces: true,
+	})
 	const [isLoadingMoreWorkspaces, setIsLoadingMoreWorkspaces] = useState(false)
 	const [workspacePage, setWorkspacePage] = useState(1)
 	const [hasMoreWorkspaces, setHasMoreWorkspaces] = useState(true)
@@ -43,22 +47,20 @@ function WorkspaceList() {
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
-	const searchRequestIdRef = useRef(0)
-	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const projectsByWorkspaceId = useMemo(() => {
 		const result = new Map<string, ProjectListItem[]>()
-		for (const project of projectSearchResults) {
+		for (const project of searchState.projects) {
 			const projects = result.get(project.workspace_id) || []
 			projects.push(project)
 			result.set(project.workspace_id, projects)
 		}
 		return result
-	}, [projectSearchResults])
+	}, [searchState.projects])
 	const displayedWorkspaces = isSearchMode
 		? Array.from(
 				new Map(
 					[
-						...workspaceSearchResults,
+						...searchState.workspaces,
 						...workspaces.filter((workspace) =>
 							projectsByWorkspaceId.has(workspace.id),
 						),
@@ -114,80 +116,78 @@ function WorkspaceList() {
 		}
 	}, [hasMoreWorkspaces, isLoadingMoreWorkspaces, workspacePage])
 
-	const loadSearchResults = useCallback(
-		async (workspaceName: string, page: number, append: boolean) => {
-			if (append && isSearchLoading) return
-
-			setIsSearchLoading(true)
-			const requestId = searchRequestIdRef.current
-			const searchName = workspaceName.trim()
-			try {
-				const [workspaceResponse, projectResponse] = await Promise.all([
-					hasMoreWorkspaceSearchResults || !append
-						? SuperMagicApi.getWorkspaces({
-								page,
-								page_size: SEARCH_PAGE_SIZE,
-								workspace_name: searchName,
-							})
-						: Promise.resolve(null),
-					!append
-						? SuperMagicApi.getProjectsWithCollaboration({
-								page: 1,
-								page_size: 100,
-								project_name: searchName,
-							})
-						: Promise.resolve(null),
-				])
-
-				if (requestId !== searchRequestIdRef.current) return
-
+	const {
+		run: runSearch,
+		cancel: cancelSearch,
+		loading: isSearchLoading,
+	} = useRequest(
+		async ({ keyword, page, append }: { keyword: string; page: number; append: boolean }) => {
+			const searchName = keyword.trim()
+			return Promise.all([
+				searchState.hasMoreWorkspaces || !append
+					? SuperMagicApi.getWorkspaces({
+							page,
+							page_size: SEARCH_PAGE_SIZE,
+							workspace_name: searchName,
+						})
+					: Promise.resolve(null),
+				!append
+					? SuperMagicApi.getProjectsWithCollaboration({
+							page: 1,
+							page_size: 100,
+							project_name: searchName,
+						})
+					: Promise.resolve(null),
+			])
+		},
+		{
+			manual: true,
+			debounceWait: 300,
+			onSuccess: ([workspaceResponse, projectResponse], [{ page, append }]) => {
 				const workspaceList = workspaceResponse?.list || []
 				const projectList = projectResponse?.list || []
-				setHasMoreWorkspaceSearchResults(
-					Boolean(workspaceResponse && page * SEARCH_PAGE_SIZE < workspaceResponse.total),
-				)
-				setWorkspaceSearchResults((current) =>
-					append ? [...current, ...workspaceList] : workspaceList,
-				)
-				setProjectSearchResults((current) =>
-					append ? [...current, ...projectList] : projectList,
-				)
-				setSearchPage(page)
-			} catch {
-				if (requestId === searchRequestIdRef.current && !append) {
-					setWorkspaceSearchResults([])
-					setProjectSearchResults([])
+				updateSearchState((draft) => {
+					draft.hasMoreWorkspaces = Boolean(
+						workspaceResponse && page * SEARCH_PAGE_SIZE < workspaceResponse.total,
+					)
+					draft.workspaces = append
+						? [...draft.workspaces, ...workspaceList]
+						: workspaceList
+					draft.projects = append ? [...draft.projects, ...projectList] : projectList
+					draft.page = page
+				})
+			},
+			onError: (_error, [{ append }]) => {
+				if (!append) {
+					updateSearchState((draft) => {
+						draft.workspaces = []
+						draft.projects = []
+					})
 				}
-			} finally {
-				if (requestId === searchRequestIdRef.current) {
-					setIsSearchLoading(false)
-				}
-			}
+			},
 		},
-		[hasMoreWorkspaceSearchResults, isSearchLoading],
 	)
 
 	const searchWorkspaces = useCallback(
 		(workspaceName: string) => {
-			if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-
 			if (!workspaceName.trim()) {
-				searchRequestIdRef.current += 1
-				setSearchPage(1)
-				setHasMoreWorkspaceSearchResults(true)
-				setWorkspaceSearchResults(workspaces)
-				setProjectSearchResults([])
+				cancelSearch()
+				updateSearchState((draft) => {
+					draft.page = 1
+					draft.hasMoreWorkspaces = true
+					draft.workspaces = toJS(workspaces)
+					draft.projects = []
+				})
 				return
 			}
 
-			searchRequestIdRef.current += 1
-			setSearchPage(1)
-			setHasMoreWorkspaceSearchResults(true)
-			searchTimerRef.current = setTimeout(() => {
-				void loadSearchResults(workspaceName, 1, false)
-			}, 300)
+			updateSearchState((draft) => {
+				draft.page = 1
+				draft.hasMoreWorkspaces = true
+			})
+			runSearch({ keyword: workspaceName, page: 1, append: false })
 		},
-		[loadSearchResults, workspaces],
+		[cancelSearch, runSearch, updateSearchState, workspaces],
 	)
 
 	const loadNextPage = useCallback(() => {
@@ -196,17 +196,17 @@ function WorkspaceList() {
 			return
 		}
 
-		if (isSearchLoading || !hasMoreWorkspaceSearchResults) return
+		if (isSearchLoading || !searchState.hasMoreWorkspaces) return
 
-		void loadSearchResults(searchValue, searchPage + 1, true)
+		runSearch({ keyword: searchState.value, page: searchState.page + 1, append: true })
 	}, [
-		hasMoreWorkspaceSearchResults,
 		isSearchLoading,
 		isSearchMode,
 		loadMoreWorkspaces,
-		loadSearchResults,
-		searchPage,
-		searchValue,
+		searchState.hasMoreWorkspaces,
+		searchState.page,
+		searchState.value,
+		runSearch,
 	])
 
 	useEffect(() => {
@@ -227,28 +227,26 @@ function WorkspaceList() {
 	}, [displayedWorkspaces.length, loadNextPage])
 
 	const handleSearchOpen = useCallback(() => {
-		setWorkspaceSearchResults(workspaces)
-		setProjectSearchResults([])
-		setSearchPage(1)
-		setHasMoreWorkspaceSearchResults(true)
+		updateSearchState((draft) => {
+			draft.workspaces = toJS(workspaces)
+			draft.projects = []
+			draft.page = 1
+			draft.hasMoreWorkspaces = true
+		})
 		setIsSearchMode(true)
-	}, [workspaces])
+	}, [updateSearchState, workspaces])
 
 	const handleSearchClose = useCallback(() => {
-		if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-		searchRequestIdRef.current += 1
-		setIsSearchLoading(false)
-		setSearchValue("")
-		setWorkspaceSearchResults([])
-		setProjectSearchResults([])
+		cancelSearch()
+		updateSearchState((draft) => {
+			draft.value = ""
+			draft.workspaces = []
+			draft.projects = []
+			draft.page = 1
+			draft.hasMoreWorkspaces = true
+		})
 		setIsSearchMode(false)
-	}, [])
-
-	useEffect(() => {
-		return () => {
-			if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-		}
-	}, [])
+	}, [cancelSearch, updateSearchState])
 
 	useEffect(() => {
 		if (workspaces.length > 0) return
@@ -298,10 +296,12 @@ function WorkspaceList() {
 						<InputGroupInput
 							className="h-6"
 							placeholder={t("super:workspace.searchWorkspace")}
-							value={searchValue}
+							value={searchState.value}
 							onChange={(event) => {
 								const value = event.target.value
-								setSearchValue(value)
+								updateSearchState((draft) => {
+									draft.value = value
+								})
 								searchWorkspaces(value)
 							}}
 							autoFocus
