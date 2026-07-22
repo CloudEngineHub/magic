@@ -181,8 +181,8 @@
 		"keyword": "Keyword",
 		"keywordPlaceholder": "Search member, user ID, department, or digital employee",
 		"last7Days": "Last 7 Days",
-		"memberId": "Member ID",
-		"memberIdPlaceholder": "Enter member ID",
+		"memberId": "Member",
+		"memberIdPlaceholder": "Select a member",
 		"source": "Source",
 		"time": "Period"
 	},
