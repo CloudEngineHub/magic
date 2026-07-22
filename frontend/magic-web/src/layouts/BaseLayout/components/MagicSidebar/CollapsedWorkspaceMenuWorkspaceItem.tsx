@@ -43,6 +43,8 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 }: CollapsedWorkspaceMenuWorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
+	const workspaceDisplayName = workspace.name || t("super:workspace.unnamedWorkspace")
+	const projectPanelTitle = `${workspaceDisplayName}/${t("super:workspace.projects")}`
 	const workspaceNameTestId = `sidebar-collapsed-workspace-name-${workspaceIdSegment}`
 	const workspaceMoreTriggerTestId = `sidebar-collapsed-workspace-more-${workspaceIdSegment}`
 	const projectPopoverTestId = `sidebar-collapsed-workspace-project-popover-${workspaceIdSegment}`
@@ -211,7 +213,10 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								variant="ghost"
 								size="sm"
 								className={cn(
-									"h-8 w-full justify-start gap-2 px-2 font-normal [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+									"h-8 w-full justify-start gap-2 px-2 font-normal [-webkit-tap-highlight-color:transparent]",
+									!isActive &&
+										"hover:bg-sidebar-accent/50 active:bg-sidebar-accent/50",
+									!isActive && !isWorkspaceHovered && "!bg-transparent",
 									isActive && "bg-sidebar-accent",
 								)}
 								onMouseEnter={() => {
@@ -300,8 +305,11 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						}}
 					>
 						<div className="flex h-8 items-center rounded-md px-2">
-							<span className="truncate text-sm font-normal leading-5 text-sidebar-foreground">
-								{t("super:workspace.projects")}
+							<span
+								className="min-w-0 flex-1 truncate text-sm font-normal leading-5 text-sidebar-foreground"
+								title={projectPanelTitle}
+							>
+								{projectPanelTitle}
 							</span>
 						</div>
 						<Button
