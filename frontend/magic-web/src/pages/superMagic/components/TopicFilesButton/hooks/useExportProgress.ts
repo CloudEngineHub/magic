@@ -21,18 +21,6 @@ export function useExportProgress() {
 		progress: 0,
 	})
 
-	// 批量 PDF 导出状态
-	const [batchPdfState, setBatchPdfState] = useState<ExportProgressState>({
-		isExporting: false,
-		progress: 0,
-	})
-
-	// 批量 PPT 导出状态
-	const [batchPptState, setBatchPptState] = useState<ExportProgressState>({
-		isExporting: false,
-		progress: 0,
-	})
-
 	// PDF 导出回调函数
 	const onPdfExportStart = useCallback(() => {
 		setPdfState({ isExporting: true, progress: 0 })
@@ -59,38 +47,10 @@ export function useExportProgress() {
 		setPptState({ isExporting: false, progress: 0 })
 	}, [])
 
-	// 批量 PDF 导出回调函数
-	const onBatchPdfExportStart = useCallback(() => {
-		setBatchPdfState({ isExporting: true, progress: 0 })
-	}, [])
-
-	const onBatchPdfExportProgress = useCallback((progress: number) => {
-		setBatchPdfState((prev) => ({ ...prev, progress }))
-	}, [])
-
-	const onBatchPdfExportEnd = useCallback(() => {
-		setBatchPdfState({ isExporting: false, progress: 0 })
-	}, [])
-
-	// 批量 PPT 导出回调函数
-	const onBatchPptExportStart = useCallback(() => {
-		setBatchPptState({ isExporting: true, progress: 0 })
-	}, [])
-
-	const onBatchPptExportProgress = useCallback((progress: number) => {
-		setBatchPptState((prev) => ({ ...prev, progress }))
-	}, [])
-
-	const onBatchPptExportEnd = useCallback(() => {
-		setBatchPptState({ isExporting: false, progress: 0 })
-	}, [])
-
 	// 重置所有导出状态
 	const resetExportProgress = useCallback(() => {
 		setPdfState({ isExporting: false, progress: 0 })
 		setPptState({ isExporting: false, progress: 0 })
-		setBatchPdfState({ isExporting: false, progress: 0 })
-		setBatchPptState({ isExporting: false, progress: 0 })
 	}, [])
 
 	return {
@@ -102,14 +62,6 @@ export function useExportProgress() {
 		isExportingPpt: pptState.isExporting,
 		pptExportProgress: pptState.progress,
 
-		// 批量 PDF 状态
-		isBatchExportingPdf: batchPdfState.isExporting,
-		batchPdfExportProgress: batchPdfState.progress,
-
-		// 批量 PPT 状态
-		isBatchExportingPpt: batchPptState.isExporting,
-		batchPptExportProgress: batchPptState.progress,
-
 		// PDF 回调函数
 		onPdfExportStart,
 		onPdfExportProgress,
@@ -119,16 +71,6 @@ export function useExportProgress() {
 		onPptExportStart,
 		onPptExportProgress,
 		onPptExportEnd,
-
-		// 批量 PDF 回调函数
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-
-		// 批量 PPT 回调函数
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 
 		// 工具函数
 		resetExportProgress,

@@ -288,19 +288,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		pdfExportProgress,
 		isExportingPpt,
 		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
 		onPptExportStart,
 		onPptExportProgress,
 		onPptExportEnd,
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		resetExportProgress,
 	} = useExportProgress()
 
@@ -1793,17 +1783,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		pdfExportProgress,
 		isExportingPpt,
 		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
-		// 批量导出进度回调
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		// 上传状态
 		uploading,
 		// 删除状态
