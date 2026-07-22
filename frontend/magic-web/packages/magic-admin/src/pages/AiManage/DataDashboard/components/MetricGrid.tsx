@@ -21,7 +21,7 @@ import {
 	type MetricKey,
 } from "../consts"
 import type { DashboardT, MetricCardData } from "../types"
-import { formatDecimal, formatNumber, formatPercent, safeDivide } from "../remoteUtils"
+import { formatDecimal, formatNumber, formatPercent, safeDivide } from "../utils"
 
 export function buildMetrics(
 	view: DataDashboardView,

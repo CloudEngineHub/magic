@@ -322,6 +322,18 @@ export const useStyles = createStyles(
 				flex-direction: column;
 			}
 		`,
+		detailTableWrap: css`
+			min-height: ${isMobile ? "460px" : "680px"};
+			overflow-anchor: none;
+
+			.${prefixCls}-table-placeholder {
+				height: ${isMobile ? "360px" : "560px"};
+
+				.${prefixCls}-table-cell {
+					height: 100%;
+				}
+			}
+		`,
 		detailSubtitle: css`
 			margin: 0;
 			color: ${token.colorText};

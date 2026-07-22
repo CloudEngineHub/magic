@@ -24,7 +24,7 @@ import {
 	formatNumber,
 	safeDivide,
 	type DashboardTabType,
-} from "../remoteUtils"
+} from "../utils"
 import { useTranslation } from "react-i18next"
 import { useStyles } from "../styles"
 
@@ -327,21 +327,23 @@ function createTabItem({
 							{t("actions.export")}
 						</MagicButton>
 					</div>
-					<Table<DashboardRow>
-						rowKey={(row) => getRowKey(tabType, row)}
-						scroll={{ x: scrollX }}
-						columns={columns}
-						dataSource={rows}
-						loading={loading}
-						pagination={{
-							current: page,
-							pageSize,
-							total,
-							showSizeChanger: true,
-							pageSizeOptions: [String(TABLE_PAGE_SIZE), "50", "100"],
-							onChange: onPageChange,
-						}}
-					/>
+					<div className={styles.detailTableWrap}>
+						<Table<DashboardRow>
+							rowKey={(row) => getRowKey(tabType, row)}
+							scroll={{ x: scrollX }}
+							columns={columns}
+							dataSource={rows}
+							loading={loading}
+							pagination={{
+								current: page,
+								pageSize,
+								total,
+								showSizeChanger: true,
+								pageSizeOptions: [String(TABLE_PAGE_SIZE), "50", "100"],
+								onChange: onPageChange,
+							}}
+						/>
+					</div>
 				</div>
 			) : null,
 	}

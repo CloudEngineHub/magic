@@ -38,7 +38,7 @@ import {
 	isAgentTab,
 	isMemberTab,
 	type DashboardTabType,
-} from "./remoteUtils"
+} from "./utils"
 
 interface DataDashboardPageProps {
 	view: DataDashboardView
@@ -232,11 +232,15 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		[agentSummary, memberSummary, t, view],
 	)
 
-	const tabData = view === VIEW.DigitalEmployeeAnalysis ? agentTabs : memberTabs
 	const summaryLoading =
 		view === VIEW.DigitalEmployeeAnalysis ? agentSummaryLoading : memberSummaryLoading
 	const tableLoading =
 		view === VIEW.DigitalEmployeeAnalysis ? agentTabsLoading : memberTabsLoading
+	const tabData = !tableLoading
+		? view === VIEW.DigitalEmployeeAnalysis
+			? agentTabs
+			: memberTabs
+		: undefined
 	const metricSkeletonCount = view === VIEW.DigitalEmployeeAnalysis ? 10 : 8
 
 	const resetPage = () => {
