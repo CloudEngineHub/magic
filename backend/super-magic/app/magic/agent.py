@@ -927,8 +927,15 @@ class Agent(BaseAgent):
             else:
                 return await self._handle_agent_loop(session_prep_result)
         finally:
-            # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
-            await self.agent_context.close_all_resources()
+            try:
+                # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
+                await self.agent_context.close_all_resources()
+            finally:
+                # RUNNING 表示 run 协程仍在执行，不能在协程退出后残留。
+                # 用户插入新消息时会取消旧 worker；若状态未结束，AgentRuntime 会把已停止的
+                # 缓存 Agent 误判为并发运行，导致后续消息永久触发 AgentRuntimeBusyError。
+                if self.is_agent_running():
+                    self.set_agent_state(AgentState.FINISHED)
 
     async def _prepare_run_session(self, query: str) -> SessionPrepResult:
         """准备本轮运行需要的会话状态，并保证 prepare 段完整收尾。"""
