@@ -15,7 +15,6 @@ import { getParentIdFromPath as _getParentIdFromPath } from "../utils/getParentI
 import { multiFolderUploadStore } from "@/stores/folderUpload"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import { DownloadImageMode, ProjectListItem } from "../../../pages/Workspace/types"
-import { useExportProgress } from "./useExportProgress"
 import { useFileOpen } from "./useFileOpen"
 import { SuperMagicApi } from "@/apis"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
@@ -281,28 +280,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			})
 		},
 	)
-
-	// 导出进度管理
-	const {
-		isExportingPdf,
-		pdfExportProgress,
-		isExportingPpt,
-		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
-		onPptExportStart,
-		onPptExportProgress,
-		onPptExportEnd,
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
-		resetExportProgress,
-	} = useExportProgress()
 
 	// 文件打开功能
 	const { handleOpenFile } = useFileOpen({
@@ -1185,7 +1162,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			if (item.file_id) {
 				const onStart = () => {
 					setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
-					onPptExportStart?.()
 				}
 				const onEnd = () => {
 					setExportingFiles((prev) => {
@@ -1193,13 +1169,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						newSet.delete(item.file_id || "")
 						return newSet
 					})
-					onPptExportEnd?.()
-				}
-				const onProgress = (progress: number) => {
-					onPptExportProgress?.(progress)
-				}
-				const onError = () => {
-					onPptExportEnd?.()
 				}
 				exportSingleFileToPpt({
 					fileId: item.file_id,
@@ -1207,12 +1176,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					t,
 					onStart,
 					onEnd,
-					onProgress,
-					onError,
+					onError: onEnd,
 				})
 			}
 		},
-		[projectId, t, onPptExportStart, onPptExportProgress, onPptExportEnd],
+		[projectId, t],
 	)
 
 	// 导出可编辑PPTX（前端 html2pptx，通过 prepareExportSlides 服务准备数据）
@@ -1788,22 +1756,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		selectedTopic,
 		// 导出状态
 		exportingFiles,
-		// 导出进度状态
-		isExportingPdf,
-		pdfExportProgress,
-		isExportingPpt,
-		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
-		// 批量导出进度回调
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		// 上传状态
 		uploading,
 		// 删除状态
@@ -1828,10 +1780,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		creatingFiles,
 		// 新增：文件列表更新回调
 		onAttachmentsChange,
-		// 重置方法
-		resetFileOperations: () => {
-			resetExportProgress()
-		},
 		removeFile,
 		// 新增：获取父级ID
 		getParentIdFromPath,
