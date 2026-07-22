@@ -253,6 +253,7 @@ class Agent(BaseAgent):
         self.agent_name = agent_name
         self._closed = False
         self._context_registered = False
+        self._active_run_task: asyncio.Task[object] | None = None
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -376,6 +377,39 @@ class Agent(BaseAgent):
             AgentContextRegistry.get_instance().unregister(self.agent_context)
             self._context_registered = False
             logger.info(f"Agent context 已注销: {self.agent_context.get_agent_session_label()}")
+
+    def has_active_run(self) -> bool:
+        """返回当前 Agent 是否仍有尚未退出的 run 协程。"""
+        task = self._active_run_task
+        return task is not None and not task.done()
+
+    def _claim_run(self) -> asyncio.Task[object]:
+        """登记当前 run 的 Task 身份，阻止同一 Agent 被并发执行。"""
+        current_task = asyncio.current_task()
+        if current_task is None:
+            raise RuntimeError("Agent.run() must execute inside an asyncio Task")
+
+        active_task = self._active_run_task
+        if active_task is not None and not active_task.done():
+            raise RuntimeError(f"Agent {self.agent_name} is already running")
+
+        self._active_run_task = current_task
+        return current_task
+
+    def _set_run_terminal_state(
+        self,
+        run_task: asyncio.Task[object],
+        terminal_state: AgentState,
+    ) -> None:
+        """仅在当前 run 尚无明确终态时写入默认终态。"""
+        if self._active_run_task is run_task and self.is_agent_running():
+            self.set_agent_state(terminal_state)
+
+    def _release_run(self, run_task: asyncio.Task[object]) -> None:
+        """只允许持有当前 Task 身份的 run 释放活动标记。"""
+        if self._active_run_task is not run_task:
+            return
+        self._active_run_task = None
 
     def dispose(self) -> None:
         """兼容性别名，语义等同于 close()。"""
@@ -882,6 +916,23 @@ class Agent(BaseAgent):
 
     async def run(self, query: str):
         """运行 agent"""
+        run_task = self._claim_run()
+        try:
+            result = await self._run_once(query)
+        except asyncio.CancelledError:
+            self._set_run_terminal_state(run_task, AgentState.SUSPENDED)
+            raise
+        except Exception:
+            self._set_run_terminal_state(run_task, AgentState.ERROR)
+            raise
+        else:
+            self._set_run_terminal_state(run_task, AgentState.FINISHED)
+            return result
+        finally:
+            self._release_run(run_task)
+
+    async def _run_once(self, query: str):
+        """执行单轮 Agent 业务逻辑；run() 统一管理执行身份。"""
         self.agent_context.set_final_task_state(None)
         self.agent_context.set_final_response(None)
 
@@ -927,15 +978,8 @@ class Agent(BaseAgent):
             else:
                 return await self._handle_agent_loop(session_prep_result)
         finally:
-            try:
-                # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
-                await self.agent_context.close_all_resources()
-            finally:
-                # RUNNING 表示 run 协程仍在执行，不能在协程退出后残留。
-                # 用户插入新消息时会取消旧 worker；若状态未结束，AgentRuntime 会把已停止的
-                # 缓存 Agent 误判为并发运行，导致后续消息永久触发 AgentRuntimeBusyError。
-                if self.is_agent_running():
-                    self.set_agent_state(AgentState.FINISHED)
+            # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
+            await self.agent_context.close_all_resources()
 
     async def _prepare_run_session(self, query: str) -> SessionPrepResult:
         """准备本轮运行需要的会话状态，并保证 prepare 段完整收尾。"""

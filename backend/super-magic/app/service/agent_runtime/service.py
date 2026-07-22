@@ -96,7 +96,7 @@ class AgentRuntime:
                 raise AgentRuntimeBusyError(
                     f"Transient Agent cannot share cached context {context_id}"
                 )
-            if cached is not None and cached.agent.is_agent_running():
+            if cached is not None and cached.agent.has_active_run():
                 raise AgentRuntimeBusyError(
                     f"Agent {cached.agent.agent_name} is running in context {context_id}"
                 )
@@ -109,7 +109,7 @@ class AgentRuntime:
                 )
 
             cached = self._cache.get(context_id)
-            if cached is not None and cached.agent.is_agent_running():
+            if cached is not None and cached.agent.has_active_run():
                 raise AgentRuntimeBusyError(
                     f"Agent {cached.agent.agent_name} started while its definition was prepared"
                 )
@@ -147,7 +147,7 @@ class AgentRuntime:
     def is_context_running(self, context_id: str) -> bool:
         """Return whether the cached Agent for a Context is currently running."""
         cached = self._cache.get(context_id)
-        return cached is not None and cached.agent.is_agent_running()
+        return cached is not None and cached.agent.has_active_run()
 
     async def invalidate_context(self, context_id: str, *, reason: str) -> tuple[str, ...]:
         """Close and remove the cached Agent for a Context."""
@@ -158,7 +158,7 @@ class AgentRuntime:
             cached = self._cache.get(context_id)
             if cached is None:
                 return ()
-            if cached.agent.is_agent_running():
+            if cached.agent.has_active_run():
                 raise AgentRuntimeBusyError(
                     f"Agent {cached.agent.agent_name} is running in context {context_id}"
                 )
