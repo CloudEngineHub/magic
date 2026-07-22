@@ -30,8 +30,6 @@ class CliManagerListParams(BaseToolParams):
 class CliManagerList(BaseTool[CliManagerListParams], CliManagerToolMixin):
     """List persisted third-party CLIs."""
 
-    code_mode_only = True
-
     async def execute(self, tool_context: ToolContext, params: CliManagerListParams) -> ToolResult:
         """列出用户持久化 CLI 的注册表记录。"""
         try:
