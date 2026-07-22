@@ -34,6 +34,7 @@ describe("MicroAppMobileHeader", () => {
 		const onToggleDatabasePanel = vi.fn()
 		const onPublish = vi.fn()
 		const onManageCollaborators = vi.fn()
+		const onRename = vi.fn()
 
 		render(
 			<MicroAppMobileHeader
@@ -43,6 +44,8 @@ describe("MicroAppMobileHeader", () => {
 				onBack={onBack}
 				onToggleDatabasePanel={onToggleDatabasePanel}
 				onPublish={onPublish}
+				canRename
+				onRename={onRename}
 				canManageCollaborators
 				onManageCollaborators={onManageCollaborators}
 			/>,
@@ -53,10 +56,12 @@ describe("MicroAppMobileHeader", () => {
 		fireEvent.click(screen.getByTestId("micro-app-mobile-database-button"))
 		fireEvent.click(screen.getByTestId("micro-app-mobile-manage-collaborators"))
 		fireEvent.click(screen.getByTestId("micro-app-mobile-publish-button"))
+		fireEvent.click(screen.getByTestId("micro-app-mobile-rename-button"))
 
 		expect(onBack).toHaveBeenCalledOnce()
 		expect(onToggleDatabasePanel).toHaveBeenCalledOnce()
 		expect(onManageCollaborators).toHaveBeenCalledOnce()
 		expect(onPublish).toHaveBeenCalledOnce()
+		expect(onRename).toHaveBeenCalledOnce()
 	})
 })

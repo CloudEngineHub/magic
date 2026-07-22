@@ -3255,6 +3255,15 @@
 			"unpublishFailed": "下架失败，请重试",
 			"unpublishSuccess": "微应用已下架",
 			"update": "保存设置"
+		},
+		"rename": {
+			"button": "重命名微应用",
+			"description": "修改当前微应用的项目名称",
+			"failed": "重命名失败，请重试",
+			"nameLabel": "微应用名称",
+			"placeholder": "请输入微应用名称",
+			"success": "微应用名称已更新",
+			"title": "重命名微应用"
 		}
 	},
 	"microAppShare": {

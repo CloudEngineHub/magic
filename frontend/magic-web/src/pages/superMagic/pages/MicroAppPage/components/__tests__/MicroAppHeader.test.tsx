@@ -74,4 +74,19 @@ describe("MicroAppHeader", () => {
 
 		expect(screen.getByTestId("micro-app-manage-collaborators")).toBeInTheDocument()
 	})
+
+	it("renders the rename entry for editable projects", () => {
+		const onRename = vi.fn()
+		renderHeader({ canRename: true, onRename })
+
+		fireEvent.click(screen.getByTestId("micro-app-rename-button"))
+
+		expect(onRename).toHaveBeenCalledOnce()
+	})
+
+	it("does not render the rename entry for read-only projects", () => {
+		renderHeader({ canRename: false, onRename: vi.fn() })
+
+		expect(screen.queryByTestId("micro-app-rename-button")).not.toBeInTheDocument()
+	})
 })

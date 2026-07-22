@@ -1,4 +1,4 @@
-import { ArrowLeft, Database, Rocket, UserRoundPlus } from "lucide-react"
+import { ArrowLeft, Database, PenLine, Rocket, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -11,6 +11,8 @@ interface MicroAppHeaderProps {
 	onBack: () => void
 	onToggleDatabasePanel: () => void
 	onPublish: () => void
+	canRename?: boolean
+	onRename?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
 }
@@ -22,6 +24,8 @@ export default function MicroAppHeader({
 	onBack,
 	onToggleDatabasePanel,
 	onPublish,
+	canRename,
+	onRename,
 	canManageCollaborators,
 	onManageCollaborators,
 }: MicroAppHeaderProps) {
@@ -49,7 +53,28 @@ export default function MicroAppHeader({
 			</Tooltip>
 
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
+				{canRename && onRename ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="-ml-2 h-8 max-w-full gap-1.5 px-2"
+								onClick={onRename}
+								data-testid="micro-app-rename-button"
+							>
+								<span className="truncate text-sm font-medium">{projectName}</span>
+								<PenLine className="size-3.5 shrink-0 text-muted-foreground" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t("microAppPage.rename.button")}
+						</TooltipContent>
+					</Tooltip>
+				) : (
+					<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
+				)}
 			</div>
 
 			<Tooltip>
