@@ -106,6 +106,31 @@ function createManager(requestPreviewLoad = vi.fn()) {
 
 function createConstructedManager(requestPreviewLoad = vi.fn()) {
 	const ensureFreshOssInfo = vi.fn()
+	const imagePresentationScheduler = {
+		replaceTargets: vi.fn(),
+		removeTarget: vi.fn(),
+		getSnapshot: vi.fn(() => ({
+			targetCount: 0,
+			pendingCount: 0,
+			targetReplaceCount: 0,
+			enqueuedCount: 0,
+			pendingReplaceCount: 0,
+			staleDropCount: 0,
+			movingUpgradeDeferredCount: 0,
+			appliedLowCount: 0,
+			appliedPreviewCount: 0,
+			appliedFullCount: 0,
+			movingAppliedLowCount: 0,
+			movingAppliedPreviewCount: 0,
+			movingAppliedFullCount: 0,
+			idleAppliedLowCount: 0,
+			idleAppliedPreviewCount: 0,
+			idleAppliedFullCount: 0,
+			flushCount: 0,
+			peakPendingCount: 0,
+			drawRequestCount: 0,
+		})),
+	}
 	const handlers = new Map<string, Array<(event: unknown) => void>>()
 	let contentLayerListening = true
 	const contentLayer = {
@@ -133,6 +158,37 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		videoResourceManager: {
 			ensureFreshOssInfo,
 		},
+		imageResourceManager: {
+			getSnapshot: vi.fn(() => ({
+				decodeAttemptCount: 0,
+				decodeRepeatAttemptCount: 0,
+				decodeSuccessCount: 0,
+				decodeFailedCount: 0,
+				decodedEvictedCount: 0,
+				decodedEvictedBytes: 0,
+				decodedEvictedLow: 0,
+				decodedEvictedPreview: 0,
+				decodedEvictedFull: 0,
+				decodedBytesTotal: 0,
+				lowLoaded: 0,
+				previewLoaded: 0,
+				fullLoaded: 0,
+				activePreviewLoadPipelineCount: 0,
+				queuedPreviewLoadCount: 0,
+				activeDecodePixelCost: 0,
+				queuedDecodePermitCount: 0,
+			})),
+		},
+		imagePresentationScheduler,
+		runtimeScheduler: {
+			getSnapshot: vi.fn(() => ({
+				drawRequestCount: 0,
+				flushCount: 0,
+				drawnCount: 0,
+				coalescedDrawRequestCount: 0,
+				drawReasonCounts: {},
+			})),
+		},
 		magicConfigManager: {
 			config: {
 				methods: {},
@@ -152,7 +208,14 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		>
 		registeredVideos: Map<string, { elementId: string; path: string }>
 	}
-	return { contentLayer, ensureFreshOssInfo, handlers, manager, requestPreviewLoad }
+	return {
+		contentLayer,
+		ensureFreshOssInfo,
+		handlers,
+		imagePresentationScheduler,
+		manager,
+		requestPreviewLoad,
+	}
 }
 
 type RequestVideoLoad = (candidate: VideoCandidate, reason: string, force?: boolean) => void
@@ -258,14 +321,12 @@ describe("CanvasVisibilityManager video load requests", () => {
 
 describe("CanvasVisibilityManager image load requests", () => {
 	it("does not reissue an unchanged viewport image request across pan and scale", () => {
-		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
 		const manager = Object.create(
 			CanvasVisibilityManager.prototype,
 		) as CanvasVisibilityManager & {
 			canvas: {
 				imageResourceManager: {
-					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
 					loadResource: typeof loadResource
 				}
 			}
@@ -279,7 +340,7 @@ describe("CanvasVisibilityManager image load requests", () => {
 			>
 		}
 		manager.canvas = {
-			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
+			imageResourceManager: { loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
 
@@ -304,33 +365,109 @@ describe("CanvasVisibilityManager image load requests", () => {
 		)
 	})
 
-	it("downgrades full candidates to preview while viewport movement is active", () => {
-		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
-		const deferFullImageCandidateIfNeeded = (
+	it("keeps the displayed image tier while moving and uses low for blank images", () => {
+		let displayedVariant: ImageResourceVariant | undefined = "preview"
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				elementManager: {
+					getElementInstance: () => {
+						getDisplayResourceVariant: () => ImageResourceVariant | undefined
+					}
+				}
+				magicConfigManager: { config: { methods: Record<string, never> } }
+			}
+			imagePresentationPhase: "moving" | "idle"
+			lowFallbackPreviewPathByElementId: Map<string, string>
+		}
+		manager.canvas = {
+			elementManager: {
+				getElementInstance: () => ({
+					getDisplayResourceVariant: () => displayedVariant,
+				}),
+			},
+			magicConfigManager: { config: { methods: {} } },
+		}
+		manager.imagePresentationPhase = "moving"
+		manager.lowFallbackPreviewPathByElementId = new Map()
+		const resolveImageCandidateForPresentationPhase = (
 			manager as unknown as {
-				deferFullImageCandidateIfNeeded: (
+				resolveImageCandidateForPresentationPhase: (
 					candidate: ImageCandidate,
-					shouldDeferFullImageLoads: boolean,
 				) => ImageCandidate
 			}
-		).deferFullImageCandidateIfNeeded
+		).resolveImageCandidateForPresentationPhase
 		const candidate = {
 			...createImageCandidate("image-1", "visible"),
 			variant: "full" as ImageResourceVariant,
 			screenLongEdge: 2000,
 		}
 
-		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, true)).toEqual(
+		expect(resolveImageCandidateForPresentationPhase.call(manager, candidate)).toEqual(
 			expect.objectContaining({
 				variant: "preview",
 				screenLongEdge: 2000,
 			}),
 		)
-		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, false)).toEqual(
+
+		displayedVariant = undefined
+		expect(resolveImageCandidateForPresentationPhase.call(manager, candidate)).toEqual(
+			expect.objectContaining({ variant: "low" }),
+		)
+
+		manager.imagePresentationPhase = "idle"
+		expect(resolveImageCandidateForPresentationPhase.call(manager, candidate)).toEqual(
 			expect.objectContaining({
 				variant: "full",
 			}),
 		)
+
+		manager.lowFallbackPreviewPathByElementId.set("image-1", candidate.path)
+		expect(
+			resolveImageCandidateForPresentationPhase.call(manager, {
+				...candidate,
+				variant: "low",
+			}),
+		).toEqual(expect.objectContaining({ variant: "preview" }))
+	})
+
+	it("lets blank moving images request low without waiting for tier cooldown", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				elementManager: {
+					getElementInstance: () => {
+						getDisplayResourceVariant: () => undefined
+					}
+				}
+			}
+			imagePresentationPhase: "moving"
+			lastRequestedLoadState: Map<string, unknown>
+			scheduleRefresh: ReturnType<typeof vi.fn>
+		}
+		manager.canvas = {
+			elementManager: {
+				getElementInstance: () => ({ getDisplayResourceVariant: () => undefined }),
+			},
+		}
+		manager.imagePresentationPhase = "moving"
+		manager.lastRequestedLoadState = new Map([
+			[
+				"image-1",
+				{ priority: "visible", variant: "preview", requestedAt: performance.now() },
+			],
+		])
+		manager.scheduleRefresh = vi.fn()
+
+		expect(
+			manager.shouldRequestImageCandidate({
+				...createImageCandidate("image-1"),
+				variant: "low",
+			}),
+		).toBe(true)
+		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
 	})
 
 	it("limits admitted full candidates per refresh", () => {
@@ -518,7 +655,7 @@ describe("CanvasVisibilityManager image load requests", () => {
 		expect(admitted.map((candidate) => candidate.variant)).toEqual(["preview", "preview"])
 	})
 
-	it("allows idle full refreshes to bypass the rapid variant switch cooldown", () => {
+	it("allows idle media refreshes to bypass the rapid variant switch cooldown", () => {
 		const manager = Object.create(
 			CanvasVisibilityManager.prototype,
 		) as CanvasVisibilityManager & {
@@ -555,19 +692,17 @@ describe("CanvasVisibilityManager image load requests", () => {
 					variant: "full",
 					screenLongEdge: 2000,
 				},
-				{ reason: "viewport:idle-full" },
+				{ reason: "viewport:idle-media" },
 			),
 		).toBe(true)
 		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
 	})
 
-	it("passes display target metadata to image resource loads", () => {
-		const emitImageResourceDisplayTarget = vi.fn()
+	it("passes directed completion metadata to full image resource loads", () => {
 		const loadResource = vi.fn()
 		const manager = Object.create(CanvasVisibilityManager.prototype) as {
 			canvas: {
 				imageResourceManager: {
-					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
 					loadResource: typeof loadResource
 				}
 			}
@@ -582,7 +717,7 @@ describe("CanvasVisibilityManager image load requests", () => {
 			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
 		}
 		manager.canvas = {
-			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
+			imageResourceManager: { loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
 		const requestImageLoad = manager.requestImageLoad.bind(manager)
@@ -601,12 +736,6 @@ describe("CanvasVisibilityManager image load requests", () => {
 			"viewport:scale",
 		)
 
-		expect(emitImageResourceDisplayTarget).toHaveBeenCalledWith({
-			elementId: "image-1",
-			path: "./images/a.png",
-			variant: "full",
-			reason: "viewport:scale",
-		})
 		expect(loadResource).toHaveBeenCalledWith(
 			"./images/a.png",
 			expect.objectContaining({
@@ -620,12 +749,10 @@ describe("CanvasVisibilityManager image load requests", () => {
 	})
 
 	it("does not attach viewport cancellation to non-viewport image requests", () => {
-		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
 		const manager = Object.create(CanvasVisibilityManager.prototype) as {
 			canvas: {
 				imageResourceManager: {
-					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
 					loadResource: typeof loadResource
 				}
 			}
@@ -640,7 +767,7 @@ describe("CanvasVisibilityManager image load requests", () => {
 			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
 		}
 		manager.canvas = {
-			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
+			imageResourceManager: { loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
 
@@ -668,6 +795,9 @@ describe("CanvasVisibilityManager image load requests", () => {
 						methods: Record<string, never>
 					}
 				}
+				imagePresentationScheduler: {
+					removeTarget: ReturnType<typeof vi.fn>
+				}
 			}
 			destroyed: boolean
 			registeredImages: Map<string, { elementId: string; path: string }>
@@ -687,6 +817,9 @@ describe("CanvasVisibilityManager image load requests", () => {
 				config: {
 					methods: {},
 				},
+			},
+			imagePresentationScheduler: {
+				removeTarget: vi.fn(),
 			},
 		}
 		manager.destroyed = false
@@ -860,11 +993,15 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 						methods: Record<string, never>
 					}
 				}
+				imagePresentationScheduler: {
+					removeTarget: ReturnType<typeof vi.fn>
+				}
 			}
 			destroyed: boolean
 			registeredImages: Map<string, { elementId: string; path: string }>
 			lastVisibilityState: Map<string, string>
 			lastRequestedLoadState: Map<string, unknown>
+			lowFallbackPreviewPathByElementId: Map<string, string>
 			imageRetentionHints: Map<string, unknown>
 			scheduleRefresh: ReturnType<typeof vi.fn>
 		}
@@ -879,6 +1016,9 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 					methods: {},
 				},
 			},
+			imagePresentationScheduler: {
+				removeTarget: vi.fn(),
+			},
 		}
 		manager.destroyed = false
 		manager.registeredImages = new Map([
@@ -886,6 +1026,7 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 		])
 		manager.lastVisibilityState = new Map()
 		manager.lastRequestedLoadState = new Map()
+		manager.lowFallbackPreviewPathByElementId = new Map()
 		manager.imageRetentionHints = new Map()
 		manager.scheduleRefresh = vi.fn()
 		return manager
@@ -1012,7 +1153,30 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 })
 
 describe("CanvasVisibilityManager content layer hit graph suppression", () => {
-	it("schedules an idle full refresh after viewport movement settles", () => {
+	it("uses an explicit viewport end event to enter idle immediately", () => {
+		vi.useFakeTimers()
+		try {
+			const { handlers, manager } = createConstructedManager()
+			const scheduleRefresh = vi.fn()
+			;(manager as unknown as { scheduleRefresh: typeof scheduleRefresh }).scheduleRefresh =
+				scheduleRefresh
+
+			handlers.get("viewport:pan")?.[0]?.({})
+			handlers.get("viewport:changed")?.[0]?.({ data: { phase: "end" } })
+
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:idle-media", true)
+			vi.advanceTimersByTime(160)
+			expect(scheduleRefresh.mock.calls).toEqual([
+				["viewport:pan", false],
+				["viewport:idle-media", true],
+			])
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("schedules an idle media refresh after viewport movement settles", () => {
 		vi.useFakeTimers()
 		try {
 			const { handlers, manager } = createConstructedManager()
@@ -1023,10 +1187,10 @@ describe("CanvasVisibilityManager content layer hit graph suppression", () => {
 			handlers.get("viewport:pan")?.[0]?.({})
 
 			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:pan", false)
-			vi.advanceTimersByTime(239)
-			expect(scheduleRefresh).not.toHaveBeenCalledWith("viewport:idle-full", true)
+			vi.advanceTimersByTime(159)
+			expect(scheduleRefresh).not.toHaveBeenCalledWith("viewport:idle-media", true)
 			vi.advanceTimersByTime(1)
-			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:idle-full", true)
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:idle-media", true)
 			manager.destroy()
 		} finally {
 			vi.useRealTimers()
@@ -1078,6 +1242,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		const requestImageLoad = vi.fn()
 		const scheduleDrainIfNeeded = vi.fn()
 		const scheduleFarVisibilityDrain = vi.fn()
+		const replaceTargets = vi.fn()
 		const queryElementIdsByExpandedRect = vi.fn((_rect, padding, options) =>
 			padding === 0 && Array.from(options?.elementIds ?? []).includes("image-1")
 				? ["image-1"]
@@ -1098,6 +1263,9 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 					getElementBounds: () => { x: number; y: number; width: number; height: number }
 					queryElementIdsByExpandedRect: typeof queryElementIdsByExpandedRect
 				}
+				imagePresentationScheduler: {
+					replaceTargets: typeof replaceTargets
+				}
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
@@ -1114,6 +1282,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			lastVideoVisibilityState: Map<string, string>
 			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
 			imageRetentionHints: Map<string, unknown>
+			imagePresentationPhase: "moving" | "idle"
 			initialVisibleCriticalUntil: number
 			statsSnapshot: Record<string, number>
 			shouldRequestImageCandidate: () => boolean
@@ -1141,6 +1310,9 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				getElementBounds: () => ({ x: 0, y: 0, width: 1000, height: 800 }),
 				queryElementIdsByExpandedRect,
 			},
+			imagePresentationScheduler: {
+				replaceTargets,
+			},
 		}
 		manager.registeredImages = new Map([
 			["image-1", { elementId: "image-1", path: "./images/a.png" }],
@@ -1152,6 +1324,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		manager.lastVideoVisibilityState = new Map()
 		manager.lastContainerDisplayVariant = new Map()
 		manager.imageRetentionHints = new Map()
+		manager.imagePresentationPhase = "moving"
 		manager.initialVisibleCriticalUntil = 0
 		manager.statsSnapshot = {
 			registeredImageCount: 0,
@@ -1207,9 +1380,19 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				elementId: "image-1",
 				path: "./images/a.png",
 				priority: "visible",
+				variant: "low",
 				visibilityState: "visible",
 			}),
 			"viewport:pan",
+		)
+		expect(replaceTargets).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					elementId: "image-1",
+					variant: "low",
+				}),
+			],
+			"moving",
 		)
 		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
 	})
@@ -1342,18 +1525,27 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 
 		const initialSignal = manager.getViewportResourceSignal("image", "./images/a.png")
 		const nextSignal = manager.getViewportResourceSignal("image", "./images/a.png")
+		manager.getViewportResourceSignal("image", "./images/b.png")
+		manager.getViewportResourceSignal("video", "./videos/a.mp4")
 		const resourceKey = manager.getViewportResourceAbortKey("image", "./images/a.png")
+		const retainedImageKey = manager.getViewportResourceAbortKey("image", "./images/b.png")
+		const retainedVideoKey = manager.getViewportResourceAbortKey("video", "./videos/a.mp4")
+		const getResourceKeySpy = vi.spyOn(manager, "getViewportResourceAbortKey")
+		getResourceKeySpy.mockClear()
 
 		expect(nextSignal).toBe(initialSignal)
 		expect(initialSignal.aborted).toBe(false)
-		manager.cancelFarViewportResourceSignals(new Set([resourceKey]))
+		manager.cancelFarViewportResourceSignals(
+			new Set([resourceKey, retainedImageKey, retainedVideoKey]),
+		)
 		expect(initialSignal.aborted).toBe(false)
-		manager.cancelFarViewportResourceSignals(new Set())
+		manager.cancelFarViewportResourceSignals(new Set([retainedImageKey, retainedVideoKey]))
 		expect(initialSignal.aborted).toBe(true)
 		expect(manager.lastRequestedLoadState.has("image-1")).toBe(false)
 		expect(manager.lastRequestedLoadState.has("image-2")).toBe(false)
 		expect(manager.lastRequestedLoadState.has("image-3")).toBe(true)
 		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(true)
+		expect(getResourceKeySpy).toHaveBeenCalledTimes(4)
 	})
 })
 

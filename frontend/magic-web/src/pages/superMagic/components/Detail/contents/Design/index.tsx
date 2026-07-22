@@ -6,6 +6,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import MagicModal from "@/components/base/MagicModal"
 import MagicSpin from "@/components/base/MagicSpin"
+import MagicToaster from "@/components/base/MagicToaster"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -1536,6 +1537,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	return (
 		<>
+			<MagicToaster />
 			<div
 				ref={containerRef}
 				className={styles.designViewerContainer}

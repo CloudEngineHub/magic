@@ -165,12 +165,6 @@ export interface CanvasEventMap {
 
 	// 图片资源管理器事件
 	"resource:image:loaded": { path: string; resource: LoadedResource } // 图片资源加载完成事件
-	"resource:image:display-target": {
-		elementId: string
-		path: string
-		variant: ImageResourceVariant
-		reason: string
-	} // 可见性调度给单个图片元素下发当前视口目标显示等级
 	"resource:image:display-loaded": {
 		elementId: string
 		path: string

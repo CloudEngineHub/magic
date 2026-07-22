@@ -3,6 +3,10 @@ import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import type { Rect } from "../../shared/ids"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
 import {
+	type ImagePresentationPhase,
+	type ImagePresentationTarget,
+} from "../image/CanvasImagePresentationScheduler"
+import {
 	decideImageDisplayViewingLevel,
 	type MediaDisplayResourceVariant,
 } from "./CanvasMediaViewingPolicy"
@@ -113,8 +117,9 @@ const IMAGE_VARIANT_SWITCH_COOLDOWN_MS = 450
 const DECODED_IMAGE_RETENTION_GRACE_MS = 5000
 const FAR_VISIBILITY_DRAIN_GRACE_MS = 3000
 const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
-const VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS = 240
-const VIEWPORT_IDLE_FULL_REFRESH_REASON = "viewport:idle-full"
+const VIEWPORT_IDLE_MEDIA_DELAY_MS = 160
+const VIEWPORT_IDLE_MEDIA_REFRESH_REASON = "viewport:idle-media"
+const IMAGE_LOW_FALLBACK_REFRESH_REASON = "image:low-fallback"
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
 // testing after the 3s drain, while image resources stay cached for fast return.
 const FAR_KONVA_RENDER_VISIBILITY_STRATEGY: CanvasRenderVisibilityStrategy = "hidden"
@@ -294,6 +299,7 @@ export class CanvasVisibilityManager {
 	private readonly lastVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastVideoVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastRequestedLoadState = new Map<string, RequestedImageLoadState>()
+	private readonly lowFallbackPreviewPathByElementId = new Map<string, string>()
 	private readonly lastRequestedVideoLoadState = new Map<string, RequestedVideoLoadState>()
 	private readonly lastContainerDisplayVariant = new Map<string, MediaDisplayResourceVariant>()
 	private readonly imageRetentionHints = new Map<string, DecodedImageRetentionHint>()
@@ -302,7 +308,7 @@ export class CanvasVisibilityManager {
 	private farVisibilityDrainTimerId: ReturnType<typeof setTimeout> | null = null
 	private contentLayerHitGraphRestoreTimerId: ReturnType<typeof setTimeout> | null = null
 	private variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null = null
-	private viewportIdleFullTimerId: ReturnType<typeof setTimeout> | null = null
+	private viewportIdleMediaTimerId: ReturnType<typeof setTimeout> | null = null
 	private scheduledForce = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
@@ -311,7 +317,7 @@ export class CanvasVisibilityManager {
 	private containerRootCache: ContainerRootCache | null = null
 	private destroyed = false
 	private lastViewportMovementAt = now()
-	private viewportFullRequestDeferUntil = 0
+	private imagePresentationPhase: ImagePresentationPhase = "idle"
 	/**
 	 * 以媒体 path 为粒度共享取消信号。不能按每次 pan 全量 abort：同一资源在连续拖动中
 	 * 往往仍位于 visible / near 区，应该复用其在飞请求。
@@ -354,7 +360,7 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportPan = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
-		this.deferFullRequestsUntilViewportIdle(currentTime)
+		this.markViewportMoving(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:pan", false)
 	}
@@ -362,9 +368,16 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportScale = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
-		this.deferFullRequestsUntilViewportIdle(currentTime)
+		this.markViewportMoving(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:scale", true)
+	}
+
+	private readonly handleViewportChanged = (event: {
+		data: { phase: "start" | "move" | "end" }
+	}): void => {
+		if (event.data.phase !== "end") return
+		this.markViewportIdle()
 	}
 
 	private readonly handleElementChange = (): void => {
@@ -376,6 +389,18 @@ export class CanvasVisibilityManager {
 		this.invalidateContainerRootCache()
 		this.initialVisibleCriticalUntil = now() + INITIAL_VISIBLE_CRITICAL_WINDOW_MS
 		this.scheduleRefresh("document:loaded", true)
+	}
+
+	private readonly handleImageResourceLoaded = (event: {
+		data: { path: string; resource: { variant: ImageResourceVariant } }
+	}): void => {
+		if (event.data.resource.variant === "low") {
+			this.lowFallbackPreviewPathByElementId.forEach((path, elementId) => {
+				if (this.isSameResourcePath(path, event.data.path)) {
+					this.lowFallbackPreviewPathByElementId.delete(elementId)
+				}
+			})
+		}
 	}
 
 	private readonly handleVideoResourceLoadFailed = (event: { data: { path: string } }): void => {
@@ -396,40 +421,22 @@ export class CanvasVisibilityManager {
 			return
 		}
 
-		const viewportRect = getViewportCanvasRect(this.canvas)
-		const viewportScale = this.canvas.stage.scaleX() || 1
-		const viewportCenter = getRectCenter(viewportRect)
-		const fallbackVariant: ImageResourceVariant = "preview"
-
+		let fallbackTargetChanged = false
 		this.registeredImages.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
 			const visibilityState = this.lastVisibilityState.get(elementId)
 			if (visibilityState !== "visible") return
 			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
-
-			const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
-			if (!bounds) return
-
-			const screenWidth = Math.max(0, bounds.width * viewportScale)
-			const screenHeight = Math.max(0, bounds.height * viewportScale)
-			const screenLongEdge = Math.max(screenWidth, screenHeight)
-			const candidate: ImageLoadCandidate = {
-				elementId,
-				path: registered.path,
-				priority: "visible",
-				variant: fallbackVariant,
-				visibilityState,
-				screenArea: screenWidth * screenHeight,
-				screenLongEdge,
-				distanceToViewportCenter: getDistance(getRectCenter(bounds), viewportCenter),
+			if (this.lowFallbackPreviewPathByElementId.get(elementId) === registered.path) {
+				return
 			}
-
+			this.lowFallbackPreviewPathByElementId.set(elementId, registered.path)
 			this.statsSnapshot.lowFallbackPreviewCount += 1
-			this.requestImageLoad(
-				candidate,
-				`${event.data.variant}-failed:${event.data.reason ?? "load-error"}`,
-			)
+			fallbackTargetChanged = true
 		})
+		if (fallbackTargetChanged && this.imagePresentationPhase === "idle") {
+			this.scheduleRefresh(IMAGE_LOW_FALLBACK_REFRESH_REASON, true)
+		}
 	}
 
 	constructor(options: { canvas: Canvas }) {
@@ -440,8 +447,10 @@ export class CanvasVisibilityManager {
 		})
 		this.canvas.eventEmitter.on("viewport:pan", this.handleViewportPan)
 		this.canvas.eventEmitter.on("viewport:scale", this.handleViewportScale)
+		this.canvas.eventEmitter.on("viewport:changed", this.handleViewportChanged)
 		this.canvas.eventEmitter.on("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.on("document:loaded", this.handleDocumentLoaded)
+		this.canvas.eventEmitter.on("resource:image:loaded", this.handleImageResourceLoaded)
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
@@ -460,8 +469,13 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredImages.set(elementId, { elementId, path })
+		if (current) {
+			this.cancelViewportResourceSignalIfUnused("image", current.path, this.registeredImages)
+			this.canvas.imagePresentationScheduler.removeTarget(elementId)
+		}
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
+		this.lowFallbackPreviewPathByElementId.delete(elementId)
 		this.imageRetentionHints.delete(elementId)
 		this.scheduleRefresh("image:register", true)
 	}
@@ -473,7 +487,9 @@ export class CanvasVisibilityManager {
 		this.cancelViewportResourceSignalIfUnused("image", registered.path, this.registeredImages)
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
+		this.lowFallbackPreviewPathByElementId.delete(elementId)
 		this.imageRetentionHints.delete(elementId)
+		this.canvas.imagePresentationScheduler.removeTarget(elementId)
 		this.scheduleRefresh("image:unregister", true)
 	}
 
@@ -655,21 +671,22 @@ export class CanvasVisibilityManager {
 		if (this.variantSwitchCooldownTimerId !== null) {
 			clearTimeout(this.variantSwitchCooldownTimerId)
 		}
-		if (this.viewportIdleFullTimerId !== null) {
-			clearTimeout(this.viewportIdleFullTimerId)
+		if (this.viewportIdleMediaTimerId !== null) {
+			clearTimeout(this.viewportIdleMediaTimerId)
 		}
 		this.rafId = null
 		this.drainTimerId = null
 		this.farVisibilityDrainTimerId = null
 		this.contentLayerHitGraphRestoreTimerId = null
 		this.variantSwitchCooldownTimerId = null
-		this.viewportIdleFullTimerId = null
+		this.viewportIdleMediaTimerId = null
 		this.restoreContentLayerHitGraph()
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
 		this.lastVisibilityState.clear()
 		this.lastVideoVisibilityState.clear()
 		this.lastRequestedLoadState.clear()
+		this.lowFallbackPreviewPathByElementId.clear()
 		this.lastRequestedVideoLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
 		this.imageRetentionHints.clear()
@@ -679,8 +696,10 @@ export class CanvasVisibilityManager {
 		this.renderVisibilityController.restoreAll()
 		this.canvas.eventEmitter.off("viewport:pan", this.handleViewportPan)
 		this.canvas.eventEmitter.off("viewport:scale", this.handleViewportScale)
+		this.canvas.eventEmitter.off("viewport:changed", this.handleViewportChanged)
 		this.canvas.eventEmitter.off("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.off("document:loaded", this.handleDocumentLoaded)
+		this.canvas.eventEmitter.off("resource:image:loaded", this.handleImageResourceLoaded)
 		this.canvas.eventEmitter.off(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
@@ -719,22 +738,25 @@ export class CanvasVisibilityManager {
 
 	private cancelFarViewportResourceSignals(activeKeys: Set<string>): void {
 		const controllers = this.getViewportResourceAbortControllers()
+		const cancelledKeys = new Set<string>()
 		controllers.forEach((controller, key) => {
 			if (activeKeys.has(key)) return
 			controller.abort()
 			controllers.delete(key)
-			this.clearViewportResourceLoadRequestState(key)
+			cancelledKeys.add(key)
 		})
+		this.clearViewportResourceLoadRequestStates(cancelledKeys)
 	}
 
-	private clearViewportResourceLoadRequestState(resourceKey: string): void {
+	private clearViewportResourceLoadRequestStates(resourceKeys: ReadonlySet<string>): void {
+		if (resourceKeys.size === 0) return
 		const clearMatchingStates = <T extends RegisteredImageElement | RegisteredVideoElement>(
 			registered: Map<string, T>,
 			requestedStates: Map<string, unknown>,
 			mediaType: "image" | "video",
 		): void => {
 			registered.forEach((resource, elementId) => {
-				if (this.getViewportResourceAbortKey(mediaType, resource.path) !== resourceKey) {
+				if (!resourceKeys.has(this.getViewportResourceAbortKey(mediaType, resource.path))) {
 					return
 				}
 				requestedStates.delete(elementId)
@@ -824,33 +846,48 @@ export class CanvasVisibilityManager {
 		)
 	}
 
-	private deferFullRequestsUntilViewportIdle(currentTime = now()): void {
-		this.viewportFullRequestDeferUntil = currentTime + VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS
-
-		if (this.viewportIdleFullTimerId !== null) {
-			clearTimeout(this.viewportIdleFullTimerId)
+	private markViewportMoving(currentTime = now()): void {
+		this.imagePresentationPhase = "moving"
+		this.lastViewportMovementAt = currentTime
+		if (this.viewportIdleMediaTimerId !== null) {
+			clearTimeout(this.viewportIdleMediaTimerId)
 		}
-
-		this.viewportIdleFullTimerId = setTimeout(() => {
-			this.viewportIdleFullTimerId = null
+		this.viewportIdleMediaTimerId = setTimeout(() => {
+			this.viewportIdleMediaTimerId = null
 			if (this.destroyed) return
-			if (now() < this.viewportFullRequestDeferUntil) return
-			this.scheduleRefresh(VIEWPORT_IDLE_FULL_REFRESH_REASON, true)
-		}, VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS)
+			this.markViewportIdle()
+		}, VIEWPORT_IDLE_MEDIA_DELAY_MS)
 	}
 
-	private shouldDeferFullImageLoads(reason: string, currentTime = now()): boolean {
-		return isViewportMovementReason(reason) || currentTime < this.viewportFullRequestDeferUntil
+	private markViewportIdle(): void {
+		if (this.viewportIdleMediaTimerId !== null) {
+			clearTimeout(this.viewportIdleMediaTimerId)
+			this.viewportIdleMediaTimerId = null
+		}
+		if (this.imagePresentationPhase === "idle") return
+		this.imagePresentationPhase = "idle"
+		this.scheduleRefresh(VIEWPORT_IDLE_MEDIA_REFRESH_REASON, true)
 	}
 
-	private deferFullImageCandidateIfNeeded(
+	private resolveImageCandidateForPresentationPhase(
 		candidate: ImageLoadCandidate,
-		shouldDeferFullImageLoads: boolean,
 	): ImageLoadCandidate {
-		if (!shouldDeferFullImageLoads || candidate.variant !== "full") return candidate
+		if (this.imagePresentationPhase === "idle") {
+			// Some formats cannot produce the low derivative. Keep the fallback declarative so
+			// moving still stays low-only and idle can promote the same active target to preview.
+			const fallbackPath = this.lowFallbackPreviewPathByElementId.get(candidate.elementId)
+			if (
+				candidate.variant === "low" &&
+				fallbackPath &&
+				this.isSameResourcePath(fallbackPath, candidate.path)
+			) {
+				return { ...candidate, variant: "preview" }
+			}
+			return candidate
+		}
 		return {
 			...candidate,
-			variant: "preview",
+			variant: this.getDisplayedImageVariant(candidate.elementId) ?? "low",
 		}
 	}
 
@@ -935,6 +972,17 @@ export class CanvasVisibilityManager {
 		return getDisplayResourceVariant.call(elementInstance)
 	}
 
+	private replaceImagePresentationTargets(candidates: ImageLoadCandidate[]): void {
+		const targets: ImagePresentationTarget[] = candidates.map((candidate) => ({
+			elementId: candidate.elementId,
+			path: candidate.path,
+			variant: candidate.variant,
+			priority: candidate.priority,
+			distanceToViewportCenter: candidate.distanceToViewportCenter,
+		}))
+		this.canvas.imagePresentationScheduler.replaceTargets(targets, this.imagePresentationPhase)
+	}
+
 	private updateImageRetentionHints(candidates: ImageLoadCandidate[], lastSeenAt: number): void {
 		candidates.forEach((candidate) => {
 			if (candidate.visibilityState !== "visible" && candidate.visibilityState !== "near") {
@@ -979,7 +1027,6 @@ export class CanvasVisibilityManager {
 		const viewportRect = getViewportCanvasRect(this.canvas)
 		const viewportScale = this.canvas.stage.scaleX() || 1
 		const scaleBand = getScaleBand(viewportScale)
-		const shouldDeferFullImageLoads = this.shouldDeferFullImageLoads(reason, startedAt)
 		const nearPadding =
 			Math.max(viewportRect.width, viewportRect.height) * NEAR_VIEWPORT_PADDING_RATIO
 		const queryCoverRect = expandRect(viewportRect, nearPadding)
@@ -1075,10 +1122,7 @@ export class CanvasVisibilityManager {
 				viewportRect,
 			)
 			if (!candidate) return
-			const displayCandidate = this.deferFullImageCandidateIfNeeded(
-				candidate,
-				shouldDeferFullImageLoads,
-			)
+			const displayCandidate = this.resolveImageCandidateForPresentationPhase(candidate)
 			if (displayCandidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
 				visibleCandidates.push(displayCandidate)
 			} else {
@@ -1110,8 +1154,7 @@ export class CanvasVisibilityManager {
 			})
 			if (visibleContainerMediaCandidates.imageCandidates.length > 0) {
 				const imageCandidates = visibleContainerMediaCandidates.imageCandidates.map(
-					(candidate) =>
-						this.deferFullImageCandidateIfNeeded(candidate, shouldDeferFullImageLoads),
+					(candidate) => this.resolveImageCandidateForPresentationPhase(candidate),
 				)
 				const frameAdjustedImageIds = new Set(
 					imageCandidates.map((candidate) => candidate.elementId),
@@ -1134,10 +1177,12 @@ export class CanvasVisibilityManager {
 			}
 		}
 
-		this.updateImageRetentionHints(
-			[...visibleCandidates, ...lowDetailVisibleCandidates, ...nearCandidates],
-			startedAt,
-		)
+		const presentationCandidates =
+			this.imagePresentationPhase === "moving"
+				? [...visibleCandidates, ...lowDetailVisibleCandidates]
+				: [...visibleCandidates, ...lowDetailVisibleCandidates, ...nearCandidates]
+		this.replaceImagePresentationTargets(presentationCandidates)
+		this.updateImageRetentionHints(presentationCandidates, startedAt)
 
 		visibleVideoIds.forEach((elementId) => {
 			const candidate = this.createVideoCandidate(
@@ -1186,7 +1231,8 @@ export class CanvasVisibilityManager {
 		const pendingNearVideoCandidates = nearVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
 		)
-		const shouldDeferNearLoads = isViewportMovementReason(reason)
+		const shouldDeferNearLoads =
+			this.imagePresentationPhase === "moving" || isViewportMovementReason(reason)
 
 		const selectedImageLoads = this.selectImageCandidatesToLoad({
 			pendingLowDetailVisibleCandidates,
@@ -1336,7 +1382,6 @@ export class CanvasVisibilityManager {
 	}): void {
 		const { reason, startedAt, viewportRect, viewportScale } = options
 		if (!isViewportMovementReason(reason)) return
-		const shouldDeferFullImageLoads = this.shouldDeferFullImageLoads(reason, startedAt)
 
 		const registeredImageIds: string[] = []
 		this.registeredImages.forEach((_, elementId) => {
@@ -1379,10 +1424,7 @@ export class CanvasVisibilityManager {
 				viewportRect,
 			)
 			if (!candidate) return
-			const displayCandidate = this.deferFullImageCandidateIfNeeded(
-				candidate,
-				shouldDeferFullImageLoads,
-			)
+			const displayCandidate = this.resolveImageCandidateForPresentationPhase(candidate)
 			if (displayCandidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
 				visibleCandidates.push(displayCandidate)
 			} else {
@@ -1405,10 +1447,9 @@ export class CanvasVisibilityManager {
 				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
-		this.updateImageRetentionHints(
-			[...visibleCandidates, ...lowDetailVisibleCandidates],
-			startedAt,
-		)
+		const presentationCandidates = [...visibleCandidates, ...lowDetailVisibleCandidates]
+		this.replaceImagePresentationTargets(presentationCandidates)
+		this.updateImageRetentionHints(presentationCandidates, startedAt)
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
@@ -1485,6 +1526,14 @@ export class CanvasVisibilityManager {
 	): boolean {
 		const previousState = this.lastRequestedLoadState.get(candidate.elementId)
 		if (!previousState) return true
+		if (
+			this.imagePresentationPhase === "moving" &&
+			candidate.variant === "low" &&
+			!this.getDisplayedImageVariant(candidate.elementId) &&
+			previousState.variant !== "low"
+		) {
+			return true
+		}
 		const priorityImproved =
 			getPriorityRank(previousState.priority) > getPriorityRank(candidate.priority)
 		const elapsedSinceLastRequest = now() - previousState.requestedAt
@@ -1493,8 +1542,9 @@ export class CanvasVisibilityManager {
 			elapsedSinceLastRequest < IMAGE_VARIANT_SWITCH_COOLDOWN_MS
 		) {
 			if (
-				options?.reason === VIEWPORT_IDLE_FULL_REFRESH_REASON &&
-				candidate.variant === "full"
+				(options?.reason === VIEWPORT_IDLE_MEDIA_REFRESH_REASON ||
+					options?.reason === IMAGE_LOW_FALLBACK_REFRESH_REASON) &&
+				getImageVariantRank(candidate.variant) > getImageVariantRank(previousState.variant)
 			) {
 				return true
 			}
@@ -2107,12 +2157,6 @@ export class CanvasVisibilityManager {
 			priority: candidate.priority,
 			variant: candidate.variant,
 			requestedAt: now(),
-		})
-		this.canvas.imageResourceManager.emitImageResourceDisplayTarget({
-			elementId: candidate.elementId,
-			path: candidate.path,
-			variant: candidate.variant,
-			reason,
 		})
 		const loadOptions = {
 			variant: candidate.variant,

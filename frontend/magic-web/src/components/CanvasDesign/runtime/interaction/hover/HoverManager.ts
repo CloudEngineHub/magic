@@ -200,10 +200,12 @@ export class HoverManager {
 			return
 		}
 
-		const targetAtPointer = this.canvas.stage.getIntersection?.(pointerPosition)
-		if (targetAtPointer && this.isConnectionTarget(targetAtPointer)) {
-			this.clearHover()
-			return
+		if (this.canvas.connectionManager.hasConnections()) {
+			const targetAtPointer = this.canvas.stage.getIntersection?.(pointerPosition)
+			if (targetAtPointer && this.isConnectionTarget(targetAtPointer)) {
+				this.clearHover()
+				return
+			}
 		}
 
 		const elementId = this.getElementIdAtPointer(pointerPosition)

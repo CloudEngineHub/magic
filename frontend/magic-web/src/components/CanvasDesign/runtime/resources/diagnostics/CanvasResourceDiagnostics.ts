@@ -35,6 +35,7 @@ export const IMAGE_RESOURCE_DIAGNOSTIC_COUNTERS = [
 	"bodyFetchSuccessCount",
 	"bodyFetchFailedCount",
 	"decodeAttemptCount",
+	"decodeRepeatAttemptCount",
 	"decodeSuccessCount",
 	"decodeFailedCount",
 	"decodedEvictedCount",

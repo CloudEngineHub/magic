@@ -211,6 +211,7 @@ describe("BaseLabelManager candidate cache", () => {
 			],
 		])
 		const queryElementIdsByExpandedRect = vi.fn(() => visibleElementIds)
+		const requestLayerDraw = vi.fn()
 		const canvas = {
 			cropManager: { getCroppingElementId: () => null },
 			elementManager: {
@@ -224,7 +225,7 @@ describe("BaseLabelManager candidate cache", () => {
 			geometryCacheManager: { queryElementIdsByExpandedRect },
 			hoverManager: { getHoveredElementId: () => null },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
-			runtimeScheduler: { requestLayerDraw: vi.fn() },
+			runtimeScheduler: { requestLayerDraw },
 			selectionManager: { isSelected: () => false },
 			stage: {
 				getAbsoluteTransform: () => ({
@@ -274,11 +275,18 @@ describe("BaseLabelManager candidate cache", () => {
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
 
 		visibleElementIds = ["frame-1"]
+		requestLayerDraw.mockClear()
 		eventEmitter.emit("viewport:pan")
 		flushRaf()
 
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
 		expect(manager.getReorderCount()).toBe(initialReorderCount)
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		expect(requestLayerDraw).toHaveBeenCalledWith("overlay", {
+			source: "TestLabelManager",
+			reason: "visible-labels:viewport-pan",
+			priority: "input",
+		})
 
 		manager.destroy()
 	})

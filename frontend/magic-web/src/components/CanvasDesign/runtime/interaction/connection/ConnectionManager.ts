@@ -41,6 +41,10 @@ export class ConnectionManager {
 		return this.store.getConnections()
 	}
 
+	public hasConnections(): boolean {
+		return !this.store.isEmpty()
+	}
+
 	public getSelectedConnectionId(): string | null {
 		return this.getSelectedConnectionIds()[0] ?? null
 	}
@@ -389,7 +393,10 @@ export class ConnectionManager {
 				"elements:transform:anchorDragmove",
 				scheduleTransformRerender,
 			),
-			this.canvas.eventEmitter.on("viewport:scale", () => this.scheduleRerender()),
+			this.canvas.eventEmitter.on("viewport:scale", () => {
+				if (!this.hasConnections()) return
+				this.scheduleRerender()
+			}),
 			this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
 				this.removeConnectionsByElementId(data.elementId, { emitChange: false })
 			}),

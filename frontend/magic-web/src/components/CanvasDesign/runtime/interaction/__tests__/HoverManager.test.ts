@@ -39,6 +39,7 @@ function createHoverManager(
 		geometryHitIds?: string[]
 		viewportHitTarget?: Konva.Node | null
 		extendingElementId?: string | null
+		hasConnections?: boolean
 	} = {},
 ) {
 	const stage = new Konva.Group()
@@ -113,6 +114,9 @@ function createHoverManager(
 		},
 		connectionDragManager: {
 			isDraggingConnection: isConnectionDragging,
+		},
+		connectionManager: {
+			hasConnections: () => options.hasConnections ?? true,
 		},
 		extendManager: {
 			getExtendingElementId: () => options.extendingElementId ?? null,
@@ -409,6 +413,19 @@ describe("HoverManager", () => {
 
 		expect(manager.hoveredElementId).toBe("element-1")
 		expect(requestLayerDraw).toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("skips Konva intersection lookup during viewport refresh without connections", () => {
+		const { eventHandlers, getIntersection, manager } = createHoverManager({
+			geometryHitIds: ["element-1"],
+			hasConnections: false,
+		})
+
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(getIntersection).not.toHaveBeenCalled()
+		expect(manager.hoveredElementId).toBe("element-1")
 		manager.destroy()
 	})
 

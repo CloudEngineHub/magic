@@ -54,6 +54,10 @@ export class ConnectionRenderer {
 	}
 
 	public render(connections: CanvasConnection[], options: ConnectionRenderOptions = {}): void {
+		if (connections.length === 0 && !this.hasRenderedState()) {
+			return
+		}
+
 		const connectionGroup = this.canvas.ensureConnectionGroup()
 		const selectedConnectionIdSet = new Set(options.selectedConnectionIds ?? [])
 		this.highlightedConnectionIds = new Set(options.highlightedConnectionIds ?? [])
@@ -126,6 +130,16 @@ export class ConnectionRenderer {
 			reason: "render",
 			priority: "normal",
 		})
+	}
+
+	private hasRenderedState(): boolean {
+		return (
+			this.renderedNodes.size > 0 ||
+			this.localConnectionContainers.size > 0 ||
+			this.hoveredConnectionIds.size > 0 ||
+			this.highlightedConnectionIds.size > 0 ||
+			this.pendingHoverLeaveFrameIds.size > 0
+		)
 	}
 
 	public clear(): void {

@@ -134,6 +134,7 @@ function createManager() {
 		previewLoadQueue: unknown[]
 		activePreviewLoadPipelineCount: number
 		decodePixelBudgetGate: MediaDecodePixelBudgetGate
+		lastSuccessfulDecodeIdentityByPathVariant: Map<string, string>
 		bodyCache: MediaResourceBodyCache<ReturnType<typeof createEntry>>
 		displayVariantPersistentCache: {
 			getLatest: ReturnType<typeof vi.fn>
@@ -149,11 +150,8 @@ function createManager() {
 		persistentLowWriteTimestamp: number
 		persistentLowWriteSequence: number
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
-		imageResourceLoadedHandlersByPath: Map<string, Set<unknown>>
 		imageResourceLoadFailedHandlersByPath: Map<string, Set<unknown>>
 		imageResourceWillCloseHandlersByPath: Map<string, Set<unknown>>
-		imageResourceDisplayTargetHandlersByElementId: Map<string, Set<unknown>>
-		imageResourceDisplayLoadedHandlersByElementId: Map<string, Set<unknown>>
 		urlLifecycle: {
 			canonicalResourcePath: (path: string) => string
 			clearExpiredOssSrc: (entry: ReturnType<typeof createEntry>) => boolean
@@ -184,6 +182,7 @@ function createManager() {
 	manager.decodePixelBudgetGate = new MediaDecodePixelBudgetGate(
 		DEFAULT_MEDIA_DECODE_CONCURRENT_PIXEL_BUDGET,
 	)
+	manager.lastSuccessfulDecodeIdentityByPathVariant = new Map()
 	manager.bodyCache = new MediaResourceBodyCache({ ttlMs: 120_000, maxBytes: 256 * 1024 * 1024 })
 	manager.displayVariantPersistentCache = {
 		getLatest: vi.fn(async () => null),
@@ -199,11 +198,8 @@ function createManager() {
 	manager.persistentLowWriteTimestamp = 0
 	manager.persistentLowWriteSequence = 0
 	manager.diagnostics = createImageResourceDiagnostics()
-	manager.imageResourceLoadedHandlersByPath = new Map()
 	manager.imageResourceLoadFailedHandlersByPath = new Map()
 	manager.imageResourceWillCloseHandlersByPath = new Map()
-	manager.imageResourceDisplayTargetHandlersByElementId = new Map()
-	manager.imageResourceDisplayLoadedHandlersByElementId = new Map()
 	manager.urlLifecycle = {
 		canonicalResourcePath: (path: string) => path,
 		clearExpiredOssSrc: vi.fn(() => false),
@@ -422,6 +418,10 @@ describe("ImageResourceManager image resources", () => {
 			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
 		).estimateImageDecodePixelCost = vi.fn(async () => 1)
 		;(manager.canvas.resourceScheduler.run as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+		manager.lastSuccessfulDecodeIdentityByPathVariant.set(
+			"images/decode-signal.png\u0000preview",
+			"images/decode-signal.png\u0000decode-signal\u0000preview",
+		)
 
 		const result = await loadImageResource.call(
 			manager,
@@ -437,6 +437,7 @@ describe("ImageResourceManager image resources", () => {
 		expect(result).toBeNull()
 		expect(acquire).toHaveBeenCalledWith(1, "visible", controller.signal)
 		expect(release).toHaveBeenCalledTimes(1)
+		expect(manager.getSnapshot().decodeRepeatAttemptCount).toBe(1)
 	})
 
 	it("closes decoded image results when the load is aborted before commit", async () => {

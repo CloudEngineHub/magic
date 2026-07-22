@@ -43,6 +43,7 @@ function createCanvasStub(
 		destroyChildren: vi.fn(),
 		add: vi.fn(),
 	}
+	const requestLayerDraw = vi.fn()
 	const selectionManager = {
 		deselectAll: vi.fn(),
 	}
@@ -62,7 +63,7 @@ function createCanvasStub(
 			invalidateElements: vi.fn(),
 		},
 		runtimeScheduler: {
-			requestLayerDraw: vi.fn(),
+			requestLayerDraw,
 		},
 		selectionManager,
 		permissionManager: {
@@ -77,7 +78,7 @@ function createCanvasStub(
 		},
 	} as unknown as Canvas
 
-	return { canvas, elementData, connectionGroup, selectionManager }
+	return { canvas, elementData, connectionGroup, requestLayerDraw, selectionManager }
 }
 
 function getLastRenderedConnectionGroup(connectionGroup: {
@@ -187,6 +188,57 @@ describe("ConnectionManager", () => {
 
 		expect(manager.getUpstreamConnections("target").map((item) => item.id)).toEqual(["a"])
 		expect(manager.getDownstreamConnections("target").map((item) => item.id)).toEqual(["b"])
+	})
+
+	it("skips viewport scale rerenders when there are no connections", () => {
+		const requestAnimationFrameMock = vi.fn()
+		vi.stubGlobal("requestAnimationFrame", requestAnimationFrameMock)
+		const { canvas, connectionGroup, requestLayerDraw } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+
+		try {
+			manager.loadDocument({ connections: [] })
+			connectionGroup.destroyChildren.mockClear()
+			requestLayerDraw.mockClear()
+
+			canvas.eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
+
+			expect(manager.hasConnections()).toBe(false)
+			expect(requestAnimationFrameMock).not.toHaveBeenCalled()
+			expect(connectionGroup.destroyChildren).not.toHaveBeenCalled()
+			expect(requestLayerDraw).not.toHaveBeenCalled()
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	it("keeps viewport scale rerenders for documents with connections", () => {
+		const frameCallbacks: FrameRequestCallback[] = []
+		const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+			frameCallbacks.push(callback)
+			return frameCallbacks.length
+		})
+		vi.stubGlobal("requestAnimationFrame", requestAnimationFrameMock)
+		const { canvas, requestLayerDraw } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+
+		try {
+			manager.loadDocument({
+				connections: [{ id: "edge", sourceElementId: "source", targetElementId: "target" }],
+			})
+			requestLayerDraw.mockClear()
+
+			canvas.eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
+
+			expect(manager.hasConnections()).toBe(true)
+			expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1)
+			expect(requestLayerDraw).not.toHaveBeenCalled()
+
+			frameCallbacks[0](0)
+			expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 
 	it("keeps hidden element connections in data but skips rendering them", () => {

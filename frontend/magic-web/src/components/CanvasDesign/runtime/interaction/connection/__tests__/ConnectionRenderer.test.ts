@@ -144,6 +144,16 @@ function installRafMock() {
 }
 
 describe("ConnectionRenderer", () => {
+	it("skips empty renders when no connection state exists", () => {
+		const { canvas } = createCanvasStub(new Map())
+		const renderer = new ConnectionRenderer({ canvas })
+
+		renderer.render([])
+
+		expect(canvas.ensureConnectionGroup).not.toHaveBeenCalled()
+		expect(canvas.runtimeScheduler.requestLayerDraw).not.toHaveBeenCalled()
+	})
+
 	it("updates an existing connection node instead of recreating it", () => {
 		const boundsById = new Map([
 			["source", { x: 0, y: 0, width: 100, height: 40 }],

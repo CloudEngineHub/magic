@@ -399,7 +399,7 @@ export abstract class BaseLabelManager {
 	 */
 	protected createOrUpdateLabel(
 		elementId: string,
-		options?: { skipReorder?: boolean; skipNotify?: boolean },
+		options?: { skipReorder?: boolean; skipNotify?: boolean; skipBatchDraw?: boolean },
 	): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
@@ -436,7 +436,7 @@ export abstract class BaseLabelManager {
 		this.updateLabelText(labelGroup, this.getLabelText(elementId))
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
-		this.updateLabelPosition(elementId)
+		this.updateLabelPosition(elementId, options?.skipBatchDraw)
 
 		// 通知其他 LabelManager 也更新该元素的可见性（单个更新，需要立即 batchDraw）
 		if (!options?.skipNotify) {
@@ -866,7 +866,11 @@ export abstract class BaseLabelManager {
 				continue
 			}
 			const hadLabel = this.labelMap.has(elementId)
-			this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
+			this.createOrUpdateLabel(elementId, {
+				skipReorder: true,
+				skipNotify: true,
+				skipBatchDraw: true,
+			})
 			if (!hadLabel && this.labelMap.has(elementId)) {
 				createdLabel = true
 			}

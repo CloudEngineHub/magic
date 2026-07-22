@@ -37,6 +37,7 @@ import { BackgroundManager } from "../interaction/background/BackgroundManager"
 import { CanvasFileUploadManager } from "../resources/upload/CanvasFileUploadManager"
 import { GeometryCacheManager } from "../shared/geometry/GeometryCacheManager"
 import { ImageResourceManager } from "../resources/image/ImageResourceManager"
+import { CanvasImagePresentationScheduler } from "../resources/image/CanvasImagePresentationScheduler"
 import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollingRegistry"
 import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
@@ -141,6 +142,7 @@ export class Canvas {
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
 	public imageResourceManager: ImageResourceManager
+	public imagePresentationScheduler: CanvasImagePresentationScheduler
 	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
@@ -301,6 +303,10 @@ export class Canvas {
 
 		// 初始化 ElementManager（使用 Content Layer）
 		this.elementManager = new ElementManager({
+			canvas: this,
+		})
+
+		this.imagePresentationScheduler = new CanvasImagePresentationScheduler({
 			canvas: this,
 		})
 
@@ -1236,9 +1242,10 @@ export class Canvas {
 			this.contentLayer.add(this.connectionGroup)
 		}
 
-		this.connectionGroup.moveToBottom()
-		const background = this.contentLayer.findOne(".canvas-background")
-		background?.moveToBottom()
+		// 连线组层级稳定后不再触发重排，也避免在每次连线渲染时遍历整棵内容树。
+		if (this.connectionGroup.zIndex() !== 0) {
+			this.connectionGroup.moveToBottom()
+		}
 		return this.connectionGroup
 	}
 
@@ -1247,6 +1254,7 @@ export class Canvas {
 	 */
 	public destroy(): void {
 		this.visibilityManager.destroy()
+		this.imagePresentationScheduler.destroy()
 		this.resourceUrlWarmupManager.destroy()
 		this.resourceScheduler.destroy()
 		this.runtimeScheduler.destroy()

@@ -306,15 +306,6 @@ export interface ImageResourceLoadedEvent {
 	data: { path: string; resource: LoadedResource }
 }
 
-export interface ImageResourceDisplayTargetEvent {
-	data: {
-		elementId: string
-		path: string
-		variant: ImageResourceVariant
-		reason: string
-	}
-}
-
 export interface ImageResourceDisplayLoadedEvent {
 	data: {
 		elementId: string
@@ -341,9 +332,6 @@ export interface ImageResourceWillCloseEvent {
 	}
 }
 
-export type ImageResourceLoadedHandler = (event: ImageResourceLoadedEvent) => void
-export type ImageResourceDisplayTargetHandler = (event: ImageResourceDisplayTargetEvent) => void
-export type ImageResourceDisplayLoadedHandler = (event: ImageResourceDisplayLoadedEvent) => void
 export type ImageResourceLoadFailedHandler = (event: ImageResourceLoadFailedEvent) => void
 export type ImageResourceWillCloseHandler = (event: ImageResourceWillCloseEvent) => void
 
@@ -372,7 +360,6 @@ export class ImageResourceManager {
 	private persistentLowGenerationByPath = new Map<string, number>()
 	private persistentLowWriteTimestamp = 0
 	private persistentLowWriteSequence = 0
-	private imageResourceLoadedHandlersByPath = new Map<string, Set<ImageResourceLoadedHandler>>()
 	private imageResourceLoadFailedHandlersByPath = new Map<
 		string,
 		Set<ImageResourceLoadFailedHandler>
@@ -381,15 +368,9 @@ export class ImageResourceManager {
 		string,
 		Set<ImageResourceWillCloseHandler>
 	>()
-	private imageResourceDisplayTargetHandlersByElementId = new Map<
-		string,
-		Set<ImageResourceDisplayTargetHandler>
-	>()
-	private imageResourceDisplayLoadedHandlersByElementId = new Map<
-		string,
-		Set<ImageResourceDisplayLoadedHandler>
-	>()
 	private decodedResourceRefCounts = new Map<ImageResource, number>()
+	// Keep only the latest identity per path/variant so re-decode diagnostics stay bounded.
+	private lastSuccessfulDecodeIdentityByPathVariant = new Map<string, string>()
 	private fullDecodedResourceRefCounts = new Map<ImageResource, number>()
 	private decodedBytesTotal = 0
 	private fullDecodedBytes = 0
@@ -397,10 +378,6 @@ export class ImageResourceManager {
 
 	private canonicalResourcePath(path: string): string {
 		return this.urlLifecycle.canonicalResourcePath(path)
-	}
-
-	public onImageResourceLoaded(path: string, handler: ImageResourceLoadedHandler): () => void {
-		return this.addPathHandler(this.imageResourceLoadedHandlersByPath, path, handler)
 	}
 
 	public onImageResourceLoadFailed(
@@ -415,40 +392,6 @@ export class ImageResourceManager {
 		handler: ImageResourceWillCloseHandler,
 	): () => void {
 		return this.addPathHandler(this.imageResourceWillCloseHandlersByPath, path, handler)
-	}
-
-	public onImageResourceDisplayTarget(
-		elementId: string,
-		handler: ImageResourceDisplayTargetHandler,
-	): () => void {
-		return this.addElementHandler(
-			this.imageResourceDisplayTargetHandlersByElementId,
-			elementId,
-			handler,
-		)
-	}
-
-	public onImageResourceDisplayLoaded(
-		elementId: string,
-		handler: ImageResourceDisplayLoadedHandler,
-	): () => void {
-		return this.addElementHandler(
-			this.imageResourceDisplayLoadedHandlersByElementId,
-			elementId,
-			handler,
-		)
-	}
-
-	public emitImageResourceDisplayTarget(data: ImageResourceDisplayTargetEvent["data"]): void {
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:display-target",
-			data,
-		})
-		this.notifyElementHandlers(
-			this.imageResourceDisplayTargetHandlersByElementId,
-			data.elementId,
-			{ data },
-		)
 	}
 
 	private addPathHandler<THandler>(
@@ -473,27 +416,6 @@ export class ImageResourceManager {
 		}
 	}
 
-	private addElementHandler<THandler>(
-		handlersByElementId: Map<string, Set<THandler>>,
-		elementId: string,
-		handler: THandler,
-	): () => void {
-		let handlers = handlersByElementId.get(elementId)
-		if (!handlers) {
-			handlers = new Set()
-			handlersByElementId.set(elementId, handlers)
-		}
-		handlers.add(handler)
-		return () => {
-			const currentHandlers = handlersByElementId.get(elementId)
-			if (!currentHandlers) return
-			currentHandlers.delete(handler)
-			if (currentHandlers.size === 0) {
-				handlersByElementId.delete(elementId)
-			}
-		}
-	}
-
 	private notifyPathHandlers<TEvent>(
 		handlersByPath: Map<string, Set<(event: TEvent) => void>>,
 		path: string,
@@ -513,23 +435,12 @@ export class ImageResourceManager {
 		})
 	}
 
-	private notifyElementHandlers<TEvent>(
-		handlersByElementId: Map<string, Set<(event: TEvent) => void>>,
-		elementId: string,
-		event: TEvent,
-	): void {
-		const handlers = handlersByElementId.get(elementId)
-		if (!handlers || handlers.size === 0) return
-		Array.from(handlers).forEach((handler) => handler(event))
-	}
-
 	private emitImageResourceLoaded(data: ImageResourceLoadedEvent["data"]): void {
 		const event = {
 			type: "resource:image:loaded" as const,
 			data,
 		}
 		this.canvas.eventEmitter.emit(event)
-		this.notifyPathHandlers(this.imageResourceLoadedHandlersByPath, data.path, { data })
 	}
 
 	private emitImageResourceDisplayLoaded(data: ImageResourceDisplayLoadedEvent["data"]): void {
@@ -538,11 +449,6 @@ export class ImageResourceManager {
 			data,
 		}
 		this.canvas.eventEmitter.emit(event)
-		this.notifyElementHandlers(
-			this.imageResourceDisplayLoadedHandlersByElementId,
-			data.elementId,
-			{ data },
-		)
 	}
 
 	private emitImageResourceLoadFailed(data: ImageResourceLoadFailedEvent["data"]): void {
@@ -3387,8 +3293,18 @@ export class ImageResourceManager {
 		}
 
 		const requestId = this.createWorkerRequestId("img")
+		const decodeIdentity = `${path}\u0000${
+			body.resourceGeneration ?? body.cacheKey
+		}\u0000${variant}`
+		const decodePathVariantKey = `${path}\u0000${variant}`
 		try {
 			this.diagnostics.increment("decodeAttemptCount")
+			if (
+				this.lastSuccessfulDecodeIdentityByPathVariant.get(decodePathVariantKey) ===
+				decodeIdentity
+			) {
+				this.diagnostics.increment("decodeRepeatAttemptCount")
+			}
 			const result = await this.canvas.resourceScheduler.run(
 				"image:decode",
 				(signal) => {
@@ -3556,6 +3472,7 @@ export class ImageResourceManager {
 			})
 
 			this.diagnostics.increment("decodeSuccessCount")
+			this.lastSuccessfulDecodeIdentityByPathVariant.set(decodePathVariantKey, decodeIdentity)
 			return loadedResource
 		} catch (error) {
 			if (this.destroyed) {
@@ -3786,11 +3703,9 @@ export class ImageResourceManager {
 		})
 		this.entries.clear()
 		this.clearDecodedByteTracking()
-		this.imageResourceLoadedHandlersByPath.clear()
+		this.lastSuccessfulDecodeIdentityByPathVariant.clear()
 		this.imageResourceLoadFailedHandlersByPath.clear()
 		this.imageResourceWillCloseHandlersByPath.clear()
-		this.imageResourceDisplayTargetHandlersByElementId.clear()
-		this.imageResourceDisplayLoadedHandlersByElementId.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)
 		this.canvas.eventEmitter.off("element:batchdeleted", this.handleBatchDeleted)
 		this.canvas.eventEmitter.off("canvas:clear", this.handleCanvasClear)

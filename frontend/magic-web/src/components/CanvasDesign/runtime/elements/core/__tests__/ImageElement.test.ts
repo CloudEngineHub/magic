@@ -68,6 +68,7 @@ describe("ImageElement mounted image node sync", () => {
 		group.add(imageNode)
 
 		const emit = vi.fn()
+		const batchDraw = vi.fn()
 		const rerenderWhenTransformIdle = vi.fn()
 		const resource = {
 			ossSrc: "https://example.test/full.png",
@@ -98,7 +99,10 @@ describe("ImageElement mounted image node sync", () => {
 			isResourceLoading: boolean
 			lastAppliedLoadFailureSignature: string | null
 			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-			applyResourceFromEvent: (loadedResource: typeof resource) => void
+			applyPresentedResource: (
+				loadedResource: typeof resource,
+				targetVariant: "full",
+			) => boolean
 		}
 		element.node = group
 		element.loadedImage = oldImage
@@ -115,9 +119,18 @@ describe("ImageElement mounted image node sync", () => {
 		element.isResourceLoading = true
 		element.lastAppliedLoadFailureSignature = "/image.png:load-error"
 		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
+		vi.spyOn(imageNode, "getLayer").mockReturnValue({ batchDraw } as never)
 
-		element.applyResourceFromEvent(resource)
+		const previousAutoDrawEnabled = Konva.autoDrawEnabled
+		let changed = false
+		try {
+			Konva.autoDrawEnabled = false
+			changed = element.applyPresentedResource(resource, "full")
+		} finally {
+			Konva.autoDrawEnabled = previousAutoDrawEnabled
+		}
 
+		expect(changed).toBe(true)
 		expect(imageNode.image()).toBe(fullImage)
 		expect(element.loadedImage).toBe(fullImage)
 		expect(element.isResourceLoading).toBe(false)
@@ -127,6 +140,7 @@ describe("ImageElement mounted image node sync", () => {
 			data: { elementId: "image-1" },
 		})
 		expect(rerenderWhenTransformIdle).not.toHaveBeenCalled()
+		expect(batchDraw).not.toHaveBeenCalled()
 	})
 
 	it("rerenders when a loaded resource has no mounted image node to update", () => {
@@ -161,7 +175,10 @@ describe("ImageElement mounted image node sync", () => {
 			isResourceLoading: boolean
 			lastAppliedLoadFailureSignature: string | null
 			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-			applyResourceFromEvent: (loadedResource: typeof resource) => void
+			applyPresentedResource: (
+				loadedResource: typeof resource,
+				targetVariant: "preview",
+			) => boolean
 		}
 		element.node = group
 		element.loadedImage = undefined
@@ -177,8 +194,9 @@ describe("ImageElement mounted image node sync", () => {
 		element.lastAppliedLoadFailureSignature = null
 		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
 
-		element.applyResourceFromEvent(resource)
+		const changed = element.applyPresentedResource(resource, "preview")
 
+		expect(changed).toBe(true)
 		expect(element.loadedImage).toBe(previewImage)
 		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
 	})
@@ -480,6 +498,7 @@ describe("ImageElement mounted image node sync", () => {
 			isFullSize: false,
 		}
 		const rerenderWhenTransformIdle = vi.fn()
+		const requestLayerDraw = vi.fn()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			loadedImage: HTMLImageElement
@@ -489,6 +508,9 @@ describe("ImageElement mounted image node sync", () => {
 				cropManager: { getCroppingElementId: () => string | null }
 				imageResourceManager: {
 					peekResource: ReturnType<typeof vi.fn>
+				}
+				runtimeScheduler: {
+					requestLayerDraw: typeof requestLayerDraw
 				}
 			}
 			getSourceCrop: () => { x: number; y: number; width: number; height: number }
@@ -506,6 +528,9 @@ describe("ImageElement mounted image node sync", () => {
 			imageResourceManager: {
 				peekResource: vi.fn(() => fallbackResource),
 			},
+			runtimeScheduler: {
+				requestLayerDraw,
+			},
 		}
 		element.getSourceCrop = vi.fn(() => ({ x: 0, y: 0, width: 100, height: 80 }))
 		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
@@ -515,6 +540,10 @@ describe("ImageElement mounted image node sync", () => {
 		expect(imageNode.image()).toBe(fallbackImage)
 		expect(element.loadedImage).toBe(fallbackImage)
 		expect(rerenderWhenTransformIdle).not.toHaveBeenCalled()
+		expect(requestLayerDraw).toHaveBeenCalledWith("content", {
+			source: "ImageElement",
+			reason: "resource-will-close",
+		})
 	})
 
 	it("removes mounted image node when a closing resource has no fallback", () => {
@@ -611,91 +640,45 @@ describe("ImageElement mounted image node sync", () => {
 		expect(rerenderWhenTransformIdle).toHaveBeenCalled()
 	})
 
-	it("applies targeted display-loaded resources only to the matching element", () => {
+	it("subscribes only to load failures and decoded surface close events", () => {
 		const cleanup = vi.fn()
-		let displayLoadedHandler: ((event: unknown) => void) | undefined
-		const subscribe = vi.fn((key: string, handler: (event: unknown) => void) => {
-			void key
-			void handler
-			return cleanup
-		})
-		const onImageResourceDisplayLoaded = vi.fn(
-			(_elementId: string, handler: (event: unknown) => void) => {
-				displayLoadedHandler = handler
-				return cleanup
-			},
-		)
-		const applyResourceFromEvent = vi.fn()
+		const onImageResourceWillClose = vi.fn(() => cleanup)
+		const onImageResourceLoadFailed = vi.fn(() => cleanup)
 		const element = Object.create(ImageElement.prototype) as {
 			data: { id: string; src: string }
 			canvas: {
 				magicConfigManager: { config: { methods: Record<string, never> } }
+				elementManager: { isTemporary: () => boolean }
 				imageResourceManager: {
-					peekResource: ReturnType<typeof vi.fn>
-					onImageResourceLoaded: typeof subscribe
-					onImageResourceDisplayTarget: typeof subscribe
-					onImageResourceDisplayLoaded: typeof onImageResourceDisplayLoaded
-					onImageResourceWillClose: typeof subscribe
-					onImageResourceLoadFailed: typeof subscribe
+					onImageResourceWillClose: typeof onImageResourceWillClose
+					onImageResourceLoadFailed: typeof onImageResourceLoadFailed
 				}
 			}
-			applyResourceFromEvent: typeof applyResourceFromEvent
 			resourceSubscriptionCleanups: Array<() => void>
 			removeResourceLoadedListener: () => void
 			setupResourceLoadedListener: () => void
 		}
-		const resource = {
-			ossSrc: "https://example.test/full.png",
-			image: new Image(),
-			imageInfo: {
-				naturalWidth: 100,
-				naturalHeight: 100,
-				fileSize: 100,
-				mimeType: "image/png",
-				filename: "full.png",
-			},
-			variant: "full",
-			sourceWidth: 100,
-			sourceHeight: 100,
-			isFullSize: true,
-		}
 		element.data = { id: "image-1", src: "./images/a.png" }
 		element.canvas = {
 			magicConfigManager: { config: { methods: {} } },
+			elementManager: { isTemporary: () => false },
 			imageResourceManager: {
-				peekResource: vi.fn(() => null),
-				onImageResourceLoaded: subscribe,
-				onImageResourceDisplayTarget: subscribe,
-				onImageResourceDisplayLoaded,
-				onImageResourceWillClose: subscribe,
-				onImageResourceLoadFailed: subscribe,
+				onImageResourceWillClose,
+				onImageResourceLoadFailed,
 			},
 		}
-		element.applyResourceFromEvent = applyResourceFromEvent
 		element.resourceSubscriptionCleanups = []
 
 		element.setupResourceLoadedListener()
 
-		expect(onImageResourceDisplayLoaded).toHaveBeenCalledWith("image-1", expect.any(Function))
-
-		displayLoadedHandler?.({
-			data: {
-				elementId: "image-2",
-				path: "./images/a.png",
-				resource,
-				reason: "viewport:scale",
-			},
-		})
-		displayLoadedHandler?.({
-			data: {
-				elementId: "image-1",
-				path: "./images/a.png",
-				resource,
-				reason: "viewport:scale",
-			},
-		})
-
-		expect(applyResourceFromEvent).toHaveBeenCalledTimes(1)
-		expect(applyResourceFromEvent).toHaveBeenCalledWith(resource)
+		expect(onImageResourceWillClose).toHaveBeenCalledWith(
+			"./images/a.png",
+			expect.any(Function),
+		)
+		expect(onImageResourceLoadFailed).toHaveBeenCalledWith(
+			"./images/a.png",
+			expect.any(Function),
+		)
+		expect(element.resourceSubscriptionCleanups).toHaveLength(2)
 	})
 })

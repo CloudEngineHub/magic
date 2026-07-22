@@ -26,9 +26,6 @@ import type {
 	ImageInfo,
 	LoadedResource,
 	ImageResourceVariant,
-	ImageResourceLoadedHandler,
-	ImageResourceDisplayTargetHandler,
-	ImageResourceDisplayLoadedHandler,
 	ImageResourceWillCloseHandler,
 	ImageResourceLoadFailedHandler,
 } from "../../resources/image/ImageResourceManager"
@@ -64,16 +61,10 @@ type ImageResourceStructureReason =
 
 type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
 
-type ImageResourceIgnoredReason =
-	| "full-resource-retained"
-	| "missing-target-resource"
-	| "same-target-resource"
-
 type ImageResourceReconcileResult =
 	| { type: "patched-content" }
 	| { type: "structure-required"; reason: ImageResourceStructureReason }
 	| { type: "metadata-only"; reason: ImageResourceMetadataReason }
-	| { type: "ignored"; reason: ImageResourceIgnoredReason }
 
 /**
  * 图片元素类
@@ -113,10 +104,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private ossSrcResolve?: (ossSrc: string) => void
 	private ossSrcReject?: (reason?: Error) => void
 
-	// resource:image:loaded / resource:image:load-failed 监听器
-	private resourceLoadedHandler?: ImageResourceLoadedHandler
-	private resourceDisplayTargetHandler?: ImageResourceDisplayTargetHandler
-	private resourceDisplayLoadedHandler?: ImageResourceDisplayLoadedHandler
+	// 资源失败与 decoded surface 释放必须同步处理；成功资源由画布级呈现调度器提交。
 	private resourceWillCloseHandler?: ImageResourceWillCloseHandler
 	private resourceLoadFailedHandler?: ImageResourceLoadFailedHandler
 	private resourceSubscriptionCleanups: Array<() => void> = []
@@ -285,7 +273,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		if (!this.loadedImage) {
 			imageNode.destroy()
-			this.node?.getLayer()?.batchDraw()
 			return { type: "structure-required", reason: "cleared-image-node" }
 		}
 
@@ -297,7 +284,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				? undefined
 				: this.getSourceCrop(this.loadedImage),
 		)
-		imageNode.getLayer()?.batchDraw()
 		return { type: "patched-content" }
 	}
 
@@ -352,38 +338,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!src) return null
 		const resource = this.canvas.imageResourceManager.peekResource(src, { variant })
 		return resource?.variant === variant ? resource : null
-	}
-
-	private applyDisplayTargetVariant(variant: ImageResourceVariant): void {
-		this.targetDisplayResourceVariant = variant
-		if (this.loadedImageVariant === "full") {
-			this.commitImageResourceReconcile({
-				type: "ignored",
-				reason: "full-resource-retained",
-			})
-			return
-		}
-
-		const targetResource = this.peekExactResourceVariant(variant)
-		if (!targetResource) {
-			this.commitImageResourceReconcile({
-				type: "ignored",
-				reason: "missing-target-resource",
-			})
-			return
-		}
-		if (this.loadedImageVariant === targetResource.variant) {
-			this.commitImageResourceReconcile({
-				type: "ignored",
-				reason: "same-target-resource",
-			})
-			return
-		}
-
-		this.applyResourceToView(targetResource)
-		this.isResourceLoading = false
-		this.isErrorState = false
-		this.commitImageResourceReconcile(this.patchMountedImageContentNodeWithLoadedResource())
 	}
 
 	override onMounted(): void {
@@ -794,14 +748,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	/**
 	 * 从 resource:image:loaded 事件应用资源
 	 */
-	private applyResourceFromEvent(resource: LoadedResource): void {
+	public applyPresentedResource(
+		resource: LoadedResource,
+		targetVariant: ImageResourceVariant,
+	): boolean {
+		this.targetDisplayResourceVariant = targetVariant
 		if (resource.variant === "full" && !resource.isFullSize) {
 			this.applyResourceMetadata(resource)
 			this.commitImageResourceReconcile({
 				type: "metadata-only",
 				reason: "non-fullsize-full",
 			})
-			return
+			return false
 		}
 
 		const shouldApply = this.shouldApplyResourceToView(resource)
@@ -811,7 +769,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				type: "metadata-only",
 				reason: "view-priority-blocked",
 			})
-			return
+			return false
+		}
+		if (this.loadedImage === resource.image && this.loadedImageVariant === resource.variant) {
+			this.applyResourceMetadata(resource)
+			return false
 		}
 
 		const wasErrorState = this.isErrorState
@@ -835,8 +797,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 		}
 
-		this.commitImageResourceReconcile(
-			wasErrorState ? this.requireImageResourceStructure("error-to-image") : patchResult,
+		const reconcileResult = wasErrorState
+			? this.requireImageResourceStructure("error-to-image")
+			: patchResult
+		this.commitImageResourceReconcile(reconcileResult)
+		return (
+			reconcileResult.type === "patched-content" ||
+			reconcileResult.type === "structure-required"
 		)
 	}
 
@@ -921,6 +888,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					)
 				: patchResult,
 		)
+		if (patchResult.type === "patched-content") {
+			this.canvas.runtimeScheduler.requestLayerDraw("content", {
+				source: "ImageElement",
+				reason: "resource-will-close",
+			})
+		}
 	}
 
 	private getImageLoadErrorText(): string {
@@ -937,9 +910,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return this.getText("image.loadError", "图片加载失败")
 	}
 
-	/**
-	 * 监听 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 事件
-	 */
+	/** 监听必须同步处理的资源失败与 decoded surface 释放事件。 */
 	private setupResourceLoadedListener(): void {
 		this.removeResourceLoadedListener()
 		if (!this.data.src) return
@@ -951,23 +922,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			resourcePath === path ||
 			toCanonicalCanvasResourcePath(resourcePath, resolveAbs) === canonicalPath
 
-		this.resourceLoadedHandler = ({ data }) => {
-			if (isCurrentResourcePath(data.path)) {
-				this.imageLoadFailureReason = null
-				this.applyResourceFromEvent(data.resource)
-			}
-		}
-		this.resourceDisplayTargetHandler = ({ data }) => {
-			if (data.elementId === this.data.id && isCurrentResourcePath(data.path)) {
-				this.applyDisplayTargetVariant(data.variant)
-			}
-		}
-		this.resourceDisplayLoadedHandler = ({ data }) => {
-			if (data.elementId === this.data.id && isCurrentResourcePath(data.path)) {
-				this.imageLoadFailureReason = null
-				this.applyResourceFromEvent(data.resource)
-			}
-		}
 		this.resourceLoadFailedHandler = ({ data }) => {
 			if (isCurrentResourcePath(data.path)) {
 				this.imageLoadFailureReason = data.reason ?? "load-error"
@@ -989,18 +943,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.handleImageSourceWillClose(data.image, data.variant)
 		}
 		this.resourceSubscriptionCleanups = [
-			this.canvas.imageResourceManager.onImageResourceLoaded(
-				path,
-				this.resourceLoadedHandler,
-			),
-			this.canvas.imageResourceManager.onImageResourceDisplayTarget(
-				this.data.id,
-				this.resourceDisplayTargetHandler,
-			),
-			this.canvas.imageResourceManager.onImageResourceDisplayLoaded(
-				this.data.id,
-				this.resourceDisplayLoadedHandler,
-			),
 			this.canvas.imageResourceManager.onImageResourceWillClose(
 				path,
 				this.resourceWillCloseHandler,
@@ -1010,34 +952,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.resourceLoadFailedHandler,
 			),
 		]
-
-		// 同步可能已缓存的资源；不要在监听阶段触发新加载，否则会绕过可见性调度。
-		const resource =
-			this.canvas.imageResourceManager.peekResource(path, {
-				variant: "preview",
-			}) ??
-			this.canvas.imageResourceManager.peekResource(path, {
-				variant: "low",
-			})
-		if (
-			resource &&
-			!this.loadedImage &&
-			(this.data.src === path ||
-				toCanonicalCanvasResourcePath(this.data.src || "", resolveAbs) === canonicalPath)
-		) {
-			this.applyResourceFromEvent(resource)
-		}
 	}
 
 	/**
-	 * 移除 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 监听
+	 * 移除资源失败与 decoded surface 释放监听
 	 */
 	private removeResourceLoadedListener(): void {
 		this.resourceSubscriptionCleanups.forEach((cleanup) => cleanup())
 		this.resourceSubscriptionCleanups = []
-		this.resourceLoadedHandler = undefined
-		this.resourceDisplayTargetHandler = undefined
-		this.resourceDisplayLoadedHandler = undefined
 		this.resourceLoadFailedHandler = undefined
 		this.resourceWillCloseHandler = undefined
 	}
