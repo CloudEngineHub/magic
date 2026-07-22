@@ -181,6 +181,8 @@ function WorkspaceList() {
 				return
 			}
 
+			// Invalidate a previous in-flight request before the next debounced search starts.
+			cancelSearch()
 			updateSearchState((draft) => {
 				draft.page = 1
 				draft.hasMoreWorkspaces = true
