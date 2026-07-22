@@ -53,7 +53,7 @@ readonly class OrganizationDomainService
 
         $savedOrganization = $this->organizationRepository->save($organizationEntity);
 
-        if ($creatorId !== null) {
+        if ($creatorId !== null && ! $savedOrganization->isPersonal()) {
             // 为创建者添加组织管理员权限并标记为组织创建人
             try {
                 $dataIsolation = DataIsolation::simpleMake($savedOrganization->getMagicOrganizationCode(), (string) $creatorId);
@@ -201,6 +201,6 @@ readonly class OrganizationDomainService
     public function isPersonOrganization(string $code): bool
     {
         $organizationEntity = $this->organizationRepository->getByCode($code);
-        return $organizationEntity->getType() == 1;
+        return $organizationEntity?->isPersonal() ?? false;
     }
 }

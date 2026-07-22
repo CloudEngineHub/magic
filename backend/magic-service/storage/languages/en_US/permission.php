@@ -128,6 +128,7 @@ return [
         'organization_creator_cannot_be_disabled' => 'Organization creator cannot be disabled',
         'current_user_not_organization_creator' => 'Current user is not the organization creator',
         'personal_organization_cannot_grant_admin' => 'Cannot grant organization admin in a personal organization',
+        'personal_organization_cannot_transfer_owner' => 'Cannot transfer the owner of a personal organization',
         'visibility_config_invalid' => 'Visibility configuration is invalid',
         'only_organization_admin_can_configure_visibility' => 'Only organization admin can configure visibility',
         'visibility_type_2_requires_users_or_departments' => 'When visibility type is 2 (partial visibility), at least one user or department must be specified',
