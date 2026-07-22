@@ -486,7 +486,7 @@ function ActionButtons(props: ActionButtonsProps) {
 									isNewestFileVersion && (
 										<ActionButton
 											icon={IconShare}
-											onClick={handleFileShare}
+											onClick={() => void handleFileShare()}
 											title={t("fileViewer.share")}
 											text={t("fileViewer.share")}
 											showText={showButtonText}
