@@ -659,6 +659,18 @@ function memberUsageColumns(
 			render: renderNumber,
 		}),
 		createDetailColumn(styles, t, {
+			titleKey: "averageAmount",
+			width: "14%",
+			render: (_, row) => renderAverageNumber(row, "points"),
+			sortValue: (row) => getAverageValue(row, "points"),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "averageTokens",
+			width: "16%",
+			render: (_, row) => renderAverageNumber(row, "tokens"),
+			sortValue: (row) => getAverageValue(row, "tokens"),
+		}),
+		createDetailColumn(styles, t, {
 			titleKey: "lastUsedAt",
 			dataIndex: "last_called_at",
 			width: "18%",
@@ -777,7 +789,8 @@ function createDetailColumn(
 		title: renderColumnTitle(styles, t(`columns.${titleKey}`), t(`columnHelpers.${helperKey}`)),
 		sorter: createSorter(
 			sortValue ??
-				((row) => (dataIndex ? (row as Record<string, unknown>)[dataIndex] : undefined)),
+				((row) =>
+					dataIndex ? (row as unknown as Record<string, unknown>)[dataIndex] : undefined),
 		),
 		sortDirections: ["descend", "ascend"],
 		showSorterTooltip: false,
