@@ -72,12 +72,14 @@ class AgentTarget:
             mode_value = _normalize_target_name(agent_mode, field_name="agent_mode")
             try:
                 mode = AgentMode(mode_value)
-            except ValueError:
+            except ValueError as exc:
                 if agent_code is not None:
                     raise AgentTargetError(
-                        f"agent_code is not valid for unknown agent mode: {mode_value}"
-                    )
-                return cls.from_name(mode_value)
+                        f"agent_code is not valid when agent_mode is a custom Agent code: {mode_value}"
+                    ) from exc
+                if is_custom_agent_code(mode_value):
+                    return cls(AgentProviderType.CREW, mode_value)
+                raise AgentTargetError(f"Unsupported agent mode: {mode_value}") from exc
         else:
             raise AgentTargetError(f"Unsupported agent mode: {agent_mode}")
 
@@ -122,7 +124,6 @@ class AgentDefinition:
 
     target: AgentTarget
     profile: AgentProfile
-    revision: str
     dynamic_init_policy: DynamicInitPolicy
 
 

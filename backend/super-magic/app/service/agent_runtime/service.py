@@ -41,7 +41,7 @@ class AgentCacheEntry:
     """The one cached Agent allowed for a Context."""
 
     target: AgentTarget
-    revision: str
+    profile: AgentProfile
     agent: "Agent"
 
 
@@ -66,6 +66,7 @@ class AgentRuntime:
         self._providers: dict[AgentProviderType, AgentDefinitionProvider] = create_provider_map()
         self._cache: dict[str, AgentCacheEntry] = {}
         self._context_locks: dict[str, ContextLockSlot] = {}
+        self._closing: bool = False
 
     @classmethod
     def get_instance(cls) -> "AgentRuntime":
@@ -87,10 +88,12 @@ class AgentRuntime:
             raise AgentRuntimeError("target must be an AgentTarget")
         if not isinstance(lifetime, AgentLifetime):
             raise AgentRuntimeError(f"Unsupported Agent instance lifetime: {lifetime}")
+        self._ensure_open()
 
         context_id = context.context_id
 
         async with self._context_lock(context_id):
+            self._ensure_open()
             cached = self._cache.get(context_id)
             if lifetime == AgentLifetime.TRANSIENT and cached is not None:
                 raise AgentRuntimeBusyError(
@@ -101,8 +104,17 @@ class AgentRuntime:
                     f"Agent {cached.agent.agent_name} is running in context {context_id}"
                 )
 
+            if (
+                lifetime == AgentLifetime.CACHED
+                and cached is not None
+                and cached.target == target
+            ):
+                self._bind_cached_context(context, cached)
+                return cached.agent
+
             provider = self._providers[target.provider_type]
             definition = await self._prepare_definition(provider, target, context)
+            self._ensure_open()
             if definition.target != target:
                 raise AgentDefinitionPrepareError(
                     "Agent definition target does not match the requested target"
@@ -114,25 +126,23 @@ class AgentRuntime:
                     f"Agent {cached.agent.agent_name} started while its definition was prepared"
                 )
 
-            if (
-                lifetime == AgentLifetime.CACHED
-                and cached is not None
-                and cached.target == definition.target
-                and cached.revision == definition.revision
-            ):
-                self._bind_context(context, definition)
-                return cached.agent
-
             if cached is not None:
                 self._cache.pop(context_id, None)
                 cached.agent.close()
 
-            return await self._construct_agent(
+            agent = await self._construct_agent(
                 definition=definition,
                 lifetime=lifetime,
                 context=context,
                 agent_id=agent_id,
             )
+            if self._closing:
+                cached = self._cache.get(context_id)
+                if cached is not None and cached.agent is agent:
+                    self._cache.pop(context_id, None)
+                agent.close()
+                self._ensure_open()
+            return agent
 
     def get_cached_agent(self, context_id: str) -> "Agent | None":
         """Return the cached Agent for one Context, if any."""
@@ -173,16 +183,17 @@ class AgentRuntime:
 
     async def close_all(self, *, reason: str) -> None:
         """Close all cached Agents during process shutdown."""
-        while self._cache:
-            context_id = next(iter(self._cache))
-            async with self._context_lock(context_id):
-                cached = self._cache.pop(context_id, None)
-                if cached is not None:
-                    cached.agent.close()
-                    logger.info(
-                        f"Closed cached Agent: context_id={context_id}, "
-                        f"agent={cached.agent.agent_name}, reason={reason}"
-                    )
+        self._closing = True
+        while context_ids := set(self._cache) | set(self._context_locks):
+            for context_id in context_ids:
+                async with self._context_lock(context_id):
+                    cached = self._cache.pop(context_id, None)
+                    if cached is not None:
+                        cached.agent.close()
+                        logger.info(
+                            f"Closed cached Agent: context_id={context_id}, "
+                            f"agent={cached.agent.agent_name}, reason={reason}"
+                        )
 
     @asynccontextmanager
     async def _context_lock(self, context_id: str) -> AsyncIterator[None]:
@@ -202,6 +213,10 @@ class AgentRuntime:
                 and self._context_locks.get(context_id) is slot
             ):
                 self._context_locks.pop(context_id, None)
+
+    def _ensure_open(self) -> None:
+        if self._closing:
+            raise AgentRuntimeError("AgentRuntime is closing")
 
     async def _prepare_definition(
         self,
@@ -245,7 +260,7 @@ class AgentRuntime:
             if lifetime == AgentLifetime.CACHED:
                 self._cache[context.context_id] = AgentCacheEntry(
                     target=definition.target,
-                    revision=definition.revision,
+                    profile=definition.profile.model_copy(deep=True),
                     agent=agent,
                 )
             return agent
@@ -284,6 +299,11 @@ class AgentRuntime:
     def _bind_context(context: AgentContext, definition: AgentDefinition) -> None:
         context.set_agent_target(definition.target)
         context.set_agent_profile(definition.profile.model_copy(deep=True))
+
+    @staticmethod
+    def _bind_cached_context(context: AgentContext, cached: AgentCacheEntry) -> None:
+        context.set_agent_target(cached.target)
+        context.set_agent_profile(cached.profile.model_copy(deep=True))
 
     @staticmethod
     def _cleanup_failed_construction(

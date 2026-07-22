@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 from typing import Protocol
 
 from app.core.context.agent_context import AgentContext
@@ -19,10 +17,7 @@ from app.path_manager import PathManager
 from app.service.agent_runtime.errors import AgentDefinitionPrepareError
 from app.service.claw_agent_runtime_service import ClawAgentRuntimeService
 from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
-from app.utils.async_file_utils import async_read_bytes
-
-
-_DEFINITION_REVISION_CONTRACT_VERSION = 1
+from app.utils.async_file_utils import async_exists
 
 
 class AgentDefinitionProvider(Protocol):
@@ -48,12 +43,14 @@ class BuiltinAgentDefinitionProvider:
         agent_name = target.agent_name
         try:
             agent_file = PathManager.get_compiled_agent_file(agent_name)
-            agent_bytes = await async_read_bytes(agent_file)
+            if not await async_exists(agent_file):
+                raise AgentDefinitionPrepareError(
+                    f"Built-in Agent definition does not exist: {agent_name}"
+                )
             profile = _copy_profile(context.get_agent_profile())
             return _build_definition(
                 target=target,
                 profile=profile,
-                agent_bytes=agent_bytes,
                 dynamic_init_policy=DynamicInitPolicy.CACHED_ONLY,
             )
         except asyncio.CancelledError:
@@ -81,7 +78,6 @@ class CrewAgentDefinitionProvider:
                 runtime_service = CrewAgentRuntimeService(on_cache_invalidated=_ignore_cache_invalidation)
 
             info = await runtime_service.ensure_compiled(agent_code)
-            agent_bytes = await async_read_bytes(info.agent_file)
             profile = _profile_from_runtime_info(
                 context=context,
                 name=info.name,
@@ -91,7 +87,6 @@ class CrewAgentDefinitionProvider:
             return _build_definition(
                 target=target,
                 profile=profile,
-                agent_bytes=agent_bytes,
                 dynamic_init_policy=DynamicInitPolicy.CACHED_ONLY,
             )
         except asyncio.CancelledError:
@@ -117,7 +112,6 @@ class ClawAgentDefinitionProvider:
         claw_code = target.agent_name
         try:
             info = await self._runtime_service.prepare(claw_code)
-            agent_bytes = await async_read_bytes(info.agent_file)
             profile = _profile_from_runtime_info(
                 context=context,
                 name=info.name,
@@ -127,7 +121,6 @@ class ClawAgentDefinitionProvider:
             return _build_definition(
                 target=target,
                 profile=profile,
-                agent_bytes=agent_bytes,
                 dynamic_init_policy=DynamicInitPolicy.EVERY_INSTANCE,
             )
         except asyncio.CancelledError:
@@ -177,46 +170,13 @@ def _build_definition(
     *,
     target: AgentTarget,
     profile: AgentProfile,
-    agent_bytes: bytes,
     dynamic_init_policy: DynamicInitPolicy,
 ) -> AgentDefinition:
-    revision = _calculate_revision(
-        target=target,
-        agent_bytes=agent_bytes,
-        profile=profile,
-    )
     return AgentDefinition(
         target=target,
         profile=profile,
-        revision=revision,
         dynamic_init_policy=dynamic_init_policy,
     )
-
-
-def _calculate_revision(
-    *,
-    target: AgentTarget,
-    agent_bytes: bytes,
-    profile: AgentProfile,
-) -> str:
-    metadata = {
-        "contract_version": _DEFINITION_REVISION_CONTRACT_VERSION,
-        "provider_type": target.provider_type.value,
-        "agent_name": target.agent_name,
-        "profile": profile.model_dump(mode="json"),
-    }
-    canonical_metadata = json.dumps(
-        metadata,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-    hasher = hashlib.sha256()
-    hasher.update(canonical_metadata)
-    hasher.update(b"\0")
-    hasher.update(agent_bytes)
-    return hasher.hexdigest()
 
 
 def _ignore_cache_invalidation(agent_code: str, reason: str) -> None:
