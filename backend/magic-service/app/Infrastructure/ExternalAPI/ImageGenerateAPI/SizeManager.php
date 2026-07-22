@@ -138,27 +138,24 @@ class SizeManager
     /**
      * 按总像素区间将最终尺寸归档为 1K / 2K / 4K。
      *
-     * 这里的分辨率档位用于内部计费和事件透传，不等同于显示器/视频行业中的 4K 定义，
-     * 而是基于正方形基准像素 1024²、2048²、4096² 做区间划分。
-     *
-     * 分界值取相邻基准像素的中点：
-     * - total_pixels < 2,621,440 => 1K
-     * - 2,621,440 <= total_pixels < 10,485,760 => 2K
-     * - total_pixels >= 10,485,760 => 4K
+     * 分界值按 DCI 2K / 4K 标准规格的总像素归档：
+     * - total_pixels < 2048x1080 => 1K
+     * - 2048x1080 <= total_pixels < 4096x2160 => 2K
+     * - total_pixels >= 4096x2160 => 4K
      */
     public static function resolveResolutionByPixels(int $width, int $height): string
     {
         $totalPixels = $width * $height;
 
-        if ($totalPixels < 2621440) {
-            return '1K';
+        if ($totalPixels >= 8847360) {
+            return '4K';
         }
 
-        if ($totalPixels < 10485760) {
+        if ($totalPixels >= 2211840) {
             return '2K';
         }
 
-        return '4K';
+        return '1K';
     }
 
     /**
