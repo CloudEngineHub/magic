@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\ModelGateway\Service;
 
 use App\Domain\Audit\ModelCall\Entity\ValueObject\AuditStatus;
+use App\Domain\ModelGateway\Entity\Dto\SlidesTemplateFileUrlRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
@@ -28,10 +29,11 @@ class SlidesTemplateAppService extends AbstractLLMAppService
     #[Inject]
     protected readonly SlidesTemplateDomainService $slidesTemplateDomainService;
 
-    public function getTemplateFileUrl(string $accessToken, array $businessParams, string $code): SlidesTemplateEntity
+    public function getTemplateFileUrl(SlidesTemplateFileUrlRequestDTO $requestDTO, string $code): SlidesTemplateEntity
     {
         $startTime = microtime(true);
-        $modelGatewayDataIsolation = $this->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
+        $businessParams = $requestDTO->getBusinessParams();
+        $modelGatewayDataIsolation = $this->createModelGatewayDataIsolationByAccessToken($requestDTO->getAccessToken(), $businessParams);
         $dataIsolation = $this->createSlidesTemplateDataIsolation($modelGatewayDataIsolation);
         $dataIsolation->setContainOfficialOrganization(true);
 

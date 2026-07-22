@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\ModelGateway\Facade\Open;
 
 use App\Application\ModelGateway\Service\SlidesTemplateAppService;
+use App\Domain\ModelGateway\Entity\Dto\SlidesTemplateFileUrlRequestDTO;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\GetSlidesTemplateFileUrlRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
@@ -22,12 +23,13 @@ class SlidesTemplateApi extends AbstractOpenApi
     public function getFileUrl(GetSlidesTemplateFileUrlRequest $request, string $code): array
     {
         $request->validated();
-        $businessParams = array_merge($this->getBusinessParams(), $request->getAccessContext());
-        $template = $this->slidesTemplateAppService->getTemplateFileUrl(
-            $this->getAccessToken(),
-            $businessParams,
-            $code,
-        );
+        $requestDTO = new SlidesTemplateFileUrlRequestDTO();
+        $requestDTO->setAccessToken($this->getAccessToken());
+        $requestDTO->setIps($this->getClientIps());
+        $requestDTO->setBusinessParams($request->getAccessContext());
+        $this->enrichRequestDTO($requestDTO, $this->request->getHeaders());
+
+        $template = $this->slidesTemplateAppService->getTemplateFileUrl($requestDTO, $code);
 
         return SlidesTemplateAssembler::createFileUrlDTO($template)->toArray();
     }
