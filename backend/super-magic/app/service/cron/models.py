@@ -42,6 +42,7 @@ class CronSchedule:
 @dataclass
 class CronPayload:
     kind: PayloadKind = PayloadKind.AGENT_TURN
+    agent_mode: Optional[str] = None
     agent_name: Optional[str] = None
     model_id: Optional[str] = None
     image_model_id: Optional[str] = None

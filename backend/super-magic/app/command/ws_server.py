@@ -171,10 +171,16 @@ async def lifespan(app: FastAPI):
     await cleanup_stale_files_on_startup()
 
     logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
-    yield
-    # 关闭时
-    logger.info("服务正在关闭...")
-    shutdown_telemetry()
+    try:
+        yield
+    finally:
+        # 关闭时
+        logger.info("服务正在关闭...")
+        from app.service.agent_runtime import AgentRuntime
+        try:
+            await AgentRuntime.get_instance().close_all(reason="service_shutdown")
+        finally:
+            shutdown_telemetry()
 
 def create_app() -> FastAPI:
     """创建并配置FastAPI应用实例"""

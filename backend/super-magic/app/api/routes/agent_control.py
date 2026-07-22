@@ -33,17 +33,20 @@ def _get_dispatcher():
 
 
 def _get_agent_context():
-    from app.core.context.agent_context_registry import AgentContextRegistry
-    contexts = AgentContextRegistry.get_instance().list_contexts()
-    return contexts[0] if contexts else None
+    return _get_dispatcher().agent_context
+
+
+def _get_runtime():
+    from app.service.agent_runtime import AgentRuntime
+    return AgentRuntime.get_instance()
 
 
 def _get_first_agent():
-    """获取第一个缓存的 Agent 实例。沙盒内通常只有一个。"""
-    dispatcher = _get_dispatcher()
-    if not dispatcher.agents:
+    """获取主 Context 的缓存 Agent。"""
+    context = _get_agent_context()
+    if context is None:
         return None
-    return next(iter(dispatcher.agents.values()))
+    return _get_runtime().get_cached_agent(context.context_id)
 
 
 # ── 端点 ─────────────────────────────────────────────────
@@ -106,30 +109,31 @@ async def restart_agent() -> BaseResponse:
     适用于 Agent 内部状态异常、需要完全重建的情况。
     如果只是想重载聊天记录，用 reload-chat-history 更轻量。
     """
-    dispatcher = _get_dispatcher()
-
     # 先停止运行
     agent_context = _get_agent_context()
     if agent_context:
         await agent_context.stop_run(reason="maintenance_restart")
         agent_context.reset_run_state()
 
-    if not dispatcher.agents:
+    if agent_context is None:
         return create_success_response(
             message="无缓存的 Agent 实例，无需重启",
             data={"destroyed": []},
         )
 
-    # 逐个关闭并移除
-    destroyed = []
-    for agent_type, agent in list(dispatcher.agents.items()):
-        agent.close()
-        destroyed.append(agent_type)
-    dispatcher.agents.clear()
+    destroyed = await _get_runtime().invalidate_context(
+        agent_context.context_id,
+        reason="maintenance_restart",
+    )
+    if not destroyed:
+        return create_success_response(
+            message="无缓存的 Agent 实例，无需重启",
+            data={"destroyed": []},
+        )
 
     return create_success_response(
         message=f"已销毁 {len(destroyed)} 个 Agent 实例，下次消息时自动重建",
-        data={"destroyed": destroyed},
+        data={"destroyed": list(destroyed)},
     )
 
 
@@ -142,23 +146,23 @@ async def reload_chat_history() -> BaseResponse:
 
     注意：只重载聊天记录，不重建 Agent 实例。如果 Agent 本身状态异常，用 restart。
     """
-    dispatcher = _get_dispatcher()
-
     # 先停止运行
     agent_context = _get_agent_context()
     if agent_context:
         await agent_context.stop_run(reason="maintenance_reload")
         agent_context.reset_run_state()
 
-    if not dispatcher.agents:
+    if agent_context is None:
+        return create_error_response(message="无缓存的 Agent 实例，无聊天记录可重载")
+
+    agents = _get_runtime().list_cached_agents(agent_context.context_id)
+    if not agents:
         return create_error_response(message="无缓存的 Agent 实例，无聊天记录可重载")
 
     results = {}
-    for agent_type, agent in dispatcher.agents.items():
-        ch = getattr(agent, "chat_history", None)
-        if not ch:
-            results[agent_type] = {"reloaded": False, "reason": "无 chat_history"}
-            continue
+    for agent in agents:
+        agent_type = agent.agent_name
+        ch = agent.chat_history
 
         old_count = len(ch.messages)
         await ch.reload_from_disk()

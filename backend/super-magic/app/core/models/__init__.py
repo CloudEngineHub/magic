@@ -19,6 +19,14 @@ from app.core.models.model_selection_policy import (
     ModelSelectionInput,
     ModelSelectionPolicy,
 )
+from app.core.models.agent_runtime import (
+    AgentDefinition,
+    AgentLifetime,
+    AgentProviderType,
+    AgentTarget,
+    AgentTargetError,
+    DynamicInitPolicy,
+)
 
 __all__ = [
     "ImageModelSizeSpec",
@@ -30,4 +38,10 @@ __all__ = [
     "TextModelState",
     "ModelSelectionInput",
     "ModelSelectionPolicy",
+    "AgentDefinition",
+    "AgentLifetime",
+    "AgentProviderType",
+    "AgentTarget",
+    "AgentTargetError",
+    "DynamicInitPolicy",
 ]

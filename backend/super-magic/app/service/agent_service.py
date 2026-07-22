@@ -31,7 +31,6 @@ from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
 from app.service.cli_status import CliStatusFactory
-from app.infrastructure.observability import install_tool_monitoring_listener
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
 
@@ -496,44 +495,6 @@ class AgentService(Base):
         logger.info(f"{agent_name}初始化完成")
 
         return
-
-    async def create_agent(
-        self,
-        agent_name: str,
-        agent_context: AgentContext,
-    ) -> Agent:
-        """
-        创建智能体实例
-
-        Args:
-            agent_type: 智能体类型名称
-            stream_mode: 是否启用流式输出
-            agent_context: 可选的代理上下文对象，将覆盖其他参数
-            stream: 流式输出对象
-            storage_credentials: 对象存储凭证，用于配置对象存储服务
-
-        Returns:
-            智能体实例和错误信息列表
-        """
-
-        try:
-            agent = Agent(agent_name, agent_context)
-
-            # 安装工具监控监听器（非侵入式）
-            install_tool_monitoring_listener(agent_context)
-
-            # Complete async dynamic initialization (directory scanning)
-            # This runs the IO-intensive directory scan in a thread pool
-            # to avoid blocking the asyncio event loop
-            await agent.async_complete_dynamic_init()
-
-            return agent
-        except Exception as e:
-            logger.error(f"创建SuperMagic实例时出错: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return None
 
     async def run_agent(
         self,

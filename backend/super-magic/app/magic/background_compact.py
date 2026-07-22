@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 from agentlang.logger import get_logger
+from app.core.models.agent_runtime import AgentTarget
 from app.magic.compact_user_input_references import format_user_input_reference_block
 
 if TYPE_CHECKING:
@@ -193,7 +194,7 @@ async def start_background_compact(
 
     compact_task = asyncio.create_task(
         run_isolated_agent(
-            agent_name=agent_name,
+            target=AgentTarget.from_name(agent_name),
             agent_id=agent_id,
             prompt=compact_prompt,
             parent_context=agent_context,

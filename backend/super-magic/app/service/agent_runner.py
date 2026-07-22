@@ -8,6 +8,7 @@ from typing import Optional, TYPE_CHECKING
 
 from agentlang.logger import get_logger
 from agentlang.chat_history.session_config import SessionConfig
+from app.core.models.agent_runtime import AgentLifetime, AgentTarget
 from app.core.models.media_model import ImageModelSpec, JsonObject, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
 from app.path_manager import PathManager
@@ -71,7 +72,7 @@ def apply_isolated_agent_model_selection(
 
 
 async def run_isolated_agent(
-    agent_name: str,
+    target: AgentTarget,
     agent_id: str,
     prompt: str,
     parent_context: Optional["AgentContext"] = None,
@@ -95,9 +96,10 @@ async def run_isolated_agent(
         子 Agent 继承完整对话上下文。用于后台压缩等需要上下文连贯的场景。
     disable_compaction: 禁用子 Agent 的上下文压缩，防止 fork 出的 Agent 自触发压缩。
     capture_compact_history_result: 捕获子 Agent 调用 compact_chat_history 的 summary 参数。
+    target: 已规范化的 Agent 运行目标；runner 不再重新解析 mode/name/code。
     """
     from app.core.context.agent_context import AgentContext
-    from app.magic.agent import Agent
+    from app.service.agent_runtime import AgentRuntime
 
     new_context = AgentContext(isolated=True)
     if parent_context is not None:
@@ -112,7 +114,12 @@ async def run_isolated_agent(
     agent: Optional["Agent"] = None
     task: Optional[asyncio.Task] = None
     try:
-        agent = Agent(agent_name, agent_id=agent_id, agent_context=new_context)
+        agent = await AgentRuntime.get_instance().acquire(
+            target=target,
+            lifetime=AgentLifetime.TRANSIENT,
+            context=new_context,
+            agent_id=agent_id,
+        )
         apply_isolated_agent_model_selection(
             agent=agent,
             parent_context=parent_context,
@@ -132,7 +139,7 @@ async def run_isolated_agent(
         if disable_compaction:
             agent.compaction_config.enable_compaction = False
 
-        handle = await subagent_session_manager.get_handle(agent_name, agent_id)
+        handle = await subagent_session_manager.get_handle(target.agent_name, agent_id)
 
         async with handle.lock:
             task = asyncio.create_task(
@@ -146,6 +153,10 @@ async def run_isolated_agent(
             handle.task = task
             handle.agent_context = new_context
             state = await task
+    except asyncio.CancelledError:
+        if agent is not None and task is None:
+            agent.close()
+        raise
     except Exception:
         if agent is not None and task is None:
             agent.close()

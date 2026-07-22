@@ -149,8 +149,16 @@ async def _parse_job_file(path: Path, job_id: str, mtime: float) -> Optional[Cro
             logger.warning(f"cron: unknown payload kind '{payload_kind_str}' in {path}, defaulting to agent_turn")
             payload_kind = PayloadKind.AGENT_TURN
 
+        raw_agent_mode = payload_cfg.get("agent_mode")
+        if raw_agent_mode is not None and not isinstance(raw_agent_mode, str):
+            raise ValueError(
+                f"cron payload.agent_mode must be a string when present, got {type(raw_agent_mode).__name__}"
+            )
+        normalized_agent_mode = raw_agent_mode.strip() or None if raw_agent_mode is not None else None
+
         payload = CronPayload(
             kind=payload_kind,
+            agent_mode=normalized_agent_mode,
             agent_name=payload_cfg.get("agent_name") or None,
             model_id=payload_cfg.get("model_id"),
             image_model_id=payload_cfg.get("image_model_id"),
@@ -316,6 +324,7 @@ def build_job_md(
     body: str,
     timezone: Optional[str] = None,
     notify_user: bool = True,
+    agent_mode: Optional[str] = None,
 ) -> str:
     """构建新 cron job MD 文件内容。"""
     import yaml
@@ -341,6 +350,8 @@ def build_job_md(
         frontmatter["name"] = name
     if timezone:
         frontmatter["timezone"] = timezone
+    if agent_mode and agent_mode.strip():
+        frontmatter["payload"]["agent_mode"] = agent_mode.strip()
     if model_id is not None:
         frontmatter["payload"]["model_id"] = model_id
     if image_model_id is not None:
@@ -447,6 +458,7 @@ async def archive_completed_job(job: CronJob, result: CronRunResult, run_at: dat
         },
         "payload": {
             "kind": str(job.payload.kind),
+            "agent_mode": job.payload.agent_mode,
             "agent_name": job.payload.agent_name,
         },
         "timezone": job.timezone,

@@ -22,7 +22,7 @@ from agentlang.context.shared_context import create_agent_shared_context
 from app.core.config.communication_config import STSTokenRefreshConfig
 from app.core.entity.agent_profile import AgentProfile, DEFAULT_AGENT_PROFILE
 from app.core.entity.attachment import Attachment
-from app.core.entity.message.client_message import ChatClientMessage, InitClientMessage, Metadata, User
+from app.core.entity.message.client_message import AgentMode, ChatClientMessage, InitClientMessage, Metadata, User
 from app.core.entity.project_archive import ProjectArchiveInfo
 from agentlang.event.event import Event, EventType, StoppableEvent
 from agentlang.event.common import BaseEventData
@@ -32,6 +32,7 @@ from app.path_manager import PathManager
 from app.core.context.run_interruption import RunCancelState, RunCleanupRegistry, RunCancellationHandle
 from app.core.entity.final_task_state import FinalTaskState
 from app.core.models.agent_model_context import AgentModelContext
+from app.core.models.agent_runtime import AgentProviderType, AgentTarget
 from app.core.context.execution_source import SuperMagicExecutionSource
 from loguru import logger
 from app.infrastructure.storage.types import PlatformType
@@ -140,6 +141,8 @@ class AgentContext(BaseAgentContext):
         self._agent_id: Optional[str] = None
         # horizon_agent_id 用于 Horizon 持久化文件名。
         self._horizon_agent_id: Optional[str] = None
+        # Runtime 完成定义准备后写入的确定运行目标。
+        self._agent_target: Optional[AgentTarget] = None
 
         # 设置工作空间目录
         try:
@@ -322,8 +325,6 @@ class AgentContext(BaseAgentContext):
             "user_tool_call_pending_id": (None, Optional[str]),
             # 当前 Agent run 的触发来源，供 ask_user 等运行态策略读取
             "execution_source": (SuperMagicExecutionSource.HUMAN_CHAT, SuperMagicExecutionSource),
-            # Agent Master 管理
-            "agent_code": (None, Optional[str]),  # 当前自定义 Agent 的 agent_code
             # 消息版本协商（v1 / v2），由 set_chat_client_message 提取 dynamic_config.message_version 写入
             "message_version": ("v2", str),
             # v2 批量 tool_calls 暂存状态
@@ -369,14 +370,13 @@ class AgentContext(BaseAgentContext):
         """
         return self.shared_context.get_field("interrupt_queue")
 
-    def set_agent_code(self, agent_code: str) -> None:
-        """设置当前自定义 Agent 的 agent_code
+    def set_agent_target(self, target: Optional[AgentTarget]) -> None:
+        """绑定 Runtime 已确认的 Agent 运行目标。"""
+        self._agent_target = target
 
-        Args:
-            agent_code: Agent 编码（如 sma-xxxxx）
-        """
-        self.shared_context.update_field("agent_code", agent_code)
-        logger.debug(f"已更新 agent_code: {agent_code}")
+    def get_agent_target(self) -> Optional[AgentTarget]:
+        """获取当前 Agent 运行目标，尚未 acquire 时返回 None。"""
+        return self._agent_target
 
     def get_agent_code(self) -> Optional[str]:
         """获取当前自定义 Agent 的 agent_code
@@ -384,7 +384,10 @@ class AgentContext(BaseAgentContext):
         Returns:
             Optional[str]: agent_code
         """
-        return self.shared_context.get_field("agent_code")
+        target = self.get_agent_target()
+        if target is None or target.provider_type == AgentProviderType.BUILTIN:
+            return None
+        return target.agent_name
 
     def set_execution_source(self, source: SuperMagicExecutionSource) -> None:
         """设置当前 Agent run 的触发来源。"""
@@ -399,8 +402,15 @@ class AgentContext(BaseAgentContext):
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
+        target = self.get_agent_target()
+        if target is not None:
+            return target.provider_type == AgentProviderType.CLAW
         msg = self.get_chat_client_message()
-        return msg is not None and str(getattr(msg, "agent_mode", "")) == "magiclaw"
+        if msg is None:
+            return False
+        if isinstance(msg.agent_mode, AgentMode):
+            return msg.agent_mode == AgentMode.MAGICLAW
+        return str(msg.agent_mode or "").strip() == AgentMode.MAGICLAW.value
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """设置沙盒ID

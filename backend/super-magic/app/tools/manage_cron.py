@@ -14,6 +14,8 @@ from pydantic import Field, field_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.client_message import AgentMode
+from app.core.models.agent_runtime import AgentProviderType
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.cron.store import build_job_md, patch_job_md
@@ -243,7 +245,7 @@ CRITICAL CONSTRAINTS:
     async def _status(self) -> ToolResult:
         from app.service.cron.store import load_cron_state, scan_jobs
         cron_dir = PathManager.get_cron_dir()
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         state = await load_cron_state()
         lines = [f"Cron dir: {cron_dir}", f"Total jobs: {len(jobs)}"]
         for job in jobs:
@@ -260,7 +262,7 @@ CRITICAL CONSTRAINTS:
 
     async def _list(self, params: ManageCronParams) -> ToolResult:
         from app.service.cron.store import scan_jobs
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         include_disabled = bool(params.include_disabled)
         if not include_disabled:
             jobs = [j for j in jobs if j.enabled]
@@ -300,6 +302,20 @@ CRITICAL CONSTRAINTS:
 
         agent_ctx = tool_context.get_extension("agent_context")
 
+        target = None
+        if agent_ctx and hasattr(agent_ctx, "get_agent_target"):
+            target = agent_ctx.get_agent_target()
+
+        agent_mode: Optional[str] = None
+        agent_name = "magic"
+        if target is not None and target.provider_type == AgentProviderType.CLAW:
+            agent_mode = AgentMode.MAGICLAW.value
+            agent_name = target.agent_name
+        elif agent_ctx and hasattr(agent_ctx, "agent_name") and agent_ctx.agent_name:
+            # 普通任务继承当前 agent 的文件标识符（如 openclaw、magic），不暴露给 LLM 作为参数。
+            # 必须用 agent_ctx.agent_name（文件标识符），不能用 get_agent_name()（返回展示名，如"龙虾"）。
+            agent_name = agent_ctx.agent_name
+
         model_id: Optional[str] = None
         image_model_id: Optional[str] = None
         video_model_id: Optional[str] = None
@@ -319,12 +335,6 @@ CRITICAL CONSTRAINTS:
         if agent_ctx and hasattr(agent_ctx, "get_user_timezone"):
             user_timezone = agent_ctx.get_user_timezone() or None
 
-        # 继承当前 agent 的文件标识符（如 openclaw、magic），不暴露给 LLM 作为参数。
-        # 必须用 agent_ctx.agent_name（文件标识符），不能用 get_agent_name()（返回展示名，如"龙虾"）。
-        agent_name = "magic"
-        if agent_ctx and hasattr(agent_ctx, "agent_name") and agent_ctx.agent_name:
-            agent_name = agent_ctx.agent_name
-
         content = build_job_md(
             schedule=params.schedule,
             payload_kind="agent_turn",  # 当前唯一可用值
@@ -338,6 +348,7 @@ CRITICAL CONSTRAINTS:
             body=params.message,
             timezone=user_timezone,
             notify_user=True if params.notify_user is None else params.notify_user,
+            agent_mode=agent_mode,
         )
         await async_write_text(path, content)
         return ToolResult(content=f"Created cron job '{job_id}' at {path}")
@@ -379,7 +390,7 @@ CRITICAL CONSTRAINTS:
         if not params.job_id:
             return ToolResult.error("job_id is required for action=run")
         from app.service.cron.store import scan_jobs
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         job = next((j for j in jobs if j.id == params.job_id), None)
         if job is None:
             return ToolResult.error(f"Job '{params.job_id}' not found or has parse errors")

@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 
 from agentlang.logger import get_logger
+from app.core.entity.message.client_message import AgentMode
+from app.core.models.agent_runtime import AgentTarget
 from app.service.agent_runner import run_isolated_agent
 from app.service.cron.models import CronJob, CronRunResult
 from app.service.cron.store import write_result_file
@@ -55,6 +57,46 @@ async def _resolve_agent_name(job: CronJob) -> str:
     return "magic"
 
 
+async def _resolve_cron_agent_target(
+    job: CronJob,
+) -> AgentTarget:
+    """将 cron 持久化身份转换为规范化 AgentTarget。
+
+    无 agent_mode 的历史任务继续按普通 agent_name 运行；只有明确写入
+    magiclaw/custom_agent 时，agent_name 才作为 agent_code 使用。
+    """
+    raw_mode = job.payload.agent_mode
+    if raw_mode is None:
+        return AgentTarget.from_name(await _resolve_agent_name(job))
+    if not isinstance(raw_mode, str):
+        raise ValueError(
+            f"Invalid agent_mode for cron job [{job.id}]: expected string, "
+            f"got {type(raw_mode).__name__}"
+        )
+
+    mode_value = raw_mode.strip()
+    if not mode_value:
+        return AgentTarget.from_name(await _resolve_agent_name(job))
+
+    try:
+        agent_mode = AgentMode(mode_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Unknown agent_mode '{mode_value}' for cron job [{job.id}]"
+        ) from exc
+
+    if agent_mode in (AgentMode.MAGICLAW, AgentMode.CUSTOM_AGENT):
+        raw_agent_name = job.payload.agent_name
+        if not isinstance(raw_agent_name, str) or not raw_agent_name.strip():
+            raise ValueError(
+                f"agent_name is required for cron job [{job.id}] "
+                f"when agent_mode={agent_mode.value}"
+            )
+        return AgentTarget.from_mode(agent_mode, raw_agent_name)
+
+    return AgentTarget.from_mode(agent_mode)
+
+
 async def execute_agent_turn(job: CronJob) -> CronRunResult:
     """
     以独立子 agent 执行 cron 任务，等待完成后写入结果文件。
@@ -80,13 +122,15 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     result = ""
     error = ""
 
-    agent_name = await _resolve_agent_name(job)
-    logger.info(f"cron job [{job.id}] starting (agent={agent_name})")
-
     timeout = job.payload.timeout_seconds
     try:
+        target = await _resolve_cron_agent_target(job)
+        logger.info(
+            f"cron job [{job.id}] starting "
+            f"(agent={target.agent_name}, provider={target.provider_type.value})"
+        )
         coro = run_isolated_agent(
-            agent_name=agent_name,
+            target=target,
             agent_id=agent_id,
             prompt=prompt,
             parent_context=None,

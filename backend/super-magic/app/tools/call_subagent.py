@@ -9,6 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.models.agent_runtime import AgentLifetime, AgentProviderType, AgentTarget
 from app.core.subagent_delegation import is_custom_agent_code
 from app.i18n import i18n
 from app.path_manager import PathManager
@@ -31,7 +32,6 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
-    from app.service.crew_agent_runtime_service import CrewAgentRuntimeInfo
 
 # 子 Agent 最大嵌套深度：1 表示只允许主 Agent 调用子 Agent，子 Agent 不能再调用子 Agent
 _MAX_AGENT_DEPTH = 1
@@ -41,12 +41,6 @@ _MAX_AGENT_DEPTH = 1
 class AgentDisplaySubject:
     kind: "AgentDisplayKind"
     name: str
-
-
-@dataclass(frozen=True)
-class PreparedAgentTarget:
-    agent_name: str
-    display_name: Optional[str] = None
 
 
 class AgentDisplayKind(StrEnum):
@@ -157,11 +151,11 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         task: Optional[asyncio.Task] = None
         try:
             from app.core.context.agent_context import AgentContext
-            from app.magic.agent import Agent
+            from app.service.agent_runtime import AgentRuntime
 
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
-            prepared_target = await _resolve_agent_target(params.agent_name)
-            params.agent_name = prepared_target.agent_name
+            target = AgentTarget.from_name(params.agent_name)
+            params.agent_name = target.agent_name
 
             # 深度检查：子 Agent 不允许再派发子 Agent
             current_depth = parent.get_subagent_depth() if parent else 0
@@ -179,7 +173,6 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
                 state.task_label = params.task_label
-                state.display_name = prepared_target.display_name
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
                     _mark_missing_running_as_interrupted(state)
                     async with handle.state_lock:
@@ -216,11 +209,17 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 _inherit_parent_context(new_agent_context, parent, depth=current_depth + 1)
                 new_agent_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
 
-                agent = Agent(
-                    params.agent_name,
+                agent = await AgentRuntime.get_instance().acquire(
+                    target=target,
+                    lifetime=AgentLifetime.TRANSIENT,
+                    context=new_agent_context,
                     agent_id=params.agent_id,
-                    agent_context=new_agent_context,
                 )
+                if target.provider_type == AgentProviderType.CREW:
+                    profile_name = new_agent_context.get_agent_profile().name.strip()
+                    state.display_name = profile_name or params.agent_name
+                else:
+                    state.display_name = None
                 apply_isolated_agent_model_selection(
                     agent=agent,
                     parent_context=parent,
@@ -298,11 +297,15 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 resume_hint="Pass the same agent_id to call_subagent to continue this conversation.",
             ))
 
+        except asyncio.CancelledError:
+            if agent is not None and task is None:
+                agent.close()
+            raise
         except Exception as e:
             if agent is not None and task is None:
                 agent.close()
             logger.exception(f"调用智能体失败: {e!s}")
-            if isinstance(e, FileNotFoundError):
+            if _contains_file_not_found_error(e):
                 error_text = _build_subagent_not_available_text(params.agent_name)
             else:
                 error_text = _build_call_subagent_error_text(
@@ -758,30 +761,16 @@ def _build_status_remark(
     return status_text
 
 
-async def _resolve_agent_target(
-    raw_agent_name: str,
-) -> PreparedAgentTarget:
-    from app.core.entity.message.client_message import AgentMode
-
-    resolved_name = AgentMode.resolve_agent_type(raw_agent_name)
-    if not is_custom_agent_code(resolved_name):
-        return PreparedAgentTarget(agent_name=resolved_name)
-
-    info = await _ensure_custom_agent_compiled_for_subagent(resolved_name)
-    return PreparedAgentTarget(
-        agent_name=info.agent_code,
-        display_name=info.name or info.agent_code,
-    )
-
-
-async def _ensure_custom_agent_compiled_for_subagent(agent_code: str) -> "CrewAgentRuntimeInfo":
-    """Prepare a custom Agent without resetting the parent's global skill cache."""
-    from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
-
-    def _no_global_reset(code: str, reason: str) -> None:
-        logger.info(f"Prepared custom sub-agent, skip global skill reset: code={code}, reason={reason}")
-
-    return await CrewAgentRuntimeService(on_cache_invalidated=_no_global_reset).ensure_compiled(agent_code)
+def _contains_file_not_found_error(error: BaseException) -> bool:
+    """Return whether an error or its chained cause is a missing Agent definition."""
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, FileNotFoundError):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _display_subject(

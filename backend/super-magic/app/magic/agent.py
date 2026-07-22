@@ -204,6 +204,11 @@ class SessionPrepResult:
 
 
 class Agent(BaseAgent):
+    """绑定 Context、ChatHistory 与 Horizon 的可运行 Agent 实例。
+
+    Agent 管理自身运行状态；定义来源、编译准备、缓存和动态初始化时机由
+    AgentRuntime 统一决定。
+    """
 
     def _setup_agent_context(self, agent_context: Optional[AgentContext] = None) -> AgentContext:
         """
@@ -560,7 +565,7 @@ class Agent(BaseAgent):
     async def async_complete_dynamic_init(self) -> None:
         """异步完成动态初始化，将 workspace 文件树、memory、用户语言同步到 AgentHorizon。
 
-        此方法应在 Agent 构造完成后、首次运行前调用（在 agent_service 中）。
+        此方法由 AgentRuntime 在 Agent 构造完成后、首次运行前按策略调用。
         Horizon 首次 build_context_update 时会将这些内容注入 LLM 的 initial_context。
         """
         horizon = self.agent_context.horizon
