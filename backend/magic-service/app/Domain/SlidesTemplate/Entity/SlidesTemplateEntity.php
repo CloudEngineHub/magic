@@ -81,7 +81,7 @@ class SlidesTemplateEntity extends AbstractEntity
 
     public static function generateNewCode(): string
     {
-        return 'PPT-' . str_replace('.', '-', uniqid('', true));
+        return 'SLIDE-' . str_replace('.', '-', uniqid('', true));
     }
 
     public function toArray(): array
