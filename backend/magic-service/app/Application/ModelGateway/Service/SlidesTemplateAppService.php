@@ -27,7 +27,7 @@ use function event_dispatch;
 class SlidesTemplateAppService extends AbstractLLMAppService
 {
     #[Inject]
-    protected readonly SlidesTemplateDomainService $slidesTemplateDomainService;
+    protected SlidesTemplateDomainService $slidesTemplateDomainService;
 
     public function getTemplateFileUrl(SlidesTemplateFileUrlRequestDTO $requestDTO, string $code): SlidesTemplateEntity
     {
