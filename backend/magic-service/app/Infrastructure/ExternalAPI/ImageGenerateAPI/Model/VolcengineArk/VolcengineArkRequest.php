@@ -15,7 +15,7 @@ class VolcengineArkRequest extends ImageGenerateRequest
 
     protected bool $watermark = false;
 
-    protected string $sequentialImageGeneration = 'disabled';
+    protected string $sequentialImageGeneration = '';
 
     protected bool $stream = false;
 

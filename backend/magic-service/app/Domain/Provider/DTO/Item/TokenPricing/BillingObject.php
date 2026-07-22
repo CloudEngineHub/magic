@@ -98,6 +98,16 @@ final class BillingObject
     public const OLD_IMAGE_COUNT_COST = 'old_image_count_cost';
 
     /**
+     * ImageCount: 图片参考输入张数售价。
+     */
+    public const IMAGE_REFERENCE_INPUT_COUNT = 'image_reference_input_count';
+
+    /**
+     * ImageCount: 图片参考输入张数成本。
+     */
+    public const IMAGE_REFERENCE_INPUT_COUNT_COST = 'image_reference_input_count_cost';
+
+    /**
      * TextTokens 固定对象。
      */
     private const array TEXT_OBJECTS = [
@@ -131,6 +141,8 @@ final class BillingObject
         self::THOUGHT_TOKEN_COST,
         self::OLD_IMAGE_COUNT,
         self::OLD_IMAGE_COUNT_COST,
+        self::IMAGE_REFERENCE_INPUT_COUNT,
+        self::IMAGE_REFERENCE_INPUT_COUNT_COST,
     ];
 
     private const array OLD_IMAGE_OBJECTS = [
