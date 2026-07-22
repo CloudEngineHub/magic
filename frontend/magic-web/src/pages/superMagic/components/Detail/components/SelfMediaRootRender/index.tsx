@@ -199,7 +199,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		sharePost,
 		shareModals,
 	} = useSelfMediaPostShare({
-		attachmentList,
+		attachments,
 		selectedProject,
 		enabled: Boolean(allowEdit),
 	})
