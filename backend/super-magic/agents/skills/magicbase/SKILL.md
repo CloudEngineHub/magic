@@ -129,7 +129,7 @@ function canEdit(row) {
 
 MagicBase `dynamic_permissions` are the backend security boundary. Frontend filters, hidden buttons, and `canEdit()` checks are only product experience safeguards. They must not be treated as the only permission control when the user asks for private, owner-only, organization-shared, department-shared, read-only, or restricted-edit data.
 
-Before creating a table for a multi-user data app, split the permission intent into four questions and reflect the answer in the `plan` assumptions and `create_magicbase_table.dynamic_permissions`:
+Before creating a table for a multi-user data app, split the permission intent into four questions and reflect the answer in the `micro_app_plan` assumptions and `create_magicbase_table.dynamic_permissions`:
 
 1. Who can read rows?
 2. Who can insert rows?
@@ -149,7 +149,7 @@ Before promising a permission feature, classify it in the plan as one of:
 - `ui_only_not_secure`: The HTML app can hide buttons, disable fields, or filter lists, but users could bypass the UI and call MagicBase directly. This is product guidance only, not security.
 - `requires_backend`: The rule needs custom backend logic or an extension to the MagicBase permission model. Do not generate a front-end-only app while claiming the permission is secure.
 
-When the request contains `ui_only_not_secure` or `requires_backend` rules, tell the user before building or changing schema. If the user accepts a UI-only downgrade, state the downgrade explicitly in `plan.assumptions` and do not describe it as enforced permission.
+When the request contains `ui_only_not_secure` or `requires_backend` rules, tell the user before building or changing schema. If the user accepts a UI-only downgrade, state the downgrade explicitly in `micro_app_plan.assumptions` and do not describe it as enforced permission.
 
 MagicBase can enforce these common cases:
 

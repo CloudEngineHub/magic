@@ -1,4 +1,4 @@
-"""micro_app_plan 工具：向用户展示微应用开发计划并等待确认。"""
+"""micro_app_plan 工具实现：向用户展示微应用开发计划并等待确认。"""
 
 import json
 import time
@@ -151,8 +151,8 @@ Plan content must be concrete enough for the user to approve:
 - 明确 `app.json.anonymous` 的取值。涉及本人编辑、我的数据、创建人权限、用户/部门/组织隔离、团队协作时默认 `anonymous:false`；公开展示、匿名反馈、匿名表单类应用才可 `anonymous:true`。
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
 - State what will be built, the real files to create or change, and the useful data model needed by the approved product loop when persistence is needed.
-- 数据型微应用默认优先使用 MagicBase：问卷、表单、待办、CRUD、小后台、dashboard、tracker 或任何用户提交/编辑/统计/查询/导出的数据，都应在 plan 中包含 data_model；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。
-- 新建或修改微应用时，`files` 应包含 `app.json`、`magic.project.js`、入口 HTML，以及任务结束前会通过 `update_html_app_memory` 创建或更新的 `MICRO-APP.md`，但不要在用户确认 plan 前写入它。
+- 数据型微应用默认优先使用 MagicBase：问卷、表单、待办、CRUD、小后台、dashboard、tracker 或任何用户提交/编辑/统计/查询/导出的数据，都应在 micro_app_plan 中包含 data_model；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。
+- 新建或修改微应用时，`files` 应包含 `app.json`、`magic.project.js`、入口 HTML，以及任务结束前会通过 `update_html_app_memory` 创建或更新的 `MICRO-APP.md`，但不要在用户确认 micro_app_plan 前写入它。
 - Do not list fake pages, speculative features, or files that will not actually be produced.
 - Keep requirements and acceptance criteria short, concrete, and verifiable.
 - Pass list fields as JSON arrays, not Markdown or YAML strings. `files` must be an array of objects with `path` and `purpose`. `data_model` must be an array of objects with `table_name`, `purpose`, and `fields`.
