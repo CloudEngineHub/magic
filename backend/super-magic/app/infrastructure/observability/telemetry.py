@@ -3,8 +3,9 @@ OpenTelemetry telemetry initialization and configuration
 
 Provides non-intrusive telemetry setup with automatic instrumentation
 """
-import os
+import json
 import logging
+import os
 import random
 import time
 from typing import Optional
@@ -21,6 +22,9 @@ from agentlang.utils.metadata import MetadataUtil
 
 from .constants import (
     LangfuseEndpoints,
+    LangfuseAttributes,
+    OpenTelemetryAttributes,
+    ObservationType,
     DefaultConfig,
 )
 
@@ -62,6 +66,47 @@ _tracer_provider: Optional[TracerProvider] = None
 _meter_provider: Optional[MeterProvider] = None
 _initialized = False
 _OTEL_EXPORT_WARNING_INTERVAL_SECONDS = 60
+_NON_ERROR_IO_PREVIEW_LENGTH = 1200
+_NOISE_PATHS = frozenset({
+    "/api/health",
+    "/api/v1/workspace/status",
+})
+
+
+def _span_request_path(span, attributes: dict, name: str) -> str:
+    """Resolve the request path across old and new HTTP semantic conventions."""
+    for key in ("http.route", "url.path", "http.target"):
+        value = attributes.get(key)
+        if value:
+            return str(value).split("?", 1)[0]
+
+    for key in ("url.full", "http.url"):
+        value = attributes.get(key)
+        if value:
+            from urllib.parse import urlparse
+
+            return urlparse(str(value)).path
+
+    return name.split(" ", 1)[1].split("?", 1)[0] if " " in name else ""
+
+
+def _shorten_non_error_io(attributes: dict) -> None:
+    """Keep successful trace/observation payloads useful without exporting full bodies."""
+    io_keys = (
+        LangfuseAttributes.OBSERVATION_INPUT,
+        LangfuseAttributes.OBSERVATION_OUTPUT,
+        LangfuseAttributes.TRACE_INPUT,
+        LangfuseAttributes.TRACE_OUTPUT,
+        OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES,
+        OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES,
+        OpenTelemetryAttributes.GEN_AI_PROMPT,
+        OpenTelemetryAttributes.GEN_AI_COMPLETION,
+    )
+    for key in io_keys:
+        value = attributes.get(key)
+        if not isinstance(value, str) or len(value) <= _NON_ERROR_IO_PREVIEW_LENGTH:
+            continue
+        attributes[key] = value[:_NON_ERROR_IO_PREVIEW_LENGTH] + "...<truncated>"
 
 
 class _SafeSpanExporter(SpanExporter):
@@ -159,6 +204,105 @@ class _ErrorFirstSamplingProcessor(SpanProcessor):
         self._inner.on_start(span, parent_context)
 
     def on_end(self, span):
+        attributes = span.attributes or {}
+        name = span.name or ""
+        request_path = _span_request_path(span, attributes, name)
+        mutable_attributes = getattr(span, "_attributes", None)
+
+        if mutable_attributes is not None and name:
+            mutable_attributes.setdefault(LangfuseAttributes.NAME, name)
+            mutable_attributes.setdefault(LangfuseAttributes.OBSERVATION_NAME, name)
+
+            trace_input = mutable_attributes.get(LangfuseAttributes.TRACE_INPUT)
+            if (
+                mutable_attributes.get(LangfuseAttributes.OBSERVATION_INPUT) in (None, "", "null")
+                and trace_input not in (None, "", "null")
+            ):
+                mutable_attributes.setdefault(LangfuseAttributes.OBSERVATION_INPUT, trace_input)
+                mutable_attributes.setdefault(OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES, trace_input)
+                mutable_attributes.setdefault(OpenTelemetryAttributes.GEN_AI_PROMPT, trace_input)
+
+            trace_output = mutable_attributes.get(LangfuseAttributes.TRACE_OUTPUT)
+            output_fallback = trace_output
+            if output_fallback in (None, "", "null"):
+                output_fallback = mutable_attributes.get("message")
+            if (
+                mutable_attributes.get(LangfuseAttributes.OBSERVATION_OUTPUT) in (None, "", "null")
+                and output_fallback not in (None, "", "null")
+            ):
+                mutable_attributes.setdefault(LangfuseAttributes.OBSERVATION_OUTPUT, output_fallback)
+                mutable_attributes.setdefault(OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES, output_fallback)
+                mutable_attributes.setdefault(OpenTelemetryAttributes.GEN_AI_COMPLETION, output_fallback)
+            attributes = span.attributes or {}
+
+        if name.startswith("openai.chat") and mutable_attributes is not None:
+            native_input = attributes.get(OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES)
+            native_output = attributes.get(OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES)
+            if not native_input:
+                native_input = {
+                    key: value
+                    for key, value in attributes.items()
+                    if key.startswith("gen_ai.prompt.")
+                } or None
+            if not native_output:
+                native_output = {
+                    key: value
+                    for key, value in attributes.items()
+                    if key.startswith("gen_ai.completion.")
+                } or None
+
+            if native_input is not None or native_output is not None:
+                mutable_attributes.setdefault(
+                    LangfuseAttributes.OBSERVATION_TYPE,
+                    ObservationType.GENERATION.value,
+                )
+                mutable_attributes.setdefault(
+                    OpenTelemetryAttributes.OBSERVATION_TYPE,
+                    ObservationType.GENERATION.value,
+                )
+
+            for attribute_key, value in (
+                (LangfuseAttributes.OBSERVATION_INPUT, native_input),
+                (LangfuseAttributes.OBSERVATION_OUTPUT, native_output),
+            ):
+                if value is None:
+                    continue
+                text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+                bounded = text[:4000] + ("...<truncated>" if len(text) > 4000 else "")
+                mutable_attributes[attribute_key] = bounded
+                if attribute_key == LangfuseAttributes.OBSERVATION_INPUT:
+                    mutable_attributes[OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES] = bounded
+                    mutable_attributes[OpenTelemetryAttributes.GEN_AI_PROMPT] = bounded
+                else:
+                    mutable_attributes[OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES] = bounded
+                    mutable_attributes[OpenTelemetryAttributes.GEN_AI_COMPLETION] = bounded
+            attributes = span.attributes or {}
+
+        if request_path in _NOISE_PATHS or name == "AgentDispatcher.setup":
+            return
+        if name.endswith(" http send") or name.endswith(" http receive"):
+            return
+        if "asgi.event.type" in attributes:
+            return
+
+        is_error = (
+            bool(span.status and span.status.status_code == StatusCode.ERROR)
+            or bool(span.events and any(event.name == "exception" for event in span.events))
+        )
+        if not is_error:
+            _shorten_non_error_io(mutable_attributes if mutable_attributes is not None else attributes)
+            attributes = span.attributes or {}
+
+        # OpenAI spans contain their final messages and usage at this point, including
+        # streaming responses, so cost enrichment must happen before export.
+        is_openai_span = name == "openai.chat"
+        try:
+            from .openai_integration import enrich_finished_openai_span
+
+            enrich_finished_openai_span(span)
+        except Exception:
+            logger.debug("Failed to enrich finished OpenAI span", exc_info=True)
+
         # Always export spans whose status was explicitly set to ERROR
         if span.status and span.status.status_code == StatusCode.ERROR:
             self._inner.on_end(span)
@@ -167,9 +311,52 @@ class _ErrorFirstSamplingProcessor(SpanProcessor):
         if span.events and any(e.name == "exception" for e in span.events):
             self._inner.on_end(span)
             return
-        # Probabilistically sample the remaining normal spans
-        if random.random() < self._sample_ratio:
+
+        observation_type = (
+            attributes.get(LangfuseAttributes.OBSERVATION_TYPE)
+            or attributes.get(OpenTelemetryAttributes.OBSERVATION_TYPE)
+        )
+        if name.startswith("openai.chat (") and observation_type == ObservationType.GENERATION.value:
+            return
+
+        has_observation_io = any(
+            attributes.get(key) not in (None, "", "null")
+            for key in (
+                LangfuseAttributes.OBSERVATION_INPUT,
+                LangfuseAttributes.OBSERVATION_OUTPUT,
+                OpenTelemetryAttributes.GEN_AI_INPUT_MESSAGES,
+                OpenTelemetryAttributes.GEN_AI_OUTPUT_MESSAGES,
+            )
+        )
+        if observation_type == ObservationType.GENERATION.value and not has_observation_io:
+            return
+
+        if is_openai_span:
             self._inner.on_end(span)
+            return
+
+        # Consistent per-trace sampling: derive the keep/drop decision from the trace_id
+        # so that a trace's root span and all of its child spans share the same decision.
+        # This prevents the common failure where the root span (which carries the trace
+        # name and trace-level input/output) is dropped while a child span survives,
+        # leaving the trace with an empty Name in Langfuse.
+        if self._should_sample_trace(span):
+            self._inner.on_end(span)
+
+    def _should_sample_trace(self, span) -> bool:
+        """Return True if this span's trace should be exported (deterministic per trace_id)."""
+        if self._sample_ratio >= 1.0:
+            return True
+        if self._sample_ratio <= 0.0:
+            return False
+        try:
+            trace_id = span.get_span_context().trace_id
+        except Exception:
+            # Fall back to independent random sampling if trace_id is unavailable
+            return random.random() < self._sample_ratio
+        # Map the low bits of trace_id to [0, 1) deterministically.
+        bucket = (trace_id % 10000) / 10000.0
+        return bucket < self._sample_ratio
 
     def shutdown(self, timeout_millis: int = 30000) -> bool:
         # BatchSpanProcessor.shutdown() takes no args; forward timeout only when supported.
@@ -212,6 +399,13 @@ def get_otlp_headers() -> dict:
         Dictionary of headers
     """
     headers = {}
+
+    # Langfuse v4-compatible collectors require this header to enable their
+    # real-time observation mapping, including Input/Output columns.
+    headers["x-langfuse-ingestion-version"] = os.getenv(
+        "LANGFUSE_INGESTION_VERSION",
+        "4",
+    )
 
     # Parse OTEL_EXPORTER_OTLP_HEADERS (format: key1=value1,key2=value2)
     otlp_headers = os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")
@@ -326,15 +520,6 @@ def setup_telemetry(
     _tracer_provider.add_span_processor(_ErrorFirstSamplingProcessor(batch_processor, sample_ratio))
     logger.info(f"[OpenTelemetry] Sampling: errors=100%, normal={sample_ratio * 100:.0f}% (OTEL_SAMPLING_RATIO={sample_ratio})")
     trace.set_tracer_provider(_tracer_provider)
-
-    # Install non-invasive LLM cost tracking (best-effort)
-    try:
-        from .llm_cost_tracking import install_llm_cost_tracking
-
-        install_llm_cost_tracking()
-    except Exception as e:
-        # Never block telemetry setup, but log the error
-        logger.warning("[OpenTelemetry] Failed to install LLM cost tracking", exc_info=True)
 
     # Setup Metrics
     # Note: Langfuse only supports traces, not metrics. Detect and handle appropriately.

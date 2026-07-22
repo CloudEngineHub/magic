@@ -32,6 +32,7 @@ try:
         LogLevel,
         OpenTelemetryAttributes,
     )
+    from app.infrastructure.observability.span_utils import set_observation_io, set_span_name
 except ImportError:
     # If OpenTelemetry is not installed, set to None
     # is_telemetry_enabled() will handle the check
@@ -43,6 +44,7 @@ except ImportError:
     ToolStatus = None
     LogLevel = None
     OpenTelemetryAttributes = None
+    set_observation_io = lambda *a, **k: None
 
 # 定义参数类型变量
 T = TypeVar('T', bound=BaseToolParams)
@@ -298,7 +300,9 @@ class BaseTool(Generic[T], ABC):
 
             tracer = get_tracer(__name__)
             tool_name = self.get_effective_name()
-            span = tracer.start_span(f"tool.{tool_name}")
+            span_name = f"tool.{tool_name}"
+            span = tracer.start_span(span_name)
+            set_span_name(span, span_name)
 
             # Langfuse-specific: Mark as tool observation type
             span.set_attribute("observation.type", "tool")
@@ -324,6 +328,9 @@ class BaseTool(Generic[T], ABC):
             span._otel_tool_class = self.__class__.__name__
             span._otel_tool_module = self.__module__
             span._otel_pending_params = dict(kwargs) if kwargs else {}
+
+            # Fill the observation Input column with the tool parameters (Langfuse).
+            set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
 
             return span
         except Exception as e:
@@ -357,6 +364,22 @@ class BaseTool(Generic[T], ABC):
             if OpenTelemetryAttributes:
                 span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME, execution_time)
                 span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME_MS, int(execution_time * 1000))
+
+            # Fill the observation Output column with the tool result (Langfuse).
+            # Capture for both success and failure so the Output column is never empty.
+            try:
+                if error is not None:
+                    output_value = {"error": str(error)}
+                elif result is not None:
+                    output_value = getattr(result, "content", None)
+                    if output_value is None:
+                        output_value = str(result)
+                else:
+                    output_value = None
+                if output_value is not None:
+                    set_observation_io(span, output_value=output_value)
+            except Exception:
+                pass
 
             if is_error:
                 # Attach full diagnostic context so errors are self-contained

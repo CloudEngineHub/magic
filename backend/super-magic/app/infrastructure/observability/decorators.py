@@ -13,7 +13,7 @@ import time
 from typing import Callable, Any, Optional, Dict
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
-from .span_utils import enrich_span_with_user_context
+from .span_utils import enrich_span_with_user_context, set_observation_io
 from .constants import (
     ObservationType,
     ToolStatus,
@@ -22,6 +22,16 @@ from .constants import (
     LangfuseSpanMetadata,
     OpenTelemetryAttributes,
 )
+
+
+def _build_io_input(args: tuple, kwargs: dict) -> Optional[dict]:
+    """Build a Langfuse observation input payload from call args/kwargs."""
+    payload = {}
+    if args:
+        payload["args"] = list(args)
+    if kwargs:
+        payload["kwargs"] = dict(kwargs)
+    return payload or None
 
 
 def traced(
@@ -67,9 +77,13 @@ def traced(
                     span.set_attribute("function.name", func.__name__)
                     span.set_attribute("function.module", func.__module__)
 
+                    # Fill the observation Input column
+                    set_observation_io(span, input_value=_build_io_input(args, kwargs))
+
                     try:
                         result = await func(*args, **kwargs)
                         span.set_status(Status(StatusCode.OK))
+                        set_observation_io(span, output_value=result)
                         return result
                     except Exception as e:
                         span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -94,9 +108,13 @@ def traced(
                     span.set_attribute("function.name", func.__name__)
                     span.set_attribute("function.module", func.__module__)
 
+                    # Fill the observation Input column
+                    set_observation_io(span, input_value=_build_io_input(args, kwargs))
+
                     try:
                         result = func(*args, **kwargs)
                         span.set_status(Status(StatusCode.OK))
+                        set_observation_io(span, output_value=result)
                         return result
                     except Exception as e:
                         span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -160,9 +178,13 @@ def traced_method(
                     span.set_attribute("method.class", self.__class__.__name__)
                     span.set_attribute("method.module", func.__module__)
 
+                    # Fill the observation Input column (self is excluded)
+                    set_observation_io(span, input_value=_build_io_input(args, kwargs))
+
                     try:
                         result = await func(self, *args, **kwargs)
                         span.set_status(Status(StatusCode.OK))
+                        set_observation_io(span, output_value=result)
                         return result
                     except Exception as e:
                         span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -196,9 +218,13 @@ def traced_method(
                     span.set_attribute("method.class", self.__class__.__name__)
                     span.set_attribute("method.module", func.__module__)
 
+                    # Fill the observation Input column (self is excluded)
+                    set_observation_io(span, input_value=_build_io_input(args, kwargs))
+
                     try:
                         result = func(self, *args, **kwargs)
                         span.set_status(Status(StatusCode.OK))
+                        set_observation_io(span, output_value=result)
                         return result
                     except Exception as e:
                         span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -322,9 +348,17 @@ def trace_tool(
                             except Exception:
                                 pass
 
+                    # Fill the observation Input column with the tool parameters
+                    if include_params:
+                        set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
+
                     try:
                         result = await func(*args, **kwargs)
                         execution_time = time.time() - start_time
+
+                        # Fill the observation Output column with the tool result
+                        if include_result and result is not None:
+                            set_observation_io(span, output_value=getattr(result, "content", result))
 
                         # Set execution time
                         span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME, execution_time)
@@ -419,9 +453,17 @@ def trace_tool(
                             except Exception:
                                 pass
 
+                    # Fill the observation Input column with the tool parameters
+                    if include_params:
+                        set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
+
                     try:
                         result = func(*args, **kwargs)
                         execution_time = time.time() - start_time
+
+                        # Fill the observation Output column with the tool result
+                        if include_result and result is not None:
+                            set_observation_io(span, output_value=getattr(result, "content", result))
 
                         # Set execution time
                         span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME, execution_time)
