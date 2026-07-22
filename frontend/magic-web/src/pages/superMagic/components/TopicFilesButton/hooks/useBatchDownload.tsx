@@ -63,13 +63,6 @@ interface UseBatchDownloadOptions {
 	removeFile: (fileId: string) => void
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
-	// 批量导出进度回调
-	onBatchPdfExportStart?: () => void
-	onBatchPdfExportProgress?: (progress: number) => void
-	onBatchPdfExportEnd?: () => void
-	onBatchPptExportStart?: () => void
-	onBatchPptExportProgress?: (progress: number) => void
-	onBatchPptExportEnd?: () => void
 	allowEdit?: boolean
 	allowDownload?: boolean
 	// 新增：批量分享回调
@@ -100,12 +93,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		removeFile,
 		getParentPathByFileId,
 		isMoving = false,
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		allowEdit,
 		allowDownload,
 		onBatchShareClick,
@@ -120,31 +107,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const { isShareRoute, isFileShare } = useShareRoute()
 	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
 	const canDownload = allowDownload !== false
-
-	// 批量导出进度控制辅助函数
-	const handleBatchExportStart = (convertType: "pdf" | "ppt") => {
-		if (convertType === "pdf") {
-			onBatchPdfExportStart?.()
-		} else {
-			onBatchPptExportStart?.()
-		}
-	}
-
-	const handleBatchExportProgress = (convertType: "pdf" | "ppt", progress: number) => {
-		if (convertType === "pdf") {
-			onBatchPdfExportProgress?.(progress)
-		} else {
-			onBatchPptExportProgress?.(progress)
-		}
-	}
-
-	const handleBatchExportEnd = (convertType: "pdf" | "ppt") => {
-		if (convertType === "pdf") {
-			onBatchPdfExportEnd?.()
-		} else {
-			onBatchPptExportEnd?.()
-		}
-	}
 
 	// 退出多选模式的辅助函数
 	const exitSelectMode = () => {
@@ -430,7 +392,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 
 		setBatchLoading(true)
-		handleBatchExportStart(convertType)
 		const toastId = createRandomUuidV4()
 		magicToast.loading({
 			key: toastId,
@@ -447,7 +408,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				targets,
 				attachments: sourceItems,
 				projectName: selectedProject?.project_name,
-				onProgress: (progress) => handleBatchExportProgress(convertType, progress),
 			})
 
 			if (result.cancelled) {
@@ -505,7 +465,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 			})
 		} finally {
 			setBatchLoading(false)
-			handleBatchExportEnd(convertType)
 		}
 	}
 
