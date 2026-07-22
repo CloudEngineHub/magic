@@ -30,7 +30,7 @@ const LogoUploadItemComponent = ({
 
 	const { styles, cx } = useStyles({ siderCollapsed })
 
-	const { t } = useTranslation("interface")
+	const { t: tCommon } = useTranslation("admin/common")
 	const { t: tPlatform } = useTranslation("admin/platform/info")
 
 	const { uploading, uploadAndGetFileUrl } = useUpload<Upload.FileData>({
@@ -58,7 +58,7 @@ const LogoUploadItemComponent = ({
 			setImageUploadUrl((prev) => ({ ...prev, [logoType]: url }))
 			setImageUploadKey?.((prev) => ({ ...prev, [logoType]: path }))
 		} else {
-			message.error(t("file.uploadFail", { ns: "message" }))
+			message.error(tCommon("file.uploadFail"))
 		}
 	})
 
