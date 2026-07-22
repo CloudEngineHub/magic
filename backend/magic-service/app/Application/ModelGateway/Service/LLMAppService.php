@@ -375,6 +375,7 @@ class LLMAppService extends AbstractLLMAppService
 
         $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
         $auditCount = (int) ($data['generate_num'] ?? 4);
+        $referenceImageCount = count($imageGenerateRequest->getReferImages());
         if (in_array($modelVersion, ImageGenerateModelType::getMidjourneyModes(), true)) {
             $auditCount = 1;
         }
@@ -386,6 +387,7 @@ class LLMAppService extends AbstractLLMAppService
             'provider_model_id' => $providerConfigItem->getProviderModelId(),
             'image_count' => $auditCount,
             'image_size' => $imageGenerateRequest->getSize(),
+            'reference_image_count' => $referenceImageCount,
             'response_duration' => $latencyMs,
             'operation_time' => (int) round($startTime * 1000),
             'organization_id' => $authorization->getOrganizationCode(),
@@ -418,6 +420,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setSourceId($data['source_id'] ?? '');
         $imageGeneratedEvent->setResolution($imageGenerateRequest->getResolution());
         $imageGeneratedEvent->setImageSize($imageGenerateRequest->getSize());
+        $imageGeneratedEvent->setReferenceImageCount($referenceImageCount);
         $imageGeneratedEvent->setProviderModelId($providerConfigItem->getProviderModelId());
         $imageGeneratedEvent->setBusinessParams($imageGenerateAuditBusinessParams);
 
