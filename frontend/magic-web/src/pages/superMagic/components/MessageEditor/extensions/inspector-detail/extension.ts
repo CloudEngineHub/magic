@@ -48,6 +48,36 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 				parseHTML: (el) => el.getAttribute("data-text-content") ?? "",
 				renderHTML: (attrs) => ({ "data-text-content": attrs.textContent }),
 			},
+			elementAttributes: {
+				default: "{}",
+				parseHTML: (el) => el.getAttribute("data-element-attributes") ?? "{}",
+				renderHTML: (attrs) => ({ "data-element-attributes": attrs.elementAttributes }),
+			},
+			resource: {
+				default: "",
+				parseHTML: (el) => el.getAttribute("data-resource") ?? "",
+				renderHTML: (attrs) => ({ "data-resource": attrs.resource }),
+			},
+			domContext: {
+				default: "{}",
+				parseHTML: (el) => el.getAttribute("data-dom-context") ?? "{}",
+				renderHTML: (attrs) => ({ "data-dom-context": attrs.domContext }),
+			},
+			elementHtml: {
+				default: "",
+				parseHTML: (el) => el.getAttribute("data-element-html") ?? "",
+				renderHTML: (attrs) => ({ "data-element-html": attrs.elementHtml }),
+			},
+			selectorMatchCount: {
+				default: -1,
+				parseHTML: (el) => {
+					const value = el.getAttribute("data-selector-match-count")
+					return value === null ? -1 : Number(value)
+				},
+				renderHTML: (attrs) => ({
+					"data-selector-match-count": String(attrs.selectorMatchCount),
+				}),
+			},
 			fileMention: {
 				default: null,
 				parseHTML: (el) => {
@@ -99,6 +129,15 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 		}
 
 		if (attrs.textContent) lines.push(`textContent: "${attrs.textContent}"`)
+		if (attrs.resource) lines.push(`resource: ${attrs.resource}`)
+		if (attrs.elementAttributes && attrs.elementAttributes !== "{}") {
+			lines.push(`elementAttributes: ${attrs.elementAttributes}`)
+		}
+		if (attrs.domContext && attrs.domContext !== "{}")
+			lines.push(`domContext: ${attrs.domContext}`)
+		if (attrs.elementHtml) lines.push(`elementHtml: ${attrs.elementHtml}`)
+		if (attrs.selectorMatchCount >= 0)
+			lines.push(`selectorMatchCount: ${attrs.selectorMatchCount}`)
 
 		return lines.length > 0 ? `${lines.join("\n")}\n` : ""
 	},

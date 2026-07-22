@@ -8,7 +8,7 @@
  * The script is self-contained — no external dependencies.
  */
 
-const INSPECTOR_HANDLER_SCRIPT = `
+export const INSPECTOR_HANDLER_SCRIPT = `
 (function() {
   if (window.__MAGIC_INSPECTOR_HANDLER__) return;
   window.__MAGIC_INSPECTOR_HANDLER__ = true;
@@ -44,6 +44,100 @@ const INSPECTOR_HANDLER_SCRIPT = `
     "opacity","borderRadius","overflow","zIndex","flexDirection",
     "justifyContent","alignItems"
   ];
+  var MAX_RESOURCE_LENGTH = 240;
+  var MAX_HTML_LENGTH = 800;
+  var RESOURCE_ATTRIBUTES = ["src", "href", "poster", "srcset", "data-src", "data-href", "data-url", "data-original"];
+  var SENSITIVE_ATTRIBUTE_PATTERN = /(authorization|credential|api[-_]?key|token|secret|signature)/i;
+  var VOID_TAGS = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
+
+  function normalizeResource(value) {
+    if (!value) return "";
+    var raw = String(value).trim();
+    if (raw.indexOf("data:") === 0) return raw.slice(0, MAX_RESOURCE_LENGTH);
+    var withoutQuery = raw.split(/[?#]/, 1)[0];
+    if (!/^[a-z][a-z\\d+.-]*:/i.test(withoutQuery) && withoutQuery.indexOf("//") !== 0) {
+      return withoutQuery.slice(0, MAX_RESOURCE_LENGTH);
+    }
+    try {
+      var url = new URL(raw, window.location.href);
+      url.search = "";
+      url.hash = "";
+      return url.href.slice(0, MAX_RESOURCE_LENGTH);
+    } catch (ex) {
+      return withoutQuery.slice(0, MAX_RESOURCE_LENGTH);
+    }
+  }
+
+  function getElementResource(element) {
+    if (!element) return "";
+    if (element.tagName.toLowerCase() === "img") return normalizeResource(element.getAttribute("src") || element.currentSrc);
+    return normalizeResource(element.getAttribute("src") || element.getAttribute("href") || element.getAttribute("poster"));
+  }
+
+  function isResourceAttribute(name) {
+    return RESOURCE_ATTRIBUTES.indexOf(name) !== -1;
+  }
+
+  function normalizeAttributeValue(name, value) {
+    if (name === "srcset") {
+      return value.split(",").map(function(item) {
+        var parts = item.trim().split(/\\s+/);
+        return [normalizeResource(parts.shift()), parts.join(" ")].filter(Boolean).join(" ");
+      }).join(", ");
+    }
+    return isResourceAttribute(name) ? normalizeResource(value) : value;
+  }
+
+  function isSensitiveAttribute(name) {
+    return SENSITIVE_ATTRIBUTE_PATTERN.test(name);
+  }
+
+  function getElementLabel(element) {
+    if (!element) return "";
+    var tag = element.tagName.toLowerCase();
+    var id = element.id ? "#" + element.id : "";
+    var className = typeof element.className === "string"
+      ? element.className.trim().split(/\\s+/).filter(Boolean).slice(0, 2).map(function(c) { return "." + c; }).join("")
+      : "";
+    var resource = getElementResource(element);
+    var text = (element.textContent || "").trim().replace(/\\s+/g, " ").slice(0, 48);
+    return tag + id + className + (resource ? " resource=" + resource : "") + (text ? " text=" + text : "");
+  }
+
+  function sanitizeOuterHTML(element) {
+    var clone = element.cloneNode(false);
+    clone.removeAttribute("style");
+    Array.prototype.slice.call(clone.attributes).forEach(function(attribute) {
+      if (isSensitiveAttribute(attribute.name)) {
+        clone.removeAttribute(attribute.name);
+        return;
+      }
+      if (isResourceAttribute(attribute.name)) {
+        clone.setAttribute(attribute.name, normalizeAttributeValue(attribute.name, attribute.value));
+      }
+    });
+    if (VOID_TAGS.indexOf(element.tagName.toLowerCase()) === -1) {
+      clone.textContent = (element.textContent || "").trim().replace(/\\s+/g, " ").slice(0, 120);
+    }
+    return clone.outerHTML.slice(0, MAX_HTML_LENGTH);
+  }
+
+  function getDomContext(element) {
+    var parent = element.parentElement;
+    if (!parent) return { parentSelector: "", siblingIndex: 1, sameTagSiblingCount: 1, sameTagIndex: 1 };
+    var children = Array.prototype.slice.call(parent.children);
+    var sameTagSiblings = children.filter(function(child) {
+      return child.tagName.toLowerCase() === element.tagName.toLowerCase();
+    });
+    return {
+      parentSelector: getElementSelector(parent),
+      siblingIndex: children.indexOf(element) + 1,
+      sameTagSiblingCount: sameTagSiblings.length,
+      sameTagIndex: sameTagSiblings.indexOf(element) + 1,
+      previousSibling: element.previousElementSibling ? getElementLabel(element.previousElementSibling) : undefined,
+      nextSibling: element.nextElementSibling ? getElementLabel(element.nextElementSibling) : undefined
+    };
+  }
 
   function getElementSelector(element) {
     if (!element || element.nodeType !== 1) return "";
@@ -108,8 +202,9 @@ const INSPECTOR_HANDLER_SCRIPT = `
     var attrCount = 0;
     for (var i = 0; i < el.attributes.length && attrCount < 10; i++) {
       var attr = el.attributes[i];
-      if (skipAttrs.indexOf(attr.name) === -1) {
-        attributes[attr.name] = attr.value.length > 100 ? attr.value.slice(0,100) + "…" : attr.value;
+      if (skipAttrs.indexOf(attr.name) === -1 && !isSensitiveAttribute(attr.name)) {
+        var attrValue = normalizeAttributeValue(attr.name, attr.value);
+        attributes[attr.name] = attrValue.length > 160 ? attrValue.slice(0,160) + "…" : attrValue;
         attrCount++;
       }
     }
@@ -122,8 +217,11 @@ const INSPECTOR_HANDLER_SCRIPT = `
       classList = el.className.trim().split(/\\s+/).filter(Boolean);
     }
 
+    var selector = getElementSelector(el);
+    var selectorMatchCount = 0;
+    try { selectorMatchCount = document.querySelectorAll(selector).length; } catch (ex) {}
     return {
-      selector: getElementSelector(el),
+      selector: selector,
       tagName: el.tagName.toLowerCase(),
       id: el.id || "",
       classList: classList,
@@ -139,6 +237,10 @@ const INSPECTOR_HANDLER_SCRIPT = `
       computedStyles: computedStyles,
       attributes: attributes,
       textContent: textContent,
+      resource: getElementResource(el),
+      domContext: getDomContext(el),
+      elementHtml: sanitizeOuterHTML(el),
+      selectorMatchCount: selectorMatchCount,
       accessibleName: el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || undefined
     };
   }
@@ -210,6 +312,10 @@ const INSPECTOR_HANDLER_SCRIPT = `
 })();
 `
 
+type InspectorContentWindow = Window & {
+	__MAGIC_INSPECTOR_HANDLER__?: boolean
+}
+
 /**
  * Injects the inspector handler script into an iframe's document.
  * The iframe must have same-origin access (sandbox="allow-same-origin allow-scripts").
@@ -217,38 +323,39 @@ const INSPECTOR_HANDLER_SCRIPT = `
  * Returns a cleanup function that removes the script and deactivates the handler.
  */
 export function injectInspectorHandler(iframe: HTMLIFrameElement): (() => void) | null {
-  const doc = iframe.contentDocument
-  if (!doc) return null
+	const doc = iframe.contentDocument
+	if (!doc) return null
 
-  // Avoid double-injection
-  if ((iframe.contentWindow as any)?.__MAGIC_INSPECTOR_HANDLER__) {
-    return () => {
-      iframe.contentWindow?.postMessage(
-        { type: "MAGIC_INSPECTOR_STOP", timestamp: Date.now() },
-        "*",
-      )
-    }
-  }
+	// Avoid double-injection
+	if ((iframe.contentWindow as InspectorContentWindow | null)?.__MAGIC_INSPECTOR_HANDLER__) {
+		return () => {
+			iframe.contentWindow?.postMessage(
+				{ type: "MAGIC_INSPECTOR_STOP", timestamp: Date.now() },
+				"*",
+			)
+		}
+	}
 
-  const script = doc.createElement("script")
-  script.setAttribute("data-injected", "true")
-  script.textContent = INSPECTOR_HANDLER_SCRIPT
-  doc.body.appendChild(script)
+	const script = doc.createElement("script")
+	script.setAttribute("data-injected", "true")
+	script.textContent = INSPECTOR_HANDLER_SCRIPT
+	doc.body.appendChild(script)
 
-  return () => {
-    iframe.contentWindow?.postMessage(
-      { type: "MAGIC_INSPECTOR_STOP", timestamp: Date.now() },
-      "*",
-    )
-    try {
-      script.remove()
-    } catch {
-      // iframe may already be detached
-    }
-    try {
-      ; (iframe.contentWindow as any).__MAGIC_INSPECTOR_HANDLER__ = false
-    } catch {
-      // cross-origin or detached
-    }
-  }
+	return () => {
+		iframe.contentWindow?.postMessage(
+			{ type: "MAGIC_INSPECTOR_STOP", timestamp: Date.now() },
+			"*",
+		)
+		try {
+			script.remove()
+		} catch {
+			// iframe may already be detached
+		}
+		try {
+			const contentWindow = iframe.contentWindow as InspectorContentWindow | null
+			if (contentWindow) contentWindow.__MAGIC_INSPECTOR_HANDLER__ = false
+		} catch {
+			// cross-origin or detached
+		}
+	}
 }
