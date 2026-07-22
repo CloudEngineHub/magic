@@ -89,7 +89,6 @@ import { useOrganization } from "@/models/user/hooks/useOrganization"
 import MagicProgressToast from "@/components/base/MagicProgressToast"
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { handleAttachmentDragEnd } from "../MessageEditor/utils/drag"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
@@ -109,6 +108,10 @@ import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
+import {
+	shouldEnableTopicFileSelection,
+	shouldShowMobileBatchActions,
+} from "./utils/batch-selection"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -153,6 +156,8 @@ interface TopicFilesCoreProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// Allow a read-only host such as a public share to expose batch selection without login.
+	allowReadonlySelection?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	// 刷新加载状态
 	refreshLoading?: boolean
@@ -205,6 +210,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		allowDownload,
+		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
 	},
@@ -218,8 +224,14 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
-	const hasLogin = userStore.user?.userInfo?.user_id
-	const selectionEnabled = Boolean(isSelectMode || (!allowEdit && hasLogin && allowDownload))
+	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
+	const selectionEnabled = shouldEnableTopicFileSelection({
+		isSelectMode,
+		allowEdit,
+		allowDownload,
+		hasLogin,
+		allowReadonlySelection,
+	})
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
@@ -303,10 +315,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		pdfExportProgress,
 		isExportingPpt,
 		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
 		createFileAndUpload,
 		createFolderAndUpload,
 		createDesignProject,
@@ -1847,6 +1855,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onBatchPptExportProgress,
 		onBatchPptExportEnd,
 		allowEdit,
+		allowDownload,
 		downloadProgress,
 		// 批量分享回调
 		onBatchShareClick: async (fileIds: string[]) => {
@@ -1875,6 +1884,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			}
 		},
 		isInProject,
+	})
+	const showMobileBatchActions = shouldShowMobileBatchActions({
+		isMobile,
+		isSelectMode,
+		hasSelection: showBatchDownload,
+	})
+	const handleCancelMobileBatchSelection = useMemoizedFn(() => {
+		resetSelection()
+		onSelectModeChange?.(false)
 	})
 
 	// 配置右键菜单 - 根据选中状态和语言动态调整宽度
@@ -2032,17 +2050,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							</MagicDropdown>
 						</Flex>
 					)}
-					{isMobile && isSelectMode && (
+					{showMobileBatchActions && (
 						<Button
 							variant="secondary"
 							className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
 							data-testid="mobile-cancel-select-button"
-							onClick={() => pubsub.publish(PubSubEvents.Cancel_File_Selection)}
+							onClick={handleCancelMobileBatchSelection}
 						>
 							{t("topicFiles.cancelSelect")}
 						</Button>
 					)}
-					{isMobile && isSelectMode && (
+					{showMobileBatchActions && (
 						<MagicDropdown
 							menu={{ items: batchMenuItems }}
 							placement="topLeft"
@@ -2284,34 +2302,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						visible={isExportingPpt}
 						progress={pptExportProgress}
 						text={t("topicFiles.exportingPpt")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPdf}
-						progress={batchPdfExportProgress}
-						text={t("topicFiles.batchExportingPdf")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPpt}
-						progress={batchPptExportProgress}
-						text={t("topicFiles.batchExportingPpt")}
 						position="top"
 						width={280}
 						showPercentage={true}

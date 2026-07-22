@@ -1,5 +1,6 @@
 import { log, LogLevel } from "../logger"
 import type { PackagePresentationInput } from "../ir/serialize"
+import type { GeneratedPPTX, ResourceLoadError } from "../api/options"
 import { drawByRegistry } from "../registry/drawer-registry"
 import { throwIfAborted } from "../sandbox/abort"
 import { createPresentation, ensureFileName } from "./pptx-document"
@@ -10,9 +11,14 @@ export async function packagePresentationInWorker({
 	slides,
 	slideBackgrounds,
 	signal,
+	onResourceError,
+	download = true,
 }: PackagePresentationInput & {
 	signal: AbortSignal
-}): Promise<void> {
+	onResourceError?: (error: ResourceLoadError) => void
+	download?: boolean
+}): Promise<GeneratedPPTX | void> {
+	void onResourceError
 	const pres = createPresentation(config)
 
 	for (let index = 0; index < slides.length; index++) {
@@ -30,5 +36,18 @@ export async function packagePresentationInWorker({
 		slideCount: slides.length,
 	})
 	throwIfAborted(signal)
-	await pres.writeFile({ fileName: ensureFileName(fileName) })
+	const outputFileName = ensureFileName(fileName)
+	if (download) {
+		await pres.writeFile({ fileName: outputFileName })
+		return
+	}
+
+	const output = await pres.write({ outputType: "blob" })
+	throwIfAborted(signal)
+	// pptxgenjs reports generated PPTX blobs as application/zip. Re-wrap the payload so
+	// callers of generatePPTX receive the same MIME type in OSS and enterprise builds.
+	const data = new Blob([output as BlobPart], {
+		type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	})
+	return { data, fileName: outputFileName }
 }

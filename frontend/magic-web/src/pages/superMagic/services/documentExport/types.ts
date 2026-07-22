@@ -2,6 +2,31 @@ import type { TFunction } from "i18next"
 import type { FontResolver } from "@magic/html2pptx"
 
 export namespace DocumentExport {
+	export type PdfPagePreset = "A3" | "A4" | "A5" | "B4" | "B5"
+	export type PdfPageUnit = "mm" | "cm" | "in" | "pt"
+	export type PdfPageOrientation = "portrait" | "landscape"
+
+	export interface PdfCustomPageSize {
+		width: number
+		height: number
+		unit: PdfPageUnit
+	}
+
+	export interface PdfPageConfig {
+		size?: "auto" | PdfPagePreset | PdfCustomPageSize
+		orientation?: PdfPageOrientation
+	}
+
+	export interface GeneratedPdf {
+		data: Uint8Array
+		fileName: string
+	}
+
+	export interface GeneratePdfHandle {
+		promise: Promise<GeneratedPdf>
+		cancel: () => void
+	}
+
 	export interface Handle {
 		promise: Promise<unknown>
 		cancel?: () => void
@@ -35,8 +60,14 @@ export namespace DocumentExport {
 		fileName?: string
 		skipFailedPages?: boolean
 		pptMode?: boolean
+		page?: PdfPageConfig
 		vector?: {
+			renderWidth?: number
+			adaptiveRenderWidth?: boolean
+			minRenderWidth?: number
+			maxRenderWidth?: number
 			fitContentWidth?: boolean
+			adaptivePageHeight?: boolean
 			[key: string]: unknown
 		}
 		onResourceLoadError?: (error: ResourceLoadError) => void
@@ -53,6 +84,7 @@ export namespace DocumentExport {
 		processedContent?: string
 		fileId?: string
 		fileName?: string
+		page?: PdfPageConfig
 		selectedProject?: unknown
 		relativeFilePath?: string
 		attachments?: unknown[]
@@ -62,7 +94,14 @@ export namespace DocumentExport {
 		onProgress?: (context: CaptureProgressContext) => void
 	}
 
+	export interface PdfExportSettingsOptions {
+		previewElement?: HTMLElement
+	}
+
 	export interface Runtime {
+		requestPdfExportSettings: (
+			options?: PdfExportSettingsOptions,
+		) => Promise<PdfPageConfig | null>
 		createResourceErrorCollector: (
 			t: TFunction | ((key: string, options?: Record<string, unknown>) => string),
 		) => ResourceErrorCollector
@@ -71,6 +110,12 @@ export namespace DocumentExport {
 		exportMarkdown: (options: MarkdownOptions) => Handle
 		exportMarkdownFile: (options: MarkdownOptions) => Handle
 		exportMarkdownRaster: (options: MarkdownOptions) => Handle
+		/** Optional artifact APIs used by isolated client-side batch export flows. */
+		generatePages?: (
+			content: string | string[],
+			options?: PageExportOptions,
+		) => GeneratePdfHandle
+		generateMarkdownFile?: (options: MarkdownOptions) => GeneratePdfHandle
 		getPptFontResolver?: () => FontResolver | undefined
 	}
 }
