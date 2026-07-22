@@ -5,9 +5,11 @@ export type AskUserDraftAnswerValue = string | readonly string[]
 export type AskUserDraftAnswers = Record<string, AskUserDraftAnswerValue>
 
 const ASK_USER_DRAFT_CACHE_ROOT = "super_magic/ask_user_draft/v1"
+const ASK_USER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
 interface AskUserDraftCachePayload {
 	answers: AskUserDraftAnswers
+	expiresAt: number
 }
 
 function canUseLocalStorage() {
@@ -68,7 +70,7 @@ export function readAskUserDraftAnswers(cacheKey: string): AskUserDraftAnswers |
 
 		const payload = JSON.parse(raw) as Partial<AskUserDraftCachePayload>
 		const answers = normalizeAnswers(payload?.answers)
-		if (!answers) {
+		if (!answers || typeof payload.expiresAt !== "number" || payload.expiresAt <= Date.now()) {
 			clearAskUserDraftAnswers(cacheKey)
 			return null
 		}
@@ -93,6 +95,7 @@ export function writeAskUserDraftAnswers(cacheKey: string, answers: AskUserDraft
 	try {
 		const payload: AskUserDraftCachePayload = {
 			answers: normalizedAnswers,
+			expiresAt: Date.now() + ASK_USER_DRAFT_TTL_MS,
 		}
 		window.localStorage.setItem(cacheKey, JSON.stringify(payload))
 	} catch (error) {
