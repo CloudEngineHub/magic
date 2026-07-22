@@ -121,7 +121,7 @@ class WorkspaceAppService extends AbstractAppService
 
         // Only auto-create when the user truly has no workspace (total === 0),
         // not just when the current page happens to be empty (e.g. page beyond range).
-        if (empty($result['list']) && ($result['total'] ?? 0) === 0 && $requestDTO->getAutoCreate()) {
+        if (empty($result['list']) && ($result['total'] ?? 0) === 0 && $requestDTO->getAutoCreate() && ! $requestDTO->hasWorkspaceNameSearch()) {
             // Auto-create workspace with the requested type (use default if not specified)
             $workspaceType = $requestDTO->workspaceType ?: WorkspaceType::Default->value;
             $workspaceEntity = $this->workspaceDomainService->createWorkspace(
