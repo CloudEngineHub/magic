@@ -108,6 +108,7 @@ import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
+import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
 import {
 	shouldEnableTopicFileSelection,
 	shouldShowMobileBatchActions,
@@ -941,6 +942,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const activeFile = activeFileId ? treeIndex.getItemById(activeFileId) : undefined
+	const { activeTreeSelectionKey, effectiveSelectedKeys } = useActiveTreeSelection({
+		activeFileId,
+		treeIndex,
+		expandedKeySet,
+		selectedKeys,
+	})
 	const isActiveFileIndexHtml =
 		activeFile?.file_name === "index.html" ||
 		activeFile?.filename === "index.html" ||
@@ -1032,7 +1039,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
-		const isActiveFile = activeFileId === item?.file_id
+		const isActiveFile = activeTreeSelectionKey === String(itemId)
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
 
@@ -1320,7 +1327,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
-						shouldHighlightFolder && styles.activeFileItemWrapper,
+						(shouldHighlightFolder || isActiveFile) && styles.activeFileItemWrapper,
+						isActiveFile && "bg-blue-500/10",
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
 					data-testid="folder-item"
@@ -1502,7 +1510,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									placement="right"
 									className={cx(
 										styles.ellipsis,
-										shouldHighlightFolder && styles.activeFileItem,
+										(shouldHighlightFolder || isActiveFile) &&
+											styles.activeFileItem,
 									)}
 									sideOffset={20}
 								>
@@ -1956,7 +1965,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							// }
 							onSelect={handleSelect}
 							expandedKeys={expandedKeys}
-							selectedKeys={selectedKeys}
+							selectedKeys={effectiveSelectedKeys}
 							titleRender={titleRender}
 							getRowRenderVersion={getRowRenderVersion}
 							rowRenderContextVersion={rowRenderContextVersion}
