@@ -428,10 +428,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 				}
 				if (messageType === "super_magic_message") {
-					if (rawNode?.role === "tool" && rawNode?.tool?.id)
+					if (rawNode?.role === "tool" && rawNode?.tool?.id) {
 						toolResponseMap.set(rawNode?.tool?.id, {
 							...rawNode?.tool,
 						})
+					}
 				}
 
 				this.messageMap.set(appMessageId, rawNode)
