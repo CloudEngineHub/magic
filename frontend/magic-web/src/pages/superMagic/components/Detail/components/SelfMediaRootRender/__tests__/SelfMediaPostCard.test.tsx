@@ -43,6 +43,7 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.renamePostInput": "Article name",
 				"detail.selfMedia.home.renamePostTitle": "Rename article",
 				"detail.selfMedia.home.mentionPost": "Mention this article",
+				"detail.selfMedia.home.moreActions": "More actions",
 				"fileViewer.share": "Share",
 				"detail.selfMedia.home.opsArtifacts.sourceReady": "Source ready",
 				"detail.selfMedia.home.opsArtifacts.sourceMissing": "Source missing",
@@ -527,6 +528,15 @@ describe("SelfMediaPostCard", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }))
 
 		await waitFor(() => expect(onDeletePost).toHaveBeenCalledWith(createPostItem()))
+	})
+
+	it("opens the context menu from the more actions button", async () => {
+		const onDeletePost = vi.fn()
+		renderCard({ onDeletePost })
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-more-post-1"))
+
+		expect(await screen.findByRole("menuitem", { name: "Delete article" })).toBeInTheDocument()
 	})
 
 	it("mentions the article folder from the context menu", async () => {

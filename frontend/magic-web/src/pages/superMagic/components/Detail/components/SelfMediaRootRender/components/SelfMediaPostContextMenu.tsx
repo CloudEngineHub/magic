@@ -33,7 +33,7 @@ import type { SelfMediaPostPublishStatus } from "../types"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 
 interface SelfMediaPostContextMenuProps {
-	children: ReactElement
+	children: (openContextMenu: (anchor: HTMLElement) => void) => ReactElement
 	item: SelfMediaPlatformPostItem
 	title: string
 	onRenamePost?: (
@@ -70,6 +70,19 @@ function SelfMediaPostContextMenu({
 	const [settingPublishStatus, setSettingPublishStatus] = useState(false)
 	const publishStatus = item.entry.publishStatus || item.post.meta.publishStatus
 	const isArchived = publishStatus === "archived"
+	const openContextMenu = (anchor: HTMLElement) => {
+		const rect = anchor.getBoundingClientRect()
+		anchor.dispatchEvent(
+			new MouseEvent("contextmenu", {
+				bubbles: true,
+				cancelable: true,
+				button: 2,
+				buttons: 2,
+				clientX: rect.right - 12,
+				clientY: rect.bottom - 12,
+			}),
+		)
+	}
 
 	if (
 		!onDeletePost &&
@@ -78,7 +91,7 @@ function SelfMediaPostContextMenu({
 		!onSharePost &&
 		!onSetPostPublishStatus
 	) {
-		return children
+		return children(() => undefined)
 	}
 
 	const openRenameDialog = () => {
@@ -132,7 +145,7 @@ function SelfMediaPostContextMenu({
 	return (
 		<>
 			<ContextMenu>
-				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+				<ContextMenuTrigger asChild>{children(openContextMenu)}</ContextMenuTrigger>
 				<ContextMenuContent
 					className={cn("w-48 p-1.5", selfMediaOverlayStyles.floatingPanel)}
 				>
