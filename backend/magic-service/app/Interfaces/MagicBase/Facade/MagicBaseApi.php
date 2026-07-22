@@ -410,7 +410,7 @@ class MagicBaseApi extends AbstractApi
         return [
             'project_id' => (string) $projectId,
             'is_admin' => $authorization !== null
-                && $this->accessControl->isProjectManager($authorization, $projectId),
+                && $this->accessControl->isProjectDataAdmin($authorization, $projectId),
         ];
     }
 

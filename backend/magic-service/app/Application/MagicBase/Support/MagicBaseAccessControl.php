@@ -72,15 +72,15 @@ readonly class MagicBaseAccessControl
     }
 
     /**
-     * Determine whether the real logged-in user can manage the project.
+     * Determine whether the real logged-in user is a micro-app data administrator.
      *
      * This intentionally does not use the share runtime actor. A share token
      * proves access to the shared project, but it must never make the share
      * creator look like the current user for administrator checks.
      */
-    public function isProjectManager(MagicUserAuthorization $authorization, int $projectId): bool
+    public function isProjectDataAdmin(MagicUserAuthorization $authorization, int $projectId): bool
     {
-        return $this->hasProjectManageRole($authorization, $projectId);
+        return $this->hasProjectDataAdminRole($authorization, $projectId);
     }
 
     public function requireReadableProject(MagicUserAuthorization $authorization, int $projectId): void
@@ -244,7 +244,7 @@ readonly class MagicBaseAccessControl
         $tablePermissions = $this->metadataDomainService->listTablePermissions($authorization->getOrganizationCode(), $tableId);
         $columnPermissions = $this->metadataDomainService->listColumnPermissions($authorization->getOrganizationCode(), $tableId);
         $rowPermissions = $this->metadataDomainService->listRowPermissions($authorization->getOrganizationCode(), $tableId);
-        $isManager = $this->hasProjectManageRole($authorization, $projectId)
+        $isManager = $this->hasProjectDataAdminRole($authorization, $projectId)
             || $this->permissionDomainService->isManager($actor, $projectAdmins, $tableAdmins, $tablePermissions);
 
         return new MagicBaseAccessContext(
@@ -342,7 +342,11 @@ readonly class MagicBaseAccessControl
         throw new LogicException('Unreachable');
     }
 
-    private function hasProjectManageRole(MagicUserAuthorization $authorization, int $projectId): bool
+    /**
+     * Project editors are MagicBase data administrators, but permission
+     * management still requires the project's manage role.
+     */
+    private function hasProjectDataAdminRole(MagicUserAuthorization $authorization, int $projectId): bool
     {
         $project = $this->getProjectOrFail($projectId);
         if (! $this->isSameOrganization($authorization, $project)) {
@@ -356,14 +360,14 @@ readonly class MagicBaseAccessControl
         }
 
         $member = $this->projectMemberDomainService->getMemberByProjectAndUser($projectId, $authorization->getId());
-        if ($member !== null && $member->getRole()->isHigherOrEqualThan(MemberRole::MANAGE)) {
+        if ($member !== null && $member->getRole()->isHigherOrEqualThan(MemberRole::EDITOR)) {
             return true;
         }
 
         $dataIsolation = DataIsolation::simpleMake($authorization->getOrganizationCode(), $authorization->getId());
         $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $authorization->getId(), true);
         foreach ($this->projectMemberDomainService->getMembersByProjectAndDepartmentIds($projectId, $departmentIds) as $departmentMember) {
-            if ($departmentMember->getRole()->isHigherOrEqualThan(MemberRole::MANAGE)) {
+            if ($departmentMember->getRole()->isHigherOrEqualThan(MemberRole::EDITOR)) {
                 return true;
             }
         }

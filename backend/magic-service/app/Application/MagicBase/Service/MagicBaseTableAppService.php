@@ -128,6 +128,15 @@ readonly class MagicBaseTableAppService
             $context = $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $table = $context->getTable();
             $before = $table;
+            $nextDynamicPermissions = null;
+            if (array_key_exists('dynamic_permissions', $payload)) {
+                $nextDynamicPermissions = $this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
+                    is_array($payload['dynamic_permissions']) ? $payload['dynamic_permissions'] : null
+                ));
+                if ($nextDynamicPermissions->toArray() !== $table->getDynamicPermissions()->toArray()) {
+                    $this->accessControl->requireManageableProject($authorization, $projectId);
+                }
+            }
 
             if (isset($payload['table_key'])) {
                 $this->requireString($payload['table_key'], '表标识');
@@ -147,10 +156,8 @@ readonly class MagicBaseTableAppService
                 $table->setDescription(trim((string) ($payload['description'] ?? '')));
             }
 
-            if (array_key_exists('dynamic_permissions', $payload)) {
-                $table->setDynamicPermissions($this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
-                    is_array($payload['dynamic_permissions']) ? $payload['dynamic_permissions'] : null
-                )));
+            if ($nextDynamicPermissions !== null) {
+                $table->setDynamicPermissions($nextDynamicPermissions);
             }
 
             $table->setUpdatedAt($this->now());
@@ -248,6 +255,15 @@ readonly class MagicBaseTableAppService
             $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $column = $this->findColumn($authorization, $tableId, $columnId);
             $before = $column;
+
+            if (array_key_exists('dynamic_permission', $payload)) {
+                $nextDynamicPermission = $this->columnDomainService->normalizeDynamicPermission(
+                    is_array($payload['dynamic_permission']) ? $payload['dynamic_permission'] : null
+                );
+                if ($nextDynamicPermission->toArray() !== $column->getDynamicPermission()->toArray()) {
+                    $this->accessControl->requireManageableProject($authorization, $projectId);
+                }
+            }
 
             $merged = array_merge($column->toArray(), $payload);
             $this->columnDomainService->validatePayload($merged);

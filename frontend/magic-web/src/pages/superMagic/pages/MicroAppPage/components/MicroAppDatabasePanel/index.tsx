@@ -27,6 +27,7 @@ import {
 	SheetTitle,
 } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/lib/utils"
+import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 import DataGrid, { type MagicBaseCellSelection } from "./DataGrid"
 import PermissionEditorDialog, { type PermissionEditorTarget } from "./PermissionEditorDialog"
 import PermissionPanel from "./PermissionPanel"
@@ -46,6 +47,7 @@ interface MicroAppDatabasePanelProps {
 	open: boolean
 	projectId?: string
 	projectName?: string
+	projectRole?: CollaboratorPermission
 	onOpenChange: (open: boolean) => void
 }
 
@@ -69,6 +71,7 @@ export default function MicroAppDatabasePanel({
 	open,
 	projectId,
 	projectName,
+	projectRole,
 	onOpenChange,
 }: MicroAppDatabasePanelProps) {
 	const { t } = useTranslation("super")
@@ -274,6 +277,7 @@ export default function MicroAppDatabasePanel({
 	}
 
 	const enabledColumns = getEnabledColumns(selectedTable)
+	const canManagePermissions = !projectRole || projectRole === "owner" || projectRole === "manage"
 	const editorTable =
 		permissionEditor?.tableId === selectedTable?.id
 			? selectedTable
@@ -341,6 +345,7 @@ export default function MicroAppDatabasePanel({
 						loading={tablesLoading}
 						error={tablesError}
 						onSelect={handleSelectTable}
+						canManagePermissions={canManagePermissions}
 						onOpenTablePermissions={handleOpenTablePermissions}
 						onRetry={() => refreshTables()}
 					/>
@@ -517,6 +522,9 @@ export default function MicroAppDatabasePanel({
 																onDeleteRows={
 																	handleRequestDeleteRows
 																}
+																canManagePermissions={
+																	canManagePermissions
+																}
 																onOpenRowPermissions={
 																	handleOpenRowPermissions
 																}
@@ -546,6 +554,7 @@ export default function MicroAppDatabasePanel({
 														permissions={permissions}
 														loading={permissionsLoading}
 														columns={displayColumns}
+														canManagePermissions={canManagePermissions}
 														onRefreshPermissions={() =>
 															refreshPermissions()
 														}

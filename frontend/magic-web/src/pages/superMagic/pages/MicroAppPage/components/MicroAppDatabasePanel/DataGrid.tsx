@@ -24,6 +24,7 @@ interface DataGridProps {
 	onSelectionChange?: (selection: MagicBaseCellSelection) => void
 	onOpenEditRow?: (rowId: string) => void
 	onDeleteRows?: (selection: MagicBaseCellSelection) => void
+	canManagePermissions?: boolean
 	onOpenRowPermissions?: (selection: MagicBaseCellSelection) => void
 	onOpenColumnPermissions?: (selection: MagicBaseCellSelection) => void
 }
@@ -68,6 +69,7 @@ export default function DataGrid({
 	onSelectionChange,
 	onOpenEditRow,
 	onDeleteRows,
+	canManagePermissions = true,
 	onOpenRowPermissions,
 	onOpenColumnPermissions,
 }: DataGridProps) {
@@ -742,25 +744,29 @@ export default function DataGrid({
 					>
 						{t("microAppPage.databasePanel.contextMenu.deleteRows")}
 					</button>
-					<div className="-mx-1 my-1 h-px bg-border" />
-					<button
-						type="button"
-						role="menuitem"
-						disabled={activeSelection.rowIds.length === 0}
-						className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-						onClick={handleOpenRowPermissions}
-					>
-						{t("microAppPage.databasePanel.contextMenu.rowPermission")}
-					</button>
-					<button
-						type="button"
-						role="menuitem"
-						disabled={!hasSelectedConfigurableColumns}
-						className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-						onClick={handleOpenColumnPermissions}
-					>
-						{t("microAppPage.databasePanel.contextMenu.columnPermission")}
-					</button>
+					{canManagePermissions ? (
+						<>
+							<div className="-mx-1 my-1 h-px bg-border" />
+							<button
+								type="button"
+								role="menuitem"
+								disabled={activeSelection.rowIds.length === 0}
+								className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+								onClick={handleOpenRowPermissions}
+							>
+								{t("microAppPage.databasePanel.contextMenu.rowPermission")}
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								disabled={!hasSelectedConfigurableColumns}
+								className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+								onClick={handleOpenColumnPermissions}
+							>
+								{t("microAppPage.databasePanel.contextMenu.columnPermission")}
+							</button>
+						</>
+					) : null}
 					<div className="-mx-1 my-1 h-px bg-border" />
 					<button
 						type="button"

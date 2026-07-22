@@ -14,6 +14,7 @@ interface TableListProps {
 	selectedTableId: string | null
 	loading: boolean
 	error?: unknown
+	canManagePermissions?: boolean
 	onSelect: (tableId: string) => void
 	onOpenTablePermissions?: (tableId: string) => void
 	onRetry: () => void
@@ -30,6 +31,7 @@ export default function TableList({
 	selectedTableId,
 	loading,
 	error,
+	canManagePermissions = true,
 	onSelect,
 	onOpenTablePermissions,
 	onRetry,
@@ -171,7 +173,7 @@ export default function TableList({
 					})}
 				</div>
 			</ScrollArea>
-			{contextMenu ? (
+			{contextMenu && canManagePermissions ? (
 				<div
 					ref={menuRef}
 					role="menu"

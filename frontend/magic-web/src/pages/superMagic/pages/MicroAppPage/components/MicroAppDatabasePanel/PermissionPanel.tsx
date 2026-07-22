@@ -20,6 +20,7 @@ interface PermissionPanelProps {
 	permissions?: MagicBasePermissionsResponse
 	loading?: boolean
 	columns: MagicBaseColumn[]
+	canManagePermissions?: boolean
 	onRefreshPermissions: () => void
 }
 
@@ -70,6 +71,7 @@ export default function PermissionPanel({
 	permissions,
 	loading,
 	columns,
+	canManagePermissions = true,
 	onRefreshPermissions,
 }: PermissionPanelProps) {
 	const { t } = useTranslation("super")
@@ -318,7 +320,12 @@ export default function PermissionPanel({
 		return (
 			<div
 				key={row.key}
-				className="grid grid-cols-[minmax(180px,240px)_1fr_40px] items-center gap-3 border-b border-border px-3 py-2 text-xs"
+				className={cn(
+					"grid items-center gap-3 border-b border-border px-3 py-2 text-xs",
+					canManagePermissions
+						? "grid-cols-[minmax(180px,240px)_1fr_40px]"
+						: "grid-cols-[minmax(180px,240px)_1fr]",
+				)}
 			>
 				<div className="flex min-w-0 items-center gap-3">
 					{renderSubjectAvatar(row)}
@@ -340,20 +347,22 @@ export default function PermissionPanel({
 						</Badge>
 					))}
 				</div>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-sm"
-					disabled={deleting}
-					aria-label={t("microAppPage.databasePanel.permissionDelete")}
-					onClick={() => handleDelete(row)}
-				>
-					{deleting ? (
-						<Loader2 className="size-3.5 animate-spin" />
-					) : (
-						<Trash2 className="size-3.5" />
-					)}
-				</Button>
+				{canManagePermissions ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						disabled={deleting}
+						aria-label={t("microAppPage.databasePanel.permissionDelete")}
+						onClick={() => handleDelete(row)}
+					>
+						{deleting ? (
+							<Loader2 className="size-3.5 animate-spin" />
+						) : (
+							<Trash2 className="size-3.5" />
+						)}
+					</Button>
+				) : null}
 			</div>
 		)
 	}

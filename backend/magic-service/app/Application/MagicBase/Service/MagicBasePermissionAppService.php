@@ -56,7 +56,7 @@ readonly class MagicBasePermissionAppService
      */
     public function batchSavePermissions(MagicUserAuthorization $authorization, int $projectId, int $tableId, BatchPermissionRequestDTO $requestDTO): array
     {
-        $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $targetType = $this->resolveTargetType($requestDTO->getTargetType());
         $targetIds = $this->resolveTargetIds($authorization, $projectId, $tableId, $targetType, $requestDTO->getTargetIds());
         $permissionGroups = $this->resolvePermissionGroups($requestDTO, $targetType, $targetIds);
@@ -149,7 +149,7 @@ readonly class MagicBasePermissionAppService
 
     public function deletePermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, string $type, int $permissionId): void
     {
-        $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
 
         match ($type) {
             'table' => $this->metadataDomainService->deleteTablePermission($authorization->getOrganizationCode(), $tableId, $permissionId),
@@ -161,7 +161,7 @@ readonly class MagicBasePermissionAppService
 
     public function createTablePermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, TablePermissionRequestDTO $requestDTO): MagicBaseTablePermissionEntity
     {
-        $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
         $permissionLevel = trim((string) $requestDTO->getPermissionLevel());
         if (! in_array($permissionLevel, MagicBaseConst::PERMISSION_LEVELS, true)) {
@@ -194,7 +194,7 @@ readonly class MagicBasePermissionAppService
 
     public function createColumnPermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, ColumnPermissionRequestDTO $requestDTO): MagicBaseColumnPermissionEntity
     {
-        $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $columnId = $this->parsePayloadId($requestDTO->getColumnId(), '字段ID');
         $column = $this->getColumnOrFail($authorization, $tableId, $columnId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
@@ -227,7 +227,7 @@ readonly class MagicBasePermissionAppService
 
     public function createRowPermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, RowPermissionRequestDTO $requestDTO): MagicBaseRowPermissionEntity
     {
-        $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $recordId = $this->parsePayloadId($requestDTO->getRecordId(), 'record_id');
         $this->rowQuerySupport->getRowOrFail($authorization, $projectId, $tableId, $recordId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);

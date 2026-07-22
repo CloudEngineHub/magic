@@ -322,6 +322,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 						open={isDatabasePanelOpen}
 						projectId={selectedProject?.id}
 						projectName={selectedProject?.project_name}
+						projectRole={selectedProject?.user_role}
 						onOpenChange={setIsDatabasePanelOpen}
 					/>
 				</Suspense>
