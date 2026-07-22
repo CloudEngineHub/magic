@@ -19,8 +19,8 @@ Router::addGroup('/v1', function () {
     Router::post('/chat/completions', [OpenAIProxyApi::class, 'chatCompletions']);
     Router::post('/embeddings', [OpenAIProxyApi::class, 'embeddings']);
     Router::get('/models', [OpenAIProxyApi::class, 'models']);
-    //    Router::post('/images/generations', [OpenAIProxyApi::class, 'textGenerateImage']);
-    //    Router::post('/images/edits', [OpenAIProxyApi::class, 'imageEdit']);
+    Router::post('/images/generations', [OpenAIProxyApi::class, 'textGenerateImageV2']);
+    Router::post('/images/edits', [OpenAIProxyApi::class, 'imageEditV2']);
     Router::post('/videos', [VideoApi::class, 'create']);
     Router::get('/videos/{id}', [VideoApi::class, 'get']);
     // @deprecated Use /v2/search instead - supports multiple search engines
