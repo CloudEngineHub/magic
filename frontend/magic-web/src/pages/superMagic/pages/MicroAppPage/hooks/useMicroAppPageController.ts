@@ -25,6 +25,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
 import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
+import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 
 /**
  * 微应用桌面端和移动端共用的数据控制层。
@@ -147,12 +148,7 @@ export function useMicroAppPageController(projectId: string) {
 		detailRef.current?.openFileTab(defaultEntryFile)
 	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
 
-	useEffect(() => {
-		store.projectFilesStore.setSelectedProject(selectedProject)
-		return () => {
-			store.projectFilesStore.setSelectedProject(null)
-		}
-	}, [selectedProject, store.projectFilesStore])
+	useMicroAppSelectedProjectSync(store.projectFilesStore, selectedProject)
 
 	useAttachmentsPolling({
 		projectId: selectedProject?.id,
