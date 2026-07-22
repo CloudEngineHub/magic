@@ -11,7 +11,7 @@ import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import type { SelfMediaAttachmentNode } from "../types"
 
 interface UseSelfMediaPostShareOptions {
-	attachmentList?: SelfMediaAttachmentNode[]
+	attachments?: SelfMediaAttachmentNode[]
 	selectedProject?: ProjectListItem | null
 	enabled: boolean
 }
@@ -19,14 +19,14 @@ interface UseSelfMediaPostShareOptions {
 const FileShareModals = lazy(() => import("../../CommonHeader/components/FileShareModals"))
 
 export function useSelfMediaPostShare({
-	attachmentList,
+	attachments,
 	selectedProject,
 	enabled,
 }: UseSelfMediaPostShareOptions) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const { hideShareFile } = useFileActionVisibility()
-	const shareAttachments = attachmentList as AttachmentItem[] | undefined
+	const shareAttachments = attachments as AttachmentItem[] | undefined
 	const {
 		shareModalVisible,
 		showSuccessModal,
@@ -52,7 +52,7 @@ export function useSelfMediaPostShare({
 		async (target: SelfMediaPlatformPostItem) => {
 			if (!canShare) return
 			const postDirectory = resolveSelfMediaPostDirectoryAttachmentItem(
-				attachmentList,
+				attachments,
 				target.post.article?.fileId ||
 					target.post.cards.find((card) => card.fileId)?.fileId,
 				target.entry.entry,
@@ -70,7 +70,7 @@ export function useSelfMediaPostShare({
 				projectName: selectedProject?.project_name,
 			})
 		},
-		[attachmentList, canShare, handleShare, selectedProject, t],
+		[attachments, canShare, handleShare, selectedProject, t],
 	)
 
 	const shareModals = useMemo(() => {

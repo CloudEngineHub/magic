@@ -42,7 +42,7 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
 }))
 
-const attachmentList: SelfMediaAttachmentNode[] = [
+const attachments: SelfMediaAttachmentNode[] = [
 	{
 		file_id: "root",
 		file_name: "self-media",
@@ -95,7 +95,7 @@ describe("useSelfMediaPostShare", () => {
 	it("shares the current article directory through the common file share flow", async () => {
 		const { result } = renderHook(() =>
 			useSelfMediaPostShare({
-				attachmentList,
+				attachments,
 				selectedProject: {
 					id: "project-1",
 					project_name: "Project One",
@@ -121,7 +121,7 @@ describe("useSelfMediaPostShare", () => {
 		const { result, rerender } = renderHook(
 			({ enabled }) =>
 				useSelfMediaPostShare({
-					attachmentList,
+					attachments,
 					enabled,
 				}),
 			{ initialProps: { enabled: false } },
