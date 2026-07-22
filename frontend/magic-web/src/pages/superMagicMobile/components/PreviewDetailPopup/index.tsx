@@ -35,17 +35,16 @@ import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { cn } from "@/lib/utils"
 
-/** Mobile preview sheet: near full viewport; overrides MagicPopup default mt-24 top band. */
+/** Keep the preview at a stable viewport height while overriding MagicPopup's auto sizing. */
 const MOBILE_PREVIEW_SHEET_CLASSNAME = cn(
 	"flex flex-col overflow-hidden rounded-t-[14px] border-0 bg-background p-0",
-	"h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))]",
-	"max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)]",
+	"!h-[98dvh] !max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)]",
 	"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
 )
 
 /** Body must stay flex + hidden overflow so Render fills the sheet below actionHeader. */
 const MOBILE_PREVIEW_BODY_CLASSNAME =
-	"flex min-h-0 flex-1 flex-col overflow-hidden !overflow-hidden bg-background p-0"
+	"flex min-h-0 flex-1 flex-col !max-h-none overflow-hidden !overflow-hidden bg-background p-0"
 import { getPreviewDetailDisplayName, isKnowledgeSearchPreviewDetail } from "./headerMeta"
 
 const OFFICE_DETAIL_TYPES: DetailType[] = [

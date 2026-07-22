@@ -163,7 +163,7 @@ function CrewMarketMobilePanelBase() {
 						? undefined
 						: selectedAgent.isAdded
 							? {
-									label: t("chat"),
+									label: t("conversation"),
 									icon: <MessageCircle className="h-5 w-5 text-white" />,
 									testId: "crew-market-mobile-detail-chat-button",
 									// 先关闭 sheet，再导航；custom primaryAction 不会自动触发 onOpenChange(false)

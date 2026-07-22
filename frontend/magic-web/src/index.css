@@ -275,9 +275,19 @@
 	}
 
 	.recording-md-prose .recording-md-table-wrap table {
+		width: max-content;
 		min-width: 100%;
+		table-layout: auto;
 		border-collapse: collapse;
 		font-size: 13px;
+	}
+
+	/* Let short tables fill the container while capping long cell content before horizontal scrolling takes over. */
+	.recording-md-cell-content {
+		width: max-content;
+		max-width: 280px;
+		white-space: normal;
+		overflow-wrap: break-word;
 	}
 
 	.recording-md-prose thead {

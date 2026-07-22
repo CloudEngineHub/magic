@@ -13,7 +13,7 @@
 		"starCrew": "明星员工",
 		"techDev": "技术开发"
 	},
-	"chat": "聊天",
+	"conversation": "对话",
 	"createCrew": "创建员工",
 	"crewConversation": {
 		"back": "返回",
