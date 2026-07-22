@@ -64,6 +64,7 @@ import { useCreateWorkspace } from "../../hooks/useCreateWorkspace"
 import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
+import { useSingleHtmlStaticDependencies } from "@/pages/superMagic/hooks/useSingleHtmlStaticDependencies"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 
@@ -107,6 +108,17 @@ function CrossProjectFileOperationModal({
 }: CrossProjectFileOperationModalProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
+	const [includeHtmlDependencies, setIncludeHtmlDependencies] = useState(true)
+	const htmlStaticDependencies = useSingleHtmlStaticDependencies({
+		active: visible,
+		fileIds,
+		attachments: sourceAttachments,
+	})
+	const selectedFileIdForDependencyReset = fileIds.length === 1 ? fileIds[0] : ""
+
+	useEffect(() => {
+		if (visible) setIncludeHtmlDependencies(true)
+	}, [visible, selectedFileIdForDependencyReset])
 
 	// 判断是否为龙虾场景
 	// 实际路由格式: /:clusterCode/claw/:code (例如: /global/claw/MC-xxx)
@@ -854,6 +866,8 @@ function CrossProjectFileOperationModal({
 				targetPath,
 				targetAttachments,
 				sourceAttachments: sourceAttachments,
+				includeHtmlDependencies,
+				htmlDependencyFileIds: htmlStaticDependencies.dependencyTransferFileIds,
 			})
 		if (closeOnSubmit) onClose && onClose()
 	})
@@ -1016,7 +1030,7 @@ function CrossProjectFileOperationModal({
 		cancelText: t("common.cancel"),
 		onOk: submit,
 		onCancel: handleCancel,
-		okDisabled: isSearch || !canSubmit,
+		okDisabled: isSearch || !canSubmit || htmlStaticDependencies.isLoading,
 	}
 
 	const handleKeyDown = useMemoizedFn((event: KeyboardEvent) => {
@@ -1465,6 +1479,28 @@ function CrossProjectFileOperationModal({
 				isMobile && "h-[calc(100%-141px)]",
 			)}
 		>
+			{htmlStaticDependencies.isHtml &&
+				htmlStaticDependencies.dependencyFileIds.length > 0 && (
+					<label
+						className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
+						data-testid="cross-project-file-html-dependencies-option"
+					>
+						<Checkbox
+							checked={includeHtmlDependencies}
+							onChange={(event) => setIncludeHtmlDependencies(event.target.checked)}
+						/>
+						<span className="flex flex-col gap-1 text-left">
+							<span className="text-sm font-medium leading-5 text-foreground">
+								{t("share.includeHtmlDependencies", {
+									count: htmlStaticDependencies.dependencyFileIds.length,
+								})}
+							</span>
+							<span className="text-xs leading-4 text-muted-foreground">
+								{t("share.includeHtmlDependenciesDescription")}
+							</span>
+						</span>
+					</label>
+				)}
 			<div
 				className="flex items-center justify-start gap-2.5 p-0"
 				data-testid="cross-project-file-modal-toolbar"

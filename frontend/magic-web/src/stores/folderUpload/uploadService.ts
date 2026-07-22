@@ -273,6 +273,78 @@ class OSSUploadService {
 	}
 
 	/**
+	 * 将内容直接上传到 OSS 覆盖指定 file_key
+	 * 用于文件编辑保存场景，绕过接口大小限制
+	 * @param content 文件内容（字符串）
+	 * @param fileKey 要覆盖的 OSS file_key（完整路径）
+	 * @param projectId 项目 ID
+	 * @param fileName 文件名（用于构造 File 对象和推断 content_type）
+	 * @returns 上传后的 OSS path
+	 */
+	async uploadContentByFileKey(
+		content: string,
+		fileKey: string,
+		projectId: string,
+		fileName: string = "content.html",
+	): Promise<string> {
+		// 根据文件扩展名推断 content_type
+		const ext = fileName.split(".").pop()?.toLowerCase() || ""
+		const mimeMap: Record<string, string> = {
+			html: "text/html",
+			htm: "text/html",
+			md: "text/markdown",
+			json: "application/json",
+			txt: "text/plain",
+			css: "text/css",
+			js: "application/javascript",
+			ts: "application/typescript",
+			xml: "application/xml",
+			svg: "image/svg+xml",
+		}
+		const contentType = mimeMap[ext] || "text/plain"
+
+		// 将字符串内容构造为 File 对象
+		const blob = new Blob([content], { type: contentType })
+		const file = new File([blob], fileName, { type: contentType })
+
+		// 获取 customFileKey 模式的上传凭证
+		const customCredentials =
+			await superMagicUploadTokenService.getUploadTokenForCustomKey(projectId)
+
+		// 提取相对于 dir 的路径
+		const relativeFileName = extractRelativePathFromCustomKey(
+			fileKey,
+			customCredentials?.temporary_credential?.dir,
+		)
+
+		// 上传（覆盖原文件）
+		return new Promise((resolve, reject) => {
+			const { success, fail } = this.upload.upload({
+				file,
+				fileName: relativeFileName,
+				customCredentials,
+				body: JSON.stringify({
+					storage: "private",
+					sts: true,
+					content_type: contentType,
+				}),
+			})
+
+			success?.((res) => {
+				if (res?.data?.path) {
+					resolve(res.data.path)
+				} else {
+					reject(new Error("Upload failed: no path returned"))
+				}
+			})
+
+			fail?.((err) => {
+				reject(new Error(`Upload failed: ${String(err?.message || err)}`))
+			})
+		})
+	}
+
+	/**
 	 * 暂停所有当前上传
 	 */
 	pauseAllUploads(): void {
