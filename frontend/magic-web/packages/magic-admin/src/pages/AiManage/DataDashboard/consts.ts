@@ -113,7 +113,7 @@ export const DEFAULT_TAB_BY_VIEW = {
 export const TABLE_SCROLL_X = {
 	SilentMembers: 900,
 	Department: 1290,
-	Member: 1500,
+	Member: 1750,
 	Agent: 1350,
 	MemberAgent: 1400,
 	Record: 1120,
