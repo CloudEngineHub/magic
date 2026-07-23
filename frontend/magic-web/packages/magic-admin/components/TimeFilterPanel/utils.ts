@@ -4,12 +4,21 @@ import type {
 	CommonAbsolutePresetRange,
 	TimeFilterHistoryItem,
 	TimeFilterLocale,
+	TimeFilterPrecision,
 	TimePresetOption,
 	TimeRangeValue,
 } from "./types"
-import { CommonAbsolutePresetKey, HistoryMode, RelativeUnit, TimeFilterTab, TimePresetKey } from "./types"
+import {
+	CommonAbsolutePresetKey,
+	HistoryMode,
+	RelativeUnit,
+	TimeFilterTab,
+	TimeFilterPrecision as TimeFilterPrecisionEnum,
+	TimePresetKey,
+} from "./types"
 
 export const DATE_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss"
+export const DATE_FORMAT = "YYYY-MM-DD"
 export const MONTH_KEY_FORMAT = "YYYY-MM"
 export const TIME_FILTER_HISTORY_STORAGE_KEY = "magic_admin_time_filter_history:v1"
 export const MAX_HISTORY_SIZE = 10
@@ -31,6 +40,20 @@ export const QUICK_PRESET_OPTIONS: TimePresetOption[] = [
 	{ key: TimePresetKey.last_90_days, labelKey: "last90Days" },
 ]
 
+export const DAY_PRECISION_QUICK_PRESET_OPTIONS: TimePresetOption[] = [
+	{ key: TimePresetKey.last_1_day, labelKey: "last1Day" },
+	{ key: TimePresetKey.last_3_days, labelKey: "last3Days" },
+	{ key: TimePresetKey.last_7_days, labelKey: "last7Days" },
+	{ key: TimePresetKey.last_14_days, labelKey: "last14Days" },
+	{ key: TimePresetKey.last_21_days, labelKey: "last21Days" },
+	{ key: TimePresetKey.last_30_days, labelKey: "last30Days" },
+	{ key: TimePresetKey.last_60_days, labelKey: "last60Days" },
+	{ key: TimePresetKey.last_90_days, labelKey: "last90Days" },
+	{ key: TimePresetKey.last_120_days, labelKey: "last120Days" },
+	{ key: TimePresetKey.last_180_days, labelKey: "last180Days" },
+	{ key: TimePresetKey.last_365_days, labelKey: "last365Days" },
+]
+
 export const STANDARD_PRESET_OPTIONS: TimePresetOption[] = [
 	{ key: TimePresetKey.today, labelKey: "today" },
 	{ key: TimePresetKey.yesterday, labelKey: "yesterday" },
@@ -48,6 +71,14 @@ export function alignTimeByUnit(time: Dayjs, unit: RelativeUnit) {
 	if (unit === RelativeUnit.hour) return time.startOf("hour")
 
 	return time.startOf("day")
+}
+
+export function getHistoryStorageKey(
+	precision: TimeFilterPrecision = TimeFilterPrecisionEnum.dateTime,
+) {
+	return precision === TimeFilterPrecisionEnum.day
+		? `${TIME_FILTER_HISTORY_STORAGE_KEY}:day`
+		: TIME_FILTER_HISTORY_STORAGE_KEY
 }
 
 function getStartOfWeek(now: Dayjs) {
@@ -78,11 +109,77 @@ function getPresetUnit(preset: TimePresetKey): RelativeUnit {
 	return RelativeUnit.day
 }
 
+function getDayRangeByPreset(preset: TimePresetKey, now = dayjs()): [Dayjs, Dayjs] {
+	const end = now.endOf("day")
+
+	if (
+		preset === TimePresetKey.last_1_minute ||
+		preset === TimePresetKey.last_5_minutes ||
+		preset === TimePresetKey.last_10_minutes ||
+		preset === TimePresetKey.last_15_minutes ||
+		preset === TimePresetKey.last_30_minutes ||
+		preset === TimePresetKey.last_1_hour ||
+		preset === TimePresetKey.last_3_hours ||
+		preset === TimePresetKey.last_6_hours ||
+		preset === TimePresetKey.last_12_hours ||
+		preset === TimePresetKey.last_24_hours ||
+		preset === TimePresetKey.last_1_day
+	) {
+		return [now.startOf("day"), end]
+	}
+
+	if (preset === TimePresetKey.today) return [now.startOf("day"), end]
+
+	if (preset === TimePresetKey.yesterday) {
+		const yesterday = now.subtract(1, "day")
+		return [yesterday.startOf("day"), yesterday.endOf("day")]
+	}
+
+	if (preset === TimePresetKey.day_before_yesterday) {
+		const dayBeforeYesterday = now.subtract(2, "day")
+		return [dayBeforeYesterday.startOf("day"), dayBeforeYesterday.endOf("day")]
+	}
+
+	if (preset === TimePresetKey.last_3_days) return [now.subtract(2, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_7_days) return [now.subtract(6, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_14_days) return [now.subtract(13, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_21_days) return [now.subtract(20, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_30_days) return [now.subtract(29, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_60_days) return [now.subtract(59, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_90_days) return [now.subtract(89, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_120_days)
+		return [now.subtract(119, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_180_days)
+		return [now.subtract(179, "day").startOf("day"), end]
+	if (preset === TimePresetKey.last_365_days)
+		return [now.subtract(364, "day").startOf("day"), end]
+
+	if (preset === TimePresetKey.this_week) return [getStartOfWeek(now), end]
+	if (preset === TimePresetKey.last_week) {
+		const thisWeekStart = getStartOfWeek(now)
+		const lastWeekStart = thisWeekStart.subtract(7, "day")
+		return [lastWeekStart, thisWeekStart.subtract(1, "day").endOf("day")]
+	}
+	if (preset === TimePresetKey.this_month) return [now.startOf("month"), end]
+	if (preset === TimePresetKey.last_month) {
+		const lastMonth = now.subtract(1, "month")
+		return [lastMonth.startOf("month"), lastMonth.endOf("month")]
+	}
+	if (preset === TimePresetKey.this_year) return [now.startOf("year"), end]
+
+	return [now.subtract(89, "day").startOf("day"), end]
+}
+
 export function getRangeByPreset(
 	preset: TimePresetKey,
 	now = dayjs(),
 	alignToUnit = false,
+	precision: TimeFilterPrecision = TimeFilterPrecisionEnum.dateTime,
 ): [Dayjs, Dayjs] {
+	if (precision === TimeFilterPrecisionEnum.day) {
+		return getDayRangeByPreset(preset, now)
+	}
+
 	const end = alignToUnit ? alignTimeByUnit(now, getPresetUnit(preset)) : now
 
 	if (preset === TimePresetKey.last_1_minute) return [end.subtract(1, "minute"), end]
@@ -107,8 +204,14 @@ export function getRangeByPreset(
 	}
 	if (preset === TimePresetKey.last_3_days) return [end.subtract(3, "day"), end]
 	if (preset === TimePresetKey.last_7_days) return [end.subtract(7, "day"), end]
+	if (preset === TimePresetKey.last_14_days) return [end.subtract(14, "day"), end]
+	if (preset === TimePresetKey.last_21_days) return [end.subtract(21, "day"), end]
 	if (preset === TimePresetKey.last_30_days) return [end.subtract(30, "day"), end]
+	if (preset === TimePresetKey.last_60_days) return [end.subtract(60, "day"), end]
 	if (preset === TimePresetKey.last_90_days) return [end.subtract(90, "day"), end]
+	if (preset === TimePresetKey.last_120_days) return [end.subtract(120, "day"), end]
+	if (preset === TimePresetKey.last_180_days) return [end.subtract(180, "day"), end]
+	if (preset === TimePresetKey.last_365_days) return [end.subtract(365, "day"), end]
 	if (preset === TimePresetKey.this_week) return [getStartOfWeek(now), now]
 	if (preset === TimePresetKey.last_week) {
 		const thisWeekStart = getStartOfWeek(now)
@@ -130,8 +233,13 @@ export function buildCustomRelativeRange({
 	value,
 	unit,
 	alignToUnit,
+	precision = TimeFilterPrecisionEnum.dateTime,
 }: BuildCustomRelativeRangeArgs): [Dayjs, Dayjs] {
 	const safeValue = Number.isFinite(value) ? Math.max(1, value) : 1
+	if (precision === TimeFilterPrecisionEnum.day) {
+		return [now.subtract(safeValue - 1, "day").startOf("day"), now.endOf("day")]
+	}
+
 	const end = alignToUnit ? alignTimeByUnit(now, unit) : now
 
 	return [end.subtract(safeValue, unit), end]
@@ -150,7 +258,47 @@ export function getRecentMonthKeys(now = dayjs(), count = 12) {
 	)
 }
 
-export function getCommonAbsolutePresetRanges(now = dayjs()): CommonAbsolutePresetRange[] {
+export function getCommonAbsolutePresetRanges(
+	now = dayjs(),
+	precision: TimeFilterPrecision = TimeFilterPrecisionEnum.dateTime,
+): CommonAbsolutePresetRange[] {
+	if (precision === TimeFilterPrecisionEnum.day) {
+		return [
+			{
+				key: CommonAbsolutePresetKey.last_3_days,
+				value: [now.subtract(2, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_7_days,
+				value: [now.subtract(6, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_14_days,
+				value: [now.subtract(13, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_21_days,
+				value: [now.subtract(20, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_30_days,
+				value: [now.subtract(29, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_60_days,
+				value: [now.subtract(59, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_90_days,
+				value: [now.subtract(89, "day").startOf("day"), now.endOf("day")],
+			},
+			{
+				key: CommonAbsolutePresetKey.last_180_days,
+				value: [now.subtract(179, "day").startOf("day"), now.endOf("day")],
+			},
+		]
+	}
+
 	return [
 		{
 			key: CommonAbsolutePresetKey.last_3_days,
@@ -173,8 +321,16 @@ export function getCommonAbsolutePresetRanges(now = dayjs()): CommonAbsolutePres
 			value: [now.subtract(30, "day"), now],
 		},
 		{
+			key: CommonAbsolutePresetKey.last_60_days,
+			value: [now.subtract(60, "day"), now],
+		},
+		{
 			key: CommonAbsolutePresetKey.last_90_days,
 			value: [now.subtract(90, "day"), now],
+		},
+		{
+			key: CommonAbsolutePresetKey.last_180_days,
+			value: [now.subtract(180, "day"), now],
 		},
 	]
 }
@@ -193,9 +349,19 @@ export function createHistoryEntry(
 	}
 }
 
-export function loadHistory(): TimeFilterHistoryItem[] {
+export function formatTimeRangeDisplay(
+	value: Pick<TimeRangeValue, "startDate" | "endDate">,
+	precision: TimeFilterPrecision = TimeFilterPrecisionEnum.dateTime,
+) {
+	const format = precision === TimeFilterPrecisionEnum.day ? DATE_FORMAT : DATE_TIME_FORMAT
+	return `${dayjs(value.startDate).format(format)} ~ ${dayjs(value.endDate).format(format)}`
+}
+
+export function loadHistory(
+	storageKey: string = TIME_FILTER_HISTORY_STORAGE_KEY,
+): TimeFilterHistoryItem[] {
 	try {
-		const stored = localStorage.getItem(TIME_FILTER_HISTORY_STORAGE_KEY)
+		const stored = localStorage.getItem(storageKey)
 		if (!stored) return []
 
 		const parsed = JSON.parse(stored)
@@ -205,48 +371,48 @@ export function loadHistory(): TimeFilterHistoryItem[] {
 	}
 }
 
-export function saveHistory(history: TimeFilterHistoryItem[]) {
+export function saveHistory(
+	history: TimeFilterHistoryItem[],
+	storageKey: string = TIME_FILTER_HISTORY_STORAGE_KEY,
+) {
 	try {
-		localStorage.setItem(
-			TIME_FILTER_HISTORY_STORAGE_KEY,
-			JSON.stringify(history.slice(0, MAX_HISTORY_SIZE)),
-		)
+		localStorage.setItem(storageKey, JSON.stringify(history.slice(0, MAX_HISTORY_SIZE)))
 	} catch {
 		// ignore storage failures
 	}
 }
 
-export function upsertHistory(entry: TimeFilterHistoryItem) {
-	const nextHistory = [entry, ...loadHistory().filter((item) => item.id !== entry.id)]
-	saveHistory(nextHistory)
+export function upsertHistory(
+	entry: TimeFilterHistoryItem,
+	storageKey = TIME_FILTER_HISTORY_STORAGE_KEY,
+) {
+	const nextHistory = [entry, ...loadHistory(storageKey).filter((item) => item.id !== entry.id)]
+	saveHistory(nextHistory, storageKey)
 	return nextHistory.slice(0, MAX_HISTORY_SIZE)
 }
 
-export function removeHistory(id: string) {
-	const nextHistory = loadHistory().filter((item) => item.id !== id)
-	saveHistory(nextHistory)
+export function removeHistory(id: string, storageKey = TIME_FILTER_HISTORY_STORAGE_KEY) {
+	const nextHistory = loadHistory(storageKey).filter((item) => item.id !== id)
+	saveHistory(nextHistory, storageKey)
 	return nextHistory
 }
-
 
 export function getPresetLabel(locale: { preset: Record<string, string> }, key: string) {
 	return locale.preset[key as keyof typeof locale.preset] || locale.preset.last24Hours
 }
 
+export function getPresetOptionLabel(locale: TimeFilterLocale, option: TimePresetOption) {
+	return getPresetLabel(locale, option.labelKey)
+}
+
 export function getAbsolutePresetLabel(locale: TimeFilterLocale, key: CommonAbsolutePresetKey) {
 	if (key === CommonAbsolutePresetKey.last_3_days) return locale.preset.last3Days
 	if (key === CommonAbsolutePresetKey.last_7_days) return locale.preset.last7Days
-	if (key === CommonAbsolutePresetKey.last_14_days)
-		return formatTemplate(locale.customRelativeLabel, {
-			value: "14",
-			unit: locale.unit.day,
-		})
-	if (key === CommonAbsolutePresetKey.last_21_days)
-		return formatTemplate(locale.customRelativeLabel, {
-			value: "21",
-			unit: locale.unit.day,
-		})
+	if (key === CommonAbsolutePresetKey.last_14_days) return locale.preset.last14Days
+	if (key === CommonAbsolutePresetKey.last_21_days) return locale.preset.last21Days
 	if (key === CommonAbsolutePresetKey.last_30_days) return locale.preset.last30Days
+	if (key === CommonAbsolutePresetKey.last_60_days) return locale.preset.last60Days
+	if (key === CommonAbsolutePresetKey.last_180_days) return locale.preset.last180Days
 	return locale.preset.last90Days
 }
 
@@ -271,10 +437,8 @@ export function getSyncedTimeFilterValue(
 ): TimeRangeValue | null {
 	if (!startDate || !endDate) return null
 
-	const isExactMatch =
-		lastValue?.startDate === startDate && lastValue.endDate === endDate
-	const isPresetMatch =
-		lastValue?.presetKey && lastValue.startDate === startDate
+	const isExactMatch = lastValue?.startDate === startDate && lastValue.endDate === endDate
+	const isPresetMatch = lastValue?.presetKey && lastValue.startDate === startDate
 
 	if (isExactMatch || isPresetMatch) {
 		return {

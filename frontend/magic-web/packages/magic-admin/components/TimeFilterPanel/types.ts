@@ -23,6 +23,11 @@ export enum RelativeMode {
 	monthly = "monthly",
 }
 
+export enum TimeFilterPrecision {
+	dateTime = "dateTime",
+	day = "day",
+}
+
 export enum TimePresetKey {
 	last_1_minute = "last_1_minute",
 	last_5_minutes = "last_5_minutes",
@@ -40,8 +45,14 @@ export enum TimePresetKey {
 	day_before_yesterday = "day_before_yesterday",
 	last_3_days = "last_3_days",
 	last_7_days = "last_7_days",
+	last_14_days = "last_14_days",
+	last_21_days = "last_21_days",
 	last_30_days = "last_30_days",
+	last_60_days = "last_60_days",
 	last_90_days = "last_90_days",
+	last_120_days = "last_120_days",
+	last_180_days = "last_180_days",
+	last_365_days = "last_365_days",
 	this_week = "this_week",
 	last_week = "last_week",
 	this_month = "this_month",
@@ -55,7 +66,9 @@ export enum CommonAbsolutePresetKey {
 	last_14_days = "last_14_days",
 	last_21_days = "last_21_days",
 	last_30_days = "last_30_days",
+	last_60_days = "last_60_days",
 	last_90_days = "last_90_days",
+	last_180_days = "last_180_days",
 }
 
 export interface TimeRangeValue {
@@ -88,6 +101,7 @@ export interface BuildCustomRelativeRangeArgs {
 	value: number
 	unit: RelativeUnit
 	alignToUnit: boolean
+	precision?: TimeFilterPrecision
 }
 
 export interface CommonAbsolutePresetRange {

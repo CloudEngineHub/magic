@@ -6,6 +6,7 @@ import {
 	MagicButton,
 	SearchSelect,
 	TimeFilterPanel,
+	TimeFilterPrecision,
 	TimePresetKey,
 	UserSelect,
 } from "@admin-components"
@@ -146,6 +147,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 								<TimeFilterPanel
 									clearable={false}
 									defaultPresetKey={TimePresetKey.last_7_days}
+									precision={TimeFilterPrecision.day}
 									value={timeRange}
 									onChange={handleTimeRangeChange}
 								/>
