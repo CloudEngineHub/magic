@@ -26,6 +26,11 @@ Router::addGroup(
             // 批量获取文件版本号（需要在 /{id}/queries 之前定义，避免路由冲突）
             Router::post('/versions', [MagicFSApi::class, 'getFileVersions']);
 
+            // 写权限预检（无副作用）。与 updateFile 同套鉴权（EDITOR），
+            // 供 magicfs 客户端在写 S3 / 本地缓存之前确认当前用户具备写权限，
+            // 避免先写 S3 再被元数据服务拒绝导致数据不一致。
+            Router::post('/{id}/check-access', [MagicFSApi::class, 'checkFileAccess']);
+
             // 获取文件信息
             Router::post('/{id}/queries', [MagicFSApi::class, 'getFileInfo']);
 

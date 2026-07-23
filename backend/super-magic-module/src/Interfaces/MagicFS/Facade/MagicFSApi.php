@@ -149,6 +149,24 @@ class MagicFSApi extends AbstractApi
     }
 
     /**
+     * 写权限预检（无副作用）。
+     *
+     * 与 updateFile 复用同一套 assertFileAccessible(fileId, EDITOR) 鉴权逻辑，
+     * 仅校验不写状态。供 magicfs 客户端在写 S3 / 本地缓存之前确认当前用户
+     * 具备写权限，避免"先写 S3 再被元数据服务拒绝"导致的数据不一致。
+     *
+     * POST /api/v1/open-api/magicfs/files/{id}/check-access.
+     */
+    public function checkFileAccess(string $id): array
+    {
+        $authorization = $this->getCurrentUser();
+
+        $this->magicFSFileAppService->checkFileWriteAccess($authorization, $id);
+
+        return [];
+    }
+
+    /**
      * 从协程上下文取出当前请求用户。
      *
      * SandboxUserAuthMiddleware 在「无 user 上下文」分支会放行而不注入用户，

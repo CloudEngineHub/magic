@@ -241,6 +241,21 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
+     * 写权限预检（无副作用）.
+     *
+     * 与 updateFile 复用同一套 assertFileAccessible(fileId, EDITOR) 鉴权逻辑，
+     * 仅校验、不写状态。供 magicfs 客户端在写 S3 / 本地缓存之前确认当前用户
+     * 具备写权限，避免"先写 S3 再被元数据服务拒绝"导致的数据不一致。
+     *
+     * 用户空间文件（project_id<=0）同样要求文件 owner 本人（assertUserSpaceFileAccessible），
+     * 与 updateFile 完全一致。
+     */
+    public function checkFileWriteAccess(MagicUserAuthorization $authorization, string $fileId): void
+    {
+        $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
+    }
+
+    /**
      * 删除文件或目录.
      */
     public function deleteFile(MagicUserAuthorization $authorization, string $fileId): void
