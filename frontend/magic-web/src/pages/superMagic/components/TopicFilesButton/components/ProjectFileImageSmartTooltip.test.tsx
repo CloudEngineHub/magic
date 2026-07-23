@@ -21,10 +21,12 @@ vi.mock("@/components/other/SmartTooltip", () => ({
 		children,
 		content,
 		forceShowTooltip,
+		onOpenChange,
 	}: {
 		children?: ReactNode
 		content?: ReactNode
 		forceShowTooltip?: boolean
+		onOpenChange?: (open: boolean) => void
 	}) => (
 		<div
 			data-testid="smart-tooltip"
@@ -32,6 +34,9 @@ vi.mock("@/components/other/SmartTooltip", () => ({
 			data-has-custom-content={String(content !== undefined && content !== null)}
 		>
 			<span>{children}</span>
+			<button type="button" onClick={() => onOpenChange?.(true)}>
+				open
+			</button>
 			{content}
 		</div>
 	),
@@ -101,7 +106,7 @@ describe("ProjectFileImageSmartTooltip", () => {
 		expect(screen.getByText("tooltip-image-error.png")).toBeInTheDocument()
 	})
 
-	it("falls back to the regular name tooltip when url exchange fails", async () => {
+	it("falls back to the regular name tooltip when no preview url is available", async () => {
 		const item: AttachmentItem = {
 			file_id: "tooltip-exchange-error",
 			file_name: "tooltip-exchange-error.png",
@@ -127,6 +132,58 @@ describe("ProjectFileImageSmartTooltip", () => {
 		expect(screen.getByTestId("smart-tooltip")).toHaveAttribute(
 			"data-has-custom-content",
 			"false",
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "open" }))
+		await act(async () => {
+			vi.advanceTimersByTime(200)
+			await Promise.resolve()
+		})
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
+	})
+
+	it("retries a failed url exchange when the tooltip opens again", async () => {
+		const item: AttachmentItem = {
+			file_id: "tooltip-exchange-retry",
+			file_name: "tooltip-exchange-retry.png",
+			file_extension: "png",
+		}
+		const source = resolveProjectFileImagePreviewSource(item)
+		if (!source) throw new Error("Expected an image preview source")
+		vi.mocked(getTemporaryDownloadUrl)
+			.mockRejectedValueOnce(new Error("temporary exchange failure"))
+			.mockResolvedValueOnce([
+				{
+					file_id: item.file_id || "",
+					url: "https://cdn.example.com/tooltip-exchange-retry.webp",
+					expires_at: "2099-01-01 00:00:00",
+				},
+			])
+
+		render(
+			<PreviewHarness item={item}>
+				<ProjectFileImageSmartTooltip source={source}>
+					{item.file_name}
+				</ProjectFileImageSmartTooltip>
+			</PreviewHarness>,
+		)
+		await act(async () => {
+			vi.advanceTimersByTime(32)
+			await Promise.resolve()
+		})
+
+		expect(screen.getByTestId("smart-tooltip")).toHaveAttribute("data-force-show", "false")
+
+		fireEvent.click(screen.getByRole("button", { name: "open" }))
+		await act(async () => {
+			vi.advanceTimersByTime(80)
+			await Promise.resolve()
+		})
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+		expect(screen.getByTestId("project-file-image-preview-tooltip-image")).toHaveAttribute(
+			"src",
+			"https://cdn.example.com/tooltip-exchange-retry.webp",
 		)
 	})
 })

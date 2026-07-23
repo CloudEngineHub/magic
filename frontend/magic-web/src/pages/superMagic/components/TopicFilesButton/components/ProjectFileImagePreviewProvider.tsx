@@ -24,7 +24,7 @@ import {
 	requestProjectFileImagePreviewBatch,
 } from "./projectFileImagePreviewCoordinator"
 
-type PreviewStatus = "idle" | "loading" | "loaded" | "error"
+type PreviewStatus = "idle" | "loading" | "loaded" | "error" | "unavailable"
 
 export interface ProjectFileImagePreviewSource {
 	item: AttachmentItem
@@ -196,7 +196,7 @@ function shouldRequestPreview(
 	if (pendingKeys.has(source.cacheKey)) return false
 
 	const state = states.get(source.cacheKey)
-	return !state || state.status === "idle"
+	return !state || state.status === "idle" || state.status === "error"
 }
 
 function resolveTooltipImageSize(naturalWidth: number, naturalHeight: number) {
@@ -274,9 +274,8 @@ export function useProjectFileImagePreviewManager({
 		},
 		[notifyPreviewKeys],
 	)
-	const hydratePersistedPreview = useCallback(
+	const hydrateCachedPreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (getMemoryCachedPreviewUrl(source.cacheKey)) return true
 			if (!getProjectFileImagePreviewCacheItem(source.cacheKey)) return false
 
 			notifyPreviewKeys([source.cacheKey])
@@ -343,11 +342,34 @@ export function useProjectFileImagePreviewManager({
 				.then((results) => {
 					if (disposedRef.current) return
 					applyPreviewStateChanges(
-						nextPendingSources.map((source, index) => [
+						nextPendingSources.map<[string, PreviewState | undefined]>(
+							(source, index) => {
+								const result = results[index]
+								if (
+									!result ||
+									result.status === "cancelled" ||
+									!isSourceAdmitted(source.cacheKey)
+								) {
+									return [source.cacheKey, undefined]
+								}
+
+								if (result.status === "unavailable") {
+									return [source.cacheKey, { status: "unavailable" }]
+								}
+								if (result.status === "failed") {
+									return [source.cacheKey, { status: "error" }]
+								}
+								return [source.cacheKey, undefined]
+							},
+						),
+					)
+				})
+				.catch(() => {
+					if (disposedRef.current) return
+					applyPreviewStateChanges(
+						nextPendingSources.map<[string, PreviewState | undefined]>((source) => [
 							source.cacheKey,
-							results[index] || !isSourceAdmitted(source.cacheKey)
-								? undefined
-								: { status: "error" },
+							isSourceAdmitted(source.cacheKey) ? { status: "error" } : undefined,
 						]),
 					)
 				})
@@ -437,7 +459,7 @@ export function useProjectFileImagePreviewManager({
 			}
 
 			const requestableSources = sources.filter((source) => {
-				if (hydratePersistedPreview(source)) return false
+				if (hydrateCachedPreview(source)) return false
 				return shouldRequestPreview(
 					source,
 					previewStatesRef.current,
@@ -446,7 +468,7 @@ export function useProjectFileImagePreviewManager({
 			})
 			if (requestableSources.length > 0) enqueueThumbnailSources(requestableSources)
 		},
-		[enqueueThumbnailSources, hydratePersistedPreview, releasePendingPreviewRequest],
+		[enqueueThumbnailSources, hydrateCachedPreview, releasePendingPreviewRequest],
 	)
 
 	const setPreviewVisible = useCallback(
@@ -461,7 +483,7 @@ export function useProjectFileImagePreviewManager({
 				}
 
 				visibleSourcesRef.current.set(source.cacheKey, { source, count: 1 })
-				if (hydratePersistedPreview(source)) return
+				if (hydrateCachedPreview(source)) return
 				if (
 					shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)
 				) {
@@ -482,7 +504,7 @@ export function useProjectFileImagePreviewManager({
 				releasePendingPreviewRequest(source.cacheKey)
 			}
 		},
-		[enqueueThumbnailSources, hydratePersistedPreview, releasePendingPreviewRequest],
+		[enqueueThumbnailSources, hydrateCachedPreview, releasePendingPreviewRequest],
 	)
 
 	useEffect(() => {
@@ -518,12 +540,12 @@ export function useProjectFileImagePreviewManager({
 
 	const ensurePreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (hydratePersistedPreview(source)) return
+			if (hydrateCachedPreview(source)) return
 			if (shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)) {
 				requestPreviewSources([source])
 			}
 		},
-		[hydratePersistedPreview, requestPreviewSources],
+		[hydrateCachedPreview, requestPreviewSources],
 	)
 
 	return useMemo(
@@ -621,7 +643,9 @@ export function ProjectFileImagePreviewTooltipContent({
 	}, [previewState?.url, source.cacheKey])
 
 	if (!manager || !previewState) return null
-	if (previewState.status === "error" || imageFailed) return null
+	if (previewState.status === "error" || previewState.status === "unavailable" || imageFailed) {
+		return null
+	}
 
 	return (
 		<div

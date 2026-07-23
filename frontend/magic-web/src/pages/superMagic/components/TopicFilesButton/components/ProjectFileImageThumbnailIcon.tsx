@@ -66,7 +66,9 @@ export function ProjectFileImageThumbnailIcon({
 	}
 
 	const shouldShowFallback =
-		previewState?.status === "error" || (previewUrl && imagePhase === "error")
+		previewState?.status === "error" ||
+		previewState?.status === "unavailable" ||
+		(previewUrl && imagePhase === "error")
 
 	return (
 		<div

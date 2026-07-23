@@ -330,7 +330,7 @@ describe("ProjectFileImageThumbnailIcon", () => {
 		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
 	})
 
-	it("only admits image rows reported near the viewport", async () => {
+	it("only exchanges uncached image rows reported near the viewport", async () => {
 		vi.useFakeTimers()
 		let observerCallback: IntersectionObserverCallback | undefined
 		const observedElements: Element[] = []
@@ -360,11 +360,10 @@ describe("ProjectFileImageThumbnailIcon", () => {
 			const source = resolveProjectFileImagePreviewSource(item)
 			if (!source) throw new Error("Expected an image preview source")
 			setProjectFileImagePreviewCacheItem(source.cacheKey, {
-				url: `https://cdn.example.com/${item.file_id}.webp?from=session`,
+				url: `https://cdn.example.com/${item.file_id}.webp?from=memory`,
 				expiresAt: "2099-01-01 00:00:00",
 			})
 		}
-		__resetProjectFileImagePreviewCoordinatorForTests({ clearSession: false })
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce(
 			attachments.slice(3, 6).map((item) => ({
 				file_id: item.file_id || "",
@@ -387,7 +386,7 @@ describe("ProjectFileImageThumbnailIcon", () => {
 
 		expect(observedElements).toHaveLength(100)
 		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
-		expect(screen.queryAllByTestId("project-file-image-thumbnail-image")).toHaveLength(0)
+		expect(screen.queryAllByTestId("project-file-image-thumbnail-image")).toHaveLength(3)
 		await act(async () => {
 			observerCallback?.(
 				observedElements

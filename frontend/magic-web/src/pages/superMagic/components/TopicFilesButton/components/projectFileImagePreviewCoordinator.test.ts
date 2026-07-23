@@ -45,27 +45,73 @@ describe("projectFileImagePreviewCoordinator", () => {
 
 		const firstRequest = requestProjectFileImagePreview(source)
 		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
-		const firstItem = await firstRequest
-		const secondItem = await requestProjectFileImagePreview(source)
+		const firstResult = await firstRequest
+		const secondResult = await requestProjectFileImagePreview(source)
 
-		expect(firstItem?.url).toBe("https://cdn.example.com/file-1.webp?signature=stable")
-		expect(secondItem?.url).toBe(firstItem?.url)
+		expect(firstResult).toEqual({
+			status: "loaded",
+			item: {
+				url: "https://cdn.example.com/file-1.webp?signature=stable",
+				expiresAt: "2099-01-01 00:00:00",
+			},
+		})
+		expect(secondResult).toEqual(firstResult)
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
-	it("restores a valid signed url from session storage after memory reset", async () => {
+	it("keeps signed urls in memory only and exchanges again after reset", async () => {
 		const source = createSource(2)
-		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce(createRows([source.fileId]))
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue(createRows([source.fileId]))
 
 		const firstRequest = requestProjectFileImagePreview(source)
 		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
-		const firstItem = await firstRequest
+		await firstRequest
 
-		__resetProjectFileImagePreviewCoordinatorForTests({ clearSession: false })
-		const restoredItem = await requestProjectFileImagePreview(source)
+		const persistedPreviewKeys = Array.from(
+			{ length: window.sessionStorage.length },
+			(_, index) => window.sessionStorage.key(index),
+		).filter((key) => key?.startsWith("magic:project-file-image-preview:v3:"))
+		expect(persistedPreviewKeys).toEqual([])
 
-		expect(restoredItem?.url).toBe(firstItem?.url)
-		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
+		__resetProjectFileImagePreviewCoordinatorForTests()
+		const secondRequest = requestProjectFileImagePreview(source)
+		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
+		await secondRequest
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+	})
+
+	it("removes legacy persisted preview entries without touching unrelated session data", () => {
+		const legacyKey = "magic:project-file-image-preview:v3:legacy-preview"
+		const unrelatedKey = "project-file-image-preview-test:unrelated"
+		window.sessionStorage.setItem(legacyKey, "signed-url")
+		window.sessionStorage.setItem(unrelatedKey, "keep")
+
+		__resetProjectFileImagePreviewCoordinatorForTests()
+
+		expect(window.sessionStorage.getItem(legacyKey)).toBeNull()
+		expect(window.sessionStorage.getItem(unrelatedKey)).toBe("keep")
+		window.sessionStorage.removeItem(unrelatedKey)
+	})
+
+	it("distinguishes unavailable previews from failed exchanges", async () => {
+		const unavailableSource = createSource(20)
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([])
+
+		const unavailableRequest = requestProjectFileImagePreview(unavailableSource)
+		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
+		await expect(unavailableRequest).resolves.toEqual({ status: "unavailable" })
+
+		const failedSource = createSource(21)
+		const exchangeError = new Error("temporary exchange failure")
+		vi.mocked(getTemporaryDownloadUrl).mockRejectedValueOnce(exchangeError)
+
+		const failedRequest = requestProjectFileImagePreview(failedSource)
+		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
+		await expect(failedRequest).resolves.toEqual({
+			status: "failed",
+			error: exchangeError,
+		})
 	})
 
 	it("deduplicates the same cache key while its exchange is in flight", async () => {
@@ -98,8 +144,18 @@ describe("projectFileImagePreviewCoordinator", () => {
 
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 		await expect(Promise.all([firstConsumer, secondConsumer])).resolves.toEqual([
-			expect.objectContaining({ url: expect.stringContaining(sharedSource.fileId) }),
-			expect.objectContaining({ url: expect.stringContaining(sharedSource.fileId) }),
+			{
+				status: "loaded",
+				item: expect.objectContaining({
+					url: expect.stringContaining(sharedSource.fileId),
+				}),
+			},
+			{
+				status: "loaded",
+				item: expect.objectContaining({
+					url: expect.stringContaining(sharedSource.fileId),
+				}),
+			},
 		])
 
 		const abandonedSource = createSource(5)
@@ -107,7 +163,7 @@ describe("projectFileImagePreviewCoordinator", () => {
 		cancelProjectFileImagePreviewRequest(abandonedSource.cacheKey)
 		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs)
 
-		await expect(abandonedRequest).resolves.toBeUndefined()
+		await expect(abandonedRequest).resolves.toEqual({ status: "cancelled" })
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 

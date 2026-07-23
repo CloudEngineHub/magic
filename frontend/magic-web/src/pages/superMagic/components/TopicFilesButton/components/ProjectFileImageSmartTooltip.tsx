@@ -29,7 +29,9 @@ export function ProjectFileImageSmartTooltip({
 		setPreviewImageFailed(false)
 	}, [previewState?.url, source.cacheKey])
 
-	const shouldUseNameTooltip = previewState?.status === "error" || previewImageFailed
+	const previewRequestFailed = previewState?.status === "error"
+	const previewUnavailable = previewState?.status === "unavailable"
+	const shouldUseNameTooltip = previewRequestFailed || previewUnavailable || previewImageFailed
 
 	return (
 		<SmartTooltip
@@ -52,7 +54,9 @@ export function ProjectFileImageSmartTooltip({
 				)
 			}
 			onOpenChange={(open) => {
-				if (open && !shouldUseNameTooltip) manager?.ensurePreview(source)
+				if (open && !previewUnavailable && !previewImageFailed) {
+					manager?.ensurePreview(source)
+				}
 			}}
 		>
 			{children}
