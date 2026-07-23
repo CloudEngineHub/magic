@@ -44,11 +44,16 @@ describe("getFullContent", () => {
 		const result = getFullContent(
 			"<!DOCTYPE html><html><body><div>Preview</div></body></html>",
 			"",
-			{ reportContentMetrics: true },
+			{
+				reportContentMetrics: true,
+				contentMetricsTargetOrigin: "https://magic.example.com",
+			},
 		)
 
 		expect(result).toContain("__MAGIC_DOCUMENT_FLOW_METRICS__")
 		expect(result).toContain('type: "contentMetrics"')
+		expect(result).toContain('var parentOrigin = "https://magic.example.com"')
+		expect(result).toContain("}, parentOrigin);")
 	})
 
 	it("skips serviceWorker mock script when disabled", async () => {

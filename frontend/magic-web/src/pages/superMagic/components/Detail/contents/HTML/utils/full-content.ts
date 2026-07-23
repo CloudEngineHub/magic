@@ -1861,13 +1861,14 @@ function getInlineInspectorFallbackScript(enable = false): string {
  * The cross-origin sandbox cannot be measured from its parent. Document-flow shares report
  * their natural dimensions so the parent can give the iframe an equal height.
  */
-const getContentMetricsReporterScript = () => `
+const getContentMetricsReporterScript = (parentOrigin: string) => `
 	(function() {
 		if (window.__MAGIC_DOCUMENT_FLOW_METRICS__) return;
 		window.__MAGIC_DOCUMENT_FLOW_METRICS__ = true;
 
 		var frameId = 0;
 		var settledTimer = null;
+		var parentOrigin = ${JSON.stringify(parentOrigin)};
 
 		function getDimension(property) {
 			var root = document.documentElement;
@@ -1888,7 +1889,7 @@ const getContentMetricsReporterScript = () => `
 					contentWidth: getDimension("scrollWidth"),
 					contentHeight: getDimension("scrollHeight"),
 					phase: phase
-				}, "*");
+				}, parentOrigin);
 			} catch (error) {}
 		}
 
@@ -2004,7 +2005,13 @@ export const getFullContent = (
 		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
 		${getLinkHandlingScript()}
 		${getNestedIframeInterceptorScript()}
-		${options.reportContentMetrics ? getContentMetricsReporterScript() : ""}
+		${
+			options.reportContentMetrics
+				? getContentMetricsReporterScript(
+						options.contentMetricsTargetOrigin || window.location.origin,
+					)
+				: ""
+		}
 		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
 		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
 	`
@@ -2085,6 +2092,8 @@ interface GetFullContentOptions {
 	containOverscroll?: boolean
 	hideVerticalScroll?: boolean
 	reportContentMetrics?: boolean
+	/** Origin of the React page that owns the sandbox iframe. */
+	contentMetricsTargetOrigin?: string
 	disableParentClickBridge?: boolean
 	enableInlineInspectorFallback?: boolean
 	postMessageTargetStrategy?: PostMessageTargetStrategy

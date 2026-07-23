@@ -353,6 +353,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			() => externalRenderSiteOrigin || window.location.origin,
 			[externalRenderSiteOrigin],
 		)
+		const contentMetricsTargetOrigin = useMemo(() => window.location.origin, [])
 
 		const postMessageTargetStrategy = useMemo(
 			() =>
@@ -1092,6 +1093,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containOverscroll: containIframeOverscroll,
 				hideVerticalScroll,
 				reportContentMetrics: documentFlowFullscreen,
+				contentMetricsTargetOrigin,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
@@ -1222,6 +1224,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						containOverscroll: containIframeOverscroll,
 						hideVerticalScroll,
 						reportContentMetrics: documentFlowFullscreen,
+						contentMetricsTargetOrigin,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
@@ -1519,6 +1522,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const handleMessage = useMemoizedFn(async (event: MessageEvent) => {
 			const messageType = typeof event.data?.type === "string" ? event.data.type : ""
 			const isExpectedSource = event.source === iframeRef.current?.contentWindow
+			const isExpectedOrigin = event.origin === iframeTargetOrigin
 			const isAllowedType = messageType ? iframeMessageTypes.has(messageType) : false
 			const shouldStrictlyValidatePreviewSource =
 				Boolean(messageType) &&
@@ -1550,7 +1554,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				return
 			}
 
-			if (shouldStrictlyValidatePreviewSource && !isExpectedSource) return
+			if (shouldStrictlyValidatePreviewSource && (!isExpectedSource || !isExpectedOrigin))
+				return
 
 			// 检查是否是 EditorBridge 协议消息（由 MessageBridge 处理）
 			// MessageBridge 的监听器会先处理新协议消息（有 version 字段的）

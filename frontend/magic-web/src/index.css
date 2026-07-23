@@ -15,6 +15,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Pure HTML shares must use document scrolling instead of the application shell's fixed-height
+ * scroll area. The class is applied only while the pure-share route is mounted, allowing long
+ * iframe content to expand the browser document for whole-page capture tools.
+ */
+html.magic-pure-share-document-flow,
+html.magic-pure-share-document-flow body,
+html.magic-pure-share-document-flow #root,
+html.magic-pure-share-document-flow #root .magic-app {
+	height: auto !important;
+	min-height: 100dvh !important;
+	overflow: visible !important;
+}
+
 @layer components {
 	/* Skeleton loading component - unified loading animation */
 	.skeleton {
