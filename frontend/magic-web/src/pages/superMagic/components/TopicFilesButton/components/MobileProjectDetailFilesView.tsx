@@ -306,10 +306,6 @@ function MobileProjectDetailFilesView({
 	}, [files, folders, isSearching, searchResults])
 	const imagePreviewManager = useProjectFileImagePreviewManager({ attachments })
 
-	useEffect(() => {
-		imagePreviewManager.setMountedItems(currentSelectableItems)
-	}, [currentSelectableItems, imagePreviewManager.setMountedItems])
-
 	const currentViewSelectableKeys = useMemo(() => {
 		if (isSearching) {
 			return searchResults.map((result) => getAttachmentKey(result.item))
