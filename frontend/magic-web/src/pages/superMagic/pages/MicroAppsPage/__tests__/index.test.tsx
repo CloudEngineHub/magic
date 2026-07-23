@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
 	refresh: vi.fn(),
 	useMicroAppsPage: vi.fn(),
+	getMicroAppProjectByProjectId: vi.fn(),
 	t: (key: string) => key,
 }))
 
@@ -48,7 +49,8 @@ vi.mock("../hooks/useMicroAppsPage", () => ({
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
-		createProject: vi.fn(),
+		createMicroAppProject: vi.fn(),
+		getMicroAppProjectByProjectId: mocks.getMicroAppProjectByProjectId,
 	},
 }))
 
@@ -67,6 +69,7 @@ describe("MicroAppsPage", () => {
 			],
 			publishedProjects: [
 				{
+					app_id: "app-2",
 					project_id: "project-2",
 					project_name: "Published App",
 					resource_id: "resource-2",
@@ -91,22 +94,23 @@ describe("MicroAppsPage", () => {
 		expect(screen.getByTestId("micro-apps-published-list")).toBeInTheDocument()
 		expect(screen.getByText("Published App")).toBeInTheDocument()
 
-		fireEvent.click(screen.getByTestId("micro-apps-published-resource-2"))
+		fireEvent.click(screen.getByTestId("micro-apps-published-app-2"))
 
 		expect(window.open).toHaveBeenCalledWith(
-			`${window.location.origin}/micro-app/resource-2`,
+			`${window.location.origin}/micro-app/app-2`,
 			"_blank",
 			"noopener,noreferrer",
 		)
 		expect(mocks.navigate).not.toHaveBeenCalled()
 	})
 
-	it("opens api access_url before falling back to local share route", () => {
+	it("prefers the stable app_id route over a stale api access_url", () => {
 		mocks.useMicroAppsPage.mockReturnValue({
 			workspace: { id: "workspace-1", name: "Micro Apps" },
 			projects: [],
 			publishedProjects: [
 				{
+					app_id: "app-2",
 					project_id: "project-2",
 					project_name: "Published App",
 					resource_id: "resource-2",
@@ -122,10 +126,10 @@ describe("MicroAppsPage", () => {
 		render(<MicroAppsPage />)
 
 		fireEvent.click(screen.getByTestId("micro-apps-tab-published"))
-		fireEvent.click(screen.getByTestId("micro-apps-published-resource-2"))
+		fireEvent.click(screen.getByTestId("micro-apps-published-app-2"))
 
 		expect(window.open).toHaveBeenCalledWith(
-			"https://example.com/micro-app/resource-2",
+			`${window.location.origin}/micro-app/app-2`,
 			"_blank",
 			"noopener,noreferrer",
 		)

@@ -27,6 +27,7 @@ import { clipboard } from "@/utils/clipboard-helpers"
 
 interface MicroAppPublishDialogProps {
 	open: boolean
+	appId?: string
 	projectId?: string
 	projectName?: string
 	onProjectNameChange?: (projectName: string) => void
@@ -126,12 +127,14 @@ function getShareRecordsFromResponse(response: unknown): Array<Record<string, an
 }
 
 function createPublishedItemFromShareSetting({
+	appId,
 	projectId,
 	resourceId,
 	projectName,
 	share,
 	setting,
 }: {
+	appId: string
 	projectId: string
 	resourceId: string
 	projectName?: string
@@ -139,6 +142,7 @@ function createPublishedItemFromShareSetting({
 	setting: Record<string, any>
 }): PublishedMicroAppProjectItem {
 	return {
+		app_id: appId,
 		project_id: String(setting.project_id || share.project_id || projectId),
 		project_name: setting.project_name || share.project_name || projectName,
 		resource_id: String(setting.resource_id || resourceId),
@@ -163,7 +167,11 @@ function createPublishedItemFromShareSetting({
 	}
 }
 
-async function loadPublishedMicroAppProject(projectId: string, projectName?: string) {
+async function loadPublishedMicroAppProject(
+	appId: string,
+	projectId: string,
+	projectName?: string,
+) {
 	const shareRecordsResponse = await SuperMagicApi.getShareResourcesList({
 		page: 1,
 		page_size: 10,
@@ -184,6 +192,7 @@ async function loadPublishedMicroAppProject(projectId: string, projectName?: str
 	const setting = getShareSettingFromResponse(settingResponse) || existingShare
 
 	return createPublishedItemFromShareSetting({
+		appId,
 		projectId,
 		resourceId: String(resourceId),
 		projectName,
@@ -214,9 +223,8 @@ function formatPublishedAt(value?: string): string {
 
 export function buildMicroAppAccessUrl(item: PublishedMicroAppProjectItem | null): string {
 	if (!item) return ""
-	if (item.access_url) return item.access_url
-	if (!item.resource_id) return ""
-	return `${window.location.origin}/micro-app/${item.resource_id}`
+	if (item.app_id) return `${window.location.origin}/micro-app/${item.app_id}`
+	return item.access_url || ""
 }
 
 export function buildMicroAppShareText({
@@ -237,6 +245,7 @@ export function buildMicroAppShareText({
 
 export default function MicroAppPublishDialog({
 	open,
+	appId,
 	projectId,
 	projectName,
 	onProjectNameChange,
@@ -259,14 +268,18 @@ export default function MicroAppPublishDialog({
 	const hasPublished = Boolean(publishedItem?.resource_id || publishedItem?.access_url)
 
 	useEffect(() => {
-		if (!open || !projectId) return
+		if (!open || !appId || !projectId) return
 
 		let ignore = false
 
 		async function loadPublishedInfo() {
 			setLoading(true)
 			try {
-				const matchedItem = await loadPublishedMicroAppProject(projectId, projectName)
+				const matchedItem = await loadPublishedMicroAppProject(
+					appId,
+					projectId,
+					projectName,
+				)
 				if (ignore) return
 
 				setPublishedItem(matchedItem)
@@ -291,7 +304,7 @@ export default function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [open, projectId, projectName, t])
+	}, [appId, open, projectId, projectName, t])
 
 	useEffect(() => {
 		if (open) return
@@ -383,7 +396,7 @@ export default function MicroAppPublishDialog({
 	])
 
 	const handleSave = useCallback(async () => {
-		if (!projectId || saving) return
+		if (!appId || !projectId || saving) return
 		const nextProjectName = formState.projectName.trim()
 		if (!nextProjectName) {
 			magicToast.error(t("microAppPage.publish.projectNameRequired"))
@@ -404,13 +417,14 @@ export default function MicroAppPublishDialog({
 		setSaving(true)
 		try {
 			const response = await SuperMagicApi.publishMicroAppProject(
-				projectId,
+				appId,
 				buildMicroAppPublishPayload(formState),
 			)
 			const nextItem = getPublishedItemFromResponse(response)
 			const savedProjectName = nextItem.project_name?.trim() || nextProjectName
 			setPublishedItem({
 				...nextItem,
+				app_id: nextItem.app_id || appId,
 				project_id: nextItem.project_id || projectId,
 				project_name: savedProjectName,
 				share_type: nextItem.share_type || formState.shareType,
@@ -427,10 +441,10 @@ export default function MicroAppPublishDialog({
 		} finally {
 			setSaving(false)
 		}
-	}, [formState, onProjectNameChange, projectId, saving, t])
+	}, [appId, formState, onProjectNameChange, projectId, saving, t])
 
 	const handleUnpublish = useCallback(() => {
-		if (!projectId || unpublishing) return
+		if (!appId || unpublishing) return
 
 		MagicModal.confirm({
 			title: t("microAppPage.publish.unpublishConfirmTitle"),
@@ -441,7 +455,7 @@ export default function MicroAppPublishDialog({
 			onOk: async () => {
 				setUnpublishing(true)
 				try {
-					await SuperMagicApi.unpublishMicroAppProject(projectId)
+					await SuperMagicApi.unpublishMicroAppProject(appId)
 					setPublishedItem(null)
 					setFormState(createDefaultFormState(formState.projectName))
 					magicToast.success(t("microAppPage.publish.unpublishSuccess"))
@@ -453,7 +467,7 @@ export default function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [formState.projectName, projectId, t, unpublishing])
+	}, [appId, formState.projectName, t, unpublishing])
 
 	return (
 		<MagicModal

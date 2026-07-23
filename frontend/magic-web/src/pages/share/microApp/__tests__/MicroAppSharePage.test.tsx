@@ -48,6 +48,7 @@ interface TestMagicDropdownProps {
 }
 
 const mocks = vi.hoisted(() => ({
+	resolvePublishedMicroApp: vi.fn(),
 	checkShareResourcePassword: vi.fn(),
 	getShareResource: vi.fn(),
 	getShareResourceFiles: vi.fn(),
@@ -68,6 +69,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
+		resolvePublishedMicroApp: mocks.resolvePublishedMicroApp,
 		checkShareResourcePassword: mocks.checkShareResourcePassword,
 		getShareResource: mocks.getShareResource,
 		getShareResourceFiles: mocks.getShareResourceFiles,
@@ -203,11 +205,11 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 	},
 }))
 
-function renderPage(path = "/micro-app/resource-1") {
+function renderPage(path = "/micro-app/app-1") {
 	return render(
 		<MemoryRouter initialEntries={[path]}>
 			<Routes>
-				<Route path="/micro-app/:resourceId" element={<MicroAppSharePage />} />
+				<Route path="/micro-app/:appId" element={<MicroAppSharePage />} />
 			</Routes>
 		</MemoryRouter>,
 	)
@@ -225,6 +227,11 @@ describe("MicroAppSharePage", () => {
 			teamshareOrganizationCode: "",
 			organizationListReady: true,
 		}
+		mocks.resolvePublishedMicroApp.mockResolvedValue({
+			app_id: "app-1",
+			resource_id: "resource-1",
+			share_code: "resource-1",
+		})
 		mocks.checkShareResourcePassword.mockResolvedValue({ has_password: false })
 		mocks.getShareResource.mockResolvedValue({
 			temporary_token: "token-1",
@@ -274,7 +281,7 @@ describe("MicroAppSharePage", () => {
 	})
 
 	it("registers the standalone micro app route as public", () => {
-		expect(RoutePath.MicroAppShare).toBe("/micro-app/:resourceId")
+		expect(RoutePath.MicroAppShare).toBe("/micro-app/:appId")
 		expect(whiteListRoutes).toContain("/micro-app/*")
 	})
 
@@ -282,6 +289,7 @@ describe("MicroAppSharePage", () => {
 		renderPage()
 
 		await waitFor(() => {
+			expect(mocks.resolvePublishedMicroApp).toHaveBeenCalledWith("app-1")
 			expect(mocks.getShareResource).toHaveBeenCalledWith({
 				resource_id: "resource-1",
 				password: undefined,
@@ -490,7 +498,7 @@ describe("MicroAppSharePage", () => {
 	it("uses password query when the resource requires password", async () => {
 		mocks.checkShareResourcePassword.mockResolvedValue({ has_password: true })
 
-		renderPage("/micro-app/resource-1?password=abcd1234")
+		renderPage("/micro-app/app-1?password=abcd1234")
 
 		await waitFor(() => {
 			expect(mocks.getShareResource).toHaveBeenCalledWith({

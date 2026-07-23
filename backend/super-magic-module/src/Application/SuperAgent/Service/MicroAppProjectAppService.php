@@ -9,7 +9,6 @@ namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
-use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Application\Share\Service\ResourceShareAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishedMicroAppListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishMicroAppRequestDTO;
@@ -48,10 +47,11 @@ class MicroAppProjectAppService extends AbstractAppService
     ) {
     }
 
-    public function publish(RequestContext $requestContext, int $projectId, PublishMicroAppRequestDTO $requestDTO): array
+    public function publish(RequestContext $requestContext, int $appId, PublishMicroAppRequestDTO $requestDTO): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        $project = $this->getValidatedMicroAppProject($projectId, $authorization->getOrganizationCode());
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+        $projectId = $project->getId();
         $this->getAccessibleProjectWithManager(
             $projectId,
             $authorization->getId(),
@@ -59,19 +59,11 @@ class MicroAppProjectAppService extends AbstractAppService
         );
         $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
 
-        $record = $this->microAppRepository->findByProjectId($projectId);
-        if ($record !== null && $record->getOrganizationCode() !== $authorization->getOrganizationCode()) {
+        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
         }
 
         $now = date('Y-m-d H:i:s');
-        if ($record === null) {
-            $record = (new MicroAppEntity())
-                ->setProjectId($projectId)
-                ->setResourceId((string) IdGenerator::getSnowId())
-                ->setOrganizationCode($authorization->getOrganizationCode())
-                ->setUserId($authorization->getId());
-        }
 
         Db::beginTransaction();
         try {
@@ -100,7 +92,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 'show_share_url' => true,
             ]);
             $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO);
-            $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl($record->getResourceId());
+            $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId());
 
             $record
                 ->setShareId($shareItem->id)
@@ -127,13 +119,17 @@ class MicroAppProjectAppService extends AbstractAppService
         return $this->formatPublishRecord($record, $project->getProjectName());
     }
 
-    public function unpublish(RequestContext $requestContext, int $projectId): array
+    public function unpublish(RequestContext $requestContext, int $appId): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        $project = $this->getValidatedMicroAppProject($projectId, $authorization->getOrganizationCode());
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+        $this->getAccessibleProjectWithManager(
+            $project->getId(),
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        );
 
-        $record = $this->microAppRepository->findByProjectId($projectId);
-        if ($record === null || $record->getOrganizationCode() !== $authorization->getOrganizationCode()) {
+        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
         }
 
@@ -155,6 +151,61 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         return $this->formatPublishRecord($record, $project->getProjectName());
+    }
+
+    public function show(RequestContext $requestContext, int $appId): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+        $this->getAccessibleProject(
+            $project->getId(),
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        );
+
+        return $this->formatMicroApp($record, $project);
+    }
+
+    public function showByProject(RequestContext $requestContext, int $projectId): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $project = $this->projectRepository->findById($projectId);
+        if ($project === null || ! $this->isMicroAppProject($project)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        $this->getAccessibleProject(
+            $projectId,
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        );
+
+        $record = $this->microAppRepository->ensureByProjectId(
+            $projectId,
+            $project->getUserOrganizationCode(),
+            $project->getUserId()
+        );
+
+        return $this->formatMicroApp($record, $project);
+    }
+
+    public function resolvePublished(int $appId): array
+    {
+        $record = $this->microAppRepository->findById($appId);
+        if ($record === null || $record->getPublishStatus() !== MicroAppPublishStatus::Published->value) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
+        }
+
+        $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
+        if ($shareEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
+        }
+
+        return [
+            'app_id' => (string) $record->getId(),
+            'resource_id' => $record->getResourceId(),
+            'share_code' => $shareEntity->getShareCode(),
+        ];
     }
 
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
@@ -208,10 +259,18 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
-    private function getValidatedMicroAppProject(int $projectId, string $organizationCode): ProjectEntity
+    /**
+     * @return array{0: MicroAppEntity, 1: ProjectEntity}
+     */
+    private function getValidatedMicroApp(int $appId): array
     {
-        $project = $this->projectRepository->findById($projectId);
-        if ($project === null || $project->getUserOrganizationCode() !== $organizationCode) {
+        $record = $this->microAppRepository->findById($appId);
+        if ($record === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        $project = $this->projectRepository->findById($record->getProjectId());
+        if ($project === null) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
         }
 
@@ -219,7 +278,7 @@ class MicroAppProjectAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, 'micro_app.invalid_project_type');
         }
 
-        return $project;
+        return [$record, $project];
     }
 
     private function isMicroAppProject(ProjectEntity $project): bool
@@ -256,6 +315,7 @@ class MicroAppProjectAppService extends AbstractAppService
     private function formatPublishRecord(MicroAppEntity $record, ?string $projectName = null): array
     {
         return [
+            'app_id' => (string) $record->getId(),
             'project_id' => $record->getProjectId(),
             'project_name' => $projectName,
             'resource_id' => $record->getResourceId(),
@@ -265,9 +325,19 @@ class MicroAppProjectAppService extends AbstractAppService
             'share_range' => $record->getShareRange(),
             'target_ids' => $record->getTargetIds(),
             'publish_status' => $record->getPublishStatus(),
-            'access_url' => $this->shareUrlBuilder->buildMicroAppShareUrl($record->getResourceId()) ?? $record->getAccessUrl(),
+            'access_url' => $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId()) ?? $record->getAccessUrl(),
             'published_at' => $record->getPublishedAt(),
             'unpublished_at' => $record->getUnpublishedAt(),
+        ];
+    }
+
+    private function formatMicroApp(MicroAppEntity $record, ProjectEntity $project): array
+    {
+        return [
+            'app_id' => (string) $record->getId(),
+            'project_id' => (string) $record->getProjectId(),
+            'project' => $this->formatProject($project),
+            'publish' => $this->formatPublishRecord($record, $project->getProjectName()),
         ];
     }
 

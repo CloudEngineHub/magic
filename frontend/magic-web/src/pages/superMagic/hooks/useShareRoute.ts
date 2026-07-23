@@ -41,7 +41,7 @@ export default function useShareRoute(): ShareRouteReturn {
 		end: false,
 	})
 
-	// Match standalone micro app share route: /micro-app/{resourceId}
+	// Match standalone micro app share route: /micro-app/{appId}
 	const microAppShareMatch = useMatch({
 		path: RoutePath.MicroAppShare,
 		end: true,
@@ -57,7 +57,7 @@ export default function useShareRoute(): ShareRouteReturn {
 				shareParams: {
 					topicId: undefined,
 					fileId: undefined,
-					resourceId: microAppShareMatch.params.resourceId,
+					resourceId: undefined,
 				},
 				isLegacy: false,
 			}

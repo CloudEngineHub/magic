@@ -64,6 +64,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectsBatchDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectsBatchMovedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectUpdatedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\StopRunningTaskEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageScheduleDomainService;
@@ -142,6 +143,7 @@ class ProjectAppService extends AbstractAppService
         private readonly WorkspaceDomainService $workspaceDomainService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly ProjectRepositoryInterface $projectRepository,
+        private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
         private readonly TopicDomainService $topicDomainService,
@@ -1917,6 +1919,12 @@ class ProjectAppService extends AbstractAppService
                 projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
             );
 
+            $microAppRecord = $this->microAppRepository->ensureByProjectId(
+                $projectEntity->getId(),
+                $projectEntity->getUserOrganizationCode(),
+                $projectEntity->getUserId(),
+            );
+
             Db::commit();
 
             $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
@@ -1925,6 +1933,7 @@ class ProjectAppService extends AbstractAppService
             return [
                 'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
                 'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
+                'app_id' => (string) $microAppRecord->getId(),
             ];
         } catch (Throwable $e) {
             Db::rollBack();

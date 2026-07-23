@@ -42,20 +42,20 @@ class MicroAppProjectApi extends AbstractApi
         return $this->projectAppService->createMicroAppProject($requestContext, $requestDTO);
     }
 
-    public function publish(RequestContext $requestContext, int $projectId): array
+    public function publish(RequestContext $requestContext, int $appId): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
 
         $requestDTO = PublishMicroAppRequestDTO::fromRequest($this->request);
 
-        return $this->microAppProjectAppService->publish($requestContext, $projectId, $requestDTO);
+        return $this->microAppProjectAppService->publish($requestContext, $appId, $requestDTO);
     }
 
-    public function unpublish(RequestContext $requestContext, int $projectId): array
+    public function unpublish(RequestContext $requestContext, int $appId): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
 
-        return $this->microAppProjectAppService->unpublish($requestContext, $projectId);
+        return $this->microAppProjectAppService->unpublish($requestContext, $appId);
     }
 
     public function publishedList(RequestContext $requestContext): array
@@ -65,5 +65,24 @@ class MicroAppProjectApi extends AbstractApi
         $requestDTO = PublishedMicroAppListRequestDTO::fromRequest($this->request);
 
         return $this->microAppProjectAppService->publishedList($requestContext, $requestDTO);
+    }
+
+    public function show(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        return $this->microAppProjectAppService->show($requestContext, $appId);
+    }
+
+    public function showByProject(RequestContext $requestContext, int $projectId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        return $this->microAppProjectAppService->showByProject($requestContext, $projectId);
+    }
+
+    public function resolvePublished(int $appId): array
+    {
+        return $this->microAppProjectAppService->resolvePublished($appId);
     }
 }

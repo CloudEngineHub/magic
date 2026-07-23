@@ -11,9 +11,9 @@ describe("superMagicMicroAppRoutes", () => {
 		)
 
 		expect(RoutePath.MicroApps).toBe("/super/micro-apps")
-		expect(RoutePath.MicroApp).toBe("/super/micro-app/:projectId")
+		expect(RoutePath.MicroApp).toBe("/super/micro-app/:appId")
 		expect(listRoute?.path).toBe("/:clusterCode/super/micro-apps")
-		expect(detailRoute?.path).toBe("/:clusterCode/super/micro-app/:projectId")
+		expect(detailRoute?.path).toBe("/:clusterCode/super/micro-app/:appId")
 	})
 
 	it("registers public micro app share route", () => {
@@ -21,7 +21,7 @@ describe("superMagicMicroAppRoutes", () => {
 			(item) => item.name === RouteName.MicroAppShare,
 		)
 
-		expect(RoutePath.MicroAppShare).toBe("/micro-app/:resourceId")
-		expect(shareRoute?.path).toBe("/micro-app/:resourceId")
+		expect(RoutePath.MicroAppShare).toBe("/micro-app/:appId")
+		expect(shareRoute?.path).toBe("/micro-app/:appId")
 	})
 })

@@ -143,6 +143,7 @@ function renderDialog({
 	return render(
 		<MicroAppPublishDialog
 			open
+			appId="app-1"
 			projectId="project-1"
 			projectName="Demo App"
 			onProjectNameChange={onProjectNameChange}
@@ -158,6 +159,7 @@ describe("MicroAppPublishDialog", () => {
 		mocks.getShareResourcesList.mockResolvedValue({ list: [] })
 		mocks.getShareInfoByCode.mockResolvedValue(null)
 		mocks.publishMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
 			project_id: "project-1",
 			resource_id: "resource-1",
 			share_type: ShareType.Organization,
@@ -255,7 +257,7 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 
 		await waitFor(() => {
-			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				project_name: "Demo App",
 				share_type: ShareType.Organization,
 				share_range: "designated",
@@ -273,7 +275,7 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 
 		await waitFor(() => {
-			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				project_name: "Demo App",
 				share_type: ShareType.Public,
 			})
@@ -292,7 +294,7 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 
 		await waitFor(() => {
-			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				project_name: "Demo App",
 				share_type: ShareType.PasswordProtected,
 				password: "123456",
@@ -311,7 +313,7 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 
 		await waitFor(() => {
-			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				project_name: "库存管理助手",
 				share_type: ShareType.Organization,
 				share_range: "all",
@@ -355,7 +357,7 @@ describe("MicroAppPublishDialog", () => {
 		})
 		await waitFor(() => {
 			expect(screen.getByTestId("micro-app-publish-access-url")).toHaveValue(
-				"https://example.com/app/resource-1",
+				`${window.location.origin}/micro-app/app-1`,
 			)
 		})
 	})
@@ -386,7 +388,7 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("micro-app-publish-access-url")).toHaveValue(
-				"https://example.com/app/resource-1",
+				`${window.location.origin}/micro-app/app-1`,
 			)
 			expect(screen.getByTestId("micro-app-publish-save")).toHaveTextContent(
 				"microAppPage.publish.update",
@@ -411,7 +413,7 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("micro-app-publish-access-url")).toHaveValue(
-				`${window.location.origin}/micro-app/resource-1`,
+				`${window.location.origin}/micro-app/app-1`,
 			)
 			expect(screen.getByTestId("micro-app-publish-save")).toHaveTextContent(
 				"microAppPage.publish.update",
@@ -441,7 +443,9 @@ describe("MicroAppPublishDialog", () => {
 		await screen.findByTestId("micro-app-publish-quick-share")
 		fireEvent.click(screen.getByTestId("micro-app-publish-copy-share-text"))
 
-		expect(mocks.writeText).toHaveBeenCalledWith("Demo App\nhttps://example.com/app/resource-1")
+		expect(mocks.writeText).toHaveBeenCalledWith(
+			`Demo App\n${window.location.origin}/micro-app/app-1`,
+		)
 		expect(mocks.successToast).toHaveBeenCalledWith("microAppPage.publish.shareTextCopySuccess")
 	})
 
@@ -467,19 +471,23 @@ describe("MicroAppPublishDialog", () => {
 		await screen.findByTestId("micro-app-publish-quick-share")
 		fireEvent.click(screen.getByTestId("micro-app-publish-copy-share-text"))
 
-		expect(mocks.writeText).toHaveBeenCalledWith("Demo App\nhttps://example.com/app/resource-1")
+		expect(mocks.writeText).toHaveBeenCalledWith(
+			`Demo App\n${window.location.origin}/micro-app/app-1`,
+		)
 	})
 
 	it("builds micro app route access url when api omits access_url", async () => {
 		expect(
 			buildMicroAppAccessUrl({
+				app_id: "app-1",
 				project_id: "project-1",
 				resource_id: "resource-1",
 				share_type: ShareType.Public,
 			}),
-		).toBe(`${window.location.origin}/micro-app/resource-1`)
+		).toBe(`${window.location.origin}/micro-app/app-1`)
 
 		mocks.publishMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
 			project_id: "project-1",
 			resource_id: "resource-1",
 			share_type: ShareType.Public,
@@ -493,7 +501,7 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("micro-app-publish-access-url")).toHaveValue(
-				`${window.location.origin}/micro-app/resource-1`,
+				`${window.location.origin}/micro-app/app-1`,
 			)
 		})
 	})
@@ -525,7 +533,7 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.click(screen.getByTestId("micro-app-unpublish-button"))
 
 		await waitFor(() => {
-			expect(mocks.unpublishMicroAppProject).toHaveBeenCalledWith("project-1")
+			expect(mocks.unpublishMicroAppProject).toHaveBeenCalledWith("app-1")
 			expect(screen.queryByTestId("micro-app-publish-access-url")).not.toBeInTheDocument()
 		})
 	})

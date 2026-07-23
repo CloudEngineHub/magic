@@ -4,6 +4,7 @@ import MicroAppPublishDialog from "./MicroAppPublishDialog"
 import MicroAppRenameDialog from "./MicroAppRenameDialog"
 
 interface MicroAppPageOverlaysProps {
+	appId?: string
 	projectId?: string
 	projectName?: string
 	publishDialogOpen: boolean
@@ -18,6 +19,7 @@ interface MicroAppPageOverlaysProps {
 
 /** 桌面端与移动端共享发布、数据库和协作者浮层，避免两套页面重复维护行为。 */
 export default function MicroAppPageOverlays({
+	appId,
 	projectId,
 	projectName,
 	publishDialogOpen,
@@ -33,6 +35,7 @@ export default function MicroAppPageOverlays({
 		<>
 			<MicroAppPublishDialog
 				open={publishDialogOpen}
+				appId={appId}
 				projectId={projectId}
 				projectName={projectName}
 				onProjectNameChange={onProjectNameChange}

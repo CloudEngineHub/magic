@@ -42,6 +42,7 @@ describe("useMicroAppsPage", () => {
 						project_mode: "micro-app",
 					},
 					publish: {
+						app_id: "app-2",
 						project_id: "933138305533177857",
 						resource_id: "resource-2",
 						share_type: ShareType.Public,
@@ -74,6 +75,7 @@ describe("useMicroAppsPage", () => {
 		expect(result.current.projects).toHaveLength(1)
 		expect(result.current.publishedProjects).toEqual([
 			{
+				app_id: "app-2",
 				project_id: "933138305533177857",
 				project_name: "Published App",
 				resource_id: "resource-2",
@@ -101,6 +103,7 @@ describe("useMicroAppsPage", () => {
 								project_name: "手机消费者问卷调查生成",
 							},
 							publish: {
+								app_id: "app-2",
 								project_id: "933138305533177857",
 								resource_id: "933152014460612609",
 								share_type: ShareType.PasswordProtected,
@@ -113,6 +116,7 @@ describe("useMicroAppsPage", () => {
 			}),
 		).toEqual([
 			{
+				app_id: "app-2",
 				project_id: "933138305533177857",
 				project_name: "手机消费者问卷调查生成",
 				resource_id: "933152014460612609",

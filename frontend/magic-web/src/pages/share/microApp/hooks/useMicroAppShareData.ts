@@ -12,7 +12,7 @@ import { useSharePermission } from "@/pages/share/hooks/useSharePermission"
 import { useTokenRefreshPolling } from "@/pages/share/hooks/useTokenRefreshPolling"
 
 interface UseMicroAppShareDataParams {
-	resourceId: string
+	appId: string
 }
 
 interface MicroAppShareMeta {
@@ -110,8 +110,9 @@ function redirectToLogin(): void {
 	})
 }
 
-export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDataParams) {
+export default function useMicroAppShareData({ appId }: UseMicroAppShareDataParams) {
 	const { search } = useLocation()
+	const [resourceId, setResourceId] = useState("")
 	const [shareData, setShareData] = useState<any>(null)
 	const [attachmentsTree, setAttachmentsTree] = useState<AttachmentItem[]>([])
 	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
@@ -126,7 +127,7 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 	const shareMeta = useMemo(() => resolveShareMeta(shareData), [shareData])
 
 	const applyShareData = useCallback(
-		async (nextShareData: any, password?: string) => {
+		async (nextShareData: any, resolvedResourceId: string, password?: string) => {
 			const meta = resolveShareMeta(nextShareData)
 			if (meta.temporaryToken) {
 				// @ts-ignore 复用现有 HTML 预览读取分享文件的临时 token 约定。
@@ -138,7 +139,7 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 			}
 
 			const filesResponse = await SuperMagicApi.getShareResourceFiles({
-				resource_id: resourceId,
+				resource_id: resolvedResourceId,
 				password,
 			})
 			const processedData = AttachmentDataProcessor.processAttachmentData(
@@ -156,7 +157,7 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 			setError(null)
 			setRequiredOrgCode("")
 		},
-		[resourceId, setRequiredOrgCode],
+		[setRequiredOrgCode],
 	)
 
 	const getShareData = useCallback(
@@ -165,25 +166,33 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 				resource_id,
 				password,
 			})
-			await applyShareData(response, password)
+			await applyShareData(response, resource_id, password)
 			return response
 		},
 		[applyShareData],
 	)
 
 	const loadShare = useCallback(async () => {
-		if (!resourceId) return
+		if (!appId) return
 
 		setLoading(true)
 		setError(null)
 		setRequiredOrgCode("")
+		setResourceId("")
 		setShareData(null)
 		setAttachmentList([])
 		setAttachmentsTree([])
+		setVerifiedPassword(undefined)
 		let checkData: any
 		try {
+			const appResponse = await SuperMagicApi.resolvePublishedMicroApp(appId)
+			const appData = unwrapResponse<{ resource_id?: string }>(appResponse)
+			const resolvedResourceId = readString(appData?.resource_id)
+			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
+			setResourceId(resolvedResourceId)
+
 			const checkResponse: any = await SuperMagicApi.checkShareResourcePassword({
-				resource_id: resourceId,
+				resource_id: resolvedResourceId,
 			})
 			checkData = unwrapResponse(checkResponse)
 			const hasPassword = Boolean(checkData?.has_password)
@@ -193,13 +202,13 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 			setPasswordFromUrl(urlPassword)
 
 			if (!hasPassword) {
-				await getShareData({ resource_id: resourceId })
+				await getShareData({ resource_id: resolvedResourceId })
 				return
 			}
 
 			if (urlPassword) {
 				try {
-					await getShareData({ resource_id: resourceId, password: urlPassword })
+					await getShareData({ resource_id: resolvedResourceId, password: urlPassword })
 					setVerifiedPassword(urlPassword)
 				} catch {
 					setShareData(null)
@@ -213,7 +222,7 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 		} finally {
 			setLoading(false)
 		}
-	}, [getShareData, resourceId, search, setRequiredOrgCode])
+	}, [appId, getShareData, search, setRequiredOrgCode])
 
 	useEffect(() => {
 		void loadShare()
@@ -233,6 +242,7 @@ export default function useMicroAppShareData({ resourceId }: UseMicroAppShareDat
 
 	return {
 		shareData,
+		resourceId,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,

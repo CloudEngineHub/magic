@@ -21,7 +21,6 @@ import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade
 import { RoutePath } from "@/constants/routes"
 import { MobileShellSidebarToggleButton } from "@/pages/superMagicMobile/components/MobileShell"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -36,12 +35,10 @@ function formatProjectTime(value?: string): string {
 }
 
 function getPublishedAppUrl(item: PublishedMicroAppProjectItem): string {
-	if (item.access_url) return item.access_url
-	if (!item.resource_id) return ""
-	return `${window.location.origin}${RoutePath.MicroAppShare.replace(
-		":resourceId",
-		item.resource_id,
-	)}`
+	if (item.app_id) {
+		return `${window.location.origin}${RoutePath.MicroAppShare.replace(":appId", item.app_id)}`
+	}
+	return item.access_url || ""
 }
 
 function MicroAppMobileRow({
@@ -93,12 +90,18 @@ export default function MicroAppsPageMobile() {
 	const [creating, setCreating] = useState(false)
 	const [activeTab, setActiveTab] = useState<MicroAppsTab>("projects")
 
-	const handleOpenProject = (project: ProjectListItem) => {
-		navigate({
-			name: RouteName.MicroApp,
-			params: { projectId: project.id },
-			viewTransition: false,
-		})
+	const handleOpenProject = async (project: ProjectListItem) => {
+		try {
+			const app = await SuperMagicApi.getMicroAppProjectByProjectId(project.id)
+			navigate({
+				name: RouteName.MicroApp,
+				params: { appId: app.app_id },
+				viewTransition: false,
+			})
+		} catch (openError) {
+			console.error("打开微应用项目失败：", openError)
+			magicToast.error(t("microAppsPage.errorTitle"))
+		}
 	}
 
 	const handleOpenPublishedProject = (item: PublishedMicroAppProjectItem) => {
@@ -111,16 +114,14 @@ export default function MicroAppsPageMobile() {
 
 		setCreating(true)
 		try {
-			const result = await SuperMagicApi.createProject({
+			const result = await SuperMagicApi.createMicroAppProject({
 				workspace_id: workspace.id,
 				project_name: "",
-				project_description: "",
-				project_mode: TopicMode.MicroApp,
 			})
 
 			navigate({
 				name: RouteName.MicroApp,
-				params: { projectId: result.project.id },
+				params: { appId: result.app_id },
 				viewTransition: false,
 			})
 		} catch (createError) {
@@ -272,7 +273,7 @@ export default function MicroAppsPageMobile() {
 									? t("microAppsPage.shareType.password")
 									: t("microAppsPage.shareType.organization")
 							const Icon = isPublic ? Globe2 : isPassword ? LockKeyhole : Users
-							const itemId = item.resource_id || item.project_id
+							const itemId = item.app_id || item.project_id
 
 							return (
 								<MicroAppMobileRow

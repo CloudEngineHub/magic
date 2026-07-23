@@ -227,11 +227,12 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 
 export default function MicroAppSharePage() {
 	const { t } = useTranslation("super")
-	const { resourceId = "" } = useParams<{ resourceId: string }>()
+	const { appId = "" } = useParams<{ appId: string }>()
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const {
 		shareData,
+		resourceId,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,
@@ -246,7 +247,7 @@ export default function MicroAppSharePage() {
 		setError,
 		setVerifiedPassword,
 		reload,
-	} = useMicroAppShareData({ resourceId })
+	} = useMicroAppShareData({ appId })
 
 	const defaultEntryFile = useMemo(
 		() => resolveDefaultHtmlEntry(attachmentList),

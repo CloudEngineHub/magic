@@ -61,14 +61,14 @@ class ShareUrlBuilder
         return $shareUrl;
     }
 
-    public function buildMicroAppShareUrl(string $resourceId, ?string $password = null): ?string
+    public function buildMicroAppShareUrl(string $appId, ?string $password = null): ?string
     {
         $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
         if ($frontendDomain === '') {
             return null;
         }
 
-        $shareUrl = $frontendDomain . '/micro-app/' . $resourceId;
+        $shareUrl = $frontendDomain . '/micro-app/' . $appId;
         if ($password !== null && $password !== '') {
             $shareUrl .= '?password=' . rawurlencode($password);
         }

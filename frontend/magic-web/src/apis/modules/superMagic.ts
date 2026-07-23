@@ -104,6 +104,7 @@ export interface PublishMicroAppProjectBody {
 }
 
 export interface PublishedMicroAppProjectItem {
+	app_id?: string
 	project_id: string
 	project_name?: string
 	resource_id?: string
@@ -138,6 +139,19 @@ export interface PublishedMicroAppProjectsResponse {
 	total?: number
 	page?: number
 	page_size?: number
+}
+
+export interface MicroAppProjectDetail {
+	app_id: string
+	project_id: string
+	project?: ProjectListItem
+	publish?: PublishedMicroAppProjectItem
+}
+
+export interface CreateMicroAppProjectResponse {
+	app_id: string
+	project: ProjectListItem
+	topic: Topic
 }
 
 /** A single LLM model returned by matchLlmModels */
@@ -2930,12 +2944,67 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * @description 创建微应用项目并生成稳定 app_id
+	 */
+	createMicroAppProject({
+		workspace_id,
+		project_name = "",
+	}: {
+		workspace_id?: string
+		project_name?: string
+	}) {
+		return fetch.post<CreateMicroAppProjectResponse>(
+			"/api/v1/super-agent/micro-app-projects",
+			{
+				workspace_id,
+				project_name,
+				dynamic_params: {
+					message_version: "v2",
+				},
+			},
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 根据 app_id 获取微应用对应的内部项目
+	 */
+	getMicroAppProject(appId: string) {
+		return fetch.get<MicroAppProjectDetail>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}", { appId }),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 为已有微应用项目获取或补建稳定 app_id
+	 */
+	getMicroAppProjectByProjectId(projectId: string) {
+		return fetch.get<MicroAppProjectDetail>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/by-project/${projectId}", {
+				projectId,
+			}),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 将公开微应用 app_id 解析为当前有效分享资源
+	 */
+	resolvePublishedMicroApp(appId: string) {
+		return fetch.get<{ app_id: string; resource_id: string; share_code: string }>(
+			genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
 	 * @description 发布微应用项目
 	 */
-	publishMicroAppProject(projectId: string, body: PublishMicroAppProjectBody) {
+	publishMicroAppProject(appId: string, body: PublishMicroAppProjectBody) {
 		return fetch.post<PublishedMicroAppProjectItem>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/${projectId}/publish", {
-				projectId,
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
+				appId,
 			}),
 			body,
 			{ parseJsonLargeIntAsString: true },
@@ -2945,10 +3014,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 下架微应用项目
 	 */
-	unpublishMicroAppProject(projectId: string) {
+	unpublishMicroAppProject(appId: string) {
 		return fetch.delete<unknown>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/${projectId}/publish", {
-				projectId,
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
+				appId,
 			}),
 		)
 	},

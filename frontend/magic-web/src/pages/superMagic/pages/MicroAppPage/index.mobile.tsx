@@ -23,6 +23,7 @@ import MicroAppMobileHeader from "./components/MicroAppMobileHeader"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import { AppStoreProvider } from "./context"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
+import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
 
 const MicroAppDatabasePanelMobile = lazy(() => import("./components/MicroAppDatabasePanelMobile"))
 const MicroAppMobileConversation = lazy(() => import("./components/MicroAppMobileConversation"))
@@ -65,7 +66,7 @@ function MobilePanelTab({
 	)
 }
 
-function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
+function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectId: string }) {
 	const { t } = useTranslation("super")
 	const [activePanel, setActivePanel] = useState<MobileMicroAppPanel>("preview")
 	const [conversationOpen, setConversationOpen] = useState(false)
@@ -232,6 +233,7 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 			</div>
 
 			<MicroAppPageOverlays
+				appId={appId}
 				projectId={selectedProject?.id}
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
@@ -291,16 +293,18 @@ function MicroAppPageMobileInner({ projectId }: { projectId: string }) {
 const MicroAppPageMobileInnerObserver = observer(MicroAppPageMobileInner)
 
 export default function MicroAppPageMobile() {
-	const { projectId } = useParams<{ projectId: string }>()
+	const { appId = "" } = useParams<{ appId: string }>()
+	const { t } = useTranslation("super")
 	const navigate = useNavigate()
+	const { projectId, loading, error } = useMicroAppProjectResolver(appId)
 
 	useEffect(() => {
-		if (!projectId) {
+		if (!appId) {
 			navigate({ name: RouteName.MicroApps, replace: true })
 		}
-	}, [projectId, navigate])
+	}, [appId, navigate])
 
-	if (!projectId) {
+	if (!appId || loading) {
 		return (
 			<div className="flex h-full w-full items-center justify-center bg-mobile-background">
 				<Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -308,9 +312,26 @@ export default function MicroAppPageMobile() {
 		)
 	}
 
+	if (error || !projectId) {
+		return (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background px-6 text-center">
+				<p className="text-sm text-destructive">
+					{error?.message || "Micro app not found"}
+				</p>
+				<button
+					type="button"
+					className="text-sm font-medium text-primary"
+					onClick={() => navigate({ name: RouteName.MicroApps })}
+				>
+					{t("microAppPage.header.backToApps")}
+				</button>
+			</div>
+		)
+	}
+
 	return (
 		<AppStoreProvider>
-			<MicroAppPageMobileInnerObserver projectId={projectId} />
+			<MicroAppPageMobileInnerObserver appId={appId} projectId={projectId} />
 		</AppStoreProvider>
 	)
 }

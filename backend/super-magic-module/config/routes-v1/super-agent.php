@@ -157,10 +157,14 @@ Router::addGroup(
             Router::post('', [MicroAppProjectApi::class, 'store']);
             // 获取已发布微应用列表
             Router::get('/published/queries', [MicroAppProjectApi::class, 'publishedList']);
+            // 根据项目 ID 获取或补建微应用映射
+            Router::get('/by-project/{projectId}', [MicroAppProjectApi::class, 'showByProject']);
+            // 根据 app_id 获取微应用项目映射
+            Router::get('/{appId}', [MicroAppProjectApi::class, 'show']);
             // 发布微应用
-            Router::post('/{projectId}/publish', [MicroAppProjectApi::class, 'publish']);
+            Router::post('/{appId}/publish', [MicroAppProjectApi::class, 'publish']);
             // 下架微应用
-            Router::delete('/{projectId}/publish', [MicroAppProjectApi::class, 'unpublish']);
+            Router::delete('/{appId}/publish', [MicroAppProjectApi::class, 'unpublish']);
         });
 
         // 用户级别特殊项目

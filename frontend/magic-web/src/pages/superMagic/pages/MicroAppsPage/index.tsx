@@ -24,7 +24,6 @@ import { RouteName } from "@/routes/constants"
 import { RoutePath } from "@/constants/routes"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
@@ -38,12 +37,10 @@ function formatProjectTime(value?: string): string {
 }
 
 function getPublishedAppUrl(item: PublishedMicroAppProjectItem): string {
-	if (item.access_url) return item.access_url
-	if (!item.resource_id) return ""
-	return `${window.location.origin}${RoutePath.MicroAppShare.replace(
-		":resourceId",
-		item.resource_id,
-	)}`
+	if (item.app_id) {
+		return `${window.location.origin}${RoutePath.MicroAppShare.replace(":appId", item.app_id)}`
+	}
+	return item.access_url || ""
 }
 
 function MicroAppProjectRow({
@@ -105,7 +102,7 @@ function PublishedMicroAppRow({
 			type="button"
 			className="flex h-16 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-muted/60"
 			onClick={() => onOpen(item)}
-			data-testid={`micro-apps-published-${item.resource_id || item.project_id}`}
+			data-testid={`micro-apps-published-${item.app_id || item.project_id}`}
 		>
 			<div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
 				{shareTypeIcon}
@@ -141,11 +138,17 @@ function MicroAppsPageDesktop() {
 	const [creating, setCreating] = useState(false)
 	const [activeTab, setActiveTab] = useState<MicroAppsTab>("projects")
 
-	const handleOpenProject = (project: ProjectListItem) => {
-		navigate({
-			name: RouteName.MicroApp,
-			params: { projectId: project.id },
-		})
+	const handleOpenProject = async (project: ProjectListItem) => {
+		try {
+			const app = await SuperMagicApi.getMicroAppProjectByProjectId(project.id)
+			navigate({
+				name: RouteName.MicroApp,
+				params: { appId: app.app_id },
+			})
+		} catch (openError) {
+			console.error("打开微应用项目失败：", openError)
+			magicToast.error(t("microAppsPage.errorTitle"))
+		}
 	}
 
 	const handleOpenPublishedProject = (item: PublishedMicroAppProjectItem) => {
@@ -164,16 +167,14 @@ function MicroAppsPageDesktop() {
 
 		setCreating(true)
 		try {
-			const result = await SuperMagicApi.createProject({
+			const result = await SuperMagicApi.createMicroAppProject({
 				workspace_id: workspace.id,
 				project_name: "",
-				project_description: "",
-				project_mode: TopicMode.MicroApp,
 			})
 
 			navigate({
 				name: RouteName.MicroApp,
-				params: { projectId: result.project.id },
+				params: { appId: result.app_id },
 			})
 		} catch (createError) {
 			console.error("创建微应用项目失败：", createError)
@@ -332,7 +333,7 @@ function MicroAppsPageDesktop() {
 						>
 							{publishedProjects.map((item) => (
 								<PublishedMicroAppRow
-									key={item.resource_id || item.project_id}
+									key={item.app_id || item.project_id}
 									item={item}
 									onOpen={handleOpenPublishedProject}
 								/>

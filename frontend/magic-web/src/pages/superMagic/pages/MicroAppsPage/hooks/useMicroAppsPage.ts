@@ -15,6 +15,7 @@ function normalizePublishedMicroAppItem(
 		if (!publish && !project?.id) return null
 
 		return {
+			app_id: String(publish?.app_id || ""),
 			project_id: String(publish?.project_id || project?.id || ""),
 			project_name: project?.project_name || publish?.project_name,
 			resource_id: publish?.resource_id ? String(publish.resource_id) : undefined,
@@ -32,6 +33,7 @@ function normalizePublishedMicroAppItem(
 
 	return {
 		...item,
+		app_id: String(item.app_id || ""),
 		project_id: String(item.project_id || ""),
 		resource_id: item.resource_id ? String(item.resource_id) : undefined,
 		share_id: item.share_id ? String(item.share_id) : undefined,
@@ -64,7 +66,7 @@ export function getPublishedMicroAppList(response: unknown): PublishedMicroAppPr
 
 	return list
 		.map((item) => normalizePublishedMicroAppItem(item))
-		.filter((item): item is PublishedMicroAppProjectItem => Boolean(item?.resource_id))
+		.filter((item): item is PublishedMicroAppProjectItem => Boolean(item?.app_id))
 }
 
 export function useMicroAppsPage() {

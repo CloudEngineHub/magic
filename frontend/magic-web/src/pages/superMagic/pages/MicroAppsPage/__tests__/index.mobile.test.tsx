@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { RouteName } from "@/routes/constants"
 import MicroAppsPageMobile from "../index.mobile"
 
@@ -11,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
 	refresh: vi.fn(),
 	useMicroAppsPage: vi.fn(),
-	createProject: vi.fn(),
+	createMicroAppProject: vi.fn(),
+	getMicroAppProjectByProjectId: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -28,7 +28,8 @@ vi.mock("../hooks/useMicroAppsPage", () => ({
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
-		createProject: mocks.createProject,
+		createMicroAppProject: mocks.createMicroAppProject,
+		getMicroAppProjectByProjectId: mocks.getMicroAppProjectByProjectId,
 	},
 }))
 
@@ -89,6 +90,7 @@ describe("MicroAppsPageMobile", () => {
 			],
 			publishedProjects: [
 				{
+					app_id: "app-2",
 					project_id: "project-2",
 					project_name: "Published App",
 					resource_id: "resource-2",
@@ -99,47 +101,54 @@ describe("MicroAppsPageMobile", () => {
 			error: null,
 			refresh: mocks.refresh,
 		})
+		mocks.getMicroAppProjectByProjectId.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+		})
 	})
 
 	afterEach(() => {
 		vi.restoreAllMocks()
 	})
 
-	it("opens draft and published micro apps from the mobile list", () => {
+	it("opens draft and published micro apps from the mobile list", async () => {
 		render(<MicroAppsPageMobile />)
 
 		fireEvent.click(screen.getByTestId("micro-apps-mobile-project-project-1"))
-		expect(mocks.navigate).toHaveBeenCalledWith({
-			name: RouteName.MicroApp,
-			params: { projectId: "project-1" },
-			viewTransition: false,
+		await waitFor(() => {
+			expect(mocks.navigate).toHaveBeenCalledWith({
+				name: RouteName.MicroApp,
+				params: { appId: "app-1" },
+				viewTransition: false,
+			})
 		})
 
 		fireEvent.click(screen.getByTestId("micro-apps-mobile-tab-published"))
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-published-resource-2"))
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-published-app-2"))
 		expect(window.open).toHaveBeenCalledWith(
-			`${window.location.origin}/micro-app/resource-2`,
+			`${window.location.origin}/micro-app/app-2`,
 			"_blank",
 			"noopener,noreferrer",
 		)
 	})
 
 	it("creates a micro app project from the mobile header", async () => {
-		mocks.createProject.mockResolvedValue({ project: { id: "project-new" } })
+		mocks.createMicroAppProject.mockResolvedValue({
+			app_id: "app-new",
+			project: { id: "project-new" },
+		})
 		render(<MicroAppsPageMobile />)
 
 		fireEvent.click(screen.getByTestId("micro-apps-mobile-create"))
 
-		expect(mocks.createProject).toHaveBeenCalledWith({
+		expect(mocks.createMicroAppProject).toHaveBeenCalledWith({
 			workspace_id: "workspace-1",
 			project_name: "",
-			project_description: "",
-			project_mode: TopicMode.MicroApp,
 		})
 		await waitFor(() => {
 			expect(mocks.navigate).toHaveBeenCalledWith({
 				name: RouteName.MicroApp,
-				params: { projectId: "project-new" },
+				params: { appId: "app-new" },
 				viewTransition: false,
 			})
 		})
