@@ -56,7 +56,7 @@ Read `result.content`, choose by `code`, `name`, and `description`, then pass th
 from sdk.tool import tool
 
 result = tool.call("call_subagent", {
-    "agent_name": str,       # required; built-in/local Agent name, or marketplace custom Agent code from find_agents
+    "agent_name": str,       # required; use "" when fork=True to inherit the current Agent
     "agent_id": str,         # required; stable conversation/session identity
     "task_label": str,       # required; user-facing label in the user's language
     "prompt": str,           # required
@@ -138,7 +138,9 @@ Use `background=True` in two scenarios:
 ### fork
 
 - `False` (default): sub-agent starts with empty conversation history. The `prompt` must be fully self-contained.
-- `True`: sub-agent inherits the parent's full conversation history. The `prompt` is a **directive** (what to do), not a briefing (what happened) — the fork already has full context.
+- `True`: sub-agent inherits the parent's full conversation history and must use the same Agent as the parent. Set `agent_name=""` so the runtime inherits the current Agent. The `prompt` is a **directive** (what to do), not a briefing (what happened) — the fork already has full context.
+
+If `fork=true` receives a non-empty `agent_name` that does not identify the current Agent, the runtime ignores it, uses the current Agent, and includes a short warning in `result.content`.
 
 Fork mode is useful when the sub-agent needs to reason over the same conversation context as the parent, e.g. generating a summary, extracting decisions, or continuing a task in isolation.
 

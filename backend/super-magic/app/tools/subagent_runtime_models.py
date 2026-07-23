@@ -49,6 +49,7 @@ class SubagentPayload:
     result: Optional[str] = None
     error: Optional[str] = None
     resume_hint: Optional[str] = None
+    warning: Optional[str] = None
 
 
 @dataclass
@@ -105,6 +106,7 @@ class SubagentSessionState(BaseModel):
     cached_tool_result: Optional[SubagentPayload] = None
     interrupt_requested: bool = False
     display_name: Optional[str] = None
+    warning: Optional[str] = None
     interrupt_reason: Optional[str] = None
 
     @model_validator(mode="after")

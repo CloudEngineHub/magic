@@ -48,9 +48,52 @@ class AgentDisplayKind(StrEnum):
     CREW = "crew"
 
 
+@dataclass(frozen=True)
+class AgentTargetResolution:
+    target: AgentTarget
+    warning: Optional[str] = None
+
+
 def _localize_agent_name(agent_name: str) -> str:
     """将 agent_name 翻译为当前语言的展示名称（如 magic → 通用智能体），未命中时原样返回。"""
     return i18n.translate(agent_name, category="tool.agent_names")
+
+
+def _resolve_agent_target(
+    params: "CallSubagentParams",
+    parent: Optional["AgentContext"],
+) -> AgentTargetResolution:
+    """解析实际运行目标；fork 必须继承父 Agent 的运行时身份。"""
+    if not params.fork or parent is None:
+        return AgentTargetResolution(target=AgentTarget.from_name(params.agent_name))
+
+    parent_target = parent.get_agent_target()
+    if parent_target is None:
+        parent_target = AgentTarget.from_name(parent.agent_name)
+
+    requested_name = params.agent_name.strip()
+    if not requested_name or requested_name == parent_target.agent_name:
+        return AgentTargetResolution(target=parent_target)
+
+    try:
+        requested_target = AgentTarget.from_name(requested_name)
+    except ValueError:
+        requested_target = None
+
+    if requested_target == parent_target:
+        return AgentTargetResolution(target=parent_target)
+
+    warning = (
+        f"Warning: fork=true uses the current agent `{parent_target.agent_name}`; "
+        f"requested agent_name `{requested_name}` was ignored."
+    )
+    return AgentTargetResolution(target=parent_target, warning=warning)
+
+
+def _append_warning(content: str, warning: Optional[str]) -> str:
+    if not warning:
+        return content
+    return f"{content}\n{warning}"
 
 
 class CallSubagentParams(BaseToolParams):
@@ -61,7 +104,9 @@ class CallSubagentParams(BaseToolParams):
             "magic, explore, shell, search, ppt, data_analysis. "
             "Marketplace custom Agent codes from find_agents (Crew digital employees, SMA-...) are accepted directly "
             "and are prepared automatically before dispatch. "
-            "Local .agent names can also be used by filename."
+            "Local .agent names can also be used by filename. "
+            "When fork=true, set this to an empty string to inherit the current agent. "
+            "Any different non-empty value is ignored and produces a warning in the tool result."
         )
     )
     agent_id: str = Field(
@@ -78,7 +123,10 @@ class CallSubagentParams(BaseToolParams):
     )
     prompt: str = Field(
         ...,
-        description="Complete task description. The sub-agent has NO access to the parent's conversation history — include everything it needs: context, task, success criteria, relevant file paths."
+        description=(
+            "Task for the sub-agent. When fork=false, include all required context because the sub-agent starts "
+            "with empty history. When fork=true, provide only the directive because the parent's history is inherited."
+        )
     )
     model_id: Optional[str] = Field(
         None,
@@ -149,21 +197,27 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         new_agent_context: Optional["AgentContext"] = None
         agent: Optional["Agent"] = None
         task: Optional[asyncio.Task] = None
+        target_warning: Optional[str] = None
         try:
             from app.core.context.agent_context import AgentContext
             from app.service.agent_runtime import AgentRuntime
 
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
-            target = AgentTarget.from_name(params.agent_name)
+            target_resolution = _resolve_agent_target(params, parent)
+            target = target_resolution.target
+            target_warning = target_resolution.warning
             params.agent_name = target.agent_name
 
             # 深度检查：子 Agent 不允许再派发子 Agent
             current_depth = parent.get_subagent_depth() if parent else 0
             tool_call_id = tool_context.tool_call_id or ""
             if current_depth >= _MAX_AGENT_DEPTH:
-                return ToolResult.error((
-                    f"Sub-agent spawn depth limit reached ({current_depth}/{_MAX_AGENT_DEPTH}). "
-                    "Sub-agents are not allowed to call call_subagent."
+                return ToolResult.error(_append_warning(
+                    (
+                        f"Sub-agent spawn depth limit reached ({current_depth}/{_MAX_AGENT_DEPTH}). "
+                        "Sub-agents are not allowed to call call_subagent."
+                    ),
+                    target_warning,
                 ))
 
             handle = await subagent_session_manager.get_handle(params.agent_name, params.agent_id)
@@ -173,6 +227,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
                 state.task_label = params.task_label
+                state.warning = target_resolution.warning
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
                     _mark_missing_running_as_interrupted(state)
                     async with handle.state_lock:
@@ -313,7 +368,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                     agent_id=params.agent_id,
                 )
             return ToolResult.error(
-                error_text,
+                _append_warning(error_text, target_warning),
                 extra_info={
                     "agent_name": params.agent_name,
                     "agent_id": params.agent_id,
@@ -547,6 +602,7 @@ def _restore_if_same_tool_call(
             state.cached_tool_result.task_label = state.task_label
         if not state.cached_tool_result.display_name:
             state.cached_tool_result.display_name = state.display_name
+        state.cached_tool_result.warning = state.warning
         return state.cached_tool_result
     if state.active_tool_call_id == tool_call_id and state.status == SubagentStatus.INTERRUPTED:
         return _build_payload(
@@ -573,6 +629,7 @@ def _build_payload(
         result=state.last_result,
         error=error or state.last_error,
         resume_hint=resume_hint,
+        warning=state.warning,
     )
 
 
@@ -589,6 +646,8 @@ def _build_payload_text(payload: SubagentPayload) -> str:
         f"Status: `{payload.status}`.",
         f"Execution mode: `{payload.mode}`.",
     ]
+    if payload.warning:
+        lines.append(payload.warning)
     if payload.result:
         lines.append(f"Result:\n{payload.result}")
     if payload.error:
