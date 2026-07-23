@@ -124,7 +124,21 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
 	)
 }
 
-function InputGroupInput({ className, ...props }: React.ComponentProps<"input">) {
+type InputGroupInputProps = React.ComponentProps<"input"> & {
+	/** Called for ordinary changes and once when an IME composition is confirmed. */
+	onValueChangeAfterComposition?: (value: string) => void
+}
+
+function InputGroupInput({
+	className,
+	onChange,
+	onCompositionStart,
+	onCompositionEnd,
+	onValueChangeAfterComposition,
+	...props
+}: InputGroupInputProps) {
+	const isComposingRef = React.useRef(false)
+
 	return (
 		<Input
 			data-slot="input-group-control"
@@ -132,6 +146,19 @@ function InputGroupInput({ className, ...props }: React.ComponentProps<"input">)
 				"flex-1 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent",
 				className,
 			)}
+			onChange={(event) => {
+				onChange?.(event)
+				if (!isComposingRef.current) onValueChangeAfterComposition?.(event.target.value)
+			}}
+			onCompositionStart={(event) => {
+				isComposingRef.current = true
+				onCompositionStart?.(event)
+			}}
+			onCompositionEnd={(event) => {
+				isComposingRef.current = false
+				onCompositionEnd?.(event)
+				onValueChangeAfterComposition?.(event.currentTarget.value)
+			}}
 			{...props}
 		/>
 	)
