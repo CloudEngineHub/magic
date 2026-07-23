@@ -102,7 +102,7 @@ class AdminProviderModelAssembler
             }
 
             $list[] = new ProviderModelGroupDTO(
-                modelId: $modelId,
+                modelId: (string) $modelId,
                 name: $model->getName(),
                 category: $model->getCategory()?->value ?? '',
                 modelType: $model->getModelType()->value,
