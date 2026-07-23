@@ -153,6 +153,8 @@ export interface MessageEditorProps {
 	onFocus?: () => void
 	/** Blur callback */
 	onBlur?: () => void
+	/** Fires when editor commands are subscribed and the current draft is restored. */
+	onReady?: () => void
 	/** Mention insert callback (multiple items) */
 	onMentionInsertItems?: (items: any[]) => void
 	/** Select detail callback */

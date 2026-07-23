@@ -6,6 +6,8 @@ import { useUserInfo } from "@/models/user/hooks/useUserInfo"
 import { useSwitchOrganization } from "@/hooks/account/useSwitchOrganization"
 import { awaitAppInitPromise } from "@/apis/clients/await-app-init"
 import type { User } from "@/types/user"
+import { defaultClusterCode } from "@/routes/helpers"
+import { useClusterCode } from "@/providers/ClusterProvider"
 
 export type CrewConversationOrganizationGuardStatus = "loading" | "ready" | "switching" | "error"
 
@@ -14,13 +16,31 @@ interface CrewConversationOrganizationTarget {
 	organization: User.MagicOrganization
 }
 
+/** Normalizes public and private deployment codes for stable account matching. */
+function normalizeDeploymentCode(deploymentCode: string | null | undefined) {
+	const normalizedCode = deploymentCode?.trim().toLowerCase() ?? ""
+	return normalizedCode === defaultClusterCode.toLowerCase() ? "" : normalizedCode
+}
+
+/** Preserves private deployment casing while mapping the public route to SaaS storage. */
+function resolveAccountDeploymentCode(deploymentCode: string) {
+	return normalizeDeploymentCode(deploymentCode) ? deploymentCode.trim() : ""
+}
+
+/** Finds an organization only from accounts that belong to the requested deployment. */
 function findOrganizationTarget(
 	accounts: User.UserAccount[],
 	magicOrganizationCode: string | null,
+	targetDeploymentCode: string,
 ): CrewConversationOrganizationTarget | null {
 	if (!magicOrganizationCode) return null
+	const normalizedTargetDeploymentCode = normalizeDeploymentCode(targetDeploymentCode)
 
 	for (const account of accounts) {
+		if (normalizeDeploymentCode(account.deployCode) !== normalizedTargetDeploymentCode) {
+			continue
+		}
+
 		const organization = account.organizations?.find(
 			(item) => item.magic_organization_code === magicOrganizationCode,
 		)
@@ -40,6 +60,8 @@ function createCurrentSessionOrganizationTarget(params: {
 	teamshareOrganizations: User.UserOrganization[]
 	userInfo: User.UserInfo | null
 	authorization: string | null
+	targetDeploymentCode: string
+	currentDeploymentCode: string
 }): CrewConversationOrganizationTarget | null {
 	const {
 		magicOrganizationCode,
@@ -48,16 +70,24 @@ function createCurrentSessionOrganizationTarget(params: {
 		teamshareOrganizations,
 		userInfo,
 		authorization,
+		targetDeploymentCode,
+		currentDeploymentCode,
 	} = params
 
 	if (!magicOrganizationCode || !userInfo) return null
+	if (
+		normalizeDeploymentCode(currentDeploymentCode) !==
+		normalizeDeploymentCode(targetDeploymentCode)
+	) {
+		return null
+	}
 
 	const organization = magicOrganizationMap[magicOrganizationCode]
 	if (!organization) return null
 
 	return {
 		account: {
-			deployCode: "",
+			deployCode: resolveAccountDeploymentCode(targetDeploymentCode),
 			magic_id: organization.magic_id || userInfo.magic_id,
 			magic_user_id: organization.magic_user_id || userInfo.user_id,
 			nickname: userInfo.nickname,
@@ -71,8 +101,13 @@ function createCurrentSessionOrganizationTarget(params: {
 	}
 }
 
-export function useCrewConversationOrganizationGuard(magicOrganizationCode: string | null) {
+/** Ensures the Crew page enters the requested organization without leaving its route deployment. */
+export function useCrewConversationOrganizationGuard(
+	magicOrganizationCode: string | null,
+	targetDeploymentCode: string,
+) {
 	const { accounts } = useAccount()
+	const { clusterCode: currentDeploymentCode } = useClusterCode()
 	const { authorization } = useAuthorization()
 	const { userInfo } = useUserInfo()
 	const { organizationCode, organizations, magicOrganizationMap, organizationListReady } =
@@ -98,12 +133,15 @@ export function useCrewConversationOrganizationGuard(magicOrganizationCode: stri
 	}, [])
 
 	const hasRouteOrganization = Boolean(magicOrganizationCode)
+	const isCurrentDeploymentMatched =
+		normalizeDeploymentCode(currentDeploymentCode) ===
+		normalizeDeploymentCode(targetDeploymentCode)
 
 	const target = useMemo(() => {
-		if (!appInitReady) return null
+		if (!appInitReady || !isCurrentDeploymentMatched) return null
 
 		return (
-			findOrganizationTarget(accounts, magicOrganizationCode) ??
+			findOrganizationTarget(accounts, magicOrganizationCode, targetDeploymentCode) ??
 			createCurrentSessionOrganizationTarget({
 				magicOrganizationCode,
 				organizationCode,
@@ -111,16 +149,21 @@ export function useCrewConversationOrganizationGuard(magicOrganizationCode: stri
 				teamshareOrganizations: organizations,
 				userInfo,
 				authorization,
+				targetDeploymentCode,
+				currentDeploymentCode,
 			})
 		)
 	}, [
 		appInitReady,
 		accounts,
 		authorization,
+		currentDeploymentCode,
+		isCurrentDeploymentMatched,
 		magicOrganizationCode,
 		magicOrganizationMap,
 		organizationCode,
 		organizations,
+		targetDeploymentCode,
 		userInfo,
 	])
 
@@ -138,6 +181,12 @@ export function useCrewConversationOrganizationGuard(magicOrganizationCode: stri
 	useEffect(() => {
 		if (!appInitReady) {
 			setStatus("loading")
+			return
+		}
+
+		if (!isCurrentDeploymentMatched) {
+			setStatus("switching")
+			setError(null)
 			return
 		}
 
@@ -181,6 +230,7 @@ export function useCrewConversationOrganizationGuard(magicOrganizationCode: stri
 	}, [
 		appInitReady,
 		hasRouteOrganization,
+		isCurrentDeploymentMatched,
 		isCurrentOrganizationMatched,
 		organizationListReady,
 		switchOrganization,

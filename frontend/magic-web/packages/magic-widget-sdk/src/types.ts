@@ -27,6 +27,7 @@ export declare namespace MagicWidget {
 
 	export interface AuthOptions {
 		loginStrategy?: LoginStrategy
+		deploymentCode?: string
 		organizationCode?: string
 	}
 
@@ -73,13 +74,35 @@ export declare namespace MagicWidget {
 		auth?: AuthOptions
 		iframe?: IframeOptions
 		modal?: ModalOptions
+		target?: HTMLElement
 	}
+
+	export type CommandErrorCode =
+		| "NOT_MOUNTED"
+		| "INVALID_INPUT"
+		| "IFRAME_NOT_READY"
+		| "COMMAND_FAILED"
+		| "DESTROYED"
+
+	export interface CommandError extends Error {
+		code: CommandErrorCode
+	}
+
+	export type EventName = "agent_ready"
+	export type EventListener = () => void
 
 	export interface Controller {
 		mount(options: MountOptions): void
 		open(): void
 		close(): void
 		destroy(): void
+		on(event: EventName, listener: EventListener): () => void
+		setInput(content: string): Promise<void>
+		appendInput(content: string): Promise<void>
+		clearInput(): Promise<void>
+		getInput(): Promise<string>
+		sendMessage(content: string): Promise<void>
+		newConversation(): Promise<void>
 	}
 
 	export interface Global extends Controller {

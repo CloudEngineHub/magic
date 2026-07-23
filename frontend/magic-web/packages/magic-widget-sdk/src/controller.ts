@@ -2,6 +2,7 @@ import { widgetStyles } from "./styles"
 import type { MagicWidget } from "./types"
 import { getWidgetScriptOrigin } from "./scriptOrigin"
 import { buildWidgetIframeUrl, validateWidgetMountOptions } from "./url"
+import { WidgetBridge, createWidgetCommandError, createWidgetId } from "./bridge"
 
 const ROOT_ATTRIBUTE = "data-magic-widget-root"
 const TRIGGER_ATTRIBUTE = "data-magic-widget-trigger"
@@ -181,6 +182,22 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let suppressNextClick = false
 	let closeTimer: number | null = null
 	let openTimer: number | null = null
+	let bridge: WidgetBridge | null = null
+	let instanceId: string | null = null
+	let appOrigin: string | null = null
+	let inlineMode = false
+	const agentReadyListeners = new Set<MagicWidget.EventListener>()
+
+	/** Notifies host subscribers whenever the current iframe editor becomes usable. */
+	const notifyAgentReady = () => {
+		agentReadyListeners.forEach((listener) => {
+			try {
+				listener()
+			} catch (error) {
+				console.error("Magic widget agent_ready listener failed", error)
+			}
+		})
+	}
 
 	const commitPanelDragPosition = (state: DragState) => {
 		state.target.style.left = `${state.currentLeft}px`
@@ -392,6 +409,11 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 
 	const close = () => {
 		if (!modal) return
+		if (inlineMode) {
+			modal.hidden = true
+			modal.setAttribute("data-state", "closed")
+			return
+		}
 		clearOpenTimer()
 		clearCloseTimer()
 		modal.setAttribute("data-state", "closing")
@@ -474,9 +496,19 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		ensureMounted()
 		if (!options || !modal || !iframe) return
 
-		iframe.src = buildWidgetIframeUrl(options, {
-			fallbackAppOrigin: initialWidgetScriptOrigin ?? getWidgetScriptOrigin(),
-		}).toString()
+		if (!iframe.src || iframe.src === "about:blank") {
+			bridge?.reset()
+			iframe.src = buildWidgetIframeUrl(options, {
+				fallbackAppOrigin: appOrigin,
+				instanceId: instanceId ?? undefined,
+				hostOrigin: window.location.origin,
+			}).toString()
+		}
+		if (inlineMode) {
+			modal.hidden = false
+			modal.setAttribute("data-state", "open")
+			return
+		}
 		clearOpenTimer()
 		clearCloseTimer()
 		positionPanel()
@@ -499,6 +531,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		stopDragging()
 		window.removeEventListener("keydown", onKeyDown)
 		window.removeEventListener("resize", onWindowResize)
+		bridge?.destroy()
 		root?.remove()
 		options = null
 		root = null
@@ -508,16 +541,82 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		mask = null
 		panel = null
 		iframe = null
+		bridge = null
+		instanceId = null
+		appOrigin = null
+		inlineMode = false
+	}
+
+	/** Validates public text commands before data crosses into the iframe. */
+	const normalizeCommandContent = (content: unknown): string => {
+		if (typeof content !== "string" || !content.trim()) {
+			throw createWidgetCommandError(
+				"INVALID_INPUT",
+				"Magic widget command content must be a non-empty string",
+			)
+		}
+		return content
+	}
+
+	/** Opens a floating widget when necessary and forwards one public text command. */
+	const sendTextCommand = async (
+		command: "setInput" | "appendInput" | "sendMessage",
+		content: unknown,
+	): Promise<void> => {
+		if (!options || !bridge || !iframe) {
+			throw createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first")
+		}
+		const normalizedContent = normalizeCommandContent(content)
+		if (iframe.src === "about:blank" || !iframe.src) open()
+		await bridge.send(command, { content: normalizedContent })
+	}
+
+	/** Sends a command that does not carry text while preserving the shared readiness wait. */
+	const sendNoPayloadCommand = async (
+		command: "clearInput" | "getInput" | "newConversation",
+	): Promise<{ content?: string } | undefined> => {
+		if (!options || !bridge || !iframe) {
+			throw createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first")
+		}
+		if (iframe.src === "about:blank" || !iframe.src) open()
+		return bridge.send(command)
+	}
+
+	/** Subscribes to the only public lifecycle event and replays readiness for late listeners. */
+	const on = (event: MagicWidget.EventName, listener: MagicWidget.EventListener) => {
+		if (event !== "agent_ready") {
+			throw new Error(`Unsupported Magic widget event: ${event}`)
+		}
+		if (typeof listener !== "function") {
+			throw new TypeError("Magic widget event listener must be a function")
+		}
+		agentReadyListeners.add(listener)
+		if (bridge?.isReady()) window.queueMicrotask(listener)
+		return () => agentReadyListeners.delete(listener)
 	}
 
 	const mount = (nextOptions: MagicWidget.MountOptions) => {
 		requireDocument()
 		validateWidgetMountOptions(nextOptions)
 		destroy()
+		if (
+			nextOptions.target &&
+			(!nextOptions.target.isConnected || !document.contains(nextOptions.target))
+		) {
+			throw new Error("Magic widget target must be connected to the document")
+		}
 		options = nextOptions
+		inlineMode = Boolean(nextOptions.target)
+		instanceId = createWidgetId("widget")
+		appOrigin = initialWidgetScriptOrigin ?? getWidgetScriptOrigin()
+		if (!appOrigin) throw new Error("Magic widget script origin is required")
 
 		root = document.createElement("div")
 		root.setAttribute(ROOT_ATTRIBUTE, "")
+		if (inlineMode) {
+			root.style.width = "100%"
+			root.style.height = "100%"
+		}
 		setHostVariables(root, nextOptions)
 		applyModalSlotOptions(root, nextOptions, "root")
 		shadowRoot = root.attachShadow({ mode: "open" })
@@ -525,28 +624,31 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		const style = document.createElement("style")
 		style.textContent = widgetStyles
 
-		trigger = document.createElement("button")
-		trigger.type = "button"
-		trigger.className = "magic-widget-trigger"
-		trigger.setAttribute(TRIGGER_ATTRIBUTE, "")
-		trigger.setAttribute("aria-label", "Open Magic")
-		trigger.append(createMessageIcon())
-		trigger.addEventListener("pointerdown", onPointerDown)
-		trigger.addEventListener("click", (event) => {
-			if (suppressNextClick) {
-				event.preventDefault()
-				suppressNextClick = false
-				return
-			}
-			open()
-		})
-		window.addEventListener("resize", onWindowResize)
+		if (!inlineMode) {
+			trigger = document.createElement("button")
+			trigger.type = "button"
+			trigger.className = "magic-widget-trigger"
+			trigger.setAttribute(TRIGGER_ATTRIBUTE, "")
+			trigger.setAttribute("aria-label", "Open Magic")
+			trigger.append(createMessageIcon())
+			trigger.addEventListener("pointerdown", onPointerDown)
+			trigger.addEventListener("click", (event) => {
+				if (suppressNextClick) {
+					event.preventDefault()
+					suppressNextClick = false
+					return
+				}
+				open()
+			})
+			window.addEventListener("resize", onWindowResize)
+		}
 
 		modal = document.createElement("div")
 		modal.className = "magic-widget-layer"
 		modal.setAttribute(PANEL_LAYER_ATTRIBUTE, "")
 		modal.setAttribute("data-state", "closed")
-		modal.hidden = true
+		modal.setAttribute("data-render-mode", inlineMode ? "inline" : "floating")
+		modal.hidden = !inlineMode
 		applyModalSlotOptions(modal, nextOptions, "layer")
 		modal.addEventListener("click", (event) => {
 			if (event.target === modal) close()
@@ -561,8 +663,10 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		panel = document.createElement("section")
 		panel.className = "magic-widget-panel"
 		panel.setAttribute(PANEL_ATTRIBUTE, "")
-		panel.setAttribute("role", "dialog")
-		panel.setAttribute("aria-modal", "true")
+		if (!inlineMode) {
+			panel.setAttribute("role", "dialog")
+			panel.setAttribute("aria-modal", "true")
+		}
 		applyModalSlotOptions(panel, nextOptions, "container")
 
 		const modalTitle = nextOptions.modal?.title ?? "Magic"
@@ -605,10 +709,17 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		}
 
 		body.append(iframe)
-		panel.append(header, body)
-		modal.append(mask, panel)
-		shadowRoot.append(style, trigger, modal)
-		document.body.append(root)
+		if (inlineMode) panel.append(body)
+		else panel.append(header, body)
+		if (inlineMode) modal.append(panel)
+		else modal.append(mask, panel)
+		if (trigger) shadowRoot.append(style, trigger, modal)
+		else shadowRoot.append(style, modal)
+		;(nextOptions.target ?? document.body).append(root)
+
+		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
+		bridge.onAgentReady(notifyAgentReady)
+		if (inlineMode) open()
 	}
 
 	return {
@@ -616,5 +727,25 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		open,
 		close,
 		destroy,
+		on,
+		setInput: (content) => sendTextCommand("setInput", content),
+		appendInput: (content) => sendTextCommand("appendInput", content),
+		clearInput: async () => {
+			await sendNoPayloadCommand("clearInput")
+		},
+		getInput: async () => {
+			const result = await sendNoPayloadCommand("getInput")
+			if (typeof result?.content !== "string") {
+				throw createWidgetCommandError(
+					"COMMAND_FAILED",
+					"Magic widget did not return the current input content",
+				)
+			}
+			return result.content
+		},
+		sendMessage: (content) => sendTextCommand("sendMessage", content),
+		newConversation: async () => {
+			await sendNoPayloadCommand("newConversation")
+		},
 	}
 }

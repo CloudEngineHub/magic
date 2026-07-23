@@ -173,6 +173,8 @@ export const PubSubEvents = {
 	Receive_RecordSummary_Audio_File: "receive_record_summary_audio_file",
 	/** 超级麦吉 - 设置输入框消息 */
 	Set_Input_Message: "PubSub_Set_Input_Message",
+	/** Widget-only editor input maintenance command. */
+	Magic_Widget_Editor_Command: "magic_widget_editor_command",
 	/** 超级麦吉 - 设置目标模型 */
 	Set_Target_Model: "PubSub_Set_Target_Model",
 	/** 超级麦吉 - 添加内容到聊天框 */

@@ -17,7 +17,12 @@ import type {
 	MessageEditorSize,
 } from "@/pages/superMagic/components/MessageEditor/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import type { CreatedProject, ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type {
+	CreatedProject,
+	ProjectListItem,
+	Topic,
+	Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
@@ -93,6 +98,8 @@ export interface SceneEditorContext {
 	onFileClick?: (fileItem: unknown) => void
 	onEditorFocus?: () => void
 	onEditorBlur?: () => void
+	/** Reports that the current editor subscriptions and draft restoration are complete. */
+	onReady?: () => void
 	onMessageSendReady?: (
 		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
 		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,

@@ -1,0 +1,185 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { WidgetBridge } from "../src/bridge"
+import { WIDGET_PROTOCOL, WIDGET_PROTOCOL_VERSION } from "../src/protocol"
+
+const TEST_ORIGIN = "https://magic.example.invalid"
+const TEST_INSTANCE_ID = "widget-mock-instance"
+
+/** Creates an iframe whose postMessage calls can be inspected without a network request. */
+function createTestIframe() {
+	const iframe = document.createElement("iframe")
+	document.body.append(iframe)
+	const frameWindow = iframe.contentWindow
+	if (!frameWindow) throw new Error("Mock iframe window is required")
+	const postMessage = vi.spyOn(frameWindow, "postMessage").mockImplementation(() => undefined)
+	return { iframe, postMessage }
+}
+
+/** Delivers a protocol READY message from the bound iframe window. */
+function dispatchReady(iframe: HTMLIFrameElement) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin: TEST_ORIGIN,
+			source: iframe.contentWindow,
+			data: {
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: TEST_INSTANCE_ID,
+				type: "ready",
+				capabilities: ["getInput", "newConversation"],
+			},
+		}),
+	)
+}
+
+/** Simulates the iframe document becoming able to receive protocol commands. */
+function dispatchLoad(iframe: HTMLIFrameElement) {
+	iframe.dispatchEvent(new Event("load"))
+}
+
+describe("WidgetBridge", () => {
+	beforeEach(() => {
+		document.body.innerHTML = ""
+	})
+
+	it("notifies agent_ready listeners and returns command results", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const onReady = vi.fn()
+		bridge.onAgentReady(onReady)
+
+		dispatchLoad(iframe)
+		dispatchReady(iframe)
+		expect(onReady).toHaveBeenCalledTimes(1)
+		expect(bridge.isReady()).toBe(true)
+
+		const inputPromise = bridge.send("getInput")
+		await Promise.resolve()
+		const command = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: command.requestId,
+					type: "response",
+					ok: true,
+					result: { content: "mock input" },
+				},
+			}),
+		)
+
+		expect(await inputPromise).toEqual({ content: "mock input" })
+	})
+
+	it("resolves newConversation from its response without a newer READY", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+		dispatchReady(iframe)
+
+		const conversationPromise = bridge.send("newConversation")
+		await Promise.resolve()
+		const command = postMessage.mock.calls[0]?.[0] as { requestId: string }
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: command.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+
+		await expect(conversationPromise).resolves.toBeUndefined()
+	})
+
+	it("invalidates readiness when the iframe document reloads", () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchReady(iframe)
+		expect(bridge.isReady()).toBe(true)
+
+		iframe.dispatchEvent(new Event("load"))
+
+		expect(bridge.isReady()).toBe(false)
+
+		dispatchReady(iframe)
+		expect(bridge.isReady()).toBe(true)
+	})
+
+	it("waits for the response when the new READY arrives first", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+		dispatchReady(iframe)
+
+		const conversationPromise = bridge.send("newConversation")
+		await Promise.resolve()
+		const command = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		dispatchReady(iframe)
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: command.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+
+		await expect(conversationPromise).resolves.toBeUndefined()
+	})
+
+	it("sends commands after iframe load without waiting for agent_ready", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+
+		const inputPromise = bridge.send("getInput")
+		await Promise.resolve()
+		const command = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: command.requestId,
+					type: "response",
+					ok: true,
+					result: { content: "mock input" },
+				},
+			}),
+		)
+
+		expect(await inputPromise).toEqual({ content: "mock input" })
+	})
+
+	it("rejects pending work after destroy", async () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const promise = bridge.send("getInput")
+
+		bridge.destroy()
+
+		await expect(promise).rejects.toMatchObject({ code: "DESTROYED" })
+	})
+})

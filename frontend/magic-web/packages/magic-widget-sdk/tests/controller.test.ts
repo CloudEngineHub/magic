@@ -44,6 +44,7 @@ describe("createMagicWidgetController", () => {
 			},
 			auth: {
 				loginStrategy: "phone_password",
+				deploymentCode: "private-mock",
 				organizationCode: "org-001",
 			},
 		})
@@ -84,7 +85,7 @@ describe("createMagicWidgetController", () => {
 		expect(panel.style.left).not.toBe("")
 		expect(panel.style.top).not.toBe("")
 		expect(panel.style.transformOrigin).not.toBe("")
-		expect(iframe?.getAttribute("src")).toContain("/global/super/crew/crew-001")
+		expect(iframe?.getAttribute("src")).toContain("/private-mock/super/crew/crew-001")
 		expect(iframe?.getAttribute("src")).toContain("login-strategy=phone_password")
 		expect(iframe?.getAttribute("src")).toContain("organizationCode=org-001")
 	})
@@ -242,9 +243,51 @@ describe("createMagicWidgetController", () => {
 		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 
 		const iframe = root?.shadowRoot?.querySelector("iframe")
-		expect(iframe?.getAttribute("src")).toBe(
+		const iframeUrl = new URL(iframe?.getAttribute("src") ?? "")
+		expect(iframeUrl.origin + iframeUrl.pathname).toBe(
 			"https://magic.example.com/global/super/crew/crew-001",
 		)
+		expect(iframeUrl.searchParams.get("magicWidgetEmbed")).toBe("1")
+		expect(iframeUrl.searchParams.get("magicWidgetProtocolVersion")).toBe("1")
+	})
+
+	it("emits agent_ready and rejects empty appended input", async () => {
+		appendWidgetScript("https://magic.example.invalid/sdk/magic-widget.js")
+		const widget = createMagicWidgetController()
+		const listener = vi.fn()
+		const unsubscribe = widget.on("agent_ready", listener)
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-mock-001",
+			},
+		})
+
+		await expect(widget.appendInput("   ")).rejects.toMatchObject({ code: "INVALID_INPUT" })
+		widget.open()
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const iframeUrl = new URL(iframe.getAttribute("src") ?? "")
+		const instanceId = iframeUrl.searchParams.get("magicWidgetInstanceId")
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: "https://magic.example.invalid",
+				source: iframe.contentWindow,
+				data: {
+					protocol: "magic-widget",
+					version: 1,
+					instanceId,
+					type: "ready",
+					capabilities: ["appendInput"],
+				},
+			}),
+		)
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		unsubscribe()
 	})
 
 	it("positions the opened desktop panel over the trigger area", () => {
@@ -263,7 +306,9 @@ describe("createMagicWidgetController", () => {
 		})
 
 		const root = document.querySelector("[data-magic-widget-root]")
-		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]") as HTMLElement
+		const trigger = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-trigger]",
+		) as HTMLElement
 
 		Object.defineProperty(trigger, "getBoundingClientRect", {
 			value: () => ({

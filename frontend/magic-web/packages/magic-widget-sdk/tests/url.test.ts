@@ -47,6 +47,46 @@ describe("buildWidgetIframeUrl", () => {
 		expect(url.toString()).toBe("https://magic.example.com/global/super/crew/crew-001")
 	})
 
+	it("uses the private deployment code as the crew route segment", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew-mock-private",
+				},
+				auth: {
+					deploymentCode: " private-mock ",
+					organizationCode: "org-mock-private",
+				},
+			},
+			{
+				fallbackAppOrigin: "https://magic.example.invalid",
+			},
+		)
+
+		expect(url.pathname).toBe("/private-mock/super/crew/crew-mock-private")
+		expect(url.searchParams.get("organizationCode")).toBe("org-mock-private")
+	})
+
+	it("keeps the SaaS route when the deployment code is empty", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew-mock-saas",
+				},
+				auth: {
+					deploymentCode: "   ",
+				},
+			},
+			{
+				fallbackAppOrigin: "https://magic.example.invalid",
+			},
+		)
+
+		expect(url.pathname).toBe("/global/super/crew/crew-mock-saas")
+	})
+
 	it("encodes the crew id as one path segment", () => {
 		const url = buildWidgetIframeUrl(
 			{
@@ -81,12 +121,9 @@ describe("buildWidgetIframeUrl", () => {
 
 	it("rejects missing page options with a stable error", () => {
 		expect(() =>
-			buildWidgetIframeUrl(
-				{} as never,
-				{
-					fallbackAppOrigin: "https://www.letsmagic.cn",
-				},
-			),
+			buildWidgetIframeUrl({} as never, {
+				fallbackAppOrigin: "https://www.letsmagic.cn",
+			}),
 		).toThrow("Magic widget page is required")
 	})
 
@@ -119,9 +156,7 @@ describe("buildWidgetIframeUrl", () => {
 					fallbackAppOrigin: "https://www.letsmagic.cn",
 				},
 			),
-		).toThrow(
-			"Magic widget organizationCode must be configured through auth.organizationCode",
-		)
+		).toThrow("Magic widget organizationCode must be configured through auth.organizationCode")
 	})
 
 	it("rejects non-string auth organization codes with a stable error", () => {
@@ -141,5 +176,24 @@ describe("buildWidgetIframeUrl", () => {
 				},
 			),
 		).toThrow("Magic widget auth.organizationCode must be a string")
+	})
+
+	it("rejects non-string deployment codes with a stable error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+						crewId: "crew-mock-invalid-deployment",
+					},
+					auth: {
+						deploymentCode: 123,
+					},
+				} as never,
+				{
+					fallbackAppOrigin: "https://magic.example.invalid",
+				},
+			),
+		).toThrow("Magic widget auth.deploymentCode must be a string")
 	})
 })

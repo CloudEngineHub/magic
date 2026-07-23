@@ -6,6 +6,7 @@ const validOptions: MagicWidget.MountOptions = {
 		crewId: "crew-001",
 	},
 	auth: {
+		deploymentCode: "private-mock",
 		organizationCode: "org-001",
 	},
 	modal: {
@@ -30,6 +31,15 @@ const validOptions: MagicWidget.MountOptions = {
 }
 
 void validOptions
+
+const unsubscribeReady = window.MagicWidget?.on("agent_ready", () => undefined)
+void unsubscribeReady
+void window.MagicWidget?.setInput("mock input")
+void window.MagicWidget?.appendInput("mock suffix")
+void window.MagicWidget?.clearInput()
+void window.MagicWidget?.getInput()
+void window.MagicWidget?.sendMessage("mock message")
+void window.MagicWidget?.newConversation()
 
 const invalidRouteOptions: MagicWidget.MountOptions = {
 	page: {

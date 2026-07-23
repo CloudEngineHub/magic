@@ -5,6 +5,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DraftStore } from "../stores"
 import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
 import {
 	insertMentionFromDroppedData,
 	DRAG_TYPE,
@@ -50,6 +51,44 @@ function safeEditorFocus(editor: Editor | null) {
 	runActiveEditor(editor, (activeEditor) => {
 		activeEditor.commands.focus()
 	})
+}
+
+/** Converts Widget plain text into the editor document written by setInput. */
+function createPlainTextDocument(content: string): JSONContent {
+	return {
+		type: "doc",
+		content: [
+			{
+				type: "paragraph",
+				content: content ? [{ type: "text", text: content }] : [],
+			},
+		],
+	}
+}
+
+/** Appends plain text to the final paragraph without changing existing structured nodes. */
+function appendPlainTextToDocument(currentContent: JSONContent, content: string): JSONContent {
+	const documentContent: JSONContent =
+		currentContent.type === "doc"
+			? currentContent
+			: {
+					type: "doc",
+					content: [currentContent],
+				}
+	const nodes = [...(documentContent.content ?? [])]
+	const lastIndex = nodes.length - 1
+	const lastNode = nodes[lastIndex]
+
+	if (lastNode?.type === "paragraph") {
+		nodes[lastIndex] = {
+			...lastNode,
+			content: [...(lastNode.content ?? []), { type: "text", text: content }],
+		}
+	} else {
+		nodes.push({ type: "paragraph", content: [{ type: "text", text: content }] })
+	}
+
+	return { ...documentContent, content: nodes }
 }
 
 function useMessageEditorPubSub({
@@ -247,6 +286,42 @@ function useMessageEditorPubSub({
 		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
+		}
+	}, [activeEditorRef, updateContent])
+
+	useEffect(() => {
+		const handleWidgetEditorCommand = (payload: SuperMagicWidgetEditorCommandPayload) => {
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				if (payload.command === "setInput") {
+					updateContent(createPlainTextDocument(payload.content ?? ""))
+					activeEditor.commands.focus()
+					payload.respond()
+					return
+				}
+
+				if (payload.command === "appendInput") {
+					updateContent(
+						appendPlainTextToDocument(activeEditor.getJSON(), payload.content ?? ""),
+					)
+					activeEditor.commands.focus()
+					payload.respond()
+					return
+				}
+
+				if (payload.command === "clearInput") {
+					updateContent({ type: "doc", content: [{ type: "paragraph" }] })
+					activeEditor.commands.focus()
+					payload.respond()
+					return
+				}
+
+				payload.respond(activeEditor.getText({ blockSeparator: "\n" }))
+			})
+		}
+
+		pubsub.subscribe(PubSubEvents.Magic_Widget_Editor_Command, handleWidgetEditorCommand)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Magic_Widget_Editor_Command, handleWidgetEditorCommand)
 		}
 	}, [activeEditorRef, updateContent])
 }

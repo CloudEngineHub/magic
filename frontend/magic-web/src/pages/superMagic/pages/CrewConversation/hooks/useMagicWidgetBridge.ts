@@ -1,0 +1,275 @@
+import { useEffect, useRef } from "react"
+import type { JSONContent } from "@tiptap/react"
+import { useMemoizedFn } from "ahooks"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { SuperMagicWidgetEditorCommandName } from "@/pages/superMagic/events/message"
+
+const PROTOCOL = "magic-widget"
+const VERSION = 1
+const AGENT_READY_TIMEOUT_MS = 20_000
+const EDITOR_COMMAND_TIMEOUT_MS = 2_000
+const CAPABILITIES = [
+	"setInput",
+	"appendInput",
+	"clearInput",
+	"getInput",
+	"sendMessage",
+	"newConversation",
+] as const
+
+type WidgetCommandName = (typeof CAPABILITIES)[number]
+
+interface WidgetContext {
+	instanceId: string
+	hostOrigin: string
+}
+
+interface AgentReadyWaiter {
+	afterSequence: number
+	resolve: () => void
+	reject: (error: Error) => void
+	timer: number
+}
+
+interface UseMagicWidgetBridgeOptions {
+	context: WidgetContext | null
+	createNewConversation: () => Promise<Topic | null>
+}
+
+export interface MagicWidgetBridgeController {
+	notifyAgentReady: () => void
+}
+
+/** Converts public text into the internal plain-text TipTap document contract. */
+function createTextContent(content: string): JSONContent {
+	return {
+		type: "doc",
+		content: [{ type: "paragraph", content: [{ type: "text", text: content }] }],
+	}
+}
+
+/** Bridges approved Widget commands into the Crew editor and conversation store. */
+export function useMagicWidgetBridge({
+	context,
+	createNewConversation,
+}: UseMagicWidgetBridgeOptions): MagicWidgetBridgeController {
+	const readySequenceRef = useRef(0)
+	const readyWaitersRef = useRef(new Set<AgentReadyWaiter>())
+	const readyAfterWindowLoadRef = useRef(false)
+	const pendingWindowLoadListenerRef = useRef<(() => void) | null>(null)
+
+	/** Resolves once an editor ready notification newer than the provided sequence arrives. */
+	const waitForAgentReadyAfter = useMemoizedFn(
+		(afterSequence: number, timeoutMs = AGENT_READY_TIMEOUT_MS): Promise<void> => {
+			if (readySequenceRef.current > afterSequence) return Promise.resolve()
+
+			return new Promise((resolve, reject) => {
+				const waiter: AgentReadyWaiter = {
+					afterSequence,
+					resolve,
+					reject,
+					timer: 0,
+				}
+				waiter.timer = window.setTimeout(() => {
+					readyWaitersRef.current.delete(waiter)
+					reject(new Error("Magic widget editor did not become ready"))
+				}, timeoutMs)
+				readyWaitersRef.current.add(waiter)
+			})
+		},
+	)
+
+	/** Sends the protocol READY message and releases new-conversation readiness waiters. */
+	const emitAgentReady = useMemoizedFn(() => {
+		if (!context || window.parent === window) return
+		readySequenceRef.current += 1
+		window.parent.postMessage(
+			{
+				protocol: PROTOCOL,
+				version: VERSION,
+				instanceId: context.instanceId,
+				type: "ready",
+				capabilities: [...CAPABILITIES],
+			},
+			context.hostOrigin,
+		)
+
+		readyWaitersRef.current.forEach((waiter) => {
+			if (readySequenceRef.current <= waiter.afterSequence) return
+			window.clearTimeout(waiter.timer)
+			readyWaitersRef.current.delete(waiter)
+			waiter.resolve()
+		})
+	})
+
+	/** Sends agent_ready after both the editor and the current iframe document are fully loaded. */
+	const notifyAgentReady = useMemoizedFn(() => {
+		if (document.readyState === "complete") {
+			emitAgentReady()
+			return
+		}
+		if (readyAfterWindowLoadRef.current) return
+
+		readyAfterWindowLoadRef.current = true
+		const handleWindowLoad = () => {
+			readyAfterWindowLoadRef.current = false
+			pendingWindowLoadListenerRef.current = null
+			emitAgentReady()
+		}
+		pendingWindowLoadListenerRef.current = handleWindowLoad
+		window.addEventListener("load", handleWindowLoad, { once: true })
+	})
+
+	/** Executes one editor maintenance command and waits for its synchronous adapter response. */
+	const executeEditorCommand = useMemoizedFn(
+		(
+			command: SuperMagicWidgetEditorCommandName,
+			content?: string,
+		): Promise<string | undefined> => {
+			return new Promise((resolve, reject) => {
+				const timer = window.setTimeout(() => {
+					reject(new Error("Magic widget editor command was not handled"))
+				}, EDITOR_COMMAND_TIMEOUT_MS)
+
+				pubsub.publish(PubSubEvents.Magic_Widget_Editor_Command, {
+					command,
+					content,
+					respond: (result) => {
+						window.clearTimeout(timer)
+						resolve(result)
+					},
+				})
+			})
+		},
+	)
+
+	useEffect(() => {
+		if (!context || window.parent === window) return
+		const targetOrigin = context.hostOrigin
+
+		/** Sends one correlated response back to the bound host window. */
+		const respond = (
+			requestId: string,
+			ok: boolean,
+			options?: { error?: string; content?: string },
+		) => {
+			window.parent.postMessage(
+				{
+					protocol: PROTOCOL,
+					version: VERSION,
+					instanceId: context.instanceId,
+					requestId,
+					type: "response",
+					ok,
+					result:
+						options?.content === undefined ? undefined : { content: options.content },
+					error: options?.error
+						? { code: "COMMAND_FAILED", message: options.error }
+						: undefined,
+				},
+				targetOrigin,
+			)
+		}
+
+		/** Validates and executes one command without exposing internal editor structures. */
+		const executeCommand = async (event: MessageEvent) => {
+			const requestId = event.data.requestId as string
+			const command = event.data.command as WidgetCommandName
+
+			try {
+				if (["setInput", "appendInput", "sendMessage"].includes(command)) {
+					const content = event.data.payload?.content
+					if (typeof content !== "string" || !content.trim()) {
+						throw new Error("Widget command content must be a non-empty string")
+					}
+					if (
+						command === "sendMessage" &&
+						!pubsub.hasListeners(PubSubEvents.Send_Message_by_Content)
+					) {
+						throw new Error("Magic widget message sending is not available")
+					}
+					if (command === "setInput") {
+						await executeEditorCommand("setInput", content)
+					} else if (command === "appendInput") {
+						await executeEditorCommand("appendInput", content)
+					} else {
+						pubsub.publish(PubSubEvents.Send_Message_by_Content, {
+							jsonContent: createTextContent(content),
+						})
+					}
+					respond(requestId, true)
+					return
+				}
+
+				if (command === "clearInput") {
+					await executeEditorCommand("clearInput")
+					respond(requestId, true)
+					return
+				}
+
+				if (command === "getInput") {
+					const content = await executeEditorCommand("getInput")
+					respond(requestId, true, { content: content ?? "" })
+					return
+				}
+
+				if (command === "newConversation") {
+					const previousReadySequence = readySequenceRef.current
+					const newTopic = await createNewConversation()
+					if (!newTopic?.id) throw new Error("Failed to create a new conversation")
+					await waitForAgentReadyAfter(previousReadySequence)
+					respond(requestId, true)
+					return
+				}
+
+				throw new Error("Widget command name is invalid")
+			} catch (error) {
+				respond(requestId, false, {
+					error: error instanceof Error ? error.message : "Widget command failed",
+				})
+			}
+		}
+
+		/** Rejects messages outside the bound protocol, origin, instance, and parent window. */
+		const handleMessage = (event: MessageEvent) => {
+			if (
+				event.origin !== targetOrigin ||
+				event.source !== window.parent ||
+				!event.data ||
+				event.data.protocol !== PROTOCOL ||
+				event.data.version !== VERSION ||
+				event.data.instanceId !== context.instanceId ||
+				event.data.type !== "command" ||
+				typeof event.data.requestId !== "string" ||
+				!CAPABILITIES.includes(event.data.command)
+			) {
+				return
+			}
+
+			void executeCommand(event)
+		}
+
+		window.addEventListener("message", handleMessage)
+		return () => window.removeEventListener("message", handleMessage)
+	}, [context, createNewConversation, executeEditorCommand, waitForAgentReadyAfter])
+
+	useEffect(() => {
+		const readyWaiters = readyWaitersRef.current
+		return () => {
+			if (pendingWindowLoadListenerRef.current) {
+				window.removeEventListener("load", pendingWindowLoadListenerRef.current)
+				pendingWindowLoadListenerRef.current = null
+			}
+			readyAfterWindowLoadRef.current = false
+			const error = new Error("Magic widget bridge was destroyed")
+			readyWaiters.forEach((waiter) => {
+				window.clearTimeout(waiter.timer)
+				waiter.reject(error)
+			})
+			readyWaiters.clear()
+		}
+	}, [])
+
+	return { notifyAgentReady }
+}

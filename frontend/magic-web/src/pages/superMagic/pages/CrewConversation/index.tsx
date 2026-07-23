@@ -6,21 +6,29 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { CrewConversationStoreProvider } from "./context"
 import {
 	getCrewConversationRouteOrganizationCode,
+	getMagicWidgetEmbedContext,
 	shouldForceMobileCrewConversation,
 } from "./route-layout"
 import { useCrewConversationOrganizationGuard } from "./hooks/useCrewConversationOrganizationGuard"
 import CrewStateView from "./components/CrewStateView"
+import { defaultClusterCode } from "@/routes/helpers"
 
 const CrewConversationDesktop = lazy(() => import("./index.desktop"))
 const CrewConversationMobile = lazy(() => import("./index.mobile"))
 
 function CrewConversationPage() {
-	const { code } = useParams<{ code?: string }>()
+	const { code, clusterCode } = useParams<{ code?: string; clusterCode?: string }>()
 	const { search } = useLocation()
 	const isMobile = useIsMobile()
 	const shouldUseMobileLayout = isMobile || shouldForceMobileCrewConversation(search)
 	const routeOrganizationCode = getCrewConversationRouteOrganizationCode(search)
-	const organizationGuard = useCrewConversationOrganizationGuard(routeOrganizationCode)
+	const widgetContext = getMagicWidgetEmbedContext(search)
+	// The route deployment is resolved before the organization guard runs, so organization
+	// switching cannot select an account from another SaaS or private environment.
+	const organizationGuard = useCrewConversationOrganizationGuard(
+		routeOrganizationCode,
+		clusterCode ?? defaultClusterCode,
+	)
 
 	if (!organizationGuard.isReady) {
 		return <CrewStateView status={organizationGuard.status === "error" ? "error" : "loading"} />
@@ -35,7 +43,11 @@ function CrewConversationPage() {
 					</div>
 				}
 			>
-				{shouldUseMobileLayout ? <CrewConversationMobile /> : <CrewConversationDesktop />}
+				{shouldUseMobileLayout ? (
+					<CrewConversationMobile widgetContext={widgetContext} />
+				) : (
+					<CrewConversationDesktop widgetContext={widgetContext} />
+				)}
 			</Suspense>
 		</CrewConversationStoreProvider>
 	)

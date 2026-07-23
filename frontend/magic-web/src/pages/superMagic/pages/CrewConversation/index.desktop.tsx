@@ -24,7 +24,12 @@ import { useCrewConversationStore } from "./context"
 import CrewConversationPanel from "./components/CrewConversationPanel"
 import CrewStateView from "./components/CrewStateView"
 
-function CrewConversationDesktop() {
+interface CrewConversationDesktopProps {
+	widgetContext?: { instanceId: string; hostOrigin: string } | null
+}
+
+/** Renders the desktop Crew layout and forwards optional widget bridge metadata. */
+function CrewConversationDesktop({ widgetContext = null }: CrewConversationDesktopProps) {
 	const { t } = useTranslation("crew/market")
 	const { styles } = useStyles()
 	const store = useCrewConversationStore()
@@ -227,6 +232,7 @@ function CrewConversationDesktop() {
 				onToggleHistoryPanel,
 			}) => (
 				<CrewConversationPanel
+					widgetContext={widgetContext}
 					variant="desktop"
 					isConversationPanelCollapsed={isConversationPanelCollapsed}
 					onToggleConversationPanel={onToggleConversationPanel}

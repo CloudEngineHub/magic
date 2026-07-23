@@ -80,6 +80,19 @@ export interface SuperMagicCreateNewTopicPayload {
 	}
 }
 
+export type SuperMagicWidgetEditorCommandName =
+	| "setInput"
+	| "appendInput"
+	| "clearInput"
+	| "getInput"
+
+/** Carries one Widget-only editor request and returns its plain-text result to the bridge. */
+export interface SuperMagicWidgetEditorCommandPayload {
+	command: SuperMagicWidgetEditorCommandName
+	content?: string
+	respond: (result?: string) => void
+}
+
 /**
  * Re_Edit_Message 的标准 payload。
  * 只声明重新编辑流程当前真正消费的字段：内容和 mentions。

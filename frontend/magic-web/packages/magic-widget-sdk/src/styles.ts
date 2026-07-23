@@ -7,6 +7,10 @@ export const widgetStyles = `
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+:host([data-magic-widget-root]) {
+	display: block;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -179,6 +183,27 @@ export const widgetStyles = `
 	min-height: 0;
 	border: 0;
 	background: #ffffff;
+}
+
+.magic-widget-layer[data-render-mode="inline"] {
+	position: relative;
+	inset: auto;
+	width: 100%;
+	height: 100%;
+	pointer-events: auto;
+}
+
+.magic-widget-layer[data-render-mode="inline"] .magic-widget-panel {
+	position: relative;
+	inset: auto;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	min-height: 0;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
 }
 
 @media (max-width: 640px) {

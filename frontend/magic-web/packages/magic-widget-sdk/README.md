@@ -12,7 +12,7 @@ Use the SDK file served by the Magic Web deployment that should host the embedde
 
 The iframe origin is inferred from the script URL. For example, if the script is loaded from `https://your-magic-domain.com/sdk/magic-widget.js`, the iframe also opens on `https://your-magic-domain.com`.
 
-The SDK does not accept an `appOrigin` option. To switch environments, load the script from the corresponding Magic Web domain.
+The SDK does not accept an `appOrigin` option. The script URL selects the Magic Web origin, while `auth.deploymentCode` selects SaaS or a private deployment within that origin.
 
 ## Quick Start
 
@@ -28,6 +28,7 @@ Call `mount` after `document.body` is available:
 		},
 		auth: {
 			loginStrategy: "phone_password",
+			deploymentCode: "private-mock",
 			organizationCode: "org-001",
 		},
 		modal: {
@@ -62,12 +63,19 @@ The UMD script exposes one global object:
 window.MagicWidget
 ```
 
-| Method | Signature | Description | Boundary |
-| --- | --- | --- | --- |
-| `mount` | `(options: MagicWidget.MountOptions) => void` | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists. |
-| `open` | `() => void` | Opens the panel programmatically. The floating button is hidden while the panel is open. | Must be called after `mount`; otherwise an error is thrown. |
-| `close` | `() => void` | Closes the panel programmatically. The floating button is shown again after the close animation. | Safe to call when the panel is already closed. |
-| `destroy` | `() => void` | Removes the widget DOM, event listeners, timers, and current configuration. | Call `mount` again before using `open`. |
+| Method            | Signature                                     | Description                                                                                                       | Boundary                                                                             |
+| ----------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `mount`           | `(options: MagicWidget.MountOptions) => void` | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists.                   |
+| `open`            | `() => void`                                  | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.                          |
+| `close`           | `() => void`                                  | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                                       |
+| `destroy`         | `() => void`                                  | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                                              |
+| `on`              | `("agent_ready", listener) => () => void`     | Subscribes to the event indicating that the Agent can accept messages and returns an unsubscribe function.        | Fires after editor subscriptions are active and the current draft phase has settled. |
+| `setInput`        | `(content: string) => Promise<void>`          | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response.                 |
+| `appendInput`     | `(content: string) => Promise<void>`          | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response.                 |
+| `clearInput`      | `() => Promise<void>`                         | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                                              |
+| `getInput`        | `() => Promise<string>`                       | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                                              |
+| `sendMessage`     | `(content: string) => Promise<void>`          | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.                     |
+| `newConversation` | `() => Promise<void>`                         | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.                   |
 
 The object also exposes `window.MagicWidget.version` for diagnostics.
 
@@ -80,9 +88,67 @@ namespace MagicWidget {
 		auth?: AuthOptions
 		iframe?: IframeOptions
 		modal?: ModalOptions
+		target?: HTMLElement
 	}
 }
 ```
+
+### Inline mode
+
+Pass a connected `HTMLElement` as `target` to render the iframe directly inside that container:
+
+```js
+const container = document.querySelector("#agent-slot")
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: container,
+})
+window.MagicWidget.setInput("Summarize this fictional content")
+window.MagicWidget.sendMessage("Process this fictional content now")
+```
+
+### Agent readiness and input maintenance
+
+`agent_ready` means that page initialization and editor command subscriptions are complete, and that the current topic's draft phase has settled through restoration, an intentional skip, or failure fallback. It is an informational state notification, not an execution prerequisite enforced by the SDK or iframe bridge. Ordinary commands are sent after the iframe document loads and are not queued for `agent_ready`.
+
+If the first host action must run after the existing topic draft has been handled, wait for one `agent_ready` event in host business logic. Subscribe before `mount` so the first event cannot be missed:
+
+```js
+const firstAgentReady = new Promise((resolve) => {
+	const unsubscribe = window.MagicWidget.on("agent_ready", () => {
+		unsubscribe()
+		resolve()
+	})
+})
+
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+})
+
+await firstAgentReady
+await window.MagicWidget.setInput("Fictional task prefix")
+await window.MagicWidget.appendInput(", continue processing")
+const currentInput = await window.MagicWidget.getInput()
+await window.MagicWidget.clearInput()
+```
+
+`getInput` returns plain text and does not expose TipTap or internal Mention JSON. `appendInput` only appends text and never sends a message. `setInput` replaces the current editor value without deleting persisted draft history; subsequent draft persistence continues through the existing topic-scoped draft flow.
+
+### New conversation
+
+`newConversation` creates a new topic for the current Crew. The iframe returns its response after the new topic transition completes, and the SDK resolves the Promise from that response:
+
+```js
+await window.MagicWidget.newConversation()
+await window.MagicWidget.setInput("Fictional content in the new conversation")
+await window.MagicWidget.sendMessage("Send fictional content in the new conversation")
+```
+
+The host must give the container a non-zero width and height. Inline mode has no floating button, mask, or SDK header; it is visible after `mount`, while `open`, `close`, and `destroy` remain available. The SDK is a single-instance API, so a later `mount` replaces the previous instance.
+
+All input, send, and conversation methods return a Promise. They reject with an error containing `code` values such as `NOT_MOUNTED`, `INVALID_INPUT`, `IFRAME_NOT_READY`, or `COMMAND_FAILED`. The SDK waits only for the iframe document to load during initial navigation or reload, not for `agent_ready`; command results follow the iframe response.
+
+The iframe uses a versioned `postMessage` protocol restricted to the SDK-derived Magic origin and the bound iframe window. Do not send secrets or unnecessary business data. Host `@` candidate injection and Agent-to-host action callbacks are not public in this phase.
 
 ### `page`
 
@@ -99,20 +165,20 @@ namespace MagicWidget {
 }
 ```
 
-| Page type | Required fields | Result |
-| --- | --- | --- |
-| `crew` | `crewId` | Opens the crew conversation page for the given crew. |
+| Page type | Required fields | Result                                               |
+| --------- | --------------- | ---------------------------------------------------- |
+| `crew`    | `crewId`        | Opens the crew conversation page for the given crew. |
 
 Boundaries:
 
-| Value | Supported | Result |
-| --- | --- | --- |
-| `{ type: "crew", crewId: "crew-001" }` | Yes | Opens the crew page on the script origin. |
-| `{ type: "crew", crewId: "" }` | No | Empty crew IDs are rejected. |
-| `{ type: "freeform", ... }` | No | Unsupported page types are rejected by the public type contract. |
-| `route` / `url` | No | Free-form navigation is not part of the public API. |
+| Value                                  | Supported | Result                                                           |
+| -------------------------------------- | --------- | ---------------------------------------------------------------- |
+| `{ type: "crew", crewId: "crew-001" }` | Yes       | Opens the crew page on the script origin.                        |
+| `{ type: "crew", crewId: "" }`         | No        | Empty crew IDs are rejected.                                     |
+| `{ type: "freeform", ... }`            | No        | Unsupported page types are rejected by the public type contract. |
+| `route` / `url`                        | No        | Free-form navigation is not part of the public API.              |
 
-Currently, `page.type = "crew"` resolves to `/{clusterCode}/super/crew/{crewId}` with the built-in default cluster code `default`. For example, `crewId: "crew-001"` opens `/default/super/crew/crew-001` on the script origin.
+Currently, `page.type = "crew"` resolves to `/{clusterCode}/super/crew/{crewId}`. Without a deployment code it uses the SaaS route `/global/super/crew/{crewId}`; with `auth.deploymentCode` it uses the corresponding private deployment route.
 
 ### `auth`
 
@@ -120,6 +186,7 @@ Currently, `page.type = "crew"` resolves to `/{clusterCode}/super/crew/{crewId}`
 namespace MagicWidget {
 	interface AuthOptions {
 		loginStrategy?: LoginStrategy
+		deploymentCode?: string
 		organizationCode?: string
 	}
 }
@@ -127,7 +194,11 @@ namespace MagicWidget {
 
 `loginStrategy` is forwarded to the iframe URL as the `login-strategy` query parameter. Magic Web can use this value on `/login` to select the corresponding login form.
 
+`deploymentCode` selects the login environment before the Crew page is entered. Omitting it or passing an empty string uses SaaS; a non-empty value selects the corresponding private deployment. If that environment is not logged in, Magic Web reuses the existing login entry with the deployment code filled in. If an account for that environment already exists, the existing account-switch flow is reused.
+
 `organizationCode` is forwarded to the iframe URL as the `organizationCode` query parameter. After the user is authenticated, Magic Web can use this value to switch into the requested Magic organization before rendering the target page. Empty strings are ignored.
+
+Environment selection happens before login and Crew rendering, while organization switching happens after the target environment is authenticated. Organization lookup is limited to accounts from that deployment and never crosses environments for a matching code. This version does not expose additional authentication-state events.
 
 Built-in strategy values:
 
@@ -171,11 +242,11 @@ namespace MagicWidget {
 }
 ```
 
-| Option | Description | Boundary |
-| --- | --- | --- |
-| `allow` | Sets the iframe `allow` attribute. | Use the standard browser permission-policy syntax, such as `"clipboard-read; clipboard-write"`. |
-| `sandbox` | Sets the iframe `sandbox` attribute. | If omitted, no `sandbox` attribute is set. A strict sandbox may block Magic Web features, so only configure it when the host page requires it. |
-| `query` | Appends extra query parameters to the iframe URL. | `null` and `undefined` values are ignored. Array values append the same key multiple times. |
+| Option    | Description                                       | Boundary                                                                                                                                       |
+| --------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allow`   | Sets the iframe `allow` attribute.                | Use the standard browser permission-policy syntax, such as `"clipboard-read; clipboard-write"`.                                                |
+| `sandbox` | Sets the iframe `sandbox` attribute.              | If omitted, no `sandbox` attribute is set. A strict sandbox may block Magic Web features, so only configure it when the host page requires it. |
+| `query`   | Appends extra query parameters to the iframe URL. | `null` and `undefined` values are ignored. Array values append the same key multiple times.                                                    |
 
 SDK-owned options take precedence over duplicate keys in `iframe.query`, such as `auth.organizationCode` for `organizationCode` and `auth.loginStrategy` for `login-strategy`.
 
@@ -193,27 +264,27 @@ namespace MagicWidget {
 }
 ```
 
-| Option | Description | Default / Boundary |
-| --- | --- | --- |
-| `title` | Panel header text. The same value is used as the iframe title. | Defaults to `"Magic"`. |
-| `width` | Desktop panel width. A number is treated as pixels; a string is used as a CSS size. | Defaults to `min(420px, calc(100vw - 32px))`. Ignored on mobile. |
-| `height` | Desktop panel height. A number is treated as pixels; a string is used as a CSS size. | Defaults to `min(680px, calc(100vh - 32px))`. Desktop has a built-in minimum panel height of `420px`. Ignored on mobile. |
-| `classNames` | Adds class names to specific modal slots. | Adds class attributes only; for deterministic visual customization, prefer `styles`. |
-| `styles` | Applies inline styles to specific modal slots. | Supports camelCase CSS properties, kebab-case properties, and CSS custom properties. `null` and `undefined` values are ignored. |
+| Option       | Description                                                                          | Default / Boundary                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `title`      | Panel header text. The same value is used as the iframe title.                       | Defaults to `"Magic"`.                                                                                                          |
+| `width`      | Desktop panel width. A number is treated as pixels; a string is used as a CSS size.  | Defaults to `min(420px, calc(100vw - 32px))`. Ignored on mobile.                                                                |
+| `height`     | Desktop panel height. A number is treated as pixels; a string is used as a CSS size. | Defaults to `min(680px, calc(100vh - 32px))`. Desktop has a built-in minimum panel height of `420px`. Ignored on mobile.        |
+| `classNames` | Adds class names to specific modal slots.                                            | Adds class attributes only; for deterministic visual customization, prefer `styles`.                                            |
+| `styles`     | Applies inline styles to specific modal slots.                                       | Supports camelCase CSS properties, kebab-case properties, and CSS custom properties. `null` and `undefined` values are ignored. |
 
 Available modal slots:
 
-| Slot | Target |
-| --- | --- |
-| `root` | Widget root container. |
-| `layer` | Fullscreen panel layer. |
-| `mask` | Mobile mask behind the panel. |
-| `container` | Panel container. |
-| `header` | Panel header. |
-| `title` | Header title text. |
-| `close` | Close button. |
-| `body` | Panel body around the iframe. |
-| `iframe` | Embedded iframe element. |
+| Slot        | Target                        |
+| ----------- | ----------------------------- |
+| `root`      | Widget root container.        |
+| `layer`     | Fullscreen panel layer.       |
+| `mask`      | Mobile mask behind the panel. |
+| `container` | Panel container.              |
+| `header`    | Panel header.                 |
+| `title`     | Header title text.            |
+| `close`     | Close button.                 |
+| `body`      | Panel body around the iframe. |
+| `iframe`    | Embedded iframe element.      |
 
 Example:
 
@@ -249,10 +320,10 @@ window.MagicWidget.mount({
 
 ## Interaction Behavior
 
-| Environment | Behavior |
-| --- | --- |
-| Desktop | Displays a circular floating message button. Clicking it hides the button and opens a panel anchored over the button area. The panel can be dragged by its header and is kept inside the viewport when the window is resized. |
-| Mobile, `<= 640px` | Opens as a bottom popover with a mask. The panel width is `100%`, height is `86vh`, bottom corners are square, and desktop `modal.width` / `modal.height` are ignored. Panel dragging is disabled. |
+| Environment        | Behavior                                                                                                                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop            | Displays a circular floating message button. Clicking it hides the button and opens a panel anchored over the button area. The panel can be dragged by its header and is kept inside the viewport when the window is resized. |
+| Mobile, `<= 640px` | Opens as a bottom popover with a mask. The panel width is `100%`, height is `86vh`, bottom corners are square, and desktop `modal.width` / `modal.height` are ignored. Panel dragging is disabled.                            |
 
 The floating button and the panel are mutually exclusive: only one is visible at a time. The panel can be closed by the close button, by clicking the mobile mask, by pressing `Escape`, or by calling `window.MagicWidget.close()`.
 
@@ -270,4 +341,4 @@ url
 zIndex
 ```
 
-Use the script URL to select the Magic Web origin, `page` to select the supported target page, `auth.organizationCode` for organization switching, and `modal` options for panel customization.
+Use the script URL to select the Magic Web origin, `page` to select the supported target page, `auth.deploymentCode` to choose SaaS or a private deployment, `auth.organizationCode` for post-login organization switching, and `modal` options for panel customization.

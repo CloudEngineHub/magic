@@ -28,3 +28,24 @@ export function getCrewConversationRouteOrganizationCode(search: string): string
 	const searchParams = new URLSearchParams(search)
 	return getFirstSearchParam(searchParams, MAGIC_ORGANIZATION_QUERY_KEYS)
 }
+
+/** Reads the private widget embed metadata while keeping normal Crew routes unchanged. */
+export function getMagicWidgetEmbedContext(search: string): {
+	instanceId: string
+	protocolVersion: number
+	hostOrigin: string
+} | null {
+	const params = new URLSearchParams(search)
+	if (params.get("magicWidgetEmbed") !== "1") return null
+	const instanceId = params.get("magicWidgetInstanceId")?.trim()
+	const protocolVersion = Number(params.get("magicWidgetProtocolVersion"))
+	const hostOriginValue = params.get("magicWidgetHostOrigin")
+	if (!instanceId || protocolVersion !== 1 || !hostOriginValue) return null
+	try {
+		const hostOrigin = new URL(hostOriginValue).origin
+		if (!hostOrigin.startsWith("http://") && !hostOrigin.startsWith("https://")) return null
+		return { instanceId, protocolVersion, hostOrigin }
+	} catch {
+		return null
+	}
+}
