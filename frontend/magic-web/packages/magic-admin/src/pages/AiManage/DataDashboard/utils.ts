@@ -2,6 +2,7 @@ import dayjs from "dayjs"
 import type { TimeRangeValue } from "@admin-components"
 import type { DataDashboard } from "@admin/types/datadashboard"
 import type { TreeNode } from "@dtyq/user-selector"
+import { AGENT_TAB_TYPE, MEMBER_TAB_TYPE } from "./consts"
 
 const DATE_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss"
 const DATE_FORMAT = "YYYY-MM-DD"
@@ -9,6 +10,9 @@ const DATE_FORMAT = "YYYY-MM-DD"
 export const EMPTY_TEXT = "-"
 
 export type DashboardTabType = DataDashboard.AgentTabType | DataDashboard.MemberTabType
+
+const AGENT_TAB_TYPES = new Set<DashboardTabType>(Object.values(AGENT_TAB_TYPE))
+const MEMBER_TAB_TYPES = new Set<DashboardTabType>(Object.values(MEMBER_TAB_TYPE))
 
 export const formatNumber = (value: number) =>
 	new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(Math.round(value || 0))
@@ -71,9 +75,9 @@ export const exportCsv = (title: string, rows: Array<Record<string, unknown>>) =
 }
 
 export function isAgentTab(tab: DashboardTabType): tab is DataDashboard.AgentTabType {
-	return tab.startsWith("agent_")
+	return AGENT_TAB_TYPES.has(tab)
 }
 
 export function isMemberTab(tab: DashboardTabType): tab is DataDashboard.MemberTabType {
-	return tab.startsWith("member_")
+	return MEMBER_TAB_TYPES.has(tab)
 }
