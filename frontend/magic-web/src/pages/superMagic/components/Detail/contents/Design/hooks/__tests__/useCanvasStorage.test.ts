@@ -40,13 +40,13 @@ describe("normalizeCanvasStorageData", () => {
 		expect(getStoredReferencePath(normalized)).toBe("./images/cat.png")
 	})
 
-	it("preserves a bare workspace-root resource in local drafts", () => {
+	it("normalizes an attachment-confirmed workspace-root resource in local drafts", () => {
 		const normalized = normalizeCanvasStorageData(storageWithReferencePath("images/cat.png"), {
 			designProjectBasePath: DESIGN_A,
 			flatAttachments: [fileItem("workspace-cat", "images/cat.png")],
 		})
 
-		expect(getStoredReferencePath(normalized)).toBe("images/cat.png")
+		expect(getStoredReferencePath(normalized)).toBe("/images/cat.png")
 	})
 
 	it("preserves an ambiguous bare resource instead of rewriting it during a UI-state save", () => {

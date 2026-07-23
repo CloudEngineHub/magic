@@ -146,10 +146,26 @@ function toAttachmentMatches(matches: CandidateMatch[]): ResolveDesignAttachment
 
 /**
  * 写入 magic.project.js / Canvas storage 的路径。
- * 当前画布资源统一收口为 `./images|videos|audios/...`。
+ * 当前画布资源统一收口为 `./images|videos|audios/...`，其他工作区资源使用 `/...`。
  */
 export function toDesignDslPath(rawPath: string, ctx: DesignPathContext = {}): string {
 	return normalizeDesignStoragePathForCanvas(rawPath, ctx.designProjectBasePath)
+}
+
+/**
+ * 将附件树等来源中语义明确的工作区路径写入 Canvas DSL。
+ * 即使附件路径是历史无前导 `/` 形式，也按工作区根解析，不套用裸 `images/...` 的旧 DSL 语义。
+ */
+export function toDesignDslPathFromWorkspacePath(
+	rawPath: string,
+	ctx: DesignPathContext = {},
+): string {
+	const trimmed = rawPath.trim()
+	if (!trimmed || isRemoteOrSpecialPath(trimmed) || hasCurrentDirectoryPrefix(trimmed)) {
+		return toDesignDslPath(rawPath, ctx)
+	}
+	const workspaceAbsolutePath = `/${normalizeWorkspacePathKey(trimmed)}`
+	return toDesignDslPath(workspaceAbsolutePath, ctx)
 }
 
 /**

@@ -17,7 +17,7 @@ import {
 	ImageGenerationTaskMeta,
 	ImageGenerationTaskTypeMap,
 } from "@/components/CanvasDesign/public/magic-types"
-import { toDesignProjectBasePath, toDesignDslPath } from "./designPath"
+import { toDesignProjectBasePath } from "./designPath"
 import {
 	migrateLoadedDesignDataPaths,
 	normalizeDesignPathForTransitionMigration,
@@ -1603,6 +1603,40 @@ export function splitFileName(fileName: string): { baseName: string; extension: 
 }
 
 /**
+ * 生成与文件系统复制规则一致的候选文件名。
+ *
+ * 先用一次正则扫描现有文件名收集已占用编号，再取最小空位，避免逐个
+ * 试探候选名称。最终持久化名称仍以后端返回为准。
+ */
+export function generateUniqueDesignFileName(fileName: string, existingNames: Set<string>): string {
+	if (!existingNames.has(fileName)) return fileName
+
+	const { baseName, extension } = splitFileName(fileName)
+	const numberedNamePattern = new RegExp(
+		`^${escapeRegExp(baseName)}\\((\\d+)\\)${escapeRegExp(extension)}$`,
+	)
+	const occupiedNumbers = new Set<number>()
+
+	for (const existingName of existingNames) {
+		const match = numberedNamePattern.exec(existingName)
+		if (!match) continue
+
+		const number = Number(match[1])
+		if (Number.isInteger(number) && number >= 1 && number <= 20) {
+			occupiedNumbers.add(number)
+		}
+	}
+
+	for (let counter = 1; counter <= 20; counter += 1) {
+		if (!occupiedNumbers.has(counter)) {
+			return `${baseName}(${counter})${extension}`
+		}
+	}
+
+	return `${baseName}_${Date.now()}${extension}`
+}
+
+/**
  * 为文件生成唯一文件名(避免同名冲突)
  * 检测范围: 同批次内的同名文件 + 目标目录下已存在的文件
  *
@@ -1643,14 +1677,7 @@ export function renameFilesForUpload(files: File[], existingFiles: FileItem[]): 
 
 		// 如果文件名已被使用,生成新的文件名
 		if (usedNames.has(newFileName)) {
-			const { baseName, extension } = splitFileName(file.name)
-			let counter = 1
-
-			// 持续尝试直到找到未使用的文件名
-			do {
-				newFileName = `${baseName}(${counter})${extension}`
-				counter++
-			} while (usedNames.has(newFileName))
+			newFileName = generateUniqueDesignFileName(file.name, usedNames)
 
 			needsRename = true
 		}

@@ -7,6 +7,7 @@ import {
 	resolveDesignAttachment,
 	toDesignApiPath,
 	toDesignDslPath,
+	toDesignDslPathFromWorkspacePath,
 	toWorkspaceAbsoluteApiPath,
 	toWorkspaceAbsoluteApiPathForOperation,
 	toWorkspaceRelativeCandidates,
@@ -46,7 +47,8 @@ describe("designPath contract", () => {
 	it("keeps other canvas workspace paths outside the current DSL root", () => {
 		const ctx = { designProjectBasePath: DESIGN_A }
 
-		expect(toDesignDslPath(`${DESIGN_B}/images/a.png`, ctx)).toBe(`${DESIGN_B}/images/a.png`)
+		expect(toDesignDslPath(`${DESIGN_B}/images/a.png`, ctx)).toBe(`/${DESIGN_B}/images/a.png`)
+		expect(toDesignDslPath(`/${DESIGN_B}/images/a.png`, ctx)).toBe(`/${DESIGN_B}/images/a.png`)
 		expect(toWorkspaceRelativePath(`${DESIGN_B}/images/a.png`, ctx)).toBe(
 			`${DESIGN_B}/images/a.png`,
 		)
@@ -54,6 +56,35 @@ describe("designPath contract", () => {
 		expect(toWorkspaceRelativeCandidates(`${DESIGN_B}/images/a.png`, ctx)).toEqual([
 			`${DESIGN_B}/images/a.png`,
 		])
+	})
+
+	it("writes known workspace paths as current-relative or workspace-absolute", () => {
+		const ctx = { designProjectBasePath: DESIGN_A }
+
+		expect(toDesignDslPathFromWorkspacePath(`/${DESIGN_A}/images/a.png`, ctx)).toBe(
+			"./images/a.png",
+		)
+		expect(toDesignDslPathFromWorkspacePath(`${DESIGN_B}/images/a.png`, ctx)).toBe(
+			`/${DESIGN_B}/images/a.png`,
+		)
+		expect(toDesignDslPathFromWorkspacePath("images/root.png", ctx)).toBe("/images/root.png")
+		expect(toDesignDslPathFromWorkspacePath("root.png", ctx)).toBe("/root.png")
+	})
+
+	it("treats an explicit /images path as workspace-root absolute", () => {
+		const ctx = { designProjectBasePath: DESIGN_A }
+
+		expect(toDesignDslPath("/images/a.png", ctx)).toBe("/images/a.png")
+		expect(toWorkspaceRelativeCandidates("/images/a.png", ctx)).toEqual(["images/a.png"])
+		expect(isCurrentCanvasResourcePath("/images/a.png", ctx)).toBe(false)
+	})
+
+	it("exposes single-segment absolute files as workspace-relative lookup paths", () => {
+		const ctx = { designProjectBasePath: DESIGN_A }
+
+		expect(toDesignDslPath("/root.png", ctx)).toBe("/root.png")
+		expect(toWorkspaceRelativePath("/root.png", ctx)).toBe("root.png")
+		expect(toWorkspaceRelativeCandidates("/root.png", ctx)).toEqual(["root.png"])
 	})
 
 	it("treats paths with a directory prefix as project-root anchored", () => {
@@ -239,5 +270,25 @@ describe("designPath contract", () => {
 
 		expect(content).toContain("./images/cat.png")
 		expect(content).not.toContain(`/${DESIGN_A}/images/cat.png`)
+	})
+
+	it("keeps external workspace resources absolute when saving magic.project.js", () => {
+		const content = generateMagicProjectJsContent(
+			{
+				version: "1.0.0",
+				canvas: {
+					elements: [
+						{
+							id: "image-1",
+							type: "image",
+							src: `${DESIGN_B}/images/cat.png`,
+						},
+					],
+				},
+			} as never,
+			{ projectBasePath: DESIGN_A },
+		)
+
+		expect(content).toContain(`"src": "/${DESIGN_B}/images/cat.png"`)
 	})
 })

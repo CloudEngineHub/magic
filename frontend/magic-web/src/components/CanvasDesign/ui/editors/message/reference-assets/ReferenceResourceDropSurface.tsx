@@ -73,6 +73,7 @@ export const ReferenceResourceDropSurface = forwardRef<
 			className={rootClassName}
 			style={style}
 			{...rest}
+			data-canvas-resource-drop-surface
 			onDropCapture={(event) => {
 				if (dragEvents) {
 					event.preventDefault()

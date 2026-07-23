@@ -14,7 +14,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { validateFilename } from "@/utils/filename-validator"
-import { toDesignDslPath, resolveDesignAttachment } from "../utils/designPath"
+import { resolveDesignAttachment, toDesignDslPathFromWorkspacePath } from "../utils/designPath"
 import { compareDesignData, normalizePath, splitFileName } from "../utils/utils"
 import { replaceCanvasFilePathReferences } from "../utils/replace-canvas-file-path-references"
 import { registerWaitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -257,7 +257,7 @@ export function useCanvasImageFileRenameSync(
 			const latestCanvasData = latestCanvasDataRef.current
 			if (!latestCanvasData) return
 
-			const nextCanvasPath = toDesignDslPath(renamedRelativeFilePath, {
+			const nextCanvasPath = toDesignDslPathFromWorkspacePath(renamedRelativeFilePath, {
 				designProjectBasePath: designProjectBasePathRef.current,
 			})
 			const nextCanvasData = replaceCanvasFilePathReferences(latestCanvasData, {
