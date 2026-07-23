@@ -114,6 +114,8 @@ export const RequestUrl = {
 	getControlTargetUsedPoints: "/api/v1/quota/points/control/points-used/queries",
 
 	/** AI管理 - 数据看板 */
+	/** 数据看板 - 数字员工筛选选项 */
+	getDataDashboardAgentOptions: "/api/v1/admin/data-dashboard/agent-options",
 	/** 数据看板 - 数字员工分析 Summary */
 	getDataDashboardAgentSummary: "/api/v1/admin/data-dashboard/agent-analysis/summary",
 	/** 数据看板 - 数字员工分析 Tabs */

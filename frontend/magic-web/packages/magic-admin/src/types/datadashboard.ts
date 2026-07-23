@@ -22,6 +22,8 @@ export namespace DataDashboard {
 		end_date?: string
 		/** 精确数字员工编码 */
 		agent_code?: string
+		/** 精确成员 ID */
+		user_id?: string
 		/** 精确部门节点，不自动包含子部门 */
 		department_id?: string
 	}
@@ -58,6 +60,22 @@ export namespace DataDashboard {
 		page_size?: number
 	}
 
+	/** 数字员工筛选选项行 */
+	export interface AgentOption {
+		/** 数字员工稳定编码 */
+		agent_code: string
+		/** 数字员工展示名称 */
+		agent_name: string | null
+	}
+
+	/** 数字员工筛选选项响应 */
+	export interface AgentOptions {
+		/** 当前组织可筛选的数字员工总数 */
+		total: number
+		/** 数字员工筛选选项列表 */
+		list: AgentOption[]
+	}
+
 	/** 数字员工趋势点 */
 	export interface AgentUsageTrendItem {
 		/** task 归属日期，格式 Y-m-d */
@@ -92,12 +110,6 @@ export namespace DataDashboard {
 		total_points: number
 		/** 统计范围内 Token 消耗总量 */
 		total_tokens: number
-		/** 统计范围内调用成功次数；未返回时前端按 total_call_count - failed_call_count 兜底 */
-		success_call_count?: number | null
-		/** 统计范围内调用失败次数；未返回时前端按 0 兜底 */
-		failed_call_count?: number | null
-		/** 调用成功率；小数口径，未返回时前端按成功次数 / 总调用次数计算 */
-		success_rate?: number | null
 		/** 按统一 task 归属日期聚合的使用趋势 */
 		usage_trend: AgentUsageTrendItem[]
 		/** 按“单个数字员工周期调用次数”形成的精确分布；前端按产品配置组合展示区间 */
@@ -128,6 +140,8 @@ export namespace DataDashboard {
 		employed_member_count: number
 		/** 当前在职成员中，统计范围内产生过有效调用的去重成员数 */
 		active_member_count: number
+		/** 统计范围内产生过调用的去重成员数，作为成员人均指标分母 */
+		calling_member_count: number
 		/** 当前在职成员中，历史首次有效调用日期落在统计范围内的人数 */
 		new_member_count: number
 		/** 全部统一 task 调用数，保留已离职成员的历史调用 */
@@ -271,6 +285,8 @@ export namespace DataDashboard {
 		points: number
 		/** 成员在当前筛选范围内的 Token 消耗 */
 		tokens: number
+		/** 当前筛选范围内最近一次调用时间 */
+		last_called_at: string | null
 	}
 
 	/** member_call：一行一个统一 task_id */

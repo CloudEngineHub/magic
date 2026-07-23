@@ -31,9 +31,7 @@ export function useAdminAuth() {
 	/** 官方组织不可访问的路由 */
 	const isOfficialOrgRestrictedAIPath = useMemo(() => {
 		return (
-			pathname.startsWith(RoutePath.AICustomModel) ||
-			pathname.startsWith(RoutePath.AIManage) ||
-			pathname.startsWith(RoutePath.AIDataStatistics)
+			pathname.startsWith(RoutePath.AICustomModel) || pathname.startsWith(RoutePath.AIManage)
 		)
 	}, [pathname])
 

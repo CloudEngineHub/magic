@@ -270,6 +270,11 @@ export const generateAIManageApi = (client: HttpClient) => {
 			)
 		},
 
+		/** 数据看板 - 数字员工筛选选项 */
+		getDataDashboardAgentOptions() {
+			return client.get<DataDashboard.AgentOptions>(RequestUrl.getDataDashboardAgentOptions)
+		},
+
 		/** 数据看板 - 数字员工分析 Summary */
 		getDataDashboardAgentSummary(data: DataDashboard.AgentSummaryQuery) {
 			return client.get<DataDashboard.AgentSummary>(

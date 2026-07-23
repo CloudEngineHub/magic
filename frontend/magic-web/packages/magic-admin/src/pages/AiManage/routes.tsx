@@ -9,7 +9,7 @@ import {
 	AI_APP_MENU,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
-import { DataDashboardView } from "./Statistics/DataDashboard/consts"
+import { DataDashboardView } from "./DataDashboard/consts"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -24,7 +24,7 @@ const AIVideoDetailPage = lazy(() => import("../PlatformPackage/VedioModelDetail
 const EmployeeReviewPage = lazy(() => import("./EmployeeReview/index.page"))
 const SkillReviewPage = lazy(() => import("./SkillReview/index.page"))
 const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
-const DataDashboardPage = lazy(() => import("./Statistics/DataDashboard/index.page"))
+const DataDashboardPage = lazy(() => import("./DataDashboard/index.page"))
 
 const hasAdminAllPermissions = (permissions: string[]) =>
 	permissions.includes(PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS) ||
