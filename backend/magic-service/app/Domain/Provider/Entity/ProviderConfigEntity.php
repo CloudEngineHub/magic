@@ -136,6 +136,14 @@ class ProviderConfigEntity extends AbstractEntity
         return $this->getTranslatedValue('alias', $locale);
     }
 
+    /**
+     * 获取翻译后的服务商配置名称，仅读取 translate.
+     */
+    public function getTranslatedName(string $locale): string
+    {
+        return $this->getTranslatedValue('name', $locale);
+    }
+
     public function setAlias(null|int|string $alias): void
     {
         if ($alias === null) {

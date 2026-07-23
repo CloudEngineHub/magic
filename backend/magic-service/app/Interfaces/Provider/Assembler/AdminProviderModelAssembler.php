@@ -189,7 +189,7 @@ class AdminProviderModelAssembler
         $configId = $model->getServiceProviderConfigId();
         $config = $providerContext['configs'][$configId] ?? null;
         $provider = $providerContext['providers'][$configId] ?? null;
-        $providerName = $model->getTranslatedName($locale);
+        $providerName = $config?->getTranslatedName($locale) ?? '';
         if ($providerName === '') {
             $providerName = $provider?->getTranslatedName($locale) ?? '';
         }
