@@ -194,13 +194,13 @@ export default {
 					title: "nav.aiSubMenu.memberAnalysis",
 					validate: canAccessAIDataStatistics,
 				},
-				{
-					name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
-					path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
-					element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
-					title: "nav.aiSubMenu.digitalEmployeeAnalysis",
-					validate: canAccessAIDataStatistics,
-				},
+				// {
+				// 	name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
+				// 	path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
+				// 	element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
+				// 	title: "nav.aiSubMenu.digitalEmployeeAnalysis",
+				// 	validate: canAccessAIDataStatistics,
+				// },
 			],
 		},
 		{
