@@ -433,10 +433,10 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         $groupBuilder = clone $builder;
         $groupBuilder
             ->select('model_id')
-            ->selectRaw('MAX(sort) as max_sort')
+            ->selectRaw('MAX(name) as sort_name')
             ->groupBy('model_id')
-            ->orderBy('max_sort', 'desc')
-            ->orderBy('model_id', 'asc');
+            ->orderBy('sort_name', 'asc')
+            ->where('type', ProviderModelType::ATOM->value);
 
         if ($page->isEnabled()) {
             $groupBuilder->forPage($page->getPage(), $page->getPageNum());
