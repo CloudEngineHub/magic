@@ -7,11 +7,9 @@ import sys
 from pathlib import Path
 import multiprocessing
 import asyncio
-import time
 from typing import Optional
 
-# 记录程序真正的启动时间
-PROGRAM_START_TIME = time.time()
+from app.core.process_runtime import PROCESS_STARTED_AT_SECONDS
 
 # 获取项目根目录，使用文件所在位置的父目录
 project_root = Path(__file__).resolve().parent
@@ -149,7 +147,7 @@ def ws_server_command(
             os.environ["SANDBOX_ID"] = "default"
 
         # 设置程序启动时间到环境变量，供 start_ws_server 使用
-        os.environ["STARTUP_START_TIME"] = str(PROGRAM_START_TIME)
+        os.environ["STARTUP_START_TIME"] = str(PROCESS_STARTED_AT_SECONDS)
 
         # 启动WebSocket服务器
         start_ws_server()

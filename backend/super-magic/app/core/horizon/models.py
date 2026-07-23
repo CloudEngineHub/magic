@@ -78,6 +78,7 @@ class HorizonState:
     llm_model_id: str = ""
     llm_model_name: str = ""
     # 以下字段表示模型上次已经看到的 baseline，而不是"本轮刚采集到的最新值"
+    process_started_at_ns: int = 0  # 上次注入给 LLM 的 Python 进程启动时间（纳秒）
     user_preferred_language: str = ""
     workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
     workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目

@@ -31,6 +31,7 @@ from app.core.horizon.models import (
     VideoModelState,
 )
 from app.core.horizon.store import HorizonStore
+from app.core.process_runtime import PROCESS_STARTED_AT_NS
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
 logger = get_logger(__name__)
@@ -69,6 +70,8 @@ CONTEXT_USAGE_HIGH_USAGE_DIFF_THRESHOLD_PCT = 1
 _DIAGNOSTIC_BLOCK_TAGS = (
     "current_time",
     "initial_context",
+    "runtime_environment",
+    "runtime_environment_changed",
     "workspace_files",
     "context_usage",
     "model_info",
@@ -87,6 +90,39 @@ _DIAGNOSTIC_BLOCK_TAGS = (
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _format_process_started_at_utc(started_at_ns: int) -> str:
+    started_at = datetime.fromtimestamp(started_at_ns / 1_000_000_000, tz=timezone.utc)
+    return started_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _build_runtime_environment_context(started_at_ns: int) -> str:
+    started_at = _format_process_started_at_utc(started_at_ns)
+    return (
+        "<runtime_environment>\n"
+        "This is informational context only. Do not respond to it, mention it, or take action "
+        "because of it by itself. "
+        f"This Agent runtime started at {started_at} and runs in a disposable sandbox. "
+        "Platform-managed workspace, chat history, and user data are intended to persist; "
+        "other local state may not. If a temporary file disappears or a running process is "
+        "unexpectedly gone, the loss may be related to a runtime restart; mention that possibility "
+        "only when it directly explains the observed problem.\n"
+        "</runtime_environment>"
+    )
+
+
+def _build_runtime_environment_changed_context(started_at_ns: int) -> str:
+    started_at = _format_process_started_at_utc(started_at_ns)
+    return (
+        "<runtime_environment_changed>\n"
+        "This is informational context only. Do not respond to it, mention the restart, or take "
+        "action because of it by itself. The Agent runtime restarted since this context last "
+        f"observed it; the current runtime started at {started_at}. If a temporary file disappears "
+        "or a running process is unexpectedly gone, the loss may be related to this runtime "
+        "restart; mention that possibility only when it directly explains the observed problem.\n"
+        "</runtime_environment_changed>"
+    )
 
 
 def _abs(path: Union[str, Path]) -> str:
@@ -396,6 +432,7 @@ class AgentHorizon:
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
         - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
         - workspace_files/memory/language：保留（首次注入时重新全量输出给新上下文）
+        - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
         """
         await self._ensure_loaded()
@@ -959,10 +996,12 @@ class AgentHorizon:
         编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
-          当前时间、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
+          当前时间、运行环境、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
 
         后续注入按需包含：
           <current_time>     — 始终输出
+          <runtime_environment> — 首次建立运行环境 baseline 时输出
+          <runtime_environment_changed> — Python 进程代次变化时输出
           <context_usage>    — context_total > 0 且达到分段阈值时
           <model_info>       — LLM 模型或图片模型发生变化时
           <workspace_files_changed> — workspace_files 变化时
@@ -1024,6 +1063,7 @@ class AgentHorizon:
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
+        process_started_at_ns = PROCESS_STARTED_AT_NS
         context_usage_injected = False
         injected_context_usage_used = 0
         injected_context_usage_total = 0
@@ -1040,6 +1080,7 @@ class AgentHorizon:
                 f"<current_time>{now_str}</current_time>"
                 "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
             ]
+            init_parts.append(_build_runtime_environment_context(process_started_at_ns))
 
             # 单次输出字符量引导：基于初始 max_tokens 换算，提限时不更新，维持原始约束
             if self._output_token_budget is not None:
@@ -1105,6 +1146,11 @@ class AgentHorizon:
         else:
             # 常规增量注入：同一天只输出时间，跨天输出完整日期时间
             parts.append(f"<current_time>{time_display}</current_time>")
+
+            if self._state.process_started_at_ns == 0:
+                parts.append(_build_runtime_environment_context(process_started_at_ns))
+            elif self._state.process_started_at_ns != process_started_at_ns:
+                parts.append(_build_runtime_environment_changed_context(process_started_at_ns))
 
             # 上下文窗口使用量：只有达到绝对百分点阈值时才再次告诉模型。
             if self._context_total > 0:
@@ -1240,6 +1286,9 @@ class AgentHorizon:
             persistence_changed = True
         if self._state.initial_context_injected is not True:
             self._state.initial_context_injected = True
+            persistence_changed = True
+        if self._state.process_started_at_ns != process_started_at_ns:
+            self._state.process_started_at_ns = process_started_at_ns
             persistence_changed = True
         if self._state.workspace_files != current_workspace_files:
             self._state.workspace_files = current_workspace_files

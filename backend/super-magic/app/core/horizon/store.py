@@ -152,6 +152,7 @@ class HorizonStore:
             )
             state.llm_model_id = data.get("llm_model_id", "")
             state.llm_model_name = data.get("llm_model_name", "")
+            state.process_started_at_ns = int(data.get("process_started_at_ns", 0) or 0)
             state.user_preferred_language = data.get("user_preferred_language", "")
             state.workspace_files = data.get("workspace_files", "")
             state.workspace_entries = data.get("workspace_entries", [])
@@ -180,6 +181,7 @@ class HorizonStore:
             "manual_context_windows": _manual_context_windows_to_dict(state.manual_context_windows),
             "llm_model_id": state.llm_model_id,
             "llm_model_name": state.llm_model_name,
+            "process_started_at_ns": state.process_started_at_ns,
             "user_preferred_language": state.user_preferred_language,
             "workspace_files": state.workspace_files,
             "workspace_entries": state.workspace_entries,
