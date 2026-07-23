@@ -16,6 +16,12 @@ export enum RoutePath {
 	AIInternalEmployeeSkill = "/admin/ai/internal-employee-skill",
 	AIEmployeeReview = "/admin/ai/internal-employee-skill/employee-review",
 	AISkillReview = "/admin/ai/internal-employee-skill/skill-review",
+	AIDataStatistics = "/admin/ai/statistics",
+	AIDataDashboardMemberAnalysis = "/admin/ai/statistics/member-analysis",
+	AIDataDashboardOrganizationAnalysis = "/admin/ai/statistics/organization-analysis",
+	AIDataDashboardDigitalEmployeeAnalysis = "/admin/ai/statistics/digital-employee-analysis",
+	AIDataDashboardConsumptionAnalysis = "/admin/ai/statistics/consumption-analysis",
+	AIDataDashboardDataDictionary = "/admin/ai/statistics/data-dictionary",
 	AIManage = "/admin/ai/manage",
 	AIAppMenu = "/admin/ai/manage/app-menu",
 
@@ -74,6 +80,18 @@ export enum RouteName {
 	AdminAIEmployeeReview = "AdminAIEmployeeReview",
 	/** 内部员工及技能 - 技能发布审核 */
 	AdminAISkillReview = "AdminAISkillReview",
+	/** 数据看板 */
+	AdminAIDataStatistics = "AdminAIDataStatistics",
+	/** 数据看板 - 成员分析 */
+	AdminAIDataDashboardMemberAnalysis = "AdminAIDataDashboardMemberAnalysis",
+	/** 数据看板 - 组织分析 */
+	AdminAIDataDashboardOrganizationAnalysis = "AdminAIDataDashboardOrganizationAnalysis",
+	/** 数据看板 - 数字员工分析 */
+	AdminAIDataDashboardDigitalEmployeeAnalysis = "AdminAIDataDashboardDigitalEmployeeAnalysis",
+	/** 数据看板 - 消耗分析 */
+	AdminAIDataDashboardConsumptionAnalysis = "AdminAIDataDashboardConsumptionAnalysis",
+	/** 数据看板 - 指标说明 */
+	AdminAIDataDashboardDataDictionary = "AdminAIDataDashboardDataDictionary",
 	/** 平台管理 - 应用菜单 */
 	AdminAIManage = "AdminAIManage",
 	/** 应用菜单 */

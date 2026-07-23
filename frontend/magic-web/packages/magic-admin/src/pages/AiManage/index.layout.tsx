@@ -9,11 +9,13 @@ import {
 	IconUsers,
 	IconSettingsAi,
 	IconMenu2,
+	IconRobot,
 } from "@tabler/icons-react"
 import {
 	AI_APP_MENU,
 	AI_CUSTOM_MODEL,
 	AI_INTERNAL_EMPLOYEE_SKILL,
+	AI_MANAGEMENT,
 	PERMISSION_KEY_MAP,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
@@ -118,6 +120,74 @@ function AIManagerLayout() {
 				],
 			},
 			{
+				key: RoutePath.AIDataStatistics,
+				label: t("nav.aiSubMenu.dataStatistics"),
+				hidden: isOfficialOrg || isPersonalOrganization,
+				validate: (permissions: string[], isSuperAdmin?: boolean) => {
+					return (
+						isSuperAdmin ||
+						AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+					)
+				},
+				children: [
+					{
+						key: RoutePath.AIDataDashboardMemberAnalysis,
+						label: t("nav.aiSubMenu.memberAnalysis"),
+						icon: <IconUsers size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+							)
+						},
+					},
+					// {
+					// 	key: RoutePath.AIDataDashboardOrganizationAnalysis,
+					// 	label: t("nav.aiSubMenu.organizationAnalysis"),
+					// 	icon: <IconBuilding size={20} />,
+					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
+					// 		return (
+					// 			isSuperAdmin ||
+					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+					// 		)
+					// 	},
+					// },
+					{
+						key: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
+						label: t("nav.aiSubMenu.digitalEmployeeAnalysis"),
+						icon: <IconRobot size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+							)
+						},
+					},
+					// {
+					// 	key: RoutePath.AIDataDashboardConsumptionAnalysis,
+					// 	label: t("nav.aiSubMenu.consumptionAnalysis"),
+					// 	icon: <IconCoin size={20} />,
+					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
+					// 		return (
+					// 			isSuperAdmin ||
+					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+					// 		)
+					// 	},
+					// },
+					// {
+					// 	key: RoutePath.AIDataDashboardDataDictionary,
+					// 	label: t("nav.aiSubMenu.dataDictionary"),
+					// 	icon: <IconBook2 size={20} />,
+					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
+					// 		return (
+					// 			isSuperAdmin ||
+					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+					// 		)
+					// 	},
+					// },
+				],
+			},
+			{
 				key: RoutePath.AIManage,
 				label: t("nav.aiSubMenu.manage"),
 				hidden: isOfficialOrg,
@@ -144,7 +214,17 @@ function AIManagerLayout() {
 		]
 	}, [t, isOfficialOrg, isPersonalOrganization])
 
-	return <SecondaryLayout items={items} openKeys={[RoutePath.AICustomModel, RoutePath.AIInternalEmployeeSkill, RoutePath.AIManage]} />
+	return (
+		<SecondaryLayout
+			items={items}
+			openKeys={[
+				RoutePath.AICustomModel,
+				RoutePath.AIInternalEmployeeSkill,
+				RoutePath.AIDataStatistics,
+				RoutePath.AIManage,
+			]}
+		/>
+	)
 }
 
 export default AIManagerLayout
