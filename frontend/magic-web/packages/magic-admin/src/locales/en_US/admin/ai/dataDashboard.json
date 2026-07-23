@@ -29,6 +29,15 @@
 		"unusedDepartment": "Unused departments",
 		"unusedDepartmentDesc": "No calls in the current period"
 	},
+	"businessTypes": {
+		"clawProjectConsume": "Claw Project Calls",
+		"flowConsume": "Flow Calls",
+		"knowledgeVectorConsume": "Knowledge Base Calls",
+		"magicModelConsume": "Model Calls",
+		"normalAssistantConsume": "Normal Assistant Calls",
+		"superMagicTaskConsume": "Digital Employee Calls",
+		"toolConsume": "Tool Calls"
+	},
 	"charts": {
 		"agentBucket": "Digital Employee Activity Segments",
 		"agentTrend": "Digital Employee Activity Trend",
@@ -46,6 +55,7 @@
 		"amount": "Total point consumption in the current statistical scope.",
 		"averageAmount": "Point consumption / calls.",
 		"averageTokens": "Token consumption / calls.",
+		"businessType": "Business type for the current call record.",
 		"calls": "Unified task calls in the current statistical scope.",
 		"department": "Full department path associated with the member or call record.",
 		"departments": "Deduplicated covered departments in the current statistical scope.",
@@ -53,6 +63,7 @@
 		"lastUsedAt": "Most recent call time for the current row subject.",
 		"member": "Member name and user ID.",
 		"members": "Deduplicated calling members in the current statistical scope.",
+		"resourceType": "Resource type for the current call record.",
 		"silentDays": "If last called at exists: end date - last called date; otherwise: end date - start date + 1.",
 		"source": "Digital employee source, including local create, market install, or organization shared.",
 		"status": "Current member address book status.",
@@ -68,6 +79,7 @@
 		"amount": "Point Consumption",
 		"averageAmount": "Avg Points per Call",
 		"averageTokens": "Avg Tokens per Call",
+		"businessType": "Business Type",
 		"calls": "Calls",
 		"department": "Department",
 		"departments": "Covered Departments",
@@ -77,6 +89,7 @@
 		"lastUsedAt": "Last Called At",
 		"member": "Member",
 		"members": "Calling Members",
+		"resourceType": "Resource Type",
 		"silentDays": "Silent Days",
 		"source": "Source",
 		"status": "Status",

@@ -381,6 +381,30 @@ export const useStyles = createStyles(
 			font-size: 12px;
 			line-height: 18px;
 		`,
+		resourceCell: css`
+			display: flex;
+			min-width: 0;
+			flex-direction: column;
+			gap: 2px;
+		`,
+		resourcePrimary: css`
+			min-width: 0;
+			overflow: hidden;
+			color: ${token.colorText};
+			font-size: 13px;
+			line-height: 20px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
+		resourceMeta: css`
+			min-width: 0;
+			overflow: hidden;
+			color: ${token.colorTextTertiary};
+			font-size: 12px;
+			line-height: 18px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
 		dictionaryTabs: css`
 			.ant-tabs-nav {
 				margin-bottom: 16px;

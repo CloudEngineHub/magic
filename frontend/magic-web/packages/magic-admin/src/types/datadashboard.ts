@@ -307,6 +307,12 @@ export namespace DataDashboard {
 		agent_code: string
 		/** 数字员工名称快照，允许为空 */
 		agent_name: string | null
+		/** 业务类型 */
+		business_type: string | null
+		/** 资源 ID */
+		resource_id: string | null
+		/** 资源类型 */
+		resource_type: string | null
 		/** task 积分消耗 */
 		points: number
 		/** task Token 消耗 */

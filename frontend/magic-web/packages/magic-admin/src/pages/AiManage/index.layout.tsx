@@ -141,17 +141,6 @@ function AIManagerLayout() {
 							)
 						},
 					},
-					// {
-					// 	key: RoutePath.AIDataDashboardOrganizationAnalysis,
-					// 	label: t("nav.aiSubMenu.organizationAnalysis"),
-					// 	icon: <IconBuilding size={20} />,
-					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
-					// 		return (
-					// 			isSuperAdmin ||
-					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
-					// 		)
-					// 	},
-					// },
 					{
 						key: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
 						label: t("nav.aiSubMenu.digitalEmployeeAnalysis"),
@@ -163,28 +152,6 @@ function AIManagerLayout() {
 							)
 						},
 					},
-					// {
-					// 	key: RoutePath.AIDataDashboardConsumptionAnalysis,
-					// 	label: t("nav.aiSubMenu.consumptionAnalysis"),
-					// 	icon: <IconCoin size={20} />,
-					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
-					// 		return (
-					// 			isSuperAdmin ||
-					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
-					// 		)
-					// 	},
-					// },
-					// {
-					// 	key: RoutePath.AIDataDashboardDataDictionary,
-					// 	label: t("nav.aiSubMenu.dataDictionary"),
-					// 	icon: <IconBook2 size={20} />,
-					// 	validate: (permissions: string[], isSuperAdmin?: boolean) => {
-					// 		return (
-					// 			isSuperAdmin ||
-					// 			AI_MANAGEMENT.some((permission) => permissions.includes(permission))
-					// 		)
-					// 	},
-					// },
 				],
 			},
 			{
