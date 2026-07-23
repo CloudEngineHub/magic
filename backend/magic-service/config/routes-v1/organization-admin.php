@@ -41,6 +41,11 @@ Router::addGroup('/api/v1/organization/admin', static function () {
         Router::get('/office-info', [OrganizationServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
+    Router::addGroup('/provider-models', static function () {
+        Router::post('/queries', [OrganizationServiceProviderApi::class, 'queriesProviderModels']);
+        Router::post('/groups/queries', [OrganizationServiceProviderApi::class, 'queriesProviderModelGroups']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
     // 非官方组织应用菜单管理
     Router::addGroup('/applications', static function () {
         Router::post('/queries', [OrganizationAppMenuAdminApi::class, 'queries']);
