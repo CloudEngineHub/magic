@@ -268,7 +268,7 @@ class ShareService:
             raise ShareServiceError(
                 ShareErrorInfo(
                     code="share_url_missing",
-                    message="The share was saved, but Magic Service did not return share_url. Check MAGIC_FRONTEND_DOMAIN.",
+                    message="The share was saved, but Magic Service did not return share_url. Check MAGIC_WEB_URL.",
                     target=target,
                     resource_id=resource_id,
                 )

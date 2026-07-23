@@ -4073,8 +4073,8 @@ class ResourceShareAppService extends AbstractShareAppService
      */
     private function buildShareBaseUrl(ResourceType $resourceType, string $resourceId): ?string
     {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
-        if ($frontendDomain === '') {
+        $magicWebUrl = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
+        if ($magicWebUrl === '') {
             return null;
         }
 
@@ -4084,6 +4084,6 @@ class ResourceShareAppService extends AbstractShareAppService
             default => null,
         };
 
-        return $uri === null ? null : $frontendDomain . $uri;
+        return $uri === null ? null : $magicWebUrl . $uri;
     }
 }
