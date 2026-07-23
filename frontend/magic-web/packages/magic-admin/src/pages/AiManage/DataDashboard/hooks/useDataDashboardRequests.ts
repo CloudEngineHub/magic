@@ -64,7 +64,8 @@ const serializeRequestQuery = (query: Record<string, unknown>) =>
 const buildSummaryKey = (
 	view: DataDashboardView,
 	query: DataDashboard.AgentSummaryQuery | DataDashboard.MemberSummaryQuery,
-) => serializeRequestQuery({ view, scope: "summary", ...query })
+	tabType: DashboardTabType,
+) => serializeRequestQuery({ view, scope: "summary", tab_type: tabType, ...query })
 
 const buildTabsKey = (
 	view: DataDashboardView,
@@ -94,7 +95,7 @@ export function useDataDashboardRequests({
 				page,
 				page_size: pageSize,
 			}
-			const summaryKey = buildSummaryKey(stateView, agentQuery)
+			const summaryKey = buildSummaryKey(stateView, agentQuery, currentTab)
 			return {
 				view: stateView,
 				summaryKey,
@@ -111,7 +112,7 @@ export function useDataDashboardRequests({
 				page,
 				page_size: pageSize,
 			}
-			const summaryKey = buildSummaryKey(stateView, memberQuery)
+			const summaryKey = buildSummaryKey(stateView, memberQuery, currentTab)
 
 			return {
 				view: stateView,
