@@ -32,6 +32,7 @@ function createCanvasStub(
 	options: {
 		parentById?: Map<string, string>
 		elementNodes?: Map<string, Konva.Group>
+		dragTargetParentById?: Map<string, string | null>
 	} = {},
 ) {
 	const contentLayer = new Konva.Group()
@@ -60,6 +61,13 @@ function createCanvasStub(
 				const node = options.elementNodes?.get(elementId)
 				return node ? { getNode: () => node } : undefined
 			}),
+		},
+		frameManager: {
+			getDragTargetParentId: vi.fn((elementId: string) =>
+				options.dragTargetParentById?.has(elementId)
+					? options.dragTargetParentById.get(elementId)
+					: undefined,
+			),
 		},
 		permissionManager: {
 			canUseSelectionToolAffordance: vi.fn(() => true),
@@ -277,5 +285,32 @@ describe("ConnectionRenderer", () => {
 		} finally {
 			vi.unstubAllGlobals()
 		}
+	})
+
+	it("renders a global copy when a same-frame endpoint is dragged out", () => {
+		const boundsById = new Map([
+			["source", { x: 20, y: 20, width: 100, height: 40 }],
+			["target", { x: 260, y: 20, width: 100, height: 40 }],
+		])
+		const frameNode = new Konva.Group({
+			id: "frame",
+			clipFunc: (context) => context.rect(0, 0, 360, 200),
+		})
+		frameNode.add(new Konva.Rect({ name: "background", width: 360, height: 200 }))
+		const { canvas, connectionGroup, contentLayer } = createCanvasStub(boundsById, {
+			parentById: new Map([
+				["source", "frame"],
+				["target", "frame"],
+			]),
+			elementNodes: new Map([["frame", frameNode]]),
+			dragTargetParentById: new Map([["source", null]]),
+		})
+		contentLayer.add(frameNode)
+		const renderer = new ConnectionRenderer({ canvas })
+
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		expect(getConnectionNodes(connectionGroup)).toHaveLength(1)
+		expect(getConnectionNodes(frameNode)).toHaveLength(1)
 	})
 })
