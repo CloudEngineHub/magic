@@ -137,6 +137,10 @@ interface IsolatedHTMLRendererProps {
 	className?: string
 	isPptRender?: boolean
 	isFullscreen?: boolean
+	/** Expands a pure-share iframe into the page instead of a viewport-scrolling shell. */
+	documentFlowFullscreen?: boolean
+	/** Latest content height reported by the injected iframe runtime. */
+	documentFlowContentHeight?: number
 	isEditMode?: boolean
 	isSaving?: boolean
 	saveEditContent?: (
@@ -294,6 +298,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			className,
 			isPptRender,
 			isFullscreen,
+			documentFlowFullscreen = false,
+			documentFlowContentHeight = 0,
 			isEditMode,
 			isSaving = false,
 			saveEditContent,
@@ -357,6 +363,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 
 		const { styles, cx } = useStyles()
+		const documentFlowIframeStyle = useMemo(() => {
+			if (!documentFlowFullscreen) return undefined
+			return {
+				height:
+					documentFlowContentHeight > 0
+						? `${Math.ceil(documentFlowContentHeight)}px`
+						: "100dvh",
+			}
+		}, [documentFlowContentHeight, documentFlowFullscreen])
 		const containerRef = useRef<HTMLDivElement>(null)
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -1076,6 +1091,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				dynamicInterception: dynamicResourceInterceptionConfig,
 				containOverscroll: containIframeOverscroll,
 				hideVerticalScroll,
+				reportContentMetrics: documentFlowFullscreen,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
@@ -1205,6 +1221,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						dynamicInterception: dynamicResourceInterceptionConfig,
 						containOverscroll: containIframeOverscroll,
 						hideVerticalScroll,
+						reportContentMetrics: documentFlowFullscreen,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
@@ -1267,6 +1284,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			[
 				containIframeOverscroll,
 				disableIframeDocumentClickBridge,
+				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
 				getMarkerId,
 				hideVerticalScroll,
@@ -1979,8 +1997,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					display: "flex",
 					flexDirection: "column",
 					width: "100%",
-					height: "100%",
-					overflow: hideVerticalScroll ? "hidden" : undefined,
+					height: documentFlowFullscreen ? "auto" : "100%",
+					minHeight: documentFlowFullscreen ? "100dvh" : undefined,
+					overflow: documentFlowFullscreen
+						? "visible"
+						: hideVerticalScroll
+							? "hidden"
+							: undefined,
 				}}
 			>
 				{/* 工具栏 - 固定在顶部，不滚动 */}
@@ -2007,27 +2030,35 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						hideVerticalScroll && styles.hiddenScrollbar,
 						isPptRender && isManualZoom && styles.pptManualZoomScrollbar,
 						cn(
-							"relative flex min-h-0 w-full flex-1 flex-col",
+							documentFlowFullscreen
+								? "relative w-full"
+								: "relative flex min-h-0 w-full flex-1 flex-col",
 							shouldApplyScaling && isFullscreen && "bg-black",
 							shouldApplyScaling && !isFullscreen && "bg-[#eee] dark:bg-[#1c1c1c]",
 						),
 					)}
 					style={{
-						overflow: hideVerticalScroll
-							? "hidden"
-							: shouldApplyScaling
-								? isManualZoom
-									? "auto"
-									: "hidden"
-								: "auto",
-						minHeight: 0,
+						overflow: documentFlowFullscreen
+							? "visible"
+							: hideVerticalScroll
+								? "hidden"
+								: shouldApplyScaling
+									? isManualZoom
+										? "auto"
+										: "hidden"
+									: "auto",
+						minHeight: documentFlowFullscreen ? "100dvh" : 0,
 					}}
 				>
 					{/* 内容包装器，使用 flex 居中 iframe */}
 					<div
 						ref={contentWrapperRef}
-						className="relative min-h-0 w-full flex-1"
-						style={getContentWrapperStyle()}
+						className={
+							documentFlowFullscreen
+								? "relative w-full"
+								: "relative min-h-0 w-full flex-1"
+						}
+						style={documentFlowFullscreen ? undefined : getContentWrapperStyle()}
 					>
 						{sandboxType === "iframe" ? (
 							<>
@@ -2035,7 +2066,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									ref={iframeRef}
 									className={cn(
 										styles.iframe,
-										"h-full w-full flex-shrink-0 border-none",
+										documentFlowFullscreen
+											? "w-full flex-shrink-0 border-none"
+											: "h-full w-full flex-shrink-0 border-none",
 										iframeClassName,
 									)}
 									title="Isolated HTML Content"
@@ -2046,7 +2079,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									allow="fullscreen"
 									allowFullScreen
 									translate="no"
-									style={getIframeStyle(hasRenderedOnceRef.current)}
+									style={
+										documentFlowIframeStyle ||
+										getIframeStyle(hasRenderedOnceRef.current)
+									}
 									data-testid="isolated-html-content-iframe"
 								/>
 								{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}

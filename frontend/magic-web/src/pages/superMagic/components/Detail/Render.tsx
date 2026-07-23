@@ -82,6 +82,7 @@ export default function Render(props: any) {
 		onActiveFileChange,
 		showFooter = true,
 		isPlaybackMode = false,
+		documentFlowFullscreen = false,
 		// Register/unregister checkBeforeClose callback
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
@@ -720,6 +721,7 @@ export default function Render(props: any) {
 		onActiveFileChange,
 		showFooter,
 		isPlaybackMode,
+		documentFlowFullscreen,
 		mdToolbarContainer,
 		isTabActive: props.isTabActive,
 		allowDownload,
@@ -728,7 +730,14 @@ export default function Render(props: any) {
 
 	return (
 		<>
-			<div className={cn("flex h-full min-h-0 min-w-0 flex-col", className)}>
+			<div
+				className={cn(
+					documentFlowFullscreen
+						? "flex min-h-dvh min-w-0 flex-col"
+						: "flex h-full min-h-0 min-w-0 flex-col",
+					className,
+				)}
+			>
 				<Suspense
 					fallback={
 						<div

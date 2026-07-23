@@ -1,6 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
-import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "./IsolatedHTMLRenderer"
+import IsolatedHTMLRenderer, {
+	type IsolatedHTMLRendererContentMetrics,
+	type IsolatedHTMLRendererRef,
+} from "./IsolatedHTMLRenderer"
 import {
 	createParentMessageHandler,
 	injectFetchInterceptorScript,
@@ -97,6 +100,8 @@ interface HTMLProps {
 	isFromNode?: boolean
 	onClose?: () => void
 	isFullscreen?: boolean
+	/** Keeps pure share fullscreen HTML in document flow for long screenshots. */
+	documentFlowFullscreen?: boolean
 	attachmentList?: any[]
 	isEditMode?: boolean
 	setIsEditMode?: (isEditMode: boolean) => void
@@ -200,6 +205,7 @@ export default memo(function HTML(props: HTMLProps) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		attachmentList,
 		isEditMode,
 		setIsEditMode,
@@ -249,6 +255,7 @@ export default memo(function HTML(props: HTMLProps) {
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
 	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
+	const [documentFlowContentHeight, setDocumentFlowContentHeight] = useState(0)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
@@ -1366,6 +1373,7 @@ export default memo(function HTML(props: HTMLProps) {
 		<div
 			className={cx(styles.htmlContainer, className, {
 				[styles.immersiveHtmlContainer]: isImmersiveLayout,
+				[styles.documentFlowHtmlContainer]: documentFlowFullscreen,
 			})}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
@@ -1373,7 +1381,11 @@ export default memo(function HTML(props: HTMLProps) {
 				<Flex
 					justify="center"
 					align="center"
-					style={{ height: "100%", width: "100%", backgroundColor: "white" }}
+					style={{
+						height: documentFlowFullscreen ? "100dvh" : "100%",
+						width: "100%",
+						backgroundColor: "white",
+					}}
 				>
 					<MagicSpin spinning />
 				</Flex>
@@ -1394,12 +1406,15 @@ export default memo(function HTML(props: HTMLProps) {
 					className={cx(styles.previewContainerBase, {
 						[styles.phoneModeContainer]: viewMode === "phone",
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
+						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
 				>
 					<div
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
 							[styles.phoneModeInner]: viewMode === "phone",
 							[styles.immersivePreviewInner]: isImmersiveLayout,
+							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
+							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
 						{isDataAnalysis ? (
@@ -1436,6 +1451,8 @@ export default memo(function HTML(props: HTMLProps) {
 									isPptRender={isInPPTMode}
 									scaleContentDimensions={scaleContentDimensions}
 									isFullscreen={isFullscreen}
+									documentFlowFullscreen={documentFlowFullscreen}
+									documentFlowContentHeight={documentFlowContentHeight}
 									isEditMode={isEditMode}
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
@@ -1449,6 +1466,19 @@ export default memo(function HTML(props: HTMLProps) {
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
 									onRenderReady={handlePreviewRenderReady}
+									onContentMetrics={(
+										metrics: IsolatedHTMLRendererContentMetrics,
+									) => {
+										if (!documentFlowFullscreen) return
+										const nextHeight = Math.ceil(metrics.contentHeight)
+										if (!Number.isFinite(nextHeight) || nextHeight <= 0) return
+
+										setDocumentFlowContentHeight((currentHeight) =>
+											currentHeight === nextHeight
+												? currentHeight
+												: nextHeight,
+										)
+									}}
 									onDevConsoleClose={() => setDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
 								/>
@@ -1457,7 +1487,12 @@ export default memo(function HTML(props: HTMLProps) {
 									<Flex
 										justify="center"
 										align="center"
-										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
+										className={cn(
+											"absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]",
+											// Before cross-origin content reports its height, reserve a full viewport
+											// so the loading indicator never collapses to the document top edge.
+											documentFlowFullscreen && "min-h-dvh",
+										)}
 									>
 										<MagicSpin spinning />
 									</Flex>
