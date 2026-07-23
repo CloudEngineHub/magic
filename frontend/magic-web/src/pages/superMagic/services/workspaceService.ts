@@ -32,7 +32,7 @@ class WorkspaceService {
 		isAutoSelect = true,
 		isSelectLast = true,
 		page,
-		pageSize = 10,
+		pageSize = 20,
 		append = false,
 	}: FetchWorkspacesParams): Promise<Workspace[]> => {
 		runInAction(() => {
