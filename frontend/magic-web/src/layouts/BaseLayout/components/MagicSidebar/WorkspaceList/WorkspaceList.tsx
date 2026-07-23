@@ -48,6 +48,7 @@ function WorkspaceList() {
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 	const isSearchComposingRef = useRef(false)
+	const isLoadingMoreWorkspacesRef = useRef(false)
 	// `useRequest` turns `loading` on only after debounce. This marker prevents
 	// a visible sentinel from replacing the queued first search page with page two.
 	const isSearchPendingRef = useRef(false)
@@ -100,9 +101,17 @@ function WorkspaceList() {
 	}
 
 	const loadMoreWorkspaces = useCallback(async () => {
-		if (isLoadingMoreWorkspaces || !hasMoreWorkspaces || workspaceStore.isWorkspaceListLoading)
+		if (
+			isLoadingMoreWorkspacesRef.current ||
+			isLoadingMoreWorkspaces ||
+			!hasMoreWorkspaces ||
+			workspaceStore.isWorkspaceListLoading
+		)
 			return
 
+		// IntersectionObserver can invoke its callback again before React commits
+		// the loading state; the ref closes that short concurrent-request window.
+		isLoadingMoreWorkspacesRef.current = true
 		setIsLoadingMoreWorkspaces(true)
 		try {
 			const nextPage = workspacePage + 1
@@ -116,6 +125,7 @@ function WorkspaceList() {
 			setWorkspacePage(nextPage)
 			setHasMoreWorkspaces(nextWorkspaces.length === SEARCH_PAGE_SIZE)
 		} finally {
+			isLoadingMoreWorkspacesRef.current = false
 			setIsLoadingMoreWorkspaces(false)
 		}
 	}, [hasMoreWorkspaces, isLoadingMoreWorkspaces, workspacePage])
