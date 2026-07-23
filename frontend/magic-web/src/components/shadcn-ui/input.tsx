@@ -2,8 +2,29 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-	({ className, type, ...props }, ref) => {
+type InputProps = React.ComponentProps<"input"> & {
+	/**
+	 * Receives ordinary changes immediately and IME input once it has been confirmed.
+	 * `onChange` keeps the native event behavior so existing consumers are unaffected.
+	 */
+	onValueChangeAfterComposition?: (value: string) => void
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+	(
+		{
+			className,
+			type,
+			onChange,
+			onCompositionStart,
+			onCompositionEnd,
+			onValueChangeAfterComposition,
+			...props
+		},
+		ref,
+	) => {
+		const isComposingRef = React.useRef(false)
+
 		return (
 			<input
 				ref={ref}
@@ -16,6 +37,19 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
 					"text-foreground",
 					className,
 				)}
+				onChange={(event) => {
+					onChange?.(event)
+					if (!isComposingRef.current) onValueChangeAfterComposition?.(event.target.value)
+				}}
+				onCompositionStart={(event) => {
+					isComposingRef.current = true
+					onCompositionStart?.(event)
+				}}
+				onCompositionEnd={(event) => {
+					isComposingRef.current = false
+					onCompositionEnd?.(event)
+					onValueChangeAfterComposition?.(event.currentTarget.value)
+				}}
 				{...props}
 			/>
 		)
