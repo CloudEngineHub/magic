@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
+	collectHtmlFiles,
 	collectRootHtmlFiles,
 	resolveDefaultHtmlEntry,
 	resolveSelectedHtmlEntry,
@@ -16,6 +17,22 @@ function file(overrides: Partial<AttachmentItem>): AttachmentItem {
 }
 
 describe("microAppFiles", () => {
+	it("collects all visible html files for preview switching", () => {
+		const result = collectHtmlFiles([
+			file({ file_id: "root", file_name: "index.html" }),
+			file({
+				file_id: "nested",
+				file_name: "admin.htm",
+				relative_file_path: "pages/admin.htm",
+			}),
+			file({ file_id: "markdown", file_name: "readme.md" }),
+			file({ file_id: "hidden", file_name: "hidden.html", is_hidden: true }),
+			file({ file_id: "folder", file_name: "pages", is_directory: true, type: "directory" }),
+		])
+
+		expect(result.map((item) => item.file_id)).toEqual(["root", "nested"])
+	})
+
 	it("collects only root html files", () => {
 		const result = collectRootHtmlFiles([
 			file({ file_id: "root-html", file_name: "index.html" }),

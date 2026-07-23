@@ -128,11 +128,6 @@ export function useMicroAppPageController(projectId: string) {
 		[attachmentList],
 	)
 
-	const nonClosableFileIds = useMemo(
-		() => (defaultEntryFile?.file_id ? [String(defaultEntryFile.file_id)] : []),
-		[defaultEntryFile?.file_id],
-	)
-
 	useEffect(() => {
 		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
 			return
@@ -326,7 +321,6 @@ export function useMicroAppPageController(projectId: string) {
 		userSelectDetail,
 		setUserSelectDetail,
 		defaultEntryFile,
-		nonClosableFileIds,
 		detailRef,
 		topicFilesProps,
 		handleOpenFile,

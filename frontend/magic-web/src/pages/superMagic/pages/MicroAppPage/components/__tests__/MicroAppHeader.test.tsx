@@ -20,9 +20,7 @@ function renderHeader(props: Partial<ComponentProps<typeof MicroAppHeader>> = {}
 		<MicroAppHeader
 			selectedProject={project}
 			hasEntries={false}
-			isDatabasePanelOpen={false}
 			onBack={vi.fn()}
-			onToggleDatabasePanel={vi.fn()}
 			onPublish={vi.fn()}
 			{...props}
 		/>,
@@ -46,15 +44,6 @@ describe("MicroAppHeader", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-button"))
 
 		expect(onPublish).toHaveBeenCalledTimes(1)
-	})
-
-	it("renders database button and triggers callback", () => {
-		const onToggleDatabasePanel = vi.fn()
-		renderHeader({ onToggleDatabasePanel })
-
-		fireEvent.click(screen.getByTestId("micro-app-database-button"))
-
-		expect(onToggleDatabasePanel).toHaveBeenCalledTimes(1)
 	})
 
 	it("hides collaborator management when the project is not manageable", () => {

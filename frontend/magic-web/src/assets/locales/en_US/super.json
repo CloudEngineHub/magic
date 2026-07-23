@@ -3228,6 +3228,14 @@
 			"showDatabase": "Show database",
 			"showFiles": "Show files"
 		},
+		"issuePrompts": {
+			"empty": "No matching issue found. Try another keyword.",
+			"featured": "Common issues",
+			"searchPlaceholder": "Search what you are seeing",
+			"subtitle": "Choose what you see and AI will inspect the cause and prepare a fix.",
+			"title": "Common issues",
+			"trigger": "Common issues"
+		},
 		"mobileConversation": {
 			"emptyDescription": "Enter a message below to continue improving this micro app.",
 			"emptyTitle": "Start a conversation",
@@ -3247,6 +3255,12 @@
 			"files": "Files",
 			"preview": "Preview"
 		},
+		"navigation": {
+			"ariaLabel": "Micro app editor",
+			"database": "Database",
+			"files": "Files",
+			"preview": "Preview"
+		},
 		"preview": {
 			"emptyDescription": "Add an HTML file to the project root, or select an entry file in the header.",
 			"emptyTitle": "No entry HTML found"
@@ -3259,6 +3273,15 @@
 			"default": "Default preview",
 			"phone": "Phone preview",
 			"source": "Source preview"
+		},
+		"previewToolbar": {
+			"address": "Current preview address",
+			"aiEdit": "AI Edit",
+			"desktop": "Desktop preview",
+			"noHtml": "No previewable HTML files",
+			"phone": "Mobile preview",
+			"refresh": "Refresh preview",
+			"title": "Preview"
 		},
 		"publish": {
 			"button": "Publish",

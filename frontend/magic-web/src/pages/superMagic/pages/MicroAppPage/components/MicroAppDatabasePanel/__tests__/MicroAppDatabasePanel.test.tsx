@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 	getTable: vi.fn(),
 	queryRows: vi.fn(),
 	getPermissions: vi.fn(),
-	updateDynamicPermissions: vi.fn(),
 	batchSavePermissions: vi.fn(),
+	deletePermission: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -19,8 +19,8 @@ vi.mock("@/apis", () => ({
 		getTable: mocks.getTable,
 		queryRows: mocks.queryRows,
 		getPermissions: mocks.getPermissions,
-		updateDynamicPermissions: mocks.updateDynamicPermissions,
 		batchSavePermissions: mocks.batchSavePermissions,
+		deletePermission: mocks.deletePermission,
 	},
 }))
 
@@ -28,11 +28,15 @@ vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 	default: () => null,
 }))
 
-vi.mock("@/components/base/MagicAvatar", () => ({
-	default: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+vi.mock("../PermissionPanel", () => ({
+	default: () => null,
 }))
 
-vi.mock("../DynamicPermissionPanel", () => ({
+vi.mock("../PermissionEditorDialog", () => ({
+	default: () => null,
+}))
+
+vi.mock("../RowEditorDialog", () => ({
 	default: () => null,
 }))
 
@@ -52,17 +56,20 @@ vi.mock("sonner", () => ({
 	},
 }))
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({
-		t: (key: string, options?: Record<string, string | number>) => {
-			if (options?.total != null) return `${key}:${options.total}`
-			if (options?.page != null && options?.totalPages != null) {
-				return `${key}:${options.page}/${options.totalPages}`
-			}
-			return key
-		},
-	}),
-}))
+vi.mock("react-i18next", () => {
+	return {
+		initReactI18next: { type: "3rdParty", init: () => undefined },
+		useTranslation: () => ({
+			t: (key: string, options?: Record<string, string | number>) => {
+				if (options?.total != null) return `${key}:${options.total}`
+				if (options?.page != null && options?.totalPages != null) {
+					return `${key}:${options.page}/${options.totalPages}`
+				}
+				return key
+			},
+		}),
+	}
+})
 
 const tables: MagicBaseTable[] = [
 	{
@@ -110,12 +117,7 @@ function renderPanel() {
 				shouldRetryOnError: false,
 			}}
 		>
-			<MicroAppDatabasePanel
-				open
-				projectId="project-1"
-				projectName="Demo App"
-				onOpenChange={vi.fn()}
-			/>
+			<MicroAppDatabasePanel active projectId="project-1" projectName="Demo App" />
 		</SWRConfig>,
 	)
 }

@@ -24,6 +24,7 @@ import type { MentionPanelStore } from "@/components/business/MentionPanel/built
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 import MicroAppTopicPicker from "./MicroAppTopicPicker"
+import MicroAppIssuePromptPanel from "../MicroAppIssuePromptPanel"
 import { resolveMicroAppModelSelectionMode } from "../../utils/microAppModelMode"
 
 interface MicroAppMobileConversationProps {
@@ -203,6 +204,9 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 					</div>
 
 					<div className="shrink-0 border-t border-border bg-mobile-background pb-[var(--safe-area-inset-bottom)] pt-2">
+						<div className="flex px-3 pb-1">
+							<MicroAppIssuePromptPanel variant="mobile" />
+						</div>
 						<ProjectPageInputContainer
 							messages={messages}
 							showLoading={showLoading}
