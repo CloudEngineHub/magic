@@ -47,6 +47,10 @@ function WorkspaceList() {
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+	const isSearchComposingRef = useRef(false)
+	// `useRequest` turns `loading` on only after debounce. This marker prevents
+	// a visible sentinel from replacing the queued first search page with page two.
+	const isSearchPendingRef = useRef(false)
 	const projectsByWorkspaceId = useMemo(() => {
 		const result = new Map<string, ProjectListItem[]>()
 		for (const project of searchState.projects) {
@@ -144,6 +148,7 @@ function WorkspaceList() {
 			manual: true,
 			debounceWait: 300,
 			onSuccess: ([workspaceResponse, projectResponse], [{ page, append }]) => {
+				isSearchPendingRef.current = false
 				const workspaceList = workspaceResponse?.list || []
 				const projectList = projectResponse?.list || []
 				updateSearchState((draft) => {
@@ -158,6 +163,7 @@ function WorkspaceList() {
 				})
 			},
 			onError: (_error, [{ append }]) => {
+				isSearchPendingRef.current = false
 				if (!append) {
 					updateSearchState((draft) => {
 						draft.workspaces = []
@@ -172,6 +178,7 @@ function WorkspaceList() {
 		(workspaceName: string) => {
 			if (!workspaceName.trim()) {
 				cancelSearch()
+				isSearchPendingRef.current = false
 				updateSearchState((draft) => {
 					draft.page = 1
 					draft.hasMoreWorkspaces = true
@@ -183,6 +190,7 @@ function WorkspaceList() {
 
 			// Invalidate a previous in-flight request before the next debounced search starts.
 			cancelSearch()
+			isSearchPendingRef.current = true
 			updateSearchState((draft) => {
 				draft.page = 1
 				draft.hasMoreWorkspaces = true
@@ -198,8 +206,15 @@ function WorkspaceList() {
 			return
 		}
 
-		if (isSearchLoading || !searchState.hasMoreWorkspaces) return
+		if (
+			!searchState.value.trim() ||
+			isSearchLoading ||
+			isSearchPendingRef.current ||
+			!searchState.hasMoreWorkspaces
+		)
+			return
 
+		isSearchPendingRef.current = true
 		runSearch({ keyword: searchState.value, page: searchState.page + 1, append: true })
 	}, [
 		isSearchLoading,
@@ -222,7 +237,9 @@ function WorkspaceList() {
 			(entries) => {
 				if (entries[0]?.isIntersecting) loadNextPage()
 			},
-			{ root: scrollContainer, threshold: 1 },
+			// Observe the actual sidebar scroll container. An initially visible
+			// sentinel naturally fills tall screens without manual height measurements.
+			{ root: scrollContainer, threshold: 0 },
 		)
 		observer.observe(sentinel)
 		return () => observer.disconnect()
@@ -240,6 +257,7 @@ function WorkspaceList() {
 
 	const handleSearchClose = useCallback(() => {
 		cancelSearch()
+		isSearchPendingRef.current = false
 		updateSearchState((draft) => {
 			draft.value = ""
 			draft.workspaces = []
@@ -301,6 +319,17 @@ function WorkspaceList() {
 							value={searchState.value}
 							onChange={(event) => {
 								const value = event.target.value
+								updateSearchState((draft) => {
+									draft.value = value
+								})
+								if (!isSearchComposingRef.current) searchWorkspaces(value)
+							}}
+							onCompositionStart={() => {
+								isSearchComposingRef.current = true
+							}}
+							onCompositionEnd={(event) => {
+								isSearchComposingRef.current = false
+								const value = event.currentTarget.value
 								updateSearchState((draft) => {
 									draft.value = value
 								})
