@@ -15,6 +15,7 @@ use App\Domain\Provider\Entity\ProviderConfigEntity;
 use App\Domain\Provider\Entity\ProviderEntity;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Status;
+use Hyperf\Contract\TranslatorInterface;
 
 class AdminProviderModelAssembler
 {
@@ -60,18 +61,19 @@ class AdminProviderModelAssembler
     private static function toModelRecordQueryResultDTO(array $result): ProviderModelQueryResultDTO
     {
         $providerContext = $result['provider_context'];
+        $locale = di(TranslatorInterface::class)->getLocale();
         $list = [];
         foreach ($result['list'] as $model) {
             $list[] = new ProviderModelRecordDTO(
                 id: (string) $model->getId(),
                 modelId: $model->getModelId(),
-                name: $model->getName(),
+                name: $model->getLocalizedName($locale),
                 modelVersion: $model->getModelVersion(),
                 category: $model->getCategory()?->value ?? '',
                 modelType: $model->getModelType()->value,
                 status: $model->getStatus()?->value ?? Status::Disabled->value,
                 icon: $model->getIcon(),
-                provider: self::buildProviderItem($model, $providerContext),
+                provider: self::buildProviderItem($model, $providerContext, $locale),
             );
         }
 
@@ -89,6 +91,7 @@ class AdminProviderModelAssembler
     private static function toModelGroupQueryResultDTO(array $result): ProviderModelQueryResultDTO
     {
         $providerContext = $result['provider_context'];
+        $locale = di(TranslatorInterface::class)->getLocale();
         $list = [];
         foreach ($result['list'] as $modelId => $groupModels) {
             if (empty($groupModels)) {
@@ -98,12 +101,12 @@ class AdminProviderModelAssembler
             $model = self::selectRepresentativeModel($groupModels);
             $providers = [];
             foreach ($groupModels as $groupModel) {
-                $providers[] = self::buildProviderItem($groupModel, $providerContext, true);
+                $providers[] = self::buildProviderItem($groupModel, $providerContext, $locale, true);
             }
 
             $list[] = new ProviderModelGroupDTO(
                 modelId: (string) $modelId,
-                name: $model->getName(),
+                name: $model->getLocalizedName($locale),
                 category: $model->getCategory()?->value ?? '',
                 modelType: $model->getModelType()->value,
                 icon: $model->getIcon(),
@@ -181,17 +184,26 @@ class AdminProviderModelAssembler
     /**
      * @param array{configs: array<int, ProviderConfigEntity>, providers: array<int, ProviderEntity>} $providerContext
      */
-    private static function buildProviderItem(ProviderModelEntity $model, array $providerContext, bool $withModelRecord = false): ProviderModelProviderDTO
+    private static function buildProviderItem(ProviderModelEntity $model, array $providerContext, string $locale, bool $withModelRecord = false): ProviderModelProviderDTO
     {
         $configId = $model->getServiceProviderConfigId();
         $config = $providerContext['configs'][$configId] ?? null;
         $provider = $providerContext['providers'][$configId] ?? null;
+        $providerName = $model->getTranslatedName($locale);
+        if ($providerName === '') {
+            $providerName = $provider?->getTranslatedName($locale) ?? '';
+        }
+
+        $providerAlias = $config?->getTranslatedAlias($locale) ?? '';
+        if ($providerAlias === '') {
+            $providerAlias = $provider?->getTranslatedName($locale) ?? '';
+        }
 
         return new ProviderModelProviderDTO(
             serviceProviderConfigId: (string) $configId,
             providerCode: $config?->getProviderCode()?->value ?? $provider?->getProviderCode()->value ?? '',
-            name: $provider?->getName() ?? '',
-            alias: $config?->getAlias() ?? '',
+            name: $providerName,
+            alias: $providerAlias,
             status: $config?->getStatus()->value ?? Status::Disabled->value,
             icon: $provider?->getIcon() ?? '',
             modelRecordId: $withModelRecord ? (string) $model->getId() : null,
