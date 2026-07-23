@@ -660,170 +660,12 @@ class ResourceShareAppService extends AbstractShareAppService
     public function getShareListByStatusFilter(
         MagicUserAuthorization $userAuthorization,
         ResourceListRequestDTO $dto
-    ): array
-    {
+    ): array {
         return $this->getShareListWithStatusFilters(
             $userAuthorization,
             $dto,
             $this->getRequestedStatusFilters($dto)
         );
-    }
-
-    /**
-     * @param array<ShareFilterType> $statusFilters
-     */
-    private function getShareListWithStatusFilters(
-        MagicUserAuthorization $userAuthorization,
-        ResourceListRequestDTO $dto,
-        array $statusFilters
-    ): array
-    {
-        $conditions = [
-            'created_uid' => $userAuthorization->getId(),
-            'resource_type' => $dto->getResourceType(), // 支持单个或数组
-            'status_filters' => $statusFilters,
-        ];
-        if (! empty($dto->getKeyword())) {
-            $conditions['keyword'] = $dto->getKeyword();
-        }
-        if ($dto->getProjectId() !== null) {
-            $conditions['project_id'] = $dto->getProjectId();
-        }
-        if (! empty($dto->getProjectModes())) {
-            $conditions['project_mode'] = $dto->getProjectModes();
-        }
-
-        $result = $this->shareDomainService->getShareList($dto->getPage(), $dto->getPageSize(), $conditions);
-
-        // 确保 total 字段存在
-        $total = $result['total'] ?? 0;
-        $list = $result['list'] ?? [];
-
-        // 如果列表为空，直接返回空列表（字段结构在 DomainService 层已保证）
-        if (empty($list)) {
-            return [
-                'total' => $total,
-                'list' => [],
-            ];
-        }
-
-        // 处理扩展信息：根据资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
-        $resourceTypes = $dto->getResourceTypes();
-
-        if (count($resourceTypes) === 1) {
-            // 单个资源类型：正常处理扩展信息
-            try {
-                $resourceType = ResourceType::from($resourceTypes[0]);
-                $factory = $this->resourceFactory->create($resourceType);
-
-                // 添加扩展信息
-                $list = $factory->getResourceExtendList($list);
-
-                // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
-                $list = $this->addResourceNamesToList($list, $resourceType);
-            } catch (RuntimeException|ValueError $e) {
-                ExceptionBuilder::throw(ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED, 'share.resource_type_not_supported', [(string) $resourceTypes[0]]);
-            }
-        } else {
-            // 多个资源类型：按资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
-            // 先按 resource_type 分组
-            $groupedList = [];
-            foreach ($list as $item) {
-                $resourceType = $item['resource_type'] ?? 0;
-                if (! isset($groupedList[$resourceType])) {
-                    $groupedList[$resourceType] = [];
-                }
-                $groupedList[$resourceType][] = $item;
-            }
-
-            // 对每个资源类型分别处理 extend 字段和 resource_name
-            $processedGroups = [];
-            foreach ($groupedList as $resourceTypeValue => $items) {
-                try {
-                    $resourceType = ResourceType::from($resourceTypeValue);
-                    $factory = $this->resourceFactory->create($resourceType);
-
-                    // 为每个资源类型添加扩展信息
-                    $processedItems = $factory->getResourceExtendList($items);
-
-                    // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
-                    $processedItems = $this->addResourceNamesToList($processedItems, $resourceType);
-
-                    $processedGroups[$resourceTypeValue] = $processedItems;
-                } catch (RuntimeException|ValueError $e) {
-                    // 如果资源类型不支持，为每个项添加空的 extend 字段
-                    foreach ($items as &$item) {
-                        if (! isset($item['extend'])) {
-                            $item['extend'] = [];
-                        }
-                    }
-                    $processedGroups[$resourceTypeValue] = $items;
-                }
-            }
-
-            // 按原有顺序合并处理后的列表（保持原有顺序）
-            $processedList = [];
-            $groupIndexMap = []; // 记录每个资源类型组内当前处理的索引
-            foreach ($list as $item) {
-                $resourceType = $item['resource_type'] ?? 0;
-                if (! isset($groupIndexMap[$resourceType])) {
-                    $groupIndexMap[$resourceType] = 0;
-                }
-                // 确保索引不越界
-                if (isset($processedGroups[$resourceType]) && $groupIndexMap[$resourceType] < count($processedGroups[$resourceType])) {
-                    $processedList[] = $processedGroups[$resourceType][$groupIndexMap[$resourceType]];
-                    ++$groupIndexMap[$resourceType];
-                } else {
-                    // 如果索引越界，使用原始项（不应该发生，但作为兜底）
-                    $processedList[] = $item;
-                }
-            }
-
-            $list = $processedList;
-        }
-
-        // 添加项目名称（确保所有项都有 project_name 字段）
-        $list = $this->addProjectNamesToList($list);
-
-        // 添加 file_ids（仅 resource_type=13/15）
-        $list = $this->addFileIdsToList($list);
-
-        // 添加工作区信息（确保所有项都有 workspace_id 和 workspace_name 字段）
-        $list = $this->addWorkspaceInfoToList($list);
-
-        // 添加复制次数（确保所有项都有 copy_count 字段）
-        $list = $this->addCopyCountsToList($list);
-
-        // 根据资源类型添加特定字段
-        $list = $this->addFieldsByResourceType($list);
-
-        // 为有密码的分享项添加解密后的密码字段
-        $list = $this->addDecryptedPasswordsToList($list);
-
-        // 添加团队分享范围摘要，避免列表接口返回 target_ids 明细
-        $list = $this->addShareScopeToList($list);
-
-        // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
-        $list = $this->convertProjectTypeForShareList($list);
-
-        // 分享链接始终由服务端域名配置生成，调用方不自行推导前端域名
-        $list = $this->addShareUrlsToList($list);
-
-        return [
-            'total' => $total,
-            'list' => $list,
-        ];
-    }
-
-    /**
-     * 将请求中的单个筛选值转换为领域层使用的状态集合；空集合表示不限制状态.
-     *
-     * @return array<ShareFilterType>
-     */
-    private function getRequestedStatusFilters(ResourceListRequestDTO $dto): array
-    {
-        $filterType = ShareFilterType::from($dto->getFilterType());
-        return $filterType === ShareFilterType::All ? [] : [$filterType];
     }
 
     /**
@@ -1650,6 +1492,162 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 2. 调用Domain层批量查询,直接返回Entity数组
         return $this->shareDomainService->getFilesByIds($fileIds);
+    }
+
+    /**
+     * @param array<ShareFilterType> $statusFilters
+     */
+    private function getShareListWithStatusFilters(
+        MagicUserAuthorization $userAuthorization,
+        ResourceListRequestDTO $dto,
+        array $statusFilters
+    ): array {
+        $conditions = [
+            'created_uid' => $userAuthorization->getId(),
+            'resource_type' => $dto->getResourceType(), // 支持单个或数组
+            'status_filters' => $statusFilters,
+        ];
+        if (! empty($dto->getKeyword())) {
+            $conditions['keyword'] = $dto->getKeyword();
+        }
+        if ($dto->getProjectId() !== null) {
+            $conditions['project_id'] = $dto->getProjectId();
+        }
+        if (! empty($dto->getProjectModes())) {
+            $conditions['project_mode'] = $dto->getProjectModes();
+        }
+
+        $result = $this->shareDomainService->getShareList($dto->getPage(), $dto->getPageSize(), $conditions);
+
+        // 确保 total 字段存在
+        $total = $result['total'] ?? 0;
+        $list = $result['list'] ?? [];
+
+        // 如果列表为空，直接返回空列表（字段结构在 DomainService 层已保证）
+        if (empty($list)) {
+            return [
+                'total' => $total,
+                'list' => [],
+            ];
+        }
+
+        // 处理扩展信息：根据资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
+        $resourceTypes = $dto->getResourceTypes();
+
+        if (count($resourceTypes) === 1) {
+            // 单个资源类型：正常处理扩展信息
+            try {
+                $resourceType = ResourceType::from($resourceTypes[0]);
+                $factory = $this->resourceFactory->create($resourceType);
+
+                // 添加扩展信息
+                $list = $factory->getResourceExtendList($list);
+
+                // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
+                $list = $this->addResourceNamesToList($list, $resourceType);
+            } catch (RuntimeException|ValueError $e) {
+                ExceptionBuilder::throw(ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED, 'share.resource_type_not_supported', [(string) $resourceTypes[0]]);
+            }
+        } else {
+            // 多个资源类型：按资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
+            // 先按 resource_type 分组
+            $groupedList = [];
+            foreach ($list as $item) {
+                $resourceType = $item['resource_type'] ?? 0;
+                if (! isset($groupedList[$resourceType])) {
+                    $groupedList[$resourceType] = [];
+                }
+                $groupedList[$resourceType][] = $item;
+            }
+
+            // 对每个资源类型分别处理 extend 字段和 resource_name
+            $processedGroups = [];
+            foreach ($groupedList as $resourceTypeValue => $items) {
+                try {
+                    $resourceType = ResourceType::from($resourceTypeValue);
+                    $factory = $this->resourceFactory->create($resourceType);
+
+                    // 为每个资源类型添加扩展信息
+                    $processedItems = $factory->getResourceExtendList($items);
+
+                    // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
+                    $processedItems = $this->addResourceNamesToList($processedItems, $resourceType);
+
+                    $processedGroups[$resourceTypeValue] = $processedItems;
+                } catch (RuntimeException|ValueError $e) {
+                    // 如果资源类型不支持，为每个项添加空的 extend 字段
+                    foreach ($items as &$item) {
+                        if (! isset($item['extend'])) {
+                            $item['extend'] = [];
+                        }
+                    }
+                    $processedGroups[$resourceTypeValue] = $items;
+                }
+            }
+
+            // 按原有顺序合并处理后的列表（保持原有顺序）
+            $processedList = [];
+            $groupIndexMap = []; // 记录每个资源类型组内当前处理的索引
+            foreach ($list as $item) {
+                $resourceType = $item['resource_type'] ?? 0;
+                if (! isset($groupIndexMap[$resourceType])) {
+                    $groupIndexMap[$resourceType] = 0;
+                }
+                // 确保索引不越界
+                if (isset($processedGroups[$resourceType]) && $groupIndexMap[$resourceType] < count($processedGroups[$resourceType])) {
+                    $processedList[] = $processedGroups[$resourceType][$groupIndexMap[$resourceType]];
+                    ++$groupIndexMap[$resourceType];
+                } else {
+                    // 如果索引越界，使用原始项（不应该发生，但作为兜底）
+                    $processedList[] = $item;
+                }
+            }
+
+            $list = $processedList;
+        }
+
+        // 添加项目名称（确保所有项都有 project_name 字段）
+        $list = $this->addProjectNamesToList($list);
+
+        // 添加 file_ids（仅 resource_type=13/15）
+        $list = $this->addFileIdsToList($list);
+
+        // 添加工作区信息（确保所有项都有 workspace_id 和 workspace_name 字段）
+        $list = $this->addWorkspaceInfoToList($list);
+
+        // 添加复制次数（确保所有项都有 copy_count 字段）
+        $list = $this->addCopyCountsToList($list);
+
+        // 根据资源类型添加特定字段
+        $list = $this->addFieldsByResourceType($list);
+
+        // 为有密码的分享项添加解密后的密码字段
+        $list = $this->addDecryptedPasswordsToList($list);
+
+        // 添加团队分享范围摘要，避免列表接口返回 target_ids 明细
+        $list = $this->addShareScopeToList($list);
+
+        // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
+        $list = $this->convertProjectTypeForShareList($list);
+
+        // 分享链接始终由服务端域名配置生成，调用方不自行推导前端域名
+        $list = $this->addShareUrlsToList($list);
+
+        return [
+            'total' => $total,
+            'list' => $list,
+        ];
+    }
+
+    /**
+     * 将请求中的单个筛选值转换为领域层使用的状态集合；空集合表示不限制状态.
+     *
+     * @return array<ShareFilterType>
+     */
+    private function getRequestedStatusFilters(ResourceListRequestDTO $dto): array
+    {
+        $filterType = ShareFilterType::from($dto->getFilterType());
+        return $filterType === ShareFilterType::All ? [] : [$filterType];
     }
 
     /**

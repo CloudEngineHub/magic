@@ -835,8 +835,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
         Builder $query,
         ShareFilterType $statusFilter,
         string $currentTime
-    ): void
-    {
+    ): void {
         switch ($statusFilter) {
             case ShareFilterType::Active:
                 $query->where('magic_resource_shares.is_enabled', 1)
