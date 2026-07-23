@@ -18,6 +18,7 @@ import { transformInspectorContent } from "@/pages/superMagic/components/Message
 import type { InspectorDetailAttrs } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import InlineMention from "./components/InlineMention"
 import { InspectorDetailReadOnly } from "./components/InspectorDetailReadOnly"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 
 // Schedule a callback on the microtask queue. Falls back to Promise.resolve()
 // for older browsers/WebViews that lack the native queueMicrotask (pre-2019).
@@ -31,6 +32,7 @@ const scheduleMicrotask =
 const RichText = memo(
 	function RichText(props: RichTextProps) {
 		const { content, className, style, onFileClick, markerClickScene = "messageList" } = props
+		const { projectFilesStore } = useMessageListContext()
 
 		const scene = markerClickScene
 		const containerRef = useRef<HTMLDivElement>(null)
@@ -51,6 +53,7 @@ const RichText = memo(
 							onFileClick={onFileClick}
 							markerClickScene={scene}
 							messageContent={content}
+							projectFilesStore={projectFilesStore}
 						/>,
 					)
 
@@ -85,7 +88,7 @@ const RichText = memo(
 					}
 				},
 			}),
-			[content, onFileClick, scene],
+			[content, onFileClick, projectFilesStore, scene],
 		)
 
 		// Generate plain text from ProseMirror node

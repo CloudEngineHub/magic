@@ -14,6 +14,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
 import type { JSONContent } from "@tiptap/core"
 import { useTranslation } from "react-i18next"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 // 间距
 const GAP = 4
@@ -38,6 +39,8 @@ interface MentionListProps {
 	markerClickScene?: MarkerClickScene
 	/** 消息的 content（用于消息列表中查找完整 marker 数据） */
 	messageContent?: JSONContent | string | Record<string, unknown>
+	/** 消息列表作用域内的附件 store；未传时保持全局 store 行为 */
+	projectFilesStore?: ProjectFilesStore
 }
 
 /**
@@ -54,6 +57,7 @@ const MentionList = ({
 	onRetry,
 	markerClickScene = "messageEditorMentionList",
 	messageContent,
+	projectFilesStore,
 }: MentionListProps) => {
 	// 使用 markerClickScene，默认为 messageEditorMentionList
 	const scene = markerClickScene
@@ -360,6 +364,7 @@ const MentionList = ({
 							zIndex: 1051,
 						}}
 						messageContent={messageContent}
+						projectFilesStore={projectFilesStore}
 						markerTooltipProps={{
 							popoverClassName: "z-[1051]",
 							parentPopoverOpen: popoverOpen,
@@ -378,6 +383,7 @@ const MentionList = ({
 		popoverOpen,
 		messageContent,
 		isMobile,
+		projectFilesStore,
 	])
 
 	const moreButton = (
@@ -478,6 +484,7 @@ const MentionList = ({
 							iconSize={iconSize}
 							markerClickScene={scene}
 							messageContent={messageContent}
+							projectFilesStore={projectFilesStore}
 						/>
 					</div>
 				)

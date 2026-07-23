@@ -149,6 +149,11 @@ export class FileUploadStore {
 		return this.files.length === 0 || this.files.every((file) => file.status === "done")
 	}
 
+	/** Marker node views reuse the editor-scoped attachment store for preview URL resolution. */
+	getProjectFilesStore(): ProjectFilesStore {
+		return this.projectFilesStore
+	}
+
 	isCurrentSessionUploadFile(fileId: string) {
 		return this.sessionUploadFileIds.has(fileId)
 	}

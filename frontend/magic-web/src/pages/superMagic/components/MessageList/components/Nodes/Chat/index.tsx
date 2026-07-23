@@ -16,14 +16,18 @@ import {
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { cn } from "@/lib/utils"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { getMentionItemsMissingFromRichTextContent } from "../RichText/mentionVisibility"
 
 function Chat(props: NodeProps) {
 	const { onSelectDetail, onFileClick: handleFileClick } = props
+	const { projectFilesStore } = useMessageListContext()
 
 	const { t } = useTranslation("super")
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
 	const mentions = node?.extra?.super_agent?.mentions || []
+	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)
 
 	const onFileClick = useMemoizedFn((item?: TiptapMentionAttributes) => {
 		openMessageFile(item)
@@ -41,7 +45,7 @@ function Chat(props: NodeProps) {
 	})
 
 	const contentVisible = node?.content && node?.status !== "finished"
-	const mentionsVisible = mentions?.length > 0
+	const mentionsVisible = mentionItems.length > 0
 	const attachmentsVisible = node?.attachments?.length > 0
 
 	if (props?.node?.status === "suspended" || node?.status === "suspended") {
@@ -65,11 +69,12 @@ function Chat(props: NodeProps) {
 				>
 					{mentionsVisible && (
 						<div className="mb-1.5 flex flex-wrap items-center gap-1">
-							{mentions?.map((mention: MentionListItem) => (
+							{mentionItems.map((mention: MentionListItem) => (
 								<AtItem
 									data={mention.attrs}
 									key={getMentionUniqueId(mention.attrs)}
 									onFileClick={onAtItemFileClick}
+									projectFilesStore={projectFilesStore}
 								/>
 							))}
 						</div>

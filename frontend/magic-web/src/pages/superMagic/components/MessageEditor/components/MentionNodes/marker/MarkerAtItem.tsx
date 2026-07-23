@@ -8,6 +8,7 @@ import MarkerTooltip from "./index"
 import { useTransformedMarkerData } from "./useTransformedMarkerData"
 import { useMarkerImageUrl } from "./useMarkerImageUrl"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 interface MarkerAtItemProps {
 	data: TiptapMentionAttributes
@@ -22,6 +23,7 @@ interface MarkerAtItemProps {
 	}
 	markerClickScene?: MarkerClickScene
 	messageContent?: JSONContent | string | Record<string, unknown>
+	projectFilesStore?: ProjectFilesStore
 }
 
 function MarkerAtItem({
@@ -33,16 +35,19 @@ function MarkerAtItem({
 	markerTooltipProps,
 	markerClickScene,
 	messageContent,
+	projectFilesStore,
 }: MarkerAtItemProps) {
 	const isInMessageList = !onRemove
 	const displayName = getMentionDisplayName(data)
 	const { markerData: transformedMarkerData, loading: markerLoading } = useTransformedMarkerData(
 		data,
 		isInMessageList,
+		projectFilesStore,
 	)
 	const { imageUrl: markerImageUrl } = useMarkerImageUrl(
 		transformedMarkerData ? getCanvasMarkerMentionImagePath(transformedMarkerData) : undefined,
 		transformedMarkerData?.design_project_id,
+		projectFilesStore,
 	)
 
 	const scene: MarkerClickScene = useMemo(() => {

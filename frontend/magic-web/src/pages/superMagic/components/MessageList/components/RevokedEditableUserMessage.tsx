@@ -26,6 +26,7 @@ import MentionList from "@/pages/superMagic/components/MessageEditor/components/
 import { handleProjectFileMention } from "@/pages/superMagic/components/MessageEditor/utils"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { useTranslation } from "react-i18next"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 
 interface RevokedEditableUserMessageProps {
 	node: SuperMagicMessageItem
@@ -56,6 +57,8 @@ function RevokedEditableUserMessage({
 	fallbackContent,
 	onPendingSendChange,
 }: RevokedEditableUserMessageProps) {
+	const { projectFilesStore: messageListProjectFilesStore } = useMessageListContext()
+	const resolvedProjectFilesStore = messageListProjectFilesStore ?? projectFilesStore
 	const [isPendingSend, setIsPendingSend] = useState(false)
 	const [pendingSendSnapshot, setPendingSendSnapshot] = useState<PendingSendSnapshot | null>(null)
 	const { t } = useTranslation("super")
@@ -147,6 +150,7 @@ function RevokedEditableUserMessage({
 								messageContent={pendingContent}
 								markerClickScene="messageList"
 								iconSize={16}
+								projectFilesStore={resolvedProjectFilesStore}
 							/>
 						</div>
 					)}
@@ -159,7 +163,14 @@ function RevokedEditableUserMessage({
 				</div>
 			</div>
 		)
-	}, [handleMentionFileClick, messageNode, node?.send_time, pendingContent, pendingMentionItems])
+	}, [
+		handleMentionFileClick,
+		messageNode,
+		node?.send_time,
+		pendingContent,
+		pendingMentionItems,
+		resolvedProjectFilesStore,
+	])
 
 	const editorContext = useMemo<SceneEditorContext | null>(() => {
 		if (!selectedTopic || !initialContent) return null
@@ -177,7 +188,8 @@ function RevokedEditableUserMessage({
 			initialContent,
 			autoFocus: true,
 			onFileClick,
-			attachments: projectFilesStore.workspaceFileTree,
+			attachments: resolvedProjectFilesStore.workspaceFileTree,
+			projectFilesStore: resolvedProjectFilesStore,
 			isAllowedMention,
 			onSendStart: ({ content, mentionItems }) => {
 				setPendingSendSnapshot({
@@ -250,6 +262,7 @@ function RevokedEditableUserMessage({
 		messagesLength,
 		onFileClick,
 		onPendingSendChange,
+		resolvedProjectFilesStore,
 		selectedTopic,
 		showLoading,
 		topicModelStore,

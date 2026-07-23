@@ -23,16 +23,18 @@ import {
 } from "@/pages/superMagic/components/MessageEditor/hooks/useMarkerClickHandler"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 interface InlineMentionProps {
 	data: TiptapMentionAttributes
 	onFileClick?: (item: TiptapMentionAttributes["data"]) => void
 	markerClickScene?: MarkerClickScene
 	messageContent?: JSONContent | string | Record<string, unknown>
+	projectFilesStore?: ProjectFilesStore
 }
 
 function InlineMarkerMention(props: InlineMentionProps) {
-	const { data, markerClickScene = "messageList", messageContent } = props
+	const { data, markerClickScene = "messageList", messageContent, projectFilesStore } = props
 
 	return (
 		<span className="magic-marker-mention inline-flex align-bottom">
@@ -40,13 +42,20 @@ function InlineMarkerMention(props: InlineMentionProps) {
 				data={data}
 				markerClickScene={markerClickScene}
 				messageContent={messageContent}
+				projectFilesStore={projectFilesStore}
 			/>
 		</span>
 	)
 }
 
 function InlineDefaultMention(props: InlineMentionProps) {
-	const { data, onFileClick, markerClickScene = "messageList", messageContent } = props
+	const {
+		data,
+		onFileClick,
+		markerClickScene = "messageList",
+		messageContent,
+		projectFilesStore,
+	} = props
 
 	const isMobile = useIsMobile()
 	const displayName = getMentionDisplayName(data)
@@ -56,10 +65,12 @@ function InlineDefaultMention(props: InlineMentionProps) {
 	const { markerData: transformedMarkerData, loading: markerLoading } = useTransformedMarkerData(
 		data,
 		isInMessageList,
+		projectFilesStore,
 	)
 	const { imageUrl: markerImageUrl } = useMarkerImageUrl(
 		transformedMarkerData ? getCanvasMarkerMentionImagePath(transformedMarkerData) : undefined,
 		transformedMarkerData?.design_project_id,
+		projectFilesStore,
 	)
 	const { handleMarkerClick } = useMarkerClickHandler({
 		scene: markerClickScene,

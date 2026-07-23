@@ -20,7 +20,8 @@ import SourceTag from "../SourceTag"
 import type { SuperMagicNode } from "@/types/chat/conversation_message"
 import type { AttachmentProps as MessageAttachmentProps } from "../../MessageAttachment/type"
 import type { RichTextProps as MessageRichTextProps } from "../../Text/components/RichText/types"
-import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { getMentionItemsMissingFromRichTextContent } from "./mentionVisibility"
 
 interface RichTextMessageNode extends SuperMagicNode {
 	content?: string
@@ -45,16 +46,14 @@ const formatTimestamp = (timestamp: string) => {
 
 function RichText(props: NodeProps) {
 	const { onSelectDetail, onFileClick: handleFileClick } = props
+	const { projectFilesStore } = useMessageListContext()
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
 		| RichTextMessageNode
 		| undefined
 	const mentions: NonNullable<MessageRichTextProps["mentions"]> =
 		((node?.extra?.super_agent?.mentions || []) as MessageRichTextProps["mentions"]) || []
-	const mentionItems: MentionListItem[] = mentions.map((mention) => ({
-		type: "mention",
-		attrs: mention.attrs,
-	}))
+	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)
 	const attachments = (node?.attachments || []) as unknown as MessageAttachmentProps[]
 	const isMobile = !useResponsive().md
 
@@ -82,7 +81,7 @@ function RichText(props: NodeProps) {
 				</span>
 			</div>
 			<div className="ml-auto w-full self-end whitespace-pre-wrap rounded-[12px] border border-border bg-white p-2.5 text-sm font-normal leading-[1.4] text-foreground shadow-sm dark:bg-card [&_p]:mb-0">
-				{mentions && mentions.length > 0 && (
+				{mentionItems.length > 0 && (
 					<div className="mb-1.5">
 						<MentionList
 							mentionItems={mentionItems}
@@ -90,6 +89,7 @@ function RichText(props: NodeProps) {
 							messageContent={node?.content}
 							markerClickScene="messageList"
 							iconSize={16}
+							projectFilesStore={projectFilesStore}
 						/>
 					</div>
 				)}
