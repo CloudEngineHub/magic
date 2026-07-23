@@ -33,6 +33,7 @@ import { MagicDropdown } from "@/components/base"
 import { IconShare3 } from "@tabler/icons-react"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
+import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 
 export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const {
@@ -69,6 +70,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const effectiveShowDownload = useDownloadVisibility(showDownload, isMobile)
 	const { hideShareFile, hideFullscreen } = useFileActionVisibility()
 	const headerContainerRef = useRef<HTMLDivElement>(null)
 	const rightActionsContainerRef = useRef<HTMLDivElement>(null)
@@ -176,7 +178,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			isFullscreenMode,
 			isEditMode,
 			detailMode,
-			showDownload,
+			showDownload: effectiveShowDownload,
 			showRefreshButton,
 			isNewestFileVersion,
 			allowEdit,
@@ -220,7 +222,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			onOpenUrl,
 			onViewModeChange,
 			showButtonText,
-			showDownload,
+			effectiveShowDownload,
 			showRefreshButton,
 			type,
 			viewMode,

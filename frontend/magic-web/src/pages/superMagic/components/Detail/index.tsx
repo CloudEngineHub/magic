@@ -5,9 +5,10 @@ import { useDetailActions } from "./hooks/useDetailActions"
 import useDetailHandlers from "./hooks/useDetailHandlers"
 import { TaskStatus, ProjectListItem, Topic } from "../../pages/Workspace/types"
 import useShareRoute from "../../hooks/useShareRoute"
-import { useResponsive } from "ahooks"
 import { cn } from "@/lib/utils"
 import { observer } from "mobx-react-lite"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 
 // Define the Detail component props interface
 interface DetailProps {
@@ -112,8 +113,8 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 	const filesViewerRef = useRef<FilesViewerRef>(null)
 
 	const { isShareRoute } = useShareRoute()
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
+	const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
 
 	// Use hooks to encapsulate operation logic - only keep what FilesViewer needs
 	const { handleDownload, handleViewModeChange, getFileViewMode } = useDetailActions({
@@ -208,7 +209,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				onActiveTabChange={onActiveTabChange}
 				topicName={topicName}
 				projectId={projectId}
-				allowDownload={allowDownload}
+				allowDownload={effectiveAllowDownload}
 				showFallbackWhenEmpty={showFallbackWhenEmpty}
 				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 			/>

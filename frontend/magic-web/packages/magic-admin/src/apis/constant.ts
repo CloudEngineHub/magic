@@ -113,6 +113,18 @@ export const RequestUrl = {
 	/** 查询管控目标已用积分 */
 	getControlTargetUsedPoints: "/api/v1/quota/points/control/points-used/queries",
 
+	/** AI管理 - 数据看板 */
+	/** 数据看板 - 数字员工筛选选项 */
+	getDataDashboardAgentOptions: "/api/v1/admin/data-dashboard/agent-options",
+	/** 数据看板 - 数字员工分析 Summary */
+	getDataDashboardAgentSummary: "/api/v1/admin/data-dashboard/agent-analysis/summary",
+	/** 数据看板 - 数字员工分析 Tabs */
+	getDataDashboardAgentTabs: "/api/v1/admin/data-dashboard/agent-analysis/tabs",
+	/** 数据看板 - 成员分析 Summary */
+	getDataDashboardMemberSummary: "/api/v1/admin/data-dashboard/member-analysis/summary",
+	/** 数据看板 - 成员分析 Tabs */
+	getDataDashboardMemberTabs: "/api/v1/admin/data-dashboard/member-analysis/tabs",
+
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */
 	/** 获取模式列表 */
