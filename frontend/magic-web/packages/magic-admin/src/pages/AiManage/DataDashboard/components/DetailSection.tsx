@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import dayjs from "dayjs"
-import { CircleHelp, Download } from "lucide-react"
-import { MagicAvatar, MagicButton } from "@admin-components"
+import { CircleHelp } from "lucide-react"
+import { MagicAvatar } from "@admin-components"
 import { Table, Tabs, Tooltip } from "antd"
 import type { ColumnType, ColumnsType } from "antd/es/table"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
@@ -17,18 +17,21 @@ import {
 } from "../consts"
 import type { DataDashboardView } from "../consts"
 import type { DashboardT } from "../types"
-import {
-	displayText,
-	EMPTY_TEXT,
-	exportCsv,
-	formatNumber,
-	safeDivide,
-	type DashboardTabType,
-} from "../utils"
+import { displayText, EMPTY_TEXT, formatNumber, safeDivide, type DashboardTabType } from "../utils"
 import { useTranslation } from "react-i18next"
 import { useStyles } from "../styles"
 
 type DashboardRow = DataDashboard.AgentTabRow | DataDashboard.MemberTabRow
+
+const BUSINESS_TYPE_NAMES: Record<string, string> = {
+	super_magic_task_consume: "businessTypes.superMagicTaskConsume",
+	claw_project_consume: "businessTypes.clawProjectConsume",
+	magic_model_consume: "businessTypes.magicModelConsume",
+	normal_assistant_consume: "businessTypes.normalAssistantConsume",
+	tool_consume: "businessTypes.toolConsume",
+	flow_consume: "businessTypes.flowConsume",
+	knowledge_vector_consume: "businessTypes.knowledgeVectorConsume",
+}
 
 interface DetailTimeRange {
 	startDate?: string | null
@@ -166,7 +169,10 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
-				columns: callColumns(styles, t, isMobile, true),
+				columns: callColumns(styles, t, isMobile, {
+					showDigitalEmployee: true,
+					showSource: true,
+				}),
 				scrollX: TABLE_SCROLL_X.Record,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentCalls")}`,
 				styles,
@@ -234,8 +240,12 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
-			columns: callColumns(styles, t, isMobile, false),
-			scrollX: TABLE_SCROLL_X.Record,
+			columns: callColumns(styles, t, isMobile, {
+				showBusinessFields: true,
+				showDigitalEmployee: false,
+				showSource: false,
+			}),
+			scrollX: TABLE_SCROLL_X.MemberRecord,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.memberCalls")}`,
 			styles,
 			t,
@@ -315,7 +325,7 @@ function createTabItem({
 				<div className={styles.detailTabContent}>
 					<div className={styles.detailTableTop}>
 						<h3 className={styles.detailSubtitle}>{label}</h3>
-						<MagicButton
+						{/* <MagicButton
 							icon={<Download size={16} />}
 							onClick={() =>
 								exportCsv(
@@ -325,7 +335,7 @@ function createTabItem({
 							}
 						>
 							{t("actions.export")}
-						</MagicButton>
+						</MagicButton> */}
 					</div>
 					<div className={styles.detailTableWrap}>
 						<Table<DashboardRow>
@@ -426,7 +436,15 @@ function callColumns(
 	styles: Record<string, string>,
 	t: DashboardT,
 	isMobile: boolean,
-	showSource: boolean,
+	{
+		showBusinessFields = false,
+		showDigitalEmployee = true,
+		showSource = false,
+	}: {
+		showBusinessFields?: boolean
+		showDigitalEmployee?: boolean
+		showSource?: boolean
+	},
 ): ColumnsType<DashboardRow> {
 	const columns: ColumnsType<DashboardRow> = [
 		createDetailColumn(styles, t, {
@@ -450,14 +468,41 @@ function callColumns(
 			ellipsis: { showTitle: true },
 			render: displayText,
 		}),
-		createDetailColumn(styles, t, {
-			titleKey: "digitalEmployee",
-			dataIndex: "agent_name",
-			width: 180,
-			render: (_, row) => renderAgent(styles, row),
-			sortValue: (row) => getAgentSortName(row),
-		}),
 	]
+
+	if (showDigitalEmployee) {
+		columns.push(
+			createDetailColumn(styles, t, {
+				titleKey: "digitalEmployee",
+				dataIndex: "agent_name",
+				width: 180,
+				render: (_, row) => renderAgent(styles, row),
+				sortValue: (row) => getAgentSortName(row),
+			}),
+		)
+	}
+
+	if (showBusinessFields) {
+		columns.push(
+			createDetailColumn(styles, t, {
+				titleKey: "businessType",
+				dataIndex: "business_type",
+				width: 160,
+				render: (value) => businessTypeLabel(value, t),
+				sortValue: (row) =>
+					businessTypeLabel((row as DataDashboard.MemberCallRow).business_type, t),
+			}),
+			createDetailColumn(styles, t, {
+				titleKey: "resourceType",
+				dataIndex: "resource_type",
+				width: 160,
+				render: (_, row) => renderResource(styles, row),
+				sortValue: (row) =>
+					(row as DataDashboard.MemberCallRow).resource_type ||
+					(row as DataDashboard.MemberCallRow).resource_id,
+			}),
+		)
+	}
 
 	if (showSource) {
 		columns.push(
@@ -878,6 +923,16 @@ function renderEntity(styles: Record<string, string>, name?: string | null, meta
 	)
 }
 
+function renderResource(styles: Record<string, string>, row: DashboardRow) {
+	const item = row as DataDashboard.MemberCallRow
+	return (
+		<div className={styles.resourceCell}>
+			<div className={styles.resourcePrimary}>{displayText(item.resource_type)}</div>
+			<div className={styles.resourceMeta}>{displayText(item.resource_id)}</div>
+		</div>
+	)
+}
+
 function renderNumber(value: unknown) {
 	return formatNumber(Number(value))
 }
@@ -960,6 +1015,13 @@ function sourceTypeLabel(value: unknown, t: DashboardT) {
 	if (value === AGENT_SOURCE_TYPE.LocalCreate) return t("sourceTypes.localCreate")
 	if (value === AGENT_SOURCE_TYPE.Market) return t("sourceTypes.market")
 	if (value === AGENT_SOURCE_TYPE.Organization) return t("sourceTypes.organization")
+	return displayText(value as string | null)
+}
+
+function businessTypeLabel(value: unknown, t: DashboardT) {
+	const businessType = typeof value === "string" ? value : ""
+	const businessTypeNameKey = businessType ? BUSINESS_TYPE_NAMES[businessType] : undefined
+	if (businessTypeNameKey) return t(businessTypeNameKey)
 	return displayText(value as string | null)
 }
 

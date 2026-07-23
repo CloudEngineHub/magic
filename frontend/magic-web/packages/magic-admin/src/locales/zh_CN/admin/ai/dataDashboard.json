@@ -29,6 +29,15 @@
 		"unusedDepartment": "未使用部门",
 		"unusedDepartmentDesc": "当前周期无调用记录"
 	},
+	"businessTypes": {
+		"clawProjectConsume": "龙虾项目调用",
+		"flowConsume": "流程调用",
+		"knowledgeVectorConsume": "知识库调用",
+		"magicModelConsume": "模型调用",
+		"normalAssistantConsume": "普通助理调用",
+		"superMagicTaskConsume": "数字员工调用",
+		"toolConsume": "工具调用"
+	},
 	"charts": {
 		"agentBucket": "数字员工活跃分层",
 		"agentTrend": "数字员工活跃趋势",
@@ -46,6 +55,7 @@
 		"amount": "当前记录或聚合对象的积分消耗合计，来自 totalAmount。",
 		"averageAmount": "积分消耗 / 调用次数。",
 		"averageTokens": "Token 消耗 / 调用次数。",
+		"businessType": "当前调用记录所属的业务类型。",
 		"calls": "当前筛选范围内调用记录数量。",
 		"department": "一级部门 / 二级部门 / 三级部门组合展示。",
 		"departments": "当前聚合对象覆盖的部门去重数量。",
@@ -55,6 +65,7 @@
 		"lastUsedAt": "该成员或数字员工最近一次调用时间。",
 		"member": "展示成员头像、成员姓名和用户 ID。用户 ID 作为副标展示，不单独成列。",
 		"members": "调用过该数字员工的去重成员数量。",
+		"resourceType": "当前调用记录所属的资源类型。",
 		"silentDays": "最近调用时间不为空：结束日期 - 最近调用日期；为空：结束日期 - 开始日期 + 1。",
 		"source": "数字员工发布渠道，包含官方市场、企业内部、个人。",
 		"status": "成员在组织架构中的在职状态。",
@@ -70,6 +81,7 @@
 		"amount": "积分消耗",
 		"averageAmount": "平均单次积分",
 		"averageTokens": "平均单次 Token",
+		"businessType": "业务类型",
 		"calls": "调用次数",
 		"department": "部门",
 		"departments": "覆盖部门数",
@@ -80,6 +92,7 @@
 		"lastUsedAt": "最近调用时间",
 		"member": "成员",
 		"members": "调用成员数",
+		"resourceType": "资源类型",
 		"silentDays": "沉默天数",
 		"source": "来源",
 		"status": "在职状态",

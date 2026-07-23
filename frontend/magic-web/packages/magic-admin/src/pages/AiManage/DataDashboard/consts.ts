@@ -116,6 +116,7 @@ export const TABLE_SCROLL_X = {
 	Member: 1750,
 	Agent: 1350,
 	MemberAgent: 1400,
+	MemberRecord: 1350,
 	Record: 1120,
 } as const
 

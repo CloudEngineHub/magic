@@ -194,13 +194,6 @@ export default {
 					title: "nav.aiSubMenu.memberAnalysis",
 					validate: canAccessAIDataStatistics,
 				},
-				// {
-				// 	name: RouteName.AdminAIDataDashboardOrganizationAnalysis,
-				// 	path: RoutePath.AIDataDashboardOrganizationAnalysis,
-				// 	element: <DataDashboardPage view={DataDashboardView.OrganizationAnalysis} />,
-				// 	title: "nav.aiSubMenu.organizationAnalysis",
-				// 	validate: canAccessAIDataStatistics,
-				// },
 				{
 					name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
 					path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
@@ -208,20 +201,6 @@ export default {
 					title: "nav.aiSubMenu.digitalEmployeeAnalysis",
 					validate: canAccessAIDataStatistics,
 				},
-				// {
-				// 	name: RouteName.AdminAIDataDashboardConsumptionAnalysis,
-				// 	path: RoutePath.AIDataDashboardConsumptionAnalysis,
-				// 	element: <DataDashboardPage view={DataDashboardView.ConsumptionAnalysis} />,
-				// 	title: "nav.aiSubMenu.consumptionAnalysis",
-				// 	validate: canAccessAIDataStatistics,
-				// },
-				// {
-				// 	name: RouteName.AdminAIDataDashboardDataDictionary,
-				// 	path: RoutePath.AIDataDashboardDataDictionary,
-				// 	element: <DataDashboardPage view={DataDashboardView.DataDictionary} />,
-				// 	title: "nav.aiSubMenu.dataDictionary",
-				// 	validate: canAccessAIDataStatistics,
-				// },
 			],
 		},
 		{
