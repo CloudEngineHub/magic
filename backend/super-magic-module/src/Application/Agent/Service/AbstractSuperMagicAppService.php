@@ -484,6 +484,36 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     /**
+     * 获取当前用户参与协作的员工编码。
+     *
+     * 该集合仅表达协作身份，不依赖货架可见性或雇佣关系，也不代表可执行资格。
+     *
+     * @return array{codes: array<string>, operations: array<string, Operation>}
+     */
+    protected function getCollaboratedAgentCodes(SuperMagicAgentDataIsolation $dataIsolation): array
+    {
+        /** @var array{operations: array<string, Operation>, operation_codes: array<string>} $accessibleAgentResult */
+        $accessibleAgentResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
+            $dataIsolation,
+            OperationPermissionResourceType::CustomAgent,
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT
+        );
+        $creatorCodes = $this->superMagicAgentDomainService->getCodesByCreator(
+            $dataIsolation,
+            $dataIsolation->getCurrentUserId()
+        );
+        $codes = array_values(array_diff($accessibleAgentResult['operation_codes'] ?? [], $creatorCodes));
+
+        return [
+            'codes' => $codes,
+            'operations' => array_intersect_key(
+                $accessibleAgentResult['operations'] ?? [],
+                array_fill_keys($codes, true)
+            ),
+        ];
+    }
+
+    /**
      * 获取通过市场安装的 Agent 编码列表。
      *
      * @return array<string>

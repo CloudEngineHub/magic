@@ -327,80 +327,44 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $dataIsolation->disabled();
 
-        // 获取团队共享可用的 Agent 编码列表
+        // 获取团队共享可读的 Agent 编码列表。
         $teamSharedAgentResult = $this->getTeamSharedReadableAgentCodes($dataIsolation);
-        $queryCodes = $teamSharedAgentResult['codes'];
-        $agentOperations = $teamSharedAgentResult['operations'];
+        return $this->querySharedAgentsByCodes(
+            $dataIsolation,
+            $requestDTO,
+            $teamSharedAgentResult['codes'],
+            $teamSharedAgentResult['operations']
+        );
+    }
 
-        if ($queryCodes === []) {
-            return [
-                'agents' => [],
-                'playbooks_map' => [],
-                'agent_market_map' => [],
-                'agent_operations' => [],
-                'latest_versions_map' => [],
-                'publisher_user_map' => [],
-                'organization_info_map' => [],
-                'total' => 0,
-            ];
-        }
+    /**
+     * 查询“我参与协作的员工”列表。
+     *
+     * 仅由 operation_permissions 决定展示资格；市场雇佣和货架可见性不会改变结果。
+     *
+     * @return array{
+     *     agents: array<int, SuperMagicAgentEntity>,
+     *     playbooks_map: array<string, array<int, AgentPlaybookEntity>>,
+     *     agent_market_map: array<string, AgentMarketEntity>,
+     *     user_agents_map: array<string, UserAgentEntity>,
+     *     agent_operations: array<string, Operation>,
+     *     latest_versions_map: array<string, AgentVersionEntity>,
+     *     publisher_user_map: array<string, MagicUserEntity>,
+     *     total: int
+     * }
+     */
+    public function queriesCollaborated(Authenticatable $authorization, QueryAgentsRequestDTO $requestDTO): array
+    {
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        $dataIsolation->disabled();
 
-        $superMagicAgentQuery = (new SuperMagicAgentQuery())->setCodes($queryCodes);
-        $superMagicAgentQuery->setKeyword(trim($requestDTO->getKeyword()));
-        $superMagicAgentQuery->setLanguageCode($dataIsolation->getLanguage() ?: LanguageEnum::EN_US->value);
-        $superMagicAgentQuery->setSort($requestDTO->getSort());
-        $versionPage = new Page($requestDTO->getPage(), $requestDTO->getPageSize());
-        $agentQueriesResult = $this->superMagicAgentDomainService->queries($dataIsolation, $superMagicAgentQuery, $versionPage);
-
-        if (empty($agentQueriesResult['list'])) {
-            return [
-                'agents' => [],
-                'playbooks_map' => [],
-                'agent_market_map' => [],
-                'agent_operations' => [],
-                'latest_versions_map' => [],
-                'publisher_user_map' => [],
-                'organization_info_map' => [],
-                'total' => $agentQueriesResult['total'],
-            ];
-        }
-        $agents = $agentQueriesResult['list'];
-
-        // 读取agent的最新发布版本
-        $agentQueriesCodes = array_map(static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(), $agents);
-        $agentVersionEntities = $this->superMagicAgentVersionDomainService->getLatestPublishedByCodes($dataIsolation, $agentQueriesCodes);
-
-        // 如果是发布内部市场共享的agent，则使用version
-        foreach ($agents as $index => $agentEntity) {
-            $agentCode = $agentEntity->getCode();
-            if (isset($agentOperations[$agentCode])) {
-                unset($agentVersionEntities[$agentCode]);
-                continue;
-            }
-            $agentVersionEntity = $agentVersionEntities[$agentCode] ?? null;
-            if (! $agentVersionEntity) {
-                continue;
-            }
-            $agents[$index] = $this->buildExternalVisibleAgentsFromVersions($dataIsolation, [$agentCode => $agentVersionEntity])[0];
-        }
-        $this->updateAgentEntitiesIcon($agents);
-
-        $agentCodes = array_map(static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(), $agents);
-        $playbooksMap = $this->superMagicAgentPlaybookDomainService->getByAgentCodesForCurrentVersion($dataIsolation, $agentCodes, true);
-        $agentMarketMap = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes($agentCodes);
-        $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
-        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
-
-        return [
-            'agents' => $agents,
-            'playbooks_map' => $playbooksMap,
-            'agent_market_map' => $agentMarketMap,
-            'agent_operations' => $agentOperations,
-            'latest_versions_map' => $agentVersionEntities,
-            'publisher_user_map' => $publisherUserMap,
-            'organization_info_map' => $organizationInfoMap,
-            'total' => $agentQueriesResult['total'],
-        ];
+        $collaboratedAgentResult = $this->getCollaboratedAgentCodes($dataIsolation);
+        return $this->querySharedAgentsByCodes(
+            $dataIsolation,
+            $requestDTO,
+            $collaboratedAgentResult['codes'],
+            $collaboratedAgentResult['operations']
+        );
     }
 
     /**
@@ -426,6 +390,27 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $queryCodes = array_values(array_unique(array_merge($marketCodes, $officialCodes)));
 
         return $this->queryPublishedVisibleAgentsByCodes($dataIsolation, $requestDTO, $queryCodes, true);
+    }
+
+    /**
+     * Batch-load the data required to resolve list origins without per-item queries.
+     *
+     * @param array<string, UserAgentEntity> $userAgentsMap
+     * @return array{official_agent_codes: string[], market_source_map: array<int, AgentMarketEntity>}
+     */
+    public function getAgentListOriginData(Authenticatable $authorization, array $userAgentsMap): array
+    {
+        $marketIds = [];
+        foreach ($userAgentsMap as $userAgent) {
+            if ($userAgent->getSourceType()->isMarket() && $userAgent->getSourceId() !== null) {
+                $marketIds[] = $userAgent->getSourceId();
+            }
+        }
+
+        return [
+            'official_agent_codes' => $this->getOfficialAgentCodes($authorization),
+            'market_source_map' => $this->superMagicAgentDomainService->getStoreAgentsByIds($marketIds),
+        ];
     }
 
     /**
@@ -485,6 +470,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             return $this->normalizeAgentListResult(match ($scope) {
                 AgentListScope::CREATED => $this->queriesCreated($authorization, $requestDTO),
                 AgentListScope::TEAM_SHARED => $this->queriesTeamShared($authorization, $requestDTO),
+                AgentListScope::COLLABORATED => $this->queriesCollaborated($authorization, $requestDTO),
                 AgentListScope::MARKET_INSTALLED => $this->queriesMarketInstalled($authorization, $requestDTO),
             });
         }
@@ -1397,6 +1383,93 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $accessibleSkillCodes,
             array_values(array_intersect(BuiltinSkill::values(), $skillCodes ?? []))
         )));
+    }
+
+    /**
+     * 按可读员工编码统一组装协作类列表，避免团队共享和协作列表出现查询语义漂移。
+     *
+     * @param array<string> $queryCodes
+     * @param array<string, Operation> $agentOperations
+     */
+    private function querySharedAgentsByCodes(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        QueryAgentsRequestDTO $requestDTO,
+        array $queryCodes,
+        array $agentOperations
+    ): array {
+        if ($queryCodes === []) {
+            return [
+                'agents' => [],
+                'playbooks_map' => [],
+                'agent_market_map' => [],
+                'user_agents_map' => [],
+                'agent_operations' => [],
+                'latest_versions_map' => [],
+                'publisher_user_map' => [],
+                'organization_info_map' => [],
+                'total' => 0,
+            ];
+        }
+
+        $superMagicAgentQuery = (new SuperMagicAgentQuery())->setCodes($queryCodes);
+        $superMagicAgentQuery->setKeyword(trim($requestDTO->getKeyword()));
+        $superMagicAgentQuery->setLanguageCode($dataIsolation->getLanguage() ?: LanguageEnum::EN_US->value);
+        $superMagicAgentQuery->setSort($requestDTO->getSort());
+        $versionPage = new Page($requestDTO->getPage(), $requestDTO->getPageSize());
+        $agentQueriesResult = $this->superMagicAgentDomainService->queries($dataIsolation, $superMagicAgentQuery, $versionPage);
+
+        if (empty($agentQueriesResult['list'])) {
+            return [
+                'agents' => [],
+                'playbooks_map' => [],
+                'agent_market_map' => [],
+                'user_agents_map' => [],
+                'agent_operations' => [],
+                'latest_versions_map' => [],
+                'publisher_user_map' => [],
+                'organization_info_map' => [],
+                'total' => $agentQueriesResult['total'],
+            ];
+        }
+        $agents = $agentQueriesResult['list'];
+
+        // 读取agent的最新发布版本
+        $agentQueriesCodes = array_map(static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(), $agents);
+        $agentVersionEntities = $this->superMagicAgentVersionDomainService->getLatestPublishedByCodes($dataIsolation, $agentQueriesCodes);
+
+        // 如果是发布内部市场共享的agent，则使用version
+        foreach ($agents as $index => $agentEntity) {
+            $agentCode = $agentEntity->getCode();
+            if (isset($agentOperations[$agentCode])) {
+                unset($agentVersionEntities[$agentCode]);
+                continue;
+            }
+            $agentVersionEntity = $agentVersionEntities[$agentCode] ?? null;
+            if (! $agentVersionEntity) {
+                continue;
+            }
+            $agents[$index] = $this->buildExternalVisibleAgentsFromVersions($dataIsolation, [$agentCode => $agentVersionEntity])[0];
+        }
+        $this->updateAgentEntitiesIcon($agents);
+
+        $agentCodes = array_map(static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(), $agents);
+        $playbooksMap = $this->superMagicAgentPlaybookDomainService->getByAgentCodesForCurrentVersion($dataIsolation, $agentCodes, true);
+        $agentMarketMap = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes($agentCodes);
+        $userAgentsMap = $this->userAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $agentCodes);
+        $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
+
+        return [
+            'agents' => $agents,
+            'playbooks_map' => $playbooksMap,
+            'agent_market_map' => $agentMarketMap,
+            'user_agents_map' => $userAgentsMap,
+            'agent_operations' => $agentOperations,
+            'latest_versions_map' => $agentVersionEntities,
+            'publisher_user_map' => $publisherUserMap,
+            'organization_info_map' => $organizationInfoMap,
+            'total' => $agentQueriesResult['total'],
+        ];
     }
 
     private function showWithAccessMode(

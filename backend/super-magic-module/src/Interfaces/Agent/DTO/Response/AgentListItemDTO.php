@@ -49,6 +49,8 @@ class AgentListItemDTO extends AbstractDTO
 
     private ?string $latestVersionCode;
 
+    private string $origin;
+
     private bool $allowDelete;
 
     private ?string $pinnedAt;
@@ -84,6 +86,7 @@ class AgentListItemDTO extends AbstractDTO
         bool $enabled,
         ?bool $isStoreOffline,
         ?string $latestVersionCode,
+        string $origin,
         bool $allowDelete,
         ?string $pinnedAt,
         ?string $latestPublishedAt,
@@ -108,6 +111,7 @@ class AgentListItemDTO extends AbstractDTO
         $this->enabled = $enabled;
         $this->isStoreOffline = $isStoreOffline;
         $this->latestVersionCode = $latestVersionCode;
+        $this->origin = $origin;
         $this->allowDelete = $allowDelete;
         $this->pinnedAt = $pinnedAt;
         $this->latestPublishedAt = $latestPublishedAt;
@@ -139,6 +143,7 @@ class AgentListItemDTO extends AbstractDTO
             'enabled' => $this->enabled,
             'is_store_offline' => $this->isStoreOffline,
             'latest_version_code' => $this->latestVersionCode,
+            'origin' => $this->origin,
             'allow_delete' => $this->allowDelete,
             'pinned_at' => $this->pinnedAt,
             'latest_published_at' => $this->latestPublishedAt,
