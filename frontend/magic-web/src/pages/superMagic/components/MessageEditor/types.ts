@@ -104,6 +104,18 @@ export interface MessageEditorModules {
 	send?: MessageEditorModuleConfig
 }
 
+export interface EditorPromptCarouselConfig {
+	examples: string[]
+	typingIntervalMs?: number
+	holdDurationMs?: number
+	fadeDurationMs?: number
+	clickable?: boolean
+	tabLabel?: string
+	acceptLabel?: string
+	navigationLabel?: string
+	applyAriaLabel?: string
+}
+
 // Component Props
 export interface MessageEditorProps {
 	/** Class name */
@@ -123,6 +135,8 @@ export interface MessageEditorProps {
 	}) => void
 	/** Placeholder */
 	placeholder?: string
+	/** Rotating prompt examples shown while the editor is empty */
+	promptCarousel?: EditorPromptCarouselConfig
 	/** File upload callback */
 	onFileUpload?: (files: FileData[]) => void
 	/** task running state - controls send/interrupt button */

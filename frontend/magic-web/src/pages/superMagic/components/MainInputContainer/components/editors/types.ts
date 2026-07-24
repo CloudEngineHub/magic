@@ -11,6 +11,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import type {
 	DraftKey,
+	EditorPromptCarouselConfig,
 	ModelItem,
 	MessageEditorLayoutConfig,
 	MessageEditorModules,
@@ -45,6 +46,8 @@ export interface SceneEditorQueueContext {
 export interface SceneEditorContext {
 	/** Override input placeholder from skill config (LocaleText) */
 	placeholder?: LocaleText
+	/** Optional rotating examples shown while the editor is empty */
+	promptCarousel?: EditorPromptCarouselConfig
 	draftKey?: DraftKey
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null

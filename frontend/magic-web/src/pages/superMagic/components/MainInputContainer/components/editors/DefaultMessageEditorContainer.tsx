@@ -27,10 +27,7 @@ import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-
 import type { SceneEditorContext, SceneEditorNodes } from "./types"
 import { useOptionalSceneStateStore } from "../../stores"
 import { cn } from "@/lib/utils"
-import {
-	buildPlainTextJSONContent,
-	generateTextFromJSONContent,
-} from "@/pages/superMagic/components/MessageEditor/utils"
+import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
@@ -445,6 +442,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				ref={tiptapEditorRef}
 				{...editorStyleProps}
 				placeholder={placeholder}
+				promptCarousel={editorContext?.promptCarousel}
 				onSend={handleSend}
 				isTaskRunning={effectiveIsTaskRunning}
 				onInterrupt={editorContext?.handleInterrupt}
