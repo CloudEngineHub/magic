@@ -2023,7 +2023,19 @@ You were interrupted by context compaction. The above contains a summary of your
 Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, maintain conversational continuity."""
 
     async def _apply_background_compact(self, summary: str) -> bool:
-        """应用后台压缩结果，保留快照后新增的消息"""
+        """应用后台压缩结果，保留快照后新增的消息。
+
+        后台压缩只处理启动时的历史前缀，不处理它运行期间产生的新消息：
+
+            [快照前缀 A] + [后台运行期间新增的消息 B]
+                    │
+                    └─ 压缩 Agent 只总结 A
+
+            应用结果后: [系统提示] + [A 的 summary] + [B]
+
+        在替换前重新计算 A 的 digest。如果 A 已经被别的流程改写，summary 就不再对应
+        当前历史，必须丢弃并回退到前台压缩，不能把旧结果写回新上下文。
+        """
         blocker_acquired = False
         applied = False
         try:

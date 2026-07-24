@@ -334,7 +334,16 @@ class AgentHorizon:
         await self._store.save(self._state)
 
     async def export_fork_state(self) -> HorizonState:
-        """导出模型已见 baseline 的值快照，不包含本轮 current staging。"""
+        """导出模型已见 baseline 的值快照，不包含本轮 current staging。
+
+        Horizon 同时维护两层数据：
+
+            持久化 baseline  -> 模型上一轮已经看到、可以安全交给子 Agent 的状态
+            current staging  -> 本轮刚采集、可能还没有形成稳定差异的运行时状态
+
+        fork 复制前者。例如父 Agent 正在刷新 workspace 列表时，子 Agent 不应拿到一份
+        只存在于父进程内存、却没有完成持久化语义的半成品状态。
+        """
         await self._ensure_loaded()
         return copy.deepcopy(self._state)
 

@@ -44,6 +44,7 @@ class SubagentPayload:
     agent_id: str
     status: SubagentStatus
     mode: SubagentExecutionMode
+    # Agent 请求的基础名称，例如 `research`；agent_id 是系统最终分配的 `research-2`。
     requested_agent_id: Optional[str] = None
     resumed: bool = False
     task_label: Optional[str] = None
@@ -82,7 +83,16 @@ class SubagentSessionConfigBlock:
 
 @dataclass
 class SubagentSessionDocument:
-    """包含 subagent 运行态的完整会话文档。"""
+    """包含 subagent 运行态的完整 `.session.json` 文档。
+
+        session.json
+        ├─ last / current -> ChatHistory 管理的模型与 Agent 配置
+        ├─ subagent       -> SubagentRuntimeStore 管理的执行状态
+        └─ extra_fields   -> 当前代码不认识、但必须原样保留的未来字段
+
+    多个 owner 共用同一个文件时，谁更新自己的区域，谁就必须保留其他区域。否则保存
+    一次运行状态就可能把模型配置或未来新增字段整个覆盖掉。
+    """
 
     last: SubagentSessionConfigBlock = field(default_factory=SubagentSessionConfigBlock)
     current: SubagentSessionConfigBlock = field(default_factory=SubagentSessionConfigBlock)
@@ -95,7 +105,9 @@ class SubagentSessionState(BaseModel):
 
     agent_name: str
     agent_id: str
+    # 保留基础名称和最终 ID，便于排查“模型请求名”和“实际会话地址”不一致的情况。
     requested_agent_id: Optional[str] = None
+    # 不能仅凭文件是否存在推断继续意图；这里记录调用方是否显式传了 resume=true。
     resumed: bool = False
     task_label: Optional[str] = None
     status: SubagentStatus = SubagentStatus.IDLE

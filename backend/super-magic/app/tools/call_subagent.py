@@ -68,7 +68,17 @@ def _resolve_agent_target(
     params: "CallSubagentParams",
     parent: Optional["AgentContext"],
 ) -> AgentTargetResolution:
-    """解析实际运行目标；fork 必须继承父 Agent 的运行时身份。"""
+    """解析实际运行目标；fork 必须继承父 Agent 的运行时身份。
+
+    这是保证“龙虾 fork 出去还是龙虾”的入口：
+
+        fork=false -> 使用请求中的 agent_name 解析目标
+        fork=true  -> 使用父 Agent 的完整 AgentTarget（provider + name）
+
+    fork 时即使模型填了另一个名称，也不能把运行模式偷偷切成普通 Agent；最多返回
+    warning 告知名称被忽略。上下文快照负责复制内容，AgentTarget 负责保留运行身份，
+    两者缺一不可。
+    """
     if not params.fork or parent is None:
         return AgentTargetResolution(target=AgentTarget.from_name(params.agent_name))
 
@@ -214,8 +224,19 @@ class CallSubagent(BaseTool[CallSubagentParams]):
 
             requested_agent_id = params.agent_id
 
+            # 生命周期决策表：
+            #
+            #   fork  resume  输入 agent_id        实际行为
+            #   ----  ------  ------------------  ------------------------------
+            #   false false   基础名称/任意名称    新建空白会话，分配新的最终 ID
+            #   true  false   基础名称              fork 当前完整上下文，分配新的最终 ID
+            #   false true    已返回的完整 ID       继续这条已有会话
+            #   true  true    任意                  拒绝，不能同时“新建”和“继续”
+            #
             # `resume` 不能由“同名文件是否存在”推断。模型可能为一个新任务复用旧名称；
             # 若自动继续，会把无关任务写入旧会话。显式意图使新建和继续都可预测。
+            # 例如：`market-research` 已经存在时，resume=false 仍创建 `market-research-2`；
+            # 只有传入 `market-research-1` 且 resume=true，才会继续第一条会话。
             if params.resume:
                 if not await AgentSessionIdService.session_exists(
                     params.agent_name,
@@ -287,6 +308,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                     chat_history_dir=PathManager.get_subagents_chat_history_dir(),
                 )
                 if params.fork:
+                    # fork 是“带着父 Agent 当前上下文创建新会话”，不是绑定或覆盖旧会话。
+                    # snapshot service 会在任何目标文件已存在时拒绝本次创建。
                     if parent is None:
                         raise RuntimeError("fork=true requires a live parent AgentContext")
                     snapshot_service = AgentContextSnapshotService()
@@ -655,6 +678,8 @@ def _success_result(payload: SubagentPayload) -> ToolResult:
 
 
 def _build_payload_text(payload: SubagentPayload) -> str:
+    # 基础 ID 只是请求名，最终 ID 才是下一次 wait/resume 使用的真实地址。
+    # 同时输出两者，是为了处理 `research` 被系统分配为 `research-3` 的场景。
     if payload.resumed:
         identity_line = (
             f"Resumed sub-agent `{payload.agent_name}` with agent_id `{payload.agent_id}`. "

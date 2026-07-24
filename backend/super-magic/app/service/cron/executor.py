@@ -108,6 +108,20 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     """
     以独立子 agent 执行 cron 任务，等待完成后写入结果文件。
     parent_context=None：CronService 是系统级服务，内部创建 root context。
+
+    固定 Agent 与每次新建 Agent 的区别：
+
+        没有固定 agent_id
+            每次触发 -> 新 ID -> `fork=true` 时从来源聊天创建新会话
+
+        有固定 agent_id，首次还没有文件
+            第一次触发 -> 从来源聊天 fork 到这个 ID
+
+        有固定 agent_id，已经有文件
+            后续触发 -> 不再 fork，直接继续这个会话
+
+    例如“每天收集新闻”通常不需要历史；“每天整理当天聊天”每次都需要从来源聊天
+    fork；“每天追踪项目进度”则应该保存固定 ID，让第二天看到第一天的结果。
     """
     # 明确告知子 agent 当前是自动化执行模式，不是用户对话：
     # - 禁止自我介绍或添加元评论，直接处理任务内容并输出结果
@@ -133,6 +147,8 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     try:
         target = await _resolve_cron_agent_target(job)
         fixed_agent_id = job.payload.agent_id
+        # 没有固定 ID：每次触发都是独立 Agent，例如“每天收集一份新新闻”。
+        # 有固定 ID：每次触发都进入同一会话，例如“每天继续追踪昨天的项目进度”。
         if fixed_agent_id is None:
             agent_id = await AgentSessionIdService.allocate(
                 target.agent_name,
@@ -147,6 +163,8 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
             )
 
         context_snapshot = None
+        # fork 只发生在固定会话尚未创建时；首次执行继承来源上下文，后续执行直接继续。
+        # 对没有固定 ID 的任务，session_exists 恒为 false，因此每次触发都会 fork 一个新 Agent。
         if job.payload.fork and not session_exists:
             context_source = job.payload.context_source
             if context_source is None:

@@ -42,7 +42,18 @@ class AgentSessionAlreadyExistsError(AgentContextSnapshotError):
 
 @dataclass(frozen=True, slots=True)
 class AgentContextSnapshot:
-    """一个时间点上的完整可重启 Agent 上下文。"""
+    """一个时间点上的完整可重启 Agent 上下文。
+
+    当前可重启上下文由三份持久化内容组成：
+
+        AgentContextSnapshot
+        ├─ ChatHistory messages
+        ├─ ChatHistory session document  (模型配置、模式等)
+        └─ HorizonState                  (已读文件、Skill、通知、环境快照等)
+
+    `AgentContext` 里的 streams、活动任务、tool call、取消状态和运行句柄属于当前
+    进程，不应被复制到新 Agent。
+    """
 
     source: AgentSessionRef
     chat_history: ChatHistoryForkData
@@ -65,12 +76,36 @@ class _TargetFiles:
 
 
 class AgentContextSnapshotService:
-    """完整 fork 的唯一编排入口。"""
+    """完整 fork 的唯一编排入口。
+
+    所有 fork 都走同一条路径，调用方不再自己复制 ChatHistory 或 Horizon：
+
+        source
+          │
+          ├─ live AgentContext      -> 读当前内存 + 当前持久化配置
+          └─ AgentSessionRef         -> 读已落盘的 ChatHistory + Horizon
+                         │
+                         ▼
+                    AgentContextSnapshot
+                         │
+                         ▼
+          写三份临时文件 -> 逐份检查目标 -> 移动为正式文件
+                         │
+                         └─ 任一步失败：删除本次文件，不留下半个会话
+
+    目标会话已有任意一份正式文件时，fork 失败；fork 的语义是创建独立新会话，不是
+    覆盖或恢复旧会话。恢复已有会话由调用方明确选择 resume 路径完成。
+    """
 
     _target_locks: dict[tuple[str, str, str], asyncio.Lock] = {}
 
     async def capture(self, source: AgentForkSource) -> AgentContextSnapshot:
-        """优先从 live context 捕获，否则从会话持久化文件恢复。"""
+        """优先从 live context 捕获，否则从会话持久化文件恢复。
+
+        当定时任务引用一个当前仍在运行的来源会话时，优先读取 live context，避免把
+        尚未落盘的本轮消息误认为不存在；如果来源已经结束，则从 `AgentSessionRef`
+        指向的文件恢复，保证 cron 可以在之后独立启动。
+        """
         if isinstance(source, AgentSessionRef):
             live_context = self._find_live_context(source)
             if live_context is not None:
@@ -89,7 +124,18 @@ class AgentContextSnapshotService:
         snapshot: AgentContextSnapshot,
         target: AgentSessionRef,
     ) -> None:
-        """把同一快照的全部组件提交为目标会话文件。"""
+        """把同一快照的全部组件提交为目标会话文件。
+
+        这里采用“先准备，后提交”的顺序：
+
+            [history.tmp, session.tmp, horizon.tmp]
+                    │ 三份都写成功
+                    ▼
+            [history, session, horizon]
+
+        目标文件只允许从不存在变成存在，不允许从旧内容变成新内容。这样两个并发 fork
+        不会互相覆盖，也不会让子 Agent 读到只有 ChatHistory 没有 Horizon 的半套上下文。
+        """
         target_files = self._target_files(target)
         lock = self._target_lock(target)
         async with lock:
@@ -106,6 +152,7 @@ class AgentContextSnapshotService:
         return snapshot
 
     async def _capture_live(self, context: AgentContext) -> AgentContextSnapshot:
+        """从当前运行中的 Agent 捕获内存中的消息和持久化状态。"""
         source_ref = self._session_ref_from_context(context)
         chat_history = getattr(context, "chat_history", None)
         if not isinstance(chat_history, ChatHistory):
@@ -122,6 +169,7 @@ class AgentContextSnapshotService:
         return self._build_snapshot(source_ref, chat_data, horizon_state)
 
     async def _capture_persisted(self, source: AgentSessionRef) -> AgentContextSnapshot:
+        """从已经落盘的会话捕获快照，不启动来源 Agent，也不修改来源文件。"""
         try:
             chat_data = await ChatHistory.load_fork_data(
                 source.target.agent_name,
@@ -220,6 +268,8 @@ class AgentContextSnapshotService:
         target: AgentSessionRef,
         target_files: _TargetFiles,
     ) -> None:
+        # fork 只创建新会话，不覆盖旧会话。先写带 generation 的临时文件，
+        # 再移动到正式文件；这样中途失败时，目标不会留下半套 ChatHistory/Horizon。
         generation = uuid.uuid4().hex
         temp_files = self._generation_files(target_files, generation, "tmp")
         committed: set[Path] = set()
@@ -259,6 +309,7 @@ class AgentContextSnapshotService:
 
     @staticmethod
     async def _any_target_file_exists(target_files: _TargetFiles) -> bool:
+        """只要三个正式文件中有一个存在，就把目标视为已被使用。"""
         for path in target_files.values():
             if await async_exists(path):
                 return True
@@ -288,7 +339,11 @@ class AgentContextSnapshotService:
         temp_files: _TargetFiles,
         committed: set[Path],
     ) -> None:
-        """将已准备好的临时文件移动到不存在的目标路径。"""
+        """将已准备好的临时文件移动到不存在的目标路径。
+
+        开头的检查不够：另一个任务可能在准备临时文件期间创建目标。因此每次移动前
+        再检查一次，发现竞争时终止，并删除本次已经移动的文件。
+        """
         for target_path, temp_path in zip(
             target_files.values(),
             temp_files.values(),
@@ -314,6 +369,7 @@ class AgentContextSnapshotService:
 
     @staticmethod
     async def _remove_committed_files(committed: set[Path]) -> None:
+        """删除本次已提交文件，避免失败后留下只有部分组件的会话。"""
         for path in committed:
             if await async_exists(path):
                 await async_unlink(path)

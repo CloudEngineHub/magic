@@ -2,6 +2,15 @@
 
 文件命名规则与 ChatHistory 一致：
   .chat_history/{agent_name}<{agent_id}>.horizon.json
+
+正常保存和 fork 写入共用同一套 codec：
+
+    HorizonState -> _encode_state -> JSON 文件
+    JSON 文件   -> migrations -> _decode_state -> HorizonState
+
+fork 只在写入目标时替换 `agent_id`，其余 Horizon 状态整体复制，包括已读文件、已加载
+Skill、通知、模型配置、workspace 快照和 context usage baseline。这样子 Agent 的第一轮
+上下文与“重新启动同一会话”使用同一份状态，而不是只复制其中几个字段。
 """
 from __future__ import annotations
 
@@ -113,7 +122,11 @@ def _manual_context_windows_from_dict(data: object) -> dict[str, ManualContextWi
 
 
 def _assert_codec_covers_horizon_state(codec_name: str, field_names: set[str]) -> None:
-    """新增持久化字段时，强制维护者同时更新 Horizon codec。"""
+    """新增持久化字段时，强制维护者同时更新 Horizon codec。
+
+    维护方式是故意简单的：`HorizonState` 增加字段后，编码器或解码器没有同步登记，
+    运行时直接报出缺失字段，而不是悄悄生成“看起来成功、实际丢数据”的 fork 文件。
+    """
     state_field_names = {state_field.name for state_field in fields(HorizonState)}
     if field_names == state_field_names:
         return
@@ -125,7 +138,11 @@ def _assert_codec_covers_horizon_state(codec_name: str, field_names: set[str]) -
 
 
 def _encode_state(state: HorizonState) -> dict:
-    """按既有 schema 编码 HorizonState，正常保存和 fork 共用本入口。"""
+    """按既有 schema 编码 HorizonState，正常保存和 fork 共用本入口。
+
+    这里是 Horizon 持久化字段的集中登记处。新增需要随 Agent 重启延续的状态时，必须
+    在这里加入字段，并让 `_decode_state` 同步恢复；覆盖检查会阻止只改一边的情况。
+    """
     data = {
         "version": CURRENT_VERSION,
         "agent_id": state.agent_id,
@@ -155,7 +172,12 @@ def _encode_state(state: HorizonState) -> dict:
 
 
 def _decode_state(data: dict) -> HorizonState:
-    """按改造前的明确字段规则恢复 HorizonState。"""
+    """按改造前的明确字段规则恢复 HorizonState。
+
+    先做版本迁移，再按字段恢复；缺失字段使用当前默认值，嵌套结构由各自的解析函数
+    处理。这个入口同时服务普通 Agent 重启和 persisted fork，二者不会各自维护一套
+    恢复逻辑。
+    """
     decoded_fields = {
         "agent_id",
         "file_records",
@@ -222,7 +244,12 @@ def _decode_state(data: dict) -> HorizonState:
 
 
 class HorizonStore:
-    """原子写入的 JSON 持久化，与 ChatHistory 同目录。"""
+    """原子写入的 JSON 持久化，与 ChatHistory 同目录。
+
+    Horizon 与 ChatHistory 是同一个 Agent 会话的两个持久化组件，不能单独把某一份当成
+    完整上下文。`AgentContextSnapshotService` 会同时准备并提交它们；本类只负责 Horizon
+    自己的编码、解码和文件写入。
+    """
 
     def __init__(self, chat_history_dir: str, agent_name: str, agent_id: str) -> None:
         self.agent_name = agent_name
@@ -282,7 +309,12 @@ class HorizonStore:
         target_agent_id: str,
         horizon_path: Path,
     ) -> None:
-        """把 Horizon baseline 改为目标身份后写入指定临时路径。"""
+        """把 Horizon baseline 改为目标身份后写入指定临时路径。
+
+        fork 后状态内容仍然来自来源，但文件里的 `agent_id` 必须改成目标 ID：否则子
+        Agent 启动时会看到“文件名是 research-2，状态内部却属于 research-1”的身份冲突。
+        深拷贝保证这个改名不会反向修改来源 Agent 的内存状态。
+        """
         normalized_horizon_path = Path(horizon_path).expanduser().resolve(strict=False)
         target_state = copy.deepcopy(state)
         target_state.agent_id = target_agent_id

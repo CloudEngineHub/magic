@@ -25,7 +25,16 @@ class SubagentRunRef:
 
 
 class SubagentSessionManager:
-    """同进程内的 subagent 会话协调器。"""
+    """同进程内的 subagent 会话协调器。
+
+    会话是否存在由两部分共同判断：
+
+        当前进程正在启动/运行 -> SubagentSessionManager
+        已经落盘或已经结束   -> SubagentRuntimeStore
+
+    之所以不能只查文件，是因为 AgentRuntime 启动后到第一份 session 文件写出前存在一个
+    短暂窗口；这段时间另一次新建请求仍然必须把该 ID 视为已占用。
+    """
 
     def __init__(self) -> None:
         self._sessions: Dict[str, SubagentSessionHandle] = {}
@@ -46,7 +55,11 @@ class SubagentSessionManager:
             return handle
 
     async def has_session(self, agent_name: str, agent_id: str) -> bool:
-        """检查当前进程是否正在运行该会话；已结束会话由持久化文件判断。"""
+        """检查当前进程是否正在运行该会话；已结束会话由持久化文件判断。
+
+        这里补的是“Agent 已启动，但会话文件还没来得及写出”的短暂窗口，
+        不负责判断历史文件是否存在。
+        """
         key = self._make_key(agent_name, agent_id)
         async with self._registry_lock:
             handle = self._sessions.get(key)

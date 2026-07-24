@@ -55,7 +55,20 @@ class IsolatedAgentModelRequest:
 
 @dataclass(frozen=True, slots=True)
 class IsolatedAgentRunRequest:
-    """一次隔离 Agent 运行所需的身份、输入和可选上下文。"""
+    """一次隔离 Agent 运行所需的身份、输入和可选上下文。
+
+    这个请求把“子 Agent 要运行什么”集中在一个对象里，避免调用方继续增加一长串
+    相互关联的参数。两种典型输入如下：
+
+        空白新 Agent:
+            snapshot=None, parent_context=None
+
+        fork 后运行:
+            snapshot=完整快照, parent_context=可选的父运行环境
+
+    `snapshot` 决定子 Agent 读哪些持久化上下文；`parent_context` 只传递 sandbox、组织和
+    subagent 层级等运行边界，不把父 Agent 的 streams、活动任务或取消状态带过去。
+    """
 
     target: AgentTarget
     agent_id: str
@@ -70,6 +83,18 @@ def apply_isolated_agent_model_selection(
     parent_context: Optional["AgentContext"] = None,
     models: Optional[IsolatedAgentModelRequest] = None,
 ) -> None:
+    """按请求、父上下文/会话文档、Agent 默认值的优先级应用模型配置。
+
+        本轮显式 model_id
+                 ↓ 没有才使用
+        父 Agent 当前模型（有 live parent）或目标 session.json（无 parent）
+                 ↓ 仍然没有才使用
+        Agent 自身配置的默认文本模型
+
+    图片和视频模型还会沿用已有能力配置。例如请求只覆盖图片模型 ID 时，尺寸配置仍
+    从父上下文或 session 文档补齐。这个选择发生在 Agent 启动后，但不会改变 fork 的
+    三份持久化文件；它只决定本次运行最终使用的模型。
+    """
     model_request = models or IsolatedAgentModelRequest()
     current_session_config = agent.chat_history.get_current_session_config()
     last_session_config = agent.chat_history.get_last_session_config()
@@ -133,6 +158,19 @@ async def _run_isolated_agent(
 
     普通和后台压缩入口共用本实现。压缩入口会捕获 compact_chat_history
     的 summary，并禁止已接近阈值的 fork Agent 再次触发压缩。
+
+    启动顺序很重要：
+
+        snapshot != None
+            1. 先把快照写成目标会话的三份正式文件
+            2. 再 acquire Agent，让 Agent 从目标文件正常加载
+            3. 最后执行 prompt
+
+        snapshot == None
+            直接 acquire 一个空白或已有会话；不会凭空复制父 Agent 的历史。
+
+    因此普通子 Agent、后台压缩 Agent 和 cron Agent 都复用同一条“写文件后启动”的
+    路径；不同点只在 prompt、模型选择和压缩结果捕获方式。
     """
     from app.core.context.agent_context import AgentContext
     from app.service.agent_runtime import AgentRuntime
@@ -215,7 +253,16 @@ def _inherit_parent_context(
     parent: Optional["AgentContext"],
     depth: int,
 ) -> None:
-    """从父 Agent 继承必要配置，is_main_agent 保持 False，streaming 保持隔离。"""
+    """从父 Agent 继承必要配置，is_main_agent 保持 False，streaming 保持隔离。
+
+    继承的是“运行环境边界”，不是“父任务本身”：
+
+        继承: sandbox_id, organization_code, subagent_depth, parent_agent_name
+        不继承: streams, task_id, streaming_sinks, 当前 tool call 和取消信号
+
+    这样子 Agent 可以在同一工作区和组织权限下工作，但不会把输出写进父 Agent 的
+    流，也不会因为父 Agent 的一次取消操作而共享同一个运行句柄。
+    """
     if not parent:
         return
     if sandbox_id := parent.get_sandbox_id():

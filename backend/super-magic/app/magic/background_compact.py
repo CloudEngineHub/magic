@@ -2,6 +2,22 @@
 """
 后台上下文压缩：在上下文接近阈值时，fork 一个同类型子 Agent 执行压缩，
 主 Agent 继续工作，压缩完成后无感应用。
+
+运行关系：
+
+    父 Agent
+      ├─ capture 当前完整快照
+      ├─ 继续接收用户消息
+      └─ 等待后台结果
+             │
+             ▼
+      同类型压缩 Agent
+      ├─ 使用同一套 ChatHistory + session + Horizon
+      ├─ 只能调用 compact_chat_history
+      └─ 返回 summary，不直接修改父 Agent 文件
+
+父 Agent 应用 summary 前还会检查快照前缀的消息数量和 digest。压缩期间追加的新消息
+允许保留；如果旧前缀被回滚、前台压缩或其他流程改写，旧 summary 才会被拒绝。
 """
 
 import asyncio
@@ -29,7 +45,13 @@ class BackgroundCompactState:
     """后台压缩状态机
 
     生命周期: idle → running → completed/failed → applied → idle
-    forked subagent 调用 compact_chat_history 的 summary 参数就是压缩摘要。
+
+    `snapshot_message_count + snapshot_digest` 标识“压缩 Agent 实际看到的历史前缀”。
+    新追加的消息位于这个前缀之后，可以原样接回 summary；如果前缀本身被回滚或其他
+    压缩流程改写，digest 才会不一致，此时旧 summary 必须丢弃。
+
+    forked subagent 调用 `compact_chat_history` 的 summary 参数就是压缩摘要；普通
+    Agent 的返回文本不能替代它，因为普通返回可能只是解释“我已经压缩完成”。
     """
     # 后台任务引用（asyncio.Task 包装了压缩 Agent 调用）
     _task: Optional[asyncio.Task] = field(default=None, repr=False)
@@ -192,6 +214,8 @@ async def start_background_compact(
         raise RuntimeError("Background compact source has no AgentTarget")
 
     from app.service.agent_session_id_service import AgentSessionIdService
+    # 后台压缩也是一次独立 Agent 执行。多次或并发压缩必须得到不同的会话 ID，
+    # 否则固定的 `bg-compact-*` 名称会让两次压缩互相覆盖上下文文件。
     agent_id = await AgentSessionIdService.allocate(
         target.agent_name,
         f"bg-compact-{parent_context_id}-{generation[:12]}",

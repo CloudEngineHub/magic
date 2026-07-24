@@ -11,7 +11,19 @@ from app.core.models.agent_runtime import AgentProviderType, AgentTarget
 
 @dataclass(frozen=True, slots=True)
 class AgentSessionRef:
-    """唯一定位一份可持久化 Agent 会话。"""
+    """唯一定位一份可持久化 Agent 会话。
+
+    这不是进程内的 Agent 对象，也不是一个可以继续执行的运行句柄，而是“下次启动
+    Agent 时去哪里读取上下文”的稳定地址：
+
+        AgentSessionRef
+        ├─ target.provider_type + target.agent_name  -> 用哪一种 Agent、哪个 Agent
+        ├─ agent_id                                  -> 哪一条独立会话
+        └─ chat_history_dir                          -> 从哪个目录读取三份上下文文件
+
+    例如 `magic<research-2>` 和 `openclaw<research-2>` 不是同一个运行目标；完整的
+    target 和目录必须一起保存，不能只保存一个容易重名的 agent_id。
+    """
 
     target: AgentTarget
     agent_id: str

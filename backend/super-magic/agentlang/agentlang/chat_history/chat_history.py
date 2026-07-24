@@ -127,7 +127,17 @@ class RuleResult:
 
 @dataclass(frozen=True, slots=True)
 class ChatHistoryForkData:
-    """ChatHistory 可独立写入另一会话的持久化数据。"""
+    """ChatHistory 可独立写入另一会话的持久化数据。
+
+    fork 需要的不只是消息列表，还要保留 session 文档中的完整配置。可以把它理解为：
+
+        ChatHistoryForkData
+        ├─ messages         -> 目标会话的 `<agent><id>.json`
+        └─ session_document -> 目标会话的 `<agent><id>.session.json`
+
+    `session_document` 保留未知字段，是为了未来新增会话字段时不会在 fork 过程中被
+    静默丢弃。运行时对象、事件流和当前任务句柄不属于 ChatHistory 的持久化数据。
+    """
 
     messages: tuple[ChatMessage, ...]
     session_document: Mapping[str, object]
@@ -631,7 +641,16 @@ class ChatHistory:
 
     @staticmethod
     def _message_to_storage_dict(message: ChatMessage) -> Dict[str, Any]:
-        """将消息转换为 ChatHistory 现有的持久化格式。"""
+        """将消息转换为 ChatHistory 现有的持久化格式。
+
+        这是消息持久化的 owner codec。正常保存和 fork 写入必须共用它：
+
+            普通运行:  messages -> _message_to_storage_dict -> 正式 history.json
+            fork 写入:  messages -> _message_to_storage_dict -> 临时 history.json
+
+        这样未来新增 `duration`、可选字段或运行时字段处理规则时，只改一个入口，
+        不会出现“正常 Agent 能读、fork 出来的 Agent 读法却不同”的分叉行为。
+        """
         # 将 dataclass 转为字典 (使用 to_dict 方法确保应用模型层的逻辑)
         if hasattr(message, "to_dict") and callable(message.to_dict):
             msg_dict = message.to_dict()
@@ -763,7 +782,11 @@ class ChatHistory:
         return document
 
     async def export_fork_data(self) -> ChatHistoryForkData:
-        """从当前内存消息和持久化 session 导出值快照。"""
+        """从当前内存消息和持久化 session 导出值快照。
+
+        live fork 的消息来自当前内存，因为本轮可能还有尚未写入文件的内容；session
+        文档则按持久化格式读取，保证模型配置和历史字段与普通重启路径一致。
+        """
         session_path = Path(self._build_model_config_filename())
         session_document = await self._load_session_document_async(session_path)
         messages = tuple(self._clone_message_for_fork(message) for message in self.messages)
@@ -779,7 +802,16 @@ class ChatHistory:
         agent_id: str,
         chat_history_dir: Path,
     ) -> ChatHistoryForkData:
-        """从指定会话的持久化文件读取 fork 数据。"""
+        """从指定会话的持久化文件读取 fork 数据。
+
+        persisted fork 只读取来源，不修复或覆盖来源文件：
+
+            来源文件 -> 解析消息 -> 在内存中执行必要的安全修复 -> 返回值快照
+                                                               |
+                                                               └─ 不写回来源
+
+        这样定时任务或后台 fork 不会因为读取一次历史，就改变用户原来的会话文件。
+        """
         from app.utils.async_file_utils import async_exists, async_read_json
 
         normalized_dir = Path(chat_history_dir).expanduser().resolve(strict=False)
@@ -791,6 +823,8 @@ class ChatHistory:
 
         view = cls._persisted_fork_view(agent_name, agent_id, normalized_dir)
         view.messages = view._messages_from_persisted_fork(history_data)
+        # 这里沿用 ChatHistory 加载时的两类关键修复，但只作用于内存副本；fork 的
+        # 目标可以拿到可继续使用的消息，来源文件则保持用户原样不变。
         view._sanitize_oversized_messages()
         view._sanitize_message_sequences()
         session_document = await cls._load_session_document_async(session_path)
@@ -807,7 +841,12 @@ class ChatHistory:
         history_path: Path,
         session_path: Path,
     ) -> None:
-        """使用 owner codec 把 fork 数据写入调用方指定的临时路径。"""
+        """使用 owner codec 把 fork 数据写入调用方指定的临时路径。
+
+        调用方负责决定“写到哪里”和“什么时候提交”，ChatHistory 只负责保证内容格式
+        与普通 `save()` 一致。snapshot service 会把这里写出的临时文件统一提交，避免
+        ChatHistory 自己知道 Horizon 或目标会话的事务细节。
+        """
         from app.utils.async_file_utils import async_write_json, async_write_text
 
         history_document = [cls._message_to_storage_dict(message) for message in data.messages]

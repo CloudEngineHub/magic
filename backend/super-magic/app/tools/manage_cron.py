@@ -369,6 +369,16 @@ CRITICAL CONSTRAINTS:
         if agent_ctx and hasattr(agent_ctx, "get_user_timezone"):
             user_timezone = agent_ctx.get_user_timezone() or None
 
+        # 定时任务的常见生命周期：
+        #
+        #   场景                  agent_id       fork   resume  每次触发的行为
+        #   --------------------  -------------  -----  ------  ----------------------------
+        #   每天收集一份新新闻    不传            false  false   创建空白新 Agent
+        #   每天整理当天聊天      不传            true   false   从来源聊天 fork 新 Agent
+        #   每天持续追踪同一进度  可读基础名称    true   false   首次 fork，之后继续固定 Agent
+        #
+        # 第三种场景创建任务时会先分配最终 ID；后续触发看到该会话已存在，就不会再次
+        # fork 或覆盖，只会继续原会话。resume=true 只用于创建任务时绑定一个已有最终 ID。
         context_source: Optional[AgentSessionRef] = None
         if params.fork:
             if target is None or agent_ctx is None:
@@ -386,6 +396,8 @@ CRITICAL CONSTRAINTS:
         cron_agent_id: Optional[str] = None
         # 与 call_subagent 相同，不能根据同名会话是否存在猜测意图：
         # resume=false 始终分配新 ID，resume=true 才允许绑定已有完整 ID。
+        # 例如传 `progress-tracker` 且 resume=false，可能保存为 `progress-tracker-3`；
+        # 只有传完整的 `progress-tracker-3` 且 resume=true，才表示绑定已有会话。
         if params.resume:
             if not params.agent_id:
                 return ToolResult.error("agent_id is required when resume=true")
@@ -472,6 +484,8 @@ CRITICAL CONSTRAINTS:
                 chat_history_dir=Path(chat_history_dir),
             )
 
+        # update 也遵守 add 的同一套规则：resume=false 把输入当基础名称并分配新 ID；
+        # resume=true 则要求输入已经是一个确实存在的完整最终 ID。
         cron_agent_id: Optional[str] = None
         if params.resume and "agent_id" not in params.model_fields_set:
             return ToolResult.error("agent_id is required when resume=true")

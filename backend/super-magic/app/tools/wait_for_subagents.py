@@ -623,6 +623,8 @@ def _build_results_text(
         if result.agent_name or result.agent_id:
             parts.append(f"Sub-agent: {result.agent_name or ''}/{result.agent_id}")
             if result.agent_name and result.agent_id:
+                # 等待结果可能在创建调用之后的另一轮才进入上下文，因此再次写出最终 ID，
+                # 防止模型只记住最初请求的基础名称而无法正确恢复该会话。
                 parts.append(
                     f"To continue this exact session, call call_subagent with "
                     f"agent_id `{result.agent_id}`, resume=true, and fork=false."

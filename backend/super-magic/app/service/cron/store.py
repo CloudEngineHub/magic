@@ -363,8 +363,12 @@ def patch_job_md(
                 raise ValueError("fork cron update requires context_source")
             payload["context_source"] = patch.context_source.to_payload()
         else:
+            # fork=false 表示这个任务以后不再从来源聊天创建 Agent，旧来源不能继续残留。
             payload.pop("context_source", None)
     if patch.update_agent_id:
+        # None 既可能表示“这次没有修改 agent_id”，也可能表示“明确删除固定 Agent”，
+        # 所以是否修改由 update_agent_id 单独表达。例如只修改每天执行时间时，不能因为
+        # agent_id 没传，就删掉原来用于持续追踪进度的固定 Agent。
         if patch.agent_id:
             payload["agent_id"] = patch.agent_id
         else:

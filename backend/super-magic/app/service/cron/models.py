@@ -77,8 +77,11 @@ class CronPayload:
     image_model_id: Optional[str] = None
     video_model_id: Optional[str] = None
     video_generation_config: Optional[JsonObject] = None
+    # fork 保存的是“首次创建时是否继承来源上下文”，不是“每次都覆盖目标会话”。
     fork: bool = False
+    # 有值表示跨触发继续同一最终 ID；为空表示每次触发重新分配一个新 ID。
     agent_id: Optional[str] = None
+    # 只有 fork=true 才保存来源。执行时读取来源的最新持久化快照，而不是复制配置时的内存对象。
     context_source: Optional[AgentSessionRef] = None
     timeout_seconds: Optional[int] = None
     notify_user: bool = True
@@ -184,6 +187,8 @@ class CronJobPatch:
     notify_user: Optional[bool] = None
     fork: Optional[bool] = None
     agent_id: Optional[str] = None
+    # agent_id=None 既可能表示“没有更新”，也可能表示“明确删除固定 ID”；
+    # 单独的布尔值用于区分这两种情况，避免 update 意外改变会话生命周期。
     update_agent_id: bool = False
     context_source: Optional[AgentSessionRef] = None
 
