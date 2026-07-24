@@ -1982,9 +1982,7 @@ class Agent(BaseAgent):
 
         await start_background_compact(
             state=self._bg_compact_state,
-            agent_name=self.agent_name,
             agent_context=self.agent_context,
-            chat_history=self.chat_history,
             compact_instruction=self._compact_skill_content,
             model_id=compact_model_id,
         )

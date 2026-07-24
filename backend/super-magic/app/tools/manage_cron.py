@@ -7,6 +7,7 @@ frontmatter 定义调度参数，正文是任务内容/提示词。
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
@@ -16,6 +17,15 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.client_message import AgentMode
 from app.core.models.agent_runtime import AgentProviderType
+from app.core.models.agent_session import AgentSessionRef
+from app.service.cron.models import (
+    CronContextMode,
+    CronJob,
+    CronJobPatch,
+    CronPayload,
+    CronSchedule,
+    PayloadKind,
+)
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.cron.store import build_job_md, patch_job_md
@@ -44,7 +54,7 @@ class ManageCronParams(BaseToolParams):
         description="""<!--zh: 操作类型及各自必填参数：
 - status: 无需额外参数
 - list: 可选 include_disabled
-- add: 必填 name / schedule / message，可选 timeout_seconds / enabled / notify_user
+- add: 必填 name / schedule / message，可选 timeout_seconds / enabled / notify_user / continue_current_context
 - update: 必填 job_id，其余字段按需传，省略则保持原值
 - remove: 必填 job_id
 - run: 必填 job_id（立即触发，忽略调度时间）
@@ -53,7 +63,7 @@ class ManageCronParams(BaseToolParams):
 Action to perform. Per-action required fields:
 - status: no extra params
 - list: optional include_disabled
-- add: name + schedule + message required; timeout_seconds/enabled/notify_user optional
+- add: name + schedule + message required; timeout_seconds/enabled/notify_user/continue_current_context optional
 - update: job_id required; any other field optional (omitted fields keep current value)
 - remove: job_id required
 - run: job_id required (triggers immediately, ignores schedule)
@@ -132,6 +142,11 @@ For list: include disabled jobs. Defaults to false (only enabled jobs shown)."""
 Whether to deliver the task result to the user after completion. Defaults to true for add.
 Rule: if the user's intent is to be informed (reminders, check-and-report tasks) → true;
 if it's a silent background maintenance task where the user should not be interrupted each run → false."""
+    )
+    continue_current_context: bool = Field(
+        False,
+        description="""<!--zh: 仅 add 使用。任务依赖当前聊天内容时设为 true；普通提醒、独立调研和独立维护任务保持 false。-->
+For add only. Set true when the scheduled task depends on this conversation, such as "summarize what we discussed today", "continue the current work", or "keep tracking this discussion". Keep false for ordinary reminders and independent research or maintenance tasks.""",
     )
 
     @field_validator("schedule", mode="before")
@@ -319,11 +334,13 @@ CRITICAL CONSTRAINTS:
         model_id: Optional[str] = None
         image_model_id: Optional[str] = None
         video_model_id: Optional[str] = None
+        video_generation_config: Optional[Dict[str, Any]] = None
         if agent_ctx and hasattr(agent_ctx, "model_context"):
             model_context = agent_ctx.model_context
             model_id = model_context.current_text_model_id or None
             image_model_id = model_context.image_model_id
             video_model_id = model_context.video_model_id
+            video_generation_config = model_context.video.video_generation_config
         if not model_id:
             model_id = "auto"
             logger.warning("创建 cron 时当前上下文没有运行时模型，已写入 auto")
@@ -335,21 +352,44 @@ CRITICAL CONSTRAINTS:
         if agent_ctx and hasattr(agent_ctx, "get_user_timezone"):
             user_timezone = agent_ctx.get_user_timezone() or None
 
-        content = build_job_md(
-            schedule=params.schedule,
-            payload_kind="agent_turn",  # 当前唯一可用值
-            agent_name=agent_name,
-            model_id=model_id,
-            image_model_id=image_model_id,
-            video_model_id=video_model_id,
-            timeout_seconds=params.timeout_seconds,
+        context_mode = CronContextMode.FRESH
+        context_source: Optional[AgentSessionRef] = None
+        if params.continue_current_context:
+            if target is None or agent_ctx is None:
+                return ToolResult.error("continue_current_context requires a live Agent context")
+            agent_id = agent_ctx.get_agent_id()
+            chat_history_dir = agent_ctx.get_chat_history_dir()
+            if not agent_id or not chat_history_dir:
+                return ToolResult.error("Current Agent session is incomplete and cannot be continued")
+            context_mode = CronContextMode.CONTINUE
+            context_source = AgentSessionRef(
+                target=target,
+                agent_id=agent_id,
+                chat_history_dir=Path(chat_history_dir),
+            )
+
+        job = CronJob(
+            id=job_id,
+            schedule=CronSchedule.from_payload(params.schedule),
+            payload=CronPayload(
+                kind=PayloadKind.AGENT_TURN,
+                agent_mode=agent_mode,
+                agent_name=agent_name,
+                model_id=model_id,
+                image_model_id=image_model_id,
+                video_model_id=video_model_id,
+                video_generation_config=video_generation_config,
+                context_mode=context_mode,
+                context_source=context_source,
+                timeout_seconds=params.timeout_seconds,
+                notify_user=True if params.notify_user is None else params.notify_user,
+            ),
+            body=params.message,
             enabled=True if params.enabled is None else params.enabled,
             name=params.name,
-            body=params.message,
             timezone=user_timezone,
-            notify_user=True if params.notify_user is None else params.notify_user,
-            agent_mode=agent_mode,
         )
+        content = build_job_md(job)
         await async_write_text(path, content)
         return ToolResult(content=f"Created cron job '{job_id}' at {path}")
 
@@ -361,19 +401,18 @@ CRITICAL CONSTRAINTS:
             return ToolResult.error(f"Job '{params.job_id}' not found")
 
         existing = await async_read_text(path)
-        updated = patch_job_md(
-            existing=existing,
-            schedule=params.schedule,
-            payload_kind=None,
-            agent_name=None,  # agent_name 不允许通过 update 修改，创建时已绑定当前 agent
-            model_id=None,
-            image_model_id=None,
-            video_model_id=None,
+        patch = CronJobPatch(
+            schedule=(
+                CronSchedule.from_payload(params.schedule)
+                if params.schedule is not None
+                else None
+            ),
             timeout_seconds=params.timeout_seconds,
             enabled=params.enabled,
             body=params.message,
             notify_user=params.notify_user,
         )
+        updated = patch_job_md(existing, patch)
         await async_write_text(path, updated)
         return ToolResult(content=f"Updated cron job '{params.job_id}'")
 

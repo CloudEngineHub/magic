@@ -10,6 +10,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.core import ai_abilities
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
+from app.core.models.agent_runtime import AgentProviderType, AgentTarget
 
 import app.service  # noqa: F401  # Ensure service package finishes initialization before importing Agent.
 from app.magic.background_compact import (
@@ -163,6 +164,33 @@ class _FakeChatHistory:
     async def replace_messages(self, messages: list[object]) -> None:
         self.replacement_messages = messages
         self.messages = messages
+
+
+def _background_compact_context(
+    messages: list[SimpleNamespace],
+    registered_cleanups: dict[str, object],
+) -> tuple[SimpleNamespace, SimpleNamespace, AgentTarget]:
+    target = AgentTarget(
+        provider_type=AgentProviderType.CLAW,
+        agent_name="mock-agent",
+    )
+    snapshot = SimpleNamespace(messages=tuple(messages))
+    context = SimpleNamespace(
+        context_id="parent-context",
+        get_agent_target=lambda: target,
+        register_run_cleanup=lambda key, callback: registered_cleanups.update({key: callback}),
+    )
+    return context, snapshot, target
+
+
+def _mock_snapshot_capture(monkeypatch, snapshot: SimpleNamespace) -> None:
+    async def capture(_service, _source):
+        return snapshot
+
+    monkeypatch.setattr(
+        "app.service.agent_context_snapshot_service.AgentContextSnapshotService.capture",
+        capture,
+    )
 
 
 class _FakePrecompactAgent:
@@ -568,33 +596,28 @@ async def test_apply_background_compact_rejects_changed_snapshot_prefix():
 
 @pytest.mark.asyncio
 async def test_start_background_compact_forks_isolated_agent_and_captures_summary(monkeypatch):
-    calls: list[dict[str, object]] = []
+    calls: list[object] = []
 
-    async def fake_run_isolated_agent(**kwargs) -> str:
-        calls.append(kwargs)
+    async def fake_run_compaction_agent(request) -> str:
+        calls.append(request)
         return "summary from forked compact agent"
 
     monkeypatch.setattr(
-        "app.service.agent_runner.run_isolated_agent",
-        fake_run_isolated_agent,
+        "app.service.agent_runner.run_compaction_agent",
+        fake_run_compaction_agent,
     )
     state = BackgroundCompactState()
     messages = [
         SimpleNamespace(role="system", content="system", show_in_ui=False),
         SimpleNamespace(role="user", content="question", show_in_ui=True),
     ]
-    chat_history = _FakeChatHistory(messages=messages, token_count=90)
     registered_cleanups: dict[str, object] = {}
-    agent_context = SimpleNamespace(
-        context_id="parent-context",
-        register_run_cleanup=lambda key, callback: registered_cleanups.update({key: callback}),
-    )
+    agent_context, snapshot, target = _background_compact_context(messages, registered_cleanups)
+    _mock_snapshot_capture(monkeypatch, snapshot)
 
     await start_background_compact(
         state=state,
-        agent_name="mock-agent",
         agent_context=agent_context,
-        chat_history=chat_history,
         compact_instruction="Use a complete summary.",
         model_id="mock-compact-model",
     )
@@ -605,12 +628,11 @@ async def test_start_background_compact_forks_isolated_agent_and_captures_summar
     assert await state._task == "summary from forked compact agent"
     assert state.get_summary() == "summary from forked compact agent"
     assert len(calls) == 1
-    assert calls[0]["agent_name"] == "mock-agent"
-    assert calls[0]["parent_context"] is agent_context
-    assert calls[0]["fork_source_chat_history"] is chat_history
-    assert calls[0]["model_id"] == "mock-compact-model"
-    assert calls[0]["disable_compaction"] is True
-    assert calls[0]["capture_compact_history_result"] is True
+    request = calls[0]
+    assert request.target is target
+    assert request.parent_context is agent_context
+    assert request.snapshot is snapshot
+    assert request.models.text_model_id == "mock-compact-model"
     assert registered_cleanups
 
 
@@ -620,7 +642,7 @@ async def test_background_compact_cleanup_only_cancels_own_generation(monkeypatc
     release_second_task = asyncio.Event()
     calls = 0
 
-    async def fake_run_isolated_agent(**kwargs) -> str:
+    async def fake_run_compaction_agent(_request) -> str:
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -630,26 +652,21 @@ async def test_background_compact_cleanup_only_cancels_own_generation(monkeypatc
         return "second summary"
 
     monkeypatch.setattr(
-        "app.service.agent_runner.run_isolated_agent",
-        fake_run_isolated_agent,
+        "app.service.agent_runner.run_compaction_agent",
+        fake_run_compaction_agent,
     )
     state = BackgroundCompactState()
     messages = [
         SimpleNamespace(role="system", content="system", show_in_ui=False),
         SimpleNamespace(role="user", content="question", show_in_ui=True),
     ]
-    chat_history = _FakeChatHistory(messages=messages, token_count=90)
     registered_cleanups: dict[str, object] = {}
-    agent_context = SimpleNamespace(
-        context_id="parent-context",
-        register_run_cleanup=lambda key, callback: registered_cleanups.update({key: callback}),
-    )
+    agent_context, snapshot, _target = _background_compact_context(messages, registered_cleanups)
+    _mock_snapshot_capture(monkeypatch, snapshot)
 
     await start_background_compact(
         state=state,
-        agent_name="mock-agent",
         agent_context=agent_context,
-        chat_history=chat_history,
         compact_instruction="Use a complete summary.",
         model_id="mock-compact-model",
     )
@@ -660,9 +677,7 @@ async def test_background_compact_cleanup_only_cancels_own_generation(monkeypatc
 
     await start_background_compact(
         state=state,
-        agent_name="mock-agent",
         agent_context=agent_context,
-        chat_history=chat_history,
         compact_instruction="Use a complete summary.",
         model_id="mock-compact-model",
     )
@@ -681,15 +696,15 @@ async def test_background_compact_cleanup_only_cancels_own_generation(monkeypatc
 
 @pytest.mark.asyncio
 async def test_start_background_compact_skips_failed_snapshot_without_forking(monkeypatch):
-    calls: list[dict[str, object]] = []
+    calls: list[object] = []
 
-    async def fake_run_isolated_agent(**kwargs) -> str:
-        calls.append(kwargs)
+    async def fake_run_compaction_agent(request) -> str:
+        calls.append(request)
         return "summary should not be used"
 
     monkeypatch.setattr(
-        "app.service.agent_runner.run_isolated_agent",
-        fake_run_isolated_agent,
+        "app.service.agent_runner.run_compaction_agent",
+        fake_run_compaction_agent,
     )
     messages = [
         SimpleNamespace(role="system", content="system", show_in_ui=False),
@@ -701,17 +716,13 @@ async def test_start_background_compact_skips_failed_snapshot_without_forking(mo
         snapshot_digest=build_messages_digest(messages),
     )
     state.mark_failed()
-    chat_history = _FakeChatHistory(messages=messages, token_count=90)
-    agent_context = SimpleNamespace(
-        context_id="parent-context",
-        register_run_cleanup=lambda key, callback: None,
-    )
+    registered_cleanups: dict[str, object] = {}
+    agent_context, snapshot, _target = _background_compact_context(messages, registered_cleanups)
+    _mock_snapshot_capture(monkeypatch, snapshot)
 
     await start_background_compact(
         state=state,
-        agent_name="mock-agent",
         agent_context=agent_context,
-        chat_history=chat_history,
         compact_instruction="Use a complete summary.",
         model_id="mock-compact-model",
     )

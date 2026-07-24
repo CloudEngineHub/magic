@@ -10,10 +10,15 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.models.agent_runtime import AgentLifetime, AgentProviderType, AgentTarget
+from app.core.models.agent_session import AgentSessionRef
 from app.core.subagent_delegation import is_custom_agent_code
 from app.i18n import i18n
 from app.path_manager import PathManager
-from app.service.agent_runner import _inherit_parent_context, apply_isolated_agent_model_selection
+from app.service.agent_runner import (
+    IsolatedAgentModelRequest,
+    _inherit_parent_context,
+    apply_isolated_agent_model_selection,
+)
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 from app.tools.subagent_runtime_models import (
@@ -201,6 +206,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         try:
             from app.core.context.agent_context import AgentContext
             from app.service.agent_runtime import AgentRuntime
+            from app.service.agent_context_snapshot_service import AgentContextSnapshotService
 
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
             target_resolution = _resolve_agent_target(params, parent)
@@ -260,9 +266,21 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                             resume_hint="Wait for the current sub-agent run to stop, then call call_subagent again.",
                         ))
 
+                target_session = AgentSessionRef(
+                    target=target,
+                    agent_id=params.agent_id,
+                    chat_history_dir=PathManager.get_subagents_chat_history_dir(),
+                )
+                if params.fork:
+                    if parent is None:
+                        raise RuntimeError("fork=true requires a live parent AgentContext")
+                    snapshot_service = AgentContextSnapshotService()
+                    context_snapshot = await snapshot_service.capture(parent)
+                    await snapshot_service.materialize(context_snapshot, target_session)
+
                 new_agent_context = AgentContext(isolated=True)
                 _inherit_parent_context(new_agent_context, parent, depth=current_depth + 1)
-                new_agent_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
+                new_agent_context.set_chat_history_dir(str(target_session.chat_history_dir))
 
                 agent = await AgentRuntime.get_instance().acquire(
                     target=target,
@@ -278,14 +296,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 apply_isolated_agent_model_selection(
                     agent=agent,
                     parent_context=parent,
-                    model_id=params.model_id,
+                    models=IsolatedAgentModelRequest(text_model_id=params.model_id),
                 )
-
-                # Fork: 从父 Agent 分叉对话历史，子 Agent 继承完整上下文
-                if params.fork and parent is not None:
-                    parent_chat_history = getattr(parent, "chat_history", None)
-                    if parent_chat_history is not None:
-                        await agent.chat_history.fork_from(parent_chat_history)
 
                 _prepare_state_for_dispatch(
                     state=state,

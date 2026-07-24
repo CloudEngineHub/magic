@@ -10,14 +10,12 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 from agentlang.logger import get_logger
-from app.core.models.agent_runtime import AgentTarget
 from app.magic.compact_user_input_references import format_user_input_reference_block
 
 if TYPE_CHECKING:
-    from agentlang.chat_history.chat_history import ChatHistory
     from app.core.context.agent_context import AgentContext
 
 logger = get_logger(__name__)
@@ -33,7 +31,7 @@ class BackgroundCompactState:
     生命周期: idle → running → completed/failed → applied → idle
     forked subagent 调用 compact_chat_history 的 summary 参数就是压缩摘要。
     """
-    # 后台任务引用（asyncio.Task 包装了 run_isolated_agent 调用）
+    # 后台任务引用（asyncio.Task 包装了压缩 Agent 调用）
     _task: Optional[asyncio.Task] = field(default=None, repr=False)
 
     # 本次后台压缩的唯一 generation，用于区分不同快照
@@ -114,7 +112,7 @@ class BackgroundCompactState:
         )
 
 
-def build_messages_digest(messages: list[object]) -> str:
+def build_messages_digest(messages: Sequence[object]) -> str:
     semantic_messages = [_message_digest_payload(message) for message in messages]
     payload = json.dumps(semantic_messages, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -147,9 +145,7 @@ def _message_digest_payload(message: object) -> dict[str, object]:
 
 async def start_background_compact(
     state: BackgroundCompactState,
-    agent_name: str,
     agent_context: "AgentContext",
-    chat_history: "ChatHistory",
     compact_instruction: str,
     model_id: Optional[str] = None,
 ) -> None:
@@ -163,8 +159,11 @@ async def start_background_compact(
         return
 
     state.reset()
-    snapshot_message_count = len(chat_history.messages)
-    snapshot_messages = chat_history.messages[:snapshot_message_count]
+    from app.service.agent_context_snapshot_service import AgentContextSnapshotService
+
+    context_snapshot = await AgentContextSnapshotService().capture(agent_context)
+    snapshot_messages = context_snapshot.messages
+    snapshot_message_count = len(snapshot_messages)
     snapshot_digest = build_messages_digest(snapshot_messages)
     if state.is_failed_snapshot(snapshot_message_count, snapshot_digest):
         logger.info("后台压缩快照与上次失败快照相同，跳过重复启动")
@@ -189,20 +188,25 @@ async def start_background_compact(
 
     parent_context_id = getattr(agent_context, "context_id", "") or "unknown-parent"
     agent_id = f"bg-compact-{parent_context_id}-{generation[:12]}"
+    target = agent_context.get_agent_target()
+    if target is None:
+        raise RuntimeError("Background compact source has no AgentTarget")
 
-    from app.service.agent_runner import run_isolated_agent
+    from app.service.agent_runner import (
+        IsolatedAgentModelRequest,
+        IsolatedAgentRunRequest,
+        run_compaction_agent,
+    )
 
     compact_task = asyncio.create_task(
-        run_isolated_agent(
-            target=AgentTarget.from_name(agent_name),
+        run_compaction_agent(IsolatedAgentRunRequest(
+            target=target,
             agent_id=agent_id,
             prompt=compact_prompt,
             parent_context=agent_context,
-            model_id=model_id,
-            fork_source_chat_history=chat_history,
-            disable_compaction=True,
-            capture_compact_history_result=True,
-        )
+            models=IsolatedAgentModelRequest(text_model_id=model_id),
+            snapshot=context_snapshot,
+        ))
     )
     state._task = compact_task
 
@@ -230,6 +234,6 @@ async def start_background_compact(
 
     logger.info(
         f"后台压缩 fork 子 Agent 已启动: "
-        f"agent_name={agent_name}, agent_id={agent_id}, "
+        f"agent_name={target.agent_name}, agent_id={agent_id}, "
         f"snapshot_messages={state.snapshot_message_count}"
     )

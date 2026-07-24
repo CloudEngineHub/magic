@@ -27,6 +27,7 @@ from app.core.models.agent_runtime import (
     AgentTargetError,
     DynamicInitPolicy,
 )
+from app.core.models.agent_session import AgentSessionRef
 
 __all__ = [
     "ImageModelSizeSpec",
@@ -44,4 +45,5 @@ __all__ = [
     "AgentTarget",
     "AgentTargetError",
     "DynamicInitPolicy",
+    "AgentSessionRef",
 ]

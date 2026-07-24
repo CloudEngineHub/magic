@@ -396,3 +396,12 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 - 新增 AI Ability 时，不要把「没有任何模型可用」设计成可配置的正常模式，也不要提供以本地规则长期替代模型能力的关闭开关
 - 专属模型配置缺失时，应使用明确的默认模型，并按能力需要允许 fallback 到 `auto`
 - 确定性本地降级只用于模型配置异常、能力不匹配、调用失败或结构化输出非法等故障场景，不能把降级路径当作无模型运行方案
+
+## 21. Agent 上下文 fork 必须由统一入口管理
+
+- 完整上下文 fork 只能通过 `AgentContextSnapshotService` 编排；调用方不得直接复制 ChatHistory、session 或 Horizon 文件
+- 当前可 fork 的可重启上下文固定包括 ChatHistory messages、完整 session 文档和 Horizon 持久化状态
+- `AgentModelContext`、中断与清理状态、活动 run、活动 tool call、subagent runtime handle、token usage manager、streams 和事件 sink 都属于运行时状态，不得进入 fork
+- 后台压缩、`call_subagent(fork=True)` 和需要延续会话的 Python cron 必须复用同一套 snapshot 语义，不得增加调用方专属的局部 fork 分支
+- 新增需要随 Agent 重启延续且需要被 fork 的状态时，必须同时更新统一 snapshot 类型、`AgentContextSnapshotService` 的组件清单、状态 owner 的编解码入口和本节内容
+- 禁止重新增加 `ChatHistory.fork_from()`、`fork_source_chat_history`，或任何只复制部分上下文 JSON 文件的旁路

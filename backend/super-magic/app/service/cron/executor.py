@@ -13,8 +13,13 @@ from datetime import datetime
 from agentlang.logger import get_logger
 from app.core.entity.message.client_message import AgentMode
 from app.core.models.agent_runtime import AgentTarget
-from app.service.agent_runner import run_isolated_agent
-from app.service.cron.models import CronJob, CronRunResult
+from app.service.agent_context_snapshot_service import AgentContextSnapshotService
+from app.service.agent_runner import (
+    IsolatedAgentModelRequest,
+    IsolatedAgentRunRequest,
+    run_isolated_agent,
+)
+from app.service.cron.models import CronContextMode, CronJob, CronRunResult
 from app.service.cron.store import write_result_file
 
 logger = get_logger(__name__)
@@ -125,19 +130,29 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     timeout = job.payload.timeout_seconds
     try:
         target = await _resolve_cron_agent_target(job)
+        context_snapshot = None
+        if job.payload.context_mode == CronContextMode.CONTINUE:
+            context_source = job.payload.context_source
+            if context_source is None:
+                raise ValueError(f"cron job [{job.id}] continue mode has no context source")
+            context_snapshot = await AgentContextSnapshotService().capture(context_source)
         logger.info(
             f"cron job [{job.id}] starting "
             f"(agent={target.agent_name}, provider={target.provider_type.value})"
         )
-        coro = run_isolated_agent(
+        run_request = IsolatedAgentRunRequest(
             target=target,
             agent_id=agent_id,
             prompt=prompt,
-            parent_context=None,
-            model_id=job.payload.model_id,
-            image_model_id=job.payload.image_model_id,
-            video_model_id=job.payload.video_model_id,
+            models=IsolatedAgentModelRequest.from_values(
+                text_model_id=job.payload.model_id,
+                image_model_id=job.payload.image_model_id,
+                video_model_id=job.payload.video_model_id,
+                video_generation_config=job.payload.video_generation_config,
+            ),
+            snapshot=context_snapshot,
         )
+        coro = run_isolated_agent(run_request)
         if timeout:
             raw = await asyncio.wait_for(coro, timeout=timeout)
         else:

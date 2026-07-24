@@ -4,13 +4,15 @@
 """
 
 import asyncio
+import copy
 import hashlib
 import json
 import os
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Union
 import aiofiles
 
 from agentlang.llms.token_usage.models import TokenUsage
@@ -121,6 +123,14 @@ class RuleResult:
     """单条序列修复规则的执行结果。"""
     name: str
     fixes: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChatHistoryForkData:
+    """ChatHistory 可独立写入另一会话的持久化数据。"""
+
+    messages: tuple[ChatMessage, ...]
+    session_document: Mapping[str, object]
 
 
 def _truncate_head_by_tokens(text: str, max_tokens: int) -> str:
@@ -611,13 +621,84 @@ class ChatHistory:
         self.messages = []
         await self.load()
 
-    async def fork_from(self, source: "ChatHistory") -> None:
-        """从另一个 ChatHistory 分叉，复制消息值，不共享消息对象。"""
-        self.messages = [self._clone_message(message) for message in source.messages]
-        self._loaded = True
-        await self.save()
+    @staticmethod
+    def history_path_for_session(agent_name: str, agent_id: str, chat_history_dir: Path) -> Path:
+        return chat_history_dir / f"{agent_name}<{agent_id}>.json"
 
-    def _clone_message(self, message: ChatMessage) -> ChatMessage:
+    @staticmethod
+    def session_path_for_session(agent_name: str, agent_id: str, chat_history_dir: Path) -> Path:
+        return chat_history_dir / f"{agent_name}<{agent_id}>.session.json"
+
+    @staticmethod
+    def _message_to_storage_dict(message: ChatMessage) -> Dict[str, Any]:
+        """将消息转换为 ChatHistory 现有的持久化格式。"""
+        # 将 dataclass 转为字典 (使用 to_dict 方法确保应用模型层的逻辑)
+        if hasattr(message, "to_dict") and callable(message.to_dict):
+            msg_dict = message.to_dict()
+        else:
+            # 备选方案 (理论上不应执行，因为所有消息类型都有 to_dict)
+            msg_dict = asdict(message)
+            logger.warning(f"消息对象缺少 to_dict 方法: {type(message)}")
+
+        # 1. 处理 duration (移除 duration_ms, 添加 duration str)
+        if isinstance(message, (AssistantMessage, ToolMessage)):
+            duration_ms = msg_dict.pop("duration_ms", None) # 总是移除 ms 字段
+            if duration_ms is not None:
+                duration_str = format_duration_to_str(duration_ms)
+                if duration_str:
+                    msg_dict["duration"] = duration_str
+        # 确保其他类型也没有 duration_ms
+        elif "duration_ms" in msg_dict:
+            msg_dict.pop("duration_ms", None)
+
+        # 2. 移除值为默认值的可选字段 (已在 to_dict 中处理 show_in_ui, content, tool_calls, system)
+        # 这里我们额外检查 to_dict 可能仍保留的 None 值 (例如转换失败的 token_usage)
+        # 并确保 compaction_info 为 None 时被移除
+        keys_to_remove = []
+        for key, value in msg_dict.items():
+            # 移除值为 None 的字段 (除非是允许为 None 的 content 或 tool_calls)
+            if value is None and key not in ["content", "tool_calls"]:
+                keys_to_remove.append(key)
+            # 特别处理 compaction_info，如果它是 None，也移除
+            elif key == "compaction_info" and value is None:
+                keys_to_remove.append(key)
+            # 检查 token_usage 是否为 None 或空字典
+            elif key == "token_usage" and (
+                value is None or (isinstance(value, dict) and not value)
+            ):
+                keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            msg_dict.pop(key)
+
+        # 移除消息字典中的运行时字段，因为它们仅用于运行时
+        msg_dict.pop("id", None)
+        msg_dict.pop("_is_validated", None)
+        return msg_dict
+
+    def _messages_from_persisted_fork(self, history_data: object) -> List[ChatMessage]:
+        """按普通 ChatHistory 的实际解析语义读取 persisted fork 消息。"""
+        if not isinstance(history_data, list):
+            raise ValueError("聊天记录文件格式无效，根节点必须是列表")
+
+        loaded_messages: List[ChatMessage] = []
+        for msg_dict in history_data:
+            if not isinstance(msg_dict, dict):
+                logger.warning(f"加载历史时跳过无效的条目 (非字典): {msg_dict}")
+                continue
+            try:
+                message = chat_message_from_dict(msg_dict)
+                if message is not None:
+                    loaded_messages.append(self._add_message_internal(message))
+            except TypeError as e:
+                logger.warning(
+                    f"加载历史时转换消息失败 (字段不匹配或类型错误): {msg_dict}，错误: {e}"
+                )
+            except Exception as e:
+                logger.error(f"加载历史时处理消息出错: {msg_dict}，错误: {e}", exc_info=True)
+        return loaded_messages
+
+    def _clone_message_for_fork(self, message: ChatMessage) -> ChatMessage:
         """复制消息值，避免 fork 后父子 Agent 共享可变 dataclass 实例。"""
         if hasattr(message, "to_dict") and callable(message.to_dict):
             data = message.to_dict()
@@ -638,6 +719,108 @@ class ChatHistory:
             raise ValueError(f"Unsupported message role for clone: {role}")
 
         return self._validate_and_standardize(cloned)
+
+    @classmethod
+    def _persisted_fork_view(
+        cls,
+        agent_name: str,
+        agent_id: str,
+        chat_history_dir: Path,
+    ) -> "ChatHistory":
+        """构造只用于 persisted fork 读取和修复的内部实例。
+
+        这里不能调用 __init__，否则读取来源会话时会创建目录并要求事件分发器。
+        """
+        view = cls.__new__(cls)
+        view.agent_name = agent_name
+        view.agent_id = agent_id
+        view.chat_history_dir = str(chat_history_dir)
+        view._history_file_path = str(cls.history_path_for_session(agent_name, agent_id, chat_history_dir))
+        view.messages = []
+        view._loaded = True
+        return view
+
+    @classmethod
+    async def _load_session_document_async(cls, session_path: Path) -> Dict[str, Any]:
+        """异步读取完整 session 文档，沿用现有缺失字段默认语义。"""
+        from app.utils.async_file_utils import async_exists, async_read_json
+
+        default_document = {
+            "last": cls._default_session_config_block(),
+            "current": cls._default_session_config_block(),
+        }
+        if not await async_exists(session_path):
+            return default_document
+
+        loaded = await async_read_json(session_path)
+        if not isinstance(loaded, dict):
+            raise ValueError(f"会话状态文档格式无效: {session_path}")
+        document = default_document | loaded
+        if not isinstance(document.get("last"), dict):
+            document["last"] = cls._default_session_config_block()
+        if not isinstance(document.get("current"), dict):
+            document["current"] = cls._default_session_config_block()
+        return document
+
+    async def export_fork_data(self) -> ChatHistoryForkData:
+        """从当前内存消息和持久化 session 导出值快照。"""
+        session_path = Path(self._build_model_config_filename())
+        session_document = await self._load_session_document_async(session_path)
+        messages = tuple(self._clone_message_for_fork(message) for message in self.messages)
+        return ChatHistoryForkData(
+            messages=messages,
+            session_document=copy.deepcopy(session_document),
+        )
+
+    @classmethod
+    async def load_fork_data(
+        cls,
+        agent_name: str,
+        agent_id: str,
+        chat_history_dir: Path,
+    ) -> ChatHistoryForkData:
+        """从指定会话的持久化文件读取 fork 数据。"""
+        from app.utils.async_file_utils import async_exists, async_read_json
+
+        normalized_dir = Path(chat_history_dir).expanduser().resolve(strict=False)
+        history_path = cls.history_path_for_session(agent_name, agent_id, normalized_dir)
+        session_path = cls.session_path_for_session(agent_name, agent_id, normalized_dir)
+        history_data: object = []
+        if await async_exists(history_path):
+            history_data = await async_read_json(history_path)
+
+        view = cls._persisted_fork_view(agent_name, agent_id, normalized_dir)
+        view.messages = view._messages_from_persisted_fork(history_data)
+        view._sanitize_oversized_messages()
+        view._sanitize_message_sequences()
+        session_document = await cls._load_session_document_async(session_path)
+        return ChatHistoryForkData(
+            messages=tuple(view.messages),
+            session_document=copy.deepcopy(session_document),
+        )
+
+    @classmethod
+    async def write_fork_data(
+        cls,
+        data: ChatHistoryForkData,
+        *,
+        history_path: Path,
+        session_path: Path,
+    ) -> None:
+        """使用 owner codec 把 fork 数据写入调用方指定的临时路径。"""
+        from app.utils.async_file_utils import async_write_json, async_write_text
+
+        history_document = [cls._message_to_storage_dict(message) for message in data.messages]
+        await async_write_text(
+            history_path,
+            json.dumps(history_document, indent=4, ensure_ascii=False),
+        )
+        await async_write_json(
+            session_path,
+            copy.deepcopy(dict(data.session_document)),
+            ensure_ascii=False,
+            indent=2,
+        )
 
     async def load(self) -> None:
         """
@@ -765,50 +948,7 @@ class ChatHistory:
         target_file_path = custom_file_path if custom_file_path else self._history_file_path
 
         try:
-            history_to_save = []
-            for message in self.messages:
-                # 将 dataclass 转为字典 (使用 to_dict 方法确保应用模型层的逻辑)
-                if hasattr(message, 'to_dict') and callable(message.to_dict):
-                    msg_dict = message.to_dict()
-                else:
-                    # 备选方案 (理论上不应执行，因为所有消息类型都有 to_dict)
-                    msg_dict = asdict(message)
-                    logger.warning(f"消息对象缺少 to_dict 方法: {type(message)}")
-
-                # 1. 处理 duration (移除 duration_ms, 添加 duration str)
-                if isinstance(message, (AssistantMessage, ToolMessage)):
-                    duration_ms = msg_dict.pop('duration_ms', None) # 总是移除 ms 字段
-                    if duration_ms is not None:
-                        duration_str = format_duration_to_str(duration_ms)
-                        if duration_str:
-                            msg_dict['duration'] = duration_str
-                # 确保其他类型也没有 duration_ms
-                elif 'duration_ms' in msg_dict:
-                     msg_dict.pop('duration_ms')
-
-                # 2. 移除值为默认值的可选字段 (已在 to_dict 中处理 show_in_ui, content, tool_calls, system)
-                # 这里我们额外检查 to_dict 可能仍保留的 None 值 (例如转换失败的 token_usage)
-                # 并确保 compaction_info 为 None 时被移除
-                keys_to_remove = []
-                for key, value in msg_dict.items():
-                    # 移除值为 None 的字段 (除非是允许为 None 的 content 或 tool_calls)
-                    if value is None and key not in ['content', 'tool_calls']:
-                        keys_to_remove.append(key)
-                    # 特别处理 compaction_info，如果它是 None，也移除
-                    elif key == 'compaction_info' and value is None:
-                         keys_to_remove.append(key)
-                    # 检查 token_usage 是否为 None 或空字典
-                    elif key == 'token_usage' and (value is None or (isinstance(value, dict) and not value)):
-                        keys_to_remove.append(key)
-
-                for key in keys_to_remove:
-                    msg_dict.pop(key)
-
-                # 移除消息字典中的运行时字段，因为它们仅用于运行时
-                msg_dict.pop('id', None)
-                msg_dict.pop('_is_validated', None)
-
-                history_to_save.append(msg_dict)
+            history_to_save = [self._message_to_storage_dict(message) for message in self.messages]
 
             # Ensure target directory exists
             target_dir = os.path.dirname(target_file_path)

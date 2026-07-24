@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import difflib
 import hashlib
 import html
@@ -331,6 +332,11 @@ class AgentHorizon:
 
     async def _save(self) -> None:
         await self._store.save(self._state)
+
+    async def export_fork_state(self) -> HorizonState:
+        """导出模型已见 baseline 的值快照，不包含本轮 current staging。"""
+        await self._ensure_loaded()
+        return copy.deepcopy(self._state)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 原 FileTimestampManager 兼容接口
