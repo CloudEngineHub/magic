@@ -84,6 +84,7 @@ describe("MessageTurnGroupList", () => {
 
 			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
+			expect(container.querySelector('[data-message-id="a1"]')).not.toBeNull()
 			expect(container).toHaveTextContent("这条消息暂时无法显示")
 		} finally {
 			consoleError.mockRestore()
@@ -106,8 +107,27 @@ describe("MessageTurnGroupList", () => {
 
 			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
+			expect(container.querySelector('[data-message-id="a1"]')).not.toBeNull()
 		} finally {
 			consoleError.mockRestore()
 		}
+	})
+
+	it.each([
+		["null", null],
+		["false", false],
+	])("does not render an empty message row when renderNode returns %s", (_, emptyNode) => {
+		const { container } = render(
+			<MessageTurnGroupList
+				groups={messageTurnGroups}
+				isMobile
+				renderNode={({ node, index }) =>
+					node.app_message_id === "a1" ? emptyNode : renderNodeLabel({ node, index })
+				}
+			/>,
+		)
+
+		expect(container.querySelector('[data-message-id="u1"]')).not.toBeNull()
+		expect(container.querySelector('[data-message-id="a1"]')).toBeNull()
 	})
 })

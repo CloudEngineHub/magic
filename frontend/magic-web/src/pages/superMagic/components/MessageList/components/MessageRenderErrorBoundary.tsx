@@ -1,5 +1,5 @@
 import { ErrorBoundary } from "react-error-boundary"
-import type { PropsWithChildren } from "react"
+import type { PropsWithChildren, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { IconAlertCircle } from "@tabler/icons-react"
 import { logger as Logger } from "@/utils/log"
@@ -9,6 +9,7 @@ const logger = Logger.createLogger("MessageRenderErrorBoundary")
 interface MessageRenderErrorBoundaryProps extends PropsWithChildren {
 	messageKey: string
 	resetKey?: string | number | null
+	fallbackWrapper?: (fallback: ReactNode) => ReactNode
 }
 
 function MessageRenderFallback({ onRetry }: { onRetry: () => void }) {
@@ -36,6 +37,7 @@ function MessageRenderFallback({ onRetry }: { onRetry: () => void }) {
 export default function MessageRenderErrorBoundary({
 	messageKey,
 	resetKey,
+	fallbackWrapper,
 	children,
 }: MessageRenderErrorBoundaryProps) {
 	return (
@@ -49,9 +51,10 @@ export default function MessageRenderErrorBoundary({
 					errorBoundary: "MessageRenderErrorBoundary",
 				})
 			}}
-			fallbackRender={({ resetErrorBoundary }) => (
-				<MessageRenderFallback onRetry={resetErrorBoundary} />
-			)}
+			fallbackRender={({ resetErrorBoundary }) => {
+				const fallback = <MessageRenderFallback onRetry={resetErrorBoundary} />
+				return fallbackWrapper ? fallbackWrapper(fallback) : fallback
+			}}
 		>
 			{children}
 		</ErrorBoundary>
