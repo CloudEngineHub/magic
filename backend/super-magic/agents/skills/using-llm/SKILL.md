@@ -33,6 +33,7 @@ To use the current Agent text model, read the `SUPER_MAGIC_CURRENT_MODEL_ID` env
 ```python
 # Option 1: run_python_snippet
 run_python_snippet(
+    purpose="Run model code",
     python_code="""
 import os
 from sdk.llm import create_openai_sync_client
@@ -59,6 +60,7 @@ Use the no-argument form when you want the current Super Magic provider:
 
 ```python
 run_python_snippet(
+    purpose="Send test prompt",
     python_code="""
 import os
 from sdk.llm import create_openai_sync_client
@@ -83,6 +85,7 @@ Use explicit client arguments when the user provides their own OpenAI-compatible
 
 ```python
 run_python_snippet(
+    purpose="Use custom model",
     python_code="""
 import os
 from sdk.llm import create_openai_sync_client
@@ -123,6 +126,7 @@ When unsure of the model ID, query available models first:
 
 ```python
 run_python_snippet(
+    purpose="List models",
     python_code="""
 import json
 from sdk.llm import create_openai_sync_client
@@ -150,6 +154,7 @@ Use a real model ID to send a chat request. When executed through `run_python_sn
 
 ```python
 run_python_snippet(
+    purpose="Send chat",
     python_code="""
 import os
 from sdk.llm import create_openai_sync_client
@@ -187,6 +192,7 @@ Important: `image_to_base64` already returns a complete data URL string, such as
 
 ```python
 run_python_snippet(
+    purpose="Analyze image",
     python_code="""
 import os
 from sdk.llm import create_openai_sync_client, file_to_url, image_to_base64

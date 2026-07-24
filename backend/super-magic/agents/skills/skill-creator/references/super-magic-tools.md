@@ -248,6 +248,7 @@ Run Python code directly without writing a file first. Useful for lightweight da
 
 ```json
 {
+  "purpose": "string (required) — User-readable purpose in the user's current language, 4–16 characters after trimming",
   "python_code": "string (required) — Python code to execute",
   "cwd": "string | null (optional) — Working directory; defaults to workspace root, relative paths resolve from workspace, absolute paths are used as provided",
   "timeout": "integer (optional, default 60) — Timeout in seconds"
@@ -258,6 +259,7 @@ Run Python code directly without writing a file first. Useful for lightweight da
 from sdk.tool import tool
 
 result = tool.call('run_python_snippet', {
+    "purpose": "Format metadata",
     "python_code": """
 import json
 

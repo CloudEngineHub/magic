@@ -503,6 +503,10 @@
         "zh_CN": "执行完毕",
         "en_US": "Completed"
     },
+    "run_sdk_snippet.fallback_purpose": {
+        "zh_CN": "执行 Python",
+        "en_US": "Run Python"
+    },
     "run_sdk_snippet.error": {
         "zh_CN": "代码模式执行失败: {{error}}",
         "en_US": "Code Mode execution failed: {{error}}"

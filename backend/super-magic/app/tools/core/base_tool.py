@@ -10,6 +10,7 @@ import inspect
 import re
 import difflib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, ClassVar, get_args, get_origin, List, Tuple
 
 from pydantic import ConfigDict, ValidationError
@@ -48,6 +49,15 @@ except ImportError:
 
 # 定义参数类型变量
 T = TypeVar('T', bound=BaseToolParams)
+
+
+@dataclass(frozen=True)
+class ToolForwardRequest:
+    """工具在用户事件触发前请求改派到另一个强类型工具。"""
+
+    target_tool: Type["BaseTool"]
+    params: BaseToolParams
+    warning: str
 
 
 class BaseTool(Generic[T], ABC):
@@ -99,6 +109,14 @@ class BaseTool(Generic[T], ABC):
         params: T,
     ) -> Optional[ToolResult]:
         """执行前权限检查。返回 None 表示允许；返回 ToolResult 表示拦截并直接回给模型。"""
+        return None
+
+    async def resolve_forwarded_tool(
+        self,
+        tool_context: ToolContext,
+        arguments: Dict[str, Any],
+    ) -> Optional[ToolForwardRequest]:
+        """在展示工具调用前判断是否需要改派到其他工具。"""
         return None
 
     def get_horizon(self, tool_context: "ToolContext") -> "AgentHorizon":

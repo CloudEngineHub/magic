@@ -34,6 +34,7 @@ from app.core.context.agent_context import AgentContext
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.tools.core import BaseToolParams, tool
+from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
@@ -43,9 +44,6 @@ from app.utils.process_executor import ProcessExecutor
 
 # 匹配 tool.call('tool_name', ...) 或 tool.call("tool_name", ...) 中的工具名
 _TOOL_CALL_PATTERN = re.compile(r'tool\.call\s*\(\s*[\'"](\w+)[\'"]')
-
-# 匹配任意 tool.call(...) 用法，包括动态工具名；用于判断脚本是否属于 Code Mode
-_TOOL_CALL_USAGE_PATTERN = re.compile(r"\btool\.call\s*\(")
 
 # v2 提前 after 使用的占位 content（与真实终端输出区分，用于选择 remark 文案）
 _EARLY_AFTER_FAKE_CONTENT = "Script dispatched, executing inner tool calls."
@@ -87,6 +85,10 @@ class RunSdkSnippet(AbstractFileTool[RunSdkSnippetParams]):
 
     def should_trigger_events(self) -> bool:
         """Code Mode 执行不触发工具调用事件，对对话透明"""
+        return False
+
+    def is_visible_in_ui(self) -> bool:
+        """隐藏 Code Mode 外层卡片，只展示内部真实工具调用。"""
         return False
 
     def get_prompt_hint(self) -> str:
@@ -305,38 +307,32 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             "SUPER_MAGIC_PROJECT_ROOT": project_root_str,
         }
 
-    @staticmethod
-    def _looks_like_code_mode(python_code: str) -> bool:
-        """只要脚本包含 SDK 工具调用迹象，就继续按 Code Mode 执行。"""
-        return "sdk.tool" in python_code or bool(_TOOL_CALL_USAGE_PATTERN.search(python_code))
-
-    @staticmethod
-    def _merge_plain_python_fallback_content(content: str) -> str:
-        """将误用提示写入模型可读内容，不增加用户可见提示。"""
-        if content:
-            return f"{_PLAIN_PYTHON_FALLBACK_WARNING}\n\n{content}"
-        return _PLAIN_PYTHON_FALLBACK_WARNING
-
-    async def _execute_plain_python_fallback(
+    async def resolve_forwarded_tool(
         self,
         tool_context: ToolContext,
-        params: RunSdkSnippetParams,
-        python_code: str,
-    ) -> ToolResult:
+        arguments: Dict[str, Any],
+    ) -> ToolForwardRequest | None:
+        params = RunSdkSnippetParams(**arguments)
+        python_code = self._prepare_python_code(params.python_code)
+        if SnippetEnvironment.looks_like_code_mode(python_code):
+            return None
+
         from app.tools.run_python_snippet import RunPythonSnippet, RunPythonSnippetParams
 
-        terminal_result = await RunPythonSnippet().execute_purely(
-            RunPythonSnippetParams(
+        fallback_purpose = i18n.translate(
+            "run_sdk_snippet.fallback_purpose",
+            category="tool.messages",
+        )
+        return ToolForwardRequest(
+            target_tool=RunPythonSnippet,
+            params=RunPythonSnippetParams(
+                purpose=fallback_purpose,
                 python_code=python_code,
                 timeout=params.timeout,
                 cwd=params.cwd,
             ),
-            tool_context,
+            warning=_PLAIN_PYTHON_FALLBACK_WARNING,
         )
-        content = self._merge_plain_python_fallback_content(terminal_result.content)
-        if terminal_result.ok:
-            return ToolResult(content=content)
-        return ToolResult.error(content)
 
     @staticmethod
     def _check_code_mode_compatibility(python_code: str) -> list[str]:
@@ -360,9 +356,6 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
     async def execute(self, tool_context: ToolContext, params: RunSdkSnippetParams) -> ToolResult:
         python_code = self._prepare_python_code(params.python_code)
-
-        if not self._looks_like_code_mode(python_code):
-            return await self._execute_plain_python_fallback(tool_context, params, python_code)
 
         # 检查是否包含不允许在 Code Mode 中调用的工具
         blocked_tools = self._check_code_mode_compatibility(python_code)

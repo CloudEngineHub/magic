@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 from typing import Any
 
 
 CURRENT_MODEL_ENV_NAME = "SUPER_MAGIC_CURRENT_MODEL_ID"
+_TOOL_CALL_USAGE_PATTERN = re.compile(r"\btool\.call\s*\(")
 
 
 class SnippetEnvironment:
@@ -27,3 +29,10 @@ class SnippetEnvironment:
         current_model_id = getattr(model_context, "current_text_model_id", None)
         if current_model_id:
             extra_env[CURRENT_MODEL_ENV_NAME] = current_model_id
+
+    @staticmethod
+    def looks_like_code_mode(python_code: str) -> bool:
+        """判断代码是否包含通过 sdk.tool 调用工具的迹象。"""
+        return "sdk.tool" in python_code or bool(
+            _TOOL_CALL_USAGE_PATTERN.search(python_code)
+        )
