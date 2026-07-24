@@ -57,6 +57,7 @@ import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
+import MessageRenderContent from "./components/MessageRenderContent"
 
 export { MessageListProvider }
 
@@ -580,7 +581,9 @@ const MessageList = observer(
 									: undefined
 						}
 					>
-						{renderNodeContent(node, index, options)}
+						<MessageRenderContent
+							render={() => renderNodeContent(node, index, options)}
+						/>
 					</MessageRenderErrorBoundary>
 				</div>
 			)
@@ -677,26 +680,36 @@ const MessageList = observer(
 																onPendingSendChange={
 																	setIsFirstRevokedUserMessagePendingSend
 																}
-																fallbackContent={renderNodeContent(
-																	firstRevokedUserMessage,
-																	firstRevokedUserMessageIndex,
-																	{
-																		disableEntryAnimation: true,
-																		previousNode:
-																			firstRevokedPreviousNode,
-																	},
-																)}
+																fallbackContent={
+																	<MessageRenderContent
+																		render={() =>
+																			renderNodeContent(
+																				firstRevokedUserMessage,
+																				firstRevokedUserMessageIndex,
+																				{
+																					disableEntryAnimation: true,
+																					previousNode:
+																						firstRevokedPreviousNode,
+																				},
+																			)
+																		}
+																	/>
+																}
 															/>
 														) : (
-															renderNodeContent(
-																firstRevokedUserMessage,
-																firstRevokedUserMessageIndex,
-																{
-																	disableEntryAnimation: true,
-																	previousNode:
-																		firstRevokedPreviousNode,
-																},
-															)
+															<MessageRenderContent
+																render={() =>
+																	renderNodeContent(
+																		firstRevokedUserMessage,
+																		firstRevokedUserMessageIndex,
+																		{
+																			disableEntryAnimation: true,
+																			previousNode:
+																				firstRevokedPreviousNode,
+																		},
+																	)
+																}
+															/>
 														)}
 													</MessageRenderErrorBoundary>
 												)
