@@ -36,6 +36,10 @@ class AgentContextSnapshotMaterializeError(AgentContextSnapshotError):
     """目标会话快照提交失败。"""
 
 
+class AgentSessionAlreadyExistsError(AgentContextSnapshotError):
+    """目标会话已经存在，不能通过 fork 覆盖。"""
+
+
 @dataclass(frozen=True, slots=True)
 class AgentContextSnapshot:
     """一个时间点上的完整可重启 Agent 上下文。"""
@@ -218,57 +222,47 @@ class AgentContextSnapshotService:
     ) -> None:
         generation = uuid.uuid4().hex
         temp_files = self._generation_files(target_files, generation, "tmp")
-        backup_files = self._generation_files(target_files, generation, "bak")
         committed: set[Path] = set()
-        backed_up: set[Path] = set()
-        cleanup_backups = True
 
         try:
+            if await self._any_target_file_exists(target_files):
+                raise AgentSessionAlreadyExistsError(
+                    f"Agent session already exists: {target.target.agent_name}<{target.agent_id}>"
+                )
             await self._prepare_snapshot_files(snapshot, target, temp_files)
-            await self._commit_snapshot_files(
-                target_files,
-                temp_files,
-                backup_files,
-                committed,
-                backed_up,
-            )
+            await self._commit_snapshot_files(target_files, temp_files, committed)
         except asyncio.CancelledError:
             try:
-                await asyncio.shield(
-                    self._restore_target_files(
-                        target_files,
-                        backup_files,
-                        committed,
-                        backed_up,
-                    )
-                )
-            except Exception as rollback_error:
-                cleanup_backups = False
+                await asyncio.shield(self._remove_committed_files(committed))
+            except Exception as cleanup_error:
                 logger.exception(
-                    "Agent session rollback failed during cancellation: %s",
-                    rollback_error,
+                    "Failed to clean Agent session after snapshot cancellation: %s",
+                    cleanup_error,
                 )
+            raise
+        except AgentSessionAlreadyExistsError:
+            await self._remove_committed_files(committed)
             raise
         except Exception as error:
             try:
-                await self._restore_target_files(
-                    target_files,
-                    backup_files,
-                    committed,
-                    backed_up,
-                )
-            except Exception as rollback_error:
-                cleanup_backups = False
+                await self._remove_committed_files(committed)
+            except Exception as cleanup_error:
                 raise AgentContextSnapshotMaterializeError(
-                    f"Failed to materialize and restore Agent session: {target.target.agent_name}<{target.agent_id}>"
-                ) from rollback_error
+                    f"Failed to clean up Agent session after materialization failure: "
+                    f"{target.target.agent_name}<{target.agent_id}>"
+                ) from cleanup_error
             raise AgentContextSnapshotMaterializeError(
                 f"Failed to materialize Agent session: {target.target.agent_name}<{target.agent_id}>"
             ) from error
         finally:
             await self._cleanup_files(temp_files.values())
-            if cleanup_backups:
-                await self._cleanup_files(backup_files.values())
+
+    @staticmethod
+    async def _any_target_file_exists(target_files: _TargetFiles) -> bool:
+        for path in target_files.values():
+            if await async_exists(path):
+                return True
+        return False
 
     @staticmethod
     async def _prepare_snapshot_files(
@@ -292,20 +286,18 @@ class AgentContextSnapshotService:
     async def _commit_snapshot_files(
         target_files: _TargetFiles,
         temp_files: _TargetFiles,
-        backup_files: _TargetFiles,
         committed: set[Path],
-        backed_up: set[Path],
     ) -> None:
-        """逐个替换目标文件，并记录发生到哪一步，供失败恢复使用。"""
-        for target_path, temp_path, backup_path in zip(
+        """将已准备好的临时文件移动到不存在的目标路径。"""
+        for target_path, temp_path in zip(
             target_files.values(),
             temp_files.values(),
-            backup_files.values(),
             strict=True,
         ):
             if await async_exists(target_path):
-                await async_rename(target_path, backup_path)
-                backed_up.add(target_path)
+                raise AgentSessionAlreadyExistsError(
+                    f"Agent session file appeared during fork: {target_path}"
+                )
             await async_rename(temp_path, target_path)
             committed.add(target_path)
 
@@ -321,19 +313,10 @@ class AgentContextSnapshotService:
         )
 
     @staticmethod
-    async def _restore_target_files(
-        target_files: _TargetFiles,
-        backup_files: _TargetFiles,
-        committed: set[Path],
-        backed_up: set[Path],
-    ) -> None:
-        for target_path, backup_path in reversed(
-            tuple(zip(target_files.values(), backup_files.values(), strict=True))
-        ):
-            if target_path in committed and await async_exists(target_path):
-                await async_unlink(target_path)
-            if target_path in backed_up and await async_exists(backup_path):
-                await async_rename(backup_path, target_path)
+    async def _remove_committed_files(committed: set[Path]) -> None:
+        for path in committed:
+            if await async_exists(path):
+                await async_unlink(path)
 
     @staticmethod
     async def _cleanup_files(paths: tuple[Path, Path, Path]) -> None:
@@ -353,4 +336,5 @@ __all__ = [
     "AgentContextSnapshotService",
     "AgentContextSnapshotSourceError",
     "AgentForkSource",
+    "AgentSessionAlreadyExistsError",
 ]

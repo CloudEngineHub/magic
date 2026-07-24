@@ -1,7 +1,7 @@
 import asyncio
+import hashlib
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-import hashlib
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from pydantic import Field, field_validator, model_validator
@@ -9,6 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.core.models.agent_runtime import AgentLifetime, AgentProviderType, AgentTarget
 from app.core.models.agent_session import AgentSessionRef
 from app.core.subagent_delegation import is_custom_agent_code
@@ -30,7 +31,6 @@ from app.tools.subagent_runtime_models import (
 )
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import subagent_session_manager
-from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 
 logger = get_logger(__name__)
 
@@ -104,34 +104,19 @@ def _append_warning(content: str, warning: Optional[str]) -> str:
 class CallSubagentParams(BaseToolParams):
     agent_name: str = Field(
         ...,
-        description=(
-            "Agent target to call. Built-in names and aliases are accepted, e.g. "
-            "magic, explore, shell, search, ppt, data_analysis. "
-            "Marketplace custom Agent codes from find_agents (Crew digital employees, SMA-...) are accepted directly "
-            "and are prepared automatically before dispatch. "
-            "Local .agent names can also be used by filename. "
-            "When fork=true, set this to an empty string to inherit the current agent. "
-            "Any different non-empty value is ignored and produces a warning in the tool result."
-        )
+        description="Agent name or marketplace code. Leave empty only when fork=true to inherit the current Agent."
     )
     agent_id: str = Field(
         ...,
-        description="Human-readable session ID, e.g. 'market-research-phase1'. Same ID = resume existing conversation; different ID = fresh start. Used for chat history isolation."
+        description="Human-readable base ID for a new session, or the exact final ID returned earlier when resuming.",
     )
     task_label: str = Field(
         ...,
-        description=(
-            "User-facing label shown in the UI for this delegated task, not the agent name or agent_id. "
-            "Must use the same language as the user's request so the label is understandable; do not default to English. "
-            "Keep it concise, describe this sub-agent's responsibility, and distinguish concurrent tasks."
-        ),
+        description="Short user-facing task label in the user's language. It is not the Agent name or session ID.",
     )
     prompt: str = Field(
         ...,
-        description=(
-            "Task for the sub-agent. When fork=false, include all required context because the sub-agent starts "
-            "with empty history. When fork=true, provide only the directive because the parent's history is inherited."
-        )
+        description="Task instruction. Use a self-contained prompt for a blank session; use a directive for fork or resume.",
     )
     model_id: Optional[str] = Field(
         None,
@@ -139,33 +124,22 @@ class CallSubagentParams(BaseToolParams):
     )
     background: bool = Field(
         False,
-        description=(
-            "If true, dispatch sub-agent as background asyncio task and return immediately. "
-            "Use wait_for_subagents(agent_ids=[agent_id]) to wait for the result, "
-            "or wait_for_subagents(agent_ids=[agent_id], kill=True) to kill a running agent. "
-            "Use background=True in two scenarios: "
-            "(1) Parallel workloads — call multiple agents with background=True sequentially, "
-            "they run concurrently regardless of parallel tool call support. "
-            "(2) Long-running tasks — sync mode blocks the parent agent with no progress visibility; "
-            "use background=True + wait_for_subagents to monitor progress, set timeouts, "
-            "or use pattern matching to react to intermediate checkpoints."
-        )
+        description="Run in the background and return immediately. Wait using the returned final agent_id."
     )
     fork: bool = Field(
         False,
-        description=(
-            "Fork mode: the sub-agent starts with your full conversation history "
-            "and context. The prompt is a directive — what to do, not a briefing "
-            "of what happened (because the fork already knows)."
-        ),
+        description="Create a new session with the current Agent's full context. Cannot combine with resume.",
+    )
+    resume: bool = Field(
+        False,
+        description="Continue an existing session by its exact returned final agent_id. False creates a new session.",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def fill_agent_id(cls, values: Any) -> Any:
-        if isinstance(values, dict):
-            values.setdefault("agent_id", values.get("agent_name", ""))
-        return values
+    @model_validator(mode="after")
+    def validate_lifecycle_intent(self) -> "CallSubagentParams":
+        if self.fork and self.resume:
+            raise ValueError("fork and resume cannot both be true")
+        return self
 
     @field_validator("task_label")
     @classmethod
@@ -177,10 +151,21 @@ class CallSubagentParams(BaseToolParams):
             raise ValueError("task_label must be a single line")
         return label
 
+    @field_validator("agent_id")
+    @classmethod
+    def validate_agent_id(cls, value: str) -> str:
+        agent_id = value.strip()
+        if not agent_id:
+            raise ValueError("agent_id must not be empty")
+        if "\n" in agent_id or "\r" in agent_id:
+            raise ValueError("agent_id must be a single line")
+        return agent_id
 
+
+# Full model-facing usage guidance: agents/skills/subagents/SKILL.md
 @tool(code_mode_only=True)
 class CallSubagent(BaseTool[CallSubagentParams]):
-    """Call another agent to complete a task. Each sub-agent runs with an isolated context and its own chat history."""
+    """Delegate a task to another Agent."""
 
     def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
         return not agent_context.is_subagent_context()
@@ -205,8 +190,9 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         target_warning: Optional[str] = None
         try:
             from app.core.context.agent_context import AgentContext
-            from app.service.agent_runtime import AgentRuntime
             from app.service.agent_context_snapshot_service import AgentContextSnapshotService
+            from app.service.agent_runtime import AgentRuntime
+            from app.service.agent_session_id_service import AgentSessionIdService
 
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
             target_resolution = _resolve_agent_target(params, parent)
@@ -226,12 +212,38 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                     target_warning,
                 ))
 
+            requested_agent_id = params.agent_id
+
+            # `resume` 不能由“同名文件是否存在”推断。模型可能为一个新任务复用旧名称；
+            # 若自动继续，会把无关任务写入旧会话。显式意图使新建和继续都可预测。
+            if params.resume:
+                if not await AgentSessionIdService.session_exists(
+                    params.agent_name,
+                    requested_agent_id,
+                ):
+                    return ToolResult.error(_append_warning(
+                        (
+                            f"Cannot resume Agent session {params.agent_name}<{requested_agent_id}> "
+                            "because it does not exist. Use resume=false to create a new session."
+                        ),
+                        target_warning,
+                    ))
+                params.agent_id = requested_agent_id
+            else:
+                params.agent_id = await AgentSessionIdService.allocate(
+                    params.agent_name,
+                    requested_agent_id,
+                    request_id=tool_call_id or None,
+                )
+
             handle = await subagent_session_manager.get_handle(params.agent_name, params.agent_id)
             async with handle.lock:
                 prompt_digest = _digest_prompt(params.prompt)
                 state = await SubagentRuntimeStore.load_state(params.agent_name, params.agent_id)
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
+                state.requested_agent_id = requested_agent_id
+                state.resumed = params.resume
                 state.task_label = params.task_label
                 state.warning = target_resolution.warning
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
@@ -263,7 +275,10 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                             state=state,
                             mode=_mode_from_background(params.background),
                             error="interrupt_timeout",
-                            resume_hint="Wait for the current sub-agent run to stop, then call call_subagent again.",
+                            resume_hint=(
+                                "Wait for the current sub-agent run to stop, then call call_subagent again "
+                                "with this exact agent_id and resume=true."
+                            ),
                         ))
 
                 target_session = AgentSessionRef(
@@ -354,14 +369,17 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 return _success_result(_build_payload(
                     state=state,
                     mode=SubagentExecutionMode.BACKGROUND,
-                    resume_hint="Sub-agent is running in background. Use wait_for_subagents(agent_ids) to block until it finishes.",
+                    resume_hint=(
+                        "Sub-agent is running in background. Use wait_for_subagents(agent_ids) to block until it finishes. "
+                        "For a later turn, pass this exact agent_id with resume=true."
+                    ),
                 ))
 
             result_state = await task
             return _success_result(_build_payload(
                 state=result_state,
                 mode=SubagentExecutionMode.SYNC,
-                resume_hint="Pass the same agent_id to call_subagent to continue this conversation.",
+                resume_hint="Pass this exact agent_id with resume=true to continue this conversation.",
             ))
 
         except asyncio.CancelledError:
@@ -474,27 +492,6 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             error,
             resume_hint,
         )
-
-    def get_prompt_hint(self) -> str:
-        return """\
-When dispatching multiple sub-agents in parallel, always specify each agent's output target explicitly in its prompt. Sub-agents share no context — they cannot sense each other or infer targets from conversation history. If the output target is missing, the sub-agent will guess, and will usually create a new object it shouldn't.
-
-Three patterns to follow based on task type:
-
-1. Shared container (canvas, presentation slides, etc.): composed of independent elements; agents can work in parallel. Pass the same container identifier (e.g. project path) to every agent, and tell each one which part it owns. Do not let agents create or choose their own container.
-
-2. Single file (report, document, etc.): the whole file is one unit; concurrent writes conflict. Either assign the full task to one agent, or have each agent draft its assigned section independently, then designate one agent to merge everything into the final file.
-
-3. Fully independent outputs (separate reports per topic, separate canvases per theme, etc.): each agent produces its own distinct deliverable. Specify each agent's output target separately. No coordination needed.
-
-background is not just for parallelism — use `background=True` + `wait_for_subagents` for any sub-agent task expected to take more than a few seconds:
-- Sync mode (`background=False`) blocks the parent agent entirely with no progress visibility and no sandbox keep-alive
-- Background mode provides progress monitoring via `wait_for_subagents` timeout snapshots and `pattern` matching for checkpoint-based interleaving
-- Only use sync mode for lightweight tasks that finish within seconds
-
-Sub-agents may include output file paths in their results. When reporting to the user, present those paths as [@file_path:path] — the frontend renders them as clickable blue links.
-Example: Research report is ready: [@file_path:reports/market-research.md]
-"""
 
     async def get_before_tool_call_friendly_content(
         self, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -620,7 +617,10 @@ def _restore_if_same_tool_call(
         return _build_payload(
             state=state,
             mode=_mode_from_background(background),
-            resume_hint="The previous sub-agent run was interrupted. Send a new prompt to continue the conversation.",
+            resume_hint=(
+                "The previous sub-agent run was interrupted. Send a new prompt with this exact agent_id "
+                "and resume=true to continue the conversation."
+            ),
         )
     return None
 
@@ -636,6 +636,8 @@ def _build_payload(
         agent_id=state.agent_id,
         status=state.status,
         mode=mode,
+        requested_agent_id=state.requested_agent_id,
+        resumed=state.resumed,
         task_label=state.task_label,
         display_name=state.display_name,
         result=state.last_result,
@@ -653,8 +655,23 @@ def _success_result(payload: SubagentPayload) -> ToolResult:
 
 
 def _build_payload_text(payload: SubagentPayload) -> str:
+    if payload.resumed:
+        identity_line = (
+            f"Resumed sub-agent `{payload.agent_name}` with agent_id `{payload.agent_id}`. "
+            "This is the existing session requested by the call."
+        )
+    else:
+        requested_id = payload.requested_agent_id or payload.agent_id
+        identity_line = (
+            f"Created a new sub-agent session for `{payload.agent_name}`. "
+            f"Requested agent_id base: `{requested_id}`. "
+            f"Assigned final agent_id: `{payload.agent_id}`. "
+            f"Use this exact final ID with resume=true for any later continuation."
+        )
+
     lines = [
-        f"Task `{payload.task_label or payload.agent_id}` is handled by sub-agent `{payload.agent_name}` with agent_id `{payload.agent_id}`.",
+        identity_line,
+        f"Task: `{payload.task_label or payload.agent_id}`.",
         f"Status: `{payload.status}`.",
         f"Execution mode: `{payload.mode}`.",
     ]
@@ -764,7 +781,7 @@ def _mark_done(
     state.cached_tool_result = _build_payload(
         state=state,
         mode=mode,
-        resume_hint="Pass the same agent_id to call_subagent to continue this conversation.",
+        resume_hint="Pass this exact agent_id with resume=true to continue this conversation.",
     )
 
 
@@ -788,7 +805,7 @@ def _mark_cancelled(
     resume_hint = (
         "This sub-agent was stopped by user request. Do not call call_subagent again automatically — wait for the user's next instruction."
         if is_user_cancel
-        else "Send a new prompt with the same agent_id to continue the conversation."
+        else "Send a new prompt with this exact agent_id and resume=true to continue the conversation."
     )
     state.cached_tool_result = _build_payload(
         state=state,
@@ -811,7 +828,7 @@ def _mark_failed(
     state.cached_tool_result = _build_payload(
         state=state,
         mode=mode,
-        resume_hint="Inspect the error and call call_subagent again with the same agent_id if needed.",
+        resume_hint="Inspect the error and use this exact agent_id with resume=true if the same session should continue.",
     )
 
 

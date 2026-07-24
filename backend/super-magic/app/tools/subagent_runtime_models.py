@@ -1,6 +1,6 @@
-from enum import StrEnum
 from dataclasses import field
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -44,6 +44,8 @@ class SubagentPayload:
     agent_id: str
     status: SubagentStatus
     mode: SubagentExecutionMode
+    requested_agent_id: Optional[str] = None
+    resumed: bool = False
     task_label: Optional[str] = None
     display_name: Optional[str] = None
     result: Optional[str] = None
@@ -93,6 +95,8 @@ class SubagentSessionState(BaseModel):
 
     agent_name: str
     agent_id: str
+    requested_agent_id: Optional[str] = None
+    resumed: bool = False
     task_label: Optional[str] = None
     status: SubagentStatus = SubagentStatus.IDLE
     last_prompt_digest: Optional[str] = None

@@ -7,10 +7,13 @@ from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.i18n import i18n
 from app.path_manager import PathManager
+from app.tools.call_subagent import AgentDisplayKind, _display_subject_from_payload
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.tools.subagent_runtime_models import (
     SubagentQueryResult,
     SubagentQueryStatus,
@@ -20,9 +23,6 @@ from app.tools.subagent_runtime_models import (
 )
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import SubagentSessionHandle, subagent_session_manager
-from app.tools.call_subagent import AgentDisplayKind, _display_subject_from_payload
-from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
-from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.utils.async_file_utils import async_exists, async_read_json
 
 # 超时时返回给父 Agent 的进度快照最大字符数
@@ -39,52 +39,26 @@ _POLL_INTERVAL = 1.0
 class WaitForSubagentsParams(BaseToolParams):
     agent_ids: List[str] = Field(
         ...,
-        description="One or more agent_ids returned by call_subagent(background=True). All specified agents are awaited together."
+        description="Exact final agent_ids returned by background call_subagent calls."
     )
     timeout: float = Field(
         30.0,
-        description="""Timeout in seconds (POSIX semantics):
-- timeout > 0: wait at most this long, then return a progress snapshot. Call again to continue waiting.
-- timeout = 0: return the current status immediately without waiting.
-- timeout = -1: wait until all agents finish, capped at 60 minutes.""",
+        description="Seconds to wait. Positive values wait up to the limit, 0 returns immediately, and -1 waits for completion.",
     )
     kill: bool = Field(
         False,
-        description=(
-            "If true, kill all specified sub-agents and return their results. The timeout is ignored. "
-            "Safe to call on already-finished agents."
-        ),
+        description="Stop all listed sub-agents and return their current results.",
     )
     pattern: Optional[str] = Field(
         None,
-        description=(
-            "Python regular expression matched against sub-agent assistant messages. Returns early on a match. "
-            "Only applies when timeout != 0 and kill is false. Use an agreed checkpoint marker, such as "
-            '"CHECKPOINT_PHASE_1", to wait for an intermediate milestone.'
-        ),
+        description="Optional Python regex that returns early when a new assistant message matches.",
     )
 
 
+# Full model-facing usage guidance: agents/skills/subagents/SKILL.md
 @tool(code_mode_only=True)
 class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
-    """Wait for or kill background sub-agents."""
-
-    def get_prompt_hint(self) -> str:
-        return """\
-Rules for wait_for_subagents:
-- timeout > 0: wait up to N seconds. If agents are still running after timeout, you MUST either:
-  1. Call wait_for_subagents again to keep waiting
-  2. Use kill=True to terminate them
-  Unattended agents run indefinitely and consume resources — do not ignore them.
-- timeout = 0: return current status snapshot immediately without waiting
-- timeout = -1: wait indefinitely until all agents finish (capped at 60 minutes)
-- kill=True: kill all specified sub-agents and return their results (timeout is ignored)
-- Timeout does NOT mean failure — it means the agents are still working. Read the "Last message" to gauge progress, then decide: keep waiting or kill.
-- Calling kill on already-finished agents is safe and returns their existing results
-- pattern: Python regex to match against sub-agent assistant messages. Returns immediately when any agent emits a matching message.
-  Typical usage: sub-agents output checkpoint markers (e.g. [CHECKPOINT:...]), parent waits for the marker, processes intermediate results, then resumes waiting.
-  Rules: only scans messages produced AFTER the wait call starts — never matches historical content. The sub-agent keeps running after a match — you must call wait_for_subagents again or kill it.
-"""
+    """Wait for or stop background Agents."""
 
     def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
         return not agent_context.is_subagent_context()
@@ -648,6 +622,11 @@ def _build_results_text(
         parts = [f"[{i}/{total}] {label}: {result.status}"]
         if result.agent_name or result.agent_id:
             parts.append(f"Sub-agent: {result.agent_name or ''}/{result.agent_id}")
+            if result.agent_name and result.agent_id:
+                parts.append(
+                    f"To continue this exact session, call call_subagent with "
+                    f"agent_id `{result.agent_id}`, resume=true, and fork=false."
+                )
 
         if result.error:
             parts.append(f"Error: {result.error}")

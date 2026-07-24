@@ -10,8 +10,10 @@ from app.service.agent_context_snapshot_service import (
     AgentContextSnapshot,
     AgentContextSnapshotMaterializeError,
     AgentContextSnapshotService,
+    AgentSessionAlreadyExistsError,
 )
 from app.utils.async_file_utils import (
+    async_exists,
     async_read_json,
     async_read_text,
     async_scandir,
@@ -60,10 +62,7 @@ async def test_snapshot_materialize_writes_chat_session_and_horizon(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_materialize_restores_all_targets_after_partial_commit(
-    tmp_path,
-    monkeypatch,
-):
+async def test_snapshot_materialize_rejects_existing_target_without_changes(tmp_path):
     source = _session("parent", tmp_path)
     target = _session("child", tmp_path)
     history_path = ChatHistory.history_path_for_session("openclaw", "child", tmp_path)
@@ -77,6 +76,23 @@ async def test_snapshot_materialize_restores_all_targets_after_partial_commit(
     for path, content in old_files.items():
         await async_write_text(path, content)
 
+    with pytest.raises(AgentSessionAlreadyExistsError):
+        await AgentContextSnapshotService().materialize(_snapshot(source), target)
+
+    for path, content in old_files.items():
+        assert await async_read_text(path) == content
+
+
+@pytest.mark.asyncio
+async def test_snapshot_materialize_removes_partial_new_target_after_commit_failure(
+    tmp_path,
+    monkeypatch,
+):
+    source = _session("parent", tmp_path)
+    target = _session("child", tmp_path)
+    history_path = ChatHistory.history_path_for_session("openclaw", "child", tmp_path)
+    session_path = ChatHistory.session_path_for_session("openclaw", "child", tmp_path)
+    horizon_path = tmp_path / "openclaw<child>.horizon.json"
     from app.service import agent_context_snapshot_service as snapshot_module
 
     original_rename = snapshot_module.async_rename
@@ -98,9 +114,10 @@ async def test_snapshot_materialize_restores_all_targets_after_partial_commit(
     with pytest.raises(AgentContextSnapshotMaterializeError):
         await AgentContextSnapshotService().materialize(_snapshot(source), target)
 
-    for path, content in old_files.items():
-        assert await async_read_text(path) == content
-    assert all(not entry.name.endswith((".tmp", ".bak")) for entry in await async_scandir(tmp_path))
+    assert not await async_exists(history_path)
+    assert not await async_exists(session_path)
+    assert not await async_exists(horizon_path)
+    assert all(not entry.name.endswith(".tmp") for entry in await async_scandir(tmp_path))
 
 
 @pytest.mark.asyncio

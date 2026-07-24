@@ -56,6 +56,7 @@ class FindAgentsParams(BaseToolParams):
         return _normalize_keywords(value)
 
 
+# Full model-facing usage guidance: agents/skills/subagents/SKILL.md
 @tool(code_mode_only=True)
 class FindAgentsTool(BaseTool[FindAgentsParams]):
     """Find marketplace custom Agents, which may be presented to users as Crew or digital employees."""

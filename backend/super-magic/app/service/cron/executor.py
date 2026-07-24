@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime
+from pathlib import Path
 
 from agentlang.logger import get_logger
 from app.core.entity.message.client_message import AgentMode
@@ -19,7 +20,8 @@ from app.service.agent_runner import (
     IsolatedAgentRunRequest,
     run_isolated_agent,
 )
-from app.service.cron.models import CronContextMode, CronJob, CronRunResult
+from app.service.agent_session_id_service import AgentSessionIdService
+from app.service.cron.models import CronJob, CronRunResult
 from app.service.cron.store import write_result_file
 
 logger = get_logger(__name__)
@@ -107,7 +109,6 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     以独立子 agent 执行 cron 任务，等待完成后写入结果文件。
     parent_context=None：CronService 是系统级服务，内部创建 root context。
     """
-    agent_id = f"cron-{job.id}"
     # 明确告知子 agent 当前是自动化执行模式，不是用户对话：
     # - 禁止自我介绍或添加元评论，直接处理任务内容并输出结果
     # - 禁止创建/修改/删除定时任务，body 中的时间描述仅为任务内容，不是新的调度指令
@@ -128,13 +129,28 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     error = ""
 
     timeout = job.payload.timeout_seconds
+    agent_id: str | None = None
     try:
         target = await _resolve_cron_agent_target(job)
+        fixed_agent_id = job.payload.agent_id
+        if fixed_agent_id is None:
+            agent_id = await AgentSessionIdService.allocate(
+                target.agent_name,
+                job.name or job.id,
+            )
+            session_exists = False
+        else:
+            agent_id = fixed_agent_id
+            session_exists = await AgentSessionIdService.session_exists(
+                target.agent_name,
+                agent_id,
+            )
+
         context_snapshot = None
-        if job.payload.context_mode == CronContextMode.CONTINUE:
+        if job.payload.fork and not session_exists:
             context_source = job.payload.context_source
             if context_source is None:
-                raise ValueError(f"cron job [{job.id}] continue mode has no context source")
+                raise ValueError(f"cron job [{job.id}] fork has no context source")
             context_snapshot = await AgentContextSnapshotService().capture(context_source)
         logger.info(
             f"cron job [{job.id}] starting "
@@ -181,6 +197,7 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
         error=error,
         duration_ms=duration_ms,
         started_at_ms=start_ms,
+        agent_id=agent_id,
     )
 
     result_file = None
@@ -192,7 +209,7 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     if job.payload.notify_user:
         try:
             from app.service.cron.notification import append_notification, try_notify_main_agent
-            from pathlib import Path
+
             await append_notification(job, run_result, result_file or Path())
             asyncio.create_task(try_notify_main_agent(), name=f"cron-notify-{job.id}")
         except Exception as e:

@@ -28,11 +28,6 @@ class CronJobStatus(StrEnum):
     RUNNING = "running"
 
 
-class CronContextMode(StrEnum):
-    FRESH = "fresh"
-    CONTINUE = "continue"
-
-
 @dataclass
 class CronSchedule:
     kind: ScheduleKind
@@ -82,18 +77,19 @@ class CronPayload:
     image_model_id: Optional[str] = None
     video_model_id: Optional[str] = None
     video_generation_config: Optional[JsonObject] = None
-    context_mode: CronContextMode = CronContextMode.FRESH
+    fork: bool = False
+    agent_id: Optional[str] = None
     context_source: Optional[AgentSessionRef] = None
     timeout_seconds: Optional[int] = None
     notify_user: bool = True
 
     def __post_init__(self) -> None:
-        if not isinstance(self.context_mode, CronContextMode):
-            self.context_mode = CronContextMode(self.context_mode)
-        if self.context_mode == CronContextMode.FRESH and self.context_source is not None:
-            raise ValueError("fresh cron context cannot define context_source")
-        if self.context_mode == CronContextMode.CONTINUE and self.context_source is None:
-            raise ValueError("continue cron context requires context_source")
+        if self.agent_id is not None:
+            self.agent_id = self.agent_id.strip() or None
+        if self.fork and self.context_source is None:
+            raise ValueError("fork cron payload requires context_source")
+        if not self.fork and self.context_source is not None:
+            raise ValueError("non-fork cron payload cannot define context_source")
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "CronPayload":
@@ -130,9 +126,8 @@ class CronPayload:
             image_model_id=cast(Optional[str], payload.get("image_model_id")),
             video_model_id=cast(Optional[str], payload.get("video_model_id")),
             video_generation_config=cast(Optional[JsonObject], video_generation_config),
-            context_mode=CronContextMode(
-                str(payload.get("context_mode", CronContextMode.FRESH.value))
-            ),
+            fork=bool(payload.get("fork", False)),
+            agent_id=_optional_non_empty_string(payload.get("agent_id")),
             context_source=context_source,
             timeout_seconds=cast(Optional[int], payload.get("timeout_seconds")),
             notify_user=bool(payload.get("notify_user", payload.get("notify_main_agent", True))),
@@ -153,7 +148,9 @@ class CronPayload:
             payload["video_model_id"] = self.video_model_id
         if self.video_generation_config is not None:
             payload["video_generation_config"] = self.video_generation_config
-        payload["context_mode"] = self.context_mode.value
+        payload["fork"] = self.fork
+        if self.agent_id is not None:
+            payload["agent_id"] = self.agent_id
         if self.context_source is not None:
             payload["context_source"] = self.context_source.to_payload()
         if self.timeout_seconds is not None:
@@ -185,6 +182,10 @@ class CronJobPatch:
     enabled: Optional[bool] = None
     body: Optional[str] = None
     notify_user: Optional[bool] = None
+    fork: Optional[bool] = None
+    agent_id: Optional[str] = None
+    update_agent_id: bool = False
+    context_source: Optional[AgentSessionRef] = None
 
 
 @dataclass
@@ -206,6 +207,7 @@ class CronRunResult:
     error: str = ""
     duration_ms: int = 0
     started_at_ms: Optional[int] = None   # 执行开始时间戳（毫秒）
+    agent_id: Optional[str] = None
 
 
 @dataclass

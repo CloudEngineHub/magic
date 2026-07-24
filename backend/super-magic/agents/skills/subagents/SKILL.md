@@ -57,12 +57,13 @@ from sdk.tool import tool
 
 result = tool.call("call_subagent", {
     "agent_name": str,       # required; use "" when fork=True to inherit the current Agent
-    "agent_id": str,         # required; stable conversation/session identity
+    "agent_id": str,         # required; base ID for new sessions, exact final ID when resuming
     "task_label": str,       # required; user-facing label in the user's language
     "prompt": str,           # required
     "model_id": str,         # optional, defaults to inheriting the caller's model
     "background": bool,      # optional, default False
     "fork": bool,            # optional, default False
+    "resume": bool,          # optional, default False
 })
 ```
 
@@ -87,11 +88,22 @@ Other `.agent` files (e.g. `data-analyst`) can also be used by name.
 
 ### agent_id
 
-Human-readable session identity, e.g. `market-research-phase1`.
+For a new session, provide a human-readable base ID such as `market-research`.
 
-- Same `agent_id` → resume the existing conversation (same chat history)
-- Different `agent_id` → fresh start with empty history
+- With `resume=False`, the tool always creates a new session, appends a sequence number, and returns the final ID, such as `market-research-2`.
+- The requested base ID is not the session address. Read the exact final ID from `result.data["agent_id"]` or `result.content`.
+- With `resume=True`, pass the exact final ID returned by the earlier call. The session must already exist.
+- Never infer that a repeated base ID should resume an old session.
 - Name by responsibility, not by sequence: `ppt-outline`, `shell-install-ffmpeg` — not `task1`, `worker-a`
+
+### Session lifecycle
+
+- New blank session: `fork=False, resume=False`
+- New session inheriting the current context: `fork=True, resume=False`
+- Continue an existing session: `fork=False, resume=True`
+- `fork=True, resume=True` is invalid
+
+Fork creates a new independent session and never overwrites an existing one. Resume is always explicit because the caller may not know that an older session used the same name.
 
 ### task_label
 
@@ -103,7 +115,7 @@ User-facing label shown directly in the UI for this delegated task. It is not th
 
 ### prompt
 
-The sub-agent has **no access to the parent's conversation history**. The prompt must be fully self-contained. Include:
+With `fork=False, resume=False`, the sub-agent has no access to the parent's conversation history. The prompt must be fully self-contained. Include:
 
 - The exact task
 - Expected output format
@@ -138,11 +150,18 @@ Use `background=True` in two scenarios:
 ### fork
 
 - `False` (default): sub-agent starts with empty conversation history. The `prompt` must be fully self-contained.
-- `True`: sub-agent inherits the parent's full conversation history and must use the same Agent as the parent. Set `agent_name=""` so the runtime inherits the current Agent. The `prompt` is a **directive** (what to do), not a briefing (what happened) — the fork already has full context.
+- `True`: creates a new sub-agent that inherits the parent's full conversation history and uses the same Agent as the parent. Set `agent_name=""` and keep `resume=False`. The `prompt` is a directive, not a briefing, because the fork already has full context.
 
 If `fork=true` receives a non-empty `agent_name` that does not identify the current Agent, the runtime ignores it, uses the current Agent, and includes a short warning in `result.content`.
 
 Fork mode is useful when the sub-agent needs to reason over the same conversation context as the parent, e.g. generating a summary, extracting decisions, or continuing a task in isolation.
+
+### resume
+
+- `False` (default): create a new session. `agent_id` is a base name; use the final ID returned by the tool for all later references.
+- `True`: continue the exact existing session named by the final `agent_id`. Keep `fork=False`.
+
+After every `call_subagent`, treat the returned final `agent_id` as authoritative. Use it for `wait_for_subagents` and any later resume call.
 
 ## Tool: wait_for_subagents
 
@@ -185,6 +204,7 @@ Awaits all listed agents together. `result.content` uses this format per agent:
 ```
 [i/total] task_label: status
 Sub-agent: agent_name/agent_id
+To continue this exact session, call call_subagent with agent_id `agent_id`, resume=true, and fork=false.
 Result:
 ```final output```
 ```
@@ -232,9 +252,11 @@ Return:
 3. one related file worth reading next
 Do not modify files.""",
     "background": False,
+    "resume": False,
 })
 
 print(result.content)
+final_agent_id = result.data["agent_id"]
 ```
 
 ## Parallel Example
@@ -244,19 +266,22 @@ Dispatch first (sequential calls, concurrent execution):
 ```python
 from sdk.tool import tool
 
-def dispatch(agent_id, task_label, prompt):
-    tool.call("call_subagent", {
+def dispatch(agent_id_base, task_label, prompt):
+    result = tool.call("call_subagent", {
         "agent_name": "search",
-        "agent_id": agent_id,
+        "agent_id": agent_id_base,
         "task_label": task_label,
         "prompt": prompt,
         "background": True,
+        "resume": False,
     })
+    print(result.content)
+    return result.data["agent_id"]
 
-dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
+competitors_id = dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
 For each, return: product name, target users, main differentiator, and source URL.
 Focus on product launches, review sites, and tech media from the past 12 months.""")
-dispatch("research-market-signals", "market signals", """Search the web for recent market signals in this product space.
+signals_id = dispatch("research-market-signals", "market signals", """Search the web for recent market signals in this product space.
 Return:
 1. notable user needs or pain points (with source URLs)
 2. recurring themes across articles or community discussions
@@ -267,7 +292,7 @@ Then wait:
 
 ```python
 result = tool.call("wait_for_subagents", {
-    "agent_ids": ["research-competitors", "research-market-signals"],
+    "agent_ids": [competitors_id, signals_id],
     "timeout": 60,
 })
 
@@ -286,8 +311,8 @@ Use `pattern` to implement interleaved parent/sub-agent execution. The sub-agent
 ```python
 from sdk.tool import tool
 
-# Dispatch a sub-agent that outputs checkpoints
-tool.call("call_subagent", {
+# Dispatch a sub-agent that outputs checkpoints and keep its final ID
+dispatch_result = tool.call("call_subagent", {
     "agent_name": "explore",
     "agent_id": "long-research",
     "task_label": "long research",
@@ -295,11 +320,13 @@ tool.call("call_subagent", {
 [CHECKPOINT: section_name]
 followed by your findings so far. Continue until all sections are done.""",
     "background": True,
+    "resume": False,
 })
+long_research_id = dispatch_result.data["agent_id"]
 
 # Wait for the first checkpoint
 result = tool.call("wait_for_subagents", {
-    "agent_ids": ["long-research"],
+    "agent_ids": [long_research_id],
     "timeout": 120,
     "pattern": r"\[CHECKPOINT:",
 })
@@ -310,6 +337,7 @@ result = tool.call("wait_for_subagents", {
 
 Rules:
 - `pattern` is a Python regex matched against each new assistant message (after the wait call starts)
+- `pattern` applies only when `timeout != 0` and `kill=False`
 - Only messages produced AFTER the wait call are scanned — no false triggers from historical content
 - When matched, `result.data["results"][i]["matched_content"]` contains the full message that triggered the match
 - The sub-agent continues running after a pattern match — call `wait_for_subagents` again to keep collecting, or use `kill=True` to terminate if the task is done
@@ -322,7 +350,9 @@ Before dispatching:
 
 - Is delegation actually necessary?
 - Does the prompt contain all required context (no reference to parent conversation)?
-- Is `agent_id` stable, human-readable, and unique to this task branch?
+- For a new session, is `agent_id` a human-readable base name and `resume=False`?
+- For waiting or resuming, are you using the exact final `agent_id` returned by `call_subagent`?
+- For an existing session, is `resume=True` and `fork=False`?
 - Is `task_label` concise, distinct, and written in the same language as the user's request?
 - Is the output target explicit and conflict-free?
 - If `background=True`, is there a matching `wait_for_subagents`?

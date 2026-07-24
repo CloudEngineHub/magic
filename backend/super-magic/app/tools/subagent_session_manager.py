@@ -45,6 +45,15 @@ class SubagentSessionManager:
                 self._sessions[key] = handle
             return handle
 
+    async def has_session(self, agent_name: str, agent_id: str) -> bool:
+        """检查当前进程是否正在运行该会话；已结束会话由持久化文件判断。"""
+        key = self._make_key(agent_name, agent_id)
+        async with self._registry_lock:
+            handle = self._sessions.get(key)
+            return handle is not None and (
+                handle.task is not None or handle.agent_context is not None
+            )
+
     async def bind_run(
         self,
         agent_name: str,

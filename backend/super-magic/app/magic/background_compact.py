@@ -187,10 +187,15 @@ async def start_background_compact(
     )
 
     parent_context_id = getattr(agent_context, "context_id", "") or "unknown-parent"
-    agent_id = f"bg-compact-{parent_context_id}-{generation[:12]}"
     target = agent_context.get_agent_target()
     if target is None:
         raise RuntimeError("Background compact source has no AgentTarget")
+
+    from app.service.agent_session_id_service import AgentSessionIdService
+    agent_id = await AgentSessionIdService.allocate(
+        target.agent_name,
+        f"bg-compact-{parent_context_id}-{generation[:12]}",
+    )
 
     from app.service.agent_runner import (
         IsolatedAgentModelRequest,

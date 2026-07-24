@@ -1,6 +1,8 @@
 from dataclasses import asdict
 
+from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.logger import get_logger
+from app.core.horizon.store import HorizonStore
 from app.path_manager import PathManager
 from app.tools.subagent_runtime_models import (
     SubagentSessionConfigBlock,
@@ -112,6 +114,41 @@ class SubagentRuntimeStore:
         document = await cls.load_document(state.agent_name, state.agent_id)
         document.subagent = state
         await cls.save_document(state.agent_name, state.agent_id, document)
+
+    @classmethod
+    async def session_exists(cls, agent_name: str, agent_id: str) -> bool:
+        """任一正式上下文文件存在，都表示该会话 ID 已被占用。"""
+        chat_history_dir = PathManager.get_subagents_chat_history_dir()
+        paths = (
+            ChatHistory.history_path_for_session(agent_name, agent_id, chat_history_dir),
+            ChatHistory.session_path_for_session(agent_name, agent_id, chat_history_dir),
+            HorizonStore.path_for_session(agent_name, agent_id, chat_history_dir),
+        )
+        for path in paths:
+            if await async_exists(path):
+                return True
+        return False
+
+    @classmethod
+    async def list_agent_ids(cls) -> set[str]:
+        """列出正式上下文文件中出现过的全部 Agent ID。"""
+        chat_history_dir = PathManager.get_subagents_chat_history_dir()
+        if not await async_exists(chat_history_dir):
+            return set()
+
+        agent_ids: set[str] = set()
+        suffixes = (".session.json", ".horizon.json", ".json")
+        for path in await async_iterdir(chat_history_dir):
+            name = path.name
+            for suffix in suffixes:
+                if not name.endswith(suffix):
+                    continue
+                session_name = name[:-len(suffix)]
+                if "<" not in session_name or not session_name.endswith(">"):
+                    break
+                agent_ids.add(session_name.rsplit("<", 1)[1][:-1])
+                break
+        return agent_ids
 
     @classmethod
     async def find_states_by_agent_id(cls, agent_id: str) -> list[SubagentSessionState]:

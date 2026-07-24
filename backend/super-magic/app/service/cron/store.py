@@ -265,7 +265,7 @@ async def write_result_file(job: CronJob, result: CronRunResult) -> Path:
         f"finished_at: \"{finished_at_local.isoformat()}\"\n"
         f"status: {result.status}\n"
         f"duration_ms: {result.duration_ms}\n"
-        f"agent_id: cron-{job.id}\n"
+        f"agent_id: {json.dumps(result.agent_id or '-', ensure_ascii=False)}\n"
         f"---\n\n"
         f"{body}\n"
     )
@@ -356,6 +356,19 @@ def patch_job_md(
             payload["notify_user"] = False
         else:
             payload.pop("notify_user", None)
+    if patch.fork is not None:
+        payload["fork"] = patch.fork
+        if patch.fork:
+            if patch.context_source is None:
+                raise ValueError("fork cron update requires context_source")
+            payload["context_source"] = patch.context_source.to_payload()
+        else:
+            payload.pop("context_source", None)
+    if patch.update_agent_id:
+        if patch.agent_id:
+            payload["agent_id"] = patch.agent_id
+        else:
+            payload.pop("agent_id", None)
     meta["payload"] = payload
 
     new_body = patch.body.strip() if patch.body is not None else old_body
