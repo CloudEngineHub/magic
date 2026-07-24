@@ -23,6 +23,7 @@ import MobileMenuItem from "./components/MobileMenuItem"
 import { cn } from "@/lib/utils"
 import {
 	canTogglePendingItem,
+	canTogglePendingLeafItem,
 	getMentionItemSelectionKey,
 	getPendingSourceRootId,
 	getSubmittablePendingEntries,
