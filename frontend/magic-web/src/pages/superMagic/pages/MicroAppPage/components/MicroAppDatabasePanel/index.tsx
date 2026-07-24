@@ -267,7 +267,7 @@ export default function MicroAppDatabasePanel({
 			? selectedTable
 			: tables.find((table) => table.id === permissionEditor?.tableId) || null
 	const subtitle = selectedTable
-		? `${selectedTable.table_key} · ${enabledColumns.length} ${t("microAppPage.databasePanel.columns")}`
+		? `${enabledColumns.length} ${t("microAppPage.databasePanel.columns")}`
 		: projectName || ""
 	const canEditSelectedRow = selectedCells.rowIds.length === 1
 	const canDeleteSelectedRows = selectedCells.rowIds.length > 0

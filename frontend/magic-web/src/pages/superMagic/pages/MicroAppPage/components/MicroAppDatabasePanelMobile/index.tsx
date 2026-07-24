@@ -48,7 +48,7 @@ export default function MicroAppDatabasePanelMobile({
 	const title = selectedTable
 		? selectedTable.table_name || selectedTable.table_key
 		: t("microAppPage.databasePanel.title")
-	const subtitle = selectedTable?.table_key || projectName || ""
+	const subtitle = selectedTable ? selectedTable.description || "" : projectName || ""
 
 	return (
 		<MagicPopup

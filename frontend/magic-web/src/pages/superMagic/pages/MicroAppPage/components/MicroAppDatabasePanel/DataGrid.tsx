@@ -633,8 +633,7 @@ export default function DataGrid({
 											{column.name}
 										</span>
 										<span className="block truncate text-[11px] font-normal text-muted-foreground">
-											{column.key}
-											{column.type ? ` · ${column.type}` : ""}
+											{column.type || "-"}
 										</span>
 									</span>
 									<SortIcon columnKey={column.key} sort={sort} />

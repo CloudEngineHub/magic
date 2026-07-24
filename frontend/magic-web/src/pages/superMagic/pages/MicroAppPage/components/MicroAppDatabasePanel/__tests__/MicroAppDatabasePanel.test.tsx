@@ -151,6 +151,9 @@ describe("MicroAppDatabasePanel", () => {
 
 		await screen.findByText("Apple")
 		expect(screen.getAllByText("Survey").length).toBeGreaterThan(0)
+		expect(document.body).not.toHaveTextContent("survey")
+		expect(document.body).not.toHaveTextContent("brand")
+		expect(document.body).toHaveTextContent("text")
 		expect(mocks.getTables).toHaveBeenCalledWith("project-1")
 		expect(mocks.getTable).toHaveBeenCalledWith("project-1", "table-1")
 		expect(mocks.queryRows).toHaveBeenCalledWith(

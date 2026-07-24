@@ -159,11 +159,8 @@ export default function TableList({
 											</Badge>
 										) : null}
 									</span>
-									<span className="block truncate text-xs text-muted-foreground">
-										{table.table_key}
-									</span>
 									{table.description ? (
-										<span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+										<span className="line-clamp-2 block text-xs text-muted-foreground">
 											{table.description}
 										</span>
 									) : null}

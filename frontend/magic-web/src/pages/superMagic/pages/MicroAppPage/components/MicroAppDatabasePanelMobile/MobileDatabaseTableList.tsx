@@ -95,9 +95,11 @@ export default function MobileDatabaseTableList({
 								<p className="truncate text-base font-medium leading-6 text-foreground">
 									{table.table_name || table.table_key}
 								</p>
-								<p className="truncate text-xs leading-5 text-muted-foreground">
-									{table.description || table.table_key}
-								</p>
+								{table.description ? (
+									<p className="truncate text-xs leading-5 text-muted-foreground">
+										{table.description}
+									</p>
+								) : null}
 							</div>
 							<ChevronRight
 								className="size-4 shrink-0 text-muted-foreground"

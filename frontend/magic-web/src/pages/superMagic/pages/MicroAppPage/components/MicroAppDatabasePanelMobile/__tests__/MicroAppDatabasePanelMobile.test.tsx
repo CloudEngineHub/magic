@@ -117,6 +117,7 @@ describe("MicroAppDatabasePanelMobile", () => {
 			"bottom",
 		)
 		expect(screen.getByTestId("mobile-magicbase-table-list")).toBeInTheDocument()
+		expect(document.body).not.toHaveTextContent("tasks")
 
 		fireEvent.click(screen.getByTestId("mobile-magicbase-table-table-1"))
 
@@ -125,6 +126,7 @@ describe("MicroAppDatabasePanelMobile", () => {
 		).toBeInTheDocument()
 		expect(screen.getByText("任务")).toBeInTheDocument()
 		expect(screen.getByText("写测试")).toBeInTheDocument()
+		expect(document.body).not.toHaveTextContent("tasks")
 	})
 
 	it("closes through the mobile popup header", () => {

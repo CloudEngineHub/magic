@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { RouteName } from "@/routes/constants"
 import MicroAppsPage from "../index"
 
 const mocks = vi.hoisted(() => ({
@@ -49,15 +50,59 @@ vi.mock("../hooks/useMicroAppsPage", () => ({
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
-		createMicroAppProject: vi.fn(),
 		getMicroAppProjectByProjectId: mocks.getMicroAppProjectByProjectId,
 	},
+}))
+
+vi.mock("../components/MicroAppCreatePrompt", () => ({
+	default: ({
+		onCreated,
+		onFocusChange,
+	}: {
+		onCreated: (projectId: string) => void
+		onFocusChange?: (focused: boolean) => void
+	}) => (
+		<button
+			type="button"
+			data-testid="mock-create-prompt"
+			onClick={() => onCreated("new-app")}
+			onFocus={() => onFocusChange?.(true)}
+			onBlur={() => onFocusChange?.(false)}
+		>
+			create
+		</button>
+	),
+}))
+
+vi.mock("../components/MicroAppFloatingBackdrop", () => ({
+	default: ({ active }: { active?: boolean }) => (
+		<div data-testid="mock-floating-backdrop" data-active={active} />
+	),
+}))
+
+vi.mock("../components/MicroAppCard", () => ({
+	default: ({
+		title,
+		onClick,
+		testId,
+	}: {
+		title: string
+		onClick: () => void
+		testId: string
+	}) => (
+		<button type="button" data-testid={testId} onClick={onClick}>
+			{title}
+		</button>
+	),
 }))
 
 describe("MicroAppsPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.spyOn(window, "open").mockImplementation(() => null)
+		mocks.getMicroAppProjectByProjectId.mockImplementation((projectId: string) =>
+			Promise.resolve({ app_id: projectId === "new-app" ? "app-new" : "app-1" }),
+		)
 		mocks.useMicroAppsPage.mockReturnValue({
 			workspace: { id: "workspace-1", name: "Micro Apps" },
 			projects: [
@@ -69,10 +114,9 @@ describe("MicroAppsPage", () => {
 			],
 			publishedProjects: [
 				{
-					app_id: "app-2",
 					project_id: "project-2",
 					project_name: "Published App",
-					resource_id: "resource-2",
+					app_id: "app-2",
 					share_type: ShareType.Public,
 				},
 			],
@@ -104,13 +148,12 @@ describe("MicroAppsPage", () => {
 		expect(mocks.navigate).not.toHaveBeenCalled()
 	})
 
-	it("prefers the stable app_id route over a stale api access_url", () => {
+	it("opens api access_url before falling back to local share route", () => {
 		mocks.useMicroAppsPage.mockReturnValue({
 			workspace: { id: "workspace-1", name: "Micro Apps" },
 			projects: [],
 			publishedProjects: [
 				{
-					app_id: "app-2",
 					project_id: "project-2",
 					project_name: "Published App",
 					resource_id: "resource-2",
@@ -126,13 +169,60 @@ describe("MicroAppsPage", () => {
 		render(<MicroAppsPage />)
 
 		fireEvent.click(screen.getByTestId("micro-apps-tab-published"))
-		fireEvent.click(screen.getByTestId("micro-apps-published-app-2"))
+		fireEvent.click(screen.getByTestId("micro-apps-published-project-2"))
 
 		expect(window.open).toHaveBeenCalledWith(
-			`${window.location.origin}/micro-app/app-2`,
+			"https://example.com/micro-app/resource-2",
 			"_blank",
 			"noopener,noreferrer",
 		)
 		expect(mocks.navigate).not.toHaveBeenCalled()
+	})
+
+	it("enters the new micro app after the hero prompt creates it", async () => {
+		render(<MicroAppsPage />)
+
+		fireEvent.click(screen.getByTestId("mock-create-prompt"))
+
+		expect(mocks.getMicroAppProjectByProjectId).toHaveBeenCalledWith("new-app")
+		await waitFor(() => {
+			expect(mocks.navigate).toHaveBeenCalledWith({
+				name: RouteName.MicroApp,
+				params: { appId: "app-new" },
+			})
+		})
+	})
+
+	it("renders the desktop page inside a bordered rounded container", () => {
+		render(<MicroAppsPage />)
+
+		expect(screen.queryByText("microAppsPage.eyebrow")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-hero-title")).toHaveClass("mx-auto")
+		expect(screen.getByText("microAppsPage.heroCapabilityProduct")).toBeInTheDocument()
+		expect(screen.getByTestId("mock-create-prompt").parentElement).toHaveClass("mx-auto")
+		expect(screen.getByTestId("micro-apps-hero")).toHaveClass("min-h-[70%]")
+		expect(screen.getByTestId("micro-apps-page")).toHaveClass(
+			"rounded-2xl",
+			"border",
+			"border-border/70",
+		)
+	})
+
+	it("emphasizes the title and backdrop while the hero prompt is focused", () => {
+		render(<MicroAppsPage />)
+
+		const title = screen.getByTestId("micro-app-hero-title")
+		const prompt = screen.getByTestId("mock-create-prompt")
+		const backdrop = screen.getByTestId("mock-floating-backdrop")
+		expect(title).toHaveAttribute("data-active", "false")
+		expect(backdrop).toHaveAttribute("data-active", "false")
+
+		fireEvent.focus(prompt)
+		expect(title).toHaveAttribute("data-active", "true")
+		expect(backdrop).toHaveAttribute("data-active", "true")
+
+		fireEvent.blur(prompt)
+		expect(title).toHaveAttribute("data-active", "false")
+		expect(backdrop).toHaveAttribute("data-active", "false")
 	})
 })

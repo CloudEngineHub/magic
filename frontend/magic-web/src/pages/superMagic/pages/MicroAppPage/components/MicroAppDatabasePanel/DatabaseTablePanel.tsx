@@ -109,7 +109,7 @@ export default function DatabaseTablePanel({
 								t("microAppPage.databasePanel.loadingTable")}
 						</h3>
 						<p className="mt-1 truncate text-xs text-muted-foreground">
-							{selectedTable?.description || selectedTable?.table_key || "-"}
+							{selectedTable?.description || "-"}
 						</p>
 					</div>
 					<div className="shrink-0 text-xs text-muted-foreground">

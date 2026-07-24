@@ -3338,10 +3338,25 @@
 	"microAppsPage": {
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
-		"emptyDescription": "There are no projects in this workspace.",
+		"draftBadge": "In progress",
+		"emptyDescription": "Describe your idea above to create your first micro app.",
 		"emptyTitle": "No micro app projects",
 		"errorDescription": "Failed to load the project list. Please retry.",
 		"errorTitle": "Load failed",
+		"galleryDescription": "Continue building your projects or open apps that have been published.",
+		"galleryTitle": "App space",
+		"heroCapabilityAgent": "Agent",
+		"heroCapabilityData": "Data",
+		"heroCapabilityMcp": "MCP",
+		"heroCapabilityProduct": "Micro App",
+		"heroCapabilitySkill": "Skill",
+		"heroDescription": "Read files, use databases, and connect to DingTalk and other apps.",
+		"heroDescriptionMobile": "Read files, use databases, and connect to more apps.",
+		"heroPlaceholder": "For example: Build a customer follow-up dashboard for a sales team with stages, owners, and next-contact dates...",
+		"heroTitle": "Turn one prompt into a Micro App ready to use",
+		"heroTitleBetween": "into a ready-to-use",
+		"heroTitlePrefix": "Turn one prompt",
+		"heroTitleProduct": "Micro App",
 		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
 		"publishedEmptyTitle": "No accessible micro apps",
 		"refresh": "Refresh",
@@ -3353,7 +3368,8 @@
 		"subtitle": "Projects in the current workspace",
 		"tabProjects": "My Projects",
 		"tabPublished": "Published Apps",
-		"title": "Micro Apps"
+		"title": "Micro Apps",
+		"updatedAt": "Updated {{date}}"
 	},
 	"mobile": {
 		"apps": {

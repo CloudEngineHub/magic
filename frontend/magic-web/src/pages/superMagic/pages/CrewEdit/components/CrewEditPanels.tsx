@@ -13,7 +13,10 @@ import { createPortal } from "react-dom"
 import { cn } from "@/lib/tiptap-utils"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
 import type { TopicDesktopPanelsHistoryLayout } from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
-import { TOPIC_HISTORY_PANEL_WIDTH } from "@/pages/superMagic/constants/resizablePanel"
+import {
+	DEFAULT_MIN_WIDTH,
+	TOPIC_HISTORY_PANEL_WIDTH,
+} from "@/pages/superMagic/constants/resizablePanel"
 
 const COLLAPSED_MESSAGE_PANEL_WIDTH = 40
 const RESIZE_HANDLE_WIDTH = 8
@@ -52,18 +55,16 @@ interface CrewEditPanelsProps {
 	hideMessagePanel?: boolean
 	/** Width of the left sidebar in px */
 	sidebarWidthPx: number
-	/** Width of the center detail panel in px (used when visible) */
-	detailPanelWidthPx: number
 	/** Width of right conversation panel in px (when expanded) */
 	messagePanelWidthPx: number
 	/** Called when user starts dragging the sidebar resize handle */
 	onSidebarResizeStart?: (clientX: number) => void
-	/** Called when user starts dragging the detail panel resize handle */
-	onDetailResizeStart?: (clientX: number) => void
+	/** Called when user starts dragging the conversation panel resize handle */
+	onMessagePanelResizeStart?: (clientX: number) => void
 	/** Whether the sidebar handle is currently being dragged */
 	isDraggingSidebar?: boolean
-	/** Whether the detail handle is currently being dragged */
-	isDraggingDetail?: boolean
+	/** Whether the conversation panel handle is currently being dragged */
+	isDraggingMessagePanel?: boolean
 	/** Keep detail subtree mounted when hidden to preserve refs */
 	keepDetailMountedWhenHidden?: boolean
 	/** Optional history topic layout rendered to the right of conversation */
@@ -90,17 +91,16 @@ function CrewEditPanels({
 	isConversationPanelCollapsed = false,
 	hideMessagePanel = false,
 	sidebarWidthPx,
-	detailPanelWidthPx,
 	messagePanelWidthPx,
 	onSidebarResizeStart,
-	onDetailResizeStart,
+	onMessagePanelResizeStart,
 	isDraggingSidebar = false,
-	isDraggingDetail = false,
+	isDraggingMessagePanel = false,
 	keepDetailMountedWhenHidden = false,
 	historyLayout,
 }: CrewEditPanelsProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
-	const detailPanelWidthRef = useRef(detailPanelWidthPx)
+	const messagePanelWidthRef = useRef(messagePanelWidthPx)
 	const minSizeReachedPointerXRef = useRef<number | null>(null)
 	const minSizeReachedPanelWidthRef = useRef<number | null>(null)
 	const collapseMonitorCleanupRef = useRef<(() => void) | null>(null)
@@ -113,6 +113,10 @@ function CrewEditPanels({
 		? (messagePanel.props as { onExpandConversationPanel?: () => void })
 				.onExpandConversationPanel
 		: undefined
+
+	useEffect(() => {
+		messagePanelWidthRef.current = messagePanelWidthPx
+	}, [messagePanelWidthPx])
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -131,10 +135,6 @@ function CrewEditPanels({
 			observer.disconnect()
 		}
 	}, [])
-
-	useEffect(() => {
-		detailPanelWidthRef.current = detailPanelWidthPx
-	}, [detailPanelWidthPx])
 
 	const resetMinSizeReachedTrackers = useCallback(() => {
 		minSizeReachedPointerXRef.current = null
@@ -172,23 +172,27 @@ function CrewEditPanels({
 
 		stopCollapseMonitor()
 
-		/** Tracks pointer movement after the detail panel reaches its minimum width. */
+		/** Tracks pointer movement after the conversation panel reaches its minimum width. */
 		const handlePointerMove = (event: PointerEvent) => {
-			const currentDetailWidth = detailPanelWidthRef.current
+			const currentMessageWidth = messagePanelWidthRef.current
 
-			if (currentDetailWidth > DETAIL_PANEL_MIN_WIDTH + COLLAPSE_TRIGGER_SIZE_EPSILON) {
+			if (
+				currentMessageWidth >
+				DEFAULT_MIN_WIDTH.MESSAGE_PANEL + COLLAPSE_TRIGGER_SIZE_EPSILON
+			) {
 				resetMinSizeReachedTrackers()
 				return
 			}
 
 			if (minSizeReachedPointerXRef.current === null) {
 				minSizeReachedPointerXRef.current = event.clientX
-				minSizeReachedPanelWidthRef.current = currentDetailWidth
+				minSizeReachedPanelWidthRef.current = currentMessageWidth
 				return
 			}
 
-			const dragDistancePx = minSizeReachedPointerXRef.current - event.clientX
-			const panelWidthAtMinReached = minSizeReachedPanelWidthRef.current ?? currentDetailWidth
+			const dragDistancePx = event.clientX - minSizeReachedPointerXRef.current
+			const panelWidthAtMinReached =
+				minSizeReachedPanelWidthRef.current ?? currentMessageWidth
 			if (
 				!shouldAutoCollapseByDragDistance({
 					dragDistancePx,
@@ -239,8 +243,8 @@ function CrewEditPanels({
 	])
 
 	useEffect(() => {
-		if (!isDraggingDetail) stopCollapseMonitor()
-	}, [isDraggingDetail, stopCollapseMonitor])
+		if (!isDraggingMessagePanel) stopCollapseMonitor()
+	}, [isDraggingMessagePanel, stopCollapseMonitor])
 
 	useEffect(() => {
 		return () => {
@@ -319,11 +323,14 @@ function CrewEditPanels({
 	}, [historyLayout, isDrawerTopicHistory])
 
 	const panelResizeTransition =
-		isDraggingSidebar || isDraggingDetail
+		isDraggingSidebar || isDraggingMessagePanel
 			? "none"
 			: "width 300ms cubic-bezier(0.4, 0, 0.2, 1), min-width 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease"
 	const messagePanelTransition =
-		isDraggingSidebar || isDraggingDetail || isConversationPanelCollapsed || hideMessagePanel
+		isDraggingSidebar ||
+		isDraggingMessagePanel ||
+		isConversationPanelCollapsed ||
+		hideMessagePanel
 			? panelResizeTransition
 			: "opacity 220ms ease"
 	const targetRightHandleWidth =
@@ -335,11 +342,10 @@ function CrewEditPanels({
 		: showDetailPanel
 			? isConversationPanelCollapsed
 				? COLLAPSED_MESSAGE_PANEL_WIDTH
-				: undefined
-			: undefined
-	const targetMessagePanelFlexBasis =
-		showDetailPanel && !isConversationPanelCollapsed && !hideMessagePanel
-			? messagePanelWidthPx
+				: Math.min(
+						messagePanelWidthPx,
+						Math.max(0, middleContainerWidth - RESIZE_HANDLE_WIDTH),
+					)
 			: undefined
 	const targetDetailPanelWidth = !showDetailPanel
 		? 0
@@ -347,7 +353,7 @@ function CrewEditPanels({
 			? "100%"
 			: isConversationPanelCollapsed
 				? `calc(100% - ${COLLAPSED_MESSAGE_PANEL_WIDTH + targetRightHandleWidth}px)`
-				: detailPanelWidthPx
+				: `calc(100% - ${targetRightHandleWidth + (targetMessagePanelWidth ?? 0)}px)`
 
 	function renderTopicHistoryShell(mode: Exclude<TopicHistoryMode, "hidden">) {
 		const isDrawer = mode === "drawer"
@@ -442,13 +448,13 @@ function CrewEditPanels({
 							onResizeStart={(clientX) => {
 								resetMinSizeReachedTrackers()
 								startCollapseMonitor()
-								onDetailResizeStart?.(clientX)
+								onMessagePanelResizeStart?.(clientX)
 							}}
 							className={cn(
 								"h-full w-full shrink-0 transition-opacity duration-150",
 								(isConversationPanelCollapsed || !showDetailPanel) &&
 									"pointer-events-none",
-								isDraggingDetail && "before:opacity-100",
+								isDraggingMessagePanel && "before:opacity-100",
 							)}
 						/>
 					</div>
@@ -458,17 +464,16 @@ function CrewEditPanels({
 					className={cn(
 						"h-full min-w-0 overflow-hidden",
 						!showDetailPanel && "flex-1",
-						showDetailPanel &&
-							!hideMessagePanel &&
-							(isConversationPanelCollapsed ? "shrink-0" : "flex-1"),
+						showDetailPanel && !hideMessagePanel && "shrink-0",
 					)}
 					style={{
 						width: targetMessagePanelWidth,
 						minWidth:
-							showDetailPanel && isConversationPanelCollapsed && !hideMessagePanel
+							showDetailPanel && !hideMessagePanel ? targetMessagePanelWidth : 0,
+						flexBasis:
+							showDetailPanel && !hideMessagePanel
 								? targetMessagePanelWidth
-								: 0,
-						flexBasis: targetMessagePanelFlexBasis,
+								: undefined,
 						opacity: showDetailPanel ? 1 : 0.995,
 						willChange: "width, opacity",
 						transition: messagePanelTransition,
