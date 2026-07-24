@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { AudioProjectListItem } from "@/types/audioProject"
+import { RouteName } from "@/routes/constants"
 
 const mockStore = {
 	list: [] as AudioProjectListItem[],
@@ -27,6 +28,7 @@ const getAttachmentsByProjectIdMock = vi.fn()
 const processAttachmentDataMock = vi.fn()
 const setExternallyHiddenMock = vi.fn()
 const setExpandedMock = vi.fn()
+const navigateMock = vi.fn()
 let intersectionObserverCallback: IntersectionObserverCallback | null = null
 
 vi.mock("react-i18next", () => ({
@@ -48,7 +50,7 @@ vi.mock("sonner", () => ({
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
-	default: () => vi.fn(),
+	default: () => navigateMock,
 }))
 
 vi.mock("@/apis", () => ({
@@ -127,17 +129,26 @@ vi.mock("../components/MobileRecordingCard", () => ({
 vi.mock("../components/MobileRecordingMoreSheet", () => ({
 	MobileRecordingMoreSheet: ({
 		isOpen,
+		onOpenProject,
 		onShare,
 		onDelete,
 		item,
 	}: {
 		isOpen: boolean
+		onOpenProject?: (item: AudioProjectListItem) => void
 		onShare?: () => void
 		onDelete?: (projectId: string) => Promise<boolean>
 		item?: AudioProjectListItem | null
 	}) =>
 		isOpen ? (
 			<div>
+				<button
+					type="button"
+					data-testid="mobile-recording-more-open-project"
+					onClick={() => item && onOpenProject?.(item)}
+				>
+					Open project
+				</button>
 				<button type="button" data-testid="mobile-recording-more-share" onClick={onShare}>
 					Share
 				</button>
@@ -251,6 +262,7 @@ describe("AudioRecordingListPanel", () => {
 		processAttachmentDataMock.mockReset()
 		setExternallyHiddenMock.mockReset()
 		setExpandedMock.mockReset()
+		navigateMock.mockReset()
 		intersectionObserverCallback = null
 
 		vi.stubGlobal(
@@ -523,6 +535,22 @@ describe("AudioRecordingListPanel", () => {
 			expect(mockStore.deleteProject).toHaveBeenCalledWith("proj-alpha-001")
 		})
 		expect(onResolveOptimisticItem).toHaveBeenCalledWith("proj-alpha-001")
+	})
+
+	it("navigates from the mobile more-actions sheet to the recording project route", () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [listItem]
+		listHookState.moreTarget = listItem
+
+		render(<AudioRecordingListPanel />)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-more-open-project"))
+
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: "proj-alpha-001" },
+		})
 	})
 
 	it("opens the shared project share sheet from the list more-actions share entry", async () => {
