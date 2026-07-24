@@ -2594,6 +2594,7 @@
 		"updateSuccess": "队列消息已更新"
 	},
 	"messageRenderError": {
+		"retry": "重试",
 		"title": "这条消息暂时无法显示"
 	},
 	"mobile": {

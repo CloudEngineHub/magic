@@ -564,15 +564,25 @@ const MessageList = observer(
 			const isUser = node?.role !== "assistant" && node?.role !== "tool"
 
 			return (
-				<MessageRenderErrorBoundary key={nodeKey} messageKey={nodeKey}>
-					<div
-						data-message-id={nodeKey}
-						data-message-role={node?.role || "user"}
-						className={cn("relative", isUser && USER_MESSAGE_ROW_CLASS)}
+				<div
+					key={nodeKey}
+					data-message-id={nodeKey}
+					data-message-role={node?.role || "user"}
+					className={cn("relative", isUser && USER_MESSAGE_ROW_CLASS)}
+				>
+					<MessageRenderErrorBoundary
+						messageKey={nodeKey}
+						resetKey={
+							typeof node?.content === "string"
+								? node.content
+								: typeof node?.status === "string"
+									? node.status
+									: undefined
+						}
 					>
 						{renderNodeContent(node, index, options)}
-					</div>
-				</MessageRenderErrorBoundary>
+					</MessageRenderErrorBoundary>
+				</div>
 			)
 		}
 
@@ -642,6 +652,15 @@ const MessageList = observer(
 												const firstRevokedUserMessageContent = (
 													<MessageRenderErrorBoundary
 														messageKey={firstRevokedUserMessageKey}
+														resetKey={
+															typeof firstRevokedUserMessage?.content ===
+															"string"
+																? firstRevokedUserMessage.content
+																: typeof firstRevokedUserMessage?.status ===
+																	  "string"
+																	? firstRevokedUserMessage.status
+																	: undefined
+														}
 													>
 														{enableRevokedUserMessageReedit &&
 														!isMobile ? (

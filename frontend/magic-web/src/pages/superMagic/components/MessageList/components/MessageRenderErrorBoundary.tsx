@@ -8,9 +8,10 @@ const logger = Logger.createLogger("MessageRenderErrorBoundary")
 
 interface MessageRenderErrorBoundaryProps extends PropsWithChildren {
 	messageKey: string
+	resetKey?: string | number | null
 }
 
-function MessageRenderFallback() {
+function MessageRenderFallback({ onRetry }: { onRetry: () => void }) {
 	const { t } = useTranslation("super")
 
 	return (
@@ -20,17 +21,26 @@ function MessageRenderFallback() {
 			role="status"
 		>
 			<IconAlertCircle className="size-4 shrink-0" aria-hidden="true" />
-			<span>{t("messageRenderError.title")}</span>
+			<span className="min-w-0 flex-1">{t("messageRenderError.title")}</span>
+			<button
+				type="button"
+				className="shrink-0 rounded px-1.5 py-0.5 text-xs text-foreground underline-offset-2 hover:underline"
+				onClick={onRetry}
+			>
+				{t("messageRenderError.retry")}
+			</button>
 		</div>
 	)
 }
 
 export default function MessageRenderErrorBoundary({
 	messageKey,
+	resetKey,
 	children,
 }: MessageRenderErrorBoundaryProps) {
 	return (
 		<ErrorBoundary
+			resetKeys={resetKey === undefined ? undefined : [resetKey]}
 			onError={(error, errorInfo) => {
 				logger.error("Message render failed", {
 					messageKey,
@@ -39,7 +49,9 @@ export default function MessageRenderErrorBoundary({
 					errorBoundary: "MessageRenderErrorBoundary",
 				})
 			}}
-			fallbackRender={() => <MessageRenderFallback />}
+			fallbackRender={({ resetErrorBoundary }) => (
+				<MessageRenderFallback onRetry={resetErrorBoundary} />
+			)}
 		>
 			{children}
 		</ErrorBoundary>

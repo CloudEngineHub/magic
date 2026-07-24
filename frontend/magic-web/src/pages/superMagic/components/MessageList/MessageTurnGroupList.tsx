@@ -48,6 +48,16 @@ export interface MessageTurnGroupListProps {
 	limitReached?: boolean
 }
 
+interface MessageRenderContentProps {
+	renderNode: MessageTurnGroupListProps["renderNode"]
+	node: SuperMagicMessageItem
+	index: number
+}
+
+function MessageRenderContent({ renderNode, node, index }: MessageRenderContentProps) {
+	return renderNode({ node, index })
+}
+
 const statusList = new Set(["completed", "failed", "error", "finished", "suspended"])
 
 function MessageTurnGroupListInner({
@@ -64,8 +74,6 @@ function MessageTurnGroupListInner({
 
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
-		const inner = renderNode({ node, index })
-		if (inner == null || inner === false) return null
 		const card = superMagicStore.getMessageNode(node?.app_message_id) as
 			| { status?: string }
 			| undefined
@@ -87,8 +95,17 @@ function MessageTurnGroupListInner({
 					isUser && USER_MESSAGE_ROW_CLASS,
 				)}
 			>
-				<MessageRenderErrorBoundary messageKey={nodeKey}>
-					{inner}
+				<MessageRenderErrorBoundary
+					messageKey={nodeKey}
+					resetKey={
+						typeof node?.content === "string"
+							? node.content
+							: typeof node?.status === "string"
+								? node.status
+								: undefined
+					}
+				>
+					<MessageRenderContent renderNode={renderNode} node={node} index={index} />
 				</MessageRenderErrorBoundary>
 			</div>
 		)

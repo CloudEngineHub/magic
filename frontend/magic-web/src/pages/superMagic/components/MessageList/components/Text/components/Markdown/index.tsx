@@ -3,15 +3,7 @@ import XMarkdown, {
 	type XMarkdownProps,
 } from "@ant-design/x-markdown"
 import { QRCode } from "antd"
-import {
-	memo,
-	useMemo,
-	useRef,
-	type ComponentProps as ReactComponentProps,
-	type CSSProperties,
-	type MutableRefObject,
-	type ReactElement,
-} from "react"
+import { memo, useMemo, useRef, type MutableRefObject, type ReactElement } from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
@@ -23,6 +15,7 @@ import {
 import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
+import { normalizeInlineStyle } from "./normalizeInlineStyle"
 import { cn } from "@/lib/utils"
 import type { MarkdownComponentProps } from "./types"
 import {
@@ -68,28 +61,6 @@ function isCodeLanguage(className: string | undefined, language: string): boolea
 		(token) =>
 			token === language || token === `lang-${language}` || token === `language-${language}`,
 	)
-}
-
-function normalizeInlineStyle(style: unknown): CSSProperties | undefined {
-	if (!style) return undefined
-	if (typeof style !== "string") return style as CSSProperties
-	if (typeof document === "undefined") return undefined
-
-	const styleElement = document.createElement("div")
-	styleElement.setAttribute("style", style)
-
-	const normalizedStyle: Record<string, string> = {}
-	for (let index = 0; index < styleElement.style.length; index += 1) {
-		const propertyName = styleElement.style.item(index)
-		if (!propertyName) continue
-
-		const reactPropertyName = propertyName.startsWith("--")
-			? propertyName
-			: propertyName.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase())
-		normalizedStyle[reactPropertyName] = styleElement.style.getPropertyValue(propertyName)
-	}
-
-	return normalizedStyle as CSSProperties
 }
 
 function resolveQRCodeValue(props: {

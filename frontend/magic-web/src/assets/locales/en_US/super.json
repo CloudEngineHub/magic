@@ -2594,6 +2594,7 @@
 		"updateSuccess": "Queue message updated successfully"
 	},
 	"messageRenderError": {
+		"retry": "Retry",
 		"title": "This message is temporarily unavailable"
 	},
 	"mobile": {

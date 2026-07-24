@@ -66,7 +66,7 @@ describe("MessageTurnGroupList", () => {
 	})
 
 	it("keeps other messages rendered when one message throws", () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		try {
 			const { container } = render(
 				<MessageTurnGroupList
@@ -85,6 +85,27 @@ describe("MessageTurnGroupList", () => {
 			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
 			expect(container).toHaveTextContent("这条消息暂时无法显示")
+		} finally {
+			consoleError.mockRestore()
+		}
+	})
+
+	it("keeps other messages rendered when the render callback throws", () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		try {
+			const { container } = render(
+				<MessageTurnGroupList
+					groups={messageTurnGroups}
+					isMobile
+					renderNode={({ node, index }) => {
+						if (node.app_message_id === "a1") throw new Error("render callback failed")
+						return renderNodeLabel({ node, index })
+					}}
+				/>,
+			)
+
+			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
+			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
 		} finally {
 			consoleError.mockRestore()
 		}
