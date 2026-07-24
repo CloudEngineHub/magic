@@ -1,35 +1,30 @@
 import { useCallback, useRef, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { Boxes, RefreshCw, Rocket } from "lucide-react"
-import { SuperMagicApi } from "@/apis"
-import type { PublishedMicroAppProjectItem } from "@/apis/modules/superMagic"
-import magicToast from "@/components/base/MagicToaster/utils"
+import { Loader2, Search } from "lucide-react"
+import type { MicroAppListScope } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
-import { RoutePath } from "@/constants/routes"
+import {
+	MicroAppEmptyIllustration,
+	MicroAppSearchEmptyIllustration,
+} from "@/pages/superMagic/components/MicroAppStateIllustration"
 import { MobileShellSidebarToggleButton } from "@/pages/superMagicMobile/components/MobileShell"
-import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCard from "./components/MicroAppCard"
 import MicroAppCreatePrompt from "./components/MicroAppCreatePrompt"
 import MicroAppFloatingBackdrop from "./components/MicroAppFloatingBackdrop"
 import MicroAppHeroTitle from "./components/MicroAppHeroTitle"
+import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
-type MicroAppsTab = "projects" | "published"
-
-function formatProjectTime(value?: string): string {
+function formatAppTime(value: string | null | undefined): string {
 	if (!value) return ""
-	return new Date(value).toLocaleDateString()
-}
-
-function getPublishedAppUrl(item: PublishedMicroAppProjectItem): string {
-	if (item.app_id) {
-		return `${window.location.origin}${RoutePath.MicroAppShare.replace(":appId", item.app_id)}`
-	}
-	return item.access_url || ""
+	const date = new Date(value)
+	return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
 }
 
 function MobileGridLoading() {
@@ -51,42 +46,42 @@ function MobileGridLoading() {
 export default function MicroAppsPageMobile() {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
-	const { workspace, projects, publishedProjects, loading, error, refresh } = useMicroAppsPage()
-	const [activeTab, setActiveTab] = useState<MicroAppsTab>("projects")
+	const {
+		workspace,
+		apps,
+		scope,
+		setScope,
+		keyword,
+		setKeyword,
+		loading,
+		loadingMore,
+		hasMore,
+		error,
+		refresh,
+		loadMore,
+	} = useMicroAppsPage()
 	const [promptFocused, setPromptFocused] = useState(false)
 	const reduceMotion = Boolean(useReducedMotion())
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 	const heroRef = useRef<HTMLElement>(null)
 
-	const handleOpenProject = useCallback(
-		async (projectId: string) => {
-			try {
-				const app = await SuperMagicApi.getMicroAppProjectByProjectId(projectId)
-				navigate({
-					name: RouteName.MicroApp,
-					params: { appId: app.app_id },
-					viewTransition: false,
-				})
-			} catch (openError) {
-				console.error("打开微应用项目失败：", openError)
-				magicToast.error(t("microAppsPage.errorTitle"))
-			}
+	const handleOpenApp = useCallback(
+		(appId: string) => {
+			navigate({
+				name: RouteName.MicroApp,
+				params: { appId },
+				viewTransition: false,
+			})
 		},
-		[navigate, t],
+		[navigate],
 	)
-
-	const handleOpenPublishedProject = (item: PublishedMicroAppProjectItem) => {
-		const accessUrl = getPublishedAppUrl(item)
-		if (accessUrl) window.open(accessUrl, "_blank", "noopener,noreferrer")
-	}
-
-	const visibleItems = activeTab === "projects" ? projects : publishedProjects
-	const isEmpty = !loading && !error && visibleItems.length === 0
+	const EmptyIllustration = keyword ? MicroAppSearchEmptyIllustration : MicroAppEmptyIllustration
 
 	return (
-		<div
-			ref={scrollContainerRef}
-			className="absolute inset-0 h-full min-h-0 w-full overflow-auto bg-mobile-background"
+		<ScrollArea
+			viewportRef={scrollContainerRef}
+			viewportClassName="[&>div]:!block [&>div]:h-full"
+			className="absolute inset-0 h-full min-h-0 w-full overflow-hidden bg-mobile-background"
 			data-testid="micro-apps-page-mobile"
 		>
 			<section
@@ -131,7 +126,7 @@ export default function MicroAppsPageMobile() {
 					>
 						<MicroAppCreatePrompt
 							workspace={workspace}
-							onCreated={handleOpenProject}
+							onCreated={handleOpenApp}
 							onFocusChange={setPromptFocused}
 							mobile
 						/>
@@ -140,26 +135,39 @@ export default function MicroAppsPageMobile() {
 			</section>
 
 			<main className="px-3 pb-7 pt-6">
-				<div className="mb-4 flex items-center justify-between gap-3 px-1">
+				<div className="mb-4 space-y-3 px-1">
 					<h2 className="text-lg font-semibold text-foreground">
 						{t("microAppsPage.galleryTitle")}
 					</h2>
+					<div className="relative">
+						<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							value={keyword}
+							onChange={(event) => setKeyword(event.target.value)}
+							placeholder={t("microAppsPage.searchPlaceholder")}
+							className="h-9 pl-9"
+							data-testid="micro-apps-mobile-search"
+						/>
+					</div>
 					<Tabs
-						value={activeTab}
-						onValueChange={(value) => setActiveTab(value as MicroAppsTab)}
+						value={scope}
+						onValueChange={(value) => setScope(value as MicroAppListScope)}
 					>
-						<TabsList className="grid h-9 w-[188px] grid-cols-2 rounded-xl">
-							<TabsTrigger
-								value="projects"
-								data-testid="micro-apps-mobile-tab-projects"
-							>
-								{t("microAppsPage.tabProjects")}
+						<TabsList className="grid h-9 w-full grid-cols-3 rounded-xl">
+							<TabsTrigger value="all" data-testid="micro-apps-mobile-scope-all">
+								{t("microAppsPage.scopeAll")}
 							</TabsTrigger>
 							<TabsTrigger
-								value="published"
-								data-testid="micro-apps-mobile-tab-published"
+								value="created"
+								data-testid="micro-apps-mobile-scope-created"
 							>
-								{t("microAppsPage.tabPublished")}
+								{t("microAppsPage.scopeCreated")}
+							</TabsTrigger>
+							<TabsTrigger
+								value="collaborated"
+								data-testid="micro-apps-mobile-scope-collaborated"
+							>
+								{t("microAppsPage.scopeCollaborated")}
 							</TabsTrigger>
 						</TabsList>
 					</Tabs>
@@ -168,97 +176,74 @@ export default function MicroAppsPageMobile() {
 				{loading ? <MobileGridLoading /> : null}
 
 				{!loading && error ? (
-					<div className="flex min-h-60 flex-col items-center justify-center gap-3 rounded-2xl border border-border px-6 text-center">
-						<p className="text-base font-medium text-foreground">
-							{t("microAppsPage.errorTitle")}
-						</p>
-						<p className="text-sm text-muted-foreground">
-							{t("microAppsPage.errorDescription")}
-						</p>
-						<Button type="button" variant="outline" className="gap-2" onClick={refresh}>
-							<RefreshCw className="size-4" aria-hidden />
-							{t("microAppsPage.refresh")}
-						</Button>
-					</div>
+					<MicroAppLoadErrorState
+						title={t("microAppsPage.errorTitle")}
+						description={t("microAppsPage.errorDescription")}
+						actionLabel={t("microAppsPage.refresh")}
+						onRetry={refresh}
+						mobile
+					/>
 				) : null}
 
-				{isEmpty ? (
-					<div className="flex min-h-60 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 text-center">
-						<div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-							{activeTab === "projects" ? (
-								<Boxes className="size-4" aria-hidden />
-							) : (
-								<Rocket className="size-4" aria-hidden />
-							)}
-						</div>
+				{!loading && !error && apps.length === 0 ? (
+					<div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-border/70 bg-muted/[0.08] px-6 py-7 text-center">
+						<EmptyIllustration size="sm" />
 						<div className="space-y-1">
 							<p className="text-base font-medium text-foreground">
-								{activeTab === "projects"
-									? t("microAppsPage.emptyTitle")
-									: t("microAppsPage.publishedEmptyTitle")}
+								{keyword
+									? t("microAppsPage.noSearchResults")
+									: t("microAppsPage.emptyTitle")}
 							</p>
 							<p className="text-sm text-muted-foreground">
-								{activeTab === "projects"
-									? t("microAppsPage.emptyDescription")
-									: t("microAppsPage.publishedEmptyDescription")}
+								{keyword
+									? t("microAppsPage.noSearchResultsDescription")
+									: t("microAppsPage.emptyDescription")}
 							</p>
 						</div>
 					</div>
 				) : null}
 
-				{!loading && !error && activeTab === "projects" ? (
+				{!loading && !error && apps.length > 0 ? (
 					<div className="grid grid-cols-2 gap-3" data-testid="micro-apps-mobile-list">
-						{projects.map((project) => (
+						{apps.map((app) => (
 							<MicroAppCard
-								key={project.id}
-								id={project.id}
-								title={project.project_name || t("project.unnamedProject")}
+								key={app.app_id}
+								id={app.app_id}
+								title={app.app_name || t("project.unnamedProject")}
+								description={app.app_description}
 								meta={
-									project.updated_at
-										? formatProjectTime(project.updated_at)
+									app.updated_at
+										? formatAppTime(app.updated_at)
 										: t("microAppsPage.draftBadge")
 								}
-								onClick={() => handleOpenProject(project.id)}
-								testId={`micro-apps-mobile-project-${project.id}`}
+								coverUrl={app.cover_url}
+								statusLabel={
+									app.publish_status === "published"
+										? t("microAppsPage.statusPublished")
+										: t("microAppsPage.statusUnpublished")
+								}
+								onClick={() => handleOpenApp(app.app_id)}
+								testId={`micro-apps-mobile-app-${app.app_id}`}
 							/>
 						))}
 					</div>
 				) : null}
 
-				{!loading && !error && activeTab === "published" ? (
-					<div
-						className="grid grid-cols-2 gap-3"
-						data-testid="micro-apps-mobile-published-list"
-					>
-						{publishedProjects.map((item) => {
-							const isPublic = item.share_type === ShareType.Public
-							const isPassword = item.share_type === ShareType.PasswordProtected
-							const shareTypeLabel = isPublic
-								? t("microAppsPage.shareType.public")
-								: isPassword
-									? t("microAppsPage.shareType.password")
-									: t("microAppsPage.shareType.organization")
-							const itemId = item.app_id || item.project_id
-
-							return (
-								<MicroAppCard
-									key={itemId}
-									id={String(itemId)}
-									title={item.project_name || t("project.unnamedProject")}
-									meta={
-										item.published_at
-											? `${shareTypeLabel} · ${formatProjectTime(item.published_at)}`
-											: shareTypeLabel
-									}
-									external
-									onClick={() => handleOpenPublishedProject(item)}
-									testId={`micro-apps-mobile-published-${itemId}`}
-								/>
-							)
-						})}
+				{!loading && !error && hasMore ? (
+					<div className="mt-6 flex justify-center">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={loadMore}
+							disabled={loadingMore}
+							data-testid="micro-apps-mobile-load-more"
+						>
+							{loadingMore ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+							{t("microAppsPage.loadMore")}
+						</Button>
 					</div>
 				) : null}
 			</main>
-		</div>
+		</ScrollArea>
 	)
 }

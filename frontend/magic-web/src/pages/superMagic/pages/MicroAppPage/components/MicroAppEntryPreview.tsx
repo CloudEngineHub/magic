@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { DetailType } from "@/pages/superMagic/components/Detail/types"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import { MicroAppEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
+import MicroAppBuildingPreview from "./MicroAppBuildingPreview"
 import MicroAppPhonePreviewFrame from "./MicroAppPhonePreviewFrame"
+import { isHtmlFile } from "../utils/microAppFiles"
 
 const HTMLPreview = lazy(() => import("@/pages/superMagic/components/Detail/contents/HTML"))
 
@@ -23,6 +26,8 @@ export interface MicroAppEntryPreviewProps {
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
 	emptyTestId?: string
+	buildingTestId?: string
+	isBuilding?: boolean
 }
 
 function getEntryFileData(entryFile: AttachmentItem | null) {
@@ -51,16 +56,24 @@ export default function MicroAppEntryPreview({
 	onRegisterAIEdit,
 	onAIEditActiveChange,
 	emptyTestId = "micro-app-preview-empty",
+	buildingTestId = "micro-app-preview-building",
+	isBuilding = false,
 }: MicroAppEntryPreviewProps) {
 	const { t } = useTranslation("super")
 	const entryData = useMemo(() => getEntryFileData(entryFile), [entryFile])
+	const hasAnyHtml = useMemo(() => attachmentList.some(isHtmlFile), [attachmentList])
 
 	if (!entryData) {
+		if (isBuilding && !hasAnyHtml) {
+			return <MicroAppBuildingPreview testId={buildingTestId} />
+		}
+
 		return (
 			<div
-				className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center"
+				className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 text-center"
 				data-testid={emptyTestId}
 			>
+				<MicroAppEmptyIllustration size="md" />
 				<p className="text-sm font-medium text-foreground">
 					{t("microAppPage.preview.emptyTitle")}
 				</p>

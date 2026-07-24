@@ -1,14 +1,26 @@
 import { motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
+import type { Ref } from "react"
 
 interface MicroAppHeroTitleProps {
 	active?: boolean
 	mobile?: boolean
+	connectorRef?: Ref<HTMLSpanElement>
+}
+
+function splitConnectorSuffix(value: string): { text: string; connector: string } {
+	const matched = value.match(/^(.*?)([，,])$/u)
+	return matched ? { text: matched[1], connector: matched[2] } : { text: value, connector: "" }
+}
+
+function needsWordSpace(before: string, after: string): boolean {
+	return /[a-z0-9]$/iu.test(before) && /^[a-z0-9]/iu.test(after)
 }
 
 export default function MicroAppHeroTitle({
 	active = false,
 	mobile = false,
+	connectorRef,
 }: MicroAppHeroTitleProps) {
 	const { t } = useTranslation("super")
 	const reduceMotion = Boolean(useReducedMotion())
@@ -18,10 +30,21 @@ export default function MicroAppHeroTitle({
 		t("microAppsPage.heroCapabilityData"),
 		t("microAppsPage.heroCapabilityMcp"),
 	]
+	const titlePrefix = splitConnectorSuffix(t("microAppsPage.heroTitlePrefix"))
+	const titleBetween = t("microAppsPage.heroTitleBetween")
+	const titleProduct = t("microAppsPage.heroTitleProduct")
+	const titleProductHint = t("microAppsPage.heroTitleProductHint").trim()
+	const prefixEnd = titlePrefix.connector || titlePrefix.text
+	const prefixSpace = needsWordSpace(prefixEnd, titleBetween) ? " " : ""
+	const productSpace = needsWordSpace(titleBetween, titleProduct) ? " " : ""
 
 	return (
 		<div
-			className={mobile ? "mx-auto max-w-[390px]" : "mx-auto max-w-[1080px]"}
+			className={
+				mobile
+					? "relative z-10 mx-auto max-w-[390px]"
+					: "relative z-10 mx-auto max-w-[1080px]"
+			}
 			data-testid="micro-app-hero-title"
 			data-active={active}
 		>
@@ -74,9 +97,28 @@ export default function MicroAppHeroTitle({
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
 			>
-				<span>{t("microAppsPage.heroTitlePrefix")}</span>
-				<span>{t("microAppsPage.heroTitleBetween")}</span>
-				<span className="relative isolate mx-[0.12em] inline-flex font-serif font-medium italic tracking-[-0.04em]">
+				<span>
+					{titlePrefix.text}
+					{titlePrefix.connector ? (
+						<span
+							ref={connectorRef}
+							className="relative inline-block"
+							data-testid="micro-app-hero-cable-anchor"
+						>
+							{titlePrefix.connector}
+						</span>
+					) : null}
+				</span>
+				{prefixSpace}
+				<span>{titleBetween}</span>
+				{productSpace}
+				<span
+					className={`relative isolate mx-[0.12em] inline-flex align-middle ${
+						titleProductHint
+							? "flex-col items-center font-sans font-semibold not-italic tracking-[-0.06em]"
+							: "font-serif font-medium italic tracking-[-0.04em]"
+					}`}
+				>
 					{/* 不规则路径只用于强调最终交付物，避免回到下方能力卡片的视觉表达。 */}
 					<motion.svg
 						viewBox="0 0 330 104"
@@ -101,7 +143,12 @@ export default function MicroAppHeroTitle({
 							transition={{ duration: reduceMotion ? 0 : 0.9, delay: 0.38 }}
 						/>
 					</motion.svg>
-					<span>{t("microAppsPage.heroTitleProduct")}</span>
+					<span>{titleProduct}</span>
+					{titleProductHint ? (
+						<span className="mt-[0.3em] font-mono text-[0.16em] font-semibold uppercase not-italic leading-none tracking-[0.18em] text-[#172037]/45 dark:text-white/40">
+							{titleProductHint}
+						</span>
+					) : null}
 				</span>
 			</motion.h1>
 		</div>

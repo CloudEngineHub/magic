@@ -1,12 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Copy, Loader2, RefreshCw, Rocket, Trash2 } from "lucide-react"
-import MagicModal from "@/components/base/MagicModal"
-import magicToast from "@/components/base/MagicToaster/utils"
-import { Button } from "@/components/shadcn-ui/button"
-import { Input } from "@/components/shadcn-ui/input"
-import { Label } from "@/components/shadcn-ui/label"
-import { Separator } from "@/components/shadcn-ui/separator"
+import { Copy, ImagePlus, Loader2, RefreshCw, Rocket, Trash2, X } from "lucide-react"
 import { SuperMagicApi } from "@/apis"
 import type {
 	MicroAppPublishShareRange,
@@ -15,31 +9,39 @@ import type {
 	PublishedMicroAppProjectItem,
 	PublishMicroAppProjectBody,
 } from "@/apis/modules/superMagic"
+import MagicModal from "@/components/base/MagicModal"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
+import { Label } from "@/components/shadcn-ui/label"
+import { Separator } from "@/components/shadcn-ui/separator"
+import { useFileUpload } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import {
 	ShareRangeField,
 	ShareTypeField,
 	type ShareRange,
 	type ShareTarget,
 } from "@/pages/superMagic/components/Share/ShareFields"
-import { ResourceType, ShareType } from "@/pages/superMagic/components/Share/types"
+import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
 import { clipboard } from "@/utils/clipboard-helpers"
 
 interface MicroAppPublishDialogProps {
 	open: boolean
 	appId?: string
-	projectId?: string
 	projectName?: string
 	onProjectNameChange?: (projectName: string) => void
 	onOpenChange: (open: boolean) => void
 }
 
 interface MicroAppPublishFormState {
-	projectName: string
+	appName: string
 	shareType: MicroAppPublishShareType
 	shareRange: MicroAppPublishShareRange
 	targets: MicroAppPublishTarget[]
 	password: string
+	coverFileKey?: string | null
+	coverUrl: string
 }
 
 const MICRO_APP_PUBLISH_TYPES = [
@@ -47,14 +49,17 @@ const MICRO_APP_PUBLISH_TYPES = [
 	ShareType.Public,
 	ShareType.PasswordProtected,
 ]
+const MAX_COVER_FILE_SIZE = 10 * 1024 * 1024
 
-function createDefaultFormState(projectName = ""): MicroAppPublishFormState {
+function createDefaultFormState(appName = ""): MicroAppPublishFormState {
 	return {
-		projectName,
+		appName,
 		shareType: ShareType.Organization,
 		shareRange: "all",
 		targets: [],
 		password: generateSharePassword(),
+		coverFileKey: undefined,
+		coverUrl: "",
 	}
 }
 
@@ -62,8 +67,12 @@ export function buildMicroAppPublishPayload(
 	formState: MicroAppPublishFormState,
 ): PublishMicroAppProjectBody {
 	const payload: PublishMicroAppProjectBody = {
-		project_name: formState.projectName.trim(),
+		app_name: formState.appName.trim(),
 		share_type: formState.shareType,
+	}
+
+	if (formState.coverFileKey !== undefined) {
+		payload.cover_file_key = formState.coverFileKey
 	}
 
 	if (formState.shareType === ShareType.Organization) {
@@ -90,127 +99,18 @@ function getPublishedItemFromResponse(
 	return response as PublishedMicroAppProjectItem
 }
 
-function getShareSettingFromResponse(response: unknown): Record<string, any> | null {
-	if (!response || typeof response !== "object") return null
-	const hasSettingFields = (value: Record<string, any>) =>
-		"resource_id" in value || "share_type" in value || "project_id" in value
-
-	if (
-		"data" in response &&
-		response.data &&
-		typeof response.data === "object" &&
-		hasSettingFields(response.data as Record<string, any>)
-	) {
-		return response.data as Record<string, any>
-	}
-
-	const directResponse = response as Record<string, any>
-	return hasSettingFields(directResponse) ? directResponse : null
-}
-
-function getShareRecordsFromResponse(response: unknown): Array<Record<string, any>> {
-	if (Array.isArray(response)) return response
-	if (!response || typeof response !== "object") return []
-	if ("data" in response && Array.isArray(response.data)) return response.data
-	if (
-		"data" in response &&
-		response.data &&
-		typeof response.data === "object" &&
-		Array.isArray((response.data as { list?: unknown }).list)
-	) {
-		return (response.data as { list: Array<Record<string, any>> }).list
-	}
-	if (Array.isArray((response as { list?: unknown }).list)) {
-		return (response as { list: Array<Record<string, any>> }).list
-	}
-	return []
-}
-
-function createPublishedItemFromShareSetting({
-	appId,
-	projectId,
-	resourceId,
-	projectName,
-	share,
-	setting,
-}: {
-	appId: string
-	projectId: string
-	resourceId: string
-	projectName?: string
-	share: Record<string, any>
-	setting: Record<string, any>
-}): PublishedMicroAppProjectItem {
-	return {
-		app_id: appId,
-		project_id: String(setting.project_id || share.project_id || projectId),
-		project_name: setting.project_name || share.project_name || projectName,
-		resource_id: String(setting.resource_id || resourceId),
-		share_id: setting.share_id || share.share_id || share.id,
-		share_code: setting.share_code || share.share_code,
-		share_type: (setting.share_type ||
-			share.share_type ||
-			ShareType.Organization) as MicroAppPublishShareType,
-		share_range: (setting.share_range ||
-			share.share_range ||
-			"all") as MicroAppPublishShareRange,
-		target_ids: (setting.target_ids || share.target_ids || []) as MicroAppPublishTarget[],
-		access_url: setting.access_url || share.access_url || share.share_url,
-		published_at:
-			setting.published_at ||
-			setting.shared_at ||
-			setting.created_at ||
-			share.shared_at ||
-			share.created_at,
-		password: setting.password || share.password || "",
-		publish_status: setting.publish_status || share.publish_status,
-	}
-}
-
-async function loadPublishedMicroAppProject(
-	appId: string,
-	projectId: string,
-	projectName?: string,
-) {
-	const shareRecordsResponse = await SuperMagicApi.getShareResourcesList({
-		page: 1,
-		page_size: 10,
-		resource_type: ResourceType.FileCollection,
-		project_id: projectId,
-		share_project: true,
-		filter_type: "active",
-	})
-	const existingShare = getShareRecordsFromResponse(shareRecordsResponse).find((share) => {
-		if (share.deleted_at) return false
-		if (share.share_project === false) return false
-		return !share.project_id || String(share.project_id) === String(projectId)
-	})
-	const resourceId = existingShare?.resource_id || existingShare?.share_code
-	if (!resourceId) return null
-
-	const settingResponse = await SuperMagicApi.getShareInfoByCode({ code: String(resourceId) })
-	const setting = getShareSettingFromResponse(settingResponse) || existingShare
-
-	return createPublishedItemFromShareSetting({
-		appId,
-		projectId,
-		resourceId: String(resourceId),
-		projectName,
-		share: existingShare,
-		setting,
-	})
-}
-
 function createFormStateFromPublishedItem(
-	item: PublishedMicroAppProjectItem,
-	projectName?: string,
+	item: PublishedMicroAppProjectItem | null,
+	appName?: string,
 ): MicroAppPublishFormState {
 	return {
-		projectName: item.project_name || projectName || "",
-		shareType: item.share_type,
-		shareRange: item.share_range || "all",
-		targets: item.target_ids || [],
-		password: item.password || "",
+		appName: item?.app_name || appName || "",
+		shareType: item?.share_type || ShareType.Organization,
+		shareRange: item?.share_range || "all",
+		targets: item?.target_ids || [],
+		password: item?.password || generateSharePassword(),
+		coverFileKey: item?.cover_file_key ?? undefined,
+		coverUrl: item?.cover_url || "",
 	}
 }
 
@@ -223,8 +123,9 @@ function formatPublishedAt(value?: string): string {
 
 export function buildMicroAppAccessUrl(item: PublishedMicroAppProjectItem | null): string {
 	if (!item) return ""
+	if (item.access_url) return item.access_url
 	if (item.app_id) return `${window.location.origin}/micro-app/${item.app_id}`
-	return item.access_url || ""
+	return ""
 }
 
 export function buildMicroAppShareText({
@@ -246,12 +147,13 @@ export function buildMicroAppShareText({
 export default function MicroAppPublishDialog({
 	open,
 	appId,
-	projectId,
 	projectName,
 	onProjectNameChange,
 	onOpenChange,
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
+	const coverInputRef = useRef<HTMLInputElement>(null)
+	const coverObjectUrlRef = useRef<string | null>(null)
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
 		createDefaultFormState(),
 	)
@@ -259,34 +161,68 @@ export default function MicroAppPublishDialog({
 	const [loading, setLoading] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [unpublishing, setUnpublishing] = useState(false)
+	const [coverUploadError, setCoverUploadError] = useState(false)
+
+	const { addFiles, clearFiles, uploading } = useFileUpload({
+		maxUploadCount: 1,
+		maxUploadSize: MAX_COVER_FILE_SIZE,
+		onFileProgressUpdate: (_fileId, _progress, status) => {
+			if (status !== "error") return
+			setCoverUploadError(true)
+			magicToast.error(t("microAppPage.publish.coverUploadFailed"))
+		},
+		onFileCompleted: (_fileId, reportResult) => {
+			setCoverUploadError(false)
+			setFormState((prev) => ({
+				...prev,
+				coverFileKey: reportResult.file_key,
+			}))
+			void SuperMagicApi.getFileUrl(reportResult.file_key)
+				.then((result) => {
+					setFormState((prev) => ({ ...prev, coverUrl: result.url }))
+				})
+				.catch((error) => {
+					console.error("Failed to resolve uploaded micro app cover url:", error)
+				})
+		},
+	})
 
 	const publishedAtText = useMemo(
 		() => formatPublishedAt(publishedItem?.published_at),
 		[publishedItem?.published_at],
 	)
 	const accessUrl = useMemo(() => buildMicroAppAccessUrl(publishedItem), [publishedItem])
-	const hasPublished = Boolean(publishedItem?.resource_id || publishedItem?.access_url)
+	const hasPublished = Boolean(
+		publishedItem?.publish_status === "published" ||
+		publishedItem?.resource_id ||
+		publishedItem?.access_url,
+	)
+	const coverUploading = uploading
+
+	const revokeCoverObjectUrl = useCallback(() => {
+		if (coverObjectUrlRef.current) URL.revokeObjectURL(coverObjectUrlRef.current)
+		coverObjectUrlRef.current = null
+	}, [])
 
 	useEffect(() => {
-		if (!open || !appId || !projectId) return
+		if (!open || !appId) return
 
 		let ignore = false
 
 		async function loadPublishedInfo() {
 			setLoading(true)
+			setCoverUploadError(false)
 			try {
-				const matchedItem = await loadPublishedMicroAppProject(
-					appId,
-					projectId,
-					projectName,
-				)
+				const detail = await SuperMagicApi.getMicroAppProject(appId)
 				if (ignore) return
 
-				setPublishedItem(matchedItem)
+				const nextItem = detail.publish || null
+				setPublishedItem(nextItem)
 				setFormState(
-					matchedItem
-						? createFormStateFromPublishedItem(matchedItem, projectName)
-						: createDefaultFormState(projectName),
+					createFormStateFromPublishedItem(
+						nextItem,
+						detail.project?.project_name || projectName,
+					),
 				)
 			} catch (error) {
 				if (ignore) return
@@ -304,14 +240,19 @@ export default function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [appId, open, projectId, projectName, t])
+	}, [appId, open, projectName, t])
 
 	useEffect(() => {
 		if (open) return
 		setLoading(false)
 		setSaving(false)
 		setUnpublishing(false)
-	}, [open])
+		setCoverUploadError(false)
+		void clearFiles()
+		revokeCoverObjectUrl()
+	}, [clearFiles, open, revokeCoverObjectUrl])
+
+	useEffect(() => () => revokeCoverObjectUrl(), [revokeCoverObjectUrl])
 
 	const handleShareTypeChange = useCallback((shareType: ShareType) => {
 		setFormState((prev) => {
@@ -327,12 +268,44 @@ export default function MicroAppPublishDialog({
 		})
 	}, [])
 
-	const handleProjectNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-		setFormState((prev) => ({
-			...prev,
-			projectName: event.target.value,
-		}))
+	const handleAppNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+		setFormState((prev) => ({ ...prev, appName: event.target.value }))
 	}, [])
+
+	const handleCoverChange = useCallback(
+		(event: React.ChangeEvent<HTMLInputElement>) => {
+			const file = event.target.files?.[0]
+			event.target.value = ""
+			if (!file) return
+			if (!file.type.startsWith("image/")) {
+				magicToast.error(t("microAppPage.publish.coverInvalidType"))
+				return
+			}
+			if (file.size > MAX_COVER_FILE_SIZE) {
+				magicToast.error(t("microAppPage.publish.coverTooLarge"))
+				return
+			}
+
+			void clearFiles()
+			revokeCoverObjectUrl()
+			setCoverUploadError(false)
+			coverObjectUrlRef.current = URL.createObjectURL(file)
+			setFormState((prev) => ({
+				...prev,
+				coverFileKey: undefined,
+				coverUrl: coverObjectUrlRef.current || "",
+			}))
+			void addFiles([file])
+		},
+		[addFiles, clearFiles, revokeCoverObjectUrl, t],
+	)
+
+	const handleClearCover = useCallback(() => {
+		void clearFiles()
+		revokeCoverObjectUrl()
+		setCoverUploadError(false)
+		setFormState((prev) => ({ ...prev, coverFileKey: null, coverUrl: "" }))
+	}, [clearFiles, revokeCoverObjectUrl])
 
 	const handleShareRangeChange = useCallback((shareRange: ShareRange) => {
 		setFormState((prev) => ({
@@ -352,17 +325,11 @@ export default function MicroAppPublishDialog({
 	}, [])
 
 	const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-		setFormState((prev) => ({
-			...prev,
-			password: event.target.value,
-		}))
+		setFormState((prev) => ({ ...prev, password: event.target.value }))
 	}, [])
 
 	const handlePasswordReset = useCallback(() => {
-		setFormState((prev) => ({
-			...prev,
-			password: generateSharePassword(),
-		}))
+		setFormState((prev) => ({ ...prev, password: generateSharePassword() }))
 	}, [])
 
 	const handleCopyAccessUrl = useCallback(() => {
@@ -379,7 +346,7 @@ export default function MicroAppPublishDialog({
 				: ""
 		clipboard.writeText(
 			buildMicroAppShareText({
-				projectName: formState.projectName.trim() || projectName,
+				projectName: formState.appName.trim() || projectName,
 				accessUrl,
 				password,
 				passwordLabel: t("microAppPage.publish.password"),
@@ -388,7 +355,7 @@ export default function MicroAppPublishDialog({
 		magicToast.success(t("microAppPage.publish.shareTextCopySuccess"))
 	}, [
 		accessUrl,
-		formState.projectName,
+		formState.appName,
 		projectName,
 		publishedItem?.password,
 		publishedItem?.share_type,
@@ -396,13 +363,13 @@ export default function MicroAppPublishDialog({
 	])
 
 	const handleSave = useCallback(async () => {
-		if (!appId || !projectId || saving) return
-		const nextProjectName = formState.projectName.trim()
-		if (!nextProjectName) {
+		if (!appId || saving || coverUploading || coverUploadError) return
+		const nextAppName = formState.appName.trim()
+		if (!nextAppName) {
 			magicToast.error(t("microAppPage.publish.projectNameRequired"))
 			return
 		}
-		if (nextProjectName.length > 100) {
+		if (nextAppName.length > 100) {
 			magicToast.error(t("microAppPage.publish.projectNameTooLong"))
 			return
 		}
@@ -421,19 +388,26 @@ export default function MicroAppPublishDialog({
 				buildMicroAppPublishPayload(formState),
 			)
 			const nextItem = getPublishedItemFromResponse(response)
-			const savedProjectName = nextItem.project_name?.trim() || nextProjectName
+			const savedAppName = nextItem.app_name || nextAppName
+			const savedCoverFileKey = nextItem.cover_file_key ?? formState.coverFileKey
 			setPublishedItem({
 				...nextItem,
 				app_id: nextItem.app_id || appId,
-				project_id: nextItem.project_id || projectId,
-				project_name: savedProjectName,
+				app_name: savedAppName,
+				cover_file_key: savedCoverFileKey,
+				cover_url: nextItem.cover_url || formState.coverUrl,
 				share_type: nextItem.share_type || formState.shareType,
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
 				password: nextItem.password || formState.password,
 			})
-			setFormState((prev) => ({ ...prev, projectName: savedProjectName }))
-			onProjectNameChange?.(savedProjectName)
+			setFormState((prev) => ({
+				...prev,
+				appName: savedAppName,
+				coverFileKey: savedCoverFileKey,
+				coverUrl: nextItem.cover_url || prev.coverUrl,
+			}))
+			onProjectNameChange?.(savedAppName)
 			magicToast.success(t("microAppPage.publish.saveSuccess"))
 		} catch (error) {
 			console.error("Failed to publish micro app:", error)
@@ -441,7 +415,7 @@ export default function MicroAppPublishDialog({
 		} finally {
 			setSaving(false)
 		}
-	}, [appId, formState, onProjectNameChange, projectId, saving, t])
+	}, [appId, coverUploadError, coverUploading, formState, onProjectNameChange, saving, t])
 
 	const handleUnpublish = useCallback(() => {
 		if (!appId || unpublishing) return
@@ -457,7 +431,11 @@ export default function MicroAppPublishDialog({
 				try {
 					await SuperMagicApi.unpublishMicroAppProject(appId)
 					setPublishedItem(null)
-					setFormState(createDefaultFormState(formState.projectName))
+					setFormState((prev) => ({
+						...createDefaultFormState(prev.appName),
+						coverFileKey: prev.coverFileKey,
+						coverUrl: prev.coverUrl,
+					}))
 					magicToast.success(t("microAppPage.publish.unpublishSuccess"))
 				} catch (error) {
 					console.error("Failed to unpublish micro app:", error)
@@ -467,7 +445,7 @@ export default function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [appId, formState.projectName, t, unpublishing])
+	}, [appId, t, unpublishing])
 
 	return (
 		<MagicModal
@@ -485,8 +463,8 @@ export default function MicroAppPublishDialog({
 					</Label>
 					<Input
 						id="micro-app-publish-project-name"
-						value={formState.projectName}
-						onChange={handleProjectNameChange}
+						value={formState.appName}
+						onChange={handleAppNameChange}
 						maxLength={100}
 						className="mt-2 h-9 bg-background"
 						data-testid="micro-app-publish-project-name"
@@ -494,6 +472,71 @@ export default function MicroAppPublishDialog({
 					<p className="mt-1 text-xs text-muted-foreground">
 						{t("microAppPage.publish.description")}
 					</p>
+				</div>
+
+				<div className="rounded-lg border border-border bg-muted/30 p-3">
+					<div className="flex items-center justify-between gap-3">
+						<div>
+							<Label>{t("microAppPage.publish.cover")}</Label>
+							<p className="mt-1 text-xs text-muted-foreground">
+								{t("microAppPage.publish.coverDescription")}
+							</p>
+						</div>
+						<div className="flex items-center gap-2">
+							<input
+								ref={coverInputRef}
+								type="file"
+								accept="image/*"
+								className="hidden"
+								onChange={handleCoverChange}
+								data-testid="micro-app-cover-input"
+							/>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => coverInputRef.current?.click()}
+								disabled={coverUploading || loading || saving}
+								data-testid="micro-app-cover-upload"
+							>
+								{coverUploading ? (
+									<Loader2 className="mr-1.5 size-3.5 animate-spin" />
+								) : (
+									<ImagePlus className="mr-1.5 size-3.5" />
+								)}
+								{t("microAppPage.publish.coverUpload")}
+							</Button>
+							{formState.coverFileKey !== undefined || formState.coverUrl ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="size-8 text-muted-foreground"
+									onClick={handleClearCover}
+									aria-label={t("microAppPage.publish.coverClear")}
+									data-testid="micro-app-cover-clear"
+								>
+									<X className="size-4" />
+								</Button>
+							) : null}
+						</div>
+					</div>
+					<div className="mt-3 overflow-hidden rounded-md border border-border bg-background">
+						{formState.coverUrl ? (
+							<img
+								src={formState.coverUrl}
+								alt=""
+								className="h-28 w-full object-cover"
+								data-testid="micro-app-cover-preview"
+							/>
+						) : (
+							<div className="flex h-20 items-center justify-center text-xs text-muted-foreground">
+								{formState.coverFileKey
+									? t("microAppPage.publish.coverSet")
+									: t("microAppPage.publish.coverEmpty")}
+							</div>
+						)}
+					</div>
 				</div>
 
 				{loading ? (
@@ -630,7 +673,13 @@ export default function MicroAppPublishDialog({
 								variant="ghost"
 								className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
 								onClick={handleUnpublish}
-								disabled={loading || saving || unpublishing}
+								disabled={
+									loading ||
+									saving ||
+									unpublishing ||
+									coverUploading ||
+									coverUploadError
+								}
 								data-testid="micro-app-unpublish-button"
 							>
 								{unpublishing ? (
@@ -647,7 +696,7 @@ export default function MicroAppPublishDialog({
 							type="button"
 							variant="outline"
 							onClick={() => onOpenChange(false)}
-							disabled={saving || unpublishing}
+							disabled={saving || unpublishing || coverUploading || coverUploadError}
 						>
 							{t("common.cancel")}
 						</Button>
@@ -655,7 +704,14 @@ export default function MicroAppPublishDialog({
 							type="button"
 							className="gap-2"
 							onClick={handleSave}
-							disabled={!projectId || loading || saving || unpublishing}
+							disabled={
+								!appId ||
+								loading ||
+								saving ||
+								unpublishing ||
+								coverUploading ||
+								coverUploadError
+							}
 							data-testid="micro-app-publish-save"
 						>
 							{saving ? <Loader2 className="size-4 animate-spin" /> : null}

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import type { MagicBaseRow, MagicBaseSortRule } from "@/apis/modules/magicBase"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
+import { MicroAppDatabaseEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { MagicBaseGridColumn } from "./utils"
 import { formatCellValue } from "./utils"
 
@@ -647,9 +648,12 @@ export default function DataGrid({
 						<tr>
 							<td
 								colSpan={Math.max(columns.length, 1)}
-								className="h-48 text-center text-sm text-muted-foreground"
+								className="h-56 text-center text-sm text-muted-foreground"
 							>
-								{t("microAppPage.databasePanel.noRows")}
+								<div className="flex flex-col items-center justify-center gap-1 py-4">
+									<MicroAppDatabaseEmptyIllustration size="sm" />
+									<span>{t("microAppPage.databasePanel.noRows")}</span>
+								</div>
 							</td>
 						</tr>
 					) : (

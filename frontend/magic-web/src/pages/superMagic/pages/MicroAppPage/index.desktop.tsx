@@ -3,7 +3,7 @@ import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Loader2, PanelRightOpen } from "lucide-react"
-import { useLocalStorageState, useMemoizedFn } from "ahooks"
+import { useLocalStorageState, useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
@@ -40,7 +40,7 @@ const SIDEBAR_MIN_PX = 220
 const SIDEBAR_MAX_PX = 420
 const MESSAGE_PANEL_DEFAULT_PX = 360
 const MESSAGE_PANEL_MIN_PX = 320
-const MESSAGE_PANEL_MAX_PX = 560
+const MESSAGE_PANEL_MAX_WIDTH_RATIO = 0.5
 const COLLAPSED_RAIL_WIDTH_PX = 40
 
 const MICRO_APP_SIDEBAR_STORAGE_KEY = "MAGIC:micro-app-page-sidebar-width"
@@ -73,12 +73,20 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 	const [isAIEditActive, setIsAIEditActive] = useState(false)
 	const aiEditHandlerRef = useRef<(() => void) | null>(null)
-	const controller = useMicroAppPageController(projectId)
+	const workspacePanelsRef = useRef<HTMLDivElement>(null)
+	const workspacePanelsSize = useSize(workspacePanelsRef)
+	const workspaceWidthPx = workspacePanelsSize?.width || window.innerWidth
+	const messagePanelMaxWidthPx = Math.max(
+		MESSAGE_PANEL_MIN_PX,
+		Math.floor(workspaceWidthPx * MESSAGE_PANEL_MAX_WIDTH_RATIO),
+	)
+	const controller = useMicroAppPageController(appId, projectId)
 	const {
 		store,
 		conversation,
 		selectedProject,
 		selectedTopic,
+		hasRunningTopic,
 		isReadOnly,
 		canRename,
 		attachments,
@@ -201,7 +209,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		handleResizeStart: onMessagePanelResizeStart,
 	} = useResizablePanel({
 		minWidth: MESSAGE_PANEL_MIN_PX,
-		maxWidth: MESSAGE_PANEL_MAX_PX,
+		maxWidth: messagePanelMaxWidthPx,
 		defaultWidth: MESSAGE_PANEL_DEFAULT_PX,
 		storageKey: MICRO_APP_MESSAGE_PANEL_STORAGE_KEY,
 		direction: "right",
@@ -247,7 +255,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 					onManageCollaborators={handleManageCollaborators}
 				/>
 
-				<div className="flex min-h-0 flex-1 overflow-hidden">
+				<div ref={workspacePanelsRef} className="flex min-h-0 flex-1 overflow-hidden">
 					<MicroAppWorkspaceNav
 						activeView={activeView}
 						databaseDisabled={!selectedProject?.id}
@@ -313,6 +321,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 												refreshKey={previewRefreshKey}
 												onRegisterAIEdit={handleRegisterAIEdit}
 												onAIEditActiveChange={setIsAIEditActive}
+												isBuilding={hasRunningTopic}
 											/>
 										</div>
 									</>
@@ -430,7 +439,6 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 
 			<MicroAppPageOverlays
 				appId={appId}
-				projectId={selectedProject?.id}
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
@@ -471,7 +479,7 @@ function MicroAppPageDesktop() {
 		return (
 			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
 				<p className="text-sm text-destructive">
-					{error?.message || "Micro app not found"}
+					{error?.message || t("microAppPage.errors.loadFailed")}
 				</p>
 				<button
 					type="button"

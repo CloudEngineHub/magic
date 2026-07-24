@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type Ref } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { SuperMagicApi } from "@/apis"
+import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContainer/components/LazyScenePanel/types"
@@ -12,24 +14,28 @@ import {
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { CreatedProject, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { resolveMicroAppModelSelectionMode } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppModelMode"
+import promptExampleData from "./microAppPromptExamples.json"
+import styles from "./MicroAppCreatePrompt.module.css"
+import cableStyles from "./MicroAppKeyboardCable.module.css"
 
 interface MicroAppCreatePromptProps {
 	workspace: Workspace | null
-	onCreated: (projectId: string) => void
+	onCreated: (appId: string) => void
 	onFocusChange?: (focused: boolean) => void
 	mobile?: boolean
+	keyboardPortRef?: Ref<HTMLSpanElement>
+	keyboardConnectorReady?: boolean
+	keyboardConnectorVisible?: boolean
 }
 
 const EDITOR_CONTAINER_CLASS_NAME = [
-	// 输入框悬浮在 Web App 页面云上方，需要用半透明边界和阴影建立清晰层级，同时只覆盖现有编辑器的视觉外观。
-	"!rounded-2xl !border !border-white !bg-white",
-	"shadow-[0_28px_90px_rgba(35,32,53,0.18),0_2px_10px_rgba(35,32,53,0.05),inset_0_1px_0_rgba(255,255,255,0.92)]",
-	"backdrop-blur-2xl dark:!border-white/10 dark:!bg-zinc-950/[0.72]",
-	"dark:shadow-[0_24px_80px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.06)]",
-	"[&_[data-testid=super-message-editor-toolbar]_button]:!rounded-lg",
+	// 输入框继续保持白色和轻盈感，边框与层级细节由场景样式统一控制。
+	"!rounded-[12px] !border !bg-[#f7f8f8]",
+	"dark:!bg-zinc-950/[0.82]",
+	"[&_[data-testid=super-message-editor-toolbar]_button]:!rounded-[7px]",
 	"[&_[data-testid=super-message-editor-toolbar-right]_button]:!h-8",
 	"[&_[data-testid=super-message-editor-toolbar-right]_button]:!min-w-8",
 ].join(" ")
@@ -39,10 +45,32 @@ function MicroAppCreatePrompt({
 	onCreated,
 	onFocusChange,
 	mobile = false,
+	keyboardPortRef,
+	keyboardConnectorReady = true,
+	keyboardConnectorVisible = true,
 }: MicroAppCreatePromptProps) {
 	const { t } = useTranslation("super")
+	const lt = useLocaleText()
 	const [sceneStateStore] = useState(() => createSceneStateStore())
 	const modelTopicMode = resolveMicroAppModelSelectionMode()
+	const appIdsByProjectIdRef = useRef(new Map<string, string>())
+	const promptCarousel = useMemo<SceneEditorContext["promptCarousel"]>(() => {
+		if (mobile) return undefined
+
+		return {
+			examples: promptExampleData.examples
+				.map((example) => lt(example.text))
+				.filter((example): example is string => Boolean(example)),
+			typingIntervalMs: 45,
+			holdDurationMs: 3000,
+			fadeDurationMs: 180,
+			clickable: true,
+			tabLabel: "Tab",
+			acceptLabel: t("microAppsPage.heroPromptAccept"),
+			navigationLabel: t("microAppsPage.heroPromptSwitch"),
+			applyAriaLabel: t("microAppsPage.heroPromptApply"),
+		}
+	}, [lt, mobile, t])
 
 	useEffect(() => {
 		sceneStateStore.setInputScopeKey(
@@ -74,10 +102,11 @@ function MicroAppCreatePrompt({
 			topicMode: TopicMode.MicroApp,
 			modelTopicMode,
 			placeholder: t("microAppsPage.heroPlaceholder"),
+			promptCarousel,
 			enableMessageSendByContent: true,
 			skipInitialDraftRestore: true,
 			size: mobile ? "mobile" : "default",
-			containerClassName: EDITOR_CONTAINER_CLASS_NAME,
+			containerClassName: `${EDITOR_CONTAINER_CLASS_NAME} ${styles.retroEnterKeyScope}`,
 			className: mobile ? "min-h-[70px]" : "min-h-[92px]",
 			layoutConfig: {
 				topBarLeft: [ToolbarButton.AT],
@@ -94,17 +123,36 @@ function MicroAppCreatePrompt({
 			modules: {
 				upload: { confirmDelete: false },
 			},
+			createProject: async (): Promise<CreatedProject | null> => {
+				if (!workspace?.id) return null
+
+				const created = await SuperMagicApi.createMicroAppProject({
+					workspace_id: String(workspace.id),
+					dynamic_params: {
+						agent_mode: "micro-app",
+						message_version: "v2",
+					},
+				})
+				appIdsByProjectIdRef.current.set(String(created.project.id), String(created.app_id))
+				return {
+					project: created.project,
+					topic: created.topic,
+				}
+			},
 			onSendSuccess: ({ currentProject }) => {
-				if (currentProject?.id) onCreated(currentProject.id)
+				const appId = currentProject?.id
+					? appIdsByProjectIdRef.current.get(String(currentProject.id))
+					: undefined
+				if (appId) onCreated(appId)
 			},
 		}),
-		[mobile, modelTopicMode, onCreated, t, workspace],
+		[mobile, modelTopicMode, onCreated, promptCarousel, t, workspace],
 	)
 
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
 			<div
-				className="w-full"
+				className={`${cableStyles.promptShell} w-full`}
 				data-testid="micro-apps-create-prompt"
 				onFocus={() => onFocusChange?.(true)}
 				onBlur={(event) => {
@@ -113,6 +161,18 @@ function MicroAppCreatePrompt({
 					}
 				}}
 			>
+				{!mobile && keyboardConnectorVisible ? (
+					<div
+						className={cableStyles.keyboardPort}
+						data-ready={keyboardConnectorReady}
+						data-testid="micro-apps-keyboard-port"
+						aria-hidden="true"
+					>
+						<span ref={keyboardPortRef} className={cableStyles.keyboardCableEnd} />
+						<span className={cableStyles.keyboardPortSlot} />
+						<span className={cableStyles.keyboardPortLight} />
+					</div>
+				) : null}
 				<DefaultMessageEditorContainer editorContext={editorContext} />
 			</div>
 		</SceneStateProvider>

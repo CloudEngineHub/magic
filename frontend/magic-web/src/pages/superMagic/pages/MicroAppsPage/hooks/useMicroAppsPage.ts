@@ -1,124 +1,165 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import type {
-	PublishedMicroAppProjectItem,
-	PublishedMicroAppProjectRecord,
+	MicroAppListItem,
+	MicroAppListResponse,
+	MicroAppListScope,
 } from "@/apis/modules/superMagic"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
-function normalizePublishedMicroAppItem(
-	item: PublishedMicroAppProjectItem | PublishedMicroAppProjectRecord,
-): PublishedMicroAppProjectItem | null {
-	if ("publish" in item || "project" in item) {
-		const publish = item.publish
-		const project = item.project
-		if (!publish && !project?.id) return null
+const MICRO_APP_PAGE_SIZE = 20
+const SEARCH_DEBOUNCE_MS = 250
 
-		return {
-			app_id: String(publish?.app_id || ""),
-			project_id: String(publish?.project_id || project?.id || ""),
-			project_name: project?.project_name || publish?.project_name,
-			resource_id: publish?.resource_id ? String(publish.resource_id) : undefined,
-			share_id: publish?.share_id ? String(publish.share_id) : undefined,
-			share_code: publish?.share_code ? String(publish.share_code) : undefined,
-			share_type: publish?.share_type ?? 2,
-			share_range: publish?.share_range || undefined,
-			target_ids: publish?.target_ids || [],
-			access_url: publish?.access_url || "",
-			published_at: publish?.published_at,
-			password: publish?.password,
-			publish_status: publish?.publish_status,
-		}
-	}
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value && typeof value === "object")
+}
+
+function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
+	if (!isRecord(item) || !item.app_id) return null
 
 	return {
-		...item,
-		app_id: String(item.app_id || ""),
-		project_id: String(item.project_id || ""),
-		resource_id: item.resource_id ? String(item.resource_id) : undefined,
-		share_id: item.share_id ? String(item.share_id) : undefined,
-		share_code: item.share_code ? String(item.share_code) : undefined,
+		app_id: String(item.app_id),
+		app_name: String(item.app_name ?? ""),
+		app_description: String(item.app_description ?? ""),
+		creator_id: String(item.creator_id ?? ""),
+		cover_url: String(item.cover_url ?? ""),
+		publish_status: String(item.publish_status ?? "unpublished"),
+		updated_at: item.updated_at == null ? null : String(item.updated_at),
 	}
 }
 
-export function getPublishedMicroAppList(response: unknown): PublishedMicroAppProjectItem[] {
-	if (!response || typeof response !== "object") return []
-	let list: Array<PublishedMicroAppProjectItem | PublishedMicroAppProjectRecord> = []
-
-	if (Array.isArray((response as { list?: unknown }).list)) {
-		list = (
-			response as {
-				list: Array<PublishedMicroAppProjectItem | PublishedMicroAppProjectRecord>
-			}
-		).list
-	} else if (
-		"data" in response &&
-		response.data &&
-		typeof response.data === "object" &&
-		Array.isArray((response.data as { list?: unknown }).list)
-	) {
-		list = (
-			response.data as {
-				list: Array<PublishedMicroAppProjectItem | PublishedMicroAppProjectRecord>
-			}
-		).list
+export function normalizeMicroAppListResponse(response: unknown): MicroAppListResponse {
+	const payload = isRecord(response) && isRecord(response.data) ? response.data : response
+	if (!isRecord(payload)) {
+		return { list: [], total: 0, page: 1, page_size: MICRO_APP_PAGE_SIZE }
 	}
 
-	return list
-		.map((item) => normalizePublishedMicroAppItem(item))
-		.filter((item): item is PublishedMicroAppProjectItem => Boolean(item?.app_id))
+	const list = Array.isArray(payload.list)
+		? payload.list
+				.map(normalizeMicroAppItem)
+				.filter((item): item is MicroAppListItem => Boolean(item))
+		: []
+
+	return {
+		list,
+		total: Number(payload.total ?? list.length),
+		page: Number(payload.page ?? 1),
+		page_size: Number(payload.page_size ?? MICRO_APP_PAGE_SIZE),
+	}
 }
 
 export function useMicroAppsPage() {
 	const [workspace, setWorkspace] = useState<Workspace | null>(null)
-	const [projects, setProjects] = useState<ProjectListItem[]>([])
-	const [publishedProjects, setPublishedProjects] = useState<PublishedMicroAppProjectItem[]>([])
+	const [apps, setApps] = useState<MicroAppListItem[]>([])
+	const [scope, setScope] = useState<MicroAppListScope>("all")
+	const [keyword, setKeyword] = useState("")
+	const [page, setPage] = useState(1)
+	const [total, setTotal] = useState(0)
 	const [loading, setLoading] = useState(true)
+	const [loadingMore, setLoadingMore] = useState(false)
 	const [error, setError] = useState<unknown>(null)
-
-	const refresh = useCallback(async () => {
-		setLoading(true)
-		setError(null)
-
-		try {
-			const nextWorkspace = await SuperMagicApi.getMicroAppWorkspace()
-			const [projectResponse, publishedResponse] = await Promise.all([
-				SuperMagicApi.getProjectsWithCollaboration({
-					workspace_id: nextWorkspace.id,
-					page: 1,
-					page_size: 100,
-					show_collaboration: 1,
-				}),
-				SuperMagicApi.getPublishedMicroAppProjects({
-					page: 1,
-					page_size: 100,
-					keyword: "",
-				}),
-			])
-
-			setWorkspace(nextWorkspace)
-			setProjects(projectResponse.list)
-			setPublishedProjects(getPublishedMicroAppList(publishedResponse))
-		} catch (nextError) {
-			setError(nextError)
-			setWorkspace(null)
-			setProjects([])
-			setPublishedProjects([])
-		} finally {
-			setLoading(false)
-		}
-	}, [])
+	const [refreshVersion, setRefreshVersion] = useState(0)
+	const requestIdRef = useRef(0)
+	const workspaceRef = useRef<Workspace | null>(null)
 
 	useEffect(() => {
-		refresh()
-	}, [refresh])
+		if (workspaceRef.current) return
+
+		let active = true
+		SuperMagicApi.getMicroAppWorkspace()
+			.then((nextWorkspace) => {
+				if (!active) return
+				workspaceRef.current = nextWorkspace
+				setWorkspace(nextWorkspace)
+			})
+			.catch((workspaceError) => {
+				if (active) console.error("Failed to load micro app workspace:", workspaceError)
+			})
+
+		return () => {
+			active = false
+		}
+	}, [refreshVersion])
+
+	useEffect(() => {
+		const requestId = ++requestIdRef.current
+		let active = true
+		const timer = window.setTimeout(async () => {
+			setLoading(true)
+			setError(null)
+			setApps([])
+			setPage(1)
+
+			try {
+				const response = await SuperMagicApi.getMicroApps({
+					page: 1,
+					page_size: MICRO_APP_PAGE_SIZE,
+					keyword: keyword.trim(),
+					scope,
+				})
+				if (!active || requestId !== requestIdRef.current) return
+
+				const normalized = normalizeMicroAppListResponse(response)
+				setApps(normalized.list)
+				setTotal(normalized.total)
+				setPage(normalized.page)
+			} catch (nextError) {
+				if (!active || requestId !== requestIdRef.current) return
+				setError(nextError)
+				setApps([])
+				setTotal(0)
+			} finally {
+				if (active && requestId === requestIdRef.current) setLoading(false)
+			}
+		}, SEARCH_DEBOUNCE_MS)
+
+		return () => {
+			active = false
+			window.clearTimeout(timer)
+		}
+	}, [keyword, refreshVersion, scope])
+
+	const loadMore = useCallback(async () => {
+		if (loading || loadingMore || apps.length >= total) return
+
+		const requestId = ++requestIdRef.current
+		setLoadingMore(true)
+		try {
+			const response = await SuperMagicApi.getMicroApps({
+				page: page + 1,
+				page_size: MICRO_APP_PAGE_SIZE,
+				keyword: keyword.trim(),
+				scope,
+			})
+			if (requestId !== requestIdRef.current) return
+
+			const normalized = normalizeMicroAppListResponse(response)
+			setApps((current) => [...current, ...normalized.list])
+			setTotal(normalized.total)
+			setPage(normalized.page)
+		} catch (nextError) {
+			if (requestId === requestIdRef.current) setError(nextError)
+		} finally {
+			if (requestId === requestIdRef.current) setLoadingMore(false)
+		}
+	}, [apps.length, keyword, loading, loadingMore, page, scope, total])
+
+	const refresh = useCallback(() => {
+		setRefreshVersion((value) => value + 1)
+	}, [])
 
 	return {
 		workspace,
-		projects,
-		publishedProjects,
+		apps,
+		scope,
+		setScope,
+		keyword,
+		setKeyword,
 		loading,
+		loadingMore,
+		hasMore: apps.length < total,
 		error,
 		refresh,
+		loadMore,
 	}
 }

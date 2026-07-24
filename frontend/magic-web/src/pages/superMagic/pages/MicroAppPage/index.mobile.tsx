@@ -73,12 +73,13 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 	const [previewFileId, setPreviewFileId] = useState<string | null>(null)
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
-	const controller = useMicroAppPageController(projectId)
+	const controller = useMicroAppPageController(appId, projectId)
 	const {
 		store,
 		conversation,
 		selectedProject,
 		selectedTopic,
+		hasRunningTopic,
 		isReadOnly,
 		canRename,
 		attachments,
@@ -210,6 +211,7 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 								selectedProject={selectedProject}
 								allowEdit={!isReadOnly}
 								onOpenFile={handlePreviewFile}
+								isBuilding={hasRunningTopic}
 							/>
 						</Suspense>
 					</div>
@@ -234,7 +236,6 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 
 			<MicroAppPageOverlays
 				appId={appId}
-				projectId={selectedProject?.id}
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
@@ -316,7 +317,7 @@ export default function MicroAppPageMobile() {
 		return (
 			<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background px-6 text-center">
 				<p className="text-sm text-destructive">
-					{error?.message || "Micro app not found"}
+					{error?.message || t("microAppPage.errors.loadFailed")}
 				</p>
 				<button
 					type="button"

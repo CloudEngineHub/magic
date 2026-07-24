@@ -17,7 +17,7 @@ import {
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import { canManageProject, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
-import SuperMagicService from "@/pages/superMagic/services"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -31,7 +31,7 @@ import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync
  * 微应用桌面端和移动端共用的数据控制层。
  * 文件加载、默认入口恢复和项目权限只维护一份，页面组件只负责各自的布局。
  */
-export function useMicroAppPageController(projectId: string) {
+export function useMicroAppPageController(appId: string, projectId: string) {
 	const { t } = useTranslation("super")
 	const store = useAppStore()
 	const { conversation } = store
@@ -48,6 +48,9 @@ export function useMicroAppPageController(projectId: string) {
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
+	const hasRunningTopic =
+		selectedTopic?.task_status === TaskStatus.RUNNING ||
+		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const canRename = Boolean(
 		selectedProject?.id &&
@@ -290,11 +293,7 @@ export function useMicroAppPageController(projectId: string) {
 
 		setRenameSubmitting(true)
 		try {
-			await SuperMagicService.project.renameProject(
-				selectedProject.id,
-				nextProjectName,
-				selectedProject.workspace_id,
-			)
+			await SuperMagicApi.updateMicroApp(appId, { app_name: nextProjectName })
 			handleProjectNameChange(nextProjectName)
 			pubsub.publish(PubSubEvents.Update_Project_Name, selectedProject.id, nextProjectName)
 			magicToast.success(t("microAppPage.rename.success"))
@@ -313,6 +312,7 @@ export function useMicroAppPageController(projectId: string) {
 		conversation,
 		selectedProject,
 		selectedTopic,
+		hasRunningTopic,
 		isReadOnly,
 		canRename,
 		attachments,

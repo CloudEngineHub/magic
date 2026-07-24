@@ -84,6 +84,48 @@ describe("MicroAppMobileEntryPreview", () => {
 		)
 	})
 
+	it("shows the building animation when a topic is running without html", () => {
+		render(
+			<MicroAppMobileEntryPreview
+				entryFile={null}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={null}
+				allowEdit={false}
+				onOpenFile={vi.fn()}
+				isBuilding
+			/>,
+		)
+
+		expect(screen.getByTestId("micro-app-mobile-preview-building")).toHaveTextContent(
+			"microAppPage.preview.buildingTitle",
+		)
+		expect(screen.queryByTestId("micro-app-mobile-preview-empty")).not.toBeInTheDocument()
+	})
+
+	it("keeps the entry-empty state when a nested html already exists", () => {
+		render(
+			<MicroAppMobileEntryPreview
+				entryFile={null}
+				attachments={[]}
+				attachmentList={[
+					{
+						file_id: "nested-html",
+						file_name: "page.html",
+						relative_file_path: "pages/page.html",
+					},
+				]}
+				selectedProject={null}
+				allowEdit={false}
+				onOpenFile={vi.fn()}
+				isBuilding
+			/>,
+		)
+
+		expect(screen.getByTestId("micro-app-mobile-preview-empty")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-mobile-preview-building")).not.toBeInTheDocument()
+	})
+
 	it("wraps phone preview with the shared phone frame", async () => {
 		render(
 			<MicroAppEntryPreview

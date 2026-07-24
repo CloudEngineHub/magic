@@ -1,20 +1,21 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, PropsWithChildren, ReactNode } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
-import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RouteName } from "@/routes/constants"
 import MicroAppsPageMobile from "../index.mobile"
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
+	setScope: vi.fn(),
+	setKeyword: vi.fn(),
 	refresh: vi.fn(),
+	loadMore: vi.fn(),
 	useMicroAppsPage: vi.fn(),
-	getMicroAppProjectByProjectId: vi.fn(),
+	t: (key: string) => key,
 }))
 
 vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ t: (key: string) => key }),
+	useTranslation: () => ({ t: mocks.t }),
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
@@ -25,24 +26,12 @@ vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
 }))
 
-vi.mock("@/apis", () => ({
-	SuperMagicApi: {
-		getMicroAppProjectByProjectId: mocks.getMicroAppProjectByProjectId,
-	},
-}))
-
 vi.mock("../components/MicroAppCreatePrompt", () => ({
-	default: ({
-		onCreated,
-		onFocusChange,
-	}: {
-		onCreated: (projectId: string) => void
-		onFocusChange?: (focused: boolean) => void
-	}) => (
+	default: ({ onCreated, onFocusChange }: any) => (
 		<button
 			type="button"
 			data-testid="mock-mobile-create-prompt"
-			onClick={() => onCreated("project-new")}
+			onClick={() => onCreated("app-new")}
 			onFocus={() => onFocusChange?.(true)}
 			onBlur={() => onFocusChange?.(false)}
 		>
@@ -58,20 +47,12 @@ vi.mock("../components/MicroAppFloatingBackdrop", () => ({
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
-	default: ({
-		title,
-		meta,
-		onClick,
-		testId,
-	}: {
-		title: string
-		meta: string
-		onClick: () => void
-		testId: string
-	}) => (
-		<button type="button" data-testid={testId} onClick={onClick}>
+	default: ({ title, description, meta, coverUrl, statusLabel, onClick, testId }: any) => (
+		<button type="button" data-testid={testId} data-cover-url={coverUrl} onClick={onClick}>
 			{title}
+			<span>{description}</span>
 			<span>{meta}</span>
+			<span>{statusLabel}</span>
 		</button>
 	),
 }))
@@ -83,7 +64,6 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 vi.mock("@/components/shadcn-ui/tabs", async () => {
 	const React = await import("react")
 	const TabsContext = React.createContext<{ onValueChange?: (value: string) => void }>({})
-
 	return {
 		Tabs: ({
 			children,
@@ -121,43 +101,49 @@ vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 describe("MicroAppsPageMobile", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		vi.spyOn(window, "open").mockImplementation(() => null)
-		mocks.getMicroAppProjectByProjectId.mockImplementation((projectId: string) =>
-			Promise.resolve({ app_id: projectId === "project-new" ? "app-new" : "app-1" }),
-		)
 		mocks.useMicroAppsPage.mockReturnValue({
 			workspace: { id: "workspace-1", name: "Micro Apps" },
-			projects: [
+			apps: [
 				{
-					id: "project-1",
-					project_name: "Draft App",
-					workspace_name: "Micro Apps",
+					app_id: "app-1",
+					app_name: "客户跟进助手",
+					app_description: "客户跟进与提醒工具",
+					creator_id: "user-1",
+					cover_url: "",
+					publish_status: "unpublished",
+					updated_at: null,
 				},
 			],
-			publishedProjects: [
-				{
-					project_id: "project-2",
-					project_name: "Published App",
-					app_id: "app-2",
-					share_type: ShareType.Public,
-					published_at: "2026-07-24T00:00:00Z",
-				},
-			],
+			scope: "all",
+			setScope: mocks.setScope,
+			keyword: "",
+			setKeyword: mocks.setKeyword,
 			loading: false,
+			loadingMore: false,
+			hasMore: true,
 			error: null,
 			refresh: mocks.refresh,
+			loadMore: mocks.loadMore,
 		})
 	})
 
-	afterEach(() => {
-		vi.restoreAllMocks()
-	})
-
-	it("opens draft and published micro apps from the mobile list", async () => {
+	it("opens an app directly by app_id", async () => {
 		render(<MicroAppsPageMobile />)
 
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-project-project-1"))
-		expect(mocks.getMicroAppProjectByProjectId).toHaveBeenCalledWith("project-1")
+		expect(screen.getByTestId("micro-apps-page-mobile")).toHaveAttribute(
+			"data-slot",
+			"scroll-area",
+		)
+		expect(
+			screen
+				.getByTestId("micro-apps-page-mobile")
+				.querySelector('[data-slot="scroll-area-viewport"]'),
+		).toBeInTheDocument()
+		const appCard = screen.getByTestId("micro-apps-mobile-app-app-1")
+		expect(screen.getByText("客户跟进与提醒工具")).toBeInTheDocument()
+		expect(screen.getByText("microAppsPage.statusUnpublished")).toBeInTheDocument()
+		fireEvent.click(appCard)
+
 		await waitFor(() => {
 			expect(mocks.navigate).toHaveBeenCalledWith({
 				name: RouteName.MicroApp,
@@ -165,29 +151,27 @@ describe("MicroAppsPageMobile", () => {
 				viewTransition: false,
 			})
 		})
-
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-tab-published"))
-		expect(
-			screen.getByText(
-				`microAppsPage.shareType.public · ${new Date(
-					"2026-07-24T00:00:00Z",
-				).toLocaleDateString()}`,
-			),
-		).toBeInTheDocument()
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-published-app-2"))
-		expect(window.open).toHaveBeenCalledWith(
-			`${window.location.origin}/micro-app/app-2`,
-			"_blank",
-			"noopener,noreferrer",
-		)
 	})
 
-	it("enters the new micro app after the mobile hero prompt creates it", async () => {
+	it("changes scope, searches, and loads more", () => {
+		render(<MicroAppsPageMobile />)
+
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-scope-collaborated"))
+		fireEvent.change(screen.getByTestId("micro-apps-mobile-search"), {
+			target: { value: "客户" },
+		})
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-load-more"))
+
+		expect(mocks.setScope).toHaveBeenCalledWith("collaborated")
+		expect(mocks.setKeyword).toHaveBeenCalledWith("客户")
+		expect(mocks.loadMore).toHaveBeenCalled()
+	})
+
+	it("enters the new app after the mobile creation prompt returns app_id", async () => {
 		render(<MicroAppsPageMobile />)
 
 		fireEvent.click(screen.getByTestId("mock-mobile-create-prompt"))
 
-		expect(mocks.getMicroAppProjectByProjectId).toHaveBeenCalledWith("project-new")
 		await waitFor(() => {
 			expect(mocks.navigate).toHaveBeenCalledWith({
 				name: RouteName.MicroApp,
@@ -195,20 +179,5 @@ describe("MicroAppsPageMobile", () => {
 				viewTransition: false,
 			})
 		})
-	})
-
-	it("emphasizes the mobile title while the prompt is focused", () => {
-		render(<MicroAppsPageMobile />)
-
-		expect(screen.getByTestId("micro-apps-mobile-hero")).toHaveClass("min-h-[70%]")
-		const title = screen.getByTestId("micro-app-hero-title")
-		const prompt = screen.getByTestId("mock-mobile-create-prompt")
-		const backdrop = screen.getByTestId("mock-mobile-floating-backdrop")
-		expect(title).toHaveAttribute("data-active", "false")
-		expect(backdrop).toHaveAttribute("data-active", "false")
-
-		fireEvent.focus(prompt)
-		expect(title).toHaveAttribute("data-active", "true")
-		expect(backdrop).toHaveAttribute("data-active", "true")
 	})
 })

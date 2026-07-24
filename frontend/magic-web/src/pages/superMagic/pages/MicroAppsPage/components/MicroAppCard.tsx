@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { AppWindow, ExternalLink } from "lucide-react"
 import { motion, useReducedMotion } from "framer-motion"
 
@@ -40,7 +41,10 @@ function resolveThemeIndex(seed: string): number {
 interface MicroAppCardProps {
 	id: string
 	title: string
+	description?: string
 	meta: string
+	coverUrl?: string
+	statusLabel?: string
 	onClick: () => void
 	testId: string
 	external?: boolean
@@ -49,13 +53,22 @@ interface MicroAppCardProps {
 export default function MicroAppCard({
 	id,
 	title,
+	description,
 	meta,
+	coverUrl,
+	statusLabel,
 	onClick,
 	testId,
 	external = false,
 }: MicroAppCardProps) {
 	const theme = coverThemes[resolveThemeIndex(id)]
 	const reduceMotion = Boolean(useReducedMotion())
+	const [coverFailed, setCoverFailed] = useState(false)
+	const showRemoteCover = Boolean(coverUrl && !coverFailed)
+
+	useEffect(() => {
+		setCoverFailed(false)
+	}, [coverUrl])
 
 	return (
 		<motion.button
@@ -72,81 +85,100 @@ export default function MicroAppCard({
 			style={{ transformPerspective: 1000 }}
 		>
 			<div className={`relative aspect-[16/10] overflow-hidden ${theme.background}`}>
+				{showRemoteCover ? (
+					<img
+						src={coverUrl}
+						alt=""
+						className="absolute inset-0 size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.035]"
+						onError={(event) => {
+							event.currentTarget.style.display = "none"
+							setCoverFailed(true)
+						}}
+					/>
+				) : null}
 				<div className="absolute inset-y-0 -left-1/2 w-1/2 skew-x-[-18deg] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.13),transparent)] opacity-0 transition-[transform,opacity] duration-700 ease-out group-hover:translate-x-[320%] group-hover:opacity-100" />
 				<div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
 
-				<div className="absolute inset-x-4 bottom-3 top-4 overflow-hidden rounded-[14px] border border-white/[0.16] bg-[#f7f8fb] shadow-[0_20px_50px_rgba(0,0,0,0.32)] transition-transform duration-500 ease-out group-hover:-translate-y-1 group-hover:rotate-[0.3deg] group-hover:scale-[1.022]">
-					<div className="flex h-5 items-center border-b border-slate-200/80 bg-white px-2.5">
-						<div className="flex gap-1">
-							<span className="size-1.5 rounded-full bg-slate-300" />
-							<span className="size-1.5 rounded-full bg-slate-300" />
-							<span className="size-1.5 rounded-full bg-slate-300" />
-						</div>
-						<div className="mx-auto h-1.5 w-16 rounded-full bg-slate-100" />
-					</div>
-
-					<div className="grid h-[calc(100%-20px)] grid-cols-[42px_1fr]">
-						<div className="border-r border-slate-200/80 bg-[#f1f2f5] px-2 py-2.5">
-							<div
-								className={`mb-3 flex size-5 items-center justify-center rounded-md ${theme.accent} text-white shadow-sm`}
-							>
-								<AppWindow className="size-4" strokeWidth={1.6} aria-hidden />
+				{!showRemoteCover ? (
+					<div className="absolute inset-x-4 bottom-3 top-4 overflow-hidden rounded-[14px] border border-white/[0.16] bg-[#f7f8fb] shadow-[0_20px_50px_rgba(0,0,0,0.32)] transition-transform duration-500 ease-out group-hover:-translate-y-1 group-hover:rotate-[0.3deg] group-hover:scale-[1.022]">
+						<div className="flex h-5 items-center border-b border-slate-200/80 bg-white px-2.5">
+							<div className="flex gap-1">
+								<span className="size-1.5 rounded-full bg-slate-300" />
+								<span className="size-1.5 rounded-full bg-slate-300" />
+								<span className="size-1.5 rounded-full bg-slate-300" />
 							</div>
-							<div className="space-y-2">
-								<div className="h-1.5 rounded-full bg-slate-400/55" />
-								<div className="h-1.5 rounded-full bg-slate-300/75" />
-								<div className="h-1.5 rounded-full bg-slate-300/75" />
-								<div className="h-1.5 rounded-full bg-slate-300/75" />
-							</div>
+							<div className="mx-auto h-1.5 w-16 rounded-full bg-slate-100" />
 						</div>
 
-						<div className="p-2.5">
-							<div className="mb-2 flex items-center justify-between">
-								<div>
-									<div className="h-1.5 w-14 rounded-full bg-slate-800/80" />
-									<div className="mt-1 h-1 w-9 rounded-full bg-slate-300" />
+						<div className="grid h-[calc(100%-20px)] grid-cols-[42px_1fr]">
+							<div className="border-r border-slate-200/80 bg-[#f1f2f5] px-2 py-2.5">
+								<div
+									className={`mb-3 flex size-5 items-center justify-center rounded-md ${theme.accent} text-white shadow-sm`}
+								>
+									<AppWindow className="size-4" strokeWidth={1.6} aria-hidden />
 								</div>
-								<div className={`h-4 w-10 rounded-md ${theme.accent} opacity-90`} />
+								<div className="space-y-2">
+									<div className="h-1.5 rounded-full bg-slate-400/55" />
+									<div className="h-1.5 rounded-full bg-slate-300/75" />
+									<div className="h-1.5 rounded-full bg-slate-300/75" />
+									<div className="h-1.5 rounded-full bg-slate-300/75" />
+								</div>
 							</div>
 
-							<div className="grid grid-cols-3 gap-1.5">
-								{[1, 2, 3].map((item) => (
-									<div
-										key={item}
-										className="rounded-md border border-slate-200/80 bg-white p-1.5"
-									>
-										<div className="h-1 w-6 rounded-full bg-slate-300" />
-										<div className="mt-1.5 h-2 w-9 rounded-full bg-slate-700/75" />
+							<div className="p-2.5">
+								<div className="mb-2 flex items-center justify-between">
+									<div>
+										<div className="h-1.5 w-14 rounded-full bg-slate-800/80" />
+										<div className="mt-1 h-1 w-9 rounded-full bg-slate-300" />
 									</div>
-								))}
-							</div>
-
-							<div className="mt-1.5 grid grid-cols-[1.35fr_0.65fr] gap-1.5">
-								<div className="rounded-md border border-slate-200/80 bg-white p-1.5">
-									<svg viewBox="0 0 120 42" className="h-8 w-full" aria-hidden>
-										<path
-											d="M2 34 C18 32 20 16 36 20 S58 30 70 17 S92 8 118 12"
-											fill="none"
-											className={theme.chart}
-											strokeWidth="2.5"
-											strokeLinecap="round"
-										/>
-										<path
-											d="M2 37 H118"
-											className="stroke-slate-200"
-											strokeWidth="1"
-										/>
-									</svg>
+									<div
+										className={`h-4 w-10 rounded-md ${theme.accent} opacity-90`}
+									/>
 								</div>
-								<div className="space-y-1.5 rounded-md border border-slate-200/80 bg-white p-1.5">
-									<div className="h-1.5 rounded-full bg-slate-200" />
-									<div className="h-1.5 rounded-full bg-slate-200" />
-									<div className="h-1.5 w-2/3 rounded-full bg-slate-200" />
+
+								<div className="grid grid-cols-3 gap-1.5">
+									{[1, 2, 3].map((item) => (
+										<div
+											key={item}
+											className="rounded-md border border-slate-200/80 bg-white p-1.5"
+										>
+											<div className="h-1 w-6 rounded-full bg-slate-300" />
+											<div className="mt-1.5 h-2 w-9 rounded-full bg-slate-700/75" />
+										</div>
+									))}
+								</div>
+
+								<div className="mt-1.5 grid grid-cols-[1.35fr_0.65fr] gap-1.5">
+									<div className="rounded-md border border-slate-200/80 bg-white p-1.5">
+										<svg
+											viewBox="0 0 120 42"
+											className="h-8 w-full"
+											aria-hidden
+										>
+											<path
+												d="M2 34 C18 32 20 16 36 20 S58 30 70 17 S92 8 118 12"
+												fill="none"
+												className={theme.chart}
+												strokeWidth="2.5"
+												strokeLinecap="round"
+											/>
+											<path
+												d="M2 37 H118"
+												className="stroke-slate-200"
+												strokeWidth="1"
+											/>
+										</svg>
+									</div>
+									<div className="space-y-1.5 rounded-md border border-slate-200/80 bg-white p-1.5">
+										<div className="h-1.5 rounded-full bg-slate-200" />
+										<div className="h-1.5 rounded-full bg-slate-200" />
+										<div className="h-1.5 w-2/3 rounded-full bg-slate-200" />
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
-				</div>
+				) : null}
 			</div>
 
 			<div className="flex items-center gap-3 px-4 py-3.5">
@@ -154,8 +186,18 @@ export default function MicroAppCard({
 					<p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
 						{title}
 					</p>
+					{description ? (
+						<p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+							{description}
+						</p>
+					) : null}
 					<p className="mt-1 truncate text-xs text-muted-foreground">{meta}</p>
 				</div>
+				{statusLabel ? (
+					<span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+						{statusLabel}
+					</span>
+				) : null}
 				{external ? (
 					<ExternalLink className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
 				) : null}

@@ -14,6 +14,14 @@ const previewMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
+const resolverMocks = vi.hoisted(() => ({
+	result: {
+		projectId: "project-1",
+		loading: false,
+		error: null as Error | null,
+	},
+}))
+
 vi.mock("react-router", () => ({
 	useParams: () => ({ appId: "app-1" }),
 }))
@@ -119,6 +127,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		},
 		selectedProject: { id: "project-1", project_name: "Micro App" },
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
+		hasRunningTopic: true,
 		isReadOnly: false,
 		canRename: false,
 		attachments: [],
@@ -151,11 +160,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 }))
 
 vi.mock("../hooks/useMicroAppProjectResolver", () => ({
-	useMicroAppProjectResolver: () => ({
-		projectId: "project-1",
-		loading: false,
-		error: null,
-	}),
+	useMicroAppProjectResolver: () => resolverMocks.result,
 }))
 
 vi.mock("../components/MicroAppHeader", () => ({
@@ -197,10 +202,28 @@ vi.mock("../components/MicroAppDatabasePanel", () => ({
 describe("MicroAppPageDesktop", () => {
 	beforeEach(() => {
 		localStorage.clear()
+		resolverMocks.result = {
+			projectId: "project-1",
+			loading: false,
+			error: null,
+		}
 		detailMocks.openFileTab.mockClear()
 		detailMocks.render.mockClear()
 		previewMocks.aiEdit.mockClear()
 		previewMocks.render.mockClear()
+	})
+
+	it("shows a readable fallback when project resolution has no display message", () => {
+		resolverMocks.result = {
+			projectId: "",
+			loading: false,
+			error: new Error(),
+		}
+
+		render(<MicroAppPageDesktop />)
+
+		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
+		expect(screen.queryByText("[object ArrayBuffer]")).not.toBeInTheDocument()
 	})
 
 	it("switches preview, file viewer, and database inside the main workspace", async () => {
@@ -215,6 +238,7 @@ describe("MicroAppPageDesktop", () => {
 			expect.objectContaining({
 				viewMode: "desktop",
 				refreshKey: 0,
+				isBuilding: true,
 			}),
 		)
 		expect(screen.getByTestId("micro-app-database-workspace")).toHaveAttribute(

@@ -9,6 +9,7 @@ interface MicroAppMobileEntryPreviewProps {
 	selectedProject: ProjectListItem | null
 	allowEdit: boolean
 	onOpenFile: (fileItem?: unknown) => void
+	isBuilding?: boolean
 }
 
 function MicroAppMobileEntryPreview({
@@ -18,6 +19,7 @@ function MicroAppMobileEntryPreview({
 	selectedProject,
 	allowEdit,
 	onOpenFile,
+	isBuilding = false,
 }: MicroAppMobileEntryPreviewProps) {
 	return (
 		<MicroAppEntryPreview
@@ -29,6 +31,8 @@ function MicroAppMobileEntryPreview({
 			onOpenFile={onOpenFile}
 			viewMode="desktop"
 			emptyTestId="micro-app-mobile-preview-empty"
+			buildingTestId="micro-app-mobile-preview-building"
+			isBuilding={isBuilding}
 		/>
 	)
 }

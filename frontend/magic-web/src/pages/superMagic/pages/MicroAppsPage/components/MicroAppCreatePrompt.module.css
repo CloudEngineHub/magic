@@ -1,0 +1,458 @@
+.retroEnterKeyScope {
+	position: relative;
+	z-index: 1;
+	border-width: 1px !important;
+	border-color: #9ca2a6 !important;
+	border-radius: 12px !important;
+	background: #f7f8f8 !important;
+	box-shadow:
+		-2px 2px 0 #d0d3d4,
+		2px 2px 0 #a0a5a8,
+		0 2px 0 #c6cacc,
+		0 5px 0 #747b80,
+		0 16px 22px -10px rgba(29, 33, 36, 0.34),
+		inset 0 1px 0 rgba(255, 255, 255, 0.95),
+		inset 0 0 0 3px rgba(255, 255, 255, 0.48),
+		inset 3px 0 0 rgba(255, 255, 255, 0.32),
+		inset -3px 0 0 rgba(66, 72, 76, 0.1),
+		inset 0 -3px 0 rgba(66, 72, 76, 0.16) !important;
+	transition:
+		border-color 180ms ease,
+		box-shadow 180ms ease;
+}
+
+.retroEnterKeyScope:hover {
+	border-color: #7d858a !important;
+}
+
+.retroEnterKeyScope:focus-within {
+	border-color: #4f575d !important;
+	background: #ffffff !important;
+	box-shadow:
+		-3px 3px 0 #c6cacc,
+		3px 3px 0 #858c91,
+		0 4px 0 #b3b8bb,
+		0 8px 0 #555d63,
+		0 22px 30px -10px rgba(29, 33, 36, 0.46),
+		inset 0 1px 0 rgba(255, 255, 255, 0.96),
+		inset 0 0 0 3px rgba(221, 224, 226, 0.72),
+		inset 3px 0 0 rgba(255, 255, 255, 0.34),
+		inset -3px 0 0 rgba(66, 72, 76, 0.14),
+		inset 0 -3px 0 rgba(66, 72, 76, 0.2) !important;
+}
+
+:global(.dark) .retroEnterKeyScope {
+	border-color: rgba(255, 255, 255, 0.16) !important;
+	background: rgba(22, 24, 27, 0.96) !important;
+	box-shadow:
+		-2px 2px 0 #3f4245,
+		2px 2px 0 #111315,
+		0 3px 0 #36393c,
+		0 5px 0 #17191b,
+		0 18px 34px rgba(0, 0, 0, 0.4),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07),
+		inset 0 0 0 2px rgba(255, 255, 255, 0.035),
+		inset 3px 0 0 rgba(255, 255, 255, 0.03),
+		inset -3px 0 0 rgba(0, 0, 0, 0.24),
+		inset 0 -3px 0 rgba(0, 0, 0, 0.38) !important;
+}
+
+:global(.dark) .retroEnterKeyScope:hover,
+:global(.dark) .retroEnterKeyScope:focus-within {
+	border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button),
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
+	--retro-key-face-top: #fafafa;
+	--retro-key-face-bottom: #e6e8e9;
+	--retro-key-border: #858b90;
+	--retro-key-base: #aab0b3;
+	--retro-key-base-edge: #6c7378;
+	--retro-key-text: #31363a;
+	position: relative;
+	isolation: isolate;
+	height: 36px !important;
+	min-width: 36px !important;
+	padding: 0 9px 3px !important;
+	border: 1px solid var(--retro-key-border) !important;
+	border-radius: 7px !important;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent 24%),
+		linear-gradient(180deg, var(--retro-key-face-top) 0%, var(--retro-key-face-bottom) 100%) !important;
+	color: var(--retro-key-text) !important;
+	box-shadow:
+		0 2px 4px rgba(29, 33, 36, 0.16),
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		inset 0 0 0 2px rgba(255, 255, 255, 0.38),
+		inset 0 -1px 0 rgba(62, 68, 72, 0.1) !important;
+	opacity: 1 !important;
+	transform: translateY(0);
+	transition:
+		transform 120ms ease,
+		box-shadow 120ms ease,
+		border-color 120ms ease,
+		filter 120ms ease !important;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button svg),
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button svg),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"] svg) {
+	filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.45));
+}
+
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-header"] button:not(:disabled):hover),
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-toolbar"] button:not(:disabled):hover),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]:hover) {
+	filter: brightness(1.04) saturate(1.03);
+	transform: translateY(-1px);
+	box-shadow:
+		0 4px 8px rgba(29, 33, 36, 0.2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.94),
+		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
+}
+
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-header"] button:not(:disabled):active),
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-toolbar"] button:not(:disabled):active),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]:active) {
+	filter: brightness(0.98);
+	transform: translateY(1px);
+	box-shadow:
+		0 1px 2px rgba(21, 24, 28, 0.14),
+		inset 0 2px 4px rgba(53, 58, 64, 0.18) !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button:focus-visible),
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button:focus-visible) {
+	outline: 2px solid #59616b;
+	outline-offset: 4px;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button:disabled),
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button:disabled) {
+	--retro-key-face-top: #f4f5f5;
+	--retro-key-face-bottom: #e2e4e5;
+	--retro-key-border: #a9aeb1;
+	--retro-key-base: #b4b9bc;
+	--retro-key-base-edge: #858c91;
+	--retro-key-text: #8c9296;
+	cursor: not-allowed;
+	filter: grayscale(0.35) saturate(0.55);
+	opacity: 0.82 !important;
+	transform: translateY(0);
+	box-shadow:
+		0 1px 3px rgba(29, 33, 36, 0.12),
+		inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-toolbar"] button[aria-pressed="true"]),
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-toolbar"] button[data-active="true"]),
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button[data-state="open"]),
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-header"] button[data-visible="true"]) {
+	--retro-key-face-top: #656b6f;
+	--retro-key-face-bottom: #3c4246;
+	--retro-key-border: #2f3539;
+	--retro-key-base: #343a3e;
+	--retro-key-base-edge: #191d20;
+	--retro-key-text: #f7f8f8;
+}
+
+.retroEnterKeyScope
+	:global(
+		[data-testid="super-message-editor-toolbar"]
+			[data-testid="voice-input-button"][data-status="recording"]
+	),
+.retroEnterKeyScope
+	:global(
+		[data-testid="super-message-editor-toolbar"]
+			[data-testid="voice-input-button"][data-status="processing"]
+	) {
+	--retro-key-face-top: #565b61;
+	--retro-key-face-bottom: #24272b;
+	--retro-key-border: #15181b;
+	--retro-key-base: #181b1f;
+	--retro-key-base-edge: #090b0d;
+	--retro-key-text: #ffffff;
+}
+
+.retroEnterKeyScope
+	:global(
+		[data-testid="super-message-editor-toolbar"]
+			[data-testid="voice-input-button"][data-status="error"]
+	) {
+	--retro-key-face-top: #464a4f;
+	--retro-key-face-bottom: #202327;
+	--retro-key-border: #792f31;
+	--retro-key-base: #1a1d20;
+	--retro-key-base-edge: #090b0d;
+	--retro-key-text: #ffb8b8;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar-divider"]) {
+	height: 24px;
+	width: 2px;
+	margin-inline: 8px;
+	border-radius: 1px;
+	background: #969da1;
+	box-shadow: 1px 0 0 rgba(255, 255, 255, 0.9);
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button) {
+	height: 30px !important;
+	min-width: 30px !important;
+	padding: 0 6px 3px !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"]) {
+	padding-bottom: 4px;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar-left"]) {
+	overflow: visible;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"]),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
+	height: 38px !important;
+	min-width: 92px !important;
+	justify-content: flex-start !important;
+	gap: 7px !important;
+	padding: 0 12px 3px !important;
+	font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 11px !important;
+	font-weight: 650 !important;
+	letter-spacing: 0.02em;
+	transform: translateY(0);
+	box-shadow:
+		0 2px 4px rgba(29, 33, 36, 0.16),
+		inset 0 1px 0 rgba(255, 255, 255, 0.92),
+		inset 0 -1px 0 rgba(53, 58, 64, 0.14) !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"] > span),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"] > span) {
+	min-width: 0;
+	flex: 1;
+	justify-content: flex-start;
+	gap: 7px;
+	color: currentColor !important;
+	font-weight: 650 !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"] span),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"] span) {
+	color: currentColor !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"] img),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"] span svg),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"] img),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"] span svg) {
+	height: 16px !important;
+	width: 16px !important;
+	filter: grayscale(1) saturate(0) contrast(1.1) !important;
+	opacity: 0.72;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"] > svg:last-child),
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-model-switch-mobile"] > svg:last-child) {
+	display: none;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"]::after),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]::after) {
+	content: "";
+	margin-left: auto;
+	height: 6px;
+	width: 6px;
+	flex: none;
+	border-bottom: 1.5px solid currentColor;
+	border-right: 1.5px solid currentColor;
+	opacity: 0.68;
+	transform: translateY(-2px) rotate(45deg);
+	transition: transform 140ms ease;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"]:not(:disabled):hover),
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]:hover) {
+	transform: translateY(-1px);
+	box-shadow:
+		0 4px 8px rgba(29, 33, 36, 0.2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.96),
+		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"][data-state="open"]) {
+	transform: translateY(1px);
+	box-shadow:
+		0 1px 2px rgba(21, 24, 28, 0.16),
+		inset 0 2px 4px rgba(53, 58, 64, 0.18) !important;
+}
+
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-model-switch"][data-state="open"]::after) {
+	transform: translateY(2px) rotate(225deg);
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]) {
+	height: 38px !important;
+	width: 78px !important;
+	min-width: 78px !important;
+	padding: 0 12px 3px !important;
+	transform: translateY(0);
+	box-shadow:
+		0 2px 4px rgba(29, 33, 36, 0.16),
+		inset 0 1px 0 rgba(255, 255, 255, 0.92),
+		inset 0 -1px 0 rgba(53, 58, 64, 0.14) !important;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]::before) {
+	content: "Enter";
+	position: absolute;
+	left: 11px;
+	top: 8px;
+	font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 10px;
+	font-weight: 650;
+	line-height: 1;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]::after) {
+	content: "↵";
+	position: absolute;
+	right: 10px;
+	top: 6px;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 22px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"] > svg) {
+	opacity: 0;
+	transform: scale(0.75);
+}
+
+.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]:not(:disabled):hover) {
+	transform: translateY(-1px);
+	box-shadow:
+		0 4px 8px rgba(29, 33, 36, 0.2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.96),
+		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
+}
+
+.retroEnterKeyScope:focus-within
+	:global(
+		[data-testid="super-message-editor-header"]
+			button:not(:disabled):not(:hover):not(:active):not([data-state="open"])
+	),
+.retroEnterKeyScope:focus-within
+	:global(
+		[data-testid="super-message-editor-toolbar"]
+			button:not(:disabled):not(:hover):not(:active):not([data-state="open"])
+	),
+.retroEnterKeyScope:focus-within
+	:global(
+		[data-testid="super-message-editor-model-switch-mobile"]:not(:disabled):not(:hover):not(
+				:active
+			):not([data-state="open"])
+	) {
+	filter: brightness(1.04) contrast(1.04);
+	transform: translateY(-1px);
+	box-shadow:
+		0 5px 10px rgba(29, 33, 36, 0.22),
+		inset 0 1px 0 rgba(255, 255, 255, 0.96),
+		inset 0 0 0 2px rgba(255, 255, 255, 0.42),
+		inset 0 -1px 0 rgba(62, 68, 72, 0.18) !important;
+}
+
+.retroEnterKeyScope
+	:global([data-testid="super-message-editor-send-button"][data-loading="true"]::after) {
+	content: "···";
+	top: 7px;
+	right: 9px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 14px;
+	letter-spacing: 1px;
+	animation: retro-enter-loading 900ms ease-in-out infinite alternate;
+}
+
+@keyframes retro-enter-loading {
+	from {
+		opacity: 0.35;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+@media (max-width: 767px) {
+	.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"]) {
+		padding-bottom: 4px;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button),
+	.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button),
+	.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
+		height: 32px !important;
+		min-width: 32px !important;
+		padding-inline: 7px !important;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button) {
+		height: 28px !important;
+		min-width: 28px !important;
+		padding-inline: 5px !important;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
+		height: 32px !important;
+		min-width: 82px !important;
+		padding: 0 9px 2px !important;
+		font-size: 10px !important;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]) {
+		width: 58px !important;
+		min-width: 58px !important;
+		padding-bottom: 2px !important;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]::before) {
+		left: 8px;
+		top: 7px;
+		font-size: 8px;
+	}
+
+	.retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]::after) {
+		right: 8px;
+		top: 5px;
+		font-size: 20px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.retroEnterKeyScope :global([data-testid="super-message-editor-header"] button),
+	.retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button),
+	.retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
+		transition: none !important;
+	}
+
+	.retroEnterKeyScope
+		:global([data-testid="super-message-editor-send-button"][data-loading="true"]::after) {
+		animation: none;
+	}
+}

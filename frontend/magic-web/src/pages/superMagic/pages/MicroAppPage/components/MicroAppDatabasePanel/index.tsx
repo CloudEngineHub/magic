@@ -16,6 +16,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
 import { Button } from "@/components/shadcn-ui/button"
+import { MicroAppDatabaseEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 import type { MagicBaseCellSelection } from "./DataGrid"
 import DatabaseTablePanel, { type DatabasePanelTab } from "./DatabaseTablePanel"
@@ -319,8 +320,9 @@ export default function MicroAppDatabasePanel({
 
 				<section className="flex min-w-0 flex-1 flex-col">
 					{!selectedTableId && !tablesLoading && !tablesError ? (
-						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-							{t("microAppPage.databasePanel.noTables")}
+						<div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+							<MicroAppDatabaseEmptyIllustration size="md" />
+							<p>{t("microAppPage.databasePanel.noTables")}</p>
 						</div>
 					) : null}
 

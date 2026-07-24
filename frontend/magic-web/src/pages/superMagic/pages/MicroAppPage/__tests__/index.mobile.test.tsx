@@ -8,6 +8,14 @@ const previewPopupMocks = vi.hoisted(() => ({
 	open: vi.fn(),
 }))
 
+const resolverMocks = vi.hoisted(() => ({
+	result: {
+		projectId: "project-1",
+		loading: false,
+		error: null as Error | null,
+	},
+}))
+
 vi.mock("react-router", () => ({
 	useParams: () => ({ appId: "app-1" }),
 }))
@@ -65,6 +73,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		},
 		selectedProject: { id: "project-1", project_name: "Micro App" },
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
+		hasRunningTopic: true,
 		isReadOnly: false,
 		attachments: [
 			{
@@ -114,11 +123,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 }))
 
 vi.mock("../hooks/useMicroAppProjectResolver", () => ({
-	useMicroAppProjectResolver: () => ({
-		projectId: "project-1",
-		loading: false,
-		error: null,
-	}),
+	useMicroAppProjectResolver: () => resolverMocks.result,
 }))
 
 vi.mock("@/pages/superMagic/components/TopicFilesButton", () => ({
@@ -140,8 +145,18 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton", () => ({
 }))
 
 vi.mock("../components/MicroAppMobileEntryPreview", () => ({
-	default: ({ entryFile }: { entryFile?: { file_id?: string } }) => (
-		<div data-testid="mobile-preview-content" data-entry-file-id={entryFile?.file_id} />
+	default: ({
+		entryFile,
+		isBuilding,
+	}: {
+		entryFile?: { file_id?: string }
+		isBuilding?: boolean
+	}) => (
+		<div
+			data-testid="mobile-preview-content"
+			data-entry-file-id={entryFile?.file_id}
+			data-is-building={String(isBuilding)}
+		/>
 	),
 }))
 
@@ -164,7 +179,25 @@ vi.mock("../components/MicroAppMobileConversation", () => ({
 
 describe("MicroAppPageMobile", () => {
 	beforeEach(() => {
+		resolverMocks.result = {
+			projectId: "project-1",
+			loading: false,
+			error: null,
+		}
 		previewPopupMocks.open.mockClear()
+	})
+
+	it("shows a readable fallback when project resolution has no display message", () => {
+		resolverMocks.result = {
+			projectId: "",
+			loading: false,
+			error: new Error(),
+		}
+
+		render(<MicroAppPageMobile />)
+
+		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
+		expect(screen.queryByText("[object ArrayBuffer]")).not.toBeInTheDocument()
 	})
 
 	it("keeps preview and files at the top level and opens conversation from a floating button", async () => {
@@ -178,6 +211,7 @@ describe("MicroAppPageMobile", () => {
 		const entryPreview = await screen.findByTestId("mobile-preview-content")
 		expect(entryPreview).toBeInTheDocument()
 		expect(entryPreview).toHaveAttribute("data-entry-file-id", "entry-1")
+		expect(entryPreview).toHaveAttribute("data-is-building", "true")
 
 		fireEvent.click(screen.getByTestId("micro-app-mobile-tab-files"))
 		expect(screen.getByTestId("mobile-files-content")).toBeInTheDocument()

@@ -1,135 +1,163 @@
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { ShareType } from "@/pages/superMagic/components/Share/types"
-import { getPublishedMicroAppList, useMicroAppsPage } from "../useMicroAppsPage"
+import { normalizeMicroAppListResponse, useMicroAppsPage } from "../useMicroAppsPage"
 
 const mocks = vi.hoisted(() => ({
 	getMicroAppWorkspace: vi.fn(),
-	getProjectsWithCollaboration: vi.fn(),
-	getPublishedMicroAppProjects: vi.fn(),
+	getMicroApps: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getMicroAppWorkspace: mocks.getMicroAppWorkspace,
-		getProjectsWithCollaboration: mocks.getProjectsWithCollaboration,
-		getPublishedMicroAppProjects: mocks.getPublishedMicroAppProjects,
+		getMicroApps: mocks.getMicroApps,
 	},
 }))
 
 describe("useMicroAppsPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		mocks.getMicroAppWorkspace.mockResolvedValue({
-			id: "workspace-1",
-			name: "Micro Apps",
-		})
-		mocks.getProjectsWithCollaboration.mockResolvedValue({
+		mocks.getMicroAppWorkspace.mockResolvedValue({ id: "workspace-1", name: "Micro Apps" })
+		mocks.getMicroApps.mockResolvedValue({
 			list: [
 				{
-					id: "project-1",
-					project_name: "Draft App",
-					workspace_name: "Micro Apps",
+					app_id: "933138305533177857",
+					app_name: "客户跟进助手",
+					app_description: "客户跟进与提醒工具",
+					creator_id: "user-1",
+					cover_url: "https://cdn.example.com/cover.png",
+					publish_status: "published",
+					updated_at: "2026-07-24 10:30:00",
 				},
 			],
-		})
-		mocks.getPublishedMicroAppProjects.mockResolvedValue({
-			list: [
-				{
-					project: {
-						id: "933138305533177857",
-						project_name: "Published App",
-						project_mode: "micro-app",
-					},
-					publish: {
-						app_id: "app-2",
-						project_id: "933138305533177857",
-						resource_id: "resource-2",
-						share_type: ShareType.Public,
-						access_url: "",
-						published_at: "2026-07-08 01:06:04",
-					},
-				},
-			],
+			total: 21,
+			page: 1,
+			page_size: 20,
 		})
 	})
 
-	it("loads workspace projects and accessible published micro apps", async () => {
+	it("loads the new app list with the default scope", async () => {
 		const { result } = renderHook(() => useMicroAppsPage())
 
-		await waitFor(() => {
-			expect(result.current.loading).toBe(false)
-		})
+		await waitFor(() => expect(result.current.loading).toBe(false))
 
-		expect(mocks.getProjectsWithCollaboration).toHaveBeenCalledWith({
-			workspace_id: "workspace-1",
+		expect(mocks.getMicroApps).toHaveBeenCalledWith({
 			page: 1,
-			page_size: 100,
-			show_collaboration: 1,
-		})
-		expect(mocks.getPublishedMicroAppProjects).toHaveBeenCalledWith({
-			page: 1,
-			page_size: 100,
+			page_size: 20,
 			keyword: "",
+			scope: "all",
 		})
-		expect(result.current.projects).toHaveLength(1)
-		expect(result.current.publishedProjects).toEqual([
-			{
-				app_id: "app-2",
-				project_id: "933138305533177857",
-				project_name: "Published App",
-				resource_id: "resource-2",
-				access_url: "",
-				published_at: "2026-07-08 01:06:04",
-				share_type: ShareType.Public,
-				share_range: undefined,
-				share_id: undefined,
-				share_code: undefined,
-				target_ids: [],
-				password: undefined,
-				publish_status: undefined,
-			},
-		])
+		expect(result.current.apps).toHaveLength(1)
+		expect(result.current.apps[0].app_id).toBe("933138305533177857")
+		expect(result.current.hasMore).toBe(true)
 	})
 
-	it("reads published list from wrapped response and nested project payload", () => {
+	it("reloads with scope and keyword, then appends the next page", async () => {
+		mocks.getMicroApps
+			.mockResolvedValueOnce({ list: [], total: 0, page: 1, page_size: 20 })
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "app-2",
+						app_name: "协作应用",
+						app_description: "",
+						creator_id: "user-2",
+						cover_url: "",
+						publish_status: "unpublished",
+						updated_at: null,
+					},
+				],
+				total: 2,
+				page: 1,
+				page_size: 20,
+			})
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "app-3",
+						app_name: "第二个协作应用",
+						app_description: "",
+						creator_id: "user-3",
+						cover_url: "",
+						publish_status: "published",
+						updated_at: null,
+					},
+				],
+				total: 2,
+				page: 2,
+				page_size: 20,
+			})
+
+		const { result } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		act(() => {
+			result.current.setScope("collaborated")
+			result.current.setKeyword("协作")
+		})
+		await waitFor(() => expect(result.current.apps[0]?.app_id).toBe("app-2"))
+
+		expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: "协作",
+			scope: "collaborated",
+		})
+
+		await act(async () => {
+			await result.current.loadMore()
+		})
+
+		expect(result.current.apps.map((app) => app.app_id)).toEqual(["app-2", "app-3"])
+		expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+			page: 2,
+			page_size: 20,
+			keyword: "协作",
+			scope: "collaborated",
+		})
+	})
+
+	it("normalizes wrapped responses and stringifies ids", () => {
 		expect(
-			getPublishedMicroAppList({
+			normalizeMicroAppListResponse({
 				data: {
-					list: [
-						{
-							project: {
-								id: "933138305533177857",
-								project_name: "手机消费者问卷调查生成",
-							},
-							publish: {
-								app_id: "app-2",
-								project_id: "933138305533177857",
-								resource_id: "933152014460612609",
-								share_type: ShareType.PasswordProtected,
-								access_url: "",
-								published_at: "2026-07-08 01:06:04",
-							},
-						},
-					],
+					list: [{ app_id: "933138305533177857", app_name: "App" }],
+					total: 1,
+					page: 1,
+					page_size: 20,
 				},
 			}),
-		).toEqual([
-			{
-				app_id: "app-2",
-				project_id: "933138305533177857",
-				project_name: "手机消费者问卷调查生成",
-				resource_id: "933152014460612609",
-				share_id: undefined,
-				share_code: undefined,
-				share_type: ShareType.PasswordProtected,
-				share_range: undefined,
-				target_ids: [],
-				access_url: "",
-				published_at: "2026-07-08 01:06:04",
-				password: undefined,
-				publish_status: undefined,
-			},
-		])
+		).toEqual({
+			list: [
+				{
+					app_id: "933138305533177857",
+					app_name: "App",
+					app_description: "",
+					creator_id: "",
+					cover_url: "",
+					publish_status: "unpublished",
+					updated_at: null,
+				},
+			],
+			total: 1,
+			page: 1,
+			page_size: 20,
+		})
+	})
+
+	it("keeps returned apps visible when workspace loading fails", async () => {
+		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		mocks.getMicroAppWorkspace.mockRejectedValue(new Error("invalid workspace code"))
+
+		const { result } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		expect(mocks.getMicroApps).toHaveBeenCalled()
+		expect(result.current.apps).toHaveLength(1)
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			"Failed to load micro app workspace:",
+			expect.any(Error),
+		)
+		consoleErrorSpy.mockRestore()
 	})
 })

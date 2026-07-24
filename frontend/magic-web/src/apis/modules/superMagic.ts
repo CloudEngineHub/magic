@@ -89,6 +89,7 @@ export interface LlmModelTemperature {
 
 export type MicroAppPublishShareType = 2 | 4 | 5
 export type MicroAppPublishShareRange = "all" | "designated"
+export type MicroAppListScope = "all" | "created" | "collaborated"
 
 export interface MicroAppPublishTarget {
 	target_type: "User" | "Department"
@@ -96,16 +97,18 @@ export interface MicroAppPublishTarget {
 }
 
 export interface PublishMicroAppProjectBody {
-	project_name: string
+	app_name: string
 	share_type: MicroAppPublishShareType
 	share_range?: MicroAppPublishShareRange
 	target_ids?: MicroAppPublishTarget[]
 	password?: string
+	cover_file_key?: string | null
 }
 
 export interface PublishedMicroAppProjectItem {
 	app_id?: string
-	project_id: string
+	project_id?: string
+	app_name?: string
 	project_name?: string
 	resource_id?: string
 	share_id?: string
@@ -116,7 +119,40 @@ export interface PublishedMicroAppProjectItem {
 	access_url?: string
 	published_at?: string
 	password?: string
+	cover_file_key?: string | null
+	cover_url?: string
 	publish_status?: "published" | "unpublished" | string
+}
+
+export interface MicroAppListItem {
+	app_id: string
+	app_name: string
+	app_description: string
+	creator_id: string
+	cover_url: string
+	publish_status: "published" | "unpublished" | string
+	updated_at: string | null
+}
+
+export interface MicroAppListResponse {
+	list: MicroAppListItem[]
+	total: number
+	page: number
+	page_size: number
+}
+
+export interface UpdateMicroAppBody {
+	app_name?: string
+	cover_file_key?: string | null
+}
+
+export interface MicroAppMetadata {
+	app_id: string
+	app_name: string
+	cover_file_key?: string | null
+	cover_url?: string
+	publish_status?: "published" | "unpublished" | string
+	updated_at?: string | null
 }
 
 export interface PublishedMicroAppProjectRecord {
@@ -2949,19 +2985,55 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	createMicroAppProject({
 		workspace_id,
 		project_name = "",
+		dynamic_params,
 	}: {
 		workspace_id?: string
 		project_name?: string
+		dynamic_params?: Record<string, unknown>
 	}) {
 		return fetch.post<CreateMicroAppProjectResponse>(
 			"/api/v1/super-agent/micro-app-projects",
 			{
 				workspace_id,
 				project_name,
-				dynamic_params: {
+				dynamic_params: dynamic_params ?? {
+					agent_mode: "micro-app",
 					message_version: "v2",
 				},
 			},
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 获取当前用户可访问的微应用列表
+	 */
+	getMicroApps(
+		params: {
+			page?: number
+			page_size?: number
+			keyword?: string
+			scope?: MicroAppListScope
+		} = {},
+	) {
+		const { page = 1, page_size = 20, keyword = "", scope = "all" } = params
+		return fetch.get<MicroAppListResponse>(
+			genRequestUrl(
+				"/api/v1/super-agent/micro-apps/queries",
+				{},
+				{ page, page_size, keyword, scope },
+			),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 更新微应用名称或封面
+	 */
+	updateMicroApp(appId: string, body: UpdateMicroAppBody) {
+		return fetch.put<MicroAppMetadata>(
+			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
+			body,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},
