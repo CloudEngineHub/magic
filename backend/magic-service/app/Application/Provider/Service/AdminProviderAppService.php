@@ -453,7 +453,7 @@ readonly class AdminProviderAppService
         $modelArray['model_id'] = $modelEntity->getDisplayModelId();
         $providerConfig = $this->providerConfigDomainService->getProviderConfig($dataIsolation, (string) $modelEntity->getServiceProviderConfigId());
         $providerCode = $providerConfig?->getProviderCode();
-        $modelArray['provider_code'] = $providerCode?->value ?? '';
+        $modelArray['provider_code'] = $providerCode->value ?? '';
 
         $modelDetailDTO = new ProviderModelDetailDTO($modelArray);
 
