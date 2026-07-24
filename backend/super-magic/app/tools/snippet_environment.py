@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 
@@ -6,6 +7,18 @@ CURRENT_MODEL_ENV_NAME = "SUPER_MAGIC_CURRENT_MODEL_ID"
 
 class SnippetEnvironment:
     """代码片段子进程环境变量构建辅助类。"""
+
+    @staticmethod
+    def resolve_working_dir(workspace_dir: str, cwd: str | None) -> Path:
+        """解析代码片段工作目录：相对路径锚定 workspace，绝对路径直接使用。"""
+        workspace_path = Path(workspace_dir)
+        if cwd is None or not cwd.strip():
+            return workspace_path
+
+        requested_path = Path(cwd)
+        if requested_path.is_absolute():
+            return requested_path
+        return workspace_path / requested_path
 
     @staticmethod
     def apply_current_model(extra_env: dict[str, str], agent_ctx: Any) -> None:

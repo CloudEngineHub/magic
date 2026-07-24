@@ -343,7 +343,6 @@ Fallback for unsupported request shapes. Use `run_python_snippet` so the termina
 
 ```python
 run_python_snippet(
-    script_path="temp_oauth2_api_request.py",
     timeout=60,
     python_code="""
 import json

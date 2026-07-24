@@ -41,7 +41,6 @@ client = create_openai_sync_client()
 model_id = os.environ.get("SUPER_MAGIC_CURRENT_MODEL_ID") or "<model-id>"
 ...
 """,
-    script_path="temp_llm_xxx.py",
     timeout=300,
 )
 
@@ -74,7 +73,6 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)
 """,
-    script_path="temp_default_provider.py",
     timeout=120,
 )
 ```
@@ -102,7 +100,6 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)
 """,
-    script_path="temp_custom_provider.py",
     timeout=180,
 )
 ```
@@ -134,7 +131,6 @@ client = create_openai_sync_client()
 models = client.models.list()
 print(json.dumps([{"id": m.id} for m in models.data], ensure_ascii=False, indent=2))
 """,
-    script_path="temp_list_models.py",
 )
 ```
 
@@ -172,7 +168,6 @@ response = client.chat.completions.create(
 
 print(response.choices[0].message.content)
 """,
-    script_path="temp_chat.py",
     timeout=120,
 )
 ```
@@ -220,7 +215,6 @@ response = client.chat.completions.create(
 
 print(response.choices[0].message.content)
 """,
-    script_path="temp_vision.py",
     timeout=120,
 )
 ```

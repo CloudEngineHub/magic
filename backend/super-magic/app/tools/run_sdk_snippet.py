@@ -15,10 +15,9 @@ v2 消息模式由 StreamListenerService 统一跳过该限制，事件正常发
 import asyncio
 import json
 import re
-import time
+import shlex
 import uuid
 
-import aiofiles
 from pathlib import Path
 from pydantic import Field
 
@@ -39,13 +38,24 @@ from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+from app.utils.async_file_utils import async_mkdir, async_unlink, async_write_text
 from app.utils.process_executor import ProcessExecutor
 
 # 匹配 tool.call('tool_name', ...) 或 tool.call("tool_name", ...) 中的工具名
 _TOOL_CALL_PATTERN = re.compile(r'tool\.call\s*\(\s*[\'"](\w+)[\'"]')
 
+# 匹配任意 tool.call(...) 用法，包括动态工具名；用于判断脚本是否属于 Code Mode
+_TOOL_CALL_USAGE_PATTERN = re.compile(r"\btool\.call\s*\(")
+
 # v2 提前 after 使用的占位 content（与真实终端输出区分，用于选择 remark 文案）
 _EARLY_AFTER_FAKE_CONTENT = "Script dispatched, executing inner tool calls."
+
+_PLAIN_PYTHON_FALLBACK_WARNING = (
+    "WARNING: run_sdk_snippet received plain Python code without sdk.tool usage, "
+    "so it was automatically executed with run_python_snippet. "
+    "Use run_python_snippet for plain Python. "
+    "Use run_sdk_snippet only for Code Mode scripts that call tools through sdk.tool."
+)
 
 logger = get_logger(__name__)
 
@@ -54,20 +64,25 @@ class RunSdkSnippetParams(BaseToolParams):
     """SDK 代码片段执行参数"""
     python_code: str = Field(
         ...,
-        description="""<!--zh: 要执行的 Python 代码，通过 sdk.tool 调用工具-->
-Python code to execute that calls tools via sdk.tool"""
+        description="""<!--zh: 要执行的 Code Mode Python 代码，必须通过 sdk.tool 调用工具；普通 Python 请使用 run_python_snippet。-->
+Code Mode Python code that calls tools via sdk.tool. Use run_python_snippet for plain Python."""
     )
     timeout: int = Field(
         120,
         description="""<!--zh: 超时秒数，默认120，按预期时长调整-->
 Timeout in seconds, default 120. Increase for long-running scripts."""
     )
+    cwd: str | None = Field(
+        None,
+        description="""<!--zh: 脚本执行工作目录；默认使用当前工作空间，相对路径基于工作空间解析，绝对路径直接使用。-->
+Script working directory. Defaults to the current workspace. Relative paths resolve from the workspace; absolute paths are used as provided."""
+    )
 
 
 @tool()
 class RunSdkSnippet(AbstractFileTool[RunSdkSnippetParams]):
-    """<!--zh: 执行 Python 脚本，脚本可通过 SDK 调用任意工具和 MCP，print 的内容作为结果返回。-->
-    Run a Python script that can call any tool or MCP via SDK. Whatever the script prints becomes the result.
+    """<!--zh: 执行通过 SDK 调用工具或 MCP 的 Code Mode Python 脚本，普通 Python 请使用 run_python_snippet。-->
+    Run a Code Mode Python script that calls tools or MCP via SDK. Use run_python_snippet for plain Python.
     """
 
     def should_trigger_events(self) -> bool:
@@ -76,8 +91,13 @@ class RunSdkSnippet(AbstractFileTool[RunSdkSnippetParams]):
 
     def get_prompt_hint(self) -> str:
         return """\
-<!--zh
-写一段 Python 脚本来编排工具调用。脚本里可以串联多个工具、加入判断和循环，
+    <!--zh
+    根据执行过程应该如何展示给用户来选择工具：
+    - 只有脚本的主要目的是通过 sdk.tool 导入 tool 并调用 tool.call() 时，才使用 run_sdk_snippet。run_sdk_snippet 的外层包装卡片会隐藏，避免重复展示；脚本内每次 tool.call() 仍会分别展示真实工具卡片。
+    - 普通 Python 计算、数据处理、校验、文件操作，或不使用 tool.call() 的库与 SDK 调用，应使用 run_python_snippet。它的 Python 执行卡片保持可见，用户可以检查实际执行的代码。
+    - 不要把 run_sdk_snippet 当作普通 Python 运行器。脚本没有导入 sdk.tool 并调用 tool.call() 时，应选择 run_python_snippet。
+
+    写一段 Python 脚本来编排工具调用。脚本里可以串联多个工具、加入判断和循环，
 中间结果留在脚本内部，不进入你的上下文——只有 print 的内容会回到你手里。
 
 适用场景：需要多步工具编排、逻辑处理，或调用仅通过 Code Mode 可用的工具。
@@ -168,9 +188,14 @@ else:
     # 用户要导出时，换成 write_file；也可导出为 CSV/JSON 等任意格式
 ```
 
-也可以链式串联多个工具：从一个工具取 ID，传给另一个工具，再合并输出。
--->
-Write a Python script to orchestrate tool calls. You can chain multiple tools, add conditionals and loops — intermediate results stay inside the script and never enter your context. Only what you print comes back.
+    也可以链式串联多个工具：从一个工具取 ID，传给另一个工具，再合并输出。
+    -->
+    Choose this tool based on how the execution should appear to the user:
+    - Use run_sdk_snippet only for Code Mode scripts whose primary purpose is to import tool from sdk.tool and call tool.call(). The run_sdk_snippet wrapper card is hidden to avoid duplicate UI, while each inner tool.call() is shown as its own tool card.
+    - Use run_python_snippet for plain Python computation, data processing, validation, file operations, or direct library and SDK calls that do not use tool.call(). Its Python execution card remains visible so the user can inspect the code that ran.
+    - Do not use run_sdk_snippet merely as a Python runner. If the script does not import sdk.tool and call tool.call(), choose run_python_snippet.
+
+    Write a Python script to orchestrate tool calls. You can chain multiple tools, add conditionals and loops — intermediate results stay inside the script and never enter your context. Only what you print comes back.
 
 Use when you need multi-step tool orchestration, logic processing, or tools that are only available via Code Mode.
 Often paired with Skills: the Skill tells you what to do, this tool handles how.
@@ -281,6 +306,39 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
         }
 
     @staticmethod
+    def _looks_like_code_mode(python_code: str) -> bool:
+        """只要脚本包含 SDK 工具调用迹象，就继续按 Code Mode 执行。"""
+        return "sdk.tool" in python_code or bool(_TOOL_CALL_USAGE_PATTERN.search(python_code))
+
+    @staticmethod
+    def _merge_plain_python_fallback_content(content: str) -> str:
+        """将误用提示写入模型可读内容，不增加用户可见提示。"""
+        if content:
+            return f"{_PLAIN_PYTHON_FALLBACK_WARNING}\n\n{content}"
+        return _PLAIN_PYTHON_FALLBACK_WARNING
+
+    async def _execute_plain_python_fallback(
+        self,
+        tool_context: ToolContext,
+        params: RunSdkSnippetParams,
+        python_code: str,
+    ) -> ToolResult:
+        from app.tools.run_python_snippet import RunPythonSnippet, RunPythonSnippetParams
+
+        terminal_result = await RunPythonSnippet().execute_purely(
+            RunPythonSnippetParams(
+                python_code=python_code,
+                timeout=params.timeout,
+                cwd=params.cwd,
+            ),
+            tool_context,
+        )
+        content = self._merge_plain_python_fallback_content(terminal_result.content)
+        if terminal_result.ok:
+            return ToolResult(content=content)
+        return ToolResult.error(content)
+
+    @staticmethod
     def _check_code_mode_compatibility(python_code: str) -> list[str]:
         """扫描代码中所有 tool.call() 调用，返回不允许 Code Mode 的工具名列表。"""
         from app.tools.core.tool_factory import tool_factory
@@ -303,6 +361,9 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
     async def execute(self, tool_context: ToolContext, params: RunSdkSnippetParams) -> ToolResult:
         python_code = self._prepare_python_code(params.python_code)
 
+        if not self._looks_like_code_mode(python_code):
+            return await self._execute_plain_python_fallback(tool_context, params, python_code)
+
         # 检查是否包含不允许在 Code Mode 中调用的工具
         blocked_tools = self._check_code_mode_compatibility(python_code)
         if blocked_tools:
@@ -314,28 +375,32 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
         # v2 模式下在脚本执行前是否已提前触发 after_tool_call
         early_after_sent = False
+        script_file_path: Path | None = None
 
         try:
-            script_filename = f"temp_sdk_{int(time.time() * 1000)}.py"
-
             project_root = PathManager.get_project_root()
+            agent_ctx = tool_context.get_extension_typed("agent_context", AgentContext)
+            if agent_ctx is None:
+                raise RuntimeError(
+                    "run_sdk_snippet: tool_context 中不存在 agent_context，"
+                    "无法确定调用方 Agent 标识"
+                )
 
-            runtime_dir = project_root / ".runtime" / "sdk_scripts"
-            runtime_dir.mkdir(parents=True, exist_ok=True)
+            runtime_dir = PathManager.get_runtime_dir() / "sdk_scripts"
+            await async_mkdir(runtime_dir, parents=True, exist_ok=True)
 
-            script_file_path = runtime_dir / script_filename
+            script_file_path = runtime_dir / f"temp_sdk_{uuid.uuid4().hex}.py"
 
             logger.info(f"创建 SDK 代码片段脚本: {script_file_path}")
 
             try:
-                async with aiofiles.open(script_file_path, 'w', encoding='utf-8') as f:
-                    await f.write(python_code)
+                await async_write_text(script_file_path, python_code)
                 logger.debug(f"成功写入代码到: {script_file_path}")
             except Exception as e:
                 logger.exception(f"写入 SDK 代码片段失败: {e}")
                 return ToolResult.error(f"写入 SDK 代码片段失败: {e}")
 
-            command = f"python {script_filename}"
+            command = f"python {shlex.quote(str(script_file_path))}"
             effective_timeout = SdkSnippetTimeoutRegistry.get_effective_timeout(
                 python_code, params.timeout
             )
@@ -348,12 +413,6 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             # 将调用方 AgentContext 的 context_id 注入子进程，供 SDK 请求带回服务端，
             # 使服务端能精确路由到正确的 Agent 上下文。
             extra_env = self._build_snippet_extra_env(project_root)
-            agent_ctx: AgentContext = tool_context.get_extension("agent_context")
-            if agent_ctx is None:
-                raise RuntimeError(
-                    "run_sdk_snippet: tool_context 中不存在 agent_context，"
-                    "无法确定调用方 Agent 标识"
-                )
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
             SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
 
@@ -397,14 +456,23 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             try:
                 terminal_result = await ProcessExecutor.execute_command(
                     command=command,
-                    cwd=runtime_dir,
+                    cwd=SnippetEnvironment.resolve_working_dir(
+                        agent_ctx.get_workspace_dir(),
+                        params.cwd,
+                    ),
                     timeout=effective_timeout,
                     extra_env=extra_env,
                     interruption_event=agent_ctx.get_interruption_event(),
                 )
             finally:
                 # 正常完成后清理残留的 in-flight 记录（容错）
-                registry.cancel_by_execution(agent_ctx.context_id, sdk_execution_id)
+                try:
+                    registry.cancel_by_execution(agent_ctx.context_id, sdk_execution_id)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"清理 SDK in-flight 记录失败: execution_id={sdk_execution_id}, "
+                        f"错误: {cleanup_error}"
+                    )
 
             # early_after_sent=True 时外层 after_tool_call 应被屏蔽（已提前发出）
             system = TOOL_RESULT_SYSTEM_DISPATCHED if early_after_sent else None
@@ -421,6 +489,17 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             logger.exception(f"执行 SDK 代码片段时出错: {e}")
             system = TOOL_RESULT_SYSTEM_DISPATCHED if early_after_sent else None
             return ToolResult.error(f"执行 SDK 代码片段时出错: {e}", system=system)
+
+        finally:
+            if script_file_path is not None:
+                try:
+                    await async_unlink(script_file_path)
+                    logger.debug(f"已删除 SDK 代码片段脚本: {script_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"删除 SDK 代码片段脚本失败: {script_file_path}, "
+                        f"错误: {cleanup_error}"
+                    )
 
     async def get_after_tool_call_friendly_action_and_remark(
         self,

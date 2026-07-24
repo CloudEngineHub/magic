@@ -249,8 +249,7 @@ Run Python code directly without writing a file first. Useful for lightweight da
 ```json
 {
   "python_code": "string (required) — Python code to execute",
-  "script_path": "string (required) — Temporary script file path (including filename); avoid name collisions, recommend temp_xxx.py",
-  "cwd": "string | null (optional) — Working directory for script execution; defaults to workspace root",
+  "cwd": "string | null (optional) — Working directory; defaults to workspace root, relative paths resolve from workspace, absolute paths are used as provided",
   "timeout": "integer (optional, default 60) — Timeout in seconds"
 }
 ```
@@ -264,8 +263,7 @@ import json
 
 data = {"name": "my-skill", "version": "1.0"}
 print(json.dumps(data, indent=2))
-""",
-    "script_path": "temp_check_skill.py"
+"""
 })
 ```
 
