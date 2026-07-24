@@ -30,6 +30,7 @@ import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
 import { AppStoreProvider } from "./context"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
+import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
 import { collectHtmlFiles, getAttachmentId } from "./utils/microAppFiles"
 
 const MicroAppDatabasePanel = lazy(() => import("./components/MicroAppDatabasePanel"))
@@ -64,7 +65,7 @@ function getPreviewPath(
 	return /^index\.html?$/i.test(normalizedPath) ? "/" : `/${normalizedPath}`
 }
 
-function MicroAppPageInner({ projectId }: { projectId: string }) {
+function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: string }) {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
@@ -428,6 +429,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 			</div>
 
 			<MicroAppPageOverlays
+				appId={appId}
 				projectId={selectedProject?.id}
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
@@ -446,16 +448,18 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 const MicroAppPageInnerObserver = observer(MicroAppPageInner)
 
 function MicroAppPageDesktop() {
-	const { projectId } = useParams<{ projectId: string }>()
+	const { appId = "" } = useParams<{ appId: string }>()
+	const { t } = useTranslation("super")
 	const navigate = useNavigate()
+	const { projectId, loading, error } = useMicroAppProjectResolver(appId)
 
 	useEffect(() => {
-		if (!projectId) {
+		if (!appId) {
 			navigate({ name: RouteName.Super, replace: true })
 		}
-	}, [projectId, navigate])
+	}, [appId, navigate])
 
-	if (!projectId) {
+	if (!appId || loading) {
 		return (
 			<div className="flex h-full w-full items-center justify-center">
 				<Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -463,9 +467,26 @@ function MicroAppPageDesktop() {
 		)
 	}
 
+	if (error || !projectId) {
+		return (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
+				<p className="text-sm text-destructive">
+					{error?.message || "Micro app not found"}
+				</p>
+				<button
+					type="button"
+					className="text-sm text-primary hover:underline"
+					onClick={() => navigate({ name: RouteName.MicroApps })}
+				>
+					{t("microAppPage.header.backToApps")}
+				</button>
+			</div>
+		)
+	}
+
 	return (
 		<AppStoreProvider>
-			<MicroAppPageInnerObserver projectId={projectId} />
+			<MicroAppPageInnerObserver appId={appId} projectId={projectId} />
 		</AppStoreProvider>
 	)
 }

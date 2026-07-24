@@ -15,7 +15,7 @@ const previewMocks = vi.hoisted(() => ({
 }))
 
 vi.mock("react-router", () => ({
-	useParams: () => ({ projectId: "project-1" }),
+	useParams: () => ({ appId: "app-1" }),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -147,6 +147,14 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		handleManageCollaborators: vi.fn(),
 		handleProjectNameChange: vi.fn(),
 		handleRenameProject: vi.fn(),
+	}),
+}))
+
+vi.mock("../hooks/useMicroAppProjectResolver", () => ({
+	useMicroAppProjectResolver: () => ({
+		projectId: "project-1",
+		loading: false,
+		error: null,
 	}),
 }))
 
