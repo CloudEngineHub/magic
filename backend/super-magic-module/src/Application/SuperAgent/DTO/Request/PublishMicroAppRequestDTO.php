@@ -11,7 +11,7 @@ use App\Infrastructure\Core\AbstractRequestDTO;
 
 class PublishMicroAppRequestDTO extends AbstractRequestDTO
 {
-    public string $projectName = '';
+    public string $appName = '';
 
     public int $shareType = 0;
 
@@ -21,14 +21,18 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
 
     public ?string $password = null;
 
+    public ?string $coverFileKey = null;
+
+    private bool $coverFileKeyProvided = false;
+
     public function getProjectName(): string
     {
-        return $this->projectName;
+        return $this->appName;
     }
 
-    public function setProjectName(?string $projectName): void
+    public function setAppName(?string $appName): void
     {
-        $this->projectName = trim($projectName ?? '');
+        $this->appName = trim($appName ?? '');
     }
 
     public function getShareType(): int
@@ -71,24 +75,42 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
         $this->password = $password;
     }
 
+    public function getCoverFileKey(): ?string
+    {
+        return $this->coverFileKey;
+    }
+
+    public function setCoverFileKey(?string $coverFileKey): void
+    {
+        $this->coverFileKeyProvided = true;
+        $coverFileKey = trim($coverFileKey ?? '');
+        $this->coverFileKey = $coverFileKey === '' ? null : $coverFileKey;
+    }
+
+    public function hasCoverFileKey(): bool
+    {
+        return $this->coverFileKeyProvided;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'project_name' => 'required|string|max:100|regex:/.*\S.*/u',
+            'app_name' => 'required|string|max:100|regex:/.*\S.*/u',
             'share_type' => 'required|integer|in:2,4,5',
             'share_range' => 'required_if:share_type,2|nullable|string|in:all,designated',
             'target_ids' => 'nullable|array',
             'target_ids.*.target_type' => 'required_with:target_ids|string|in:User,Department',
             'target_ids.*.target_id' => 'required_with:target_ids|string|max:64',
             'password' => 'required_if:share_type,5|nullable|string|min:4|max:32',
+            'cover_file_key' => 'nullable|string|max:512',
         ];
     }
 
     protected static function getHyperfValidationMessage(): array
     {
         return [
-            'project_name.required' => 'Micro app name is required',
-            'project_name.regex' => 'Micro app name cannot be blank',
+            'app_name.required' => 'Micro app name is required',
+            'app_name.regex' => 'Micro app name cannot be blank',
             'share_type.required' => 'Share type is required',
             'share_type.in' => 'Share type must be 2, 4, or 5',
             'share_range.required_if' => 'Share range is required for team share',
@@ -96,6 +118,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
             'password.required_if' => 'Password is required for password protected share',
             'password.min' => 'Password must be at least 4 characters',
             'password.max' => 'Password cannot exceed 32 characters',
+            'cover_file_key.max' => 'Cover file key cannot exceed 512 characters',
         ];
     }
 }

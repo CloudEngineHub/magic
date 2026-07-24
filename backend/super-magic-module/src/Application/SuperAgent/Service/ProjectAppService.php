@@ -1923,6 +1923,7 @@ class ProjectAppService extends AbstractAppService
                 $projectEntity->getId(),
                 $projectEntity->getUserOrganizationCode(),
                 $projectEntity->getUserId(),
+                $projectEntity->getCreatedUid(),
             );
 
             Db::commit();

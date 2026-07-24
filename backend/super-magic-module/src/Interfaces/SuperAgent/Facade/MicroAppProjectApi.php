@@ -10,8 +10,10 @@ namespace Dtyq\SuperMagic\Interfaces\SuperAgent\Facade;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateMicroAppProjectRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\MicroAppListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishedMicroAppListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishMicroAppRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateMicroAppRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\MicroAppProjectAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -65,6 +67,24 @@ class MicroAppProjectApi extends AbstractApi
         $requestDTO = PublishedMicroAppListRequestDTO::fromRequest($this->request);
 
         return $this->microAppProjectAppService->publishedList($requestContext, $requestDTO);
+    }
+
+    public function list(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = MicroAppListRequestDTO::fromRequest($this->request);
+
+        return $this->microAppProjectAppService->list($requestContext, $requestDTO);
+    }
+
+    public function update(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = UpdateMicroAppRequestDTO::fromRequest($this->request);
+
+        return $this->microAppProjectAppService->update($requestContext, $appId, $requestDTO);
     }
 
     public function show(RequestContext $requestContext, int $appId): array

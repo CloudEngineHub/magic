@@ -26,6 +26,10 @@ class MicroAppEntity extends AbstractEntity
 
     protected string $userId = '';
 
+    protected string $creatorId = '';
+
+    protected ?string $coverFileKey = null;
+
     protected int $shareType = 0;
 
     protected ?string $shareRange = null;
@@ -61,6 +65,8 @@ class MicroAppEntity extends AbstractEntity
             'share_code' => $this->shareCode,
             'organization_code' => $this->organizationCode,
             'user_id' => $this->userId,
+            'creator_id' => $this->creatorId,
+            'cover_file_key' => $this->coverFileKey,
             'share_type' => $this->shareType,
             'share_range' => $this->shareRange,
             'target_ids' => $this->targetIds,
@@ -148,6 +154,28 @@ class MicroAppEntity extends AbstractEntity
     public function setUserId(string $userId): self
     {
         $this->userId = $userId;
+        return $this;
+    }
+
+    public function getCreatorId(): string
+    {
+        return $this->creatorId;
+    }
+
+    public function setCreatorId(?string $creatorId): self
+    {
+        $this->creatorId = $creatorId ?? '';
+        return $this;
+    }
+
+    public function getCoverFileKey(): ?string
+    {
+        return $this->coverFileKey;
+    }
+
+    public function setCoverFileKey(?string $coverFileKey): self
+    {
+        $this->coverFileKey = $coverFileKey;
         return $this;
     }
 

@@ -19,6 +19,8 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|string $share_code
  * @property string $organization_code
  * @property string $user_id
+ * @property string $creator_id
+ * @property null|string $cover_file_key
  * @property int $share_type
  * @property null|string $share_range
  * @property array $target_ids
@@ -44,6 +46,8 @@ class MicroAppModel extends AbstractModel
         'share_code',
         'organization_code',
         'user_id',
+        'creator_id',
+        'cover_file_key',
         'share_type',
         'share_range',
         'target_ids',

@@ -7,11 +7,17 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
+use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
+use App\Domain\File\Service\FileDomainService;
+use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
+use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\SuperMagic\Application\Share\Service\ResourceShareAppService;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\MicroAppListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishedMicroAppListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\PublishMicroAppRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateMicroAppRequestDTO;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Constant\ShareAccessType;
 use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
@@ -26,6 +32,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterf
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
@@ -43,6 +50,10 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly ProjectDomainService $projectDomainService,
+        private readonly ProjectMemberDomainService $projectMemberDomainService,
+        private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
+        private readonly PackageFilterInterface $packageFilterService,
+        private readonly FileDomainService $fileDomainService,
         private readonly EventDispatcherInterface $eventDispatcher,
     ) {
     }
@@ -58,6 +69,8 @@ class MicroAppProjectAppService extends AbstractAppService
             $authorization->getOrganizationCode()
         );
         $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
+        $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
+        $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
 
         if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
@@ -67,7 +80,7 @@ class MicroAppProjectAppService extends AbstractAppService
 
         Db::beginTransaction();
         try {
-            if ($projectNameChanged) {
+            if ($projectNameChanged || $coverChanged) {
                 $project
                     ->setProjectName($requestDTO->getProjectName())
                     ->setUpdatedUid($authorization->getId())
@@ -102,6 +115,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 ->setTargetIds($requestDTO->getShareType() === ShareAccessType::TeamShare->value && $requestDTO->getShareRange() === 'designated' ? $requestDTO->getTargetIds() : [])
                 ->setPublishStatus(MicroAppPublishStatus::Published->value)
                 ->setAccessUrl($accessUrl)
+                ->setCoverFileKey($coverFileKey)
                 ->setPublishedAt($now)
                 ->setUnpublishedAt(null);
 
@@ -112,11 +126,61 @@ class MicroAppProjectAppService extends AbstractAppService
             throw $e;
         }
 
-        if ($projectNameChanged) {
+        if ($projectNameChanged || $coverChanged) {
             $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($project, $authorization));
         }
 
         return $this->formatPublishRecord($record, $project->getProjectName());
+    }
+
+    public function update(RequestContext $requestContext, int $appId, UpdateMicroAppRequestDTO $requestDTO): array
+    {
+        if (! $requestDTO->hasUpdates()) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'app_name or cover_file_key is required');
+        }
+
+        $authorization = $requestContext->getUserAuthorization();
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+        $this->getAccessibleProjectWithManager(
+            $project->getId(),
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        );
+
+        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+        }
+
+        $projectName = $requestDTO->hasAppName() ? $requestDTO->getAppName() : $project->getProjectName();
+        $projectNameChanged = $project->getProjectName() !== $projectName;
+        $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
+        $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
+        if (! $projectNameChanged && ! $coverChanged) {
+            return $this->formatAppMetadata($record, $project);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Db::beginTransaction();
+        try {
+            $project
+                ->setProjectName($projectName ?? '')
+                ->setUpdatedUid($authorization->getId())
+                ->setUpdatedAt($now);
+            $project = $this->projectDomainService->saveProjectEntity($project);
+
+            if ($coverChanged) {
+                $record->setCoverFileKey($coverFileKey);
+                $record = $this->microAppRepository->save($record);
+            }
+            Db::commit();
+        } catch (Throwable $e) {
+            Db::rollBack();
+            throw $e;
+        }
+
+        $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($project, $authorization));
+
+        return $this->formatAppMetadata($record, $project);
     }
 
     public function unpublish(RequestContext $requestContext, int $appId): array
@@ -183,7 +247,8 @@ class MicroAppProjectAppService extends AbstractAppService
         $record = $this->microAppRepository->ensureByProjectId(
             $projectId,
             $project->getUserOrganizationCode(),
-            $project->getUserId()
+            $project->getUserId(),
+            $project->getCreatedUid(),
         );
 
         return $this->formatMicroApp($record, $project);
@@ -259,6 +324,57 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
+    public function list(RequestContext $requestContext, MicroAppListRequestDTO $requestDTO): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($authorization);
+        $userId = $authorization->getId();
+
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId(
+            $dataIsolation,
+            $userId,
+            true
+        );
+        $organizationCodes = $this->getAccessibleOrganizationCodes(
+            $userId,
+            $departmentIds,
+            $authorization->getOrganizationCode()
+        );
+
+        $result = $this->microAppRepository->paginateAccessible(
+            $userId,
+            array_map('strval', $departmentIds),
+            $organizationCodes,
+            $requestDTO->getScope(),
+            $requestDTO->getKeyword(),
+            $requestDTO->getPage(),
+            $requestDTO->getPageSize()
+        );
+
+        $coverUrls = $this->resolveCoverUrls($result['list']);
+        $items = [];
+        foreach ($result['list'] as $row) {
+            $appId = (string) ($row['app_id'] ?? '');
+            $coverKey = (string) ($row['cover_file_key'] ?? '');
+            $items[] = [
+                'app_id' => $appId,
+                'app_name' => (string) ($row['app_name'] ?? ''),
+                'app_description' => (string) ($row['app_description'] ?? ''),
+                'creator_id' => (string) ($row['creator_id'] ?? ''),
+                'cover_url' => $coverUrls[$this->coverUrlMapKey($row, $coverKey)] ?? '',
+                'publish_status' => (string) ($row['publish_status'] ?? MicroAppPublishStatus::Unpublished->value),
+                'updated_at' => ($row['updated_at'] ?? null) !== null ? (string) $row['updated_at'] : null,
+            ];
+        }
+
+        return [
+            'list' => $items,
+            'total' => (int) $result['total'],
+            'page' => $requestDTO->getPage(),
+            'page_size' => $requestDTO->getPageSize(),
+        ];
+    }
+
     /**
      * @return array{0: MicroAppEntity, 1: ProjectEntity}
      */
@@ -303,8 +419,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 $shareEntity,
                 $userId,
                 $organizationCode,
-                $shareEntity->getShareCode(),
-                true
+                $shareEntity->getShareCode()
             );
             return true;
         } catch (Throwable) {
@@ -317,13 +432,14 @@ class MicroAppProjectAppService extends AbstractAppService
         return [
             'app_id' => (string) $record->getId(),
             'project_id' => $record->getProjectId(),
-            'project_name' => $projectName,
+            'app_name' => $projectName,
             'resource_id' => $record->getResourceId(),
             'share_id' => $record->getShareId(),
             'share_code' => $record->getShareCode(),
             'share_type' => $record->getShareType(),
             'share_range' => $record->getShareRange(),
             'target_ids' => $record->getTargetIds(),
+            'cover_file_key' => $record->getCoverFileKey(),
             'publish_status' => $record->getPublishStatus(),
             'access_url' => $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId()) ?? $record->getAccessUrl(),
             'published_at' => $record->getPublishedAt(),
@@ -356,6 +472,25 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
+    private function formatAppMetadata(MicroAppEntity $record, ProjectEntity $project): array
+    {
+        $coverKey = $record->getCoverFileKey() ?? '';
+        $row = [
+            'organization_code' => $project->getUserOrganizationCode(),
+            'cover_file_key' => $coverKey,
+        ];
+        $coverUrls = $this->resolveCoverUrls([$row]);
+
+        return [
+            'app_id' => (string) $record->getId(),
+            'app_name' => $project->getProjectName(),
+            'cover_file_key' => $record->getCoverFileKey(),
+            'cover_url' => $coverUrls[$this->coverUrlMapKey($row, $coverKey)] ?? '',
+            'publish_status' => $record->getPublishStatus(),
+            'updated_at' => $project->getUpdatedAt(),
+        ];
+    }
+
     private function containsKeyword(string $haystack, string $needle): bool
     {
         if (function_exists('mb_stripos')) {
@@ -363,5 +498,72 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         return stripos($haystack, $needle) !== false;
+    }
+
+    /**
+     * @param string[] $departmentIds
+     * @return string[]
+     */
+    private function getAccessibleOrganizationCodes(string $userId, array $departmentIds, string $currentOrganizationCode): array
+    {
+        $targetIds = array_values(array_unique(array_merge([$userId], $departmentIds)));
+        $projectIds = $this->projectMemberDomainService->getProjectIdsByCollaboratorTargets($targetIds);
+        $organizationCodes = $this->projectDomainService->getOrganizationCodesByProjectIds($projectIds);
+        $paidOrganizationCodes = $this->packageFilterService->filterPaidOrganizations($organizationCodes);
+
+        return array_values(array_unique(array_merge($paidOrganizationCodes, [$currentOrganizationCode])));
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $rows
+     * @return array<string,string>
+     */
+    private function resolveCoverUrls(array $rows): array
+    {
+        $result = [];
+        $grouped = [];
+        foreach ($rows as $row) {
+            $coverKey = trim((string) ($row['cover_file_key'] ?? ''));
+            if ($coverKey === '') {
+                continue;
+            }
+
+            $organizationCode = (string) ($row['organization_code'] ?? '');
+            if ($organizationCode === '') {
+                continue;
+            }
+
+            $mapKey = $this->coverUrlMapKey($row, $coverKey);
+            if (filter_var($coverKey, FILTER_VALIDATE_URL)) {
+                $result[$mapKey] = $coverKey;
+                continue;
+            }
+
+            $grouped[$organizationCode][$coverKey] = $mapKey;
+        }
+
+        foreach ($grouped as $organizationCode => $coverKeys) {
+            try {
+                $links = $this->fileDomainService->getLinks($organizationCode, array_keys($coverKeys));
+                foreach ($links as $fileKey => $link) {
+                    $mapKey = $coverKeys[$fileKey] ?? null;
+                    if ($mapKey !== null) {
+                        $result[$mapKey] = $link->getUrl();
+                    }
+                }
+            } catch (Throwable) {
+                // A missing cover must not make the complete micro-app list fail.
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     */
+    private function coverUrlMapKey(array $row, string $coverKey): string
+    {
+        return (string) ($row['organization_code'] ?? '') . ':' . $coverKey;
     }
 }

@@ -167,6 +167,14 @@ Router::addGroup(
             Router::delete('/{appId}/publish', [MicroAppProjectApi::class, 'unpublish']);
         });
 
+        // 微应用业务接口，仅使用 app_id 作为对外标识
+        Router::addGroup('/micro-apps', static function () {
+            // 获取当前用户可访问的微应用列表
+            Router::get('/queries', [MicroAppProjectApi::class, 'list']);
+            // 编辑微应用名称和封面
+            Router::put('/{appId}', [MicroAppProjectApi::class, 'update']);
+        });
+
         // 用户级别特殊项目
         Router::addGroup('/user/special-projects', static function () {
             // 创建或获取特殊项目
