@@ -5,6 +5,7 @@ import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
 import { isUserRoleMessage, isToolRoleMessage, type MessageTurnGroup } from "./message-turn-groups"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
 	"sticky isolate z-20 overflow-visible",
@@ -86,7 +87,9 @@ function MessageTurnGroupListInner({
 					isUser && USER_MESSAGE_ROW_CLASS,
 				)}
 			>
-				{inner}
+				<MessageRenderErrorBoundary messageKey={nodeKey}>
+					{inner}
+				</MessageRenderErrorBoundary>
 			</div>
 		)
 	}

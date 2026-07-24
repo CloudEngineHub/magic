@@ -56,6 +56,7 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 
 export { MessageListProvider }
 
@@ -563,14 +564,15 @@ const MessageList = observer(
 			const isUser = node?.role !== "assistant" && node?.role !== "tool"
 
 			return (
-				<div
-					key={nodeKey}
-					data-message-id={nodeKey}
-					data-message-role={node?.role || "user"}
-					className={cn("relative", isUser && USER_MESSAGE_ROW_CLASS)}
-				>
-					{renderNodeContent(node, index, options)}
-				</div>
+				<MessageRenderErrorBoundary key={nodeKey} messageKey={nodeKey}>
+					<div
+						data-message-id={nodeKey}
+						data-message-role={node?.role || "user"}
+						className={cn("relative", isUser && USER_MESSAGE_ROW_CLASS)}
+					>
+						{renderNodeContent(node, index, options)}
+					</div>
+				</MessageRenderErrorBoundary>
 			)
 		}
 
@@ -637,22 +639,37 @@ const MessageList = observer(
 																firstRevokedUserMessageIndex - 1
 															]
 														: undefined
-												const firstRevokedUserMessageContent =
-													enableRevokedUserMessageReedit && !isMobile ? (
-														<RevokedEditableUserMessage
-															node={firstRevokedUserMessage}
-															selectedTopic={selectedTopic}
-															showLoading={showLoading}
-															messagesLength={data.length}
-															hiddenOptimisticMessageIds={
-																hiddenRevokedOptimisticMessageIds
-															}
-															onFileClick={onFileClick}
-															topicModelStore={topicModelStore}
-															onPendingSendChange={
-																setIsFirstRevokedUserMessagePendingSend
-															}
-															fallbackContent={renderNodeContent(
+												const firstRevokedUserMessageContent = (
+													<MessageRenderErrorBoundary
+														messageKey={firstRevokedUserMessageKey}
+													>
+														{enableRevokedUserMessageReedit &&
+														!isMobile ? (
+															<RevokedEditableUserMessage
+																node={firstRevokedUserMessage}
+																selectedTopic={selectedTopic}
+																showLoading={showLoading}
+																messagesLength={data.length}
+																hiddenOptimisticMessageIds={
+																	hiddenRevokedOptimisticMessageIds
+																}
+																onFileClick={onFileClick}
+																topicModelStore={topicModelStore}
+																onPendingSendChange={
+																	setIsFirstRevokedUserMessagePendingSend
+																}
+																fallbackContent={renderNodeContent(
+																	firstRevokedUserMessage,
+																	firstRevokedUserMessageIndex,
+																	{
+																		disableEntryAnimation: true,
+																		previousNode:
+																			firstRevokedPreviousNode,
+																	},
+																)}
+															/>
+														) : (
+															renderNodeContent(
 																firstRevokedUserMessage,
 																firstRevokedUserMessageIndex,
 																{
@@ -660,19 +677,10 @@ const MessageList = observer(
 																	previousNode:
 																		firstRevokedPreviousNode,
 																},
-															)}
-														/>
-													) : (
-														renderNodeContent(
-															firstRevokedUserMessage,
-															firstRevokedUserMessageIndex,
-															{
-																disableEntryAnimation: true,
-																previousNode:
-																	firstRevokedPreviousNode,
-															},
-														)
-													)
+															)
+														)}
+													</MessageRenderErrorBoundary>
+												)
 
 												const revokedUserMessageWrapperClassName = isMobile
 													? "relative mb-2"

@@ -19,6 +19,10 @@ function renderNodeLabel({ node }: { node: SuperMagicMessageItem; index: number 
 	return <span data-testid={`msg-${node.app_message_id}`}>{node.app_message_id}</span>
 }
 
+function ThrowingMessage() {
+	throw new Error("message render failed")
+}
+
 describe("MessageTurnGroupList", () => {
 	const messages = [msg("user", "u1"), msg("assistant", "a1")]
 	const { messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
@@ -49,5 +53,29 @@ describe("MessageTurnGroupList", () => {
 
 		expect(container.querySelector('[data-sticky-message-id="u1"]')).not.toBeNull()
 		expect(container.querySelector(".sticky")).not.toBeNull()
+	})
+
+	it("keeps other messages rendered when one message throws", () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			const { container } = render(
+				<MessageTurnGroupList
+					groups={messageTurnGroups}
+					isMobile
+					renderNode={({ node, index }) =>
+						node.app_message_id === "a1" ? (
+							<ThrowingMessage />
+						) : (
+							renderNodeLabel({ node, index })
+						)
+					}
+				/>,
+			)
+
+			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
+			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
+		} finally {
+			consoleError.mockRestore()
+		}
 	})
 })
