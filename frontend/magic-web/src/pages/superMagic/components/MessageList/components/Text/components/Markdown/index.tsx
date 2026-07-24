@@ -8,6 +8,7 @@ import {
 	useMemo,
 	useRef,
 	type ComponentProps as ReactComponentProps,
+	type CSSProperties,
 	type MutableRefObject,
 	type ReactElement,
 } from "react"
@@ -67,6 +68,28 @@ function isCodeLanguage(className: string | undefined, language: string): boolea
 		(token) =>
 			token === language || token === `lang-${language}` || token === `language-${language}`,
 	)
+}
+
+function normalizeInlineStyle(style: unknown): CSSProperties | undefined {
+	if (!style) return undefined
+	if (typeof style !== "string") return style as CSSProperties
+	if (typeof document === "undefined") return undefined
+
+	const styleElement = document.createElement("div")
+	styleElement.setAttribute("style", style)
+
+	const normalizedStyle: Record<string, string> = {}
+	for (let index = 0; index < styleElement.style.length; index += 1) {
+		const propertyName = styleElement.style.item(index)
+		if (!propertyName) continue
+
+		const reactPropertyName = propertyName.startsWith("--")
+			? propertyName
+			: propertyName.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase())
+		normalizedStyle[reactPropertyName] = styleElement.style.getPropertyValue(propertyName)
+	}
+
+	return normalizedStyle as CSSProperties
 }
 
 function resolveQRCodeValue(props: {
@@ -196,6 +219,7 @@ export function useMarkdownComponent({
 		() => ({
 			pre(props: XMarkdownComponentProps) {
 				const { children, className: preClassName, style, title } = props
+				const normalizedStyle = normalizeInlineStyle(style)
 				const { domNode } = props as XMarkdownComponentProps & {
 					domNode?: unknown
 				}
@@ -225,7 +249,7 @@ export function useMarkdownComponent({
 					return (
 						<pre
 							className={typeof preClassName === "string" ? preClassName : undefined}
-							style={style}
+							style={normalizedStyle}
 							title={typeof title === "string" ? title : undefined}
 						>
 							{children}
@@ -238,7 +262,7 @@ export function useMarkdownComponent({
 				return (
 					<HtmlCodeBlockPreview
 						className={typeof preClassName === "string" ? preClassName : undefined}
-						style={style}
+						style={normalizedStyle}
 						title={typeof title === "string" ? title : undefined}
 						isStreaming={isCodeBlockStreaming}
 						// isSuspended={isSuspendedRef.current}
