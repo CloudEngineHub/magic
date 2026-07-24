@@ -717,7 +717,9 @@
 				"updatedAt": "更新于 {{date}}"
 			},
 			"preview": {
+				"collapse": "收起配置预览",
 				"empty": "暂无配置",
+				"expand": "展开配置预览",
 				"home": "首页",
 				"title": "配置预览",
 				"topic": "话题内"
