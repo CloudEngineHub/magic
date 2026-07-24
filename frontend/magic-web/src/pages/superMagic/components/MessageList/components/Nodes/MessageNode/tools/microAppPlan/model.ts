@@ -22,10 +22,42 @@ interface PlanFile {
 	purpose: string
 }
 
+export interface PlanDataModelFieldDetail {
+	label: string
+	value: string
+}
+
+export interface PlanDataModelField {
+	name: string
+	type: string
+	description: string
+	text: string
+	details: PlanDataModelFieldDetail[]
+}
+
+const DATA_MODEL_FIELD_KNOWN_KEYS = new Set([
+	"name",
+	"field_name",
+	"fieldName",
+	"field",
+	"key",
+	"label",
+	"title",
+	"type",
+	"field_type",
+	"fieldType",
+	"data_type",
+	"dataType",
+	"description",
+	"purpose",
+	"comment",
+	"note",
+])
+
 interface PlanDataModel {
 	tableName: string
 	purpose: string
-	fields: string[]
+	fields: PlanDataModelField[]
 }
 
 interface PlanCardData {
@@ -67,6 +99,95 @@ function tryParseJson(value: string): unknown {
 	}
 }
 
+function decodePythonString(value: string): string {
+	let result = ""
+	for (let index = 0; index < value.length; index += 1) {
+		const character = value[index]
+		if (character !== "\\" || index === value.length - 1) {
+			result += character
+			continue
+		}
+
+		const escaped = value[index + 1]
+		index += 1
+		if (escaped === "n") result += "\n"
+		else if (escaped === "r") result += "\r"
+		else if (escaped === "t") result += "\t"
+		else if (escaped === "b") result += "\b"
+		else if (escaped === "f") result += "\f"
+		else if (escaped === "u" && /^[0-9a-fA-F]{4}$/.test(value.slice(index + 1, index + 5))) {
+			result += String.fromCharCode(Number.parseInt(value.slice(index + 1, index + 5), 16))
+			index += 4
+		} else if (escaped === "x" && /^[0-9a-fA-F]{2}$/.test(value.slice(index + 1, index + 3))) {
+			result += String.fromCharCode(Number.parseInt(value.slice(index + 1, index + 3), 16))
+			index += 2
+		} else if (escaped === "\\" || escaped === "'" || escaped === '"') {
+			result += escaped
+		} else {
+			result += `\\${escaped}`
+		}
+	}
+	return result
+}
+
+function hasPythonTokenAt(value: string, index: number, token: string): boolean {
+	if (!value.startsWith(token, index)) return false
+	const previous = value[index - 1] || ""
+	const next = value[index + token.length] || ""
+	return !/[\w]/.test(previous) && !/[\w]/.test(next)
+}
+
+function tryParsePythonLiteral(value: string): unknown {
+	// 已完成的旧消息可能包含 Python str(dict)；这里只转换字面量，不执行其中的代码。
+	const text = value.trim()
+	if (!text || (text[0] !== "[" && text[0] !== "{")) return undefined
+
+	let jsonText = ""
+	for (let index = 0; index < text.length; index += 1) {
+		const character = text[index]
+		if (character === "'" || character === '"') {
+			const quote = character
+			let rawString = ""
+			let closed = false
+			for (index += 1; index < text.length; index += 1) {
+				const current = text[index]
+				if (current === "\\" && index + 1 < text.length) {
+					rawString += current + text[index + 1]
+					index += 1
+					continue
+				}
+				if (current === quote) {
+					closed = true
+					break
+				}
+				rawString += current
+			}
+			if (!closed) return undefined
+			jsonText += JSON.stringify(decodePythonString(rawString))
+			continue
+		}
+
+		if (hasPythonTokenAt(text, index, "True")) {
+			jsonText += "true"
+			index += 3
+		} else if (hasPythonTokenAt(text, index, "False")) {
+			jsonText += "false"
+			index += 4
+		} else if (hasPythonTokenAt(text, index, "None")) {
+			jsonText += "null"
+			index += 3
+		} else {
+			jsonText += character
+		}
+	}
+
+	try {
+		return JSON.parse(jsonText)
+	} catch {
+		return undefined
+	}
+}
+
 function normalizeListLine(value: string) {
 	return value
 		.trim()
@@ -83,6 +204,84 @@ function normalizeStringList(value: unknown): string[] {
 	}
 	if (!Array.isArray(value)) return []
 	return value.map(normalizeText).filter(Boolean)
+}
+
+function normalizeDetailValue(value: unknown): string {
+	if (typeof value === "string") return value.trim()
+	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+		return String(value)
+	}
+	if (Array.isArray(value)) {
+		return value.map(normalizeDetailValue).filter(Boolean).join("、")
+	}
+	if (!value || typeof value !== "object") return ""
+
+	return Object.entries(value as Record<string, unknown>)
+		.map(([key, nestedValue]) => {
+			const text = normalizeDetailValue(nestedValue)
+			return text ? `${key}: ${text}` : ""
+		})
+		.filter(Boolean)
+		.join("；")
+}
+
+function normalizeDataModelField(value: unknown): PlanDataModelField | null {
+	if (typeof value === "string") {
+		const parsed = tryParseJson(value) ?? tryParsePythonLiteral(value)
+		if (parsed !== undefined) return normalizeDataModelField(parsed)
+	}
+
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		const text = normalizeDetailValue(value)
+		return text ? { name: "", type: "", description: "", text, details: [] } : null
+	}
+
+	const record = value as Record<string, unknown>
+	const technicalName = normalizeDetailValue(
+		record.key ?? record.field_name ?? record.fieldName ?? record.field,
+	)
+	const displayName = normalizeDetailValue(record.name ?? record.label ?? record.title)
+	const name = technicalName || displayName
+	const type = normalizeDetailValue(
+		record.type ?? record.field_type ?? record.fieldType ?? record.data_type ?? record.dataType,
+	)
+	const description =
+		normalizeDetailValue(
+			record.description ?? record.purpose ?? record.comment ?? record.note,
+		) || (technicalName ? displayName : "")
+	const details = Object.entries(record)
+		.filter(([key]) => !DATA_MODEL_FIELD_KNOWN_KEYS.has(key))
+		.map(([detailLabel, detailValue]) => ({
+			label: detailLabel,
+			value: normalizeDetailValue(detailValue),
+		}))
+		.filter((detail) => detail.value)
+
+	if (!name && !type && !description && details.length === 0) return null
+
+	return {
+		name,
+		type,
+		description,
+		text: "",
+		details,
+	}
+}
+
+function normalizeDataModelFields(value: unknown): PlanDataModelField[] {
+	if (typeof value === "string") {
+		const parsed = tryParseJson(value) ?? tryParsePythonLiteral(value)
+		if (parsed !== undefined) return normalizeDataModelFields(parsed)
+		return value
+			.split(/\r?\n/)
+			.map(normalizeListLine)
+			.filter(Boolean)
+			.map((text) => ({ name: "", type: "", description: "", text, details: [] }))
+	}
+	if (!Array.isArray(value)) return []
+	return value
+		.map(normalizeDataModelField)
+		.filter((field): field is PlanDataModelField => field !== null)
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -129,7 +328,7 @@ function normalizeDataModel(value: unknown): PlanDataModel[] {
 			return {
 				tableName: normalizeText(record.table_name ?? record.tableName),
 				purpose: normalizeText(record.purpose),
-				fields: normalizeStringList(record.fields),
+				fields: normalizeDataModelFields(record.fields),
 			}
 		})
 		.filter((item) => item.tableName || item.purpose || item.fields.length > 0)

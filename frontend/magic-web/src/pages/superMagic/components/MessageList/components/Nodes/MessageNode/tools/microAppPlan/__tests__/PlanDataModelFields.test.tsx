@@ -7,8 +7,20 @@ describe("PlanDataModelFields", () => {
 		render(
 			<PlanDataModelFields
 				fields={[
-					"保留 submitter_user_id：string，用于记录提交用户",
-					"新增 configuration_screenshots：json，可选，存储配置截图",
+					{
+						name: "submitter_user_id",
+						type: "string",
+						description: "记录提交用户",
+						text: "",
+						details: [],
+					},
+					{
+						name: "configuration_screenshots",
+						type: "json",
+						description: "存储配置截图",
+						text: "",
+						details: [{ label: "required", value: "false" }],
+					},
 				]}
 			/>,
 		)
@@ -18,10 +30,16 @@ describe("PlanDataModelFields", () => {
 
 		expect(scrollContainer).toHaveClass("overflow-x-auto", "overscroll-x-contain")
 		expect(rail).toHaveClass("min-w-max", "flex-nowrap")
-		expect(screen.getAllByText(/submitter_user_id|configuration_screenshots/)).toHaveLength(2)
-		screen.getAllByText(/submitter_user_id|configuration_screenshots/).forEach((field) => {
-			expect(field).toHaveClass("shrink-0", "whitespace-nowrap")
-		})
+		expect(screen.getAllByTestId("plan-data-model-field")).toHaveLength(2)
+		expect(screen.getByText("submitter_user_id")).toBeInTheDocument()
+		expect(screen.getByText("string")).toBeInTheDocument()
+		expect(screen.getByText("记录提交用户")).toBeInTheDocument()
+		expect(screen.getByText("configuration_screenshots")).toBeInTheDocument()
+		expect(screen.getByText("json")).toBeInTheDocument()
+		expect(screen.getByText("存储配置截图")).toBeInTheDocument()
+		expect(screen.getByText("required")).toBeInTheDocument()
+		expect(screen.getByText("false")).toBeInTheDocument()
+		expect(screen.queryByText(/\{.*\}/)).not.toBeInTheDocument()
 	})
 
 	it("does not render an empty scroll container", () => {
