@@ -10,6 +10,16 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
+vi.mock("react-i18next", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-i18next")>()
+	return {
+		...actual,
+		useTranslation: () => ({
+			t: (key: string) => (key === "messageRenderError.title" ? "这条消息暂时无法显示" : key),
+		}),
+	}
+})
+
 function msg(role: "user" | "assistant", appId: string): SuperMagicMessageItem {
 	return { role, app_message_id: appId } as SuperMagicMessageItem
 }
@@ -74,6 +84,7 @@ describe("MessageTurnGroupList", () => {
 
 			expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
+			expect(container).toHaveTextContent("这条消息暂时无法显示")
 		} finally {
 			consoleError.mockRestore()
 		}

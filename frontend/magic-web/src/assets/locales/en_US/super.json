@@ -2593,6 +2593,9 @@
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
+	"messageRenderError": {
+		"title": "This message is temporarily unavailable"
+	},
 	"mobile": {
 		"apps": {
 			"emptyDescription": "No application entry is available for the current organization yet.",

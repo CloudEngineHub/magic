@@ -1,11 +1,28 @@
 import { ErrorBoundary } from "react-error-boundary"
 import type { PropsWithChildren } from "react"
+import { useTranslation } from "react-i18next"
+import { IconAlertCircle } from "@tabler/icons-react"
 import { logger as Logger } from "@/utils/log"
 
 const logger = Logger.createLogger("MessageRenderErrorBoundary")
 
 interface MessageRenderErrorBoundaryProps extends PropsWithChildren {
 	messageKey: string
+}
+
+function MessageRenderFallback() {
+	const { t } = useTranslation("super")
+
+	return (
+		<div
+			className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+			data-testid="message-render-error"
+			role="status"
+		>
+			<IconAlertCircle className="size-4 shrink-0" aria-hidden="true" />
+			<span>{t("messageRenderError.title")}</span>
+		</div>
+	)
 }
 
 export default function MessageRenderErrorBoundary({
@@ -22,15 +39,7 @@ export default function MessageRenderErrorBoundary({
 					errorBoundary: "MessageRenderErrorBoundary",
 				})
 			}}
-			fallbackRender={() => (
-				<div
-					className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground"
-					data-testid="message-render-error"
-					role="alert"
-				>
-					该消息暂时无法显示
-				</div>
-			)}
+			fallbackRender={() => <MessageRenderFallback />}
 		>
 			{children}
 		</ErrorBoundary>

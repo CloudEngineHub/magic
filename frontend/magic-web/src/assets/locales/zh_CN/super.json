@@ -2593,6 +2593,9 @@
 		"updateFailed": "更新队列消息失败",
 		"updateSuccess": "队列消息已更新"
 	},
+	"messageRenderError": {
+		"title": "这条消息暂时无法显示"
+	},
 	"mobile": {
 		"apps": {
 			"emptyDescription": "当前组织下暂无可访问的应用入口。",
