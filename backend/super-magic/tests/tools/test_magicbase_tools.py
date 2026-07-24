@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.api.magicbase_api import MagicBaseApi
 from app.infrastructure.sdk.magic_service.parameter import (
@@ -108,6 +109,114 @@ async def test_magicbase_tool_actions_are_localized(tool_class, tool_name, zh_ac
         i18n.set_language("en_US")
         en = await tool.get_before_tool_call_friendly_action_and_remark(tool_name, None, {})
         assert en["action"] == en_action
+    finally:
+        i18n.reset_language()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "tool_name", "arguments", "expected_remark"),
+    [
+        (
+            QueryMagicTables(),
+            "query_magicbase_tables",
+            {},
+            "当前微应用",
+        ),
+        (
+            GetMagicTable(),
+            "get_magicbase_table",
+            {"table_id": "table-1"},
+            "表结构与权限",
+        ),
+        (
+            QueryMagicRows(),
+            "query_magicbase_rows",
+            {"table_id": "table-1"},
+            "当前数据表",
+        ),
+        (
+            CreateMagicRow(),
+            "create_magicbase_row",
+            {"table_id": "table-1"},
+            "保存业务数据",
+        ),
+        (
+            BatchCreateMagicRows(),
+            "batch_create_magicbase_rows",
+            {"table_id": "table-1", "rows": [{}, {}]},
+            "2 条记录",
+        ),
+        (
+            DeleteMagicRow(),
+            "delete_magicbase_row",
+            {"table_id": "table-1", "record_id": "row-1"},
+            "指定记录",
+        ),
+        (
+            BatchDeleteMagicRows(),
+            "batch_delete_magicbase_rows",
+            {"table_id": "table-1", "record_ids": ["row-1", "row-2"]},
+            "2 条记录",
+        ),
+        (
+            CreateMagicTable(),
+            "create_magicbase_table",
+            {"table_name": "客户反馈"},
+            "客户反馈",
+        ),
+        (
+            CreateMagicColumn(),
+            "create_magicbase_column",
+            {"column_name": "联系电话"},
+            "联系电话",
+        ),
+        (
+            UpdateMagicTablePermissions(),
+            "update_magicbase_table_permissions",
+            {"table_id": "table-1"},
+            "读写范围",
+        ),
+        (
+            DeleteMagicTable(),
+            "delete_magicbase_table",
+            {"table_id": "table-1"},
+            "指定数据表",
+        ),
+        (
+            UpdateMagicColumn(),
+            "update_magicbase_column",
+            {"column_id": "column-1", "column_name": "联系电话"},
+            "联系电话",
+        ),
+        (
+            DeleteMagicColumn(),
+            "delete_magicbase_column",
+            {"column_id": "column-1"},
+            "指定字段",
+        ),
+    ],
+)
+async def test_magicbase_tools_describe_their_target_before_and_after_execution(
+    tool, tool_name, arguments, expected_remark
+):
+    try:
+        i18n.set_language("zh_CN")
+        before = await tool.get_before_tool_call_friendly_action_and_remark(
+            tool_name, None, arguments
+        )
+        after = await tool.get_after_tool_call_friendly_action_and_remark(
+            tool_name,
+            None,
+            ToolResult(content="ok"),
+            0.1,
+            arguments,
+        )
+
+        assert before["remark"]
+        assert expected_remark in before["remark"]
+        assert after["remark"]
+        assert expected_remark in after["remark"]
     finally:
         i18n.reset_language()
 

@@ -2862,5 +2862,45 @@
     "call_simple_agent.failed": {
         "zh_CN": "助理调用失败",
         "en_US": "Agent consultation failed"
+    },
+    "magicbase.current_micro_app": {
+        "zh_CN": "当前微应用",
+        "en_US": "Current micro-app"
+    },
+    "magicbase.table_count": {
+        "zh_CN": "{{count}} 个数据表",
+        "en_US": "{{count}} tables"
+    },
+    "magicbase.table_structure": {
+        "zh_CN": "表结构与权限",
+        "en_US": "Structure and permissions"
+    },
+    "magicbase.current_table": {
+        "zh_CN": "当前数据表",
+        "en_US": "Current table"
+    },
+    "magicbase.save_business_data": {
+        "zh_CN": "保存业务数据",
+        "en_US": "Save app data"
+    },
+    "magicbase.selected_record": {
+        "zh_CN": "指定记录",
+        "en_US": "Selected row"
+    },
+    "magicbase.permission_scope": {
+        "zh_CN": "读写范围",
+        "en_US": "Access scope"
+    },
+    "magicbase.selected_table": {
+        "zh_CN": "指定数据表",
+        "en_US": "Selected table"
+    },
+    "magicbase.selected_column": {
+        "zh_CN": "指定字段",
+        "en_US": "Selected field"
+    },
+    "magicbase.row_count": {
+        "zh_CN": "{{count}} 条记录",
+        "en_US": "{{count}} rows"
     }
 }

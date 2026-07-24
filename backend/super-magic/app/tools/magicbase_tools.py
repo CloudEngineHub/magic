@@ -36,6 +36,7 @@ from app.service.html_app_memory_service import (
     write_migrations_state,
 )
 from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.magicbase_tool_friendly import MagicBaseFriendlyRemarkMixin
 from app.utils.init_client_message_util import InitClientMessageUtil
 
 MAGICBASE_MYSQL_LIKE_DATA_TYPES = {"text", "number", "datetime", "boolean", "json"}
@@ -421,7 +422,7 @@ Optional exact table_name filter."""
 
 
 @tool(name="query_magicbase_tables")
-class QueryMagicTables(BaseTool[QueryMagicbaseTablesParams]):
+class QueryMagicTables(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTablesParams]):
     """<!--zh
     查询当前项目的 MagicBase 表。
 
@@ -476,7 +477,7 @@ Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or ta
 
 
 @tool(name="get_magicbase_table")
-class GetMagicTable(BaseTool[GetMagicbaseTableParams]):
+class GetMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseTableParams]):
     """<!--zh
     根据真实 table.id 获取当前项目的 MagicBase 表详情。
     -->
@@ -522,7 +523,7 @@ class QueryMagicbaseRowsParams(BaseToolParams):
 
 
 @tool(name="query_magicbase_rows")
-class QueryMagicRows(BaseTool[QueryMagicbaseRowsParams]):
+class QueryMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseRowsParams]):
     """Query rows from a MagicBase table in the current project using the current user authorization."""
     name = "query_magicbase_rows"
 
@@ -566,7 +567,7 @@ class CreateMagicbaseRowParams(BaseToolParams):
 
 
 @tool(name="create_magicbase_row")
-class CreateMagicRow(BaseTool[CreateMagicbaseRowParams]):
+class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowParams]):
     """Create one MagicBase row as the current authenticated user."""
     name = "create_magicbase_row"
 
@@ -608,7 +609,7 @@ class BatchCreateMagicbaseRowsParams(BaseToolParams):
 
 
 @tool(name="batch_create_magicbase_rows")
-class BatchCreateMagicRows(BaseTool[BatchCreateMagicbaseRowsParams]):
+class BatchCreateMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchCreateMagicbaseRowsParams]):
     """Batch create MagicBase rows as the current authenticated user."""
     name = "batch_create_magicbase_rows"
 
@@ -649,7 +650,7 @@ class DeleteMagicbaseRowParams(BaseToolParams):
 
 
 @tool(name="delete_magicbase_row")
-class DeleteMagicRow(BaseTool[DeleteMagicbaseRowParams]):
+class DeleteMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseRowParams]):
     """Delete one MagicBase row after explicit user confirmation."""
     name = "delete_magicbase_row"
 
@@ -694,7 +695,7 @@ class BatchDeleteMagicbaseRowsParams(BaseToolParams):
 
 
 @tool(name="batch_delete_magicbase_rows")
-class BatchDeleteMagicRows(BaseTool[BatchDeleteMagicbaseRowsParams]):
+class BatchDeleteMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchDeleteMagicbaseRowsParams]):
     """Batch delete MagicBase rows after explicit user confirmation."""
     name = "batch_delete_magicbase_rows"
 
@@ -767,7 +768,7 @@ Table, row, and column dynamic permissions. Pass this as an object, never as a J
 
 
 @tool(name="create_magicbase_table")
-class CreateMagicTable(BaseTool[CreateMagicbaseTableParams]):
+class CreateMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseTableParams]):
     """<!--zh
     在当前项目创建 MagicBase 表，并返回真实 table.id。
 
@@ -907,7 +908,7 @@ Optional column dynamic permission object. Pass it as an object, not as a JSON s
 
 
 @tool(name="create_magicbase_column")
-class CreateMagicColumn(BaseTool[CreateMagicbaseColumnParams]):
+class CreateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseColumnParams]):
     """<!--zh
     给当前项目内已有 MagicBase 表新增字段。
     -->
@@ -1022,7 +1023,10 @@ Full replacement dynamic permissions object for an existing table. Use this to u
 
 
 @tool(name="update_magicbase_table_permissions")
-class UpdateMagicTablePermissions(BaseTool[UpdateMagicbaseTablePermissionsParams]):
+class UpdateMagicTablePermissions(
+    MagicBaseFriendlyRemarkMixin,
+    BaseTool[UpdateMagicbaseTablePermissionsParams],
+):
     """<!--zh
     修改当前项目内已有 MagicBase 表的动态权限。
 
@@ -1101,7 +1105,7 @@ Set to true only after the user explicitly confirms deleting this table."""
 
 
 @tool(name="delete_magicbase_table")
-class DeleteMagicTable(BaseTool[DeleteMagicbaseTableParams]):
+class DeleteMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseTableParams]):
     """<!--zh
     删除当前项目内已有 MagicBase 表。
 
@@ -1205,7 +1209,7 @@ Optional column dynamic permission after update. To preserve existing permission
 
 
 @tool(name="update_magicbase_column")
-class UpdateMagicColumn(BaseTool[UpdateMagicbaseColumnParams]):
+class UpdateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseColumnParams]):
     """<!--zh
     修改当前项目内已有 MagicBase 字段。
 
@@ -1301,7 +1305,7 @@ Set to true only after the user explicitly confirms deleting this column."""
 
 
 @tool(name="delete_magicbase_column")
-class DeleteMagicColumn(BaseTool[DeleteMagicbaseColumnParams]):
+class DeleteMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseColumnParams]):
     """<!--zh
     删除当前项目内已有 MagicBase 字段。
 
