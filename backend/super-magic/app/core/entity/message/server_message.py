@@ -269,7 +269,7 @@ class PlanDataModelContent(BaseModel):
 
     table_name: str
     purpose: str
-    fields: List[str] = Field(default_factory=list)
+    fields: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
 
 
 class PlanToolContent(BaseModel):

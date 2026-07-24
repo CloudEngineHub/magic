@@ -2,7 +2,7 @@
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -30,6 +30,36 @@ def normalize_string_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
     return [text for item in value if (text := normalize_text(item))]
+
+
+def normalize_data_model_fields(value: Any) -> List[Union[str, Dict[str, Any]]]:
+    """保留字段对象，避免 ToolDetail 把结构化数据转换成 Python 字典文本。"""
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+
+        parsed = try_parse_json(text)
+        if parsed is not None and parsed is not value:
+            return normalize_data_model_fields(parsed)
+
+        return [item for line in text.splitlines() if (item := normalize_list_line(line))]
+
+    if not isinstance(value, list):
+        return []
+
+    fields: List[Union[str, Dict[str, Any]]] = []
+    for item in value:
+        structured = to_plain_dict(item)
+        if structured:
+            fields.append(structured)
+            continue
+
+        text = normalize_text(item)
+        if text:
+            fields.append(text)
+    return fields
 
 
 def normalize_files(value: Any) -> List[Dict[str, str]]:
@@ -80,13 +110,13 @@ def normalize_data_model(value: Any) -> List[Dict[str, Any]]:
             {
                 "table_name": normalize_text(item.get("table_name") or item.get("tableName") or item.get("name")),
                 "purpose": normalize_text(item.get("purpose")),
-                "fields": normalize_string_list(item.get("fields")),
+                "fields": normalize_data_model_fields(item.get("fields")),
             }
             for item in structured
             if (
                 normalize_text(item.get("table_name") or item.get("tableName") or item.get("name"))
                 or normalize_text(item.get("purpose"))
-                or normalize_string_list(item.get("fields"))
+                or normalize_data_model_fields(item.get("fields"))
             )
         ]
 
@@ -98,7 +128,7 @@ def normalize_data_model(value: Any) -> List[Dict[str, Any]]:
         raw = to_plain_dict(item)
         table_name = normalize_text(raw.get("table_name"))
         purpose = normalize_text(raw.get("purpose"))
-        fields = normalize_string_list(raw.get("fields"))
+        fields = normalize_data_model_fields(raw.get("fields"))
         if table_name or purpose or fields:
             tables.append({"table_name": table_name, "purpose": purpose, "fields": fields})
     return tables
