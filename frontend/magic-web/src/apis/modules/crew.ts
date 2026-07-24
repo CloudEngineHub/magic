@@ -236,6 +236,8 @@ export interface AgentItem {
 	source_type: CrewSourceType
 	/** Current user's display source for this agent (returned by list endpoints). */
 	origin: CrewAgentOrigin
+	/** Publish visibility for the current agent. */
+	publish_target_type?: AgentPublishTargetType | null
 	publisher_type?: CrewPublisherType
 	publisher?: CrewPublisher | null
 	enabled: boolean

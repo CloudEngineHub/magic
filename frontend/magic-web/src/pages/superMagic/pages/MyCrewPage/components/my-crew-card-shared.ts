@@ -1,4 +1,4 @@
-import type { CrewAgentOrigin, CrewSourceType } from "@/apis/modules/crew"
+import type { AgentPublishTargetType, CrewAgentOrigin } from "@/apis/modules/crew"
 import {
 	CollaboratorPermissionEnum,
 	type CollaboratorPermission,
@@ -41,17 +41,21 @@ export function isUnpublishedCreatedCrew(
 	return employee.sourceType === "LOCAL_CREATE" && !employee.latestPublishedAt?.trim()
 }
 
-export function resolveMyCrewCreatedFooterBadgeLabel(
-	sourceType: CrewSourceType,
+export function resolveMyCrewPublishTargetLabel(
+	publishTargetType: AgentPublishTargetType | null | undefined,
 	t: (key: string) => string,
-	tCrewCreate: (key: string) => string,
-): string {
-	switch (sourceType) {
+): string | null {
+	switch (publishTargetType) {
+		case "PRIVATE":
+			return t("skillEditPage.publishPanel.targets.private.label")
+		case "MEMBER":
+			return t("skillEditPage.publishPanel.targets.specific_members.label")
+		case "ORGANIZATION":
+			return t("skillEditPage.publishPanel.targets.organization.label")
 		case "MARKET":
-			return t("myCrewPage.sourceStore")
-		case "LOCAL_CREATE":
+			return t("skillEditPage.publishPanel.targets.crew_market.label")
 		default:
-			return tCrewCreate("status.unpublished")
+			return null
 	}
 }
 

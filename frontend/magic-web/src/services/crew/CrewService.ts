@@ -32,6 +32,7 @@ import {
 	type StoreAgentMarketType,
 	type StoreAgentMarketDetailResponse,
 	type AgentItem,
+	type AgentPublishTargetType,
 	type UnifiedAgentItem,
 	type AgentDetailResponse,
 	type PlaybookItem,
@@ -84,6 +85,7 @@ export interface MyCrewView {
 	sourceType: CrewSourceType
 	/** Current user's display source for this agent. */
 	origin?: CrewAgentOrigin
+	publishTargetType?: AgentPublishTargetType | null
 	publisherType: CrewPublisherType | null
 	publisherName: string | null
 	enabled: boolean
@@ -457,6 +459,7 @@ export class CrewService {
 			})),
 			sourceType: this.normalizeSourceType(item.source_type),
 			origin: item.origin,
+			publishTargetType: item.publish_target_type ?? null,
 			publisherType: item.publisher_type ?? null,
 			publisherName: item.publisher?.name?.trim() || null,
 			enabled: item.enabled,
