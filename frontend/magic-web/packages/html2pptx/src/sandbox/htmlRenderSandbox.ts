@@ -1,4 +1,5 @@
 import type { SlideConfig } from "../api/options"
+import { ExportFidelityError, isExportFidelityError } from "../errors"
 import { LogLevel, createScopedLog } from "../logger"
 import { NATIVE_LOAD_WAIT_MS, READY_STATE_POLL_MS } from "../shared/constants"
 import { DEFAULT_CONFIG } from "../shared/unit"
@@ -9,11 +10,13 @@ import {
 	measureContentSize,
 	normalizeSandboxHtml,
 } from "./htmlRenderSandbox.helpers"
+import { installEChartsExportInterceptor } from "./echarts-export-interceptor"
 import {
 	SandboxReadyController,
 	type SandboxReadyControllerInput,
 } from "./waitSandboxReady"
 import type { ResourceLoadError } from "../api/options"
+import { detectRenderReadinessCapabilities } from "./render-readiness"
 
 /** Sandbox render result */
 export interface SandboxRenderResult {
@@ -65,12 +68,17 @@ export interface HtmlRenderSandboxOptions {
 
 /**
  * One HTML render sandbox instance backed by a hidden iframe.
- * Multi-page export reuses the same instance for serial rendering; one instance does not support concurrent render calls.
+ * Multi-page export reuses the same instance for serial rendering, but every page after the
+ * first receives a fresh iframe/browsing context. Replacing the iframe is required because
+ * document.open()/write()/close() does not reset global lexical declarations such as top-level
+ * const/let/class, and it also leaves page-owned timers/listeners attached to the old Window.
+ * One instance does not support concurrent render calls.
  */
 export class HtmlRenderSandbox implements SandboxInstance {
-	readonly iframe: HTMLIFrameElement
-	readonly window: Window
-	readonly document: Document
+	private currentIframe: HTMLIFrameElement
+	private currentWindow: Window
+	private currentDocument: Document
+	private hasStartedRender = false
 
 	private rendering = false
 	private readonly htmlWidth: number
@@ -83,16 +91,22 @@ export class HtmlRenderSandbox implements SandboxInstance {
 		this.htmlWidth = htmlWidth
 		this.htmlHeight = htmlHeight
 		this.ReadyController = options?.ReadyController ?? SandboxReadyController
-		this.iframe = createHiddenIframe({ htmlWidth, htmlHeight })
+		const context = this.createBrowsingContext()
+		this.currentIframe = context.iframe
+		this.currentWindow = context.window
+		this.currentDocument = context.document
+	}
 
-		document.body.appendChild(this.iframe)
+	get iframe(): HTMLIFrameElement {
+		return this.currentIframe
+	}
 
-		this.window = this.iframe.contentWindow as Window
-		this.document = this.iframe.contentDocument as Document
+	get window(): Window {
+		return this.currentWindow
+	}
 
-		this.iframe.addEventListener("error", (event) => {
-			this.sandboxLog(LogLevel.L4, "iframe error", { error: String(event) })
-		})
+	get document(): Document {
+		return this.currentDocument
 	}
 
 	render(
@@ -105,11 +119,34 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			)
 		}
 		this.rendering = true
+		let iframeWindow: Window
+		let iframeDocument: Document
+
+		try {
+			const context = this.acquireRenderContext()
+			iframeWindow = context.window
+			iframeDocument = context.document
+		} catch (error) {
+			this.rendering = false
+			return Promise.reject(error)
+		}
 
 		return new Promise((resolve, reject) => {
 			const signal = options?.signal
-			const iframeWindow = this.window
-			const iframeDocument = this.document
+			const renderAbortController = new AbortController()
+			const renderSignal = renderAbortController.signal
+			let pageErrorRecorded = false
+			let rejectPageError: (error: Error) => void = () => {}
+			const pageErrorPromise = new Promise<never>((_, rejectPageErrorPromise) => {
+				rejectPageError = rejectPageErrorPromise
+			})
+			// Page scripts can fail synchronously during document.write before readiness starts.
+			// Attach a handler immediately; Promise.race below still observes the original rejection.
+			void pageErrorPromise.catch(() => undefined)
+			const pendingUnhandledRejections = new Map<
+				Promise<unknown>,
+				ReturnType<typeof setTimeout>
+			>()
 			const lifecycleState: RenderLifecycleState = {
 				settled: false,
 				readyStarted: false,
@@ -142,9 +179,66 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const onAbort = () => {
 				finish("reject", createAbortError())
 			}
+			const recordPageError = (error: unknown) => {
+				if (pageErrorRecorded || lifecycleState.settled) return
+				pageErrorRecorded = true
+				if (isExportFidelityError(error)) {
+					rejectPageError(error)
+					return
+				}
+				const message = error instanceof Error ? error.message : String(error)
+				rejectPageError(
+					new ExportFidelityError(
+						`[Sandbox] page script failed: ${message}`,
+						"script",
+						error,
+					),
+				)
+			}
+			const reportUnhandledScriptError = (url: string) => {
+				try {
+					options?.onResourceError?.({
+						url,
+						kind: "script",
+						reason: "load-error",
+					})
+				} catch {
+					// Reporting must not hide the page error that fails the export.
+				}
+			}
+			const onWindowError = (event: ErrorEvent) => {
+				Promise.resolve().then(() => {
+					if (event.defaultPrevented || lifecycleState.settled) return
+					const error = event.error ?? new Error(event.message || "Unknown page script error")
+					reportUnhandledScriptError(event.filename || "inline-script://window-error")
+					recordPageError(error)
+				})
+			}
+			const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+				const previousTimer = pendingUnhandledRejections.get(event.promise)
+				if (previousTimer) clearTimeout(previousTimer)
+				const timer = setTimeout(() => {
+					pendingUnhandledRejections.delete(event.promise)
+					if (event.defaultPrevented || lifecycleState.settled) return
+					reportUnhandledScriptError("inline-script://unhandled-rejection")
+					recordPageError(event.reason ?? new Error("Unhandled page promise rejection"))
+				}, 0)
+				pendingUnhandledRejections.set(event.promise, timer)
+			}
+			const onRejectionHandled = (event: PromiseRejectionEvent) => {
+				const timer = pendingUnhandledRejections.get(event.promise)
+				if (timer) clearTimeout(timer)
+				pendingUnhandledRejections.delete(event.promise)
+			}
 
 			const cleanup = () => {
+				if (!renderSignal.aborted) renderAbortController.abort()
 				iframeDocument.removeEventListener("DOMContentLoaded", onDomReady)
+				iframeWindow.removeEventListener("error", onWindowError)
+				iframeWindow.removeEventListener("unhandledrejection", onUnhandledRejection)
+				iframeWindow.removeEventListener("rejectionhandled", onRejectionHandled)
+				for (const timer of pendingUnhandledRejections.values()) clearTimeout(timer)
+				pendingUnhandledRejections.clear()
 				if (signal) signal.removeEventListener("abort", onAbort)
 				lifecycleState.readyController?.restore()
 				lifecycleState.readyController = null
@@ -163,14 +257,23 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				}
 				signal?.addEventListener("abort", onAbort, { once: true })
 				const normalizedHtml = normalizeSandboxHtml(html)
+				const readinessCapabilities = detectRenderReadinessCapabilities(normalizedHtml)
 
 				// Explicitly clear the previous page document before installing the ready controller so this page's load and resource events are not missed.
 				iframeDocument.open()
+				// Install for every page before document.write. Runtime activity, rather than source
+				// syntax, decides whether this page actually contains an ECharts instance.
+				installEChartsExportInterceptor(iframeWindow)
+				iframeWindow.addEventListener("error", onWindowError)
+				iframeWindow.addEventListener("unhandledrejection", onUnhandledRejection)
+				iframeWindow.addEventListener("rejectionhandled", onRejectionHandled)
 				lifecycleState.readyController = new this.ReadyController({
 					iframeWindow,
 					iframeDocument,
 					nativeLoadWaitMs: NATIVE_LOAD_WAIT_MS,
 					onResourceError: options?.onResourceError,
+					onPageError: recordPageError,
+					...readinessCapabilities,
 				})
 
 				iframeDocument.write(normalizedHtml)
@@ -190,7 +293,11 @@ export class HtmlRenderSandbox implements SandboxInstance {
 
 							Promise.resolve()
 								.then(async () => {
-									await lifecycleState.readyController?.waitForReady({ signal })
+									await Promise.race([
+											lifecycleState.readyController?.waitForReady({ signal: renderSignal }) ??
+											Promise.resolve(),
+										pageErrorPromise,
+									])
 									const measured = measureContentSize({
 										iframeDocument,
 										fallbackWidth: this.htmlWidth,
@@ -221,8 +328,57 @@ export class HtmlRenderSandbox implements SandboxInstance {
 	}
 
 	destroy(): void {
-		if (this.iframe.parentNode) {
-			this.iframe.parentNode.removeChild(this.iframe)
+		if (this.currentIframe.parentNode) {
+			this.currentIframe.parentNode.removeChild(this.currentIframe)
 		}
+	}
+
+	/**
+	 * Keep the initially-created iframe for the first page so public accessors remain usable
+	 * immediately after construction. Every later page rotates to a new browsing context before
+	 * any HTML is written, destroying the previous page's Window together with its timers and
+	 * event listeners.
+	 */
+	private acquireRenderContext(): { window: Window; document: Document } {
+		if (this.hasStartedRender) {
+			const previousIframe = this.currentIframe
+			const context = this.createBrowsingContext()
+			this.currentIframe = context.iframe
+			this.currentWindow = context.window
+			this.currentDocument = context.document
+			previousIframe.remove()
+		} else {
+			this.hasStartedRender = true
+		}
+
+		return {
+			window: this.currentWindow,
+			document: this.currentDocument,
+		}
+	}
+
+	private createBrowsingContext(): {
+		iframe: HTMLIFrameElement
+		window: Window
+		document: Document
+	} {
+		const iframe = createHiddenIframe({
+			htmlWidth: this.htmlWidth,
+			htmlHeight: this.htmlHeight,
+		})
+		document.body.appendChild(iframe)
+
+		const iframeWindow = iframe.contentWindow
+		const iframeDocument = iframe.contentDocument
+		if (!iframeWindow || !iframeDocument) {
+			iframe.remove()
+			throw new Error("[Sandbox] failed to create iframe browsing context")
+		}
+
+		iframe.addEventListener("error", (event) => {
+			this.sandboxLog(LogLevel.L4, "iframe error", { error: String(event) })
+		})
+
+		return { iframe, window: iframeWindow, document: iframeDocument }
 	}
 }

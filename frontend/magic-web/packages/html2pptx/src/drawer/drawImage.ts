@@ -59,6 +59,7 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 			src: String(src).slice(0, 80),
 			error: String(error),
 		})
+		throw error
 	}
 }
 
