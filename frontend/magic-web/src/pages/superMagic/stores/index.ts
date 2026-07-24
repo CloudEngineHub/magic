@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction, toJS } from "mobx"
 import pubsub from "@/utils/pubsub"
-import { unionBy, get, set, merge } from "lodash-es"
+import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
@@ -19,7 +19,6 @@ import {
 	sortMessages,
 	addOneToBigNumberString,
 	isToolCallsEqual,
-	isToolCallsMatch,
 	isToolCallArgumentsComplete,
 	compactToolCalls,
 	getCharsPerTick,
@@ -93,6 +92,38 @@ const STREAM_RECOVERY_MAX_BACKOFF_MS = 30_000
 
 const TERMINAL_TOPIC_TASK_STATUSES = new Set(["finished", "error", "suspended"])
 
+/** Tool response 的 canonical 状态集合；response_missing 是 Store 内部生成的弱终态。 */
+const VALID_TOOL_RESPONSE_STATUSES = new Set([
+	"waiting",
+	"running",
+	"finished",
+	"error",
+	"suspended",
+	"response_missing",
+])
+
+const TASK_SUSPENDED_EVENT = "agent_suspended"
+
+type StreamChunkPayload = SuperMagicChunkMessage["super_magic_chunk"]
+
+interface StreamChunkLedger {
+	nextChunkIndex: number
+	pendingChunks: Map<number, StreamChunkPayload>
+}
+
+interface AuthoritativeAssistantSnapshot {
+	appMessageId: string
+	node: RawSuperMagicMessageNode
+}
+
+interface SharedReplayState {
+	latestMessageId: string
+	pendingAssistant?: {
+		correlationId: string
+		toolCalls: ToolCall[]
+	}
+}
+
 function compareMessageSeqId(left: string, right: string): number {
 	if (left === right) return 0
 	const normalizedLeft = left.replace(/^0+(?=\d)/, "")
@@ -114,6 +145,17 @@ function resolveDomainEvents(payload: TopicMessageListenerPayload): DomainEventP
 export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private collaborators: SuperMagicStoreCollaborators
 	private topicSyncGenerationCounter = 0
+	/** HTTP 同步中的 finished assistant 先按代次暂存，只有同步成功且任务 finished 才提升为终态。 */
+	private pendingTopicSyncFinalizations = new Map<
+		string,
+		{ generation: number; snapshots: Map<string, AuthoritativeAssistantSnapshot> }
+	>()
+	/** 非 UI canonical sidecar：metadata-only chunk 也参与排序，但不会创建空 StreamState。 */
+	private streamChunkLedgers = new Map<string, StreamChunkLedger>()
+	/** tool response 的 seq 只用于 canonical 覆盖防御，不暴露到 ToolResponseState。 */
+	private latestToolResponseSeqIds = new Map<string, Map<string, string>>()
+	/** 分享消息会被整批、逐条和旧前缀重复回放；该 sidecar 只记录单 topic 的顺序与待结算工具。 */
+	private sharedReplayStates = new Map<string, SharedReplayState>()
 	private onServerMessagesConfirmedCallbacks = new Set<
 		(payload: ServerMessagesConfirmedPayload) => void
 	>()
@@ -129,7 +171,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	> = new Map()
 	// 消息内容（卡片形式）
 	messageMap: Map<string, unknown> = new Map()
-	// 工具调用响应最新态（key: <topic_id, tool_call_id>）
+	// 工具调用响应最新态（key: <topic_id, tool.id>）
 	toolResponseMap: Map<string, Map<string, ToolResponseState>> = new Map()
 	/** 话题消息元数据 */
 	topicMeta: Map<SuperMagicStoreTopicId, TopicMeta> = new Map()
@@ -154,6 +196,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				onServerMessagesConfirmedCallbacks: false,
 				onStreamRecoveryRequestedCallbacks: false,
 				topicSyncGenerationCounter: false,
+				pendingTopicSyncFinalizations: false,
+				streamChunkLedgers: false,
+				latestToolResponseSeqIds: false,
+				sharedReplayStates: false,
 			},
 			{ autoBind: true },
 		)
@@ -230,20 +276,39 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicMeta.recoveryCorrelationId = null
 	}
 
+	private getStreamChunkLedger(topicId: string, correlationId: string): StreamChunkLedger {
+		const key = `${topicId}\u0000${correlationId}`
+		let ledger = this.streamChunkLedgers.get(key)
+		if (!ledger) {
+			ledger = { nextChunkIndex: 0, pendingChunks: new Map() }
+			this.streamChunkLedgers.set(key, ledger)
+		}
+		return ledger
+	}
+
+	private clearStreamChunkLedger(topicId: string, correlationId: string) {
+		this.streamChunkLedgers.delete(`${topicId}\u0000${correlationId}`)
+	}
+
 	/**
 	 * 渲染追平后进入等待态时启动一次 watchdog。等待态本身是正常的，只有超过阈值仍未
 	 * 收到可渲染数据才请求 HTTP 权威快照，避免把“模型思考中”误判成卡死。
 	 */
-	private scheduleStreamRecovery(topicId: string, correlationId: string) {
+	private scheduleStreamRecovery(
+		topicId: string,
+		correlationId: string,
+		allowMissingStreamState = false,
+	) {
 		const topicMeta = this.getTopicMetadata(topicId)
 		const streamState = topicMeta.content.get(correlationId)
-		if (!streamState || streamState.isFinalMessageReceived) return
+		if ((!streamState && !allowMissingStreamState) || streamState?.isFinalMessageReceived)
+			return
 		if (topicId !== this.activeTopicId || topicMeta.timer) return
 		if (topicMeta.recoveryTimer && topicMeta.recoveryCorrelationId === correlationId) return
 
 		this.clearStreamRecoveryTimer(topicId)
 		const recoveryDelay = Math.min(
-			STREAM_RECOVERY_TIMEOUT_MS * 2 ** streamState.recoveryAttempts,
+			STREAM_RECOVERY_TIMEOUT_MS * 2 ** (streamState?.recoveryAttempts || 0),
 			STREAM_RECOVERY_MAX_BACKOFF_MS,
 		)
 		topicMeta.recoveryCorrelationId = correlationId
@@ -253,14 +318,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				topicMeta.recoveryCorrelationId = null
 				const currentStreamState = topicMeta.content.get(correlationId)
 				if (
-					!currentStreamState ||
-					currentStreamState.isFinalMessageReceived ||
+					(!currentStreamState && !allowMissingStreamState) ||
+					currentStreamState?.isFinalMessageReceived ||
 					topicId !== this.activeTopicId ||
 					topicMeta.timer
 				)
 					return
 
-				currentStreamState.recoveryAttempts += 1
+				if (currentStreamState) currentStreamState.recoveryAttempts += 1
 				this.emitStreamRecoveryRequested({ topicId, correlationId })
 			})
 		}, recoveryDelay)
@@ -275,6 +340,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const generation = ++this.topicSyncGenerationCounter
 		topicMeta.syncGeneration = generation
 		topicMeta.syncState = "syncing"
+		// 同一时刻只有全局最新 generation 可写回；新同步开始时丢弃旧代次的待确认终态。
+		this.pendingTopicSyncFinalizations.clear()
+		this.pendingTopicSyncFinalizations.set(topicId, {
+			generation,
+			snapshots: new Map(),
+		})
 		return generation
 	}
 
@@ -290,6 +361,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** 取消仍在途的同步，使其后续响应只能被读取、不能再写回 store。 */
 	cancelTopicSync(topicId: string, generation: number) {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return
+		const pendingFinalizations = this.pendingTopicSyncFinalizations.get(topicId)
+		if (pendingFinalizations?.generation === generation) {
+			this.pendingTopicSyncFinalizations.delete(topicId)
+		}
 		this.topicSyncGenerationCounter += 1
 		const topicMeta = this.getTopicMetadata(topicId)
 		topicMeta.syncState = "idle"
@@ -315,6 +390,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return false
 
 		const topicMeta = this.getTopicMetadata(topicId)
+		const pendingFinalizations = this.pendingTopicSyncFinalizations.get(topicId)
+		this.pendingTopicSyncFinalizations.delete(topicId)
 		this.clearStreamRecoveryTimer(topicId)
 		const now = Date.now()
 		const previousSyncedSeqId = topicMeta.lastSyncedSeqId
@@ -332,7 +409,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			latestSeqId &&
 			compareMessageSeqId(latestSeqId, previousSyncedSeqId) > 0,
 		)
-		const isTerminalTopic = Boolean(taskStatus && TERMINAL_TOPIC_TASK_STATUSES.has(taskStatus))
+		const isSuccessfulFinishedSync = Boolean(succeeded && taskStatus === "finished")
+		const isSuccessfulSuspendedSync = Boolean(succeeded && taskStatus === "suspended")
+		const isTerminalTopic = Boolean(
+			succeeded && taskStatus && TERMINAL_TOPIC_TASK_STATUSES.has(taskStatus),
+		)
+		const hasCurrentFinalizationSnapshot = Boolean(
+			isSuccessfulFinishedSync && pendingFinalizations?.generation === generation,
+		)
 
 		if (isTerminalTopic) {
 			topicMeta.renderPolicy = "instant"
@@ -348,7 +432,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 		topicMeta.syncState = "idle"
 
-		if (topicMeta.renderPolicy === "instant") {
+		if (hasCurrentFinalizationSnapshot && pendingFinalizations) {
+			this.finalizeSynchronizedAssistantSnapshots(topicId, pendingFinalizations.snapshots)
+		}
+
+		if (isSuccessfulFinishedSync) {
+			// HTTP finished 是普通工具缺失响应的第二个业务完成屏障；只补 canonical
+			// 占位，不伪造 tool 消息或成功领域事件，迟到的真实响应仍可覆盖它。
+			this.fillMissingToolResponses(topicId)
+			// finished 只结算本代 HTTP 快照明确确认的 correlation；其他流继续正常运行。
+			if (topicMeta.content.size > 0) {
+				topicMeta.renderPolicy = "live"
+				if (topicId === this.activeTopicId && !topicMeta.timer) {
+					this.resumeActiveStreams(topicId)
+				}
+			}
+		} else if (isSuccessfulSuspendedSync) {
+			// 只有权威 topic 状态才批量结算未完成工具；单个 tool message 的 suspended
+			// 只描述该工具自身，不能扩大为整个任务的中断信号。
+			this.handleTopicSuspended(topicId)
+		} else if (topicMeta.renderPolicy === "instant") {
 			this.settleTopicStreamsInstantly(topicId)
 		} else if (topicId === this.activeTopicId && topicMeta.content.size > 0) {
 			this.resumeActiveStreams(topicId)
@@ -375,12 +478,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	initializeMessages(topicId: string, messages: RawSuperMagicMessageEnvelope[]) {
 		const existingMessages = this.messages.get(topicId) || []
 		const topicBuffer = this.getTopicBuffer(topicId)
+		const syncTopicMeta = this.getTopicMetadata(topicId)
+		const pendingFinalizations = this.pendingTopicSyncFinalizations.get(topicId)
+		const currentSyncFinalizations =
+			syncTopicMeta.syncState === "syncing" &&
+			pendingFinalizations?.generation === syncTopicMeta.syncGeneration
+				? pendingFinalizations
+				: undefined
 		const incomingAppMessageIds: string[] = []
 		console.log("API 拉取的消息列表", messages)
 		const bufferedMessageIds = new Set(
 			topicBuffer.messages.map((item) => item?.seq?.message?.app_message_id),
 		)
-		const existingMessageIds = new Set(existingMessages.map((item) => item.app_message_id))
 		runInAction(() => {
 			const chronologicalMessages = (messages || []).slice().reverse()
 			const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
@@ -392,35 +501,42 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const appMessageId = imMessage?.app_message_id as string
 				if (appMessageId) incomingAppMessageIds.push(appMessageId)
 				const correlationId = String(rawNode?.correlation_id || "")
+				const incomingMessage: MessageItem = transformRawMessage(
+					envelope?.seq as RawSuperMagicMessageSequence,
+				)
+				// 针对客户端的工具调用消息直接过滤
+				if (incomingMessage?.type === "user_tool_call") return
+
+				if (rawNode?.role === "assistant" && appMessageId && correlationId) {
+					const revisionDecision = this.getAssistantRevisionDecision(
+						topicId,
+						appMessageId,
+						correlationId,
+						envelope?.seq?.seq_id,
+						existingMessages,
+					)
+					if (revisionDecision === "same" || revisionDecision === "stale") return
+				}
+
 				if (
-					!bufferedMessageIds.has(appMessageId) &&
+					(!bufferedMessageIds.has(appMessageId) || rawNode?.role === "assistant") &&
 					rawNode?.event !== "before_llm_request"
 				) {
-					const incomingMessage: MessageItem = transformRawMessage(
-						envelope?.seq as RawSuperMagicMessageSequence,
+					const matchIndex = existingMessages.findIndex(
+						(item) =>
+							item?.app_message_id === appMessageId ||
+							(rawNode?.role === "assistant" &&
+								item?.role === "assistant" &&
+								Boolean(correlationId) &&
+								item?.correlation_id === correlationId),
 					)
-					// 针对客户端的工具调用消息直接过滤
-					if (incomingMessage?.type === "user_tool_call") {
-						return
-					}
-					if (
-						existingMessageIds.has(appMessageId) ||
-						existingMessageIds.has(correlationId)
-					) {
-						const matchIndex = existingMessages.findIndex(
-							(item) =>
-								item?.app_message_id === appMessageId ||
-								(item?.app_message_id === correlationId &&
-									item?.role === rawNode?.role),
-						)
-						if (matchIndex > -1) {
-							const existingMessage = existingMessages[matchIndex]
-							if (existingMessage) {
-								existingMessages[matchIndex] = {
-									...existingMessage,
-									...incomingMessage,
-									app_message_id: existingMessage.app_message_id,
-								}
+					if (matchIndex > -1) {
+						const existingMessage = existingMessages[matchIndex]
+						if (existingMessage) {
+							existingMessages[matchIndex] = {
+								...existingMessage,
+								...incomingMessage,
+								app_message_id: incomingMessage.app_message_id,
 							}
 						}
 					} else {
@@ -428,22 +544,42 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 				}
 				if (messageType === "super_magic_message") {
-					if (rawNode?.role === "tool" && rawNode?.tool?.id) {
-						toolResponseMap.set(rawNode?.tool?.id, {
-							...rawNode?.tool,
-						})
-					}
+					this.recordToolResponse(
+						topicId,
+						rawNode,
+						envelope?.seq?.seq_id,
+						toolResponseMap,
+					)
 				}
 
 				this.messageMap.set(appMessageId, rawNode)
 				if (rawNode?.role === "assistant" && appMessageId && correlationId) {
-					settledStream =
-						this.reconcileServerAssistantSnapshot(
-							topicId,
+					const didSettleStream = this.reconcileServerAssistantSnapshot(
+						topicId,
+						appMessageId,
+						correlationId,
+						rawNode,
+					)
+					if (rawNode.status === "finished") {
+						const canonicalNode = this.messageMap.get(appMessageId) as
+							| RawSuperMagicMessageNode
+							| undefined
+						// Finalization must retain the already-reconciled nested tool fields;
+						// storing the raw HTTP payload here would erase inherited arguments later.
+						const topicCanonicalNode =
+							canonicalNode?.role === "assistant" &&
+							canonicalNode.correlation_id === correlationId &&
+							canonicalNode.topic_id === topicId
+								? canonicalNode
+								: undefined
+						currentSyncFinalizations?.snapshots.set(correlationId, {
 							appMessageId,
-							correlationId,
-							rawNode,
-						) || settledStream
+							node: this.cloneAuthoritativeAssistantSnapshot(
+								topicCanonicalNode || rawNode,
+							),
+						})
+					}
+					settledStream = didSettleStream || settledStream
 				}
 			})
 			// Clean up local sidecars.
@@ -508,16 +644,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							unknown
 						>),
 					}
+					const topicId = String(sharedMessage?.topic_id || rawNode?.topic_id || "")
 					if (rawNode?.role === "tool") {
-						const toolPayload = (rawNode?.tool || {}) as Record<string, unknown>
-						const toolCallId = String(rawNode?.tool_call_id || toolPayload?.id || "")
-						if (toolCallId) {
-							const topicId = String(sharedMessage?.topic_id || "")
-							const toolResponse = toolPayload as ToolResponseState
-							const topicToolMap = this.toolResponseMap.get(topicId) || new Map()
-							topicToolMap.set(toolCallId, toolResponse)
-							this.toolResponseMap.set(topicId, topicToolMap)
-						}
+						this.recordToolResponse(topicId, rawNode as RawSuperMagicMessageNode)
+					} else if (rawNode?.role === "assistant" && topicId) {
+						this.advanceSharedReplay(
+							topicId,
+							messageId,
+							rawNode as RawSuperMagicMessageNode,
+						)
 					}
 
 					this.messageMap.set(messageId, rawNode)
@@ -528,96 +663,440 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
+	private advanceSharedReplay(
+		topicId: string,
+		messageId: string,
+		assistantNode: RawSuperMagicMessageNode,
+	) {
+		const replayState = this.sharedReplayStates.get(topicId) || { latestMessageId: "" }
+		if (
+			messageId &&
+			replayState.latestMessageId &&
+			compareMessageSeqId(messageId, replayState.latestMessageId) <= 0
+		) {
+			// 分享播放会从头重放旧前缀；旧 Assistant 只刷新 messageMap，不能反向充当完成屏障。
+			return
+		}
+
+		if (messageId) replayState.latestMessageId = messageId
+		const correlationId = String(assistantNode.correlation_id || "")
+		const pendingAssistant = replayState.pendingAssistant
+		if (pendingAssistant && pendingAssistant.correlationId !== correlationId) {
+			this.settleSharedToolCalls(topicId, pendingAssistant.toolCalls)
+			replayState.pendingAssistant = undefined
+		}
+
+		const hasToolCalls = Object.prototype.hasOwnProperty.call(assistantNode, "tool_calls")
+		if (hasToolCalls) {
+			const toolCalls = Array.isArray(assistantNode.tool_calls)
+				? this.cloneToolCallsForRendering(assistantNode.tool_calls as ToolCall[])
+				: []
+			replayState.pendingAssistant =
+				toolCalls.length > 0 ? { correlationId, toolCalls } : undefined
+		}
+
+		this.sharedReplayStates.set(topicId, replayState)
+	}
+
+	/** 分享列表没有普通 Topic buffer；下一 Assistant 是缺失工具响应的现成完成屏障。 */
+	private settleSharedToolCalls(topicId: string, toolCalls: ToolCall[]) {
+		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
+		let changed = false
+
+		toolCalls.forEach((toolCall) => {
+			const toolId = String(toolCall.id || "")
+			if (!toolId || this.isAskUserToolCall(toolCall)) return
+
+			const current = toolResponseMap.get(toolId)
+			if (
+				current?.status === "finished" ||
+				current?.status === "error" ||
+				current?.status === "suspended" ||
+				current?.status === "response_missing"
+			)
+				return
+
+			toolResponseMap.set(
+				toolId,
+				this.mergeToolResponseState(current, {
+					...(toolCall.tool || {}),
+					id: toolId,
+					name: toolCall.tool?.name || toolCall.function?.name || "",
+					status: "response_missing",
+				}),
+			)
+			changed = true
+		})
+
+		if (changed) this.toolResponseMap.set(topicId, toolResponseMap)
+	}
+
 	// ======================================
 	// 方法 1：外部接收真实 chunk（前期正常流）
 	// ======================================
 	receiveChunk(message: SuperMagicChunkMessage) {
 		const topicId = message?.topic_id
-		persistMessageToStorage(topicId, message)
 		const messageChunk = message?.[message?.type]
 		const correlationId = String(messageChunk?.correlation_id || "")
 		if (!topicId || !correlationId) return
 		const topicMeta = this.getTopicMetadata(topicId)
-		if (topicMeta.finalizedCorrelationIds.has(correlationId)) return
+		if (topicMeta.finalizedCorrelationIds.has(correlationId)) {
+			this.clearStreamChunkLedger(topicId, correlationId)
+			return
+		}
 
 		const choice = messageChunk?.choices?.[0]
 		const delta = choice?.delta
 		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
-		const isFinalChunk = Boolean(choice?.finish_reason || messageChunk?.usage)
-		const hasRenderableDelta = Boolean(
+		const hasTextDelta = Boolean(
 			(typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) ||
-			(typeof delta?.content === "string" && delta.content.length > 0) ||
-			toolCalls.length > 0,
+			(typeof delta?.content === "string" && delta.content.length > 0),
 		)
-		// heartbeat/metadata-only chunk 不能创建空 StreamState，否则 topic 会永久保持 streaming。
-		if (!hasRenderableDelta && !isFinalChunk) return
+		// Tool arguments remain canonical even when the tool header is missing. They must
+		// reach the indexed provisional slot, but only a stable tool id is projectable.
+		const hasCanonicalDelta = hasTextDelta || toolCalls.length > 0
+		const chunkIndex =
+			Number.isInteger(messageChunk?.i) && Number(messageChunk.i) >= 0
+				? Number(messageChunk.i)
+				: null
 
-		const existingStreamState = this.getStreamState(topicId, correlationId)
-		// 只有终止标记但没有任何前置数据时，等待最终 IM/HTTP 消息直接建立完整节点。
-		if (!existingStreamState && isFinalChunk && !hasRenderableDelta) {
-			if (topicId === this.activeTopicId && topicMeta.syncState !== "syncing") {
-				this.emitStreamRecoveryRequested({ topicId, correlationId })
-			}
+		if (chunkIndex === null) {
+			// 缺失或非法序号无法安全排序和去重；丢弃当前包，等待后续完整消息兜底收敛。
+			console.error("chunk error")
 			return
 		}
 
-		const stableAppMessageId = correlationId
-		const streamState = existingStreamState || this.getTopicStreamState(topicId, correlationId)
-		if (streamState.isFinalMessageReceived) return
+		const ledger = this.getStreamChunkLedger(topicId, correlationId)
+		const hasBufferedLaterChunk = Array.from(ledger.pendingChunks.keys()).some(
+			(pendingChunkIndex) => pendingChunkIndex > 0,
+		)
+		if (
+			chunkIndex === 0 &&
+			(ledger.nextChunkIndex > 1 || (ledger.nextChunkIndex > 0 && hasBufferedLaterChunk)) &&
+			!topicMeta.finalizedCorrelationIds.has(correlationId)
+		) {
+			// 同一 correlation 已推进到 i>0 后再次收到 i=0，表示模型放弃旧回答并从头生成。
+			// completion id 仅作附带信息；这里只重置旧流状态，保留原消息卡片与非流式元数据。
+			ledger.pendingChunks.clear()
+			ledger.nextChunkIndex = 0
+			topicMeta.content.delete(correlationId)
+			topicMeta.streamSnapshots.delete(correlationId)
+			this.clearStreamRecoveryTimer(topicId, correlationId)
+			if (topicMeta.timer) {
+				clearTimeout(topicMeta.timer)
+				topicMeta.timer = null
+			}
+
+			const cachedNode = this.messageMap.get(correlationId)
+			if (
+				cachedNode &&
+				typeof cachedNode === "object" &&
+				(cachedNode as RawSuperMagicMessageNode).role === "assistant" &&
+				(cachedNode as RawSuperMagicMessageNode).correlation_id === correlationId &&
+				(cachedNode as RawSuperMagicMessageNode).topic_id === topicId
+			) {
+				const streamNode = cachedNode as RawSuperMagicMessageNode
+				streamNode.content = ""
+				streamNode.reasoning_content = ""
+				streamNode.tool_calls = []
+				this.messageMap.set(correlationId, streamNode)
+			}
+		}
+		// correlationId 负责隔离一轮流，i 负责该轮内的幂等和顺序；旧序号与待处理重复序号都直接忽略。
+		if (chunkIndex < ledger.nextChunkIndex || ledger.pendingChunks.has(chunkIndex)) {
+			return
+		}
+		persistMessageToStorage(topicId, message)
 
 		runInAction(() => {
-			this.clearStreamRecoveryTimer(topicId, correlationId)
-			streamState.recoveryAttempts = 0
-			if (isFinalChunk) {
-				topicMeta.isStream = false
-				streamState.isFinalMessageReceived = true
-			} else {
-				// 新的增量 chunk 说明话题已经重新进入运行态，结束上一次终态同步留下的瞬时策略。
-				if (topicMeta.renderPolicy === "instant") topicMeta.renderPolicy = "live"
-				topicMeta.isStream = true
-			}
+			ledger.pendingChunks.set(chunkIndex, messageChunk)
+			let appliedChunk = false
 
-			if (delta?.reasoning_content) {
-				streamState.reasoning_content += delta.reasoning_content
-			}
+			while (ledger.pendingChunks.has(ledger.nextChunkIndex)) {
+				const orderedChunk = ledger.pendingChunks.get(ledger.nextChunkIndex)
+				ledger.pendingChunks.delete(ledger.nextChunkIndex)
+				ledger.nextChunkIndex += 1
+				if (!orderedChunk) continue
 
-			if (delta?.content) {
-				streamState.content += delta.content
-			}
-
-			toolCalls.forEach((toolCall) => {
-				const fn = toolCall?.function
-				if (fn && !Array.isArray(fn) && typeof fn === "object") {
-					const isNewTool = fn.name
-					const toolIndex = toolCall?.index ?? 0
-
-					if (isNewTool) {
-						const existingTool = streamState.tool_calls[toolIndex]
-						streamState.tool_calls[toolIndex] = {
-							...existingTool,
-							...toolCall,
-							function: {
-								...existingTool?.function,
-								...fn,
-							},
-						} as ToolCall
-					} else {
-						const argCache = get(
-							streamState,
-							["tool_calls", toolIndex, "function", "arguments"],
-							"",
-						)
-						set(
-							streamState,
-							["tool_calls", toolIndex, "function", "arguments"],
-							argCache + (fn.arguments || ""),
-						)
+				const orderedChoice = orderedChunk.choices?.[0]
+				const orderedDelta = orderedChoice?.delta
+				const orderedToolCalls = Array.isArray(orderedDelta?.tool_calls)
+					? orderedDelta.tool_calls
+					: []
+				const orderedIsFinal = Boolean(orderedChoice?.finish_reason)
+				const orderedHasTextDelta = Boolean(
+					(typeof orderedDelta?.reasoning_content === "string" &&
+						orderedDelta.reasoning_content.length > 0) ||
+					(typeof orderedDelta?.content === "string" && orderedDelta.content.length > 0),
+				)
+				const orderedHasCanonicalDelta = orderedHasTextDelta || orderedToolCalls.length > 0
+				// role/heartbeat/usage-only 只推进 ledger，不进入 topicMeta.content，避免空流占用 UI loading 状态。
+				if (!orderedHasCanonicalDelta && !orderedIsFinal) {
+					// usage 不是终止信号；若后续正文丢失，等待 watchdog 发起权威恢复。
+					if (orderedChunk.usage) {
+						this.scheduleStreamRecovery(topicId, correlationId, true)
 					}
+					continue
 				}
-			})
 
-			this.startStreamRendering(topicId, stableAppMessageId)
+				const existingStreamState = this.getStreamState(topicId, correlationId)
+				if (!existingStreamState && orderedIsFinal && !orderedHasCanonicalDelta) {
+					this.clearStreamChunkLedger(topicId, correlationId)
+					if (topicId === this.activeTopicId && topicMeta.syncState !== "syncing") {
+						this.emitStreamRecoveryRequested({ topicId, correlationId })
+					}
+					break
+				}
+
+				const streamState =
+					existingStreamState || this.getTopicStreamState(topicId, correlationId)
+				if (streamState.isFinalMessageReceived) {
+					this.clearStreamChunkLedger(topicId, correlationId)
+					break
+				}
+				appliedChunk =
+					this.applyOrderedChunk(
+						topicId,
+						correlationId,
+						topicMeta,
+						streamState,
+						orderedChunk,
+					) || appliedChunk
+				if (streamState.isFinalMessageReceived) {
+					this.clearStreamChunkLedger(topicId, correlationId)
+					break
+				}
+			}
+
+			// 出现 gap 时不让后到参数越过工具头；超过恢复阈值后由 HTTP 权威快照收敛。
+			if (!appliedChunk && ledger.pendingChunks.size > 0) {
+				let streamState = this.getStreamState(topicId, correlationId)
+				if (!streamState && hasCanonicalDelta) {
+					streamState = this.getTopicStreamState(topicId, correlationId)
+				}
+				if (streamState && !streamState.isFinalMessageReceived) {
+					topicMeta.isStream = true
+					this.scheduleStreamRecovery(topicId, correlationId)
+				}
+			}
 		})
+	}
+
+	private applyOrderedChunk(
+		topicId: string,
+		stableAppMessageId: string,
+		topicMeta: TopicMeta,
+		streamState: StreamState,
+		messageChunk: SuperMagicChunkMessage["super_magic_chunk"],
+	): boolean {
+		if (streamState.isFinalMessageReceived) return false
+		const choice = messageChunk?.choices?.[0]
+		const delta = choice?.delta
+		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
+		const isFinalChunk = Boolean(choice?.finish_reason)
+
+		this.clearStreamRecoveryTimer(topicId, messageChunk.correlation_id)
+		streamState.recoveryAttempts = 0
+		if (isFinalChunk) {
+			topicMeta.isStream = false
+			streamState.isFinalMessageReceived = true
+		} else {
+			// 新的增量 chunk 说明话题已经重新进入运行态，结束上一次终态同步留下的瞬时策略。
+			if (topicMeta.renderPolicy === "instant") topicMeta.renderPolicy = "live"
+			topicMeta.isStream = true
+		}
+
+		if (delta?.reasoning_content) streamState.reasoning_content += delta.reasoning_content
+		if (delta?.content) streamState.content += delta.content
+
+		toolCalls.forEach((toolCall) => {
+			const fn = toolCall?.function
+			if (!fn || Array.isArray(fn) || typeof fn !== "object") return
+			const isToolHeader = Boolean(fn.name || toolCall.id)
+			const toolIndex = toolCall?.index ?? 0
+
+			if (isToolHeader) {
+				const existingTool = streamState.tool_calls[toolIndex]
+				const provisionalArguments = existingTool?.function?.arguments
+				// 参数续片可能因网络乱序先到；工具头补齐时必须升级原槽位而不是追加新工具。
+				streamState.tool_calls[toolIndex] = {
+					...existingTool,
+					...toolCall,
+					function: {
+						...existingTool?.function,
+						...fn,
+						arguments:
+							typeof provisionalArguments === "string"
+								? provisionalArguments
+								: fn.arguments || "",
+					},
+				} as ToolCall
+				return
+			}
+
+			const argCache = get(
+				streamState,
+				["tool_calls", toolIndex, "function", "arguments"],
+				"",
+			)
+			set(
+				streamState,
+				["tool_calls", toolIndex, "function", "arguments"],
+				argCache + (fn.arguments || ""),
+			)
+		})
+
+		// Anonymous argument slots are canonical-only state. Do not create a message
+		// card or typewriter timer until content, reasoning, or a stable tool id exists.
+		const hasProjectableTools = this.getProjectableToolCalls(streamState.tool_calls).length > 0
+		if (streamState.content || streamState.reasoning_content || hasProjectableTools) {
+			this.startStreamRendering(topicId, stableAppMessageId)
+		}
+		return true
+	}
+
+	private cloneAuthoritativeAssistantSnapshot(
+		serverNode: RawSuperMagicMessageNode,
+	): RawSuperMagicMessageNode {
+		const snapshot = {
+			...serverNode,
+		} as RawSuperMagicMessageNode
+		const streamControlledFields = ["content", "reasoning_content", "tool_calls"] as const
+		// 运行时对象可能显式携带 undefined；它与 wire-level absent 同义，必须从
+		// merge 输入中删除，否则对象展开会把已经继承的 canonical 字段覆盖掉。
+		streamControlledFields.forEach((field) => {
+			if (!this.hasDefinedFinalField(serverNode, field)) {
+				delete (snapshot as Record<string, unknown>)[field]
+			}
+		})
+
+		if (this.hasDefinedFinalField(serverNode, "content")) {
+			snapshot.content = typeof serverNode.content === "string" ? serverNode.content : ""
+		}
+		if (this.hasDefinedFinalField(serverNode, "reasoning_content")) {
+			snapshot.reasoning_content =
+				typeof serverNode.reasoning_content === "string" ? serverNode.reasoning_content : ""
+		}
+		if (this.hasDefinedFinalField(serverNode, "tool_calls")) {
+			snapshot.tool_calls = Array.isArray(serverNode.tool_calls)
+				? this.cloneToolCallsForRendering(serverNode.tool_calls as ToolCall[])
+				: []
+		}
+
+		return snapshot
+	}
+
+	/** Final 字段的 undefined/absent 与显式 null、空值具有不同覆盖语义。 */
+	private hasDefinedFinalField(
+		node: RawSuperMagicMessageNode | undefined,
+		field: "content" | "reasoning_content" | "tool_calls",
+	) {
+		return Boolean(
+			node &&
+			Object.prototype.hasOwnProperty.call(node, field) &&
+			(node as Record<string, unknown>)[field] !== undefined,
+		)
+	}
+
+	private getFinalToolCalls(node: RawSuperMagicMessageNode | undefined) {
+		if (!this.hasDefinedFinalField(node, "tool_calls")) {
+			return { present: false, toolCalls: [] as ToolCall[] }
+		}
+		return {
+			present: true,
+			toolCalls: Array.isArray(node?.tool_calls) ? (node.tool_calls as ToolCall[]) : [],
+		}
+	}
+
+	/**
+	 * Merge an authoritative Assistant snapshot without treating nested absent fields
+	 * as explicit clears. Only an Assistant node from the same logical domain may act
+	 * as the inheritance source.
+	 */
+	private mergeAuthoritativeAssistantSnapshot(
+		currentNode: RawSuperMagicMessageNode | undefined,
+		finalNode: RawSuperMagicMessageNode,
+	): RawSuperMagicMessageNode {
+		const currentAssistantNode = currentNode?.role === "assistant" ? currentNode : undefined
+		const authoritativeNode = {
+			...(currentAssistantNode
+				? this.cloneAuthoritativeAssistantSnapshot(currentAssistantNode)
+				: {}),
+			...this.cloneAuthoritativeAssistantSnapshot(finalNode),
+		} as RawSuperMagicMessageNode
+		const finalToolState = this.getFinalToolCalls(finalNode)
+
+		if (finalToolState.present) {
+			const currentToolCalls = Array.isArray(currentAssistantNode?.tool_calls)
+				? (currentAssistantNode.tool_calls as ToolCall[])
+				: []
+			authoritativeNode.tool_calls = this.cloneToolCallsForRendering(
+				this.reconcileFinalToolCalls(currentToolCalls, finalToolState.toolCalls),
+			)
+		}
+
+		return authoritativeNode
+	}
+
+	/**
+	 * HTTP finished 快照只静默结算本代明确确认的 correlation。丢弃同步窗口内重建的
+	 * StreamState，并重新写回权威节点，避免 stale chunk 覆盖最终内容或误伤同 topic 其他流。
+	 */
+	private finalizeSynchronizedAssistantSnapshots(
+		topicId: string,
+		snapshots: Map<string, AuthoritativeAssistantSnapshot>,
+	) {
+		if (snapshots.size === 0) return
+		const topicMeta = this.getTopicMetadata(topicId)
+		if (topicMeta.timer) {
+			clearTimeout(topicMeta.timer)
+			topicMeta.timer = null
+		}
+
+		snapshots.forEach(({ appMessageId, node }, correlationId) => {
+			this.clearStreamRecoveryTimer(topicId, correlationId)
+			this.clearStreamChunkLedger(topicId, correlationId)
+			topicMeta.content.delete(correlationId)
+			topicMeta.streamSnapshots.delete(correlationId)
+			topicMeta.finalizedCorrelationIds.add(correlationId)
+
+			const currentNode = this.messageMap.get(correlationId) as
+				| RawSuperMagicMessageNode
+				| undefined
+			const hasTopicCorrelationNode = Boolean(
+				currentNode?.role === "assistant" &&
+				currentNode.correlation_id === correlationId &&
+				currentNode.topic_id === topicId,
+			)
+			// HTTP Final 的 absent 字段不具备覆盖语义；先继承当前 canonical，
+			// 再让显式 null / 空值经规范化后覆盖对应字段。
+			const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(
+				hasTopicCorrelationNode ? currentNode : undefined,
+				node,
+			)
+			// messageMap 的 correlation key 仍是全局别名；被另一 topic 占用时保留原别名，
+			// 仅用真实 appMessageId 保存本 topic Final，避免跨 topic 收敛或继承。
+			if (!currentNode || hasTopicCorrelationNode) {
+				this.messageMap.set(correlationId, authoritativeNode)
+			} else {
+				this.warnAssistantCorrelationAliasConflict(
+					topicId,
+					correlationId,
+					currentNode.topic_id,
+					currentNode.role,
+					currentNode.role === "assistant" ? undefined : correlationId,
+				)
+			}
+			this.messageMap.set(appMessageId, authoritativeNode)
+		})
+
+		topicMeta.isStream = topicMeta.content.size > 0
+		topicMeta.isStreamLoading = topicMeta.content.size > 0
+		this.topicMeta.set(topicId, topicMeta)
+
+		const buffer = this.getTopicBuffer(topicId)
+		buffer.isProcessing = false
+		this.processMessageBuffer(topicId)
 	}
 
 	/**
@@ -631,29 +1110,62 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		correlationId: string,
 		serverNode: RawSuperMagicMessageNode,
 	) {
+		this.clearStreamChunkLedger(topicId, correlationId)
 		const streamState = this.getStreamState(topicId, correlationId)
 		const correlationNode = this.messageMap.get(correlationId) as
 			| RawSuperMagicMessageNode
 			| undefined
-		const hasTopicCorrelationNode =
-			correlationNode && (!correlationNode.topic_id || correlationNode.topic_id === topicId)
-		if (!streamState && !hasTopicCorrelationNode) return
+		const hasTopicCorrelationNode = Boolean(
+			correlationNode?.role === "assistant" &&
+			correlationNode.correlation_id === correlationId &&
+			correlationNode.topic_id === topicId,
+		)
+		const hasConflictingCorrelationNode = Boolean(correlationNode && !hasTopicCorrelationNode)
+		// 首次 HTTP 快照也需要建立 correlation 别名；已被其他 topic 占用时只保留
+		// 本 topic 的真实 appMessageId，不能因为本 topic 已有 StreamState 就绕过隔离。
+		if (!streamState && hasConflictingCorrelationNode) {
+			if (this.getTopicMetadata(topicId).syncState !== "syncing") {
+				this.warnAssistantCorrelationAliasConflict(
+					topicId,
+					correlationId,
+					correlationNode?.topic_id,
+					correlationNode?.role,
+					correlationNode?.role === "assistant" ? undefined : correlationId,
+				)
+			}
+			this.messageMap.set(appMessageId, this.cloneAuthoritativeAssistantSnapshot(serverNode))
+			return
+		}
 
-		const reconciledNode = {
-			...(hasTopicCorrelationNode ? correlationNode : {}),
-			...serverNode,
-			content: typeof serverNode.content === "string" ? serverNode.content : "",
-			reasoning_content:
-				typeof serverNode.reasoning_content === "string"
-					? serverNode.reasoning_content
-					: "",
-			tool_calls: Array.isArray(serverNode.tool_calls)
-				? compactToolCalls(serverNode.tool_calls as ToolCall[])
-				: [],
-		} as RawSuperMagicMessageNode
+		const currentAssistantNode = hasTopicCorrelationNode ? correlationNode : undefined
+		const reconciliationBase = streamState
+			? ({
+					...(currentAssistantNode || {}),
+					role: "assistant",
+					correlation_id: correlationId,
+					content: streamState.content,
+					reasoning_content: streamState.reasoning_content,
+					tool_calls: this.cloneToolCallsForRendering(streamState.tool_calls),
+				} as RawSuperMagicMessageNode)
+			: currentAssistantNode
+		const reconciledNode = this.mergeAuthoritativeAssistantSnapshot(
+			reconciliationBase,
+			serverNode,
+		)
 
-		// 列表卡片可能仍保留 correlationId 作为稳定 React key；两个查询键必须指向同一终态。
-		this.messageMap.set(correlationId, reconciledNode)
+		// 列表卡片可能仍保留 correlationId 作为稳定 React key；无冲突时两个查询键
+		// 指向同一终态。跨 topic 冲突时只写真实 appMessageId，保留旧 correlation alias。
+		if (!hasConflictingCorrelationNode) {
+			this.messageMap.set(correlationId, reconciledNode)
+		} else if (this.getTopicMetadata(topicId).syncState !== "syncing") {
+			this.warnAssistantCorrelationAliasConflict(
+				topicId,
+				correlationId,
+				correlationNode?.topic_id,
+				correlationNode?.role,
+				correlationNode?.role === "assistant" ? undefined : correlationId,
+			)
+		}
 		this.messageMap.set(appMessageId, reconciledNode)
 
 		if (!streamState) return
@@ -665,7 +1177,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 		topicMeta.content.delete(correlationId)
 		topicMeta.streamSnapshots.delete(correlationId)
-		topicMeta.finalizedCorrelationIds.add(correlationId)
+		if (topicMeta.syncState !== "syncing") {
+			topicMeta.finalizedCorrelationIds.add(correlationId)
+		}
 		topicMeta.isStream = topicMeta.content.size > 0
 		topicMeta.isStreamLoading = topicMeta.content.size > 0
 		this.topicMeta.set(topicId, topicMeta)
@@ -686,12 +1200,219 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * tool response 属于 canonical 数据，不应等待 assistant 打字机完成后才入账。
 	 * UI 的 tool 字段会从这个 Map 读取，消息队列只负责顺序化列表和领域事件。
 	 */
-	private recordToolResponse(topicId: string, messageNode?: RawSuperMagicMessageNode) {
-		const toolId = String(messageNode?.tool?.id || messageNode?.tool_call_id || "")
-		if (!toolId || messageNode?.role !== "tool") return
-		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
-		toolResponseMap.set(toolId, { ...(messageNode.tool as ToolResponseState) })
+	private getValidToolResponseSeqId(seqId: unknown): string | undefined {
+		if (typeof seqId === "string") {
+			const normalizedSeqId = seqId.trim()
+			return normalizedSeqId || undefined
+		}
+		if (typeof seqId === "number" && Number.isFinite(seqId)) return String(seqId)
+		return undefined
+	}
+
+	private getToolResponseSeqMap(topicId: string) {
+		let seqMap = this.latestToolResponseSeqIds.get(topicId)
+		if (!seqMap) {
+			seqMap = new Map()
+			this.latestToolResponseSeqIds.set(topicId, seqMap)
+		}
+		return seqMap
+	}
+
+	private isStrongToolResponseStatus(status?: string) {
+		return status === "finished" || status === "error"
+	}
+
+	private isValidToolResponseStatus(status: unknown): status is string {
+		return typeof status === "string" && VALID_TOOL_RESPONSE_STATUSES.has(status)
+	}
+
+	private classifySameSeqToolResponse(current: ToolResponseState, incoming: ToolResponseState) {
+		let hasSupplement = false
+		for (const [key, value] of Object.entries(incoming)) {
+			if (value === undefined) continue
+			const currentValue = current[key]
+			if (currentValue === undefined) {
+				hasSupplement = true
+				continue
+			}
+			if (!isEqual(currentValue, value)) return { hasConflict: true, hasSupplement: false }
+		}
+		return { hasConflict: false, hasSupplement }
+	}
+
+	/**
+	 * 低版本只阻止 canonical 覆盖；消息本身仍继续进入列表、messageMap 和事件链路。
+	 * 同版本允许补齐缺失字段，但一旦发现已存在字段冲突，保留首次 canonical 结果。
+	 */
+	private recordToolResponse(
+		topicId: string,
+		messageNode?: RawSuperMagicMessageNode,
+		seqId?: unknown,
+		targetMap?: Map<string, ToolResponseState>,
+	) {
+		if (messageNode?.role !== "tool") return
+		const rawTool = messageNode.tool
+		if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) return
+
+		// 历史 tool_call_id 只保留在 raw message 中用于观测；canonical 身份只认 tool.id。
+		const toolId = typeof rawTool.id === "string" ? rawTool.id.trim() : ""
+		if (!toolId) return
+
+		const toolResponseMap = targetMap || this.toolResponseMap.get(topicId) || new Map()
+		const current = toolResponseMap.get(toolId)
+		const normalizedSeqId = this.getValidToolResponseSeqId(seqId)
+		const seqMap = this.getToolResponseSeqMap(topicId)
+		const latestSeqId = seqMap.get(toolId)
+		const shouldReportProtocolWarning = Boolean(
+			!current || (normalizedSeqId && normalizedSeqId !== latestSeqId),
+		)
+		const toolCallId =
+			typeof messageNode.tool_call_id === "string" ? messageNode.tool_call_id.trim() : ""
+		if (shouldReportProtocolWarning && toolCallId && toolCallId !== toolId) {
+			console.warn("[SuperMagicStore] tool response id conflict", {
+				topicId,
+				toolId,
+				toolCallId,
+			})
+		}
+
+		const incoming: ToolResponseState = {
+			...(rawTool as ToolResponseState),
+			id: toolId,
+		}
+		if (rawTool.status !== undefined && !this.isValidToolResponseStatus(rawTool.status)) {
+			const fallbackStatus = this.isValidToolResponseStatus(current?.status)
+				? current.status
+				: "running"
+			incoming.status = fallbackStatus
+			if (shouldReportProtocolWarning) {
+				console.warn("[SuperMagicStore] unknown tool response status", {
+					topicId,
+					toolId,
+					incomingStatus: rawTool.status,
+					fallbackStatus,
+				})
+			}
+		}
+
+		if (!current) {
+			toolResponseMap.set(toolId, incoming)
+			if (normalizedSeqId) seqMap.set(toolId, normalizedSeqId)
+			this.toolResponseMap.set(topicId, toolResponseMap)
+			return
+		}
+		if (normalizedSeqId && !latestSeqId) {
+			// response_missing 等无版本占位被真实消息接管时，从这条消息开始建立 seq 基线。
+			toolResponseMap.set(toolId, this.mergeToolResponseState(current, incoming))
+			seqMap.set(toolId, normalizedSeqId)
+			this.toolResponseMap.set(topicId, toolResponseMap)
+			return
+		}
+
+		if (normalizedSeqId && latestSeqId) {
+			const sequenceOrder = compareMessageSeqId(normalizedSeqId, latestSeqId)
+			if (sequenceOrder < 0) {
+				console.warn("[SuperMagicStore] stale tool response ignored", {
+					topicId,
+					toolCallId: toolId,
+					incomingSeqId: normalizedSeqId,
+					latestSeqId,
+				})
+				return
+			}
+			if (sequenceOrder === 0) {
+				const sameSeqResult = this.classifySameSeqToolResponse(current, incoming)
+				if (sameSeqResult.hasConflict) {
+					console.warn("[SuperMagicStore] conflicting tool response ignored", {
+						topicId,
+						toolCallId: toolId,
+						seqId: normalizedSeqId,
+					})
+					return
+				}
+				if (!sameSeqResult.hasSupplement) return
+				const supplemented = this.mergeToolResponseState(current, incoming)
+				toolResponseMap.set(toolId, supplemented)
+				this.toolResponseMap.set(topicId, toolResponseMap)
+				return
+			}
+
+			toolResponseMap.set(toolId, this.mergeToolResponseState(current, incoming))
+			seqMap.set(toolId, normalizedSeqId)
+			this.toolResponseMap.set(topicId, toolResponseMap)
+			return
+		}
+
+		// 未知版本不能破坏已有强终态；其余情况保留原有状态合并语义。
+		const nextState = this.isStrongToolResponseStatus(current.status)
+			? this.mergeUnknownSeqToolResponseState(current, incoming)
+			: this.mergeToolResponseState(current, incoming)
+		if (nextState === current || isEqual(nextState, current)) return
+		toolResponseMap.set(toolId, nextState)
 		this.toolResponseMap.set(topicId, toolResponseMap)
+	}
+
+	private mergeUnknownSeqToolResponseState(
+		current: ToolResponseState,
+		incoming: ToolResponseState,
+	): ToolResponseState {
+		const safeIncoming: ToolResponseState = {}
+		Object.entries(incoming).forEach(([key, value]) => {
+			if (value !== undefined && current[key] === undefined) safeIncoming[key] = value
+		})
+		if (Object.keys(safeIncoming).length === 0) return current
+		return this.mergeToolResponseState(current, safeIncoming)
+	}
+
+	/**
+	 * Tool response 的真实执行状态只能向更强终态推进；response_missing 是可被真实
+	 * finished/error 覆盖的弱占位。字段按 defined 值合并，避免占位清空真实 detail。
+	 */
+	private mergeToolResponseState(
+		current: ToolResponseState | undefined,
+		incoming: ToolResponseState,
+	): ToolResponseState {
+		const currentStatus = current?.status
+		const incomingStatus = incoming.status
+		const preserveRealPayload =
+			incomingStatus === "response_missing" &&
+			(currentStatus === "finished" || currentStatus === "error")
+		const merged: ToolResponseState = { ...(current || {}) }
+		Object.entries(incoming).forEach(([key, value]) => {
+			if (value === undefined) return
+			if (preserveRealPayload && key !== "status" && current?.[key] !== undefined) return
+			merged[key] = value
+		})
+
+		if (!currentStatus || incomingStatus === undefined) {
+			if (currentStatus && incomingStatus === undefined) merged.status = currentStatus
+			return merged
+		}
+
+		if (currentStatus === "running" && incomingStatus === "waiting") {
+			// waiting 是执行前态；后到消息可以补充 detail/attachments，但不能让
+			// 已开始执行的工具重新进入等待态。
+			merged.status = "running"
+		} else if (currentStatus === "finished") {
+			merged.status = "finished"
+		} else if (currentStatus === "error") {
+			merged.status = incomingStatus === "finished" ? "finished" : "error"
+		} else if (currentStatus === "response_missing") {
+			merged.status =
+				incomingStatus === "finished" ||
+				incomingStatus === "error" ||
+				incomingStatus === "suspended"
+					? incomingStatus
+					: "response_missing"
+		} else if (currentStatus === "suspended") {
+			// 合成 suspended 是可被迟到真实终态纠正的弱终态，但不能回滚为运行态。
+			merged.status =
+				incomingStatus === "finished" || incomingStatus === "error"
+					? incomingStatus
+					: "suspended"
+		}
+
+		return merged
 	}
 
 	addUserMessage(topicId: string, baseMessage: PendingUserMessageEnvelope) {
@@ -893,6 +1614,110 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	// ======================================
 	// 方法 2：收到最终 message → 切换续流模式
 	// ======================================
+	private getAssistantRevisionSeqId(
+		topicId: string,
+		appMessageId: string,
+		correlationId: string,
+		includeBuffer = true,
+		messageList?: MessageItem[],
+	) {
+		let latestSeqId = ""
+		const consider = (seqId: unknown) => {
+			const normalized = typeof seqId === "string" ? seqId : String(seqId || "")
+			if (!normalized) return
+			if (!latestSeqId || compareMessageSeqId(normalized, latestSeqId) > 0) {
+				latestSeqId = normalized
+			}
+		}
+
+		;(messageList || this.messages.get(topicId) || []).forEach((item) => {
+			if (item.role !== "assistant") return
+			const matchesAppMessageId =
+				Boolean(appMessageId) && item.app_message_id === appMessageId
+			const matchesCorrelationId =
+				Boolean(correlationId) && item.correlation_id === correlationId
+			if (!matchesAppMessageId && !matchesCorrelationId) return
+			// 流式占位卡的 seq 是本地推导值，不代表已接受的 Final revision。
+			if (item.app_message_id === correlationId && item.correlation_id === correlationId)
+				return
+			consider(item.seq_id)
+		})
+
+		if (includeBuffer) {
+			this.getTopicBuffer(topicId).messages.forEach((envelope) => {
+				const sequence = envelope?.seq
+				const rawNode = getRawMessageNode(sequence?.message)
+				if (rawNode?.role !== "assistant") return
+				const matchesAppMessageId =
+					Boolean(appMessageId) && sequence?.message?.app_message_id === appMessageId
+				const matchesCorrelationId =
+					Boolean(correlationId) && rawNode?.correlation_id === correlationId
+				if (!matchesAppMessageId && !matchesCorrelationId) return
+				consider(sequence?.seq_id)
+			})
+		}
+
+		return latestSeqId || undefined
+	}
+
+	private getAssistantRevisionDecision(
+		topicId: string,
+		appMessageId: string,
+		correlationId: string,
+		incomingSeqId: unknown,
+		messageList?: MessageItem[],
+	): "new" | "same" | "stale" | "higher" {
+		const currentSeqId = this.getAssistantRevisionSeqId(
+			topicId,
+			appMessageId,
+			correlationId,
+			true,
+			messageList,
+		)
+		if (!currentSeqId) return "new"
+		const incoming =
+			typeof incomingSeqId === "string" ? incomingSeqId : String(incomingSeqId || "")
+		if (!incoming) return "same"
+		const order = compareMessageSeqId(incoming, currentSeqId)
+		if (order > 0) return "higher"
+		if (order < 0) return "stale"
+		return "same"
+	}
+
+	private enqueueAssistantRevision(
+		topicId: string,
+		baseMessage: RawSuperMagicMessageEnvelope,
+		appMessageId: string,
+		correlationId: string,
+	) {
+		const buffer = this.getTopicBuffer(topicId)
+		const incomingSeqId = baseMessage?.seq?.seq_id
+		const existingIndex = buffer.messages.findIndex((envelope) => {
+			const sequence = envelope?.seq
+			const rawNode = getRawMessageNode(sequence?.message)
+			return (
+				rawNode?.role === "assistant" &&
+				((Boolean(appMessageId) && sequence?.message?.app_message_id === appMessageId) ||
+					(Boolean(correlationId) && rawNode?.correlation_id === correlationId))
+			)
+		})
+
+		if (existingIndex < 0) {
+			buffer.messages.push(baseMessage)
+			return
+		}
+
+		const existingSeqId = buffer.messages[existingIndex]?.seq?.seq_id
+		if (
+			typeof incomingSeqId === "string" &&
+			typeof existingSeqId === "string" &&
+			compareMessageSeqId(incomingSeqId, existingSeqId) > 0
+		) {
+			// 同一逻辑卡在 buffer 中只保留最高 revision，避免重复消费和重复通知。
+			buffer.messages[existingIndex] = baseMessage
+		}
+	}
+
 	enqueueMessage(topicId: string, baseMessage: RawSuperMagicMessageEnvelope) {
 		const message = baseMessage?.seq as RawSuperMagicMessageSequence
 		const msgCache = this.messages.get(topicId) || []
@@ -906,9 +1731,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const appMessageId = message?.message?.app_message_id as string
 
 		const correlationId = messageNode?.correlation_id as string
+		const revisionDecision =
+			messageNode?.role === "assistant"
+				? this.getAssistantRevisionDecision(
+						topicId,
+						appMessageId,
+						correlationId,
+						message?.seq_id,
+					)
+				: "new"
+		if (revisionDecision === "same" || revisionDecision === "stale") return
+		const isHigherAssistantRevision = revisionDecision === "higher"
 
 		const buffer = this.getTopicBuffer(topicId)
-		this.recordToolResponse(topicId, messageNode)
+		this.recordToolResponse(topicId, messageNode, message?.seq_id)
+		const isTaskSuspendedEvent = messageNode?.event === TASK_SUSPENDED_EVENT
+		if (isTaskSuspendedEvent) {
+			this.handleTopicSuspended(topicId)
+		}
+		if (messageNode?.role === "assistant" && !isTaskSuspendedEvent) {
+			// 新 assistant 到达证明上一轮已推进；排除当前 assistant，避免把它自己的
+			// tool_calls 当成缺失项，并检查 buffer 中尚未消费的真实 tool response。
+			this.fillMissingToolResponses(topicId, [appMessageId, correlationId])
+		}
 
 		// 针对客户端的工具调用消息直接过滤
 		if (nextMessage?.type === "user_tool_call") {
@@ -917,11 +1762,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		const hasMessage = msgIdSet.has(appMessageId)
-		const hasCorrelationIdMessage = msgIdSet.has(correlationId) && messageNode?.role !== "tool"
+		const hasCorrelationIdMessage = msgCache.some(
+			(item) =>
+				Boolean(correlationId) &&
+				item?.role === messageNode?.role &&
+				item?.role === "assistant" &&
+				item?.correlation_id === correlationId,
+		)
 		const hasBufferMessage = buffer.messages.some(
 			(o) => o?.seq?.message?.app_message_id === appMessageId,
 		)
-		if (hasMessage || hasCorrelationIdMessage || hasBufferMessage) {
+		if (
+			!isHigherAssistantRevision &&
+			(hasMessage || hasCorrelationIdMessage || hasBufferMessage)
+		) {
 			if (hasCorrelationIdMessage && correlationId) {
 				// 真消息到达时，把非流式字段（status / task_id / event /
 				// attachments / usage 等元信息）同步到 chunk 阶段创建的 mock 节点与卡片，
@@ -938,25 +1792,31 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const streamState = this.getStreamState(topicId, correlationId)
 				if (streamState) {
 					streamState.isFinalMessageReceived = true
-					if (messageNode?.content) streamState.content = messageNode.content as string
-					if (messageNode?.reasoning_content)
-						streamState.reasoning_content = messageNode.reasoning_content as string
+					if (this.hasDefinedFinalField(messageNode, "content")) {
+						streamState.content =
+							typeof messageNode.content === "string" ? messageNode.content : ""
+					}
+					if (this.hasDefinedFinalField(messageNode, "reasoning_content")) {
+						streamState.reasoning_content =
+							typeof messageNode.reasoning_content === "string"
+								? messageNode.reasoning_content
+								: ""
+					}
 
-					const finalToolCalls =
-						Array.isArray(messageNode?.tool_calls) && messageNode.tool_calls.length > 0
-							? (messageNode.tool_calls as ToolCall[])
-							: []
-					streamState.tool_calls = this.mergeToolCallsById(
-						compactToolCalls(streamState.tool_calls),
-						compactToolCalls(finalToolCalls),
-					)
+					const finalToolState = this.getFinalToolCalls(messageNode)
+					if (finalToolState.present) {
+						streamState.tool_calls = this.reconcileFinalToolCalls(
+							streamState.tool_calls,
+							finalToolState.toolCalls,
+						)
 
-					const cache = this.messageMap.get(correlationId) as
-						| RawSuperMagicMessageNode
-						| undefined
-					if (cache && finalToolCalls.length === 0) {
-						cache.tool_calls = []
-						this.messageMap.set(correlationId, cache)
+						const cache = this.messageMap.get(correlationId) as
+							| RawSuperMagicMessageNode
+							| undefined
+						if (cache && finalToolState.toolCalls.length === 0) {
+							cache.tool_calls = []
+							this.messageMap.set(correlationId, cache)
+						}
 					}
 
 					// IM 消息到达时立即同步 tool 字段到 messageMap，
@@ -965,8 +1825,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 					this.startStreamRendering(topicId, correlationId)
 				} else {
+					this.syncFinalAssistantStreamFields(correlationId, messageNode)
 					this.syncToolCallsToolField(correlationId, messageNode)
 				}
+				const currentNode = this.messageMap.get(correlationId)
+				if (appMessageId && currentNode) this.messageMap.set(appMessageId, currentNode)
 				persistMessageToStorage(topicId, message, true)
 			}
 			return
@@ -985,13 +1848,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		if (nextMessage?.type === "super_magic_message") {
-			const buffer = this.getTopicBuffer(topicId)
-			const bufferIndex = buffer?.messages.findIndex(
-				(o) =>
-					o?.seq?.message?.app_message_id === baseMessage?.seq?.message?.app_message_id,
-			)
-			if (bufferIndex < 0) {
-				buffer?.messages.push(baseMessage)
+			const bufferHasAssistantRevision =
+				messageNode?.role === "assistant" && isHigherAssistantRevision
+			if (bufferHasAssistantRevision) {
+				this.enqueueAssistantRevision(topicId, baseMessage, appMessageId, correlationId)
+			} else {
+				const bufferIndex = buffer?.messages.findIndex(
+					(o) =>
+						o?.seq?.message?.app_message_id ===
+						baseMessage?.seq?.message?.app_message_id,
+				)
+				if (bufferIndex < 0) buffer?.messages.push(baseMessage)
+			}
+			if (bufferHasAssistantRevision || buffer?.messages.length > 0) {
 				console.log(
 					"%c 【DEBUG】 插入队列",
 					"background-color: red;color: white;padding:0 4px",
@@ -1025,7 +1894,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (finalToolCalls.length === 0) return
 
 		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
-		if (!cache || !Array.isArray(cache.tool_calls)) return
+		if (
+			cache?.role !== "assistant" ||
+			cache.correlation_id !== correlationId ||
+			!Array.isArray(cache.tool_calls)
+		)
+			return
 
 		const cacheToolCalls = cache.tool_calls as ToolCall[]
 		let mutated = false
@@ -1041,9 +1915,42 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	/**
+	 * StreamState may already be gone when the authoritative assistant message arrives.
+	 * This helper is only called from that branch, so replacing the complete final stream
+	 * fields cannot interrupt the existing typewriter catch-up path.
+	 */
+	private syncFinalAssistantStreamFields(
+		correlationId: string,
+		finalNode: RawSuperMagicMessageNode | undefined,
+	) {
+		if (!correlationId || !finalNode) return
+		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
+		if (cache?.role !== "assistant" || cache.correlation_id !== correlationId) return
+
+		if (this.hasDefinedFinalField(finalNode, "content")) {
+			cache.content = typeof finalNode.content === "string" ? finalNode.content : ""
+		}
+		if (this.hasDefinedFinalField(finalNode, "reasoning_content")) {
+			cache.reasoning_content =
+				typeof finalNode.reasoning_content === "string" ? finalNode.reasoning_content : ""
+		}
+
+		const finalToolState = this.getFinalToolCalls(finalNode)
+		if (finalToolState.present) {
+			const currentToolCalls = Array.isArray(cache.tool_calls)
+				? (cache.tool_calls as ToolCall[])
+				: []
+			cache.tool_calls = this.cloneToolCallsForRendering(
+				this.reconcileFinalToolCalls(currentToolCalls, finalToolState.toolCalls),
+			)
+		}
+		this.messageMap.set(correlationId, cache)
+	}
+
+	/**
 	 * 将真消息节点中的非流式元信息合并到 chunk 阶段创建的 mock 节点。
 	 * 跳过 content / reasoning_content / tool_calls（由 startStreamRendering
-	 * 渐进 catch-up），也跳过 correlation_id（mock 已经按它建表）。
+	 * 渐进 catch-up），也跳过 correlation_id / topic_id（mock 已按外层路由身份建表）。
 	 */
 	private syncFinalNodeMetadata(
 		correlationId: string,
@@ -1051,13 +1958,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	) {
 		if (!correlationId || !finalNode) return
 		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
-		if (!cache) return
+		if (cache?.role !== "assistant" || cache.correlation_id !== correlationId) return
 
 		const streamControlledKeys = new Set([
 			"content",
 			"reasoning_content",
 			"tool_calls",
 			"correlation_id",
+			// The outer topic is the Store transport/routing identity. The Final node's
+			// topic_id may belong to the inner Agent domain and must not replace it here.
+			"topic_id",
 		])
 
 		let mutated = false
@@ -1075,9 +1985,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	/**
-	 * 将真消息卡片中的身份 / 状态字段合并到 mock 卡片。保留 mock 卡片的
-	 * app_message_id（== correlationId），避免替换主键导致 React key 抖动
-	 * 或下游订阅错位。
+	 * 将真消息卡片中的身份 / 状态字段合并到逻辑卡片。
+	 * React key 由 correlation_id 稳定，卡片的持久 app_message_id 使用 Final 真 ID。
 	 */
 	private syncFinalCardMetadata(
 		topicId: string,
@@ -1088,11 +1997,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const messages = this.messages.get(topicId)
 		if (!messages?.length) return
 
-		const cardIndex = messages.findIndex((item) => item.app_message_id === correlationId)
+		const cardIndex = messages.findIndex(
+			(item) => item.role === "assistant" && item.correlation_id === correlationId,
+		)
 		if (cardIndex < 0) return
 
 		const existingCard = messages[cardIndex]
+		const nextAppMessageId = (finalCard as Record<string, unknown>).app_message_id
+		if (
+			typeof nextAppMessageId === "string" &&
+			nextAppMessageId &&
+			existingCard.app_message_id &&
+			existingCard.app_message_id !== nextAppMessageId &&
+			existingCard.app_message_id !== correlationId
+		) {
+			// 不同 appMessageId 代表不同 revision；旧 alias 不永久跟随可变 correlation 节点。
+			this.messageMap.delete(existingCard.app_message_id)
+		}
+		// 卡片属于传入的 topicId；Final 可能携带另一个内层 Agent topic，不能改写路由归属。
 		const patchableKeys: Array<string> = [
+			"app_message_id",
 			"magic_message_id",
 			"conversation_id",
 			"sender_id",
@@ -1102,7 +2026,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			"event",
 			"refer_message_id",
 			"parent_correlation_id",
-			"topic_id",
 			"type",
 		]
 
@@ -1122,6 +2045,111 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.messages.set(topicId, nextMessages)
 	}
 
+	/**
+	 * 没有对应 StreamState 的 Assistant Final 来自历史回补或 Final-only 路径。
+	 * 这类消息已经是服务端权威快照，应直接落地，不能借用其他 correlation 的 topic timer
+	 * 创建伪流式动画；同时只清理当前 correlation，保留同 topic 中仍在运行的真实流。
+	 */
+	private commitBufferedAssistantSnapshotImmediately(
+		topicId: string,
+		correlationId: string,
+		rawAppMessageId: string,
+		message: MessageItem,
+		messageNode: RawSuperMagicMessageNode,
+		correlationNode: RawSuperMagicMessageNode | undefined,
+	) {
+		const topicMeta = this.getTopicMetadata(topicId)
+		const hasTopicAssistantAlias = Boolean(
+			correlationId &&
+			correlationNode?.role === "assistant" &&
+			correlationNode.correlation_id === correlationId &&
+			correlationNode.topic_id === topicId,
+		)
+		const hasCorrelationAliasConflict = Boolean(
+			correlationId && correlationNode && !hasTopicAssistantAlias,
+		)
+		const routedFinalNode = {
+			...messageNode,
+			// Store 的消息归属由 enqueueMessage 的外层 topic 决定，不能被内层 Agent topic 覆盖。
+			topic_id: topicId,
+			...(correlationId ? { correlation_id: correlationId } : {}),
+		} as RawSuperMagicMessageNode
+		const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(
+			hasTopicAssistantAlias ? correlationNode : undefined,
+			routedFinalNode,
+		)
+
+		if (correlationId && !hasCorrelationAliasConflict) {
+			this.messageMap.set(correlationId, authoritativeNode)
+		}
+		if (rawAppMessageId) this.messageMap.set(rawAppMessageId, authoritativeNode)
+
+		const messages = this.messages.get(topicId) || []
+		const existingCardIndex = messages.findIndex(
+			(item) =>
+				item.app_message_id === rawAppMessageId ||
+				(Boolean(correlationId) &&
+					item.role === "assistant" &&
+					item.correlation_id === correlationId),
+		)
+		const existingCard = existingCardIndex >= 0 ? messages[existingCardIndex] : undefined
+		if (
+			existingCard?.app_message_id &&
+			rawAppMessageId &&
+			existingCard.app_message_id !== rawAppMessageId &&
+			existingCard.app_message_id !== correlationId
+		) {
+			this.messageMap.delete(existingCard.app_message_id)
+		}
+		const finalCard = {
+			...(existingCard || {}),
+			...message,
+			topic_id: topicId,
+			...(rawAppMessageId ? { app_message_id: rawAppMessageId } : {}),
+		} as MessageItem
+		const nextMessages = messages.slice()
+		if (existingCardIndex >= 0) nextMessages[existingCardIndex] = finalCard
+		else nextMessages.push(finalCard)
+		this.messages.set(topicId, unionBy(sortMessages(nextMessages), "app_message_id"))
+
+		if (correlationId) {
+			topicMeta.content.delete(correlationId)
+			topicMeta.streamSnapshots.delete(correlationId)
+			topicMeta.finalizedCorrelationIds.add(correlationId)
+			this.clearStreamRecoveryTimer(topicId, correlationId)
+			this.clearStreamChunkLedger(topicId, correlationId)
+		}
+		topicMeta.isStream = topicMeta.content.size > 0
+		topicMeta.isStreamLoading = topicMeta.content.size > 0
+		this.topicMeta.set(topicId, topicMeta)
+
+		if (hasCorrelationAliasConflict) {
+			this.warnAssistantCorrelationAliasConflict(
+				topicId,
+				correlationId,
+				correlationNode?.topic_id,
+				correlationNode?.role,
+				correlationNode?.role === "assistant" ? undefined : correlationId,
+			)
+		}
+
+		const payload = {
+			topicId,
+			message: finalCard,
+			messageNode: authoritativeNode,
+			stage: "arrived" as const,
+		} satisfies TopicMessageListenerPayload
+		this.emitTopicMessageArrived(payload)
+		this.emitDomainEvents(payload)
+		if (authoritativeNode.status === "finished") {
+			this.fillMissingToolResponses(topicId)
+		}
+
+		const buffer = this.getTopicBuffer(topicId)
+		buffer.isProcessing = false
+		this.processMessageBuffer(topicId)
+	}
+
 	private processMessageBuffer(topicId: string) {
 		const buffer = this.getTopicBuffer(topicId)
 		if (buffer.messages.length > 0 && !buffer.isProcessing) {
@@ -1132,17 +2160,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 			const message = transformRawMessage(nextMessage?.seq as RawSuperMagicMessageSequence)
 
-			if (messageNode?.role === "tool") {
-				if (messageNode?.status === "suspended") {
-					this.handleTopicSuspended(topicId)
+			if (messageNode && messageNode.role !== "assistant") {
+				if (messageNode.role === "tool") {
+					// tool response 已在 enqueueMessage / 入队时写入 canonical map；这里不再等待
+					// assistant 动画，避免一个停住的 StreamState 永久卡住整个消息队列。
+					this.recordToolResponse(topicId, messageNode, nextMessage?.seq?.seq_id)
 				}
 
-				// tool response 已在 enqueueMessage / 入队时写入 canonical map；这里不再等待
-				// assistant 动画，避免一个停住的 StreamState 永久卡住整个消息队列。
-				this.recordToolResponse(topicId, messageNode)
-
 				console.log(
-					"%c 【DEBUG】 消费队列 - 工具",
+					"%c 【DEBUG】 消费队列 - 非 Assistant",
 					"background-color: pink;color: white;padding:0 4px",
 					JSON.parse(JSON.stringify(buffer)),
 				)
@@ -1170,15 +2196,141 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const correlationId = messageNode?.correlation_id as string
 				const rawAppMessageId = nextMessage?.seq?.message?.app_message_id as string
 				const topicMeta = this.getTopicMetadata(topicId)
+				const currentSeqId = this.getAssistantRevisionSeqId(
+					topicId,
+					rawAppMessageId,
+					correlationId,
+					false,
+				)
+				const incomingSeqId = nextMessage?.seq?.seq_id
+				if (
+					typeof currentSeqId === "string" &&
+					typeof incomingSeqId === "string" &&
+					compareMessageSeqId(incomingSeqId, currentSeqId) <= 0
+				) {
+					// HTTP 或先到 revision 已占据该逻辑卡时，buffer 中旧/重复副本不得回退 canonical。
+					buffer.isProcessing = false
+					this.processMessageBuffer(topicId)
+					return
+				}
 				if (correlationId && topicMeta.finalizedCorrelationIds.has(correlationId)) {
-					// 全量服务端快照已经结算该 assistant；丢弃 buffer 中的重复副本，
-					// 防止切回后又重新创建一份流式状态。
+					const isHigherRevision =
+						typeof currentSeqId === "string" &&
+						typeof incomingSeqId === "string" &&
+						compareMessageSeqId(incomingSeqId, currentSeqId) > 0
+					if (!isHigherRevision) {
+						// 已结算的同版本或旧版本仍是重复副本；保留 tombstone，阻止迟到 chunk 重开流。
+						buffer.isProcessing = false
+						this.processMessageBuffer(topicId)
+						return
+					}
+					// 高 seq Final 是新 revision；不清除 tombstone，避免旧 chunk 在排队窗口重开流。
+				}
+				// 入队时上一轮可能还未完成 UI 投影；真正消费新 assistant 时再检查一次，
+				// 此时上一轮 tool_calls 已可见，同时当前 assistant 仍被明确排除。
+				if (
+					messageNode?.role === "assistant" &&
+					messageNode.event !== TASK_SUSPENDED_EVENT
+				) {
+					this.fillMissingToolResponses(topicId, [rawAppMessageId, correlationId])
+				}
+
+				const existingStreamState = this.getStreamState(topicId, correlationId)
+				const correlationNode = this.messageMap.get(correlationId) as
+					| RawSuperMagicMessageNode
+					| undefined
+				const hasTopicAssistantAlias = Boolean(
+					correlationNode?.role === "assistant" &&
+					correlationNode.correlation_id === correlationId &&
+					correlationNode.topic_id === topicId,
+				)
+				const hasCorrelationAliasConflict = Boolean(
+					correlationNode && !hasTopicAssistantAlias,
+				)
+				if (!existingStreamState) {
+					this.commitBufferedAssistantSnapshotImmediately(
+						topicId,
+						correlationId,
+						rawAppMessageId,
+						message,
+						messageNode as RawSuperMagicMessageNode,
+						correlationNode,
+					)
+					return
+				}
+				const streamState = existingStreamState
+				if (hasCorrelationAliasConflict) {
+					// correlation alias 只属于同 topic 的 Assistant 逻辑消息。Tool/User 或
+					// 其他 topic 已占用该 key 时，Final 仍以真实 appMessageId 落库，绝不
+					// 复用、覆盖冲突 canonical。
+					const streamNode = streamState
+						? ({
+								role: "assistant",
+								topic_id: topicId,
+								correlation_id: correlationId,
+								content: streamState.content,
+								reasoning_content: streamState.reasoning_content,
+								tool_calls: this.cloneToolCallsForRendering(streamState.tool_calls),
+							} as RawSuperMagicMessageNode)
+						: undefined
+					const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(
+						streamNode,
+						messageNode as RawSuperMagicMessageNode,
+					)
+					streamState.isFinalMessageReceived = true
+					streamState.stage = "done"
+					this.messageMap.set(rawAppMessageId, authoritativeNode)
+					const messages = this.messages.get(topicId) || []
+					const existingCardIndex = messages.findIndex(
+						(item) =>
+							item.role === "assistant" && item.correlation_id === correlationId,
+					)
+					const finalCard =
+						existingCardIndex >= 0
+							? {
+									...messages[existingCardIndex],
+									...message,
+									app_message_id: rawAppMessageId,
+								}
+							: message
+					const nextMessages = messages.slice()
+					if (existingCardIndex >= 0) nextMessages[existingCardIndex] = finalCard
+					else nextMessages.push(finalCard)
+					this.messages.set(
+						topicId,
+						unionBy(sortMessages(nextMessages), "app_message_id"),
+					)
+					topicMeta.content.delete(correlationId)
+					topicMeta.streamSnapshots.delete(correlationId)
+					topicMeta.finalizedCorrelationIds.add(correlationId)
+					topicMeta.isStream = topicMeta.content.size > 0
+					topicMeta.isStreamLoading = topicMeta.content.size > 0
+					this.clearStreamRecoveryTimer(topicId, correlationId)
+					this.clearStreamChunkLedger(topicId, correlationId)
+					this.topicMeta.set(topicId, topicMeta)
+					this.warnAssistantCorrelationAliasConflict(
+						topicId,
+						correlationId,
+						correlationNode?.topic_id,
+						correlationNode?.role,
+						correlationNode?.role === "assistant" ? undefined : correlationId,
+					)
+					const payload = {
+						topicId,
+						message: finalCard,
+						messageNode: authoritativeNode,
+						stage: "arrived" as const,
+					} satisfies TopicMessageListenerPayload
+					this.emitTopicMessageArrived(payload)
+					this.emitDomainEvents(payload)
+					if (authoritativeNode.status === "finished") {
+						this.fillMissingToolResponses(topicId)
+					}
 					buffer.isProcessing = false
 					this.processMessageBuffer(topicId)
 					return
 				}
 
-				const streamState = this.getTopicStreamState(topicId, correlationId)
 				streamState.isFinalMessageReceived = true
 				if (topicMeta.timer) {
 					console.log(
@@ -1196,11 +2348,23 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					"background-color: pink;color: white;padding:0 4px",
 					JSON.parse(JSON.stringify(nextMessage)),
 				)
-				streamState.content = messageNode?.content || ""
-				streamState.reasoning_content = (messageNode?.reasoning_content as string) || ""
-				streamState.tool_calls = (messageNode?.tool_calls as ToolCall[]) || []
-				// 服务端原始 app_message_id 与流式稳定 correlationId 都必须可回查到最终节点。
-				if (rawAppMessageId) this.messageMap.set(rawAppMessageId, messageNode)
+				if (this.hasDefinedFinalField(messageNode, "content")) {
+					streamState.content =
+						typeof messageNode?.content === "string" ? messageNode.content : ""
+				}
+				if (this.hasDefinedFinalField(messageNode, "reasoning_content")) {
+					streamState.reasoning_content =
+						typeof messageNode?.reasoning_content === "string"
+							? messageNode.reasoning_content
+							: ""
+				}
+				const finalToolState = this.getFinalToolCalls(messageNode)
+				if (finalToolState.present) {
+					streamState.tool_calls = this.reconcileFinalToolCalls(
+						streamState.tool_calls,
+						finalToolState.toolCalls,
+					)
+				}
 				this.startStreamRendering(topicId, messageNode?.correlation_id as string)
 
 				// 首次真消息（无 chunk 前置）场景：startStreamRendering 只会用
@@ -1213,9 +2377,63 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						messageNode as RawSuperMagicMessageNode,
 					)
 					this.syncFinalCardMetadata(topicId, correlationId, message)
+					const currentNode = this.messageMap.get(correlationId)
+					if (rawAppMessageId && currentNode)
+						this.messageMap.set(rawAppMessageId, currentNode)
 				}
 			}
 		}
+	}
+
+	/**
+	 * correlation alias belongs exclusively to the Assistant logical-message domain.
+	 * A Tool/User candidate may share the correlation for protocol association, but it
+	 * must never receive an Assistant snapshot under its own persistent appMessageId.
+	 */
+	private findAssistantAliasTarget(
+		topicId: string,
+		correlationId: string,
+		messages: MessageItem[],
+	): MessageItem | undefined {
+		const assistantTarget = messages.find(
+			(message) =>
+				message.role === "assistant" &&
+				message.topic_id === topicId &&
+				message.correlation_id === correlationId,
+		)
+		if (assistantTarget) return assistantTarget
+
+		const conflictingTarget = messages.find(
+			(message) =>
+				message.role !== "assistant" &&
+				message.topic_id === topicId &&
+				message.correlation_id === correlationId,
+		)
+		console.warn("[SuperMagicStore] assistant alias target missing", {
+			topicId,
+			correlationId,
+			conflictingAppMessageId: conflictingTarget?.app_message_id,
+			conflictingRole: conflictingTarget?.role,
+			resolution: "preserve-correlation-canonical",
+		})
+		return undefined
+	}
+
+	private warnAssistantCorrelationAliasConflict(
+		topicId: string,
+		correlationId: string,
+		conflictingTopicId?: string,
+		conflictingRole?: string,
+		conflictingAppMessageId?: string,
+	) {
+		console.warn("[SuperMagicStore] assistant correlation alias conflict", {
+			topicId,
+			correlationId,
+			conflictingTopicId,
+			conflictingRole,
+			conflictingAppMessageId,
+			resolution: "preserve-existing-correlation-canonical",
+		})
 	}
 
 	private startStreamRendering(topicId: string, correlationId: string) {
@@ -1225,10 +2443,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		const streamState = this.getTopicStreamState(topicId, correlationId)
-		let cache = this.messageMap.get(correlationId || "") as RawSuperMagicMessageNode
+		const cachedNode = this.messageMap.get(correlationId || "") as
+			| RawSuperMagicMessageNode
+			| undefined
+		const hasUsableAssistantCache = Boolean(
+			cachedNode?.role === "assistant" &&
+			cachedNode.correlation_id === correlationId &&
+			cachedNode.topic_id === topicId,
+		)
+		if (cachedNode && !hasUsableAssistantCache) {
+			// correlation key 已被 Tool/User 或其他 topic 占用时，流式数据先留在
+			// topic-scoped StreamState，等待 Final 以真实 appMessageId 建立 Assistant 卡片。
+			return
+		}
+		let cache = cachedNode as RawSuperMagicMessageNode
 
 		if (!cache) {
-			this.messageMap.set(correlationId || "", this.getDefaultNode(correlationId || ""))
+			this.messageMap.set(
+				correlationId || "",
+				this.getDefaultNode(correlationId || "", topicId),
+			)
 			cache = this.messageMap.get(correlationId || "") as RawSuperMagicMessageNode
 
 			const messages = this.messages.get(topicId) || []
@@ -1277,6 +2511,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				return
 			}
 		}
+		if (!progressed && streamState.isFinalMessageReceived) {
+			// final 已到但视觉状态无法继续推进时，权威快照优先，禁止继续创建 16ms 空转 timer。
+			this.settleFinalStreamImmediately(topicId, correlationId)
+			return
+		}
 		if (!progressed && !streamState.isFinalMessageReceived) {
 			// 流式无新数据且未收到最终消息 → 暂停定时器，等待下一个 chunk
 			// 到达后由 receiveChunk 重启渲染；若长期没有有效数据则 watchdog 请求 HTTP 快照。
@@ -1299,23 +2538,55 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 */
 	private flushStreamToCompletion(topicId: string, correlationId: string) {
 		const streamState = this.getTopicStreamState(topicId, correlationId)
-		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode
+		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
 		if (!cache || !streamState) return
+		if (
+			cache.role !== "assistant" ||
+			cache.correlation_id !== correlationId ||
+			cache.topic_id !== topicId
+		) {
+			// 冲突 correlation key 只能保留 Tool/User canonical；完成流不得借
+			// flush 路径绕过 role-scoped alias 规则去改写它。
+			this.completeStreamRendering(topicId, correlationId)
+			return
+		}
 
 		const topicMeta = this.getTopicMetadata(topicId)
 		topicMeta.streamSnapshots.set(correlationId, {
 			reasoning_content: streamState.reasoning_content || "",
 			content: (streamState.content as string) || "",
-			tool_calls: Array.isArray(cache.tool_calls)
-				? ([...(cache.tool_calls as ToolCall[])] as ToolCall[])
-				: [],
+			tool_calls: this.cloneToolCallsForRendering(
+				Array.isArray(cache.tool_calls) ? (cache.tool_calls as ToolCall[]) : [],
+			),
 		})
 
 		cache.reasoning_content = streamState.reasoning_content
 		cache.content = streamState.content
-		cache.tool_calls = streamState.tool_calls
+		cache.tool_calls = this.cloneToolCallsForRendering(streamState.tool_calls)
 		this.messageMap.set(correlationId, cache)
 
+		this.completeStreamRendering(topicId, correlationId)
+	}
+
+	private settleFinalStreamImmediately(topicId: string, correlationId: string) {
+		const streamState = this.getStreamState(topicId, correlationId)
+		const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
+		if (!streamState || !cache) return
+		if (
+			cache.role !== "assistant" ||
+			cache.correlation_id !== correlationId ||
+			cache.topic_id !== topicId
+		) {
+			streamState.stage = "done"
+			this.completeStreamRendering(topicId, correlationId)
+			return
+		}
+
+		cache.reasoning_content = streamState.reasoning_content
+		cache.content = streamState.content
+		cache.tool_calls = this.cloneToolCallsForRendering(streamState.tool_calls)
+		streamState.stage = "done"
+		this.messageMap.set(correlationId, cache)
 		this.completeStreamRendering(topicId, correlationId)
 	}
 
@@ -1333,23 +2604,47 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		const messages = this.messages.get(topicId) || []
 		topicMeta.content.forEach((streamState, correlationId) => {
-			const cache = (this.messageMap.get(correlationId) ||
-				this.getDefaultNode(correlationId)) as RawSuperMagicMessageNode
+			const cachedNode = this.messageMap.get(correlationId) as
+				| RawSuperMagicMessageNode
+				| undefined
+			const hasAssistantCache = Boolean(
+				cachedNode?.role === "assistant" &&
+				cachedNode.correlation_id === correlationId &&
+				cachedNode.topic_id === topicId,
+			)
+			const cache =
+				(hasAssistantCache ? cachedNode : undefined) ||
+				(this.getDefaultNode(correlationId, topicId) as RawSuperMagicMessageNode)
 			streamState.isFinalMessageReceived = true
 			streamState.stage = "done"
 			cache.reasoning_content = streamState.reasoning_content
 			cache.content = streamState.content
-			cache.tool_calls = compactToolCalls(streamState.tool_calls)
-			this.messageMap.set(correlationId, cache)
-			const targetMessage = messages.find(
+			cache.tool_calls = this.cloneToolCallsForRendering(streamState.tool_calls)
+			if (hasAssistantCache || !cachedNode) {
+				this.messageMap.set(correlationId, cache)
+			}
+			let targetMessage = messages.find(
 				(message) =>
-					message.correlation_id === correlationId ||
-					message.app_message_id === correlationId,
+					message.role === "assistant" &&
+					message.topic_id === topicId &&
+					message.correlation_id === correlationId,
 			)
+			if (cachedNode && !hasAssistantCache && !targetMessage) {
+				this.warnAssistantCorrelationAliasConflict(
+					topicId,
+					correlationId,
+					cachedNode.topic_id,
+					cachedNode.role,
+					cachedNode.role === "assistant" ? undefined : correlationId,
+				)
+			} else if (!targetMessage) {
+				targetMessage = this.findAssistantAliasTarget(topicId, correlationId, messages)
+			}
 			if (targetMessage?.app_message_id) {
 				this.messageMap.set(targetMessage.app_message_id, cache)
 			}
 			topicMeta.finalizedCorrelationIds.add(correlationId)
+			this.clearStreamChunkLedger(topicId, correlationId)
 		})
 
 		topicMeta.content.clear()
@@ -1366,6 +2661,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private completeStreamRendering(topicId: string, correlationId?: string) {
 		const meta = this.getTopicMetadata(topicId)
 		this.clearStreamRecoveryTimer(topicId, correlationId)
+		if (correlationId) this.clearStreamChunkLedger(topicId, correlationId)
 		meta.isStreamLoading = false
 		if (meta.timer) {
 			clearTimeout(meta.timer)
@@ -1382,9 +2678,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		if (correlationId) {
 			const messages = this.messages.get(topicId) || []
-			const targetMessage = messages.find(
-				(m) => m.correlation_id === correlationId || m.app_message_id === correlationId,
-			)
+			const targetMessage = this.findAssistantAliasTarget(topicId, correlationId, messages)
 			if (targetMessage) {
 				const payload = {
 					topicId,
@@ -1396,6 +2690,27 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				} satisfies TopicMessageListenerPayload
 				this.emitTopicMessageArrived(payload)
 				this.emitDomainEvents(payload)
+			}
+
+			const completedNode = this.getMessageNode(correlationId) as
+				| RawSuperMagicMessageNode
+				| undefined
+			if (completedNode?.role === "assistant" && completedNode.status === "finished") {
+				// finished assistant 是逐工具完成屏障。已有 canonical 或 buffer response
+				// 会按 tool.id 被跳过，只为同轮真正缺失的工具生成弱终态。
+				this.fillMissingToolResponses(topicId)
+			}
+			if (targetMessage?.app_message_id && targetMessage.app_message_id !== correlationId) {
+				const currentNode = this.getMessageNode(correlationId) as
+					| RawSuperMagicMessageNode
+					| undefined
+				if (currentNode) {
+					// 完成后脱离可变 correlation 节点，避免后续 revision 改写旧 appId。
+					this.messageMap.set(
+						targetMessage.app_message_id,
+						this.cloneAuthoritativeAssistantSnapshot(currentNode),
+					)
+				}
 			}
 		}
 
@@ -1420,14 +2735,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private handleTopicSuspended(topicId: string) {
 		const topicMeta = this.topicMeta.get(topicId)
-		if (!topicMeta?.content) return
-
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
 
-		topicMeta.content.forEach((streamState, correlationId) => {
+		topicMeta?.content.forEach((streamState, correlationId) => {
 			if (streamState.isFinalMessageReceived) return
 
-			const validToolCalls = compactToolCalls(streamState.tool_calls).filter(
+			const validToolCalls = this.getProjectableToolCalls(streamState.tool_calls).filter(
 				isToolCallArgumentsComplete,
 			)
 
@@ -1435,14 +2748,27 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			streamState.isFinalMessageReceived = true
 
 			const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
-			if (cache) {
-				;(cache as any).tool_calls = validToolCalls.length > 0 ? validToolCalls : []
+			if (
+				cache?.role === "assistant" &&
+				cache.correlation_id === correlationId &&
+				cache.topic_id === topicId
+			) {
+				cache.tool_calls = validToolCalls.length > 0 ? validToolCalls : []
 				this.messageMap.set(correlationId, cache)
 			}
 
 			validToolCalls.forEach((tc) => {
-				if (tc.id && !toolResponseMap.has(tc.id) && !this.isAskUserToolCall(tc)) {
-					toolResponseMap.set(tc.id, this.createInterruptedToolResponse(tc))
+				if (tc.id && !this.isAskUserToolCall(tc)) {
+					const current = toolResponseMap.get(tc.id)
+					if (!this.isSettledToolResponse(current)) {
+						toolResponseMap.set(
+							tc.id,
+							this.mergeToolResponseState(
+								current,
+								this.createInterruptedToolResponse(tc),
+							),
+						)
+					}
 				}
 			})
 
@@ -1455,6 +2781,82 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private isAskUserToolCall(tc: ToolCall) {
 		return tc.function?.name === ASK_USER_TOOL.name || tc.tool?.name === ASK_USER_TOOL.name
+	}
+
+	private isSettledToolResponse(response?: ToolResponseState) {
+		return (
+			response?.status === "finished" ||
+			response?.status === "error" ||
+			response?.status === "suspended"
+		)
+	}
+
+	/**
+	 * 在有业务完成屏障时，为仍缺少真实 tool response 的普通工具写入弱终态。
+	 * 仅更新 canonical Map；buffer 已有真实响应、ask_user 或强终态工具都会跳过。
+	 */
+	private fillMissingToolResponses(topicId: string, currentAssistantIds: string[] = []) {
+		const excludedAssistantIds = new Set(currentAssistantIds.filter(Boolean))
+		const bufferedToolIds = new Set<string>()
+		this.getTopicBuffer(topicId).messages.forEach((message) => {
+			const node = getRawMessageNode(message?.seq?.message)
+			if (node?.role !== "tool") return
+			const toolId = typeof node.tool?.id === "string" ? node.tool.id.trim() : ""
+			if (toolId) bufferedToolIds.add(toolId)
+		})
+
+		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
+		let changed = false
+		const settleToolCalls = (toolCalls: ToolCall[]) => {
+			toolCalls.forEach((toolCall) => {
+				const toolId = String(toolCall.id || "")
+				if (!toolId || this.isAskUserToolCall(toolCall) || bufferedToolIds.has(toolId))
+					return
+
+				const current = toolResponseMap.get(toolId)
+				if (
+					current?.status === "finished" ||
+					current?.status === "error" ||
+					current?.status === "suspended" ||
+					current?.status === "response_missing"
+				)
+					return
+
+				const missingResponse: ToolResponseState = {
+					...(toolCall.tool || {}),
+					id: toolId,
+					name: toolCall.tool?.name || toolCall.function?.name || "",
+					status: "response_missing",
+				}
+				toolResponseMap.set(toolId, this.mergeToolResponseState(current, missingResponse))
+				changed = true
+			})
+		}
+
+		;(this.messages.get(topicId) || []).forEach((message) => {
+			if (message.role !== "assistant") return
+			const node = (this.messageMap.get(message.app_message_id) ||
+				this.messageMap.get(message.correlation_id)) as RawSuperMagicMessageNode | undefined
+			if (!node) return
+			if (
+				excludedAssistantIds.has(message.app_message_id) ||
+				excludedAssistantIds.has(message.correlation_id) ||
+				excludedAssistantIds.has(String(node.correlation_id || ""))
+			)
+				return
+
+			const toolCalls = Array.isArray(node.tool_calls) ? (node.tool_calls as ToolCall[]) : []
+			settleToolCalls(toolCalls)
+		})
+
+		// 下一 assistant 可能在上一条长工具参数仍处于动画投影时到达。此时
+		// messageMap 尚未展示完整 tool_calls，但 StreamState 已持有 canonical final 数据。
+		this.topicMeta.get(topicId)?.content.forEach((streamState, correlationId) => {
+			if (excludedAssistantIds.has(correlationId)) return
+			settleToolCalls(streamState.tool_calls)
+		})
+
+		if (changed) this.toolResponseMap.set(topicId, toolResponseMap)
 	}
 
 	/**
@@ -1478,9 +2880,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 			let hasUnresolved = false
 			toolCalls.forEach((tc) => {
-				if (tc.id && !toolResponseMap.has(tc.id) && !this.isAskUserToolCall(tc)) {
+				if (tc.id && !this.isAskUserToolCall(tc)) {
+					const current = toolResponseMap.get(tc.id)
+					if (this.isSettledToolResponse(current)) return
 					hasUnresolved = true
-					toolResponseMap.set(tc.id, this.createInterruptedToolResponse(tc))
+					toolResponseMap.set(
+						tc.id,
+						this.mergeToolResponseState(
+							current,
+							this.createInterruptedToolResponse(tc),
+						),
+					)
 				}
 			})
 
@@ -1499,38 +2909,125 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	/**
-	 * 以 current 数组既有顺序为基准，按 tool_call.id 合并 incoming：
-	 * - 已有 id：原位补齐 function.arguments / function.label / tool
-	 * - 新 id：追加末尾
-	 * 首现即定序、永不重排，根治流式与最终态顺序不一致。
+	 * 最终 assistant 是工具调用的权威快照：
+	 * - 已有合法 id 按稳定 identity 匹配，arguments/name/label 以最终态覆盖；
+	 * - 参数先到形成的临时 index 槽位会被同 index 的最终工具升级；
+	 * - 最终快照中不存在的匿名或脏工具直接丢弃，避免幽灵工具进入 UI。
 	 */
-	private mergeToolCallsById(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
-		if (current.length === 0) return incoming
-		if (incoming.length === 0) return incoming
+	private reconcileFinalToolCalls(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
+		const finalTools = this.dedupeFinalToolCallsById(this.getProjectableToolCalls(incoming))
+		if (finalTools.length === 0) return []
 
-		const currentById = new Map(current.map((t) => [t.id, t]))
-		const merged: ToolCall[] = current.map((t) => {
-			const inc = incoming.find((i) => i.id === t.id)
-			if (!inc) return t
-			return {
-				...t,
+		const remainingIndexes = new Set(finalTools.map((_, index) => index))
+		const reconciled: ToolCall[] = []
+		const appendFinalTool = (existing: ToolCall | undefined, incomingIndex: number) => {
+			const finalTool = finalTools[incomingIndex]
+			if (!finalTool) return
+			const hasFinalArguments = Boolean(
+				finalTool.function &&
+				Object.prototype.hasOwnProperty.call(finalTool.function, "arguments") &&
+				finalTool.function.arguments !== undefined,
+			)
+			// TC-03 只允许同一稳定 tool id 继承参数；匿名 index 槽位仅用于升级身份，
+			// 不能在 Final 漏字段时把未归属的 arguments 借给一个新工具。
+			const canInheritArguments = Boolean(existing?.id && existing.id === finalTool.id)
+			remainingIndexes.delete(incomingIndex)
+			reconciled.push({
+				...existing,
+				...finalTool,
+				id: finalTool.id,
+				type: finalTool.type || "function",
+				index: reconciled.length,
 				function: {
-					...t.function,
-					arguments: inc.function?.arguments ?? t.function?.arguments ?? "",
-					label: inc.function?.label || t.function?.label || "",
-					name: inc.function?.name || t.function?.name || "",
+					...existing?.function,
+					...finalTool.function,
+					name: finalTool.function?.name || "",
+					label: finalTool.function?.label || "",
+					arguments: hasFinalArguments
+						? typeof finalTool.function?.arguments === "string"
+							? finalTool.function.arguments
+							: ""
+						: canInheritArguments && typeof existing?.function?.arguments === "string"
+							? existing.function.arguments
+							: "",
 				},
-				...(inc.tool ? { tool: inc.tool } : {}),
-			}
-		})
-
-		for (const inc of incoming) {
-			if (!currentById.has(inc.id)) {
-				merged.push(inc)
-			}
+			})
 		}
 
-		return merged
+		current.forEach((existing, currentIndex) => {
+			let incomingIndex = finalTools.findIndex(
+				(tool, index) => remainingIndexes.has(index) && tool.id && tool.id === existing?.id,
+			)
+			if (incomingIndex < 0 && this.isTemporaryToolSlot(existing, currentIndex)) {
+				// Final arrays may be reordered, so use the protocol slot index when it is present.
+				incomingIndex = finalTools.findIndex(
+					(tool, index) =>
+						remainingIndexes.has(index) &&
+						(Number.isInteger(tool.index) ? tool.index : index) === currentIndex,
+				)
+			}
+			if (incomingIndex >= 0) appendFinalTool(existing, incomingIndex)
+		})
+
+		finalTools.forEach((_, index) => {
+			if (remainingIndexes.has(index)) appendFinalTool(undefined, index)
+		})
+		return reconciled
+	}
+
+	/** Final is canonical per tool id; duplicate values use last-write-wins. */
+	private dedupeFinalToolCallsById(finalTools: ToolCall[]): ToolCall[] {
+		const deduped: ToolCall[] = []
+		const outputIndexById = new Map<string, number>()
+		const sourceIndexById = new Map<string, number>()
+
+		finalTools.forEach((toolCall, incomingIndex) => {
+			const toolCallId = String(toolCall.id || "")
+			const outputIndex = outputIndexById.get(toolCallId)
+			if (outputIndex === undefined) {
+				outputIndexById.set(toolCallId, deduped.length)
+				sourceIndexById.set(toolCallId, incomingIndex)
+				deduped.push(toolCall)
+				return
+			}
+
+			console.warn("[SuperMagicStore] duplicate final tool call id", {
+				toolCallId,
+				previousIndex: sourceIndexById.get(toolCallId),
+				incomingIndex,
+				resolution: "last-write-wins",
+			})
+			deduped[outputIndex] = toolCall
+			sourceIndexById.set(toolCallId, incomingIndex)
+		})
+
+		return deduped
+	}
+
+	private isAnonymousToolSlot(toolCall: ToolCall | undefined) {
+		const hasArguments = typeof toolCall?.function?.arguments === "string"
+		const toolId = String(toolCall?.id || "").trim()
+		const toolName = String(toolCall?.function?.name || "").trim()
+		return hasArguments && !toolId && !toolName
+	}
+
+	private isProjectableToolCall(toolCall: ToolCall | undefined) {
+		return Boolean(String(toolCall?.id || "").trim())
+	}
+
+	private getProjectableToolCalls(toolCalls: ToolCall[] = []): ToolCall[] {
+		return compactToolCalls(toolCalls).filter((toolCall) =>
+			this.isProjectableToolCall(toolCall),
+		)
+	}
+
+	private isTemporaryToolSlot(toolCall: ToolCall | undefined, index: number) {
+		const toolId = String(toolCall?.id || "")
+		return (
+			this.isAnonymousToolSlot(toolCall) ||
+			!toolId ||
+			(toolId === String(index) && !toolCall?.function?.name)
+		)
 	}
 
 	/**
@@ -1560,13 +3057,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return ordered
 	}
 
+	private cloneToolCallsForRendering(toolCalls: ToolCall[]): ToolCall[] {
+		return this.getProjectableToolCalls(toolCalls).map((toolCall, index) => ({
+			...toolCall,
+			index,
+			function: { ...toolCall.function },
+		}))
+	}
+
 	private resumeFromCurrentStateV2(topicId: string, appMessageId: string): boolean {
 		const streamState = this.getTopicStreamState(topicId, appMessageId)
-		const messageMap = this.messageMap.get(appMessageId) || this.getDefaultNode(appMessageId)
+		const messageMap =
+			this.messageMap.get(appMessageId) || this.getDefaultNode(appMessageId, topicId)
 
 		const finalContent = streamState.content || ""
 		const finalReasoningContent = streamState.reasoning_content || ""
-		const finalTools = compactToolCalls(streamState.tool_calls)
+		const finalTools = this.getProjectableToolCalls(streamState.tool_calls)
 
 		// --------------------------
 		// 1. 续流思考（直接补全）
@@ -1631,6 +3137,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageMap.tool_calls as ToolCall[],
 			finalTools,
 		)
+		if (
+			streamState.isFinalMessageReceived &&
+			!isToolCallsEqual(messageMap.tool_calls, orderedFinalTools)
+		) {
+			// Final assistant 是权威快照；工具字段整体替换，禁止继续拼接 streamed arguments。
+			messageMap.tool_calls = this.cloneToolCallsForRendering(orderedFinalTools)
+			streamState.stage = "done"
+			this.messageMap.set(appMessageId, messageMap)
+			return false
+		}
 		if (!isToolCallsEqual(messageMap.tool_calls, orderedFinalTools)) {
 			streamState.stage = "tool"
 
@@ -1680,25 +3196,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		streamState: StreamState,
 		finalTools: ToolCall[],
 	): ToolStreamStepResult {
-		if (!Array.isArray(finalTools) || finalTools.length === 0) {
+		const projectableTools = this.getProjectableToolCalls(finalTools)
+		if (projectableTools.length === 0) {
 			streamState.currentToolIndex = 0
 			return { progressed: false, done: true }
 		}
 
 		let startIndex = Math.max(streamState.currentToolIndex || 0, 0)
 
-		for (let j = 0; j < Math.min(startIndex, finalTools.length); j++) {
+		for (let j = 0; j < Math.min(startIndex, projectableTools.length); j++) {
 			const cur = get(messageMap, ["tool_calls", j, "function", "arguments"], "")
-			const fin = finalTools[j]?.function?.arguments || ""
+			const fin = projectableTools[j]?.function?.arguments || ""
 			if (cur.length < fin.length) {
 				startIndex = j
 				break
 			}
 		}
 
-		for (let i = startIndex; i < finalTools.length; i++) {
-			const finalTool = finalTools[i]
-			const toolId = finalTool?.id || String(i)
+		for (let i = startIndex; i < projectableTools.length; i++) {
+			const finalTool = projectableTools[i]
+			const toolId = finalTool.id
 			const toolType = finalTool?.type || "function"
 			const toolName = finalTool?.function?.name || ""
 			const toolLabel = finalTool?.function?.label || ""
@@ -1744,11 +3261,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageMap.tool_calls = messageMap.tool_calls?.slice(0, i + 1)
 			return {
 				progressed: true,
-				done: streamState.currentToolIndex >= finalTools.length,
+				done: streamState.currentToolIndex >= projectableTools.length,
 			}
 		}
 
-		streamState.currentToolIndex = finalTools.length
+		streamState.currentToolIndex = projectableTools.length
 		return { progressed: false, done: true }
 	}
 
@@ -1812,7 +3329,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return this.topicMeta.get(topicId)?.content?.get(correlationId)
 	}
 
-	private getDefaultNode(correlationId: string): any {
+	private getDefaultNode(correlationId: string, topicId: string): any {
 		return {
 			attachments: [],
 			content: "",
@@ -1824,7 +3341,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			tool: null,
 			tool_call_id: null,
 			tool_calls: null,
-			topic_id: "",
+			topic_id: topicId,
 			usage: null,
 		}
 	}

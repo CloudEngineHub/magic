@@ -625,28 +625,97 @@ export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 
 	// Timer: poll messages every 30 seconds
 	useEffect(() => {
+		let disposed = false
+		let inFlightPollingSync: { topicId: string; generation: number } | null = null
+
+		const cancelInFlightPollingSync = () => {
+			if (!inFlightPollingSync) return
+			const { topicId, generation } = inFlightPollingSync
+			inFlightPollingSync = null
+			superMagicStore.cancelTopicSync(topicId, generation)
+		}
+
+		const hasActiveTopicSync = () =>
+			Array.from(superMagicStore.topicMeta.entries()).some(
+				([topicId, topicMeta]) =>
+					topicMeta.syncState === "syncing" &&
+					superMagicStore.isTopicSyncCurrent(topicId, topicMeta.syncGeneration),
+			)
+
 		const timer = setInterval(() => {
 			if (
 				selectedTopic?.id &&
 				selectedTopic.chat_conversation_id &&
 				selectedTopic.chat_topic_id
 			) {
-				pullMessage({
-					conversation_id: selectedTopic?.chat_conversation_id,
-					chat_topic_id: selectedTopic?.chat_topic_id,
+				const topicId = selectedTopic.chat_topic_id
+				const taskStatus = selectedTopic.task_status || selectedTopic.status
+				const pollingParams = {
+					conversation_id: selectedTopic.chat_conversation_id,
+					chat_topic_id: topicId,
 					page_token: "",
-					order: "desc",
+					order: "desc" as const,
 					// 轮询兜底保持中等窗口，兼顾稳定性和请求成本。
 					limit: POLLING_SYNC_MESSAGE_COUNT,
 					updatePageToken: false,
 					refreshMessages: true,
+				}
+
+				if (
+					taskStatus !== TaskStatus.FINISHED ||
+					typeof superMagicStore.beginTopicSync !== "function"
+				) {
+					void pullMessage(pollingParams)
+					return
+				}
+
+				// 只有 finished topic 的成功轮询才构成工具缺失响应的完成屏障。
+				// generation 必须单飞且不能抢占已有权威同步，避免慢请求持续作废彼此。
+				if (inFlightPollingSync || hasActiveTopicSync()) return
+				const syncGeneration = superMagicStore.beginTopicSync(topicId)
+				inFlightPollingSync = { topicId, generation: syncGeneration }
+
+				void pullMessage({
+					...pollingParams,
+					syncGeneration,
 				})
+					.then((pullResult) => {
+						if (disposed || inFlightPollingSync?.generation !== syncGeneration) return
+						const currentTopic = selectedTopicRef.current
+						const currentTaskStatus = currentTopic?.task_status || currentTopic?.status
+						if (
+							currentTopic?.chat_topic_id !== topicId ||
+							currentTaskStatus !== TaskStatus.FINISHED
+						) {
+							superMagicStore.cancelTopicSync(topicId, syncGeneration)
+							return
+						}
+						superMagicStore.completeTopicSync(topicId, syncGeneration, {
+							succeeded: pullResult.didPullSucceed,
+							taskStatus: currentTaskStatus,
+							latestSeqId: pullResult.didPullSucceed
+								? superMagicStore.getLatestMessageSeqId(topicId)
+								: undefined,
+						})
+					})
+					.catch(() => {
+						// HTTP 后处理或 Store 写入异常时释放 generation；失败同步不能成为完成屏障。
+						if (disposed || inFlightPollingSync?.generation !== syncGeneration) return
+						superMagicStore.cancelTopicSync(topicId, syncGeneration)
+					})
+					.finally(() => {
+						if (inFlightPollingSync?.generation === syncGeneration) {
+							inFlightPollingSync = null
+						}
+					})
 			}
 		}, 20 * 1000)
 
 		// Cleanup timer
 		return () => {
+			disposed = true
 			clearInterval(timer)
+			cancelInFlightPollingSync()
 		}
 	}, [selectedTopic, pullMessage])
 

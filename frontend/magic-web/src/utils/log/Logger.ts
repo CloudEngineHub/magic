@@ -43,20 +43,20 @@ class Logger {
 		this.enableConfig =
 			typeof enableConfig === "boolean"
 				? {
-					console: enableConfig,
-					warn: enableConfig,
-					error: enableConfig,
-					trace: enableConfig,
-					report: enableConfig,
-				}
+						console: enableConfig,
+						warn: enableConfig,
+						error: enableConfig,
+						trace: enableConfig,
+						report: enableConfig,
+					}
 				: {
-					console: true,
-					warn: true,
-					error: true,
-					trace: true,
-					report: true,
-					...enableConfig,
-				}
+						console: true,
+						warn: true,
+						error: true,
+						trace: true,
+						report: true,
+						...enableConfig,
+					}
 
 		// 初始化插件系统
 		this.pluginManager = new LoggerPluginManager()
@@ -238,7 +238,7 @@ class Logger {
 	/**
 	 * 销毁 Logger 实例
 	 */
-	destroy(): void { }
+	destroy(): void {}
 }
 
 // 导出插件相关内容
