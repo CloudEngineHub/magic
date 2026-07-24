@@ -459,6 +459,10 @@
         "zh_CN": "确认开发计划",
         "en_US": "Review implementation plan"
     },
+    "update_html_app_memory": {
+        "zh_CN": "更新微应用信息",
+        "en_US": "Update micro-app details"
+    },
     "query_magicbase_tables": {
         "zh_CN": "查询数据表",
         "en_US": "Query tables"

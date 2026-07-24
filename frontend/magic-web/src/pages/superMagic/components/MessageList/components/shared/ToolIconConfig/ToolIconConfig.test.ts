@@ -13,8 +13,30 @@ const tableToolNames = [
 	"delete_magicbase_column",
 ]
 
+const microAppToolNames = [
+	"micro_app_plan",
+	"query_magicbase_rows",
+	"create_magicbase_row",
+	"batch_create_magicbase_rows",
+	"delete_magicbase_row",
+	"batch_delete_magicbase_rows",
+	"update_html_app_memory",
+]
+
 describe("table tool icons", () => {
 	it.each(tableToolNames)(
+		"uses the same SVG asset in both tool icon renderers: %s",
+		async (toolName) => {
+			const configuredAsset = getToolIconConfig(toolName).assetUrl
+
+			expect(configuredAsset).toBeTruthy()
+			expect(await loadToolIcon(toolName)).toBe(configuredAsset)
+		},
+	)
+})
+
+describe("micro-app tool icons", () => {
+	it.each(microAppToolNames)(
 		"uses the same SVG asset in both tool icon renderers: %s",
 		async (toolName) => {
 			const configuredAsset = getToolIconConfig(toolName).assetUrl

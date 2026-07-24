@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
 from app.service.html_app_memory_service import (
     MAGICBASE_MODEL_END,
     MAGICBASE_MODEL_START,
@@ -207,6 +208,30 @@ class UpdateHtmlAppMemory(BaseTool[UpdateHtmlAppMemoryParams]):
     """
     name = "update_html_app_memory"
 
+    async def get_before_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        arguments: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        friendly = await super().get_before_tool_call_friendly_action_and_remark(
+            tool_name,
+            tool_context,
+            arguments,
+        )
+        friendly["remark"] = i18n.translate(
+            "update_html_app_memory.remark",
+            category="tool.messages",
+        )
+        return friendly
+
+    def _get_remark_content(
+        self,
+        result: ToolResult,
+        arguments: Dict[str, Any] = None,
+    ) -> str:
+        return i18n.translate("update_html_app_memory.remark", category="tool.messages")
+
     def get_prompt_hint(self) -> str:
         return """\
 <!--zh
@@ -264,13 +289,19 @@ Rules:
                 type=DisplayType.MD,
                 data=FileContent(
                     file_name="MICRO-APP.md",
-                    content="MICRO-APP.md 更新失败，请稍后重试或检查项目记忆参数。",
+                    content=i18n.translate(
+                        "update_html_app_memory.detail_error",
+                        category="tool.messages",
+                    ),
                 ),
             )
         return ToolDetail(
             type=DisplayType.MD,
             data=FileContent(
                 file_name="MICRO-APP.md",
-                content="MICRO-APP.md 项目记忆已更新。",
+                content=i18n.translate(
+                    "update_html_app_memory.detail_success",
+                    category="tool.messages",
+                ),
             ),
         )

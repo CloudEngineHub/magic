@@ -2902,5 +2902,17 @@
     "magicbase.row_count": {
         "zh_CN": "{{count}} 条记录",
         "en_US": "{{count}} rows"
+    },
+    "update_html_app_memory.remark": {
+        "zh_CN": "记录最新功能与数据结构",
+        "en_US": "Record the latest features and data model"
+    },
+    "update_html_app_memory.detail_success": {
+        "zh_CN": "微应用信息已更新。",
+        "en_US": "Micro-app information updated."
+    },
+    "update_html_app_memory.detail_error": {
+        "zh_CN": "更新微应用信息失败，请稍后重试或检查参数。",
+        "en_US": "Failed to update micro-app information. Try again or check the parameters."
     }
 }

@@ -94,6 +94,13 @@ const iconNameMap: Record<string, string> = {
 	delete_magicbase_table: "delete_table",
 	update_magicbase_column: "update_field",
 	delete_magicbase_column: "delete_field",
+	micro_app_plan: "todo_write",
+	query_magicbase_rows: "query_table",
+	create_magicbase_row: "create_table",
+	batch_create_magicbase_rows: "create_table",
+	delete_magicbase_row: "delete_table",
+	batch_delete_magicbase_rows: "delete_table",
+	update_html_app_memory: "long_memory",
 }
 
 /**

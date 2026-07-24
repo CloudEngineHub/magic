@@ -41,6 +41,8 @@ import queryTableIcon from "@/pages/superMagic/assets/tool_icon/query_table.svg"
 import updateFieldIcon from "@/pages/superMagic/assets/tool_icon/update_field.svg"
 import updateTablePermissionsIcon from "@/pages/superMagic/assets/tool_icon/update_table_permissions.svg"
 import viewTableIcon from "@/pages/superMagic/assets/tool_icon/view_table.svg"
+import longMemoryIcon from "@/pages/superMagic/assets/tool_icon/long_memory.svg"
+import todoWriteIcon from "@/pages/superMagic/assets/tool_icon/todo_write.svg"
 
 /**
  * 工具图标配置映射
@@ -129,6 +131,18 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		bgColor: "#FF623F",
 	},
 
+	// 微应用流程
+	micro_app_plan: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: todoWriteIcon,
+	},
+	update_html_app_memory: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: longMemoryIcon,
+	},
+
 	// 数据表操作
 	query_magicbase_tables: {
 		icon: DefaultIcon,
@@ -169,6 +183,31 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		icon: DefaultIcon,
 		bgColor: "transparent",
 		assetUrl: deleteFieldIcon,
+	},
+	query_magicbase_rows: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: queryTableIcon,
+	},
+	create_magicbase_row: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: createTableIcon,
+	},
+	batch_create_magicbase_rows: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: createTableIcon,
+	},
+	delete_magicbase_row: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: deleteTableIcon,
+	},
+	batch_delete_magicbase_rows: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: deleteTableIcon,
 	},
 
 	// 代码执行
