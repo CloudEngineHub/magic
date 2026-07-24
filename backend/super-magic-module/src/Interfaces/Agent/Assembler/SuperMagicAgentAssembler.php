@@ -546,6 +546,7 @@ class SuperMagicAgentAssembler
         }
 
         $latestVersionCode = $latestVersionEntity?->getVersion();
+        $publishTargetType = $latestVersionEntity?->getPublishTargetType()->value;
         $isAdded = $userAgent !== null;
 
         $allowDelete = false;
@@ -566,6 +567,7 @@ class SuperMagicAgentAssembler
             enabled: $agent->getEnabled() ?? false,
             isStoreOffline: false,
             latestVersionCode: $latestVersionCode,
+            publishTargetType: $publishTargetType,
             origin: ($origin ?? AgentOrigin::TEAM_SHARED)->value,
             allowDelete: $allowDelete,
             pinnedAt: $agent->getPinnedAt(),
