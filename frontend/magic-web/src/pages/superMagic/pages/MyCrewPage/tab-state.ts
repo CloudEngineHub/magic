@@ -1,6 +1,7 @@
 export const MY_CREW_TAB_VALUES = {
 	created: "created",
 	hired: "hired",
+	collaborated: "collaborated",
 } as const
 
 export type MyCrewCrewTypeTab = (typeof MY_CREW_TAB_VALUES)[keyof typeof MY_CREW_TAB_VALUES]
@@ -9,6 +10,7 @@ const MY_CREW_DEFAULT_TAB = MY_CREW_TAB_VALUES.created
 const MY_CREW_AVAILABLE_TABS: MyCrewCrewTypeTab[] = [
 	MY_CREW_TAB_VALUES.created,
 	MY_CREW_TAB_VALUES.hired,
+	MY_CREW_TAB_VALUES.collaborated,
 ]
 
 export function getMyCrewAvailableTabs(): MyCrewCrewTypeTab[] {

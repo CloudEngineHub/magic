@@ -28,5 +28,6 @@ export function useMyCrewTabs() {
 		availableTabs,
 		isCreatedTab: crewTypeTab === MY_CREW_TAB_VALUES.created,
 		isHiredTab: crewTypeTab === MY_CREW_TAB_VALUES.hired,
+		isCollaboratedTab: crewTypeTab === MY_CREW_TAB_VALUES.collaborated,
 	}
 }

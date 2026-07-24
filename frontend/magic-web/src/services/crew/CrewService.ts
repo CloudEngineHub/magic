@@ -5,6 +5,7 @@ import { getLocalePreferredKeys, resolveLocalizedText } from "@/utils/locale"
 import { resolveCrewAgentPromptText } from "./agent-prompt"
 import {
 	buildCrewI18nText,
+	type CrewAgentOrigin,
 	type CrewI18nArrayText,
 	type CrewI18nText,
 	type CrewIconObject,
@@ -81,6 +82,8 @@ export interface MyCrewView {
 	icon: string | null
 	playbooks: CrewPlaybookView[]
 	sourceType: CrewSourceType
+	/** Current user's display source for this agent. */
+	origin?: CrewAgentOrigin
 	publisherType: CrewPublisherType | null
 	publisherName: string | null
 	enabled: boolean
@@ -93,7 +96,7 @@ export interface MyCrewView {
 	updatedAt: string
 	/** From team-shared API `creator_info.name` */
 	creatorName: string | null
-	/** Unified API scope: identifies the origin category. Undefined when using legacy endpoints. */
+	/** Unified API scope: identifies the queried list category. Undefined for legacy endpoints. */
 	scope?: "created" | "team_shared" | "market_installed"
 	/** Organization name from unified API's organization_info field */
 	organizationName?: string | null
@@ -244,7 +247,7 @@ export class CrewService {
 		}
 	}
 
-	/** Fetch agents via unified endpoint (mobile). Returns flat list regardless of scope. */
+	/** Fetch agents via the unified endpoint. Returns a flat list regardless of scope. */
 	async getUnifiedAgents(
 		params: GetUnifiedAgentListParams = {},
 	): Promise<PagedResult<MyCrewView>> {
@@ -255,6 +258,14 @@ export class CrewService {
 			pageSize: data.page_size,
 			total: data.total,
 		}
+	}
+
+	/** Fetch agents the current user collaborates on via the unified list endpoint. */
+	async getCollaboratedAgents(params: GetAgentsParams = {}): Promise<PagedResult<MyCrewView>> {
+		return this.getUnifiedAgents({
+			...params,
+			scope: "collaborated",
+		})
 	}
 
 	/**
@@ -445,6 +456,7 @@ export class CrewService {
 				themeColor: f.theme_color,
 			})),
 			sourceType: this.normalizeSourceType(item.source_type),
+			origin: item.origin,
 			publisherType: item.publisher_type ?? null,
 			publisherName: item.publisher?.name?.trim() || null,
 			enabled: item.enabled,

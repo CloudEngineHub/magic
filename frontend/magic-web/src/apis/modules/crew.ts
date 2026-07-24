@@ -79,6 +79,9 @@ export interface CrewPublisher {
 /** Source type for user agents */
 export type CrewSourceType = "LOCAL_CREATE" | "MARKET"
 
+/** Display origin of an agent in the user's employee lists. */
+export type CrewAgentOrigin = "OFFICIAL" | "CREATED" | "MARKET" | "TEAM_SHARED"
+
 /** Publish status */
 export type CrewPublishStatus = "PUBLISHED" | "OFFLINE" | "DRAFT"
 
@@ -231,6 +234,8 @@ export interface AgentItem {
 	icon_type: CrewIconType
 	playbooks: CrewPlayBookBaseData[]
 	source_type: CrewSourceType
+	/** Current user's display source for this agent (returned by list endpoints). */
+	origin: CrewAgentOrigin
 	publisher_type?: CrewPublisherType
 	publisher?: CrewPublisher | null
 	enabled: boolean
@@ -265,7 +270,12 @@ export interface GetTeamSharedAgentsResponse extends GetCreatedAgentsResponse {}
 // ======================== Unified Agent List (API: POST /api/v2/super-magic/agents/queries) ========================
 
 /** Scope filter for unified agent list query */
-export type UnifiedAgentScope = "all" | "created" | "team_shared" | "market_installed"
+export type UnifiedAgentScope =
+	| "all"
+	| "created"
+	| "team_shared"
+	| "market_installed"
+	| "collaborated"
 
 /** Sort field for unified agent list query */
 export type UnifiedAgentSort = "updated_at" | "created_at"
@@ -290,7 +300,7 @@ export interface AgentOrganizationInfo {
  */
 export interface UnifiedAgentItem extends AgentItem {
 	scope: "created" | "team_shared" | "market_installed"
-	organization_info: AgentOrganizationInfo
+	organization_info: AgentOrganizationInfo | null
 }
 
 /** Paginated response for unified agent list query */
@@ -986,7 +996,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	/**
 	 * Get unified agent list (all scopes in one query).
 	 * Endpoint: POST /api/v2/super-magic/agents/queries
-	 * Replaces separate created/hired/team-shared endpoints for mobile.
+	 * Supports the unified mobile list and the desktop collaboration list.
 	 * @param params Request body with scope, sort, pagination
 	 */
 	getUnifiedAgentList(params: GetUnifiedAgentListParams = {}) {
