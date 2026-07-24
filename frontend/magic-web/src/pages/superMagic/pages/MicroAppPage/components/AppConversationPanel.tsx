@@ -38,6 +38,7 @@ import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTo
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
+import MicroAppIssuePromptPanel from "./MicroAppIssuePromptPanel"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -254,7 +255,14 @@ function AppConversationPanel({
 			}
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
-			editor={<DefaultMessageEditorContainer editorContext={editorContext} />}
+			editor={
+				<div className="flex flex-col gap-1.5">
+					<div className="flex px-1">
+						<MicroAppIssuePromptPanel variant="desktop" />
+					</div>
+					<DefaultMessageEditorContainer editorContext={editorContext} />
+				</div>
+			}
 			editorNodes={editorNodes}
 			messageListProviderValue={messageListProviderValue}
 			messages={messages as SuperMagicMessageItem[]}

@@ -94,7 +94,6 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		userSelectDetail: null,
 		setUserSelectDetail: vi.fn(),
 		defaultEntryFile: { file_id: "entry-1" },
-		nonClosableFileIds: ["entry-1"],
 		detailRef: { current: null },
 		topicFilesProps: {},
 		handleOpenFile: vi.fn(),

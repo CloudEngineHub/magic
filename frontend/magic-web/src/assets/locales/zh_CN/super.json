@@ -3228,6 +3228,14 @@
 			"showDatabase": "展开数据库",
 			"showFiles": "展开文件列表"
 		},
+		"issuePrompts": {
+			"empty": "没有找到相关问题，换个关键词试试。",
+			"featured": "常用问题",
+			"searchPlaceholder": "搜索你遇到的现象",
+			"subtitle": "选择你看到的现象，AI 会检查原因并给出修复。",
+			"title": "常见问题",
+			"trigger": "常见问题"
+		},
 		"mobileConversation": {
 			"emptyDescription": "在下方输入内容，继续完善当前微应用。",
 			"emptyTitle": "开始对话",
@@ -3247,6 +3255,12 @@
 			"files": "文件",
 			"preview": "预览"
 		},
+		"navigation": {
+			"ariaLabel": "微应用编辑区域",
+			"database": "数据库",
+			"files": "文件",
+			"preview": "预览"
+		},
 		"preview": {
 			"emptyDescription": "请在项目根目录添加 HTML 文件，或从右上角选择入口文件。",
 			"emptyTitle": "未找到入口 HTML"
@@ -3259,6 +3273,15 @@
 			"default": "默认预览",
 			"phone": "手机预览",
 			"source": "源码预览"
+		},
+		"previewToolbar": {
+			"address": "当前预览地址",
+			"aiEdit": "AI 编辑",
+			"desktop": "电脑端预览",
+			"noHtml": "暂无可预览的 HTML 文件",
+			"phone": "手机端预览",
+			"refresh": "刷新预览",
+			"title": "预览"
 		},
 		"publish": {
 			"button": "发布",

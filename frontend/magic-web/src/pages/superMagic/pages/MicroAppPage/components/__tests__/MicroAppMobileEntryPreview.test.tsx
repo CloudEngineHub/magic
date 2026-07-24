@@ -1,6 +1,8 @@
+import type { ReactNode } from "react"
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import MicroAppEntryPreview from "../MicroAppEntryPreview"
 import MicroAppMobileEntryPreview from "../MicroAppMobileEntryPreview"
 
 const htmlPreviewMocks = vi.hoisted(() => ({
@@ -16,6 +18,12 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		htmlPreviewMocks.props = props
 		return <div data-testid="mobile-entry-html-preview" />
 	},
+}))
+
+vi.mock("../MicroAppPhonePreviewFrame", () => ({
+	default: ({ children }: { children: ReactNode }) => (
+		<div data-testid="micro-app-phone-preview-frame">{children}</div>
+	),
 }))
 
 describe("MicroAppMobileEntryPreview", () => {
@@ -73,6 +81,27 @@ describe("MicroAppMobileEntryPreview", () => {
 
 		expect(screen.getByTestId("micro-app-mobile-preview-empty")).toHaveTextContent(
 			"microAppPage.preview.emptyTitle",
+		)
+	})
+
+	it("wraps phone preview with the shared phone frame", async () => {
+		render(
+			<MicroAppEntryPreview
+				entryFile={{ file_id: "entry-1", file_name: "index.html" }}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={null}
+				allowEdit
+				viewMode="phone"
+			/>,
+		)
+
+		expect(await screen.findByTestId("micro-app-phone-preview-frame")).toBeInTheDocument()
+		expect(htmlPreviewMocks.props).toEqual(
+			expect.objectContaining({
+				viewMode: "phone",
+				showPhoneFrame: false,
+			}),
 		)
 	})
 })

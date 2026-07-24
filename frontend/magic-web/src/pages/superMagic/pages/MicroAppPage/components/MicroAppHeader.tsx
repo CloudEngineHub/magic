@@ -1,4 +1,4 @@
-import { ArrowLeft, Database, PenLine, Rocket, UserRoundPlus } from "lucide-react"
+import { ArrowLeft, PenLine, Rocket, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -7,9 +7,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 interface MicroAppHeaderProps {
 	selectedProject: ProjectListItem | null
 	hasEntries: boolean
-	isDatabasePanelOpen: boolean
 	onBack: () => void
-	onToggleDatabasePanel: () => void
 	onPublish: () => void
 	canRename?: boolean
 	onRename?: () => void
@@ -20,9 +18,7 @@ interface MicroAppHeaderProps {
 export default function MicroAppHeader({
 	selectedProject,
 	hasEntries,
-	isDatabasePanelOpen,
 	onBack,
-	onToggleDatabasePanel,
 	onPublish,
 	canRename,
 	onRename,
@@ -76,27 +72,6 @@ export default function MicroAppHeader({
 					<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
 				)}
 			</div>
-
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<Button
-						type="button"
-						variant={isDatabasePanelOpen ? "secondary" : "outline"}
-						size="icon"
-						className="size-8 shrink-0"
-						onClick={onToggleDatabasePanel}
-						disabled={!selectedProject?.id}
-						data-testid="micro-app-database-button"
-					>
-						<Database size={16} />
-					</Button>
-				</TooltipTrigger>
-				<TooltipContent side="bottom">
-					{isDatabasePanelOpen
-						? t("microAppPage.header.hideDatabase")
-						: t("microAppPage.header.showDatabase")}
-				</TooltipContent>
-			</Tooltip>
 
 			{showCollaboratorAction ? (
 				<Tooltip>

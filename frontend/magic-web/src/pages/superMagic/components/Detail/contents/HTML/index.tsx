@@ -139,7 +139,10 @@ interface HTMLProps {
 	showFileHeader?: boolean
 	activeFileId?: string | null
 	showFooter?: boolean
+	showPhoneFrame?: boolean
 	onRefreshFile?: () => void
+	onRegisterAIEdit?: (handler: (() => void) | null) => void
+	onAIEditActiveChange?: (active: boolean) => void
 	isPlaybackMode?: boolean
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	isInPPTMode?: boolean
@@ -230,7 +233,10 @@ export default memo(function HTML(props: HTMLProps) {
 		showFileHeader = true,
 		activeFileId,
 		showFooter,
+		showPhoneFrame = true,
 		onRefreshFile,
+		onRegisterAIEdit,
+		onAIEditActiveChange,
 		isPlaybackMode = false,
 		onRegisterSaveHandler,
 		isInPPTMode = false,
@@ -451,6 +457,22 @@ export default memo(function HTML(props: HTMLProps) {
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
+	const handleAIEdit = useMemoizedFn(() => {
+		if (isAppendPicking) {
+			htmlRendererRef.current?.stopInspector()
+		} else {
+			htmlRendererRef.current?.startInspectorAppend()
+		}
+	})
+
+	useEffect(() => {
+		onRegisterAIEdit?.(handleAIEdit)
+		return () => onRegisterAIEdit?.(null)
+	}, [handleAIEdit, onRegisterAIEdit])
+
+	useEffect(() => {
+		onAIEditActiveChange?.(isAppendPicking)
+	}, [isAppendPicking, onAIEditActiveChange])
 	// 从模块级 Map 恢复上次的调试面板状态（组件重挂载后仍能保持开启）
 	const [devConsoleState, setDevConsoleState] = useState(() => ({
 		fileId,
@@ -1438,13 +1460,13 @@ export default memo(function HTML(props: HTMLProps) {
 			) : (
 				<div
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: viewMode === "phone",
+						[styles.phoneModeContainer]: viewMode === "phone" && showPhoneFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
 					})}
 				>
 					<div
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: viewMode === "phone",
+							[styles.phoneModeInner]: viewMode === "phone" && showPhoneFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 						})}
 					>

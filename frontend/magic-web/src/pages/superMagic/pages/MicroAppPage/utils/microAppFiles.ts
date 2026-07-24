@@ -29,11 +29,19 @@ export function getAttachmentId(item: AttachmentItem): string {
 	)
 }
 
-export function isRootHtmlFile(item: AttachmentItem): boolean {
+export function isHtmlFile(item: AttachmentItem): boolean {
 	if (item.is_hidden || item.is_directory || item.type === "directory") return false
 
 	const extension = getFileExtension(item)
-	if (extension !== "html" && extension !== "htm") return false
+	return extension === "html" || extension === "htm"
+}
+
+export function collectHtmlFiles(items: AttachmentItem[]): AttachmentItem[] {
+	return items.filter(isHtmlFile)
+}
+
+export function isRootHtmlFile(item: AttachmentItem): boolean {
+	if (!isHtmlFile(item)) return false
 
 	const normalizedPath = getNormalizedPath(item)
 	const isRootPath = !normalizedPath.includes("/")
