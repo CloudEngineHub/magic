@@ -176,7 +176,7 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedText(?array $i18n, string $fallback, string $language): string
     {
-        $localizedValue = $i18n[$language] ?: $i18n[LanguageEnum::DEFAULT->value] ?? null;
+        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? null;
         if (is_string($localizedValue) && $localizedValue !== '') {
             return $localizedValue;
         }
