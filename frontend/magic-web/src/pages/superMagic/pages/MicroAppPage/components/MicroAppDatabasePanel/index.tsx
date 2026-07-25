@@ -4,13 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import useSWR from "swr"
-import useSWRInfinite from "swr/infinite"
 import { MagicBaseApi } from "@/apis"
-import type {
-	MagicBaseQueryRowsResponse,
-	MagicBaseRow,
-	MagicBaseSortRule,
-} from "@/apis/modules/magicBase"
+import type { MagicBaseSortRule } from "@/apis/modules/magicBase"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -26,43 +21,28 @@ import { MicroAppDatabaseEmptyIllustration } from "@/pages/superMagic/components
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 import type { MagicBaseCellSelection } from "./DataGrid"
 import DatabaseTablePanel, { type DatabasePanelTab } from "./DatabaseTablePanel"
+import {
+	DATABASE_INTRO_DISMISSED_KEY,
+	EMPTY_CELL_SELECTION,
+	getRowRecordId,
+	type RowEditorState,
+} from "./panelState"
 import PermissionEditorDialog, { type PermissionEditorTarget } from "./PermissionEditorDialog"
 import RowEditorDialog from "./RowEditorDialog"
 import TableList, { TableListToggle } from "./TableList"
+import useMagicBaseRows from "./useMagicBaseRows"
 import {
-	MAGIC_BASE_PAGE_SIZE,
 	buildGridColumns,
-	buildMagicBaseRowsRequest,
 	getDefaultSort,
 	getDisplayColumns,
 	getEnabledColumns,
+	type MagicBaseFilterCondition,
 } from "./utils"
 
 interface MicroAppDatabasePanelProps {
 	active: boolean
 	projectId?: string
 	projectRole?: CollaboratorPermission
-}
-
-type RowEditorState =
-	| {
-			mode: "create"
-			row?: null
-	  }
-	| {
-			mode: "edit"
-			row: MagicBaseRow
-	  }
-
-function getRowRecordId(row: MagicBaseRow): string {
-	return String(row.id ?? row.record_id ?? "")
-}
-
-const DATABASE_INTRO_DISMISSED_KEY = "MAGIC:micro-app-database-intro-dismissed"
-const EMPTY_CELL_SELECTION: MagicBaseCellSelection = {
-	rowIds: [],
-	columnIds: [],
-	columnKeys: [],
 }
 
 export default function MicroAppDatabasePanel({
@@ -74,7 +54,6 @@ export default function MicroAppDatabasePanel({
 	const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
 	const [tableListCollapsed, setTableListCollapsed] = useState(false)
 	const [showSystemFields, setShowSystemFields] = useState(false)
-	const rowsLoadRequestedRef = useRef(false)
 	const [introDismissed, setIntroDismissed] = useState(
 		() =>
 			typeof window !== "undefined" &&
@@ -83,6 +62,7 @@ export default function MicroAppDatabasePanel({
 	const tableListModeRef = useRef<"auto" | "manual">("auto")
 	const [activeTab, setActiveTab] = useState<DatabasePanelTab>("data")
 	const [sort, setSort] = useState<MagicBaseSortRule | null>(null)
+	const [filters, setFilters] = useState<MagicBaseFilterCondition[]>([])
 	const [permissionEditor, setPermissionEditor] = useState<{
 		tableId: string
 		target: PermissionEditorTarget
@@ -121,6 +101,7 @@ export default function MicroAppDatabasePanel({
 		tableListModeRef.current = "auto"
 		setTableListCollapsed(false)
 		setShowSystemFields(false)
+		setFilters([])
 	}, [projectId])
 
 	// 单表不需要持续占用分类栏；用户手动操作后不再用自动规则覆盖其选择。
@@ -147,35 +128,22 @@ export default function MicroAppDatabasePanel({
 	}, [selectedTable?.id])
 
 	const {
-		data: rowsPages,
+		rows,
+		total,
+		hasMore: hasMoreRows,
+		loadingMore: loadingMoreRows,
 		error: rowsError,
 		isLoading: rowsLoading,
-		isValidating: rowsValidating,
-		size: rowsPageCount,
-		setSize: setRowsPageCount,
-		mutate: refreshRows,
-	} = useSWRInfinite<MagicBaseQueryRowsResponse>(
-		(pageIndex, previousPageData) => {
-			if (!active || !projectId || !selectedTableId || !selectedTable) return null
-			if (previousPageData && previousPageData.list.length === 0) return null
-			if (previousPageData && pageIndex * MAGIC_BASE_PAGE_SIZE >= previousPageData.total) {
-				return null
-			}
-
-			return {
-				scope: "magicbase-rows",
-				projectId,
-				tableId: selectedTableId,
-				request: buildMagicBaseRowsRequest({
-					table: selectedTable,
-					sort,
-					page: pageIndex + 1,
-				}),
-			}
-		},
-		({ projectId: currentProjectId, tableId, request }) =>
-			MagicBaseApi.queryRows(currentProjectId, tableId, request),
-	)
+		loadMore: handleLoadMoreRows,
+		refresh: refreshRows,
+	} = useMagicBaseRows({
+		active,
+		projectId,
+		tableId: selectedTableId,
+		table: selectedTable,
+		sort,
+		filters,
+	})
 
 	const {
 		data: permissions,
@@ -189,22 +157,6 @@ export default function MicroAppDatabasePanel({
 			MagicBaseApi.getPermissions(currentProjectId, currentTableId),
 	)
 
-	const rows = useMemo(() => {
-		const seenRowIds = new Set<string>()
-		return (rowsPages || []).flatMap((currentPage) =>
-			currentPage.list.filter((row) => {
-				const rowId = getRowRecordId(row)
-				if (!rowId) return true
-				if (seenRowIds.has(rowId)) return false
-				seenRowIds.add(rowId)
-				return true
-			}),
-		)
-	}, [rowsPages])
-	const total = rowsPages?.[0]?.total || 0
-	const hasMoreRows = rows.length < total
-	const loadingMoreRows =
-		rowsValidating && Boolean(rowsPages) && rowsPages?.[rowsPageCount - 1] === undefined
 	const gridColumns = useMemo(
 		() => buildGridColumns(selectedTable, rows, showSystemFields),
 		[rows, selectedTable, showSystemFields],
@@ -215,6 +167,7 @@ export default function MicroAppDatabasePanel({
 		setSelectedTableId(tableId)
 		setActiveTab("data")
 		setSelectedCells(EMPTY_CELL_SELECTION)
+		setFilters([])
 	}
 
 	const handleSortChange = (field: string) => {
@@ -289,15 +242,10 @@ export default function MicroAppDatabasePanel({
 		setSelectionResetVersion((version) => version + 1)
 	}
 
-	useEffect(() => {
-		if (!loadingMoreRows) rowsLoadRequestedRef.current = false
-	}, [loadingMoreRows, rows.length])
-
-	const handleLoadMoreRows = useCallback(() => {
-		if (!hasMoreRows || loadingMoreRows || rowsLoadRequestedRef.current) return
-		rowsLoadRequestedRef.current = true
-		setRowsPageCount((pageCount) => pageCount + 1)
-	}, [hasMoreRows, loadingMoreRows, setRowsPageCount])
+	const handleFiltersChange = (nextFilters: MagicBaseFilterCondition[]) => {
+		setFilters(nextFilters)
+		handleClearSelection()
+	}
 
 	const confirmDeleteRows = async () => {
 		if (!projectId || !selectedTableId || !deleteSelection?.rowIds.length) return
@@ -460,6 +408,7 @@ export default function MicroAppDatabasePanel({
 						canDeleteSelectedRows={canDeleteSelectedRows}
 						canManagePermissions={canManagePermissions}
 						showSystemFields={showSystemFields}
+						filters={filters}
 						onTabChange={setActiveTab}
 						onShowSystemFieldsChange={setShowSystemFields}
 						onCreateRow={handleCreateRow}
@@ -468,6 +417,7 @@ export default function MicroAppDatabasePanel({
 						onSortChange={handleSortChange}
 						onSelectionChange={setSelectedCells}
 						onClearSelection={handleClearSelection}
+						onFiltersChange={handleFiltersChange}
 						onLoadMoreRows={handleLoadMoreRows}
 						onOpenEditRow={handleOpenEditRow}
 						onRequestDeleteRows={handleRequestDeleteRows}

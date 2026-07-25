@@ -83,6 +83,11 @@ export interface MagicBaseGridColumn {
 	source?: "system" | "schema" | "row"
 }
 
+export interface MagicBaseFilterCondition {
+	field: string
+	value: boolean | number | string
+}
+
 function appendUnique(fields: string[], field?: string) {
 	if (!field || fields.includes(field)) return
 	fields.push(field)
@@ -138,10 +143,14 @@ export function buildMagicBaseRowsRequest(params: {
 	table?: MagicBaseTable | null
 	sort: MagicBaseSortRule | null
 	page: number
+	filters?: MagicBaseFilterCondition[]
 }): MagicBaseQueryRowsRequest {
+	const filter = Object.fromEntries(
+		(params.filters || []).map((condition) => [condition.field, { eq: condition.value }]),
+	)
 	return {
 		select: buildMagicBaseSelect(params.table),
-		filter: {},
+		filter,
 		sort: params.sort ? [params.sort] : [],
 		page: params.page,
 		page_size: MAGIC_BASE_PAGE_SIZE,

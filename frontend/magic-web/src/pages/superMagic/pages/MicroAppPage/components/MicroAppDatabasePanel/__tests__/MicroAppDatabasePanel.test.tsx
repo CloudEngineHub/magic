@@ -431,6 +431,67 @@ describe("MicroAppDatabasePanel", () => {
 		})
 	})
 
+	it("filters rows by multiple exact-match column conditions", async () => {
+		mocks.getTable.mockResolvedValue({
+			...tableDetail,
+			columns: [
+				...tableDetail.columns,
+				{
+					id: "column-3",
+					table_id: "table-1",
+					column_key: "price",
+					column_name: "Price",
+					data_type: "number",
+					is_required: false,
+					status: "enabled",
+				},
+			],
+		})
+		renderPanel()
+
+		const selectedCell = await screen.findByText("Apple")
+		fireEvent.mouseDown(selectedCell.closest("td") as HTMLElement, { button: 0 })
+		fireEvent.mouseUp(selectedCell.closest("td") as HTMLElement)
+		expect(await screen.findByTestId("magicbase-selection-actions")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("magicbase-filter-trigger"))
+		const valueInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterValue")
+		fireEvent.change(valueInputs[0], { target: { value: "Apple" } })
+		fireEvent.click(screen.getByText("microAppPage.databasePanel.addFilterCondition"))
+		const nextValueInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterValue")
+		fireEvent.change(nextValueInputs[1], { target: { value: "5999" } })
+		fireEvent.click(screen.getByText("microAppPage.databasePanel.applyFilters"))
+
+		await waitFor(() => {
+			expect(mocks.queryRows).toHaveBeenLastCalledWith(
+				"project-1",
+				"table-1",
+				expect.objectContaining({
+					filter: {
+						brand: { eq: "Apple" },
+						price: { eq: 5999 },
+					},
+					page: 1,
+				}),
+			)
+		})
+		expect(screen.getByTestId("magicbase-filter-trigger")).toHaveTextContent(
+			"microAppPage.databasePanel.filterCount:2",
+		)
+		expect(screen.queryByTestId("magicbase-selection-actions")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("magicbase-filter-trigger"))
+		fireEvent.click(screen.getByText("microAppPage.databasePanel.clearFilters"))
+
+		await waitFor(() => {
+			expect(mocks.queryRows).toHaveBeenLastCalledWith(
+				"project-1",
+				"table-1",
+				expect.objectContaining({ filter: {}, page: 1 }),
+			)
+		})
+	})
+
 	it("loads the next page when scrolling near the bottom", async () => {
 		mocks.queryRows.mockImplementation(
 			(_projectId: string, _tableId: string, request: { page: number }) =>

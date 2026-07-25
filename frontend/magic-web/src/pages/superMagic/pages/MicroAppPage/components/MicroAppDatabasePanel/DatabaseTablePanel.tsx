@@ -31,10 +31,11 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/lib/utils"
 
+import DataFilterBar from "./DataFilterBar"
 import DataGrid, { type MagicBaseCellSelection } from "./DataGrid"
 import PermissionPanel from "./PermissionPanel"
 import StructureTable from "./StructureTable"
-import type { MagicBaseGridColumn } from "./utils"
+import type { MagicBaseFilterCondition, MagicBaseGridColumn } from "./utils"
 
 export type DatabasePanelTab = "data" | "structure" | "permissions"
 
@@ -64,6 +65,7 @@ interface DatabaseTablePanelProps {
 	canDeleteSelectedRows: boolean
 	canManagePermissions: boolean
 	showSystemFields: boolean
+	filters: MagicBaseFilterCondition[]
 	onTabChange: (tab: DatabasePanelTab) => void
 	onShowSystemFieldsChange: (show: boolean) => void
 	onCreateRow: () => void
@@ -72,6 +74,7 @@ interface DatabaseTablePanelProps {
 	onSortChange: (field: string) => void
 	onSelectionChange: (selection: MagicBaseCellSelection) => void
 	onClearSelection: () => void
+	onFiltersChange: (conditions: MagicBaseFilterCondition[]) => void
 	onLoadMoreRows: () => void
 	onOpenEditRow: (recordId: string) => void
 	onRequestDeleteRows: (selection: MagicBaseCellSelection) => void
@@ -177,6 +180,7 @@ export default function DatabaseTablePanel({
 	canDeleteSelectedRows,
 	canManagePermissions,
 	showSystemFields,
+	filters,
 	onTabChange,
 	onShowSystemFieldsChange,
 	onCreateRow,
@@ -185,6 +189,7 @@ export default function DatabaseTablePanel({
 	onSortChange,
 	onSelectionChange,
 	onClearSelection,
+	onFiltersChange,
 	onLoadMoreRows,
 	onOpenEditRow,
 	onRequestDeleteRows,
@@ -298,6 +303,13 @@ export default function DatabaseTablePanel({
 									</Button>
 								) : null}
 							</div>
+						) : null}
+						{activeTab === "data" ? (
+							<DataFilterBar
+								columns={displayColumns}
+								value={filters}
+								onChange={onFiltersChange}
+							/>
 						) : null}
 						{activeTab === "data" ? (
 							<Button
