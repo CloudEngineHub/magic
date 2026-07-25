@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction, toJS } from "mobx"
 import pubsub from "@/utils/pubsub"
-import { unionBy, get, set, merge } from "lodash-es"
+import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
