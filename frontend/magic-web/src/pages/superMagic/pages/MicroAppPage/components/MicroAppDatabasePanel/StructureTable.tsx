@@ -14,10 +14,6 @@ interface StructureTableProps {
 	columns: MagicBaseColumn[]
 }
 
-function formatPermission(read?: string, edit?: string) {
-	return [read, edit].filter(Boolean).join(" / ") || "-"
-}
-
 export default function StructureTable({ columns }: StructureTableProps) {
 	const { t } = useTranslation("super")
 
@@ -39,7 +35,6 @@ export default function StructureTable({ columns }: StructureTableProps) {
 					<TableHead>{t("microAppPage.databasePanel.source")}</TableHead>
 					<TableHead>{t("microAppPage.databasePanel.required")}</TableHead>
 					<TableHead>{t("microAppPage.databasePanel.status")}</TableHead>
-					<TableHead>{t("microAppPage.databasePanel.permission")}</TableHead>
 				</TableRow>
 			</TableHeader>
 			<TableBody>
@@ -69,12 +64,6 @@ export default function StructureTable({ columns }: StructureTableProps) {
 							<Badge variant="outline" className="rounded-md">
 								{column.status || "-"}
 							</Badge>
-						</TableCell>
-						<TableCell className="text-xs text-muted-foreground">
-							{formatPermission(
-								column.dynamic_permission?.read_scope,
-								column.dynamic_permission?.edit_scope,
-							)}
 						</TableCell>
 					</TableRow>
 				))}

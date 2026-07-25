@@ -2,9 +2,10 @@ import { useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import { JSONContent } from "@tiptap/react"
-import { AppWindow } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import ConversationEmptyState from "@/pages/superMagic/components/ConversationPanelScaffold/ConversationEmptyState"
+import { MicroAppConversationEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
@@ -230,8 +231,9 @@ function AppConversationPanel({
 			allowMessageTooltip: true,
 			allowConversationCopy: true,
 			onTopicSwitch: topicStore.setSelectedTopic,
+			projectFilesStore,
 		}
-	}, [topicStore.setSelectedTopic])
+	}, [projectFilesStore, topicStore.setSelectedTopic])
 
 	return (
 		<ConversationPanelScaffold
@@ -284,23 +286,25 @@ function AppConversationEmptyState({
 	className?: string
 	variant: "compact" | "hero"
 }) {
+	const { t } = useTranslation("super")
+
 	return (
 		<ConversationEmptyState
 			className={className}
 			icon={<AppConversationEmptyIcon variant={variant} />}
-			title="开始对话"
-			subtitle="发送消息开始与 AI 对话"
+			title={t("microAppPage.conversation.emptyTitle")}
+			subtitle={t("microAppPage.conversation.emptyDescription")}
 			variant={variant}
+			testId={`micro-app-conversation-empty-${variant}`}
 		/>
 	)
 }
 
 function AppConversationEmptyIcon({ variant }: { variant: "compact" | "hero" }) {
 	return (
-		<AppWindow
-			className={variant === "hero" ? "size-14" : "size-11"}
-			strokeWidth={1.6}
-			aria-hidden
+		<MicroAppConversationEmptyIllustration
+			size={variant === "hero" ? "md" : "sm"}
+			testId={`micro-app-conversation-empty-${variant}-illustration`}
 		/>
 	)
 }

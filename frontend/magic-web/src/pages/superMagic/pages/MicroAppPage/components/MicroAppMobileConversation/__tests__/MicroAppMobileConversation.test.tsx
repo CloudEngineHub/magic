@@ -36,7 +36,9 @@ vi.mock("@/pages/superMagicMobile/components/icons/mobile-resource-type-icon", (
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList", () => ({
-	default: () => <div data-testid="mobile-message-list" />,
+	default: ({ fallbackRender }: { fallbackRender?: ReactNode }) => (
+		<div data-testid="mobile-message-list">{fallbackRender}</div>
+	),
 	MessageListProvider: ({ children }: { children: ReactNode }) => children,
 }))
 
@@ -163,5 +165,8 @@ describe("MicroApp mobile conversation controls", () => {
 			"default",
 		)
 		expect(screen.getByTestId("mobile-message-list")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("micro-app-mobile-conversation-empty-illustration"),
+		).toHaveAttribute("data-state", "conversation-empty")
 	})
 })

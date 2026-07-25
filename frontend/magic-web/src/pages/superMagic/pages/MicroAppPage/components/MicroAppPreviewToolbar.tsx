@@ -1,4 +1,4 @@
-import { FileCode2, Monitor, RefreshCw, Smartphone, Sparkles } from "lucide-react"
+import { Globe2, Monitor, RefreshCw, Smartphone, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
@@ -9,6 +9,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/shadcn-ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/lib/utils"
 
 import type { MicroAppEntryPreviewMode } from "./MicroAppEntryPreview"
@@ -97,7 +98,7 @@ export default function MicroAppPreviewToolbar({
 					data-testid="micro-app-preview-address"
 				>
 					<span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-						<FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+						<Globe2 className="size-4 shrink-0 text-muted-foreground" />
 						<SelectValue
 							className="min-w-0 flex-1 truncate text-left"
 							placeholder={t("microAppPage.previewToolbar.noHtml")}
@@ -114,17 +115,24 @@ export default function MicroAppPreviewToolbar({
 			</Select>
 
 			<div className="flex items-center gap-2 justify-self-end">
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					className="size-8 shrink-0"
-					aria-label={t("microAppPage.previewToolbar.refresh")}
-					onClick={onRefresh}
-					data-testid="micro-app-preview-refresh"
-				>
-					<RefreshCw size={16} />
-				</Button>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="size-8 shrink-0"
+							aria-label={t("microAppPage.previewToolbar.refresh")}
+							onClick={onRefresh}
+							data-testid="micro-app-preview-refresh"
+						>
+							<RefreshCw size={16} />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{t("microAppPage.previewToolbar.refresh")}
+					</TooltipContent>
+				</Tooltip>
 
 				<Button
 					type="button"

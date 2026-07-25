@@ -237,18 +237,26 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 			className={cn("flex h-full min-h-0 flex-col", className)}
 			data-testid="long-memory-sider-panel"
 		>
-			<div className="flex h-8 shrink-0 items-center justify-between px-2">
-				<SmoothTabs
-					tabs={tabs}
-					value={activeTab}
-					onChange={(value) => setActiveTab(value as MemoryTypeTab)}
-					variant="background"
-					className="h-7 bg-muted p-[3px]"
-					buttonClassName="h-[22px] px-2 py-0 text-xs"
-					indicatorClassName="inset-y-[3px] h-[22px]"
-					showTooltip={false}
-				/>
-				<div className="flex items-center gap-0.5">
+			<div
+				className="flex h-8 shrink-0 items-center justify-between px-2"
+				data-slot="project-panel-header"
+			>
+				<span className="hidden" data-slot="project-panel-title">
+					{t("longMemory")}
+				</span>
+				<div data-slot="project-panel-tabs">
+					<SmoothTabs
+						tabs={tabs}
+						value={activeTab}
+						onChange={(value) => setActiveTab(value as MemoryTypeTab)}
+						variant="background"
+						className="h-7 bg-muted p-[3px]"
+						buttonClassName="h-[22px] px-2 py-0 text-xs"
+						indicatorClassName="inset-y-[3px] h-[22px]"
+						showTooltip={false}
+					/>
+				</div>
+				<div className="flex items-center gap-0.5" data-slot="project-panel-actions">
 					<Button
 						type="button"
 						variant="ghost"
@@ -275,7 +283,7 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 			</div>
 
 			{isSearchVisible && (
-				<div className="shrink-0 p-2">
+				<div className="shrink-0 p-2" data-slot="project-panel-toolbar">
 					<div className="relative">
 						<Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
@@ -293,6 +301,7 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 			<div
 				className="scrollbar-y-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2"
 				data-testid="long-memory-sider-list"
+				data-slot="project-panel-content"
 			>
 				{isLoading ? (
 					<div
@@ -305,6 +314,7 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 					<div
 						className="flex h-full min-h-24 items-center justify-center text-center text-sm text-muted-foreground"
 						data-testid="long-memory-sider-empty"
+						data-slot="project-panel-empty"
 					>
 						{emptyText}
 					</div>

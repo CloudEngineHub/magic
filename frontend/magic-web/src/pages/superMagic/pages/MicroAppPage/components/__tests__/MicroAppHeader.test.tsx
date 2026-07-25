@@ -46,6 +46,14 @@ describe("MicroAppHeader", () => {
 		expect(onPublish).toHaveBeenCalledTimes(1)
 	})
 
+	it("shows published status when the micro app is already published", () => {
+		renderHeader({ hasEntries: true, isPublished: true })
+
+		expect(screen.getByTestId("micro-app-publish-button")).toHaveTextContent(
+			"microAppPage.publish.published",
+		)
+	})
+
 	it("hides collaborator management when the project is not manageable", () => {
 		renderHeader({
 			canManageCollaborators: false,
@@ -64,18 +72,18 @@ describe("MicroAppHeader", () => {
 		expect(screen.getByTestId("micro-app-manage-collaborators")).toBeInTheDocument()
 	})
 
-	it("renders the rename entry for editable projects", () => {
-		const onRename = vi.fn()
-		renderHeader({ canRename: true, onRename })
+	it("renders the details editor entry for editable projects", () => {
+		const onEdit = vi.fn()
+		renderHeader({ canEdit: true, onEdit })
 
-		fireEvent.click(screen.getByTestId("micro-app-rename-button"))
+		fireEvent.click(screen.getByTestId("micro-app-edit-button"))
 
-		expect(onRename).toHaveBeenCalledOnce()
+		expect(onEdit).toHaveBeenCalledOnce()
 	})
 
-	it("does not render the rename entry for read-only projects", () => {
-		renderHeader({ canRename: false, onRename: vi.fn() })
+	it("does not render the details editor entry for read-only projects", () => {
+		renderHeader({ canEdit: false, onEdit: vi.fn() })
 
-		expect(screen.queryByTestId("micro-app-rename-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-edit-button")).not.toBeInTheDocument()
 	})
 })

@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { Loader2 } from "lucide-react"
 import { useMemoizedFn } from "ahooks"
 
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
@@ -21,6 +20,7 @@ import { cn } from "@/lib/utils"
 import MicroAppConversationFloatingButton from "./components/MicroAppMobileConversation/MicroAppConversationFloatingButton"
 import MicroAppMobileHeader from "./components/MicroAppMobileHeader"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
+import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
 import { AppStoreProvider } from "./context"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
@@ -66,7 +66,17 @@ function MobilePanelTab({
 	)
 }
 
-function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectId: string }) {
+function MicroAppPageMobileInner({
+	appId,
+	projectId,
+	isPublished,
+	onPublishStatusChange,
+}: {
+	appId: string
+	projectId: string
+	isPublished: boolean
+	onPublishStatusChange: (published: boolean) => void
+}) {
 	const { t } = useTranslation("super")
 	const [activePanel, setActivePanel] = useState<MobileMicroAppPanel>("preview")
 	const [conversationOpen, setConversationOpen] = useState(false)
@@ -81,7 +91,7 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 		selectedTopic,
 		hasRunningTopic,
 		isReadOnly,
-		canRename,
+		canEdit,
 		attachments,
 		attachmentList,
 		defaultEntryFile,
@@ -91,16 +101,18 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 		handleToggleDatabasePanel,
 		publishDialogOpen,
 		setPublishDialogOpen,
-		renameDialogOpen,
-		setRenameDialogOpen,
-		renameSubmitting,
+		editDialogOpen,
+		setEditDialogOpen,
+		editSubmitting,
 		isDatabasePanelOpen,
 		setIsDatabasePanelOpen,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
-		handleRenameProject,
+		captureCoverReady,
+		handleCaptureCover,
+		handleEditMicroApp,
 	} = controller
 
 	const setPreviewDetail = useMemoizedFn((detail: PreviewDetail | null) => {
@@ -138,11 +150,7 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 	}, [projectId])
 
 	if (store.initLoading) {
-		return (
-			<div className="flex h-full w-full items-center justify-center bg-mobile-background">
-				<Loader2 className="size-8 animate-spin text-muted-foreground" />
-			</div>
-		)
+		return <MicroAppPageLoadingState mobile testId="micro-app-mobile-project-loading" />
 	}
 
 	if (store.initError) {
@@ -169,12 +177,13 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 				<MicroAppMobileHeader
 					selectedProject={selectedProject}
 					hasEntries={Boolean(defaultEntryFile)}
+					isPublished={isPublished}
 					isDatabasePanelOpen={isDatabasePanelOpen}
 					onBack={handleBackToMicroApps}
 					onToggleDatabasePanel={handleToggleDatabasePanel}
 					onPublish={handleOpenPublishDialog}
-					canRename={canRename}
-					onRename={() => setRenameDialogOpen(true)}
+					canEdit={canEdit}
+					onEdit={() => setEditDialogOpen(true)}
 					canManageCollaborators={canManageCollaborators}
 					onManageCollaborators={handleManageCollaborators}
 				/>
@@ -239,11 +248,13 @@ function MicroAppPageMobileInner({ appId, projectId }: { appId: string; projectI
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
+				onPublishStatusChange={onPublishStatusChange}
 				onProjectNameChange={handleProjectNameChange}
-				renameDialogOpen={renameDialogOpen}
-				renameSubmitting={renameSubmitting}
-				onRenameDialogOpenChange={setRenameDialogOpen}
-				onRenameProject={handleRenameProject}
+				editDialogOpen={editDialogOpen}
+				editSubmitting={editSubmitting}
+				onEditDialogOpenChange={setEditDialogOpen}
+				onEditMicroApp={handleEditMicroApp}
+				onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
 				collaboratorPanel={CollaboratorUpdatePanel}
 			/>
 			{isDatabasePanelOpen ? (
@@ -297,7 +308,8 @@ export default function MicroAppPageMobile() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
-	const { projectId, loading, error } = useMicroAppProjectResolver(appId)
+	const { projectId, isPublished, setIsPublished, loading, error } =
+		useMicroAppProjectResolver(appId)
 
 	useEffect(() => {
 		if (!appId) {
@@ -306,11 +318,7 @@ export default function MicroAppPageMobile() {
 	}, [appId, navigate])
 
 	if (!appId || loading) {
-		return (
-			<div className="flex h-full w-full items-center justify-center bg-mobile-background">
-				<Loader2 className="size-8 animate-spin text-muted-foreground" />
-			</div>
-		)
+		return <MicroAppPageLoadingState mobile testId="micro-app-mobile-resolver-loading" />
 	}
 
 	if (error || !projectId) {
@@ -332,7 +340,12 @@ export default function MicroAppPageMobile() {
 
 	return (
 		<AppStoreProvider>
-			<MicroAppPageMobileInnerObserver appId={appId} projectId={projectId} />
+			<MicroAppPageMobileInnerObserver
+				appId={appId}
+				projectId={projectId}
+				isPublished={isPublished}
+				onPublishStatusChange={setIsPublished}
+			/>
 		</AppStoreProvider>
 	)
 }

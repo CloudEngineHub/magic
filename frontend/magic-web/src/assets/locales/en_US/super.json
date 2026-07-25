@@ -3063,7 +3063,14 @@
 		"updateSuccess": "Queue message updated successfully"
 	},
 	"microAppPage": {
+		"conversation": {
+			"emptyDescription": "Describe it and I’ll update this micro app.",
+			"emptyTitle": "What would you like to change?"
+		},
 		"databasePanel": {
+			"accessPermissions": "Access permissions",
+			"backToData": "Back to data",
+			"collapseTableList": "Collapse table list",
 			"columnKey": "Column key",
 			"columnName": "Column name",
 			"columnPermission": "Column permissions",
@@ -3076,8 +3083,11 @@
 				"rowPermission": "Set row permissions",
 				"tablePermission": "Set table permissions"
 			},
+			"dataSettings": "Data settings",
 			"dataTab": "Data",
 			"dataType": "Type",
+			"description": "View and manage the data created while this micro app runs, just like a spreadsheet.",
+			"dismissIntro": "Dismiss data guide",
 			"dynamicAction": {
 				"rowDelete": "Delete rows",
 				"rowDeleteDescription": "Controls which rows a user may delete",
@@ -3108,7 +3118,7 @@
 				"private_user": "Creator only",
 				"public": "All authorized users"
 			},
-			"dynamicSystemFields": "{{total}} system fields are maintained by MagicBase and are not configurable here.",
+			"dynamicSystemFields": "{{total}} system fields are maintained automatically and are not configurable here.",
 			"dynamicTableSection": "Table permissions",
 			"dynamicTitle": "Dynamic permission configuration",
 			"editorTarget": "Targets: {{total}}",
@@ -3117,10 +3127,16 @@
 				"row": "Set row permissions",
 				"table": "Set table permissions"
 			},
+			"expandTableList": "Expand table list",
+			"fieldSettings": "Field settings",
+			"intro": "Each data table stores one type of data, and each row is one record.",
+			"loadProgress": "{{loaded}} / {{total}} records loaded. Scroll down for more.",
 			"loadRowsFailed": "Failed to load rows",
 			"loadTableFailed": "Failed to load table schema",
 			"loadTablesFailed": "Failed to load tables",
+			"loadedAll": "All {{total}} records loaded",
 			"loading": "Loading",
+			"loadingMore": "Loading more data",
 			"loadingTable": "Loading table",
 			"next": "Next",
 			"no": "No",
@@ -3169,23 +3185,23 @@
 			},
 			"permissionUnknownDepartment": "Unknown department",
 			"permissionUnknownUser": "Unknown user",
-			"permissionsTab": "Permissions",
+			"permissionsTab": "Access permissions",
 			"previous": "Previous",
 			"refresh": "Refresh",
 			"required": "Required",
 			"retry": "Retry",
-			"rowCreate": "New row",
+			"rowCreate": "Add data",
 			"rowCreateFailed": "Failed to create row",
 			"rowCreateSuccess": "Row created",
-			"rowCreateTitle": "New row",
-			"rowDelete": "Delete rows",
+			"rowCreateTitle": "Add data",
+			"rowDelete": "Delete",
 			"rowDeleteConfirm": "Delete",
 			"rowDeleteDescription": "Delete the selected {{total}} rows. This cannot be restored from this panel.",
 			"rowDeleteFailed": "Failed to delete rows",
 			"rowDeleteSuccess": "Deleted {{total}} rows",
 			"rowDeleteTitle": "Delete selected rows",
-			"rowEdit": "Edit row",
-			"rowEditTitle": "Edit row",
+			"rowEdit": "Edit",
+			"rowEditTitle": "Edit data",
 			"rowFieldRequired": "{{field}} is required",
 			"rowJsonInvalid": "{{field}} is not valid JSON",
 			"rowNoEditableColumns": "This table has no editable dynamic columns",
@@ -3197,12 +3213,13 @@
 			"searchTables": "Search tables",
 			"selectCurrentPage": "Select current page",
 			"selectRow": "Select row",
-			"selectedRows": "{{total}} rows selected",
+			"selectedRows": "{{total}} selected",
+			"showSystemFields": "Show system fields",
 			"source": "Source",
 			"staticPermissions": "Static grants",
 			"staticPermissionsHint": "Add permissions for selected users or departments",
 			"status": "Status",
-			"structureTab": "Structure",
+			"structureTab": "Field settings",
 			"subjectAnonymous": "Anonymous visitor",
 			"subjectType": {
 				"anonymous": "Anonymous",
@@ -3211,10 +3228,36 @@
 				"user": "User"
 			},
 			"systemField": "System field",
+			"tableCount": "{{total}} tables",
+			"tableListTitle": "Data tables",
 			"tablePermission": "Table permissions",
-			"title": "Database",
-			"totalRows": "{{total}} rows",
+			"title": "App data",
+			"totalRows": "{{total}} records",
 			"yes": "Yes"
+		},
+		"edit": {
+			"button": "Edit micro app details",
+			"captureCover": "Generate page cover",
+			"captureFailed": "Failed to capture the cover. Please retry.",
+			"captureSuccess": "Cover generated from the micro app home page",
+			"capturing": "Capturing",
+			"clearCover": "Remove cover",
+			"coverDescription": "Upload an image or generate a cover from the micro app home page. A 16:10 landscape image works best.",
+			"coverEmpty": "No cover set",
+			"coverInvalidType": "Select an image file",
+			"coverLabel": "Micro app cover",
+			"coverPreviewAlt": "Micro app cover preview",
+			"coverTooLarge": "The cover image cannot exceed 10 MB",
+			"coverUploadFailed": "Failed to upload the cover. Please retry.",
+			"description": "Change the name and cover shown in the micro app list and share page.",
+			"failed": "Failed to save micro app details. Please retry.",
+			"loadFailed": "Failed to load micro app details. Please retry.",
+			"nameLabel": "Micro app name",
+			"namePlaceholder": "Enter a micro app name",
+			"success": "Micro app details updated",
+			"title": "Edit micro app details",
+			"uploadCover": "Upload image",
+			"uploading": "Uploading"
 		},
 		"errors": {
 			"loadFailed": "Unable to load this micro app. Please try again later."
@@ -3239,9 +3282,11 @@
 			"title": "Common issues",
 			"trigger": "Common issues"
 		},
+		"loading": {
+			"description": "Loading the page and project data",
+			"title": "Opening micro app"
+		},
 		"mobileConversation": {
-			"emptyDescription": "Enter a message below to continue improving this micro app.",
-			"emptyTitle": "Start a conversation",
 			"noTopics": "There are no topics available in this project.",
 			"open": "Open conversation",
 			"switchTopic": "Tap to switch topics",
@@ -3260,9 +3305,12 @@
 		},
 		"navigation": {
 			"ariaLabel": "Micro app editor",
-			"database": "Database",
+			"database": "Data",
 			"files": "Files",
-			"preview": "Preview"
+			"longMemory": "Long-term memory",
+			"preview": "Preview",
+			"scheduledTasks": "Scheduled tasks",
+			"shareManagement": "Share management"
 		},
 		"preview": {
 			"buildingDescription": "The preview will appear here as soon as the page is ready.",
@@ -3327,15 +3375,6 @@
 			"unpublishFailed": "Failed to unpublish. Please retry.",
 			"unpublishSuccess": "Micro app unpublished",
 			"update": "Save settings"
-		},
-		"rename": {
-			"button": "Rename micro app",
-			"description": "Change the project name of this micro app",
-			"failed": "Failed to rename. Please retry.",
-			"nameLabel": "Micro app name",
-			"placeholder": "Enter a micro app name",
-			"success": "Micro app name updated",
-			"title": "Rename micro app"
 		}
 	},
 	"microAppShare": {

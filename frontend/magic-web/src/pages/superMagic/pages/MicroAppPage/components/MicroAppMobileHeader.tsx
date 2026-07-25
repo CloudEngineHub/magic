@@ -7,12 +7,13 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 interface MicroAppMobileHeaderProps {
 	selectedProject: ProjectListItem | null
 	hasEntries: boolean
+	isPublished?: boolean
 	isDatabasePanelOpen: boolean
 	onBack: () => void
 	onToggleDatabasePanel: () => void
 	onPublish: () => void
-	canRename?: boolean
-	onRename?: () => void
+	canEdit?: boolean
+	onEdit?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
 }
@@ -21,17 +22,21 @@ interface MicroAppMobileHeaderProps {
 export default function MicroAppMobileHeader({
 	selectedProject,
 	hasEntries,
+	isPublished = false,
 	isDatabasePanelOpen,
 	onBack,
 	onToggleDatabasePanel,
 	onPublish,
-	canRename,
-	onRename,
+	canEdit,
+	onEdit,
 	canManageCollaborators,
 	onManageCollaborators,
 }: MicroAppMobileHeaderProps) {
 	const { t } = useTranslation("super")
 	const projectName = selectedProject?.project_name || t("project.unnamedProject")
+	const publishButtonLabel = t(
+		isPublished ? "microAppPage.publish.published" : "microAppPage.publish.button",
+	)
 
 	return (
 		<header
@@ -50,14 +55,14 @@ export default function MicroAppMobileHeader({
 			</Button>
 
 			<div className="min-w-0 flex-1">
-				{canRename && onRename ? (
+				{canEdit && onEdit ? (
 					<Button
 						type="button"
 						variant="ghost"
 						size="sm"
 						className="h-9 max-w-full justify-start gap-1.5 px-1"
-						onClick={onRename}
-						data-testid="micro-app-mobile-rename-button"
+						onClick={onEdit}
+						data-testid="micro-app-mobile-edit-button"
 					>
 						<span className="truncate text-base font-medium">{projectName}</span>
 						<PenLine className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -108,7 +113,7 @@ export default function MicroAppMobileHeader({
 						size="icon"
 						className="size-9 text-primary"
 						onClick={onPublish}
-						aria-label={t("microAppPage.publish.button")}
+						aria-label={publishButtonLabel}
 						data-testid="micro-app-mobile-publish-button"
 					>
 						<Rocket className="size-4" aria-hidden />

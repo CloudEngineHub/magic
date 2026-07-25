@@ -83,9 +83,38 @@ describe("MicroAppDatabasePanel utils", () => {
 		})
 	})
 
-	it("adds row-only keys after schema columns", () => {
+	it("builds exact-match filters for multiple columns", () => {
+		expect(
+			buildMagicBaseRowsRequest({
+				table,
+				sort: null,
+				page: 1,
+				filters: [
+					{ field: "brand", value: "Apple" },
+					{ field: "price", value: 5999 },
+				],
+			}),
+		).toEqual(
+			expect.objectContaining({
+				filter: {
+					brand: { eq: "Apple" },
+					price: { eq: 5999 },
+				},
+			}),
+		)
+	})
+
+	it("hides system fields from the default data grid without changing the query fields", () => {
 		expect(
 			buildGridColumns(table, [{ id: "1", brand: "Apple", extra: "x" }]).map((c) => c.key),
+		).toEqual(["brand", "extra"])
+	})
+
+	it("adds system fields when the user chooses to show them", () => {
+		expect(
+			buildGridColumns(table, [{ id: "1", brand: "Apple", extra: "x" }], true).map(
+				(column) => column.key,
+			),
 		).toEqual([
 			"id",
 			"brand",

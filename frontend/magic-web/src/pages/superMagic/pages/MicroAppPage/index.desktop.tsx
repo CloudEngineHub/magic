@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { Loader2, PanelRightOpen } from "lucide-react"
+import { PanelRightOpen } from "lucide-react"
 import { useLocalStorageState, useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
@@ -25,47 +25,29 @@ import AppConversationPanel from "./components/AppConversationPanel"
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
+import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
 import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
 import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
+import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
 import { AppStoreProvider } from "./context"
+import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
-import { collectHtmlFiles, getAttachmentId } from "./utils/microAppFiles"
+import * as layout from "./layoutConstants"
+import { collectHtmlFiles, getAttachmentId, getMicroAppPreviewPath } from "./utils/microAppFiles"
 
-const MicroAppDatabasePanel = lazy(() => import("./components/MicroAppDatabasePanel"))
-
-const SIDEBAR_DEFAULT_PX = 280
-const SIDEBAR_MIN_PX = 220
-const SIDEBAR_MAX_PX = 420
-const MESSAGE_PANEL_DEFAULT_PX = 360
-const MESSAGE_PANEL_MIN_PX = 320
-const MESSAGE_PANEL_MAX_WIDTH_RATIO = 0.5
-const COLLAPSED_RAIL_WIDTH_PX = 40
-
-const MICRO_APP_SIDEBAR_STORAGE_KEY = "MAGIC:micro-app-page-sidebar-width"
-const MICRO_APP_MESSAGE_PANEL_STORAGE_KEY = "MAGIC:micro-app-page-message-panel-width"
-const MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY = "MAGIC:micro-app-page-message-panel-collapsed"
-
-function getPreviewPath(
-	entryFile: {
-		file_name?: string
-		filename?: string
-		display_filename?: string
-		relative_file_path?: string
-	} | null,
-) {
-	if (!entryFile) return "/"
-
-	const fileName =
-		entryFile.display_filename || entryFile.file_name || entryFile.filename || "index.html"
-	const relativePath = entryFile.relative_file_path || fileName
-	const normalizedPath = relativePath.replace(/^\/+/, "")
-
-	return /^index\.html?$/i.test(normalizedPath) ? "/" : `/${normalizedPath}`
-}
-
-function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: string }) {
+function MicroAppPageInner({
+	appId,
+	projectId,
+	isPublished,
+	onPublishStatusChange,
+}: {
+	appId: string
+	projectId: string
+	isPublished: boolean
+	onPublishStatusChange: (published: boolean) => void
+}) {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
@@ -77,8 +59,8 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 	const workspacePanelsSize = useSize(workspacePanelsRef)
 	const workspaceWidthPx = workspacePanelsSize?.width || window.innerWidth
 	const messagePanelMaxWidthPx = Math.max(
-		MESSAGE_PANEL_MIN_PX,
-		Math.floor(workspaceWidthPx * MESSAGE_PANEL_MAX_WIDTH_RATIO),
+		layout.MESSAGE_PANEL_MIN_PX,
+		Math.floor(workspaceWidthPx * layout.MESSAGE_PANEL_MAX_WIDTH_RATIO),
 	)
 	const controller = useMicroAppPageController(appId, projectId)
 	const {
@@ -88,7 +70,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		selectedTopic,
 		hasRunningTopic,
 		isReadOnly,
-		canRename,
+		canEdit,
 		attachments,
 		attachmentList,
 		activeFileId,
@@ -103,14 +85,16 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		handleFileTabsCacheLoaded,
 		publishDialogOpen,
 		setPublishDialogOpen,
-		renameDialogOpen,
-		setRenameDialogOpen,
-		renameSubmitting,
+		editDialogOpen,
+		setEditDialogOpen,
+		editSubmitting,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
-		handleRenameProject,
+		captureCoverReady,
+		handleCaptureCover,
+		handleEditMicroApp,
 	} = controller
 	const [previewEntryFile, setPreviewEntryFile] = useState(defaultEntryFile)
 	const previewHtmlFiles = useMemo(() => collectHtmlFiles(attachmentList), [attachmentList])
@@ -118,7 +102,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		() =>
 			previewHtmlFiles.map((file) => ({
 				id: getAttachmentId(file),
-				path: getPreviewPath(file),
+				path: getMicroAppPreviewPath(file),
 			})),
 		[previewHtmlFiles],
 	)
@@ -136,13 +120,17 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		})
 
 	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useLocalStorageState<boolean>(
-		MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY,
+		layout.MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY,
 		{
 			defaultValue: false,
 		},
 	)
+	// 数据表格需要更宽的工作区；只恢复系统自动收起的状态，不覆盖用户手动操作。
+	const messagePanelCollapsedBeforeDatabaseRef = useRef(false)
+	const databaseAutoCollapsedRef = useRef(false)
 
 	const toggleMessagePanelCollapse = useMemoizedFn(() => {
+		if (activeView === "database") databaseAutoCollapsedRef.current = false
 		setIsMessagePanelCollapsed((previous) => !previous)
 	})
 	const handleToggleMessagePanelCollapse = useMemoizedFn(() => {
@@ -150,6 +138,22 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		toggleMessagePanelCollapse()
 	})
 	const handleWorkspaceViewChange = useMemoizedFn((nextView: MicroAppWorkspaceView) => {
+		if (activeView === "database" && nextView !== "database") {
+			if (databaseAutoCollapsedRef.current) {
+				setIsMessagePanelCollapsed(messagePanelCollapsedBeforeDatabaseRef.current)
+			}
+			databaseAutoCollapsedRef.current = false
+		}
+
+		if (activeView !== "database" && nextView === "database") {
+			messagePanelCollapsedBeforeDatabaseRef.current = Boolean(isMessagePanelCollapsed)
+			if (!isMessagePanelCollapsed) {
+				closeTopicHistoryPanel()
+				setIsMessagePanelCollapsed(true)
+				databaseAutoCollapsedRef.current = true
+			}
+		}
+
 		setActiveView(nextView)
 		if (nextView === "preview" && defaultEntryFile) {
 			setPreviewEntryFile(defaultEntryFile)
@@ -171,14 +175,31 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 	const handleRegisterAIEdit = useMemoizedFn((handler: (() => void) | null) => {
 		aiEditHandlerRef.current = handler
 	})
+	const handleOpenEditDialog = useMemoizedFn(() => {
+		setEditDialogOpen(true)
+	})
+	const showFilesView = useMemoizedFn(() => {
+		setActiveView("files")
+	})
+
+	useMicroAppMessageFileOpen({
+		attachmentList,
+		detailRef,
+		isFilesViewActive: activeView === "files",
+		showFilesView,
+	})
 
 	useEffect(() => {
+		if (databaseAutoCollapsedRef.current) {
+			setIsMessagePanelCollapsed(messagePanelCollapsedBeforeDatabaseRef.current)
+			databaseAutoCollapsedRef.current = false
+		}
 		setActiveView("preview")
 		setPreviewEntryFile(null)
 		setPreviewMode("desktop")
 		setPreviewRefreshKey(0)
 		setIsAIEditActive(false)
-	}, [projectId])
+	}, [projectId, setIsMessagePanelCollapsed])
 
 	useEffect(() => {
 		if (defaultEntryFile && !previewEntryFile?.file_id) {
@@ -197,10 +218,10 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		isDragging: isDraggingSidebar,
 		handleResizeStart: onSidebarResizeStart,
 	} = useResizablePanel({
-		minWidth: SIDEBAR_MIN_PX,
-		maxWidth: SIDEBAR_MAX_PX,
-		defaultWidth: SIDEBAR_DEFAULT_PX,
-		storageKey: MICRO_APP_SIDEBAR_STORAGE_KEY,
+		minWidth: layout.SIDEBAR_MIN_PX,
+		maxWidth: layout.SIDEBAR_MAX_PX,
+		defaultWidth: layout.SIDEBAR_DEFAULT_PX,
+		storageKey: layout.MICRO_APP_SIDEBAR_STORAGE_KEY,
 		direction: "left",
 	})
 	const {
@@ -208,19 +229,15 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 		isDragging: isDraggingMessagePanel,
 		handleResizeStart: onMessagePanelResizeStart,
 	} = useResizablePanel({
-		minWidth: MESSAGE_PANEL_MIN_PX,
+		minWidth: layout.MESSAGE_PANEL_MIN_PX,
 		maxWidth: messagePanelMaxWidthPx,
-		defaultWidth: MESSAGE_PANEL_DEFAULT_PX,
-		storageKey: MICRO_APP_MESSAGE_PANEL_STORAGE_KEY,
+		defaultWidth: layout.MESSAGE_PANEL_DEFAULT_PX,
+		storageKey: layout.MICRO_APP_MESSAGE_PANEL_STORAGE_KEY,
 		direction: "right",
 	})
 
 	if (store.initLoading) {
-		return (
-			<div className="flex h-full w-full items-center justify-center">
-				<Loader2 className="size-8 animate-spin text-muted-foreground" />
-			</div>
-		)
+		return <MicroAppPageLoadingState testId="micro-app-project-loading" />
 	}
 
 	if (store.initError) {
@@ -247,10 +264,11 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 				<MicroAppHeader
 					selectedProject={selectedProject}
 					hasEntries={Boolean(defaultEntryFile)}
+					isPublished={isPublished}
 					onBack={handleBackToMicroApps}
 					onPublish={handleOpenPublishDialog}
-					canRename={canRename}
-					onRename={() => setRenameDialogOpen(true)}
+					canEdit={canEdit}
+					onEdit={handleOpenEditDialog}
 					canManageCollaborators={canManageCollaborators}
 					onManageCollaborators={handleManageCollaborators}
 				/>
@@ -259,6 +277,8 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 					<MicroAppWorkspaceNav
 						activeView={activeView}
 						databaseDisabled={!selectedProject?.id}
+						projectPanelDisabled={!selectedProject?.id}
+						hideScheduledTasks={isReadOnly}
 						onViewChange={handleWorkspaceViewChange}
 					/>
 
@@ -267,9 +287,11 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 						<div
 							className={cn(
 								"absolute inset-0 min-w-0 overflow-hidden",
-								activeView === "database" ? "hidden" : "flex",
+								activeView === "preview" || activeView === "files"
+									? "flex"
+									: "hidden",
 							)}
-							aria-hidden={activeView === "database"}
+							aria-hidden={activeView !== "preview" && activeView !== "files"}
 							data-testid="micro-app-preview-workspace"
 						>
 							{activeView === "files" ? (
@@ -353,23 +375,13 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 							</div>
 						</div>
 
-						<div
-							className={cn(
-								"absolute inset-0 overflow-hidden",
-								activeView !== "database" && "hidden",
-							)}
-							aria-hidden={activeView !== "database"}
-							data-testid="micro-app-database-workspace"
-						>
-							<Suspense fallback={null}>
-								<MicroAppDatabasePanel
-									active={activeView === "database"}
-									projectId={selectedProject?.id}
-									projectName={selectedProject?.project_name}
-									projectRole={selectedProject?.user_role}
-								/>
-							</Suspense>
-						</div>
+						<MicroAppProjectPanels
+							activeView={activeView}
+							projectId={selectedProject?.id}
+							projectRole={selectedProject?.user_role}
+							workspaceId={selectedProject?.workspace_id}
+							topicId={selectedTopic?.id}
+						/>
 					</main>
 
 					{!isMessagePanelCollapsed ? (
@@ -422,7 +434,7 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 					{isMessagePanelCollapsed ? (
 						<aside
 							className="flex h-full shrink-0 justify-center border-l border-border bg-background py-2"
-							style={{ width: COLLAPSED_RAIL_WIDTH_PX }}
+							style={{ width: layout.COLLAPSED_RAIL_WIDTH_PX }}
 							data-testid="micro-app-conversation-rail"
 						>
 							<MicroAppPanelToggleButton
@@ -442,11 +454,13 @@ function MicroAppPageInner({ appId, projectId }: { appId: string; projectId: str
 				projectName={selectedProject?.project_name}
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
+				onPublishStatusChange={onPublishStatusChange}
 				onProjectNameChange={handleProjectNameChange}
-				renameDialogOpen={renameDialogOpen}
-				renameSubmitting={renameSubmitting}
-				onRenameDialogOpenChange={setRenameDialogOpen}
-				onRenameProject={handleRenameProject}
+				editDialogOpen={editDialogOpen}
+				editSubmitting={editSubmitting}
+				onEditDialogOpenChange={setEditDialogOpen}
+				onEditMicroApp={handleEditMicroApp}
+				onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
 				collaboratorPanel={CollaboratorUpdatePanel}
 			/>
 		</FileActionVisibilityProvider>
@@ -459,7 +473,8 @@ function MicroAppPageDesktop() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
-	const { projectId, loading, error } = useMicroAppProjectResolver(appId)
+	const { projectId, isPublished, setIsPublished, loading, error } =
+		useMicroAppProjectResolver(appId)
 
 	useEffect(() => {
 		if (!appId) {
@@ -468,11 +483,7 @@ function MicroAppPageDesktop() {
 	}, [appId, navigate])
 
 	if (!appId || loading) {
-		return (
-			<div className="flex h-full w-full items-center justify-center">
-				<Loader2 className="size-8 animate-spin text-muted-foreground" />
-			</div>
-		)
+		return <MicroAppPageLoadingState testId="micro-app-resolver-loading" />
 	}
 
 	if (error || !projectId) {
@@ -494,7 +505,12 @@ function MicroAppPageDesktop() {
 
 	return (
 		<AppStoreProvider>
-			<MicroAppPageInnerObserver appId={appId} projectId={projectId} />
+			<MicroAppPageInnerObserver
+				appId={appId}
+				projectId={projectId}
+				isPublished={isPublished}
+				onPublishStatusChange={setIsPublished}
+			/>
 		</AppStoreProvider>
 	)
 }

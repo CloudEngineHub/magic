@@ -10,6 +10,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
+import { MicroAppConversationEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useInterruptAndUndoMessage } from "@/pages/superMagic/hooks/useInterruptAndUndoMessage"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
@@ -41,16 +42,18 @@ interface MicroAppMobileConversationProps {
 function MobileConversationEmpty() {
 	const { t } = useTranslation("super")
 	return (
-		<div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-			<div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-				<MessageCircle className="size-6" aria-hidden />
-			</div>
+		<div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+			<MicroAppConversationEmptyIllustration
+				size="sm"
+				className="w-[136px]"
+				testId="micro-app-mobile-conversation-empty-illustration"
+			/>
 			<div className="space-y-1">
 				<p className="text-base font-medium text-foreground">
-					{t("microAppPage.mobileConversation.emptyTitle")}
+					{t("microAppPage.conversation.emptyTitle")}
 				</p>
 				<p className="text-sm text-muted-foreground">
-					{t("microAppPage.mobileConversation.emptyDescription")}
+					{t("microAppPage.conversation.emptyDescription")}
 				</p>
 			</div>
 		</div>

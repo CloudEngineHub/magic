@@ -1,18 +1,21 @@
 import type { ReactNode } from "react"
+import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 
 import MicroAppPublishDialog from "./MicroAppPublishDialog"
-import MicroAppRenameDialog from "./MicroAppRenameDialog"
+import MicroAppEditDialog from "./MicroAppEditDialog"
 
 interface MicroAppPageOverlaysProps {
 	appId?: string
 	projectName?: string
 	publishDialogOpen: boolean
 	onPublishDialogOpenChange: (open: boolean) => void
+	onPublishStatusChange: (published: boolean) => void
 	onProjectNameChange: (projectName: string) => void
-	renameDialogOpen: boolean
-	renameSubmitting: boolean
-	onRenameDialogOpenChange: (open: boolean) => void
-	onRenameProject: (projectName: string) => Promise<boolean>
+	editDialogOpen: boolean
+	editSubmitting: boolean
+	onEditDialogOpenChange: (open: boolean) => void
+	onEditMicroApp: (changes: UpdateMicroAppBody) => Promise<boolean>
+	onCaptureCover?: () => Promise<Blob>
 	collaboratorPanel: ReactNode
 }
 
@@ -22,11 +25,13 @@ export default function MicroAppPageOverlays({
 	projectName,
 	publishDialogOpen,
 	onPublishDialogOpenChange,
+	onPublishStatusChange,
 	onProjectNameChange,
-	renameDialogOpen,
-	renameSubmitting,
-	onRenameDialogOpenChange,
-	onRenameProject,
+	editDialogOpen,
+	editSubmitting,
+	onEditDialogOpenChange,
+	onEditMicroApp,
+	onCaptureCover,
 	collaboratorPanel,
 }: MicroAppPageOverlaysProps) {
 	return (
@@ -36,14 +41,17 @@ export default function MicroAppPageOverlays({
 				appId={appId}
 				projectName={projectName}
 				onProjectNameChange={onProjectNameChange}
+				onPublishStatusChange={onPublishStatusChange}
 				onOpenChange={onPublishDialogOpenChange}
 			/>
-			<MicroAppRenameDialog
-				open={renameDialogOpen}
+			<MicroAppEditDialog
+				open={editDialogOpen}
+				appId={appId}
 				projectName={projectName}
-				isSubmitting={renameSubmitting}
-				onOpenChange={onRenameDialogOpenChange}
-				onConfirm={onRenameProject}
+				isSubmitting={editSubmitting}
+				onOpenChange={onEditDialogOpenChange}
+				onConfirm={onEditMicroApp}
+				onCaptureCover={onCaptureCover}
 			/>
 			{collaboratorPanel}
 		</>

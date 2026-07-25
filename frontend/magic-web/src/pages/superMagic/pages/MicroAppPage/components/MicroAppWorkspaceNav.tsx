@@ -1,21 +1,32 @@
-import { Database, File, Monitor } from "lucide-react"
+import { Brain, Database, File, Monitor, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import { cn } from "@/lib/utils"
 
-export type MicroAppWorkspaceView = "preview" | "files" | "database"
+export type MicroAppWorkspaceView =
+	| "preview"
+	| "files"
+	| "database"
+	| "scheduledTasks"
+	| "shareManagement"
+	| "longMemory"
 
 interface MicroAppWorkspaceNavProps {
 	activeView: MicroAppWorkspaceView
 	databaseDisabled?: boolean
+	projectPanelDisabled?: boolean
+	hideScheduledTasks?: boolean
 	onViewChange: (view: MicroAppWorkspaceView) => void
 }
 
 export default function MicroAppWorkspaceNav({
 	activeView,
 	databaseDisabled = false,
+	projectPanelDisabled = false,
+	hideScheduledTasks = false,
 	onViewChange,
 }: MicroAppWorkspaceNavProps) {
 	const { t } = useTranslation("super")
@@ -38,6 +49,31 @@ export default function MicroAppWorkspaceNav({
 			icon: Database,
 			testId: "micro-app-nav-database",
 			disabled: databaseDisabled,
+		},
+		...(!hideScheduledTasks
+			? [
+					{
+						view: "scheduledTasks" as const,
+						label: t("microAppPage.navigation.scheduledTasks"),
+						icon: Timer,
+						testId: "micro-app-nav-scheduled-tasks",
+						disabled: projectPanelDisabled,
+					},
+				]
+			: []),
+		{
+			view: "shareManagement" as const,
+			label: t("microAppPage.navigation.shareManagement"),
+			icon: IconShareCog,
+			testId: "micro-app-nav-share-management",
+			disabled: projectPanelDisabled,
+		},
+		{
+			view: "longMemory" as const,
+			label: t("microAppPage.navigation.longMemory"),
+			icon: Brain,
+			testId: "micro-app-nav-long-memory",
+			disabled: projectPanelDisabled,
 		},
 	]
 
@@ -66,7 +102,7 @@ export default function MicroAppWorkspaceNav({
 								onClick={() => onViewChange(view)}
 								data-testid={testId}
 							>
-								<Icon size={16} />
+								<Icon size={16} color="currentColor" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="right">{label}</TooltipContent>

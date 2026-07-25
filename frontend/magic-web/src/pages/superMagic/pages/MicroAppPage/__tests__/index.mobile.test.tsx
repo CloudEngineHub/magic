@@ -16,6 +16,10 @@ const resolverMocks = vi.hoisted(() => ({
 	},
 }))
 
+const controllerMocks = vi.hoisted(() => ({
+	initLoading: false,
+}))
+
 vi.mock("react-router", () => ({
 	useParams: () => ({ appId: "app-1" }),
 }))
@@ -61,7 +65,7 @@ vi.mock("../context", () => ({
 vi.mock("../hooks/useMicroAppPageController", () => ({
 	useMicroAppPageController: () => ({
 		store: {
-			initLoading: false,
+			initLoading: controllerMocks.initLoading,
 			initError: null,
 			mentionPanelStore: {},
 			projectFilesStore: {},
@@ -75,6 +79,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
 		hasRunningTopic: true,
 		isReadOnly: false,
+		canEdit: false,
 		attachments: [
 			{
 				file_id: "entry-1",
@@ -113,12 +118,18 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		handleFileTabsCacheLoaded: vi.fn(),
 		publishDialogOpen: false,
 		setPublishDialogOpen: vi.fn(),
+		editDialogOpen: false,
+		setEditDialogOpen: vi.fn(),
+		editSubmitting: false,
 		isDatabasePanelOpen: false,
 		setIsDatabasePanelOpen: vi.fn(),
 		CollaboratorUpdatePanel: null,
 		canManageCollaborators: false,
 		handleManageCollaborators: vi.fn(),
 		handleProjectNameChange: vi.fn(),
+		captureCoverReady: true,
+		handleCaptureCover: vi.fn(),
+		handleEditMicroApp: vi.fn(),
 	}),
 }))
 
@@ -184,6 +195,7 @@ describe("MicroAppPageMobile", () => {
 			loading: false,
 			error: null,
 		}
+		controllerMocks.initLoading = false
 		previewPopupMocks.open.mockClear()
 	})
 
@@ -198,6 +210,20 @@ describe("MicroAppPageMobile", () => {
 
 		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
 		expect(screen.queryByText("[object ArrayBuffer]")).not.toBeInTheDocument()
+	})
+
+	it("uses the loading illustration while resolving the project", () => {
+		resolverMocks.result = {
+			projectId: "",
+			loading: true,
+			error: null,
+		}
+
+		render(<MicroAppPageMobile />)
+
+		expect(
+			screen.getByTestId("micro-app-mobile-resolver-loading-illustration"),
+		).toHaveAttribute("data-state", "loading")
 	})
 
 	it("keeps preview and files at the top level and opens conversation from a floating button", async () => {

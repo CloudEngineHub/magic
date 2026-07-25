@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import type { ComponentProps } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import MicroAppPublishDialog, {
@@ -12,13 +13,12 @@ const mocks = vi.hoisted(() => ({
 	publishMicroAppProject: vi.fn(),
 	unpublishMicroAppProject: vi.fn(),
 	getFileUrl: vi.fn(),
-	addFiles: vi.fn(),
-	clearFiles: vi.fn(),
+	uploadAndGetFileUrl: vi.fn(),
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
 	writeText: vi.fn(),
 	confirmModal: vi.fn(),
-	useFileUploadOptions: undefined as Record<string, unknown> | undefined,
+	useUploadOptions: undefined as Record<string, unknown> | undefined,
 	t: (key: string, options?: Record<string, string>) =>
 		options?.time ? `${key}:${options.time}` : key,
 }))
@@ -36,12 +36,11 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: mocks.t }),
 }))
 
-vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => ({
-	useFileUpload: (options: Record<string, unknown>) => {
-		mocks.useFileUploadOptions = options
+vi.mock("@/hooks/useUploadFiles", () => ({
+	useUpload: (options: Record<string, unknown>) => {
+		mocks.useUploadOptions = options
 		return {
-			addFiles: mocks.addFiles,
-			clearFiles: mocks.clearFiles,
+			uploadAndGetFileUrl: mocks.uploadAndGetFileUrl,
 			uploading: false,
 		}
 	},
@@ -60,16 +59,26 @@ vi.mock("@/utils/clipboard-helpers", () => ({
 
 vi.mock("@/components/base/MagicModal", async () => {
 	const React = await import("react")
-	const MagicModal = ({ open, children, title }: any) =>
-		open
-			? React.createElement(
-					"div",
-					{ "data-testid": "mock-magic-modal" },
-					React.createElement("h2", null, title),
-					children,
-				)
-			: null
-	MagicModal.confirm = mocks.confirmModal
+	const MagicModal = Object.assign(
+		({
+			open,
+			children,
+			title,
+		}: {
+			open?: boolean
+			children?: React.ReactNode
+			title?: React.ReactNode
+		}) =>
+			open
+				? React.createElement(
+						"div",
+						{ "data-testid": "mock-magic-modal" },
+						React.createElement("h2", null, title),
+						children,
+					)
+				: null,
+		{ confirm: mocks.confirmModal },
+	)
 	return { default: MagicModal }
 })
 
@@ -94,7 +103,7 @@ vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
 	}
 })
 
-function renderDialog() {
+function renderDialog(props: Partial<ComponentProps<typeof MicroAppPublishDialog>> = {}) {
 	return render(
 		<MicroAppPublishDialog
 			open
@@ -102,6 +111,7 @@ function renderDialog() {
 			projectName="Demo App"
 			onProjectNameChange={vi.fn()}
 			onOpenChange={vi.fn()}
+			{...props}
 		/>,
 	)
 }
@@ -109,6 +119,7 @@ function renderDialog() {
 describe("MicroAppPublishDialog", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.useUploadOptions = undefined
 		mocks.getMicroAppProject.mockResolvedValue({
 			app_id: "app-1",
 			project_id: "project-1",
@@ -123,7 +134,17 @@ describe("MicroAppPublishDialog", () => {
 			publish_status: "published",
 			access_url: "https://example.com/micro-app/app-1",
 		})
-		mocks.getFileUrl.mockResolvedValue({ url: "https://cdn.example.com/cover.png" })
+		mocks.getFileUrl.mockResolvedValue({ url: "https://cdn.example.com/existing-cover.png" })
+		mocks.uploadAndGetFileUrl.mockResolvedValue({
+			fullfilled: [
+				{
+					value: {
+						path: "micro-app/covers/new.png",
+						url: "https://cdn.example.com/cover.png",
+					},
+				},
+			],
+		})
 		mocks.confirmModal.mockImplementation(({ onOk }: { onOk?: () => void }) => onOk?.())
 	})
 
@@ -170,8 +191,42 @@ describe("MicroAppPublishDialog", () => {
 		})
 	})
 
-	it("publishes with app_name instead of project_name", async () => {
+	it("limits the content height and scrolls overflowing settings", async () => {
 		renderDialog()
+
+		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
+		expect(scrollArea).toHaveClass("min-h-0", "flex-1", "overflow-y-auto")
+		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveClass("max-h-[80dvh]")
+	})
+
+	it("resolves and renders an existing cover from its file key", async () => {
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				cover_file_key: "micro-app/covers/existing.png",
+				share_type: ShareType.Public,
+				publish_status: "published",
+			},
+		})
+
+		renderDialog()
+
+		await waitFor(() => {
+			expect(mocks.getFileUrl).toHaveBeenCalledWith("micro-app/covers/existing.png")
+			expect(screen.getByTestId("micro-app-cover-preview")).toHaveAttribute(
+				"src",
+				"https://cdn.example.com/existing-cover.png",
+			)
+		})
+	})
+
+	it("publishes with app_name instead of project_name", async () => {
+		const onPublishStatusChange = vi.fn()
+		renderDialog({ onPublishStatusChange })
 		await screen.findByTestId("share-type-field")
 
 		fireEvent.click(screen.getByTestId("share-type-public"))
@@ -185,6 +240,7 @@ describe("MicroAppPublishDialog", () => {
 				app_name: "库存管理助手",
 				share_type: ShareType.Public,
 			})
+			expect(onPublishStatusChange).toHaveBeenCalledWith(true)
 		})
 	})
 
@@ -216,6 +272,30 @@ describe("MicroAppPublishDialog", () => {
 		})
 	})
 
+	it("reports unpublished state after unpublishing succeeds", async () => {
+		const onPublishStatusChange = vi.fn()
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				resource_id: "resource-1",
+				share_type: ShareType.Public,
+				publish_status: "published",
+			},
+		})
+
+		renderDialog({ onPublishStatusChange })
+		fireEvent.click(await screen.findByTestId("micro-app-unpublish-button"))
+
+		await waitFor(() => {
+			expect(mocks.unpublishMicroAppProject).toHaveBeenCalledWith("app-1")
+			expect(onPublishStatusChange).toHaveBeenCalledWith(false)
+		})
+	})
+
 	it("uploads an image cover and publishes its file key", async () => {
 		renderDialog()
 		await screen.findByTestId("share-type-field")
@@ -224,15 +304,8 @@ describe("MicroAppPublishDialog", () => {
 		fireEvent.change(screen.getByTestId("micro-app-cover-input"), {
 			target: { files: [file] },
 		})
-		const onFileCompleted = mocks.useFileUploadOptions?.onFileCompleted as
-			| ((fileId: string, result: { file_key: string }) => void)
-			| undefined
-		act(() => {
-			onFileCompleted?.("file-1", { file_key: "micro-app/covers/new.png" })
-		})
-		await waitFor(() =>
-			expect(mocks.getFileUrl).toHaveBeenCalledWith("micro-app/covers/new.png"),
-		)
+		await waitFor(() => expect(mocks.uploadAndGetFileUrl).toHaveBeenCalledOnce())
+		expect(mocks.useUploadOptions).toEqual({ storageType: "public", useSnowflakeId: true })
 
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 		await waitFor(() => {

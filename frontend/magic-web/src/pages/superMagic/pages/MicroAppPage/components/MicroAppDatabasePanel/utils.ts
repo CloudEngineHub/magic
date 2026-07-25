@@ -148,14 +148,22 @@ export function buildMagicBaseRowsRequest(params: {
 	}
 }
 
-export function buildGridColumns(table?: MagicBaseTable | null, rows: MagicBaseRow[] = []) {
+export function buildGridColumns(
+	table?: MagicBaseTable | null,
+	rows: MagicBaseRow[] = [],
+	showSystemFields = false,
+) {
 	const columns: MagicBaseGridColumn[] = [
-		{
-			key: MAGIC_BASE_ID_COLUMN.column_key,
-			name: MAGIC_BASE_ID_COLUMN.column_name || MAGIC_BASE_ID_COLUMN.column_key,
-			type: MAGIC_BASE_ID_COLUMN.data_type,
-			source: "system",
-		},
+		...(showSystemFields
+			? [
+					{
+						key: MAGIC_BASE_ID_COLUMN.column_key,
+						name: MAGIC_BASE_ID_COLUMN.column_name || MAGIC_BASE_ID_COLUMN.column_key,
+						type: MAGIC_BASE_ID_COLUMN.data_type,
+						source: "system" as const,
+					},
+				]
+			: []),
 		...getDisplaySchemaColumns(table).map((column) => ({
 			id: column.id,
 			key: column.column_key,
@@ -175,15 +183,17 @@ export function buildGridColumns(table?: MagicBaseTable | null, rows: MagicBaseR
 		})
 	})
 
-	MAGIC_BASE_TRAILING_SYSTEM_COLUMNS.forEach((column) => {
-		if (columns.some((item) => item.key === column.column_key)) return
-		columns.push({
-			key: column.column_key,
-			name: column.column_name || column.column_key,
-			type: column.data_type,
-			source: "system",
+	if (showSystemFields) {
+		MAGIC_BASE_TRAILING_SYSTEM_COLUMNS.forEach((column) => {
+			if (columns.some((item) => item.key === column.column_key)) return
+			columns.push({
+				key: column.column_key,
+				name: column.column_name || column.column_key,
+				type: column.data_type,
+				source: "system",
+			})
 		})
-	})
+	}
 
 	return columns
 }

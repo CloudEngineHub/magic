@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { SuperMagicApi } from "@/apis"
+import { isMicroAppPublished } from "../utils/microAppPublish"
 
 const MAX_DISPLAY_ERROR_LENGTH = 240
 
@@ -31,12 +32,14 @@ export function normalizeMicroAppProjectError(error: unknown): Error {
 
 export function useMicroAppProjectResolver(appId: string) {
 	const [projectId, setProjectId] = useState("")
+	const [isPublished, setIsPublished] = useState(false)
 	const [loading, setLoading] = useState(Boolean(appId))
 	const [error, setError] = useState<Error | null>(null)
 
 	useEffect(() => {
 		if (!appId) {
 			setProjectId("")
+			setIsPublished(false)
 			setLoading(false)
 			return
 		}
@@ -45,6 +48,7 @@ export function useMicroAppProjectResolver(appId: string) {
 		setLoading(true)
 		setError(null)
 		setProjectId("")
+		setIsPublished(false)
 
 		SuperMagicApi.getMicroAppProject(appId)
 			.then((result) => {
@@ -52,6 +56,7 @@ export function useMicroAppProjectResolver(appId: string) {
 				const nextProjectId = String(result.project_id || result.project?.id || "")
 				if (!nextProjectId) throw new Error()
 				setProjectId(nextProjectId)
+				setIsPublished(isMicroAppPublished(result.publish))
 			})
 			.catch((nextError) => {
 				if (!active) return
@@ -66,5 +71,5 @@ export function useMicroAppProjectResolver(appId: string) {
 		}
 	}, [appId])
 
-	return { projectId, loading, error }
+	return { projectId, isPublished, setIsPublished, loading, error }
 }

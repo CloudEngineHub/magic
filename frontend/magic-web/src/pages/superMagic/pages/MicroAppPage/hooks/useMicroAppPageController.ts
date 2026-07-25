@@ -3,6 +3,7 @@ import { useDebounceFn, useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 
 import { SuperMagicApi } from "@/apis"
+import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
@@ -24,6 +25,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
+import { captureMicroAppCover } from "../utils/captureMicroAppCover"
 import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 
@@ -41,8 +43,8 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>(null)
 	const [isFileTabsCacheLoaded, setIsFileTabsCacheLoaded] = useState(false)
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
-	const [renameDialogOpen, setRenameDialogOpen] = useState(false)
-	const [renameSubmitting, setRenameSubmitting] = useState(false)
+	const [editDialogOpen, setEditDialogOpen] = useState(false)
+	const [editSubmitting, setEditSubmitting] = useState(false)
 	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
@@ -52,7 +54,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		selectedTopic?.task_status === TaskStatus.RUNNING ||
 		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
-	const canRename = Boolean(
+	const canEdit = Boolean(
 		selectedProject?.id &&
 		selectedProject.workspace_id &&
 		(!selectedProject.user_role || canManageProject(selectedProject.user_role)),
@@ -76,8 +78,8 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		setIsFileTabsCacheLoaded(false)
 		defaultEntryOpenedKeyRef.current = null
 		setPublishDialogOpen(false)
-		setRenameDialogOpen(false)
-		setRenameSubmitting(false)
+		setEditDialogOpen(false)
+		setEditSubmitting(false)
 		setIsDatabasePanelOpen(false)
 	}, [projectId])
 
@@ -284,26 +286,39 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		})
 	})
 
-	const handleRenameProject = useMemoizedFn(async (projectName: string) => {
-		if (!selectedProject?.id || !selectedProject.workspace_id || !canRename) return false
+	const handleCaptureCover = useMemoizedFn(() => {
+		if (!defaultEntryFile) return Promise.reject(new Error("Micro app index.html is not ready"))
+		return captureMicroAppCover({
+			entryFile: defaultEntryFile,
+			attachments,
+			attachmentList,
+		})
+	})
 
-		const nextProjectName = projectName.trim()
-		if (!nextProjectName || nextProjectName === selectedProject.project_name?.trim())
-			return false
+	const handleEditMicroApp = useMemoizedFn(async (changes: UpdateMicroAppBody) => {
+		if (!selectedProject?.id || !selectedProject.workspace_id || !canEdit) return false
+		if (changes.app_name === undefined && changes.cover_file_key === undefined) return false
 
-		setRenameSubmitting(true)
+		setEditSubmitting(true)
 		try {
-			await SuperMagicApi.updateMicroApp(appId, { app_name: nextProjectName })
-			handleProjectNameChange(nextProjectName)
-			pubsub.publish(PubSubEvents.Update_Project_Name, selectedProject.id, nextProjectName)
-			magicToast.success(t("microAppPage.rename.success"))
+			const metadata = await SuperMagicApi.updateMicroApp(appId, changes)
+			const nextProjectName = metadata.app_name?.trim()
+			if (changes.app_name !== undefined && nextProjectName) {
+				handleProjectNameChange(nextProjectName)
+				pubsub.publish(
+					PubSubEvents.Update_Project_Name,
+					selectedProject.id,
+					nextProjectName,
+				)
+			}
+			magicToast.success(t("microAppPage.edit.success"))
 			return true
 		} catch (error) {
-			console.error("Failed to rename micro app:", error)
-			magicToast.error(t("microAppPage.rename.failed"))
+			console.error("Failed to edit micro app:", error)
+			magicToast.error(t("microAppPage.edit.failed"))
 			return false
 		} finally {
-			setRenameSubmitting(false)
+			setEditSubmitting(false)
 		}
 	})
 
@@ -314,7 +329,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		selectedTopic,
 		hasRunningTopic,
 		isReadOnly,
-		canRename,
+		canEdit,
 		attachments,
 		attachmentList,
 		activeFileId,
@@ -331,15 +346,17 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		handleFileTabsCacheLoaded,
 		publishDialogOpen,
 		setPublishDialogOpen,
-		renameDialogOpen,
-		setRenameDialogOpen,
-		renameSubmitting,
+		editDialogOpen,
+		setEditDialogOpen,
+		editSubmitting,
 		isDatabasePanelOpen,
 		setIsDatabasePanelOpen,
 		CollaboratorUpdatePanel,
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
-		handleRenameProject,
+		captureCoverReady: Boolean(defaultEntryFile?.file_id),
+		handleCaptureCover,
+		handleEditMicroApp,
 	}
 }

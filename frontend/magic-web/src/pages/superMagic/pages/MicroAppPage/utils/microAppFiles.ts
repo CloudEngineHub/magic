@@ -29,6 +29,16 @@ export function getAttachmentId(item: AttachmentItem): string {
 	)
 }
 
+export function getMicroAppPreviewPath(item: AttachmentItem | null): string {
+	if (!item) return "/"
+
+	const fileName = item.display_filename || item.file_name || item.filename || "index.html"
+	const relativePath = item.relative_file_path || fileName
+	const normalizedPath = relativePath.replace(/^\/+/, "")
+
+	return /^index\.html?$/i.test(normalizedPath) ? "/" : `/${normalizedPath}`
+}
+
 export function isHtmlFile(item: AttachmentItem): boolean {
 	if (item.is_hidden || item.is_directory || item.type === "directory") return false
 

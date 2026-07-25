@@ -33,6 +33,24 @@ describe("useMicroAppProjectResolver", () => {
 		expect(result.current.error?.message).toBe("")
 	})
 
+	it("returns published state from the micro app detail", async () => {
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			publish: {
+				share_type: 4,
+				publish_status: "published",
+			},
+		})
+
+		const { result } = renderHook(() => useMicroAppProjectResolver("app-1"))
+
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		expect(result.current.projectId).toBe("project-1")
+		expect(result.current.isPublished).toBe(true)
+	})
+
 	it("preserves a readable backend error message", () => {
 		expect(normalizeMicroAppProjectError({ message: "Micro app was deleted" }).message).toBe(
 			"Micro app was deleted",

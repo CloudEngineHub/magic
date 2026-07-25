@@ -1,4 +1,4 @@
-import { Search, Table2 } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, Search, Table2 } from "lucide-react"
 import type { MouseEvent } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -7,6 +7,8 @@ import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import { cn } from "@/lib/utils"
 
 interface TableListProps {
@@ -18,6 +20,50 @@ interface TableListProps {
 	onSelect: (tableId: string) => void
 	onOpenTablePermissions?: (tableId: string) => void
 	onRetry: () => void
+	onToggle: () => void
+}
+
+interface TableListToggleProps {
+	collapsed: boolean
+	label: string
+	onToggle: () => void
+	className?: string
+	"data-testid"?: string
+}
+
+export function TableListToggle({
+	collapsed,
+	label,
+	onToggle,
+	className,
+	"data-testid": testId,
+}: TableListToggleProps) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon"
+					className={cn("size-8 shrink-0", className)}
+					aria-label={label}
+					aria-controls="magicbase-table-list-panel"
+					aria-expanded={!collapsed}
+					data-testid={testId}
+					onClick={onToggle}
+				>
+					{collapsed ? (
+						<PanelLeftOpen className="size-4" />
+					) : (
+						<PanelLeftClose className="size-4" />
+					)}
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent side="right" sideOffset={6}>
+				{label}
+			</TooltipContent>
+		</Tooltip>
+	)
 }
 
 type TableContextMenuState = {
@@ -35,12 +81,15 @@ export default function TableList({
 	onSelect,
 	onOpenTablePermissions,
 	onRetry,
+	onToggle,
 }: TableListProps) {
 	const { t } = useTranslation("super")
 	const [keyword, setKeyword] = useState("")
 	const [contextMenu, setContextMenu] = useState<TableContextMenuState | null>(null)
 	const menuRef = useRef<HTMLDivElement | null>(null)
+	const showSearch = tables.length > 8
 	const filteredTables = useMemo(() => {
+		if (!showSearch) return tables
 		const normalizedKeyword = keyword.trim().toLowerCase()
 		if (!normalizedKeyword) return tables
 		return tables.filter((table) =>
@@ -48,7 +97,7 @@ export default function TableList({
 				.filter(Boolean)
 				.some((value) => value?.toLowerCase().includes(normalizedKeyword)),
 		)
-	}, [keyword, tables])
+	}, [keyword, showSearch, tables])
 
 	const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
@@ -86,21 +135,47 @@ export default function TableList({
 	}, [closeContextMenu, contextMenu])
 
 	return (
-		<aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-border bg-muted/20">
-			<div className="border-b border-border p-3">
-				<div className="relative">
-					<Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						value={keyword}
-						onChange={(event) => setKeyword(event.target.value)}
-						placeholder={t("microAppPage.databasePanel.searchTables")}
-						className="h-8 pl-8"
-					/>
-				</div>
+		<aside
+			id="magicbase-table-list-panel"
+			className="flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-border/60 bg-muted/30"
+		>
+			<div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 p-4 pl-1">
+				<TableListToggle
+					collapsed={false}
+					label={t("microAppPage.databasePanel.collapseTableList")}
+					onToggle={onToggle}
+					className="size-6"
+				/>
+				{showSearch ? (
+					<div className="relative min-w-0 flex-1">
+						<Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							value={keyword}
+							onChange={(event) => setKeyword(event.target.value)}
+							placeholder={t("microAppPage.databasePanel.searchTables")}
+							className="h-8 pl-8"
+						/>
+					</div>
+				) : (
+					<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+						<span className="truncate text-sm font-semibold text-foreground">
+							{t("microAppPage.databasePanel.tableListTitle")}
+						</span>
+						<span className="shrink-0 rounded-full border border-border/60 bg-background px-2 py-0.5 text-[11px] text-muted-foreground shadow-xs">
+							{t("microAppPage.databasePanel.tableCount", { total: tables.length })}
+						</span>
+					</div>
+				)}
 			</div>
 
-			<ScrollArea className="min-h-0 flex-1">
-				<div className="space-y-1 p-2" data-testid="magicbase-table-list">
+			<ScrollArea
+				className="min-h-0 min-w-0 flex-1 overflow-hidden"
+				viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!w-full [&>div]:!min-w-0"
+			>
+				<div
+					className="w-full min-w-0 max-w-full space-y-1 overflow-hidden p-2"
+					data-testid="magicbase-table-list"
+				>
 					{loading ? (
 						<div className="space-y-2 p-2">
 							{Array.from({ length: 5 }).map((_, index) => (
@@ -138,19 +213,31 @@ export default function TableList({
 								key={table.id}
 								type="button"
 								className={cn(
-									"flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-background",
-									active && "bg-background shadow-sm",
+									"flex w-full min-w-0 max-w-full items-start gap-2.5 overflow-hidden rounded-md border border-transparent px-2.5 py-2.5 text-left transition-[background-color,border-color,box-shadow] hover:border-border/60 hover:bg-background/60",
+									active && "border-primary/20 bg-primary/[0.06] shadow-xs",
 								)}
 								onClick={() => onSelect(table.id)}
 								onContextMenu={(event) => handleTableContextMenu(table.id, event)}
 							>
-								<Table2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-								<span className="min-w-0 flex-1">
+								<span
+									className={cn(
+										"flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground",
+										active && "border-primary/15 bg-primary/10 text-primary",
+									)}
+								>
+									<Table2 className="size-3.5" />
+								</span>
+								<span className="block min-w-0 flex-1 overflow-hidden">
 									<span className="flex min-w-0 items-center gap-2">
-										<span className="truncate text-sm font-medium text-foreground">
+										<span
+											className={cn(
+												"truncate text-sm font-medium text-foreground",
+												active && "font-semibold",
+											)}
+										>
 											{table.table_name || table.table_key}
 										</span>
-										{table.status ? (
+										{table.status && table.status !== "enabled" ? (
 											<Badge
 												variant="outline"
 												className="shrink-0 rounded-md"
@@ -160,9 +247,15 @@ export default function TableList({
 										) : null}
 									</span>
 									{table.description ? (
-										<span className="line-clamp-2 block text-xs text-muted-foreground">
+										<SmartTooltip
+											elementType="span"
+											placement="right"
+											sideOffset={8}
+											content={table.description}
+											className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground"
+										>
 											{table.description}
-										</span>
+										</SmartTooltip>
 									) : null}
 								</span>
 							</button>

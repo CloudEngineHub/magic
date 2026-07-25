@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest"
 
 import AppConversationPanel from "../AppConversationPanel"
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ t: (key: string) => key }),
+}))
+
+const scaffoldMocks = vi.hoisted(() => ({
+	messageListProviderValue: null as Record<string, unknown> | null,
+}))
+
 vi.mock("../../context", () => ({
 	useAppStore: () => ({
 		conversation: { setConversationGenerating: vi.fn() },
@@ -14,11 +22,43 @@ vi.mock("../../utils/microAppModelMode", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
-	default: ({ editor }: { editor: React.ReactNode }) => <div>{editor}</div>,
+	default: ({
+		editor,
+		emptyCompact,
+		messageListProviderValue,
+	}: {
+		editor: React.ReactNode
+		emptyCompact: React.ReactNode
+		messageListProviderValue: Record<string, unknown>
+	}) => {
+		scaffoldMocks.messageListProviderValue = messageListProviderValue
+		return (
+			<div>
+				{emptyCompact}
+				{editor}
+			</div>
+		)
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold/ConversationEmptyState", () => ({
-	default: () => null,
+	default: ({
+		icon,
+		title,
+		subtitle,
+		testId,
+	}: {
+		icon: React.ReactNode
+		title: React.ReactNode
+		subtitle: React.ReactNode
+		testId: string
+	}) => (
+		<div data-testid={testId}>
+			{icon}
+			{title}
+			{subtitle}
+		</div>
+	),
 }))
 
 vi.mock(
@@ -123,6 +163,31 @@ vi.mock("@/models/user", () => ({
 }))
 
 describe("AppConversationPanel", () => {
+	it("uses the micro app conversation illustration and action-oriented copy", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+			/>,
+		)
+
+		const emptyState = screen.getByTestId("micro-app-conversation-empty-compact")
+		expect(emptyState).toBeInTheDocument()
+		expect(
+			screen.getByTestId("micro-app-conversation-empty-compact-illustration"),
+		).toHaveAttribute("data-state", "conversation-empty")
+		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyTitle")
+		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyDescription")
+	})
+
 	it("uses the micro-app employee model catalog and send mode", () => {
 		const topicStore = {
 			selectedTopic: { id: "topic-1", topic_name: "Topic" },
@@ -146,6 +211,30 @@ describe("AppConversationPanel", () => {
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
 			"data-send-topic-mode",
 			"micro-app",
+		)
+	})
+
+	it("provides the project attachment store to the message list", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+		const projectFilesStore = {
+			workspaceFilesList: [{ file_id: "file-1", file_name: "index.html" }],
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={projectFilesStore}
+			/>,
+		)
+
+		expect(scaffoldMocks.messageListProviderValue).toEqual(
+			expect.objectContaining({ projectFilesStore }),
 		)
 	})
 })

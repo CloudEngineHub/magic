@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("StructureTable", () => {
-	it("renders column metadata and permissions", () => {
+	it("renders column metadata without permissions", () => {
 		const columns: MagicBaseColumn[] = [
 			{
 				id: "column-1",
@@ -46,7 +46,8 @@ describe("StructureTable", () => {
 		expect(screen.getByText("microAppPage.databasePanel.systemField")).toBeInTheDocument()
 		expect(screen.getAllByText("microAppPage.databasePanel.yes").length).toBeGreaterThan(0)
 		expect(screen.getAllByText("enabled").length).toBeGreaterThan(0)
-		expect(screen.getByText("public / owner")).toBeInTheDocument()
+		expect(screen.queryByText("microAppPage.databasePanel.permission")).not.toBeInTheDocument()
+		expect(screen.queryByText("public / owner")).not.toBeInTheDocument()
 	})
 
 	it("renders empty column state", () => {

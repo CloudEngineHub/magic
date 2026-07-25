@@ -7,10 +7,11 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 interface MicroAppHeaderProps {
 	selectedProject: ProjectListItem | null
 	hasEntries: boolean
+	isPublished?: boolean
 	onBack: () => void
 	onPublish: () => void
-	canRename?: boolean
-	onRename?: () => void
+	canEdit?: boolean
+	onEdit?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
 }
@@ -18,15 +19,19 @@ interface MicroAppHeaderProps {
 export default function MicroAppHeader({
 	selectedProject,
 	hasEntries,
+	isPublished = false,
 	onBack,
 	onPublish,
-	canRename,
-	onRename,
+	canEdit,
+	onEdit,
 	canManageCollaborators,
 	onManageCollaborators,
 }: MicroAppHeaderProps) {
 	const { t } = useTranslation("super")
 	const projectName = selectedProject?.project_name || t("project.unnamedProject")
+	const publishButtonLabel = t(
+		isPublished ? "microAppPage.publish.published" : "microAppPage.publish.button",
+	)
 	const showCollaboratorAction = Boolean(canManageCollaborators && onManageCollaborators)
 	return (
 		<header
@@ -49,7 +54,7 @@ export default function MicroAppHeader({
 			</Tooltip>
 
 			<div className="min-w-0 flex-1">
-				{canRename && onRename ? (
+				{canEdit && onEdit ? (
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
@@ -57,15 +62,15 @@ export default function MicroAppHeader({
 								variant="ghost"
 								size="sm"
 								className="-ml-2 h-8 max-w-full gap-1.5 px-2"
-								onClick={onRename}
-								data-testid="micro-app-rename-button"
+								onClick={onEdit}
+								data-testid="micro-app-edit-button"
 							>
 								<span className="truncate text-sm font-medium">{projectName}</span>
 								<PenLine className="size-3.5 shrink-0 text-muted-foreground" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="bottom">
-							{t("microAppPage.rename.button")}
+							{t("microAppPage.edit.button")}
 						</TooltipContent>
 					</Tooltip>
 				) : (
@@ -103,7 +108,7 @@ export default function MicroAppHeader({
 							data-testid="micro-app-publish-button"
 						>
 							<Rocket size={14} />
-							{t("microAppPage.publish.button")}
+							{publishButtonLabel}
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="bottom">
