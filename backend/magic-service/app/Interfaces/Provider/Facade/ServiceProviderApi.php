@@ -305,13 +305,11 @@ class ServiceProviderApi extends AbstractApi
         if ($modelId === '') {
             $modelId = trim((string) $request->input('model_version', ''));
         }
-        $includeOfficialPricing = filter_var($request->input('include_official_pricing', false), FILTER_VALIDATE_BOOLEAN);
 
         return $this->providerModelPricingTemplateAppService->queries(
             $category,
             $providerCode,
-            $modelId === '' ? null : $modelId,
-            $includeOfficialPricing
+            $modelId === '' ? null : $modelId
         );
     }
 

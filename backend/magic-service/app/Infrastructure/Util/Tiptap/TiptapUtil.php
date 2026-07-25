@@ -21,7 +21,7 @@ class TiptapUtil
         return self::getEditor()
             ->setContent($content)
             ->getText([
-                'blockSeparator' => '',
+                'blockSeparator' => "\n",
             ]);
     }
 

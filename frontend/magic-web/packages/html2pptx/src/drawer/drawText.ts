@@ -1,4 +1,5 @@
 import type { PPTTextNode, PPTTextRun, Slide } from "../ir/node"
+import { toPptxTextMargin } from "./textMargin"
 
 /** Underline style type */
 type UnderlineStyle = "sng" | "dbl" | "dash" | "dotted" | "none"
@@ -24,6 +25,10 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		transparency,
 		charSpacing,
 		lineSpacing,
+		lineSpacingPt,
+		align,
+		valign,
+		shadow,
 		margin,
 		rotate,
 		outline,
@@ -41,11 +46,22 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		underline: underline ? { style: "sng" as UnderlineStyle } : undefined,
 		strike: strike ? true : undefined,
 		charSpacing, // Apply character spacing
-		lineSpacingMultiple: lineSpacing ?? undefined, // Disable this for single-line text to avoid applying line-height twice
-		margin: margin ?? [0, 0, 0, 0],
+		align,
+		valign,
+		shadow: shadow ?? undefined,
+		// The IR uses CSS order [top, right, bottom, left]. PptxGenJS 4.x
+		// serializes text margins in [left, right, bottom, top] order.
+		margin: toPptxTextMargin(margin ?? [0, 0, 0, 0]),
 		wrap: node.wrap ?? true,
+		fit: "none",
 		rotate: rotate, // Apply rotation
 		outline, // Apply text outline
+	}
+	if (lineSpacingPt !== undefined) {
+		options.lineSpacing = lineSpacingPt
+	} else if (lineSpacing !== undefined) {
+		// Keep the old multiplier behavior for existing parsers and consumers.
+		options.lineSpacingMultiple = lineSpacing
 	}
 
 	// Color handling
@@ -102,12 +118,7 @@ function resolveRunOptions(run: PPTTextRun): Record<string, unknown> | undefined
 	const options = run.options
 	if (!options) return undefined
 
-	const {
-		fontWeight,
-		underline,
-		strike,
-		...rest
-	} = options
+	const { fontWeight, underline, strike, ...rest } = options
 	void fontWeight
 
 	const output: Record<string, unknown> = { ...rest }

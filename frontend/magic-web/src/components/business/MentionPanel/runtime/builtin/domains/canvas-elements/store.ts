@@ -5,9 +5,9 @@ import type {
 	CanvasDocument,
 	ElementType,
 	LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
-import { ElementTypeEnum } from "@/components/CanvasDesign/canvas/types"
-import { CanvasFileIcon, FolderIcon } from "@/components/CanvasDesign/components/ui/icons"
+} from "@/components/CanvasDesign/runtime/document/types"
+import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import { CanvasFileIcon, FolderIcon } from "@/components/CanvasDesign/ui/primitives/icons"
 import { MentionItemType, type MentionItem } from "../../../../types"
 import { createProjectFileMentionData } from "../../../../utils/projectReferenceMention"
 import { MentionPanelBuiltinItemId } from "../../catalog-ids"

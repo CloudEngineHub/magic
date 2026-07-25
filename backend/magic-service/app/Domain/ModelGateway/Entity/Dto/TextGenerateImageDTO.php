@@ -23,8 +23,6 @@ class TextGenerateImageDTO extends AbstractRequestDTO
 
     protected ?WatermarkConfig $watermark = null;
 
-    protected string $sequentialImageGeneration = 'disabled';
-
     protected array $imageGenerationConfig = [];
 
     protected string $outputFormat = '';
@@ -91,16 +89,6 @@ class TextGenerateImageDTO extends AbstractRequestDTO
         }
 
         $this->watermark = $watermark;
-    }
-
-    public function getSequentialImageGeneration(): string
-    {
-        return $this->sequentialImageGeneration;
-    }
-
-    public function setSequentialImageGeneration(string $sequentialImageGeneration): void
-    {
-        $this->sequentialImageGeneration = $sequentialImageGeneration;
     }
 
     public function getImageGenerationConfig(): array

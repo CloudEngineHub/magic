@@ -279,8 +279,7 @@ class MessageQueueCompensationAppService extends AbstractAppService
             $appMessageId = IdGenerator::getUniqueId32();
 
             // get agent user_id
-            $dataIsolation = new DataIsolation();
-            $dataIsolation->setCurrentOrganizationCode($message->getOrganizationCode());
+            $dataIsolation = DataIsolation::create($message->getOrganizationCode());
             $aiUserEntity = $this->userDomainService->getByAiCode($dataIsolation, AgentConstant::SUPER_MAGIC_CODE);
 
             if (empty($aiUserEntity)) {

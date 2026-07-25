@@ -44,6 +44,12 @@ export interface SlidesTemplateCanvasTile {
 	template: OptionItem
 }
 
+export const SLIDES_TEMPLATE_CANVAS_FILLER_ID_MARKER = ":filler:"
+
+export function isSlidesTemplateCanvasFiller(tile: SlidesTemplateCanvasTile) {
+	return tile.id.includes(SLIDES_TEMPLATE_CANVAS_FILLER_ID_MARKER)
+}
+
 export interface SlidesTemplatePreviewFocus {
 	anchorTileId: string
 	tile: SlidesTemplateCanvasTile

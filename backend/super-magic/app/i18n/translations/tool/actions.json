@@ -580,8 +580,8 @@
         "en_US": "Persist CLI"
     },
     "cli_manager_list": {
-        "zh_CN": "查看持久化 CLI",
-        "en_US": "List persisted CLIs"
+        "zh_CN": "查看用户持久化 CLI",
+        "en_US": "List user-managed persisted CLIs"
     },
     "cli_manager_remove": {
         "zh_CN": "移除持久化 CLI",

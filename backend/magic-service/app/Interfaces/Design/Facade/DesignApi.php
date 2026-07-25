@@ -12,6 +12,7 @@ use App\Application\Design\Service\ImageConvertHighConfigAppService;
 use App\Application\Design\Service\ImageGenerationAppService;
 use App\Application\Design\Service\ImageMarkIdentifyAppService;
 use App\Application\Design\Service\ImagePromptCompletionAppService;
+use App\Application\Design\Service\TextContentCompletionAppService;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
@@ -20,6 +21,7 @@ use App\Interfaces\Design\Assembler\DesignVideoAssembler;
 use App\Interfaces\Design\Assembler\ImageGenerationAssembler;
 use App\Interfaces\Design\DTO\ImageGenerationDTO;
 use App\Interfaces\Design\RequestForm\CompleteImagePromptFormRequest;
+use App\Interfaces\Design\RequestForm\CompleteTextContentFormRequest;
 use App\Interfaces\Design\RequestForm\ConvertHighImageFormRequest;
 use App\Interfaces\Design\RequestForm\EraserFormRequest;
 use App\Interfaces\Design\RequestForm\EstimateVideoPointsFormRequest;
@@ -45,6 +47,9 @@ class DesignApi extends AbstractApi
 
     #[Inject]
     protected ImagePromptCompletionAppService $imagePromptCompletionAppService;
+
+    #[Inject]
+    protected TextContentCompletionAppService $textContentCompletionAppService;
 
     #[Inject]
     protected ImageConvertHighConfigAppService $imageConvertHighConfigAppService;
@@ -221,6 +226,25 @@ class DesignApi extends AbstractApi
         );
 
         return ['prompt' => $prompt];
+    }
+
+    /**
+     * 优化画布文本内容.
+     */
+    public function completeTextContent(CompleteTextContentFormRequest $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $request->validateResolved();
+        $validated = $request->validated();
+
+        $text = $this->textContentCompletionAppService->complete(
+            $authenticatable,
+            (int) $validated['project_id'],
+            (string) $validated['user_prompt'],
+            isset($validated['model_id']) ? (string) $validated['model_id'] : null,
+        );
+
+        return ['text' => $text];
     }
 
     /**

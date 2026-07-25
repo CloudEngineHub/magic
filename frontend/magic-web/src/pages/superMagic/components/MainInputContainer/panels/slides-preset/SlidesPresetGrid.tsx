@@ -27,6 +27,7 @@ interface SlidesPresetGridProps {
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
+	disableContentVisibility?: boolean
 }
 
 const containerVariants = {
@@ -82,6 +83,7 @@ const SlidesPresetGrid = observer(
 		showHoverDetails = true,
 		hoverDetailsContainer,
 		disableEntryAnimation = false,
+		disableContentVisibility = false,
 	}: SlidesPresetGridProps) => {
 		const { t } = useTranslation("crew/create")
 		const [previewTemplate, setPreviewTemplate] = useState<OptionItem | null>(null)
@@ -96,6 +98,7 @@ const SlidesPresetGrid = observer(
 		const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 		const scrollLoadRequestedRef = useRef(false)
 		const canUseHoverPreview = useFinePointerHover()
+		const shouldUseContentVisibility = canUseHoverPreview && !disableContentVisibility
 		const isPreviewOpen = Boolean(previewTemplate)
 
 		useEffect(() => {
@@ -240,7 +243,7 @@ const SlidesPresetGrid = observer(
 					ref={gridRef}
 					data-testid="slides-preset-grid"
 					className={cn(
-						"scrollbar-hide relative grid w-full grid-cols-2 content-start gap-4 overflow-y-auto overflow-x-hidden p-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
+						"scrollbar-hide relative grid w-full touch-pan-y grid-cols-2 content-start gap-4 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
 						className,
 					)}
 					variants={disableEntryAnimation ? undefined : containerVariants}
@@ -292,7 +295,9 @@ const SlidesPresetGrid = observer(
 										: { type: "spring", stiffness: 300, damping: 20 }
 								}
 								className={cn(
-									"relative flex size-full [contain-intrinsic-size:260px] [content-visibility:auto]",
+									"relative flex size-full",
+									shouldUseContentVisibility &&
+										"[contain-intrinsic-size:260px] [content-visibility:auto]",
 									canUseHoverPreview && "will-change-transform",
 								)}
 							>

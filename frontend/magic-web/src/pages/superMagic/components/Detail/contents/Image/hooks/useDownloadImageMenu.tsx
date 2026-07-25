@@ -1,19 +1,9 @@
 import { useTranslation } from "react-i18next"
-import { lazy, Suspense, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { Flex } from "antd"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
-import { AttachmentItem } from "../../../../TopicFilesButton/hooks"
-import { useMemoizedFn } from "ahooks"
-import { isInternationalEnv } from "@/utils/env"
-import { useAiWatermarkPreference } from "@/hooks/useAiWatermarkPreference"
-
-const loadWaterMarkFreeModal = () => {
-	return import("../../../../WaterMarkFreeModal").then((module) => ({
-		default: module.WaterMarkFreeModal,
-	}))
-}
-
-const WaterMarkFreeModal = lazy(() => loadWaterMarkFreeModal())
+import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
+import { useAiImageDownloadPolicy } from "@/pages/superMagic/hooks/useAiImageDownloadPolicy"
 
 interface UseDownloadImageMenuProps {
 	/* 下载回调 */
@@ -25,20 +15,13 @@ interface UseDownloadImageMenuProps {
  */
 export function useDownloadImageMenu({ onDownload }: UseDownloadImageMenuProps) {
 	const { t } = useTranslation("super")
-	const [visible, setVisible] = useState(false)
-	const [downloadItem, setDownloadItem] = useState<AttachmentItem | undefined>()
-	const isInternationalSite = useMemo(() => isInternationalEnv(), [])
-	const [initialized, setInitialized] = useState(false)
-	const { hasGlobalAgreement, isFreeTrialVersion } = useAiWatermarkPreference()
-
-	const preloadWaterMarkFreeModal = useMemoizedFn(() => {
-		void loadWaterMarkFreeModal().then(() => {
-			setInitialized(true)
-		})
-	})
-
-	const shouldUseSingleDownloadEntry =
-		!isInternationalSite && hasGlobalAgreement && !isFreeTrialVersion
+	const {
+		agreementModal,
+		isFreeTrialVersion,
+		preloadWaterMarkFreeModal,
+		shouldUseSingleDownloadEntry,
+		handleDownloadNoWaterMark,
+	} = useAiImageDownloadPolicy<AttachmentItem>({ onDownload })
 
 	const downloadImageDropdownItems = useMemo(() => {
 		if (shouldUseSingleDownloadEntry) {
@@ -66,17 +49,6 @@ export function useDownloadImageMenu({ onDownload }: UseDownloadImageMenuProps) 
 		]
 	}, [shouldUseSingleDownloadEntry, t])
 
-	/** Open agreement modal or download directly depending on site and user agreement state. */
-	const handleDownloadNoWaterMark = (item?: AttachmentItem) => {
-		if (isInternationalSite || hasGlobalAgreement) {
-			onDownload?.(DownloadImageMode.HighQuality, item)
-			return
-		}
-
-		setDownloadItem(item)
-		setVisible(true)
-	}
-
 	const downloadMenuClick = ({ key }: { key: string }) => {
 		switch (key) {
 			case "download":
@@ -91,27 +63,6 @@ export function useDownloadImageMenu({ onDownload }: UseDownloadImageMenuProps) 
 				break
 		}
 	}
-
-	const agreementModal = useMemo(() => {
-		return (
-			(initialized || visible) && (
-				<Suspense fallback={null}>
-					<WaterMarkFreeModal
-						visible={visible}
-						onClose={() => {
-							setVisible(false)
-							setDownloadItem(undefined)
-						}}
-						onConfirm={() => {
-							setVisible(false)
-							onDownload?.(DownloadImageMode.HighQuality, downloadItem)
-							setDownloadItem(undefined)
-						}}
-					/>
-				</Suspense>
-			)
-		)
-	}, [downloadItem, initialized, onDownload, visible])
 
 	return {
 		agreementModal,

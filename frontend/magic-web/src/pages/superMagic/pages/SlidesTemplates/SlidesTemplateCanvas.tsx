@@ -20,6 +20,7 @@ import {
 	getPriorityWeightedRandomIndex,
 	getTemplateKey,
 	getTemplatePreviewUrls,
+	isSlidesTemplateCanvasFiller,
 } from "./canvasInteraction"
 import { getNearestLoopedSlidesTemplateCanvasItem } from "./canvasLoop"
 import SlidesTemplateCanvasSurface from "./SlidesTemplateCanvasSurface"
@@ -92,6 +93,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const [isDragging, setIsDragging] = useState(false)
 		const [randomFocusedCanvasItem, setRandomFocusedCanvasItem] =
 			useState<TemplateCanvasItem<SlidesTemplateCanvasTile> | null>(null)
+		const pendingRandomFocusRef = useRef(false)
 		const viewportRef = useRef<HTMLDivElement | null>(null)
 		const contentRef = useRef<HTMLDivElement | null>(null)
 		const offsetRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
@@ -113,24 +115,33 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			resetKey,
 			templates,
 		})
-		const { canvasItems, contentBounds, loopItemQuery, loopMetrics, templateBounds } =
-			useSlidesTemplateCanvasItems({
-				enableInfiniteLoop,
-				templates: activeTemplates,
-			})
+		const {
+			canvasItems,
+			contentBounds,
+			loopItemQuery,
+			loopMetrics,
+			resetKey: layoutResetKey,
+			templateBounds,
+		} = useSlidesTemplateCanvasItems({
+			enableInfiniteLoop,
+			resetKey,
+			templates: activeTemplates,
+		})
 		const priorityCanvasItems = useMemo(
 			() =>
 				// 后端默认按 sort 降序返回，这里再次显式排序，保证本地分组数据也遵循同一优先级。
-				[...canvasItems].sort((left, right) => {
-					const leftSort = left.item.template.sort
-					const rightSort = right.item.template.sort
-					if (leftSort != null && rightSort != null && leftSort !== rightSort) {
-						return rightSort - leftSort
-					}
-					if (leftSort != null) return -1
-					if (rightSort != null) return 1
-					return left.index - right.index
-				}),
+				[...canvasItems]
+					.filter(({ item }) => !isSlidesTemplateCanvasFiller(item))
+					.sort((left, right) => {
+						const leftSort = left.item.template.sort
+						const rightSort = right.item.template.sort
+						if (leftSort != null && rightSort != null && leftSort !== rightSort) {
+							return rightSort - leftSort
+						}
+						if (leftSort != null) return -1
+						if (rightSort != null) return 1
+						return left.index - right.index
+					}),
 			[canvasItems],
 		)
 		const { scheduleVisibleCanvasItemsUpdate, updateVisibleCanvasItems, visibleCanvasItems } =
@@ -140,7 +151,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				loopMetrics,
 				onOffsetRebase: applyTransform,
 				offsetRef,
-				resetKey,
+				resetKey: layoutResetKey,
 				scaleRef,
 				viewportRef,
 			})
@@ -233,7 +244,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			loopMetrics,
 			onLoadMore,
 			offsetRef,
-			resetKey,
+			resetKey: layoutResetKey,
 			scaleRef,
 			scheduleVisibleCanvasItemsUpdate,
 			smallContentVerticalAlignment: initialAlignment === "top" ? "start" : "center",
@@ -285,7 +296,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			maybeRequestMore,
 			offsetRef,
 			onPointerDownStart: handlePointerDownStart,
-			resetKey,
+			resetKey: layoutResetKey,
 			scheduleEdgeMovement,
 			setCanvasOffset,
 			setIsDragging,
@@ -318,42 +329,54 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			contentBounds,
 			maybeRequestMore,
 			offsetRef,
-			resetKey,
 			scaleRef,
 			setCanvasOffset,
 			stopAnimation,
 			viewportInsetsRef,
 			viewportRef,
 		})
+		const focusRandomTemplate = useCallback(() => {
+			if (priorityCanvasItems.length === 0 || !viewportRef.current) return false
+
+			const candidates =
+				priorityCanvasItems.length > 1 && randomFocusedTemplateKey
+					? priorityCanvasItems.filter(({ item }) => {
+							return getTemplateKey(item.template) !== randomFocusedTemplateKey
+						})
+					: priorityCanvasItems
+			const randomIndex = getPriorityWeightedRandomIndex(candidates.length)
+			const canvasItem = candidates[randomIndex]
+			if (!canvasItem) return false
+			const focusedCanvasItem = getNearestLoopedSlidesTemplateCanvasItem({
+				item: canvasItem,
+				loopMetrics,
+				offset: offsetRef.current,
+				scale: scaleRef.current,
+			})
+			if (!handleFocusPoint(focusedCanvasItem.position)) return false
+
+			setRandomFocusedCanvasItem(focusedCanvasItem)
+			return true
+		}, [handleFocusPoint, loopMetrics, priorityCanvasItems, randomFocusedTemplateKey])
+		const requestRandomTemplateFocus = useCallback(() => {
+			const didFocus = focusRandomTemplate()
+			pendingRandomFocusRef.current = !didFocus
+			return didFocus
+		}, [focusRandomTemplate])
+
+		useEffect(() => {
+			if (!pendingRandomFocusRef.current) return
+
+			const frameId = requestAnimationFrame(() => {
+				if (focusRandomTemplate()) pendingRandomFocusRef.current = false
+			})
+			return () => cancelAnimationFrame(frameId)
+		}, [focusRandomTemplate])
 
 		useImperativeHandle(
 			ref,
 			() => ({
-				focusRandomTemplate() {
-					if (priorityCanvasItems.length === 0) return false
-
-					const candidates =
-						priorityCanvasItems.length > 1 && randomFocusedTemplateKey
-							? priorityCanvasItems.filter(({ item }) => {
-									return (
-										getTemplateKey(item.template) !== randomFocusedTemplateKey
-									)
-								})
-							: priorityCanvasItems
-					const randomIndex = getPriorityWeightedRandomIndex(candidates.length)
-					const canvasItem = candidates[randomIndex]
-					if (!canvasItem) return false
-					const focusedCanvasItem = getNearestLoopedSlidesTemplateCanvasItem({
-						item: canvasItem,
-						loopMetrics,
-						offset: offsetRef.current,
-						scale: scaleRef.current,
-					})
-					if (!handleFocusPoint(focusedCanvasItem.position)) return false
-
-					setRandomFocusedCanvasItem(focusedCanvasItem)
-					return true
-				},
+				focusRandomTemplate: requestRandomTemplateFocus,
 				openPreview(template) {
 					if (getTemplatePreviewUrls(template).length === 0) return false
 
@@ -385,8 +408,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				handleFocusPoint,
 				hydratePreviewFocus,
 				loopMetrics,
-				priorityCanvasItems,
-				randomFocusedTemplateKey,
+				requestRandomTemplateFocus,
 			],
 		)
 
@@ -412,7 +434,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			canvasItems,
 			contentBounds,
 			initialAlignment,
-			resetKey,
+			resetKey: layoutResetKey,
 			scaleRef,
 			setCanvasOffset,
 			viewportInsetsRef,

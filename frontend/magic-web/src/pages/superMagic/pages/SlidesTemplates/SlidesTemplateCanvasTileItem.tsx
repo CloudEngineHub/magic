@@ -6,6 +6,7 @@ import {
 	type SlidesTemplateCanvasTile,
 	getTemplateKey,
 	getTemplatePreviewUrls,
+	isSlidesTemplateCanvasFiller,
 } from "./canvasInteraction"
 import { getFeaturedSlidesTemplateTag } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
 import SlidesTemplateCoverTile from "./SlidesTemplateCoverTile"
@@ -125,6 +126,9 @@ function SlidesTemplateCanvasTileItem({
 	return (
 		<div
 			data-slides-template-canvas-item="true"
+			data-slides-template-layout-filler={
+				isSlidesTemplateCanvasFiller(tile) ? "true" : undefined
+			}
 			data-testid="slides-template-canvas-tile-item"
 			className="absolute [contain:layout_style]"
 			style={{

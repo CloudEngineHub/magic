@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -49,6 +50,7 @@ readonly class SuperMagicAgentDomainService
         protected CloudFileRepositoryInterface $cloudFileRepository,
         protected WorkspaceExporterInterface $workspaceExporter,
         protected AgentMarketRepositoryInterface $agentMarketRepository,
+        protected SuperMagicAgentCategoryRelationDomainService $categoryRelationDomainService,
     ) {
     }
 
@@ -145,12 +147,16 @@ readonly class SuperMagicAgentDomainService
             $this->userAgentDomainService->deleteUserAgentOwnership($dataIsolation, $code);
         } else {
             // LOCAL_CREATE 类型：这是资源 owner 删除，需要同时清理资源本体、版本/技能/剧本和所有用户关系。
+            $versionIds = $this->agentVersionRepository->findIdsByAgentCode($dataIsolation, $code);
+            $marketIds = $this->storeAgentRepository->findIdsByAgentCode($dataIsolation, $code);
             $result = $this->superMagicAgentRepository->delete($dataIsolation, $code);
             $this->userAgentDomainService->deleteAllUserAgentOwnershipsByCode($dataIsolation, $code);
             $this->agentSkillRepository->deleteByAgentCode($dataIsolation, $entity->getCode());
             $this->agentPlaybookRepository->deleteByAgentCode($dataIsolation, $entity->getCode());
             $this->agentVersionRepository->deleteByAgentCode($dataIsolation, $code);
             $this->storeAgentRepository->offlineByAgentCode($dataIsolation, $code);
+            $this->categoryRelationDomainService->deleteVersionCategoriesByRelationIds($versionIds);
+            $this->categoryRelationDomainService->deleteMarketCategoriesByRelationIds($marketIds);
         }
 
         if ($result) {
@@ -403,7 +409,15 @@ readonly class SuperMagicAgentDomainService
 
         // Call sandbox workspace export API via proxy request
         $request = new ExportWorkspaceRequest(ProjectMode::AGENT_CREATOR->value, $code, $uploadConfig, $sourcePath);
-        $response = $this->workspaceExporter->export($sandboxId, $request);
+        // SuperMagicAgentDataIsolation is the Agent-domain isolation VO
+        // (BaseDataIsolation derivative), NOT the Contact-side DataIsolation
+        // used by the sandbox gateway. Adapt it to Contact\DataIsolation
+        // here so the export path can forward the per-user token uniformly.
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.export_failed');

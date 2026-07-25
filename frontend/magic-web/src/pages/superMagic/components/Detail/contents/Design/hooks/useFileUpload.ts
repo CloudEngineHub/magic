@@ -11,7 +11,7 @@ import {
 	type UploadPrivateFileResponse,
 	UploadSubDir,
 	type UploadSubDirType,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
@@ -55,6 +55,11 @@ interface UseFileUploadOptions {
 		fileName?: string,
 		fileSize?: number,
 	) => Promise<GetFileInfoResponseWithFileId>
+	setFileInfoCache?: (
+		path: string,
+		fileInfo: GetFileInfoResponse,
+		options?: { allowMissingAttachment?: boolean },
+	) => void
 	/** 文件列表更新*/
 	updateAttachments: () => void
 	/** 获取/创建 images 目录（由顶层传入，用于复用 promise 缓存） */
@@ -87,6 +92,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 		currentFile,
 		flatAttachments,
 		getFileInfoById,
+		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir: getOrCreateImagesDirProp,
 	} = options
@@ -272,6 +278,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 						processedFileNames,
 						pendingGetFileInfoRef,
 						getFileInfoById,
+						setFileInfoCache,
 						setIsUploading,
 						setUploadProgress,
 						t,
@@ -323,6 +330,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 			setIsUploading,
 			setUploadProgress,
 			getFileInfoById,
+			setFileInfoCache,
 			selectedTopic?.workspace_id,
 			selectedTopic?.topic_name,
 			selectedTopic?.id,

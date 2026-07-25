@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\BatchDownloadPack;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\BatchDownloadPackRepositoryInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\FileConverterInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Request\FileConverterRequest;
@@ -20,16 +21,14 @@ class BatchDownloadPackRepository implements BatchDownloadPackRepositoryInterfac
     }
 
     public function submitPackTask(
-        string $userId,
-        string $organizationCode,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         FileConverterRequest $request,
         string $workDir
     ): FileConverterResponse {
         return $this->fileConverter->convert(
-            $userId,
-            $organizationCode,
+            $dataIsolation,
             $sandboxId,
             $projectId,
             $request,
@@ -37,8 +36,8 @@ class BatchDownloadPackRepository implements BatchDownloadPackRepositoryInterfac
         );
     }
 
-    public function queryPackTask(string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
+    public function queryPackTask(DataIsolation $dataIsolation, string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
     {
-        return $this->fileConverter->queryConvertResult($sandboxId, $projectId, $taskKey);
+        return $this->fileConverter->queryConvertResult($dataIsolation, $sandboxId, $projectId, $taskKey);
     }
 }

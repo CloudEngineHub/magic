@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
+import { createPortal } from "react-dom"
 import MagicDropdown from "../index"
 import type { MenuProps } from "antd"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 
 describe("MagicDropdown", () => {
 	const basicMenuItems: MenuProps["items"] = [
@@ -251,6 +258,169 @@ describe("MagicDropdown", () => {
 
 			await waitFor(() => {
 				expect(screen.getByText("Custom Content")).toBeInTheDocument()
+			})
+		})
+
+		it("keeps the parent open while a touch interaction enters a nested portal", async () => {
+			function NestedDropdown() {
+				const [open, setOpen] = useState(true)
+
+				return (
+					<>
+						<output data-testid="parent-dropdown-open">{String(open)}</output>
+						<MagicDropdown
+							open={open}
+							onOpenChange={setOpen}
+							keepOpenOnNestedOverlay
+							contentRole="panel"
+							popupRender={() => (
+								<DropdownMenu open modal={false}>
+									<DropdownMenuTrigger asChild>
+										<button type="button">Nested trigger</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent>
+										<button type="button" data-testid="nested-portal-content">
+											Nested content
+										</button>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							)}
+						>
+							<button type="button">Parent trigger</button>
+						</MagicDropdown>
+					</>
+				)
+			}
+
+			render(<NestedDropdown />)
+
+			const nestedContent = await screen.findByTestId("nested-portal-content")
+			expect(nestedContent.closest("[data-overlay-interaction-content]")).not.toBeNull()
+			fireEvent.pointerDown(nestedContent, { pointerType: "touch" })
+			fireEvent.click(nestedContent)
+
+			expect(screen.getByTestId("parent-dropdown-open")).toHaveTextContent("true")
+			expect(document.querySelector('[data-slot="popover-content"]')).not.toBeNull()
+		})
+
+		it("marks a nested overlay trigger before its portal opens", () => {
+			render(
+				<MagicDropdown
+					open
+					keepOpenOnNestedOverlay
+					contentRole="panel"
+					popupRender={() => (
+						<DropdownMenu modal={false}>
+							<DropdownMenuTrigger asChild>
+								<button type="button">Nested trigger</button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent>Nested content</DropdownMenuContent>
+						</DropdownMenu>
+					)}
+				>
+					<button type="button">Parent trigger</button>
+				</MagicDropdown>,
+			)
+
+			expect(screen.getByRole("button", { name: "Nested trigger" })).toHaveAttribute(
+				"data-overlay-interaction-scopes",
+			)
+			expect(screen.queryByText("Nested content")).not.toBeInTheDocument()
+		})
+
+		it("keeps the parent open for a nested overlay rendered through a reverse portal", async () => {
+			function ReversePortalNestedDropdown() {
+				const [open, setOpen] = useState(true)
+				const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null)
+
+				return (
+					<>
+						<output data-testid="parent-dropdown-open">{String(open)}</output>
+						<MagicDropdown
+							open={open}
+							onOpenChange={setOpen}
+							keepOpenOnNestedOverlay
+							contentRole="panel"
+							popupRender={() => <div ref={setPortalContainer}>Parent content</div>}
+						>
+							<button type="button">Parent trigger</button>
+						</MagicDropdown>
+						{portalContainer
+							? createPortal(
+									<DropdownMenu open modal={false}>
+										<DropdownMenuTrigger asChild>
+											<button type="button">Nested trigger</button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent>
+											<button
+												type="button"
+												data-testid="reverse-portal-content"
+											>
+												Nested content
+											</button>
+										</DropdownMenuContent>
+									</DropdownMenu>,
+									portalContainer,
+								)
+							: null}
+					</>
+				)
+			}
+
+			render(<ReversePortalNestedDropdown />)
+
+			const nestedContent = await screen.findByTestId("reverse-portal-content")
+			fireEvent.pointerDown(nestedContent, {
+				button: 0,
+				ctrlKey: false,
+				pointerType: "touch",
+			})
+			fireEvent.click(nestedContent)
+
+			await waitFor(() => {
+				expect(screen.getByTestId("parent-dropdown-open")).toHaveTextContent("true")
+			})
+		})
+
+		it("closes the parent when interacting with an unrelated portal", async () => {
+			function DropdownWithUnrelatedPortal() {
+				const [open, setOpen] = useState(true)
+
+				return (
+					<>
+						<output data-testid="parent-dropdown-open">{String(open)}</output>
+						<MagicDropdown
+							open={open}
+							onOpenChange={setOpen}
+							keepOpenOnNestedOverlay
+							contentRole="panel"
+							popupRender={() => <div>Parent content</div>}
+						>
+							<button type="button">Parent trigger</button>
+						</MagicDropdown>
+
+						<DropdownMenu open modal={false}>
+							<DropdownMenuTrigger asChild>
+								<button type="button">Unrelated trigger</button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent>
+								<button type="button" data-testid="unrelated-portal-content">
+									Unrelated content
+								</button>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</>
+				)
+			}
+
+			render(<DropdownWithUnrelatedPortal />)
+
+			const unrelatedContent = await screen.findByTestId("unrelated-portal-content")
+			fireEvent.pointerDown(unrelatedContent)
+			fireEvent.click(unrelatedContent)
+
+			await waitFor(() => {
+				expect(screen.getByTestId("parent-dropdown-open")).toHaveTextContent("false")
 			})
 		})
 	})

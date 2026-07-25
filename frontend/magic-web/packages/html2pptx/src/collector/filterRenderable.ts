@@ -7,6 +7,7 @@ import {
 	isInsideTableCell,
 	isTableCellStandaloneGraphicElement,
 } from "../shared/element-predicates"
+import { hasRenderableTextThroughDisplayContents } from "../shared/text-flow-dom"
 
 
 /**
@@ -28,6 +29,7 @@ function hasRenderableContent(node: ElementNode): boolean {
 	if (hasVisibleBackground(style.backgroundColor)) return true
 	if (hasVisibleBorder(style.borderStyle, style.borderWidth, style.borderColor)) return true
 	if (hasDirectTextChild(node)) return true
+	if (hasRenderableTextThroughDisplayContents(node.element)) return true
 	if (style.boxShadow && style.boxShadow !== "none") return true
 
 	return false

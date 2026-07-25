@@ -1,45 +1,15 @@
-import { createStyles } from "antd-style"
 import { magic } from "@/enhance/magicElectron"
 import { useEffect, useState } from "react"
 import { IconX, IconMinus, IconSquares } from "@tabler/icons-react"
+import { cn } from "@/lib/utils"
 import { useDesktopVersionCheck } from "./useDesktopVersionCheck"
 
-export const useStyles = createStyles(({ css }) => {
-	return {
-		menu: css`
-			width: 100px;
-			height: 12px;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-		`,
-		menuIcon: css`
-			width: 30px;
-			height: 30px;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: 4px;
-			color: rgba(33, 33, 33, 1);
-
-			&:hover {
-				background-color: rgba(33, 33, 33, 0.04);
-			}
-		`,
-		maxButton: css`
-			&:hover {
-				color: #fff;
-				background-color: #d53b2b;
-			}
-		`,
-		inactive: css`
-			color: rgba(33, 33, 33, 0.4);
-		`,
-	}
-})
+const menuIconClassName = cn(
+	"inline-flex size-[30px] items-center justify-center rounded-[4px] text-foreground",
+	"cursor-pointer hover:bg-foreground/[0.04]",
+)
 
 export function WindowMenu() {
-	const { styles, cx } = useStyles()
 	const { isHighVersion } = useDesktopVersionCheck()
 
 	const [isActive, setActive] = useState(false)
@@ -65,27 +35,28 @@ export function WindowMenu() {
 	}
 
 	return (
-		<div className={cx(styles.menu)}>
+		<div className="flex h-3 w-[100px] items-center justify-between" data-testid="window-menu">
 			<span
-				className={cx(styles.menuIcon, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(menuIconClassName, !isActive && "text-foreground/40")}
+				data-testid="window-menu-minimize-button"
 				onClick={() => magic?.view?.minimize?.()}
 			>
 				<IconMinus size={20} strokeWidth={1.5} />
 			</span>
 			<span
-				className={cx(styles.menuIcon, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(menuIconClassName, !isActive && "text-foreground/40")}
+				data-testid="window-menu-maximize-button"
 				onClick={() => magic?.view?.maximize?.()}
 			>
 				<IconSquares size={20} strokeWidth={1.5} />
 			</span>
 			<span
-				className={cx(styles.menuIcon, styles.maxButton, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(
+					menuIconClassName,
+					"hover:bg-[#d53b2b] hover:text-white",
+					!isActive && "text-foreground/40",
+				)}
+				data-testid="window-menu-close-button"
 				onClick={() => magic?.view?.close?.()}
 			>
 				<IconX size={20} strokeWidth={1.5} />

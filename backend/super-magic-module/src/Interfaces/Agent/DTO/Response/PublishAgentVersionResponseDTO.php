@@ -20,6 +20,7 @@ class PublishAgentVersionResponseDTO extends AbstractDTO
         private readonly bool $isCurrentVersion,
         private readonly ?string $publishedAt,
         private readonly ?string $categoryId,
+        private readonly array $categoryIds = [],
     ) {
     }
 
@@ -34,6 +35,7 @@ class PublishAgentVersionResponseDTO extends AbstractDTO
             'is_current_version' => $this->isCurrentVersion,
             'published_at' => $this->publishedAt,
             'category_id' => $this->categoryId,
+            'category_ids' => array_map(static fn (int $categoryId): string => (string) $categoryId, $this->categoryIds),
         ];
     }
 }

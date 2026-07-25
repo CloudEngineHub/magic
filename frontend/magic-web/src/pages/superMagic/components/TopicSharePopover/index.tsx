@@ -21,7 +21,7 @@ import { cn } from "@/lib/tiptap-utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ShareListRefreshType } from "@/pages/superMagic/components/ShareManagement/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { isMagicApp } from "@/utils/devices"
+import { isMagicApp, isNoHoverCoarsePointer } from "@/utils/devices"
 
 interface TopicSharePopoverProps {
 	open: boolean
@@ -701,10 +701,9 @@ function TopicSharePopover({
 					}
 				}}
 				onFocusOutside={(e) => {
-					// Magic App iPad uses the desktop popover on a WebView touch surface.
-					// Clipboard and WebView focus hops can briefly move focus outside without
-					// a user dismissal intent, so keep the PC popover open for focus-only changes.
-					if (isMagicApp) {
+					// Touch-first desktop layouts can move focus outside during a tap without
+					// expressing a user dismissal intent, so keep the PC popover open.
+					if (isMagicApp || isNoHoverCoarsePointer()) {
 						e.preventDefault()
 					}
 				}}

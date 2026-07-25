@@ -10,6 +10,7 @@ namespace App\Domain\SlidesTemplate\Repository\Persistence;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Factory\SlidesTemplateFactory;
@@ -18,6 +19,7 @@ use App\Domain\SlidesTemplate\Repository\Persistence\Model\SlidesTemplateModel;
 use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Carbon\Carbon;
 use Hyperf\Database\Model\Builder;
 use Hyperf\DbConnection\Db;
 
@@ -72,6 +74,14 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
     public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
     {
         return (int) $this->createQueryBuilder($dataIsolation, $query)->sum('total_usage_count');
+    }
+
+    public function countTodayCreated(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return $this->createQueryBuilder($dataIsolation, $query)
+            ->where('status', SlidesTemplateStatus::Enabled->value)
+            ->whereDate('created_at', Carbon::today()->toDateString())
+            ->count();
     }
 
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity

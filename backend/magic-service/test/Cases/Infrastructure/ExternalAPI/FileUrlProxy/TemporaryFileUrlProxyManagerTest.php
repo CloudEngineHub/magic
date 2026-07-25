@@ -37,19 +37,19 @@ final class TemporaryFileUrlProxyManagerTest extends TestCase
         $fileUrl = 'https://magic-sandbox.tos-cn-beijing.volces.com/path/input.png?X-Tos-Signature=abc';
         $base64File = 'data:image/png;base64,' . base64_encode('image-binary');
         $nonHttpFile = 'gs://bucket/input.png';
-        $proxyManageUrl = 'https://short-url.pages.letsmagic.space/' . $fileUrl;
+        $createUrl = 'https://short-url.pages.letsmagic.space/' . $fileUrl;
 
         $result = $manager->prepare([$fileUrl, $base64File, $nonHttpFile]);
 
         $this->assertSame([$shortUrl, $base64File, $nonHttpFile], $result['urls']);
-        $this->assertSame([$proxyManageUrl], $result['proxy_urls']);
+        $this->assertSame([$shortUrl], $result['proxy_urls']);
 
         $manager->cleanup($result['proxy_urls']);
 
         $this->assertSame('PUT', $history[0]['request']->getMethod());
-        $this->assertSame($proxyManageUrl, (string) $history[0]['request']->getUri());
+        $this->assertSame($createUrl, (string) $history[0]['request']->getUri());
         $this->assertSame('DELETE', $history[1]['request']->getMethod());
-        $this->assertSame($proxyManageUrl, (string) $history[1]['request']->getUri());
+        $this->assertSame($shortUrl, (string) $history[1]['request']->getUri());
         $this->assertSame(0, $mock->count());
     }
 
@@ -78,11 +78,10 @@ final class TemporaryFileUrlProxyManagerTest extends TestCase
         );
 
         $fileUrl = 'https://example.com/input.png';
-        $proxyManageUrl = 'https://short-url.pages.letsmagic.space/' . $fileUrl;
         $result = $manager->prepare([$fileUrl, $fileUrl]);
 
         $this->assertSame([$shortUrl, $shortUrl], $result['urls']);
-        $this->assertSame([$proxyManageUrl], $result['proxy_urls']);
+        $this->assertSame([$shortUrl], $result['proxy_urls']);
         $this->assertSame(0, $mock->count());
     }
 

@@ -23,6 +23,7 @@ import MobileMenuItem from "./components/MobileMenuItem"
 import { cn } from "@/lib/utils"
 import {
 	canTogglePendingItem,
+	canTogglePendingLeafItem,
 	getMentionItemSelectionKey,
 	getPendingSourceRootId,
 	getSubmittablePendingEntries,
@@ -113,6 +114,7 @@ const MentionPanelMobile = observer(
 			catalogBehavior,
 			buildStoreRequest,
 			canToggleMultiSelectItem,
+			enableMultiSelect = true,
 			...restProps
 		} = props
 
@@ -169,13 +171,13 @@ const MentionPanelMobile = observer(
 			setPendingByKey(new Map())
 		})
 
-		// Mirror desktop multi-select eligibility so folders can be selected as their own mention.
 		const canTogglePendingItemForItem = useCallback(
 			(item: MentionItem) => {
-				if (!canTogglePendingItem(item)) return false
+				if (!enableMultiSelect) return false
+				if (!canTogglePendingLeafItem(item)) return false
 				return canToggleMultiSelectItem ? canToggleMultiSelectItem(item) : true
 			},
-			[canToggleMultiSelectItem],
+			[canToggleMultiSelectItem, enableMultiSelect],
 		)
 
 		useEffect(() => {
@@ -331,6 +333,13 @@ const MentionPanelMobile = observer(
 					return
 				}
 
+				if (!enableMultiSelect) {
+					setTimeout(() => {
+						actions.confirmSelection({ enterFolder: false })
+					}, 100)
+					return
+				}
+
 				if (!canTogglePendingItemForItem(selectedItem)) {
 					const canDrillDown =
 						Boolean(
@@ -350,6 +359,9 @@ const MentionPanelMobile = observer(
 				actions,
 				canTogglePendingItemForItem,
 				requestPendingToggleForItem,
+				enableMultiSelect,
+				ensureMcpItemReadyForPending,
+				pendingByKey,
 				resolvedRuntime.catalogBehavior,
 				state,
 			],
@@ -485,6 +497,7 @@ const MentionPanelMobile = observer(
 				handleDeleteHistoryItem,
 				handleItemCheckboxClick,
 				handleItemClick,
+				canTogglePendingItemForItem,
 				pendingByKey,
 				rootPendingCounts,
 				totalPending,
@@ -517,9 +530,10 @@ const MentionPanelMobile = observer(
 		}, [mobileSheetView, computed.canNavigateBack, t.ariaLabels])
 
 		const a11yTitle = useMemo(() => {
+			if (!enableMultiSelect) return searchPlaceholder || t.searchPlaceholder
 			if (mobileSheetView === "selected") return t.mobileSelectedItemsTitle
 			return `${t.mobileSelectedItemsLabel} (${totalPending})`
-		}, [mobileSheetView, t, totalPending])
+		}, [enableMultiSelect, mobileSheetView, searchPlaceholder, t, totalPending])
 
 		const pendingEntries = useMemo(() => Array.from(pendingByKey.entries()), [pendingByKey])
 
@@ -567,7 +581,11 @@ const MentionPanelMobile = observer(
 								)}
 							</button>
 
-							{mobileSheetView === "selected" ? (
+							{!enableMultiSelect ? (
+								<h2 className="max-w-[min(100%,247px)] truncate text-center text-lg font-medium leading-6 text-foreground">
+									{searchPlaceholder || t.searchPlaceholder}
+								</h2>
+							) : mobileSheetView === "selected" ? (
 								<h2 className="max-w-[min(100%,247px)] truncate text-center text-lg font-medium leading-6 text-foreground">
 									{t.mobileSelectedItemsTitle}
 								</h2>
@@ -586,33 +604,35 @@ const MentionPanelMobile = observer(
 								</button>
 							)}
 
-							<button
-								type="button"
-								className={cn(
-									"absolute right-2.5 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full",
-									mobileSheetView === "selected" ? "bg-card" : "bg-primary",
-								)}
-								style={{ boxShadow: "0px 8px 25px 0px rgba(0,0,0,0.10)" }}
-								onClick={handleRightButton}
-								aria-label={
-									mobileSheetView === "selected"
-										? t.ariaLabels.clearAllSelected
-										: t.ariaLabels.confirmButton
-								}
-							>
-								{mobileSheetView === "selected" ? (
-									<Eraser
-										className="h-[22px] w-[22px] text-foreground"
-										aria-hidden
-									/>
-								) : (
-									<Check
-										className="h-[22px] w-[22px] text-primary-foreground"
-										strokeWidth={2.5}
-										aria-hidden
-									/>
-								)}
-							</button>
+							{enableMultiSelect ? (
+								<button
+									type="button"
+									className={cn(
+										"absolute right-2.5 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full",
+										mobileSheetView === "selected" ? "bg-card" : "bg-primary",
+									)}
+									style={{ boxShadow: "0px 8px 25px 0px rgba(0,0,0,0.10)" }}
+									onClick={handleRightButton}
+									aria-label={
+										mobileSheetView === "selected"
+											? t.ariaLabels.clearAllSelected
+											: t.ariaLabels.confirmButton
+									}
+								>
+									{mobileSheetView === "selected" ? (
+										<Eraser
+											className="h-[22px] w-[22px] text-foreground"
+											aria-hidden
+										/>
+									) : (
+										<Check
+											className="h-[22px] w-[22px] text-primary-foreground"
+											strokeWidth={2.5}
+											aria-hidden
+										/>
+									)}
+								</button>
+							) : null}
 						</div>
 
 						<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-3.5 pb-1 pt-2">

@@ -126,6 +126,10 @@ export interface GetStoreCategoriesResponse {
 	list: StoreCategoryItem[]
 }
 
+export interface GetStoreCategoriesParams {
+	include_empty?: 0 | 1
+}
+
 // ======================== Store Agents (API 2) ========================
 
 /** Query params for getting store agents list */
@@ -339,6 +343,8 @@ export interface PublishAgentPrefillResponse {
 	version_description_i18n: PublishAgentPrefillDescriptionI18n | null
 	publish_target_type: AgentPublishTargetType | null
 	publish_target_value?: PublishAgentTargetValue | null
+	category_id?: string | number | null
+	category_ids?: Array<string | number> | null
 }
 
 export interface PublishAgentParams {
@@ -348,6 +354,8 @@ export interface PublishAgentParams {
 	publish_to_type?: AgentPublishToType
 	publish_target_type: AgentPublishTargetType
 	publish_target_value?: PublishAgentTargetValue | null
+	category_id?: string | number | null
+	category_ids?: Array<string | number>
 }
 
 /** Response for publish agent (API 17) */
@@ -483,6 +491,7 @@ export interface AgentDetailResponse {
 	updated_at: string
 	project_id: string | null
 	publish_type?: AgentPublishToType | null
+	publish_target_type?: AgentPublishTargetType | null
 	allowed_publish_target_types?: AgentAllowedPublishTargetType[]
 }
 
@@ -529,6 +538,18 @@ export interface AgentVersionItem {
 	version_description_i18n: CrewI18nText | null
 	review_remark?: string | null
 	publish_target_value?: AgentPublishTargetValueResolved | null
+	category_id?: string | number | null
+	category?: {
+		id?: string | number | null
+		name_i18n?: CrewI18nText | null
+		name?: string | null
+	} | null
+	category_ids?: Array<string | number> | null
+	categories?: Array<{
+		id?: string | number | null
+		name_i18n?: CrewI18nText | null
+		name?: string | null
+	}> | null
 }
 
 export interface GetAgentVersionsResponse {
@@ -590,9 +611,9 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	 * Get store agent category list.
 	 * Returns all categories with crew count for the current organization.
 	 */
-	getStoreAgentCategories() {
+	getStoreAgentCategories(params: GetStoreCategoriesParams = {}) {
 		return fetch.get<GetStoreCategoriesResponse>(
-			genRequestUrl("/api/v2/super-magic/agent-market/categories"),
+			genRequestUrl("/api/v2/super-magic/agent-market/categories", {}, params),
 		)
 	},
 

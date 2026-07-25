@@ -24,7 +24,13 @@ class SaveSlidesTemplateRequestTest extends TestCase
 
         $this->assertArrayHasKey('category_code', $rules);
         $this->assertArrayNotHasKey('category_id', $rules);
-        $this->assertStringContainsString('regex:/^PPT-CATE-', (string) $rules['category_code']);
+
+        preg_match('/regex:(.+)$/', (string) $rules['category_code'], $matches);
+        $regex = $matches[1] ?? '';
+
+        $this->assertSame(1, preg_match($regex, 'PPT-CATE-business'));
+        $this->assertSame(1, preg_match($regex, 'SLIDE-CATE-business'));
+        $this->assertSame(0, preg_match($regex, 'SLD-CATE-business'));
     }
 
     public function testUsageCountFieldsAreNotAcceptedFromAdminRequest(): void

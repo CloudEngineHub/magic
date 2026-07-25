@@ -3,8 +3,8 @@ import { showMobileImagePreview } from "../../AtItem/components/MobileImagePrevi
 import { CanvasMarkerMentionData } from "@/components/business/MentionPanel/types"
 import { memo, useMemo, useRef } from "react"
 import { createStyles } from "antd-style"
-import { AREA_MARKER_STYLES } from "@/components/CanvasDesign/canvas/interaction/markers/markerStyles"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import { AREA_MARKER_STYLES } from "@/components/CanvasDesign/runtime/interaction/marker/markers/markerStyles"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import { useMarkerImageUrl } from "./useMarkerImageUrl"
 import {
 	getCanvasMarkerMentionImagePath,

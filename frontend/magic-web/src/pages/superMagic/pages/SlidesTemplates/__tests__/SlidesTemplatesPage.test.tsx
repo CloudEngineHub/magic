@@ -107,6 +107,7 @@ const {
 			loadTemplateDetail: vi.fn().mockResolvedValue(null),
 			retryRefresh: vi.fn(),
 			selectedGroupKey: "all",
+			selectedChildTagCodes: [] as string[],
 			setKeyword: vi.fn(),
 			setSelectedGroupKey: vi.fn(),
 			templateOptions: [template, related, unrelated],
@@ -156,6 +157,7 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 				enableInfiniteLoop,
 				hasMore,
 				initialAlignment,
+				isLoading,
 				onLoadMore,
 				onFindSimilarColors,
 				onPreviewOpenChange,
@@ -166,6 +168,7 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 				enableInfiniteLoop?: boolean
 				hasMore: boolean
 				initialAlignment?: "center" | "top"
+				isLoading: boolean
 				onLoadMore: () => void
 				onFindSimilarColors?: (template: OptionItem) => void
 				onPreviewOpenChange?: (isOpen: boolean) => void
@@ -194,6 +197,7 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 						data-testid="mock-slides-template-canvas-options"
 						data-has-more={String(hasMore)}
 						data-initial-alignment={initialAlignment}
+						data-is-loading={String(isLoading)}
 						data-loop-enabled={String(enableInfiniteLoop)}
 						data-reset-key={resetKey}
 					>
@@ -288,6 +292,8 @@ describe("SlidesTemplatesPage", () => {
 		catalogStateMock.isRefreshFailed = false
 		catalogStateMock.isRefreshing = false
 		catalogStateMock.loadedTemplateCount = 3
+		catalogStateMock.selectedChildTagCodes = []
+		catalogStateMock.selectedGroupKey = "all"
 		catalogStateMock.templateOptions = [businessTemplate, relatedTemplate, unrelatedTemplate]
 		catalogOptionsHistory.length = 0
 		canvasTemplatesHistory.length = 0
@@ -304,6 +310,31 @@ describe("SlidesTemplatesPage", () => {
 			"data-loop-enabled",
 			"true",
 		)
+	})
+
+	it("prefetches a second backend-sized batch for the unfiltered home canvas", async () => {
+		catalogStateMock.hasMore = true
+		catalogStateMock.loadedTemplateCount = 200
+		catalogStateMock.templateOptions = Array.from(
+			{ length: 200 },
+			(_, index): OptionItem => ({
+				value: `PPT-initial-${index}`,
+				label: `Initial Template ${index}`,
+			}),
+		)
+
+		render(<SlidesTemplatesPage />)
+
+		await waitFor(() => expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1))
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-is-loading",
+			"true",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"false",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toBeEmptyDOMElement()
 	})
 
 	it("disables the infinite loop while searching and restores it after clearing", () => {
@@ -587,6 +618,7 @@ describe("SlidesTemplatesPage", () => {
 			),
 		]
 		render(<SlidesTemplatesPage />)
+		vi.clearAllMocks()
 
 		fireEvent.click(screen.getByTestId("mock-slides-template-find-similar-colors"))
 

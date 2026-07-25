@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, CircleX, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
@@ -23,6 +23,7 @@ interface SlidesTemplateFloatingSelectorProps {
 	slidesState: SlidesTemplatePanelState
 	onFilterChange: (filterId: string, value: string) => void
 	onTemplateClick: (template: OptionItem) => void
+	onTemplateClear: () => void
 	templatePickerContainer?: HTMLDivElement | null
 	readOnly?: boolean
 	variant?: ScenePanelVariant
@@ -39,6 +40,7 @@ function SlidesTemplateFloatingSelector({
 	slidesState,
 	onFilterChange,
 	onTemplateClick,
+	onTemplateClear,
 	templatePickerContainer,
 	readOnly = false,
 	variant,
@@ -78,6 +80,7 @@ function SlidesTemplateFloatingSelector({
 		},
 		[onPreviewOpenChange],
 	)
+	const clearSelectionText = t("playbook.edit.presets.clearSelection")
 
 	const trigger = (
 		<Button
@@ -110,7 +113,37 @@ function SlidesTemplateFloatingSelector({
 				)}
 			</span>
 			<span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-				<ChevronDown className="size-4 text-muted-foreground opacity-50 transition-opacity" />
+				{isMobile && selectedTemplate ? (
+					<span
+						role="button"
+						tabIndex={0}
+						aria-label={clearSelectionText}
+						className={cn(
+							"inline-flex items-center justify-center rounded-full text-muted-foreground/70",
+							isCompactMobile && "-m-2 size-8 active:bg-muted",
+						)}
+						onPointerDown={(event) => {
+							event.preventDefault()
+							event.stopPropagation()
+						}}
+						onClick={(event) => {
+							event.preventDefault()
+							event.stopPropagation()
+							onTemplateClear()
+						}}
+						onKeyDown={(event) => {
+							if (event.key !== "Enter" && event.key !== " ") return
+							event.preventDefault()
+							event.stopPropagation()
+							onTemplateClear()
+						}}
+						data-testid="slides-template-floating-selector-clear-button"
+					>
+						<CircleX className="size-4 opacity-50" />
+					</span>
+				) : (
+					<ChevronDown className="size-4 text-muted-foreground opacity-50 transition-opacity" />
+				)}
 			</span>
 		</Button>
 	)
@@ -192,6 +225,8 @@ function SlidesTemplateFloatingSelector({
 			trigger={["click"]}
 			open={open}
 			onOpenChange={handleDropdownOpenChange}
+			keepOpenOnNestedOverlay
+			contentRole="panel"
 			popupRender={() => panelContent}
 			overlayClassName="w-[min(90vw,760px)] min-w-[360px] overflow-visible rounded-lg border border-border bg-popover p-3 shadow-xl"
 		>

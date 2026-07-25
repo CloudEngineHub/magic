@@ -22,6 +22,7 @@ import {
 import { OverflowTooltipText } from "./OverflowTooltipText"
 import { SlidesTemplateTagFormModal } from "./SlidesTemplateTagFormModal"
 import { SlidesTemplateTagGroupPanel } from "./SlidesTemplateTagGroupPanel"
+import { buildSlidesTemplateTagQueryParams } from "../tagQuery"
 
 type TagItem = SlidesTemplate.TagItem
 type TagParams = SlidesTemplate.TagQueryParams
@@ -62,6 +63,13 @@ export const SlidesTemplateTagModal = memo(
 			() => groups.find((group) => group.id === selectedGroupId) ?? null,
 			[groups, selectedGroupId],
 		)
+		const groupNames = useMemo(
+			() =>
+				new Map(
+					groups.map((group) => [String(group.id), resolveSlidesTemplateTagName(group)]),
+				),
+			[groups],
+		)
 
 		const { run, loading } = useRequest(
 			(nextParams: TagParams) => SlidesTemplateApi.tag.query(nextParams),
@@ -81,33 +89,25 @@ export const SlidesTemplateTagModal = memo(
 				if (preferredGroupId && tree.some((group) => group.id === preferredGroupId)) {
 					return preferredGroupId
 				}
+				if (currentGroupId === null) return null
 				if (currentGroupId && tree.some((group) => group.id === currentGroupId)) {
 					return currentGroupId
 				}
-				return tree[0]?.id ?? null
+				return null
 			})
 		})
 
 		const buildTagParams = useMemoizedFn((page = 1, pageSize = params.page_size) => {
-			if (!selectedGroupId) return null
-			return {
+			return buildSlidesTemplateTagQueryParams({
 				page,
-				page_size: pageSize,
-				parent_id: selectedGroupId,
-				node_type: "tag" as const,
-				keyword: filterDraft.keyword.trim() || undefined,
-				code: filterDraft.code.trim() || undefined,
-				status: filterDraft.status ?? null,
-			}
+				pageSize,
+				parentId: selectedGroupId,
+				filters: filterDraft,
+			})
 		})
 
 		const queryTags = useMemoizedFn((page = 1, pageSize = params.page_size) => {
 			const nextParams = buildTagParams(page, pageSize)
-			if (!nextParams) {
-				setData([])
-				setTotal(0)
-				return
-			}
 			setParams(nextParams)
 			run(nextParams)
 		})
@@ -230,6 +230,23 @@ export const SlidesTemplateTagModal = memo(
 						/>
 					),
 				},
+				...(selectedGroupId === null
+					? [
+							{
+								title: t("slidesTemplate.tag.fields.parent"),
+								dataIndex: "parent_id",
+								key: "parent_id",
+								width: 150,
+								ellipsis: { showTitle: false },
+								render: (value: string | number) => (
+									<OverflowTooltipText
+										text={groupNames.get(String(value)) ?? String(value)}
+										style={{ maxWidth: 150 }}
+									/>
+								),
+							},
+						]
+					: []),
 				{
 					title: t("slidesTemplate.tag.columns.templateCount"),
 					dataIndex: "template_count",
@@ -314,6 +331,8 @@ export const SlidesTemplateTagModal = memo(
 			],
 			[
 				t,
+				selectedGroupId,
+				groupNames,
 				statusLabel,
 				statusLoadingIds,
 				hasEditRight,
@@ -353,7 +372,9 @@ export const SlidesTemplateTagModal = memo(
 						<Flex align="center" justify="space-between">
 							<Flex align="center" gap={8}>
 								<Typography.Text strong>
-									{t("slidesTemplate.tag.childrenTitle")}
+									{selectedGroup
+										? t("slidesTemplate.tag.childrenTitle")
+										: t("slidesTemplate.tag.allTagsTitle")}
 								</Typography.Text>
 								{selectedGroup ? (
 									<Typography.Text type="secondary">
@@ -364,7 +385,7 @@ export const SlidesTemplateTagModal = memo(
 							<MagicButton
 								type="primary"
 								icon={<IconPlus size={16} />}
-								disabled={!hasEditRight || !selectedGroup}
+								disabled={!hasEditRight}
 								onClick={() => openForm("tag")}
 							>
 								{t("slidesTemplate.tag.addButton")}
@@ -424,14 +445,13 @@ export const SlidesTemplateTagModal = memo(
 							<MagicButton
 								onClick={() => {
 									setFilterDraft({ keyword: "", code: "", status: undefined })
-									const nextParams = {
+									const nextParams = buildSlidesTemplateTagQueryParams({
 										page: 1,
-										page_size: params.page_size,
-										parent_id: selectedGroupId ?? undefined,
-										node_type: "tag" as const,
-									}
+										pageSize: params.page_size,
+										parentId: selectedGroupId,
+									})
 									setParams(nextParams)
-									if (selectedGroupId) run(nextParams)
+									run(nextParams)
 								}}
 							>
 								{t("button.reset")}

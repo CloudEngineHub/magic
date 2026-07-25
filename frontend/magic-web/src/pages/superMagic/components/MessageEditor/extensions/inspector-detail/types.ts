@@ -15,6 +15,16 @@ export interface InspectorDetailAttrs {
 	styleCount: number
 	/** Truncated text content preview */
 	textContent: string
+	/** JSON-serialized element attributes */
+	elementAttributes?: string
+	/** Normalized resource URL/path */
+	resource?: string
+	/** JSON-serialized DOM position and sibling context */
+	domContext?: string
+	/** Sanitized, truncated outerHTML snippet */
+	elementHtml?: string
+	/** Number of elements matched by selector */
+	selectorMatchCount?: number
 	/** Optional source file mention for the inspected HTML file. */
 	fileMention?: TiptapMentionAttributes | null
 }

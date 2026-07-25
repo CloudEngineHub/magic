@@ -19,8 +19,6 @@ class OpenRouterRequest extends ImageGenerateRequest
         'exclude' => true,
     ];
 
-    protected array $referenceImages = [];
-
     public function __construct(
         string $width = '',
         string $height = '',
@@ -69,16 +67,6 @@ class OpenRouterRequest extends ImageGenerateRequest
         $this->reasoning = $reasoning;
     }
 
-    public function getReferenceImages(): array
-    {
-        return $this->referenceImages;
-    }
-
-    public function setReferenceImages(array $referenceImages): void
-    {
-        $this->referenceImages = $referenceImages;
-    }
-
     /**
      * 转换为 OpenRouter API 请求格式.
      */
@@ -122,8 +110,10 @@ class OpenRouterRequest extends ImageGenerateRequest
      */
     private function buildMessageContent(): array|string
     {
+        $referenceImages = $this->getReferImages();
+
         // 如果没有参考图片，直接返回文本提示词
-        if (empty($this->referenceImages)) {
+        if (empty($referenceImages)) {
             return $this->getPrompt();
         }
 
@@ -131,7 +121,7 @@ class OpenRouterRequest extends ImageGenerateRequest
         $content = [];
 
         // 添加所有参考图片
-        foreach ($this->referenceImages as $imageUrl) {
+        foreach ($referenceImages as $imageUrl) {
             $content[] = [
                 'type' => 'image_url',
                 'image_url' => [

@@ -49,7 +49,12 @@ export class DesignVersionManager {
 		const data = parseMagicProjectJsContent(content)
 		if (data) {
 			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) normalizeDesignDataPathsAfterLoad(data, dslBase)
+			if (dslBase) {
+				normalizeDesignDataPathsAfterLoad(data, dslBase, {
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				})
+			}
 		}
 		return data
 	}
@@ -62,7 +67,12 @@ export class DesignVersionManager {
 		const data = parseMagicProjectJsContent(content)
 		if (data) {
 			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) normalizeDesignDataPathsAfterLoad(data, dslBase)
+			if (dslBase) {
+				normalizeDesignDataPathsAfterLoad(data, dslBase, {
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				})
+			}
 			await hydrateDesignDataDetails(data, {
 				attachments: this.options.attachments,
 				flatAttachments: this.options.flatAttachments,

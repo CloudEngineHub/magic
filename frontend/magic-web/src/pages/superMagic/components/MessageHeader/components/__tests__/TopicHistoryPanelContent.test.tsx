@@ -15,12 +15,12 @@ const {
 	mockStartTopicStatusPolling,
 	mockStopTopicStatusPolling,
 	mockGetTopicDetail,
-	mockIsMagicApp,
+	mockIsNoHoverCoarsePointer,
 } = vi.hoisted(() => ({
 	mockStartTopicStatusPolling: vi.fn(),
 	mockStopTopicStatusPolling: vi.fn(),
 	mockGetTopicDetail: vi.fn(),
-	mockIsMagicApp: vi.fn(() => false),
+	mockIsNoHoverCoarsePointer: vi.fn(() => false),
 }))
 let latestTopicStatusPollingHandler: ((items: SuperAgentTopicStatusItem[]) => void) | null = null
 
@@ -85,9 +85,7 @@ vi.mock("@/pages/superMagic/services", () => ({
 }))
 
 vi.mock("@/utils/devices", () => ({
-	get isMagicApp() {
-		return mockIsMagicApp()
-	},
+	isNoHoverCoarsePointer: mockIsNoHoverCoarsePointer,
 }))
 
 vi.mock("@/stores/recordingSummary", () => ({
@@ -416,8 +414,8 @@ describe("TopicHistoryPanelContent", () => {
 		mockStartTopicStatusPolling.mockClear()
 		mockStopTopicStatusPolling.mockClear()
 		mockGetTopicDetail.mockReset()
-		mockIsMagicApp.mockReset()
-		mockIsMagicApp.mockReturnValue(false)
+		mockIsNoHoverCoarsePointer.mockReset()
+		mockIsNoHoverCoarsePointer.mockReturnValue(false)
 		latestTopicStatusPollingHandler = null
 		mockUsePaginatedTopics.mockImplementation(
 			(options?: { storeTopics?: Topic[]; searchKeyword?: string }) => {
@@ -632,9 +630,9 @@ describe("TopicHistoryPanelContent", () => {
 		).toBeInTheDocument()
 	})
 
-	it("shows app topic actions without hover and moves pin into the more menu", async () => {
+	it("shows no-hover browser topic actions without hover and moves pin into the more menu", async () => {
 		const handlePinTopic = vi.fn().mockResolvedValue(undefined)
-		mockIsMagicApp.mockReturnValue(true)
+		mockIsNoHoverCoarsePointer.mockReturnValue(true)
 
 		renderComponent({
 			onPinTopic: handlePinTopic,

@@ -1,7 +1,4 @@
-import type {
-	ProjectListItem,
-	Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 
 type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<void>
@@ -9,6 +6,8 @@ type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<voi
 export interface WorkspaceItemProps {
 	workspace: Workspace
 	className?: string
+	/** Search mode renders only the matching projects without updating the normal sidebar cache. */
+	searchProjects?: ProjectListItem[]
 }
 
 export interface ProjectListProps {

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Request\FileConverterRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Response\FileConverterResponse;
@@ -23,12 +24,13 @@ class FileConverterService extends AbstractSandboxOS implements FileConverterInt
         parent::__construct($loggerFactory);
     }
 
-    public function convert(string $userId, string $organizationCode, string $sandboxId, string $projectId, FileConverterRequest $request, string $workDir): FileConverterResponse
+    public function convert(DataIsolation $dataIsolation, string $sandboxId, string $projectId, FileConverterRequest $request, string $workDir): FileConverterResponse
     {
         $requestData = $request->toArray();
         try {
             // Sandbox must already be running (ensured by the App layer before calling convert)
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/file/converts',
@@ -69,7 +71,7 @@ class FileConverterService extends AbstractSandboxOS implements FileConverterInt
         }
     }
 
-    public function queryConvertResult(string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
+    public function queryConvertResult(DataIsolation $dataIsolation, string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
     {
         $this->logger->info('FileConverter Starting query conversion result', [
             'sandbox_id' => $sandboxId,
@@ -80,6 +82,7 @@ class FileConverterService extends AbstractSandboxOS implements FileConverterInt
         try {
             // 直接查询转换结果，不检查沙箱状态，因为 create 方法会保证沙箱启动
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'GET',
                 'api/file/converts/' . $taskKey,

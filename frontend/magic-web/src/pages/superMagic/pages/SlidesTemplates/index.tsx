@@ -11,6 +11,7 @@ import TemplateGroupSelector from "@/pages/superMagic/components/MainInputContai
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import { useSlidesTemplateCatalogState } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateCatalogState"
+import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "./SlidesTemplateCanvas"
 import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
 import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
@@ -34,6 +35,7 @@ const BOTTOM_TOOLS_OFFSET = 24
 // 接口单页上限是 200。固定使用较大的页大小，保证后续 page 分页的 offset 连续，
 // 也避免相似颜色筛选为了凑够结果频繁请求小页面。
 const CANVAS_TEMPLATE_PAGE_SIZE = 200
+const CANVAS_INITIAL_TEMPLATE_TARGET_COUNT = CANVAS_TEMPLATE_PAGE_SIZE * 2
 const CANVAS_EDGE_GAP = 40
 const SIMILAR_COLOR_TARGET_COUNT = 200
 const SIMILAR_COLOR_LOAD_MORE_INTERVAL_MS = 600
@@ -61,7 +63,20 @@ function SlidesTemplatesPage() {
 	const hasGroups = slidesState.groups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
 	const colorExtractionVersion = useTemplateColorExtractionVersion(isSimilarColorFilterActive)
-	const enableInfiniteLoop = !searchValue.trim() && !isSimilarColorFilterActive
+	const isUnfilteredAllTemplatesView =
+		slidesState.selectedGroupKey === ALL_SLIDES_TEMPLATE_GROUP_KEY &&
+		slidesState.selectedChildTagCodes.length === 0 &&
+		!searchValue.trim() &&
+		!slidesState.debouncedKeyword &&
+		!similarColorSource
+	const isInitialPrefetchPending =
+		isUnfilteredAllTemplatesView &&
+		slidesState.templateOptions.length >= CANVAS_TEMPLATE_PAGE_SIZE &&
+		slidesState.loadedTemplateCount < CANVAS_INITIAL_TEMPLATE_TARGET_COUNT &&
+		slidesState.hasMore &&
+		!slidesState.isLoadMoreFailed
+	const enableInfiniteLoop =
+		!searchValue.trim() && !isSimilarColorFilterActive && !isInitialPrefetchPending
 	const visibleTemplateOptions = useMemo(() => {
 		let nextTemplateOptions = slidesState.templateOptions
 
@@ -122,6 +137,37 @@ function SlidesTemplatesPage() {
 		if (isComposingRef.current) return
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
+
+	useEffect(() => {
+		if (
+			!isUnfilteredAllTemplatesView ||
+			slidesState.loadedTemplateCount === 0 ||
+			slidesState.templateOptions.length < CANVAS_TEMPLATE_PAGE_SIZE ||
+			slidesState.loadedTemplateCount >= CANVAS_INITIAL_TEMPLATE_TARGET_COUNT ||
+			!slidesState.hasMore ||
+			slidesState.isLoading ||
+			slidesState.isRefreshing ||
+			slidesState.isLoadingMore ||
+			slidesState.isLoadMoreFailed
+		) {
+			return
+		}
+
+		loadMoreTemplates()
+	}, [
+		isUnfilteredAllTemplatesView,
+		loadMoreTemplates,
+		searchValue,
+		similarColorSource,
+		slidesState.debouncedKeyword,
+		slidesState.hasMore,
+		slidesState.isLoading,
+		slidesState.isLoadingMore,
+		slidesState.isLoadMoreFailed,
+		slidesState.isRefreshing,
+		slidesState.loadedTemplateCount,
+		slidesState.templateOptions.length,
+	])
 
 	const queueMissingTemplateColors = useCallback(() => {
 		if (!similarColorSource) return
@@ -267,11 +313,11 @@ function SlidesTemplatesPage() {
 				ref={canvasRef}
 				enableInfiniteLoop={enableInfiniteLoop}
 				initialAlignment={isSimilarColorFilterActive ? "top" : "center"}
-				templates={visibleTemplateOptions}
+				templates={isInitialPrefetchPending ? [] : visibleTemplateOptions}
 				selectedTemplate={selectedTemplate}
 				onTemplateSelect={handleTemplateSelect}
 				hasMore={isSimilarColorFilterActive ? false : slidesState.hasMore}
-				isLoading={slidesState.isLoading}
+				isLoading={slidesState.isLoading || isInitialPrefetchPending}
 				isLoadingMore={slidesState.isLoadingMore}
 				isRefreshFailed={slidesState.isRefreshFailed}
 				isRefreshing={slidesState.isRefreshing}

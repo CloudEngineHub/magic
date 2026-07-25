@@ -275,6 +275,30 @@ const useStyles = createStyles(({ css }) => {
 				height: 0;
 			}
 		`,
+		pptManualZoomScrollbar: css`
+			scrollbar-width: thin;
+			scrollbar-color: rgb(var(--muted-foreground-rgb) / 0.45) transparent;
+
+			&::-webkit-scrollbar {
+				width: 8px;
+				height: 8px;
+			}
+
+			&::-webkit-scrollbar-track {
+				background: transparent;
+			}
+
+			&::-webkit-scrollbar-thumb {
+				border: 2px solid transparent;
+				border-radius: 9999px;
+				background-color: rgb(var(--muted-foreground-rgb) / 0.45);
+				background-clip: content-box;
+			}
+
+			&::-webkit-scrollbar-thumb:hover {
+				background-color: rgb(var(--muted-foreground-rgb) / 0.7);
+			}
+		`,
 		iframe: css`
 			width: 100%;
 			height: 100%;
@@ -2125,6 +2149,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					ref={containerRef}
 					className={cx(
 						hideVerticalScroll && styles.hiddenScrollbar,
+						isPptRender && isManualZoom && styles.pptManualZoomScrollbar,
 						cn(
 							"relative flex min-h-0 w-full flex-1",
 							devConsole.enabled && devConsoleLayout === "right"

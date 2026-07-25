@@ -92,6 +92,11 @@ export default function useMessageSendHandler({
 							size: t("stylePanel.inspector.size"),
 							computedStyles: t("stylePanel.inspector.computedStyles"),
 							textContent: t("stylePanel.inspector.textContent"),
+							elementAttributes: t("stylePanel.inspector.elementAttributes"),
+							resource: t("stylePanel.inspector.resource"),
+							domContext: t("stylePanel.inspector.domContext"),
+							elementHtml: t("stylePanel.inspector.elementHtml"),
+							selectorMatchCount: t("stylePanel.inspector.selectorMatchCount"),
 						},
 					)
 				: undefined

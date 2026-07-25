@@ -44,6 +44,7 @@ export type ActiveDetailTabType = FileViewerTabType | null
 export interface FileItem {
 	file_id: string
 	file_name: string
+	file_key?: string
 	display_filename?: string
 	filename?: string
 	file_extension?: string

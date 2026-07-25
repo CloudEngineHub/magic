@@ -41,6 +41,7 @@ export type {
 	TaskDomainEventPayload,
 	DomainEventPayload,
 	RegisterDomainEventListenerParams,
+	StreamRecoveryRequestPayload,
 } from "./types"
 
 // Re-export value exports
@@ -79,10 +80,16 @@ import type {
 	ToolResponseState,
 	TopicMeta,
 	RegisterDomainEventListenerParams,
+	StreamRecoveryRequestPayload,
 } from "./types"
 
 /** 离开话题超过该时长后，重新进入时优先快速追平而不是逐字续播。 */
 const TOPIC_CATCHUP_INACTIVE_THRESHOLD_MS = 8_000
+
+/** UI 已追平但迟迟没有终态时，触发一次服务端权威恢复而不是永久等待下一条 WS chunk。 */
+const STREAM_RECOVERY_TIMEOUT_MS = 5_000
+
+const STREAM_RECOVERY_MAX_BACKOFF_MS = 30_000
 
 const TERMINAL_TOPIC_TASK_STATUSES = new Set(["finished", "error", "suspended"])
 
@@ -109,6 +116,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private topicSyncGenerationCounter = 0
 	private onServerMessagesConfirmedCallbacks = new Set<
 		(payload: ServerMessagesConfirmedPayload) => void
+	>()
+	private onStreamRecoveryRequestedCallbacks = new Set<
+		(payload: StreamRecoveryRequestPayload) => void
 	>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
@@ -142,6 +152,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this,
 			{
 				onServerMessagesConfirmedCallbacks: false,
+				onStreamRecoveryRequestedCallbacks: false,
 				topicSyncGenerationCounter: false,
 			},
 			{ autoBind: true },
@@ -155,8 +166,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
+	registerOnStreamRecoveryRequested(callback: (payload: StreamRecoveryRequestPayload) => void) {
+		this.onStreamRecoveryRequestedCallbacks.add(callback)
+		return () => {
+			this.onStreamRecoveryRequestedCallbacks.delete(callback)
+		}
+	}
+
 	private emitServerMessagesConfirmed(payload: ServerMessagesConfirmedPayload) {
 		this.onServerMessagesConfirmedCallbacks.forEach((callback) => {
+			callback(payload)
+		})
+	}
+
+	private emitStreamRecoveryRequested(payload: StreamRecoveryRequestPayload) {
+		this.onStreamRecoveryRequestedCallbacks.forEach((callback) => {
 			callback(payload)
 		})
 	}
@@ -185,6 +209,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					clearTimeout(previousMeta.timer)
 					previousMeta.timer = null
 				}
+				this.clearStreamRecoveryTimer(prevTopicId)
 			}
 		}
 		this.activeTopicId = topicId
@@ -193,6 +218,52 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.replayPendingSnapshots(topicId)
 			this.resumeActiveStreams(topicId)
 		}
+	}
+
+	/** 清理当前话题等待服务端恢复的 watchdog，避免切换话题后旧流再次唤醒。 */
+	private clearStreamRecoveryTimer(topicId: string, correlationId?: string) {
+		const topicMeta = this.topicMeta.get(topicId)
+		if (!topicMeta?.recoveryTimer) return
+		if (correlationId && topicMeta.recoveryCorrelationId !== correlationId) return
+		clearTimeout(topicMeta.recoveryTimer)
+		topicMeta.recoveryTimer = null
+		topicMeta.recoveryCorrelationId = null
+	}
+
+	/**
+	 * 渲染追平后进入等待态时启动一次 watchdog。等待态本身是正常的，只有超过阈值仍未
+	 * 收到可渲染数据才请求 HTTP 权威快照，避免把“模型思考中”误判成卡死。
+	 */
+	private scheduleStreamRecovery(topicId: string, correlationId: string) {
+		const topicMeta = this.getTopicMetadata(topicId)
+		const streamState = topicMeta.content.get(correlationId)
+		if (!streamState || streamState.isFinalMessageReceived) return
+		if (topicId !== this.activeTopicId || topicMeta.timer) return
+		if (topicMeta.recoveryTimer && topicMeta.recoveryCorrelationId === correlationId) return
+
+		this.clearStreamRecoveryTimer(topicId)
+		const recoveryDelay = Math.min(
+			STREAM_RECOVERY_TIMEOUT_MS * 2 ** streamState.recoveryAttempts,
+			STREAM_RECOVERY_MAX_BACKOFF_MS,
+		)
+		topicMeta.recoveryCorrelationId = correlationId
+		topicMeta.recoveryTimer = setTimeout(() => {
+			runInAction(() => {
+				topicMeta.recoveryTimer = null
+				topicMeta.recoveryCorrelationId = null
+				const currentStreamState = topicMeta.content.get(correlationId)
+				if (
+					!currentStreamState ||
+					currentStreamState.isFinalMessageReceived ||
+					topicId !== this.activeTopicId ||
+					topicMeta.timer
+				)
+					return
+
+				currentStreamState.recoveryAttempts += 1
+				this.emitStreamRecoveryRequested({ topicId, correlationId })
+			})
+		}, recoveryDelay)
 	}
 
 	/**
@@ -244,6 +315,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return false
 
 		const topicMeta = this.getTopicMetadata(topicId)
+		this.clearStreamRecoveryTimer(topicId)
 		const now = Date.now()
 		const previousSyncedSeqId = topicMeta.lastSyncedSeqId
 		const inactiveSince =
@@ -356,10 +428,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 				}
 				if (messageType === "super_magic_message") {
-					if (rawNode?.role === "tool" && rawNode?.tool?.id)
+					if (rawNode?.role === "tool" && rawNode?.tool?.id) {
 						toolResponseMap.set(rawNode?.tool?.id, {
 							...rawNode?.tool,
 						})
+					}
 				}
 
 				this.messageMap.set(appMessageId, rawNode)
@@ -467,17 +540,34 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const topicMeta = this.getTopicMetadata(topicId)
 		if (topicMeta.finalizedCorrelationIds.has(correlationId)) return
 
-		const stableAppMessageId = correlationId
-		const streamState = this.getTopicStreamState(topicId, correlationId)
-
-		if (streamState.isFinalMessageReceived) return
-
 		const choice = messageChunk?.choices?.[0]
 		const delta = choice?.delta
-		const isFinalChunk = Boolean(choice?.finish_reason || messageChunk.usage)
-		if (!delta && !isFinalChunk) return
+		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
+		const isFinalChunk = Boolean(choice?.finish_reason || messageChunk?.usage)
+		const hasRenderableDelta = Boolean(
+			(typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) ||
+			(typeof delta?.content === "string" && delta.content.length > 0) ||
+			toolCalls.length > 0,
+		)
+		// heartbeat/metadata-only chunk 不能创建空 StreamState，否则 topic 会永久保持 streaming。
+		if (!hasRenderableDelta && !isFinalChunk) return
+
+		const existingStreamState = this.getStreamState(topicId, correlationId)
+		// 只有终止标记但没有任何前置数据时，等待最终 IM/HTTP 消息直接建立完整节点。
+		if (!existingStreamState && isFinalChunk && !hasRenderableDelta) {
+			if (topicId === this.activeTopicId && topicMeta.syncState !== "syncing") {
+				this.emitStreamRecoveryRequested({ topicId, correlationId })
+			}
+			return
+		}
+
+		const stableAppMessageId = correlationId
+		const streamState = existingStreamState || this.getTopicStreamState(topicId, correlationId)
+		if (streamState.isFinalMessageReceived) return
 
 		runInAction(() => {
+			this.clearStreamRecoveryTimer(topicId, correlationId)
+			streamState.recoveryAttempts = 0
 			if (isFinalChunk) {
 				topicMeta.isStream = false
 				streamState.isFinalMessageReceived = true
@@ -495,15 +585,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamState.content += delta.content
 			}
 
-			const toolCalls = delta?.tool_calls || []
-			if (toolCalls.length > 0) {
-				const fn = toolCalls?.[0]?.function
+			toolCalls.forEach((toolCall) => {
+				const fn = toolCall?.function
 				if (fn && !Array.isArray(fn) && typeof fn === "object") {
 					const isNewTool = fn.name
-					const toolIndex = toolCalls?.[0]?.index ?? 0
+					const toolIndex = toolCall?.index ?? 0
 
 					if (isNewTool) {
-						streamState.tool_calls[toolIndex] = toolCalls?.[0]
+						const existingTool = streamState.tool_calls[toolIndex]
+						streamState.tool_calls[toolIndex] = {
+							...existingTool,
+							...toolCall,
+							function: {
+								...existingTool?.function,
+								...fn,
+							},
+						} as ToolCall
 					} else {
 						const argCache = get(
 							streamState,
@@ -517,7 +614,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						)
 					}
 				}
-			}
+			})
 
 			this.startStreamRendering(topicId, stableAppMessageId)
 		})
@@ -561,6 +658,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		if (!streamState) return
 		const topicMeta = this.getTopicMetadata(topicId)
+		this.clearStreamRecoveryTimer(topicId, correlationId)
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
@@ -582,6 +680,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			isProcessing: boolean
 			messages: RawSuperMagicMessageEnvelope[]
 		}
+	}
+
+	/**
+	 * tool response 属于 canonical 数据，不应等待 assistant 打字机完成后才入账。
+	 * UI 的 tool 字段会从这个 Map 读取，消息队列只负责顺序化列表和领域事件。
+	 */
+	private recordToolResponse(topicId: string, messageNode?: RawSuperMagicMessageNode) {
+		const toolId = String(messageNode?.tool?.id || messageNode?.tool_call_id || "")
+		if (!toolId || messageNode?.role !== "tool") return
+		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
+		toolResponseMap.set(toolId, { ...(messageNode.tool as ToolResponseState) })
+		this.toolResponseMap.set(topicId, toolResponseMap)
 	}
 
 	addUserMessage(topicId: string, baseMessage: PendingUserMessageEnvelope) {
@@ -798,6 +908,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const correlationId = messageNode?.correlation_id as string
 
 		const buffer = this.getTopicBuffer(topicId)
+		this.recordToolResponse(topicId, messageNode)
 
 		// 针对客户端的工具调用消息直接过滤
 		if (nextMessage?.type === "user_tool_call") {
@@ -1026,31 +1137,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					this.handleTopicSuspended(topicId)
 				}
 
-				// 仅等待当前 tool 所属 assistant 的流式动画完成；其他消息的流式
-				// 不应阻塞当前 tool 完成态写入，否则上一条工具会被下一条回复卡住。
-				const topicMeta = this.getTopicMetadata(topicId)
-				const relatedStreamState = messageNode?.correlation_id
-					? topicMeta.content.get(messageNode.correlation_id as string)
-					: undefined
-				if (relatedStreamState && relatedStreamState.stage !== "done") {
-					console.log(
-						"%c 【DEBUG】 消费队列 - 工具（等待流式完成）",
-						"background-color: orange;color: white;padding:0 4px",
-						JSON.parse(JSON.stringify(buffer)),
-					)
-					buffer.messages.unshift(nextMessage!)
-					buffer.isProcessing = false
-					return
-				}
-
-				// 流式已结束，安全消费 tool 响应并更新 toolResponseMap
-				const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
-				if (messageNode?.tool?.id) {
-					toolResponseMap.set(messageNode?.tool?.id || "", {
-						...messageNode?.tool,
-					})
-				}
-				this.toolResponseMap.set(topicId, toolResponseMap)
+				// tool response 已在 enqueueMessage / 入队时写入 canonical map；这里不再等待
+				// assistant 动画，避免一个停住的 StreamState 永久卡住整个消息队列。
+				this.recordToolResponse(topicId, messageNode)
 
 				console.log(
 					"%c 【DEBUG】 消费队列 - 工具",
@@ -1079,6 +1168,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.processMessageBuffer(topicId)
 			} else {
 				const correlationId = messageNode?.correlation_id as string
+				const rawAppMessageId = nextMessage?.seq?.message?.app_message_id as string
 				const topicMeta = this.getTopicMetadata(topicId)
 				if (correlationId && topicMeta.finalizedCorrelationIds.has(correlationId)) {
 					// 全量服务端快照已经结算该 assistant；丢弃 buffer 中的重复副本，
@@ -1109,6 +1199,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamState.content = messageNode?.content || ""
 				streamState.reasoning_content = (messageNode?.reasoning_content as string) || ""
 				streamState.tool_calls = (messageNode?.tool_calls as ToolCall[]) || []
+				// 服务端原始 app_message_id 与流式稳定 correlationId 都必须可回查到最终节点。
+				if (rawAppMessageId) this.messageMap.set(rawAppMessageId, messageNode)
 				this.startStreamRendering(topicId, messageNode?.correlation_id as string)
 
 				// 首次真消息（无 chunk 前置）场景：startStreamRendering 只会用
@@ -1166,6 +1258,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		const progressed = this.resumeFromCurrentStateV2(topicId, correlationId)
+		if (progressed) this.clearStreamRecoveryTimer(topicId, correlationId)
 
 		if (streamState.isFinalMessageReceived && streamState.stage === "done") {
 			const isStreamContentSame = streamState.content === cache?.content
@@ -1186,8 +1279,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 		if (!progressed && !streamState.isFinalMessageReceived) {
 			// 流式无新数据且未收到最终消息 → 暂停定时器，等待下一个 chunk
-			// 到达后由 receiveChunk → startStreamRendering 重启渲染
+			// 到达后由 receiveChunk 重启渲染；若长期没有有效数据则 watchdog 请求 HTTP 快照。
 			if (topicMeta.renderPolicy === "catchup") topicMeta.renderPolicy = "live"
+			this.scheduleStreamRecovery(topicId, correlationId)
 			return
 		}
 
@@ -1231,6 +1325,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 */
 	private settleTopicStreamsInstantly(topicId: string) {
 		const topicMeta = this.getTopicMetadata(topicId)
+		this.clearStreamRecoveryTimer(topicId)
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
@@ -1270,6 +1365,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private completeStreamRendering(topicId: string, correlationId?: string) {
 		const meta = this.getTopicMetadata(topicId)
+		this.clearStreamRecoveryTimer(topicId, correlationId)
 		meta.isStreamLoading = false
 		if (meta.timer) {
 			clearTimeout(meta.timer)

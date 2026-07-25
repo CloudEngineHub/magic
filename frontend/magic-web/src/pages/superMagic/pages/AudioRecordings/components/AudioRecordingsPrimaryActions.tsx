@@ -1,14 +1,8 @@
 import { useRef } from "react"
-import { ChevronDown, Mic, Settings, Upload } from "lucide-react"
+import { Mic, Settings, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/shadcn-ui/dropdown-menu"
 
 interface AudioRecordingsPrimaryActionsProps {
 	onOpenSettings: () => void
@@ -17,27 +11,7 @@ interface AudioRecordingsPrimaryActionsProps {
 	isStartingRecording?: boolean
 }
 
-/** Renders the dropdown row that opens the stable desktop file picker. */
-function DesktopAudioImportMenuItem({
-	onOpenFilePicker,
-	label,
-}: {
-	onOpenFilePicker: () => void
-	label: string
-}) {
-	return (
-		<DropdownMenuItem
-			onClick={onOpenFilePicker}
-			className="gap-2"
-			data-testid="audio-recordings-import-menu-item"
-		>
-			<Upload className="size-4" aria-hidden />
-			<span>{label}</span>
-		</DropdownMenuItem>
-	)
-}
-
-/** Desktop-only action cluster that separates creation actions from the filter toolbar. */
+/** Desktop-only action cluster that keeps recording primary while exposing import as a peer action. */
 export function AudioRecordingsPrimaryActions({
 	onOpenSettings,
 	onImportFiles,
@@ -54,8 +28,7 @@ export function AudioRecordingsPrimaryActions({
 		>
 			{onImportFiles ? (
 				<AudioUploadAction
-					// Keep the hidden file input mounted outside the dropdown content so
-					// the browser can still deliver the selected files after the menu closes.
+					// Keep the hidden input mounted at the action-cluster level so file selection survives UI changes.
 					handler={(onUpload) => {
 						openFilePickerRef.current = onUpload
 						return null
@@ -64,46 +37,34 @@ export function AudioRecordingsPrimaryActions({
 				/>
 			) : null}
 
-			{/* Keep recording as the dominant CTA while exposing upload through the adjacent menu. */}
-			<DropdownMenu>
-				<div className="flex items-center">
-					<Button
-						type="button"
-						size="sm"
-						className="h-9 rounded-r-none px-3.5"
-						disabled={isStartingRecording || !onStartRecording}
-						onClick={onStartRecording}
-						data-testid="audio-recordings-start-recording-button"
-					>
-						<Mic className="size-4" aria-hidden />
-						<span>{t("actions.startRecording")}</span>
-					</Button>
-					<DropdownMenuTrigger asChild>
-						<Button
-							type="button"
-							size="icon"
-							className="h-9 w-9 rounded-l-none border-l border-primary-foreground/15 px-0"
-							disabled={isStartingRecording}
-							aria-label={t("card.moreActions")}
-							data-testid="audio-recordings-start-recording-menu-trigger"
-						>
-							<ChevronDown className="size-4" aria-hidden />
-						</Button>
-					</DropdownMenuTrigger>
-				</div>
-				<DropdownMenuContent align="end" className="min-w-[160px]">
-					{onImportFiles ? (
-						<DesktopAudioImportMenuItem
-							// The menu item only opens the stable picker; it must not own the
-							// hidden input because dropdown teardown happens before file selection returns.
-							onOpenFilePicker={() => openFilePickerRef.current()}
-							label={t("card.sourceImported")}
-						/>
-					) : null}
-				</DropdownMenuContent>
-			</DropdownMenu>
+			{/* Keep recording visually dominant because it is the default creation path. */}
+			<Button
+				type="button"
+				size="sm"
+				className="h-9 px-3.5"
+				disabled={isStartingRecording || !onStartRecording}
+				onClick={onStartRecording}
+				data-testid="audio-recordings-start-recording-button"
+			>
+				<Mic className="size-4" aria-hidden />
+				<span>{t("actions.startRecording")}</span>
+			</Button>
 
-			{/* Keep settings visible as a secondary action so recording remains the primary emphasis. */}
+			{onImportFiles ? (
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					className="h-9 shrink-0 gap-1.5 rounded-lg bg-background px-3 shadow-xs"
+					onClick={() => openFilePickerRef.current()}
+					data-testid="audio-recordings-import-audio-button"
+				>
+					<Upload className="size-4" aria-hidden />
+					<span>{t("card.sourceImported")}</span>
+				</Button>
+			) : null}
+
+			{/* Reuse the settings dialog title so the entry and modal stay semantically aligned. */}
 			<Button
 				type="button"
 				variant="outline"
@@ -113,7 +74,6 @@ export function AudioRecordingsPrimaryActions({
 				data-testid="audio-recordings-settings-button"
 			>
 				<Settings className="size-4" aria-hidden />
-				{/* Reuse the dialog title key so the entry and modal stay semantically aligned. */}
 				<span>{t("super:mobile.recordingEntry.settings.title")}</span>
 			</Button>
 		</div>

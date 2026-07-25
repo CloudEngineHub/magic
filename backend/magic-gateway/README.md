@@ -186,10 +186,12 @@ MAGIC_GATEWAY_ALLOWED_TARGET_IP=10.0.0.0/8,2001:db8::/32,::1
 
 ```
 # 通用配置
-JWT_SECRET=your-secret-key-change-me
+JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
 API_GATEWAY_VERSION=1.0.0
 DEFAULT_API_URL=https://api.default-service.com
-MAGIC_GATEWAY_API_KEY=your-gateway-api-key-here
+MAGIC_GATEWAY_API_KEY=replace-with-a-random-gateway-key
+# JWT 令牌有效期（天），默认 30
+MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS=30
 
 # OpenAI 服务配置
 OPENAI_API_KEY=sk-xxxx
@@ -214,7 +216,13 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT=example-text-embedding
 AZURE_OPENAI_EMBEDDING_API_VERSION=2023-05-15
 ```
 
+
+
 **重要：** `MAGIC_GATEWAY_API_KEY` 是一个关键安全凭证，仅用于 `/auth` 接口的认证。只有获取令牌时需要提供此API密钥，获取令牌后的其他请求都使用获得的令牌进行认证，不需要再提供此API密钥。
+
+**安全要求：** `JWT_SECRET` 必须至少32字符，并且必须与 `MAGIC_GATEWAY_API_KEY` 使用不同的随机值。`/status` 需要 `X-Gateway-API-Key`，只返回版本和健康状态；容器健康检查请使用无需认证且不返回配置的 `/healthz`。
+
+升级前的版本使用 `MAGIC_GATEWAY_API_KEY` 签发JWT。网关默认继续接受这些旧令牌，不需要额外配置；新令牌仍只使用 `JWT_SECRET` 签发。
 
 ### 容器环境变量
 

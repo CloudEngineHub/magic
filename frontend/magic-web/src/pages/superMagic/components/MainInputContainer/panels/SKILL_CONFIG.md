@@ -202,6 +202,54 @@ type LocaleText = string | Record<string, string>
 | `default_group_key` | `string`                        | 否   | 默认选中的分组 key（配合 `OptionGroup` 使用）   |
 | `default_value`     | `string`                        | 否   | 默认选中的选项 value                            |
 | `option_view_type`  | `OptionViewType`                | 否   | 选项的视图模式，见枚举说明                      |
+| `custom_input`      | `FieldCustomInputConfig`        | 否   | 在预设选项之外允许输入精确值，当前支持数字输入  |
+
+### `custom_input` 自定义输入
+
+当字段既需要提供常用预设选项，又需要允许用户输入精确值时，可以配置 `custom_input`。预设选项和自定义输入共用 `FieldItem.current_value`，因此上层状态、发送内容和重置逻辑不需要维护两套字段。
+
+当前仅支持数字输入：
+
+```json
+{
+  "data_key": "pages",
+  "label": { "zh_CN": "页数", "en_US": "Pages" },
+  "default_value": "",
+  "options": [
+    { "value": "1-5", "label": "1-5" },
+    { "value": "6-10", "label": "6-10" },
+    { "value": "10+", "label": "10+" }
+  ],
+  "custom_input": {
+    "type": "number",
+    "min": 1,
+    "step": 1,
+    "integer": true,
+    "placeholder": { "zh_CN": "请输入页数", "en_US": "Enter pages" },
+    "unit": { "zh_CN": "页", "en_US": "pages" }
+  }
+}
+```
+
+#### `FieldCustomInputConfig` 字段说明
+
+| 字段          | 类型         | 必填 | 说明                                                   |
+| ------------- | ------------ | ---- | ------------------------------------------------------ |
+| `type`        | `"number"`   | 是   | 输入类型，当前仅支持数字                               |
+| `min`         | `number`     | 否   | 允许的最小值                                           |
+| `max`         | `number`     | 否   | 允许的最大值                                           |
+| `step`        | `number`     | 否   | 数值步长；设置后会以 `min` 或 `0` 作为步长计算起点     |
+| `integer`     | `boolean`    | 否   | 是否只允许安全整数                                     |
+| `placeholder` | `LocaleText` | 否   | 输入框占位文本                                         |
+| `unit`        | `LocaleText` | 否   | 展示在输入框末尾的单位，如「页」「个」「分钟」         |
+
+约束与扩展原则：
+
+1. `default_value` 仍属于 `FieldItem`，不要放入 `custom_input`。它描述字段初始值，而不是输入控件本身。
+2. 数字解析和校验统一由 `fieldCustomInput.ts` 处理，UI 组件只负责展示、收集和提交值。
+3. `unit` 只用于展示，不会自动拼接到 `current_value`；例如输入 `8` 时提交值仍为 `"8"`。
+4. 不在配置中加入宽度、颜色、CSS class 等页面样式，避免业务配置与具体 UI 实现耦合。
+5. 后续增加文本、日期等类型时，应将 `FieldCustomInputConfig` 改为以 `type` 区分的联合类型，并分别定义对应约束，不要把所有类型的属性堆到同一个接口中。
 
 ---
 

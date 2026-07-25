@@ -46,6 +46,10 @@ export interface CategoryView {
 	crewCount: number
 }
 
+export interface GetStoreCategoriesOptions {
+	includeEmpty?: boolean
+}
+
 export interface StoreAgentView {
 	id: string
 	agentCode: string
@@ -164,8 +168,10 @@ export interface PagedResult<T> {
 export class CrewService {
 	// ─── Categories ─────────────────────────────────────────────────────────
 
-	async getStoreCategories(): Promise<CategoryView[]> {
-		const data = await CrewApi.getStoreAgentCategories()
+	async getStoreCategories(options: GetStoreCategoriesOptions = {}): Promise<CategoryView[]> {
+		const data = await CrewApi.getStoreAgentCategories({
+			include_empty: options.includeEmpty ? 1 : undefined,
+		})
 		return data.list.map((item) => this.mapCategory(item))
 	}
 

@@ -681,9 +681,9 @@ class TaskDomainService
         return $this->taskRepository->updateTaskStatusBySandboxIds($sandboxIds, $taskStatus->value, $errMsg, $finishedTime, $activeStatuses);
     }
 
-    public function executeScriptTask(ScriptTaskEntity $scriptTaskEntity): void
+    public function executeScriptTask(DataIsolation $dataIsolation, ScriptTaskEntity $scriptTaskEntity): void
     {
         $scriptTaskRequest = ScriptTaskRequest::create($scriptTaskEntity->getTaskId(), $scriptTaskEntity->getArguments(), $scriptTaskEntity->getScriptName());
-        $this->sandboxAgent->executeScriptTask($scriptTaskEntity->getSandboxId(), $scriptTaskRequest);
+        $this->sandboxAgent->executeScriptTask($dataIsolation, $scriptTaskEntity->getSandboxId(), $scriptTaskRequest);
     }
 }

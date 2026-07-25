@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from uvicorn.config import Config
 from pathlib import Path
 
-from app.api.middleware import RequestLoggingMiddleware
+from app.api.middleware import RequestLoggingMiddleware, UserAuthorizationMiddleware
 from app.api.routes import api_router
 from app.service.agent_dispatcher import AgentDispatcher
 from agentlang.logger import get_logger
@@ -188,6 +188,12 @@ def create_app() -> FastAPI:
 
     # Auto-instrument FastAPI with OpenTelemetry (non-intrusive, controlled by env var)
     instrument_fastapi(app)
+
+    # User-Authorization 校验中间件必须在其他中间件**之前**注册——
+    # Starlette 的 add_middleware 是后进先出（后注册的成为最外层），
+    # 这样 UserAuthorizationMiddleware 才会成为最外层，先于 CORS /
+    # 日志中间件拒绝未鉴权请求，避免无意义的下游处理。
+    app.add_middleware(UserAuthorizationMiddleware)
 
     # 添加请求日志中间件
     app.add_middleware(RequestLoggingMiddleware)

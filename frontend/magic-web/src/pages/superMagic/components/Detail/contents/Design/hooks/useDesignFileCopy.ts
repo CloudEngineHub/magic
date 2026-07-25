@@ -12,18 +12,20 @@ import {
 	getOrCreateUploadSubDirFileId,
 	validateUploadDirectoryFileId,
 } from "../utils/designAssetDirectory"
-import { normalizePath, findFileBySrc } from "../utils/utils"
+import { normalizePath } from "../utils/utils"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
 import {
-	normalizeDesignAttachmentPathForCanvas,
-	resolveDesignDslPathCandidatesToWorkspaceRelative,
-} from "../utils/designDslPathUtils"
+	getDesignPathFileName,
+	resolveDesignAttachment,
+	toDesignDslPath,
+	toWorkspaceRelativeCandidates,
+} from "../utils/designPath"
 import {
 	SUPPORTED_AUDIO_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 	validateCanvasFilePath,
-} from "@/components/CanvasDesign/canvas/utils/utils"
-import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/runtime/shared/ids"
+import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/public/magic-types"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseDesignFileCopyOptions {
@@ -149,14 +151,12 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				return
 			}
 
-			const normalizedCandidates = resolveDesignDslPathCandidatesToWorkspaceRelative(
-				path,
+			const normalizedCandidates = toWorkspaceRelativeCandidates(path, {
 				designProjectBasePath,
-			).map((candidate) => normalizePath(candidate))
+			}).map((candidate) => normalizePath(candidate))
 
 			const maxAttempts = Math.max(1, Math.floor(ATTACHMENT_WAIT_TIMEOUT_MS / 1000))
 			for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-
 				const latestAttachments = await getProjectAttachments(projectId)
 				const matchedAttachment = latestAttachments.find(
 					(item) =>
@@ -178,14 +178,17 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 	const copyFileToDesignAssetDirectory = useCallback(
 		async (filePath: string, assetDirPath: string, assetDirItem: FileItem): Promise<string> => {
-			const fileItem = findFileBySrc(
+			const resolvedFile = resolveDesignAttachment(
 				filePath,
-				flatAttachments || [],
-				designProjectBasePath,
-				attachmentIndex,
+				{
+					flatAttachments: flatAttachments || [],
+					designProjectBasePath,
+					attachmentIndex,
+				},
+				{ mode: "strict-current-canvas" },
 			)
 
-			if (!fileItem?.file_id) {
+			if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
 				return filePath
 			}
 
@@ -193,7 +196,8 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				return filePath
 			}
 
-			const fileName = fileItem.file_name || filePath.split("/").pop() || ""
+			const fileItem = resolvedFile.fileItem
+			const fileName = fileItem.file_name || getDesignPathFileName(filePath)
 			const expectedPathInDir = `${assetDirPath}/${fileName}`
 			const normalizedExpectedPath = normalizePath(expectedPathInDir)
 			const existingFileInDir = flatAttachments?.find(
@@ -203,10 +207,9 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 			)
 
 			if (existingFileInDir) {
-				return normalizeDesignAttachmentPathForCanvas(
-					existingFileInDir.relative_file_path || expectedPathInDir,
+				return toDesignDslPath(existingFileInDir.relative_file_path || expectedPathInDir, {
 					designProjectBasePath,
-				)
+				})
 			}
 
 			try {
@@ -217,10 +220,9 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 					pre_file_id: "",
 				})) as BatchOperationResult
 
-				const newPath = normalizeDesignAttachmentPathForCanvas(
-					`${assetDirPath}/${fileName}`,
+				const newPath = toDesignDslPath(`${assetDirPath}/${fileName}`, {
 					designProjectBasePath,
-				)
+				})
 
 				if (copyResult.status === "success" || copyResult.status === "completed") {
 					await waitForAttachmentVisible(newPath)
@@ -403,11 +405,9 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				}
 
 				const { assetDirPath, normalizedAssetDirPath, assetDirItem } = dirCtx
-				const normalizedFilePathCandidates =
-					resolveDesignDslPathCandidatesToWorkspaceRelative(
-						filePath,
-						designProjectBasePath,
-					).map((candidate) => normalizePath(candidate))
+				const normalizedFilePathCandidates = toWorkspaceRelativeCandidates(filePath, {
+					designProjectBasePath,
+				}).map((candidate) => normalizePath(candidate))
 				const matchedFile = flatAttachments.find(
 					(item) =>
 						!item.is_directory &&
@@ -418,7 +418,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				const matchedFilePath = normalizePath(matchedFile?.relative_file_path || "")
 				const isInAssetDir = matchedFilePath.startsWith(normalizedAssetDirPath + "/")
 
-				const fileName = filePath.split("/").pop() || ""
+				const fileName = getDesignPathFileName(filePath)
 				const expectedPathInAssetDir = `${assetDirPath}/${fileName}`
 				const normalizedExpectedPath = normalizePath(expectedPathInAssetDir)
 				const existingFileInAssetDir = flatAttachments.find(
@@ -429,10 +429,9 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 				if (isInAssetDir || existingFileInAssetDir) {
 					processedPaths.push(
-						normalizeDesignAttachmentPathForCanvas(
-							existingFileInAssetDir?.relative_file_path || filePath,
+						toDesignDslPath(existingFileInAssetDir?.relative_file_path || filePath, {
 							designProjectBasePath,
-						),
+						}),
 					)
 				} else {
 					const newPath = await copyFileToDesignAssetDirectory(

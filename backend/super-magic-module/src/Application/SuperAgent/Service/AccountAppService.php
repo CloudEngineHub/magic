@@ -40,8 +40,7 @@ class AccountAppService extends AbstractAppService
     public function initAccount(string $organizationCode): array
     {
         // 查询是否已经存在了超级麦吉账号，如果存在则不更新
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentOrganizationCode($organizationCode);
+        $dataIsolation = DataIsolation::create($organizationCode);
         $aiUserEntity = $this->userDomainService->getByAiCode($dataIsolation, AgentConstant::SUPER_MAGIC_CODE);
         if (! empty($aiUserEntity)) {
             ExceptionBuilder::throw(GenericErrorCode::SystemError, 'account.super_magic_already_created');

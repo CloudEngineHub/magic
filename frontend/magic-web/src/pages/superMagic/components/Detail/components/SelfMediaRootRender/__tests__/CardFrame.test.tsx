@@ -259,7 +259,7 @@ describe("CardFrame", () => {
 		const iframe = await screen.findByTitle("card-capture")
 		expect(ref.current).not.toBeNull()
 
-		await ref.current?.capture()
+		await ref.current?.capture({ format: "webp" })
 
 		expect(mockStabilizeSingleLineTextForSnapdom).toHaveBeenCalledWith(
 			iframe.contentDocument?.body,
@@ -269,6 +269,13 @@ describe("CardFrame", () => {
 			expect.objectContaining({
 				backgroundColor: "#ffffff",
 				embedFonts: false,
+			}),
+		)
+		expect(mockSnapdomToBlob).toHaveBeenCalledWith({ type: "webp", quality: 0.92 })
+		expect(ref.current?.getCaptureSize?.()).toEqual(
+			expect.objectContaining({
+				width: expect.any(Number),
+				height: expect.any(Number),
 			}),
 		)
 		expect(restoreTextStyles).toHaveBeenCalledTimes(1)

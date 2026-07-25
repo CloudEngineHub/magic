@@ -159,6 +159,7 @@ return [
         'organization_creator_cannot_be_disabled' => '组织创建人不可禁用',
         'current_user_not_organization_creator' => '当前用户不是组织创建人',
         'personal_organization_cannot_grant_admin' => '个人组织不可设置组织管理员',
+        'personal_organization_cannot_transfer_owner' => '个人组织不可转移组织所有者',
         'visibility_config_invalid' => '可见性配置参数错误',
         'only_organization_admin_can_configure_visibility' => '只有组织管理员可以配置可见性',
         'visibility_type_2_requires_users_or_departments' => '部分可见时，必须至少指定一个用户或部门',

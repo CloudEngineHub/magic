@@ -2336,16 +2336,16 @@
         "en_US": "Failed to persist CLI \"{{name}}\": {{error}}"
     },
     "cli_manager.list.before": {
-        "zh_CN": "正在查看持久化 CLI（校验：{{validate}}）",
-        "en_US": "Listing persisted CLIs (validate: {{validate}})"
+        "zh_CN": "正在查看用户持久化 CLI（校验：{{validate}}）",
+        "en_US": "Listing user-managed persisted CLIs (validate: {{validate}})"
     },
     "cli_manager.list.after_success": {
-        "zh_CN": "读取到 {{count}} 个持久化 CLI",
-        "en_US": "Found {{count}} persisted CLI(s)"
+        "zh_CN": "读取到 {{count}} 个用户持久化 CLI",
+        "en_US": "Found {{count}} user-managed persisted CLI(s)"
     },
     "cli_manager.list.after_failed": {
-        "zh_CN": "查看持久化 CLI 失败：{{error}}",
-        "en_US": "Failed to list persisted CLIs: {{error}}"
+        "zh_CN": "查看用户持久化 CLI 失败：{{error}}",
+        "en_US": "Failed to list user-managed persisted CLIs: {{error}}"
     },
     "cli_manager.remove.before": {
         "zh_CN": "正在移除持久化 CLI「{{name}}」",
@@ -2368,12 +2368,12 @@
         "en_US": "CLI Persistence Failed"
     },
     "cli_manager.detail.list_success_title": {
-        "zh_CN": "持久化 CLI 列表",
-        "en_US": "Persisted CLIs"
+        "zh_CN": "用户持久化 CLI 列表",
+        "en_US": "User-managed persisted CLIs"
     },
     "cli_manager.detail.list_failed_title": {
-        "zh_CN": "持久化 CLI 读取失败",
-        "en_US": "Persisted CLI List Failed"
+        "zh_CN": "用户持久化 CLI 读取失败",
+        "en_US": "User-managed persisted CLI List Failed"
     },
     "cli_manager.detail.remove_success_title": {
         "zh_CN": "CLI 持久化已移除",
@@ -2482,6 +2482,10 @@
     "cli_manager.error.command_name_reserved": {
         "zh_CN": "命令名属于系统保留名称：{{command}}",
         "en_US": "Command name is reserved: {{command}}"
+    },
+    "cli_manager.error.runtime_managed_cli": {
+        "zh_CN": "该 CLI 由超级麦吉运行时提供，无需用户持久化：{{command}}",
+        "en_US": "This CLI is provided by the Super Magic runtime and does not require user persistence: {{command}}"
     },
     "cli_manager.error.command_name_conflict": {
         "zh_CN": "命令名已被占用：{{command}}",

@@ -28,6 +28,8 @@ class SuperMagicAgentQuery extends AbstractQuery
 
     protected ?string $languageCode = null;
 
+    protected ?AgentListSort $sort = null;
+
     public function getName(): ?string
     {
         return $this->name;
@@ -97,5 +99,15 @@ class SuperMagicAgentQuery extends AbstractQuery
     public function setLanguageCode(?string $languageCode): void
     {
         $this->languageCode = $languageCode;
+    }
+
+    public function getSort(): ?AgentListSort
+    {
+        return $this->sort;
+    }
+
+    public function setSort(?AgentListSort $sort): void
+    {
+        $this->sort = $sort;
     }
 }

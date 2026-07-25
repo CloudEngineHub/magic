@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { CanvasDesignMentionDataService } from "../CanvasDesignMentionDataService"
-import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
+import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import type { I18nTexts } from "@/components/business/MentionPanel/i18n/types"
 import { zhCN } from "@/components/business/MentionPanel/i18n/locales/zh-CN"
-import { ElementTypeEnum, type CanvasDocument } from "@/components/CanvasDesign/canvas/types"
+import {
+	ElementTypeEnum,
+	type CanvasDocument,
+} from "@/components/CanvasDesign/runtime/document/types"
 
 function folderNode(
 	id: string,
@@ -284,6 +287,40 @@ describe("CanvasDesignMentionDataService", () => {
 						type: ElementTypeEnum.Image,
 						name: "Hero Layer",
 						src: "./images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(result.items).toEqual([])
+	})
+
+	it("does not guess other design resources by basename when strict lookup misses", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [
+				folderNode("design-a/images", "images", [
+					fileNode("cat.png", "design-a/images/cat.png"),
+				]),
+			]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "design-b/images/cat.png",
 						zIndex: 1,
 					},
 				],

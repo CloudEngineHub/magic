@@ -1,13 +1,16 @@
+import { fileURLToPath } from "node:url"
 import { resolve } from "node:path"
-import { defineConfig } from "vite"
+import { defineConfig, type UserConfig } from "vite"
 
-export default defineConfig(({ mode }) => {
+const projectRoot = fileURLToPath(new URL(".", import.meta.url))
+
+function getBaseViteConfig({ mode }: { mode: string }): UserConfig {
 	const isProd = mode === "production"
 
 	return {
 		resolve: {
 			alias: {
-				"@": resolve(__dirname, "src"),
+				"@": resolve(projectRoot, "src"),
 			},
 		},
 		publicDir: false,
@@ -16,12 +19,12 @@ export default defineConfig(({ mode }) => {
 			open: false,
 		},
 		build: {
-			outDir: "dist",
+			outDir: resolve(projectRoot, "dist"),
 			emptyOutDir: true,
 			sourcemap: true,
 			minify: isProd ? "esbuild" : false,
 			lib: {
-				entry: resolve(__dirname, "src/index.ts"),
+				entry: resolve(projectRoot, "src/index.ts"),
 				name: "Html2Pptx",
 				fileName: "index",
 				formats: ["es", "cjs"],
@@ -37,4 +40,6 @@ export default defineConfig(({ mode }) => {
 			},
 		},
 	}
-})
+}
+
+export default defineConfig((configEnv) => getBaseViteConfig({ mode: configEnv.mode }))

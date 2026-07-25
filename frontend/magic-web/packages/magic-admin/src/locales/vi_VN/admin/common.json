@@ -21,8 +21,11 @@
 	"confirmClose": "Xác nhận Đóng",
 	"detail": "Chi tiết",
 	"file": {
+		"imageLoadFailed": "Tải hình ảnh thất bại",
+		"imageSizeTooLarge": "Hình ảnh không được vượt quá {{size}}",
+		"imageSizeTooSmall": "Kích thước hình ảnh không được nhỏ hơn {{width}}x{{height}}",
 		"maxSize": "Giới hạn kích thước tệp đơn là {{maxSize}}MB",
-		"onlySupportUploadImage": "Chỉ hỗ trợ tải lên hình ảnh định dạng png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Chỉ hỗ trợ tải lên hình ảnh định dạng png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Tải lên tệp thất bại, vui lòng thử lại"
 	},
 	"filter": "Lọc",

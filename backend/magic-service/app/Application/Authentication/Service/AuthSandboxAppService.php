@@ -8,21 +8,13 @@ declare(strict_types=1);
 namespace App\Application\Authentication\Service;
 
 use App\Domain\Chat\DTO\Request\Common\MagicContext;
-use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Hyperf\Context\RequestContext;
-use Hyperf\Contract\ConfigInterface;
 use Hyperf\WebSocketServer\Context as WebSocketContext;
 use Throwable;
 
 class AuthSandboxAppService extends AuthBaseAppService
 {
-    public function __construct(
-        private readonly ConfigInterface $config,
-        private readonly MagicUserDomainService $magicUserDomainService
-    ) {
-    }
-
     /**
      * HTTP/WebSocket 场景保持旧链路；只有 IPC 场景才使用显式传入的 headers。
      *
@@ -33,14 +25,10 @@ class AuthSandboxAppService extends AuthBaseAppService
     public function authenticate(array $headers): ?MagicUserAuthorization
     {
         if (! $this->hasRequestContext()) {
-            return $this->authenticateByIpcHeaders($headers);
+            return $this->authenticateByHeaders($headers);
         }
 
-        try {
-            return $this->authenticateByWebGuard();
-        } catch (Throwable $origin) {
-            return $this->trySandboxCompatibleAuth($headers, $this->config, $this->magicUserDomainService, $origin);
-        }
+        return $this->authenticateByWebGuard();
     }
 
     /**
@@ -65,24 +53,5 @@ class AuthSandboxAppService extends AuthBaseAppService
     protected function hasRequestContext(): bool
     {
         return RequestContext::has() || WebSocketContext::get(MagicContext::class) instanceof MagicContext;
-    }
-
-    /**
-     * @param array<string,mixed> $headers
-     *
-     * @throws Throwable
-     */
-    private function authenticateByIpcHeaders(array $headers): ?MagicUserAuthorization
-    {
-        try {
-            return $this->authenticateByHeaders($headers);
-        } catch (Throwable $origin) {
-            return $this->trySandboxCompatibleAuth(
-                $headers,
-                $this->config,
-                $this->magicUserDomainService,
-                $origin
-            );
-        }
     }
 }

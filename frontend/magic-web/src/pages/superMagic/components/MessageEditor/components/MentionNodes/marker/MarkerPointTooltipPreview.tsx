@@ -4,7 +4,7 @@ import CanvasMarkerIcon from "@/pages/superMagic/assets/svg/canvas-marker.svg"
 import { CanvasMarkerMentionData } from "@/components/business/MentionPanel/types"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createStyles } from "antd-style"
-import { POINT_MARKER_STYLES } from "@/components/CanvasDesign/canvas/interaction/markers/markerStyles"
+import { POINT_MARKER_STYLES } from "@/components/CanvasDesign/runtime/interaction/marker/markers/markerStyles"
 import { useMarkerImageUrl } from "./useMarkerImageUrl"
 import {
 	getCanvasMarkerMentionImagePath,
@@ -182,7 +182,12 @@ function MarkerPointTooltipPreview({
 			</div>
 			{markerPositionStyle && (
 				<div className={styles.markerContainer} style={markerPositionStyle}>
-					<img src={CanvasMarkerIcon} alt="marker" className={styles.markerIcon}  data-testid="marker-point-tooltip-preview-image"/>
+					<img
+						src={CanvasMarkerIcon}
+						alt="marker"
+						className={styles.markerIcon}
+						data-testid="marker-point-tooltip-preview-image"
+					/>
 					{markerData.mark_number !== undefined && (
 						<span className={styles.markerNumber}>{markerData.mark_number}</span>
 					)}

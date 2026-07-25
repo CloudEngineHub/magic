@@ -91,9 +91,7 @@ class OpenTaskApi extends AbstractApi
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'user_not_authorized');
         }
 
-        $dataIsolation = new DataIsolation();
-        // 设置用户授权信息
-        $dataIsolation->setCurrentUserId($userAuthorization?->getId());
+        $dataIsolation = DataIsolation::create('', (string) ($userAuthorization?->getId() ?? ''));
         $status = TaskStatus::from($status);
 
         $this->topicTaskAppService->updateTaskStatus($dataIsolation, $taskEntity, $status);
@@ -171,8 +169,14 @@ class OpenTaskApi extends AbstractApi
 
         $requestDTO->setSandboxId($topicDTO->getSandboxId());
 
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = DataIsolation::create(
+            $userAuthorization->getOrganizationCode(),
+            $userAuthorization->getId()
+        );
+
         try {
-            $this->handleTaskMessageAppService->executeScriptTask($requestDTO);
+            $this->handleTaskMessageAppService->executeScriptTask($dataIsolation, $requestDTO);
         } catch (Exception $e) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'execute_script_task_failed');
         }

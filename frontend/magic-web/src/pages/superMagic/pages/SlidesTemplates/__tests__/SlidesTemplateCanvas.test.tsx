@@ -98,9 +98,10 @@ function getCanvasTranslate() {
 	}
 }
 
-function getVisibleTemplateSnapshot() {
+function getVisibleSourceTemplateSnapshot() {
 	return screen
 		.getAllByTestId("slides-template-canvas-tile-item")
+		.filter((item) => item.dataset.slidesTemplateLayoutFiller !== "true")
 		.map((item) => {
 			const image = item.querySelector("img")
 			return `${item.style.transform}|${image?.getAttribute("alt") ?? ""}`
@@ -630,6 +631,80 @@ describe("SlidesTemplateCanvas", () => {
 		expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
 	})
 
+	it("keeps the zoom scale when the filtered collection changes", () => {
+		const templates = Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))
+		const props = {
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: false,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+		}
+		const { rerender } = render(
+			<SlidesTemplateCanvas {...props} resetKey="category:all" templates={templates} />,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-template-canvas-zoom-out"))
+		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("70%")
+
+		rerender(
+			<SlidesTemplateCanvas
+				{...props}
+				resetKey="category:business"
+				templates={templates.slice(0, 24)}
+			/>,
+		)
+
+		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("70%")
+		expect(screen.getByTestId("slides-template-canvas-content").style.transform).toMatch(
+			/scale\(0\.7/,
+		)
+	})
+
+	it("still auto-fits when the first filtered result arrives after a reset", () => {
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue(CANVAS_RECT)
+
+		try {
+			const { rerender } = render(
+				<SlidesTemplateCanvas
+					templates={[]}
+					selectedTemplate={null}
+					onTemplateSelect={vi.fn()}
+					hasMore={false}
+					isLoading={false}
+					isLoadingMore={false}
+					isRefreshing={false}
+					onLoadMore={vi.fn()}
+					resetKey="category:loading"
+				/>,
+			)
+
+			rerender(
+				<SlidesTemplateCanvas
+					templates={[template]}
+					selectedTemplate={null}
+					onTemplateSelect={vi.fn()}
+					hasMore={false}
+					isLoading={false}
+					isLoadingMore={false}
+					isRefreshing={false}
+					onLoadMore={vi.fn()}
+					resetKey="category:business"
+				/>,
+			)
+
+			expect(screen.getByTestId("slides-template-canvas-content").style.transform).toContain(
+				"scale(1.16)",
+			)
+		} finally {
+			rectSpy.mockRestore()
+		}
+	})
+
 	it("moves the canvas from the edge direction controls", () => {
 		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)))
 		const canvas = screen.getByTestId("slides-template-canvas")
@@ -831,7 +906,7 @@ describe("SlidesTemplateCanvas", () => {
 		}
 	})
 
-	it("keeps the current viewport unchanged when an appended page arrives", async () => {
+	it("keeps existing cards fixed while an appended page fills a visible gap", async () => {
 		const rectSpy = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
 			.mockReturnValue(CANVAS_RECT)
@@ -855,14 +930,15 @@ describe("SlidesTemplateCanvas", () => {
 			const { rerender } = render(
 				<SlidesTemplateCanvas {...props} templates={initialTemplates} />,
 			)
-			const initialSnapshot = getVisibleTemplateSnapshot()
+			const initialSnapshot = getVisibleSourceTemplateSnapshot()
 
 			rerender(<SlidesTemplateCanvas {...props} templates={appendedTemplates} />)
 
 			await waitFor(() => {
-				expect(getVisibleTemplateSnapshot()).toEqual(initialSnapshot)
+				const appendedSnapshot = getVisibleSourceTemplateSnapshot()
+				expect(initialSnapshot.every((item) => appendedSnapshot.includes(item))).toBe(true)
 			})
-			expect(screen.queryByAltText("Template 41")).not.toBeInTheDocument()
+			expect(screen.getByAltText("Template 48")).toBeInTheDocument()
 		} finally {
 			rectSpy.mockRestore()
 		}
@@ -907,6 +983,99 @@ describe("SlidesTemplateCanvas", () => {
 				expect(screen.getAllByAltText(/Template 1\d\d/).length).toBeGreaterThan(0)
 			})
 			expect(screen.queryByAltText("Template 1")).not.toBeInTheDocument()
+		} finally {
+			rectSpy.mockRestore()
+		}
+	})
+
+	it("does not preserve the search layout when clearing search restores the loop", async () => {
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue(CANVAS_RECT)
+		const categoryTemplates = Array.from({ length: 80 }, (_, index) =>
+			createTemplate(index + 101),
+		)
+		const searchTemplates = Array.from({ length: 40 }, (_, index) => createTemplate(index + 1))
+		const props = {
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: false,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+		}
+
+		try {
+			const { rerender } = render(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop
+					resetKey="category:1"
+					templates={categoryTemplates}
+				/>,
+			)
+			fireEvent.click(screen.getByTestId("slides-template-canvas-zoom-out"))
+			fireEvent.click(screen.getByTestId("slides-template-canvas-zoom-out"))
+
+			// 输入搜索词会先关闭循环，服务端搜索结果随后替换当前分类。
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop={false}
+					resetKey="category:1"
+					templates={categoryTemplates}
+				/>,
+			)
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop={false}
+					resetKey="search:1"
+					templates={searchTemplates}
+				/>,
+			)
+
+			// 清除搜索时循环先恢复；「全部」首批结果进入预取阶段时，画布会先清空。
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop
+					resetKey="search:1"
+					templates={searchTemplates}
+				/>,
+			)
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop={false}
+					resetKey="category:2"
+					templates={[]}
+				/>,
+			)
+			expect(screen.queryByAltText("Template 1")).not.toBeInTheDocument()
+			expect(screen.queryAllByTestId("slides-template-canvas-tile-item")).toHaveLength(0)
+
+			// 预取完成后，同一个 resetKey 提交完整分类布局。
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					enableInfiniteLoop
+					resetKey="category:2"
+					templates={categoryTemplates}
+				/>,
+			)
+
+			await waitFor(() => {
+				expect(screen.getAllByAltText(/Template 1\d\d/).length).toBeGreaterThan(0)
+			})
+			expect(screen.queryByAltText("Template 1")).not.toBeInTheDocument()
+
+			const renderedPositions = screen
+				.getAllByTestId("slides-template-canvas-tile-item")
+				.filter((item) => item.dataset.slidesTemplateLayoutFiller !== "true")
+				.map((item) => item.style.transform)
+			expect(new Set(renderedPositions).size).toBe(renderedPositions.length)
 		} finally {
 			rectSpy.mockRestore()
 		}
@@ -1035,7 +1204,23 @@ describe("SlidesTemplateCanvas", () => {
 	})
 
 	it("centers and highlights a random template from the current filtered items", async () => {
-		const templates = Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))
+		const templates = Array.from(
+			{ length: 120 },
+			(_, index): OptionItem => ({
+				...createTemplate(index + 1),
+				...(index % 11 === 0
+					? {
+							tags: [
+								{
+									code: "featured",
+									id: `featured-${index}`,
+									name_i18n: { en_US: "Featured", zh_CN: "精选" },
+								},
+							],
+						}
+					: {}),
+			}),
+		)
 		const canvasRef = createRef<SlidesTemplateCanvasHandle>()
 		const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75)
 
@@ -1070,6 +1255,14 @@ describe("SlidesTemplateCanvas", () => {
 					.getAllByTestId("slides-template-canvas-tile-item")
 					.find((item) => item.style.zIndex === "30")
 					?.querySelector('[data-testid="slides-template-static-cover"]')
+			const getFocusedTile = () =>
+				screen
+					.getAllByTestId("slides-template-canvas-tile-item")
+					.find((item) => item.style.zIndex === "30")
+			expect(getFocusedTile()).not.toHaveAttribute(
+				"data-slides-template-layout-filler",
+				"true",
+			)
 			expect(getFocusedCover()).toHaveAttribute(
 				"data-slides-template-emphasis-ready",
 				"false",
@@ -1099,6 +1292,50 @@ describe("SlidesTemplateCanvas", () => {
 		} finally {
 			randomSpy.mockRestore()
 		}
+	})
+
+	it("retries the first random focus after the initial templates become available", async () => {
+		const canvasRef = createRef<SlidesTemplateCanvasHandle>()
+		const props = {
+			ref: canvasRef,
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: false,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+		}
+		const { rerender } = render(
+			<SlidesTemplateCanvas {...props} templates={[]} resetKey="initial-loading" />,
+		)
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+
+		let didFocusImmediately = true
+		act(() => {
+			didFocusImmediately = canvasRef.current?.focusRandomTemplate() ?? false
+		})
+		expect(didFocusImmediately).toBe(false)
+
+		rerender(
+			<SlidesTemplateCanvas
+				{...props}
+				templates={Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))}
+				resetKey="initial-ready"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				screen
+					.getAllByTestId("slides-template-canvas-tile-item")
+					.some((item) => item.style.zIndex === "30"),
+			).toBe(true)
+		})
+		await waitFor(() => {
+			expect(getCanvasTranslate()).not.toEqual({ x: 0, y: 0 })
+		})
 	})
 
 	it("gives higher-sort templates priority when choosing a random focus", () => {

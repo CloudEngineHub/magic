@@ -1,10 +1,11 @@
-import { memo, type ReactNode } from "react"
+import { memo, type PropsWithChildren, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
 import { isUserRoleMessage, isToolRoleMessage, type MessageTurnGroup } from "./message-turn-groups"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
 	"sticky isolate z-20 overflow-visible",
@@ -47,6 +48,64 @@ export interface MessageTurnGroupListProps {
 	limitReached?: boolean
 }
 
+interface MessageRenderRowProps {
+	renderNode: MessageTurnGroupListProps["renderNode"]
+	node: SuperMagicMessageItem
+	index: number
+	nodeKey: string
+	isUser: boolean
+	isTool: boolean
+}
+
+interface MessageRowContainerProps extends PropsWithChildren {
+	node: SuperMagicMessageItem
+	nodeKey: string
+	isUser: boolean
+	isTool: boolean
+}
+
+function MessageRowContainer({
+	node,
+	nodeKey,
+	isUser,
+	isTool,
+	children,
+}: MessageRowContainerProps) {
+	return (
+		<div
+			data-message-id={nodeKey}
+			data-message-role={node?.role || "user"}
+			className={cn(
+				"relative w-full",
+				!isUser &&
+					!isTool &&
+					"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
+				isUser && USER_MESSAGE_ROW_CLASS,
+			)}
+		>
+			{children}
+		</div>
+	)
+}
+
+function MessageRenderRow({
+	renderNode,
+	node,
+	index,
+	nodeKey,
+	isUser,
+	isTool,
+}: MessageRenderRowProps) {
+	const inner = renderNode({ node, index })
+	if (inner == null || inner === false) return null
+
+	return (
+		<MessageRowContainer node={node} nodeKey={nodeKey} isUser={isUser} isTool={isTool}>
+			{inner}
+		</MessageRowContainer>
+	)
+}
+
 const statusList = new Set(["completed", "failed", "error", "finished", "suspended"])
 
 function MessageTurnGroupListInner({
@@ -63,8 +122,6 @@ function MessageTurnGroupListInner({
 
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
-		const inner = renderNode({ node, index })
-		if (inner == null || inner === false) return null
 		const card = superMagicStore.getMessageNode(node?.app_message_id) as
 			| { status?: string }
 			| undefined
@@ -73,21 +130,33 @@ function MessageTurnGroupListInner({
 		}
 		const isUser = isUserRoleMessage(node)
 		const isTool = isToolRoleMessage(node)
+		const wrapMessageRow = (content: ReactNode) => (
+			<MessageRowContainer node={node} nodeKey={nodeKey} isUser={isUser} isTool={isTool}>
+				{content}
+			</MessageRowContainer>
+		)
 		return (
-			<div
+			<MessageRenderErrorBoundary
 				key={nodeKey}
-				data-message-id={nodeKey}
-				data-message-role={node?.role || "user"}
-				className={cn(
-					"relative w-full",
-					!isUser &&
-						!isTool &&
-						"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
-					isUser && USER_MESSAGE_ROW_CLASS,
-				)}
+				messageKey={nodeKey}
+				fallbackWrapper={wrapMessageRow}
+				resetKey={
+					typeof node?.content === "string"
+						? node.content
+						: typeof node?.status === "string"
+							? node.status
+							: undefined
+				}
 			>
-				{inner}
-			</div>
+				<MessageRenderRow
+					renderNode={renderNode}
+					node={node}
+					index={index}
+					nodeKey={nodeKey}
+					isUser={isUser}
+					isTool={isTool}
+				/>
+			</MessageRenderErrorBoundary>
 		)
 	}
 

@@ -20,12 +20,12 @@ export function useAdminAuth() {
 	const location = useLocation()
 	const { pathname } = location
 
-	const isSaas = env.MAGIC_APP_ENV.startsWith("saas")
+	const isSaas = env.MAGIC_APP_ENV?.startsWith("saas")
 	const [hasPermission, setHasPermission] = useState<boolean | null>(true)
 
 	/** 个人组织不可访问的路由（商业版 AI 路径，RoutePath 已迁至 enterprise） */
 	const isPersonalOrgRestrictedAIPath = useMemo(() => {
-		return pathname.startsWith("/admin/ai/model") || pathname.startsWith("/admin/ai/usage")
+		return pathname.startsWith(RoutePath.AIDataStatistics)
 	}, [pathname])
 
 	/** 官方组织不可访问的路由 */

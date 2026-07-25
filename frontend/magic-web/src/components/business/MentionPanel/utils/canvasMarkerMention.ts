@@ -3,13 +3,13 @@ import {
 	type Marker,
 	type MarkerArea,
 	type MarkerPoint,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	IdentifyImageMarkAreaResponse,
 	IdentifyImageMarkPointResponse,
 	IdentifyImageMarkResponse,
 	IdentifyImageMarkResponseBase,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type {
 	CanvasMarkerMentionData,
 	CanvasMarkerMentionSuggestion,

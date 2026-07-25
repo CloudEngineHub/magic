@@ -63,6 +63,7 @@ interface SelfMediaHomePostListProps {
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
 	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSharePost?: (target: SelfMediaPlatformPostItem) => void
 	onSetPostPublishStatus?: (
 		target: SelfMediaPlatformPostItem,
 		publishStatus?: SelfMediaPostPublishStatus,
@@ -92,6 +93,7 @@ function SelfMediaHomePostList({
 	onRenamePost,
 	onDeletePost,
 	onMentionPost,
+	onSharePost,
 	onSetPostPublishStatus,
 	t,
 }: SelfMediaHomePostListProps) {
@@ -196,6 +198,7 @@ function SelfMediaHomePostList({
 										onRenamePost={onRenamePost}
 										onDeletePost={onDeletePost}
 										onMentionPost={onMentionPost}
+										onSharePost={onSharePost}
 										onSetPostPublishStatus={onSetPostPublishStatus}
 									/>
 								)

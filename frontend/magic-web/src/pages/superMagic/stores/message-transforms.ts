@@ -214,12 +214,15 @@ export function createStreamState(): StreamState {
 		currentToolIndex: 0,
 		tool_calls: [],
 		isFinalMessageReceived: false,
+		recoveryAttempts: 0,
 	}
 }
 
 export function getDefaultTopicMeta(): TopicMeta {
 	return {
 		timer: null,
+		recoveryTimer: null,
+		recoveryCorrelationId: null,
 		isStream: false,
 		isStreamLoading: false,
 		content: new Map(),

@@ -1,8 +1,8 @@
 import { useRef, useCallback, useEffect } from "react"
 import { useLatest } from "ahooks"
-import { CanvasDesignRef } from "@/components/CanvasDesign/types"
+import { CanvasDesignRef } from "@/components/CanvasDesign/public/props"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { PaddingInsetConfig } from "@/components/CanvasDesign/canvas/types"
+import { PaddingInsetConfig } from "@/components/CanvasDesign/runtime/document/types"
 
 interface UseDesignFocusElementProps {
 	isPlaybackMode?: boolean

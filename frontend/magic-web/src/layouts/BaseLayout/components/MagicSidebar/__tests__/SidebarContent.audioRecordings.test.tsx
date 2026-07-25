@@ -1,18 +1,39 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import SidebarContent from "../SidebarContent"
 
-const { mockIsMagicApp, navigateMock, changeBottomTabMock } = vi.hoisted(() => ({
-	mockIsMagicApp: vi.fn(),
-	navigateMock: vi.fn(),
-	changeBottomTabMock: vi.fn(),
-}))
+const { mockIsMagicApp, navigateMock, changeBottomTabMock, useSlidesTemplateStatisticsMock } =
+	vi.hoisted(() => ({
+		mockIsMagicApp: vi.fn(),
+		navigateMock: vi.fn(),
+		changeBottomTabMock: vi.fn(),
+		useSlidesTemplateStatisticsMock: vi.fn(),
+	}))
+const animatedNumberTextMock = vi.hoisted(() => vi.fn())
+
+afterEach(() => {
+	vi.unstubAllGlobals()
+})
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, options?: { count?: string }) =>
-			key === "slidesTemplates.templateCount" ? `${options?.count} 套` : key,
+		t: (key: string, options?: Record<string, string | number>) => {
+			switch (key) {
+				case "slidesTemplates.compactCount":
+					return `${options?.value} 套`
+				case "slidesTemplates.todayAddedCount":
+					return `今日新增 ${options?.value} 套`
+				case "slidesTemplates.templateTotalCount":
+					return `模板总数 ${options?.value} 套`
+				case "slidesTemplates.statisticsTooltip":
+					return `${options?.title} · 今日新增 ${options?.todayAdded} 套 · 模板总数 ${options?.total} 套`
+				case "slidesTemplates.statisticsTooltipWithoutToday":
+					return `${options?.title} · 模板总数 ${options?.total} 套`
+				default:
+					return key
+			}
+		},
 	}),
 	initReactI18next: {
 		type: "3rdParty",
@@ -89,7 +110,15 @@ vi.mock("@/pages/superMagic/hooks/useResourceStatusPolling", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
-	useSlidesTemplateTotal: () => 101582,
+	useSlidesTemplateStatistics: useSlidesTemplateStatisticsMock,
+	useSlidesTemplateTotal: () => useSlidesTemplateStatisticsMock()?.templateTotal,
+}))
+
+vi.mock("@/pages/superMagic/components/AnimatedNumberText", () => ({
+	AnimatedNumberText: ({ value }: { value: number }) => {
+		animatedNumberTextMock(value)
+		return <>{value.toLocaleString("en-US")}</>
+	},
 }))
 
 vi.mock("../hooks/useNavigateToSuperHome", () => ({
@@ -228,27 +257,100 @@ describe("SidebarContent audio recordings entry", () => {
 })
 
 describe("SidebarContent slides templates count", () => {
+	beforeEach(() => {
+		animatedNumberTextMock.mockClear()
+		useSlidesTemplateStatisticsMock.mockReset()
+		useSlidesTemplateStatisticsMock.mockReturnValue({
+			templateTotal: 101582,
+			templateCountTodayGrowth: 512,
+		})
+	})
+
 	it("shows the highlighted template count in the collapsed tooltip", () => {
 		renderSidebarContent(true)
 
-		expect(screen.getByTestId("sidebar-content-slides-templates-button")).toHaveClass(
-			"!bg-[#fff2ec]",
-			"!text-[#ff6a1f]",
-		)
-		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
-			"sidebar:slidesTemplates.title101,582 套",
-		)
+		const menuButton = screen.getByTestId("sidebar-content-slides-templates-button")
+		expect(menuButton).toHaveClass("!text-[#ff6a1f]", "hover:!bg-[#fff2ec]")
+		expect(screen.getByTestId("mock-slides-templates-icon")).toBeVisible()
+		expect(menuButton.querySelector("[data-slides-template-label]")).toBeNull()
+		expect(screen.queryByTestId("sidebar-content-slides-templates-count")).toBeNull()
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-title"),
+		).toHaveTextContent("sidebar:slidesTemplates.title")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-today"),
+		).toHaveTextContent("今日新增 512 套")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-total"),
+		).toHaveTextContent("模板总数 101,582 套")
 	})
 
-	it("keeps the highlighted template count beside the title when expanded", () => {
+	it("shows today's growth first and allows the complete count to wrap below the title", () => {
 		renderSidebarContent()
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
-			"101,582 套",
+			"今日新增512套",
 		)
-		expect(screen.getByTestId("sidebar-content-slides-templates-button")).not.toHaveClass(
-			"!bg-[#fff2ec]",
-		)
+		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
+		expect(animatedNumberTextMock).toHaveBeenCalledWith(512)
+		const title = screen
+			.getByTestId("sidebar-content-slides-templates-button")
+			.querySelector<HTMLElement>("[data-slides-template-label]")
+		if (!title) throw new Error("Expected the visible slides template title to exist")
+		const countBadge = screen.getByTestId("sidebar-content-slides-templates-count")
+		const menuButton = screen.getByTestId("sidebar-content-slides-templates-button")
+		const row = title.closest("[data-slides-template-row]")
+		const content = title.closest("[data-slides-template-content]")
+		expect(countBadge.className).not.toMatch(/scale|translate|rotate/)
+		expect(countBadge).toHaveClass("rounded-full", "bg-[#fff2ec]")
+		expect(title).toHaveClass("shrink-0", "whitespace-nowrap")
+		expect(title).not.toHaveClass("flex-1")
+		expect(row).not.toHaveClass("flex-wrap")
+		expect(content).toHaveClass("flex-wrap", "content-center", "gap-y-0", "min-w-0", "flex-1")
+		expect(menuButton).toHaveClass("!h-8", "py-0")
+		expect(
+			content?.querySelector("[data-testid='sidebar-content-slides-templates-count']"),
+		).toBe(countBadge)
+		expect(menuButton).not.toHaveClass("!bg-[#fff2ec]")
 		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip")).toBeNull()
+	})
+
+	it("restores the count badge after expanding the collapsed sidebar", () => {
+		const { rerender } = renderSidebarContent(true)
+
+		rerender(<SidebarContent collapsed={false} />)
+
+		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
+			"今日新增512套",
+		)
+		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
+	})
+
+	it("falls back to the total when today's growth is unavailable", () => {
+		useSlidesTemplateStatisticsMock.mockReturnValue({ templateTotal: 101582 })
+
+		renderSidebarContent()
+
+		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
+			"模板总数101,582套",
+		)
+		expect(animatedNumberTextMock).toHaveBeenCalledWith(101582)
+	})
+
+	it("omits today's growth from the collapsed tooltip when the field is unavailable", () => {
+		useSlidesTemplateStatisticsMock.mockReturnValue({ templateTotal: 101582 })
+
+		renderSidebarContent(true)
+
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-title"),
+		).toHaveTextContent("sidebar:slidesTemplates.title")
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip-total"),
+		).toHaveTextContent("模板总数 101,582 套")
+		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip-today")).toBeNull()
+		expect(
+			screen.getByTestId("sidebar-content-slides-templates-tooltip"),
+		).not.toHaveTextContent("今日新增")
 	})
 })

@@ -522,6 +522,25 @@ return [
             ],
         ],
 
+        // 文本内容优化
+        'text_content_completion' => [
+            'code' => 'text_content_completion',
+            'name' => [
+                'zh_CN' => '文本内容优化',
+                'en_US' => 'Text Content Completion',
+            ],
+            'description' => [
+                'zh_CN' => '本能力覆盖平台所有文本内容优化场景，根据用户文本生成可直接替换原文的优化后正文。',
+                'en_US' => 'This capability covers text content optimization scenarios on the platform, generating improved text that can directly replace the original content.',
+            ],
+            'icon' => 'text-content-completion-icon',
+            'sort_order' => 23,
+            'status' => env('AI_ABILITY_TEXT_CONTENT_COMPLETION_STATUS', true),
+            'config' => [
+                'model_id' => env('AI_ABILITY_TEXT_CONTENT_COMPLETION_MODEL_ID', null),
+            ],
+        ],
+
         // 图片搜索
         'image_search' => [
             'code' => 'image_search',

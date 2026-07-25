@@ -239,7 +239,7 @@ class MagicServiceClient:
         escaped_code = quote(normalized_code, safe="")
         return await self._request_json(
             "GET",
-            f"/api/v1/slides-templates/{escaped_code}/file-url",
+            f"/api/v1/open-api/slides-templates/{escaped_code}/file-url",
             operation_name="幻灯片模板文件链接获取",
             params=self._filter_query_params(access_context),
         )

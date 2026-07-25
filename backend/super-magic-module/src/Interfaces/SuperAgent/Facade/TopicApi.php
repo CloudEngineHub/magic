@@ -225,7 +225,7 @@ class TopicApi extends AbstractApi
 
         $sandboxId = $this->agentAppService->ensureSandboxInitialized($dataIsolation, (int) $topicId, skipInitMessages: true);
 
-        $result = $this->agentAppService->rollbackCheckpoint($sandboxId, $targetMessageId);
+        $result = $this->agentAppService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
 
         if (! $result->isSuccess()) {
             ExceptionBuilder::throw(AgentErrorCode::SANDBOX_NOT_FOUND, $result->getMessage());
@@ -503,10 +503,8 @@ class TopicApi extends AbstractApi
         /** @var MagicUserAuthorization $authorization */
         $authorization = $this->getAuthorization();
 
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
+        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
         $dataIsolation->setUserType(UserType::Human);
         $dataIsolation->setLanguage(CoContext::getLanguage());
 

@@ -57,6 +57,15 @@ export interface MagicDropdownProps {
 	onInteractOutside?: DropdownMenuContentProps["onInteractOutside"]
 
 	/**
+	 * Keep the current dropdown open while interacting with a nested portal overlay,
+	 * such as another dropdown, select, popover, dialog, or drawer.
+	 */
+	keepOpenOnNestedOverlay?: boolean
+
+	/** Use popover semantics for complex interactive and scrollable panel content. */
+	contentRole?: "menu" | "panel"
+
+	/**
 	 * Callback when Escape key is pressed while dropdown is open (desktop only)
 	 */
 	onEscapeKeyDown?: DropdownMenuContentProps["onEscapeKeyDown"]

@@ -1,4 +1,4 @@
-import { CanvasDocument } from "@/components/CanvasDesign/canvas/types"
+import { CanvasDocument } from "@/components/CanvasDesign/runtime/document/types"
 
 export interface DesignData {
 	type: "design" | string

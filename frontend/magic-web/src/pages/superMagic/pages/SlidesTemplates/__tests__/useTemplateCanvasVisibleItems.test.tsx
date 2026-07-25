@@ -21,6 +21,56 @@ function createTile(index: number): SlidesTemplateCanvasTile {
 }
 
 describe("useTemplateCanvasVisibleItems", () => {
+	it("clears stale visible items when the next layout is empty", () => {
+		const canvasItems = buildTemplateCanvasItems([createTile(1)])
+		const initialLoopMetrics = getSlidesTemplateCanvasLoopMetrics(canvasItems)
+		const emptyCanvasItems: typeof canvasItems = []
+		const emptyLoopMetrics = getSlidesTemplateCanvasLoopMetrics(emptyCanvasItems)
+		const viewport = document.createElement("div")
+		vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+			bottom: 600,
+			height: 600,
+			left: 0,
+			right: 800,
+			top: 0,
+			width: 800,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		})
+		const viewportRef = createRef<HTMLDivElement>()
+		viewportRef.current = viewport
+		const offsetRef = { current: { x: 0, y: 0 } }
+		const scaleRef = { current: 0.6 }
+		const onOffsetRebase = vi.fn()
+
+		const { result, rerender } = renderHook(
+			({
+				items,
+				loopMetrics,
+			}: {
+				items: typeof canvasItems
+				loopMetrics: typeof initialLoopMetrics
+			}) =>
+				useTemplateCanvasVisibleItems({
+					canvasItems: items,
+					loopMetrics,
+					onOffsetRebase,
+					offsetRef,
+					resetKey: "all:",
+					scaleRef,
+					viewportRef,
+				}),
+			{ initialProps: { items: canvasItems, loopMetrics: initialLoopMetrics } },
+		)
+
+		expect(result.current.visibleCanvasItems.length).toBeGreaterThan(0)
+
+		rerender({ items: emptyCanvasItems, loopMetrics: emptyLoopMetrics })
+
+		expect(result.current.visibleCanvasItems).toHaveLength(0)
+	})
+
 	it("rebases the live offset before rendering a changed loop period", () => {
 		const previousItems = buildTemplateCanvasItems([createTile(1)])
 		const nextItems = buildTemplateCanvasItems(

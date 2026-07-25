@@ -29,6 +29,10 @@
 	},
 	"otherInfo": "Other Information",
 	"platformDefaultLanguage": "Platform Default Language",
+	"platformDefaultLanguageOptions": {
+		"en_US": "English",
+		"zh_CN": "Simplified Chinese"
+	},
 	"platformDefaultLanguageTip": "The language set is the default language when the platform is initialized. All functions that support multiple languages will use this default language",
 	"platformEnLogo": "Platform English Logo",
 	"platformFavicon": "Platform Favicon",

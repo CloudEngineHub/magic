@@ -27,9 +27,11 @@ import {
 	createPptxSlideConfig,
 	resolvePptScaleContentDimensions,
 } from "./contents/HTML/utils/slide-dimensions"
+import { ossUploadService } from "@/stores/folderUpload/uploadService"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
+import { unshadow } from "@/utils/shadow"
 import {
 	documentExportService,
 	type DocumentExport,
@@ -210,28 +212,55 @@ export default function Render(props: any) {
 				console.error("syncCustomProjectFolderNameBeforeSave failed:", error)
 			}
 
-			const res = await SuperMagicApi.saveFileContent([
-				{
-					file_id: targetFileId,
-					content: newContent,
-					enable_shadow,
-				},
-			])
-			if (res?.success_files?.length > 0) {
-				await fetchFileVersions?.(targetFileId, 10, undefined, true)
-				magicToast.success({
-					content: t("common.saveSuccess"),
-					key,
+			const fileKey = data?.file_key
+			const projectIdValue = selectedProject?.id || projectId
+			const contentStr =
+				typeof newContent === "string" ? newContent : JSON.stringify(newContent)
+			const uploadContent =
+				enable_shadow && contentStr.startsWith("SHADOWED_")
+					? unshadow(contentStr)
+					: contentStr
+
+			// Edited content can exceed the save API request-body limit, so this path reuses
+			// the OSS key returned in the current file metadata for direct upload. The key
+			// must come from that metadata only; do not replace it with user input or a
+			// client-constructed cross-project path. Changes are still committed via replaceFile.
+			if (fileKey && projectIdValue) {
+				const uploadedPath = await ossUploadService.uploadContentByFileKey(
+					uploadContent,
+					fileKey,
+					projectIdValue,
+					data?.file_name || "content.html",
+				)
+
+				await SuperMagicApi.replaceFile({
+					id: targetFileId,
+					file_key: uploadedPath,
 				})
-				// Only exit edit mode if explicitly requested
-				if (shouldExitEditMode) {
-					setIsEditMode(false)
-				}
 			} else {
-				magicToast.error({
-					content: t("common.saveFailed"),
-					key,
-				})
+				const res = await SuperMagicApi.saveFileContent([
+					{
+						file_id: targetFileId,
+						content: newContent,
+						enable_shadow,
+					},
+				])
+				if (!res?.success_files?.length) {
+					magicToast.error({
+						content: t("common.saveFailed"),
+						key,
+					})
+					return
+				}
+			}
+
+			await fetchFileVersions?.(targetFileId, 10, undefined, true)
+			magicToast.success({
+				content: t("common.saveSuccess"),
+				key,
+			})
+			if (shouldExitEditMode) {
+				setIsEditMode(false)
 			}
 		} catch (err) {
 			magicToast.error({

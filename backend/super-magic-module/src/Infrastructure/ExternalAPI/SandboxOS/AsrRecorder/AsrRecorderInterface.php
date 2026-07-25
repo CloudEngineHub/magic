@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrAudioConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrMarkerFileConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrNoteFileConfig;
@@ -15,6 +16,11 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Response\As
 
 /**
  * ASR 录音服务接口.
+ *
+ * Every method takes a DataIsolation as its FIRST parameter so the
+ * sandbox-gateway call underneath forwards User-Authorization to
+ * the in-pod super-magic agent's AuthMiddleware. Required, not
+ * optional: passing null here would break the auth contract.
  */
 interface AsrRecorderInterface
 {
@@ -22,6 +28,7 @@ interface AsrRecorderInterface
      * 启动 ASR 录音任务
      * 对应沙箱 POST /api/asr/task/start.
      *
+     * @param DataIsolation $dataIsolation Per-call user identity
      * @param string $sandboxId 沙箱ID
      * @param string $taskKey 任务键
      * @param string $sourceDir 音频分片目录（相对路径）
@@ -32,6 +39,7 @@ interface AsrRecorderInterface
      * @return AsrRecorderResponse 响应结果
      */
     public function startTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $sourceDir,
@@ -46,6 +54,7 @@ interface AsrRecorderInterface
      * 对应沙箱 POST /api/asr/task/finish
      * 支持轮询查询状态（多次调用相同参数）.
      *
+     * @param DataIsolation $dataIsolation Per-call user identity
      * @param string $sandboxId 沙箱ID
      * @param string $taskKey 任务键
      * @param string $workspaceDir 工作区目录
@@ -56,6 +65,7 @@ interface AsrRecorderInterface
      * @return AsrRecorderResponse 响应结果
      */
     public function finishTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir,
@@ -69,12 +79,14 @@ interface AsrRecorderInterface
      * 查询 ASR 录音任务状态
      * 对应沙箱 POST /api/asr/task/query.
      *
+     * @param DataIsolation $dataIsolation Per-call user identity
      * @param string $sandboxId 沙箱ID
      * @param string $taskKey 任务键
      * @param string $workspaceDir 工作区目录，默认 .workspace
      * @return AsrRecorderResponse 响应结果
      */
     public function queryTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir = '.workspace'
@@ -84,12 +96,14 @@ interface AsrRecorderInterface
      * 取消 ASR 录音任务
      * 对应沙箱 POST /api/asr/task/cancel.
      *
+     * @param DataIsolation $dataIsolation Per-call user identity
      * @param string $sandboxId 沙箱ID
      * @param string $taskKey 任务键
      * @param string $workspaceDir 工作区目录，默认 .workspace
      * @return AsrRecorderResponse 响应结果
      */
     public function cancelTask(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir = '.workspace'

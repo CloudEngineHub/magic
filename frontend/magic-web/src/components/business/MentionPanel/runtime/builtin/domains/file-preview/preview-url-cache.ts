@@ -2,7 +2,10 @@ import {
 	getTemporaryDownloadUrl,
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
-import { isOssExpired, parseExpiresAt } from "@/components/CanvasDesign/canvas/utils/ossExpiryUtils"
+import {
+	isOssExpired,
+	parseExpiresAt,
+} from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 
 interface MentionPreviewUrlCacheItem {
 	url: string

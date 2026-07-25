@@ -380,6 +380,18 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {
+		renderPPTSlide()
+
+		expect(screen.getByTestId("ppt-edit-toolbar")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-slide-render-content")).toHaveClass("min-h-0", "flex-1")
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				className: "h-full",
+			}),
+		)
+	})
+
 	it("向 HTML renderer 传入竖版 PPT 的缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1080" data-height="1920"></div>',

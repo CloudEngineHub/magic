@@ -7,22 +7,28 @@ import {
 	StatusTag,
 	TableWithFilters,
 	MobileList,
+	type SearchItem,
+	type TableButton,
+	type TimeRangeValue,
 } from "@admin-components"
-import type { SearchItem, TimeRangeValue } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { Flex, InputNumber, Switch, Tooltip, message, type TableProps } from "antd"
+import { Flex, InputNumber, Select, Switch, Tooltip, message, type TableProps } from "antd"
+import { IconCategory } from "@tabler/icons-react"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useApis } from "@admin/apis"
 import type { PlatformPackage } from "@admin/types/platformPackage"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
 import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
+import { resolveAgentMarketCategoryName } from "./utils"
+import { AgentMarketCategoryModal } from "./components/AgentMarketCategoryModal"
 
 const EmployeeMarketCard = lazy(() => import("./EmployeeMarketCard"))
 
 type DataType = PlatformPackage.AgentMarketItem
 type ParamsType = PlatformPackage.GetAgentMarketListParams
+const CATEGORY_SELECT_WIDTH = 220
 
 const useStyles = createStyles(({ token }) => ({
 	container: {
@@ -33,6 +39,33 @@ const useStyles = createStyles(({ token }) => ({
 		color: token.magicColorUsages.text[3],
 	},
 }))
+
+function normalizeCategoryIds(categoryIds?: string[] | null) {
+	return Array.from(new Set((categoryIds ?? []).filter(Boolean)))
+}
+
+function getAgentMarketCategoryIds(record: DataType) {
+	if (Array.isArray(record.category_ids)) return normalizeCategoryIds(record.category_ids)
+	return record.category_id ? [record.category_id] : []
+}
+
+function areSameCategoryIds(left: string[], right: string[]) {
+	const normalizedLeft = normalizeCategoryIds(left).sort()
+	const normalizedRight = normalizeCategoryIds(right).sort()
+	if (normalizedLeft.length !== normalizedRight.length) return false
+	return normalizedLeft.every((id, index) => id === normalizedRight[index])
+}
+
+function resolveAgentMarketCategories(
+	categoryIds: string[],
+	categories: PlatformPackage.AgentMarketCategoryItem[],
+) {
+	return categoryIds
+		.map((categoryId) => categories.find((category) => category.id === categoryId))
+		.filter((category): category is PlatformPackage.AgentMarketCategoryItem =>
+			Boolean(category),
+		)
+}
 
 function EmployeeMarketPage() {
 	const { t } = useTranslation("admin/platform/employeeMarket")
@@ -46,6 +79,9 @@ function EmployeeMarketPage() {
 	const [sortSavingIds, setSortSavingIds] = useState<Set<string>>(new Set())
 	const [featuredSavingIds, setFeaturedSavingIds] = useState<Set<string>>(new Set())
 	const [hiddenSavingIds, setHiddenSavingIds] = useState<Set<string>>(new Set())
+	const [categorySavingIds, setCategorySavingIds] = useState<Set<string>>(new Set())
+	const [categoryOpen, setCategoryOpen] = useState(false)
+	const [categories, setCategories] = useState<PlatformPackage.AgentMarketCategoryItem[]>([])
 	const [lastTimeFilterValue, setLastTimeFilterValue] = useState<TimeRangeValue | null>(null)
 	const [params, setParams] = useState<ParamsType>({
 		page: 1,
@@ -67,6 +103,16 @@ function EmployeeMarketPage() {
 						return acc
 					}, {}),
 				)
+			},
+		},
+	)
+
+	const { run: runCategories, loading: categoriesLoading } = useRequest(
+		() => PlatformPackageApi.getAgentMarketCategoryList({}),
+		{
+			manual: true,
+			onSuccess: (res) => {
+				setCategories(res.list)
 			},
 		},
 	)
@@ -158,6 +204,7 @@ function EmployeeMarketPage() {
 
 	useMount(() => {
 		run(params)
+		runCategories()
 	})
 
 	const updateParams = useMemoizedFn((newParams: Partial<ParamsType>) => {
@@ -195,6 +242,20 @@ function EmployeeMarketPage() {
 		[t],
 	)
 
+	const categoryOptions = useMemo(
+		() =>
+			categories.map((category) => ({
+				label: resolveAgentMarketCategoryName(category),
+				value: category.id,
+			})),
+		[categories],
+	)
+
+	const categoryMap = useMemo(
+		() => new Map(categoryOptions.map((category) => [category.value, category.label])),
+		[categoryOptions],
+	)
+
 	const renderStatus = useMemoizedFn(
 		(value: string, map: Record<string, { text: string; color: string }>) => {
 			const info = map[value]
@@ -221,6 +282,20 @@ function EmployeeMarketPage() {
 		return Array.isArray(roles) ? roles.join(" / ") : roles
 	})
 
+	const getCategoryName = useMemoizedFn((record: DataType) => {
+		if (record.categories?.length) {
+			return record.categories.map(resolveAgentMarketCategoryName).join(" / ")
+		}
+		const categoryIds = getAgentMarketCategoryIds(record)
+		if (categoryIds.length) {
+			return categoryIds
+				.map((categoryId) => categoryMap.get(categoryId) ?? categoryId)
+				.join(" / ")
+		}
+		if (record.category) return resolveAgentMarketCategoryName(record.category)
+		return t("category.uncategorized")
+	})
+
 	const renderDescriptionText = useMemoizedFn((value?: PlatformPackage.NameI18N) => {
 		const text = getLocalizedText(value)
 		if (text === "-") return text
@@ -243,6 +318,40 @@ function EmployeeMarketPage() {
 			</Tooltip>
 		)
 	})
+
+	const handleChangeCategory = useMemoizedFn(
+		async (record: DataType, nextCategoryIds?: string[]) => {
+			const categoryIds = normalizeCategoryIds(nextCategoryIds)
+			if (areSameCategoryIds(getAgentMarketCategoryIds(record), categoryIds)) return
+
+			setCategorySavingIds((prev) => new Set([...prev, record.id]))
+			try {
+				await PlatformPackageApi.updateAgentMarketCategoryRelation(record.id, categoryIds)
+				const nextCategories = resolveAgentMarketCategories(categoryIds, categories)
+				setData((prev) =>
+					prev.map((item) =>
+						item.id === record.id
+							? {
+									...item,
+									category_ids: categoryIds,
+									categories: nextCategories,
+									category_id: categoryIds[0] ?? null,
+									category: nextCategories[0] ?? null,
+								}
+							: item,
+					),
+				)
+			} catch {
+				message.error(tCommon("message.updateFailed"))
+			} finally {
+				setCategorySavingIds((prev) => {
+					const next = new Set(prev)
+					next.delete(record.id)
+					return next
+				})
+			}
+		},
+	)
 
 	const columns: TableProps<DataType>["columns"] = useMemo(
 		() => [
@@ -301,6 +410,35 @@ function EmployeeMarketPage() {
 				key: "publish_status",
 				width: 120,
 				render: (value: string) => renderStatus(value, publishStatusMap),
+			},
+			{
+				title: t("category.label"),
+				dataIndex: "category_ids",
+				key: "category_ids",
+				width: 240,
+				render: (_, record) => {
+					const saving = categorySavingIds.has(record.id)
+					if (!categories.length) return getCategoryName(record)
+					const categoryIds = getAgentMarketCategoryIds(record)
+
+					return (
+						<Select
+							allowClear
+							showSearch
+							mode="multiple"
+							maxTagCount="responsive"
+							optionFilterProp="label"
+							style={{ width: CATEGORY_SELECT_WIDTH }}
+							value={categoryIds.length ? categoryIds : undefined}
+							placeholder={t("category.uncategorized")}
+							options={categoryOptions}
+							loading={categoriesLoading}
+							disabled={saving || !hasEditRight}
+							dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+							onChange={(value) => handleChangeCategory(record, value)}
+						/>
+					)
+				},
 			},
 			{
 				title: t("isFeatured"),
@@ -407,6 +545,12 @@ function EmployeeMarketPage() {
 			publisherTypeMap,
 			renderStatus,
 			publishStatusMap,
+			categorySavingIds,
+			categories.length,
+			getCategoryName,
+			categoryOptions,
+			categoriesLoading,
+			handleChangeCategory,
 			featuredSavingIds,
 			hiddenSavingIds,
 			handleChangeFeatured,
@@ -482,6 +626,25 @@ function EmployeeMarketPage() {
 					updateParams({ publisher_type: value === "all" ? undefined : value })
 				},
 			},
+			...(categories.length
+				? [
+						{
+							type: SearchItemType.SELECT,
+							field: "category_ids",
+							prefix: t("category.label"),
+							placeholder: tCommon("all"),
+							mode: "multiple",
+							allowClear: true,
+							maxTagCount: "responsive",
+							options: categoryOptions,
+							onChange: (value: string[]) => {
+								updateParams({
+									category_ids: value.length ? value : undefined,
+								})
+							},
+						} satisfies SearchItem,
+					]
+				: []),
 			{
 				type: SearchItemType.SELECT,
 				field: "order_by",
@@ -510,8 +673,32 @@ function EmployeeMarketPage() {
 				},
 			},
 		],
-		[t, tCommon, timeFilterValue, updateParams, debouncedSearch],
+		[
+			t,
+			tCommon,
+			timeFilterValue,
+			updateParams,
+			debouncedSearch,
+			categories.length,
+			categoryOptions,
+		],
 	)
+
+	const buttons: TableButton[] = useMemo(
+		() => [
+			{
+				text: t("category.manageButton"),
+				icon: <IconCategory size={16} />,
+				onClick: () => setCategoryOpen(true),
+			},
+		],
+		[t],
+	)
+
+	const refreshAfterCategoryChange = useMemoizedFn(() => {
+		runCategories()
+		run(params)
+	})
 
 	const isMobile = useIsMobile()
 
@@ -525,45 +712,72 @@ function EmployeeMarketPage() {
 
 	if (isMobile) {
 		return (
-			<MobileList<ParamsType, DataType>
-				data={data}
-				loading={loading}
-				total={total}
-				currentFilters={params}
-				search={searchItems}
-				CardComponent={
-					<EmployeeMarketCard
-						publishStatusMap={publishStatusMap}
-						publisherTypeMap={publisherTypeMap}
-						featuredSavingIds={featuredSavingIds}
-						hiddenSavingIds={hiddenSavingIds}
-						sortSavingIds={sortSavingIds}
-						sortOrderMap={sortOrderMap}
-						setSortOrderMap={setSortOrderMap}
-						debouncedAutoSaveSortOrder={debouncedAutoSaveSortOrder}
-						handleChangeFeatured={handleChangeFeatured}
-						handleChangeHidden={handleChangeHidden}
-						getLocalizedText={getLocalizedText}
+			<>
+				<MobileList<ParamsType, DataType>
+					data={data}
+					loading={loading}
+					total={total}
+					currentFilters={params}
+					search={searchItems}
+					buttons={buttons}
+					CardComponent={
+						<EmployeeMarketCard
+							publishStatusMap={publishStatusMap}
+							publisherTypeMap={publisherTypeMap}
+							categoryOptions={categoryOptions}
+							categorySavingIds={categorySavingIds}
+							featuredSavingIds={featuredSavingIds}
+							hiddenSavingIds={hiddenSavingIds}
+							sortSavingIds={sortSavingIds}
+							sortOrderMap={sortOrderMap}
+							setSortOrderMap={setSortOrderMap}
+							debouncedAutoSaveSortOrder={debouncedAutoSaveSortOrder}
+							handleChangeCategory={handleChangeCategory}
+							handleChangeFeatured={handleChangeFeatured}
+							handleChangeHidden={handleChangeHidden}
+							getLocalizedText={getLocalizedText}
+							getCategoryName={getCategoryName}
+							hasEditRight={hasEditRight}
+						/>
+					}
+					paginationConfig={paginationConfig}
+					showDetail={false}
+				/>
+				{categoryOpen && (
+					<AgentMarketCategoryModal
+						open={categoryOpen}
+						hasEditRight={hasEditRight}
+						onCancel={() => setCategoryOpen(false)}
+						onSuccess={refreshAfterCategoryChange}
 					/>
-				}
-				paginationConfig={paginationConfig}
-				showDetail={false}
-			/>
+				)}
+			</>
 		)
 	}
 
 	return (
-		<div className={styles.container}>
-			<TableWithFilters<DataType>
-				search={searchItems}
-				columns={columns}
-				dataSource={data}
-				rowKey="id"
-				extraHeight={116}
-				loading={loading}
-				pagination={paginationConfig}
-			/>
-		</div>
+		<>
+			<div className={styles.container}>
+				<TableWithFilters<DataType>
+					search={searchItems}
+					buttons={buttons}
+					columns={columns}
+					dataSource={data}
+					rowKey="id"
+					extraHeight={116}
+					loading={loading}
+					pagination={paginationConfig}
+				/>
+			</div>
+			{categoryOpen && (
+				<AgentMarketCategoryModal
+					open={categoryOpen}
+					hasEditRight={hasEditRight}
+					onCancel={() => setCategoryOpen(false)}
+					onSuccess={refreshAfterCategoryChange}
+				/>
+			)}
+		</>
 	)
 }
 

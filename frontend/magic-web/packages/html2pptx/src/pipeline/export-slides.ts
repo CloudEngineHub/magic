@@ -1,4 +1,4 @@
-import type { SlideConfig, ExportPageContext } from "../api/options"
+import type { GeneratedPPTX, SlideConfig, ExportPageContext } from "../api/options"
 import type { ResourceLoadError } from "../api/options"
 import type { EmbedFontInput, FontMissPolicy, FontResolver } from "../api/font"
 import type { SerializablePPTNode } from "../ir/serialize"
@@ -30,6 +30,8 @@ export interface ExportTaskInput {
 	signal: AbortSignal
 	fontResolver?: FontResolver
 	fontMissPolicy?: FontMissPolicy
+	/** Return the generated file instead of downloading it inside the packager. */
+	collectOutput?: boolean
 	runtime?: ExportPipelineRuntime
 }
 
@@ -63,8 +65,9 @@ export async function runExport({
 	signal,
 	fontResolver,
 	fontMissPolicy,
+	collectOutput = false,
 	runtime,
-}: ExportTaskInput): Promise<void> {
+}: ExportTaskInput): Promise<GeneratedPPTX | void> {
 	const textMergeMode = DEFAULT_TEXT_MERGE_MODE
 	const activePrepareSlideNodes = runtime?.prepareSlideNodes ?? prepareSlideNodes
 	const activePackagePresentationInWorker =
@@ -148,13 +151,15 @@ export async function runExport({
 		: []
 	ensureNotAborted(signal)
 
-	await activePackagePresentationInWorker({
+	const output = await activePackagePresentationInWorker({
 		config: finalConfig,
 		fileName: ensureFileName(fileName),
 		slides: preparedSlides,
 		slideBackgrounds,
 		embedFonts,
 		signal,
+		onResourceError,
+		...(collectOutput ? { download: false } : {}),
 	})
 	log(LogLevel.L2, "导出完成", {
 		fileName,
@@ -162,6 +167,7 @@ export async function runExport({
 		inputSlides: htmlSlides.length,
 		outputSlides: preparedSlides.length,
 	})
+	return output
 }
 
 async function resolveFontsWithResolver(

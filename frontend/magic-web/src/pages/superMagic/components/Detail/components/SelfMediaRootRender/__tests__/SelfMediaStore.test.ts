@@ -438,6 +438,31 @@ describe("SelfMediaStore", () => {
 			expect(store.postEntries[0].name).toBe("New title")
 		})
 
+		it("updates subtitle and tags without changing the post entry name", () => {
+			const entry = makeEntry("p1")
+			const post = makePost("p1", {
+				meta: { id: "p1", title: "Keep title", subtitle: "Old subtitle" },
+			})
+			runInAction(() => {
+				store.slices = [makeSlice("rednote", [entry])]
+				store.loadedPosts = { [cacheKey("rednote", "p1")]: post }
+				store.activePlatform = "rednote"
+				store.rootLoading = false
+			})
+
+			store.updatePostMeta(0, {
+				subtitle: "New subtitle",
+				tags: { core: ["AI"], mid: ["PPT"] },
+			})
+
+			expect(store.posts[0].meta).toMatchObject({
+				title: "Keep title",
+				subtitle: "New subtitle",
+				tags: { core: ["AI"], mid: ["PPT"] },
+			})
+			expect(store.postEntries[0].name).toBe("Name p1")
+		})
+
 		it("updates a home post title by platform and entry id", () => {
 			const rednoteEntry = makeEntry("rednote-1")
 			const wechatEntry = makeEntry("wechat-1")

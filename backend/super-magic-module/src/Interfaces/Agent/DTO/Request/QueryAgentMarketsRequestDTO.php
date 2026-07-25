@@ -36,6 +36,9 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
      */
     public ?string $categoryId = null;
 
+    /** @var null|array<int, null|int|string> */
+    public ?array $categoryIds = null;
+
     /**
      * 获取 Hyperf 验证规则.
      */
@@ -45,7 +48,9 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:100',
             'keyword' => 'nullable|string|max:255',
-            'category_id' => 'nullable|string',
+            'category_id' => 'nullable|integer|min:1',
+            'category_ids' => 'nullable|array|max:100',
+            'category_ids.*' => 'integer|min:1',
         ];
     }
 
@@ -62,7 +67,8 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
             'page_size.max' => __('super_magic.agent.page_size_must_not_exceed_100'),
             'keyword.string' => __('super_magic.agent.keyword_must_be_string'),
             'keyword.max' => __('super_magic.agent.keyword_must_not_exceed_255'),
-            'category_id.string' => __('super_magic.agent.category_id_must_be_integer'),
+            'category_id.integer' => __('super_magic.agent.category_id_must_be_integer'),
+            'category_id.min' => __('super_magic.agent.category_id_must_be_greater_than_zero'),
         ];
     }
 
@@ -84,5 +90,30 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
     public function getCategoryId(): ?string
     {
         return $this->categoryId;
+    }
+
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        if ($this->categoryIds !== null) {
+            return $this->normalizeCategoryIds($this->categoryIds);
+        }
+
+        return $this->categoryId === null ? [] : $this->normalizeCategoryIds([$this->categoryId]);
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    private function normalizeCategoryIds(array $categoryIds): array
+    {
+        $normalized = [];
+        foreach ($categoryIds as $categoryId) {
+            $categoryId = (int) $categoryId;
+            if ($categoryId <= 0 || in_array($categoryId, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $categoryId;
+        }
+
+        return $normalized;
     }
 }

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\SaveFilesRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
@@ -25,7 +26,7 @@ class SuperMagicDomainService
         $this->logger = $loggerFactory->get('sandbox');
     }
 
-    public function saveFileData(string $sandboxId, array $fileDataList, string $workDir): array
+    public function saveFileData(DataIsolation $dataIsolation, string $sandboxId, array $fileDataList, string $workDir): array
     {
         $this->logger->info('[SuperMagic][App] Save file data', [
             'sandbox_id' => $sandboxId,
@@ -43,7 +44,7 @@ class SuperMagicDomainService
         }
 
         $request = SaveFilesRequest::create($files);
-        $response = $this->agent->saveFiles($sandboxId, $request);
+        $response = $this->agent->saveFiles($dataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             throw new SandboxOperationException(

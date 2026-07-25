@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { MutableRefObject, RefObject } from "react"
 import type { TemplateCanvasItem, TemplateCanvasPoint } from "./canvasLayout"
 import type { SlidesTemplateCanvasTile } from "./canvasInteraction"
+import { isSlidesTemplateCanvasFiller } from "./canvasInteraction"
 import {
 	getRebasedSlidesTemplateCanvasOffset,
 	getLoopedVisibleSlidesTemplateCanvasItems,
@@ -54,7 +55,7 @@ export function useTemplateCanvasVisibleItems({
 	const loopMetricsRef = useRef(loopMetrics)
 	const preservedCanvasItemsRef = useRef<Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>>([])
 	const resetKeyRef = useRef(resetKey)
-	const visibleKeyRef = useRef("")
+	const visibleKeyRef = useRef<string | null>(null)
 	const visibleCanvasItemsRef = useRef<Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>>([])
 	const frameRef = useRef<number | null>(null)
 	const [visibleCanvasItems, setVisibleCanvasItems] = useState<
@@ -128,22 +129,23 @@ export function useTemplateCanvasVisibleItems({
 			preservedCanvasItemsRef.current = []
 		} else if (hasAppendedItems && visibleCanvasItemsRef.current.length > 0) {
 			// 分页会改变循环周期。先保留当前视口中的旧卡片，等它们移出视口后再显示新布局，
-			// 避免接口返回的瞬间替换用户正在看的模板。
+			// 避免接口返回的瞬间替换用户正在看的真实模板。循环边界补位项不属于真实数据，
+			// 必须随新布局一起移除，否则新分页模板会被旧补位项挡住。
 			const scale = Math.max(scaleRef.current, 0.01)
 			const positionAdjustment = {
 				x: (previousOffset.x - rebasedOffset.x) / scale,
 				y: (previousOffset.y - rebasedOffset.y) / scale,
 			}
-			preservedCanvasItemsRef.current = visibleCanvasItemsRef.current.map(
-				(canvasItem, index) => ({
+			preservedCanvasItemsRef.current = visibleCanvasItemsRef.current
+				.filter((canvasItem) => !isSlidesTemplateCanvasFiller(canvasItem.item))
+				.map((canvasItem, index) => ({
 					...canvasItem,
 					position: {
 						x: canvasItem.position.x + positionAdjustment.x,
 						y: canvasItem.position.y + positionAdjustment.y,
 					},
 					renderKey: `preserved:${index}:${canvasItem.renderKey ?? canvasItem.item.id}`,
-				}),
-			)
+				}))
 		}
 		if (rebasedOffset.x !== offsetRef.current.x || rebasedOffset.y !== offsetRef.current.y) {
 			offsetRef.current = rebasedOffset
@@ -154,7 +156,9 @@ export function useTemplateCanvasVisibleItems({
 		loopItemQueryRef.current = loopItemQuery
 		loopMetricsRef.current = loopMetrics
 		resetKeyRef.current = resetKey
-		visibleKeyRef.current = ""
+		// null 表示强制重新提交可见项。空布局的 key 本身是空字符串，不能用空字符串作哨兵，
+		// 否则筛选切换到预取阶段时会跳过 setVisibleCanvasItems([])，把旧卡片留在画布上。
+		visibleKeyRef.current = null
 		updateVisibleCanvasItems()
 	}, [
 		canvasItems,

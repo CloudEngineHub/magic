@@ -55,6 +55,7 @@ const UserSelect = memo(
 		const locale = getLocale("UserSelect")
 
 		const [open, setOpen] = useState(false)
+		const [draftSelected, setDraftSelected] = useState(selected)
 		const [optionValues, setOptionValues] = useState<DefaultOptionType[]>([])
 
 		const transformTag = useMemoizedFn((data: TreeNode[]) => {
@@ -113,14 +114,20 @@ const UserSelect = memo(
 		})
 
 		const onOk = useMemoizedFn((data: TreeNode[]) => {
+			setDraftSelected(data)
 			departmentSelectorProps?.onOk?.(data)
 			setOpen(false)
 			setSelected(data)
 		})
 
 		const onCancel = useMemoizedFn(() => {
+			setDraftSelected(selected)
 			setOpen(false)
 		})
+
+		useEffect(() => {
+			setDraftSelected(selected)
+		}, [selected])
 
 		useEffect(() => {
 			if (!open) return
@@ -192,8 +199,8 @@ const UserSelect = memo(
 				{dataSource === "Magic" && open && (
 					<MemberDepartmentSelector
 						open={open}
-						selectedValues={selected}
-						onSelectChange={setSelected}
+						selectedValues={draftSelected}
+						onSelectChange={setDraftSelected}
 						onCancel={onCancel}
 						{...departmentSelectorProps}
 						onOk={onOk}

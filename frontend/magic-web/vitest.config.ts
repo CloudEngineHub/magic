@@ -36,6 +36,10 @@ const getVitestBaseConfig = () => {
 		resolve: {
 			alias: [
 				{
+					find: "@admin/",
+					replacement: `${resolve(__dirname, "packages/magic-admin/src")}/`,
+				},
+				{
 					find: /^antd\/es\/locale\/[^/]+$/,
 					replacement: resolve(__dirname, "test/mocks/empty-locale.ts"),
 				},

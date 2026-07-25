@@ -1,6 +1,7 @@
 import type { WithPage, WithPageToken } from "@admin/types/common"
 import type { AiModel } from "@admin/const/aiModel"
 import type { AiManage } from "../../types/aiManage"
+import type { DataDashboard } from "../../types/datadashboard"
 import { RequestUrl } from "../constant"
 import { genRequestUrl } from "../utils"
 import type { HttpClient } from "../core/HttpClient"
@@ -266,6 +267,39 @@ export const generateAIManageApi = (client: HttpClient) => {
 		getOfficialPointsStatistics() {
 			return client.get<AiManage.OfficialPointsStatistics>(
 				RequestUrl.getOfficialPointsStatistics,
+			)
+		},
+
+		/** 数据看板 - 数字员工筛选选项 */
+		getDataDashboardAgentOptions() {
+			return client.get<DataDashboard.AgentOptions>(RequestUrl.getDataDashboardAgentOptions)
+		},
+
+		/** 数据看板 - 数字员工分析 Summary */
+		getDataDashboardAgentSummary(data: DataDashboard.AgentSummaryQuery) {
+			return client.get<DataDashboard.AgentSummary>(
+				genRequestUrl(RequestUrl.getDataDashboardAgentSummary, {}, data),
+			)
+		},
+
+		/** 数据看板 - 数字员工分析 Tabs */
+		getDataDashboardAgentTabs(data: DataDashboard.AgentTabsQuery) {
+			return client.get<DataDashboard.PagedResponse<DataDashboard.AgentTabRow>>(
+				genRequestUrl(RequestUrl.getDataDashboardAgentTabs, {}, data),
+			)
+		},
+
+		/** 数据看板 - 成员分析 Summary */
+		getDataDashboardMemberSummary(data: DataDashboard.MemberSummaryQuery) {
+			return client.get<DataDashboard.MemberSummary>(
+				genRequestUrl(RequestUrl.getDataDashboardMemberSummary, {}, data),
+			)
+		},
+
+		/** 数据看板 - 成员分析 Tabs */
+		getDataDashboardMemberTabs(data: DataDashboard.MemberTabsQuery) {
+			return client.get<DataDashboard.PagedResponse<DataDashboard.MemberTabRow>>(
+				genRequestUrl(RequestUrl.getDataDashboardMemberTabs, {}, data),
 			)
 		},
 

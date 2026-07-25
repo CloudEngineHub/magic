@@ -13,6 +13,7 @@ use App\Infrastructure\ExternalAPI\FileUrlProxy\TemporaryFileUrlProxyManager;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerate;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\OpenRouterRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageGenerateResponse;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use GuzzleHttp\Client;
@@ -55,6 +56,33 @@ final class LLMAppServiceFileUrlProxyTest extends TestCase
         $this->assertSame(0, $mock->count());
     }
 
+    public function testGenerateImageOpenAIFormatWithFileUrlProxyUsesProxyForOpenRouterProvider(): void
+    {
+        $shortUrl = 'https://short-url.pages.letsmagic.space/17829009419c4bbeb3';
+        $mock = new MockHandler([
+            new Response(200, [], $shortUrl),
+            new Response(204),
+        ]);
+        $service = $this->createService($mock);
+        $imageGenerateService = new RecordingImageGenerateService();
+
+        $imageUrl = 'https://magic-sandbox.tos-cn-beijing.volces.com/path/input.png?X-Tos-Signature=abc';
+        $request = new OpenRouterRequest('1024', '1024', 'openrouter-image', '编辑图片');
+        $request->setReferImages([$imageUrl]);
+
+        $response = $this->invokePrivate($service, 'generateImageOpenAIFormatWithFileUrlProxy', [
+            $imageGenerateService,
+            $request,
+            ProviderCode::OpenRouter,
+        ]);
+
+        $this->assertInstanceOf(OpenAIFormatResponse::class, $response);
+        $this->assertSame([$shortUrl], $imageGenerateService->openAIFormatReferImages);
+        $this->assertSame([$shortUrl], $imageGenerateService->openRouterMessageImageUrls);
+        $this->assertSame([$imageUrl], $request->getReferImages());
+        $this->assertSame(0, $mock->count());
+    }
+
     private function createService(MockHandler $mock): LLMAppService
     {
         $reflection = new ReflectionClass(LLMAppService::class);
@@ -89,6 +117,8 @@ final class RecordingImageGenerateService implements ImageGenerate
 {
     public array $openAIFormatReferImages = [];
 
+    public array $openRouterMessageImageUrls = [];
+
     public function generateImage(ImageGenerateRequest $imageGenerateRequest): ImageGenerateResponse
     {
         return new ImageGenerateResponse(ImageGenerateType::URL, []);
@@ -107,6 +137,15 @@ final class RecordingImageGenerateService implements ImageGenerate
     public function generateImageOpenAIFormat(ImageGenerateRequest $imageGenerateRequest): OpenAIFormatResponse
     {
         $this->openAIFormatReferImages = $imageGenerateRequest->getReferImages();
+        if ($imageGenerateRequest instanceof OpenRouterRequest) {
+            $content = $imageGenerateRequest->toArray()['messages'][0]['content'] ?? [];
+            foreach (is_array($content) ? $content : [] as $part) {
+                if (($part['type'] ?? '') === 'image_url') {
+                    $this->openRouterMessageImageUrls[] = $part['image_url']['url'] ?? '';
+                }
+            }
+        }
+
         return new OpenAIFormatResponse([
             'created' => time(),
             'provider' => 'test',

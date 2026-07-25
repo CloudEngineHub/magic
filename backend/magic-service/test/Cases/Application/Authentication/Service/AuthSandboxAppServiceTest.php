@@ -8,10 +8,8 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Authentication\Service;
 
 use App\Application\Authentication\Service\AuthSandboxAppService;
-use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Hyperf\Contract\ConfigInterface;
 use PHPUnit\Framework\TestCase;
 use Throwable;
 
@@ -54,46 +52,11 @@ class AuthSandboxAppServiceTest extends TestCase
         $this->assertSame([], $service->credentials);
     }
 
-    public function testAuthenticateDoesNotUseExplicitHeadersWhenWebGuardFailsInRequestContext(): void
-    {
-        $authorization = $this->createAuthorization();
-        $service = $this->createService(
-            useWebGuard: true,
-            webGuardException: new BusinessException('webguard_failed', 1001),
-            sandboxAuthorization: $authorization,
-        );
-
-        $result = $service->authenticate([
-            'authorization' => ['Bearer user-token'],
-            'organization_code' => ['DT001'],
-        ]);
-
-        $this->assertSame($authorization, $result);
-        $this->assertSame(1, $service->webGuardCallCount);
-        $this->assertSame(1, $service->sandboxCallCount);
-        $this->assertSame([], $service->credentials);
-        $this->assertSame(1001, $service->sandboxOrigin?->getCode());
-    }
-
-    public function testAuthenticateFallsBackToSandboxWhenExplicitHeadersFail(): void
-    {
-        $authorization = $this->createAuthorization();
-        $service = $this->createService(useWebGuard: false, sandboxAuthorization: $authorization);
-
-        $result = $service->authenticate([]);
-
-        $this->assertSame($authorization, $result);
-        $this->assertSame(0, $service->webGuardCallCount);
-        $this->assertSame(1, $service->sandboxCallCount);
-        $this->assertSame(2179, $service->sandboxOrigin?->getCode());
-    }
-
-    public function testAuthenticateKeepsWebGuardExceptionWhenHttpFallbacksFail(): void
+    public function testAuthenticateRethrowsWebGuardException(): void
     {
         $service = $this->createService(
             useWebGuard: true,
             webGuardException: new BusinessException('webguard_failed', 1001),
-            sandboxThrowsOrigin: true,
         );
 
         $this->expectException(BusinessException::class);
@@ -106,12 +69,11 @@ class AuthSandboxAppServiceTest extends TestCase
         ]);
     }
 
-    public function testAuthenticateKeepsHeaderExceptionWhenIpcFallbacksFail(): void
+    public function testAuthenticateRethrowsHeaderException(): void
     {
         $service = $this->createService(
             useWebGuard: false,
             headerException: new BusinessException('headers_failed', 1002),
-            sandboxThrowsOrigin: true,
         );
 
         $this->expectException(BusinessException::class);
@@ -138,19 +100,13 @@ class AuthSandboxAppServiceTest extends TestCase
         ?MagicUserAuthorization $webGuardAuthorization = null,
         ?Throwable $webGuardException = null,
         ?Throwable $headerException = null,
-        ?MagicUserAuthorization $sandboxAuthorization = null,
-        bool $sandboxThrowsOrigin = false,
     ): AuthSandboxAppServiceForTest {
         return new AuthSandboxAppServiceForTest(
-            $this->createStub(ConfigInterface::class),
-            $this->createStub(MagicUserDomainService::class),
             $useWebGuard,
             $headerAuthorization,
             $webGuardAuthorization,
             $webGuardException,
             $headerException,
-            $sandboxAuthorization,
-            $sandboxThrowsOrigin,
         );
     }
 }
@@ -167,22 +123,13 @@ class AuthSandboxAppServiceForTest extends AuthSandboxAppService
 
     public int $webGuardCallCount = 0;
 
-    public int $sandboxCallCount = 0;
-
-    public ?Throwable $sandboxOrigin = null;
-
     public function __construct(
-        ConfigInterface $config,
-        MagicUserDomainService $magicUserDomainService,
         private readonly bool $useWebGuard,
         private readonly ?MagicUserAuthorization $headerAuthorization,
         private readonly ?MagicUserAuthorization $webGuardAuthorization,
         private readonly ?Throwable $webGuardException,
         private readonly ?Throwable $headerException,
-        private readonly ?MagicUserAuthorization $sandboxAuthorization,
-        private readonly bool $sandboxThrowsOrigin,
     ) {
-        parent::__construct($config, $magicUserDomainService);
     }
 
     protected function hasRequestContext(): bool
@@ -217,21 +164,5 @@ class AuthSandboxAppServiceForTest extends AuthSandboxAppService
         }
 
         return $this->headerAuthorization;
-    }
-
-    protected function trySandboxCompatibleAuth(
-        array $headers,
-        ConfigInterface $config,
-        MagicUserDomainService $magicUserDomainService,
-        Throwable $origin
-    ): ?MagicUserAuthorization {
-        ++$this->sandboxCallCount;
-        $this->sandboxOrigin = $origin;
-
-        if ($this->sandboxThrowsOrigin) {
-            throw $origin;
-        }
-
-        return $this->sandboxAuthorization;
     }
 }

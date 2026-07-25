@@ -2,17 +2,15 @@
 """
 Checkpoint事件监听服务
 
-这个模块负责监听代理运行和文件操作事件，自动创建checkpoint和保存文件快照。
+这个模块负责监听代理运行和聊天历史变更事件，自动创建checkpoint和备份聊天历史快照。
 """
 
 from agentlang.event.event import Event, EventType
 from agentlang.event.data import BeforeMainAgentRunEventData, ChatHistoryChangedEventData
-from app.core.entity.event.file_event import FileEventData
 from app.core.context.agent_context import AgentContext
 from app.service.checkpoint_service import CheckpointService
 from app.service.agent_event.base_listener_service import BaseListenerService
 from app.utils.checkpoint_utils import CheckpointUtils
-from app.core.entity.checkpoint import FileOperation
 from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from agentlang.logger import get_logger
@@ -26,21 +24,8 @@ class CheckpointListenerService:
     @staticmethod
     def register_standard_listeners(agent_context: AgentContext) -> None:
         """注册checkpoint相关的事件监听器"""
-        # 文件快照由外部文件系统（magicfs）直接在 checkpoint 目录里维护，
-        # 不再通过事件驱动的方式在 Python 层保存 initial_content / latest_content，
-        # 因此下面的文件事件监听器全部停用。
-        # 聊天历史快照仍由本服务负责备份。
         event_listeners = {
             EventType.BEFORE_MAIN_AGENT_RUN: CheckpointListenerService._handle_before_main_agent_run,
-            # BEFORE事件监听器（保存initial_content）
-            # EventType.BEFORE_FILE_CREATED: CheckpointListenerService._handle_before_file_created,
-            # EventType.BEFORE_FILE_UPDATED: CheckpointListenerService._handle_before_file_updated,
-            # EventType.BEFORE_FILE_DELETED: CheckpointListenerService._handle_before_file_deleted,
-            # AFTER事件监听器（保存latest_content）
-            # EventType.FILE_CREATED: CheckpointListenerService._handle_file_created,
-            # EventType.FILE_UPDATED: CheckpointListenerService._handle_file_updated,
-            # EventType.FILE_DELETED: CheckpointListenerService._handle_file_deleted,
-            # 聊天历史变更事件监听器
             EventType.CHAT_HISTORY_CHANGED: CheckpointListenerService._handle_chat_history_changed,
         }
 
@@ -104,173 +89,6 @@ class CheckpointListenerService:
 
         except Exception as e:
             logger.error(f"保存 initial chat_history 快照失败: {e}", exc_info=True)
-
-    @staticmethod
-    async def _handle_before_file_created(event: Event[FileEventData]) -> None:
-        """处理文件创建前事件"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过文件快照")
-                return
-
-            # 记录文件创建操作（文件创建前不需要保存内容，回滚时直接删除即可）
-            checkpoint_service = CheckpointService()
-            await checkpoint_service.save_initial_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.CREATED)
-
-            logger.info(f"记录文件创建前操作: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件创建前事件失败: {e}")
-
-    @staticmethod
-    async def _handle_before_file_updated(event: Event[FileEventData]) -> None:
-        """处理文件更新前事件，保存修改前的内容"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过文件快照")
-                return
-
-            # 检查同一个checkpoint下是否已经有该文件的快照（避免重复快照）
-            checkpoint_service = CheckpointService()
-            if await checkpoint_service.has_file_snapshot(current_checkpoint, event.data.filepath):
-                logger.info(f"文件已有快照，跳过重复保存: {event.data.filepath}")
-                return
-
-            # 保存修改前的文件内容（仅第一次）
-            await checkpoint_service.save_initial_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.UPDATED)
-
-            logger.info(f"保存文件首次更新快照: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件更新前事件失败: {e}")
-
-    @staticmethod
-    async def _handle_before_file_deleted(event: Event[FileEventData]) -> None:
-        """处理文件删除前事件，保存删除前的内容"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过文件快照")
-                return
-
-            # 保存删除前的文件内容
-            checkpoint_service = CheckpointService()
-            await checkpoint_service.save_initial_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.DELETED)
-
-            logger.info(f"保存文件删除前快照: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件删除前事件失败: {e}")
-
-    @staticmethod
-    async def _handle_file_created(event: Event[FileEventData]) -> None:
-        """处理文件创建后事件，保存最新状态"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过最新文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过最新文件快照")
-                return
-
-            # 保存文件创建后的最新状态
-            checkpoint_service = CheckpointService()
-            await checkpoint_service.save_latest_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.CREATED)
-
-            logger.info(f"保存文件创建后的最新快照: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件创建后事件失败: {e}")
-
-    @staticmethod
-    async def _handle_file_updated(event: Event[FileEventData]) -> None:
-        """处理文件更新后事件，保存最新状态"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过最新文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过最新文件快照")
-                return
-
-            # 保存文件更新后的最新状态
-            checkpoint_service = CheckpointService()
-            await checkpoint_service.save_latest_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.UPDATED)
-
-            logger.info(f"保存文件更新后的最新快照: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件更新后事件失败: {e}")
-
-    @staticmethod
-    async def _handle_file_deleted(event: Event[FileEventData]) -> None:
-        """处理文件删除后事件，保存最新状态"""
-        try:
-            # 获取代理上下文
-            tool_context = event.data.tool_context
-            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
-
-            if not agent_context:
-                logger.error("无法获取代理上下文，跳过最新文件快照处理")
-                return
-
-            # 获取当前checkpoint
-            current_checkpoint = CheckpointUtils.get_current_checkpoint(agent_context)
-            if not current_checkpoint:
-                logger.info("当前没有活跃的checkpoint，跳过最新文件快照")
-                return
-
-            # 保存文件删除后的最新状态（记录文件已删除）
-            checkpoint_service = CheckpointService()
-            await checkpoint_service.save_latest_file_snapshot(current_checkpoint, event.data.filepath, FileOperation.DELETED)
-
-            logger.info(f"保存文件删除后的最新快照: {event.data.filepath}")
-
-        except Exception as e:
-            logger.error(f"处理文件删除后事件失败: {e}")
 
     @staticmethod
     async def _handle_chat_history_changed(event: Event[ChatHistoryChangedEventData]) -> None:

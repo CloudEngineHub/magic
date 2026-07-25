@@ -1,9 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react"
+import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { createContext, useContext } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { modeListMock, getModeConfigWithLegacyMock, publishMock } = vi.hoisted(() => {
+const {
+	modeListMock,
+	getModeConfigWithLegacyMock,
+	publishMock,
+	shouldSuppressInputAutoFocusOnIPadMock,
+	preventOpenAutoFocusMock,
+} = vi.hoisted(() => {
 	const modeList = [
 		{
 			mode: {
@@ -37,6 +43,8 @@ const { modeListMock, getModeConfigWithLegacyMock, publishMock } = vi.hoisted(()
 			},
 		),
 		publishMock: vi.fn(),
+		shouldSuppressInputAutoFocusOnIPadMock: vi.fn(() => false),
+		preventOpenAutoFocusMock: vi.fn(),
 	}
 })
 
@@ -96,6 +104,10 @@ vi.mock("@/utils/pubsub", () => ({
 	},
 }))
 
+vi.mock("@/utils/inputFocusPolicy", () => ({
+	shouldSuppressInputAutoFocusOnIPad: shouldSuppressInputAutoFocusOnIPadMock,
+}))
+
 vi.mock("@/components/other/BlackPurpleButton", () => ({
 	default: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
 		<button type="button" {...props}>
@@ -133,10 +145,34 @@ vi.mock("@/components/shadcn-ui/popover", () => ({
 			</button>
 		)
 	},
-	PopoverContent: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => {
+	PopoverContent: ({
+		children,
+		className,
+		collisionPadding,
+		avoidCollisions,
+		"data-testid": testId,
+		onOpenAutoFocus,
+	}: {
+		children: ReactNode
+		className?: string
+		collisionPadding?: number
+		avoidCollisions?: boolean
+		"data-testid"?: string
+		onOpenAutoFocus?: (event: { preventDefault: () => void }) => void
+	}) => {
 		const context = useContext(popoverContext)
 		if (!context?.open) return null
-		return <div {...props}>{children}</div>
+		onOpenAutoFocus?.({ preventDefault: preventOpenAutoFocusMock })
+		return (
+			<div
+				className={className}
+				data-testid={testId}
+				data-collision-padding={collisionPadding}
+				data-avoid-collisions={avoidCollisions}
+			>
+				{children}
+			</div>
+		)
 	},
 	PopoverAnchor: () => null,
 }))
@@ -205,7 +241,48 @@ describe("ModeToggle", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.useRealTimers()
+		shouldSuppressInputAutoFocusOnIPadMock.mockReturnValue(false)
 	})
+
+	it("prevents the search input from receiving automatic focus on iPad", () => {
+		shouldSuppressInputAutoFocusOnIPadMock.mockReturnValue(true)
+
+		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		expect(shouldSuppressInputAutoFocusOnIPadMock).toHaveBeenCalled()
+		expect(preventOpenAutoFocusMock).toHaveBeenCalledOnce()
+	})
+
+	it.each([true, false])(
+		"constrains the desktop mode popover to the available viewport (%s)",
+		(allowChangeMode) => {
+			render(
+				<ModeToggle
+					topicMode={"mode-a" as never}
+					allowChangeMode={allowChangeMode}
+					onModeChange={vi.fn()}
+				/>,
+			)
+
+			fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+			const popover = screen.getByTestId("super-message-editor-mode-toggle-popover")
+			expect(popover).toHaveClass(
+				"max-h-[min(90dvh,var(--radix-popover-content-available-height))]",
+			)
+			expect(popover).toHaveAttribute("data-collision-padding", "8")
+			expect(popover).toHaveAttribute("data-avoid-collisions", "true")
+			expect(screen.getByTestId("super-message-editor-mode-toggle-content")).toHaveClass(
+				"min-h-0",
+			)
+			expect(screen.getByTestId("super-message-editor-mode-toggle-list")).toHaveClass(
+				"min-h-0",
+				"flex-1",
+			)
+		},
+	)
 
 	it("keeps the popover open when toggling a mode description", () => {
 		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)

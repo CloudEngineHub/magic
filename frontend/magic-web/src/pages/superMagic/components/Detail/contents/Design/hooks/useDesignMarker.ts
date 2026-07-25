@@ -5,17 +5,17 @@ import {
 	ElementTypeEnum,
 	type LayerElement,
 	type ImageElement,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	CanvasDesignMethods,
 	IdentifyImageMarkResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { SuperMagicMarkerDataUpdatedPayload } from "@/pages/superMagic/events/markers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { Marker } from "@/components/CanvasDesign/canvas/types"
+import { Marker } from "@/components/CanvasDesign/runtime/document/types"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { TFunction } from "i18next"
-import { CanvasDesignRef } from "@/components/CanvasDesign/types"
+import { CanvasDesignRef } from "@/components/CanvasDesign/public/props"
 import { isLikelyAbortError, type SuperMagicMarkerManager } from "../marker-manager"
 
 interface UseDesignMarkerOptions {

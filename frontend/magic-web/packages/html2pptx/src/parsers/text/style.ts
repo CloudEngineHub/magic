@@ -36,7 +36,7 @@ export interface TextStyle {
 	charSpacing?: number // Character spacing in points
 	lineSpacing?: number // Line spacing multiplier
 	shadow?: PPTShadow | null
-	margin: [number, number, number, number] // Margin in points
+	margin: [number, number, number, number] // [top, right, bottom, left] in points
 	outline?: {
 		color: string
 		size: number
@@ -58,7 +58,9 @@ export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 			: style.color
 		: style.color
 
-	const fontSize = Math.max(1, Math.floor(style.fontSize * scale * PX_TO_PT_RATIO))
+	// Keep fractional point sizes. Flooring here changes browser line metrics
+	// (for example 18px becomes 13pt instead of 13.5pt) and can alter wrapping.
+	const fontSize = Math.max(0.01, style.fontSize * scale * PX_TO_PT_RATIO)
 	const fontWeight = parseFontWeight(style.fontWeight)
 	const isBold = parseBold(style.fontWeight)
 	const isItalic = style.fontStyle === "italic"
@@ -67,9 +69,7 @@ export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 	const charSpacing = parseLetterSpacing(style.letterSpacing, style.fontSize, scale)
 	const lineSpacing = parseLineSpacing(style.lineHeight, style.fontSize)
 	const align =
-		style.textAlign === "center" ||
-		style.textAlign === "right" ||
-		style.textAlign === "justify"
+		style.textAlign === "center" || style.textAlign === "right" || style.textAlign === "justify"
 			? style.textAlign
 			: undefined
 

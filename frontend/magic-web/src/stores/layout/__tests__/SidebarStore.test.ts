@@ -189,6 +189,15 @@ describe("SidebarStore", () => {
 			expect(store.width).toBeCloseTo(expectedWidth, 2)
 		})
 
+		it("should return the latest width after the getter has already been read", () => {
+			const initialWidth = store.width
+
+			store.setWidth(30)
+
+			expect(store.width).not.toBe(initialWidth)
+			expect(store.width).toBe(30)
+		})
+
 		it("should clamp width within min/max bounds", () => {
 			// Test minimum
 			store.setWidth(5)

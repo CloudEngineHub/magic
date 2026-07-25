@@ -25,6 +25,7 @@ import AICardCreateDialog, { type AICardCreateInitialValues } from "./components
 import SelfMediaOpsMetricsDialog from "./components/SelfMediaOpsMetricsDialog"
 import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
 import { useSelfMediaHomeScrollMemory } from "./hooks/useSelfMediaHomeScrollPosition"
+import { useSelfMediaPostShare } from "./hooks/useSelfMediaPostShare"
 import {
 	SelfMediaFileStorageService,
 	type SelfMediaPostOpsMetricsPayload,
@@ -55,6 +56,7 @@ import {
 import type {
 	SelfMediaAttachmentNode,
 	SelfMediaPostEntry,
+	SelfMediaPostMetaPatch,
 	SelfMediaPostPublishStatus,
 	SelfMediaRootRenderProps,
 	SelfMediaWechatCoverType,
@@ -174,7 +176,7 @@ const SPLASH_SCREEN_SEEN_KEY = "selfMediaSplashSeen"
 
 function shouldShowSelfMediaSplash() {
 	if (process.env.NODE_ENV === "test") return false
-	if (process.env.NODE_ENV === "development") return true
+	// if (process.env.NODE_ENV === "development") return true
 	return localStorage.getItem(SPLASH_SCREEN_SEEN_KEY) !== "true"
 }
 
@@ -191,6 +193,16 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 }: SelfMediaRootRenderInnerProps) {
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
+	const {
+		canShare: canSharePost,
+		isCheckingShare: sharePostLoading,
+		sharePost,
+		shareModals,
+	} = useSelfMediaPostShare({
+		attachments,
+		selectedProject,
+		enabled: Boolean(allowEdit),
+	})
 	const [showSplash, setShowSplash] = useState(shouldShowSelfMediaSplash)
 	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
 	const [aiCardDialogOpen, setAiCardDialogOpen] = useState(false)
@@ -203,6 +215,9 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		index: number
 	} | null>(null)
 	const [analysisSubmitting, setAnalysisSubmitting] = useState(false)
+	useEffect(() => {
+		if (!allowEdit) setOpsMetricsTarget(null)
+	}, [allowEdit])
 	const homeScrollMemory = useSelfMediaHomeScrollMemory(
 		`${folderFileId || ""}:${folderPath || ""}`,
 	)
@@ -213,7 +228,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const selectedAnalysisModel = topicModelStore.selectedLanguageModel
 	const dataSyncModel = resolveFirstAvailableSelfMediaDataSyncModel()
 
-	const { platforms, resolvedPlatform: platform, rootLoading } = store
+	const { platforms, resolvedPlatform: platform, rootLoading, sharedPostFallback } = store
 	const projectId = selectedProject?.id || ""
 	const fileStorageService = useMemo(
 		() =>
@@ -223,12 +238,21 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 
 	// Detect empty project: no platforms configured and not loading
 	const isEmptyProject = !rootLoading && platforms.length === 0
-	const activeRootMode = rootMode ?? (isEmptyProject ? "create" : "home")
+	const isSingleSharedPost = sharedPostFallback && store.allPosts.length === 1
+	const activeRootMode =
+		rootMode ?? (isSingleSharedPost ? "platform" : isEmptyProject ? "create" : "home")
+
+	// A cached file-viewer tab can switch to another folder without remounting this component.
+	useEffect(() => {
+		setRootMode(null)
+	}, [folderFileId])
 
 	useEffect(() => {
 		if (rootLoading || rootMode !== null) return
-		setRootMode(isEmptyProject && allowEdit ? "create" : "home")
-	}, [isEmptyProject, rootLoading, rootMode, allowEdit])
+		setRootMode(
+			isSingleSharedPost ? "platform" : isEmptyProject && allowEdit ? "create" : "home",
+		)
+	}, [isEmptyProject, rootLoading, rootMode, allowEdit, isSingleSharedPost])
 	const handleStartCreateArticle = useCallback(() => {
 		setRootMode("create")
 	}, [])
@@ -758,6 +782,28 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[fileStorageService, t],
 	)
+	const handleUpdatePostMeta = useCallback(
+		async (
+			target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
+			patch: SelfMediaPostMetaPatch,
+		) => {
+			try {
+				if (!fileStorageService) return false
+				await fileStorageService.updatePostMeta(target.entry.entry, patch)
+				return true
+			} catch (error) {
+				console.error("Self-media post metadata update failed:", error)
+				magicToast.error(
+					t(
+						"detail.selfMedia.platform.rednote.metaEdit.failed",
+						"内容保存失败，请稍后重试",
+					),
+				)
+				return false
+			}
+		},
+		[fileStorageService, t],
+	)
 	const handleRenameHomePost = useCallback(
 		async (target: SelfMediaPlatformPostItem, nextTitle: string) => {
 			try {
@@ -786,6 +832,13 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			index: store.activePostIndex,
 		})
 	}, [handleRequestPrePublishAnalysis, platform, store.activePostIndex])
+	const handleShareActivePost = useCallback(() => {
+		if (!platform) return
+		const target = store.allPosts.find(
+			(item) => item.platform === platform && item.index === store.activePostIndex,
+		)
+		if (target) void sharePost(target)
+	}, [platform, sharePost, store])
 	const handleRequestWechatCoverGeneration = useCallback(
 		async ({
 			index,
@@ -948,6 +1001,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				>
 					<SelfMediaHomePage
 						posts={store.allPosts}
+						allowEdit={allowEdit}
 						attachmentList={attachmentList}
 						onEnsurePostLoaded={handleEnsureHomePostLoaded}
 						onCreateArticle={allowEdit ? handleStartCreateArticle : undefined}
@@ -967,6 +1021,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						onDeletePost={allowEdit ? handleDeletePost : undefined}
 						onSetPostPublishStatus={allowEdit ? handleSetPostPublishStatus : undefined}
 						onMentionPost={allowEdit ? handleMentionHomePost : undefined}
+						onSharePost={canSharePost ? sharePost : undefined}
 						onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
 						onRefreshAllData={allowEdit ? handleRefreshAllData : undefined}
 						onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
@@ -995,14 +1050,16 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						initialValues={aiCardInitialValues ?? undefined}
 					/>
 					<SelfMediaOpsMetricsDialog
-						open={Boolean(opsMetricsTarget)}
+						open={allowEdit && Boolean(opsMetricsTarget)}
 						onOpenChange={(open) => {
 							if (!open) setOpsMetricsTarget(null)
 						}}
 						target={opsMetricsTarget}
 						fileStorageService={fileStorageService}
-						onUpdateAutoSyncPublishedUrl={handleUpdateAutoSyncPublishedUrl}
-						onFetchPublishedData={handlePostPublishRefresh}
+						onUpdateAutoSyncPublishedUrl={
+							allowEdit ? handleUpdateAutoSyncPublishedUrl : undefined
+						}
+						onFetchPublishedData={allowEdit ? handlePostPublishRefresh : undefined}
 					/>
 					<PrePublishAnalysisDialog
 						open={Boolean(analysisTarget)}
@@ -1128,9 +1185,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 							selectedProject={selectedProject}
 							onBackHome={handleBackHome}
 							onUpdatePostTitle={allowEdit ? handleUpdatePostTitle : undefined}
+							onUpdatePostMeta={allowEdit ? handleUpdatePostMeta : undefined}
 							onRequestPrePublishAnalysis={
 								allowEdit ? handleRequestActivePrePublishAnalysis : undefined
 							}
+							onSharePost={canSharePost ? handleShareActivePost : undefined}
+							shareLoading={sharePostLoading}
 							onRequestWechatCoverGeneration={
 								allowEdit ? handleRequestWechatCoverGeneration : undefined
 							}
@@ -1159,7 +1219,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		)
 	}
 
-	return <div className={cn("relative h-full w-full", className)}>{renderContent()}</div>
+	return (
+		<div className={cn("relative h-full w-full", className)}>
+			{renderContent()}
+			{shareModals}
+		</div>
+	)
 })
 
 export default observer(SelfMediaRootRender)

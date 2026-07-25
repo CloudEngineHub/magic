@@ -354,6 +354,10 @@ function CrewEditPanels({
 			: isConversationPanelCollapsed
 				? `calc(100% - ${COLLAPSED_MESSAGE_PANEL_WIDTH + targetRightHandleWidth}px)`
 				: `calc(100% - ${targetRightHandleWidth + (targetMessagePanelWidth ?? 0)}px)`
+	// Safari 会用 overflow:hidden 裁剪详情区内的 fixed 全屏层，全屏期间需解除祖先裁剪。
+	const detailPanelOverflowClassName = isDetailPanelFullscreen
+		? "overflow-visible"
+		: "overflow-hidden"
 
 	function renderTopicHistoryShell(mode: Exclude<TopicHistoryMode, "hidden">) {
 		const isDrawer = mode === "drawer"
@@ -391,7 +395,7 @@ function CrewEditPanels({
 	return (
 		<div
 			ref={containerRef}
-			className="flex h-full w-full overflow-hidden"
+			className={cn("flex h-full w-full", detailPanelOverflowClassName)}
 			data-testid="crew-edit-panels"
 		>
 			<div
@@ -410,11 +414,14 @@ function CrewEditPanels({
 				className={cn("shrink-0", isDraggingSidebar && "before:opacity-100")}
 			/>
 
-			<div className="relative flex h-full min-w-0 flex-1 overflow-hidden">
+			<div
+				className={cn("relative flex h-full min-w-0 flex-1", detailPanelOverflowClassName)}
+			>
 				{(showDetailPanel || keepDetailMountedWhenHidden) && (
 					<div
 						className={cn(
-							"h-full min-w-0 overflow-hidden",
+							"h-full min-w-0",
+							detailPanelOverflowClassName,
 							!showDetailPanel &&
 								keepDetailMountedWhenHidden &&
 								"pointer-events-none",
@@ -429,7 +436,9 @@ function CrewEditPanels({
 						}}
 						data-testid="crew-edit-detail-panel"
 					>
-						<div className="h-full w-full min-w-0 overflow-hidden">{detailPanel}</div>
+						<div className={cn("h-full w-full min-w-0", detailPanelOverflowClassName)}>
+							{detailPanel}
+						</div>
 					</div>
 				)}
 

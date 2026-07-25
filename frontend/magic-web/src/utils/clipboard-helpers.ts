@@ -1,3 +1,5 @@
+import { isInDingTalkEnvironment } from "@/utils/devices"
+
 /**
  * 剪贴板工具函数 - 提供跨平台兼容的剪贴板操作
  *
@@ -18,6 +20,34 @@
  * HTTP 环境或权限被拒绝时自动降级到 execCommand
  */
 async function _writeText(text: string): Promise<void> {
+	// Keep the legacy copy command synchronous in DingTalk WebViews before using the restricted API.
+	if (isInDingTalkEnvironment) {
+		try {
+			fallbackWriteText(text)
+			return
+		} catch (fallbackError) {
+			if (!navigator.clipboard?.writeText) {
+				console.log("[clipboard] DingTalk copy failed", {
+					fallbackError,
+					textLength: text.length,
+				})
+				throw fallbackError
+			}
+
+			try {
+				await navigator.clipboard.writeText(text)
+				return
+			} catch (nativeError) {
+				console.log("[clipboard] DingTalk copy failed", {
+					fallbackError,
+					nativeError,
+					textLength: text.length,
+				})
+				throw fallbackError
+			}
+		}
+	}
+
 	let nativeWriteTextError: unknown
 	if (navigator.clipboard?.writeText) {
 		try {
@@ -31,6 +61,11 @@ async function _writeText(text: string): Promise<void> {
 	try {
 		fallbackWriteText(text)
 	} catch (error) {
+		console.log("[clipboard] Copy failed", {
+			fallbackError: error,
+			nativeError: nativeWriteTextError,
+			textLength: text.length,
+		})
 		if (nativeWriteTextError) {
 			throw nativeWriteTextError
 		}
@@ -99,20 +134,46 @@ export const clipboard = {
 
 /** 纯文本 execCommand 降级方案 */
 function fallbackWriteText(text: string): void {
-	const textarea = document.createElement("textarea")
-	textarea.value = text
-	textarea.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none"
-	textarea.setAttribute("readonly", "")
-	document.body.appendChild(textarea)
+	// Use the contentEditable selection path that is supported by older DingTalk WebViews.
+	const container = document.createElement("div")
+	container.contentEditable = "true"
+	container.textContent = text
+	container.style.cssText =
+		"position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;white-space:pre-wrap"
+	document.body.appendChild(container)
+	let selection: Selection | null = null
+
+	let copyHandled = false
+	const handleCopy = (event: ClipboardEvent) => {
+		if (!event.clipboardData) return
+
+		try {
+			event.clipboardData.setData("text/plain", text)
+			event.preventDefault()
+			event.stopPropagation()
+			copyHandled = true
+		} catch {
+			// Preserve the browser's default copy behavior when custom data is unavailable.
+		}
+	}
+
 	try {
-		textarea.select()
-		textarea.setSelectionRange(0, text.length)
+		// Focus before creating the selection so older WebViews do not reset the range.
+		container.focus()
+		const range = document.createRange()
+		range.selectNodeContents(container)
+		selection = window.getSelection()
+		selection?.removeAllRanges()
+		selection?.addRange(range)
+		document.addEventListener("copy", handleCopy)
 		const success = document.execCommand("copy")
-		if (!success) {
+		if (!success && !copyHandled) {
 			throw new Error("Clipboard text fallback failed: execCommand returned false")
 		}
 	} finally {
-		document.body.removeChild(textarea)
+		document.removeEventListener("copy", handleCopy)
+		selection?.removeAllRanges()
+		document.body.removeChild(container)
 	}
 }
 

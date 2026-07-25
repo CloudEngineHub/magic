@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx"
 import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { normalizeDraftForAvailability, sanitizeDraftForSubmission } from "./publishAvailability"
 import type {
+	PublishCategoryOption,
 	PublishDraft,
 	PublishHistoryRecord,
 	PublishInternalTarget,
@@ -28,6 +29,8 @@ export class PublishPanelStore {
 	currentPublisherName = ""
 	historyRecords: PublishHistoryRecord[] = []
 	selectedHistoryRecord: PublishHistoryRecord | null = null
+	currentPublishTo: PublishTo | null = null
+	marketCategories: PublishCategoryOption[] = []
 	marketCopy: PublishMarketCopy = {
 		publishToLabelKey: "skillEditPage.publishPanel.publishToOptions.skills_library.label",
 		publishToDescriptionKey:
@@ -73,10 +76,16 @@ export class PublishPanelStore {
 		)
 			return false
 		if (this.draft.version.trim().length === 0) return false
+		if (this.requiresMarketCategory)
+			return this.draft.categoryIds?.length ? true : Boolean(this.draft.categoryId?.trim())
 
 		if (this.requiresSpecificMembers) return this.draft.specificMembers.length > 0
 
 		return true
+	}
+
+	get requiresMarketCategory() {
+		return this.draft.publishTo === "MARKET" && this.marketCategories.length > 0
 	}
 
 	get requiresSpecificMembers() {
@@ -100,6 +109,8 @@ export class PublishPanelStore {
 		const { preserveDraft = false, preserveView = false } = options
 		this.hasUnpublishedChanges = data.hasUnpublishedChanges
 		this.currentPublisherName = data.currentPublisherName
+		this.currentPublishTo = data.currentPublishTo ?? null
+		this.marketCategories = [...(data.marketCategories ?? [])]
 		this.marketCopy = data.marketCopy ?? this.marketCopy
 		this.historyRecords = data.historyRecords.map((record) => ({
 			...record,
@@ -170,6 +181,10 @@ export class PublishPanelStore {
 		}
 	}
 
+	setCurrentPublishTo(publishTo: PublishTo | null) {
+		this.currentPublishTo = publishTo
+	}
+
 	selectInternalTarget(target: PublishInternalTarget) {
 		if (!this.availableInternalTargets.includes(target)) return
 		if (this.draft.internalTarget === target) return
@@ -185,6 +200,23 @@ export class PublishPanelStore {
 		this.draft = {
 			...this.draft,
 			specificMembers,
+		}
+	}
+
+	setCategoryId(categoryId: string) {
+		this.draft = {
+			...this.draft,
+			categoryId,
+			categoryIds: categoryId ? [categoryId] : [],
+		}
+	}
+
+	setCategoryIds(categoryIds: string[]) {
+		const normalizedCategoryIds = normalizeCategoryIds(categoryIds)
+		this.draft = {
+			...this.draft,
+			categoryIds: normalizedCategoryIds,
+			categoryId: normalizedCategoryIds[0],
 		}
 	}
 
@@ -222,20 +254,36 @@ export class PublishPanelStore {
 							submissionDraft.publishTo === "INTERNAL"
 								? submissionDraft.internalTarget
 								: undefined,
+						categoryId:
+							submissionDraft.publishTo === "MARKET"
+								? submissionDraft.categoryId
+								: undefined,
+						categoryIds:
+							submissionDraft.publishTo === "MARKET"
+								? [...(submissionDraft.categoryIds ?? [])]
+								: undefined,
+						categoryName:
+							submissionDraft.publishTo === "MARKET" && submissionDraft.categoryId
+								? this.resolveCategoryName(submissionDraft.categoryId)
+								: undefined,
+						categoryNames:
+							submissionDraft.publishTo === "MARKET"
+								? this.resolveCategoryNames(submissionDraft.categoryIds ?? [])
+								: undefined,
 						publisherName: this.currentPublisherName,
 						publishedAt: formatPublishTimestamp(new Date()),
 						specificMembers:
 							submissionDraft.publishTo === "INTERNAL" &&
-								submissionDraft.internalTarget === "MEMBER"
+							submissionDraft.internalTarget === "MEMBER"
 								? [...submissionDraft.specificMembers]
 								: undefined,
 						skillsLibraryReview:
 							submissionDraft.publishTo === "MARKET"
 								? {
-									submit: "done",
-									review: "current",
-									published: "pending",
-								}
+										submit: "done",
+										review: "current",
+										published: "pending",
+									}
 								: undefined,
 					},
 					...this.historyRecords,
@@ -251,7 +299,7 @@ export class PublishPanelStore {
 	}
 
 	private normalizeDraft(draft: PublishDraft) {
-		return normalizeDraftForAvailability({
+		const normalized = normalizeDraftForAvailability({
 			draft: {
 				...draft,
 				specificMembers: [...draft.specificMembers],
@@ -259,9 +307,35 @@ export class PublishPanelStore {
 			availablePublishTo: this.availablePublishTo,
 			availableInternalTargets: this.availableInternalTargets,
 		})
+		const categoryId = normalized.categoryId
+		const categoryIds = normalizeCategoryIds(
+			normalized.categoryIds ?? (categoryId ? [categoryId] : []),
+		)
+		const normalizedWithoutCategory = { ...normalized }
+		delete normalizedWithoutCategory.categoryId
+		delete normalizedWithoutCategory.categoryIds
+
+		return {
+			...normalizedWithoutCategory,
+			...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
+		}
+	}
+
+	private resolveCategoryName(categoryId: string) {
+		return this.marketCategories.find((category) => category.id === categoryId)?.name
+	}
+
+	private resolveCategoryNames(categoryIds: string[]) {
+		return categoryIds
+			.map((categoryId) => this.resolveCategoryName(categoryId) ?? categoryId)
+			.filter(Boolean)
 	}
 }
 
 function formatPublishTimestamp(date: Date) {
 	return date.toISOString().slice(0, 19).replace("T", " ")
+}
+
+function normalizeCategoryIds(categoryIds?: string[]) {
+	return Array.from(new Set((categoryIds ?? []).filter(Boolean)))
 }

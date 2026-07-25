@@ -712,6 +712,59 @@ describe("SelfMediaFileStorageService", () => {
 		})
 	})
 
+	it("updates editable post metadata while preserving unrelated manifest content", async () => {
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "post-1-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/post.json",
+		})
+		contentByFileId.set(
+			"post-1-json",
+			JSON.stringify({
+				id: "post-1",
+				meta: { title: "Old title", subtitle: "Old subtitle", author: "Magic" },
+				cards: ["cards/01.html"],
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.updatePostMeta("posts/post-1/post.json", {
+			subtitle: "New subtitle",
+			tags: { core: ["AI"], mid: ["PPT"] },
+		})
+
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}")).toEqual({
+			id: "post-1",
+			meta: {
+				title: "Old title",
+				subtitle: "New subtitle",
+				author: "Magic",
+				tags: { core: ["AI"], mid: ["PPT"] },
+			},
+			cards: ["cards/01.html"],
+		})
+	})
+
 	it("renames a home post in both post.json and magic.project.js", async () => {
 		seedNode({
 			file_id: "magic-project-js",

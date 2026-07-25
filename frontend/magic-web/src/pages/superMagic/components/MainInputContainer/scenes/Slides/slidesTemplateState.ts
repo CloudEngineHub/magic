@@ -72,6 +72,8 @@ export interface SlidesTemplateCountResponse {
 	 * 模板累计使用量。服务端灰度发布前可能不返回；前端不能用模板数量替代它。
 	 */
 	total_usage_count?: number
+	/** 今日新增模板数。服务端灰度发布前可能不返回。 */
+	template_count_today_growth?: number
 }
 
 /** 列表只提供封面；打开预览时再读取详情中的大图资源。 */
@@ -140,6 +142,8 @@ export const SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX = "category:"
 export const SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX = "tag:"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
+export const SLIDES_TEMPLATE_DEFAULT_SIZE = "16:9"
+export const SLIDES_TEMPLATE_DEFAULT_LANGUAGE = "auto"
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
 	resize: { w: 1920 },
 	format: "webp",
@@ -195,6 +199,14 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 		data_key: "pages",
 		label: { zh_CN: "页数", en_US: "Pages" },
 		default_value: "",
+		custom_input: {
+			type: "number",
+			min: 1,
+			step: 1,
+			integer: true,
+			placeholder: { zh_CN: "请输入页数", en_US: "Enter pages" },
+			unit: { zh_CN: "页", en_US: "pages" },
+		},
 		options: [
 			{ value: "1-5", label: "1-5" },
 			{ value: "6-10", label: "6-10" },
@@ -204,6 +216,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	{
 		data_key: "size",
 		label: { zh_CN: "尺寸", en_US: "Size" },
+		default_value: "",
 		options: [
 			{ value: "16:9", label: "16:9" },
 			{ value: "4:3", label: "4:3" },

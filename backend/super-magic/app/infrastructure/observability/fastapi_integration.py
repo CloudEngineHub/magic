@@ -13,8 +13,8 @@ from opentelemetry.trace import Status, StatusCode, SpanContext, TraceFlags
 from opentelemetry.sdk.trace import SpanProcessor
 from agentlang.utils.metadata import MetadataUtil, MetadataError
 from .telemetry import is_telemetry_enabled
-from .constants import LangfuseAttributes
-from .span_utils import enrich_span_with_user_context
+from .constants import LangfuseAttributes, OpenTelemetryAttributes, ObservationType
+from .span_utils import enrich_span_with_user_context, set_trace_name, set_trace_io, redact_headers
 import time
 import json
 import logging
@@ -126,6 +126,28 @@ def _server_request_hook(span, scope):
 
     span.update_name(span_name)
     span.set_attribute(LangfuseAttributes.NAME, span_name)
+    span.set_attribute(LangfuseAttributes.OBSERVATION_TYPE, ObservationType.SPAN.value)
+    span.set_attribute(OpenTelemetryAttributes.OBSERVATION_TYPE, ObservationType.SPAN.value)
+
+    # This is the ROOT span of the trace: set the trace-level Name so the Langfuse
+    # Traces list Name column is populated (langfuse.name alone does NOT do this).
+    set_trace_name(span, span_name)
+
+    # Fill the trace-level Input column with request line + query + headers.
+    try:
+        trace_input = {"method": method, "path": scope.get("path", "")}
+        query_string = scope.get("query_string")
+        if query_string:
+            trace_input["query"] = (
+                query_string.decode("utf-8", "replace")
+                if isinstance(query_string, bytes) else str(query_string)
+            )
+        raw_headers = scope.get("headers")
+        if raw_headers:
+            trace_input["headers"] = redact_headers(raw_headers)
+        set_trace_io(span, input_value=trace_input)
+    except Exception as e:
+        _logger.debug(f"Failed to set trace input: {e}")
 
 
 class HTTPErrorTrackingMiddleware:
@@ -212,6 +234,23 @@ class HTTPErrorTrackingMiddleware:
                 span.set_status(Status(StatusCode.OK))
                 response_time = (time.time() - start_time) * 1000
                 span.set_attribute("http.response_time_ms", round(response_time, 2))
+
+            # Fill the trace-level Output column (bounded body preview).
+            if status_code and span and span.is_recording():
+                try:
+                    trace_output = {"status_code": status_code}
+                    if response_body_parts:
+                        try:
+                            body_text = b"".join(response_body_parts).decode("utf-8")
+                            trace_output["body"] = (
+                                body_text[:5000] + "...<truncated>"
+                                if len(body_text) > 5000 else body_text
+                            )
+                        except Exception:
+                            pass
+                    set_trace_io(span, output_value=trace_output)
+                except Exception as e:
+                    _logger.debug(f"Failed to set trace output: {e}")
 
         except Exception as e:
             # Exception occurred
@@ -333,6 +372,8 @@ def instrument_fastapi(app: FastAPI, track_errors: bool = True) -> None:
             # Use more detailed span names (include HTTP method + route)
             server_request_hook=_server_request_hook,
             client_request_hook=None,  # Not needed for server instrumentation
+            excluded_urls=r"/api/health,/api/v1/workspace/status",
+            exclude_spans=["receive", "send"],
         )
         _logger.info("FastAPI instrumentation enabled with detailed span names")
     except Exception as e:

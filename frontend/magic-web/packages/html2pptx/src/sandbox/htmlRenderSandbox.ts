@@ -44,6 +44,7 @@ export interface SandboxInstance {
 
 interface RenderLifecycleState {
 	settled: boolean
+	readyStarted: boolean
 	timeoutId: ReturnType<typeof setTimeout> | null
 	pollTimerId: ReturnType<typeof setTimeout> | null
 	readyController: SandboxReadyControllerLike | null
@@ -111,6 +112,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const iframeDocument = this.document
 			const lifecycleState: RenderLifecycleState = {
 				settled: false,
+				readyStarted: false,
 				timeoutId: null,
 				pollTimerId: null,
 				readyController: null,
@@ -177,6 +179,12 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				checkLoaded = () => {
 					if (lifecycleState.settled) return
 					if (isDocumentReadyForRender({ iframeDocument, renderStartedAt })) {
+						if (lifecycleState.readyStarted) return
+						lifecycleState.readyStarted = true
+						if (lifecycleState.pollTimerId) {
+							clearTimeout(lifecycleState.pollTimerId)
+							lifecycleState.pollTimerId = null
+						}
 						iframeWindow.requestAnimationFrame(() => {
 							if (lifecycleState.settled) return
 

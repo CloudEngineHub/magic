@@ -323,14 +323,14 @@ class HandleTaskMessageAppService extends AbstractAppService
         return $this->taskDomainService->getTaskBySandboxId($sandboxId);
     }
 
-    public function executeScriptTask(CreateScriptTaskRequestDTO $requestDTO): void
+    public function executeScriptTask(DataIsolation $dataIsolation, CreateScriptTaskRequestDTO $requestDTO): void
     {
         $scriptTaskEntity = new ScriptTaskEntity();
         $scriptTaskEntity->setSandboxId($requestDTO->getSandboxId());
         $scriptTaskEntity->setTaskId($requestDTO->getTaskId());
         $scriptTaskEntity->setScriptName($requestDTO->getScriptName());
         $scriptTaskEntity->setArguments($requestDTO->getArguments());
-        $this->taskDomainService->executeScriptTask($scriptTaskEntity);
+        $this->taskDomainService->executeScriptTask($dataIsolation, $scriptTaskEntity);
     }
 
     /**

@@ -9,6 +9,7 @@ namespace App\Domain\Contact\Entity\ValueObject;
 
 use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Infrastructure\Core\AbstractObject;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 
 /**
  * 数据隔离 SaaS化
@@ -51,6 +52,20 @@ class DataIsolation extends AbstractObject
 
     protected ?string $language = null;
 
+    /**
+     * 当前用户的 User-Authorization token (sandbox-token, raw, no Bearer prefix).
+     * 用于沙箱网关透传给 in-pod super-magic agent 的 AuthMiddleware。
+     *
+     * Nullable, because warm-pool workers and other service-account-style
+     * callers do not have a per-user token; the gateway omits the
+     * User-Authorization header in that case.
+     *
+     * 默认由 DataIsolation::create() 自动填充（当 userId 不为空时通过
+     * AgentDomainService::getAuthorizationByUserId 获取）。调用方通常
+     * 无需手动设置；仅在需要覆盖或 token 获取失败后重试时手动设置。
+     */
+    protected ?string $userAuthorizationToken = null;
+
     public function __construct(?array $data = null)
     {
         if (isset($data['user_type']) && is_numeric($data['user_type'])) {
@@ -89,6 +104,8 @@ class DataIsolation extends AbstractObject
         $static = new self();
         $static->setCurrentOrganizationCode(currentOrganizationCode: $currentOrganizationCode);
         $static->setCurrentUserId(currentUserId: $userId);
+        $agentDomainService = di(AgentDomainService::class);
+        $static->setUserAuthorizationToken($agentDomainService->getAuthorizationByUserId($userId));
         return $static;
     }
 
@@ -144,15 +161,12 @@ class DataIsolation extends AbstractObject
 
     public static function simpleMake(string $currentOrganizationCode, ?string $userId = null): DataIsolation
     {
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentOrganizationCode(currentOrganizationCode: $currentOrganizationCode);
-        $dataIsolation->setCurrentUserId(currentUserId: $userId);
-        return $dataIsolation;
+        return self::create($currentOrganizationCode, (string) $userId);
     }
 
     public static function simpleMakeOnlyEnvironment(): DataIsolation
     {
-        return new DataIsolation();
+        return self::create();
     }
 
     public function isEnable(): bool
@@ -168,5 +182,15 @@ class DataIsolation extends AbstractObject
     public function setLanguage(?string $language): void
     {
         $this->language = $language;
+    }
+
+    public function getUserAuthorizationToken(): ?string
+    {
+        return $this->userAuthorizationToken;
+    }
+
+    public function setUserAuthorizationToken(?string $userAuthorizationToken): void
+    {
+        $this->userAuthorizationToken = $userAuthorizationToken;
     }
 }

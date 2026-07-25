@@ -18,6 +18,10 @@ import {
 	getCanvasProjectOperationImpact,
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	mergeHtmlStaticDependencyFileIds,
+	resolveSingleHtmlStaticDependencies,
+} from "@/pages/superMagic/utils/htmlStaticDependencies"
 
 interface UseCrossProjectFileOperationOptions {
 	projectId?: string
@@ -25,6 +29,55 @@ interface UseCrossProjectFileOperationOptions {
 	selectedProject: ProjectListItem | null
 	projects: ProjectListItem[]
 	onSuccess?: (result?: { operationType: "move" | "copy"; fileIds: string[] }) => void
+}
+
+interface EffectiveOperationFileIdsResult {
+	fileIds: string[]
+	dependencyAnalysisFailed: boolean
+}
+
+async function resolveEffectiveOperationFileIds({
+	fileIds,
+	sourceAttachments,
+	includeHtmlDependencies = true,
+	htmlDependencyFileIds,
+}: {
+	fileIds: string[]
+	sourceAttachments: AttachmentItem[]
+	includeHtmlDependencies?: boolean
+	htmlDependencyFileIds?: string[]
+}): Promise<EffectiveOperationFileIdsResult> {
+	if (!includeHtmlDependencies) {
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			dependencyAnalysisFailed: false,
+		}
+	}
+
+	if (htmlDependencyFileIds !== undefined) {
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, htmlDependencyFileIds, true),
+			dependencyAnalysisFailed: false,
+		}
+	}
+
+	try {
+		const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
+			fileIds,
+			attachments: sourceAttachments,
+		})
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
+			dependencyAnalysisFailed: false,
+		}
+	} catch (error) {
+		// Dependency enrichment must not turn an existing file operation into a hard failure.
+		console.error("Failed to resolve HTML static dependencies for file operation:", error)
+		return {
+			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			dependencyAnalysisFailed: true,
+		}
+	}
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
@@ -158,8 +211,19 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
+			includeHtmlDependencies?: boolean
+			htmlDependencyFileIds?: string[]
 		}) => {
-			const effectiveFileIds = data.fileIds || fileIds
+			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
+				await resolveEffectiveOperationFileIds({
+					fileIds: data.fileIds || fileIds,
+					sourceAttachments: data.sourceAttachments,
+					includeHtmlDependencies: data.includeHtmlDependencies,
+					htmlDependencyFileIds: data.htmlDependencyFileIds,
+				})
+			if (dependencyAnalysisFailed) {
+				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+			}
 			if (!projectId || effectiveFileIds.length === 0) return
 
 			let keepBothIds =
@@ -297,8 +361,19 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
+			includeHtmlDependencies?: boolean
+			htmlDependencyFileIds?: string[]
 		}) => {
-			const effectiveFileIds = data.fileIds ?? fileIds
+			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
+				await resolveEffectiveOperationFileIds({
+					fileIds: data.fileIds ?? fileIds,
+					sourceAttachments: data.sourceAttachments,
+					includeHtmlDependencies: data.includeHtmlDependencies,
+					htmlDependencyFileIds: data.htmlDependencyFileIds,
+				})
+			if (dependencyAnalysisFailed) {
+				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+			}
 			if (!projectId || effectiveFileIds.length === 0) return
 
 			let keepBothIds =
@@ -376,13 +451,13 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
-						onSuccess?.({ operationType: "copy", fileIds })
+						onSuccess?.({ operationType: "copy", fileIds: effectiveFileIds })
 					}, 500)
 					return
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "copy", fileIds)
+					handleOperationPolling(result.batch_key, "copy", effectiveFileIds)
 				}
 			} catch (error) {
 				console.error("复制文件失败:", error)

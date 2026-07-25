@@ -52,9 +52,6 @@ class AIImageGenerateParamsVO extends AbstractValueObject
     // 来源ID
     public string $sourceId;
 
-    // 连续图片生成模式（disabled/enabled）
-    public string $sequentialImageGeneration = 'disabled';
-
     // 图片生成附加配置
     public array $imageGenerationConfig = [];
 
@@ -240,16 +237,6 @@ class AIImageGenerateParamsVO extends AbstractValueObject
     public function setSourceId(string $sourceId): void
     {
         $this->sourceId = $sourceId;
-    }
-
-    public function getSequentialImageGeneration(): string
-    {
-        return $this->sequentialImageGeneration;
-    }
-
-    public function setSequentialImageGeneration(string $sequentialImageGeneration): void
-    {
-        $this->sequentialImageGeneration = $sequentialImageGeneration;
     }
 
     public function getImageGenerationConfig(): array

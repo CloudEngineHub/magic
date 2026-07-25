@@ -42,6 +42,7 @@ class SuperMagicAgentVersionDomainService
         protected AgentSkillRepositoryInterface $agentSkillRepository,
         protected AgentPlaybookRepositoryInterface $agentPlaybookRepository,
         protected AgentMarketRepositoryInterface $storeAgentRepository,
+        protected SuperMagicAgentCategoryRelationDomainService $categoryRelationDomainService,
     ) {
     }
 
@@ -416,7 +417,18 @@ class SuperMagicAgentVersionDomainService
                 $storeAgentEntity->setSortOrder($existingStoreAgent->getSortOrder());
             }
 
-            $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
+            $storeAgentEntity = $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
+            if ($storeAgentEntity->getId() !== null) {
+                $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds(
+                    (int) $versionEntity->getId(),
+                    $versionEntity->getCategoryId()
+                );
+                $this->categoryRelationDomainService->replaceMarketCategories(
+                    $dataIsolation,
+                    $storeAgentEntity->getId(),
+                    $categoryIds
+                );
+            }
             return;
         }
 

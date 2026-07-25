@@ -33,6 +33,7 @@ interface SlidesPresetCardProps {
 }
 
 const PREVIEW_PRELOAD_DELAY_MS = 300
+const HOVER_DETAILS_OPEN_DELAY_MS = 1000
 
 function FeaturedTagIcon({ label, testId }: { label: string; testId: string }) {
 	return (
@@ -317,7 +318,7 @@ function SlidesPresetCard({
 		const subText = template.sub_text ? lt(template.sub_text) : ""
 
 		return (
-			<HoverCard openDelay={150} closeDelay={100}>
+			<HoverCard openDelay={HOVER_DETAILS_OPEN_DELAY_MS} closeDelay={100}>
 				<HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
 				<HoverCardContent
 					container={hoverDetailsContainer}

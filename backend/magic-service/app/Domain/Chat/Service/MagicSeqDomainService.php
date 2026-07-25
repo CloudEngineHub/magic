@@ -275,9 +275,7 @@ class MagicSeqDomainService extends AbstractDomainService
         // 消息的type和content抽象出来
         $messageDTO = $this->getControlMessageDTO($userAuth, $selfSeqEntity);
         // 根据消息类型,分发到对应的处理模块
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentOrganizationCode($userAuth->getOrganizationCode());
-        $dataIsolation->setCurrentUserId($userAuth->getId());
+        $dataIsolation = DataIsolation::create($userAuth->getOrganizationCode(), $userAuth->getId());
         $dataIsolation->setUserType(UserType::Ai);
         try {
             $this->clientOperateMessageStatus($messageDTO, $dataIsolation);

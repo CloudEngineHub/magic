@@ -25,6 +25,17 @@ abstract class AbstractSandboxOS
 
     protected string $baseUrl = '';
 
+    /**
+     * Sandbox-gateway service-account token (the gateway's own auth,
+     * distinct from any per-user token). Used for the
+     * `Sandbox-Gateway-Token` header.
+     *
+     * Per-request user identity (userId, orgCode, authorization) is
+     * NOT stored here — it travels through method parameters as a
+     * `DataIsolation` value object. See SandboxGatewayInterface for the
+     * rationale: storing per-request state on this long-lived DI
+     * singleton leaks across coroutines.
+     */
     protected string $token = '';
 
     protected bool $enableSandbox = true;

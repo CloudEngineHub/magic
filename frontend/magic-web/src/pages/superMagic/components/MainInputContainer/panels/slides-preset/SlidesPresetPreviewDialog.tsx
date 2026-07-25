@@ -74,7 +74,7 @@ function SlidesPresetPreviewDialog({
 				title={title}
 				headerVariant="actionHeader"
 				headerTitle={title}
-				headerTrailingAction={{
+				headerLeadingAction={{
 					ariaLabel: "Close",
 					icon: <X />,
 					onClick: () => onOpenChange(false),

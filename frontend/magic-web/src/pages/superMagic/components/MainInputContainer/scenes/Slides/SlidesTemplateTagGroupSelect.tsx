@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react"
-import { Check, ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
-import { ActionDrawer } from "@/components/shadcn-composed/action-drawer"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	DropdownMenu,
@@ -13,7 +12,9 @@ import {
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
+import SlidesTemplateMobileFilterOption from "./SlidesTemplateMobileFilterOption"
 import type { SlidesTemplateTagGroupItem } from "./slidesTemplateState"
+import SlidesTemplateMobileFilterPopup from "./SlidesTemplateMobileFilterPopup"
 
 interface SlidesTemplateTagGroupSelectProps {
 	tagGroup: SlidesTemplateTagGroupItem
@@ -122,54 +123,47 @@ function SlidesTemplateTagGroupSelect({
 		return (
 			<>
 				{trigger}
-				<ActionDrawer
+				<SlidesTemplateMobileFilterPopup
 					open={isMobilePanelOpen}
 					onOpenChange={handleMobilePanelOpenChange}
 					title={groupName}
-					cancelText={t("playbook.edit.presets.form.cancel")}
-					confirmText={t("playbook.edit.presets.form.confirm")}
-					onConfirm={() => onSelectedTagCodesChange(draftSelectedTagCodes)}
-					contentClassName="gap-1.5"
+					secondaryAction={{
+						label: t("playbook.edit.presets.form.cancel"),
+						onClick: () => handleMobilePanelOpenChange(false),
+					}}
+					confirmAction={{
+						label: t("playbook.edit.presets.form.confirm"),
+						onClick: () => {
+							onSelectedTagCodesChange(draftSelectedTagCodes)
+							handleMobilePanelOpenChange(false)
+						},
+					}}
 				>
 					<div
-						className="flex flex-col gap-1"
+						className="grid grid-cols-3 gap-2"
 						data-testid={`slides-template-tag-mobile-panel-${tagGroup.code}`}
 					>
 						{tagGroup.tags.map((tag) => {
 							const isSelected = draftSelectedTagCodeSet.has(tag.code)
 
 							return (
-								<button
+								<SlidesTemplateMobileFilterOption
 									key={tag.code}
-									type="button"
-									className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-sm text-foreground hover:bg-accent"
-									aria-pressed={isSelected}
-									data-testid={`slides-template-tag-mobile-option-${tag.code}`}
+									label={lt(tag.name_i18n)}
+									selected={isSelected}
 									onClick={() => toggleDraftSelectedTag(tag.code)}
-								>
-									<span
-										className={cn(
-											"flex size-5 shrink-0 items-center justify-center rounded border border-border bg-background",
-											isSelected &&
-												"border-primary bg-primary text-primary-foreground",
-										)}
-									>
-										{isSelected ? <Check className="size-3.5" /> : null}
-									</span>
-									<span className="min-w-0 flex-1 truncate">
-										{lt(tag.name_i18n)}
-									</span>
-								</button>
+									data-testid={`slides-template-tag-mobile-option-${tag.code}`}
+								></SlidesTemplateMobileFilterOption>
 							)
 						})}
 					</div>
-				</ActionDrawer>
+				</SlidesTemplateMobileFilterPopup>
 			</>
 		)
 	}
 
 	return (
-		<DropdownMenu>
+		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"

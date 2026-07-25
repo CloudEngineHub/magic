@@ -1,5 +1,33 @@
 {
 	"asc": "正序",
+	"category": {
+		"actions": {
+			"search": "搜索"
+		},
+		"addButton": "新增分类",
+		"addTitle": "新增员工市场分类",
+		"columns": {
+			"name": "分类名称",
+			"status": "状态"
+		},
+		"editTitle": "编辑员工市场分类",
+		"fields": {
+			"name": "分类名称",
+			"status": "显示状态"
+		},
+		"filters": {
+			"keyword": "关键词",
+			"status": "状态"
+		},
+		"label": "所属分类",
+		"manageButton": "分类管理",
+		"manageTitle": "分类管理",
+		"status": {
+			"hidden": "隐藏",
+			"visible": "显示"
+		},
+		"uncategorized": "未分类"
+	},
 	"createdAt": "创建时间",
 	"desc": "倒序",
 	"description": "员工描述",

@@ -106,7 +106,12 @@ export class DesignLoadManager {
 							flatAttachments,
 							attachments,
 						})
-						if (dslBase) normalizeDesignDataPathsAfterLoad(parsedData, dslBase)
+						if (dslBase) {
+							normalizeDesignDataPathsAfterLoad(parsedData, dslBase, {
+								flatAttachments,
+								attachmentIndex: this.options.attachmentIndex,
+							})
+						}
 
 						// v2：从 sidecar 回填重字段，让画布与生成编辑器拿到完整数据
 						await hydrateDesignDataDetails(parsedData, {

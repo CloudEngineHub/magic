@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetValue;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentListSort;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
@@ -186,7 +187,7 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
             $this->applyVersionKeywordSearch($builder, $keyword, $languageCode);
         }
 
-        $builder->orderBy('updated_at', 'desc')->orderBy('code');
+        $this->applyOrder($builder, $query);
 
         $result = $this->getByPage($builder, $page);
 
@@ -320,6 +321,16 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         $builder->where('code', $agentCode)->delete();
 
         return true;
+    }
+
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query());
+
+        return $builder->where('code', $agentCode)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
     }
 
     public function clearCurrentVersion(SuperMagicAgentDataIsolation $dataIsolation, string $code): int
@@ -644,5 +655,20 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         }
 
         return $attributes;
+    }
+
+    private function applyOrder(Builder $builder, AgentVersionQuery $query): void
+    {
+        if ($query->getSort() === AgentListSort::CREATED_AT) {
+            $builder->orderBy('created_at', 'DESC')->orderBy('code');
+            return;
+        }
+
+        if ($query->getSort() === AgentListSort::UPDATED_AT) {
+            $builder->orderBy('updated_at', 'DESC')->orderBy('code');
+            return;
+        }
+
+        $builder->orderBy('updated_at', 'desc')->orderBy('code');
     }
 }

@@ -7,6 +7,7 @@ import {
 	Loader2,
 	Pencil,
 	RefreshCw,
+	Share2,
 	X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -36,6 +37,8 @@ interface SelfMediaShellHeaderProps {
 	refreshLabel: string
 	refreshDisabled?: boolean
 	refreshTestId: string
+	onShare?: () => void
+	shareLoading?: boolean
 	exportAction?: ReactNode
 	exportLabel?: string
 	exportDisabled?: boolean
@@ -64,6 +67,8 @@ function SelfMediaShellHeader({
 	refreshLabel,
 	refreshDisabled,
 	refreshTestId,
+	onShare,
+	shareLoading,
 	exportAction,
 	exportLabel,
 	exportDisabled,
@@ -315,6 +320,29 @@ function SelfMediaShellHeader({
 							</TooltipTrigger>
 							<TooltipContent>{refreshLabel}</TooltipContent>
 						</Tooltip>
+						{onShare ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										disabled={shareLoading}
+										onClick={onShare}
+										data-testid="self-media-shell-share-button"
+										aria-label={t("fileViewer.share")}
+										variant="ghost"
+										size="icon"
+										className="size-9 rounded-[12px] text-[#18181b] hover:bg-[#f1f1f2] hover:text-[#18181b] sm:size-10 sm:rounded-[14px]"
+									>
+										{shareLoading ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : (
+											<Share2 className="h-4 w-4" />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("fileViewer.share")}</TooltipContent>
+							</Tooltip>
+						) : null}
 					</div>
 					{exportAction ??
 						(onOpenExport ? (

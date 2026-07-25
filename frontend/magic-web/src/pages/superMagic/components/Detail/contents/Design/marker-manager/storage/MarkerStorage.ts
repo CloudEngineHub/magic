@@ -1,6 +1,6 @@
-import type { Marker } from "@/components/CanvasDesign/canvas/types"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDesignStorageData } from "@/components/CanvasDesign/types.magic"
+import type { Marker } from "@/components/CanvasDesign/runtime/document/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import type { CanvasDesignStorageData } from "@/components/CanvasDesign/public/magic-types"
 
 const DEFAULT_STORAGE_KEY_PREFIX = "MAGIC:supermagic-design:"
 

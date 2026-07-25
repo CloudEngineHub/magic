@@ -289,6 +289,10 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		icon: Sparkles,
 		bgColor: "#A109FF",
 	},
+	generate_images: {
+		icon: Sparkles,
+		bgColor: "#A109FF",
+	},
 
 	// 文件转换
 	convert_to_markdown: {

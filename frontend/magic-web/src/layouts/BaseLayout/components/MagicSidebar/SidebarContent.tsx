@@ -1,18 +1,10 @@
 import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import {
-	Boxes,
-	ChevronRight,
-	Home,
-	LayoutGrid,
-	MessageCircle,
-	UsersRound,
-	Sparkles,
-} from "lucide-react"
+import { Boxes, ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import slidesTemplateFireIcon from "@/assets/resources/icons/fire.webp"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
 	SidebarGroup,
@@ -37,36 +29,11 @@ import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatus
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
-import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
-import { formatNumber } from "@/utils/format"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
-
-function SlidesTemplateCountBadge({
-	templateCount,
-	testId,
-}: {
-	templateCount: string
-	testId?: string
-}) {
-	return (
-		<span
-			className="flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]"
-			data-testid={testId}
-		>
-			<img
-				src={slidesTemplateFireIcon}
-				alt=""
-				aria-hidden="true"
-				className="h-4 w-4 object-contain"
-			/>
-			{templateCount}
-		</span>
-	)
-}
 
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
@@ -81,8 +48,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
-	const slidesTemplateTotal = useSlidesTemplateTotal()
-
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
 			event.button === 0 &&
@@ -112,73 +77,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		event.preventDefault()
 		if (microAppsRouteUrl && location.pathname === microAppsRouteUrl) return
 		navigate({ name: RouteName.MicroApps })
-	}
-
-	function renderSidebarMarketMenuItem({
-		titleKey,
-		routeName,
-		testId,
-		Icon,
-	}: (typeof sidebarMarketMenuItems)[number]) {
-		const title =
-			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
-		const isSlidesTemplateMenuItem = routeName === RouteName.SuperSlidesTemplates
-		const templateCount =
-			isSlidesTemplateMenuItem && slidesTemplateTotal !== undefined
-				? t("slidesTemplates.templateCount", {
-						count: formatNumber(slidesTemplateTotal),
-					})
-				: null
-		const tooltip = collapsed
-			? templateCount
-				? {
-						children: (
-							<div
-								className="flex items-center gap-2 text-sm"
-								data-testid="sidebar-content-slides-templates-tooltip"
-							>
-								<span>{title}</span>
-								<SlidesTemplateCountBadge templateCount={templateCount} />
-							</div>
-						),
-					}
-				: title
-			: undefined
-
-		return (
-			<SidebarMenuItem key={routeName}>
-				<SidebarMenuButton
-					asChild
-					tooltip={tooltip}
-					data-testid={testId}
-					className={
-						collapsed && isSlidesTemplateMenuItem
-							? "!text-[#ff6a1f] hover:!bg-[#fff2ec]  hover:!text-[#ff6a1f]"
-							: "text-sidebar-foreground"
-					}
-				>
-					<a
-						href={getRoutePath({ name: routeName }) || "#"}
-						onClick={(event) => handleNavigateToRoute(routeName, event)}
-						className="text-current no-underline"
-					>
-						<Icon className="h-4 w-4 shrink-0" />
-						<span
-							className={`${templateCount ? "min-w-0" : "flex-1"} overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5`}
-						>
-							{title}
-						</span>
-						{!collapsed && templateCount && (
-							// 数量提示紧跟标题，标题过长时由 flex 收缩并截断。
-							<SlidesTemplateCountBadge
-								templateCount={templateCount}
-								testId="sidebar-content-slides-templates-count"
-							/>
-						)}
-					</a>
-				</SidebarMenuButton>
-			</SidebarMenuItem>
-		)
 	}
 
 	return (
@@ -225,7 +123,22 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</ChatsSubMenu>
 						</SidebarMenuItem>
-						{sidebarMarketMenuItems.map(renderSidebarMarketMenuItem)}
+						{sidebarMarketMenuItems.map((item) => {
+							const title =
+								item.titleKey === "sidebar:superLobster.title"
+									? t(item.titleKey, clawBrandValues)
+									: t(item.titleKey)
+
+							return (
+								<SidebarMarketMenuItem
+									key={item.routeName}
+									item={item}
+									title={title}
+									collapsed={collapsed}
+									onNavigate={handleNavigateToRoute}
+								/>
+							)
+						})}
 						<SidebarMenuItem>
 							<AppsSubMenu>
 								<SidebarMenuButton

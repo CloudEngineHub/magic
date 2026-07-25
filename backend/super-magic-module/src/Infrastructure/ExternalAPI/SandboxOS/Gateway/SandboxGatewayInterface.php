@@ -7,82 +7,113 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 
 /**
- * Sandbox Gateway Interface
+ * Sandbox Gateway Interface.
+ *
  * Defines sandbox lifecycle management and agent forwarding functionality.
+ *
+ * ## Per-method DataIsolation policy
+ *
+ * Earlier revisions of this interface carried per-request auth state
+ * (user id, organization code, authorization token) on the gateway
+ * service instance via `setUserContext()` + `clearUserContext()`. That
+ * implementation leaked:
+ *
+ *   - the long-lived SandboxGatewayService singleton in DI shared
+ *     state between unrelated requests (different users in different
+ *     coroutines against the same instance),
+ *   - any prior request's authorization token into the next request
+ *     if the caller forgot to clear it.
+ *
+ * The interface now splits its methods into two clearly-separated
+ * groups based on what they actually do:
+ *
+ * **Per-pod methods that talk to a specific user-bound pod** carry a
+ * `DataIsolation` as their FIRST parameter. The downstream super-magic
+ * agent (inside the pod) enforces User-Authorization on its agfs +
+ * internal HTTP surface, so the caller must forward the user's stable
+ * sandbox-token (looked up via
+ * `AgentDomainService::getAuthorizationByUserId` and stamped onto the
+ * DataIsolation via `setUserAuthorizationToken`). The gateway's
+ * service-to-service `Sandbox-Gateway-Token` is always present
+ * regardless.
+ *
+ *   - createSandbox        — special: stamp user identity on pod init
+ *   - proxySandboxRequest  — forwards to in-pod agent
+ *   - uploadFile           — uploads to in-pod agent
+ *   - copyFiles            — invokes in-pod agfs
+ *   - upgradeSandbox       — message to running in-pod agent
+ *   - mountWarmPoolSandbox — triggers in-pod agfs /api/v1/mount
+ *
+ * **Control-plane methods that only hit the gateway's k8s /
+ * image-registry / status cache (never the in-pod agent):** do NOT
+ * take a DataIsolation. They authenticate purely via
+ * `Sandbox-Gateway-Token` (the service-to-service shared secret).
+ *
+ *   - deleteSandbox            — k8s delete pod
+ *   - getSandboxStatus         — k8s pod status
+ *   - getBatchSandboxStatus    — k8s batch status
+ *   - getLatestAgentImage      — global image version
+ *   - getLatestAgfsImage       — global image version
+ *   - getLatestImages          — global image version (combined)
+ *   - createWarmPoolSandbox    — k8s create unbound pod
+ *
+ * Per-request state lives in the call signature (DataIsolation value
+ * object), never on the service.
  */
 interface SandboxGatewayInterface
 {
     /**
-     * Set user context for the current request.
-     * This method should be called before making any requests that require user information.
-     *
-     * @param null|string $userId User ID
-     * @param null|string $organizationCode Organization code
-     * @return self Returns self for method chaining
-     */
-    public function setUserContext(?string $userId, ?string $organizationCode): self;
-
-    /**
-     * Clear user context.
-     *
-     * @return self Returns self for method chaining
-     */
-    public function clearUserContext(): self;
-
-    /**
      * 创建沙箱.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (see class doc)
      * @param string $projectId Project ID
      * @param string $sandboxId Sandbox ID
      * @param string $workDir Sandbox working directory
      * @param string $projectSpaceRootFileId Project space root directory file ID
      * @param string $userSpaceRootFileId User space root directory file ID
-     * @param string $authorization User authorization token, empty string means not provided
-     * @param array<string, string> $labels Extra pod labels (e.g. ['topic-id' => '123']); merged onto gateway-managed labels, reserved keys are ignored
-     * @return GatewayResult 创建结果，成功时data包含sandbox_id
+     * @param array<string, string> $labels Extra pod labels
      */
-    public function createSandbox(string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $authorization = '', array $labels = []): GatewayResult;
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', array $labels = []): GatewayResult;
 
     /**
      * 删除（停止）沙箱.
      *
-     * @param string $sandboxId Sandbox ID
-     * @return GatewayResult 删除结果
+     * 纯 gateway 控制面调用（k8s API），无需 user 身份。
      */
     public function deleteSandbox(string $sandboxId): GatewayResult;
 
     /**
      * Get single sandbox status.
      *
-     * @param string $sandboxId Sandbox ID
-     * @return SandboxStatusResult Sandbox status result
+     * 纯 gateway 控制面调用（k8s pod 状态），无需 user 身份。
      */
     public function getSandboxStatus(string $sandboxId): SandboxStatusResult;
 
     /**
      * Get batch sandbox status.
      *
-     * @param array $sandboxIds Sandbox ID list
-     * @return BatchStatusResult Batch status result
+     * 纯 gateway 控制面调用（k8s 批量状态），无需 user 身份。
      */
     public function getBatchSandboxStatus(array $sandboxIds): BatchStatusResult;
 
     /**
      * Proxy request to sandbox.
      *
+     * @param DataIsolation $dataIsolation per-call user identity
      * @param string $sandboxId Sandbox ID
      * @param string $method HTTP method
      * @param string $path Target path
      * @param array $data Request data
      * @param array $headers Additional headers
-     * @return GatewayResult Proxy result
      */
     public function proxySandboxRequest(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $method,
         string $path,
@@ -90,43 +121,46 @@ interface SandboxGatewayInterface
         array $headers = []
     ): GatewayResult;
 
-    public function uploadFile(string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult;
+    public function uploadFile(DataIsolation $dataIsolation, string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult;
 
     /**
      * 复制文件（同步操作）.
      *
-     * @param array $files 文件复制项目数组，格式：[['source_oss_path' => 'xxx', 'target_oss_path' => 'xxx'], ...]
-     * @return GatewayResult 复制结果
+     * `files` is serialized directly to JSON and must therefore be a
+     * zero-indexed list, even when copying only one file. Passing a single
+     * associative FileCopyItem would serialize as a JSON object and be
+     * rejected by the Sandbox Gateway's `[]FileCopyItem` request contract.
+     *
+     * @param array<int, array{source_oss_path: string, target_oss_path: string}> $files
      */
-    public function copyFiles(array $files): GatewayResult;
+    public function copyFiles(DataIsolation $dataIsolation, array $files): GatewayResult;
 
     /**
      * 升级沙箱镜像.
      *
      * @param string $messageId 消息ID
      * @param string $contextType 上下文类型，通常为"continue"
-     * @return GatewayResult 升级结果
      */
-    public function upgradeSandbox(string $messageId, string $contextType = 'continue'): GatewayResult;
+    public function upgradeSandbox(DataIsolation $dataIsolation, string $messageId, string $contextType = 'continue'): GatewayResult;
 
     /**
      * 获取沙箱网关当前部署的最新 Agent 镜像.
      *
-     * @return string 最新 Agent 镜像全名（如 registry.example.com/agent:v1.2.3），失败时返回空字符串
+     * 纯 gateway 控制面调用（全局镜像版本），无需 user 身份。
      */
     public function getLatestAgentImage(): string;
 
     /**
      * 获取沙箱网关当前部署的最新 AGFS 镜像.
      *
-     * @return string 最新 AGFS 镜像全名（如 registry.example.com/agfs:v1.2.3），失败时返回空字符串
+     * 纯 gateway 控制面调用（全局镜像版本），无需 user 身份。
      */
     public function getLatestAgfsImage(): string;
 
     /**
      * 一次性获取沙箱网关当前部署的 agent 与 agfs 最新镜像，避免两次调用。
      *
-     * 任一镜像获取失败时，两个字段均返回空字符串（与单镜像接口的容错语义一致）。
+     * 纯 gateway 控制面调用（全局镜像版本），无需 user 身份。
      *
      * @return array{agent_image: string, agfs_image: string}
      */
@@ -135,11 +169,7 @@ interface SandboxGatewayInterface
     /**
      * 在 warm pool 中创建一个未绑定项目的沙箱。
      *
-     * sandbox_id 由调用方（warm-pool worker）生成并先入库，再发请求，避免响应丢失
-     * 导致的孤儿 pod。pod 名固定为 `sandbox-<sandbox_id>`，因此 sandbox_id 必须是
-     * DNS-1123 label fragment（首位 [a-z0-9]，仅含小写字母/数字/-）。
-     *
-     * 返回 data 字段：sandbox_id / sandbox_name / agent_image / agfs_image / namespace。
+     * 纯 gateway 控制面调用（k8s 创建未绑定 pod），无需 user 身份。
      */
     public function createWarmPoolSandbox(string $sandboxId): GatewayResult;
 
@@ -147,19 +177,19 @@ interface SandboxGatewayInterface
      * 把一个 warm pool 沙箱绑定到指定项目，触发 agfs-server `/api/v1/mount`
      * 并等待 versionTree 初始首次同步完成（gateway 内部会 wait_ready=1）.
      *
+     * @param DataIsolation $dataIsolation per-call user identity
      * @param string $sandboxId warm-<uuid>
      * @param string $projectId 实际项目 ID
      * @param string $projectSpaceRootFileID 项目空间 root file id（来自 task_file 表）
      * @param string $userSpaceRootFileID 用户空间 root file id（可空）
-     * @param string $authorization 用户 MagicToken
-     * @param array<string, string> $labels 额外 pod 标签（如 ['topic-id' => '123']）；合并到 bound-* 标签上，保留字段会被忽略
+     * @param array<string, string> $labels 额外 pod 标签
      */
     public function mountWarmPoolSandbox(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         string $projectSpaceRootFileID,
         string $userSpaceRootFileID,
-        string $authorization,
         array $labels = []
     ): GatewayResult;
 }

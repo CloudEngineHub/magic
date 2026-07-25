@@ -53,7 +53,7 @@ export function parseLetterSpacing(
 
 	if (Number.isNaN(pxValue) || pxValue === 0) return undefined
 
-	return Math.round(pxValue * scale * PX_TO_PT_RATIO)
+	return Number((pxValue * scale * PX_TO_PT_RATIO).toFixed(3))
 }
 
 /**
@@ -113,6 +113,33 @@ export function transformText(text: string, textTransform: string): string {
 	}
 
 	return text
+}
+
+export interface TextTransformFlowState {
+	previousIsWord: boolean
+}
+
+/** Apply text-transform while retaining word-boundary state across DOM/line fragments. */
+export function transformTextWithFlowContext(
+	text: string,
+	textTransform: string,
+	state: TextTransformFlowState,
+): string {
+	let output = text
+	if (textTransform === "capitalize") {
+		let previousIsWord = state.previousIsWord
+		output = Array.from(text, (character) => {
+			const isWord = /\w/.test(character)
+			const transformed = isWord && !previousIsWord ? character.toUpperCase() : character
+			previousIsWord = isWord
+			return transformed
+		}).join("")
+	} else {
+		output = transformText(text, textTransform)
+	}
+
+	for (const character of text) state.previousIsWord = /\w/.test(character)
+	return output
 }
 
 export function normalizeTextByWhiteSpace(input: { text: string; whiteSpace: string }): string {

@@ -33,8 +33,9 @@ class SuperMagicAgentMarketApi extends AbstractApi
     public function getCategories(): array
     {
         $authorization = $this->getAuthorization();
+        $includeEmpty = filter_var($this->request->input('include_empty', false), FILTER_VALIDATE_BOOLEAN);
 
-        $result = $this->superMagicAgentMarketAppService->getCategories($authorization);
+        $result = $this->superMagicAgentMarketAppService->getCategories($authorization, $includeEmpty);
         $responseDTO = SuperMagicAgentMarketAssembler::createCategoryListItemDTOs($result);
 
         return ['list' => $responseDTO];

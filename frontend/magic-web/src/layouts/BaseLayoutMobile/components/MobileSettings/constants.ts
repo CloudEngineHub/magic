@@ -6,10 +6,10 @@ export const MOBILE_SETTINGS_SHEET_CLASSNAME =
 
 /**
  * Root settings sheet height: default 98vh, capped by viewport minus top safe area.
- * Overrides MagicPopup bottom drawer default `mt-24`, which leaves a large empty band above the sheet.
+ * Important sizing overrides MagicPopup's auto height so content cannot change the sheet height.
  */
 export const MOBILE_SETTINGS_ROOT_SHEET_CLASSNAME =
-	"h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))] max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)] data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]"
+	"!h-[98dvh] !max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)] data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]"
 
 /** Nested settings sheets (points detail, order history, timezone, etc.) share the same default height. */
 export const MOBILE_SETTINGS_SHEET_HEIGHT_CLASSNAME = MOBILE_SETTINGS_ROOT_SHEET_CLASSNAME

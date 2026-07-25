@@ -25,6 +25,9 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
 
     public ?int $categoryId = null;
 
+    /** @var null|array<int, null|int|string> */
+    public ?array $categoryIds = null;
+
     public function getVersion(): string
     {
         return $this->version;
@@ -50,9 +53,30 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
         return $this->categoryId;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        if ($this->categoryIds !== null) {
+            return $this->normalizeCategoryIds($this->categoryIds);
+        }
+
+        return $this->categoryId === null ? [] : [$this->categoryId];
+    }
+
+    public function getPrimaryCategoryId(): ?int
+    {
+        return $this->getCategoryIds()[0] ?? null;
+    }
+
     public function setCategoryId(null|int|string $categoryId): void
     {
         $this->categoryId = $categoryId === null ? null : (int) $categoryId;
+    }
+
+    public function setCategoryIds(?array $categoryIds): void
+    {
+        $this->categoryIds = $categoryIds;
+        $this->categoryId = $this->getPrimaryCategoryId();
     }
 
     public function toPublishTargetValue(): ?PublishTargetValue
@@ -90,6 +114,8 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
             'publish_target_value.department_ids' => 'nullable|array',
             'publish_target_value.department_ids.*' => 'string|max:64',
             'category_id' => 'exclude_unless:publish_target_type,MARKET|nullable|integer|min:1',
+            'category_ids' => 'exclude_unless:publish_target_type,MARKET|nullable|array|max:100',
+            'category_ids.*' => 'integer|min:1',
         ];
     }
 
@@ -117,6 +143,25 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
             'publish_target_value.department_ids.*.max' => __('validation.max.string', ['attribute' => 'publish_target_value.department_ids', 'max' => 64]),
             'category_id.integer' => __('super_magic.agent.category_id_must_be_integer'),
             'category_id.min' => __('super_magic.agent.category_id_must_be_greater_than_zero'),
+            'category_ids.array' => __('validation.array', ['attribute' => 'category_ids']),
+            'category_ids.max' => __('validation.max.array', ['attribute' => 'category_ids', 'max' => 100]),
+            'category_ids.*.integer' => __('super_magic.agent.category_id_must_be_integer'),
+            'category_ids.*.min' => __('super_magic.agent.category_id_must_be_greater_than_zero'),
         ];
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    private function normalizeCategoryIds(array $categoryIds): array
+    {
+        $normalized = [];
+        foreach ($categoryIds as $categoryId) {
+            $categoryId = (int) $categoryId;
+            if ($categoryId <= 0 || in_array($categoryId, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $categoryId;
+        }
+
+        return $normalized;
     }
 }

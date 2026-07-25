@@ -3,6 +3,7 @@ import { BookCheck, Building2, Check, ChevronLeft, X } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { cn } from "@/lib/utils"
 import { usePublishPanelStore } from "../context"
@@ -81,27 +82,27 @@ export default observer(function PublishDetailView({ onClose }: PublishDetailVie
 					/>
 
 					<div className="flex flex-col gap-2">
-						<div className="flex items-center justify-between gap-3">
-							<p className="text-base font-medium text-foreground">
-								{t("skillEditPage.publishPanel.create.fields.target.label")}
-							</p>
-							<p className="text-xs leading-4 text-muted-foreground">
-								{t("skillEditPage.publishPanel.create.fields.target.helper")}
-							</p>
-						</div>
+						<p className="text-base font-medium text-foreground">
+							{t("skillEditPage.publishPanel.create.fields.target.label")}
+						</p>
 						<ReadonlyPublishToCard publishTo={record.publishTo} />
 					</div>
 
-					<div className="flex flex-col gap-2">
-						<p className="text-base font-medium text-foreground">
-							{t("skillEditPage.publishPanel.create.fields.permissionSettings.label")}
-						</p>
-						{record.publishTo === "INTERNAL" ? (
+					{record.publishTo === "INTERNAL" ? (
+						<div className="flex flex-col gap-2">
+							<p className="text-base font-medium text-foreground">
+								{t(
+									"skillEditPage.publishPanel.create.fields.permissionSettings.label",
+								)}
+							</p>
 							<ReadonlyInternalTargetSection record={record} />
-						) : (
-							<ReadonlySkillsLibraryCard record={record} />
-						)}
-					</div>
+						</div>
+					) : (
+						<>
+							<ReadonlyMarketCategoryField record={record} />
+							<ReadonlyPublishingProcessSection record={record} />
+						</>
+					)}
 				</div>
 			</div>
 		</div>
@@ -160,6 +161,71 @@ function ReadonlyPublishToCard({ publishTo }: { publishTo: PublishTo }) {
 					</p>
 				</div>
 			</div>
+		</div>
+	)
+}
+
+function ReadonlyMarketCategoryField({
+	record,
+}: {
+	record: NonNullable<ReturnType<typeof usePublishPanelStore>["selectedHistoryRecord"]>
+}) {
+	const { t } = useTranslation("crew/market")
+	const store = usePublishPanelStore()
+	const categoryNames =
+		record.categoryNames && record.categoryNames.length > 0
+			? record.categoryNames
+			: (record.categoryIds ?? (record.categoryId ? [record.categoryId] : []))
+					.map(
+						(categoryId) =>
+							store.marketCategories.find((category) => category.id === categoryId)
+								?.name ?? categoryId,
+					)
+					.filter(Boolean)
+	const displayCategoryNames = categoryNames.length
+		? categoryNames
+		: record.categoryName
+			? [record.categoryName]
+			: []
+
+	if (displayCategoryNames.length === 0) return null
+
+	return (
+		<div className="flex flex-col gap-1.5">
+			<p className="text-base font-medium text-foreground">
+				{t("skillEditPage.publishPanel.create.fields.category.label")}
+			</p>
+			<div
+				className="flex min-h-9 flex-wrap items-center gap-1"
+				data-testid="skill-publish-detail-category"
+			>
+				{displayCategoryNames.map((categoryName) => (
+					<Badge
+						key={categoryName}
+						variant="secondary"
+						className="max-w-full rounded-md px-2 py-0.5 font-normal"
+					>
+						<span className="truncate">{categoryName}</span>
+					</Badge>
+				))}
+			</div>
+		</div>
+	)
+}
+
+function ReadonlyPublishingProcessSection({
+	record,
+}: {
+	record: NonNullable<ReturnType<typeof usePublishPanelStore>["selectedHistoryRecord"]>
+}) {
+	const { t } = useTranslation("crew/market")
+
+	return (
+		<div className="flex flex-col gap-2">
+			<p className="text-base font-medium text-foreground">
+				{t("skillEditPage.publishPanel.create.fields.publishingProcess.label")}
+			</p>
+			<ReadonlySkillsLibraryCard record={record} />
 		</div>
 	)
 }

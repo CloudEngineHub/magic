@@ -67,11 +67,16 @@ class AdminSkillAppService extends AbstractSkillAppService
             $query,
             $page
         );
+        /** @var SkillVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadSkillVersionRelatedEntities(null, $versions);
 
         return $this->adminSkillAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
@@ -130,11 +135,16 @@ class AdminSkillAppService extends AbstractSkillAppService
             $query,
             $page
         );
+        /** @var SkillVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadSkillVersionRelatedEntities(null, $versions);
 
         return $this->adminSkillAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 

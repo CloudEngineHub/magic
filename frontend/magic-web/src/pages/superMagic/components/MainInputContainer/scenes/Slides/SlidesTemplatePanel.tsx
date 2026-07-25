@@ -28,7 +28,11 @@ import {
 } from "../../panels/utils"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalSceneStateStore } from "../../stores"
-import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "./slidesTemplateState"
+import {
+	ALL_SLIDES_TEMPLATE_GROUP_KEY,
+	SLIDES_TEMPLATE_DEFAULT_LANGUAGE,
+	SLIDES_TEMPLATE_DEFAULT_SIZE,
+} from "./slidesTemplateState"
 import SlidesTemplateFloatingSelector from "./SlidesTemplateFloatingSelector"
 import SlidesTemplatePanelContent from "./SlidesTemplatePanelContent"
 import { useSlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
@@ -75,6 +79,33 @@ function updateFieldValue(
 				}
 			: item,
 	)
+}
+
+function updateTemplateRelatedFields(fieldItems: FieldItem[], hasTemplate: boolean): FieldItem[] {
+	return fieldItems.map((item) => {
+		if (!hasTemplate && item.data_key === "pages") {
+			return {
+				...item,
+				current_value: "",
+			}
+		}
+
+		if (item.data_key === "size") {
+			return {
+				...item,
+				current_value: hasTemplate ? SLIDES_TEMPLATE_DEFAULT_SIZE : "",
+			}
+		}
+
+		if (item.data_key === "language") {
+			return {
+				...item,
+				current_value: hasTemplate ? SLIDES_TEMPLATE_DEFAULT_LANGUAGE : "",
+			}
+		}
+
+		return item
+	})
 }
 
 function SlidesTemplatePanel({
@@ -147,8 +178,14 @@ function SlidesTemplatePanel({
 			const currentValue = localeTextToDisplayString(
 				findComplexField(currentFieldItems)?.current_value,
 			)
-			if (currentValue === selectedValue) return currentFieldItems
-			return updateFieldValue(currentFieldItems, isComplexField, selectedValue)
+			if (currentValue === selectedValue && controlledSelectedTemplate) {
+				return currentFieldItems
+			}
+			const nextFieldItems =
+				currentValue === selectedValue
+					? currentFieldItems
+					: updateFieldValue(currentFieldItems, isComplexField, selectedValue)
+			return updateTemplateRelatedFields(nextFieldItems, Boolean(controlledSelectedTemplate))
 		})
 	}, [controlledSelectedTemplate, isSelectionControlled])
 
@@ -202,7 +239,10 @@ function SlidesTemplatePanel({
 		if (readOnly) return
 		const requestSeq = templateDetailRequestSeqRef.current + 1
 		templateDetailRequestSeqRef.current = requestSeq
-		const nextFieldItems = updateFieldValue(fieldItems, isComplexField, template.value)
+		const nextFieldItems = updateTemplateRelatedFields(
+			updateFieldValue(fieldItems, isComplexField, template.value),
+			true,
+		)
 		if (!isSelectionControlled) setInternalSelectedTemplate(template)
 		applyFieldItems(nextFieldItems)
 		onTemplateSelect?.(template)
@@ -221,6 +261,19 @@ function SlidesTemplatePanel({
 				console.error("Failed to fetch slides template detail", error)
 			})
 	})
+
+	const handleTemplateClear = useCallback(() => {
+		if (readOnly) return
+
+		templateDetailRequestSeqRef.current += 1
+		const nextFieldItems = updateTemplateRelatedFields(
+			updateFieldValue(fieldItems, isComplexField, ""),
+			false,
+		)
+		if (!isSelectionControlled) setInternalSelectedTemplate(null)
+		applyFieldItems(nextFieldItems)
+		onTemplateSelect?.(null)
+	}, [applyFieldItems, fieldItems, isSelectionControlled, onTemplateSelect, readOnly])
 
 	const handleRandomTemplateRequest = useMemoizedFn(() => {
 		if (readOnly || slidesState.templateOptions.length === 0) return
@@ -268,6 +321,7 @@ function SlidesTemplatePanel({
 				slidesState={slidesState}
 				onFilterChange={handleFilterChange}
 				onTemplateClick={handleTemplateClick}
+				onTemplateClear={handleTemplateClear}
 				templatePickerContainer={templatePickerContainer}
 				readOnly={readOnly}
 				variant={variant}
@@ -284,6 +338,8 @@ function SlidesTemplatePanel({
 				selectedTemplate={selectedTemplate}
 				onTemplateClick={handleTemplateClick}
 				toolbarClassName="sticky top-0 z-50 bg-background/95 pb-3 backdrop-blur"
+				// 首页由外层 ScrollArea 负责滚动，避免网格的 overscroll 限制阻断滚轮事件。
+				gridClassName="overflow-y-visible overscroll-y-auto"
 				onPreviewOpenChange={onPreviewOpenChange}
 			/>
 		)

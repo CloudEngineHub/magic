@@ -21,8 +21,11 @@
 	"confirmClose": "閉じることを確認",
 	"detail": "詳細",
 	"file": {
+		"imageLoadFailed": "画像の読み込みに失敗しました",
+		"imageSizeTooLarge": "画像は{{size}}を超えることはできません",
+		"imageSizeTooSmall": "画像サイズは{{width}}x{{height}}未満にできません",
 		"maxSize": "単一ファイルの上限は{{maxSize}}MBです",
-		"onlySupportUploadImage": "png/jpg/jpeg/gif/webp形式の画像のみアップロード可能です",
+		"onlySupportUploadImage": "png/jpg/jpeg/svg/gif/webp形式の画像のみアップロード可能です",
 		"uploadFail": "ファイルのアップロードに失敗しました。もう一度お試しください"
 	},
 	"filter": "フィルター",

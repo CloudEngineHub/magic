@@ -72,6 +72,23 @@ export function createRecordingMarkdownComponents({
 				<table>{children}</table>
 			</div>
 		),
+		// Cell wrappers provide intrinsic column sizing while capping unusually long content.
+		th: ({ children, node, ...props }: ComponentProps<"th"> & { node?: unknown }) => {
+			void node
+			return (
+				<th {...props}>
+					<div className="recording-md-cell-content">{children}</div>
+				</th>
+			)
+		},
+		td: ({ children, node, ...props }: ComponentProps<"td"> & { node?: unknown }) => {
+			void node
+			return (
+				<td {...props}>
+					<div className="recording-md-cell-content">{children}</div>
+				</td>
+			)
+		},
 		// Read-only markdown must not toggle GFM task checkboxes.
 		input: ({ checked, ...props }: ComponentProps<"input">) => (
 			<input type="checkbox" checked={checked} readOnly {...props} />

@@ -13,7 +13,7 @@
 		"starCrew": "Star Crew",
 		"techDev": "Tech & Dev"
 	},
-	"chat": "Chat",
+	"conversation": "Conversation",
 	"createCrew": "Create Crew",
 	"crewConversation": {
 		"back": "Back",
@@ -312,7 +312,7 @@
 	"noMoreData": "You've seen everything!",
 	"noResults": "No results found.",
 	"pptEmployee": {
-		"delivered": "<strong>{{count}}</strong> presentations delivered"
+		"delivered": "{{count}} slides delivered"
 	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",
@@ -368,7 +368,17 @@
 				"publish": "Publish"
 			},
 			"create": {
+				"channelChangeConfirm": {
+					"confirm": "Switch",
+					"content": "Configured or previously used audience data will be cleared.",
+					"title": "Switch publishing channel?"
+				},
 				"fields": {
+					"category": {
+						"label": "Category",
+						"placeholder": "Select a category",
+						"required": "Please select a category"
+					},
 					"details": {
 						"label": "Version Details",
 						"optional": "Optional",
@@ -381,7 +391,6 @@
 						"label": "Publishing Process"
 					},
 					"target": {
-						"helper": "Once selected, the publishing scope cannot be changed",
 						"label": "Publish to",
 						"skillsLibrary": {
 							"steps": {

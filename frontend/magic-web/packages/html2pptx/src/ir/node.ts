@@ -49,8 +49,16 @@ export interface PPTNodeBase {
 export type CustGeomPoint =
 	| { x: number; y: number; moveTo?: boolean }
 	| { x: number; y: number; curve: { type: "quadratic"; x1: number; y1: number } }
-	| { x: number; y: number; curve: { type: "cubic"; x1: number; y1: number; x2: number; y2: number } }
-	| { x: number; y: number; curve: { type: "arc"; hR: number; wR: number; stAng: number; swAng: number } }
+	| {
+			x: number
+			y: number
+			curve: { type: "cubic"; x1: number; y1: number; x2: number; y2: number }
+	  }
+	| {
+			x: number
+			y: number
+			curve: { type: "arc"; hR: number; wR: number; stAng: number; swAng: number }
+	  }
 	| { close: true }
 
 /** Shape node */
@@ -84,6 +92,7 @@ export interface PPTShapeNode extends PPTNodeBase {
 		strike?: boolean
 		align?: "left" | "center" | "right"
 		valign?: "top" | "middle" | "bottom"
+		/** Text insets in CSS order: [top, right, bottom, left], points */
 		margin?: [number, number, number, number]
 		wrap?: boolean
 	}
@@ -133,6 +142,10 @@ export interface PPTTextRunOptions {
 	strike?: boolean
 	charSpacing?: number
 	transparency?: number
+	/** Start this run with a PowerPoint soft line break (`<a:br/>`) */
+	softBreakBefore?: boolean
+	/** End the current visual line after this run */
+	breakLine?: boolean
 }
 
 /** Rich text run within one PPT text box */
@@ -166,8 +179,10 @@ export interface PPTTextNode extends PPTNodeBase {
 	align?: "left" | "center" | "right" | "justify"
 	/** Vertical alignment */
 	valign?: "top" | "middle" | "bottom"
-	/** Line spacing */
+	/** Legacy line-spacing multiple (for example, 1.4 means 140%) */
 	lineSpacing?: number
+	/** Exact line spacing in points; takes precedence over the legacy line-spacing multiple */
+	lineSpacingPt?: number
 	/** Whether text wraps */
 	wrap?: boolean
 	/** Transparency (0-100) */
@@ -176,7 +191,7 @@ export interface PPTTextNode extends PPTNodeBase {
 	charSpacing?: number
 	/** Shadow */
 	shadow?: PPTShadow | null
-	/** Margin in points */
+	/** Text insets in CSS order: [top, right, bottom, left], points */
 	margin?: [number, number, number, number]
 	/** Rotation angle in degrees */
 	rotate?: number

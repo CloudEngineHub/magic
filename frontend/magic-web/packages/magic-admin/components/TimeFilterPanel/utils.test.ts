@@ -1,6 +1,13 @@
 import dayjs from "dayjs"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { CommonAbsolutePresetKey, HistoryMode, RelativeUnit, TimeFilterTab, TimePresetKey } from "./types"
+import {
+	CommonAbsolutePresetKey,
+	HistoryMode,
+	RelativeUnit,
+	TimeFilterPrecision,
+	TimeFilterTab,
+	TimePresetKey,
+} from "./types"
 import {
 	alignTimeByUnit,
 	buildCustomRelativeRange,
@@ -83,9 +90,47 @@ describe("TimeFilterPanel utils", () => {
 			CommonAbsolutePresetKey.last_14_days,
 			CommonAbsolutePresetKey.last_21_days,
 			CommonAbsolutePresetKey.last_30_days,
+			CommonAbsolutePresetKey.last_60_days,
 			CommonAbsolutePresetKey.last_90_days,
+			CommonAbsolutePresetKey.last_180_days,
 		])
 		expect(presets[0].value[0].format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-05 18:13:26")
 		expect(presets[0].value[1].format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-08 18:13:26")
+	})
+
+	it("builds day-level ranges when precision is day", () => {
+		const now = dayjs("2026-06-08 18:13:26")
+		const [start, end] = getRangeByPreset(
+			TimePresetKey.last_7_days,
+			now,
+			false,
+			TimeFilterPrecision.day,
+		)
+
+		expect(start.format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-02 00:00:00")
+		expect(end.format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-08 23:59:59")
+	})
+
+	it("builds long day-level ranges as natural days", () => {
+		const now = dayjs("2026-06-08 18:13:26")
+		const [start, end] = getRangeByPreset(
+			TimePresetKey.last_365_days,
+			now,
+			false,
+			TimeFilterPrecision.day,
+		)
+
+		expect(start.format("YYYY-MM-DD HH:mm:ss")).toBe("2025-06-09 00:00:00")
+		expect(end.format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-08 23:59:59")
+	})
+
+	it("builds day-level absolute presets when precision is day", () => {
+		const presets = getCommonAbsolutePresetRanges(
+			dayjs("2026-06-08 18:13:26"),
+			TimeFilterPrecision.day,
+		)
+
+		expect(presets[0].value[0].format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-06 00:00:00")
+		expect(presets[0].value[1].format("YYYY-MM-DD HH:mm:ss")).toBe("2026-06-08 23:59:59")
 	})
 })

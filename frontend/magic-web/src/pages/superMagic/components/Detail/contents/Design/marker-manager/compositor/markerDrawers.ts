@@ -1,9 +1,9 @@
-import type { Marker, MarkerArea } from "@/components/CanvasDesign/canvas/types"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import type { Marker, MarkerArea } from "@/components/CanvasDesign/runtime/document/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	POINT_MARKER_STYLES,
 	AREA_MARKER_STYLES,
-} from "@/components/CanvasDesign/canvas/interaction/markers/markerStyles"
+} from "@/components/CanvasDesign/runtime/interaction/marker/markers/markerStyles"
 
 /** 用于绘制的最小图片信息（仅需宽高） */
 export interface ImageInfoForDraw {

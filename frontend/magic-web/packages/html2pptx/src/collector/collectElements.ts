@@ -1,4 +1,9 @@
 import type { ElementNode, ComputedStyleInfo } from "../ir/dom"
+import {
+	hasActiveTransform,
+	withNeutralizedTransforms,
+	type TransformMeasurementTarget,
+} from "../shared/transform-measurement"
 
 let idCounter = 0
 
@@ -25,12 +30,40 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 		// display:none means the whole subtree is not rendered, so prune it directly
 		if (computedStyle.display === "none") return null
 
-		// display:contents has no box of its own; children still participate in parent layout, so recurse through to the parent
+		// display:contents has no layout box, but it can still own inherited text
+		// styles. Keep a zero-geometry metadata node in allNodes so rich-text
+		// parsing can resolve those styles, while continuing to flatten its
+		// element children onto the real layout parent.
 		if (element !== doc.body && computedStyle.display === "contents") {
+			const styleNode: ElementNode = {
+				id: `el-${idCounter++}`,
+				tagName: element.tagName,
+				element,
+				rect: {
+					x: rect.left,
+					y: rect.top,
+					w: 0,
+					h: 0,
+				},
+				layout: {
+					offsetWidth: 0,
+					offsetHeight: 0,
+					layoutWidth: 0,
+					layoutHeight: 0,
+				},
+				style: extractStyles(computedStyle),
+				textContent: getDirectTextContent(element),
+				children: [],
+				parent,
+				depth,
+				zIndex: parseZIndex(computedStyle.zIndex),
+				domOrder: idCounter,
+			}
 			Array.from(element.children).forEach((child) => {
 				const childNode = traverse(child, parent, depth)
 				if (childNode && parent) parent.children.push(childNode)
 			})
+			allNodes.push(styleNode)
 			return null
 		}
 
@@ -51,6 +84,8 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 			layout: {
 				offsetWidth: (element as HTMLElement).offsetWidth,
 				offsetHeight: (element as HTMLElement).offsetHeight,
+				layoutWidth: rect.width,
+				layoutHeight: rect.height,
 			},
 			style: extractStyles(computedStyle),
 			textContent: getDirectTextContent(element),
@@ -73,8 +108,44 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 
 	// Start traversal from the body element, including body itself to capture background color/image and related styles
 	traverse(doc.body, null, 0)
+	measureLayoutBorderBoxes(allNodes)
 
 	return allNodes
+}
+
+/**
+ * Fill floating-point border-box sizes before CSS transforms in one layout
+ * pass. Neutralizing the complete collected transform set avoids one style
+ * mutation/reflow cycle per descendant of a transformed container.
+ *
+ * `offsetWidth`/`offsetHeight` are integer APIs, while the transformed client
+ * rect is an axis-aligned bounding box. The neutralized batch retains CSS
+ * transform containing blocks while exposing every element's layout box.
+ */
+function measureLayoutBorderBoxes(nodes: ElementNode[]): void {
+	const transformedElements: TransformMeasurementTarget[] = nodes
+		.filter((node) => hasActiveTransform(node.style))
+		.map((node) => ({ element: node.element, style: node.style }))
+	if (transformedElements.length === 0) return
+
+	withNeutralizedTransforms(transformedElements, () => {
+		for (const node of nodes) {
+			if (node.style.display === "contents") continue
+			const rect = node.element.getBoundingClientRect()
+			node.layout.layoutWidth = nonNegativeFiniteOrFallback(
+				rect.width,
+				node.layout.layoutWidth ?? node.rect.w,
+			)
+			node.layout.layoutHeight = nonNegativeFiniteOrFallback(
+				rect.height,
+				node.layout.layoutHeight ?? node.rect.h,
+			)
+		}
+	})
+}
+
+function nonNegativeFiniteOrFallback(value: number, fallback: number): number {
+	return Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
 /**
@@ -134,6 +205,7 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 
 		// Layout
 		display: style.display,
+		contentVisibility: style.getPropertyValue("content-visibility"),
 		position: style.position,
 		opacity: style.opacity,
 		visibility: style.visibility,
@@ -153,6 +225,10 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 
 		// Transform
 		transform: style.transform,
+		transformOrigin: style.transformOrigin,
+		translate: style.getPropertyValue("translate"),
+		rotate: style.getPropertyValue("rotate"),
+		scale: style.getPropertyValue("scale"),
 
 		// Filter
 		filter: style.filter,

@@ -21,8 +21,11 @@
 	"confirmClose": "Жабуды растау",
 	"detail": "Толығырақ",
 	"file": {
+		"imageLoadFailed": "Суретті жүктеу сәтсіз аяқталды",
+		"imageSizeTooLarge": "Сурет {{size}} өлшемінен аспауы керек",
+		"imageSizeTooSmall": "Сурет өлшемі {{width}}x{{height}} мәнінен кем болмауы керек",
 		"maxSize": "Бір файлдың максималды өлшемі {{maxSize}}MB",
-		"onlySupportUploadImage": "Тек png/jpg/jpeg/gif/webp форматындағы суреттер үшін жүктеу қолдайды",
+		"onlySupportUploadImage": "Тек png/jpg/jpeg/svg/gif/webp форматындағы суреттер үшін жүктеу қолдайды",
 		"uploadFail": "Файлды жүктеу сәтсіз аяқталды, қайта көріңіз"
 	},
 	"filter": "Сүзгілеу",

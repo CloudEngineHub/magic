@@ -17,7 +17,7 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
 
     public I18nTextDTO $nameI18n;
 
-    public int $parentId = 0;
+    public string $parentId = '0';
 
     public string $nodeType = 'tag';
 
@@ -66,14 +66,14 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
         $this->nameI18n = $nameI18n instanceof I18nTextDTO ? $nameI18n : I18nTextDTO::fromArray($nameI18n ?? []);
     }
 
-    public function getParentId(): int
+    public function getParentId(): string
     {
         return $this->parentId;
     }
 
     public function setParentId(null|int|string $parentId): void
     {
-        $this->parentId = $parentId === null ? 0 : (int) $parentId;
+        $this->parentId = $parentId === null ? '0' : (string) $parentId;
     }
 
     public function getNodeType(): string

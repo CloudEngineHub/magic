@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
@@ -13,6 +14,7 @@ import {
 	SlidesTemplateTagFiltersSkeleton,
 } from "./SlidesTemplateFilterSkeleton"
 import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
+import SlidesTemplateMobileTagFilters from "./SlidesTemplateMobileTagFilters"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
 
 interface SlidesTemplatePanelContentProps {
@@ -41,9 +43,9 @@ function SlidesTemplatePanelContent({
 	onPreviewOpenChange,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
+	const isMobile = useIsMobile()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
-	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const selectorGroups = slidesState.groups
@@ -65,7 +67,6 @@ function SlidesTemplatePanelContent({
 	)
 	const handlePreviewOpenChange = useCallback(
 		(open: boolean) => {
-			setIsPreviewOpen(open)
 			onPreviewOpenChange?.(open)
 		},
 		[onPreviewOpenChange],
@@ -123,17 +124,13 @@ function SlidesTemplatePanelContent({
 	}
 
 	return (
-		<div className={cn("flex min-h-0 flex-col gap-3", className)}>
+		<div className={cn("flex min-h-0 flex-col", className)}>
 			<div
 				className={cn(
-					"flex flex-col gap-3 px-4 pt-3",
+					"flex translate-y-0 flex-col gap-3 px-4 pt-3 opacity-100",
 					toolbarClassName,
-					isPreviewOpen
-						? "pointer-events-none translate-y-[calc(100%_+_24px)] opacity-0"
-						: "translate-y-0 opacity-100",
 				)}
 				data-testid="slides-template-panel-toolbar"
-				aria-hidden={isPreviewOpen}
 			>
 				<div className="flex min-w-0 items-center gap-2">
 					{slidesState.isPrimaryFilterLoading ? (
@@ -169,56 +166,64 @@ function SlidesTemplatePanelContent({
 					</Button>
 				</div>
 				{slidesState.isTagFilterLoading ? (
-					<SlidesTemplateTagFiltersSkeleton />
+					<SlidesTemplateTagFiltersSkeleton isMobile={isMobile} />
 				) : slidesState.tagGroups.length > 0 ? (
-					<div
-						className="flex min-w-0 items-start gap-2"
-						data-testid="slides-template-category-tag-filters"
-					>
-						<div
-							className="flex min-w-0 flex-1 flex-wrap items-center gap-2 py-0.5"
-							data-testid="slides-template-tag-groups"
-						>
-							{slidesState.tagGroups.map((tagGroup) => {
-								const selectedGroupTagCodes = tagGroup.tags
-									.filter((tag) => selectedChildTagCodeSet.has(tag.code))
-									.map((tag) => tag.code)
+					<div data-testid="slides-template-category-tag-filters">
+						{isMobile ? (
+							<SlidesTemplateMobileTagFilters
+								tagGroups={slidesState.tagGroups}
+								selectedTagCodes={slidesState.selectedChildTagCodes}
+								onSelectedTagCodesChange={slidesState.setSelectedChildTagCodes}
+							/>
+						) : (
+							<div className="flex min-w-0 items-start gap-2">
+								<div
+									className="flex min-w-0 flex-1 flex-wrap items-center gap-2 py-0.5"
+									data-testid="slides-template-tag-groups"
+								>
+									{slidesState.tagGroups.map((tagGroup) => {
+										const selectedGroupTagCodes = tagGroup.tags
+											.filter((tag) => selectedChildTagCodeSet.has(tag.code))
+											.map((tag) => tag.code)
 
-								return (
-									<SlidesTemplateTagGroupSelect
-										key={tagGroup.code}
-										tagGroup={tagGroup}
-										selectedTagCodes={selectedGroupTagCodes}
-										onSelectedTagCodesChange={(nextGroupTagCodes) => {
-											const groupTagCodeSet = new Set(
-												tagGroup.tags.map((tag) => tag.code),
-											)
-											const otherGroupTagCodes =
-												slidesState.selectedChildTagCodes.filter(
-													(tagCode) => !groupTagCodeSet.has(tagCode),
-												)
-											slidesState.setSelectedChildTagCodes([
-												...otherGroupTagCodes,
-												...nextGroupTagCodes,
-											])
-										}}
-									/>
-								)
-							})}
-						</div>
-						{hasSelectedChildTags ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="mt-0.5 h-8 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-destructive"
-								data-testid="slides-template-tag-clear-selection"
-								onClick={() => slidesState.setSelectedChildTagCodes([])}
-							>
-								<X className="size-3.5" />
-								{t("playbook.edit.presets.clearSelection")}
-							</Button>
-						) : null}
+										return (
+											<SlidesTemplateTagGroupSelect
+												key={tagGroup.code}
+												tagGroup={tagGroup}
+												selectedTagCodes={selectedGroupTagCodes}
+												onSelectedTagCodesChange={(nextGroupTagCodes) => {
+													const groupTagCodeSet = new Set(
+														tagGroup.tags.map((tag) => tag.code),
+													)
+													const otherGroupTagCodes =
+														slidesState.selectedChildTagCodes.filter(
+															(tagCode) =>
+																!groupTagCodeSet.has(tagCode),
+														)
+													slidesState.setSelectedChildTagCodes([
+														...otherGroupTagCodes,
+														...nextGroupTagCodes,
+													])
+												}}
+											/>
+										)
+									})}
+								</div>
+								{hasSelectedChildTags ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="mt-0.5 h-8 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-destructive"
+										data-testid="slides-template-tag-clear-selection"
+										onClick={() => slidesState.setSelectedChildTagCodes([])}
+									>
+										<X className="size-3.5" />
+										{t("playbook.edit.presets.clearSelection")}
+									</Button>
+								) : null}
+							</div>
+						)}
 					</div>
 				) : null}
 				{isSearchOpen ? (
@@ -253,6 +258,7 @@ function SlidesTemplatePanelContent({
 				showHoverDetails={showHoverDetails}
 				hoverDetailsContainer={hoverDetailsContainer}
 				disableEntryAnimation={disableEntryAnimation}
+				disableContentVisibility={isMobile}
 			/>
 		</div>
 	)

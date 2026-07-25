@@ -1,12 +1,10 @@
 const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 	"box-sizing",
 	"display",
-	"width",
-	"max-width",
-	"min-width",
-	"height",
-	"max-height",
-	"min-height",
+	// Do not inline computed width/height constraints. The synchronous fallback
+	// renders in a hidden iframe where images may not be loaded yet, so computed
+	// geometry can temporarily be 0px or a preview-only pixel width. Author CSS
+	// rules and inline styles are preserved separately by inlineStyleRules().
 	"margin",
 	"margin-top",
 	"margin-right",
@@ -74,6 +72,8 @@ const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 	"grid-template-columns",
 	"grid-template-rows",
 ] as const
+
+const WECHAT_ARTICLE_COMMENTS_SELECTOR = "[data-wechat-article-comments='true']"
 
 function parseInlineStyle(styleText: string | null): Map<string, string> {
 	const result = new Map<string, string>()
@@ -197,18 +197,16 @@ function sanitizeSourceBeforeRender(root: ParentNode): void {
 
 function removeUnsafeClipboardNodes(root: ParentNode): void {
 	root.querySelectorAll(
-		"script,style,link[rel='stylesheet'],meta,title,iframe,object,embed,base",
+		`script,style,link[rel='stylesheet'],meta,title,iframe,object,embed,base,${WECHAT_ARTICLE_COMMENTS_SELECTOR}`,
 	).forEach((node) => node.remove())
 	removeEventHandlerAttributes(root)
 }
 
 function serializeTargetBody(targetBody: HTMLElement): string | null {
-	const wrapper = targetBody.ownerDocument.createElement("section")
-	const bodyStyle = targetBody.getAttribute("style")
-	if (bodyStyle) wrapper.setAttribute("style", bodyStyle)
-	while (targetBody.firstChild) wrapper.appendChild(targetBody.firstChild)
-
-	const html = wrapper.outerHTML.trim()
+	// Native “select all → copy” copies the body children, not the body layout
+	// container. Carrying body width/padding into WeChat can make the pasted
+	// article wider than the editor viewport and hide overflowing content.
+	const html = targetBody.innerHTML.trim()
 	return html || null
 }
 
@@ -260,9 +258,14 @@ export function buildWechatClipboardHtmlFromDocument(sourceDocument: Document): 
 export function buildWechatClipboardHtmlFromIframe(
 	iframe: HTMLIFrameElement | null | undefined,
 ): string | null {
-	const sourceDocument = iframe?.contentDocument
-	if (!sourceDocument?.body) return null
-	return buildWechatClipboardHtmlFromDocument(sourceDocument)
+	try {
+		const sourceDocument = iframe?.contentDocument
+		if (!sourceDocument?.body) return null
+		return buildWechatClipboardHtmlFromDocument(sourceDocument)
+	} catch {
+		// A configured external sandbox can make the preview iframe cross-origin.
+		return null
+	}
 }
 
 export function buildWechatClipboardHtmlFromSource(html: string): string {

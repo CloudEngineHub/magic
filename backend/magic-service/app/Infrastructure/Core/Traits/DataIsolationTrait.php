@@ -18,15 +18,15 @@ trait DataIsolationTrait
      */
     protected function createDataIsolation(Authenticatable $authorization): DataIsolation
     {
-        $dataIsolation = new DataIsolation();
         /* @phpstan-ignore-next-line */
         if ($authorization instanceof MagicUserAuthorization) {
             $userId = $authorization->getId();
-            $dataIsolation->setCurrentUserId(currentUserId: $userId);
+            $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $userId);
             $dataIsolation->setCurrentMagicId(currentMagicId: $authorization->getMagicId());
             $dataIsolation->setUserType(userType: $authorization->getUserType());
+        } else {
+            $dataIsolation = DataIsolation::create($authorization->getOrganizationCode());
         }
-        $dataIsolation->setCurrentOrganizationCode(currentOrganizationCode: $authorization->getOrganizationCode());
         return $dataIsolation;
     }
 }

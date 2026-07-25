@@ -95,8 +95,7 @@ abstract class AbstractMessageDispatchSubscriber extends AbstractSeqConsumer
                     $this->magicControlMessageAppService->dispatchMQControlMessage($userSeqEntity);
                     $this->setSeqCanNotRetry($seqRetryKey);
                     if ($userSeqEntity->canTriggerFlow()) {
-                        $dataIsolation = new DataIsolation();
-                        $dataIsolation->setCurrentOrganizationCode($userSeqEntity->getOrganizationCode());
+                        $dataIsolation = DataIsolation::create($userSeqEntity->getOrganizationCode());
                         $userEntity = $this->magicUserRepository->getUserByMagicId($dataIsolation, $userSeqEntity->getObjectId());
                         if ($userEntity === null) {
                             $this->logger->error('messageDispatch user not found: seqId:' . $seqId);

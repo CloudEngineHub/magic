@@ -58,7 +58,19 @@ vi.mock("../../components/ScenePanelContainer", () => ({
 }))
 
 vi.mock("../Slides/SlidesTemplateHomeSelectionPreview", () => ({
-	default: () => <div data-testid="slides-template-preview" />,
+	default: ({
+		templatePickerOpen,
+		onTemplatePickerOpenChange,
+	}: {
+		templatePickerOpen?: boolean
+		onTemplatePickerOpenChange?: (open: boolean) => void
+	}) => (
+		<div data-testid="slides-template-preview" data-template-picker-open={templatePickerOpen}>
+			<button type="button" onClick={() => onTemplatePickerOpenChange?.(true)}>
+				更换模板
+			</button>
+		</div>
+	),
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -86,7 +98,16 @@ describe("DefaultInputContainer", () => {
 			/>,
 		)
 
+		fireEvent.click(screen.getByRole("button", { name: "更换模板" }))
+		expect(screen.getByTestId("slides-template-preview")).toHaveAttribute(
+			"data-template-picker-open",
+			"true",
+		)
 		fireEvent.click(screen.getByRole("button", { name: "选择模板" }))
+		expect(screen.getByTestId("slides-template-preview")).toHaveAttribute(
+			"data-template-picker-open",
+			"false",
+		)
 		expect(mockPublish).not.toHaveBeenCalled()
 	})
 

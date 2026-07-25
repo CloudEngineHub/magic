@@ -5,13 +5,20 @@ import type {
 	GenerateVideoRequest,
 	StoredVideoModeDraftsMap,
 	StoredVideoModeInputDraft,
-} from "@/components/CanvasDesign/types.magic"
-import { CanvasDesignRootStorageData } from "@/components/CanvasDesign/types.magic"
-import { normalizeDesignStoragePathForCanvas } from "../utils/designDslPathUtils"
+} from "@/components/CanvasDesign/public/magic-types"
+import { CanvasDesignRootStorageData } from "@/components/CanvasDesign/public/magic-types"
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
+import {
+	normalizeDesignPathForTransitionMigration,
+	type DesignPathTransitionMigrationContext,
+} from "../utils/designPathTransitionMigration"
 
 interface UseCanvasStorageOptions {
 	designProjectId?: string
 	designProjectBasePath?: string
+	flatAttachments?: FileItem[]
+	attachmentIndex?: DesignAttachmentIndex | null
 }
 
 interface UseCanvasStorageReturn {
@@ -29,7 +36,15 @@ interface UseCanvasStorageReturn {
  * - 将存储数据保存到 localStorage
  */
 export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasStorageReturn {
-	const { designProjectId, designProjectBasePath } = options
+	const { designProjectId, designProjectBasePath, flatAttachments, attachmentIndex } = options
+	const pathContext = useMemo<DesignPathTransitionMigrationContext>(
+		() => ({
+			designProjectBasePath,
+			flatAttachments,
+			attachmentIndex,
+		}),
+		[attachmentIndex, designProjectBasePath, flatAttachments],
+	)
 
 	// 获取 storage key（基于目录ID），用于 viewport、expandedElementIds 和 layersCollapsed 的保存
 	const storageKey = useMemo(() => {
@@ -50,14 +65,14 @@ export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasSto
 			if (stored) {
 				return normalizeCanvasStorageData(
 					JSON.parse(stored) as CanvasDesignStorageData,
-					designProjectBasePath,
+					pathContext,
 				)
 			}
 			return null
 		} catch (error) {
 			return null
 		}
-	}, [storageKey, designProjectBasePath])
+	}, [storageKey, pathContext])
 
 	/**
 	 * 保存存储数据
@@ -70,13 +85,13 @@ export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasSto
 			try {
 				localStorage.setItem(
 					storageKey,
-					JSON.stringify(normalizeCanvasStorageData(data, designProjectBasePath)),
+					JSON.stringify(normalizeCanvasStorageData(data, pathContext)),
 				)
 			} catch (error) {
 				//
 			}
 		},
-		[storageKey, designProjectBasePath],
+		[storageKey, pathContext],
 	)
 
 	/**
@@ -116,51 +131,58 @@ export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasSto
 	}
 }
 
-function normalizeCanvasStorageData(
+/**
+ * 过渡期本地草稿修复：裸 `images/...` 必须由附件唯一确认后才能写成 `./...`。
+ */
+export function normalizeCanvasStorageData(
 	data: CanvasDesignStorageData,
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): CanvasDesignStorageData {
 	return {
 		...data,
-		tempImageConfigs: normalizeTempImageConfigs(data.tempImageConfigs, designProjectBasePath),
-		tempVideoConfigs: normalizeTempVideoConfigs(data.tempVideoConfigs, designProjectBasePath),
-		tempVideoModeDrafts: normalizeTempVideoModeDrafts(
-			data.tempVideoModeDrafts,
-			designProjectBasePath,
-		),
+		tempImageConfigs: normalizeTempImageConfigs(data.tempImageConfigs, pathContext),
+		tempVideoConfigs: normalizeTempVideoConfigs(data.tempVideoConfigs, pathContext),
+		tempVideoModeDrafts: normalizeTempVideoModeDrafts(data.tempVideoModeDrafts, pathContext),
 	}
+}
+
+function normalizeStoragePath(
+	path: string,
+	pathContext: DesignPathTransitionMigrationContext,
+): string {
+	return normalizeDesignPathForTransitionMigration(path, pathContext)
 }
 
 function normalizeTempImageConfigs(
 	configs: CanvasDesignStorageData["tempImageConfigs"],
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): CanvasDesignStorageData["tempImageConfigs"] {
 	if (!configs) return configs
 
 	return Object.fromEntries(
 		Object.entries(configs).map(([elementId, config]) => [
 			elementId,
-			normalizeTempImageConfig(config, designProjectBasePath),
+			normalizeTempImageConfig(config, pathContext),
 		]),
 	)
 }
 
 function normalizeTempImageConfig(
 	config: Partial<GenerateImageRequest>,
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): Partial<GenerateImageRequest> {
 	const referenceImageOptions = config.reference_image_options
 	const normalizedReferenceImageOptions = referenceImageOptions?.length
 		? referenceImageOptions.map((entry) => ({
 				...entry,
-				path: normalizeDesignStoragePathForCanvas(entry.path, designProjectBasePath),
+				path: normalizeStoragePath(entry.path, pathContext),
 			}))
 		: undefined
 
 	return {
 		...config,
 		reference_images: config.reference_images?.map((path) =>
-			normalizeDesignStoragePathForCanvas(path, designProjectBasePath),
+			normalizeStoragePath(path, pathContext),
 		),
 		reference_image_options: normalizedReferenceImageOptions,
 	}
@@ -168,35 +190,35 @@ function normalizeTempImageConfig(
 
 function normalizeTempVideoConfigs(
 	configs: CanvasDesignStorageData["tempVideoConfigs"],
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): CanvasDesignStorageData["tempVideoConfigs"] {
 	if (!configs) return configs
 
 	return Object.fromEntries(
 		Object.entries(configs).map(([elementId, config]) => [
 			elementId,
-			normalizeTempVideoConfig(config, designProjectBasePath),
+			normalizeTempVideoConfig(config, pathContext),
 		]),
 	)
 }
 
 function normalizeTempVideoModeDrafts(
 	drafts: CanvasDesignStorageData["tempVideoModeDrafts"],
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): CanvasDesignStorageData["tempVideoModeDrafts"] {
 	if (!drafts) return drafts
 
 	return Object.fromEntries(
 		Object.entries(drafts).map(([elementId, map]) => [
 			elementId,
-			normalizeSingleElementModeDrafts(map, designProjectBasePath),
+			normalizeSingleElementModeDrafts(map, pathContext),
 		]),
 	)
 }
 
 function normalizeSingleElementModeDrafts(
 	map: StoredVideoModeDraftsMap | undefined,
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): StoredVideoModeDraftsMap {
 	if (!map) return {}
 
@@ -204,40 +226,36 @@ function normalizeSingleElementModeDrafts(
 	for (const key of ["keyframe_guided", "image_reference", "omni_reference"] as const) {
 		const draft = map[key]
 		if (!draft) continue
-		next[key] = normalizeOneModeDraft(draft, designProjectBasePath)
+		next[key] = normalizeOneModeDraft(draft, pathContext)
 	}
 	return next
 }
 
 function normalizeOneModeDraft(
 	draft: StoredVideoModeInputDraft,
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): StoredVideoModeInputDraft {
 	return {
 		frameImageInfos: draft.frameImageInfos.map((slot) =>
 			slot
 				? {
 						...slot,
-						path: normalizeDesignStoragePathForCanvas(slot.path, designProjectBasePath),
-						src: slot.src
-							? normalizeDesignStoragePathForCanvas(slot.src, designProjectBasePath)
-							: slot.src,
+						path: normalizeStoragePath(slot.path, pathContext),
+						src: slot.src ? normalizeStoragePath(slot.src, pathContext) : slot.src,
 					}
 				: slot,
 		),
 		referenceImageInfos: draft.referenceImageInfos.map((info) => ({
 			...info,
-			path: normalizeDesignStoragePathForCanvas(info.path, designProjectBasePath),
-			src: info.src
-				? normalizeDesignStoragePathForCanvas(info.src, designProjectBasePath)
-				: info.src,
+			path: normalizeStoragePath(info.path, pathContext),
+			src: info.src ? normalizeStoragePath(info.src, pathContext) : info.src,
 		})),
 	}
 }
 
 function normalizeTempVideoConfig(
 	config: Partial<GenerateVideoRequest>,
-	designProjectBasePath?: string,
+	pathContext: DesignPathTransitionMigrationContext,
 ): Partial<GenerateVideoRequest> {
 	const inputs = config.inputs
 	if (!inputs) return config
@@ -250,10 +268,7 @@ function normalizeTempVideoConfig(
 				? {
 						frames: inputs.frames.map((item) => ({
 							...item,
-							uri: normalizeDesignStoragePathForCanvas(
-								item.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(item.uri, pathContext),
 						})),
 					}
 				: {}),
@@ -261,10 +276,7 @@ function normalizeTempVideoConfig(
 				? {
 						reference_images: inputs.reference_images.map((item) => ({
 							...item,
-							uri: normalizeDesignStoragePathForCanvas(
-								item.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(item.uri, pathContext),
 						})),
 					}
 				: {}),
@@ -272,10 +284,7 @@ function normalizeTempVideoConfig(
 				? {
 						reference_videos: inputs.reference_videos.map((item) => ({
 							...item,
-							uri: normalizeDesignStoragePathForCanvas(
-								item.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(item.uri, pathContext),
 						})),
 					}
 				: {}),
@@ -283,10 +292,7 @@ function normalizeTempVideoConfig(
 				? {
 						reference_audios: inputs.reference_audios.map((item) => ({
 							...item,
-							uri: normalizeDesignStoragePathForCanvas(
-								item.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(item.uri, pathContext),
 						})),
 					}
 				: {}),
@@ -294,10 +300,7 @@ function normalizeTempVideoConfig(
 				? {
 						video: {
 							...inputs.video,
-							uri: normalizeDesignStoragePathForCanvas(
-								inputs.video.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(inputs.video.uri, pathContext),
 						},
 					}
 				: {}),
@@ -305,10 +308,7 @@ function normalizeTempVideoConfig(
 				? {
 						mask: {
 							...inputs.mask,
-							uri: normalizeDesignStoragePathForCanvas(
-								inputs.mask.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(inputs.mask.uri, pathContext),
 						},
 					}
 				: {}),
@@ -316,10 +316,7 @@ function normalizeTempVideoConfig(
 				? {
 						audio: inputs.audio.map((item) => ({
 							...item,
-							uri: normalizeDesignStoragePathForCanvas(
-								item.uri,
-								designProjectBasePath,
-							),
+							uri: normalizeStoragePath(item.uri, pathContext),
 						})),
 					}
 				: {}),

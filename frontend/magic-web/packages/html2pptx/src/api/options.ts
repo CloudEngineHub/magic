@@ -74,6 +74,18 @@ export interface ExportHandle {
 	cancel: () => void
 }
 
+/** Client-side PPTX artifact produced without triggering a browser download. */
+export interface GeneratedPPTX {
+	data: Blob
+	fileName: string
+}
+
+/** Return handle from generatePPTX, used to await an artifact or cancel actively. */
+export interface GenerateHandle {
+	promise: Promise<GeneratedPPTX>
+	cancel: () => void
+}
+
 /** Per-slide export context */
 export interface ExportPageContext {
 	/** Current page index, starting from 0 */

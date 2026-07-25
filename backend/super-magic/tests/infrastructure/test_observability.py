@@ -22,6 +22,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.trace import Status, StatusCode
+from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
 
 _RESOURCE = Resource.create({"service.name": "test"})
 
@@ -41,6 +42,7 @@ def _make_span(provider: TracerProvider, name: str = "test_span"):
 # ===========================================================================
 
 from app.infrastructure.observability.telemetry import _ErrorFirstSamplingProcessor
+from app.infrastructure.observability.telemetry import _shorten_non_error_io, get_otlp_headers
 
 
 class _CapturingProcessor(SpanProcessor):
@@ -77,6 +79,7 @@ class TestErrorFirstSamplingProcessor:
 
         tracer = provider.get_tracer("test")
         with tracer.start_as_current_span("err_span") as span:
+            span.set_attribute("langfuse.observation.input", "request")
             span.set_status(Status(StatusCode.ERROR, "boom"))
 
         assert len(inner.ended) == 1
@@ -90,6 +93,7 @@ class TestErrorFirstSamplingProcessor:
 
         for _ in range(20):
             with tracer.start_as_current_span("err") as span:
+                span.set_attribute("langfuse.observation.input", "request")
                 span.set_status(Status(StatusCode.ERROR, "err"))
 
         assert len(inner.ended) == 20
@@ -104,6 +108,7 @@ class TestErrorFirstSamplingProcessor:
         tracer = provider.get_tracer("test")
 
         with tracer.start_as_current_span("exc_span") as span:
+            span.set_attribute("langfuse.observation.input", "request")
             span.record_exception(ValueError("oops"))
 
         assert len(inner.ended) == 1
@@ -131,8 +136,8 @@ class TestErrorFirstSamplingProcessor:
         tracer = provider.get_tracer("test")
 
         for _ in range(20):
-            with tracer.start_as_current_span("ok_span"):
-                pass
+            with tracer.start_as_current_span("ok_span") as span:
+                span.set_attribute("langfuse.observation.input", "request")
 
         assert len(inner.ended) == 20
 
@@ -145,14 +150,219 @@ class TestErrorFirstSamplingProcessor:
 
         random.seed(42)
         for _ in range(1000):
-            with tracer.start_as_current_span("ok_span"):
-                pass
+            with tracer.start_as_current_span("ok_span") as span:
+                span.set_attribute("langfuse.observation.input", "request")
 
         count = len(inner.ended)
         assert 50 <= count <= 200, f"Expected ~100 sampled spans, got {count}"
 
-    # ------------------------------------------------------------------
-    # on_start is forwarded to inner processor
+    def test_non_generation_span_without_input_is_exported(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("Service.no_args"):
+            pass
+        assert len(inner.ended) == 1
+        assert inner.ended[0].name == "Service.no_args"
+
+    @pytest.mark.parametrize("name", [
+        "GET /api/health",
+        "GET /api/v1/workspace/status",
+        "GET /api/v1/workspace/status http send",
+        "AgentDispatcher.setup",
+    ])
+    def test_noise_spans_are_dropped_even_with_input(self, name):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span(name) as span:
+            span.set_attribute("langfuse.observation.input", "request")
+        assert inner.ended == []
+
+    def test_openai_native_content_is_promoted(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat") as span:
+            span.set_attribute("gen_ai.input.messages", '[{"role":"user","content":"hello"}]')
+            span.set_attribute("gen_ai.output.messages", '[{"role":"assistant","content":"world"}]')
+        attrs = inner.ended[0].attributes
+        assert "hello" in attrs["langfuse.observation.input"]
+        assert "world" in attrs["langfuse.observation.output"]
+
+    def test_openai_usage_only_generation_span_is_dropped(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat (model)") as span:
+            span.set_attribute("langfuse.observation.type", "generation")
+            span.set_attribute("gen_ai.usage.total_tokens", 42)
+
+        assert inner.ended == []
+
+    def test_openai_model_generation_span_with_legacy_content_is_dropped(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat (model)") as span:
+            span.set_attribute("langfuse.observation.type", "generation")
+            span.set_attribute("gen_ai.prompt.0.role", "user")
+            span.set_attribute("gen_ai.prompt.0.content", "hello")
+            span.set_attribute("gen_ai.completion.0.role", "assistant")
+            span.set_attribute("gen_ai.completion.0.content", "world")
+            span.set_attribute("gen_ai.usage.total_tokens", 42)
+
+        assert inner.ended == []
+
+    def test_openai_span_without_generation_or_io_is_exported(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat"):
+            pass
+
+        assert len(inner.ended) == 1
+        assert inner.ended[0].name == "openai.chat"
+
+    def test_base_service_methods_are_not_automatically_traced(self):
+        from app.core.base_service import Base
+
+        class ExampleService(Base):
+            def execute(self):
+                return "ok"
+
+        assert ExampleService().execute() == "ok"
+        assert not hasattr(ExampleService.execute, "__wrapped__")
+
+    def test_openai_observation_io_is_encoded_in_otlp_span_attributes(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat") as span:
+            span.set_attribute("gen_ai.input.messages", '[{"role":"user","content":"hello"}]')
+            span.set_attribute("gen_ai.output.messages", '[{"role":"assistant","content":"world"}]')
+
+        request = encode_spans(inner.ended)
+        encoded_span = request.resource_spans[0].scope_spans[0].spans[0]
+        attributes = {attribute.key: attribute.value for attribute in encoded_span.attributes}
+
+        assert "hello" in attributes["langfuse.observation.input"].string_value
+        assert "world" in attributes["langfuse.observation.output"].string_value
+        assert attributes["langfuse.observation.type"].string_value == "generation"
+        assert attributes["langfuse.name"].string_value == "openai.chat"
+
+    def test_missing_langfuse_name_falls_back_to_span_operation(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("tool.read_files") as span:
+            span.set_attribute("langfuse.observation.input", '{"paths": ["a.txt"]}')
+
+        assert inner.ended[0].attributes["langfuse.name"] == "tool.read_files"
+
+    def test_trace_io_is_mirrored_in_final_otlp_payload(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("POST /api/v1/messages/chat") as span:
+            span.set_attribute("langfuse.trace.input", '{"path":"/api/v1/messages/chat"}')
+            span.set_attribute("langfuse.trace.output", '{"status_code":200}')
+
+        request = encode_spans(inner.ended)
+        encoded_span = request.resource_spans[0].scope_spans[0].spans[0]
+        attributes = {attribute.key: attribute.value for attribute in encoded_span.attributes}
+
+        assert "/api/v1/messages/chat" in attributes["langfuse.observation.input"].string_value
+        assert "status_code" in attributes["langfuse.observation.output"].string_value
+        assert "/api/v1/messages/chat" in attributes["gen_ai.prompt"].string_value
+        assert "status_code" in attributes["gen_ai.completion"].string_value
+
+    def test_message_fills_missing_observation_output(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("tool.edit_file") as span:
+            span.set_attribute("langfuse.trace.input", '{"path":"/tmp/a.txt"}')
+            span.set_attribute("message", "edit completed")
+
+        request = encode_spans(inner.ended)
+        encoded_span = request.resource_spans[0].scope_spans[0].spans[0]
+        attributes = {attribute.key: attribute.value for attribute in encoded_span.attributes}
+
+        assert attributes["langfuse.observation.input"].string_value == '{"path":"/tmp/a.txt"}'
+        assert attributes["langfuse.observation.output"].string_value == "edit completed"
+
+    def test_explicit_langfuse_name_is_preserved(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("internal.operation") as span:
+            span.set_attribute("langfuse.name", "Friendly name")
+            span.set_attribute("langfuse.observation.input", "request")
+
+        assert inner.ended[0].attributes["langfuse.name"] == "Friendly name"
+
+    def test_otlp_headers_enable_langfuse_v4_by_default(self, monkeypatch):
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_HEADERS", raising=False)
+        monkeypatch.delenv("LANGFUSE_INGESTION_VERSION", raising=False)
+        with patch("app.infrastructure.observability.telemetry.MetadataUtil.add_magic_and_user_authorization_headers"):
+            headers = get_otlp_headers()
+        assert headers["x-langfuse-ingestion-version"] == "4"
+
+    def test_explicit_otlp_header_can_override_langfuse_version(self, monkeypatch):
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_HEADERS", "x-langfuse-ingestion-version=3")
+        with patch("app.infrastructure.observability.telemetry.MetadataUtil.add_magic_and_user_authorization_headers"):
+            headers = get_otlp_headers()
+        assert headers["x-langfuse-ingestion-version"] == "3"
+
+    def test_workspace_status_is_dropped_when_path_is_only_in_url(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("GET /internal") as span:
+            span.set_attribute("url.full", "http://localhost/api/v1/workspace/status?x=1")
+            span.set_attribute("langfuse.trace.input", "request")
+        assert inner.ended == []
+
+    def test_non_error_io_is_shortened(self):
+        attributes = {
+            "langfuse.trace.input": "i" * 2000,
+            "langfuse.trace.output": "o" * 2000,
+        }
+        _shorten_non_error_io(attributes)
+        assert len(attributes["langfuse.trace.input"]) == 1214
+        assert attributes["langfuse.trace.input"].endswith("...<truncated>")
+
+    def test_non_error_span_exports_shortened_input_and_output(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("POST /api/v1/messages") as span:
+            span.set_attribute("langfuse.trace.input", "i" * 2000)
+            span.set_attribute("langfuse.trace.output", "o" * 2000)
+
+        assert len(inner.ended) == 1
+        attributes = inner.ended[0].attributes
+        assert len(attributes["langfuse.trace.input"]) == 1214
+        assert len(attributes["langfuse.trace.output"]) == 1214
+
+    def test_openai_legacy_content_promoted_to_standard_genai_keys(self):
+        # OpenLLMetry may only emit legacy gen_ai.prompt.*/completion.* keys.
+        # Plan A: they must be mirrored to the standard gen_ai.*.messages keys
+        # so OTEL-native backends (Guance) can render Input/Output.
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat") as span:
+            span.set_attribute("gen_ai.prompt.0.role", "user")
+            span.set_attribute("gen_ai.prompt.0.content", "hello")
+            span.set_attribute("gen_ai.completion.0.role", "assistant")
+            span.set_attribute("gen_ai.completion.0.content", "world")
+        attrs = inner.ended[0].attributes
+        assert "hello" in attrs["langfuse.observation.input"]
+        assert "world" in attrs["langfuse.observation.output"]
+        assert "hello" in attrs["gen_ai.input.messages"]
+        assert "world" in attrs["gen_ai.output.messages"]
     # ------------------------------------------------------------------
     def test_on_start_forwarded_to_inner(self):
         inner = MagicMock(spec=SpanProcessor)
@@ -264,10 +474,14 @@ class TestBaseToolSpanAttributes:
         tool._create_tool_span(ctx, {"command": "echo hello", "timeout": 10})
 
         attrs = self._get_attrs(mock_span)
+        mock_span.update_name.assert_called_once_with("tool.test_tool")
+        assert attrs.get("langfuse.name") == "tool.test_tool"
+        assert attrs.get("langfuse.observation.name") == "tool.test_tool"
         assert attrs.get("tool.name") == "test_tool"
         assert attrs.get("tool.call_id") == "call_123"
         assert attrs.get("user.id") == "u1"
         assert attrs.get("session.id") == "s1"
+        assert "echo hello" in attrs["langfuse.observation.input"]
 
     @patch("app.tools.core.base_tool.is_telemetry_enabled", return_value=True)
     @patch("app.tools.core.base_tool.get_tracer")
@@ -356,6 +570,7 @@ class TestBaseToolSpanAttributes:
         attrs = self._get_attrs(span)
         assert attrs.get("tool.execution_time") == pytest.approx(1.23)
         assert attrs.get("tool.execution_time_ms") == 1230
+        assert attrs["langfuse.observation.output"] == "ok"
 
     def test_end_span_success_sets_ok_status(self):
         tool = _make_tool()
@@ -456,6 +671,99 @@ def _mock_span_for_hook() -> MagicMock:
     span._attrs: dict = {}
     span.set_attribute.side_effect = lambda k, v: span._attrs.update({k: v})
     return span
+
+
+class TestOpenAIResponseHook:
+    @patch("app.infrastructure.observability.openai_integration._get_model_pricing")
+    def test_finished_openai_span_maps_content_cost_and_bypasses_sampling(
+        self,
+        mock_get_pricing,
+    ):
+        from app.infrastructure.observability.openai_integration import enrich_finished_openai_span
+
+        pricing = MagicMock()
+        pricing.get_model_pricing.return_value = {
+            "input_price": 0.01,
+            "output_price": 0.02,
+            "currency": "USD",
+        }
+        mock_get_pricing.return_value = pricing
+
+        proc, inner = TestErrorFirstSamplingProcessor()._processor(ratio=0.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        span = provider.get_tracer("test").start_span("openai.chat")
+        span.set_attribute("gen_ai.input.messages", '[{"role":"user"}]')
+        span.set_attribute("gen_ai.output.messages", '[{"role":"assistant"}]')
+        span.set_attribute("gen_ai.response.model", "test-model")
+        span.set_attribute("gen_ai.usage.input_tokens", 1000)
+        span.set_attribute("gen_ai.usage.output_tokens", 500)
+        span.end()
+
+        assert len(inner.ended) == 1
+        attrs = inner.ended[0].attributes
+        assert attrs["langfuse.observation.input"] == '[{"role":"user"}]'
+        assert attrs["langfuse.observation.output"] == '[{"role":"assistant"}]'
+        assert attrs["gen_ai.usage.cost"] == pytest.approx(0.02)
+        assert enrich_finished_openai_span(inner.ended[0]) is True
+
+    @patch("app.infrastructure.observability.openai_integration._report_to_langfuse")
+    def test_merges_standard_token_usage_into_existing_span(self, mock_report):
+        from app.infrastructure.observability.openai_integration import _response_hook
+
+        span = _mock_span_for_hook()
+        request = {"model": "test-model"}
+        response = SimpleNamespace(
+            model="test-model",
+            usage=SimpleNamespace(prompt_tokens=12, completion_tokens=7, total_tokens=19),
+        )
+
+        _response_hook(span, request, response)
+
+        assert span._attrs["gen_ai.usage.input_tokens"] == 12
+        assert span._attrs["gen_ai.usage.completion_tokens"] == 7
+        assert span._attrs["gen_ai.usage.total_tokens"] == 19
+        mock_report.assert_called_once_with(span, request, response)
+
+    @patch("app.infrastructure.observability.openai_integration._get_model_pricing")
+    @patch("app.infrastructure.observability.openai_integration._get_langfuse_client")
+    @patch("app.infrastructure.observability.openai_integration.OpenAIParser.parse")
+    def test_merges_cost_without_marking_span_as_generation(
+        self,
+        mock_parse,
+        mock_get_client,
+        mock_get_pricing,
+    ):
+        from app.infrastructure.observability.openai_integration import _report_to_langfuse
+
+        token_usage = SimpleNamespace(
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            input_tokens_details=None,
+        )
+        mock_parse.return_value = token_usage
+        mock_get_client.return_value = MagicMock()
+        pricing = MagicMock()
+        pricing.get_model_pricing.return_value = {
+            "input_price": 0.01,
+            "output_price": 0.02,
+            "currency": "USD",
+        }
+        mock_get_pricing.return_value = pricing
+
+        span = _mock_span_for_hook()
+        request = {"model": "test-model"}
+        response = SimpleNamespace(
+            model="test-model",
+            usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500),
+        )
+
+        _report_to_langfuse(span, request, response)
+
+        assert span._attrs["gen_ai.usage.cost"] == pytest.approx(0.02)
+        assert "observation.type" not in span._attrs
+        assert "langfuse.observation.type" not in span._attrs
 
 
 class TestHttpxRequestHook:
@@ -758,7 +1066,7 @@ class TestAiohttpHooks:
 # 6. FastAPI server request hook
 # ===========================================================================
 
-from app.infrastructure.observability.fastapi_integration import _server_request_hook
+from app.infrastructure.observability.fastapi_integration import _server_request_hook, instrument_fastapi
 
 
 class TestFastAPIServerRequestHook:
@@ -835,3 +1143,130 @@ class TestFastAPIServerRequestHook:
         span.update_name.assert_called()
         name = span.update_name.call_args[0][0]
         assert name == "GET /static/file.js"
+
+    def test_instrumentation_excludes_noise_urls_and_event_spans(self):
+        app = MagicMock()
+        with patch("app.infrastructure.observability.fastapi_integration.is_telemetry_enabled", return_value=True), \
+             patch("app.infrastructure.observability.fastapi_integration.FastAPIInstrumentor.instrument_app") as instrument:
+            instrument_fastapi(app, track_errors=False)
+
+        assert instrument.call_args.kwargs["excluded_urls"] == r"/api/health,/api/v1/workspace/status"
+        assert instrument.call_args.kwargs["exclude_spans"] == ["receive", "send"]
+
+
+# ---------------------------------------------------------------------------
+# Langfuse input/output/name attribute coverage (new behavior)
+# ---------------------------------------------------------------------------
+from app.infrastructure.observability.constants import LangfuseAttributes
+from app.infrastructure.observability import span_utils
+
+
+class TestLangfuseIOHelpers:
+    def test_set_observation_io_sets_input_and_output(self):
+        span = _mock_span_for_hook()
+        span_utils.set_observation_io(span, input_value={"a": 1}, output_value=[1, 2])
+        assert span._attrs[LangfuseAttributes.OBSERVATION_INPUT] == '{"a": 1}'
+        assert span._attrs[LangfuseAttributes.OBSERVATION_OUTPUT] == "[1, 2]"
+        # Plan A: also write standard OTEL GenAI keys so Guance can read IO.
+        assert span._attrs["gen_ai.input.messages"] == '{"a": 1}'
+        assert span._attrs["gen_ai.output.messages"] == "[1, 2]"
+
+    def test_set_observation_io_skips_none(self):
+        span = _mock_span_for_hook()
+        span_utils.set_observation_io(span, input_value=None, output_value=None)
+        assert LangfuseAttributes.OBSERVATION_INPUT not in span._attrs
+        assert LangfuseAttributes.OBSERVATION_OUTPUT not in span._attrs
+
+    def test_set_trace_name_and_io(self):
+        span = _mock_span_for_hook()
+        span_utils.set_trace_name(span, "POST /x")
+        span_utils.set_trace_io(span, input_value={"k": "v"}, output_value={"status_code": 200})
+        assert span._attrs[LangfuseAttributes.TRACE_NAME] == "POST /x"
+        assert span._attrs[LangfuseAttributes.TRACE_INPUT] == '{"k": "v"}'
+        assert '"status_code": 200' in span._attrs[LangfuseAttributes.TRACE_OUTPUT]
+        assert span._attrs[LangfuseAttributes.OBSERVATION_INPUT] == '{"k": "v"}'
+        assert '"status_code": 200' in span._attrs[LangfuseAttributes.OBSERVATION_OUTPUT]
+        # Plan A: trace IO also mirrored to standard OTEL GenAI keys.
+        assert span._attrs["gen_ai.input.messages"] == '{"k": "v"}'
+        assert '"status_code": 200' in span._attrs["gen_ai.output.messages"]
+        assert span._attrs["gen_ai.prompt"] == '{"k": "v"}'
+        assert '"status_code": 200' in span._attrs["gen_ai.completion"]
+
+    def test_long_value_is_truncated_not_dropped(self):
+        span = _mock_span_for_hook()
+        big = "x" * 20000
+        span_utils.set_observation_io(span, input_value=big)
+        val = span._attrs[LangfuseAttributes.OBSERVATION_INPUT]
+        assert val.endswith("...<truncated>")
+        assert len(val) < 20000
+
+    def test_non_serializable_value_falls_back_to_str(self):
+        span = _mock_span_for_hook()
+
+        class Weird:
+            def __repr__(self):
+                return "WEIRD"
+
+        # dict containing a non-JSON-friendly object still gets captured (default=str)
+        span_utils.set_observation_io(span, output_value={"obj": Weird()})
+        assert LangfuseAttributes.OBSERVATION_OUTPUT in span._attrs
+
+    def test_redact_headers_masks_sensitive(self):
+        headers = {"Authorization": "Bearer secret", "Content-Type": "application/json"}
+        result = span_utils.redact_headers(headers)
+        assert result["Authorization"] == "<redacted>"
+        assert result["Content-Type"] == "application/json"
+
+
+class TestHttpxIOCapture:
+    def test_request_hook_sets_observation_input(self):
+        span = _mock_span_for_hook()
+        req = MagicMock()
+        req.method = "POST"
+        req.url = MagicMock()
+        req.url.path = "/api/v1/messages"
+        req.headers = {"authorization": "Bearer x", "accept": "application/json"}
+        req.content = b'{"hello": "world"}'
+
+        httpx_request_hook(span, req)
+
+        assert LangfuseAttributes.OBSERVATION_INPUT in span._attrs
+        payload = span._attrs[LangfuseAttributes.OBSERVATION_INPUT]
+        assert "world" in payload
+        assert "<redacted>" in payload  # authorization masked
+
+    def test_response_hook_sets_observation_output_on_success(self):
+        span = _mock_span_for_hook()
+        req = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = '{"ok": true}'
+
+        httpx_response_hook(span, req, resp)
+
+        assert LangfuseAttributes.OBSERVATION_OUTPUT in span._attrs
+        assert '"status_code": 200' in span._attrs[LangfuseAttributes.OBSERVATION_OUTPUT]
+
+
+class TestConsistentSampling:
+    def test_same_trace_id_is_deterministic(self):
+        from app.infrastructure.observability.telemetry import _ErrorFirstSamplingProcessor
+        proc = _ErrorFirstSamplingProcessor(_CapturingProcessor(), sample_ratio=0.5)
+
+        span = MagicMock()
+        ctx = MagicMock()
+        ctx.trace_id = 12345
+        span.get_span_context.return_value = ctx
+
+        decisions = {proc._should_sample_trace(span) for _ in range(20)}
+        assert len(decisions) == 1  # deterministic per trace_id
+
+    def test_ratio_zero_and_one(self):
+        from app.infrastructure.observability.telemetry import _ErrorFirstSamplingProcessor
+        span = MagicMock()
+        ctx = MagicMock()
+        ctx.trace_id = 999
+        span.get_span_context.return_value = ctx
+
+        assert _ErrorFirstSamplingProcessor(_CapturingProcessor(), 1.0)._should_sample_trace(span) is True
+        assert _ErrorFirstSamplingProcessor(_CapturingProcessor(), 0.0)._should_sample_trace(span) is False

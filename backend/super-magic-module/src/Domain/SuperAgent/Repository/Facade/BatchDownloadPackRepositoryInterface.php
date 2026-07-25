@@ -7,19 +7,19 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Request\FileConverterRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Response\FileConverterResponse;
 
 interface BatchDownloadPackRepositoryInterface
 {
     public function submitPackTask(
-        string $userId,
-        string $organizationCode,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         FileConverterRequest $request,
         string $workDir
     ): FileConverterResponse;
 
-    public function queryPackTask(string $sandboxId, string $projectId, string $taskKey): FileConverterResponse;
+    public function queryPackTask(DataIsolation $dataIsolation, string $sandboxId, string $projectId, string $taskKey): FileConverterResponse;
 }

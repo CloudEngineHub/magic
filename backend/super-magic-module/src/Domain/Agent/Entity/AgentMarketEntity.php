@@ -75,6 +75,9 @@ class AgentMarketEntity extends AbstractEntity
      */
     protected ?int $categoryId = null;
 
+    /** @var int[] */
+    protected array $categoryIds = [];
+
     /**
      * @var PublishStatus 发布状态：UNPUBLISHED=未发布, PUBLISHING=发布中, PUBLISHED=已发布, OFFLINE=已下架
      */
@@ -140,6 +143,7 @@ class AgentMarketEntity extends AbstractEntity
             'publisher_id' => $this->publisherId,
             'publisher_type' => $this->publisherType->value,
             'category_id' => $this->categoryId,
+            'category_ids' => $this->categoryIds,
             'publish_status' => $this->publishStatus->value,
             'install_count' => $this->installCount,
             'sort_order' => $this->sortOrder,
@@ -276,6 +280,16 @@ class AgentMarketEntity extends AbstractEntity
         return $this->categoryId;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        if ($this->categoryIds !== []) {
+            return $this->categoryIds;
+        }
+
+        return $this->categoryId === null ? [] : [$this->categoryId];
+    }
+
     public function setCategoryId(null|int|string $categoryId): self
     {
         if ($categoryId === null) {
@@ -283,6 +297,14 @@ class AgentMarketEntity extends AbstractEntity
         } else {
             $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
         }
+        return $this;
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): self
+    {
+        $this->categoryIds = $this->normalizeCategoryIds($categoryIds);
+        $this->categoryId = $this->categoryIds[0] ?? null;
         return $this;
     }
 
@@ -430,5 +452,20 @@ class AgentMarketEntity extends AbstractEntity
     public function setOrganizationCode(?string $organizationCode): void
     {
         $this->organizationCode = $organizationCode;
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    private function normalizeCategoryIds(array $categoryIds): array
+    {
+        $normalized = [];
+        foreach ($categoryIds as $categoryId) {
+            $categoryId = (int) $categoryId;
+            if ($categoryId <= 0 || in_array($categoryId, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $categoryId;
+        }
+
+        return $normalized;
     }
 }

@@ -3,6 +3,10 @@ import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
 	return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
@@ -11,7 +15,15 @@ function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimit
 function ContextMenuTrigger({
 	...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
-	return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
+	return (
+		<ContextMenuPrimitive.Trigger
+			data-slot="context-menu-trigger"
+			{...props}
+			{...overlayScopeAttributes}
+		/>
+	)
 }
 
 function ContextMenuGroup({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Group>) {
@@ -60,6 +72,8 @@ function ContextMenuSubContent({
 	className,
 	...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
+
 	return (
 		<ContextMenuPrimitive.SubContent
 			data-slot="context-menu-sub-content"
@@ -68,6 +82,7 @@ function ContextMenuSubContent({
 				className,
 			)}
 			{...props}
+			{...overlayScopeAttributes}
 		/>
 	)
 }
@@ -76,6 +91,8 @@ function ContextMenuContent({
 	className,
 	...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
+
 	return (
 		<ContextMenuPrimitive.Portal>
 			<ContextMenuPrimitive.Content
@@ -85,6 +102,7 @@ function ContextMenuContent({
 					className,
 				)}
 				{...props}
+				{...overlayScopeAttributes}
 			/>
 		</ContextMenuPrimitive.Portal>
 	)

@@ -24,6 +24,28 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 		}
 	})()
 	const styleEntries = Object.entries(parsedStyles)
+	const parsedAttributes: Record<string, string> = (() => {
+		try {
+			return JSON.parse(attrs.elementAttributes || "{}")
+		} catch {
+			return {}
+		}
+	})()
+	const parsedDomContext: {
+		parentSelector?: string
+		siblingIndex?: number
+		sameTagSiblingCount?: number
+		sameTagIndex?: number
+		previousSibling?: string
+		nextSibling?: string
+	} = (() => {
+		try {
+			return JSON.parse(attrs.domContext || "{}")
+		} catch {
+			return {}
+		}
+	})()
+	const attributeEntries = Object.entries(parsedAttributes)
 
 	const headerLabel = getInspectorDetailHeaderLabel(t)
 	const fileData =
@@ -123,6 +145,94 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 									</Fragment>
 								))}
 							</span>
+						</span>
+					)}
+
+					{/* Resource and selector validation */}
+					{(attrs.resource || attrs.selector) && (
+						<span className="block space-y-1">
+							{attrs.resource && (
+								<span className="flex gap-1.5">
+									<span className="flex-shrink-0 text-foreground/50">
+										{t("stylePanel.inspector.resource")}
+									</span>
+									<code className="min-w-0 break-all font-mono text-foreground/70">
+										{attrs.resource}
+									</code>
+								</span>
+							)}
+							{attrs.selector && attrs.selectorMatchCount >= 0 && (
+								<span className="flex gap-1.5">
+									<span className="flex-shrink-0 text-foreground/50">
+										{t("stylePanel.inspector.selectorMatchCount")}
+									</span>
+									<span>{attrs.selectorMatchCount}</span>
+								</span>
+							)}
+						</span>
+					)}
+
+					{/* Element attributes */}
+					{attributeEntries.length > 0 && (
+						<span className="block">
+							<span className="text-foreground/50">
+								{t("stylePanel.inspector.elementAttributes")}
+							</span>
+							<span className="mt-0.5 grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-px rounded bg-muted/50 px-1.5 py-1 font-mono text-[11px]">
+								{attributeEntries.map(([name, value]) => (
+									<Fragment key={name}>
+										<span className="text-foreground/50">{name}:</span>
+										<span className="min-w-0 break-all text-foreground/70">
+											{value}
+										</span>
+									</Fragment>
+								))}
+							</span>
+						</span>
+					)}
+
+					{/* DOM context */}
+					{(parsedDomContext.parentSelector ||
+						parsedDomContext.previousSibling ||
+						parsedDomContext.nextSibling) && (
+						<span className="block space-y-0.5">
+							<span className="text-foreground/50">
+								{t("stylePanel.inspector.domContext")}
+							</span>
+							{parsedDomContext.parentSelector && (
+								<span className="block break-all font-mono">
+									{parsedDomContext.parentSelector}
+								</span>
+							)}
+							<span className="block">
+								{t("stylePanel.inspector.elementPosition")}:{" "}
+								{parsedDomContext.siblingIndex ?? 0};{" "}
+								{t("stylePanel.inspector.sameTagPosition")}:{" "}
+								{parsedDomContext.sameTagIndex ?? 0} /{" "}
+								{parsedDomContext.sameTagSiblingCount ?? 0}
+							</span>
+							{parsedDomContext.previousSibling && (
+								<span className="block break-all">
+									← {parsedDomContext.previousSibling}
+								</span>
+							)}
+							{parsedDomContext.nextSibling && (
+								<span className="block break-all">
+									→ {parsedDomContext.nextSibling}
+								</span>
+							)}
+						</span>
+					)}
+
+					{/* HTML snippet */}
+					{attrs.elementHtml && (
+						<span className="block">
+							<span className="text-foreground/50">
+								{t("stylePanel.inspector.elementHtml")}
+							</span>
+							<code className="mt-0.5 block max-h-20 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 px-1.5 py-1 font-mono text-[11px] text-foreground/70">
+								{attrs.elementHtml}
+							</code>
 						</span>
 					)}
 

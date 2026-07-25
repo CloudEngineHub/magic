@@ -517,6 +517,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			onActiveFileChange={setActiveFileId}
 			onActiveTabChange={handleActiveDetailTabChange}
 			onFullscreenChange={setIsDetailPanelFullscreen}
+			isFullscreen={isDetailPanelFullscreen}
 			onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 			projectId={selectedProject?.id}
 			showFallbackWhenEmpty

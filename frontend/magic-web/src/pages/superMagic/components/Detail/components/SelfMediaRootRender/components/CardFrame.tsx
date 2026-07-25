@@ -19,10 +19,21 @@ import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
 import { stabilizeSingleLineTextForSnapdom } from "../../PPTRender/services/snapdomTextStabilizer"
 import type { SelfMediaAttachmentNode } from "../types"
 import { replaceFontAwesomeIconsWithSvg } from "../utils/fontAwesomeSvgFallback"
+import {
+	DEFAULT_SELF_MEDIA_EXPORT_FORMAT,
+	SELF_MEDIA_EXPORT_IMAGE_QUALITY,
+} from "../utils/exportImageFormat"
+import type { SelfMediaExportFormat } from "../utils/exportImageFormat"
 
 export interface CardFrameRef {
 	/** Trigger a screenshot and return the dataUrl. */
-	capture: (options?: { pixelRatio?: number; timeoutMs?: number }) => Promise<string>
+	capture: (options?: {
+		pixelRatio?: number
+		timeoutMs?: number
+		format?: SelfMediaExportFormat
+	}) => Promise<string>
+	/** Read the CSS-pixel size used by capture before the output ratio is applied. */
+	getCaptureSize?: () => { width: number; height: number } | null
 	/** Get the underlying iframe element (for fallback host-side screenshot). */
 	getIframeElement: () => HTMLIFrameElement | null
 }
@@ -359,7 +370,11 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 	}, [measureFrame])
 
 	const capture = useCallback<CardFrameRef["capture"]>(
-		async ({ pixelRatio = 2, timeoutMs = 15000 } = {}) => {
+		async ({
+			pixelRatio = 2,
+			timeoutMs = 15000,
+			format = DEFAULT_SELF_MEDIA_EXPORT_FORMAT,
+		} = {}) => {
 			const iframe = iframeRef.current
 			if (!iframe?.contentWindow) throw new Error("iframe not ready")
 			const iframeDoc = iframe.contentDocument
@@ -390,7 +405,10 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 								backgroundColor: "#ffffff",
 								embedFonts: false,
 							})
-							const blob = await result.toBlob({ type: "png" })
+							const blob = await result.toBlob({
+								type: format,
+								quality: SELF_MEDIA_EXPORT_IMAGE_QUALITY,
+							})
 							return blobToDataUrl(blob)
 						})(),
 						timeoutPromise,
@@ -411,6 +429,10 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 		ref,
 		() => ({
 			capture,
+			getCaptureSize: () => {
+				const doc = iframeRef.current?.contentDocument
+				return doc ? getCaptureDimensions(doc) : null
+			},
 			getIframeElement: () => iframeRef.current,
 		}),
 		[capture],

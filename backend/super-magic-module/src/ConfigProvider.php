@@ -25,6 +25,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\Service\FileProcessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\HandleAgentMessageAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\MessageQueueAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\MessageScheduleAppService;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRelationRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentPlaybookRepositoryInterface;
@@ -33,6 +34,7 @@ use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentVersionRepositoryInterfa
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\UserAgentRepositoryInterface;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\AgentCategoryRelationRepository;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\AgentCategoryRepository;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\AgentMarketRepository;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\AgentPlaybookRepository;
@@ -233,6 +235,7 @@ class ConfigProvider
                 AgentMarketRepositoryInterface::class => AgentMarketRepository::class,
                 AgentVersionRepositoryInterface::class => AgentVersionRepository::class,
                 AgentCategoryRepositoryInterface::class => AgentCategoryRepository::class,
+                AgentCategoryRelationRepositoryInterface::class => AgentCategoryRelationRepository::class,
                 AgentSkillRepositoryInterface::class => AgentSkillRepository::class,
                 UserAgentRepositoryInterface::class => UserAgentRepository::class,
 

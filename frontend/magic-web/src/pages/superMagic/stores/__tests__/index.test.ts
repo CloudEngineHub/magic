@@ -143,15 +143,16 @@ describe("SuperMagicStore streaming", () => {
 
 	it("chunk 终态 stop 后冻结，后到 chunk 不可脏写", () => {
 		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
 		store.setTest("topic-1")
 
-		store.handleSuperMagicChunkMessage(
+		store.receiveChunk(
 			createChunkMessage({
 				correlationId: "corr-2",
 				content: "hel",
 			}),
 		)
-		store.handleSuperMagicChunkMessage(
+		store.receiveChunk(
 			createChunkMessage({
 				correlationId: "corr-2",
 				content: "lo",
@@ -160,11 +161,11 @@ describe("SuperMagicStore streaming", () => {
 		)
 		vi.runAllTimers()
 
-		const streamEntry = store.getTopicMetadata("topic-1").content["corr-2"]
-		expect(streamEntry.status).toBe(4)
-		expect(streamEntry.content).toBe("hello")
+		const topicMeta = (store as any).getTopicMetadata("topic-1")
+		expect(topicMeta.finalizedCorrelationIds.has("corr-2")).toBe(true)
+		expect((store.getMessageNode("corr-2") as any)?.content).toBe("hello")
 
-		store.handleSuperMagicChunkMessage(
+		store.receiveChunk(
 			createChunkMessage({
 				correlationId: "corr-2",
 				content: "!!!",
@@ -172,8 +173,104 @@ describe("SuperMagicStore streaming", () => {
 		)
 		vi.runAllTimers()
 
-		const nextEntry = store.getTopicMetadata("topic-1").content["corr-2"]
-		expect(nextEntry.content).toBe("hello")
+		expect((store.getMessageNode("corr-2") as any)?.content).toBe("hello")
+	})
+
+	it("空 chunk 不创建无法结算的幽灵 StreamState", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
+
+		store.receiveChunk({
+			type: "super_magic_chunk",
+			topic_id: "topic-1",
+			super_magic_chunk: {
+				correlation_id: "corr-heartbeat",
+				choices: [{ finish_reason: null }],
+			},
+		} as any)
+
+		expect(store.getStreamState("topic-1", "corr-heartbeat")).toBeUndefined()
+		expect((store as any).getTopicMetadata("topic-1").content.size).toBe(0)
+	})
+
+	it("只有 final 标记但没有前置 StreamState 时立即请求 HTTP 恢复", () => {
+		const store = new SuperMagicStore()
+		const recoveryRequested = vi.fn()
+		store.registerOnStreamRecoveryRequested(recoveryRequested)
+		store.setActiveTopicId("topic-1")
+
+		store.receiveChunk({
+			type: "super_magic_chunk",
+			topic_id: "topic-1",
+			super_magic_chunk: {
+				correlation_id: "corr-final-only",
+				choices: [{ finish_reason: "stop" }],
+			},
+		} as any)
+
+		expect(store.getStreamState("topic-1", "corr-final-only")).toBeUndefined()
+		expect(recoveryRequested).toHaveBeenCalledWith({
+			topicId: "topic-1",
+			correlationId: "corr-final-only",
+		})
+	})
+
+	it("同一个 chunk 中的多个 tool call 都进入 canonical StreamState", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
+		store.setTest("topic-1")
+
+		store.receiveChunk({
+			type: "super_magic_chunk",
+			topic_id: "topic-1",
+			super_magic_chunk: {
+				correlation_id: "corr-multi-tools",
+				choices: [
+					{
+						finish_reason: null,
+						delta: {
+							content: "",
+							reasoning_content: "",
+							tool_calls: [
+								{
+									index: 0,
+									id: "tool-a",
+									type: "function",
+									function: { name: "search", arguments: '{"q":"a"}' },
+								},
+								{
+									index: 1,
+									id: "tool-b",
+									type: "function",
+									function: { name: "read_file", arguments: '{"path":"b"}' },
+								},
+							],
+						},
+					},
+				],
+			},
+		} as any)
+
+		const streamState = store.getStreamState("topic-1", "corr-multi-tools")
+		expect(streamState?.tool_calls.map((tool) => tool.id)).toEqual(["tool-a", "tool-b"])
+	})
+
+	it("流式追平后长期未收到 final 时发出一次 HTTP 恢复请求", () => {
+		const store = new SuperMagicStore()
+		const recoveryRequested = vi.fn()
+		const unsubscribe = (store as any).registerOnStreamRecoveryRequested?.(recoveryRequested)
+		store.setActiveTopicId("topic-1")
+		store.setTest("topic-1")
+
+		store.receiveChunk(createChunkMessage({ correlationId: "corr-stalled", content: "a" }))
+		vi.advanceTimersByTime(5_100)
+
+		expect(unsubscribe).toBeTypeOf("function")
+		expect(recoveryRequested).toHaveBeenCalledTimes(1)
+		expect(recoveryRequested).toHaveBeenCalledWith({
+			topicId: "topic-1",
+			correlationId: "corr-stalled",
+		})
 	})
 
 	it("真消息到达后，非流式元信息（status/task_id/event/attachments）同步到 mock 节点与卡片", () => {
@@ -297,7 +394,7 @@ describe("SuperMagicStore streaming", () => {
 		expect((store.getMessageNode("corr-3") as any)?.content).toBe("你好呀")
 	})
 
-	it("tool 完成态等待所属工具动画结束，但不被下一条流式消息阻塞", () => {
+	it("tool 完成态不被所属 assistant 或下一条流式消息阻塞", () => {
 		const store = new SuperMagicStore()
 		store.setActiveTopicId("topic-1")
 		store.setTest("topic-1")
@@ -353,6 +450,44 @@ describe("SuperMagicStore streaming", () => {
 		expect(store.getStreamState("topic-1", "corr-next")).toBeTruthy()
 	})
 
+	it("tool response 到达后立即写入 canonical map，不等待 assistant 动画", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
+		store.setTest("topic-1")
+
+		store.enqueueMessage(
+			"topic-1",
+			createAssistantEnvelope({
+				appMessageId: "assistant-immediate-tool",
+				correlationId: "corr-immediate-tool",
+				content: "处理中",
+				nodeOverrides: {
+					tool_calls: [
+						{
+							id: "tool-immediate",
+							type: "function",
+							index: 0,
+							function: {
+								name: "read_file",
+								arguments: JSON.stringify({ path: "a".repeat(500) }),
+							},
+						},
+					],
+				},
+			}),
+		)
+		store.enqueueMessage(
+			"topic-1",
+			createToolEnvelope({
+				appMessageId: "tool-immediate-message",
+				correlationId: "corr-immediate-tool",
+				toolCallId: "tool-immediate",
+			}),
+		)
+
+		expect(store.toolResponseMap.get("topic-1")?.get("tool-immediate")?.status).toBe("finished")
+	})
+
 	it("非活跃话题不启动定时器，final 到达后 buffer 正常排空且保存快照", () => {
 		const store = new SuperMagicStore()
 		store.setActiveTopicId("topic-active")
@@ -377,7 +512,7 @@ describe("SuperMagicStore streaming", () => {
 		expect(topicMeta.content.size).toBe(0)
 		expect(topicMeta.streamSnapshots.size).toBe(1)
 		expect(topicMeta.streamSnapshots.get("corr-inactive")).toMatchObject({
-			content: "",
+			content: "background reply",
 			reasoning_content: "",
 		})
 	})

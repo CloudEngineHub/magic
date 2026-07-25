@@ -20,7 +20,7 @@ import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
-function WorkspaceItem({ workspace, className }: WorkspaceItemProps) {
+function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
 	const workspaceNameTestId = `sidebar-workspace-item-name-${workspaceIdSegment}`
@@ -29,9 +29,10 @@ function WorkspaceItem({ workspace, className }: WorkspaceItemProps) {
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
-	const isExpanded = sidebarStore.expandedWorkspaces.has(workspace.id)
-	const projects = projectStore.getProjectsByWorkspace(workspace.id)
-	const isLoading = projectStore.isLoadingWorkspace(workspace.id)
+	const isExpanded =
+		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
+	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
+	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
 
 	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
@@ -76,10 +77,14 @@ function WorkspaceItem({ workspace, className }: WorkspaceItemProps) {
 	 * Load projects for workspace when workspace is expanded and projects are not loaded
 	 */
 	useEffect(() => {
-		if (isExpanded && !projectStore.hasLoadedWorkspace(workspace.id)) {
+		if (
+			searchProjects === undefined &&
+			isExpanded &&
+			!projectStore.hasLoadedWorkspace(workspace.id)
+		) {
 			projectStore.loadProjectsForWorkspace(workspace.id)
 		}
-	}, [isExpanded, workspace.id])
+	}, [isExpanded, searchProjects, workspace.id])
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (

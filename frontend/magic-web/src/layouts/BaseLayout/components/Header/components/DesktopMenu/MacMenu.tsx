@@ -1,59 +1,22 @@
-import { createStyles } from "antd-style"
 import { magic } from "@/enhance/magicElectron"
 import { useEffect, useState } from "react"
 import { IconMinus } from "@tabler/icons-react"
 import { IconClose, IconToggle } from "@/enhance/tabler/icons-react"
+import { cn } from "@/lib/utils"
 import { useDesktopVersionCheck } from "./useDesktopVersionCheck"
 
-export const useStyles = createStyles(({ css }) => {
-	return {
-		menu: css`
-			width: 60px;
-			height: 12px;
-			display: flex;
-			align-items: center;
-			justify-content: flex-start;
-			gap: 8px;
+const menuIconClassName =
+	"inline-flex size-3 cursor-pointer items-center justify-center rounded-full"
 
-			svg {
-				opacity: 0;
-			}
-
-			&:hover {
-				& svg {
-					opacity: 1;
-				}
-			}
-		`,
-		menuIcon: css`
-			width: 12px;
-			height: 12px;
-			border-radius: 50%;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-		`,
-		closeButton: css`
-			background-color: #ff5f57;
-		`,
-		minButton: css`
-			background-color: #febc2e;
-		`,
-		maxButton: css`
-			background-color: #28c840;
-		`,
-		inactive: css`
-			background-color: rgba(33, 33, 33, 0.1);
-		`,
-	}
-})
+// Match native macOS titlebar controls by revealing the traffic-light glyphs only on hover.
+const menuClassName =
+	"flex h-3 w-[60px] items-center justify-start gap-2 [&_svg]:opacity-0 hover:[&_svg]:opacity-100"
 
 interface MacMenuProps {
 	className?: string
 }
 
 export function MacMenu(props?: MacMenuProps) {
-	const { styles, cx } = useStyles()
 	const { isHighVersion } = useDesktopVersionCheck()
 
 	const [isActive, setActive] = useState(true)
@@ -79,27 +42,24 @@ export function MacMenu(props?: MacMenuProps) {
 	}
 
 	return (
-		<div className={cx(styles.menu, props?.className)}>
+		<div className={cn(menuClassName, props?.className)} data-testid="mac-menu">
 			<span
-				className={cx(styles.menuIcon, styles.closeButton, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(menuIconClassName, isActive ? "bg-[#ff5f57]" : "bg-foreground/10")}
+				data-testid="mac-menu-close-button"
 				onClick={() => magic?.view?.close?.()}
 			>
 				<IconClose size={8} />
 			</span>
 			<span
-				className={cx(styles.menuIcon, styles.minButton, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(menuIconClassName, isActive ? "bg-[#febc2e]" : "bg-foreground/10")}
+				data-testid="mac-menu-minimize-button"
 				onClick={() => magic?.view?.minimize?.()}
 			>
 				<IconMinus size={8} />
 			</span>
 			<span
-				className={cx(styles.menuIcon, styles.maxButton, {
-					[styles.inactive]: !isActive,
-				})}
+				className={cn(menuIconClassName, isActive ? "bg-[#28c840]" : "bg-foreground/10")}
+				data-testid="mac-menu-maximize-button"
 				onClick={() => magic?.view?.maximize?.()}
 			>
 				<IconToggle size={6} />

@@ -60,7 +60,6 @@ class AgentLoadFailedError(RuntimeError):
 
 class AgentDispatcher(Base):
     SERVICE_TYPE = "dispatcher"
-    TRACE_EXCLUDE_METHODS = {"get_instance"}
     """
     Agent调度器，负责Agent的创建、初始化和运行
 

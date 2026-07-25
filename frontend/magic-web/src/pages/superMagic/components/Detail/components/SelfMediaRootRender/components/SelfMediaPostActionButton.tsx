@@ -1,3 +1,4 @@
+import type { MouseEventHandler } from "react"
 import type { LucideIcon } from "lucide-react"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/lib/utils"
@@ -6,7 +7,7 @@ interface SelfMediaPostActionButtonProps {
 	label: string
 	Icon: LucideIcon
 	showLabel: boolean
-	onClick: () => void
+	onClick: MouseEventHandler<HTMLButtonElement>
 	dataTestId: string
 	variant?: "default" | "primary"
 }

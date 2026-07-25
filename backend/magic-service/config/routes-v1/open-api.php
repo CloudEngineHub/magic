@@ -5,9 +5,11 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Interfaces\Chat\Facade\Open\MagicChatOpenApi;
+use App\Interfaces\Contact\Facade\Open\MagicUserOpenApi;
 use App\Interfaces\Flow\Facade\Open\MagicFlowOpenApi;
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
 use App\Interfaces\ModelGateway\Facade\Open\DataQueryApi;
+use App\Interfaces\ModelGateway\Facade\Open\SlidesTemplateApi;
 use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v1/open-api', function () {
@@ -25,6 +27,20 @@ Router::addGroup('/api/v1/open-api', function () {
 
 Router::addGroup('/api/v1/open-api', function () {
     Router::post('/im/messages/queries', [MagicChatOpenApi::class, 'messageQueries']);
+}, ['middleware' => [ApiKeyMiddleware::class]]);
+
+// Slides template APIs
+Router::addGroup('/api/v1/open-api', function () {
+    Router::get('/slides-templates/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
+}, ['middleware' => [ApiKeyMiddleware::class]]);
+// Slides template APIs（Deprecated)
+Router::addGroup('/api/v1/slides-templates', static function () {
+    Router::get('/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
+}, ['middleware' => [ApiKeyMiddleware::class]]);
+
+// Contact user lookup APIs
+Router::addGroup('/api/v1/open-api', function () {
+    Router::get('/contact/users/search', [MagicUserOpenApi::class, 'search']);
 }, ['middleware' => [ApiKeyMiddleware::class]]);
 
 // Data query APIs

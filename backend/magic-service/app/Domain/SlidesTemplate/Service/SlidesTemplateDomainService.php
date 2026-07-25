@@ -54,7 +54,7 @@ class SlidesTemplateDomainService
     }
 
     /**
-     * @return array{total: int, total_usage_count: int}
+     * @return array{total: int, total_usage_count: int, template_count_today_growth: int}
      */
     public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array
     {

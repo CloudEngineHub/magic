@@ -31,7 +31,7 @@ import type {
 	IdentifyImageMarkResponse,
 	ReferenceImageOptions,
 	RemoveBackgroundRequest,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { PlaybookItem } from "./crew"
 import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
@@ -511,6 +511,26 @@ export interface CompleteImagePromptRequest {
 export interface CompleteImagePromptResponse {
 	/** 最终可直接写入输入框的提示词 */
 	prompt: string
+}
+
+/**
+ * AI 优化文本内容请求参数
+ */
+export interface CompleteTextContentRequest {
+	/** 项目 id */
+	project_id?: string
+	/** 当前场景拼装后的用户提示词 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+}
+
+/**
+ * AI 优化文本内容响应
+ */
+export interface CompleteTextContentResponse {
+	/** 最终可直接写入文本元素的内容 */
+	text: string
 }
 
 /**
@@ -1238,17 +1258,19 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page_size,
 		workspace_type,
 		auto_create,
+		workspace_name,
 	}: {
 		page: number
 		page_size: number
 		workspace_type?: string
 		auto_create?: boolean
+		workspace_name?: string
 	}) {
 		return fetch.get(
 			genRequestUrl(
 				"/api/v1/super-agent/workspaces/queries",
 				{},
-				{ page, page_size, workspace_type, auto_create },
+				{ page, page_size, workspace_type, auto_create, workspace_name },
 			),
 			{
 				enableRequestUnion: true,
@@ -2768,6 +2790,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	completeImagePrompt(params: CompleteImagePromptRequest) {
 		return fetch.post<CompleteImagePromptResponse>(
 			"/api/v1/design/image-prompt/complete",
+			params,
+		)
+	},
+
+	/**
+	 * @description AI 优化文本内容
+	 * @param params 文本内容优化请求参数
+	 * @returns 文本内容优化响应数据
+	 */
+	completeTextContent(params: CompleteTextContentRequest) {
+		return fetch.post<CompleteTextContentResponse>(
+			"/api/v1/design/text-content/complete",
 			params,
 		)
 	},

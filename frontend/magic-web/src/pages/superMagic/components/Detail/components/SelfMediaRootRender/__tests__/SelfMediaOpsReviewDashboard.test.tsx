@@ -25,7 +25,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 			mockHtmlRendererProps(props)
 			return React.createElement("div", {
 				"data-testid": "self-media-ops-review-html-renderer",
-				"data-relative-file-path": props.relative_file_path,
+				"data-relative-file-path": props.htmlRelativeFolderPath,
 			})
 		}),
 	}
@@ -112,6 +112,49 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("SelfMediaOpsReviewDashboard", () => {
+	it("shows sync and edit actions when editing is allowed", async () => {
+		const onSyncData = vi.fn()
+		const onEditData = vi.fn()
+		const target = buildTarget()
+
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={target}
+				allowEdit
+				onClose={vi.fn()}
+				onSyncData={onSyncData}
+				onEditData={onEditData}
+				onLoadData={async () => buildOpsReviewData()}
+			/>,
+		)
+
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-sync"))
+		fireEvent.click(screen.getByTestId("self-media-ops-review-edit"))
+
+		await waitFor(() => expect(onSyncData).toHaveBeenCalledWith(target))
+		expect(onEditData).toHaveBeenCalledWith(target)
+	})
+
+	it("hides sync and edit actions in read-only mode", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				allowEdit={false}
+				onClose={vi.fn()}
+				onSyncData={vi.fn()}
+				onEditData={vi.fn()}
+				onLoadData={async () => buildOpsReviewData()}
+			/>,
+		)
+
+		await screen.findByTestId("self-media-ops-review-dashboard")
+
+		expect(screen.queryByTestId("self-media-ops-review-sync")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-ops-review-edit")).not.toBeInTheDocument()
+	})
+
 	it("renders a single-post case review dashboard with warm workspace styling", async () => {
 		render(
 			<SelfMediaOpsReviewDashboard
@@ -236,13 +279,13 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		expect(reportSection).toHaveClass("shadow-xs")
 
 		const renderer = await screen.findByTestId("self-media-ops-review-html-renderer")
-		expect(renderer).toHaveAttribute("data-relative-file-path", "posts/post-1/ops/review.html")
+		expect(renderer).toHaveAttribute("data-relative-file-path", "posts/post-1/ops/")
 		expect(screen.queryByTestId("self-media-ops-review-html-frame")).not.toBeInTheDocument()
 		expect(mockHtmlRendererProps).toHaveBeenCalledWith(
 			expect.objectContaining({
 				content:
 					"<html><body><button data-action='send-next-step'>发送下一步</button></body></html>",
-				relative_file_path: "posts/post-1/ops/review.html",
+				htmlRelativeFolderPath: "posts/post-1/ops/",
 				disableDynamicResourceInterception: true,
 				containIframeOverscroll: true,
 			}),

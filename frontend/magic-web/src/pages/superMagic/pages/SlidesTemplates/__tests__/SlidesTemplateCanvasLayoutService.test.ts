@@ -58,18 +58,45 @@ function getGridBounds(items: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>
 }
 
 describe("SlidesTemplateCanvasLayoutService", () => {
-	it("fills every cell of the finite loop unit with mixed card spans", () => {
+	it("fills the loop unit while keeping one source item per real template", () => {
 		const service = new SlidesTemplateCanvasLayoutService()
 		const { canvasItems, loopMetrics } = service.synchronize(
 			Array.from({ length: 55 }, (_, index) => createTemplate(index + 1, index % 5 === 0)),
 		)
+		const sourceItems = getSourceItems(canvasItems)
 		const occupiedCells = getOccupiedCells(canvasItems)
 
-		for (let y = 0; y < loopMetrics.rowStride; y += 1) {
-			for (let x = 0; x < loopMetrics.columnStride; x += 1) {
-				expect(occupiedCells.has(`${x}:${y}`)).toBe(true)
-			}
-		}
+		expect(sourceItems).toHaveLength(55)
+		expect(new Set(sourceItems.map(({ item }) => item.template.value)).size).toBe(55)
+		expect(occupiedCells.size).toBe(loopMetrics.columnStride * loopMetrics.rowStride)
+		expect(loopMetrics.width).toBeGreaterThan(0)
+		expect(loopMetrics.height).toBeGreaterThan(0)
+	})
+
+	it("does not show duplicate templates in the centered initial viewport", () => {
+		const service = new SlidesTemplateCanvasLayoutService()
+		const snapshot = service.synchronize(
+			Array.from({ length: 200 }, (_, index) => createTemplate(index + 1, index % 11 === 0)),
+		)
+		const viewportWidth = 1_728
+		const viewportHeight = 1_084
+		const centerX = (snapshot.contentBounds.minX + snapshot.contentBounds.maxX) / 2
+		const centerY = (snapshot.contentBounds.minY + snapshot.contentBounds.maxY) / 2
+		const visibleItems = getLoopedVisibleSlidesTemplateCanvasItems({
+			itemQuery: snapshot.loopItemQuery,
+			items: snapshot.canvasItems,
+			loopMetrics: snapshot.loopMetrics,
+			offset: {
+				x: viewportWidth / 2 - centerX,
+				y: viewportHeight / 2 - centerY,
+			},
+			viewportHeight,
+			viewportWidth,
+		})
+		const visibleTemplateValues = visibleItems.map(({ item }) => item.template.value)
+
+		expect(visibleItems.length).toBeGreaterThan(0)
+		expect(new Set(visibleTemplateValues).size).toBe(visibleTemplateValues.length)
 	})
 
 	it("spreads a small finite result set across six columns without filler or loop copies", () => {
@@ -152,18 +179,20 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 			expect(item?.grid).toEqual(location.grid)
 			expect(item?.position).toEqual(location.position)
 		})
-		expect(appendedSnapshot.canvasItems[0]).toBe(initialSnapshot.canvasItems[0])
+		expect(getSourceItems(appendedSnapshot.canvasItems)[0]).toBe(
+			getSourceItems(initialSnapshot.canvasItems)[0],
+		)
 		expect(appendedSnapshot.loopItemQuery).toBe(initialSnapshot.loopItemQuery)
 	})
 
-	it("keeps a rectangular grid when another page is loaded", () => {
+	it("uses real appended templates to fill existing gaps before extending the grid", () => {
 		const service = new SlidesTemplateCanvasLayoutService()
 		const firstPage = Array.from({ length: 40 }, (_, index) =>
 			createTemplate(index + 1, index % 6 === 0),
 		)
 		const initialSnapshot = service.synchronize(firstPage)
 		const initialSourceItems = getSourceItems(initialSnapshot.canvasItems)
-		const initialBounds = getGridBounds(initialSnapshot.canvasItems)
+		const initialBounds = getGridBounds(initialSourceItems)
 		const initialLocations = new Map(
 			initialSourceItems.map((item) => [item.item.id, item.grid]),
 		)
@@ -181,12 +210,13 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 			).toEqual(grid)
 		})
 		expect(appendedSourceItems).toHaveLength(40)
-		appendedSourceItems.forEach((item) => {
-			expect(item.grid.y).toBeGreaterThanOrEqual(initialBounds.maxRow)
-		})
-		expect(getOccupiedCells(appendedSnapshot.canvasItems).size).toBe(
-			appendedSnapshot.loopMetrics.columnStride * appendedSnapshot.loopMetrics.rowStride,
-		)
+		expect(appendedSourceItems.some((item) => item.grid.y < initialBounds.maxRow)).toBe(true)
+		expect(getSourceItems(appendedSnapshot.canvasItems)).toHaveLength(80)
+		expect(
+			new Set(
+				getSourceItems(appendedSnapshot.canvasItems).map(({ item }) => item.template.value),
+			).size,
+		).toBe(80)
 	})
 
 	it("switches back to the full loop grid once the result set reaches the loop threshold", () => {
@@ -203,18 +233,18 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 		expect(Math.max(...loopSnapshot.canvasItems.map(({ grid }) => grid.x))).toBeGreaterThan(2)
 	})
 
-	it("fills a loop unit when every template is featured", () => {
+	it("fills the loop unit when every template is featured", () => {
 		const service = new SlidesTemplateCanvasLayoutService()
 		const { canvasItems, loopMetrics } = service.synchronize(
 			Array.from({ length: 37 }, (_, index) => createTemplate(index + 1, true)),
 		)
+		const sourceItems = getSourceItems(canvasItems)
 		const occupiedCells = getOccupiedCells(canvasItems)
 
-		for (let y = 0; y < loopMetrics.rowStride; y += 1) {
-			for (let x = 0; x < loopMetrics.columnStride; x += 1) {
-				expect(occupiedCells.has(`${x}:${y}`)).toBe(true)
-			}
-		}
+		expect(sourceItems).toHaveLength(37)
+		expect(new Set(sourceItems.map(({ item }) => item.template.value)).size).toBe(37)
+		expect(occupiedCells.size).toBe(loopMetrics.columnStride * loopMetrics.rowStride)
+		expect(loopMetrics.width).toBeGreaterThan(0)
 	})
 
 	it("keeps featured cards at the configured two-by-two size", () => {

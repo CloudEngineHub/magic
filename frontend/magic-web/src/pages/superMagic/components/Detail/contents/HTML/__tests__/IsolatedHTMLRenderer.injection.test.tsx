@@ -5,6 +5,8 @@ import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
+	isManualZoom: false,
+	shouldApplyScaling: false,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -88,6 +90,7 @@ vi.mock("antd-style", () => ({
 		styles: {
 			rendererContainer: "renderer-container",
 			hiddenScrollbar: "hidden-scrollbar",
+			pptManualZoomScrollbar: "ppt-manual-zoom-scrollbar",
 			iframe: "iframe",
 			shadowHost: "shadow-host",
 			loadingContainer: "loading-container",
@@ -154,9 +157,9 @@ vi.mock("../hooks/useHTMLEditorV2", () => ({
 vi.mock("../hooks/useZoomControls", () => ({
 	useZoomControls: () => ({
 		scaleRatio: 1,
-		shouldApplyScaling: false,
+		shouldApplyScaling: hookState.shouldApplyScaling,
 		isScaleReady: true,
-		isManualZoom: false,
+		isManualZoom: hookState.isManualZoom,
 		handleScaleChange: vi.fn(),
 		handleResetZoom: vi.fn(),
 		getContentWrapperStyle: () => ({}),
@@ -391,12 +394,35 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		hookState.editorContentInjectedValues = []
+		hookState.isManualZoom = false
+		hookState.shouldApplyScaling = false
 	})
 
 	afterEach(() => {
-		vi.runOnlyPendingTimers()
+		act(() => {
+			vi.runOnlyPendingTimers()
+		})
 		vi.useRealTimers()
 		vi.restoreAllMocks()
+	})
+
+	it("shows the scrollbar style only while a PPT is manually zoomed", async () => {
+		hookState.isManualZoom = true
+		hookState.shouldApplyScaling = true
+
+		const { container, rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} isPptRender manualScale={1.2} />,
+		)
+
+		const getScrollableContent = () => container.querySelector(".ppt-manual-zoom-scrollbar")
+
+		await flushReactEffects()
+		expect(getScrollableContent()).toBeInTheDocument()
+
+		rerender(<IsolatedHTMLRenderer {...defaultProps} manualScale={1.2} />)
+
+		await flushReactEffects()
+		expect(getScrollableContent()).not.toBeInTheDocument()
 	})
 
 	it("does not inject content into a sibling iframe from another iframeReady message", async () => {

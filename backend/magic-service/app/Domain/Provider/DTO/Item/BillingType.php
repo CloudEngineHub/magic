@@ -9,13 +9,21 @@ namespace App\Domain\Provider\DTO\Item;
 
 enum BillingType: string
 {
+    // ---------------- 通用计费类型 ----------------
     case Tokens = 'Tokens'; // token 计价
     case Times = 'Times'; // 次数计价
     case Per_Second = 'Per_Second'; // 按秒计价
+
+    // ---------------- 文本模型计费类型 ----------------
     case TextTokens = 'TextTokens'; // 文本模型 token 计费
+
+    // ---------------- 生图模型计费类型 ----------------
     case ImageCount = 'ImageCount'; // 图片按张计费
     case ImageTokens = 'ImageTokens'; // 图片 token 计费
     case ImageTokensWithThought = 'ImageTokensWithThought'; // 图片 token 计费：含思考过程
+    case Seedream5ProImage = 'Seedream5ProImage'; // VolcengineArk Seedream 5 Pro 图片计费
+
+    // ---------------- 视频模型计费类型 ----------------
     case VideoResolutionDuration = 'VideoResolutionDuration'; // 视频按时长计费：分辨率
     case VideoResolutionAudioDuration = 'VideoResolutionAudioDuration'; // 视频按时长计费：分辨率 + 音频
     case VideoResolutionReferenceVideoDuration = 'VideoResolutionReferenceVideoDuration'; // 视频按时长计费：分辨率 + 参考视频

@@ -100,14 +100,24 @@ class CheckpointStorage:
         checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
         return checkpoint_dir / "latest_chat_history_snapshots"
 
-    def get_initial_content_file_path(self, checkpoint_id: str, path_hash: str) -> Path:
-        """获取文件快照的初始化内容文件路径"""
+    def get_initial_content_file_path(self, checkpoint_id: str, file_id: str) -> Path:
+        """获取文件快照的初始化内容文件路径
+
+        Args:
+            checkpoint_id: checkpoint ID
+            file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
+        """
         file_snapshots_dir = self.get_file_snapshots_dir(checkpoint_id)
-        snapshot_dir = file_snapshots_dir / path_hash
+        snapshot_dir = file_snapshots_dir / file_id
         return snapshot_dir / "initial_content"
 
-    def get_latest_content_file_path(self, checkpoint_id: str, path_hash: str) -> Path:
-        """获取文件快照的最新内容文件路径"""
+    def get_latest_content_file_path(self, checkpoint_id: str, file_id: str) -> Path:
+        """获取文件快照的最新内容文件路径
+
+        Args:
+            checkpoint_id: checkpoint ID
+            file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
+        """
         file_snapshots_dir = self.get_file_snapshots_dir(checkpoint_id)
-        snapshot_dir = file_snapshots_dir / path_hash
+        snapshot_dir = file_snapshots_dir / file_id
         return snapshot_dir / "latest_content"

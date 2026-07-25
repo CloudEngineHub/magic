@@ -1,5 +1,5 @@
 import { ImageIcon, MousePointerClick, X } from "lucide-react"
-import { useEffect, useRef, useState, type DragEvent } from "react"
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicDropdown from "@/components/base/MagicDropdown"
@@ -15,6 +15,7 @@ import { useLocaleText } from "../../panels/hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "../../panels/types"
 import { isComplexField } from "../../panels/utils"
 import SlidesPresetPreviewDialog from "../../panels/slides-preset/SlidesPresetPreviewDialog"
+import { useFinePointerHover } from "../../panels/slides-preset/useFinePointerHover"
 import AIAutoSelectVisual from "./AIAutoSelectVisual"
 
 interface SlidesTemplateHomeSelectionPreviewProps {
@@ -24,6 +25,9 @@ interface SlidesTemplateHomeSelectionPreviewProps {
 	onTemplatePickerContainerChange?: (container: HTMLDivElement | null) => void
 	onFilterChange: (filterId: string, value: string) => void
 	template?: OptionItem | null
+	templatePickerOpen?: boolean
+	onTemplatePickerOpenChange?: (open: boolean) => void
+	showTemplateActions?: boolean
 	className?: string
 	isTemplatePreviewOpen?: boolean
 }
@@ -39,6 +43,9 @@ export default function SlidesTemplateHomeSelectionPreview({
 	onTemplatePickerContainerChange,
 	onFilterChange,
 	template,
+	templatePickerOpen,
+	onTemplatePickerOpenChange,
+	showTemplateActions = true,
 	className,
 	isTemplatePreviewOpen = false,
 }: SlidesTemplateHomeSelectionPreviewProps) {
@@ -55,12 +62,22 @@ export default function SlidesTemplateHomeSelectionPreview({
 		priority: "interactive",
 	})
 	const simpleFilters = filters.filter((filter) => !isComplexField(filter))
+	const canUseHoverActions = useFinePointerHover()
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-	const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false)
+	const [internalTemplatePickerOpen, setInternalTemplatePickerOpen] = useState(false)
 	const [isTemplatePickerReady, setIsTemplatePickerReady] = useState(true)
+	const [isTemplateActionsDismissed, setIsTemplateActionsDismissed] = useState(false)
 	const [isRandomDragActive, setIsRandomDragActive] = useState(false)
 	const [isRandomDropActive, setIsRandomDropActive] = useState(false)
 	const randomDragDepthRef = useRef(0)
+	const templateActionsRef = useRef<HTMLDivElement>(null)
+	const isTemplatePointerInsideRef = useRef(false)
+	const waitForTemplatePointerLeaveRef = useRef(false)
+	const isTemplatePickerOpen = templatePickerOpen ?? internalTemplatePickerOpen
+	const setTemplatePickerOpen = (open: boolean) => {
+		setInternalTemplatePickerOpen(open)
+		onTemplatePickerOpenChange?.(open)
+	}
 
 	useEffect(() => {
 		if (!onRandomTemplateRequest) return
@@ -84,7 +101,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 	}, [onRandomTemplateRequest])
 
 	const handleClear = () => {
-		setIsTemplatePickerOpen(false)
+		setTemplatePickerOpen(false)
 		setIsTemplatePickerReady(false)
 		onClear?.()
 		window.setTimeout(() => setIsTemplatePickerReady(true), 0)
@@ -92,7 +109,50 @@ export default function SlidesTemplateHomeSelectionPreview({
 
 	const handleTemplatePickerOpenChange = (open: boolean) => {
 		if (!open && isTemplatePreviewOpen) return
-		setIsTemplatePickerOpen(open)
+		setTemplatePickerOpen(open)
+	}
+
+	const previousTemplatePickerOpenRef = useRef(isTemplatePickerOpen)
+	useEffect(() => {
+		const wasOpen = previousTemplatePickerOpenRef.current
+		previousTemplatePickerOpenRef.current = isTemplatePickerOpen
+		if (!wasOpen || isTemplatePickerOpen) return
+
+		const isPointerInside = canUseHoverActions && isTemplatePointerInsideRef.current
+		waitForTemplatePointerLeaveRef.current = isPointerInside
+		setIsTemplateActionsDismissed(isPointerInside)
+		const activeElement = document.activeElement
+		if (
+			activeElement instanceof HTMLElement &&
+			templateActionsRef.current?.contains(activeElement)
+		) {
+			activeElement.blur()
+		}
+	}, [canUseHoverActions, isTemplatePickerOpen, template])
+
+	const renderTemplatePicker = (trigger: ReactNode) => {
+		if (!onTemplatePickerContainerChange || !isTemplatePickerReady) return trigger
+
+		return (
+			<MagicDropdown
+				trigger={["click"]}
+				open={isTemplatePickerOpen}
+				onOpenChange={handleTemplatePickerOpenChange}
+				keepOpenOnNestedOverlay
+				contentRole="panel"
+				placement="topRight"
+				getPopupContainer={() => document.body}
+				popupRender={() => (
+					<div
+						ref={onTemplatePickerContainerChange}
+						className="flex h-full min-h-0 flex-col overflow-hidden"
+					/>
+				)}
+				overlayClassName="h-[min(70vh,640px)] w-[min(90vw,760px)] min-w-[360px] overflow-hidden rounded-lg border border-border bg-popover p-3 shadow-xl"
+			>
+				{trigger}
+			</MagicDropdown>
+		)
 	}
 
 	const isRandomTemplateDrag = (event: DragEvent<HTMLDivElement>) =>
@@ -129,25 +189,90 @@ export default function SlidesTemplateHomeSelectionPreview({
 	const selectionContent = template ? (
 		<div className="flex min-w-[40%] max-w-fit flex-1 items-center gap-3 overflow-hidden">
 			<div className="relative shrink-0">
-				<button
-					type="button"
-					className="group flex aspect-video w-20 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-inset ring-black/[0.06] transition-shadow hover:ring-black/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-24"
-					aria-label={t("playbook.edit.presets.form.preview")}
-					onClick={() => setIsPreviewOpen(true)}
-					data-testid="slides-template-home-preview-selected-template"
+				<div
+					ref={templateActionsRef}
+					className="group relative flex aspect-video w-20 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-inset ring-black/[0.06] transition-shadow focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:ring-black/[0.16] sm:w-24"
+					onPointerEnter={() => {
+						if (!showTemplateActions) return
+						if (!canUseHoverActions) return
+						isTemplatePointerInsideRef.current = true
+						if (!waitForTemplatePointerLeaveRef.current) {
+							setIsTemplateActionsDismissed(false)
+						}
+					}}
+					onPointerLeave={() => {
+						if (!showTemplateActions) return
+						if (!canUseHoverActions) return
+						isTemplatePointerInsideRef.current = false
+						waitForTemplatePointerLeaveRef.current = false
+						setIsTemplateActionsDismissed(false)
+					}}
+					data-testid="slides-template-home-thumbnail"
 				>
-					{coverUrl ? (
-						<img
-							src={coverUrl}
-							alt={templateName}
-							className="size-full object-cover"
-							decoding="async"
-							draggable={false}
-						/>
+					<div className="flex size-full items-center justify-center">
+						{coverUrl ? (
+							<img
+								src={coverUrl}
+								alt={templateName}
+								className="size-full object-cover"
+								decoding="async"
+								draggable={false}
+							/>
+						) : (
+							<ImageIcon className="size-4 text-muted-foreground" />
+						)}
+					</div>
+					{showTemplateActions ? (
+						<div
+							className={cn(
+								"absolute inset-0 flex items-center justify-center gap-1 bg-black/45 transition-opacity",
+								canUseHoverActions && isTemplateActionsDismissed
+									? "pointer-events-none opacity-0"
+									: canUseHoverActions
+										? "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+										: "opacity-100",
+							)}
+							data-interaction-mode={canUseHoverActions ? "hover" : "touch"}
+							data-testid="slides-template-home-actions"
+						>
+							{renderTemplatePicker(
+								<button
+									type="button"
+									className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+									aria-label={t("playbook.edit.presets.form.replaceTemplate")}
+									onClick={
+										onTemplatePickerContainerChange
+											? undefined
+											: onClear
+												? handleClear
+												: undefined
+									}
+									disabled={!onTemplatePickerContainerChange && !onClear}
+									data-testid="slides-template-home-replace-selected-template"
+								>
+									{t("playbook.edit.presets.form.replaceTemplate")}
+								</button>,
+							)}
+							<button
+								type="button"
+								className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+								aria-label={t("playbook.edit.presets.form.preview")}
+								onClick={() => setIsPreviewOpen(true)}
+								data-testid="slides-template-home-preview-selected-template"
+							>
+								{t("playbook.edit.presets.form.preview")}
+							</button>
+						</div>
 					) : (
-						<ImageIcon className="size-4 text-muted-foreground" />
+						<button
+							type="button"
+							className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+							aria-label={t("playbook.edit.presets.form.preview")}
+							onClick={() => setIsPreviewOpen(true)}
+							data-testid="slides-template-home-preview-selected-template"
+						/>
 					)}
-				</button>
+				</div>
 				{onClear ? (
 					<Button
 						type="button"
@@ -168,12 +293,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 				) : null}
 			</div>
 
-			<button
-				type="button"
-				className="min-w-0 flex-1 rounded-lg text-left outline-none transition-colors hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-				aria-label={t("playbook.edit.presets.form.preview")}
-				onClick={() => setIsPreviewOpen(true)}
-			>
+			<div className="min-w-0 flex-1">
 				<p className="truncate text-sm font-medium text-foreground">
 					{t("playbook.edit.presets.form.selectedTemplate", { name: templateName })}
 				</p>
@@ -189,24 +309,11 @@ export default function SlidesTemplateHomeSelectionPreview({
 						))}
 					</div>
 				) : null}
-			</button>
+			</div>
 		</div>
 	) : onTemplatePickerContainerChange && isTemplatePickerReady ? (
 		<div className="flex min-w-[240px] flex-1">
-			<MagicDropdown
-				trigger={["click"]}
-				open={isTemplatePickerOpen}
-				onOpenChange={handleTemplatePickerOpenChange}
-				placement="topRight"
-				getPopupContainer={() => document.body}
-				popupRender={() => (
-					<div
-						ref={onTemplatePickerContainerChange}
-						className="flex h-full min-h-0 flex-col overflow-hidden"
-					/>
-				)}
-				overlayClassName="h-[min(70vh,640px)] w-[min(90vw,760px)] min-w-[360px] overflow-hidden rounded-lg border border-border bg-popover p-3 shadow-xl"
-			>
+			{renderTemplatePicker(
 				<button
 					type="button"
 					className="group relative flex min-h-[70px] min-w-0 flex-1 items-center overflow-hidden rounded-lg px-4 text-left outline-none transition-shadow hover:shadow-[0_4px_16px_rgba(139,92,246,0.1)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -219,8 +326,8 @@ export default function SlidesTemplateHomeSelectionPreview({
 							{t("playbook.edit.presets.form.selectOrAutoSelectTemplate")}
 						</p>
 					</div>
-				</button>
-			</MagicDropdown>
+				</button>,
+			)}
 		</div>
 	) : (
 		<div className="relative flex min-h-[70px] min-w-0 flex-1 items-center overflow-hidden px-4">

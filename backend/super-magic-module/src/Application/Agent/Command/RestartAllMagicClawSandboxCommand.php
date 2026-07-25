@@ -208,9 +208,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
 
     private function createDataIsolation(MagicClawEntity $claw): DataIsolation
     {
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($claw->getUserId());
-        $dataIsolation->setCurrentOrganizationCode($claw->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($claw->getOrganizationCode(), $claw->getUserId());
         $dataIsolation->setThirdPartyOrganizationCode($claw->getOrganizationCode());
         return $dataIsolation;
     }

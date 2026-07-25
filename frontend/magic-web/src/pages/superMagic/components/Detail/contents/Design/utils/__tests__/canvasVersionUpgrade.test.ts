@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import type { DesignData } from "../../types"
 import { upgradeCanvasToV2 } from "../canvasVersionUpgrade"
 import { writeUserElementDetails } from "../elementDetailsIo"

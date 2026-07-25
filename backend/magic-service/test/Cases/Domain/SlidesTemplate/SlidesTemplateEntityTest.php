@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Test\Cases\Domain\SlidesTemplate;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
@@ -17,13 +18,22 @@ use PHPUnit\Framework\TestCase;
  */
 class SlidesTemplateEntityTest extends TestCase
 {
-    public function testGenerateNewCodeUsesPptPrefixAndSafeUniqueSuffix(): void
+    public function testGenerateNewCodeUsesSlidePrefixAndSafeUniqueSuffix(): void
     {
         $code = SlidesTemplateEntity::generateNewCode();
 
-        $this->assertMatchesRegularExpression('/^PPT-[0-9a-f]+-[0-9]+$/', $code);
+        $this->assertMatchesRegularExpression('/^SLIDE-[0-9a-f]+-[0-9]+$/', $code);
         $this->assertLessThanOrEqual(64, strlen($code));
         $this->assertNotSame($code, SlidesTemplateEntity::generateNewCode());
+    }
+
+    public function testGenerateNewCategoryCodeUsesSlideCatePrefixAndSafeUniqueSuffix(): void
+    {
+        $code = SlidesTemplateCategoryEntity::generateNewCode();
+
+        $this->assertMatchesRegularExpression('/^SLIDE-CATE-[0-9a-f]+-[0-9]+$/', $code);
+        $this->assertLessThanOrEqual(64, strlen($code));
+        $this->assertNotSame($code, SlidesTemplateCategoryEntity::generateNewCode());
     }
 
     public function testStatusEnumIdentifiesEnabledAndDisabled(): void

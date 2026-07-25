@@ -5,9 +5,10 @@ import { useDetailActions } from "./hooks/useDetailActions"
 import useDetailHandlers from "./hooks/useDetailHandlers"
 import { TaskStatus, ProjectListItem, Topic } from "../../pages/Workspace/types"
 import useShareRoute from "../../hooks/useShareRoute"
-import { useResponsive } from "ahooks"
 import { cn } from "@/lib/utils"
 import { observer } from "mobx-react-lite"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 
 // Define the Detail component props interface
 interface DetailProps {
@@ -54,6 +55,8 @@ interface DetailProps {
 	hideTabBar?: boolean
 	/** When true, treats the file viewer as fullscreen without requiring URL params */
 	forceFullscreenMode?: boolean
+	/** 详情页全屏时允许 fixed 预览层脱离 Safari 的祖先裁剪边界 */
+	isFullscreen?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
 	/** Class name for the detail container */
@@ -108,6 +111,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
+		isFullscreen = false,
 		showFileFooter: showFileFooterProp,
 		className,
 	} = props
@@ -115,8 +119,8 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 	const filesViewerRef = useRef<FilesViewerRef>(null)
 
 	const { isShareRoute } = useShareRoute()
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
+	const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
 
 	// Use hooks to encapsulate operation logic - only keep what FilesViewer needs
 	const { handleDownload, handleViewModeChange, getFileViewMode } = useDetailActions({
@@ -175,7 +179,13 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 
 	// Return unified files mode with playback tab
 	return (
-		<div className={cn("relative flex h-full flex-col overflow-hidden rounded-lg", className)}>
+		<div
+			className={cn(
+				"relative flex h-full flex-col rounded-lg",
+				isFullscreen ? "overflow-visible" : "overflow-hidden",
+				className,
+			)}
+		>
 			<FilesViewer
 				ref={filesViewerRef}
 				attachments={attachments}
@@ -206,7 +216,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				onActiveTabChange={onActiveTabChange}
 				topicName={topicName}
 				projectId={projectId}
-				allowDownload={allowDownload}
+				allowDownload={effectiveAllowDownload}
 				showFallbackWhenEmpty={showFallbackWhenEmpty}
 				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 				nonClosableFileIds={nonClosableFileIds}

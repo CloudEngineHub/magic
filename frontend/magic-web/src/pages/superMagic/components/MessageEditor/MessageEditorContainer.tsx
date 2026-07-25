@@ -640,7 +640,7 @@ export const MessageEditorContainer = observer(
 					// Keep long-text paste automatic; the upload flow inserts the file mention immediately.
 					void (async () => {
 						await ensureProjectContextForPastedText()
-						await _addFiles([textFile], undefined, { usePastedTextTempDirectory: true })
+						await _addFiles([textFile], undefined, { useTempDirectory: true })
 					})()
 				},
 				[

@@ -2,7 +2,7 @@ import { CanvasMarkerMentionData } from "@/components/business/MentionPanel/type
 import { memo } from "react"
 import MarkerPointTooltipPreview from "./MarkerPointTooltipPreview"
 import MarkerAreaTooltipPreview from "./MarkerAreaTooltipPreview"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 
 interface MarkerTooltipPreviewProps {
 	markerData: CanvasMarkerMentionData

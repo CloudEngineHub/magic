@@ -25,6 +25,7 @@ class FileOperation(str, Enum):
     CREATED = "created"
     UPDATED = "updated"
     DELETED = "deleted"
+    RENAMED = "renamed"
 
 
 class FileType(str, Enum):
@@ -34,9 +35,21 @@ class FileType(str, Enum):
 
 
 class FileSnapshot(BaseModel):
-    """文件快照信息模型"""
+    """文件快照信息模型
 
-    file_path: str = Field(..., description="文件路径")
+    file_id 是文件的稳定 Snowflake ID，是 on-disk 快照存储的主键
+    （file_snapshots/<file_id>/）。与 file_path 不同，file_id 在
+    rename 时保持不变，因此同一逻辑文件跨 rename 的所有快照
+    共享同一个 snapshot_path 目录。
+
+    file_path 是该条目记录时刻的路径（历史观测值，非主键）。
+    对于 operation=renamed 的条目，file_path 是新路径，
+    old_file_path 是 rename 前的旧路径；其他操作 old_file_path 为 None。
+    """
+
+    file_id: str = Field(..., description="文件稳定 ID（Snowflake），快照存储主键")
+    file_path: str = Field(..., description="条目记录时刻的文件路径")
+    old_file_path: Optional[str] = Field(None, description="rename 前的旧路径（仅 operation=renamed 时有值）")
     modified_time: datetime = Field(..., description="文件修改时间")
     operation: FileOperation = Field(..., description="文件操作类型")
     file_type: FileType = Field(..., description="文件类型（文件或目录）")

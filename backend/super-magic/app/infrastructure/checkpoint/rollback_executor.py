@@ -19,7 +19,7 @@ from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.utils.async_file_utils import (
     async_copy2, async_rmtree, async_mkdir, async_unlink, async_rmdir, async_write_json,
-    get_file_id_from_xattr
+    async_rename, get_file_id_from_xattr
 )
 from app.core.exceptions import RollbackException, ErrorCode
 from app.path_manager import PathManager
@@ -140,6 +140,10 @@ class RollbackExecutor:
         """
         合并多个checkpoint的文件快照，去除重复操作
 
+        按 file_id（文件稳定身份）去重，而非 file_path。因为 rename 时
+        file_path 变化但 file_id 不变，按 file_id 去重才能正确聚合
+        同一逻辑文件跨 rename 的多次操作。
+
         Args:
             checkpoint_ids: checkpoint ID列表
             is_forward: True=正向回滚(保留最晚), False=反向回滚(保留最早)
@@ -147,7 +151,7 @@ class RollbackExecutor:
         Returns:
             List[Tuple[str, FileSnapshot]]: [(checkpoint_id, file_snapshot), ...]
         """
-        file_operations = {}  # {file_path: (checkpoint_id, file_snapshot)}
+        file_operations = {}  # {file_id: (checkpoint_id, file_snapshot)}
 
         # 根据回滚方向确定处理顺序
         processing_order = checkpoint_ids if is_forward else reversed(checkpoint_ids)
@@ -180,13 +184,13 @@ class RollbackExecutor:
             )
 
             for file_snapshot in snapshots_order:
-                file_path = file_snapshot.file_path
+                file_id = file_snapshot.file_id
 
                 # 处理顺序已通过 reversed 调整，直接覆盖即可达到预期效果：
                 # - 反向回滚：从新到旧处理，最后保留最早的操作
                 # - 正向回滚：从旧到新处理，最后保留最晚的操作
-                file_operations[file_path] = (checkpoint_id, file_snapshot)
-                logger.debug(f"{'正向' if is_forward else '反向'}回滚更新文件操作: {file_path} -> {file_snapshot.operation.value}")
+                file_operations[file_id] = (checkpoint_id, file_snapshot)
+                logger.debug(f"{'正向' if is_forward else '反向'}回滚更新文件操作: file_id={file_id}, path={file_snapshot.file_path} -> {file_snapshot.operation.value}")
 
         merged_operations = list(file_operations.values())
 
@@ -212,15 +216,15 @@ class RollbackExecutor:
         try:
             merged_operations = await self._merge_file_snapshots_for_rollback(checkpoint_ids, is_forward)
 
-            # 检查是否有重复的文件路径
-            file_paths = [file_snapshot.file_path for _, file_snapshot in merged_operations]
-            unique_file_paths = set(file_paths)
+            # 检查是否有重复的文件 ID
+            file_ids = [file_snapshot.file_id for _, file_snapshot in merged_operations]
+            unique_file_ids = set(file_ids)
 
-            if len(file_paths) != len(unique_file_paths):
-                logger.error("合并逻辑错误：存在重复的文件路径")
+            if len(file_ids) != len(unique_file_ids):
+                logger.error("合并逻辑错误：存在重复的文件 ID")
                 return False
 
-            logger.debug(f"合并逻辑验证通过，处理了{len(unique_file_paths)}个唯一文件")
+            logger.debug(f"合并逻辑验证通过，处理了{len(unique_file_ids)}个唯一文件")
             return True
 
         except Exception as e:
@@ -333,6 +337,8 @@ class RollbackExecutor:
             return "add" if is_forward else "delete"
         if file_snapshot.operation == FileOperation.DELETED:
             return "delete" if is_forward else "add"
+        if file_snapshot.operation == FileOperation.RENAMED:
+            return "update"
         return "update"
 
     def _normalize_affected_file_path(self, file_path: str) -> str:
@@ -368,11 +374,6 @@ class RollbackExecutor:
         except Exception as e:
             logger.error(f"从latest_content恢复文件失败: {e}")
             return False
-
-    def _calculate_path_hash(self, file_path: str) -> str:
-        """计算文件路径hash"""
-        import hashlib
-        return hashlib.md5(file_path.encode('utf-8')).hexdigest()
 
     def _resolve_workspace_path(self, file_path: str) -> Path:
         """将 snapshot 中记录的 file_path 解析为绝对路径。
@@ -681,6 +682,8 @@ class RollbackExecutor:
                     return await self._restore_updated_file_forward(checkpoint_id, file_snapshot)
                 elif operation == FileOperation.DELETED:
                     return await self._restore_deleted_file_forward(checkpoint_id, file_snapshot)
+                elif operation == FileOperation.RENAMED:
+                    return await self._restore_renamed_file_forward(checkpoint_id, file_snapshot)
             else:
                 # 反向回滚：撤销操作的结果
                 if operation == FileOperation.CREATED:
@@ -689,6 +692,8 @@ class RollbackExecutor:
                     return await self._restore_updated_file_backward(checkpoint_id, file_snapshot)
                 elif operation == FileOperation.DELETED:
                     return await self._restore_deleted_file_backward(checkpoint_id, file_snapshot)
+                elif operation == FileOperation.RENAMED:
+                    return await self._restore_renamed_file_backward(checkpoint_id, file_snapshot)
 
             logger.error(f"未知的文件操作类型: {operation}")
             return False
@@ -705,8 +710,7 @@ class RollbackExecutor:
             # 根据文件类型选择创建方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                path_hash = self._calculate_path_hash(file_snapshot.file_path)
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, path_hash)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
 
                 if not latest_content_path.exists():
                     logger.warning(f"CREATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -774,8 +778,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                path_hash = self._calculate_path_hash(file_snapshot.file_path)
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, path_hash)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
 
                 if not latest_content_path.exists():
                     logger.warning(f"UPDATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -811,8 +814,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                path_hash = self._calculate_path_hash(file_snapshot.file_path)
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, path_hash)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
 
                 if not initial_content_path.exists():
                     logger.error(f"UPDATED操作的initial_content不存在: {file_snapshot.file_path}")
@@ -880,8 +882,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                path_hash = self._calculate_path_hash(file_snapshot.file_path)
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, path_hash)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
 
                 if not initial_content_path.exists():
                     logger.error(f"DELETED操作的initial_content不存在: {file_snapshot.file_path}")
@@ -907,6 +908,50 @@ class RollbackExecutor:
 
         except Exception as e:
             logger.error(f"DELETED操作反向回滚失败: {e}")
+            return False
+
+    async def _restore_renamed_file_forward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
+        """RENAMED操作的正向回滚：将文件从 old_path 重命名到 new_path（应用 rename 操作）
+
+        rename 不改内容，无需读取 initial_content / latest_content 快照。
+        """
+        try:
+            source_path = self._resolve_workspace_path(file_snapshot.old_file_path)
+            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+
+            if not source_path.exists():
+                logger.info(f"RENAMED操作正向回滚，源路径已不存在，跳过: {file_snapshot.old_file_path}")
+                return True
+
+            await async_mkdir(target_path.parent, parents=True, exist_ok=True)
+            await async_rename(source_path, target_path)
+            logger.info(f"RENAMED操作正向回滚成功，重命名: {file_snapshot.old_file_path} -> {file_snapshot.file_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"RENAMED操作正向回滚失败: {e}")
+            return False
+
+    async def _restore_renamed_file_backward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
+        """RENAMED操作的反向回滚：将文件从 new_path 重命名回 old_path（撤销 rename 操作）
+
+        rename 不改内容，无需读取 initial_content / latest_content 快照。
+        """
+        try:
+            source_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_workspace_path(file_snapshot.old_file_path)
+
+            if not source_path.exists():
+                logger.info(f"RENAMED操作反向回滚，源路径已不存在，跳过: {file_snapshot.file_path}")
+                return True
+
+            await async_mkdir(target_path.parent, parents=True, exist_ok=True)
+            await async_rename(source_path, target_path)
+            logger.info(f"RENAMED操作反向回滚成功，重命名: {file_snapshot.file_path} -> {file_snapshot.old_file_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"RENAMED操作反向回滚失败: {e}")
             return False
 
     async def get_files_for_version_creation(self, current_checkpoint_id: Optional[str], target_checkpoint_id: str) -> List[str]:
@@ -952,10 +997,12 @@ class RollbackExecutor:
                 should_create_version = False
 
                 if direction == "forward":
-                    # 正向回滚：DELETE 操作的文件不需要版本（会被删除）
+                    # 正向回滚：DELETE 操作的文件不需要版本（会被删除），
+                    # CREATED/UPDATED/RENAMED 都需要版本。
                     should_create_version = file_snapshot.operation != FileOperation.DELETED
                 elif direction == "backward":
-                    # 反向回滚：CREATE 操作的文件不需要版本（会被删除）
+                    # 反向回滚：CREATE 操作的文件不需要版本（会被删除），
+                    # UPDATED/DELETED/RENAMED 都需要版本。
                     should_create_version = file_snapshot.operation != FileOperation.CREATED
 
                 if should_create_version:

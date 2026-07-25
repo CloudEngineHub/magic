@@ -120,6 +120,46 @@ export const generatePlatformPackageApi = (client: HttpClient) => {
 			return client.put<null>(genRequestUrl(RequestUrl.updateAgentMarketInfo, { id }), data)
 		},
 
+		updateAgentMarketCategoryRelation(id: string, categoryIds: string[]) {
+			return client.put<null>(
+				genRequestUrl(RequestUrl.updateAgentMarketCategoryRelation, { id }),
+				{
+					category_ids: categoryIds,
+				},
+			)
+		},
+
+		getAgentMarketCategoryList(data: PlatformPackage.GetAgentMarketCategoryListParams) {
+			return client.post<PlatformPackage.AgentMarketCategoryListResponse>(
+				RequestUrl.getAgentMarketCategoryList,
+				data,
+			)
+		},
+
+		getAgentMarketCategoryDetail(id: string) {
+			return client.get<PlatformPackage.AgentMarketCategoryItem>(
+				genRequestUrl(RequestUrl.getAgentMarketCategoryDetail, { id }),
+			)
+		},
+
+		createAgentMarketCategory(data: PlatformPackage.SaveAgentMarketCategoryParams) {
+			return client.post<PlatformPackage.AgentMarketCategoryItem>(
+				RequestUrl.createAgentMarketCategory,
+				data,
+			)
+		},
+
+		updateAgentMarketCategory(id: string, data: PlatformPackage.SaveAgentMarketCategoryParams) {
+			return client.put<PlatformPackage.AgentMarketCategoryItem>(
+				genRequestUrl(RequestUrl.updateAgentMarketCategory, { id }),
+				data,
+			)
+		},
+
+		deleteAgentMarketCategory(id: string) {
+			return client.delete<null>(genRequestUrl(RequestUrl.deleteAgentMarketCategory, { id }))
+		},
+
 		reviewSkillVersion(id: string, data: PlatformPackage.ReviewSkillVersionParams) {
 			return client.put<null>(genRequestUrl(RequestUrl.reviewSkillVersion, { id }), data)
 		},

@@ -115,7 +115,7 @@ function EmployeeCardMobile({
 
 	// Mobile card keeps a single action: added agents enter chat; only not-added agents can hire.
 	const actionIsChat = employee.isAdded
-	const actionLabel = actionIsChat ? t("chat") : t("hire")
+	const actionLabel = actionIsChat ? t("conversation") : t("hire")
 	const actionDisabled = actionIsChat ? false : isEmployeeMarketPrimaryActionDisabled(employee)
 
 	function handleInfoClick() {

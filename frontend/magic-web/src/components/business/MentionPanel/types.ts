@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from "react"
 import type { I18nTexts, LocaleInput } from "./i18n/types"
-import type { MarkerType } from "@/components/CanvasDesign/canvas/types"
+import type { MarkerType } from "@/components/CanvasDesign/runtime/document/types"
 import type { MentionItemRenderer } from "./renderers/types"
 import type { MentionPanelItemType as MentionPanelItemTypeValue } from "./runtime/builtin/panel-item-types"
 
@@ -132,6 +132,8 @@ export interface UploadFileMentionData {
 	file_path?: string
 	file_size?: number
 	file?: File
+	relative_file_path?: string
+	is_hidden?: boolean
 	// 上传状态相关字段
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
@@ -512,6 +514,8 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	triggerRef?: React.RefObject<HTMLElement | null>
 	language?: LocaleInput
 	disableKeyboardShortcuts?: boolean
+	/** 是否允许多选。默认 true；单槽替换等一换一场景可关闭。 */
+	enableMultiSelect?: boolean
 	/**
 	 * 为 true 时禁止 Radix 因「外部」交互自动关闭（画布内嵌套 Portal 易出现误判）。
 	 * 仍可通过 onClose / 键盘退出等显式关闭。

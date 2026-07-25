@@ -8,6 +8,7 @@ import {
 	useMemo,
 	useCallback,
 } from "react"
+import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
@@ -403,7 +404,7 @@ const FilesViewer = memo(
 			const currentTab = activeTab
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
 			const effectiveIsFullscreen =
-				Boolean(props.forceFullscreenMode) || Boolean(isFullscreen)
+				isFullscreenMode || Boolean(isFullscreen) || fullscreenFileId === currentTab?.id
 			const currentRenderProps = useMemo(
 				() => ({ isFullscreen: effectiveIsFullscreen, ...otherProps }),
 				[effectiveIsFullscreen, otherProps],
@@ -420,7 +421,7 @@ const FilesViewer = memo(
 					currentTab.refreshKey || "",
 					currentTab.fileData.file_id || "",
 					currentTab.fileData.updated_at || "",
-					String(isFullscreen),
+					String(effectiveIsFullscreen),
 					String(otherProps.type || ""),
 					String(otherProps.updatedAt || ""),
 					props.activeFileId || "",
@@ -428,7 +429,7 @@ const FilesViewer = memo(
 				].join("|")
 			}, [
 				currentTab,
-				isFullscreen,
+				effectiveIsFullscreen,
 				otherProps.type,
 				otherProps.updatedAt,
 				props.activeFileId,
@@ -549,7 +550,7 @@ const FilesViewer = memo(
 				openFileTab,
 			])
 
-			return (
+			const viewer = (
 				<div
 					className={cn(
 						"flex h-full flex-col",
@@ -566,7 +567,7 @@ const FilesViewer = memo(
 						)}
 					>
 						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
-						{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
+						{tabs.length > 0 && !effectiveIsFullscreen && !props.hideTabBar && (
 							<div className="relative flex h-11 items-center bg-accent">
 								<HeadlessHorizontalScroll
 									className="h-full min-w-0 flex-1"
@@ -651,6 +652,13 @@ const FilesViewer = memo(
 					</div>
 				</div>
 			)
+
+			// A fixed descendant is still confined by any transformed ancestor in the workspace
+			// layout. Portal fullscreen content to the document root so it always covers the
+			// workspace list and other layout siblings.
+			return effectiveIsFullscreen && typeof document !== "undefined"
+				? createPortal(viewer, document.body)
+				: viewer
 		}),
 	),
 )
