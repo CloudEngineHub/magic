@@ -11,13 +11,18 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { CardFooterBadge } from "@/pages/superMagic/components/CardFooterBadge"
+import { CardFooterLabel } from "@/pages/superMagic/components/CardFooterLabel"
 import type { MyCrewView } from "@/services/crew/CrewService"
 import { MyCrewCardMainSection } from "./MyCrewCardMainSection"
 import {
 	isInsideMyCrewCardInteractiveTarget,
 	preventMyCrewCardInteractiveClick,
 } from "./my-crew-card-interaction"
-import { resolveMyCrewPublishTargetLabel } from "./my-crew-card-shared"
+import {
+	formatVersionBadge,
+	resolveMyCrewCreatedFooterBadgeLabel,
+	resolveMyCrewPublishTargetLabel,
+} from "./my-crew-card-shared"
 
 interface CreatedCrewCardProps {
 	employee: MyCrewView
@@ -44,7 +49,16 @@ function CreatedCrewCard({
 	const canOpenConversation =
 		Boolean(employee.latestPublishedAt?.trim()) && onConversation != null
 	const { t } = useTranslation("crew/market")
+	const { t: tCrewCreate } = useTranslation("crew/create")
 	const publishTargetLabel = resolveMyCrewPublishTargetLabel(employee.publishTargetType, t)
+	const createdStatusBadgeLabel = resolveMyCrewCreatedFooterBadgeLabel(
+		employee.sourceType,
+		t,
+		tCrewCreate,
+	)
+	const createdFooterBadgeLabel = employee.needUpgrade
+		? t("skillsLibrary.upgrade")
+		: formatVersionBadge(employee.latestVersionCode) || createdStatusBadgeLabel
 
 	function handleCardRootClick(event: MouseEvent<HTMLDivElement>) {
 		if (isInsideMyCrewCardInteractiveTarget(event.target)) return
@@ -66,14 +80,20 @@ function CreatedCrewCard({
 						<>
 							<Separator />
 							<div className="flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-b-md bg-sidebar px-4 py-2.5">
-								<div className="flex-1" aria-hidden />
 								{publishTargetLabel ? (
-									<CardFooterBadge
+									<CardFooterLabel
 										label={publishTargetLabel}
-										className="px-2 py-0.5 text-xs font-semibold"
-										dataTestId="my-crew-card-footer-badge"
+										withTooltip
+										dataTestId="my-crew-card-footer-publish-target"
 									/>
-								) : null}
+								) : (
+									<div className="flex-1" aria-hidden />
+								)}
+								<CardFooterBadge
+									label={createdFooterBadgeLabel}
+									className="px-2 py-0.5 text-xs font-semibold"
+									dataTestId="my-crew-card-footer-badge"
+								/>
 							</div>
 						</>
 					}
