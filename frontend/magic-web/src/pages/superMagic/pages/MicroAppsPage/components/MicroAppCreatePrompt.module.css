@@ -2,14 +2,13 @@
 	position: relative;
 	z-index: 1;
 	border-width: 1px !important;
-	border-color: #9ca2a6 !important;
+	border-color: #8d908d !important;
 	border-radius: 12px !important;
-	background: #f7f8f8 !important;
+	background: #ffffff !important;
 	box-shadow:
-		-2px 2px 0 #d0d3d4,
-		2px 2px 0 #a0a5a8,
-		0 2px 0 #c6cacc,
-		0 5px 0 #747b80,
+		0 2px 0 #d2d2cf,
+		0 5px 0 #a4a5a1,
+		0 8px 0 #686b67,
 		0 16px 22px -10px rgba(29, 33, 36, 0.34),
 		inset 0 1px 0 rgba(255, 255, 255, 0.95),
 		inset 0 0 0 3px rgba(255, 255, 255, 0.48),
@@ -22,33 +21,26 @@
 }
 
 .retroEnterKeyScope:hover {
-	border-color: #7d858a !important;
+	border-color: #696d69 !important;
 }
 
 .retroEnterKeyScope:focus-within {
-	border-color: #4f575d !important;
+	border-color: #373b38 !important;
 	background: #ffffff !important;
 	box-shadow:
-		-3px 3px 0 #c6cacc,
-		3px 3px 0 #858c91,
-		0 4px 0 #b3b8bb,
-		0 8px 0 #555d63,
-		0 22px 30px -10px rgba(29, 33, 36, 0.46),
-		inset 0 1px 0 rgba(255, 255, 255, 0.96),
-		inset 0 0 0 3px rgba(221, 224, 226, 0.72),
-		inset 3px 0 0 rgba(255, 255, 255, 0.34),
-		inset -3px 0 0 rgba(66, 72, 76, 0.14),
-		inset 0 -3px 0 rgba(66, 72, 76, 0.2) !important;
+		0 3px 0 #cacac7,
+		0 6px 0 #878985,
+		0 10px 0 #4e514e,
+		0 22px 30px -10px rgba(29, 33, 36, 0.46) !important;
 }
 
 :global(.dark) .retroEnterKeyScope {
 	border-color: rgba(255, 255, 255, 0.16) !important;
 	background: rgba(22, 24, 27, 0.96) !important;
 	box-shadow:
-		-2px 2px 0 #3f4245,
-		2px 2px 0 #111315,
-		0 3px 0 #36393c,
-		0 5px 0 #17191b,
+		0 2px 0 #3f4245,
+		0 5px 0 #111315,
+		0 8px 0 #17191b,
 		0 18px 34px rgba(0, 0, 0, 0.4),
 		inset 0 1px 0 rgba(255, 255, 255, 0.07),
 		inset 0 0 0 2px rgba(255, 255, 255, 0.035),
@@ -62,15 +54,23 @@
 	border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
+:global(.dark) .retroEnterKeyScope:focus-within {
+	box-shadow:
+		0 3px 0 #3f4245,
+		0 6px 0 #111315,
+		0 10px 0 #17191b,
+		0 22px 34px rgba(0, 0, 0, 0.48) !important;
+}
+
 .retroEnterKeyScope :global([data-testid="super-message-editor-header"] button),
 .retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button),
 .retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]) {
-	--retro-key-face-top: #fafafa;
-	--retro-key-face-bottom: #e6e8e9;
-	--retro-key-border: #858b90;
-	--retro-key-base: #aab0b3;
-	--retro-key-base-edge: #6c7378;
-	--retro-key-text: #31363a;
+	--retro-key-face-top: #ffffff;
+	--retro-key-face-bottom: #f1f2f0;
+	--retro-key-border: #989b97;
+	--retro-key-base: #d1d2cf;
+	--retro-key-base-edge: #747773;
+	--retro-key-text: #252825;
 	position: relative;
 	isolation: isolate;
 	height: 36px !important;
@@ -83,7 +83,9 @@
 		linear-gradient(180deg, var(--retro-key-face-top) 0%, var(--retro-key-face-bottom) 100%) !important;
 	color: var(--retro-key-text) !important;
 	box-shadow:
-		0 2px 4px rgba(29, 33, 36, 0.16),
+		0 2px 0 var(--retro-key-base),
+		0 4px 0 var(--retro-key-base-edge),
+		0 7px 9px rgba(29, 33, 36, 0.14),
 		inset 0 1px 0 rgba(255, 255, 255, 0.9),
 		inset 0 0 0 2px rgba(255, 255, 255, 0.38),
 		inset 0 -1px 0 rgba(62, 68, 72, 0.1) !important;
@@ -111,7 +113,9 @@
 	filter: brightness(1.04) saturate(1.03);
 	transform: translateY(-1px);
 	box-shadow:
-		0 4px 8px rgba(29, 33, 36, 0.2),
+		0 3px 0 var(--retro-key-base),
+		0 5px 0 var(--retro-key-base-edge),
+		0 9px 12px rgba(29, 33, 36, 0.18),
 		inset 0 1px 0 rgba(255, 255, 255, 0.94),
 		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
 }
@@ -124,7 +128,9 @@
 	filter: brightness(0.98);
 	transform: translateY(1px);
 	box-shadow:
-		0 1px 2px rgba(21, 24, 28, 0.14),
+		0 1px 0 var(--retro-key-base),
+		0 2px 0 var(--retro-key-base-edge),
+		0 3px 5px rgba(21, 24, 28, 0.14),
 		inset 0 2px 4px rgba(53, 58, 64, 0.18) !important;
 }
 
@@ -136,18 +142,21 @@
 
 .retroEnterKeyScope :global([data-testid="super-message-editor-header"] button:disabled),
 .retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button:disabled) {
-	--retro-key-face-top: #f4f5f5;
-	--retro-key-face-bottom: #e2e4e5;
-	--retro-key-border: #a9aeb1;
-	--retro-key-base: #b4b9bc;
-	--retro-key-base-edge: #858c91;
-	--retro-key-text: #8c9296;
+	--retro-key-face-top: #fbfbfa;
+	--retro-key-face-bottom: #eeeeec;
+	--retro-key-border: #c2c3bf;
+	--retro-key-base: #dededb;
+	--retro-key-base-edge: #a7a9a4;
+	--retro-key-text: #8f918d;
 	cursor: not-allowed;
 	filter: grayscale(0.35) saturate(0.55);
 	opacity: 0.82 !important;
 	transform: translateY(0);
+	/* Disabled keys stay raised; muted colors communicate availability without looking pressed. */
 	box-shadow:
-		0 1px 3px rgba(29, 33, 36, 0.12),
+		0 2px 0 var(--retro-key-base),
+		0 4px 0 var(--retro-key-base-edge),
+		0 7px 9px rgba(29, 33, 36, 0.1),
 		inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
 }
 
@@ -158,12 +167,12 @@
 .retroEnterKeyScope :global([data-testid="super-message-editor-toolbar"] button[data-state="open"]),
 .retroEnterKeyScope
 	:global([data-testid="super-message-editor-header"] button[data-visible="true"]) {
-	--retro-key-face-top: #656b6f;
-	--retro-key-face-bottom: #3c4246;
-	--retro-key-border: #2f3539;
-	--retro-key-base: #343a3e;
-	--retro-key-base-edge: #191d20;
-	--retro-key-text: #f7f8f8;
+	--retro-key-face-top: #484b49;
+	--retro-key-face-bottom: #252826;
+	--retro-key-border: #171a18;
+	--retro-key-base: #292c2a;
+	--retro-key-base-edge: #101210;
+	--retro-key-text: #ffffff;
 }
 
 .retroEnterKeyScope
@@ -176,11 +185,11 @@
 		[data-testid="super-message-editor-toolbar"]
 			[data-testid="voice-input-button"][data-status="processing"]
 	) {
-	--retro-key-face-top: #565b61;
-	--retro-key-face-bottom: #24272b;
-	--retro-key-border: #15181b;
-	--retro-key-base: #181b1f;
-	--retro-key-base-edge: #090b0d;
+	--retro-key-face-top: #3f4240;
+	--retro-key-face-bottom: #1f2220;
+	--retro-key-border: #121412;
+	--retro-key-base: #232624;
+	--retro-key-base-edge: #0b0d0b;
 	--retro-key-text: #ffffff;
 }
 
@@ -189,11 +198,11 @@
 		[data-testid="super-message-editor-toolbar"]
 			[data-testid="voice-input-button"][data-status="error"]
 	) {
-	--retro-key-face-top: #464a4f;
-	--retro-key-face-bottom: #202327;
+	--retro-key-face-top: #434644;
+	--retro-key-face-bottom: #252825;
 	--retro-key-border: #792f31;
-	--retro-key-base: #1a1d20;
-	--retro-key-base-edge: #090b0d;
+	--retro-key-base: #292c29;
+	--retro-key-base-edge: #111311;
 	--retro-key-text: #ffb8b8;
 }
 
@@ -202,7 +211,7 @@
 	width: 2px;
 	margin-inline: 8px;
 	border-radius: 1px;
-	background: #969da1;
+	background: #8d908c;
 	box-shadow: 1px 0 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -233,7 +242,9 @@
 	letter-spacing: 0.02em;
 	transform: translateY(0);
 	box-shadow:
-		0 2px 4px rgba(29, 33, 36, 0.16),
+		0 2px 0 var(--retro-key-base),
+		0 4px 0 var(--retro-key-base-edge),
+		0 7px 9px rgba(29, 33, 36, 0.14),
 		inset 0 1px 0 rgba(255, 255, 255, 0.92),
 		inset 0 -1px 0 rgba(53, 58, 64, 0.14) !important;
 }
@@ -287,7 +298,9 @@
 .retroEnterKeyScope :global([data-testid="super-message-editor-model-switch-mobile"]:hover) {
 	transform: translateY(-1px);
 	box-shadow:
-		0 4px 8px rgba(29, 33, 36, 0.2),
+		0 3px 0 var(--retro-key-base),
+		0 5px 0 var(--retro-key-base-edge),
+		0 9px 12px rgba(29, 33, 36, 0.2),
 		inset 0 1px 0 rgba(255, 255, 255, 0.96),
 		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
 }
@@ -295,7 +308,9 @@
 .retroEnterKeyScope :global([data-testid="super-message-editor-model-switch"][data-state="open"]) {
 	transform: translateY(1px);
 	box-shadow:
-		0 1px 2px rgba(21, 24, 28, 0.16),
+		0 1px 0 var(--retro-key-base),
+		0 2px 0 var(--retro-key-base-edge),
+		0 3px 5px rgba(21, 24, 28, 0.16),
 		inset 0 2px 4px rgba(53, 58, 64, 0.18) !important;
 }
 
@@ -311,13 +326,15 @@
 	padding: 0 12px 3px !important;
 	transform: translateY(0);
 	box-shadow:
-		0 2px 4px rgba(29, 33, 36, 0.16),
+		0 2px 0 var(--retro-key-base),
+		0 4px 0 var(--retro-key-base-edge),
+		0 7px 9px rgba(29, 33, 36, 0.14),
 		inset 0 1px 0 rgba(255, 255, 255, 0.92),
 		inset 0 -1px 0 rgba(53, 58, 64, 0.14) !important;
 }
 
 .retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]::before) {
-	content: "Enter";
+	content: "ENTER";
 	position: absolute;
 	left: 11px;
 	top: 8px;
@@ -348,7 +365,9 @@
 .retroEnterKeyScope :global([data-testid="super-message-editor-send-button"]:not(:disabled):hover) {
 	transform: translateY(-1px);
 	box-shadow:
-		0 4px 8px rgba(29, 33, 36, 0.2),
+		0 3px 0 var(--retro-key-base),
+		0 5px 0 var(--retro-key-base-edge),
+		0 9px 12px rgba(29, 33, 36, 0.2),
 		inset 0 1px 0 rgba(255, 255, 255, 0.96),
 		inset 0 -1px 0 rgba(53, 58, 64, 0.12) !important;
 }
@@ -372,7 +391,9 @@
 	filter: brightness(1.04) contrast(1.04);
 	transform: translateY(-1px);
 	box-shadow:
-		0 5px 10px rgba(29, 33, 36, 0.22),
+		0 3px 0 var(--retro-key-base),
+		0 5px 0 var(--retro-key-base-edge),
+		0 9px 12px rgba(29, 33, 36, 0.22),
 		inset 0 1px 0 rgba(255, 255, 255, 0.96),
 		inset 0 0 0 2px rgba(255, 255, 255, 0.42),
 		inset 0 -1px 0 rgba(62, 68, 72, 0.18) !important;
