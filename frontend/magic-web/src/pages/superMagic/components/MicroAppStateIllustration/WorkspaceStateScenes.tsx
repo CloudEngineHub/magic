@@ -45,6 +45,203 @@ export function EmptyScene({ accent, surface }: MicroAppStateSceneProps) {
 	)
 }
 
+export function LoadingScene({ accent, surface }: MicroAppStateSceneProps) {
+	return (
+		<>
+			<path
+				d="M96 110C118 110 126 95 145 95C164 95 168 125 190 125C207 125 213 110 230 110"
+				fill="none"
+				stroke={accent}
+				strokeOpacity="0.2"
+				strokeWidth="1.6"
+				strokeDasharray="3 5"
+				data-testid="micro-app-loading-connection"
+			/>
+
+			<g transform="translate(32 76)" data-testid="micro-app-loading-source">
+				<rect
+					x="-7"
+					y="8"
+					width="68"
+					height="68"
+					rx="22"
+					fill={surface}
+					stroke={accent}
+					strokeOpacity="0.08"
+				/>
+				<rect
+					width="68"
+					height="68"
+					rx="22"
+					className="fill-white stroke-[#172037]/[0.07] dark:fill-[#17181D] dark:stroke-white/[0.08]"
+				/>
+				<rect
+					x="17"
+					y="16"
+					width="34"
+					height="36"
+					rx="10"
+					fill={accent}
+					fillOpacity="0.08"
+				/>
+				<rect x="24" y="23" width="9" height="9" rx="3" fill={accent} fillOpacity="0.42" />
+				<rect
+					x="37"
+					y="23"
+					width="7"
+					height="9"
+					rx="3"
+					className="fill-[#172037]/10 dark:fill-white/10"
+				/>
+				<rect
+					x="24"
+					y="36"
+					width="20"
+					height="4"
+					rx="2"
+					className="fill-[#172037]/10 dark:fill-white/10"
+				/>
+				<rect
+					x="24"
+					y="44"
+					width="14"
+					height="3"
+					rx="1.5"
+					className="fill-[#172037]/[0.06] dark:fill-white/[0.08]"
+				/>
+			</g>
+
+			<g transform="translate(160 110)">
+				<circle r="22" fill={surface} />
+				<circle
+					r="13"
+					fill="white"
+					stroke={accent}
+					strokeOpacity="0.18"
+					className="dark:fill-[#17181D]"
+				/>
+				<circle r="4" fill={accent} fillOpacity="0.52" />
+				<path
+					d="M0-34V-23M0 23V34"
+					stroke={accent}
+					strokeOpacity="0.18"
+					strokeWidth="1.5"
+					strokeDasharray="2 3"
+				/>
+			</g>
+
+			<g transform="translate(132 39)">
+				<rect
+					width="55"
+					height="29"
+					rx="10"
+					className="fill-white stroke-[#172037]/[0.06] dark:fill-[#17181D] dark:stroke-white/[0.08]"
+				/>
+				<path
+					d="M14 9H25L29 13H41V21H14Z"
+					fill={accent}
+					fillOpacity="0.12"
+					stroke={accent}
+					strokeOpacity="0.28"
+					strokeWidth="1.2"
+					strokeLinejoin="round"
+				/>
+			</g>
+
+			<g transform="translate(135 157)">
+				<rect
+					width="50"
+					height="28"
+					rx="10"
+					className="fill-white stroke-[#172037]/[0.06] dark:fill-[#17181D] dark:stroke-white/[0.08]"
+				/>
+				<ellipse
+					cx="25"
+					cy="9"
+					rx="11"
+					ry="4"
+					fill={accent}
+					fillOpacity="0.1"
+					stroke={accent}
+					strokeOpacity="0.3"
+					strokeWidth="1.2"
+				/>
+				<path
+					d="M14 9V18C14 21 19 23 25 23C31 23 36 21 36 18V9"
+					fill={accent}
+					fillOpacity="0.06"
+					stroke={accent}
+					strokeOpacity="0.3"
+					strokeWidth="1.2"
+				/>
+			</g>
+
+			<g transform="translate(226 62)" data-testid="micro-app-loading-project-stack">
+				<rect
+					x="-14"
+					y="-9"
+					width="68"
+					height="86"
+					rx="17"
+					fill={surface}
+					stroke={accent}
+					strokeOpacity="0.08"
+					transform="rotate(-6 20 34)"
+				/>
+				<rect
+					x="7"
+					y="-5"
+					width="68"
+					height="86"
+					rx="17"
+					className="fill-white/70 stroke-[#172037]/[0.04] dark:fill-white/[0.02] dark:stroke-white/[0.05]"
+					transform="rotate(5 41 38)"
+				/>
+				<rect
+					width="68"
+					height="86"
+					rx="17"
+					className="fill-white stroke-[#172037]/[0.07] dark:fill-[#17181D] dark:stroke-white/[0.08]"
+				/>
+				<rect x="14" y="15" width="31" height="6" rx="3" fill={accent} fillOpacity="0.16" />
+				<rect
+					x="14"
+					y="31"
+					width="40"
+					height="4"
+					rx="2"
+					className="fill-[#172037]/[0.06] dark:fill-white/[0.08]"
+				/>
+				<rect
+					x="14"
+					y="43"
+					width="34"
+					height="4"
+					rx="2"
+					className="fill-[#172037]/[0.06] dark:fill-white/[0.08]"
+				/>
+				<rect
+					x="14"
+					y="55"
+					width="29"
+					height="4"
+					rx="2"
+					className="fill-[#172037]/[0.06] dark:fill-white/[0.08]"
+				/>
+				<rect
+					x="14"
+					y="68"
+					width="18"
+					height="5"
+					rx="2.5"
+					fill={accent}
+					fillOpacity="0.2"
+				/>
+			</g>
+		</>
+	)
+}
+
 export function BuildingScene({ accent, animated }: MicroAppStateSceneProps) {
 	return (
 		<>

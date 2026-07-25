@@ -429,17 +429,19 @@ box-shadow:
 - 图标使用 1.5–2px 线宽的简洁线性图标。
 - 连接关系使用 1px–2px 低对比线条。
 - 空状态使用灰蓝色，只表达「尚未发生」。
-- 加载中使用冷蓝色，适合循环、扫描和进度关系。
+- 加载中使用冷蓝色，适合连接、读取和进度关系。
 - 可重试的加载失败使用琥珀色，适合刷新、暂停和暂时中断。
 - 阻断错误使用低饱和红色，且只标出一个关键错误节点。
 - 成功状态使用薄荷绿，适合完成、连接和发布结果。
 - Agent 或 Skill 介绍可以使用紫色，但不能把紫色当成通用状态色。
 - 一张状态插图只使用一种上述语义色，其余界面保持白色、灰色和深墨色。
 - 状态插图在页面中承担辅助说明，不高于标题和主要操作的视觉层级。
-- 常规桌面状态插图宽度控制在 120–156px；只有「正在制作」等主预览状态可以放大到 280px。
+- 常规桌面状态插图宽度控制在 120–156px；全页初始化状态可以使用 180px，「正在制作」等主预览状态可以放大到 280px。
 - 深墨色实心面积不超过插图的 5%，优先使用浅灰线框和低透明度结构。
 - 状态色面积控制在 5%–8%，不使用覆盖标题区域的大范围状态色光晕。
 - 状态插图不叠加多层阴影；界面与状态徽记最多保留一层轻阴影。
+- 初始化加载不复用浏览器窗口构图。使用「Micro App → 项目数据栈」的连接关系，避免与空状态、制作中和异常状态混淆。
+- 对话空状态使用「用户需求气泡 → Agent → 微应用结果卡」的构图，强调输入内容会直接作用于当前应用，不使用通用聊天或窗口图标。
 
 ### 10.4 推荐比例
 
@@ -499,16 +501,18 @@ src/pages/superMagic/components/MicroAppStateIllustration
 
 统一组件 `MicroAppStateIllustration` 接受 `state`、`size`、`animated`、`label` 和 `testId`。业务代码优先使用具名组件，避免在页面中重复维护 SVG：
 
-| 组件                                | 状态                 | 语义色   |
-| ----------------------------------- | -------------------- | -------- |
-| `MicroAppEmptyIllustration`         | 暂无微应用、预览为空 | 中性灰蓝 |
-| `MicroAppBuildingIllustration`      | 正在制作             | 冷蓝     |
-| `MicroAppConfirmIllustration`       | 等待用户确认方案     | 克制紫   |
-| `MicroAppSearchEmptyIllustration`   | 搜索无结果           | 中性灰蓝 |
-| `MicroAppRetryIllustration`         | 可恢复连接或加载异常 | 琥珀色   |
-| `MicroAppPermissionIllustration`    | 权限阻断             | 低饱和红 |
-| `MicroAppPublishedIllustration`     | 发布成功             | 薄荷绿   |
-| `MicroAppDatabaseEmptyIllustration` | 数据库无表或暂无数据 | 中性灰蓝 |
+| 组件                                    | 状态                     | 语义色   |
+| --------------------------------------- | ------------------------ | -------- |
+| `MicroAppEmptyIllustration`             | 暂无微应用、预览为空     | 中性灰蓝 |
+| `MicroAppLoadingIllustration`           | 初始化、读取项目数据     | 冷蓝     |
+| `MicroAppConversationEmptyIllustration` | 首次对话、引导修改微应用 | 克制紫   |
+| `MicroAppBuildingIllustration`          | 正在制作                 | 冷蓝     |
+| `MicroAppConfirmIllustration`           | 等待用户确认方案         | 克制紫   |
+| `MicroAppSearchEmptyIllustration`       | 搜索无结果               | 中性灰蓝 |
+| `MicroAppRetryIllustration`             | 可恢复连接或加载异常     | 琥珀色   |
+| `MicroAppPermissionIllustration`        | 权限阻断                 | 低饱和红 |
+| `MicroAppPublishedIllustration`         | 发布成功                 | 薄荷绿   |
+| `MicroAppDatabaseEmptyIllustration`     | 数据库无表或暂无数据     | 中性灰蓝 |
 
 组件默认作为静态装饰图并从无障碍树中隐藏。插图本身需要传达额外信息时，传入 `label`；页面已有标题和说明时不要重复设置。只有加载和生成过程按需开启 `animated`，其他状态不默认循环播放。循环动效必须通过组件内部的 `prefers-reduced-motion` 处理，不由业务页面重复判断。
 

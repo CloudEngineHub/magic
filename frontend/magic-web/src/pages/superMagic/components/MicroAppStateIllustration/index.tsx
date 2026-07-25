@@ -1,9 +1,16 @@
 import type { ComponentType } from "react"
-import { useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
-import { BuildingScene, ConfirmScene, EmptyScene, SearchEmptyScene } from "./WorkspaceStateScenes"
+import { ConversationEmptyScene } from "./ConversationStateScenes"
+import {
+	BuildingScene,
+	ConfirmScene,
+	EmptyScene,
+	LoadingScene,
+	SearchEmptyScene,
+} from "./WorkspaceStateScenes"
 import {
 	DatabaseEmptyScene,
 	PermissionScene,
@@ -36,6 +43,12 @@ const STATE_STYLE: Record<
 	}
 > = {
 	empty: { accent: "#8390A6", surface: "#F6F7F9", scene: EmptyScene },
+	loading: { accent: "#5B7FEA", surface: "#F4F6FD", scene: LoadingScene },
+	"conversation-empty": {
+		accent: "#786FCE",
+		surface: "#F5F3FC",
+		scene: ConversationEmptyScene,
+	},
 	building: { accent: "#5B7FEA", surface: "#F4F6FD", scene: BuildingScene },
 	confirm: { accent: "#806FE8", surface: "#F6F4FC", scene: ConfirmScene },
 	"search-empty": { accent: "#8390A6", surface: "#F6F7F9", scene: SearchEmptyScene },
@@ -84,6 +97,29 @@ export function MicroAppStateIllustration({
 
 export function MicroAppEmptyIllustration(props: NamedIllustrationProps) {
 	return <MicroAppStateIllustration {...props} state="empty" />
+}
+
+export function MicroAppLoadingIllustration({ animated = true, ...props }: NamedIllustrationProps) {
+	const reduceMotion = Boolean(useReducedMotion())
+	const shouldAnimate = animated && !reduceMotion
+
+	return (
+		<div className="relative inline-flex shrink-0">
+			<MicroAppStateIllustration {...props} state="loading" animated={false} />
+			{shouldAnimate ? (
+				<motion.span
+					className="pointer-events-none absolute left-[31%] top-[49%] size-1.5 rounded-full bg-[#5B7FEA]/70"
+					animate={{ opacity: [0, 1, 0], x: [0, 64] }}
+					transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }}
+					aria-hidden
+				/>
+			) : null}
+		</div>
+	)
+}
+
+export function MicroAppConversationEmptyIllustration(props: NamedIllustrationProps) {
+	return <MicroAppStateIllustration {...props} state="conversation-empty" />
 }
 
 export function MicroAppBuildingIllustration(props: NamedIllustrationProps) {

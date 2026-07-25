@@ -1,5 +1,7 @@
 export type MicroAppStateIllustrationType =
 	| "empty"
+	| "loading"
+	| "conversation-empty"
 	| "building"
 	| "confirm"
 	| "search-empty"
