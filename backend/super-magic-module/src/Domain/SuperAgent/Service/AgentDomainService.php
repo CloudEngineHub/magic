@@ -15,6 +15,8 @@ use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\Token\Entity\MagicTokenEntity;
 use App\Domain\Token\Entity\ValueObject\MagicTokenType;
 use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -37,12 +39,16 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\InitializationMetadataD
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageMetadata;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\UserInfoValueObject;
 use Dtyq\SuperMagic\Domain\SuperAgent\Exception\WorkspaceReadyTimeoutException;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskMessageRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
+use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Constant\WorkspaceStatus;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\AskUserResponseMessageRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\ChatMessageRequest;
@@ -91,7 +97,9 @@ class AgentDomainService
         private readonly SuperMagicAgentRepositoryInterface $superMagicAgentRepository,
         private readonly MagicTokenRepositoryInterface $magicTokenRepository,
         private readonly LockerInterface $locker,
+        private readonly ProjectRepositoryInterface $projectRepository,
         private readonly TopicRepositoryInterface $topicRepository,
+        private readonly WorkspaceRepositoryInterface $workspaceRepository,
         private readonly TaskMessageRepositoryInterface $taskMessageRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
     ) {
@@ -106,7 +114,8 @@ class AgentDomainService
         }
         $authToken = $dataIsolation->getUserAuthorizationToken() ?? '';
         // todo 初始化数据, 后续有些参数需要精简去掉
-        $agentInitContext = AgentInitContext::createDefault();
+        $superMagicContext = $this->buildSuperMagicContext($projectEntity, $topicEntity, $sandboxId);
+        $agentInitContext = AgentInitContext::createDefault($superMagicContext);
         $agentInitContext->setMessageId((string) IdGenerator::getSnowId());
         $agentInitContext->setUserId($dataIsolation->getCurrentUserId()); // 待废弃
         $agentInitContext->setProjectId((string) $projectEntity->getId()); // 待废弃
@@ -690,6 +699,8 @@ class AgentDomainService
         $constraintText = $this->getPromptConstraint($taskContext);
         $prompt = $userRequest . $constraintText;
 
+        $superMagicContext = $this->buildCurrentSuperMagicContext($taskContext);
+
         // 构建 metadata（使用公共方法）
         $initMetadata = new InitializationMetadataDTO();
         $messageMetadata = $this->buildMessageMetadata($dataIsolation, $taskContext, $initMetadata);
@@ -714,6 +725,7 @@ class AgentDomainService
             dynamicConfig: $taskDynamicConfig,
             metadata: $messageMetadata->toArray(),
             agent: ! empty($agentProfile) ? $agentProfile : null,
+            superMagicContext: $superMagicContext,
         );
 
         $result = $this->agent->sendChatMessage($dataIsolation, $taskContext->getSandboxId(), $chatMessage);
@@ -1377,6 +1389,63 @@ class AgentDomainService
         $metadata = $initContext->getMetadata();
         $metadata['sandbox_id'] = $sandboxId;
         $initContext->setMetadata($metadata);
+
+        $initContext->setSuperMagicContext(
+            $initContext->getSuperMagicContext()->withSandboxId($sandboxId)
+        );
+    }
+
+    private function buildCurrentSuperMagicContext(TaskContext $taskContext): SuperMagicContext
+    {
+        $topicEntity = $this->topicRepository->getTopicById($taskContext->getTopicId());
+        if ($topicEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        if ($topicEntity->getProjectId() !== $taskContext->getProjectId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        $projectEntity = $this->projectRepository->findById($taskContext->getProjectId());
+        if ($projectEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        return $this->buildSuperMagicContext(
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            sandboxId: $taskContext->getSandboxId(),
+        );
+    }
+
+    private function buildSuperMagicContext(
+        ProjectEntity $projectEntity,
+        TopicEntity $topicEntity,
+        string $sandboxId,
+    ): SuperMagicContext {
+        if ($topicEntity->getProjectId() !== $projectEntity->getId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        if ($sandboxId === '') {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'sandbox_id is required');
+        }
+
+        $workspaceEntity = null;
+        $workspaceId = $projectEntity->getWorkspaceId();
+        if ($workspaceId !== null) {
+            $workspaceEntity = $this->workspaceRepository->getWorkspaceById($workspaceId);
+            if ($workspaceEntity === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::WORKSPACE_NOT_FOUND, 'workspace.workspace_not_found');
+            }
+        }
+
+        return SuperMagicContext::fromEntities(
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            workspaceEntity: $workspaceEntity,
+            sandboxId: $sandboxId,
+        );
     }
 
     /**

@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 from app.core.context.pending_reply_state import PendingReplyState
 
 if TYPE_CHECKING:
-    from app.core.horizon.agent_horizon import AgentHorizon
     from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
+    from app.core.entity.message.client_message import SuperMagicContext
+    from app.core.horizon.agent_horizon import AgentHorizon
 from datetime import datetime, timedelta
 
 from agentlang.context.base_agent_context import BaseAgentContext
@@ -282,7 +283,7 @@ class AgentContext(BaseAgentContext):
         # 使用 register_fields 一次性注册所有字段
         from typing import Dict, List, Optional, Any
         from app.core.entity.attachment import Attachment
-        from app.core.entity.message.client_message import ChatClientMessage
+        from app.core.entity.message.client_message import ChatClientMessage, SuperMagicContext
         from app.core.entity.project_archive import ProjectArchiveInfo
         from app.core.stream import Stream
         import asyncio
@@ -294,6 +295,7 @@ class AgentContext(BaseAgentContext):
             "streams": ({}, Dict[str, Stream]),
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
+            "super_magic_context": (None, Optional[SuperMagicContext]),
             "task_id": (None, Optional[str]),
             "interrupt_queue": (None, Optional[asyncio.Queue]),
             "sandbox_id": ("", str),
@@ -606,6 +608,9 @@ class AgentContext(BaseAgentContext):
             self.shared_context.update_field("message_version", version)
             logger.debug(f"消息版本已设置为: {version}")
 
+        if chat_client_message.super_magic_context is not None:
+            self.set_super_magic_context(chat_client_message.super_magic_context)
+
     def get_chat_client_message(self) -> Optional[ChatClientMessage]:
         """获取聊天客户端消息
 
@@ -613,6 +618,14 @@ class AgentContext(BaseAgentContext):
             Optional[ChatClientMessage]: 聊天客户端消息
         """
         return self.shared_context.get_field("chat_client_message")
+
+    def set_super_magic_context(self, context: Optional["SuperMagicContext"]) -> None:
+        """设置本轮业务消息提供的 Super Magic 产品上下文。"""
+        self.shared_context.update_field("super_magic_context", context)
+
+    def get_super_magic_context(self) -> Optional["SuperMagicContext"]:
+        """获取本轮最新的 Super Magic 产品上下文。"""
+        return self.shared_context.get_field("super_magic_context")
 
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流

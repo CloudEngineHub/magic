@@ -66,6 +66,42 @@ class Metadata(BaseModel):
     )
 
 
+class SuperMagicWorkspaceContext(BaseModel):
+    """当前项目所属工作区。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicProjectContext(BaseModel):
+    """当前项目。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicTopicContext(BaseModel):
+    """当前话题。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicSandboxContext(BaseModel):
+    """当前逻辑沙盒。"""
+
+    id: str
+
+
+class SuperMagicContext(BaseModel):
+    """Super Magic 产品位置上下文。"""
+
+    workspace: Optional[SuperMagicWorkspaceContext] = None
+    project: SuperMagicProjectContext
+    topic: SuperMagicTopicContext
+    sandbox: SuperMagicSandboxContext
+
+
 class ClientMessage(BaseModel):
     """任务消息模型"""
 
@@ -165,6 +201,10 @@ class ChatClientMessage(ClientMessage):
     remark: Optional[str] = None  # 备注信息，用于中断消息等场景
     mcp_config: Optional[Dict[str, Any]] = None  # MCP 服务器配置，格式与 config/mcp.json 保持一致
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_context: Optional[SuperMagicContext] = Field(
+        default=None,
+        description="Current Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     channel_context: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Channel-specific payload, owned and interpreted by the originating channel plugin.",
@@ -295,6 +335,10 @@ class InitClientMessage(ClientMessage):
     )
     sts_token_refresh: Optional[STSTokenRefreshConfig] = None  # STS Token刷新配置，可选字段
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_context: Optional[SuperMagicContext] = Field(
+        default=None,
+        description="Initial Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     upload_config: Optional[Dict[str, Any]] = None  # 上传配置，可包含平台类型和临时凭证
     magic_service_host: Optional[str] = None  # Magic Service主机地址，可选字段
     magic_service_ws_host: Optional[str] = None  # Magic Service WebSocket主机地址，可选字段

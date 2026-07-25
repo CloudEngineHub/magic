@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request;
 
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicContext;
 
 /**
  * 聊天消息请求类
@@ -15,20 +16,21 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
  */
 class ChatMessageRequest
 {
-    public function __construct(
-        private string $messageId = '',
-        private string $userId = '',
-        private string $taskId = '',
-        private string $prompt = '',
-        private string $taskMode = 'chat',
-        private string $agentMode = '',
-        private array $attachments = [],
-        private array $mentions = [],
-        private array $mcpConfig = [],
-        private string $modelId = '',
-        private array $dynamicConfig = [],
-        private array $metadata = [],
-        private ?array $agent = null,
+    private function __construct(
+        private string $messageId,
+        private string $userId,
+        private string $taskId,
+        private string $prompt,
+        private SuperMagicContext $superMagicContext,
+        private string $taskMode,
+        private string $agentMode,
+        private array $attachments,
+        private array $mentions,
+        private array $mcpConfig,
+        private string $modelId,
+        private array $dynamicConfig,
+        private array $metadata,
+        private ?array $agent,
         private string $type = 'chat',
     ) {
     }
@@ -41,6 +43,7 @@ class ChatMessageRequest
         string $userId,
         string $taskId,
         string $prompt,
+        SuperMagicContext $superMagicContext,
         string $taskMode = 'chat',
         string $agentMode = '',
         array $attachments = [],
@@ -52,19 +55,20 @@ class ChatMessageRequest
         ?array $agent = null,
     ): self {
         return new self(
-            $messageId,
-            $userId,
-            $taskId,
-            $prompt,
-            $taskMode,
-            $agentMode,
-            $attachments,
-            $mentions,
-            $mcpConfig,
-            $modelId,
-            $dynamicConfig,
-            $metadata,
-            $agent
+            messageId: $messageId,
+            userId: $userId,
+            taskId: $taskId,
+            prompt: $prompt,
+            superMagicContext: $superMagicContext,
+            taskMode: $taskMode,
+            agentMode: $agentMode,
+            attachments: $attachments,
+            mentions: $mentions,
+            mcpConfig: $mcpConfig,
+            modelId: $modelId,
+            dynamicConfig: $dynamicConfig,
+            metadata: $metadata,
+            agent: $agent,
         );
     }
 
@@ -298,6 +302,17 @@ class ChatMessageRequest
         return $this;
     }
 
+    public function getSuperMagicContext(): SuperMagicContext
+    {
+        return $this->superMagicContext;
+    }
+
+    public function setSuperMagicContext(SuperMagicContext $superMagicContext): self
+    {
+        $this->superMagicContext = $superMagicContext;
+        return $this;
+    }
+
     public function toArray(): array
     {
         return [
@@ -315,6 +330,7 @@ class ChatMessageRequest
             'dynamic_config' => $this->dynamicConfig,
             'metadata' => $this->metadata,
             'agent' => $this->agent,
+            'super_magic_context' => $this->superMagicContext->toArray(),
         ];
     }
 }
