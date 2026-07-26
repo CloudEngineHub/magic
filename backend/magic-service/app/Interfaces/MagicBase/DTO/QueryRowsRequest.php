@@ -19,7 +19,9 @@ class QueryRowsRequest extends AbstractMagicBaseDTO
 
     protected string $select = '';
 
-    /** @return array<string, array<string, mixed>> */
+    protected bool $includeTotal = true;
+
+    /** @return array<string, mixed> */
     public function getFilter(): array
     {
         return $this->filter;
@@ -69,6 +71,20 @@ class QueryRowsRequest extends AbstractMagicBaseDTO
     public function setSelect(null|array|int|string $value): void
     {
         $this->select = $this->normalizeSelect($value);
+    }
+
+    public function getIncludeTotal(): bool
+    {
+        return $this->includeTotal;
+    }
+
+    public function setIncludeTotal(null|bool|int|string $value): void
+    {
+        if ($value === null) {
+            $this->includeTotal = true;
+            return;
+        }
+        $this->includeTotal = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true;
     }
 
     private function normalizeSelect(null|array|int|string $value): string

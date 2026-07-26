@@ -51,8 +51,8 @@ class MagicBaseColumnDomainService
         if ($defaultValue !== null) {
             $isValid = match (ColumnType::tryFrom($dataType)) {
                 ColumnType::Text => is_string($defaultValue),
-                ColumnType::Number => is_numeric($defaultValue),
-                ColumnType::Datetime => is_string($defaultValue),
+                ColumnType::Number => MagicBaseNumberNormalizer::normalize($defaultValue) !== null,
+                ColumnType::Datetime => MagicBaseDateTimeNormalizer::normalize($defaultValue) !== null,
                 ColumnType::Boolean => is_bool($defaultValue) || $defaultValue === 0 || $defaultValue === 1 || $defaultValue === '0' || $defaultValue === '1',
                 ColumnType::Json => is_array($defaultValue) || is_object($defaultValue) || is_string($defaultValue),
                 default => false,

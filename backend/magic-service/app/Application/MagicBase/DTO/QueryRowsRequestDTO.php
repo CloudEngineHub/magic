@@ -10,7 +10,7 @@ namespace App\Application\MagicBase\DTO;
 class QueryRowsRequestDTO
 {
     /**
-     * @param array<string, array<string, mixed>> $filter Query filter keyed by field name or relation.field.
+     * @param array<string, mixed> $filter public query DSL or legacy filter keyed by field name
      * @param list<array{field?: string, order?: 'asc'|'desc'|string}> $sort
      */
     public function __construct(
@@ -19,11 +19,12 @@ class QueryRowsRequestDTO
         public int $page = 1,
         public int $pageSize = 20,
         public string $select = '',
+        public bool $includeTotal = true,
     ) {
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<string, mixed>
      */
     public function getFilter(): array
     {
@@ -53,13 +54,19 @@ class QueryRowsRequestDTO
         return $this->select;
     }
 
+    public function includeTotal(): bool
+    {
+        return $this->includeTotal;
+    }
+
     /**
      * @return array{
-     *     filter: array<string, array<string, mixed>>,
+     *     filter: array<string, mixed>,
      *     sort: list<array{field?: string, order?: 'asc'|'desc'|string}>,
      *     page: int,
      *     page_size: int,
-     *     select: string
+     *     select: string,
+     *     include_total: bool
      * }
      */
     public function toArray(): array
@@ -70,6 +77,7 @@ class QueryRowsRequestDTO
             'page' => $this->page,
             'page_size' => $this->pageSize,
             'select' => $this->select,
+            'include_total' => $this->includeTotal,
         ];
     }
 }

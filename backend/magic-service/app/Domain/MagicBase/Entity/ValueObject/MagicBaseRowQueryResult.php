@@ -12,6 +12,7 @@ readonly class MagicBaseRowQueryResult
     public function __construct(
         private MagicBaseEntityCollection $rows,
         private int $total,
+        private bool $hasMore,
     ) {
     }
 
@@ -23,5 +24,10 @@ readonly class MagicBaseRowQueryResult
     public function getTotal(): int
     {
         return $this->total;
+    }
+
+    public function hasMore(): bool
+    {
+        return $this->hasMore;
     }
 }

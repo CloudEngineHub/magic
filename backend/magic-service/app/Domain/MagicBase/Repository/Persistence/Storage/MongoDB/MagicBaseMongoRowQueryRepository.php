@@ -25,6 +25,7 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     public function __construct(
         private MagicBaseMongoClient $client,
         private MagicBaseMongoCollectionRouter $router,
+        private MagicBaseMongoQueryCompiler $queryCompiler,
     ) {
     }
 
@@ -58,13 +59,15 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
         $options = [
             'sort' => $this->buildSort($query),
             'skip' => ($query->getPage() - 1) * $query->getPageSize(),
-            'limit' => $query->getPageSize(),
+            'limit' => $query->getPageSize() + ($query->includeTotal() ? 0 : 1),
             'maxTimeMS' => $this->client->queryTimeoutMs(),
         ];
 
         try {
             $collection = $this->client->collection($route->getMongoCollection());
-            $total = $collection->countDocuments($filter, ['maxTimeMS' => $this->client->queryTimeoutMs()]);
+            $total = $query->includeTotal()
+                ? $collection->countDocuments($filter, ['maxTimeMS' => $this->client->queryTimeoutMs()])
+                : 0;
             $cursor = $collection->find($filter, $options);
         } catch (Throwable $exception) {
             $this->logQueryFailure('MongoDB row storage query failed.', $exception, [
@@ -79,7 +82,14 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
             $entities[] = new MagicBaseRowEntity($this->fromDocument($document));
         }
 
-        return new MagicBaseRowQueryResult(new MagicBaseEntityCollection($entities), (int) $total);
+        $hasMore = $query->includeTotal()
+            ? (($query->getPage() - 1) * $query->getPageSize()) + count($entities) < $total
+            : count($entities) > $query->getPageSize();
+        if (! $query->includeTotal() && $hasMore) {
+            array_pop($entities);
+        }
+
+        return new MagicBaseRowQueryResult(new MagicBaseEntityCollection($entities), (int) $total, $hasMore);
     }
 
     public function listRows(string $dataOrganizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
@@ -135,11 +145,8 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
             $filter = ['$and' => [$filter, $permissionFilter]];
         }
 
-        foreach ($query->getFilters() as $field => $condition) {
-            $fieldFilter = $this->buildFieldFilter((string) $field, $condition);
-            if ($fieldFilter === null) {
-                continue;
-            }
+        $fieldFilter = $this->queryCompiler->compileFilter($query->getFilter());
+        if ($fieldFilter !== []) {
             $filter = ['$and' => [$filter, $fieldFilter]];
         }
 
@@ -191,66 +198,6 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     }
 
     /**
-     * @param array<string, mixed> $condition
-     * @return null|array<string, mixed>
-     */
-    private function buildFieldFilter(string $field, array $condition): ?array
-    {
-        $path = $this->fieldPath($field);
-        $condition = $this->normalizeSystemIdCondition($field, $condition);
-        if (array_key_exists('in', $condition)) {
-            $values = is_array($condition['in']) ? array_values($condition['in']) : [];
-            return [$path => ['$in' => $values]];
-        }
-        if (array_key_exists('eq', $condition)) {
-            return [$path => $condition['eq']];
-        }
-
-        return null;
-    }
-
-    /**
-     * API record IDs are strings to preserve JavaScript precision, while MongoDB
-     * stores the system record_id as a 64-bit integer.
-     *
-     * @param array<string, mixed> $condition
-     * @return array<string, mixed>
-     */
-    private function normalizeSystemIdCondition(string $field, array $condition): array
-    {
-        if (! in_array($field, ['id', 'record_id'], true)) {
-            return $condition;
-        }
-
-        if (array_key_exists('eq', $condition)) {
-            $condition['eq'] = $this->normalizeRecordIdValue($condition['eq']);
-        }
-
-        if (is_array($condition['in'] ?? null)) {
-            $condition['in'] = array_map(
-                fn (mixed $value): mixed => $this->normalizeRecordIdValue($value),
-                $condition['in']
-            );
-        }
-
-        return $condition;
-    }
-
-    private function normalizeRecordIdValue(mixed $value): mixed
-    {
-        if (is_int($value)) {
-            return $value;
-        }
-
-        if (! is_string($value) || ! ctype_digit($value)) {
-            return $value;
-        }
-
-        $normalized = (int) $value;
-        return (string) $normalized === $value ? $normalized : $value;
-    }
-
-    /**
      * @return array<string, int>
      */
     private function buildSort(MagicBaseRowQuery $query): array
@@ -261,24 +208,11 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
             if ($field === '') {
                 continue;
             }
-            $sort[$this->fieldPath($field)] = strtolower((string) ($item['order'] ?? 'asc')) === 'desc' ? -1 : 1;
+            $sort[$this->queryCompiler->fieldPath($field)] = strtolower((string) ($item['order'] ?? 'asc')) === 'desc' ? -1 : 1;
         }
 
         $sort['record_id'] ??= 1;
         return $sort;
-    }
-
-    private function fieldPath(string $field): string
-    {
-        return match ($field) {
-            'id', 'record_id' => 'record_id',
-            'data_organization_code' => 'data_organization_code',
-            'organization_code' => 'organization_code',
-            'created_at' => 'created_at',
-            'updated_at' => 'updated_at',
-            'created_by' => 'created_by',
-            default => 'data.' . $field,
-        };
     }
 
     /**

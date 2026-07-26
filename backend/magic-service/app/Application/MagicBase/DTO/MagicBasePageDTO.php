@@ -17,11 +17,12 @@ readonly class MagicBasePageDTO
         public int $page,
         public int $pageSize,
         public int $total,
+        public bool $hasMore,
     ) {
     }
 
     /**
-     * @return array{list: list<array<string, mixed>>, page: int, page_size: int, total: int}
+     * @return array{list: list<array<string, mixed>>, page: int, page_size: int, total: int, has_more: bool}
      */
     public function toArray(): array
     {
@@ -30,6 +31,7 @@ readonly class MagicBasePageDTO
             'page' => $this->page,
             'page_size' => $this->pageSize,
             'total' => $this->total,
+            'has_more' => $this->hasMore,
         ];
     }
 }

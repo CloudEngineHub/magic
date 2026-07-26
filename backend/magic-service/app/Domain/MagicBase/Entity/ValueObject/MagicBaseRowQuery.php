@@ -10,7 +10,6 @@ namespace App\Domain\MagicBase\Entity\ValueObject;
 readonly class MagicBaseRowQuery
 {
     /**
-     * @param array<string, array<string, mixed>> $filters query filter keyed by root field or dynamic column_key
      * @param list<array{field?: string, order?: 'asc'|'desc'|string}> $sorts
      * @param list<string> $actorDepartmentIds
      * @param list<int> $staticReadableRecordIds
@@ -20,7 +19,7 @@ readonly class MagicBaseRowQuery
         private string $dataOrganizationCode,
         private int $projectId,
         private int $tableId,
-        private array $filters,
+        private MagicBaseFilterGroup $filter,
         private array $sorts,
         private int $page,
         private int $pageSize,
@@ -32,6 +31,7 @@ readonly class MagicBaseRowQuery
         private array $actorDepartmentIds,
         private array $staticReadableRecordIds,
         private array $fieldTypes,
+        private bool $includeTotal,
     ) {
     }
 
@@ -50,12 +50,9 @@ readonly class MagicBaseRowQuery
         return $this->tableId;
     }
 
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    public function getFilters(): array
+    public function getFilter(): MagicBaseFilterGroup
     {
-        return $this->filters;
+        return $this->filter;
     }
 
     /**
@@ -123,5 +120,10 @@ readonly class MagicBaseRowQuery
     public function getFieldTypes(): array
     {
         return $this->fieldTypes;
+    }
+
+    public function includeTotal(): bool
+    {
+        return $this->includeTotal;
     }
 }

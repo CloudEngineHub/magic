@@ -56,6 +56,7 @@ class MagicBaseResponseAssembler
             'page' => (int) ($payload['page'] ?? 1),
             'page_size' => (int) ($payload['page_size'] ?? 20),
             'total' => (int) ($payload['total'] ?? 0),
+            'has_more' => (bool) ($payload['has_more'] ?? false),
             'list' => $list,
         ]);
     }

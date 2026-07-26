@@ -17,5 +17,7 @@ class MagicBasePageResponseDTO extends AbstractMagicBaseDTO
 
     protected int $total = 0;
 
+    protected bool $hasMore = false;
+
     protected array $list = [];
 }

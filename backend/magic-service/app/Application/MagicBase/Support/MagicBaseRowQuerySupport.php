@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MagicBase\Support;
 
+use App\Application\MagicBase\DTO\MagicBaseResolvedFilter;
 use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
@@ -17,6 +18,7 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseFormattedRow;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Entity\ValueObject\SelectQuery;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
+use App\Domain\MagicBase\Exception\MagicBaseInvalidFilterException;
 use App\Domain\MagicBase\Exception\MagicBaseUnsupportedQueryException;
 use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
@@ -149,8 +151,7 @@ readonly class MagicBaseRowQuerySupport
     }
 
     /**
-     * @param array<string, array<string, mixed>> $filters
-     * @return array<string, array<string, mixed>>
+     * @param array<string, mixed> $filters
      */
     public function resolveFiltersForRowStorage(
         MagicUserAuthorization $authorization,
@@ -159,15 +160,21 @@ readonly class MagicBaseRowQuerySupport
         MagicBaseAccessContext $access,
         ActorContext $actor,
         array $filters,
-    ): array {
+    ): MagicBaseResolvedFilter {
         unset($access);
+        if ($this->isFilterGroupPayload($filters)) {
+            return new MagicBaseResolvedFilter($filters);
+        }
+
         $resolved = [];
+        $unboundedInFields = [];
         foreach ($filters as $field => $condition) {
             if (! is_string($field) || ! is_array($condition)) {
                 continue;
             }
             if (! str_contains($field, '.')) {
                 $resolved[$field] = $condition;
+                unset($unboundedInFields[$field]);
                 continue;
             }
 
@@ -177,9 +184,10 @@ readonly class MagicBaseRowQuerySupport
             $resolved[$relation->getSourceColumnKey()] = [
                 'in' => $sourceValues,
             ];
+            $unboundedInFields[$relation->getSourceColumnKey()] = true;
         }
 
-        return $resolved;
+        return new MagicBaseResolvedFilter($resolved, array_keys($unboundedInFields));
     }
 
     /**
@@ -224,6 +232,14 @@ readonly class MagicBaseRowQuerySupport
             $this->notFound('记录');
         }
         return $row;
+    }
+
+    /**
+     * @param array<string, mixed> $filter
+     */
+    private function isFilterGroupPayload(array $filter): bool
+    {
+        return is_string($filter['logic'] ?? null);
     }
 
     /**
@@ -362,7 +378,10 @@ readonly class MagicBaseRowQuerySupport
     ): array {
         unset($actor);
         if (! array_key_exists('eq', $condition)) {
-            return [];
+            throw new MagicBaseInvalidFilterException('关联字段筛选暂时只支持 eq', [
+                'field' => $relationField,
+                'reason' => 'relation_operator_not_supported',
+            ]);
         }
 
         $targetContext = $this->loadTargetContext($authorization, $projectId, (int) $relation->getTargetTableId());

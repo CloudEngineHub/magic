@@ -33,8 +33,12 @@ class MagicBaseRowDomainService
             if (! is_string($field) || ! $columnsByKey->has($field)) {
                 $this->invalid('字段');
             }
-            $this->validateFieldValue($columnsByKey->get($field), $value);
-            $normalized[$field] = $value;
+            $column = $columnsByKey->get($field);
+            if (! $column instanceof MagicBaseColumnEntity) {
+                $this->invalid('字段');
+            }
+            $this->validateFieldValue($column, $value);
+            $normalized[$field] = $this->normalizeFieldValue($column, $value);
         }
 
         foreach ($columnsByKey->all() as $field => $column) {
@@ -44,7 +48,11 @@ class MagicBaseRowDomainService
 
             if ($isCreate) {
                 if ($column->getDefaultValue() !== null) {
-                    $normalized[$field] = $column->getDefaultValue();
+                    $this->validateFieldValue($column, $column->getDefaultValue());
+                    $normalized[$field] = $this->normalizeFieldValue(
+                        $column,
+                        $column->getDefaultValue(),
+                    );
                     continue;
                 }
                 if ($column->getIsRequired()) {
@@ -106,7 +114,7 @@ class MagicBaseRowDomainService
         $dataType = ColumnType::tryFrom($column->getDataType());
         $isValid = match ($dataType) {
             ColumnType::Text => is_string($value),
-            ColumnType::Number => is_numeric($value),
+            ColumnType::Number => MagicBaseNumberNormalizer::normalize($value) !== null,
             ColumnType::Datetime => is_string($value),
             ColumnType::Boolean => is_bool($value) || $value === 0 || $value === 1 || $value === '0' || $value === '1',
             ColumnType::Json => is_array($value) || is_string($value) || is_object($value),
@@ -116,6 +124,29 @@ class MagicBaseRowDomainService
         if (! $isValid) {
             $this->invalid($column->getColumnKey());
         }
+    }
+
+    private function normalizeFieldValue(MagicBaseColumnEntity $column, mixed $value): mixed
+    {
+        if ($value === null) {
+            return $value;
+        }
+
+        return match (ColumnType::tryFrom($column->getDataType())) {
+            ColumnType::Number => MagicBaseNumberNormalizer::normalize($value),
+            ColumnType::Boolean => is_bool($value) ? $value : in_array($value, [1, '1'], true),
+            ColumnType::Datetime => $this->normalizeDatetimeValue($column, $value),
+            default => $value,
+        };
+    }
+
+    private function normalizeDatetimeValue(MagicBaseColumnEntity $column, mixed $value): string
+    {
+        $normalized = MagicBaseDateTimeNormalizer::normalize($value);
+        if ($normalized === null) {
+            $this->invalid($column->getColumnKey());
+        }
+        return $normalized;
     }
 
     private function empty(string $label): void

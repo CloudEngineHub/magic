@@ -34,7 +34,7 @@ readonly class MagicBaseQueryAppService
         $context = $this->accessControl->requireReadableTable($authorization, $projectId, $tableId);
         $sorts = $requestDTO->getSort();
         $this->rowQuerySupport->assertSortableByRowStorage($sorts);
-        $filters = $this->rowQuerySupport->resolveFiltersForRowStorage(
+        $resolvedFilter = $this->rowQuerySupport->resolveFiltersForRowStorage(
             $authorization,
             $projectId,
             $context->getTable(),
@@ -43,18 +43,20 @@ readonly class MagicBaseQueryAppService
             $requestDTO->getFilter()
         );
         $page = max(1, $requestDTO->getPage());
-        $pageSize = max(1, $requestDTO->getPageSize());
+        $pageSize = min(100, max(1, $requestDTO->getPageSize()));
         $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
             $authorization->getOrganizationCode(),
             $context->getTable(),
             $context->getAccess(),
             $context->getActor(),
-            $filters,
+            $resolvedFilter->getFilter(),
             $sorts,
             $page,
             $pageSize,
             false,
             $this->accessControl->getStaticReadableRecordIds($context),
+            $requestDTO->includeTotal(),
+            $resolvedFilter->getUnboundedInFields(),
         );
         $result = $this->rowStorageResolver->queryRows($query);
         /** @var MagicBaseRowEntity[] $rows */
@@ -70,6 +72,7 @@ readonly class MagicBaseQueryAppService
             $page,
             $pageSize,
             $result->getTotal(),
+            $result->hasMore(),
         );
     }
 

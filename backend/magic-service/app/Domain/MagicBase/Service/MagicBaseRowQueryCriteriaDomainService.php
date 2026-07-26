@@ -11,14 +11,21 @@ use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseAccessContext;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
 
 readonly class MagicBaseRowQueryCriteriaDomainService
 {
+    public function __construct(
+        private MagicBaseRowFilterDomainService $rowFilterDomainService,
+    ) {
+    }
+
     /**
-     * @param array<string, array<string, mixed>> $filters query filter keyed by root field or dynamic column_key
+     * @param array<string, mixed> $filters public query DSL or legacy field-keyed filter
      * @param list<array{field?: string, order?: 'asc'|'desc'|string}> $sorts
      * @param list<int> $staticReadableRecordIds record ids readable through static row permissions
+     * @param list<string> $unboundedInFields relation fields resolved by the trusted application layer
      */
     public function buildReadableQuery(
         string $dataOrganizationCode,
@@ -31,12 +38,15 @@ readonly class MagicBaseRowQueryCriteriaDomainService
         int $pageSize,
         bool $includeDeleted = false,
         array $staticReadableRecordIds = [],
+        bool $includeTotal = true,
+        array $unboundedInFields = [],
     ): MagicBaseRowQuery {
+        $fieldTypes = $this->getFieldTypes($access);
         return new MagicBaseRowQuery(
             $dataOrganizationCode,
             (int) $table->getProjectId(),
             (int) $table->getId(),
-            $filters,
+            $this->rowFilterDomainService->parse($filters, $fieldTypes, $unboundedInFields),
             $sorts,
             max(1, $page),
             max(1, $pageSize),
@@ -47,7 +57,8 @@ readonly class MagicBaseRowQueryCriteriaDomainService
             $actor->getOrganizationCode(),
             $actor->getDepartmentIds(),
             $staticReadableRecordIds,
-            $this->getFieldTypes($access),
+            $fieldTypes,
+            $includeTotal,
         );
     }
 
@@ -63,7 +74,11 @@ readonly class MagicBaseRowQueryCriteriaDomainService
     {
         $fieldTypes = [];
         foreach ($access->getColumns()->all() as $columnKey => $column) {
-            if (! $column instanceof MagicBaseColumnEntity || ! is_string($columnKey)) {
+            if (
+                ! $column instanceof MagicBaseColumnEntity
+                || ! is_string($columnKey)
+                || $column->getStatus() === MagicBaseConst::STATUS_DISABLED
+            ) {
                 continue;
             }
             $fieldTypes[$columnKey] = $column->getDataType();

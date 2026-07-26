@@ -61,6 +61,7 @@ class MagicBaseAssembler
             $request->getPage(),
             $request->getPageSize(),
             $request->getSelect(),
+            $request->getIncludeTotal(),
         );
     }
 
