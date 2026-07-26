@@ -580,12 +580,12 @@
         "en_US": "Unknown file"
     },
     "download_from_urls.partial_success": {
-        "zh_CN": "下载完成：{{success}}个成功，{{failed}}个失败",
-        "en_US": "Download completed: {{success}} succeeded, {{failed}} failed"
+        "zh_CN": "下载完成：{{success}}个成功，{{skipped}}个跳过，{{failed}}个失败",
+        "en_US": "Download completed: {{success}} succeeded, {{skipped}} skipped, {{failed}} failed"
     },
     "download_from_urls.success_count": {
-        "zh_CN": "成功下载{{count}}个文件",
-        "en_US": "Successfully downloaded {{count}} files"
+        "zh_CN": "成功下载{{count}}个文件，跳过{{skipped}}个已有文件",
+        "en_US": "Successfully downloaded {{count}} files and skipped {{skipped}} existing files"
     },
     "download_from_urls.batch_error": {
         "zh_CN": "批量下载资源失败: {{error}}",
@@ -594,6 +594,26 @@
     "download_from_urls.failed_count": {
         "zh_CN": "下载失败：{{count}}个文件",
         "en_US": "Download failed: {{count}} files"
+    },
+    "download_from_urls.progress_downloading": {
+        "zh_CN": "正在下载 {{file}}，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Downloading {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
+    "download_from_urls.progress_retrying": {
+        "zh_CN": "正在重试 {{file}}，第 {{retry_count}} 次重试，整体进度 {{progress}}%",
+        "en_US": "Retrying {{file}}. Retry {{retry_count}}. Overall progress: {{progress}}%"
+    },
+    "download_from_urls.progress_completed": {
+        "zh_CN": "下载任务已结束，已处理 {{completed}}/{{total}} 个文件",
+        "en_US": "Download task finished. Processed {{completed}}/{{total}} files"
+    },
+    "download_from_urls.progress_failed": {
+        "zh_CN": "{{file}} 下载失败，继续处理其他文件",
+        "en_US": "Failed to download {{file}}. Continuing with the remaining files"
+    },
+    "download_from_urls.progress_cancelled": {
+        "zh_CN": "下载已取消，未完成文件的可续传数据已保留",
+        "en_US": "Download cancelled. Resumable data for incomplete files was preserved"
     },
     "get_youtube_video_info.success": {
         "zh_CN": "获取视频信息成功 - {{title}}",

@@ -258,9 +258,11 @@ class ConvertPdf(AbstractFileTool[ConvertPdfParams], WorkspaceTool[ConvertPdfPar
                         url=input_location,
                         # 提供相对于工作区的路径给下载工具
                         file_path=str(temp_download_path.relative_to(workspace_root)),
-                        override=True # 覆盖同名临时文件
                     )
-                    download_result = await download_tool.execute_purely(download_params)
+                    download_result = await download_tool.execute_purely(
+                        download_params,
+                        overwrite=True,
+                    )
                     if not download_result.ok:
                         logger.error(f"Normal 模式下载 PDF 失败: {download_result.content}")
                         return ToolResult.error(f"下载 PDF 文件失败: {download_result.content}")

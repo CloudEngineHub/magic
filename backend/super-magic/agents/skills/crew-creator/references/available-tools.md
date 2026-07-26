@@ -33,8 +33,7 @@ tools:
   - visual_understanding
   - video_understanding
   - run_python_snippet
-  - download_from_url
-  - download_from_urls
+  - run_sdk_snippet
 ```
 
 ### Content Creation Employee
@@ -74,7 +73,6 @@ tools:
   - visual_understanding
   - video_understanding
   - run_python_snippet
-  - download_from_url
 ```
 
 ---
@@ -104,9 +102,17 @@ tools:
 |------|-------------|
 | `web_search` | Search the internet for information |
 | `read_webpages_as_markdown` | Fetch webpages and convert to Markdown |
-| `download_from_url` | Download a file from a URL |
-| `download_from_urls` | Batch download files from multiple URLs |
 | `download_from_markdown` | Download files referenced in Markdown content |
+
+External file downloads use the `download` system skill with `run_sdk_snippet`, including single-file downloads. Do not put `download_from_url` or the Code Mode-only `download_from_urls` tool in an Agent `tools:` list.
+
+```yaml
+tools:
+  - run_sdk_snippet
+skills:
+  system_skills:
+    - name: download
+```
 
 ### Vision & Image
 
@@ -124,6 +130,7 @@ tools:
 |------|-------------|
 | `shell_exec` | Execute shell commands |
 | `run_python_snippet` | Run Python code directly |
+| `run_sdk_snippet` | Run Code Mode scripts that call tools through `sdk.tool` |
 
 ### Content Processing
 

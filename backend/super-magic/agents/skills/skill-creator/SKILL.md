@@ -48,7 +48,7 @@ read_files(files=[{"file_path": "path/to/file.md"}])
 Before specifying tools in the skill, read the reference file `references/super-magic-tools.md` for the full list of available tools and usage examples.
 
 Common tool categories — quick reference (see `references/super-magic-tools.md` for details and examples):
-- Web search & fetch: `web_search`, `read_webpages_as_markdown`, `download_from_url`, `download_from_urls`
+- Web search & fetch: `web_search`, `read_webpages_as_markdown`; external file downloads use the `download` skill with `run_sdk_snippet`
 - Vision: `visual_understanding`, `visual_understanding_webpage`, `video_understanding`
 - Code execution: `shell_exec`, `run_python_snippet`
 - Image generation & search: `generate_images`, `image_search`

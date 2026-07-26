@@ -940,7 +940,6 @@ Keyword Diversification Principles:
             download_params = DownloadFromUrlParams(
                 url=url,
                 file_path="",  # 空路径触发 cache_only 模式
-                override=True
             )
 
             task = self._download_image_group_with_semaphore(url, grouped_images, download_params, semaphore)

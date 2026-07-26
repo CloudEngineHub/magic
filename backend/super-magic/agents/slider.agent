@@ -17,12 +17,12 @@ tools:
   - multi_edit_file
   - multi_edit_file_range
   - image_search
-  - download_from_urls
   - generate_images
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
     - name: user-info
     - name: slide-template
