@@ -24,7 +24,7 @@ function PlanDataModelFields({ fields }: PlanDataModelFieldsProps) {
 				data-testid="plan-data-model-fields-rail"
 			>
 				{fields.map((field, index) => {
-					const key = `${field.name}-${field.type}-${field.text}-${index}`
+					const key = `field-${index}`
 
 					if (field.text) {
 						return (
@@ -71,7 +71,7 @@ function PlanDataModelFields({ fields }: PlanDataModelFieldsProps) {
 								<div className="mt-2 flex flex-wrap gap-1">
 									{field.details.map((detail, detailIndex) => (
 										<span
-											key={`${detail.label}-${detail.value}-${detailIndex}`}
+											key={`detail-${detailIndex}`}
 											className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] leading-4"
 										>
 											<span className="text-muted-foreground">

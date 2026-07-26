@@ -1,5 +1,6 @@
 import type { ToolDataLike } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/tools/DefaultTool"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { parsePartialJson } from "./partialJson"
 
 export const MICRO_APP_PLAN_TOOL_NAME = "micro_app_plan"
 
@@ -63,6 +64,7 @@ interface PlanDataModel {
 interface PlanCardData {
 	planId: string
 	status: PlanStatus
+	isComplete: boolean
 	title: string
 	summary: string
 	appType: string
@@ -334,24 +336,30 @@ function normalizeDataModel(value: unknown): PlanDataModel[] {
 		.filter((item) => item.tableName || item.purpose || item.fields.length > 0)
 }
 
-function parseArguments(argumentsText: unknown): Record<string, unknown> {
-	if (typeof argumentsText !== "string" || !argumentsText) return {}
-	try {
-		const parsed = JSON.parse(argumentsText)
-		return toRecord(parsed)
-	} catch {
-		return {}
+function parseArguments(argumentsText: unknown) {
+	if (typeof argumentsText !== "string" || !argumentsText) {
+		return { data: {}, isComplete: false }
+	}
+
+	const result = parsePartialJson(argumentsText)
+	const isObject =
+		!!result.value && typeof result.value === "object" && !Array.isArray(result.value)
+	return {
+		data: toRecord(result.value),
+		isComplete: result.isComplete && isObject,
 	}
 }
 
 export function resolvePlan(tool?: ToolDataLike): PlanCardData {
 	const detailData = toRecord(tool?.detail?.data)
-	const args = parseArguments(tool?.rawArguments ?? detailData.arguments)
-	const source = { ...args, ...detailData }
+	const argumentsResult = parseArguments(tool?.rawArguments ?? detailData.arguments)
+	const source = { ...argumentsResult.data, ...detailData }
+	const hasDetail = typeof detailData.status === "string"
 
 	return {
 		planId: normalizeText(source.plan_id) || normalizeText(tool?.id),
 		status: normalizePlanStatus(source.status),
+		isComplete: hasDetail || argumentsResult.isComplete,
 		title: normalizeText(source.title ?? source.plan_title),
 		summary: normalizeText(source.summary),
 		appType: normalizeText(source.app_type ?? source.appType),

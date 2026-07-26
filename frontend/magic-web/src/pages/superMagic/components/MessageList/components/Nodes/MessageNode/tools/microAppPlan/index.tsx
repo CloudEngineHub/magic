@@ -15,7 +15,7 @@ import { IconLoader2 } from "@tabler/icons-react"
 import { CheckCircle2, ChevronDown, ClipboardList, PencilLine, XCircle } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import type { ReactNode } from "react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import PlanDataModelFields from "./PlanDataModelFields"
 import { MICRO_APP_PLAN_TOOL_NAME, PLAN_STATUS, resolvePlan, resolveTaskId } from "./model"
@@ -26,10 +26,7 @@ function PlanList({ items }: { items: string[] }) {
 	return (
 		<ul className="space-y-1.5">
 			{items.map((item, index) => (
-				<li
-					key={`${index}-${item}`}
-					className="flex gap-2 text-xs leading-5 text-foreground"
-				>
+				<li key={`item-${index}`} className="flex gap-2 text-xs leading-5 text-foreground">
 					<span className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground/60" />
 					<span>{item}</span>
 				</li>
@@ -69,16 +66,36 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 		| { tool?: ToolDataLike }
 		| undefined
 	const tool = props.toolData || node?.tool
-	const plan = useMemo(() => resolvePlan(tool), [tool])
+	const deferredRawArguments = useDeferredValue(tool?.rawArguments)
+	const plan = resolvePlan(
+		tool
+			? {
+					...tool,
+					rawArguments: deferredRawArguments,
+				}
+			: tool,
+	)
 	const shouldRenderDefaultTool = tool?.status === "error"
 
-	const isOpen = !!loading || open
 	const isPending = plan.status === PLAN_STATUS.pending
+	const isStreaming = !!loading && !plan.isComplete
+	const isOpen = isStreaming || open
 	const isFrozen =
-		pendingAction !== null || !loading || props.isShare || isShareRoute || !isPending
+		pendingAction !== null ||
+		!loading ||
+		isStreaming ||
+		props.isShare ||
+		isShareRoute ||
+		!isPending
 	const toolId = tool?.id
 
 	const statusConfig = useMemo(() => {
+		if (isStreaming && plan.status === PLAN_STATUS.pending) {
+			return {
+				label: t("plan.status.generating"),
+				className: "border-primary/20 bg-primary/10 text-primary",
+			}
+		}
 		if (plan.status === PLAN_STATUS.approved) {
 			return {
 				label: t("plan.status.approved"),
@@ -107,7 +124,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			label: t("plan.status.pending"),
 			className: "border-primary/20 bg-primary/10 text-primary",
 		}
-	}, [plan.status, t])
+	}, [isStreaming, plan.status, t])
 
 	const submitReply = useCallback(
 		async (responseStatus: PlanResponseStatus, comment = "") => {
@@ -227,12 +244,12 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 					variant="ghost"
 					size="icon-sm"
 					onClick={() => setOpen((value) => !value)}
-					disabled={!!loading}
+					disabled={isStreaming}
 					aria-label={isOpen ? t("plan.actions.collapse") : t("plan.actions.expand")}
 					aria-expanded={isOpen}
 					className="size-7 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
 				>
-					{loading ? (
+					{isStreaming ? (
 						<IconLoader2 size={14} className="animate-spin" aria-hidden />
 					) : (
 						<ChevronDown
@@ -262,7 +279,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 						<ol className="space-y-1.5">
 							{plan.implementationSteps.map((item, index) => (
 								<li
-									key={`${index}-${item}`}
+									key={`step-${index}`}
 									className="flex gap-2 text-xs leading-5 text-foreground"
 								>
 									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] text-muted-foreground">
@@ -276,9 +293,9 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 
 					<PlanSection title={t("plan.sections.files")} hidden={plan.files.length === 0}>
 						<div className="grid gap-2">
-							{plan.files.map((file) => (
+							{plan.files.map((file, index) => (
 								<div
-									key={`${file.path}-${file.purpose}`}
+									key={`file-${index}`}
 									className="rounded-md border border-border bg-muted/30 px-3 py-2"
 								>
 									<div className="text-xs font-medium leading-5 text-foreground">
@@ -299,9 +316,9 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 						hidden={plan.dataModel.length === 0}
 					>
 						<div className="grid gap-2">
-							{plan.dataModel.map((table) => (
+							{plan.dataModel.map((table, index) => (
 								<div
-									key={`${table.tableName}-${table.purpose}`}
+									key={`table-${index}`}
 									className="min-w-0 rounded-md border border-border bg-muted/30 px-3 py-2"
 								>
 									<div className="text-xs font-medium leading-5 text-foreground">
