@@ -52,6 +52,7 @@ describe("MicroAppMobileEntryPreview", () => {
 		expect(htmlPreviewMocks.props).toEqual(
 			expect.objectContaining({
 				activeFileId: "entry-1",
+				virtualStorageMarkerId: "entry-1",
 				updatedAt: "2026-07-20T06:00:00Z",
 				allowEdit: true,
 				showFileHeader: false,

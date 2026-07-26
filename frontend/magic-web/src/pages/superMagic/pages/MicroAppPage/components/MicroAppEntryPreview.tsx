@@ -23,6 +23,7 @@ export interface MicroAppEntryPreviewProps {
 	onOpenFile?: (fileItem?: unknown) => void
 	viewMode?: MicroAppEntryPreviewMode
 	refreshKey?: number
+	storageMarkerId?: string
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
 	emptyTestId?: string
@@ -53,6 +54,7 @@ export default function MicroAppEntryPreview({
 	onOpenFile,
 	viewMode = "desktop",
 	refreshKey = 0,
+	storageMarkerId,
 	onRegisterAIEdit,
 	onAIEditActiveChange,
 	emptyTestId = "micro-app-preview-empty",
@@ -93,6 +95,7 @@ export default function MicroAppEntryPreview({
 			attachmentList={attachmentList}
 			selectedProject={selectedProject}
 			activeFileId={entryData.file_id}
+			virtualStorageMarkerId={storageMarkerId}
 			updatedAt={entryData.updated_at}
 			allowEdit={allowEdit}
 			viewMode={viewMode}

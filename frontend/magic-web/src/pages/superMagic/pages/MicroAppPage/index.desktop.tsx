@@ -3,7 +3,7 @@ import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { PanelRightOpen } from "lucide-react"
-import { useLocalStorageState, useMemoizedFn, useSize } from "ahooks"
+import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
@@ -119,12 +119,8 @@ function MicroAppPageInner({
 			isEnabled: !isReadOnly,
 		})
 
-	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useLocalStorageState<boolean>(
-		layout.MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY,
-		{
-			defaultValue: false,
-		},
-	)
+	// 折叠仅用于当前详情页的临时布局，重新进入微应用时始终展示对话上下文。
+	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useState(false)
 	// 数据表格需要更宽的工作区；只恢复系统自动收起的状态，不覆盖用户手动操作。
 	const messagePanelCollapsedBeforeDatabaseRef = useRef(false)
 	const databaseAutoCollapsedRef = useRef(false)
@@ -190,10 +186,9 @@ function MicroAppPageInner({
 	})
 
 	useEffect(() => {
-		if (databaseAutoCollapsedRef.current) {
-			setIsMessagePanelCollapsed(messagePanelCollapsedBeforeDatabaseRef.current)
-			databaseAutoCollapsedRef.current = false
-		}
+		messagePanelCollapsedBeforeDatabaseRef.current = false
+		databaseAutoCollapsedRef.current = false
+		setIsMessagePanelCollapsed(false)
 		setActiveView("preview")
 		setPreviewEntryFile(null)
 		setPreviewMode("desktop")
@@ -341,6 +336,7 @@ function MicroAppPageInner({
 												onOpenFile={handlePreviewOpenFile}
 												viewMode={previewMode}
 												refreshKey={previewRefreshKey}
+												storageMarkerId={defaultEntryFile?.file_id}
 												onRegisterAIEdit={handleRegisterAIEdit}
 												onAIEditActiveChange={setIsAIEditActive}
 												isBuilding={hasRunningTopic}

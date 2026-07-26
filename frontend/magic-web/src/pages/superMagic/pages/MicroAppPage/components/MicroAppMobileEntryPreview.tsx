@@ -29,6 +29,7 @@ function MicroAppMobileEntryPreview({
 			selectedProject={selectedProject}
 			allowEdit={allowEdit}
 			onOpenFile={onOpenFile}
+			storageMarkerId={entryFile?.file_id}
 			viewMode="desktop"
 			emptyTestId="micro-app-mobile-preview-empty"
 			buildingTestId="micro-app-mobile-preview-building"

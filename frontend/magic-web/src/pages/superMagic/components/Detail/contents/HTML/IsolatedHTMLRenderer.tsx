@@ -156,6 +156,8 @@ interface IsolatedHTMLRendererProps {
 	) => Promise<void>
 	onSaveReady?: (triggerSave: () => Promise<SaveResult | undefined>) => void
 	fileId?: string
+	/** 跨多个 HTML 文件共享存储时使用的稳定标记；未传时继续按当前文件隔离。 */
+	virtualStorageMarkerId?: string
 	filePathMapping: Map<string, string>
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
@@ -362,6 +364,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			saveEditContent,
 			onSaveReady,
 			fileId,
+			virtualStorageMarkerId,
 			filePathMapping,
 			openNewTab,
 			htmlRelativeFolderPath,
@@ -1116,10 +1119,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			// 默认返回文件ID
 			return fileId
 		})
+		const getStorageMarkerId = useMemoizedFn(() => virtualStorageMarkerId || getMarkerId())
 
 		useEffect(() => {
 			let cancelled = false
-			const markerId = getMarkerId()
+			const markerId = getStorageMarkerId()
 			const namespace = buildHtmlVirtualStorageNamespace({
 				projectId: selectedProject?.id,
 				topicId: selectedProject?.current_topic_id,
@@ -1140,9 +1144,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		}, [
 			// attachmentList,
 			fileId,
-			getMarkerId,
+			getStorageMarkerId,
 			selectedProject?.current_topic_id,
 			selectedProject?.id,
+			virtualStorageMarkerId,
 		])
 
 		useEffect(() => {
@@ -1208,7 +1213,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 
 			// 根据HTML文件上下文确定标记ID：如果父目录存在metadata则使用父目录ID，否则使用文件ID
-			const markerId = getMarkerId()
+			const markerId = getStorageMarkerId()
 			// 创建完整HTML内容
 			const fullContent = getFullContent(decodedContent, markerId, {
 				dynamicInterception: dynamicResourceInterceptionConfig,
@@ -1336,7 +1341,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 
 					// 根据HTML文件上下文确定标记ID
-					const markerId = getMarkerId()
+					const markerId = getStorageMarkerId()
 					if (!virtualStorageContext) return
 					// 创建完整HTML内容
 					const fullContent = getFullContent(decodedContent, markerId, {
@@ -1406,7 +1411,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containIframeOverscroll,
 				disableIframeDocumentClickBridge,
 				dynamicResourceInterceptionConfig,
-				getMarkerId,
+				getStorageMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
 				isEditMode,

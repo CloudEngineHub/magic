@@ -336,6 +336,15 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
+	it("expands the conversation panel when entering from the micro-app home page", () => {
+		localStorage.setItem("MAGIC:micro-app-page-message-panel-collapsed", "true")
+
+		render(<MicroAppPageDesktop />)
+
+		expect(screen.getByTestId("desktop-conversation-panel")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
+	})
+
 	it("switches preview, file viewer, and database inside the main workspace", async () => {
 		render(<MicroAppPageDesktop />)
 

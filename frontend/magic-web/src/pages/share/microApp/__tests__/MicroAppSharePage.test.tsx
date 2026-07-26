@@ -37,6 +37,7 @@ interface TestPreviewFile {
 interface TestHtmlPreviewProps {
 	data: TestPreviewFile
 	openFileTab?: (file: TestPreviewFile) => void
+	virtualStorageMarkerId?: string
 }
 
 interface TestMagicDropdownProps {
@@ -181,11 +182,18 @@ vi.mock("@/pages/share/components", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
-	default: function MockHtmlPreview({ data, openFileTab }: TestHtmlPreviewProps) {
+	default: function MockHtmlPreview({
+		data,
+		openFileTab,
+		virtualStorageMarkerId,
+	}: TestHtmlPreviewProps) {
 		const [mountedFileId] = useState(data.file_id)
 
 		return (
-			<div data-testid="mock-html-preview">
+			<div
+				data-testid="mock-html-preview"
+				data-virtual-storage-marker-id={virtualStorageMarkerId}
+			>
 				<span>{data.file_name}</span>
 				<span data-testid="mock-mounted-file-id">{mountedFileId}</span>
 				<button
@@ -351,11 +359,19 @@ describe("MicroAppSharePage", () => {
 
 		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
 		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-1")
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-virtual-storage-marker-id",
+			"file-1",
+		)
 
 		fireEvent.click(screen.getByRole("button", { name: "navigate-admin" }))
 
 		expect(screen.getByTestId("mock-html-preview")).toHaveTextContent("admin.html")
 		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-2")
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-virtual-storage-marker-id",
+			"file-1",
+		)
 
 		fireEvent.click(screen.getByRole("button", { name: "navigate-index" }))
 

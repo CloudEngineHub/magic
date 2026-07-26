@@ -149,6 +149,8 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
+	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
+	virtualStorageMarkerId?: string
 }
 
 interface HtmlExportActionProps {
@@ -241,6 +243,7 @@ export default memo(function HTML(props: HTMLProps) {
 		onRegisterSaveHandler,
 		isInPPTMode = false,
 		allowDownload,
+		virtualStorageMarkerId,
 	} = props
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
@@ -1508,6 +1511,7 @@ export default memo(function HTML(props: HTMLProps) {
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
 									fileId={displayData?.file_id}
+									virtualStorageMarkerId={virtualStorageMarkerId}
 									filePathMapping={filePathMapping}
 									openNewTab={openNewTab}
 									htmlRelativeFolderPath={
