@@ -213,8 +213,14 @@ function getAssistantCards(
 
 function getRenderableToolIds(node: ProjectedNode | undefined): string[] {
 	return (node?.tool_calls ?? [])
-		.map((tool) => tool.id)
-		.filter((id): id is string => typeof id === "string")
+		.filter(
+			(tool) =>
+				typeof tool.id === "string" &&
+				tool.id.length > 0 &&
+				typeof tool.function?.name === "string" &&
+				tool.function.name.length > 0,
+		)
+		.map((tool) => tool.id as string)
 }
 
 function getCanonicalNodeForCard(
@@ -522,14 +528,12 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		})
 	})
 
-	it("工具名称为空，UI 渲染默认工具图标。", () => {
+	it("工具名称为空时 canonical 清理该工具且 UI 防御性不渲染。", () => {
 		const store = createStore()
 		enqueueAssistant(store, { toolCalls: [createToolCall({ name: "" })] })
 
-		expect(getNode(store)?.tool_calls?.[0]).toMatchObject({
-			id: "tool-1",
-			function: { name: "" },
-		})
+		expect.soft(getNode(store)?.tool_calls ?? []).toEqual([])
+		expect(getRenderableToolIds(getNode(store))).toEqual([])
 	})
 
 	it("工具 action/remark 缺失，只剩 spinner。", () => {
@@ -562,7 +566,8 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 
 		enqueueAssistant(store, { toolCalls: [invalidTool] })
 
-		expect(getNode(store)?.tool_calls ?? []).toHaveLength(0)
+		expect.soft(getNode(store)?.tool_calls ?? []).toHaveLength(0)
+		expect(getRenderableToolIds(getNode(store))).toEqual([])
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})

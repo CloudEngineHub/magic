@@ -111,10 +111,11 @@
 - 工具头到达，但缺少 `function.name`。
 - 工具头只有 id，没有 function。
 - arguments chunk 缺少 id 和 name，仅有 index。
-- arguments chunk 缺少 index。
-- arguments 不是字符串。
-- arguments 为 `null`。
-- arguments 为空字符串。
+- arguments chunk 缺少 index，但提供 id 时按 id 绑定。
+- arguments chunk 同时缺少 index 和 id 时丢弃且不污染已有工具。
+- arguments 不是字符串时忽略并保留旧值。
+- arguments 为 `null` 时忽略并保留旧值。
+- streamed arguments 为空字符串时 no-op，Final 空字符串仍权威。
 - arguments 片段丢包。
 - arguments 片段重复。
 - arguments 片段乱序。
@@ -123,38 +124,38 @@
 - arguments 最终只有半个 JSON。
 - final arguments 比流式 arguments 更短。
 - final arguments 与流式 arguments 长度相同但内容不同。
-- 当前 messageMap arguments 比 canonical final 更长。
+- 流式 arguments 比 canonical Final 更长时整体替换。
 - 当前 arguments 不是 final arguments 的前缀。
 - final arguments 是空对象，但流式 arguments 非空。
 - final assistant 缺少 arguments。
-- Final 提供真实 tool id 但缺少 arguments，且只有匿名 index 槽位可匹配时，不得继承匿名参数。
+- Final 真实 tool id 缺少 arguments 时不继承匿名 index 槽位。
 - 一个 chunk 内包含多个 tool call。
 - 多个 tool call 的 arguments 在不同 chunk 中交错到达。
 - tool index 出现空洞，例如直接收到 index 2。
 - index 0 的工具头丢失，只收到 index 1。
-- 同一个 index 后续被另一个 tool id 复用。
+- 同一 index 收到新 id 时流式保留首个工具，Final 再权威覆盖。
 - 同一个 tool id 在后续 chunk 中改变 index。
 - 同一个 tool id 在后续 chunk 中改变 name。
 - 同一个 tool id 在不同 correlation 中复用。
 - 工具头重复到达。
 - 重复工具头内容完全相同。
-- 重复工具头使用相同 id 但不同 name。
-- 匿名 index 槽位没有在工具头到达后升级。
-- 匿名槽位与最终合法工具同时保留。
-- `compactToolCalls()` 清除了数组空洞，但保留了缺少 id 的对象。
-- UI 动画为匿名工具生成了 `"0"` 之类的临时 id。
-- 临时 id 后续没有被真实 tool id 替换。
-- final tool call 顺序与流式首现顺序不同。
+- 重复工具头的空 name 不覆盖同 id 已有非空 name。
+- arguments-first 匿名 index 槽位在合法工具头到达后原位升级。
+- Final 合法工具替换匿名槽位且不产生重复 canonical 工具。
+- Final canonical projection 清除流式空洞，并按 Final 位置重建 index。
+- Store 不为匿名工具生成伪造 id。
+- 匿名槽位在真实工具头到达后升级为真实 id。
+- Final 数组顺序覆盖流式首现顺序并重建 canonical index。
 - final tool call 数量比流式阶段多。
 - final tool call 数量比流式阶段少。
-- final message 完全没有 tool_calls，但流式阶段存在工具。
+- final message 显式 tool_calls=[] 时清空流式阶段工具。
 - final message 新增了流式阶段从未出现的工具。
 - final message 删除了流式阶段出现的工具。
-- final message 包含重复 tool id。
-- 同一工具的 `type` 在流式和 final 中不同。
+- final message 包含重复 tool id 时末项胜出并记录日志。
+- MCP tool call 保持 function type，并保留 MCP sentinel。
 - `function` 意外为数组而不是对象。
-- 工具参数巨大，例如包含完整 HTML 页面。
-- 多个超大工具参数同时流式，导致内存和渲染压力。
+- 单个超大工具参数在 Store 中不截断。
+- 多个超大工具参数同时流式时保持内容隔离。
 
 ### 历史：决策前黑盒判定基线与验证（2026-07-23）
 
@@ -304,13 +305,320 @@
 - 决策后修改测试，至少连续运行目标文件两次，并补跑 `final-assistant-message.test.ts`、`chunk-transport-ordering.test.ts`、`message-list-ui-projection.test.ts` 和 `resource-performance.test.ts` 中相关用例；不要以“全绿”作为唯一目标。
 - `stores/index.ts` 继续保持黑盒；不得通过阅读实现反推测试预期。enterprise overlay 仍需在修改前做一次路径存在性检查。
 
-#### 决策实施后的当前结果（2026-07-23）
+#### 历史：决策实施后的结果（2026-07-23）
 
 - `tool-call-argument-assembly.test.ts` 当前为 `50 tests / 44 passed / 6 failed`。
 - 新增回归“Final 真实 tool id 缺少 arguments 时不继承匿名 index 槽位”已通过；TC-03 的继承源现在严格要求同 topic、同 correlation、同 tool id。
 - 重复 Final tool id 的两个入口均继续验证末项胜出、单工具投影、结构化 warning 且 warning exactly-once；未把“首次出现顺序”写成 TC-07 契约。
 - 仍失败的 6 项是既有 TDD RED：缺 index 按 id 绑定、缺 index/id 丢弃、非字符串 arguments、`null` arguments、同 id 改 index、Final 顺序权威。它们不属于本轮四项决策的回归。
 - 当前维护数量以 50 为准；上面的 48 行表只作为决策前历史证据。
+
+### 历史：决策确认前的黑盒复核基线（2026-07-25）
+
+本节保留用户确认 A 选项前的 50 用例审计快照，仅用于追溯当时为何需要决策。当前有效契约、用例结果和失败归因见下一节“决策 A 实施后的当前维护基线”。
+
+#### 本轮边界与实时结果
+
+- 全程没有阅读、搜索、展开或修改 `src/pages/superMagic/stores/index.ts`；测试只把 `SuperMagicStore` 当作黑盒，通过公开 API 输入消息并观察公开状态。
+- 本轮没有修改任何测试用例或生产代码。由于当前仍有协议、标准化和观察层决策未确认，先冻结证据并等待决策，避免为了全绿反向适配现有实现。
+- 工作区起始状态为 clean；验证环境为 HEAD `3f1558ff19`、Node `v22.22.2`、Vitest `3.2.6`。
+- 完整文件与 6 个失败用例的定向复跑结果一致：`50 tests / 44 passed / 6 failed`，共 9 个失败断言，退出码 `1`。全部是 `AssertionError`；没有导入、配置、运行时异常、超时、skip 或 pending。
+- 相邻层定向复验为 `7 passed / 75 skipped`：Final absent arguments、重复 Final id、匿名工具 UI 过滤、稳定 correlation key，以及两个大参数收敛代理用例均通过。
+
+```bash
+corepack pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  --silent=true \
+  src/pages/superMagic/stores/__tests__/tool-call-argument-assembly.test.ts
+```
+
+#### 黑盒评判门禁
+
+“UI 看起来正常”不是测试准确性的充分条件。UI 可能过滤匿名工具、按 correlation 合并卡片或用 effective Tool response 覆盖 embedded 状态，从而掩盖 Store 中的脏数据、重复 revision 或错误身份。反过来，也不要求每个测试机械重复六层断言；用例标题声称哪一层，就必须使用该层的公开 oracle。
+
+| 层级                | 适用场景                                            | 正确黑盒 oracle                                                                            | 最低门禁                                                                                  |
+| ------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| P：协议 / fixture   | 缺字段、`null`、异常类型、id/index 冲突             | 当前 wire fixture、公共类型及已确认产品决策                                                | 人工畸形 fixture 不能直接证明 Store bug；先确认协议或防御策略                             |
+| R：Raw stream       | 片段拼接、乱序/重复、稀疏 index、临时槽位           | `getStreamState(topicId, correlationId).tool_calls`；分别观察 raw slots 与过滤后的有效工具 | raw 稀疏长度不能代替 canonical/UI 工具数量                                                |
+| C：Canonical node   | Final 覆盖、arguments、顺序、删除、去重             | `getMessageNode(identity).tool_calls`                                                      | Final 语义必须在 canonical 上断言，不能只看流式临时态                                     |
+| M：`store.messages` | 消息数量、revision、role/topic、app/correlation/seq | `store.messages.get(topicId)`                                                              | Final、身份、重复与删除场景至少核对相关 identity/seq，UI 单卡不能替代                     |
+| U：UI projection    | 可见工具、稳定 key、幽灵 spinner、卡片数量          | `messagesConverter()`、`getMessageNodeKey()` 或真实组件                                    | 只有声称 UI 行为的测试才强制 U；Store 数组断言不能证明 React 行为                         |
+| L：生命周期 / 性能  | stream 结束、timer、恢复、耗时/内存                 | `isTopicStreaming()`、公开 StreamState/事件、明确性能预算                                  | finish reason、Final transport、Tool terminal、task terminal 分开；内容保真不等于性能通过 |
+
+维护原则：
+
+1. 纯参数拼接用例以 P+R 为主；Final 值覆盖以 C 为主。
+2. Final 身份、消息数量、重复 revision、删除语义至少使用 C+M；若声称卡片/UI，再补 U。
+3. arguments 正确性来自 canonical node；Tool status/loading/detail/attachment 是 `toolResponseMap` 优先的另一条 effective-state oracle，二者不能混为一个结论。
+4. 日志不是默认业务契约。只有已经确认结构、字段和 exactly-once 语义的事件才可以锁定；当前只有 TC-07 的重复 Final id warning 已确认。
+5. 性能测试必须有耗时、内存、渲染次数或长任务预算；大字符串未截断只能证明内容保真。
+
+#### 当前协议与 fixture 证据
+
+- 本节重新统计了该测试体系一直引用的当前 `mock_v2.json`：17,311 个 stream tool delta 全部有 numeric `index`；其中 21 个工具头都有 string `id` 与 `function.name`、没有 arguments，17,290 个 continuation 都没有 id/name、都有 string arguments；所有 delta 的 `type` 都是 `function`。
+- `mock_v2.json` 中 35 个 persisted Assistant tool call 全部有 id/name/string arguments/type=function，全部没有 wire `index`，没有观察到单个数组内重复 id。persisted Assistant 的 status 仍可为 running/waiting，因此“收到持久 Assistant/Final transport”不等于 task terminal。
+- 历史文档使用的 `mock_v1.json` 当前已不存在；旧的 “34,792 个 stream delta / 44 个 Final tool call” 合计统计不能继续当作当前证据。当前目录中的其他 mock/Scene 文件没有混入本轮旧 v1/v2 契约统计。
+- `SuperMagicChunkMessage` 的 TypeScript 声明把 id/name/arguments/index 都写成必填，但当前 wire fixture 明确存在“header 无 arguments”和“continuation 无 id/name”。因此公共类型本身已比真实 wire 更严格，类型强转只能说明测试越过了声明边界，不能单独判断 fixture 合法或非法。
+- UI 已确认只渲染同时具有非空 string id 与非空 `function.name` 的工具；这只能证明匿名工具不会显示，不能证明 Store canonical 已经删除匿名/畸形对象。
+- Assistant UI key 使用 correlation，而持久身份仍是有效 appMessageId；`messagesConverter()` 会保留同 correlation 的后项，因此身份/seq 场景必须独立检查 `store.messages`。
+
+#### 当前 6 个失败的精确归因
+
+|   # | 测试 / 失败行                                         | 实际结果 → 当前期望                                                                                 | 失败的 oracle | 当前主归因                                                                    | 是否可直接归因 `stores/index.ts`                                                         |
+| --: | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+|   1 | L387；断言 L413/L416：缺 index、有 id 时按 id 绑定    | tool-a 变为 `undefined`，tool-b 只保留了 tool-a 的 `{"a":"` → 应分别保持 tool-a 并把片段拼到 tool-b | P/R           | TC-01 未决；“按 id fallback”是测试预设。实际跨槽位污染是条件性 Store 防御风险 | 否。先决定缺 index 时按 id 关联、挂起还是整项丢弃；无论哪种都应明确是否允许污染既有槽位  |
+|   2 | L429；断言 L454/L464：index/id 都缺失时丢弃并记录日志 | `should-not-bind` 被拼到 tool-a，且未出现指定日志 → 应状态不变并记录日志                            | P/R/日志      | 混合：状态污染是防御性风险；精确 console 文案没有契约依据，是测试 oracle 问题 | 不能整体归 Store。需分别确认“必须不改变状态”和“是否需要结构化事件/日志”                  |
+|   3 | L470；断言 L489/L496：object arguments                | 对象被转成 `[object Object]` 后拼接，且无指定日志 → 应忽略并保留旧值                                | P/R/日志      | TC-02 标准化未决；忽略、清空、`String()`、JSON 序列化或错误态都尚未确认       | 否。确认标准化规则后，数据断言才可能成为 Store RED；现有日志文案仍过度指定               |
+|   4 | L502；断言 L528：`null` arguments                     | 旧 arguments 实际已保留；只有“必须输出指定日志”失败                                                 | 日志          | 测试用例问题，置信度高；当前失败没有证明 Store 数据错误                       | 否。除非另行确认 structured warning 契约，否则应移除/改写日志断言                        |
+|   5 | L830；断言 L841：同 id 改 index                       | 旧 slot 0 仍存在 → 期望迁移后 slot 0 清空；后续新 slot/唯一性断言因硬失败未执行                     | P/R           | TC-05 未决；测试预设 id 权威并迁移槽位                                        | 否。先决定 id/index 谁权威，以及迁移、替换、分裂还是拒绝                                 |
+|   6 | L986；断言 L1001：Final 顺序与流式首现不同            | canonical 仍为 `tool-a@0, tool-b@1, tool-c@2` → 期望按 Final 为 `tool-c@0, tool-a@1, tool-b@2`      | C             | TC-06 未明确确认；“完整权威数组”是否连顺序/index 一起权威仍待决               | 条件性。若确认 Final 数组顺序权威并重建 0..n，则这是有效 Store RED；否则当前测试过度指定 |
+
+本轮可下的结论：
+
+- 当前 6 个红测中，没有一个能在现有决策下无条件归为 `stores/index.ts` 业务缺陷。
+- 明确属于测试问题的是 #4 的日志断言；#2、#3 也含有未经确认的日志 oracle。
+- #1、#2、#3 暴露了真实的状态污染/标准化风险，但是否违反业务契约取决于 malformed wire 的防御策略。
+- #5、#6 是身份/index/order 的产品协议问题；确认规则后才可以把 RED 固化为 Store 契约。
+
+#### 50 个用例逐条准确性审计
+
+标记：`A` = 当前窄契约充分；`B` = 方向可用但覆盖/命名不足；`C` = 测试自身问题；`D` = 协议或产品规则未定。`A` 只表示其当前标题所需的 oracle 足够，不代表已经覆盖 UI、消息身份或性能。
+
+|   # | 起始行 | 用例简写                      | 当前结果 | 层              | 结论 | 主要依据 / 后续动作                                                         |
+| --: | -----: | ----------------------------- | -------- | --------------- | ---- | --------------------------------------------------------------------------- |
+|   1 |    308 | arguments 先于工具头          | 通过     | R               | A    | 头到达前有效工具为空，补头后参数正确归并                                    |
+|   2 |    325 | 工具头缺 id                   | 通过     | P/R             | D    | 是否允许匿名 raw 槽位未确认；不能从 Store 结果推导 UI                       |
+|   3 |    340 | 工具头缺 name                 | 通过     | P/C             | B    | Final 完整值可能掩盖异常流式阶段污染；补 raw 与 UI-invalid 观察             |
+|   4 |    360 | 工具头缺 function             | 通过     | P/C             | B    | 只证明不抛错和 Final 可恢复；补异常输入不污染 raw/canonical/messages        |
+|   5 |    375 | continuation 仅有 index       | 通过     | P/R             | A    | 当前 wire 的正常 continuation 形态                                          |
+|   6 |    387 | 缺 index 按 id 绑定           | 失败     | P/R/日志        | D    | TC-01 未决；日志也未确认                                                    |
+|   7 |    429 | index/id 都缺失时丢弃         | 失败     | P/R/日志        | D    | 防御策略与 observability 未决                                               |
+|   8 |    470 | object arguments              | 失败     | P/R/日志        | D    | TC-02 未决                                                                  |
+|   9 |    502 | `null` arguments              | 失败     | P/R/日志        | D    | 数据断言已通过，当前失败仅是未确认日志                                      |
+|  10 |    534 | 空字符串 arguments            | 通过     | R/日志          | B    | 旧值本来也是空串，无法区分 no-op、忽略或显式清空                            |
+|  11 |    550 | 片段丢包后 Final 收敛         | 通过     | C/L             | A    | Final canonical 与 StreamState 收敛均有断言                                 |
+|  12 |    564 | arguments 片段重复            | 通过     | R               | A    | 精确重复 chunk 的幂等结果明确                                               |
+|  13 |    577 | arguments 乱序                | 通过     | R               | A    | 最终按 `i` 收敛；缺口期间可观察状态可另补                                   |
+|  14 |    589 | 流式值合法但业务错误          | 通过     | C               | A    | 验证 Final 不使用 JSON 合法性/业务值启发式                                  |
+|  15 |    604 | 流式值为非法 JSON             | 通过     | C               | A    | 验证 Final 整体替换，不按 JSON 形态猜测                                     |
+|  16 |    619 | 最终只有半个 JSON             | 通过     | R/C/L           | B    | `raw ?? canonical` 混合两个观察层；应分别断言，opaque-string 规则仍见 TC-11 |
+|  17 |    637 | Final arguments 更短          | 通过     | C               | A    | Final 整体覆盖                                                              |
+|  18 |    650 | Final 等长但内容不同          | 通过     | C               | A    | 防止长度启发式                                                              |
+|  19 |    661 | 流式值比 Final 更长           | 通过     | C/M             | A    | canonical 与单 Final 消息同时验证                                           |
+|  20 |    674 | 流式值不是 Final 前缀         | 通过     | C               | A    | 防止前缀启发式                                                              |
+|  21 |    685 | Final `{}` 覆盖非空值         | 通过     | C               | A    | 显式 Final 值权威                                                           |
+|  22 |    696 | Final nested arguments absent | 通过     | C/M             | A    | TC-03 已确认；同 identity streamed 值继承且消息收敛                         |
+|  23 |    713 | 真实 id 不继承匿名槽位        | 通过     | C               | A    | identity-safe 负向断言明确                                                  |
+|  24 |    735 | 单 chunk 多工具               | 通过     | R               | A    | 工具数量与顺序可观察                                                        |
+|  25 |    750 | 多工具 arguments 交错         | 通过     | R               | A    | 参数按 index 隔离                                                           |
+|  26 |    782 | 直接收到 index 2              | 通过     | R raw/effective | A    | 正确区分稀疏 raw slots 与有效工具集合                                       |
+|  27 |    799 | 只收到 index 1                | 通过     | R raw/effective | A    | 同时验证稀疏槽位与不造 `"0"` id                                             |
+|  28 |    816 | 同 index 换另一个 id          | 通过     | P/C             | D    | 后续 Final 掩盖流式冲突；index 复用规则未定                                 |
+|  29 |    830 | 同 id 改 index                | 失败     | P/R             | D    | TC-05 未决                                                                  |
+|  30 |    846 | 同 id 改 name                 | 通过     | P/C             | B    | 只检查 Final name，第二个 stream chunk 即使被忽略也可能通过                 |
+|  31 |    863 | 同 id 跨 correlation          | 通过     | R               | A    | 两个 correlation 的 arguments 隔离明确                                      |
+|  32 |    885 | 工具头在不同 `i` 重复         | 通过     | R               | A    | 验证逻辑工具不重复创建                                                      |
+|  33 |    895 | 同一 header chunk 精确重放    | 通过     | R               | A    | 与 #32 的不同 `i` 重复分开                                                  |
+|  34 |    906 | 重复头同 id 不同 name         | 通过     | P/C             | B    | Final 再次掩盖流式冲突处理                                                  |
+|  35 |    921 | “匿名槽位没有升级”            | 通过     | R               | C    | 标题说“没有升级”，断言实际要求升级；标题与 oracle 相反                      |
+|  36 |    938 | 匿名槽位与合法 Final          | 通过     | C/M             | B    | canonical 单工具正确，但标题含混；UI 无幽灵工具需 U 层                      |
+|  37 |    953 | Final 清洞并重建 index        | 通过     | C               | D    | “清洞”与“生成 index=0”绑在一起；TC-06 未确认                                |
+|  38 |    964 | Store 不伪造匿名 id           | 通过     | R/C             | C    | 只排除字面值 `"0"`；生成其他临时 id 仍会假绿                                |
+|  39 |    974 | 匿名槽位升级为真实 id         | 通过     | R               | A    | 身份升级断言明确，和 #35 部分重复                                           |
+|  40 |    986 | Final 顺序覆盖流式顺序        | 失败     | C               | D    | TC-06 确认后才成为有效 Store RED                                            |
+|  41 |   1008 | Final 工具更多                | 通过     | C/M             | A    | 完整数组增加与消息 identity 均验证                                          |
+|  42 |   1021 | Final 工具更少                | 通过     | C/M             | A    | 完整数组删除与消息 identity 均验证                                          |
+|  43 |   1038 | 显式 `tool_calls=[]`          | 通过     | C/M/L           | A    | 清空、消息 identity、生命周期均覆盖                                         |
+|  44 |   1050 | Final 新增工具                | 通过     | C/M             | A    | canonical 与消息层充分                                                      |
+|  45 |   1063 | Final 删除工具                | 通过     | C/M             | A    | Store canonical 充分；UI 幽灵工具由 UI 套件负责                             |
+|  46 |   1080 | 重复 Final id 末项胜出        | 通过     | P/C/M/日志      | A    | TC-07 已确认；结构化 warning 与 exactly-once 明确                           |
+|  47 |   1113 | MCP function type + sentinel  | 通过     | P/C             | D    | 当前 UI 实现支持该形态，但后端正式协议/精确 sentinel 仍未确认               |
+|  48 |   1138 | function 为数组               | 通过     | P/C             | B    | Final 掩盖畸形 chunk；补 raw/canonical/messages 不污染                      |
+|  49 |   1155 | 单个超大参数不截断            | 通过     | R               | A    | 只证明内容保真，不证明性能                                                  |
+|  50 |   1165 | 多个超大参数内容隔离          | 通过     | R               | A    | 只证明内容隔离，不证明内存或渲染预算                                        |
+
+主分类统计：`30 A / 8 B / 2 C / 10 D`。
+
+#### 待决策清单
+
+| 决策        | 影响用例                    | 需要确认的问题                                                                | 推荐方向（仅供决策，不代表已修改测试）                                                        |
+| ----------- | --------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| TC-01a      | 6                           | 缺 `index`、有 id 时如何处理？                                                | 仅在同 correlation 内按已存在 id 唯一匹配；匹配失败则丢弃/挂起，绝不覆盖其他 slot             |
+| TC-01b      | 7                           | `index` 与 id 都缺失时，状态是否必须完全不变？                                | 丢弃且不污染任何已有工具；observability 与数据规则分开确认                                    |
+| OBS-01      | 6–9、46                     | malformed 输入是否必须记录日志？锁定 console 文案还是 structured event？      | 不锁中文 console 字符串；如需要观测，定义稳定 event name、字段、级别与 exactly-once           |
+| TC-02       | 8、9                        | object / `null` arguments 如何标准化？                                        | 忽略并保留旧值；也可进入显式错误态，但不要隐式 `String()` 污染参数                            |
+| TC-02-empty | 10                          | streamed `arguments=""` 是 no-op 还是显式清空？                               | stream fragment 作为 no-op；Final 显式空字符串继续按 TC-03 覆盖                               |
+| TC-05       | 28–30、34                   | 同 id 改 index、同 index 换 id、同 id 改 name 时谁权威？                      | tool id 作为逻辑身份；index 只作 correlation 内 transport slot；冲突迁移/拒绝规则需一次性定义 |
+| TC-06       | 37、40                      | Final 数组顺序是否权威？canonical index 是否按 Final 位置重建？               | Final 完整数组连顺序一起权威，canonical index 重建为 `0..n-1`                                 |
+| TC-04-clean | 2–4、35–38、48              | Store canonical 是否必须清除缺 id/name/非法 function 对象，还是只由 UI 过滤？ | raw 可保留临时槽位；离开流式域前 canonical 必须干净，UI 过滤仅作防御                          |
+| TC-08       | 47                          | MCP 是否正式固定为 `type="function" + tool.name="mcp_tool_call"`？            | 先向后端/产品确认 exact sentinel；当前没有 `type="mcp"` 依据                                  |
+| TC-11       | 14–16                       | Store 是否把 arguments 当 opaque string？                                     | Store 只保留/拼接字符串；JSON 解析/校验交给执行层，Final 仍整体权威                           |
+| MAL-01      | 4、48                       | 非对象/缺失 function 是否必须完全拒绝且不污染状态？                           | 不抛异常但忽略畸形字段；用 raw、canonical、messages 三层证明无污染                            |
+| GATE-01     | 所有 Final/身份/UI/性能场景 | 是否每个测试都强制 C+M+U？                                                    | 不机械全加：纯 R 用例只测 R；Final/身份至少 C+M；声称 UI 才强制 U；性能必须独立预算           |
+
+在上述决策确认前，保留有效 RED，但不把未决 RED 描述成已证实的 `stores/index.ts` 缺陷。收到决策后再修改测试：先修 C 类标题/oracle，再按确认的 P/D 规则调整断言，并同步本节的数量、逐项表、失败归因和决策状态。
+
+#### 后续维护门禁
+
+- 场景清单已同步为当前 50 个测试；历史 48 项表继续只读保留。
+- 修改测试后，目标文件至少连续运行两次；同时定向复验 `final-assistant-message.test.ts`、`message-list-ui-projection.test.ts` 与 `resource-performance.test.ts` 的相关契约。
+- `message-list-ui-projection.test.ts` 中声称 UI/React 的用例要核对真实 MessageNode 过滤门槛（id + function.name）；只过滤 id 的 helper 不能代表真实 UI。
+- `resource-performance.test.ts` 当前多数是内容/生命周期代理；没有真实性能预算时，只能记录“代理覆盖”，不能宣称无主线程长任务或无内存压力。
+- 后续继续禁止通过阅读 `stores/index.ts` 反推测试预期；公开行为与已确认协议不一致时才记录 Store RED。
+
+### 决策 A 实施后的当前维护基线（2026-07-25）
+
+本节是后续“Tool call 创建与参数拼接”测试的当前有效记录。上面的 48 用例历史表和决策前 50 用例审计继续保留用于追溯，但新增、删除、重命名、协议调整、通过数量和失败归因必须以本节为准。
+
+#### 黑盒边界与验证结果
+
+- 黑盒测试校准阶段未修改生产 Store；在用户确认 7 个 RED 均需修复后，后续最小修复仅修改 `stores/index.ts` 的 streamed tool merge 与 Final 排序路径。
+- 所有预期均来自用户确认的 A 决策、公开输入/输出、`store.messages`、公开 StreamState/canonical API、UI 投影和相邻测试结果，没有根据 Store 实现倒推断言。
+- 边界审计：测试用例与 oracle 的制定过程没有依赖 `stores/index.ts` 实现倒推；用户确认契约并要求修复后，才读取生产实现进行根因定位和最小修复。
+- 环境：HEAD `3f1558ff19`、Node `v22.22.2`、Vitest `3.2.6`。
+- 决策实施前基线：`50 tests / 44 passed / 6 failed`，9 个失败断言。
+- 决策实施后稳定基线：`50 tests / 43 passed / 7 failed`，9 个失败断言。全部是已确认业务契约的 `AssertionError`；没有导入错误、运行时异常、超时、skip 或 pending。
+- 数量从 6 个 RED 增至 7 个不是回归测试变差：删除 3 处无依据的 console 文案断言后，`null` 和空字符串用例转绿；同时 TC-05b、TC-05c 的流式冲突覆盖被补实，新增了 2 个有效 Store RED。
+- Store 最小修复后基线：`50 tests / 50 passed / 0 failed`。7 个原 RED 的断言均保持不变，没有通过弱化测试转绿。
+- 质量门禁：主文件最终版本连续两次结果一致；Prettier、`git diff --check`、50 标题与 Markdown 场景清单逐字比对均通过。ESLint 因仓库当前缺少 `.eslintrc.cjs` 引用的 `./eslint/src-import-boundary.cjs` 无法启动。仓库级 TypeScript 检查仍有大量既有错误；`stores/index.ts` 的现有诊断位于未修改的 import、MobX annotation 和旧参数位置，本次修改行没有新增诊断。
+
+```bash
+corepack pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  --silent=true \
+  src/pages/superMagic/stores/__tests__/tool-call-argument-assembly.test.ts
+```
+
+#### 已确认决策与固定契约
+
+| 决策        | 用户选择 | 当前固定契约                                                                                                                    | 落点                                            |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| TC-01a      | A        | 缺 `index`、有 id 时，仅在同 correlation 内按唯一已存在 id 绑定；无法唯一匹配则丢弃，绝不覆盖其他 slot                          | #6                                              |
+| TC-01b      | A        | `index` 与 id 都缺失时整项丢弃，任何已有工具状态都不得变化                                                                      | #7                                              |
+| OBS-01      | A        | malformed 输入不锁定中文 console 文案；只有 TC-07 已确认的结构化 warning 才断言事件名、字段和 exactly-once                      | #6–9、#46                                       |
+| TC-02       | A        | object / `null` arguments 忽略并保留旧字符串；不得隐式 `String()` 或 JSON 序列化后拼接                                          | #8、#9                                          |
+| TC-02-empty | A        | streamed `arguments=""` 是 no-op；Final 显式空字符串仍是权威值                                                                  | #10                                             |
+| MAL-01      | A        | 缺失/非对象 `function` 不抛异常且不污染 raw、canonical、messages；后续合法 Final 可恢复                                         | #4、#48                                         |
+| TC-11       | A        | arguments 是 opaque string；Store 不解析、校验或修复 JSON，Final 仍整体权威                                                     | #14–#21                                         |
+| TC-05a      | A        | 同 id 改 index 时迁移到空目标槽位，清除旧槽位，只保留一个逻辑工具                                                               | #29                                             |
+| TC-05b      | A        | 同 index 收到另一 id 时，流式阶段保留首个工具并忽略冲突；Final 完整数组可权威覆盖                                               | #28                                             |
+| TC-05c      | A        | 同 id 的最新非空 streamed name 胜出；空 name 不清除旧值；Final name 最终权威                                                    | #30、#34                                        |
+| TC-06       | A        | Final 完整数组的数量、顺序和值均权威；canonical index 按 Final 位置重建为 `0..n-1`                                              | #37、#40                                        |
+| TC-04-clean | A        | raw 流式域允许临时匿名/稀疏槽位；离开流式域后的 canonical 只能保留具有非空 id、非空 name、合法 function 的工具；UI 过滤只是防御 | #2–#4、#35–#38、#48；UI 相邻套件                |
+| TC-08       | A        | MCP 继续使用 `type="function"`，并以 `tool.name="mcp_tool_call"` 作为 sentinel                                                  | #47                                             |
+| TC-07       | A        | 重复 Final id 末项胜出，只保留一个 canonical 工具，并输出一次已确认的结构化 warning                                             | #46                                             |
+| GATE-01     | A        | 不机械给每个用例增加 C+M+U：纯 stream 用 P+R；Final 值用 C；Final 身份/增删/重复/revision 用 C+M；UI 声明才用 U                 | 全文件                                          |
+| GATE-02     | A        | raw、canonical、messages、UI-effective 和 lifecycle 分层断言；不得用 `raw ?? canonical` 或 UI 通过替代 Store 标准化             | #16、Final/身份用例、UI 相邻套件                |
+| TC-09       | A        | 主文件只维护 Store/canonical 契约；真实 UI 与性能声明放到对应相邻套件                                                           | #36、#49、#50；相邻套件                         |
+| PERF-01     | A        | 大参数用例只证明内容完整、工具隔离和收敛代理；没有耗时/内存/长任务预算时不声明真实性能 SLA                                      | #49、#50；`resource-performance.test.ts`        |
+| MSG-01      | A        | Final 身份敏感场景必须核对单一持久 Assistant message 的 app/correlation/topic/seq；UI 单卡不能替代消息层                        | #19、#22、#23、#28、#30、#34、#36、#37、#40–#48 |
+
+#### 测试 oracle 调整（Store 修复前）
+
+| 调整                            | 原问题                                  | 当前处理                                                                           | 结果                                         |
+| ------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------- |
+| #6–#9 malformed observability   | 把未确认中文 console 文案当业务契约     | 移除 console 断言，只保留状态与标准化契约；TC-07 warning 不变                      | `null` 转绿；其余真实数据问题保留 RED        |
+| #10 empty fragment              | 初始值也是空串，无法证明 no-op          | 先写入非空旧值，再发送空 fragment；随后验证 Final 空串权威                         | 通过                                         |
+| #4、#48 malformed function      | 合法 Final 掩盖了异常输入是否污染       | Final 前分别断言 raw、canonical、messages 无污染，再验证合法 Final 恢复            | 通过                                         |
+| #16 half JSON                   | `raw ?? canonical` 混合观察层           | 分别断言 StreamState 已清理、公开 canonical 保留 opaque 半字符串、lifecycle 已停止 | 通过                                         |
+| #28–#30、#34 identity/name 冲突 | 只看 Final，可能掩盖 streamed 冲突      | 增加 Final 前 raw 断言，并继续验证 Final + 单持久消息                              | #28、#34 RED；#30 通过                       |
+| #35、#36 标题                   | 标题与断言相反或含混                    | 改为“原位升级”“Final 替换且不重复”                                                 | 通过                                         |
+| #38 匿名 id                     | 只排除字面值 `"0"`，其他伪 id 可假绿    | 断言不存在任何 string id、没有 canonical 工具和持久消息                            | 通过                                         |
+| Final 身份门禁                  | 部分 Final 场景只有 canonical 断言      | 补 `expectSingleFinalMessage()`，核对 app/correlation/topic/seq                    | 相关用例通过，#40 的 C 仍 RED、M 通过        |
+| UI renderable helper            | 只按 id 过滤，与真实 MessageNode 不一致 | 改为同时要求非空 string id 与非空 `function.name`                                  | UI 防御断言通过；canonical 清理 RED 单独暴露 |
+| 大参数命名                      | “快速”暗示未测量的性能结论              | 删除未计时的“快速”，保留内容/生命周期代理语义                                      | 相关 2 用例通过                              |
+
+#### 7 个原 RED 的修复结果
+
+|   # | 测试                                         | 最小修复                                                                                 | 当前结果 |
+| --: | -------------------------------------------- | ---------------------------------------------------------------------------------------- | -------- |
+|   1 | 缺 index、有 id 按 id 绑定（L397，2 个断言） | 缺 index 时只按同 correlation 内唯一 id 定位；已知 id 的无 name 数据按 continuation 拼接 | PASS     |
+|   2 | index/id 都缺失时丢弃（L427）                | 无法解析目标槽位时在任何 `get/set` 前丢弃                                                | PASS     |
+|   3 | object arguments（L456）                     | streamed arguments 仅接受 string；object/null 不参与拼接                                 | PASS     |
+|   4 | 同 index 收到新 id（L781）                   | 目标槽位已有不同稳定 id 时忽略 streamed 冲突，等待 Final 权威覆盖                        | PASS     |
+|   5 | 同 id 改 index（L801，2 个断言）             | 新目标为空时迁移同 id 工具并清除旧槽位，保持 id 唯一                                     | PASS     |
+|   6 | 重复头空 name（L881）                        | streamed 空 name 不覆盖已有非空 name；Final 仍最终权威                                   | PASS     |
+|   7 | Final 顺序权威（L972）                       | Final reconciliation 按 incoming 顺序输出，Final 渲染阶段不再恢复 streamed 首现顺序      | PASS     |
+
+结论：7 个原失败均为 Store 契约问题，修复后主文件 `50/50` 通过；没有修改测试断言或降低 Store 标准化要求。
+
+#### 相邻层复验
+
+| 套件 / 范围                                                                                        | 结果                    | 说明                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `final-assistant-message.test.ts`：arguments absent/empty、重复 id、删除、Final identity/lifecycle | `7 passed / 31 skipped` | Final C+M/L 契约通过                                                                                                                                       |
+| `chunk-transport-ordering.test.ts`：工具头/尾片段丢失、Final 后迟到 arguments、finish 后 Final     | `4 passed / 41 skipped` | 传输顺序与 Final 权威相邻契约通过                                                                                                                          |
+| `resource-performance.test.ts`：多大型工具收敛、Final 覆盖大参数并清理                             | `2 passed / 15 skipped` | 只作为内容/生命周期代理，不是性能 SLA                                                                                                                      |
+| `message-list-ui-projection.test.ts`：匿名过滤、匿名/合法混合、spinner 防御、大 arguments          | `4 passed / 23 skipped` | 当前筛选的 U 层防御与 Final canonical 大参数投影均通过                                                                                                     |
+| `MessageNode.tool-filter.test.tsx`                                                                 | suite 未执行            | 既有 `test/setup.ts` mock 初始化报 `createMockComponent is not defined`；这是测试基础设施阻塞，未修改该基础设施，也不影响源文件中已核对的 id+name 过滤门槛 |
+
+#### 50 个用例当前准确性审计
+
+标记：`PASS` = 当前实现满足已确认契约；`RED` = 用例准确、当前黑盒行为违反已确认契约。所有 50 项均已完成决策，不再使用“协议未定”分类。
+
+|   # |   行 | 用例简写                          | 结果 | 门禁    | 准确性依据                                        |
+| --: | ---: | --------------------------------- | ---- | ------- | ------------------------------------------------- |
+|   1 |  308 | arguments 先于工具头              | PASS | R       | 临时匿名槽位不进入有效工具；工具头到达后原位合并  |
+|   2 |  325 | 工具头缺 id                       | PASS | P/R     | raw 可临时匿名且不生成伪 id                       |
+|   3 |  340 | 工具头缺 name                     | PASS | P/R/C/M | raw 可暂存不可渲染；合法 Final 恢复并收敛为单消息 |
+|   4 |  365 | 工具头缺 function                 | PASS | P/R/C/M | malformed 不污染，合法 Final 可恢复               |
+|   5 |  385 | continuation 仅有 index           | PASS | P/R     | 当前正常 continuation 形态                        |
+|   6 |  397 | 缺 index 按 id 绑定               | PASS | P/R     | TC-01a：同 correlation 唯一 id 绑定               |
+|   7 |  427 | index/id 都缺失时丢弃             | PASS | P/R     | TC-01b：无身份数据不污染已有工具                  |
+|   8 |  456 | object arguments                  | PASS | P/R     | TC-02：非字符串 arguments 忽略                    |
+|   9 |  476 | `null` arguments                  | PASS | P/R     | 忽略并保留旧值，不依赖日志                        |
+|  10 |  496 | stream 空串 no-op、Final 空串权威 | PASS | R/C/M   | 区分 fragment no-op 与 Final 显式值               |
+|  11 |  515 | 片段丢包后 Final 收敛             | PASS | C/L     | Final canonical 与生命周期收敛                    |
+|  12 |  529 | arguments 片段重复                | PASS | R       | 同 `i` 重放幂等                                   |
+|  13 |  542 | arguments 乱序                    | PASS | R       | 按传输序列收敛                                    |
+|  14 |  554 | 合法 JSON 但业务值错误            | PASS | C       | Final 不使用业务值启发式                          |
+|  15 |  569 | 非法 JSON streamed 值             | PASS | C       | opaque string，不做 JSON repair                   |
+|  16 |  584 | 最终只有半个 JSON                 | PASS | R/C/L   | raw 清理、canonical opaque 值、lifecycle 分层     |
+|  17 |  601 | Final arguments 更短              | PASS | C       | Final 整体覆盖                                    |
+|  18 |  614 | Final 等长不同内容                | PASS | C       | 不使用长度启发式                                  |
+|  19 |  625 | stream 比 Final 更长              | PASS | C/M     | canonical 与单 Final 消息                         |
+|  20 |  638 | stream 不是 Final 前缀            | PASS | C       | 不使用前缀启发式                                  |
+|  21 |  649 | Final `{}` 覆盖非空               | PASS | C       | 显式 Final 值权威                                 |
+|  22 |  660 | Final arguments absent            | PASS | C/M     | 仅继承同 identity streamed 值                     |
+|  23 |  677 | 真实 id 不继承匿名槽位            | PASS | C/M     | identity-safe 负向继承                            |
+|  24 |  700 | 单 chunk 多工具                   | PASS | R       | 工具数量与顺序可观察                              |
+|  25 |  715 | 多工具 arguments 交错             | PASS | R       | 参数按 index 隔离                                 |
+|  26 |  747 | 直接收到 index 2                  | PASS | R       | 区分 raw 稀疏槽位与有效工具                       |
+|  27 |  764 | 只收到 index 1                    | PASS | R       | 不生成 `"0"` 等伪 id                              |
+|  28 |  781 | 同 index 收到新 id                | PASS | P/R/C/M | TC-05b：stream 冲突忽略、Final 权威               |
+|  29 |  801 | 同 id 改 index                    | PASS | P/R     | TC-05a：迁移并保持 id 唯一                        |
+|  30 |  817 | 同 id 改非空 name                 | PASS | P/R/C/M | 最新非空 streamed name + Final 权威               |
+|  31 |  838 | 同 id 跨 correlation              | PASS | R       | correlation 隔离                                  |
+|  32 |  860 | 不同 `i` 重复工具头               | PASS | R       | 不重复创建逻辑工具                                |
+|  33 |  870 | 同 header chunk 精确重放          | PASS | R       | 精确重放幂等                                      |
+|  34 |  881 | 空 name 不覆盖已有 name           | PASS | P/R/C/M | TC-05c：最新非空 streamed name 胜出               |
+|  35 |  901 | arguments-first 匿名槽位原位升级  | PASS | R       | 标题与 oracle 一致                                |
+|  36 |  918 | Final 替换匿名槽位且不重复        | PASS | C/M/L   | canonical、消息与 stream 清理                     |
+|  37 |  934 | Final 清洞并重建 index            | PASS | C/M     | TC-06 的单工具位置重建                            |
+|  38 |  946 | Store 不伪造匿名 id               | PASS | R/C/M   | 排除任意 string 伪 id，不只字面值 `"0"`           |
+|  39 |  960 | 匿名槽位升级真实 id               | PASS | R       | 身份升级明确                                      |
+|  40 |  972 | Final 顺序覆盖 streamed 顺序      | PASS | C/M     | TC-06：Final 顺序与重建 index 均权威              |
+|  41 |  995 | Final 工具更多                    | PASS | C/M     | 完整数组增加与单消息                              |
+|  42 | 1008 | Final 工具更少                    | PASS | C/M     | 完整数组删除与单消息                              |
+|  43 | 1025 | 显式 `tool_calls=[]`              | PASS | C/M/L   | 清空、消息与生命周期                              |
+|  44 | 1037 | Final 新增工具                    | PASS | C/M     | canonical + messages                              |
+|  45 | 1050 | Final 删除工具                    | PASS | C/M     | canonical + messages；UI 另测                     |
+|  46 | 1067 | 重复 Final id 末项胜出            | PASS | P/C/M/O | 唯一确认的结构化 warning exactly-once             |
+|  47 | 1100 | MCP function type + sentinel      | PASS | P/C/M   | TC-08 已确认                                      |
+|  48 | 1126 | function 为数组                   | PASS | P/R/C/M | malformed 不污染，合法 Final 恢复                 |
+|  49 | 1148 | 单个超大参数不截断                | PASS | R       | 内容保真代理，不声明 SLA                          |
+|  50 | 1158 | 多个超大参数内容隔离              | PASS | R       | 内容隔离代理，不声明 SLA                          |
+
+统计：`50 PASS / 0 RED / 0 测试用例问题 / 0 协议未定`。
+
+#### 后续维护门禁
+
+- 上方场景清单必须与主测试文件 50 个 `it(...)` 标题逐字同步；数量或标题变化必须同时更新本节。
+- 主文件修改后至少连续运行两次，并记录精确 pass/fail 与失败断言数；有效 RED 不得通过适配现状删除。
+- Final 身份/增删/重复场景继续使用 C+M；若标题声称 UI，再到 UI 套件使用真实 id+name renderable 规则。
+- canonical 清理与 UI 过滤必须分别记录：UI 能过滤脏工具不代表 TC-04-clean 通过。
+- 性能相关标题没有明确预算时只能描述内容、隔离、清理或收敛代理。
+- 后续调整测试 oracle 时继续禁止依赖 `stores/index.ts` 倒推期望；只有在契约确认后的生产修复阶段才读取实现进行根因定位。
 
 ## Tool response 与执行状态
 
@@ -1082,6 +1390,116 @@ npx --no-install vitest run \
 - 同一个页面存在两个 Store 订阅实例，chunk 被消费两次。
 - React Strict Mode 或热更新导致 PubSub 重复订阅。
 
+### TS-D1～TS-D13 决策执行与 23 项当前维护基线（2026-07-26）
+
+本节是 Topic 切换、后台渲染和订阅生命周期测试的当前记录入口。Store 黑盒场景位于 `topic-switching-background.test.ts`，真实 React Strict Mode 订阅 owner 场景位于 `useScopedTopicReadProgress.test.tsx`。后续调整这些测试或与其交叉的“HTTP 权威同步与恢复”测试时，必须同步更新本节。
+
+#### 黑盒边界与验证结果
+
+- 前序测试校准阶段保持 `stores/index.ts` 黑盒；用户随后明确授权业务修复，本轮只读取和修改 Topic 激活恢复、HTTP sync 屏障、render policy 与 timer 相关路径。
+- Store 测试只观察协议输入、raw StreamState、`store.messages`、canonical node、Tool effective state、UI projection、identity/version、公开 lifecycle 和 listener。
+- 旧的“双 Store 手工 receiveChunk”场景已删除；它没有经过 PubSub，也不能证明应用 owner 重复订阅。
+- 旧的“两个活跃注册总共只通知一次”断言已按 TS-D9/TS-D10 改为“每个独立订阅各一次、各自 unsubscribe”。
+- Strict Mode 由真实 hook 的 mount → cleanup → remount 验证，不再让 Store registry 猜测调用方泄漏。
+- 当前 Store 目标结果：`22 tests / 22 passed`；Hook 目标结果：`1 test / 1 passed`。合计 `23 contracts / 23 passed`；目标组合在最终内容上连续运行两次，结果一致。
+- 原两个 `AssertionError` 均已转绿；新增“长时间离开期间 sync 失败后 instant 投影但保持 stream 未完成”回归也通过。
+
+```bash
+corepack pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  src/pages/superMagic/stores/__tests__/topic-switching-background.test.ts \
+  src/pages/superMagic/hooks/__tests__/useScopedTopicReadProgress.test.tsx \
+  --reporter=verbose \
+  --silent=true
+```
+
+#### 已确认决策
+
+| 决策   | 已选 | 当前测试契约                                                                                                       |
+| ------ | ---- | ------------------------------------------------------------------------------------------------------------------ |
+| TS-D1  | A    | 后台 topic 已完成后切回直接展示 canonical Final，不重新播放打字机。                                                |
+| TS-D2  | A    | 未完成 topic 切回时，即使没有新 chunk，也继续已有 pending render。                                                 |
+| TS-D3  | A    | 不锁定 `inactiveAt/lastActiveAt` 内部值，只测试它们产生的公开行为。                                                |
+| TS-D4  | A    | 短于 30 秒恢复 pending render；达到 30 秒 instant settle 当前已知 draft；wall clock 跳变不替代 monotonic elapsed。 |
+| TS-D5  | A    | 切回时已有 HTTP sync，则冻结 stale draft 的动画进度，等待权威 snapshot。                                           |
+| TS-D6  | A    | terminal 后不再产生公开可见的 snapshot 重播、stream 重开或 recovery；canonical messages 保留。                     |
+| TS-D7  | A    | `setActiveTopicId(null)` 只取消选中并保留消息；真正关闭/删除需要独立 dispose/clear 契约。                          |
+| TS-D8  | A    | 应用使用 singleton owner；Store 单测不再伪造两个实例的 PubSub 行为。                                               |
+| TS-D9  | A    | 同 topic + callback 的每次注册都是独立订阅，并拥有独立 unsubscribe。                                               |
+| TS-D10 | A    | exactly-once 按“每个活跃订阅、每次 canonical 语义变化”计数。                                                       |
+| TS-D11 | A    | Strict Mode/HMR 回归由真实 hook/component 生命周期负责。                                                           |
+| TS-D12 | A    | Store 文件验证 P/R/M/C/T/V/L/O；真实 React 生命周期在 Hook/UI 套件验证。                                           |
+| TS-D13 | A    | 只使用 topic/correlation scoped 的公开语义，不再以全局 `vi.getTimerCount()` 或内部 TopicMeta Map 作为 oracle。     |
+
+#### 两个 Store RED 修复结果
+
+|   # | 用例 / 原失败行                                   | 原实际 → 已确认期望                                                 | 最小业务修复                                                                                                     | 当前结果 |
+| --: | ------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
+|  14 | L514，原失败 L524：达到 30 秒后 instant settle    | projected content 长度 `256` → 当前已知 draft 长度 `9216`           | 30 秒阈值；wall/monotonic 双时钟校验；未完成 draft 直接投影但不 Final，后续 chunk 恢复 live。                    | PASS     |
+|  16 | L547，原失败 L559：HTTP sync 期间冻结 stale draft | sync 期间 stale draft 从长度 `128` 继续推进到 `1024` → 应保持 `128` | sync 开始暂停现有 timer；恢复入口和 render tick 检查 `syncState`；sync 完成/取消后复用现有 generation 恢复路径。 | PASS     |
+
+统计：`0 个 Store RED / 0 个测试用例问题 / 0 个协议未定`。修复没有新增 Store、全局 Map、公开 API 或新的架构层。
+
+#### 23 项当前清单
+
+|   # | 文件 / 定义行 | 用例简写                              | 结果 | 门禁    | 当前判断                                                       |
+| --: | ------------- | ------------------------------------- | ---- | ------- | -------------------------------------------------------------- |
+|   1 | Store L254    | A 流式时切到 B                        | PASS | R/C/U/L | B 单卡完成，A raw stream 保留。                                |
+|   2 | Store L276    | A 后台继续收 chunk                    | PASS | R/L     | background chunk 按自身 topic 拼接。                           |
+|   3 | Store L288    | A 后台收到 Final                      | PASS | M/C/U/L | canonical、单卡和 lifecycle 收敛。                             |
+|   4 | Store L302    | A 后台收到 Tool response              | PASS | C/T     | Tool canonical/effective 为 finished。                         |
+|   5 | Store L322    | 后台完成后切回不重播                  | PASS | C/U/L   | canonical Final 直接展示且不重建 stream。                      |
+|   6 | Store L338    | 无新 chunk 时恢复 pending render      | PASS | R/C/L   | 切回后已有 draft 继续推进。                                    |
+|   7 | Store L355    | 已完成切回不重建 StreamState          | PASS | C/R/L   | 完成态保持 terminal。                                          |
+|   8 | Store L369    | A → B → A                             | PASS | R/C/L   | A 收敛，B 保持独立 streaming。                                 |
+|   9 | Store L394    | A → B → C → A                         | PASS | R/C/L   | 三个 topic 的 raw/canonical/lifecycle 相互隔离。               |
+|  10 | Store L420    | 多 topic 同时完成                     | PASS | C/L     | 三个 topic 均完成。                                            |
+|  11 | Store L457    | activeTopicId 晚于 chunk              | PASS | P/R/C   | 数据路由不依赖 active topic 先更新。                           |
+|  12 | Store L471    | 已调度 timer 不污染其他 topic         | PASS | C/R/L   | A/B 最终值和 lifecycle 独立。                                  |
+|  13 | Store L497    | 短于 30 秒恢复 pending render         | PASS | C/L     | 不读取内部时间字段，只验证 catchup 行为。                      |
+|  14 | Store L514    | 达到 30 秒 instant settle             | PASS | R/C/L   | 当前已知 draft 一次投影，Stream 仍保持运行。                   |
+|  15 | Store L529    | wall clock 跳变不误判长离开           | PASS | C/L     | 短暂离开仍渐进恢复，不被系统时间跳变 instant settle。          |
+|  16 | Store L547    | HTTP sync 期间冻结 stale draft        | PASS | C/V/L   | sync 期间 projection 保持不变，权威快照完成后正常收敛。        |
+|  17 | Store L579    | 长离开 sync 失败后 instant 但不 Final | PASS | R/C/V/L | 本地 draft 一次投影，StreamState 和 streaming lifecycle 保留。 |
+|  18 | Store L605    | HTTP 后只保留最新单卡                 | PASS | M/C/U/V | authoritative snapshot 最终单卡收敛。                          |
+|  19 | Store L633    | terminal 切回拒绝晚到 chunk           | PASS | C/R/L   | finalized correlation barrier 生效。                           |
+|  20 | Store L656    | terminal 后无重播/恢复                | PASS | C/O/L   | 晚到 chunk 不重开 stream，也不产生 recovery。                  |
+|  21 | Store L678    | `setActiveTopicId(null)` 只取消选中   | PASS | M/C/U/L | canonical 消息保留；不再伪装成删除。                           |
+|  22 | Store L692    | 独立 listener 注册与 unsubscribe      | PASS | O       | 两个订阅各收到一次；分别取消后通知数量正确。                   |
+|  23 | Hook L75      | Strict Mode 只保留一个活跃订阅        | PASS | O/React | mount-cleanup-remount 后 active count 为 1，unmount 后为 0。   |
+
+#### 已修正的测试问题与仍受公开能力限制的覆盖
+
+- 用例 6 已移除“切回后再注入 Final chunk”的污染变量，真正验证没有新 chunk 时恢复 pending render。
+- 用例 13、15 已改成行为标题，不读取 `inactiveAt/lastActiveAt`。
+- 用例 16 已在 HTTP sync 未完成时切回，真实制造 replay 与权威 snapshot 的交错窗口。
+- 用例 17 以 RED → GREEN 锁定 instant projection 与 terminal settlement 的边界，防止 sync 失败误删未完成 StreamState。
+- 用例 20 只锁定公开可见的无重播、无 stream 重开和无 recovery；没有读取 `streamSnapshots` 内部容器。
+- 用例 21 只验证取消选中语义。SuperMagicStore 当前没有已确认的公开 dispose/clear 入口，因此“真正删除后释放 TopicMeta”仍不能在黑盒测试中直接覆盖；不得通过读取实现或构造不存在的 API 补测。
+- TS-D8 的 singleton 是应用 owner 约束；本轮通过真实 Hook Strict Mode 生命周期覆盖订阅不泄漏，但没有用 Store 构造器测试阻止多实例。
+- `types.ts` 仅新增 `inactiveMonotonicAt` 内部字段用于排除大幅 wall clock 跳变；没有新增公开 API。`streamSnapshots` 的旧注释仍可能与 TS-D1 冲突，本轮未做无关整理。
+
+#### 相邻套件当前验证基线
+
+四个相邻文件联合运行结果为 `136 tests / 127 passed / 9 failed`，其中 `3 files failed / 1 file passed`：
+
+| 文件                                       | 当前结果 | 与本节关系                                             |
+| ------------------------------------------ | -------- | ------------------------------------------------------ |
+| `http-authoritative-sync-recovery.test.ts` | `61/61`  | 全部通过；sync generation、取消和恢复契约未回归。      |
+| `message-list-ui-projection.test.ts`       | `22/27`  | 5 个既有 UI projection RED，不并入 Topic 失败。        |
+| `render-state-machine-timers.test.ts`      | `29/31`  | 2 个既有 timer RED；长离开后台追平场景随 TS-D4 转绿。  |
+| `resource-performance.test.ts`             | `15/17`  | 2 个既有 resource/performance RED，不并入 Topic 失败。 |
+
+focused ESLint 无法启动：仓库 `.eslintrc.cjs` 引用缺失的 `./eslint/src-import-boundary.cjs`。这是环境/配置基线阻塞，不是本轮测试修改产生的 lint error。
+
+#### 后续维护门禁
+
+- 两个原 RED 已成为固定回归门禁，不得删除、缩短内容或放宽断言。
+- 后续若出现新的 Store RED，仍需先完成黑盒归因，再由用户明确授权业务修复范围。
+- Store/Hook 测试变更后至少连续运行两次，并补跑 `render-state-machine-timers.test.ts`、`resource-performance.test.ts`、`message-list-ui-projection.test.ts` 和 `http-authoritative-sync-recovery.test.ts`。
+- Topic 切换与 HTTP 权威同步继续共享 P/R/M/C/T/U/V/L/O 分层；后文 HTTP 当前基线仍负责数据权威、identity/version 和 recovery 契约。
+- 新增、删除、重命名用例时同步更新本节的 23 项清单、失败归因、验证命令和公开能力限制。
+
 ## HTTP 权威同步与恢复
 
 - 已有 HTTP sync 时 watchdog 必须复用该请求，不再发起 recovery。
@@ -1264,6 +1682,357 @@ corepack pnpm exec vitest run \
 - 调整测试后至少连续运行目标文件两次，并补跑 `final-assistant-message.test.ts`、`tool-response-execution-state.test.ts`、`message-list-ui-projection.test.ts` 和 `message-buffer.test.ts`，防止跨观察层契约再次漂移。
 - 历史 `23/17/6`、`25/16/9` 与初次校准后的 `25/19/6` 基线保留用于对照；补强 watchdog/reset 与修正 D11/D4 oracle 后，当前冻结基线为 `25/18/7`，7 项 RED 只有在对应契约实现后才应转绿。
 - HTTP-D11 测试使用 `RETRY_TERMINAL_MAX_WINDOWS` 作为防挂死的本地安全上界，不是产品 retry 次数。若未来需要固定最大尝试次数或公开 failure payload，必须新增明确契约并替换该安全观察策略。
+
+### 当前黑盒维护复核（2026-07-25）
+
+本节覆盖并修正上方 2026-07-23 基线中已经漂移的“当前”判断；历史表格继续保留用于追溯。后续维护 `http-authoritative-sync-recovery.test.ts` 时，应优先以本节为入口，并同步更新测试数量、失败归因、协议状态和覆盖缺口。
+
+#### 本轮边界、环境与复现
+
+- 本轮没有打开、搜索展示或修改 `src/pages/superMagic/stores/index.ts`；只运行公开黑盒测试，并检查目标测试、公开 Store 类型、`store.messages`、`messagesConverter()` 和 MessageList/ToolCall 消费规则。
+- 当前 HEAD：`3f1558ff19`；Node：`v22.22.2`；pnpm：`10.6.5`；Vitest：`3.2.6`。
+- 当前工作树原本已包含 `stores/index.ts`、其他测试和本文档的本地修改；这些改动均视为既有用户工作。本轮只增补本文档，不检查 `stores/index.ts` diff。
+- 目标文件连续运行三次结果一致：`25 tests / 18 passed / 7 failed`，共 16 个失败断言；均为 `AssertionError`，没有导入错误、运行时异常、pending、skip 或未收集用例。
+- 相邻 `message-list-ui-projection.test.ts` 当前为 `27 tests / 22 passed / 5 failed`，只用于核对 UI 观察层，不能并入本 HTTP 套件的失败数量。其中 Map-first effective state 与 embedded 回写混淆再次证明“UI 正常”不能单独作为 Store 标准化结论。
+
+```bash
+pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  src/pages/superMagic/stores/__tests__/http-authoritative-sync-recovery.test.ts \
+  --reporter=verbose \
+  --silent=true
+```
+
+#### 当前评判门禁
+
+每个 HTTP 用例必须先声明自己观察的层次，再决定失败归因：
+
+| 门禁 | 观察层                   | 最低判定要求                                                                                                                            |
+| ---- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| P    | 协议 / fixture           | 明确 outer/inner topic、app/correlation、role、seq、task status、`tool.id`；字段缺失、`null`、空字符串和 `[]` 不得共用隐式默认语义。    |
+| M    | `store.messages`         | 检查逻辑消息数量、顺序、role/topic、app/correlation、seq 和旧版本残留；UI 去重不能替代消息层标准化。                                    |
+| C    | Canonical node           | 通过公开查询比较 content/status/tool calls/alias 的已定义语义字段，不要求对象引用相等，也不无差别深比较所有字段。                       |
+| T    | Tool canonical/effective | `toolResponseMap` 按 `tool.id` 为 canonical，UI Map-first、assistant embedded fallback；embedded 未回写不等于 UI 仍 loading。           |
+| U    | UI 投影                  | `messagesConverter()` 只证明列表卡片数量、顺序和 identity；真实 content/status 结合 canonical node，工具 loading 结合 effective state。 |
+| V    | Identity/version         | 重复、乱序、晚到、跨来源更新必须满足 app/correlation/role 边界和 seq 单调性；冲突输入不得悄悄污染 watermark。                           |
+| L    | 生命周期                 | generation、text stream、task、recovery 和 buffer 分开判断；一个层次结束不能自动推出其他层次结束。                                      |
+| O    | 事件/副作用              | recovery/listener 应验证去重、停止条件和 exactly-once；测试安全窗不是产品 SLA。                                                         |
+
+因此，标记“测试用例问题”不能只证明 UI 看起来正常。至少要同时检查该场景相关的 M/C/T/U/V/L 层；但也不要求每个用例机械断言全部层次，避免把无关实现细节写成契约。
+
+#### 当前 7 个失败的修正归因
+
+|   # | 失败用例                                         | 当前黑盒事实                                                           | 修正归因                         | 结论与后续测试处理                                                                                                                                                                                     |
+| --: | ------------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|   1 | 已有 HTTP sync 时 watchdog 仍发 recovery         | current generation 为真，但出现 1 个 recovery event                    | **Store 业务问题**               | HTTP-D1 已确认；断言只依赖公开 generation 与 event，测试准确。                                                                                                                                         |
+|   2 | recovery 已开始 sync 后又发第二个 watchdog       | 同 correlation event 从 1 增至 2                                       | **Store 业务问题**               | HTTP-D1 已确认；第二个有效 chunk 明确重新挂起 watchdog，重复 event 证据充分。                                                                                                                          |
+|   3 | authoritative snapshot 外旧消息未删除            | 旧 node 仍可查，`store.messages`/UI 均 3 条而非 2 条                   | **Store 业务问题**               | HTTP-D2 replacement 失败；即使后续补 D2-order，当前成员数量和旧 node 残留仍独立成立。                                                                                                                  |
+|   4 | 同 app、不同 correlation 的冲突被接纳            | list/UI/canonical identity 与 latest seq 均被新冲突记录覆盖            | **Store 业务问题**               | HTTP-D3 已确认；M/C/U/V 四层同时证明非法 revision 被接纳。                                                                                                                                             |
+|   5 | nonterminal snapshot 删除本地 tool slot          | `local-tool` 及 arguments 丢失，只剩 `http-tool`                       | **Store 为主 + 测试观察层问题**  | 两个不同 `tool.id` 的合并失败已足以证明 HTTP-D6 Store RED；但额外要求 `getStreamState()` 对象必须存在，把数据合并与内部流状态形态绑在一起，后续应拆成独立 lifecycle 契约或改用语义观察。               |
+|   6 | recovery 持续失败后仍不断发 event                | 安全观察窗后 event 仍从 24 增至 25；同时 `isTopicStreaming()` 为 true  | **Store 与测试 oracle 混合问题** | “终态后 event 不再增长”能证明自动 recovery 尚未有界，是有效 Store RED；但没有 task-terminal 输入时直接要求 `isTopicStreaming=false`，混淆 recovery 与 task/thinking 生命周期，不能据此单独归因 Store。 |
+|   7 | `taskStatus=finished` 且 HTTP 失败后仍 streaming | draft/list/UI 保留和独立 retry 通过，仅 `isTopicStreaming()` 仍为 true | **Store 业务问题**               | HTTP-D4 有明确 task-terminal 信号；停止该 task 的 stream/loading 是准确黑盒契约，不代表关闭整个 topic。                                                                                                |
+
+运行层面仍是 7 个失败用例；精准归因应记录为：`5 个纯 Store 问题 + 2 个混合问题`。两个混合用例都包含有效 Store RED，但不能把其中每个断言都继续标成 Store 业务问题。
+
+#### 25 个用例当前准确性复核
+
+|   # | 用例简写                                      | 运行 | 当前准确性             | 覆盖/调整状态                                                                                                                                                         |
+| --: | --------------------------------------------- | ---- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | 已有 sync 时抑制 watchdog                     | FAIL | 准确，Store RED        | 保留。                                                                                                                                                                |
+|   2 | recovery sync 合并后续 watchdog               | FAIL | 准确，Store RED        | 保留。                                                                                                                                                                |
+|   3 | 旧 recovery 低 seq 不回退                     | PASS | 准确                   | 已覆盖 M/C/V/L。                                                                                                                                                      |
+|   4 | outer topic 与 inner Agent topic 分域         | PASS | 准确                   | 已覆盖 P/M/C/L。                                                                                                                                                      |
+|   5 | HTTP 未包含目标 correlation                   | PASS | 核心准确               | draft 保留和继续 recovery 已覆盖；耗尽后的 failure/thinking 形态另测。                                                                                                |
+|   6 | 分页聚合后 authoritative replace              | FAIL | 当前失败准确但覆盖不足 | replacement RED 保留；按既有 D2-order 决策补乱序输入及 M/U 精确顺序。                                                                                                 |
+|   7 | 低 seq HTTP 不回退高 seq IM                   | PASS | 准确                   | 已避免从消息列表顶层读取 canonical content。                                                                                                                          |
+|   8 | HTTP 比本地 StreamState 新                    | PASS | 准确                   | terminal snapshot、M/C/U/V/L 一致。                                                                                                                                   |
+|   9 | HTTP 与 final chunk 并发                      | PASS | 准确但覆盖不足         | 补终态后 bounded no-recovery，避免只证明内容未覆盖。                                                                                                                  |
+|  10 | tool response 并发时 Map/effective 优先       | PASS | 准确                   | effective helper 与真实 ToolCall consumer 一致；实际 React 渲染留在 UI 套件。                                                                                         |
+|  11 | 同 app、不同 correlation 整体拒绝             | FAIL | 准确，Store RED        | 保留 M/C/U/V 四层。                                                                                                                                                   |
+|  12 | 同 correlation 不同 role 隔离                 | PASS | 准确但覆盖不足         | 补裸 correlation 只归 Assistant 的负向查询。                                                                                                                          |
+|  13 | HTTP assistant 不覆盖 canonical tool response | PASS | 准确                   | 不要求 embedded 回写。                                                                                                                                                |
+|  14 | terminal tool_calls 完整替换                  | PASS | 准确但覆盖不足         | 仍缺 absent/`null`/`[]` 三分支。                                                                                                                                      |
+|  15 | nonterminal tool_calls 合并                   | FAIL | 混合                   | tool 数据合并是 Store RED；`StreamState` 对象存在性需拆分/改写；仍缺同 `tool.id` collision。                                                                          |
+|  16 | authoritative 完成后结束公开 stream           | PASS | 准确                   | 有 terminal canonical 输入。                                                                                                                                          |
+|  17 | stale generation 数据仍做版本裁决             | PASS | 准确                   | generation 与 data arbitration 已分层。                                                                                                                               |
+|  18 | syncState 离开 syncing                        | PASS | 基础准确但覆盖不足     | 补重复 complete、旧 generation cancel 和幂等。                                                                                                                        |
+|  19 | recovery backoff 有界且单调                   | PASS | 测试安全窗准确         | 仍需产品总预算/SLA 参数，不能把 8s/20s 写成业务常量。                                                                                                                 |
+|  20 | 新有效 chunk 重置 backoff                     | PASS | 当前 content 分支准确  | 仍缺 reasoning/tool 与 heartbeat/metadata/usage-only 的有效性分类。                                                                                                   |
+|  21 | recovery 耗尽进入可观察终态                   | FAIL | **当前 oracle 不完整** | 拆为“自动 recovery 停止 + recovery_failed 可观察 + draft 保留”和“有/无 task-terminal 时 thinking 分支”；删除无 task-terminal 时强制 `isTopicStreaming=false` 的绑定。 |
+|  22 | task finished + HTTP failure                  | FAIL | 准确，Store RED        | 另补同 topic 后续新 task 可正常开始，防止把 task terminal 写成 topic closure。                                                                                        |
+|  23 | canonical message 完成即结束自身 stream       | PASS | 准确                   | 已有 no-recovery 观察窗。                                                                                                                                             |
+|  24 | task finished 时消费已有 buffer               | PASS | 准确但覆盖不足         | 补 `messagesConverter()` 顺序/单卡观察和 listener exactly-once。                                                                                                      |
+|  25 | finished message 接受更高 seq revision        | PASS | 准确但覆盖不足         | 仍缺 equal-seq conflicting payload。                                                                                                                                  |
+
+#### 历史：已有决策与当时待确认项（已由 2026-07-26 章节取代）
+
+以下内容是 2026-07-25 当时的待确认快照，仅供追溯。用户已在 2026-07-26 确认全部推荐项，并明确恢复预算为“最多 3 次或 30 秒，任一先到”；当前有效契约和 49 项用例基线见后续章节。
+
+| 待确认/补充              | 已记录方向                              | 仍缺的可测试定义                                                                                                              |
+| ------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| D2-empty                 | 按请求是否完整区分                      | 公开输入中用什么字段/调用阶段区分“完整空快照”和“分页/请求不完整的空响应”。                                                    |
+| D2-order                 | Store 按 `seq_id` 排序                  | 是否同时要求 `store.messages` 与 `messagesConverter()` 升序，以及相同 seq 的稳定次序。                                        |
+| D6-presence/content      | absent 保留，`null`/空值显式清空        | 是否允许 nonterminal snapshot 使用相同规则；helper 需要显式构造字段缺失而非默认值。                                           |
+| D6-collision             | 同 `tool.id` 按 seq/字段逐项合并        | local streamed slot 没有可比较 seq 时，哪些字段保持不覆盖；是否要求结构化冲突事件。                                           |
+| D7-equal                 | equal seq 冲突拒绝并标记                | “标记”由 warning、listener event、公开 conflict state 还是其他接口承载。                                                      |
+| D10-effective            | 只有内容/工具/推理算有效                | `finish_reason`-only chunk 是否重置；role-only、heartbeat、metadata、usage-only 明确不重置是否继续有效。                      |
+| D10-sla / D11-budget     | 总恢复预算；attempts/总时长任一先到     | 需要给出可测试的最大总时长和最大 attempts，或明确只要求实现自定但必须公开预算。                                               |
+| D11-failure              | `status=error` + 独立 `recovery_failed` | failure 应挂在 message node、StreamState、独立 Store getter、listener payload 还是 task event；UI “超时请重试”的数据来源。    |
+| D11 thinking             | recovery 耗尽不是 task terminal         | task running/unknown 时是否保持 node `running/waiting` 与 thinking；task finished/final/cancel 时才停止，需明确各公开观察点。 |
+| D11-draft                | recovery 耗尽保留 draft                 | draft 必须同时保留在 canonical node、`store.messages` 和 UI，还是允许仅 canonical/UI 保留。                                   |
+| D12-missing-id           | 不以 `tool_call_id` 兜底                | HTTP 文件是否重复覆盖，或只依赖 tool-response 套件并在此建立交叉引用。                                                        |
+| D6 lifecycle observation | nonterminal 数据不得被误判 terminal     | 是否把 `getStreamState()` 对象存在本身作为协议；当前建议只断公开语义状态，除非产品明确要求继续流式动画。                      |
+
+#### 已确认契约下可直接补强、无需新增产品决策
+
+- 用例 9：HTTP/final race 完成后不再产生 recovery event。
+- 用例 12：裸 correlation alias 只返回 Assistant，Tool/User 仅按自己的 appMessageId 查询。
+- 用例 18：重复 complete、旧 generation cancel、重复 cancel 的幂等性。
+- 用例 22：`taskStatus=finished` 只结束当前 task；同 topic 后续新 task/chunk 仍可开始。
+- 用例 24：buffer 消费后的 `messagesConverter()` 顺序/卡片 identity 与 listener exactly-once。
+- 所有“UI 正常”结论必须由相邻 UI 套件验证真实 consumer；HTTP 文件保留 M/C/T/U/V/L 的跨层接口断言，不在单文件内复制完整 React 渲染测试。
+
+#### 后续修改门禁
+
+- 用户确认决策后，先只修改黑盒测试和本节，不读取 `stores/index.ts`；有效 RED 不得为追求全绿而删除。
+- 测试 oracle 调整与生产 Store 修复分两个阶段记录。只有用户明确授权业务修复后，才进入实现根因定位。
+- 修改目标测试后至少连续运行两次，并补跑 `final-assistant-message.test.ts`、`tool-response-execution-state.test.ts`、`message-list-ui-projection.test.ts` 和 `message-buffer.test.ts`；相邻失败分别归因，不合并进 HTTP 数量。
+- 新增/删除/重命名用例时同步更新本节 25 项表、失败归因、协议决策和验证命令。
+
+### 协议决策执行与 61 用例当前基线（2026-07-26）
+
+本节是“HTTP 权威同步与恢复”测试的当前记录入口，优先级高于上方 2026-07-23、2026-07-25 历史快照。后续新增、删除、重命名或调整目标测试时，必须同步更新本节的决策、用例清单、失败归因和验证结果。
+
+#### 黑盒边界与评判标准
+
+- oracle 校准阶段没有打开、搜索展示或修改 `src/pages/superMagic/stores/index.ts`；测试通过公开入口实例化 Store，评判标准不依赖实现细节。用户随后明确授权业务修复，生产实现定位阶段已读取并修改 Store，但测试 oracle 继续保持黑盒。
+- “测试用例问题”不能只以 UI 是否正常判断。UI 过滤、去重或 fallback 可能掩盖 Store 中的脏数据；Store 数据标准化、canonical identity/version、UI projection 和 lifecycle 必须分别观察。
+- 每个用例只选择与标题相关的门禁，不机械要求所有层次：`P` 协议/fixture、`M` `store.messages`、`C` canonical node、`T` tool canonical/effective、`U` UI projection、`V` identity/version、`L` lifecycle、`O` listener/warning/recovery 副作用。
+- 判断“测试用例问题”前，至少要验证与场景相关的 Store 标准化是否合理：消息数量/顺序、app/correlation/role/topic/seq、canonical content/tool、Map-first effective state、UI 卡片 identity、恢复与任务生命周期。UI 单独通过不构成测试错误的充分依据。
+- `getStreamState()` 对象是否存在不是通用业务契约；nonterminal 场景只验证公开语义状态。只有用例明确测试 recovery attempts 等公开状态时才读取该对象。
+
+#### 已确认决策
+
+| 决策             | 可选方向                                                               | 已执行选项    | 当前可测试契约                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| D2-empty         | A. 始终清空；B. 始终 no-op；C. 按请求完整性区分                        | **C（推荐）** | 完整成功的空 authoritative snapshot 清空 topic；失败或分页未完成不提交空 snapshot。                                     |
+| D2-order         | A. 保持输入顺序；B. Store 标准化排序                                   | **B（推荐）** | `store.messages` 与 UI projection 按 `seq_id` 升序；相同 seq 保持输入稳定顺序。                                         |
+| D6-tool-presence | A. 区分 terminal/nonterminal；B. 所有空值都清空                        | **A（推荐）** | terminal：absent 保留，`null`/`[]` 清空；nonterminal：absent/`null`/`[]` 均不删除有效本地工具。                         |
+| D6-content       | A. 区分 terminal/nonterminal；B. 所有空值都清空                        | **A（推荐）** | terminal：absent 保留，`null`/`""` 清空；nonterminal：absent/`null`/`""` 不删除不可比较版本的本地内容。                 |
+| D6-collision     | A. HTTP 覆盖；B. 本地覆盖；C. 按 identity/version/字段合并             | **C（推荐）** | 同 `tool.id` 合并字段；没有可比较版本时保留已有本地 arguments，接纳不冲突的 HTTP 状态字段。                             |
+| D6-lifecycle     | A. 强制具体 `StreamState` 对象；B. 验证公开语义                        | **B（推荐）** | nonterminal 输入保持公开 streaming 语义，不绑定内部对象的具体存储形态。                                                 |
+| D7-equal         | A. 后到覆盖；B. 静默保留首次；C. 保留首次并告警                        | **C（推荐）** | equal seq、同 identity、payload 冲突时保留首次 canonical，拒绝冲突 revision，并记录结构化 warning。                     |
+| D8-role-alias    | A. 所有 role 共用 correlation alias；B. Assistant-only                 | **B（推荐）** | 裸 correlation alias 只归 Assistant；Tool/User 按各自 appMessageId 查询。                                               |
+| D10-effective    | A. 任意 chunk 重置；B. 仅有效载荷重置                                  | **B（推荐）** | content/reasoning/tool 重置 recovery；role/metadata/usage-only 不重置；finish-reason-only 结束对应文本流/watchdog。     |
+| D11-budget       | A. 仅次数；B. 仅时长；C. 双预算任一先到                                | **C（推荐）** | 自动恢复最多 **3 次或 30 秒，任一先到**；耗尽后不得继续发 recovery request。                                            |
+| D11-failure      | A. 复用 task terminal；B. 只写 message；C. 只发日志；D. 独立状态和事件 | **D（推荐）** | 提供 correlation-scoped recovery failure state 和 exactly-once `recovery_failed` event，包含 attempts 与 elapsedMs。    |
+| D11-thinking     | A. recovery 耗尽即结束 thinking；B. 与 task terminal 分离              | **B（推荐）** | recovery 耗尽不是 task terminal；task running/unknown 时仍保持 thinking，finished/final/cancel 才结束对应 task stream。 |
+| D11-draft        | A. 三层保留；B. 仅 canonical；C. 丢弃                                  | **A（推荐）** | recovery 耗尽后 draft 同时保留在 canonical、`store.messages` 和 UI。                                                    |
+| D12-missing-id   | A. 不使用 `tool_call_id` 兜底；B. legacy fallback                      | **A（推荐）** | HTTP tool response 缺少 `tool.id` 时不建立 canonical key；保留 raw 消息并记录结构化 warning。                           |
+
+恢复失败的公开契约接口为：
+
+- `getStreamRecoveryState(topicId, correlationId)`：返回独立 recovery state，耗尽时至少包含 `status="failed"`、`reason="recovery_failed"`、attempts、elapsedMs。
+- `registerOnStreamRecoveryFailed(callback)`：发布 exactly-once failure event；payload 至少包含 topicId、correlationId、status、reason、attempts、elapsedMs。
+
+#### 本轮测试 oracle 修正
+
+| 用例                            | 原测试问题                                                                                    | 修正                                           | 修正后性质                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| recovery failure event          | event 缺失时继续对 `undefined.attempts/elapsedMs` 做 matcher，产生 `TypeError` 并掩盖真实缺口 | 先断 event 存在，仅在存在时检查预算字段        | 缺失公开 API/event 现在表现为普通 `AssertionError`，仍保留 Store RED。 |
+| task terminal 后同 topic 新任务 | chunk 到达后立即断言完整文本，实际只观察到尚未收敛的 typewriter 前缀                          | 调用公开测试渲染收敛 helper 后再断言完整 draft | 新任务是否可启动与 UI 文本投影均按稳定观察点判断。                     |
+
+修正后没有剩余“测试运行错误”；下列 18 项是业务修复前的准确契约断言，不应为了适配旧实现删除。
+
+#### 修复前 18 个失败用例的归因
+
+|   # | 测试用例                              | 当前黑盒事实                                                          | 归因               | 精准依据                                                                 |
+| --: | ------------------------------------- | --------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------ |
+|   1 | 已有 HTTP sync 时 watchdog 复用请求   | current generation 有效时仍产生 1 个 recovery event                   | **Store 业务问题** | D1 的 O/L 契约明确，不依赖内部实现。                                     |
+|   2 | recovery sync 合并后续 watchdog       | 同 correlation 产生第 2 个 recovery event                             | **Store 业务问题** | 已有 current sync，重复副作用可直接观察。                                |
+|   6 | 完整成功的空 snapshot 清空 topic      | canonical、messages、UI 均残留旧消息                                  | **Store 业务问题** | D2-empty 已确认；M/C/U 三层一致证明 snapshot 未替换。                    |
+|   8 | snapshot seq 升序且 equal-seq 稳定    | equal seq 两项顺序被反转                                              | **Store 业务问题** | D2-order 已确认；M 层排序结果直接违反稳定次序。                          |
+|   9 | 分页聚合后 authoritative replace      | 快照外旧 node、列表记录和 UI 卡片仍存在                               | **Store 业务问题** | D2 replacement 的 C/M/U 三层均失败。                                     |
+|  11 | equal seq payload 冲突                | 首次 canonical 保留，但没有结构化 warning                             | **Store 业务问题** | D7-equal 的数据裁决已满足，O 层冲突可观察性缺失。                        |
+|  15 | 同 app、不同 correlation 冲突拒绝     | 新 correlation/revision 覆盖 canonical、messages、UI 与 latest seq    | **Store 业务问题** | M/C/U/V 四层同时证明非法 identity 被接纳。                               |
+|  17 | HTTP tool response 缺少 `tool.id`     | 未创建 legacy canonical key，但没有结构化 warning                     | **Store 业务问题** | D12 的 canonical 防污染已满足，O 层异常可观察性缺失。                    |
+|  26 | nonterminal snapshot 合并不同 tool id | 本地 tool/arguments 被删除，且公开 streaming 被结束                   | **Store 业务问题** | D6 的 C/L 两层均失败。                                                   |
+|  27 | nonterminal tool_calls absent         | 本地工具保留，但公开 streaming 被结束                                 | **Store 业务问题** | 数据标准化通过，D6 nonterminal lifecycle 失败。                          |
+|  28 | nonterminal tool_calls=`null`         | 本地有效工具被清空                                                    | **Store 业务问题** | nonterminal 空值不得删除不可比较本地数据。                               |
+|  29 | nonterminal tool_calls=`[]`           | 本地有效工具被清空                                                    | **Store 业务问题** | 与 absent/terminal 分支已分离，fixture 语义明确。                        |
+|  30 | nonterminal content absent            | 本地内容保留，但公开 streaming 被结束                                 | **Store 业务问题** | content 数据通过，nonterminal lifecycle 失败。                           |
+|  31 | nonterminal content=`null`            | 本地 draft 被清空                                                     | **Store 业务问题** | D6-content 要求不可比较版本保持本地值。                                  |
+|  32 | nonterminal content=`""`              | 本地 draft 被清空                                                     | **Store 业务问题** | empty 与 absent/null fixture 已独立构造。                                |
+|  33 | nonterminal 同 `tool.id` collision    | HTTP arguments 覆盖本地不可比较 arguments，且 streaming 被结束        | **Store 业务问题** | D6-collision 的字段合并和 L 层同时失败。                                 |
+|  45 | recovery 3 次/30 秒耗尽               | 预算后仍继续 recovery，且无 failure getter/listener/event             | **Store 业务问题** | D11 budget/failure 的 O/L 契约均缺失；draft 和 thinking 保留分支已通过。 |
+|  46 | task finished + HTTP failure          | 原 task 仍处于 streaming；draft 保留、独立 retry 和后续新 task 可启动 | **Store 业务问题** | D4 只缺 task terminal barrier；没有把整个 topic 错当成关闭。             |
+
+修复前统计：`18 Store RED / 0 测试用例问题 / 0 协议未定`。这里的“Store 业务问题”表示当时公开黑盒行为违反已确认契约；具体实现根因和解决结果见后续“业务修复执行结果”。
+
+#### 修复前 49 个用例准确性清单
+
+|   # | 定义行 | 用例简写                                      | 结果 | 门禁      | 当前判断                                            |
+| --: | -----: | --------------------------------------------- | ---- | --------- | --------------------------------------------------- |
+|   1 |    397 | 已有 sync 时 watchdog 抑制 recovery           | FAIL | O/L       | Store RED；重复 recovery。                          |
+|   2 |    411 | recovery sync 合并后续 watchdog               | FAIL | O/L       | Store RED；同 correlation 重复 recovery。           |
+|   3 |    438 | 旧 recovery 低 seq 不回退                     | PASS | M/C/V/L   | 符合 higher-seq-wins。                              |
+|   4 |    480 | outer topic 与 inner Agent topic 分域         | PASS | P/M/C     | transport 与业务 topic 映射正确。                   |
+|   5 |    511 | HTTP 未包含目标 correlation                   | PASS | C/O/L     | draft 保留并继续 recovery。                         |
+|   6 |    542 | 完整空 snapshot 清空 topic                    | FAIL | M/C/U     | Store RED；旧数据残留。                             |
+|   7 |    567 | 失败/分页未完成不提交空 snapshot              | PASS | M/C/U/L   | 不完整请求保持旧 snapshot。                         |
+|   8 |    595 | seq 升序与 equal-seq 稳定顺序                 | FAIL | M/U/V     | Store RED；相同 seq 顺序反转。                      |
+|   9 |    629 | 分页聚合后 authoritative replace              | FAIL | M/C/U/V   | Store RED；快照外旧数据残留。                       |
+|  10 |    688 | 低 seq HTTP 不回退高 seq IM                   | PASS | M/C/U/V   | canonical 和 watermark 单调。                       |
+|  11 |    719 | equal seq 冲突 first-write + warning          | FAIL | C/M/U/V/O | 数据裁决通过，结构化 warning 缺失。                 |
+|  12 |    763 | HTTP 比本地 StreamState 新                    | PASS | M/C/U/V/L | terminal snapshot 收敛。                            |
+|  13 |    782 | HTTP/final race                               | PASS | C/O/L     | canonical 不回退且终态后无 recovery。               |
+|  14 |    808 | assistant/tool 并发 Map-first                 | PASS | T/U       | canonical tool response 优先。                      |
+|  15 |    838 | 同 app、不同 correlation 整体拒绝             | FAIL | M/C/U/V   | Store RED；非法 identity 被接纳。                   |
+|  16 |    880 | 同 correlation 不同 role 隔离                 | PASS | P/M/C/V   | Assistant-only alias 生效。                         |
+|  17 |    912 | missing tool id 不以 tool_call_id 兜底        | FAIL | P/T/O     | canonical 防污染通过，warning 缺失。                |
+|  18 |    946 | HTTP assistant 不覆盖 canonical tool response | PASS | T/U       | Map/effective 保持 finished。                       |
+|  19 |    974 | terminal tool_calls 完整替换                  | PASS | C/L       | terminal authoritative array 生效。                 |
+|  20 |    996 | terminal tool_calls absent 保留               | PASS | C/L       | absent 与显式空值分离。                             |
+|  21 |    996 | terminal tool_calls `null` 清空               | PASS | C/L       | 显式清空生效。                                      |
+|  22 |    996 | terminal tool_calls `[]` 清空                 | PASS | C/L       | 显式清空生效。                                      |
+|  23 |   1022 | terminal content absent 保留                  | PASS | C/L       | absent 保留本地内容。                               |
+|  24 |   1022 | terminal content `null` 清空                  | PASS | C/L       | 显式清空生效。                                      |
+|  25 |   1022 | terminal content `""` 清空                    | PASS | C/L       | 显式清空生效。                                      |
+|  26 |   1042 | nonterminal 合并不同 tool id                  | FAIL | C/L       | Store RED；本地工具被删除且 lifecycle 结束。        |
+|  27 |   1078 | nonterminal tool_calls absent 保留            | FAIL | C/L       | 数据通过，lifecycle RED。                           |
+|  28 |   1078 | nonterminal tool_calls `null` 保留            | FAIL | C/L       | Store RED；本地工具被清空。                         |
+|  29 |   1078 | nonterminal tool_calls `[]` 保留              | FAIL | C/L       | Store RED；本地工具被清空。                         |
+|  30 |   1105 | nonterminal content absent 保留               | FAIL | C/L       | 数据通过，lifecycle RED。                           |
+|  31 |   1105 | nonterminal content `null` 保留               | FAIL | C/L       | Store RED；本地 draft 被清空。                      |
+|  32 |   1105 | nonterminal content `""` 保留                 | FAIL | C/L       | Store RED；本地 draft 被清空。                      |
+|  33 |   1129 | nonterminal 同 tool id 字段合并               | FAIL | C/V/L     | Store RED；arguments 覆盖且 lifecycle 结束。        |
+|  34 |   1160 | authoritative 完成后结束公开 stream           | PASS | L         | terminal canonical 结束对应流。                     |
+|  35 |   1179 | stale generation 数据仍版本裁决               | PASS | V/L       | data arbitration 与 generation 分层。               |
+|  36 |   1214 | sync complete/cancel 幂等和下一代             | PASS | L         | lifecycle API 可重复安全使用。                      |
+|  37 |   1249 | recovery backoff 有界且单调                   | PASS | O/L       | 不锁死具体退避曲线。                                |
+|  38 |   1278 | content chunk 重置 recovery                   | PASS | O/L       | 有效载荷分类正确。                                  |
+|  39 |   1301 | reasoning chunk 重置 recovery                 | PASS | O/L       | 有效载荷分类正确。                                  |
+|  40 |   1301 | tool chunk 重置 recovery                      | PASS | O/L       | 有效载荷分类正确。                                  |
+|  41 |   1330 | role-only 不重置 recovery                     | PASS | O/L       | 无效载荷分类正确。                                  |
+|  42 |   1330 | metadata-only 不重置 recovery                 | PASS | O/L       | 无效载荷分类正确。                                  |
+|  43 |   1330 | usage-only 不重置 recovery                    | PASS | O/L       | usage 不等于内容进展。                              |
+|  44 |   1354 | finish-reason-only 结束流/watchdog            | PASS | O/L       | finality 与 reset 分离。                            |
+|  45 |   1368 | recovery 最多 3 次或 30 秒并暴露 failure      | FAIL | C/M/U/L/O | Store RED；预算和公开 failure API/event 缺失。      |
+|  46 |   1419 | task finished + HTTP failure + 新任务         | FAIL | C/M/U/L   | Store RED；原 task streaming 未停止，其余分支通过。 |
+|  47 |   1461 | canonical 完成即结束自身 stream               | PASS | C/M/U/L   | task running 不重开完成消息。                       |
+|  48 |   1490 | task finished 时消费 buffer                   | PASS | M/C/U/O/L | UI 顺序与 listener exactly-once 通过。              |
+|  49 |   1549 | finished message 接受 higher-seq revision     | PASS | M/C/U/V/L | 高版本 revision 更新且保持单卡。                    |
+
+#### 修复前验证结果（历史）
+
+目标命令连续运行两次结果一致：
+
+```bash
+pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  src/pages/superMagic/stores/__tests__/http-authoritative-sync-recovery.test.ts \
+  --reporter=verbose \
+  --silent=true
+```
+
+- `49 tests / 31 passed / 18 failed`；18 项均为 `AssertionError`，没有 `TypeError`、导入/配置错误、skip、pending 或未收集用例。
+- 18 个失败测试共产生 33 个失败断言；同一用例的 M/C/U/L/O 多层断言会分别报告，但归因按 18 个用例统计。
+- 相邻套件：`final-assistant-message.test.ts` 为 `38/38`；`tool-response-execution-state.test.ts` 为 `54/54`；`message-list-ui-projection.test.ts` 为 `22/27`；`message-buffer.test.ts` 为 `14/20`。相邻失败属于各自章节，不并入 HTTP 的 18 个 RED。
+
+#### 业务修复执行结果（2026-07-26）
+
+用户授权读取和修改生产 Store 后，18 个 RED 均按上表的黑盒契约修复，没有删除或弱化目标断言。随后针对跨 generation、topic、correlation、buffer ownership、cancel/recovery、无 StreamState 恢复和 listener 隔离又补充 12 项黑盒回归；目标文件当前为 `61/61`。
+
+|   # | 场景                                | 已执行的业务修复                                                                                                                                                                              | 当前结果 |
+| --: | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+|   1 | 已有 HTTP sync 时 watchdog 复用请求 | `scheduleStreamRecovery()` 在 `syncState="syncing"` 时抑制新 watchdog，复用当前 generation。                                                                                                  | PASS     |
+|   2 | recovery sync 合并后续 watchdog     | recovery state 按 topic + correlation 隔离；`recovering` 状态不重复发 request。                                                                                                               | PASS     |
+|   6 | 完整成功的空 snapshot 清空 topic    | sync context 记录本次快照实际确认的 correlation；`succeeded + finished` 时 discard 快照外旧流、消息、buffer、node 和 recovery sidecar，并建立 late-chunk tombstone。                          | PASS     |
+|   8 | snapshot seq 升序且 equal-seq 稳定  | 对数字字符串执行稳定升序比较，相同 seq 保持输入顺序。                                                                                                                                         | PASS     |
+|   9 | 分页聚合后 authoritative replace    | `initializeMessages()` 默认 `replace`；前台恢复先聚合分页再单次替换，历史翻页显式使用 `{ mode: "merge" }`。                                                                                   | PASS     |
+|  11 | equal seq payload 冲突              | 保留首次 canonical，并发布包含 identity、seq 和 resolution 的结构化 warning。                                                                                                                 | PASS     |
+|  15 | 同 app、不同 correlation 冲突拒绝   | 非法 revision 整条拒绝，不创建新 alias，不推进 messages/UI/latest seq。                                                                                                                       | PASS     |
+|  17 | HTTP tool response 缺少 `tool.id`   | 不以 `tool_call_id` 建 canonical；保留 raw 记录并发布结构化 warning。                                                                                                                         | PASS     |
+|  26 | nonterminal 合并不同 tool id        | HTTP 与本地 streamed tool 按稳定 ID 做 union，不删除本地有效 slot。                                                                                                                           | PASS     |
+|  27 | nonterminal tool_calls absent       | 保留本地工具和公开 streaming 语义。                                                                                                                                                           | PASS     |
+|  28 | nonterminal tool_calls `null`       | `null` 在 nonterminal 分支不清空不可比较的本地工具。                                                                                                                                          | PASS     |
+|  29 | nonterminal tool_calls `[]`         | 空数组在 nonterminal 分支不清空不可比较的本地工具。                                                                                                                                           | PASS     |
+|  30 | nonterminal content absent          | 保留本地内容，且不把该 correlation 误判为 terminal。                                                                                                                                          | PASS     |
+|  31 | nonterminal content `null`          | 保留不可比较版本的本地 draft。                                                                                                                                                                | PASS     |
+|  32 | nonterminal content `""`            | 保留不可比较版本的本地 draft。                                                                                                                                                                | PASS     |
+|  33 | nonterminal 同 `tool.id` collision  | 同 ID 按字段合并：保留本地 arguments，接纳不冲突的 HTTP status，禁止字符串拼接和长度启发式覆盖。                                                                                              | PASS     |
+|  45 | recovery 最多 3 次或 30 秒          | 新增 correlation-scoped state/getter/failure listener；最多 3 次或 30 秒任一先到，exactly-once 发布 `recovery_failed`。waiting 只持有 recovery timer，request in-flight 才持有绝对 deadline。 | PASS     |
+|  46 | task finished + HTTP failure        | 只结算同步开始前的旧 correlation，停止原 task stream/loading，保留 draft；retry 与同 topic 新 task 使用独立生命周期。                                                                         | PASS     |
+
+补充审查新增的 12 项回归：
+
+|   # | 场景                                                      | 锁定的业务边界                                                                                                   | 当前结果 |
+| --: | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
+|  50 | cancel recovery sync 后恢复 watchdog                      | cancel 不重置 attempts/startedAt；active topic 按剩余预算重新调度，不能永久停在 waiting。                        | PASS     |
+|  51 | 新 topic sync 抢占旧 topic generation                     | 全局单飞抢占时释放旧 topic 的 `syncing`，并恢复其后续 recovery/lifecycle。                                       | PASS     |
+|  52 | 同一 HTTP snapshot 内 app/correlation 冲突                | snapshot 内后续非法 identity 在任何 node/list/watermark/authoritative-set mutation 前整体拒绝。                  | PASS     |
+|  53 | outer transport topic 与 inner Agent topic 清理 ownership | canonical 清理由 outer topic 的消息引用决定，不能拿 inner Agent `topic_id` 误删或漏删。                          | PASS     |
+|  54 | 成功空 snapshot 清理同步前阻塞 buffer                     | 只丢弃同步开始前且快照外的旧 buffer；HTTP 失败和同步开始后到达的新任务继续保留。                                 | PASS     |
+|  55 | stale generation replace 不污染当前 membership            | 旧响应仍参与 higher-seq 数据裁决，但不得清空或改写当前 generation 的 authoritative membership/finalization。     | PASS     |
+|  56 | terminal snapshot 后 cancel 保留 late-chunk tombstone     | 已接纳 message-level terminal 后，即使同步被 cancel，晚到 chunk 也不能重开已完成 correlation。                   | PASS     |
+|  57 | 同 topic 不同 correlation 独立 watchdog/failure           | watchdog、deadline、attempts 和 failure event 按 correlation 隔离，任一恢复不得清除另一 correlation 的计时状态。 | PASS     |
+|  58 | recovery request listener 异常隔离                        | 单个 listener 抛错只记录错误，后续 listener 仍收到同一次 recovery request。                                      | PASS     |
+|  59 | usage/metadata-only 无 StreamState 恢复                   | 首包没有可渲染 StreamState 时仍进入统一 watchdog、重试和 3 次/30 秒 failure 状态机。                             | PASS     |
+|  60 | final-only 无 StreamState 恢复                            | final-only 首包也统一计数和重试；失败后暴露 correlation-scoped `recovery_failed`。                               | PASS     |
+|  61 | 首次 terminal HTTP snapshot 建立 tombstone                | 此前没有 StreamState 时接纳 terminal snapshot，cancel 后晚到 chunk 仍不得覆盖 canonical 或重开流。               | PASS     |
+
+补充的跨套件契约修正：原 timer 用例要求“成功完整空 snapshot 后晚到 chunk 复活旧消息为 `AB`”，与已批准 D2-empty 冲突；现改为验证旧 node/list/stream 被清理且 late chunk 被拒绝。该调整是协议校准，不是为当前实现降低断言。
+
+公开 API 与入口边界：
+
+- `getStreamRecoveryState(topicId, correlationId)` 和 `registerOnStreamRecoveryFailed(callback)` 暴露独立 failure 状态与 exactly-once 事件。
+- `initializeMessages(topicId, messages, { mode })` 默认 `replace`，只有历史分页使用 `merge`。
+- 模块级 `StreamRecoveryCoordinator` 是唯一 Store recovery request consumer；各 Hook 只登记 owner token、topic、conversation 和最新 task status，同 topic recovery 单飞并在任何 await 前同步建立 generation。
+- 主 SuperMagic Hook 与 RecordingSummary/AiChat Hook 的历史分页入口均显式传入 `mode: "merge"`；watchdog recovery 会拉取全部分页到 `has_more=false` 后只执行一次 `{ mode: "replace", syncGeneration }`，任一页失败不提交 partial snapshot。
+- finished resident polling 使用每页 30 条的完整分页 authoritative recovery；task status、owner 或 topic 变化会取消旧 generation，旧响应无权替换 membership 或完成新同步。
+- 两个 Hook 的 PubSub cleanup 均使用精确 handler，卸载一个 owner 不会清空其他页面或浮窗的同事件订阅。
+- 成功完整 terminal snapshot 对快照外旧流执行 discard；HTTP 失败且 task finished 才 hard-settle 并保留 draft，两条分支不得合并。
+
+#### 当前验证结果
+
+目标命令在最终代码上连续运行两次，均为：
+
+```bash
+pnpm exec vitest run \
+  --config ./vitest.config.ts \
+  src/pages/superMagic/stores/__tests__/http-authoritative-sync-recovery.test.ts \
+  --silent
+```
+
+- 目标 HTTP 连续运行两次：`61/61`，0 failed。
+- Final/tool/chunk 高关联四套件：`187/187`（Final `38/38`、tool-call arguments `50/50`、tool response `54/54`、chunk transport `45/45`）。
+- MessageList/UI：`22/27`，5 个既有 RED。
+- Message Buffer：`14/20`，6 个既有 RED；本轮曾暴露的“成功空快照重新写回旧 draft”已修复并转绿。
+- Render timer：`29/31`，2 个既有 RED；长离开后台追平场景随 TS-D4 修复转绿。
+- Topic/correlation identity：`28/35`，7 个既有 RED。
+- Topic switching/background：Store `22/22`；Hook Strict Mode owner `1/1`，合计 `23/23`。
+- Resource/performance：`15/17`，2 个既有 RED。
+- 五个相邻 Store 套件合计：`108/130`，22 个既有 RED；减少的 1 项是长离开后台追平随 TS-D4 修复转绿，没有新增失败。
+- 主 `useTopicMessages.test.tsx`：`14/14`；`streamRecoveryCoordinator.test.ts`：`5/5`；RecordingSummary/AiChat Hook：`3/3`，三文件联合为 `22/22`。
+- focused ESLint 无法启动：仓库 `.eslintrc.cjs` 引用缺失的 `./eslint/src-import-boundary.cjs`；这是配置基线阻塞，不是本轮 lint error 结论。
+
+#### 已知覆盖缺口
+
+以下项目不影响 18 项转绿，但不得把 `61/61` 外推为端到端全覆盖：
+
+- recovery 当前用例覆盖 30 秒耗尽、`attempts <= 3`、永久悬挂 deadline 和双 correlation 隔离；尚未独立锁定“第 3 次请求先于 30 秒耗尽”这一时序分支。
+- Store 的 `{ mode: "merge" }` 尚缺直接 Store 级合并测试；当前由主 Hook 历史分页参数用例覆盖，RecordingSummary/AiChat 的历史分页 merge 入口仍缺单独 focused test。
+- nonterminal 8 项主要观察 canonical/lifecycle，尚未逐项补齐 `store.messages` 与 UI-effective identity。
+- D2-order 尚未使用 `9/10` fixture 专门锁定跨位数数字排序。
+- Store、coordinator 和两个 Hook 已分别有 focused 测试，但仍缺使用真实 Store + mocked HTTP 的生产接线集成测试；当前 `22/22` 不能外推为浏览器端网络可靠性证明。
+
+#### 后续维护门禁
+
+- 当前没有待用户决策项；协议变化必须先在本节新增决策记录，再调整测试。
+- 目标 HTTP 当前门禁为 `61/61`；有效 RED 不得为追求全绿而删除或改成适配当前实现，只有公开契约改变或业务实现满足契约后才能改状态。
+- 目标测试修改后至少连续运行两次，并补跑本文档当前验证矩阵；记录精确 pass/fail、失败类型和跨层归因。
+- “测试用例问题”必须给出 fixture、Store 标准化、canonical、messages、UI/effective 和 lifecycle 中相关层次的反证；只证明 UI 正常不够。
+- 编写和校准测试 oracle 时继续保持 Store 黑盒；只有用户明确授权业务实现修复后，才能读取生产实现定位根因。测试契约不得反向适配实现细节。
 
 ### 2026-07-23 分享路由缺失 Tool response 结算
 

@@ -800,7 +800,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("live-again")
 	})
 
-	it("terminal topic 被 instant settle，但仍有真实 chunk 在途。", () => {
+	it("完整成功的空 authoritative snapshot 终结旧流并拒绝在途晚包。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "A" }))
@@ -813,11 +813,15 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 				latestSeqId: "100",
 			}),
 		).toBe(true)
+		expect(getProjectedNode(store)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 
 		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
 		advanceRendering()
 
-		expect(getProjectedNode(store)?.content).toBe("AB")
+		expect(getProjectedNode(store)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(vi.getTimerCount()).toBe(0)
 	})
 })

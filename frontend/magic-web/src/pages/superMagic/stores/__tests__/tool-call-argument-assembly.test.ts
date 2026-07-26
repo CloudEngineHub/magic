@@ -347,6 +347,10 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		})
 
 		store.receiveChunk(createChunk({ toolCalls: [missingName] }))
+		expect(getStreamTools(store)).toHaveLength(1)
+		expect(getStreamTools(store)[0]).toMatchObject({ id: "tool-1" })
+		expect(getStreamTools(store)[0]?.function?.name || "").toBe("")
+
 		enqueueFinal(store, [createFinalToolCall({ arguments: '{"path":"a.txt"}' })])
 
 		expect(getProjectedTools(store)).toEqual([
@@ -355,6 +359,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 				function: expect.objectContaining({ name: "read_file" }),
 			}),
 		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("工具头只有 id，没有 function。", () => {
@@ -364,12 +369,17 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expect(() =>
 			store.receiveChunk(createChunk({ toolCalls: [missingFunction] })),
 		).not.toThrow()
+		expect(getStreamTools(store)).toEqual([])
+		expect(getProjectedTools(store)).toEqual([])
+		expect(getCorrelationMessages(store)).toEqual([])
+
 		enqueueFinal(store, [createFinalToolCall({ arguments: "{}" })])
 
 		expect(getProjectedTools(store)[0]).toMatchObject({
 			id: "tool-1",
 			function: { name: "read_file", arguments: "{}" },
 		})
+		expectSingleFinalMessage(store)
 	})
 
 	it("arguments chunk 缺少 id 和 name，仅有 index。", () => {
@@ -386,165 +396,120 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 
 	it("arguments chunk 缺少 index，但提供 id 时按 id 绑定。", () => {
 		const store = createStore()
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 
-		try {
-			store.receiveChunk(
-				createChunk({
-					i: 0,
-					toolCalls: [
-						createToolCall({ id: "tool-a", index: 0, arguments: '{"a":"' }),
-						createToolCall({ id: "tool-b", index: 1, arguments: '{"b":"' }),
-					],
-				}),
-			)
-			const missingIndex = protocolToolCall({
-				id: "tool-b",
-				type: "function",
-				function: { arguments: 'value"}' },
-			})
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [
+					createToolCall({ id: "tool-a", index: 0, arguments: '{"a":"' }),
+					createToolCall({ id: "tool-b", index: 1, arguments: '{"b":"' }),
+				],
+			}),
+		)
+		const missingIndex = protocolToolCall({
+			id: "tool-b",
+			type: "function",
+			function: { arguments: 'value"}' },
+		})
 
-			expect(() =>
-				store.receiveChunk(createChunk({ i: 1, toolCalls: [missingIndex] })),
-			).not.toThrow()
+		expect(() =>
+			store.receiveChunk(createChunk({ i: 1, toolCalls: [missingIndex] })),
+		).not.toThrow()
 
-			expect
-				.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-a")))
-				.toBe('{"a":"')
-			expect
-				.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-b")))
-				.toBe('{"b":"value"}')
-			expect
-				.soft(
-					consoleError.mock.calls.some(([message]) =>
-						String(message).includes("tool_calls chunk 缺少 id"),
-					),
-				)
-				.toBe(false)
-		} finally {
-			consoleError.mockRestore()
-		}
+		expect
+			.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-a")))
+			.toBe('{"a":"')
+		expect
+			.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-b")))
+			.toBe('{"b":"value"}')
 	})
 
-	it("arguments chunk 同时缺少 index 和 id 时丢弃并记录日志。", () => {
+	it("arguments chunk 同时缺少 index 和 id 时丢弃且不污染已有工具。", () => {
 		const store = createStore()
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 
-		try {
-			store.receiveChunk(
-				createChunk({
-					i: 0,
-					toolCalls: [
-						createToolCall({ id: "tool-a", index: 0, arguments: '{"a":"old"}' }),
-						createToolCall({ id: "tool-b", index: 1, arguments: '{"b":"old"}' }),
-					],
-				}),
-			)
-			const missingIdentity = protocolToolCall({
-				type: "function",
-				function: { arguments: "should-not-bind" },
-			})
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [
+					createToolCall({ id: "tool-a", index: 0, arguments: '{"a":"old"}' }),
+					createToolCall({ id: "tool-b", index: 1, arguments: '{"b":"old"}' }),
+				],
+			}),
+		)
+		const missingIdentity = protocolToolCall({
+			type: "function",
+			function: { arguments: "should-not-bind" },
+		})
 
-			expect(() =>
-				store.receiveChunk(createChunk({ i: 1, toolCalls: [missingIdentity] })),
-			).not.toThrow()
+		expect(() =>
+			store.receiveChunk(createChunk({ i: 1, toolCalls: [missingIdentity] })),
+		).not.toThrow()
 
-			expect
-				.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-a")))
-				.toBe('{"a":"old"}')
-			expect
-				.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-b")))
-				.toBe('{"b":"old"}')
-			expect
-				.soft(
-					consoleError.mock.calls.some(([message]) =>
-						String(message).includes("tool_calls chunk 缺少 id"),
-					),
-				)
-				.toBe(true)
-		} finally {
-			consoleError.mockRestore()
-		}
+		expect
+			.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-a")))
+			.toBe('{"a":"old"}')
+		expect
+			.soft(getArguments(getStreamTools(store).find((tool) => tool.id === "tool-b")))
+			.toBe('{"b":"old"}')
 	})
 
 	it("arguments 不是字符串时忽略并保留旧值。", () => {
 		const store = createStore()
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		const objectArguments = protocolToolCall({
 			index: 0,
 			type: "function",
 			function: { arguments: { path: "a.txt" } },
 		})
 
-		try {
-			store.receiveChunk(
-				createChunk({
-					i: 0,
-					toolCalls: [createToolCall({ arguments: '{"path":"old.txt"}' })],
-				}),
-			)
-			expect(() =>
-				store.receiveChunk(createChunk({ i: 1, toolCalls: [objectArguments] })),
-			).not.toThrow()
-			expect.soft(getArguments(getStreamTools(store)[0])).toBe('{"path":"old.txt"}')
-			expect
-				.soft(
-					consoleError.mock.calls.some(([message]) =>
-						String(message).includes("tool_calls chunk arguments 格式异常"),
-					),
-				)
-				.toBe(true)
-		} finally {
-			consoleError.mockRestore()
-		}
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [createToolCall({ arguments: '{"path":"old.txt"}' })],
+			}),
+		)
+		expect(() =>
+			store.receiveChunk(createChunk({ i: 1, toolCalls: [objectArguments] })),
+		).not.toThrow()
+		expect(getArguments(getStreamTools(store)[0])).toBe('{"path":"old.txt"}')
 	})
 
 	it("arguments 为 `null` 时忽略并保留旧值。", () => {
 		const store = createStore()
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		const nullArguments = protocolToolCall({
 			index: 0,
 			type: "function",
 			function: { arguments: null },
 		})
 
-		try {
-			store.receiveChunk(
-				createChunk({
-					i: 0,
-					toolCalls: [createToolCall({ arguments: '{"path":"old.txt"}' })],
-				}),
-			)
-			expect(() =>
-				store.receiveChunk(createChunk({ i: 1, toolCalls: [nullArguments] })),
-			).not.toThrow()
-			expect.soft(getArguments(getStreamTools(store)[0])).toBe('{"path":"old.txt"}')
-			expect
-				.soft(
-					consoleError.mock.calls.some(([message]) =>
-						String(message).includes("tool_calls chunk arguments 格式异常"),
-					),
-				)
-				.toBe(true)
-		} finally {
-			consoleError.mockRestore()
-		}
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [createToolCall({ arguments: '{"path":"old.txt"}' })],
+			}),
+		)
+		expect(() =>
+			store.receiveChunk(createChunk({ i: 1, toolCalls: [nullArguments] })),
+		).not.toThrow()
+		expect(getArguments(getStreamTools(store)[0])).toBe('{"path":"old.txt"}')
 	})
 
-	it("arguments 为空字符串。", () => {
+	it("streamed arguments 为空字符串时 no-op，Final 空字符串仍权威。", () => {
 		const store = createStore()
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 
-		try {
-			store.receiveChunk(createChunk({ i: 0, toolCalls: [createToolCall()] }))
-			store.receiveChunk(createChunk({ i: 1, toolCalls: [createArgumentsFragment("")] }))
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [createToolCall({ arguments: '{"path":"old.txt"}' })],
+			}),
+		)
+		store.receiveChunk(createChunk({ i: 1, toolCalls: [createArgumentsFragment("")] }))
 
-			expect(getStreamTools(store)).toHaveLength(1)
-			expect(getArguments(getStreamTools(store)[0])).toBe("")
-			expect(consoleError).not.toHaveBeenCalled()
-		} finally {
-			consoleError.mockRestore()
-		}
+		expect(getStreamTools(store)).toHaveLength(1)
+		expect(getArguments(getStreamTools(store)[0])).toBe('{"path":"old.txt"}')
+
+		enqueueFinal(store, [createFinalToolCall({ arguments: "" })])
+		expect(getArguments(getProjectedTools(store)[0])).toBe("")
+		expectSingleFinalMessage(store)
 	})
 
 	it("arguments 片段丢包。", () => {
@@ -628,9 +593,8 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		)
 		settleRendering(100)
 
-		expect(
-			getArguments(getStreamTools(store)[0]) ?? getArguments(getProjectedTools(store)[0]),
-		).toBe('{"path":"a')
+		expect(getStreamToolSlots(store)).toEqual([])
+		expect(getArguments(getProjectedTools(store)[0])).toBe('{"path":"a')
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
@@ -730,6 +694,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 			function: { name: "read_file", arguments: "" },
 		})
 		expect(getArguments(getProjectedTools(store)[0])).not.toBe(anonymousArguments)
+		expectSingleFinalMessage(store)
 	})
 
 	it("一个 chunk 内包含多个 tool call。", () => {
@@ -813,7 +778,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expect(getStreamTools(store).some((tool) => tool.id === "0")).toBe(false)
 	})
 
-	it("同一个 index 后续被另一个 tool id 复用。", () => {
+	it("同一 index 收到新 id 时流式保留首个工具，Final 再权威覆盖。", () => {
 		const store = createStore()
 
 		store.receiveChunk(
@@ -822,9 +787,15 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		store.receiveChunk(
 			createChunk({ i: 1, toolCalls: [createToolCall({ id: "tool-b", index: 0 })] }),
 		)
+
+		expect
+			.soft(getStreamTools(store))
+			.toEqual([expect.objectContaining({ id: "tool-a", index: 0 })])
+
 		enqueueFinal(store, [createFinalToolCall({ id: "tool-b", arguments: "{}" })])
 
 		expect(getProjectedTools(store).map((tool) => tool.id)).toEqual(["tool-b"])
+		expectSingleFinalMessage(store)
 	})
 
 	it("同一个 tool id 在后续 chunk 中改变 index。", () => {
@@ -838,9 +809,9 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		)
 
 		const slots = getStreamToolSlots(store)
-		expect(slots[0]).toBeUndefined()
-		expect(slots[2]).toMatchObject({ id: "tool-a", index: 2 })
-		expect(getStreamTools(store).filter((tool) => tool.id === "tool-a")).toHaveLength(1)
+		expect.soft(slots[0]).toBeUndefined()
+		expect.soft(slots[2]).toMatchObject({ id: "tool-a", index: 2 })
+		expect.soft(getStreamTools(store).filter((tool) => tool.id === "tool-a")).toHaveLength(1)
 	})
 
 	it("同一个 tool id 在后续 chunk 中改变 name。", () => {
@@ -855,9 +826,13 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 				toolCalls: [createToolCall({ id: "tool-a", name: "write_file" })],
 			}),
 		)
-		enqueueFinal(store, [createFinalToolCall({ id: "tool-a", name: "write_file" })])
 
-		expect(getProjectedTools(store)[0]?.function?.name).toBe("write_file")
+		expect(getStreamTools(store)[0]?.function?.name).toBe("write_file")
+
+		enqueueFinal(store, [createFinalToolCall({ id: "tool-a", name: "read_file" })])
+
+		expect(getProjectedTools(store)[0]?.function?.name).toBe("read_file")
+		expectSingleFinalMessage(store)
 	})
 
 	it("同一个 tool id 在不同 correlation 中复用。", () => {
@@ -903,22 +878,27 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expect(getStreamTools(store)[0]?.id).toBe("tool-a")
 	})
 
-	it("重复工具头使用相同 id 但不同 name。", () => {
+	it("重复工具头的空 name 不覆盖同 id 已有非空 name。", () => {
 		const store = createStore()
 
 		store.receiveChunk(
 			createChunk({ i: 0, toolCalls: [createToolCall({ id: "tool-a", name: "search" })] }),
 		)
 		store.receiveChunk(
-			createChunk({ i: 1, toolCalls: [createToolCall({ id: "tool-a", name: "read_file" })] }),
+			createChunk({ i: 1, toolCalls: [createToolCall({ id: "tool-a", name: "" })] }),
 		)
+
+		expect.soft(getStreamTools(store)).toHaveLength(1)
+		expect.soft(getStreamTools(store)[0]?.function?.name).toBe("search")
+
 		enqueueFinal(store, [createFinalToolCall({ id: "tool-a", name: "read_file" })])
 
 		expect(getProjectedTools(store)).toHaveLength(1)
 		expect(getProjectedTools(store)[0]?.function?.name).toBe("read_file")
+		expectSingleFinalMessage(store)
 	})
 
-	it("匿名 index 槽位没有在工具头到达后升级。", () => {
+	it("arguments-first 匿名 index 槽位在合法工具头到达后原位升级。", () => {
 		const store = createStore()
 
 		store.receiveChunk(
@@ -935,7 +915,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		})
 	})
 
-	it("匿名槽位与最终合法工具同时保留。", () => {
+	it("Final 合法工具替换匿名槽位且不产生重复 canonical 工具。", () => {
 		const store = createStore()
 
 		store.receiveChunk(
@@ -947,6 +927,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 
 		expect(getProjectedTools(store)).toHaveLength(1)
 		expect(getProjectedTools(store)[0]?.id).toBe("real-tool")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expectSingleFinalMessage(store)
 	})
 
@@ -959,6 +940,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expect(getProjectedTools(store)).toEqual([
 			expect.objectContaining({ id: "valid-tool", index: 0 }),
 		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("Store 不为匿名工具生成伪造 id。", () => {
@@ -967,8 +949,12 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		store.receiveChunk(createChunk({ toolCalls: [createArgumentsFragment("{}", 0)] }))
 		settleRendering(100)
 
-		expect(getProjectedTools(store).some((tool) => tool.id === "0")).toBe(false)
-		expect(getStreamTools(store).some((tool) => tool.id === "0")).toBe(false)
+		const streamedTools = getStreamTools(store)
+		expect(streamedTools).toHaveLength(1)
+		expect(streamedTools.every((tool) => tool.id === undefined)).toBe(true)
+		expect(streamedTools.some((tool) => typeof tool.id === "string")).toBe(false)
+		expect(getProjectedTools(store)).toEqual([])
+		expect(getCorrelationMessages(store)).toEqual([])
 	})
 
 	it("匿名槽位在真实工具头到达后升级为真实 id。", () => {
@@ -983,7 +969,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expect(getStreamTools(store)[0]?.id).toBe("real-tool")
 	})
 
-	it("final tool call 顺序与流式首现顺序不同。", () => {
+	it("Final 数组顺序覆盖流式首现顺序并重建 canonical index。", () => {
 		const store = createStore()
 		const streamToolA = createToolCall({ id: "tool-a", index: 0 })
 		const streamToolB = createToolCall({ id: "tool-b", index: 1 })
@@ -998,11 +984,12 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 			createFinalToolCall({ id: "tool-b" }),
 		])
 
-		expect(getProjectedTools(store).map(({ id, index }) => ({ id, index }))).toEqual([
+		expect.soft(getProjectedTools(store).map(({ id, index }) => ({ id, index }))).toEqual([
 			{ id: "tool-c", index: 0 },
 			{ id: "tool-a", index: 1 },
 			{ id: "tool-b", index: 2 },
 		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("final tool call 数量比流式阶段多。", () => {
@@ -1133,6 +1120,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 			function: { name: "call_tool" },
 			tool: { name: "mcp_tool_call" },
 		})
+		expectSingleFinalMessage(store)
 	})
 
 	it("`function` 意外为数组而不是对象。", () => {
@@ -1145,11 +1133,16 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		})
 
 		expect(() => store.receiveChunk(createChunk({ toolCalls: [arrayFunction] }))).not.toThrow()
+		expect(getStreamTools(store)).toEqual([])
+		expect(getProjectedTools(store)).toEqual([])
+		expect(getCorrelationMessages(store)).toEqual([])
+
 		enqueueFinal(store, [createFinalToolCall({ id: "tool-a", arguments: "{}" })])
 		expect(getProjectedTools(store)[0]).toMatchObject({
 			id: "tool-a",
 			function: { name: "read_file", arguments: "{}" },
 		})
+		expectSingleFinalMessage(store)
 	})
 
 	it("单个超大工具参数在 Store 中不截断。", () => {

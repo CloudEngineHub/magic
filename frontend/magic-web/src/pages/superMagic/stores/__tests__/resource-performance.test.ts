@@ -491,7 +491,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("Final 快速覆盖超大参数后清理 stream 和 timer。", () => {
+	it("Final 覆盖超大参数后清理 stream 和 timer。", () => {
 		const store = createStore()
 		const partial = "x".repeat(32_000)
 		const canonical = "final-canonical"

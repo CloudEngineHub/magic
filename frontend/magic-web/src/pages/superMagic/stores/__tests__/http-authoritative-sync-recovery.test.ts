@@ -5,6 +5,7 @@ import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
+	TopicMessageListenerPayload,
 } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -25,11 +26,9 @@ const RENDER_SETTLE_MS = 2_000
 // These broad fake-timer windows keep black-box observation finite; they are not product SLAs.
 const INITIAL_RECOVERY_OBSERVATION_MS = 8_000
 const RETRY_RECOVERY_OBSERVATION_MS = 20_000
-// The exact retry count is intentionally not part of HTTP-D11. These windows
-// only bound this black-box observation so an infinite spinner cannot hang the test.
-const RETRY_TERMINAL_MAX_WINDOWS = 32
-const RETRY_TERMINAL_QUIESCENCE_WINDOWS = 2
-const RETRY_TERMINAL_WINDOW_MS = RETRY_RECOVERY_OBSERVATION_MS + 1_000
+const RECOVERY_MAX_ATTEMPTS = 3
+const RECOVERY_TOTAL_BUDGET_MS = 30_000
+const RECOVERY_POST_BUDGET_OBSERVATION_MS = 60_000
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
 type ChunkToolCall = ChunkChoice["delta"]["tool_calls"][number]
@@ -62,13 +61,42 @@ interface ProjectedNode {
 	} | null
 }
 
+interface StreamRecoveryStateProjection {
+	status?: string
+	reason?: string
+	attempts?: number
+	elapsedMs?: number
+}
+
+interface StreamRecoveryFailurePayload {
+	topicId: string
+	correlationId: string
+	status: "failed"
+	reason: "recovery_failed"
+	attempts: number
+	elapsedMs: number
+}
+
+interface StreamRecoveryObservableStore {
+	getStreamRecoveryState?: (
+		topicId: string,
+		correlationId: string,
+	) => StreamRecoveryStateProjection | undefined
+	registerOnStreamRecoveryFailed?: (
+		callback: (payload: StreamRecoveryFailurePayload) => void,
+	) => () => void
+}
+
 interface ChunkOptions {
 	topicId?: string
 	correlationId?: string
 	i?: number
 	content?: string
+	reasoningContent?: string
 	finishReason?: ChunkChoice["finish_reason"]
 	toolCalls?: ChunkToolCall[]
+	usage?: SuperMagicChunkMessage["super_magic_chunk"]["usage"]
+	choices?: ChunkChoice[]
 }
 
 interface EnvelopeOptions {
@@ -80,6 +108,8 @@ interface EnvelopeOptions {
 	role?: "assistant" | "tool"
 	content?: string | null
 	toolCalls?: ProjectedToolCall[] | null
+	omitContent?: boolean
+	omitToolCalls?: boolean
 	toolId?: string
 	toolCallId?: string
 	toolStatus?: string
@@ -91,8 +121,11 @@ function createChunk({
 	correlationId = CORRELATION_ID,
 	i = 0,
 	content = "",
+	reasoningContent = "",
 	finishReason = null,
 	toolCalls = [],
+	usage = null,
+	choices,
 }: ChunkOptions = {}): SuperMagicChunkMessage {
 	return {
 		magic_message_id: `magic-chunk-${topicId}-${i}`,
@@ -104,22 +137,48 @@ function createChunk({
 		message_id: `completion-${topicId}`,
 		super_magic_chunk: {
 			i,
-			usage: null,
+			usage,
 			correlation_id: correlationId,
-			choices: [
+			choices: choices ?? [
 				{
 					finish_reason: finishReason,
 					delta: {
 						content,
 						role: "assistant",
 						tool_calls: toolCalls,
-						reasoning_content: "",
+						reasoning_content: reasoningContent,
 						index: 0,
 					},
 				},
 			],
 		},
 	}
+}
+
+function createMetadataOnlyChunk({
+	i,
+	finishReason = null,
+}: {
+	i: number
+	finishReason?: ChunkChoice["finish_reason"]
+}): SuperMagicChunkMessage {
+	return createChunk({
+		i,
+		choices: [
+			{
+				finish_reason: finishReason,
+				delta: { index: 0 } as ChunkChoice["delta"],
+			},
+		],
+	})
+}
+
+function createUsageOnlyChunk(i: number): SuperMagicChunkMessage {
+	return createChunk({
+		i,
+		choices: [],
+		usage: { completion_tokens: 1, prompt_tokens: 1, total_tokens: 2 },
+	})
 }
 
 function createToolCall({
@@ -145,31 +204,42 @@ function createToolCall({
 	}
 }
 
-function createEnvelope({
-	topicId = TOPIC_A,
-	nodeTopicId = topicId,
-	appMessageId = "assistant-sync",
-	correlationId = CORRELATION_ID,
-	seqId = "100",
-	role = "assistant",
-	content = role === "assistant" ? "canonical" : null,
-	toolCalls = role === "assistant" ? [] : null,
-	toolId = "tool-1",
-	toolCallId = "legacy-tool-call-1",
-	toolStatus = "finished",
-	nodeStatus = role === "assistant" ? "finished" : "running",
-}: EnvelopeOptions = {}): RawSuperMagicMessageEnvelope {
+function createEnvelope(options: EnvelopeOptions = {}): RawSuperMagicMessageEnvelope {
+	const {
+		topicId = TOPIC_A,
+		nodeTopicId = topicId,
+		appMessageId = "assistant-sync",
+		correlationId = CORRELATION_ID,
+		seqId = "100",
+		role = "assistant",
+		toolId = "tool-1",
+		toolCallId = "legacy-tool-call-1",
+		toolStatus = "finished",
+		nodeStatus = role === "assistant" ? "finished" : "running",
+		omitContent = false,
+		omitToolCalls = false,
+	} = options
+	const content = Object.prototype.hasOwnProperty.call(options, "content")
+		? options.content
+		: role === "assistant"
+			? "canonical"
+			: null
+	const toolCalls = Object.prototype.hasOwnProperty.call(options, "toolCalls")
+		? options.toolCalls
+		: role === "assistant"
+			? []
+			: null
 	const node = {
 		role,
 		topic_id: nodeTopicId,
 		message_id: `node-${appMessageId}`,
 		correlation_id: correlationId,
-		content,
 		reasoning_content: null,
-		tool_calls: toolCalls,
 		status: nodeStatus,
 		send_timestamp: Number(seqId) || 1,
 	} as SuperMagicNode
+	if (!omitContent) node.content = content
+	if (!omitToolCalls) node.tool_calls = toolCalls
 	if (role === "tool") {
 		node.tool_call_id = toolCallId
 		node.tool = {
@@ -278,6 +348,40 @@ function collectRecoveryRequests(store: SuperMagicStore): {
 	return { events, unsubscribe }
 }
 
+function getStreamRecoveryState(
+	store: SuperMagicStore,
+	topicId = TOPIC_A,
+	correlationId = CORRELATION_ID,
+): StreamRecoveryStateProjection | undefined {
+	const observableStore = store as unknown as StreamRecoveryObservableStore
+	return observableStore.getStreamRecoveryState?.call(store, topicId, correlationId)
+}
+
+function collectRecoveryFailures(store: SuperMagicStore): {
+	events: StreamRecoveryFailurePayload[]
+	isSupported: boolean
+	unsubscribe: () => void
+} {
+	const events: StreamRecoveryFailurePayload[] = []
+	const observableStore = store as unknown as StreamRecoveryObservableStore
+	const register = observableStore.registerOnStreamRecoveryFailed
+	const unsubscribe =
+		register?.call(store, (payload) => events.push(payload)) ?? (() => undefined)
+	return { events, isSupported: typeof register === "function", unsubscribe }
+}
+
+function collectTopicArrivals(store: SuperMagicStore): {
+	events: TopicMessageListenerPayload[]
+	unsubscribe: () => void
+} {
+	const events: TopicMessageListenerPayload[] = []
+	const unsubscribe = store.registerTopicMessageListener({
+		topicId: TOPIC_A,
+		callback: (payload) => events.push(payload),
+	})
+	return { events, unsubscribe }
+}
+
 describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
@@ -286,6 +390,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 	afterEach(() => {
 		vi.clearAllTimers()
+		vi.restoreAllMocks()
 		vi.useRealTimers()
 	})
 
@@ -328,6 +433,80 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			store.cancelTopicSync(TOPIC_A, inFlightGeneration)
 		}
 		unsubscribe()
+	})
+
+	it("recovery requested listener 抛错时必须隔离异常并继续通知后续 listener。", () => {
+		const store = createStore()
+		const listenerError = new Error("listener failed")
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const unsubscribeThrowing = store.registerOnStreamRecoveryRequested(() => {
+			throw listenerError
+		})
+		const recovery = collectRecoveryRequests(store)
+
+		store.receiveChunk(createChunk({ content: "incomplete" }))
+
+		expect(() => {
+			vi.advanceTimersByTime(INITIAL_RECOVERY_OBSERVATION_MS)
+		}).not.toThrow()
+		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
+		expect(consoleError).toHaveBeenCalledWith(
+			"[SuperMagicStore] stream recovery request listener error",
+			expect.objectContaining({
+				error: listenerError,
+				topicId: TOPIC_A,
+				correlationId: CORRELATION_ID,
+			}),
+		)
+
+		unsubscribeThrowing()
+		recovery.unsubscribe()
+	})
+
+	it("取消当前 recovery sync 后必须重新进入 watchdog，不能永久停在 waiting。", () => {
+		const store = createStore()
+		const events: StreamRecoveryRequestPayload[] = []
+		let inFlightGeneration: number | undefined
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			events.push(payload)
+			inFlightGeneration ??= store.beginTopicSync(payload.topicId)
+		})
+
+		store.receiveChunk(createChunk({ content: "incomplete" }))
+		expect(advanceUntilRecovery(events, 1, INITIAL_RECOVERY_OBSERVATION_MS)).toBeDefined()
+		expect(inFlightGeneration).toBeDefined()
+
+		if (inFlightGeneration !== undefined) {
+			store.cancelTopicSync(TOPIC_A, inFlightGeneration)
+		}
+
+		expect(advanceUntilRecovery(events, 2, RETRY_RECOVERY_OBSERVATION_MS)).toBeDefined()
+		expect(events).toEqual([
+			{ topicId: TOPIC_A, correlationId: CORRELATION_ID },
+			{ topicId: TOPIC_A, correlationId: CORRELATION_ID },
+		])
+		unsubscribe()
+	})
+
+	it("新 topic sync 抢占旧 generation 后必须释放旧 topic 的 syncing 状态。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+
+		store.receiveChunk(createChunk({ content: "topic A incomplete" }))
+		const generationA = store.beginTopicSync(TOPIC_A)
+		store.setActiveTopicId(TOPIC_B)
+		const generationB = store.beginTopicSync(TOPIC_B)
+
+		expect(store.isTopicSyncCurrent(TOPIC_A, generationA)).toBe(false)
+		expect(store.isTopicSyncCurrent(TOPIC_B, generationB)).toBe(true)
+		store.cancelTopicSync(TOPIC_B, generationB)
+		store.setActiveTopicId(TOPIC_A)
+
+		expect(
+			advanceUntilRecovery(recovery.events, 1, INITIAL_RECOVERY_OBSERVATION_MS),
+		).toBeDefined()
+		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
+		recovery.unsubscribe()
 	})
 
 	it("旧恢复请求的低 seq HTTP 数据进入 initializeMessages 后仍不得回退。", () => {
@@ -403,6 +582,45 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.completeTopicSync(TOPIC_A, generationB, { succeeded: true })).toBe(false)
 	})
 
+	it("清理 outer topic 时不能用 inner Agent topic 判断 canonical ownership。", () => {
+		const store = createStore()
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				topicId: TOPIC_A,
+				nodeTopicId: AGENT_TOPIC_A,
+				appMessageId: "outer-a-app",
+				correlationId: "outer-a-correlation",
+				content: "keep topic A",
+			}),
+		])
+		store.initializeMessages(TOPIC_B, [
+			createEnvelope({
+				topicId: TOPIC_B,
+				nodeTopicId: AGENT_TOPIC_A,
+				appMessageId: "outer-b-app",
+				correlationId: "outer-b-correlation",
+				content: "remove topic B",
+			}),
+		])
+		const generation = store.beginTopicSync(TOPIC_B)
+
+		store.initializeMessages(TOPIC_B, [], { syncGeneration: generation })
+		expect(
+			store.completeTopicSync(TOPIC_B, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+			}),
+		).toBe(true)
+
+		expect.soft(getNode(store, "outer-a-app")?.content).toBe("keep topic A")
+		expect.soft(getNode(store, "outer-a-correlation")?.content).toBe("keep topic A")
+		expect.soft(getNode(store, "outer-b-app")).toBeUndefined()
+		expect.soft(getNode(store, "outer-b-correlation")).toBeUndefined()
+		expect.soft(getMessageRecords(store, TOPIC_A)).toHaveLength(1)
+		expect.soft(getMessageRecords(store, TOPIC_B)).toHaveLength(0)
+	})
+
 	it("HTTP 响应没有包含目标 correlation。", () => {
 		const store = createStore()
 		const recovery = collectRecoveryRequests(store)
@@ -432,6 +650,138 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBeDefined()
 		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
 		recovery.unsubscribe()
+	})
+
+	it("完整 HTTP 请求返回空 authoritative snapshot 时清空 topic。", () => {
+		const store = createStore()
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "removed-by-empty-snapshot",
+				correlationId: "removed-by-empty-correlation",
+				seqId: "100",
+			}),
+		])
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(TOPIC_A, [])
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+				latestSeqId: "100",
+			}),
+		).toBe(true)
+
+		expect.soft(getNode(store, "removed-by-empty-correlation")).toBeUndefined()
+		expect.soft(getMessageRecords(store)).toHaveLength(0)
+		expect.soft(getUiMessages(store)).toHaveLength(0)
+	})
+
+	it("成功空 snapshot 必须丢弃同步开始前被旧流阻塞的 buffer 条目。", () => {
+		const store = createStore()
+
+		store.receiveChunk(
+			createChunk({ correlationId: "timer-owner-correlation", content: "timer owner" }),
+		)
+		store.receiveChunk(
+			createChunk({ correlationId: "buffer-blocker-correlation", content: "buffer blocker" }),
+		)
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "buffer-blocker-final",
+				correlationId: "buffer-blocker-correlation",
+				seqId: "199",
+				content: "buffer blocker final",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "buffered-before-sync",
+				correlationId: "buffered-before-sync-correlation",
+				seqId: "200",
+				content: "must be discarded",
+			}),
+		)
+		expect(store.buffer.get(TOPIC_A)?.messages.length).toBeGreaterThan(1)
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(TOPIC_A, [], { syncGeneration: generation })
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		expect.soft(getNode(store, "buffered-before-sync")).toBeUndefined()
+		expect.soft(getNode(store, "buffered-before-sync-correlation")).toBeUndefined()
+		expect.soft(getMessageRecords(store)).toHaveLength(0)
+		expect.soft(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
+	})
+
+	it("HTTP 请求失败或分页未完成时不提交空 snapshot，保留现有 topic 数据。", () => {
+		const store = createStore()
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "preserved-after-incomplete-request",
+				correlationId: "preserved-after-incomplete-correlation",
+				seqId: "100",
+				content: "preserved",
+			}),
+		])
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: false,
+				taskStatus: "running",
+			}),
+		).toBe(true)
+
+		expect(getNode(store, "preserved-after-incomplete-correlation")?.content).toBe("preserved")
+		expect(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "preserved-after-incomplete-request",
+				seq_id: "100",
+			},
+		])
+	})
+
+	it("authoritative snapshot 按 seq_id 升序标准化，相同 seq 保持输入稳定顺序。", () => {
+		const store = createStore()
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "seq-300",
+				correlationId: "correlation-300",
+				seqId: "300",
+			}),
+			createEnvelope({
+				appMessageId: "seq-200-first",
+				correlationId: "correlation-200-first",
+				seqId: "200",
+			}),
+			createEnvelope({
+				appMessageId: "seq-100",
+				correlationId: "correlation-100",
+				seqId: "100",
+			}),
+			createEnvelope({
+				appMessageId: "seq-200-second",
+				correlationId: "correlation-200-second",
+				seqId: "200",
+			}),
+		])
+
+		const expectedOrder = ["seq-100", "seq-200-first", "seq-200-second", "seq-300"]
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual(
+			expectedOrder,
+		)
+		expect(getUiMessages(store).map((message) => message.app_message_id)).toEqual(expectedOrder)
+		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("300")
 	})
 
 	it("分页结果必须先聚合，再以一次 authoritative snapshot 替换 topic 视图。", () => {
@@ -524,6 +874,50 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
 	})
 
+	it("同一逻辑消息 equal seq 但 payload 冲突时保留首次 canonical 并记录结构化冲突。", () => {
+		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "equal-seq-app",
+				correlationId: "equal-seq-correlation",
+				seqId: "100",
+				content: "first canonical",
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "equal-seq-app",
+				correlationId: "equal-seq-correlation",
+				seqId: "100",
+				content: "conflicting payload",
+			}),
+		])
+
+		expect.soft(getNode(store, "equal-seq-correlation")?.content).toBe("first canonical")
+		expect.soft(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "equal-seq-app",
+				correlation_id: "equal-seq-correlation",
+				seq_id: "100",
+			},
+		])
+		expect.soft(getUiMessages(store)).toHaveLength(1)
+		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+		expect.soft(warnSpy).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				code: "assistant-seq-conflict",
+				topicId: TOPIC_A,
+				appMessageId: "equal-seq-app",
+				correlationId: "equal-seq-correlation",
+				seqId: "100",
+				resolution: "preserve-first-canonical",
+			}),
+		)
+	})
+
 	it("HTTP 响应比本地 StreamState 更新。", () => {
 		const store = createStore()
 
@@ -545,6 +939,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 	it("HTTP 响应到达时 final chunk 同时到达。", () => {
 		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
 		store.receiveChunk(createChunk({ i: 0, content: "draft" }))
 		const generation = store.beginTopicSync(TOPIC_A)
 
@@ -563,6 +958,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		expect(getNode(store, CORRELATION_ID)?.content).toBe("HTTP canonical")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		vi.advanceTimersByTime(RECOVERY_POST_BUDGET_OBSERVATION_MS)
+		expect(recovery.events).toHaveLength(0)
+		recovery.unsubscribe()
 	})
 
 	it("HTTP assistant 与 tool response 并发时以 tool.id 的 canonical Map 状态为准。", () => {
@@ -637,6 +1035,37 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
 	})
 
+	it("同一 HTTP snapshot 内同 appMessageId、不同 correlationId 的后续记录必须拒绝。", () => {
+		const store = createStore()
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "shared-batch-app",
+				correlationId: "original-batch-correlation",
+				seqId: "100",
+				content: "original",
+			}),
+			createEnvelope({
+				appMessageId: "shared-batch-app",
+				correlationId: "different-batch-correlation",
+				seqId: "200",
+				content: "must not overwrite",
+			}),
+		])
+
+		expect.soft(getNode(store, "original-batch-correlation")?.content).toBe("original")
+		expect.soft(getNode(store, "different-batch-correlation")).toBeUndefined()
+		expect.soft(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "shared-batch-app",
+				correlation_id: "original-batch-correlation",
+				seq_id: "100",
+			},
+		])
+		expect.soft(getUiMessages(store)).toHaveLength(1)
+		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+	})
+
 	it("initializeMessages 按 correlationId 隔离不同 role 的消息。", () => {
 		const store = createStore()
 
@@ -659,6 +1088,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		expect(getNode(store, "tool-app")?.role).toBe("tool")
 		expect(getNode(store, "assistant-app")?.role).toBe("assistant")
+		expect(getNode(store, "role-collision")?.role).toBe("assistant")
 		expect(getMessageRecords(store)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ app_message_id: "tool-app", role: "tool" }),
@@ -666,6 +1096,40 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			]),
 		)
 		expect(getMessageRecords(store)).toHaveLength(2)
+	})
+
+	it("HTTP tool response 缺少 tool.id 时不使用 tool_call_id 建立 canonical 关联。", () => {
+		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				role: "tool",
+				appMessageId: "missing-tool-id-response",
+				correlationId: "missing-tool-id-correlation",
+				seqId: "200",
+				toolId: "",
+				toolCallId: "legacy-tool-call-must-not-be-used",
+			}),
+		])
+
+		expect.soft(getNode(store, "missing-tool-id-response")).toMatchObject({
+			role: "tool",
+			tool_call_id: "legacy-tool-call-must-not-be-used",
+		})
+		expect.soft(getCanonicalToolState(store, "")).toBeUndefined()
+		expect
+			.soft(getCanonicalToolState(store, "legacy-tool-call-must-not-be-used"))
+			.toBeUndefined()
+		expect.soft(warnSpy).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				code: "tool-response-missing-tool-id",
+				topicId: TOPIC_A,
+				toolCallId: "legacy-tool-call-must-not-be-used",
+				resolution: "ignore-canonical-association",
+			}),
+		)
 	})
 
 	it("后到 HTTP assistant 快照不得覆盖 tool.id 对应的 canonical response。", () => {
@@ -718,6 +1182,52 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 	})
 
+	it.each([
+		["字段缺失时保留", { omitToolCalls: true }, ["local-tool"]],
+		["显式 null 时清空", { toolCalls: null }, []],
+		["显式空数组时清空", { toolCalls: [] }, []],
+	] as const)("terminal tool_calls %s。", (_label, envelopeOptions, expectedToolIds) => {
+		const store = createStore()
+		store.receiveChunk(
+			createChunk({
+				toolCalls: [createToolCall({ id: "local-tool", arguments: '{"local":true}' })],
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				seqId: "200",
+				...envelopeOptions,
+			}),
+		])
+		advanceRendering()
+
+		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id) ?? []).toEqual(
+			expectedToolIds,
+		)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it.each([
+		["字段缺失时保留本地内容", { omitContent: true }, "local draft"],
+		["显式 null 时清空内容", { content: null }, ""],
+		["显式空字符串时清空内容", { content: "" }, ""],
+	] as const)("terminal content %s。", (_label, envelopeOptions, expectedContent) => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ content: "local draft" }))
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				seqId: "200",
+				...envelopeOptions,
+			}),
+		])
+		advanceRendering()
+
+		expect(getNode(store, CORRELATION_ID)?.content ?? "").toBe(expectedContent)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
 	it("nonterminal HTTP snapshot 的 tool_calls 必须与本地流式 slot 合并。", () => {
 		const store = createStore()
 
@@ -751,7 +1261,89 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect
 			.soft(tools.find((tool) => tool.id === "http-tool")?.function?.arguments)
 			.toBe('{"http":true}')
-		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeDefined()
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it.each([
+		["字段缺失", { omitToolCalls: true }],
+		["显式 null", { toolCalls: null }],
+		["显式空数组", { toolCalls: [] }],
+	] as const)("nonterminal tool_calls %s 时保留有效本地 slot。", (_label, envelopeOptions) => {
+		const store = createStore()
+		store.receiveChunk(
+			createChunk({
+				toolCalls: [createToolCall({ id: "local-tool", arguments: '{"local":true}' })],
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				seqId: "200",
+				nodeStatus: "running",
+				...envelopeOptions,
+			}),
+		])
+		advanceRendering()
+
+		const tools = getNode(store, CORRELATION_ID)?.tool_calls ?? []
+		expect(tools.map((tool) => tool.id)).toEqual(["local-tool"])
+		expect(tools[0]?.function?.arguments).toBe('{"local":true}')
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it.each([
+		["字段缺失", { omitContent: true }],
+		["显式 null", { content: null }],
+		["显式空字符串", { content: "" }],
+	] as const)(
+		"nonterminal content %s 时不删除不可比较版本的本地内容。",
+		(_label, envelopeOptions) => {
+			const store = createStore()
+			store.receiveChunk(createChunk({ content: "local draft" }))
+
+			store.initializeMessages(TOPIC_A, [
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "running",
+					...envelopeOptions,
+				}),
+			])
+			advanceRendering()
+
+			expect(getNode(store, CORRELATION_ID)?.content).toBe("local draft")
+			expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		},
+	)
+
+	it("nonterminal snapshot 与本地相同 tool.id 时按字段合并且不覆盖不可比较 arguments。", () => {
+		const store = createStore()
+		store.receiveChunk(
+			createChunk({
+				toolCalls: [createToolCall({ id: "shared-tool", arguments: '{"local":true}' })],
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				seqId: "200",
+				nodeStatus: "running",
+				toolCalls: [
+					createToolCall({
+						id: "shared-tool",
+						arguments: '{"http":true}',
+						status: "running",
+					}),
+				],
+			}),
+		])
+		advanceRendering()
+
+		const tools = getNode(store, CORRELATION_ID)?.tool_calls ?? []
+		expect.soft(tools).toHaveLength(1)
+		expect.soft(tools[0]?.id).toBe("shared-tool")
+		expect.soft(tools[0]?.function?.arguments).toBe('{"local":true}')
+		expect.soft(tools[0]?.tool?.status).toBe("running")
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
 	it("权威快照完成后公开流式生命周期结束。", () => {
@@ -808,6 +1400,100 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
 	})
 
+	it("旧 generation 的 replace 响应不得清空当前 generation 的 snapshot membership。", () => {
+		const store = createStore()
+		const oldGeneration = store.beginTopicSync(TOPIC_A)
+		const currentGeneration = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "current-generation-app",
+					correlationId: "current-generation-correlation",
+					seqId: "200",
+					content: "current generation",
+				}),
+			],
+			{ mode: "replace", syncGeneration: currentGeneration },
+		)
+		store.initializeMessages(TOPIC_A, [], {
+			mode: "replace",
+			syncGeneration: oldGeneration,
+		})
+
+		expect(
+			store.completeTopicSync(TOPIC_A, currentGeneration, {
+				succeeded: true,
+				taskStatus: "finished",
+				latestSeqId: "200",
+			}),
+		).toBe(true)
+
+		expect
+			.soft(getNode(store, "current-generation-correlation")?.content)
+			.toBe("current generation")
+		expect.soft(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "current-generation-app",
+				correlation_id: "current-generation-correlation",
+				seq_id: "200",
+			},
+		])
+		expect.soft(getUiMessages(store)).toHaveLength(1)
+	})
+
+	it("同步中已接纳 terminal snapshot 后即使 cancel，也必须拒绝晚到 chunk 重开。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ content: "draft" }))
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "terminal-before-cancel",
+					seqId: "200",
+					content: "terminal canonical",
+				}),
+			],
+			{ syncGeneration: generation },
+		)
+		store.cancelTopicSync(TOPIC_A, generation)
+		store.receiveChunk(createChunk({ i: 0, content: "late chunk" }))
+		advanceRendering()
+
+		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("terminal canonical")
+		expect.soft(getNode(store, "terminal-before-cancel")?.content).toBe("terminal canonical")
+		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("首次 terminal HTTP snapshot 即使此前没有 StreamState，cancel 后也必须拒绝晚到 chunk。", () => {
+		const store = createStore()
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "terminal-without-stream",
+					seqId: "200",
+					content: "terminal canonical",
+				}),
+			],
+			{ syncGeneration: generation },
+		)
+		store.cancelTopicSync(TOPIC_A, generation)
+		store.receiveChunk(createChunk({ i: 0, content: "late chunk" }))
+		advanceRendering()
+
+		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("terminal canonical")
+		expect.soft(getNode(store, "terminal-without-stream")?.content).toBe("terminal canonical")
+		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
 	it("syncState 可以离开 syncing，并支持下一代 complete/cancel。", () => {
 		const store = createStore()
 		const generation = store.beginTopicSync(TOPIC_A)
@@ -820,12 +1506,27 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(true)
 		expect(store.isTopicSyncCurrent(TOPIC_A, generation)).toBe(false)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "running",
+			}),
+		).toBe(false)
+		store.cancelTopicSync(TOPIC_A, generation)
+		expect(store.isTopicSyncCurrent(TOPIC_A, generation)).toBe(false)
 
 		const nextGeneration = store.beginTopicSync(TOPIC_A)
 		expect(nextGeneration).toBeGreaterThan(generation)
 		expect(store.isTopicSyncCurrent(TOPIC_A, nextGeneration)).toBe(true)
 		store.cancelTopicSync(TOPIC_A, nextGeneration)
+		store.cancelTopicSync(TOPIC_A, nextGeneration)
 		expect(store.isTopicSyncCurrent(TOPIC_A, nextGeneration)).toBe(false)
+		expect(
+			store.completeTopicSync(TOPIC_A, nextGeneration, {
+				succeeded: true,
+				taskStatus: "running",
+			}),
+		).toBe(false)
 	})
 
 	it("HTTP 请求失败后的 recovery 退避必须有界且单调递增。", () => {
@@ -880,7 +1581,17 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		unsubscribe()
 	})
 
-	it("连续 recovery 失败必须在有界次数后进入可观察终态。", () => {
+	it.each([
+		["reasoning", (i: number) => createChunk({ i, reasoningContent: "new reasoning" })],
+		[
+			"tool",
+			(i: number) =>
+				createChunk({
+					i,
+					toolCalls: [createToolCall({ id: "effective-tool", arguments: "{}" })],
+				}),
+		],
+	] as const)("收到新的有效 %s chunk 后 recoveryAttempts 归零。", (_label, createNextChunk) => {
 		const store = createStore()
 		const events: StreamRecoveryRequestPayload[] = []
 		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
@@ -889,29 +1600,215 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			store.completeTopicSync(payload.topicId, generation, { succeeded: false })
 		})
 
-		store.receiveChunk(createChunk({ content: "unrecoverable draft" }))
-		let quietWindows = 0
-		for (
-			let window = 0;
-			window < RETRY_TERMINAL_MAX_WINDOWS &&
-			store.isTopicStreaming(TOPIC_A) &&
-			quietWindows < RETRY_TERMINAL_QUIESCENCE_WINDOWS;
-			window += 1
-		) {
-			const eventCountBeforeWindow = events.length
-			vi.advanceTimersByTime(RETRY_TERMINAL_WINDOW_MS)
-			quietWindows = events.length === eventCountBeforeWindow ? quietWindows + 1 : 0
-		}
+		store.receiveChunk(createChunk({ i: 0, content: "first" }))
+		expect(advanceUntilRecovery(events, 1, INITIAL_RECOVERY_OBSERVATION_MS)).toBeDefined()
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)?.recoveryAttempts).toBeGreaterThan(0)
 
-		// D11 leaves the exact retry count implementation-defined. The public stream
-		// must still reach a terminal state within this bounded observation window.
-		expect.soft(events.length).toBeGreaterThan(0)
+		store.receiveChunk(createNextChunk(1))
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)?.recoveryAttempts).toBe(0)
+		unsubscribe()
+	})
+
+	it.each([
+		["role-only", (i: number) => createChunk({ i })],
+		["metadata-only", (i: number) => createMetadataOnlyChunk({ i })],
+		["usage-only", (i: number) => createUsageOnlyChunk(i)],
+	] as const)("%s chunk 不重置 recoveryAttempts。", (_label, createNextChunk) => {
+		const store = createStore()
+		const events: StreamRecoveryRequestPayload[] = []
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			events.push(payload)
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, { succeeded: false })
+		})
+
+		store.receiveChunk(createChunk({ i: 0, content: "first" }))
+		expect(advanceUntilRecovery(events, 1, INITIAL_RECOVERY_OBSERVATION_MS)).toBeDefined()
+		const attemptsBefore = store.getStreamState(TOPIC_A, CORRELATION_ID)?.recoveryAttempts
+		expect(attemptsBefore).toBeGreaterThan(0)
+
+		store.receiveChunk(createNextChunk(1))
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)?.recoveryAttempts).toBe(attemptsBefore)
+		unsubscribe()
+	})
+
+	it("usage-only 与 metadata-only 首包在没有 StreamState 时仍按 3 次或 30 秒预算恢复。", () => {
+		const scenarios = [
+			["usage-only", () => createUsageOnlyChunk(0)],
+			["metadata-only", () => createMetadataOnlyChunk({ i: 0 })],
+		] as const
+
+		scenarios.forEach(([label, createFirstChunk]) => {
+			vi.clearAllTimers()
+			vi.setSystemTime(0)
+			const store = createStore()
+			const events: StreamRecoveryRequestPayload[] = []
+			const failures = collectRecoveryFailures(store)
+			const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+				events.push(payload)
+				const generation = store.beginTopicSync(payload.topicId)
+				store.completeTopicSync(payload.topicId, generation, { succeeded: false })
+			})
+
+			store.receiveChunk(createFirstChunk())
+			vi.advanceTimersByTime(RECOVERY_TOTAL_BUDGET_MS)
+
+			expect
+				.soft(events.length, `${label} must retry after the first failed sync`)
+				.toBeGreaterThan(1)
+			expect
+				.soft(events.length, `${label} recovery attempts must remain bounded`)
+				.toBeLessThanOrEqual(RECOVERY_MAX_ATTEMPTS)
+			expect
+				.soft(getStreamRecoveryState(store), `${label} must expose recovery_failed`)
+				.toMatchObject({
+					status: "failed",
+					reason: "recovery_failed",
+				})
+			expect.soft(failures.events, `${label} must emit failure exactly once`).toHaveLength(1)
+
+			unsubscribe()
+			failures.unsubscribe()
+		})
+	})
+
+	it("finish_reason-only chunk 结束当前文本流和 watchdog，而不是重置 recovery backoff。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+
+		store.receiveChunk(createChunk({ i: 0, content: "draft" }))
+		store.receiveChunk(createMetadataOnlyChunk({ i: 1, finishReason: "stop" }))
+		advanceRendering()
+
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		vi.advanceTimersByTime(RECOVERY_POST_BUDGET_OBSERVATION_MS)
+		expect.soft(recovery.events).toHaveLength(0)
+		recovery.unsubscribe()
+	})
+
+	it("final-only 首包在没有 StreamState 时仍统一计数、重试并暴露 recovery_failed。", () => {
+		const store = createStore()
+		const events: StreamRecoveryRequestPayload[] = []
+		const failures = collectRecoveryFailures(store)
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			events.push(payload)
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, { succeeded: false })
+		})
+
+		store.receiveChunk(createMetadataOnlyChunk({ i: 0, finishReason: "stop" }))
+
+		expect.soft(events).toHaveLength(1)
+		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		vi.advanceTimersByTime(RECOVERY_TOTAL_BUDGET_MS)
+
+		expect.soft(events.length).toBeGreaterThan(1)
+		expect.soft(events.length).toBeLessThanOrEqual(RECOVERY_MAX_ATTEMPTS)
+		expect.soft(getStreamRecoveryState(store)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		expect.soft(failures.events).toHaveLength(1)
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
-		const terminalEventCount = events.length
-		vi.advanceTimersByTime(RETRY_TERMINAL_WINDOW_MS * RETRY_TERMINAL_QUIESCENCE_WINDOWS)
-		expect.soft(events).toHaveLength(terminalEventCount)
 		unsubscribe()
+		failures.unsubscribe()
+	})
+
+	it("连续 recovery 失败在最多 3 次或 30 秒后停止自动恢复并暴露 recovery_failed。", () => {
+		const store = createStore()
+		const events: StreamRecoveryRequestPayload[] = []
+		const failures = collectRecoveryFailures(store)
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			events.push(payload)
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, { succeeded: false })
+		})
+
+		store.receiveChunk(createChunk({ content: "unrecoverable draft" }))
+		vi.advanceTimersByTime(RECOVERY_TOTAL_BUDGET_MS)
+
+		expect.soft(events.length).toBeGreaterThan(0)
+		expect.soft(events.length).toBeLessThanOrEqual(RECOVERY_MAX_ATTEMPTS)
+		const exhaustedEventCount = events.length
+		vi.advanceTimersByTime(RECOVERY_POST_BUDGET_OBSERVATION_MS)
+		expect.soft(events).toHaveLength(exhaustedEventCount)
+
+		expect.soft(failures.isSupported).toBe(true)
+		expect.soft(getStreamRecoveryState(store)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		expect.soft(failures.events).toEqual([
+			expect.objectContaining({
+				topicId: TOPIC_A,
+				correlationId: CORRELATION_ID,
+				status: "failed",
+				reason: "recovery_failed",
+				attempts: expect.any(Number),
+				elapsedMs: expect.any(Number),
+			}),
+		])
+		const failure = failures.events[0]
+		expect.soft(failure).toBeDefined()
+		if (failure) {
+			expect.soft(failure.attempts).toBeLessThanOrEqual(RECOVERY_MAX_ATTEMPTS)
+			expect.soft(failure.elapsedMs).toBeLessThanOrEqual(RECOVERY_TOTAL_BUDGET_MS)
+		}
+
+		// Recovery exhaustion is not a task-terminal signal. Keep the visible draft
+		// and thinking state until task finished/final/cancel arrives.
+		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("unrecoverable draft")
+		expect.soft(getMessageRecords(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
+		expect.soft(getUiMessages(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		unsubscribe()
+		failures.unsubscribe()
+	})
+
+	it("同 topic 的不同 correlation 必须各自持有 watchdog 和 recovery failure。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const failures = collectRecoveryFailures(store)
+		const correlationA = "parallel-recovery-a"
+		const correlationB = "parallel-recovery-b"
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: correlationA,
+				choices: [],
+				usage: { completion_tokens: 1, prompt_tokens: 1, total_tokens: 2 },
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				correlationId: correlationB,
+				choices: [],
+				usage: { completion_tokens: 1, prompt_tokens: 1, total_tokens: 2 },
+			}),
+		)
+		vi.advanceTimersByTime(RECOVERY_TOTAL_BUDGET_MS)
+
+		expect.soft(recovery.events).toHaveLength(2)
+		expect.soft(recovery.events).toEqual(
+			expect.arrayContaining([
+				{ topicId: TOPIC_A, correlationId: correlationA },
+				{ topicId: TOPIC_A, correlationId: correlationB },
+			]),
+		)
+		expect.soft(failures.events).toHaveLength(2)
+		expect.soft(getStreamRecoveryState(store, TOPIC_A, correlationA)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		expect.soft(getStreamRecoveryState(store, TOPIC_A, correlationB)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		recovery.unsubscribe()
+		failures.unsubscribe()
 	})
 
 	it("最终任务已 finished 且 HTTP 同步失败时停止 stream/loading，保留 draft 并允许独立 retry。", () => {
@@ -943,6 +1840,17 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("recovered")
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: "next-task-correlation",
+				i: 0,
+				content: "next task draft",
+			}),
+		)
+		advanceRendering()
+		expect.soft(getNode(store, "next-task-correlation")?.content).toBe("next task draft")
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
 	it("canonical message 完成后结束自身 stream，即使服务端 task 仍 running。", () => {
@@ -976,6 +1884,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 	it("服务端任务状态 finished，但本地仍有 buffer。", () => {
 		const store = createStore()
+		const arrivals = collectTopicArrivals(store)
 
 		store.enqueueMessage(
 			TOPIC_A,
@@ -1019,7 +1928,17 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				seq_id: "101",
 			},
 		])
+		expect(getUiMessages(store).map((message) => message.app_message_id)).toEqual([
+			"buffered-1",
+			"buffered-2",
+		])
+		expect(
+			arrivals.events
+				.filter((event) => ["100", "101"].includes(event.message.seq_id))
+				.map((event) => event.message.seq_id),
+		).toEqual(["100", "101"])
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		arrivals.unsubscribe()
 	})
 
 	it("已完成消息仍可接受更高 seq 的 authoritative revision。", () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
+import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
@@ -19,6 +20,8 @@ const CORRELATION_A = "correlation-background-a"
 const CORRELATION_B = "correlation-background-b"
 const CORRELATION_C = "correlation-background-c"
 const RENDER_SETTLE_MS = 2_000
+const LONG_ABSENCE_MS = 30_000
+const RECOVERY_WINDOW_MS = 5_100
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
 type ChunkToolCall = ChunkChoice["delta"]["tool_calls"][number]
@@ -34,6 +37,9 @@ interface ChunkOptions {
 }
 
 interface ProjectedNode {
+	app_message_id?: string
+	correlation_id?: string
+	role?: string
 	content?: string | null
 	reasoning_content?: string | null
 	tool_calls?: Array<{
@@ -218,6 +224,17 @@ function getProjectedNode(
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
+function getAssistantCards(
+	store: SuperMagicStore,
+	topicId = TOPIC_A,
+	correlationId = CORRELATION_A,
+): ProjectedNode[] {
+	const records = Array.from(store.messages.get(topicId) ?? []) as Array<Record<string, unknown>>
+	return messagesConverter(records).filter(
+		(message) => message.role === "assistant" && message.correlation_id === correlationId,
+	) as ProjectedNode[]
+}
+
 function advanceRendering(milliseconds = RENDER_SETTLE_MS): void {
 	vi.advanceTimersByTime(milliseconds)
 }
@@ -253,6 +270,7 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe("A pending")
 		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B done")
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeUndefined()
+		expect(getAssistantCards(store, TOPIC_B, CORRELATION_B)).toHaveLength(1)
 	})
 
 	it("topic A 后台继续收到 chunk。", () => {
@@ -278,6 +296,7 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store)?.content).toBe("canonical")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(getAssistantCards(store)).toHaveLength(1)
 	})
 
 	it("topic A 后台收到 tool response。", () => {
@@ -294,9 +313,13 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store)?.tool_calls?.[0]).toMatchObject({
 			id: "tool-background",
 		})
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-background")).toMatchObject({
+			id: "tool-background",
+			status: "finished",
+		})
 	})
 
-	it("topic A 后台完成后切回，错误重播打字机。", () => {
+	it("topic A 后台完成后切回时直接展示 canonical Final，不重播打字机。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "draft" }))
@@ -309,22 +332,24 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store)?.content).toBe("final")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
-		expect(vi.getTimerCount()).toBe(0)
+		expect(getAssistantCards(store)).toHaveLength(1)
 	})
 
-	it("topic A 未完成时切回，但 timer 未恢复。", () => {
+	it("topic A 未完成时切回，即使没有新 chunk 也会恢复 pending render。", () => {
 		const store = createStore()
+		const pendingContent = "pending".repeat(1_024)
 
-		store.receiveChunk(createChunk({ i: 0, content: "A" }))
+		store.receiveChunk(createChunk({ i: 0, content: pendingContent }))
 		store.setActiveTopicId(TOPIC_B)
-		advanceRendering(500)
 		store.setActiveTopicId(TOPIC_A)
-		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
-		advanceRendering()
+		const contentBeforeResume = getProjectedNode(store)?.content ?? ""
+		advanceRendering(100)
+		const contentAfterResume = getProjectedNode(store)?.content ?? ""
 
-		expect(getProjectedNode(store)?.content).toBe("AB")
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
-		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(contentAfterResume.length).toBeGreaterThan(contentBeforeResume.length)
+		expect(pendingContent.startsWith(contentAfterResume)).toBe(true)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(pendingContent)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
 	it("topic A 已完成时切回，却重新创建 StreamState。", () => {
@@ -362,6 +387,8 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A!")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
+		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
+		expect(store.isTopicStreaming(TOPIC_B)).toBe(true)
 	})
 
 	it("快速执行 A → B → C → A。", () => {
@@ -383,6 +410,11 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
 		expect(getProjectedNode(store, CORRELATION_C)?.content).toBe("C")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
+		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
+		expect(store.getStreamState(TOPIC_C, CORRELATION_C)).toBeDefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		expect(store.isTopicStreaming(TOPIC_B)).toBe(true)
+		expect(store.isTopicStreaming(TOPIC_C)).toBe(true)
 	})
 
 	it("多个 topic 同时收到流式 chunk。", () => {
@@ -436,7 +468,7 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 	})
 
-	it("topic 切换时旧 timer 回调已经进入任务队列。", () => {
+	it("topic 切换后已调度的 timer 不会污染其他 topic。", () => {
 		const store = createStore()
 		const contentA = "A".repeat(4_096)
 
@@ -462,56 +494,72 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeUndefined()
 	})
 
-	it("inactiveAt/lastActiveAt 记录顺序错误。", () => {
+	it("短于 30 秒的离开只恢复 pending render，不锁定内部时间字段。", () => {
 		const store = createStore()
+		const pendingContent = "short-away".repeat(1_024)
 
-		store.receiveChunk(createChunk({ i: 0, content: "A" }))
-		vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"))
+		store.receiveChunk(createChunk({ i: 0, content: pendingContent }))
 		store.setActiveTopicId(TOPIC_B)
-		vi.setSystemTime(new Date("2026-01-01T00:00:02.000Z"))
+		vi.setSystemTime(new Date("2026-01-01T00:00:29.999Z"))
 		store.setActiveTopicId(TOPIC_A)
-		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
-		advanceRendering()
+		const contentBeforeResume = getProjectedNode(store)?.content ?? ""
+		advanceRendering(100)
+		const contentAfterResume = getProjectedNode(store)?.content ?? ""
 
-		expect(getProjectedNode(store)?.content).toBe("AB")
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(contentAfterResume.length).toBeGreaterThan(contentBeforeResume.length)
+		expect(contentAfterResume.length).toBeLessThan(pendingContent.length)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
-	it("浏览器休眠后恢复，错误判断为长时间离开。", () => {
+	it("离开达到 30 秒后切回，instant settle 当前已知 draft。", () => {
 		const store = createStore()
+		const pendingContent = "long-away".repeat(1_024)
 
-		store.receiveChunk(createChunk({ i: 0, content: "before sleep" }))
+		store.receiveChunk(createChunk({ i: 0, content: pendingContent }))
 		store.setActiveTopicId(TOPIC_B)
-		vi.advanceTimersByTime(60_000)
+		vi.setSystemTime(new Date(`2026-01-01T00:00:${LONG_ABSENCE_MS / 1_000}.000Z`))
 		store.setActiveTopicId(TOPIC_A)
-		store.receiveChunk(createChunk({ i: 1, content: " after wake", finishReason: "stop" }))
-		advanceRendering()
+		advanceRendering(1)
 
-		expect(getProjectedNode(store)?.content).toBe("before sleep after wake")
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(getProjectedNode(store)?.content?.length).toBe(pendingContent.length)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(pendingContent)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
-	it("系统时间变化导致 inactive 时长异常。", () => {
+	it("wall clock 跳变不会把短暂离开误判为 30 秒长离开。", () => {
 		const store = createStore()
+		const pendingContent = "clock-jump".repeat(1_024)
 
-		store.receiveChunk(createChunk({ i: 0, content: "A" }))
+		store.receiveChunk(createChunk({ i: 0, content: pendingContent }))
+		store.setActiveTopicId(TOPIC_B)
 		vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"))
-		store.setActiveTopicId(TOPIC_B)
-		vi.setSystemTime(new Date("2020-01-01T00:00:00.000Z"))
 		store.setActiveTopicId(TOPIC_A)
-		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
-		advanceRendering()
+		const contentAfterReturn = getProjectedNode(store)?.content ?? ""
+		advanceRendering(100)
+		const contentAfterResume = getProjectedNode(store)?.content ?? ""
 
-		expect(getProjectedNode(store)?.content).toBe("AB")
-		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(contentAfterReturn.length).toBeLessThan(pendingContent.length)
+		expect(contentAfterResume.length).toBeGreaterThan(contentAfterReturn.length)
+		expect(contentAfterResume.length).toBeLessThan(pendingContent.length)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
-	it("切回时 HTTP 同步和 replayPendingSnapshots 同时执行。", () => {
+	it("切回时已有 HTTP sync，等待权威快照后再恢复本地 draft。", () => {
 		const store = createStore()
+		const staleDraft = "stale draft".repeat(512)
 
-		store.receiveChunk(createChunk({ content: "stale draft" }))
+		store.receiveChunk(createChunk({ content: staleDraft }))
 		store.setActiveTopicId(TOPIC_B)
 		const generation = store.beginTopicSync(TOPIC_A)
+		const contentBeforeReturn = getProjectedNode(store)?.content ?? ""
+		store.setActiveTopicId(TOPIC_A)
+		advanceRendering(100)
+
+		const contentWhileSyncing = getProjectedNode(store)?.content ?? ""
+		expect(contentWhileSyncing.length).toBe(contentBeforeReturn.length)
+		expect(staleDraft.startsWith(contentWhileSyncing)).toBe(true)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(staleDraft)
+
 		store.initializeMessages(TOPIC_A, [createFinalEnvelope({ content: "authoritative" })])
 		expect(
 			store.completeTopicSync(TOPIC_A, generation, {
@@ -520,15 +568,41 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 				latestSeqId: "100",
 			}),
 		).toBe(true)
-		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
 
 		expect(getProjectedNode(store)?.content).toBe("authoritative")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+		expect(getAssistantCards(store)).toHaveLength(1)
 	})
 
-	it("切回时 resumeActiveStreams 早于 HTTP 权威快照。", () => {
+	it("长时间离开期间 HTTP sync 失败后 instant settle 本地 draft，但保持 stream 未完成。", () => {
+		const store = createStore()
+		const localDraft = "local draft".repeat(512)
+
+		store.receiveChunk(createChunk({ content: localDraft }))
+		store.setActiveTopicId(TOPIC_B)
+		vi.setSystemTime(new Date(`2026-01-01T00:00:${LONG_ABSENCE_MS / 1_000}.000Z`))
+		const generation = store.beginTopicSync(TOPIC_A)
+		const contentBeforeReturn = getProjectedNode(store)?.content ?? ""
+		store.setActiveTopicId(TOPIC_A)
+		advanceRendering(100)
+
+		expect(getProjectedNode(store)?.content?.length).toBe(contentBeforeReturn.length)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: false,
+				taskStatus: "running",
+			}),
+		).toBe(true)
+		advanceRendering(1)
+
+		expect(getProjectedNode(store)?.content).toBe(localDraft)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(localDraft)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("HTTP 权威快照完成后只保留一张最新 Assistant 卡片。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "stale draft" }))
@@ -548,9 +622,15 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 
 		expect(getProjectedNode(store)?.content).toBe("authoritative")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		const cards = getAssistantCards(store)
+		expect(cards).toHaveLength(1)
+		expect(cards[0]).toMatchObject({
+			app_message_id: `final-${CORRELATION_A}`,
+			correlation_id: CORRELATION_A,
+		})
 	})
 
-	it("terminal topic 切回时仍进入 live 模式。", () => {
+	it("terminal topic 切回后拒绝 finalized correlation 的晚到 chunk。", () => {
 		const store = createStore()
 		const generation = store.beginTopicSync(TOPIC_A)
 
@@ -570,10 +650,15 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store)?.content).toBe("terminal")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(getAssistantCards(store)).toHaveLength(1)
 	})
 
-	it("后台 topic final 后 streamSnapshots 未清理。", () => {
+	it("后台 topic Final 后晚到 chunk 不产生可观察的重播或恢复。", () => {
 		const store = createStore()
+		const recoveries: unknown[] = []
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) =>
+			recoveries.push(payload),
+		)
 
 		store.receiveChunk(createChunk({ content: "draft" }))
 		store.setActiveTopicId(TOPIC_B)
@@ -581,14 +666,16 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		advanceRendering()
 		store.receiveChunk(createChunk({ i: 1, content: " late" }))
 		store.setActiveTopicId(TOPIC_A)
-		advanceRendering()
+		advanceRendering(RECOVERY_WINDOW_MS)
 
 		expect(getProjectedNode(store)?.content).toBe("final")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(recoveries).toHaveLength(0)
+		unsubscribe()
 	})
 
-	it("topic 被关闭或删除，但 topicMeta 没有释放。", () => {
+	it("setActiveTopicId(null) 只取消选中，保留已完成 topic 的 canonical 消息。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "done", finishReason: "stop" }))
@@ -599,28 +686,10 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(getProjectedNode(store)?.content).toBe("done")
-		expect(vi.getTimerCount()).toBe(0)
+		expect(getAssistantCards(store)).toHaveLength(1)
 	})
 
-	it("同一个页面存在两个 Store 订阅实例，chunk 被消费两次。", () => {
-		const firstStore = createStore()
-		const secondStore = createStore()
-		const firstChunk = createChunk({ i: 0, content: "A" })
-		const finalChunk = createChunk({ i: 1, content: "B", finishReason: "stop" })
-
-		firstStore.receiveChunk(firstChunk)
-		secondStore.receiveChunk(firstChunk)
-		firstStore.receiveChunk(finalChunk)
-		secondStore.receiveChunk(finalChunk)
-		advanceRendering()
-
-		expect(getProjectedNode(firstStore)?.content).toBe("AB")
-		expect(getProjectedNode(secondStore)?.content).toBe("AB")
-		expect(firstStore.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
-		expect(secondStore.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
-	})
-
-	it("React Strict Mode 或热更新导致 PubSub 重复订阅。", () => {
+	it("同一 callback 的重复注册是独立订阅，并由各自 unsubscribe 管理。", () => {
 		const store = createStore()
 		const arrivedAppMessageIds: string[] = []
 		const callback = ({ message }: { message: { app_message_id: string } }) => {
@@ -641,8 +710,38 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		)
 		advanceRendering()
 
-		expect(arrivedAppMessageIds).toHaveLength(1)
+		expect(arrivedAppMessageIds).toEqual(["strict-mode-final", "strict-mode-final"])
 		unsubscribeFirst()
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				correlationId: "strict-mode-correlation-2",
+				appMessageId: "strict-mode-final-2",
+				seqId: "102",
+				content: "second",
+			}),
+		)
+		advanceRendering()
+
+		expect(arrivedAppMessageIds).toEqual([
+			"strict-mode-final",
+			"strict-mode-final",
+			"strict-mode-final-2",
+		])
 		unsubscribeSecond()
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				correlationId: "strict-mode-correlation-3",
+				appMessageId: "strict-mode-final-3",
+				seqId: "103",
+				content: "third",
+			}),
+		)
+		advanceRendering()
+
+		expect(arrivedAppMessageIds).toHaveLength(3)
 	})
 })
