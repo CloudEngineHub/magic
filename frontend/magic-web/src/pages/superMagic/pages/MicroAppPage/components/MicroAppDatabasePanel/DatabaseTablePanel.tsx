@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next"
 
 import type {
 	MagicBaseColumn,
+	MagicBaseFilterGroup,
 	MagicBasePermissionsResponse,
 	MagicBaseRow,
 	MagicBaseSortRule,
@@ -32,10 +33,11 @@ import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 import DataFilterBar from "./DataFilterBar"
+import DataFilterSummary from "./DataFilterSummary"
 import DataGrid, { type MagicBaseCellSelection } from "./DataGrid"
 import PermissionPanel from "./PermissionPanel"
 import StructureTable from "./StructureTable"
-import type { MagicBaseFilterCondition, MagicBaseGridColumn } from "./utils"
+import type { MagicBaseGridColumn } from "./utils"
 
 export type DatabasePanelTab = "data" | "structure" | "permissions"
 
@@ -57,6 +59,7 @@ interface DatabaseTablePanelProps {
 	permissions?: MagicBasePermissionsResponse
 	permissionsLoading: boolean
 	total: number
+	totalKnown: boolean
 	loadedRowCount: number
 	hasMoreRows: boolean
 	loadingMoreRows: boolean
@@ -65,7 +68,7 @@ interface DatabaseTablePanelProps {
 	canDeleteSelectedRows: boolean
 	canManagePermissions: boolean
 	showSystemFields: boolean
-	filters: MagicBaseFilterCondition[]
+	filter: MagicBaseFilterGroup
 	onTabChange: (tab: DatabasePanelTab) => void
 	onShowSystemFieldsChange: (show: boolean) => void
 	onCreateRow: () => void
@@ -74,7 +77,7 @@ interface DatabaseTablePanelProps {
 	onSortChange: (field: string) => void
 	onSelectionChange: (selection: MagicBaseCellSelection) => void
 	onClearSelection: () => void
-	onFiltersChange: (conditions: MagicBaseFilterCondition[]) => void
+	onFilterChange: (filter: MagicBaseFilterGroup) => void
 	onLoadMoreRows: () => void
 	onOpenEditRow: (recordId: string) => void
 	onRequestDeleteRows: (selection: MagicBaseCellSelection) => void
@@ -172,6 +175,7 @@ export default function DatabaseTablePanel({
 	permissions,
 	permissionsLoading,
 	total,
+	totalKnown,
 	loadedRowCount,
 	hasMoreRows,
 	loadingMoreRows,
@@ -180,7 +184,7 @@ export default function DatabaseTablePanel({
 	canDeleteSelectedRows,
 	canManagePermissions,
 	showSystemFields,
-	filters,
+	filter,
 	onTabChange,
 	onShowSystemFieldsChange,
 	onCreateRow,
@@ -189,7 +193,7 @@ export default function DatabaseTablePanel({
 	onSortChange,
 	onSelectionChange,
 	onClearSelection,
-	onFiltersChange,
+	onFilterChange,
 	onLoadMoreRows,
 	onOpenEditRow,
 	onRequestDeleteRows,
@@ -236,7 +240,9 @@ export default function DatabaseTablePanel({
 									t("microAppPage.databasePanel.loadingTable")}
 							</h3>
 							<span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-								{t("microAppPage.databasePanel.totalRows", { total })}
+								{totalKnown
+									? t("microAppPage.databasePanel.totalRows", { total })
+									: t("microAppPage.databasePanel.loadedRows", { total })}
 							</span>
 							{activeTab === "structure" ? (
 								<span className="shrink-0 rounded-md bg-primary/5 px-1.5 py-0.5 text-xs text-primary">
@@ -307,8 +313,8 @@ export default function DatabaseTablePanel({
 						{activeTab === "data" ? (
 							<DataFilterBar
 								columns={displayColumns}
-								value={filters}
-								onChange={onFiltersChange}
+								value={filter}
+								onChange={onFilterChange}
 							/>
 						) : null}
 						{activeTab === "data" ? (
@@ -336,6 +342,13 @@ export default function DatabaseTablePanel({
 			</div>
 
 			<div className="flex min-h-0 flex-1 flex-col bg-background">
+				{activeTab === "data" ? (
+					<DataFilterSummary
+						columns={displayColumns}
+						value={filter}
+						onChange={onFilterChange}
+					/>
+				) : null}
 				{tableError ? (
 					<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm">
 						<p className="text-destructive">
@@ -377,6 +390,7 @@ export default function DatabaseTablePanel({
 											onDeleteRows={onRequestDeleteRows}
 											canManagePermissions={canManagePermissions}
 											total={total}
+											totalKnown={totalKnown}
 											loadedRowCount={loadedRowCount}
 											hasMore={hasMoreRows}
 											loadingMore={loadingMoreRows}

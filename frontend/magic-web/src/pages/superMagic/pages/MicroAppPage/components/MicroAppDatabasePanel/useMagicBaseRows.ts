@@ -4,6 +4,7 @@ import useSWRInfinite from "swr/infinite"
 import { MagicBaseApi } from "@/apis"
 import type {
 	MagicBaseQueryRowsResponse,
+	MagicBaseFilterGroup,
 	MagicBaseRow,
 	MagicBaseSortRule,
 	MagicBaseTable,
@@ -12,7 +13,7 @@ import type {
 import {
 	MAGIC_BASE_PAGE_SIZE,
 	buildMagicBaseRowsRequest,
-	type MagicBaseFilterCondition,
+	getMagicBaseFilterConditionCount,
 } from "./utils"
 
 interface UseMagicBaseRowsParams {
@@ -21,7 +22,7 @@ interface UseMagicBaseRowsParams {
 	tableId: string | null
 	table?: MagicBaseTable
 	sort: MagicBaseSortRule | null
-	filters: MagicBaseFilterCondition[]
+	filter: MagicBaseFilterGroup
 }
 
 function getRowRecordId(row: MagicBaseRow): string {
@@ -34,9 +35,10 @@ export default function useMagicBaseRows({
 	tableId,
 	table,
 	sort,
-	filters,
+	filter,
 }: UseMagicBaseRowsParams) {
 	const loadRequestedRef = useRef(false)
+	const filterConditionCount = getMagicBaseFilterConditionCount(filter)
 	const {
 		data: pages,
 		error,
@@ -49,7 +51,13 @@ export default function useMagicBaseRows({
 		(pageIndex, previousPageData) => {
 			if (!active || !projectId || !tableId || !table) return null
 			if (previousPageData && previousPageData.list.length === 0) return null
-			if (previousPageData && pageIndex * MAGIC_BASE_PAGE_SIZE >= previousPageData.total) {
+			if (
+				previousPageData &&
+				!(
+					previousPageData.has_more ??
+					pageIndex * MAGIC_BASE_PAGE_SIZE < previousPageData.total
+				)
+			) {
 				return null
 			}
 
@@ -61,7 +69,8 @@ export default function useMagicBaseRows({
 					table,
 					sort,
 					page: pageIndex + 1,
-					filters,
+					filter,
+					includeTotal: pageIndex === 0 && filterConditionCount === 0,
 				}),
 			}
 		},
@@ -82,12 +91,15 @@ export default function useMagicBaseRows({
 		)
 	}, [pages])
 	const total = pages?.[0]?.total || 0
-	const hasMore = rows.length < total
+	const lastPage = pages?.[pages.length - 1]
+	const hasMore = lastPage?.has_more ?? rows.length < total
+	const totalKnown = filterConditionCount === 0 || Boolean(lastPage && !hasMore)
+	const displayTotal = totalKnown && filterConditionCount === 0 ? total : rows.length
 	const loadingMore = isValidating && Boolean(pages) && pages?.[size - 1] === undefined
 
 	useEffect(() => {
 		loadRequestedRef.current = false
-	}, [filters, sort, tableId])
+	}, [filter, sort, tableId])
 
 	useEffect(() => {
 		if (!loadingMore) loadRequestedRef.current = false
@@ -101,7 +113,8 @@ export default function useMagicBaseRows({
 
 	return {
 		rows,
-		total,
+		total: displayTotal,
+		totalKnown,
 		hasMore,
 		loadingMore,
 		error,

@@ -2,78 +2,137 @@ import { ListFilter, Plus, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { MagicBaseColumn } from "@/apis/modules/magicBase"
+import type {
+	MagicBaseColumn,
+	MagicBaseFilterGroup,
+	MagicBaseFilterLogic,
+	MagicBaseFilterOperator,
+} from "@/apis/modules/magicBase"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
 
-import type { MagicBaseFilterCondition } from "./utils"
+import {
+	type DraftFilterCondition,
+	getDefaultFilterOperator,
+	getFilterableColumns,
+	getFilterConditionLimit,
+	getFilterOperators,
+	getRootFilterConditions,
+	isValidDraftFilterCondition,
+	MAX_OR_FILTER_CONDITIONS,
+	toDraftFilterValue,
+	toFilterCondition,
+} from "./dataFilterRules"
+import { createEmptyMagicBaseFilter, getMagicBaseFilterConditionCount } from "./utils"
+import useFilterOperatorLabel from "./useFilterOperatorLabel"
 
-interface DataFilterBarProps {
+interface DataFilterProps {
 	columns: MagicBaseColumn[]
-	value: MagicBaseFilterCondition[]
-	onChange: (conditions: MagicBaseFilterCondition[]) => void
+	value: MagicBaseFilterGroup
+	onChange: (filter: MagicBaseFilterGroup) => void
 }
 
-interface DraftFilterCondition {
-	field: string
-	value: string
-}
+function FilterValueInput({
+	column,
+	condition,
+	onChange,
+	onEnter,
+}: {
+	column?: MagicBaseColumn
+	condition: DraftFilterCondition
+	onChange: (value: string) => void
+	onEnter: () => void
+}) {
+	const { t } = useTranslation("super")
+	if (column?.data_type === "boolean" && condition.operator !== "in") {
+		return (
+			<Select value={condition.value || undefined} onValueChange={onChange}>
+				<SelectTrigger
+					size="sm"
+					className="h-8 w-full min-w-0 bg-background"
+					aria-label={t("microAppPage.databasePanel.filterValue")}
+				>
+					<SelectValue placeholder={t("microAppPage.databasePanel.filterValue")} />
+				</SelectTrigger>
+				<SelectContent align="start">
+					<SelectItem value="true">{t("microAppPage.databasePanel.yes")}</SelectItem>
+					<SelectItem value="false">{t("microAppPage.databasePanel.no")}</SelectItem>
+				</SelectContent>
+			</Select>
+		)
+	}
 
-const FILTERABLE_DATA_TYPES = new Set(["boolean", "datetime", "number", "text"])
-
-function getFilterableColumns(columns: MagicBaseColumn[]) {
-	return columns.filter(
-		(column) =>
-			column.status !== "disabled" &&
-			column.source !== "system" &&
-			!column.system &&
-			FILTERABLE_DATA_TYPES.has(column.data_type),
+	const isList = condition.operator === "in"
+	return (
+		<Input
+			type={
+				isList
+					? "text"
+					: column?.data_type === "number"
+						? "number"
+						: column?.data_type === "datetime"
+							? "datetime-local"
+							: "text"
+			}
+			value={condition.value}
+			step={column?.data_type === "datetime" ? 1 : undefined}
+			className="h-8 min-w-0"
+			placeholder={
+				isList
+					? t("microAppPage.databasePanel.filterListValuePlaceholder")
+					: t("microAppPage.databasePanel.filterValuePlaceholder")
+			}
+			aria-label={t("microAppPage.databasePanel.filterValue")}
+			onChange={(event) => onChange(event.target.value)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") onEnter()
+			}}
+		/>
 	)
 }
 
-function toDraftValue(column: MagicBaseColumn, value: MagicBaseFilterCondition["value"]) {
-	if (column.data_type === "datetime") return String(value).replace(" ", "T").slice(0, 19)
-	return String(value)
-}
-
-function toFilterValue(column: MagicBaseColumn, value: string) {
-	if (column.data_type === "boolean") return value === "true"
-	if (column.data_type === "number") return Number(value)
-	if (column.data_type === "datetime") {
-		const normalized = value.replace("T", " ")
-		return normalized.length === 16 ? `${normalized}:00` : normalized
-	}
-	return value.trim()
-}
-
-function isValidDraftCondition(condition: DraftFilterCondition, columns: MagicBaseColumn[]) {
-	const column = columns.find((item) => item.column_key === condition.field)
-	if (!column || condition.value.trim() === "") return false
-	if (column.data_type === "number") return Number.isFinite(Number(condition.value))
-	return true
-}
-
-export default function DataFilterBar({ columns, value, onChange }: DataFilterBarProps) {
+export default function DataFilterBar({ columns, value, onChange }: DataFilterProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
+	const [draftLogic, setDraftLogic] = useState<MagicBaseFilterLogic>("and")
 	const [draftConditions, setDraftConditions] = useState<DraftFilterCondition[]>([])
 	const filterableColumns = useMemo(() => getFilterableColumns(columns), [columns])
+	const conditionCount = getMagicBaseFilterConditionCount(value)
+	const getOperatorLabel = useFilterOperatorLabel()
 
 	const createDraftConditions = () => {
-		const conditions = value.flatMap((condition) => {
+		const conditions = getRootFilterConditions(value).flatMap((condition) => {
 			const column = filterableColumns.find((item) => item.column_key === condition.field)
 			return column
-				? [{ field: condition.field, value: toDraftValue(column, condition.value) }]
+				? [
+						{
+							field: condition.field,
+							operator: condition.operator,
+							value: toDraftFilterValue(column, condition),
+						},
+					]
 				: []
 		})
 		if (conditions.length > 0 || filterableColumns.length === 0) return conditions
-		return [{ field: filterableColumns[0].column_key, value: "" }]
+		const column = filterableColumns[0]
+		return [{ field: column.column_key, operator: getDefaultFilterOperator(column), value: "" }]
 	}
 
 	const handleOpenChange = (nextOpen: boolean) => {
-		if (nextOpen) setDraftConditions(createDraftConditions())
+		if (nextOpen) {
+			// Draft state prevents incomplete conditions from changing the active row query.
+			setDraftLogic(value.logic)
+			setDraftConditions(createDraftConditions())
+		}
 		setOpen(nextOpen)
 	}
 
@@ -86,46 +145,51 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterBa
 	}
 
 	const handleAddCondition = () => {
-		const usedFields = new Set(draftConditions.map((condition) => condition.field))
-		const column = filterableColumns.find((item) => !usedFields.has(item.column_key))
-		if (!column) return
-		setDraftConditions((current) => [...current, { field: column.column_key, value: "" }])
+		const column = filterableColumns[0]
+		if (!column || draftConditions.length >= getFilterConditionLimit(draftLogic)) return
+		setDraftConditions((current) => [
+			...current,
+			{ field: column.column_key, operator: getDefaultFilterOperator(column), value: "" },
+		])
 	}
+
+	const allConditionsValid =
+		draftConditions.length > 0 &&
+		draftConditions.length <= getFilterConditionLimit(draftLogic) &&
+		draftConditions.every((condition) =>
+			isValidDraftFilterCondition(condition, filterableColumns),
+		)
 
 	const handleApply = () => {
-		const conditions = draftConditions.flatMap((condition) => {
+		if (!allConditionsValid) return
+		const items = draftConditions.flatMap((condition) => {
 			const column = filterableColumns.find((item) => item.column_key === condition.field)
-			if (!column || !isValidDraftCondition(condition, filterableColumns)) return []
-			return [{ field: condition.field, value: toFilterValue(column, condition.value) }]
+			if (!column) return []
+			return [toFilterCondition(column, condition)]
 		})
-		onChange(conditions)
+		if (items.length !== draftConditions.length) return
+		onChange({ logic: draftLogic, items })
 		setOpen(false)
 	}
-
-	const allConditionsValid = draftConditions.every((condition) =>
-		isValidDraftCondition(condition, filterableColumns),
-	)
-	const usedFields = new Set(draftConditions.map((condition) => condition.field))
-	const canAddCondition = filterableColumns.some((column) => !usedFields.has(column.column_key))
 
 	return (
 		<Popover open={open} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
 				<Button
 					type="button"
-					variant={value.length > 0 ? "secondary" : "outline"}
+					variant={conditionCount > 0 ? "secondary" : "outline"}
 					size="sm"
 					className="h-8 gap-1.5 bg-background shadow-xs"
 					disabled={filterableColumns.length === 0}
 					data-testid="magicbase-filter-trigger"
 				>
-					<ListFilter className="size-3.5" />
-					{value.length > 0
-						? t("microAppPage.databasePanel.filterCount", { total: value.length })
+					<ListFilter className="size-4" />
+					{conditionCount > 0
+						? t("microAppPage.databasePanel.filterCount", { total: conditionCount })
 						: t("microAppPage.databasePanel.filterData")}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="end" className="w-[420px] p-0" sideOffset={8}>
+			<PopoverContent align="end" className="w-[520px] p-0" sideOffset={8}>
 				<div className="border-b border-border/60 px-4 py-3">
 					<h4 className="text-sm font-semibold text-foreground">
 						{t("microAppPage.databasePanel.filterTitle")}
@@ -135,91 +199,111 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterBa
 					</p>
 				</div>
 
-				<div className="max-h-[320px] space-y-2 overflow-y-auto p-3">
+				<div className="flex items-center gap-2 border-b border-border/60 px-3 py-2.5">
+					<span className="text-xs text-muted-foreground">
+						{t("microAppPage.databasePanel.filterMatchMode")}
+					</span>
+					<Select
+						value={draftLogic}
+						onValueChange={(nextValue) =>
+							setDraftLogic(nextValue as MagicBaseFilterLogic)
+						}
+					>
+						<SelectTrigger
+							size="sm"
+							className="h-8 min-w-[220px] bg-background"
+							aria-label={t("microAppPage.databasePanel.filterMatchMode")}
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent align="start">
+							<SelectItem value="and">
+								{t("microAppPage.databasePanel.filterMatchAll")}
+							</SelectItem>
+							<SelectItem
+								value="or"
+								disabled={draftConditions.length > MAX_OR_FILTER_CONDITIONS}
+							>
+								{t("microAppPage.databasePanel.filterMatchAny")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+
+				<div className="max-h-[360px] space-y-2 overflow-y-auto p-3">
 					{draftConditions.map((condition, index) => {
 						const column = filterableColumns.find(
 							(item) => item.column_key === condition.field,
 						)
+						const operators = getFilterOperators(column)
 						return (
 							<div
-								key={`${condition.field}:${index}`}
-								className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_32px] items-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-2"
+								key={index}
+								className="grid grid-cols-[minmax(0,1fr)_112px_minmax(0,1.2fr)_32px] items-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-2"
 							>
-								<select
+								<Select
 									value={condition.field}
-									className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-									aria-label={t("microAppPage.databasePanel.filterField")}
-									onChange={(event) =>
+									onValueChange={(nextValue) => {
+										const nextColumn = filterableColumns.find(
+											(item) => item.column_key === nextValue,
+										)
 										updateDraftCondition(index, {
-											field: event.target.value,
+											field: nextValue,
+											operator: getDefaultFilterOperator(nextColumn),
+											value: "",
+										})
+									}}
+								>
+									<SelectTrigger
+										size="sm"
+										className="h-8 w-full min-w-0 bg-background"
+										aria-label={t("microAppPage.databasePanel.filterField")}
+									>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent align="start">
+										{filterableColumns.map((item) => (
+											<SelectItem
+												key={item.column_key}
+												value={item.column_key}
+											>
+												{item.column_name || item.column_key}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<Select
+									value={condition.operator}
+									onValueChange={(nextValue) =>
+										updateDraftCondition(index, {
+											operator: nextValue as MagicBaseFilterOperator,
 											value: "",
 										})
 									}
 								>
-									{filterableColumns.map((item) => (
-										<option
-											key={item.column_key}
-											value={item.column_key}
-											disabled={
-												item.column_key !== condition.field &&
-												usedFields.has(item.column_key)
-											}
-										>
-											{item.column_name || item.column_key}
-										</option>
-									))}
-								</select>
-								<span className="text-xs text-muted-foreground">
-									{t("microAppPage.databasePanel.filterEquals")}
-								</span>
-								{column?.data_type === "boolean" ? (
-									<select
-										value={condition.value}
-										className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-										aria-label={t("microAppPage.databasePanel.filterValue")}
-										onChange={(event) =>
-											updateDraftCondition(index, {
-												value: event.target.value,
-											})
-										}
+									<SelectTrigger
+										size="sm"
+										className="h-8 w-full min-w-0 bg-background"
+										aria-label={t("microAppPage.databasePanel.filterOperator")}
 									>
-										<option value="">
-											{t("microAppPage.databasePanel.filterValue")}
-										</option>
-										<option value="true">
-											{t("microAppPage.databasePanel.yes")}
-										</option>
-										<option value="false">
-											{t("microAppPage.databasePanel.no")}
-										</option>
-									</select>
-								) : (
-									<Input
-										type={
-											column?.data_type === "number"
-												? "number"
-												: column?.data_type === "datetime"
-													? "datetime-local"
-													: "text"
-										}
-										value={condition.value}
-										step={column?.data_type === "datetime" ? 1 : undefined}
-										className="h-8 min-w-0"
-										placeholder={t(
-											"microAppPage.databasePanel.filterValuePlaceholder",
-										)}
-										aria-label={t("microAppPage.databasePanel.filterValue")}
-										onChange={(event) =>
-											updateDraftCondition(index, {
-												value: event.target.value,
-											})
-										}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" && allConditionsValid)
-												handleApply()
-										}}
-									/>
-								)}
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent align="start">
+										{operators.map((operator) => (
+											<SelectItem key={operator} value={operator}>
+												{getOperatorLabel(operator)}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<FilterValueInput
+									column={column}
+									condition={condition}
+									onChange={(nextValue) =>
+										updateDraftCondition(index, { value: nextValue })
+									}
+									onEnter={handleApply}
+								/>
 								<Button
 									type="button"
 									variant="ghost"
@@ -236,7 +320,7 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterBa
 										)
 									}
 								>
-									<Trash2 className="size-3.5" />
+									<Trash2 className="size-4" />
 								</Button>
 							</div>
 						)
@@ -246,10 +330,14 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterBa
 						type="button"
 						variant="ghost"
 						size="sm"
-						className={cn("h-8 gap-1.5", !canAddCondition && "hidden")}
+						className={cn(
+							"h-8 gap-1.5",
+							draftConditions.length >= getFilterConditionLimit(draftLogic) &&
+								"hidden",
+						)}
 						onClick={handleAddCondition}
 					>
-						<Plus className="size-3.5" />
+						<Plus className="size-4" />
 						{t("microAppPage.databasePanel.addFilterCondition")}
 					</Button>
 				</div>
@@ -259,9 +347,10 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterBa
 						type="button"
 						variant="ghost"
 						size="sm"
-						disabled={value.length === 0}
+						disabled={conditionCount === 0}
+						data-testid="magicbase-clear-filters"
 						onClick={() => {
-							onChange([])
+							onChange(createEmptyMagicBaseFilter())
 							setOpen(false)
 						}}
 					>

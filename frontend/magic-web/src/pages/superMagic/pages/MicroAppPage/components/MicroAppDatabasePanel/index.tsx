@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import useSWR from "swr"
 import { MagicBaseApi } from "@/apis"
-import type { MagicBaseSortRule } from "@/apis/modules/magicBase"
+import type { MagicBaseFilterGroup, MagicBaseSortRule } from "@/apis/modules/magicBase"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -33,10 +33,10 @@ import TableList, { TableListToggle } from "./TableList"
 import useMagicBaseRows from "./useMagicBaseRows"
 import {
 	buildGridColumns,
+	createEmptyMagicBaseFilter,
 	getDefaultSort,
 	getDisplayColumns,
 	getEnabledColumns,
-	type MagicBaseFilterCondition,
 } from "./utils"
 
 interface MicroAppDatabasePanelProps {
@@ -62,7 +62,7 @@ export default function MicroAppDatabasePanel({
 	const tableListModeRef = useRef<"auto" | "manual">("auto")
 	const [activeTab, setActiveTab] = useState<DatabasePanelTab>("data")
 	const [sort, setSort] = useState<MagicBaseSortRule | null>(null)
-	const [filters, setFilters] = useState<MagicBaseFilterCondition[]>([])
+	const [filter, setFilter] = useState<MagicBaseFilterGroup>(createEmptyMagicBaseFilter)
 	const [permissionEditor, setPermissionEditor] = useState<{
 		tableId: string
 		target: PermissionEditorTarget
@@ -101,7 +101,7 @@ export default function MicroAppDatabasePanel({
 		tableListModeRef.current = "auto"
 		setTableListCollapsed(false)
 		setShowSystemFields(false)
-		setFilters([])
+		setFilter(createEmptyMagicBaseFilter())
 	}, [projectId])
 
 	// 单表不需要持续占用分类栏；用户手动操作后不再用自动规则覆盖其选择。
@@ -130,6 +130,7 @@ export default function MicroAppDatabasePanel({
 	const {
 		rows,
 		total,
+		totalKnown,
 		hasMore: hasMoreRows,
 		loadingMore: loadingMoreRows,
 		error: rowsError,
@@ -142,7 +143,7 @@ export default function MicroAppDatabasePanel({
 		tableId: selectedTableId,
 		table: selectedTable,
 		sort,
-		filters,
+		filter,
 	})
 
 	const {
@@ -167,7 +168,7 @@ export default function MicroAppDatabasePanel({
 		setSelectedTableId(tableId)
 		setActiveTab("data")
 		setSelectedCells(EMPTY_CELL_SELECTION)
-		setFilters([])
+		setFilter(createEmptyMagicBaseFilter())
 	}
 
 	const handleSortChange = (field: string) => {
@@ -242,8 +243,8 @@ export default function MicroAppDatabasePanel({
 		setSelectionResetVersion((version) => version + 1)
 	}
 
-	const handleFiltersChange = (nextFilters: MagicBaseFilterCondition[]) => {
-		setFilters(nextFilters)
+	const handleFilterChange = (nextFilter: MagicBaseFilterGroup) => {
+		setFilter(nextFilter)
 		handleClearSelection()
 	}
 
@@ -400,6 +401,7 @@ export default function MicroAppDatabasePanel({
 						permissions={permissions}
 						permissionsLoading={permissionsLoading}
 						total={total}
+						totalKnown={totalKnown}
 						loadedRowCount={rows.length}
 						hasMoreRows={hasMoreRows}
 						loadingMoreRows={loadingMoreRows}
@@ -408,7 +410,7 @@ export default function MicroAppDatabasePanel({
 						canDeleteSelectedRows={canDeleteSelectedRows}
 						canManagePermissions={canManagePermissions}
 						showSystemFields={showSystemFields}
-						filters={filters}
+						filter={filter}
 						onTabChange={setActiveTab}
 						onShowSystemFieldsChange={setShowSystemFields}
 						onCreateRow={handleCreateRow}
@@ -417,7 +419,7 @@ export default function MicroAppDatabasePanel({
 						onSortChange={handleSortChange}
 						onSelectionChange={setSelectedCells}
 						onClearSelection={handleClearSelection}
-						onFiltersChange={handleFiltersChange}
+						onFilterChange={handleFilterChange}
 						onLoadMoreRows={handleLoadMoreRows}
 						onOpenEditRow={handleOpenEditRow}
 						onRequestDeleteRows={handleRequestDeleteRows}

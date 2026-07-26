@@ -49,12 +49,30 @@ export interface MagicBaseSortRule {
 	order: "asc" | "desc"
 }
 
+export type MagicBaseFilterLogic = "and" | "or"
+
+export type MagicBaseFilterOperator = "eq" | "in" | "contains" | "gt" | "gte" | "lt" | "lte"
+
+export type MagicBaseFilterScalar = boolean | number | string
+
+export interface MagicBaseFilterCondition {
+	field: string
+	operator: MagicBaseFilterOperator
+	value: MagicBaseFilterScalar | MagicBaseFilterScalar[]
+}
+
+export interface MagicBaseFilterGroup {
+	logic: MagicBaseFilterLogic
+	items: Array<MagicBaseFilterCondition | MagicBaseFilterGroup>
+}
+
 export interface MagicBaseQueryRowsRequest {
 	select: string
-	filter: Record<string, unknown>
+	filter: MagicBaseFilterGroup | Record<string, unknown>
 	sort: MagicBaseSortRule[]
 	page: number
 	page_size: number
+	include_total?: boolean
 }
 
 export type MagicBaseRow = Record<string, unknown>
@@ -63,6 +81,7 @@ export interface MagicBaseQueryRowsResponse {
 	page: number
 	page_size: number
 	total: number
+	has_more?: boolean
 	list: MagicBaseRow[]
 }
 

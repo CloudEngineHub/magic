@@ -1,7 +1,11 @@
 import type { MouseEvent } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { MagicBaseRow, MagicBaseSortRule } from "@/apis/modules/magicBase"
-import type { CellCoordinate, ContextMenuPosition, MagicBaseCellSelection } from "./DataGrid.types"
+import type {
+	CellCoordinate,
+	ContextMenuPosition,
+	DataGridProps,
+	MagicBaseCellSelection,
+} from "./DataGrid.types"
 import DataGridView from "./DataGridView"
 import {
 	buildHeaderSelection,
@@ -11,30 +15,9 @@ import {
 	type HeaderColumnSelection,
 	isCellWithinSelection,
 } from "./dataGridSelection"
-import type { MagicBaseGridColumn } from "./utils"
 import { useDataGridAutoScroll } from "./useDataGridAutoScroll"
 
 export type { MagicBaseCellSelection } from "./DataGrid.types"
-
-interface DataGridProps {
-	columns: MagicBaseGridColumn[]
-	rows: MagicBaseRow[]
-	sort: MagicBaseSortRule | null
-	loading: boolean
-	total: number
-	loadedRowCount: number
-	hasMore: boolean
-	loadingMore: boolean
-	selectionResetKey?: string
-	onSortChange: (field: string) => void
-	onLoadMore: () => void
-	onSelectionChange?: (selection: MagicBaseCellSelection) => void
-	onOpenEditRow?: (rowId: string) => void
-	onDeleteRows?: (selection: MagicBaseCellSelection) => void
-	canManagePermissions?: boolean
-	onOpenRowPermissions?: (selection: MagicBaseCellSelection) => void
-	onOpenColumnPermissions?: (selection: MagicBaseCellSelection) => void
-}
 
 export default function DataGrid({
 	columns,
@@ -42,6 +25,7 @@ export default function DataGrid({
 	sort,
 	loading,
 	total,
+	totalKnown,
 	loadedRowCount,
 	hasMore,
 	loadingMore,
@@ -468,6 +452,7 @@ export default function DataGrid({
 			rows={rows}
 			sort={sort}
 			total={total}
+			totalKnown={totalKnown}
 			loadedRowCount={loadedRowCount}
 			hasMore={hasMore}
 			loadingMore={loadingMore}

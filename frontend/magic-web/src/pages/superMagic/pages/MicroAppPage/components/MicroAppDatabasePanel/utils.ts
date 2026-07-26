@@ -1,5 +1,7 @@
 import type {
 	MagicBaseColumn,
+	MagicBaseFilterCondition,
+	MagicBaseFilterGroup,
 	MagicBaseQueryRowsRequest,
 	MagicBaseRow,
 	MagicBaseSortRule,
@@ -83,9 +85,29 @@ export interface MagicBaseGridColumn {
 	source?: "system" | "schema" | "row"
 }
 
-export interface MagicBaseFilterCondition {
-	field: string
-	value: boolean | number | string
+export function createEmptyMagicBaseFilter(): MagicBaseFilterGroup {
+	return { logic: "and", items: [] }
+}
+
+export function isMagicBaseFilterCondition(
+	item: MagicBaseFilterCondition | MagicBaseFilterGroup,
+): item is MagicBaseFilterCondition {
+	return "field" in item
+}
+
+export function getMagicBaseFilterConditionCount(filter: MagicBaseFilterGroup): number {
+	return filter.items.reduce(
+		(total, item) =>
+			total + (isMagicBaseFilterCondition(item) ? 1 : getMagicBaseFilterConditionCount(item)),
+		0,
+	)
+}
+
+export function normalizeMagicBaseBooleanValue(value: unknown): boolean {
+	if (typeof value === "string") {
+		return ["1", "true"].includes(value.trim().toLowerCase())
+	}
+	return value === true || value === 1
 }
 
 function appendUnique(fields: string[], field?: string) {
@@ -143,17 +165,19 @@ export function buildMagicBaseRowsRequest(params: {
 	table?: MagicBaseTable | null
 	sort: MagicBaseSortRule | null
 	page: number
-	filters?: MagicBaseFilterCondition[]
+	filter?: MagicBaseFilterGroup
+	includeTotal?: boolean
 }): MagicBaseQueryRowsRequest {
-	const filter = Object.fromEntries(
-		(params.filters || []).map((condition) => [condition.field, { eq: condition.value }]),
-	)
+	const filter = params.filter || createEmptyMagicBaseFilter()
 	return {
 		select: buildMagicBaseSelect(params.table),
 		filter,
 		sort: params.sort ? [params.sort] : [],
 		page: params.page,
 		page_size: MAGIC_BASE_PAGE_SIZE,
+		include_total:
+			params.includeTotal ??
+			(params.page === 1 && getMagicBaseFilterConditionCount(filter) === 0),
 	}
 }
 

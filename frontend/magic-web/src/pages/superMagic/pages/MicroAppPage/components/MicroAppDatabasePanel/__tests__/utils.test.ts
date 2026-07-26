@@ -6,6 +6,7 @@ import {
 	buildMagicBaseSelect,
 	getDefaultSort,
 	getDisplayColumns,
+	normalizeMagicBaseBooleanValue,
 } from "../utils"
 
 const table: MagicBaseTable = {
@@ -76,32 +77,51 @@ describe("MicroAppDatabasePanel utils", () => {
 			}),
 		).toEqual({
 			select: "id,brand,organization_code,created_by,created_at,updated_at",
-			filter: {},
+			filter: { logic: "and", items: [] },
 			sort: [{ field: "created_at", order: "desc" }],
 			page: 2,
 			page_size: 20,
+			include_total: false,
 		})
 	})
 
-	it("builds exact-match filters for multiple columns", () => {
+	it("builds grouped filters without exposing storage expressions", () => {
 		expect(
 			buildMagicBaseRowsRequest({
 				table,
 				sort: null,
 				page: 1,
-				filters: [
-					{ field: "brand", value: "Apple" },
-					{ field: "price", value: 5999 },
-				],
+				filter: {
+					logic: "or",
+					items: [
+						{ field: "brand", operator: "contains", value: "Apple" },
+						{ field: "price", operator: "gte", value: 5999 },
+					],
+				},
 			}),
 		).toEqual(
 			expect.objectContaining({
 				filter: {
-					brand: { eq: "Apple" },
-					price: { eq: 5999 },
+					logic: "or",
+					items: [
+						{ field: "brand", operator: "contains", value: "Apple" },
+						{ field: "price", operator: "gte", value: 5999 },
+					],
 				},
+				include_total: false,
 			}),
 		)
+	})
+
+	it("normalizes historical boolean scalar values", () => {
+		expect(normalizeMagicBaseBooleanValue(true)).toBe(true)
+		expect(normalizeMagicBaseBooleanValue(1)).toBe(true)
+		expect(normalizeMagicBaseBooleanValue("1")).toBe(true)
+		expect(normalizeMagicBaseBooleanValue("true")).toBe(true)
+		expect(normalizeMagicBaseBooleanValue(false)).toBe(false)
+		expect(normalizeMagicBaseBooleanValue(0)).toBe(false)
+		expect(normalizeMagicBaseBooleanValue("0")).toBe(false)
+		expect(normalizeMagicBaseBooleanValue("false")).toBe(false)
 	})
 
 	it("hides system fields from the default data grid without changing the query fields", () => {

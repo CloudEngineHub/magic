@@ -1,159 +1,30 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { SWRConfig } from "swr"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { MagicBaseTable } from "@/apis/modules/magicBase"
-import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import MicroAppDatabasePanel from "../index"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-const mocks = vi.hoisted(() => ({
-	getTables: vi.fn(),
-	getTable: vi.fn(),
-	queryRows: vi.fn(),
-	getPermissions: vi.fn(),
-	batchSavePermissions: vi.fn(),
-	deletePermission: vi.fn(),
-}))
+import {
+	cleanupPanelTest,
+	getPanelMocks,
+	renderPanel,
+	resetPanelMocks,
+	tableDetail,
+	tables,
+} from "./MicroAppDatabasePanel.testUtils"
 
-vi.mock("@/apis", () => ({
-	MagicBaseApi: {
-		getTables: mocks.getTables,
-		getTable: mocks.getTable,
-		queryRows: mocks.queryRows,
-		getPermissions: mocks.getPermissions,
-		batchSavePermissions: mocks.batchSavePermissions,
-		deletePermission: mocks.deletePermission,
-	},
-}))
+const mocks = getPanelMocks()
 
-vi.mock("@/components/business/MemberDepartmentSelector", () => ({
-	default: () => null,
-}))
-
-vi.mock("../PermissionPanel", () => ({
-	default: () => null,
-}))
-
-vi.mock("../PermissionEditorDialog", () => ({
-	default: () => null,
-}))
-
-vi.mock("../RowEditorDialog", () => ({
-	default: () => null,
-}))
-
-vi.mock("@/models/user", () => ({
-	userStore: {
-		user: {
-			organizationCode: "org-1",
-			userInfo: { organization_code: "org-1" },
-		},
-	},
-}))
-
-vi.mock("sonner", () => ({
-	toast: {
-		error: vi.fn(),
-		success: vi.fn(),
-	},
-}))
-
-vi.mock("react-i18next", () => {
-	return {
-		initReactI18next: { type: "3rdParty", init: () => undefined },
-		useTranslation: () => ({
-			t: (key: string, options?: Record<string, string | number>) => {
-				if (options?.loaded != null && options?.total != null) {
-					return `${key}:${options.loaded}/${options.total}`
-				}
-				if (options?.total != null) return `${key}:${options.total}`
-				if (options?.page != null && options?.totalPages != null) {
-					return `${key}:${options.page}/${options.totalPages}`
-				}
-				return key
-			},
-		}),
-	}
-})
-
-const tables: MagicBaseTable[] = [
-	{
-		id: "table-1",
-		project_id: "project-1",
-		table_key: "survey",
-		table_name: "Survey",
-		description: "Survey answers",
-		status: "enabled",
-		columns: [],
-	},
-]
-
-const tableDetail: MagicBaseTable = {
-	...tables[0],
-	columns: [
-		{
-			id: "column-1",
-			table_id: "table-1",
-			column_key: "brand",
-			column_name: "Brand",
-			data_type: "text",
-			is_required: false,
-			status: "enabled",
-			dynamic_permission: { read_scope: "public", edit_scope: "public" },
-		},
-		{
-			id: "column-2",
-			table_id: "table-1",
-			column_key: "created_at",
-			column_name: "Created At",
-			data_type: "datetime",
-			is_required: false,
-			status: "enabled",
-		},
-	],
-}
-
-function renderPanel(projectRole?: CollaboratorPermission) {
-	return render(
-		<SWRConfig
-			value={{
-				provider: () => new Map(),
-				dedupingInterval: 0,
-				shouldRetryOnError: false,
-			}}
-		>
-			<MicroAppDatabasePanel
-				active
-				projectId="project-1"
-				projectName="Demo App"
-				projectRole={projectRole}
-			/>
-		</SWRConfig>,
-	)
+async function selectFilterOption(label: string, optionName: string, index = 0) {
+	const trigger = screen.getAllByLabelText(label)[index]
+	fireEvent.keyDown(trigger, { key: "ArrowDown" })
+	fireEvent.click(await screen.findByRole("option", { name: optionName }))
 }
 
 describe("MicroAppDatabasePanel", () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
-		localStorage.clear()
-		mocks.getTables.mockResolvedValue(tables)
-		mocks.getTable.mockResolvedValue(tableDetail)
-		mocks.queryRows.mockResolvedValue({
-			page: 1,
-			page_size: 20,
-			total: 35,
-			list: [{ id: "row-1", brand: "Apple", created_at: "2026-07-06 18:01:42" }],
-		})
-		mocks.getPermissions.mockResolvedValue({
-			table_permissions: [],
-			column_permissions: [],
-			row_permissions: [],
-		})
+		resetPanelMocks()
 	})
 
 	afterEach(() => {
-		cleanup()
-		document.body.removeAttribute("data-scroll-locked")
-		document.body.style.pointerEvents = ""
+		cleanupPanelTest()
 	})
 
 	it("loads table list, selects the first table, and renders rows", async () => {
@@ -177,10 +48,11 @@ describe("MicroAppDatabasePanel", () => {
 			"table-1",
 			expect.objectContaining({
 				select: "id,brand,organization_code,created_by,created_at,updated_at",
-				filter: {},
+				filter: { logic: "and", items: [] },
 				sort: [{ field: "created_at", order: "desc" }],
 				page: 1,
 				page_size: 20,
+				include_total: true,
 			}),
 		)
 	})
@@ -431,7 +303,7 @@ describe("MicroAppDatabasePanel", () => {
 		})
 	})
 
-	it("filters rows by multiple exact-match column conditions", async () => {
+	it("filters rows with typed operators and any-match conditions", async () => {
 		mocks.getTable.mockResolvedValue({
 			...tableDetail,
 			columns: [
@@ -455,9 +327,25 @@ describe("MicroAppDatabasePanel", () => {
 		expect(await screen.findByTestId("magicbase-selection-actions")).toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("magicbase-filter-trigger"))
+		const matchModeTrigger = screen.getByLabelText("microAppPage.databasePanel.filterMatchMode")
+		expect(matchModeTrigger).toHaveAttribute("data-slot", "select-trigger")
+		await selectFilterOption(
+			"microAppPage.databasePanel.filterMatchMode",
+			"microAppPage.databasePanel.filterMatchAny",
+		)
 		const valueInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterValue")
 		fireEvent.change(valueInputs[0], { target: { value: "Apple" } })
 		fireEvent.click(screen.getByText("microAppPage.databasePanel.addFilterCondition"))
+		const fieldInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterField")
+		expect(fieldInputs[0]).toHaveAttribute("data-slot", "select-trigger")
+		await selectFilterOption("microAppPage.databasePanel.filterField", "Price", 1)
+		const operatorInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterOperator")
+		expect(operatorInputs[0]).toHaveAttribute("data-slot", "select-trigger")
+		await selectFilterOption(
+			"microAppPage.databasePanel.filterOperator",
+			"microAppPage.databasePanel.filterOperatorGte",
+			1,
+		)
 		const nextValueInputs = screen.getAllByLabelText("microAppPage.databasePanel.filterValue")
 		fireEvent.change(nextValueInputs[1], { target: { value: "5999" } })
 		fireEvent.click(screen.getByText("microAppPage.databasePanel.applyFilters"))
@@ -468,26 +356,52 @@ describe("MicroAppDatabasePanel", () => {
 				"table-1",
 				expect.objectContaining({
 					filter: {
-						brand: { eq: "Apple" },
-						price: { eq: 5999 },
+						logic: "or",
+						items: [
+							{ field: "brand", operator: "contains", value: "Apple" },
+							{ field: "price", operator: "gte", value: 5999 },
+						],
 					},
 					page: 1,
+					include_total: false,
 				}),
 			)
 		})
+		expect(screen.getByText("microAppPage.databasePanel.loadedRows:1")).toBeInTheDocument()
 		expect(screen.getByTestId("magicbase-filter-trigger")).toHaveTextContent(
 			"microAppPage.databasePanel.filterCount:2",
 		)
 		expect(screen.queryByTestId("magicbase-selection-actions")).not.toBeInTheDocument()
+		expect(
+			screen.getByText("microAppPage.databasePanel.filterMatchAnySummary"),
+		).toBeInTheDocument()
 
-		fireEvent.click(screen.getByTestId("magicbase-filter-trigger"))
-		fireEvent.click(screen.getByText("microAppPage.databasePanel.clearFilters"))
+		fireEvent.click(
+			screen.getAllByLabelText("microAppPage.databasePanel.removeFilterCondition")[0],
+		)
+		await waitFor(() => {
+			expect(mocks.queryRows).toHaveBeenLastCalledWith(
+				"project-1",
+				"table-1",
+				expect.objectContaining({
+					filter: {
+						logic: "or",
+						items: [{ field: "price", operator: "gte", value: 5999 }],
+					},
+				}),
+			)
+		})
+
+		fireEvent.click(screen.getByLabelText("microAppPage.databasePanel.removeFilterCondition"))
 
 		await waitFor(() => {
 			expect(mocks.queryRows).toHaveBeenLastCalledWith(
 				"project-1",
 				"table-1",
-				expect.objectContaining({ filter: {}, page: 1 }),
+				expect.objectContaining({
+					filter: { logic: "and", items: [] },
+					page: 1,
+				}),
 			)
 		})
 	})
@@ -499,6 +413,7 @@ describe("MicroAppDatabasePanel", () => {
 					page: request.page,
 					page_size: 20,
 					total: 35,
+					has_more: request.page === 1,
 					list:
 						request.page === 1
 							? [{ id: "row-1", brand: "Apple" }]
@@ -524,6 +439,11 @@ describe("MicroAppDatabasePanel", () => {
 				expect.objectContaining({ page: 2 }),
 			)
 		})
+		expect(mocks.queryRows).toHaveBeenLastCalledWith(
+			"project-1",
+			"table-1",
+			expect.objectContaining({ page: 2, include_total: false }),
+		)
 		expect(await screen.findByText("Samsung")).toBeInTheDocument()
 	})
 

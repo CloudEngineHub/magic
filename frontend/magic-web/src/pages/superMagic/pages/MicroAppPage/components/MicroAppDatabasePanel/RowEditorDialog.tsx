@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
 import { Textarea } from "@/components/shadcn-ui/textarea"
-import { buildMagicBaseSelect, getEnabledColumns } from "./utils"
+import { buildMagicBaseSelect, getEnabledColumns, normalizeMagicBaseBooleanValue } from "./utils"
 
 type RowEditorMode = "create" | "edit"
 
@@ -39,8 +39,11 @@ function isBooleanColumn(column: MagicBaseColumn) {
 
 function formatInitialValue(column: MagicBaseColumn, row?: MagicBaseRow | null): boolean | string {
 	const value = row?.[column.column_key]
-	if (isBooleanColumn(column)) return Boolean(value)
+	if (isBooleanColumn(column)) return normalizeMagicBaseBooleanValue(value)
 	if (value == null) return ""
+	if (column.data_type === "datetime") {
+		return String(value).replace(" ", "T").slice(0, 19)
+	}
 	if (column.data_type === "json") {
 		if (typeof value === "string") return value
 		try {
@@ -53,10 +56,11 @@ function formatInitialValue(column: MagicBaseColumn, row?: MagicBaseRow | null):
 }
 
 function parseColumnValue(column: MagicBaseColumn, value: boolean | string): unknown {
-	if (isBooleanColumn(column)) return Boolean(value)
+	if (isBooleanColumn(column)) return normalizeMagicBaseBooleanValue(value)
 	const stringValue = String(value)
 	if (stringValue.trim() === "" && !column.is_required) return null
 	if (column.data_type === "number") return Number(stringValue)
+	if (column.data_type === "datetime") return stringValue.replace("T", " ")
 	if (column.data_type === "json") {
 		if (stringValue.trim() === "") return column.is_required ? "" : null
 		return JSON.parse(stringValue)
@@ -224,7 +228,14 @@ export default function RowEditorDialog({
 									) : (
 										<Input
 											id={`magicbase-row-${field}`}
-											type={column.data_type === "number" ? "number" : "text"}
+											type={
+												column.data_type === "number"
+													? "number"
+													: column.data_type === "datetime"
+														? "datetime-local"
+														: "text"
+											}
+											step={column.data_type === "datetime" ? 1 : undefined}
 											value={String(value ?? "")}
 											onChange={(event) =>
 												setFieldValue(field, event.target.value)

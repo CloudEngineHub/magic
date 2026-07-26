@@ -18,6 +18,7 @@ interface DataGridViewProps {
 	rows: MagicBaseRow[]
 	sort: MagicBaseSortRule | null
 	total: number
+	totalKnown: boolean
 	loadedRowCount: number
 	hasMore: boolean
 	loadingMore: boolean
@@ -73,6 +74,7 @@ export default function DataGridView({
 	rows,
 	sort,
 	total,
+	totalKnown,
 	loadedRowCount,
 	hasMore,
 	loadingMore,
@@ -249,10 +251,17 @@ export default function DataGridView({
 							{t("microAppPage.databasePanel.loadingMore")}
 						</span>
 					) : hasMore ? (
-						t("microAppPage.databasePanel.loadProgress", {
-							loaded: loadedRowCount,
-							total,
-						})
+						totalKnown ? (
+							t("microAppPage.databasePanel.loadProgress", {
+								loaded: loadedRowCount,
+								total,
+							})
+						) : (
+							t("microAppPage.databasePanel.loadProgressUnknown", {
+								loaded: loadedRowCount,
+								total,
+							})
+						)
 					) : (
 						t("microAppPage.databasePanel.loadedAll", { total })
 					)}
