@@ -156,11 +156,8 @@ export default function MicroAppEditDialog({
 		[revokeCoverObjectUrl, uploadCoverFile],
 	)
 
-	const handleCoverChange = useCallback(
-		(event: React.ChangeEvent<HTMLInputElement>) => {
-			const file = event.target.files?.[0]
-			event.target.value = ""
-			if (!file) return
+	const handleCoverFile = useCallback(
+		(file: File) => {
 			if (!file.type.startsWith("image/")) {
 				magicToast.error(t("microAppPage.edit.coverInvalidType"))
 				return
@@ -173,6 +170,39 @@ export default function MicroAppEditDialog({
 		},
 		[setLocalCoverFile, t],
 	)
+
+	const handleCoverChange = useCallback(
+		(event: React.ChangeEvent<HTMLInputElement>) => {
+			const file = event.target.files?.[0]
+			event.target.value = ""
+			if (!file) return
+			handleCoverFile(file)
+		},
+		[handleCoverFile],
+	)
+
+	useEffect(() => {
+		if (!open || loading || capturing || uploading || isSubmitting) return
+
+		const handlePaste = (event: ClipboardEvent) => {
+			const clipboardData = event.clipboardData
+			if (!clipboardData) return
+
+			const clipboardFiles = Array.from(clipboardData.files ?? [])
+			const imageFile =
+				clipboardFiles.find((file) => file.type.startsWith("image/")) ??
+				Array.from(clipboardData.items ?? [])
+					.find((item) => item.kind === "file" && item.type.startsWith("image/"))
+					?.getAsFile()
+
+			if (!imageFile) return
+			event.preventDefault()
+			handleCoverFile(imageFile)
+		}
+
+		document.addEventListener("paste", handlePaste)
+		return () => document.removeEventListener("paste", handlePaste)
+	}, [capturing, handleCoverFile, isSubmitting, loading, open, uploading])
 
 	const handleCaptureCover = useCallback(async () => {
 		if (!onCaptureCover || capturing) return

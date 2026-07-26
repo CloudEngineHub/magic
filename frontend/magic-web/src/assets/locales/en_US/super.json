@@ -3306,7 +3306,7 @@
 			"captureSuccess": "Cover generated from the micro app home page",
 			"capturing": "Capturing",
 			"clearCover": "Remove cover",
-			"coverDescription": "Upload an image or generate a cover from the micro app home page. A 16:10 landscape image works best.",
+			"coverDescription": "Upload or paste an image, or generate a cover from the micro app home page. A 16:10 landscape image works best.",
 			"coverEmpty": "No cover set",
 			"coverInvalidType": "Select an image file",
 			"coverLabel": "Micro app cover",

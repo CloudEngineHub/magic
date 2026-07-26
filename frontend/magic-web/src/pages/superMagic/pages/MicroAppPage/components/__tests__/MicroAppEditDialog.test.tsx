@@ -121,4 +121,44 @@ describe("MicroAppEditDialog", () => {
 			}),
 		)
 	})
+
+	it("uploads a pasted image and submits the cover key", async () => {
+		const onConfirm = vi.fn().mockResolvedValue(true)
+		render(
+			<MicroAppEditDialog
+				open
+				appId="app-1"
+				projectName="Demo App"
+				onOpenChange={vi.fn()}
+				onConfirm={onConfirm}
+			/>,
+		)
+
+		await waitFor(() => expect(apiMocks.getMicroAppProject).toHaveBeenCalled())
+		await waitFor(() =>
+			expect(screen.getByTestId("micro-app-edit-name-input")).not.toBeDisabled(),
+		)
+
+		const image = new File(["cover"], "clipboard-cover.png", { type: "image/png" })
+		fireEvent.paste(document, {
+			clipboardData: {
+				files: [image],
+				items: [],
+			},
+		})
+
+		await waitFor(() =>
+			expect(uploadMocks.uploadAndGetFileUrl).toHaveBeenCalledWith([
+				{ name: "clipboard-cover.png", file: image, status: "init" },
+			]),
+		)
+		await waitFor(() => expect(screen.getByTestId("micro-app-edit-confirm")).not.toBeDisabled())
+		fireEvent.click(screen.getByTestId("micro-app-edit-confirm"))
+
+		await waitFor(() =>
+			expect(onConfirm).toHaveBeenCalledWith({
+				cover_file_key: "micro-app/covers/new.webp",
+			}),
+		)
+	})
 })
