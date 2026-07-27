@@ -97,7 +97,11 @@ export default function PDFViewer(props: any) {
 					documentFlow={documentFlowFullscreen}
 				/>
 			) : (
-				<FlexBox justify="center" align="center" style={{ height: "100%" }}>
+				<FlexBox
+					justify="center"
+					align="center"
+					style={documentFlowFullscreen ? { minHeight: "100dvh" } : { height: "100%" }}
+				>
 					<MagicSpin spinning />
 				</FlexBox>
 			)}

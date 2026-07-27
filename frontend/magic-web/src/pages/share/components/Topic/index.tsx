@@ -942,6 +942,7 @@ function Topic({
 							hideHeader={hidePreviewHeader}
 							showFileHeader={showFileHeader}
 							forceFullscreenMode={forceFullscreenMode}
+							documentFlowFullscreen={documentFlowFullscreen}
 							onPreviewFileChange={(fileId) => {
 								setPrimaryPreviewFileId(fileId)
 								onPreviewFileChange?.(fileId)
@@ -968,6 +969,7 @@ function Topic({
 								hideHeader={hidePreviewHeader}
 								showFileHeader={showFileHeader}
 								forceFullscreenMode={forceFullscreenMode}
+								documentFlowFullscreen={documentFlowFullscreen}
 								onPreviewFileChange={onPreviewFileChange}
 								onPreviewFullscreenChange={onPreviewFullscreenChange}
 							/>

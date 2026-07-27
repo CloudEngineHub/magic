@@ -244,6 +244,8 @@ export default memo(function HTML(props: HTMLProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const isImmersiveLayout = !showFileHeader && !showFooter
+	// The simulated phone frame has a fixed height and cannot be used for page-level scrolling.
+	const shouldUsePhonePreviewFrame = !documentFlowFullscreen && viewMode === "phone"
 	// 通过 previewPolicy 声明能力，详情页消费配置
 	const previewPolicy = displayData?.display_config?.previewPolicy
 	const isReadonlyPreview = previewPolicy?.readonly === true
@@ -1408,14 +1410,14 @@ export default memo(function HTML(props: HTMLProps) {
 			) : (
 				<div
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: viewMode === "phone",
+						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
 						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
 				>
 					<div
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: viewMode === "phone",
+							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,

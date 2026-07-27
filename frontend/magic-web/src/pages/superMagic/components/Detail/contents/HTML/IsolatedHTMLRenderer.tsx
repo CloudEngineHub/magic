@@ -9,7 +9,7 @@ import {
 	useMemo,
 	useLayoutEffect,
 } from "react"
-import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
+import { useDeepCompareEffect, useMemoizedFn, useResponsive } from "ahooks"
 import { filterInjectedTags } from "./utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
@@ -364,15 +364,20 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 
 		const { styles, cx } = useStyles()
+		const isMobile = useResponsive().md === false
 		const documentFlowIframeStyle = useMemo(() => {
 			if (!documentFlowFullscreen) return undefined
+			// Mobile keeps the HTML document inside a viewport-sized iframe so native touch
+			// scrolling remains owned by the iframe. Desktop expands the iframe into the page
+			// document, which is required for whole-page capture extensions to discover its height.
+			if (isMobile) return { height: "100dvh" }
 			return {
 				height:
 					documentFlowContentHeight > 0
 						? `${Math.ceil(documentFlowContentHeight)}px`
 						: "100dvh",
 			}
-		}, [documentFlowContentHeight, documentFlowFullscreen])
+		}, [documentFlowContentHeight, documentFlowFullscreen, isMobile])
 		const containerRef = useRef<HTMLDivElement>(null)
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)

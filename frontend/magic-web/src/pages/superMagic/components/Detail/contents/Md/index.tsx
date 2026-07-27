@@ -211,6 +211,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 维护一个内部的 viewMode 状态，在数据加载期间保持稳定
 	const [internalViewMode, setInternalViewMode] = useState<"code" | "desktop" | "phone">(viewMode)
+	// The phone frame has fixed dimensions and its own clipping; pure shares need page scrolling.
+	const shouldUsePhoneFrame = !documentFlowFullscreen && internalViewMode === "phone"
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent = savedContent || displayData?.content || fileData || ""
@@ -831,7 +833,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								: "min-h-0 flex-1 transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
 							!documentFlowFullscreen &&
 								(internalViewMode === "code" ? "overflow-hidden" : "overflow-auto"),
-							internalViewMode === "phone" &&
+							shouldUsePhoneFrame &&
 								"flex w-full items-center justify-center bg-muted",
 						)}
 					>
@@ -843,7 +845,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								!documentFlowFullscreen &&
 									internalViewMode === "code" &&
 									"overflow-hidden",
-								internalViewMode === "phone" &&
+								shouldUsePhoneFrame &&
 									"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
 							)}
 						>
