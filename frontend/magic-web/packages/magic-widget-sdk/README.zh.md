@@ -196,6 +196,8 @@ namespace MagicWidget {
 
 `deploymentCode` 用于进入数字员工页之前选择登录环境。未传或传入空字符串时使用 SaaS 环境；传入非空值时使用对应私有化环境。若该环境尚未登录，Magic Web 会复用现有登录入口并填充部署码；若浏览器中已有该环境账号，则复用现有账号切换能力。
 
+当需要展示私有化部署识别码表单时，请同时传入 `loginStrategy: "private_deployment"` 和 `deploymentCode`。目标页仍使用 `/{deploymentCode}/...` 路由，因此已有私有化登录会话不会被 SaaS 权限校验拦截；若需要登录，同一部署码会传递给表单作为预填值。`privateDeploymentCode` 不再支持。
+
 `organizationCode` 会作为 `organizationCode` 查询参数追加到 iframe URL 中。用户完成登录后，Magic Web 可以依据该值切换到目标 Magic 组织后再渲染页面。空字符串会被忽略。
 
 环境选择发生在登录和 Crew 页面渲染之前，组织切换发生在目标环境登录完成之后。组织只会在目标部署环境的账号范围内匹配，不会跨环境选择同编码组织。本版本不提供额外的鉴权状态事件。
@@ -212,7 +214,9 @@ namespace MagicWidget {
 		| "DingTalkAvoid"
 		| "wecom"
 		| "Lark"
+		| "wechat_official_account"
 		| "redirect"
+		| "private_deployment"
 		| "apple_login"
 		| "google_login"
 		| "anta_login"
@@ -341,4 +345,4 @@ url
 zIndex
 ```
 
-请通过脚本地址选择 Magic Web 域名，通过 `page` 选择受支持的目标页面，通过 `auth.deploymentCode` 选择 SaaS 或私有化环境，通过 `auth.organizationCode` 配置登录后的组织切换，并通过 `modal` 参数配置面板展示效果。
+请通过脚本地址选择 Magic Web 域名，通过 `page` 选择受支持的目标页面，通过 `auth.deploymentCode` 选择 SaaS 或私有化环境；如需预填私有化登录表单，请结合 `auth.loginStrategy: "private_deployment"` 使用，且不会改变私有化目标路由；通过 `auth.organizationCode` 配置登录后的组织切换，并通过 `modal` 参数配置面板展示效果。

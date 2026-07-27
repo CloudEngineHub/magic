@@ -4,6 +4,7 @@ export const WIDGET_QUERY_EMBED = "magicWidgetEmbed"
 export const WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 export const WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 export const WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
+export const WIDGET_QUERY_DEPLOYMENT_CODE = "magicWidgetDeploymentCode"
 
 export type WidgetCommandName =
 	| "setInput"

@@ -2,6 +2,7 @@ import type { MagicWidget } from "./types"
 import {
 	WIDGET_PROTOCOL_VERSION,
 	WIDGET_QUERY_EMBED,
+	WIDGET_QUERY_DEPLOYMENT_CODE,
 	WIDGET_QUERY_HOST_ORIGIN,
 	WIDGET_QUERY_INSTANCE_ID,
 	WIDGET_QUERY_PROTOCOL_VERSION,
@@ -9,6 +10,7 @@ import {
 
 export const LOGIN_STRATEGY_QUERY_KEY = "login-strategy"
 export const ORGANIZATION_CODE_QUERY_KEY = "organizationCode"
+export const PRIVATE_DEPLOYMENT_LOGIN_STRATEGY = "private_deployment"
 const DEFAULT_CLUSTER_CODE = "global"
 
 export interface BuildWidgetIframeUrlContext {
@@ -46,6 +48,15 @@ function assertNoLegacyTopLevelOrganizationCode(options: MagicWidget.MountOption
 	}
 }
 
+/** Rejects the removed private-code field so Widget hosts do not silently target SaaS. */
+function assertNoLegacyPrivateDeploymentCode(options: MagicWidget.MountOptions) {
+	if (Object.prototype.hasOwnProperty.call(options.auth ?? {}, "privateDeploymentCode")) {
+		throw new Error(
+			"Magic widget auth.privateDeploymentCode has been removed; use auth.deploymentCode with loginStrategy: private_deployment",
+		)
+	}
+}
+
 function encodePathSegment(value: unknown, label: string) {
 	if (typeof value !== "string") {
 		throw new Error(`Magic widget ${label} must be a string`)
@@ -70,6 +81,11 @@ function normalizeOptionalString(value: unknown, label: string) {
 	return trimmedValue || null
 }
 
+/** Identifies the Widget login strategy that opens the private deployment code form. */
+function isPrivateDeploymentLoginStrategy(loginStrategy: unknown) {
+	return loginStrategy === PRIVATE_DEPLOYMENT_LOGIN_STRATEGY
+}
+
 /** Resolves a supported widget page inside the requested SaaS or private deployment. */
 function resolvePagePath(
 	page: MagicWidget.PageOptions | null | undefined,
@@ -92,6 +108,7 @@ function resolvePagePath(
 export function validateWidgetMountOptions(options: MagicWidget.MountOptions | null | undefined) {
 	requireMountOptions(options)
 	assertNoLegacyTopLevelOrganizationCode(options)
+	assertNoLegacyPrivateDeploymentCode(options)
 	const deploymentCode = normalizeOptionalString(
 		options.auth?.deploymentCode,
 		"auth.deploymentCode",
@@ -117,17 +134,18 @@ export function buildWidgetIframeUrl(
 ) {
 	requireMountOptions(options)
 	assertNoLegacyTopLevelOrganizationCode(options)
+	assertNoLegacyPrivateDeploymentCode(options)
 	const origin = normalizeScriptOrigin(context.fallbackAppOrigin)
 	const deploymentCode = normalizeOptionalString(
 		options.auth?.deploymentCode,
 		"auth.deploymentCode",
 	)
+	const isPrivateDeploymentLogin = isPrivateDeploymentLoginStrategy(options.auth?.loginStrategy)
 	const pagePath = resolvePagePath(options.page, deploymentCode)
 	const organizationCode = normalizeOptionalString(
 		options.auth?.organizationCode,
 		"auth.organizationCode",
 	)
-
 	const url = new URL(pagePath, origin)
 
 	Object.entries(options.iframe?.query ?? {}).forEach(([key, value]) => {
@@ -140,6 +158,11 @@ export function buildWidgetIframeUrl(
 
 	if (options.auth?.loginStrategy) {
 		url.searchParams.set(LOGIN_STRATEGY_QUERY_KEY, options.auth.loginStrategy)
+	}
+
+	if (isPrivateDeploymentLogin && deploymentCode) {
+		// Forward the code so a redirected login page can prefill the private deployment form.
+		url.searchParams.set(WIDGET_QUERY_DEPLOYMENT_CODE, deploymentCode)
 	}
 
 	if (context.instanceId) {

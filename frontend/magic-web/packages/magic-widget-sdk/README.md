@@ -196,6 +196,8 @@ namespace MagicWidget {
 
 `deploymentCode` selects the login environment before the Crew page is entered. Omitting it or passing an empty string uses SaaS; a non-empty value selects the corresponding private deployment. If that environment is not logged in, Magic Web reuses the existing login entry with the deployment code filled in. If an account for that environment already exists, the existing account-switch flow is reused.
 
+Use `loginStrategy: "private_deployment"` with `deploymentCode` when the private-deployment code form must be shown. The target page still uses `/{deploymentCode}/...`, so an existing private-deployment session is never checked against SaaS permissions; if login is required, the same code is forwarded to prefill the form. `privateDeploymentCode` is not supported.
+
 `organizationCode` is forwarded to the iframe URL as the `organizationCode` query parameter. After the user is authenticated, Magic Web can use this value to switch into the requested Magic organization before rendering the target page. Empty strings are ignored.
 
 Environment selection happens before login and Crew rendering, while organization switching happens after the target environment is authenticated. Organization lookup is limited to accounts from that deployment and never crosses environments for a matching code. This version does not expose additional authentication-state events.
@@ -212,7 +214,9 @@ namespace MagicWidget {
 		| "DingTalkAvoid"
 		| "wecom"
 		| "Lark"
+		| "wechat_official_account"
 		| "redirect"
+		| "private_deployment"
 		| "apple_login"
 		| "google_login"
 		| "anta_login"
@@ -341,4 +345,4 @@ url
 zIndex
 ```
 
-Use the script URL to select the Magic Web origin, `page` to select the supported target page, `auth.deploymentCode` to choose SaaS or a private deployment, `auth.organizationCode` for post-login organization switching, and `modal` options for panel customization.
+Use the script URL to select the Magic Web origin, `page` to select the supported target page, `auth.deploymentCode` to choose SaaS or a private deployment, `auth.loginStrategy: "private_deployment"` to prefill the private login form without changing the private target route, `auth.organizationCode` for post-login organization switching, and `modal` options for panel customization.

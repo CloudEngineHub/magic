@@ -6,6 +6,7 @@ const validOptions: MagicWidget.MountOptions = {
 		crewId: "crew-001",
 	},
 	auth: {
+		loginStrategy: "private_deployment",
 		deploymentCode: "private-mock",
 		organizationCode: "org-001",
 	},
@@ -31,6 +32,14 @@ const validOptions: MagicWidget.MountOptions = {
 }
 
 void validOptions
+
+// Keep SDK autocomplete aligned with the Magic Web login strategies used by Widget hosts.
+const knownLoginStrategies: MagicWidget.LoginStrategy[] = [
+	"private_deployment",
+	"wechat_official_account",
+]
+
+void knownLoginStrategies
 
 const unsubscribeReady = window.MagicWidget?.on("agent_ready", () => undefined)
 void unsubscribeReady

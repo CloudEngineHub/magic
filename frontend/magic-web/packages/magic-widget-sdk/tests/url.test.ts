@@ -68,6 +68,28 @@ describe("buildWidgetIframeUrl", () => {
 		expect(url.searchParams.get("organizationCode")).toBe("org-mock-private")
 	})
 
+	it("uses the private route and forwards the deployment code for private login", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew-mock-private-form",
+				},
+				auth: {
+					loginStrategy: "private_deployment",
+					deploymentCode: " private-code-mock ",
+				},
+			},
+			{
+				fallbackAppOrigin: "https://magic.example.invalid",
+			},
+		)
+
+		expect(url.pathname).toBe("/private-code-mock/super/crew/crew-mock-private-form")
+		expect(url.searchParams.get("login-strategy")).toBe("private_deployment")
+		expect(url.searchParams.get("magicWidgetDeploymentCode")).toBe("private-code-mock")
+	})
+
 	it("keeps the SaaS route when the deployment code is empty", () => {
 		const url = buildWidgetIframeUrl(
 			{
@@ -195,5 +217,24 @@ describe("buildWidgetIframeUrl", () => {
 				},
 			),
 		).toThrow("Magic widget auth.deploymentCode must be a string")
+	})
+
+	it("rejects the removed private deployment code field with a migration error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+						crewId: "crew-mock-legacy-private-code",
+					},
+					auth: {
+						privateDeploymentCode: "private-code-mock",
+					},
+				} as never,
+				{
+					fallbackAppOrigin: "https://magic.example.invalid",
+				},
+			),
+		).toThrow("Magic widget auth.privateDeploymentCode has been removed")
 	})
 })

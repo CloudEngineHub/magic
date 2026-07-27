@@ -11,10 +11,12 @@ export declare namespace MagicWidget {
 		| "DingTalkAvoid"
 		| "wecom"
 		| "Lark"
+		| "wechat_official_account"
 		| "redirect"
 		| "apple_login"
 		| "google_login"
 		| "anta_login"
+		| "private_deployment"
 		| CustomLoginStrategy
 
 	export type QueryValue =
