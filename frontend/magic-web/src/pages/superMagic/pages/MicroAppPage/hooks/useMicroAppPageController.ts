@@ -10,6 +10,7 @@ import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollab
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
@@ -26,6 +27,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
 import { captureMicroAppCover } from "../utils/captureMicroAppCover"
+import { canEditMicroAppMetadata } from "../utils/microAppPermissions"
 import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 
@@ -54,11 +56,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		selectedTopic?.task_status === TaskStatus.RUNNING ||
 		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
-	const canEdit = Boolean(
-		selectedProject?.id &&
-		selectedProject.workspace_id &&
-		(!selectedProject.user_role || canManageProject(selectedProject.user_role)),
-	)
+	const canEdit = canEditMicroAppMetadata(selectedProject)
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
 
@@ -132,6 +130,14 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		() => resolveDefaultHtmlEntry(attachmentList),
 		[attachmentList],
 	)
+	const handleAttachmentsChange = useCallback(
+		({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
+			const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
+			store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+			setIsInitialAttachmentsLoaded(true)
+		},
+		[store.projectFilesStore],
+	)
 
 	useEffect(() => {
 		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
@@ -150,18 +156,21 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 
 	useMicroAppSelectedProjectSync(store.projectFilesStore, selectedProject)
 
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
-		onAttachmentsChange: useCallback(
-			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
-				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
-				store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
-				setIsInitialAttachmentsLoaded(true)
-			},
-			[store.projectFilesStore],
-		),
+		store: store.projectFilesStore,
+		onAttachmentsChange: handleAttachmentsChange,
 		onError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to poll micro app attachments:", error)
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
+		onAttachmentsChange: handleAttachmentsChange,
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			console.error("Failed to refresh realtime micro app attachments:", error)
 		}),
 	})
 
@@ -296,7 +305,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	})
 
 	const handleEditMicroApp = useMemoizedFn(async (changes: UpdateMicroAppBody) => {
-		if (!selectedProject?.id || !selectedProject.workspace_id || !canEdit) return false
+		if (!selectedProject?.id || !canEdit) return false
 		if (changes.app_name === undefined && changes.cover_file_key === undefined) return false
 
 		setEditSubmitting(true)
@@ -344,6 +353,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		handleOpenPublishDialog,
 		handleToggleDatabasePanel,
 		handleFileTabsCacheLoaded,
+		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
 		editDialogOpen,

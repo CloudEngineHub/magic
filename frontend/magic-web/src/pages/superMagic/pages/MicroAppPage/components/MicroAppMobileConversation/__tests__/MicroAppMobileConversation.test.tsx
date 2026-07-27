@@ -6,6 +6,10 @@ import MicroAppConversationFloatingButton from "../MicroAppConversationFloatingB
 import MicroAppTopicPicker from "../MicroAppTopicPicker"
 import MicroAppMobileConversation from ".."
 
+const scopedProgressMocks = vi.hoisted(() => ({
+	params: null as Record<string, unknown> | null,
+}))
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
@@ -74,7 +78,10 @@ vi.mock("@/pages/superMagic/hooks/useTopicMessages", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useScopedTopicReadProgress", () => ({
-	useScopedTopicReadProgress: () => ({ handleTopicMessagesChange: vi.fn() }),
+	useScopedTopicReadProgress: (params: Record<string, unknown>) => {
+		scopedProgressMocks.params = params
+		return { handleTopicMessagesChange: vi.fn() }
+	},
 }))
 
 vi.mock("@/pages/superMagic/hooks/useTopicConversationLoading", () => ({
@@ -168,5 +175,35 @@ describe("MicroApp mobile conversation controls", () => {
 		expect(
 			screen.getByTestId("micro-app-mobile-conversation-empty-illustration"),
 		).toHaveAttribute("data-state", "conversation-empty")
+	})
+
+	it("requests an attachment refresh when the topic reaches a terminal status", () => {
+		const checkAttachmentsNowDebounced = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "需求讨论" },
+			topics: [],
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<MicroAppMobileConversation
+				open
+				selectedProject={{ id: "project-1", project_name: "微应用" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				attachments={[]}
+				onOpenFile={vi.fn()}
+				onOpenChange={vi.fn()}
+				onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+			/>,
+		)
+
+		expect(scopedProgressMocks.params).toEqual(
+			expect.objectContaining({
+				onTerminalTopicStatusChange: checkAttachmentsNowDebounced,
+			}),
+		)
 	})
 })

@@ -18,6 +18,11 @@ const resolverMocks = vi.hoisted(() => ({
 
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
+	checkAttachmentsNowDebounced: vi.fn(),
+}))
+
+const mobileConversationMocks = vi.hoisted(() => ({
+	render: vi.fn(),
 }))
 
 vi.mock("react-router", () => ({
@@ -116,6 +121,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		handleOpenPublishDialog: vi.fn(),
 		handleToggleDatabasePanel: vi.fn(),
 		handleFileTabsCacheLoaded: vi.fn(),
+		checkAttachmentsNowDebounced: controllerMocks.checkAttachmentsNowDebounced,
 		publishDialogOpen: false,
 		setPublishDialogOpen: vi.fn(),
 		editDialogOpen: false,
@@ -184,8 +190,10 @@ vi.mock("../components/MicroAppDatabasePanelMobile", () => ({
 }))
 
 vi.mock("../components/MicroAppMobileConversation", () => ({
-	default: ({ open }: { open: boolean }) =>
-		open ? <div data-testid="mobile-conversation-popup" /> : null,
+	default: (props: { open: boolean }) => {
+		mobileConversationMocks.render(props)
+		return props.open ? <div data-testid="mobile-conversation-popup" /> : null
+	},
 }))
 
 describe("MicroAppPageMobile", () => {
@@ -196,6 +204,8 @@ describe("MicroAppPageMobile", () => {
 			error: null,
 		}
 		controllerMocks.initLoading = false
+		controllerMocks.checkAttachmentsNowDebounced.mockClear()
+		mobileConversationMocks.render.mockClear()
 		previewPopupMocks.open.mockClear()
 	})
 
@@ -244,6 +254,11 @@ describe("MicroAppPageMobile", () => {
 
 		fireEvent.click(screen.getByTestId("micro-app-mobile-conversation-button"))
 		expect(await screen.findByTestId("mobile-conversation-popup")).toBeInTheDocument()
+		expect(mobileConversationMocks.render).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				onTerminalTopicStatusChange: controllerMocks.checkAttachmentsNowDebounced,
+			}),
+		)
 	})
 
 	it("opens a mobile preview popup without replacing the entry preview", async () => {

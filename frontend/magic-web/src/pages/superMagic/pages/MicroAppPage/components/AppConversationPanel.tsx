@@ -53,6 +53,7 @@ interface AppConversationPanelProps {
 	onToggleHistoryPanel?: () => void
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
+	onTerminalTopicStatusChange?: () => void
 }
 
 function AppConversationPanel({
@@ -67,6 +68,7 @@ function AppConversationPanel({
 	onToggleHistoryPanel,
 	mentionPanelStore,
 	projectFilesStore,
+	onTerminalTopicStatusChange,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
@@ -96,6 +98,7 @@ function AppConversationPanel({
 		topicStore,
 		selectedTopic,
 		isSelectedTopicMessagesReady,
+		onTerminalTopicStatusChange,
 	})
 
 	const { messages, showLoading } = useTopicConversationLoading({

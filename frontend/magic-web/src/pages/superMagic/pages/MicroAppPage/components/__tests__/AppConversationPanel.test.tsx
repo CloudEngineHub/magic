@@ -11,6 +11,10 @@ const scaffoldMocks = vi.hoisted(() => ({
 	messageListProviderValue: null as Record<string, unknown> | null,
 }))
 
+const scopedProgressMocks = vi.hoisted(() => ({
+	params: null as Record<string, unknown> | null,
+}))
+
 vi.mock("../../context", () => ({
 	useAppStore: () => ({
 		conversation: { setConversationGenerating: vi.fn() },
@@ -121,7 +125,10 @@ vi.mock("@/pages/superMagic/hooks/useTopicMessages", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useScopedTopicReadProgress", () => ({
-	useScopedTopicReadProgress: () => ({ handleTopicMessagesChange: vi.fn() }),
+	useScopedTopicReadProgress: (params: Record<string, unknown>) => {
+		scopedProgressMocks.params = params
+		return { handleTopicMessagesChange: vi.fn() }
+	},
 }))
 
 vi.mock("@/pages/superMagic/hooks/useTopicConversationLoading", () => ({
@@ -235,6 +242,31 @@ describe("AppConversationPanel", () => {
 
 		expect(scaffoldMocks.messageListProviderValue).toEqual(
 			expect.objectContaining({ projectFilesStore }),
+		)
+	})
+
+	it("requests an attachment refresh when the topic reaches a terminal status", () => {
+		const checkAttachmentsNowDebounced = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+			/>,
+		)
+
+		expect(scopedProgressMocks.params).toEqual(
+			expect.objectContaining({
+				onTerminalTopicStatusChange: checkAttachmentsNowDebounced,
+			}),
 		)
 	})
 })

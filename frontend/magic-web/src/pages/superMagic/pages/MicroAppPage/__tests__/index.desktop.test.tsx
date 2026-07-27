@@ -27,6 +27,16 @@ const resolverMocks = vi.hoisted(() => ({
 
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
+	checkAttachmentsNowDebounced: vi.fn(),
+	attachmentList: [
+		{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
+		{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
+		{ file_id: "script-1", file_name: "app.js", relative_file_path: "app.js" },
+	],
+	defaultEntryFile: { file_id: "entry-1", file_name: "index.html" } as {
+		file_id: string
+		file_name: string
+	} | null,
 }))
 
 const headerMocks = vi.hoisted(() => ({
@@ -34,6 +44,10 @@ const headerMocks = vi.hoisted(() => ({
 }))
 
 const overlayMocks = vi.hoisted(() => ({
+	render: vi.fn(),
+}))
+
+const conversationPanelMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
@@ -150,21 +164,18 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		isReadOnly: false,
 		canEdit: false,
 		attachments: [],
-		attachmentList: [
-			{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
-			{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
-			{ file_id: "script-1", file_name: "app.js", relative_file_path: "app.js" },
-		],
+		attachmentList: controllerMocks.attachmentList,
 		activeFileId: "entry-1",
 		userSelectDetail: null,
 		setUserSelectDetail: vi.fn(),
-		defaultEntryFile: { file_id: "entry-1", file_name: "index.html" },
+		defaultEntryFile: controllerMocks.defaultEntryFile,
 		detailRef: { current: null },
 		topicFilesProps: {},
 		handleActiveFileChange: vi.fn(),
 		handleBackToMicroApps: vi.fn(),
 		handleOpenPublishDialog: vi.fn(),
 		handleFileTabsCacheLoaded: vi.fn(),
+		checkAttachmentsNowDebounced: controllerMocks.checkAttachmentsNowDebounced,
 		publishDialogOpen: false,
 		setPublishDialogOpen: vi.fn(),
 		editDialogOpen: false,
@@ -210,7 +221,10 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 }))
 
 vi.mock("../components/AppConversationPanel", () => ({
-	default: () => <div data-testid="desktop-conversation-panel" />,
+	default: (props: Record<string, unknown>) => {
+		conversationPanelMocks.render(props)
+		return <div data-testid="desktop-conversation-panel" />
+	},
 }))
 
 vi.mock("../components/MicroAppPageOverlays", () => ({
@@ -271,12 +285,20 @@ describe("MicroAppPageDesktop", () => {
 			error: null,
 		}
 		controllerMocks.initLoading = false
+		controllerMocks.attachmentList = [
+			{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
+			{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
+			{ file_id: "script-1", file_name: "app.js", relative_file_path: "app.js" },
+		]
+		controllerMocks.defaultEntryFile = { file_id: "entry-1", file_name: "index.html" }
 		detailMocks.openFileTab.mockClear()
 		detailMocks.render.mockClear()
 		previewMocks.aiEdit.mockClear()
 		previewMocks.render.mockClear()
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
+		conversationPanelMocks.render.mockClear()
+		controllerMocks.checkAttachmentsNowDebounced.mockClear()
 	})
 
 	it("shows a readable fallback when project resolution has no display message", () => {
@@ -343,6 +365,44 @@ describe("MicroAppPageDesktop", () => {
 
 		expect(screen.getByTestId("desktop-conversation-panel")).toBeInTheDocument()
 		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
+	})
+
+	it("connects task completion to the attachment refresh check", () => {
+		render(<MicroAppPageDesktop />)
+
+		expect(conversationPanelMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({
+				onTerminalTopicStatusChange: controllerMocks.checkAttachmentsNowDebounced,
+			}),
+		)
+	})
+
+	it("shows the generated entry file after the attachment store refreshes", async () => {
+		controllerMocks.attachmentList = []
+		controllerMocks.defaultEntryFile = null
+		const { rerender } = render(<MicroAppPageDesktop />)
+
+		expect(previewMocks.render).toHaveBeenLastCalledWith(
+			expect.objectContaining({ entryFile: null }),
+		)
+
+		const generatedEntry = {
+			file_id: "generated-entry",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+		controllerMocks.attachmentList = [generatedEntry]
+		controllerMocks.defaultEntryFile = generatedEntry
+		resolverMocks.result = { ...resolverMocks.result, isPublished: false }
+		rerender(<MicroAppPageDesktop />)
+
+		await waitFor(() => {
+			expect(previewMocks.render).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					entryFile: expect.objectContaining({ file_id: "generated-entry" }),
+				}),
+			)
+		})
 	})
 
 	it("switches preview, file viewer, and database inside the main workspace", async () => {

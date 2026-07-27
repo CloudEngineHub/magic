@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { PanelRightOpen } from "lucide-react"
@@ -23,6 +22,7 @@ import { cn } from "@/lib/utils"
 
 import AppConversationPanel from "./components/AppConversationPanel"
 import MicroAppHeader from "./components/MicroAppHeader"
+import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
@@ -30,10 +30,8 @@ import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
 import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
 import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
-import { AppStoreProvider } from "./context"
 import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
-import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
 import * as layout from "./layoutConstants"
 import { collectHtmlFiles, getAttachmentId, getMicroAppPreviewPath } from "./utils/microAppFiles"
 
@@ -83,6 +81,7 @@ function MicroAppPageInner({
 		handleBackToMicroApps,
 		handleOpenPublishDialog,
 		handleFileTabsCacheLoaded,
+		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
 		editDialogOpen,
@@ -398,6 +397,7 @@ function MicroAppPageInner({
 									topicStore={conversation.topicStore}
 									mentionPanelStore={store.mentionPanelStore}
 									projectFilesStore={store.projectFilesStore}
+									onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 									detailPanelVisible
 									isConversationPanelCollapsed={isMessagePanelCollapsed}
 									onToggleConversationPanel={handleToggleMessagePanelCollapse}
@@ -466,49 +466,7 @@ function MicroAppPageInner({
 const MicroAppPageInnerObserver = observer(MicroAppPageInner)
 
 function MicroAppPageDesktop() {
-	const { appId = "" } = useParams<{ appId: string }>()
-	const { t } = useTranslation("super")
-	const navigate = useNavigate()
-	const { projectId, isPublished, setIsPublished, loading, error } =
-		useMicroAppProjectResolver(appId)
-
-	useEffect(() => {
-		if (!appId) {
-			navigate({ name: RouteName.Super, replace: true })
-		}
-	}, [appId, navigate])
-
-	if (!appId || loading) {
-		return <MicroAppPageLoadingState testId="micro-app-resolver-loading" />
-	}
-
-	if (error || !projectId) {
-		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
-				<p className="text-sm text-destructive">
-					{error?.message || t("microAppPage.errors.loadFailed")}
-				</p>
-				<button
-					type="button"
-					className="text-sm text-primary hover:underline"
-					onClick={() => navigate({ name: RouteName.MicroApps })}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
-		)
-	}
-
-	return (
-		<AppStoreProvider>
-			<MicroAppPageInnerObserver
-				appId={appId}
-				projectId={projectId}
-				isPublished={isPublished}
-				onPublishStatusChange={setIsPublished}
-			/>
-		</AppStoreProvider>
-	)
+	return <MicroAppDesktopRoute Content={MicroAppPageInnerObserver} />
 }
 
 export default MicroAppPageDesktop

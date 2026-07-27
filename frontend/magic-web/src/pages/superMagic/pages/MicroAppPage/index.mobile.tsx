@@ -99,6 +99,7 @@ function MicroAppPageMobileInner({
 		handleBackToMicroApps,
 		handleOpenPublishDialog,
 		handleToggleDatabasePanel,
+		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
 		editDialogOpen,
@@ -276,6 +277,7 @@ function MicroAppPageMobileInner({
 						mentionPanelStore={store.mentionPanelStore}
 						projectFilesStore={store.projectFilesStore}
 						attachments={attachments}
+						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 						onOpenFile={handlePreviewFile}
 						onOpenChange={setConversationOpen}
 					/>

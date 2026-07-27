@@ -37,6 +37,7 @@ interface MicroAppMobileConversationProps {
 	attachments: AttachmentItem[]
 	onOpenFile: (file?: unknown) => void
 	onOpenChange: (open: boolean) => void
+	onTerminalTopicStatusChange?: () => void
 }
 
 function MobileConversationEmpty() {
@@ -73,6 +74,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 	attachments,
 	onOpenFile,
 	onOpenChange,
+	onTerminalTopicStatusChange,
 }: MicroAppMobileConversationProps) {
 	const { t } = useTranslation("super")
 	const [topicPickerOpen, setTopicPickerOpen] = useState(false)
@@ -91,6 +93,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 		topicStore,
 		selectedTopic,
 		isSelectedTopicMessagesReady,
+		onTerminalTopicStatusChange,
 	})
 	const { messages, showLoading } = useTopicConversationLoading({
 		selectedTopic,
