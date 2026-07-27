@@ -23,6 +23,43 @@ describe("filterInjectedTags", () => {
 		expect(result).toContain('<div xmlns="http://www.w3.org/1999/xhtml">sample</div>')
 	})
 
+	it("should preserve consecutive blank lines in document content", () => {
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head><title>Placeholder</title></head>
+<body>
+<section>First placeholder</section>
+
+
+<section>Second placeholder</section>
+</body>
+</html>`
+
+		const result = filterInjectedTags(html, new Map())
+
+		expect(result).toContain("</section>\n\n\n<section>Second placeholder</section>")
+	})
+
+	it("should not add boundary blank lines when cleaning ordinary HTML or PPT content", () => {
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head><script data-injected="fetch-interceptor">window.placeholderRuntime = true;</script>
+<title>Placeholder document</title>
+</head>
+<body class="placeholder-body">
+<section>Placeholder content</section>
+</body></html>`
+
+		const result = filterInjectedTags(html, new Map())
+
+		expect(result).toContain("<head>\n<title>Placeholder document</title>\n</head>")
+		expect(result).toContain(
+			'<body class="placeholder-body">\n<section>Placeholder content</section>\n</body>',
+		)
+		expect(result).not.toContain("<head>\n\n<title>")
+		expect(result).not.toContain('<body class="placeholder-body">\n\n<section>')
+	})
+
 	it("should restore original relative path for inline background-image", () => {
 		const html = `
 			<!DOCTYPE html>

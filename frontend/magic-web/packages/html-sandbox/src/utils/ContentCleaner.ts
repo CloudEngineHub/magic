@@ -5,7 +5,7 @@
 
 export class ContentCleaner {
 	/**
-	 * Clean document HTML
+	 * Clean serialized document HTML without modifying author-owned inline styles.
 	 */
 	static cleanDocument(html: string): string {
 		const parser = new DOMParser()
@@ -43,7 +43,13 @@ export class ContentCleaner {
 	 */
 	private static cleanEditingAttributes(doc: Document): void {
 		const editingClasses = ["__editor-selected", "__editor-hover"]
-		const editingAttributes = ["contenteditable", "data-text-editing", "data-previous-content"]
+		const editingAttributes = [
+			"contenteditable",
+			"data-text-editing",
+			"data-previous-content",
+			"data-previous-user-select",
+			"data-previous-webkit-user-select",
+		]
 
 		doc.querySelectorAll("*").forEach((el) => {
 			// Remove editing classes

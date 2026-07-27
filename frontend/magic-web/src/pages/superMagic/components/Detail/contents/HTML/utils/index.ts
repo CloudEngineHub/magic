@@ -1236,17 +1236,10 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		const bodyAttrString = bodyAttrs.length > 0 ? " " + bodyAttrs.join(" ") : ""
 
 		// 重新构建完整的HTML文档
-		let processedHtml = `${doctypeString}<html${htmlAttrString}>
-<head>
-${headContent}
-</head>
-<body${bodyAttrString}>
-${bodyContent}
-</body>
+		const processedHtml = `${doctypeString}<html${htmlAttrString}>
+<head>${headContent}</head>
+<body${bodyAttrString}>${bodyContent}</body>
 </html>`
-
-		// 清理移除元素后产生的多余空行
-		processedHtml = processedHtml.replace(/\n\s*\n/g, "\n")
 
 		// 返回清理后的HTML字符串
 		return processedHtml
