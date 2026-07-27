@@ -1,299 +1,31 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { useState, type ReactNode } from "react"
-import { MemoryRouter, Route, Routes } from "react-router"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RoutePath } from "@/constants/routes"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
-import MicroAppSharePage from "../index"
+import {
+	getMicroAppSharePageMocks,
+	renderPage,
+	resetMicroAppSharePageMocks,
+} from "./MicroAppSharePage.testUtils"
 
-interface TestUserInfo {
-	user_id: string
-	magic_id: string
-	nickname: string
-	real_name: string
-	avatar: string
-	status: number
-	organization_code: string
-}
+const mocks = getMicroAppSharePageMocks()
 
-interface TestTeamshareOrganization {
-	organization_code: string
-	organization_name: string
-}
-
-interface TestOrganizationMeta {
-	organizations: TestTeamshareOrganization[]
-	organizationCode: string
-	magicOrganizationMap: Record<string, { organization_name?: string }>
-	teamshareOrganizationCode: string
-	organizationListReady: boolean
-}
-
-interface TestPreviewFile {
-	file_id?: string
-	file_name?: string
-}
-
-interface TestHtmlPreviewProps {
-	data: TestPreviewFile
-	openFileTab?: (file: TestPreviewFile) => void
-	virtualStorageMarkerId?: string
-}
-
-interface TestMagicDropdownProps {
-	children: ReactNode
-	popupRender?: () => ReactNode
-	open?: boolean
-	onOpenChange?: (open: boolean) => void
-	overlayClassName?: string
-}
-
-const mocks = vi.hoisted(() => ({
-	resolvePublishedMicroApp: vi.fn(),
-	checkShareResourcePassword: vi.fn(),
-	getShareResource: vi.fn(),
-	getShareResourceFiles: vi.fn(),
-	getTemporaryDownloadUrl: vi.fn(),
-	historyReplace: vi.fn(),
-	authorization: { current: "" },
-	userInfo: { current: null as TestUserInfo | null },
-	organizationMeta: {
-		current: {
-			organizations: [] as TestTeamshareOrganization[],
-			organizationCode: "",
-			magicOrganizationMap: {} as Record<string, { organization_name?: string }>,
-			teamshareOrganizationCode: "",
-			organizationListReady: true,
-		} as TestOrganizationMeta,
-	},
-}))
-
-vi.mock("@/apis", () => ({
-	SuperMagicApi: {
-		resolvePublishedMicroApp: mocks.resolvePublishedMicroApp,
-		checkShareResourcePassword: mocks.checkShareResourcePassword,
-		getShareResource: mocks.getShareResource,
-		getShareResourceFiles: mocks.getShareResourceFiles,
-	},
-}))
-
-vi.mock("react-i18next", () => ({
-	initReactI18next: {
-		type: "3rdParty",
-		init: vi.fn(),
-	},
-	useTranslation: () => ({
-		t: (key: string) => key,
-	}),
-}))
-
-vi.mock("@/models/user/hooks", () => ({
-	useAuthorization: () => ({ authorization: mocks.authorization.current }),
-	useOrganization: () => mocks.organizationMeta.current,
-	useUserInfo: () => ({ userInfo: mocks.userInfo.current }),
-}))
-
-vi.mock("@/models/user/hooks/useAccount", () => ({
-	useAccount: () => ({ accounts: [] }),
-}))
-
-vi.mock("@/models/user", () => ({
-	userStore: {
-		user: {
-			get authorization() {
-				return mocks.authorization.current
-			},
-			get userInfo() {
-				return mocks.userInfo.current
-			},
-			get organizationCode() {
-				return mocks.organizationMeta.current.organizationCode
-			},
-			get organizations() {
-				return mocks.organizationMeta.current.organizations
-			},
-		},
-	},
-}))
-
-vi.mock("@/routes/history", () => ({
-	history: {
-		push: vi.fn(),
-		replace: mocks.historyReplace,
-	},
-}))
-
-vi.mock("@/pages/superMagic/utils/api", () => ({
-	getTemporaryDownloadUrl: mocks.getTemporaryDownloadUrl,
-}))
-
-vi.mock("@/hooks/account/useSwitchOrganization", () => ({
-	useSwitchOrganization: () => vi.fn(),
-}))
-
-vi.mock("@/layouts/BaseLayout/components/Header/components/Logo", () => ({
-	default: () => <div data-testid="mock-logo" />,
-}))
-
-vi.mock("@/components/business/UserAvatarRender", () => ({
-	default: ({ userInfo }: { userInfo?: TestUserInfo | null }) => (
-		<div data-testid="mock-user-avatar">{userInfo?.nickname || "avatar"}</div>
-	),
-}))
-
-vi.mock("@/components/base/MagicDropdown", () => ({
-	default: ({
-		children,
-		popupRender,
-		open,
-		onOpenChange,
-		overlayClassName,
-	}: TestMagicDropdownProps) => (
-		<div data-testid="mock-magic-dropdown" data-overlay-class-name={overlayClassName}>
-			<div data-testid="mock-magic-dropdown-trigger" onClick={() => onOpenChange?.(!open)}>
-				{children}
-			</div>
-			{open ? popupRender?.() : null}
-		</div>
-	),
-}))
-
-vi.mock("@/hooks/account/useLogout", () => ({
-	default: () => vi.fn(),
-}))
-
-vi.mock(
-	"@/layouts/BaseLayout/components/Sider/components/OrganizationSwitch/OrganizationList",
-	() => ({
-		default: () => <div data-testid="mock-organization-list" />,
-	}),
-)
-
-vi.mock("@/pages/share/components/WorkspaceButton", () => ({
-	default: () => <button type="button">workspace</button>,
-}))
-
-vi.mock("@/pages/share/components", () => ({
-	ErrorDisplay: ({ errorMessage }: { errorMessage?: string }) => (
-		<div data-testid="mock-error-display">{errorMessage}</div>
-	),
-	PasswordVerification: () => <div data-testid="mock-password-verification" />,
-	ShareEmptyState: () => <div data-testid="mock-share-empty-state" />,
-}))
-
-vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
-	default: function MockHtmlPreview({
-		data,
-		openFileTab,
-		virtualStorageMarkerId,
-	}: TestHtmlPreviewProps) {
-		const [mountedFileId] = useState(data.file_id)
-
-		return (
-			<div
-				data-testid="mock-html-preview"
-				data-virtual-storage-marker-id={virtualStorageMarkerId}
-			>
-				<span>{data.file_name}</span>
-				<span data-testid="mock-mounted-file-id">{mountedFileId}</span>
-				<button
-					type="button"
-					onClick={() => openFileTab?.({ file_id: "file-2", file_name: "admin.html" })}
-				>
-					navigate-admin
-				</button>
-				<button
-					type="button"
-					onClick={() => openFileTab?.({ file_id: "file-1", file_name: "index.html" })}
-				>
-					navigate-index
-				</button>
-			</div>
-		)
-	},
-}))
-
-function renderPage(path = "/micro-app/app-1") {
-	return render(
-		<MemoryRouter initialEntries={[path]}>
-			<Routes>
-				<Route path="/micro-app/:appId" element={<MicroAppSharePage />} />
-			</Routes>
-		</MemoryRouter>,
-	)
+async function confirmSafetyNotice() {
+	expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+	expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+	return screen.findByTestId("mock-html-preview")
 }
 
 describe("MicroAppSharePage", () => {
-	beforeEach(() => {
-		vi.clearAllMocks()
-		mocks.authorization.current = ""
-		mocks.userInfo.current = null
-		mocks.organizationMeta.current = {
-			organizations: [],
-			organizationCode: "",
-			magicOrganizationMap: {},
-			teamshareOrganizationCode: "",
-			organizationListReady: true,
-		}
-		mocks.resolvePublishedMicroApp.mockResolvedValue({
-			app_id: "app-1",
-			resource_id: "resource-1",
-			share_code: "resource-1",
-		})
-		mocks.checkShareResourcePassword.mockResolvedValue({ has_password: false })
-		mocks.getShareResource.mockResolvedValue({
-			temporary_token: "token-1",
-			data: {
-				project_id: "project-1",
-				project_name: "Demo App",
-			},
-		})
-		mocks.getShareResourceFiles.mockResolvedValue({
-			tree: [
-				{
-					file_id: "app-json-1",
-					file_name: "app.json",
-					file_extension: "json",
-					relative_file_path: "app.json",
-				},
-				{
-					file_id: "file-1",
-					file_name: "index.html",
-					file_extension: "html",
-					relative_file_path: "index.html",
-				},
-			],
-			list: [
-				{
-					file_id: "app-json-1",
-					file_name: "app.json",
-					file_extension: "json",
-					relative_file_path: "app.json",
-				},
-				{
-					file_id: "file-1",
-					file_name: "index.html",
-					file_extension: "html",
-					relative_file_path: "index.html",
-				},
-			],
-		})
-		mocks.getTemporaryDownloadUrl.mockResolvedValue([{ url: "https://example.com/app.json" }])
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue({
-				ok: true,
-				json: vi.fn().mockResolvedValue({ type: "micro-app", anonymous: true }),
-			}),
-		)
-	})
+	beforeEach(resetMicroAppSharePageMocks)
 
 	it("registers the standalone micro app route as public", () => {
 		expect(RoutePath.MicroAppShare).toBe("/micro-app/:appId")
 		expect(whiteListRoutes).toContain("/micro-app/*")
 	})
 
-	it("loads shared files and renders the root html entry", async () => {
+	it("waits for safety confirmation before rendering the root html entry", async () => {
 		renderPage()
 
 		await waitFor(() => {
@@ -308,7 +40,54 @@ describe("MicroAppSharePage", () => {
 			})
 		})
 
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toHaveTextContent(
+			"Demo App",
+		)
+		expect(screen.getByTestId("micro-app-share-cover")).toHaveAttribute(
+			"src",
+			"https://example.com/cover.webp",
+		)
+		expect(screen.getByText("microAppShare.safetySensitiveData")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+
 		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
+		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
+	})
+
+	it("hides a cover image that fails to load", async () => {
+		renderPage()
+
+		const cover = await screen.findByTestId("micro-app-share-cover")
+		fireEvent.error(cover)
+
+		expect(screen.queryByTestId("micro-app-share-cover")).not.toBeInTheDocument()
+	})
+
+	it("does not render an empty cover placeholder when no cover is published", async () => {
+		mocks.resolvePublishedMicroApp.mockResolvedValue({
+			app_id: "app-1",
+			resource_id: "resource-1",
+			share_code: "resource-1",
+		})
+
+		renderPage()
+
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-cover")).not.toBeInTheDocument()
+	})
+
+	it("sets the share context before loading app.json", async () => {
+		mocks.getTemporaryDownloadUrl.mockImplementation(async () => {
+			expect(window.temporary_token).toBe("token-1")
+			expect(window.project_id).toBe("project-1")
+			return [{ url: "https://example.com/app.json" }]
+		})
+
+		renderPage()
+
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
 	})
 
 	it("replaces the current preview across repeated html navigation", async () => {
@@ -357,7 +136,7 @@ describe("MicroAppSharePage", () => {
 
 		renderPage()
 
-		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
+		expect(await confirmSafetyNotice()).toHaveTextContent("index.html")
 		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-1")
 		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
 			"data-virtual-storage-marker-id",
@@ -382,7 +161,7 @@ describe("MicroAppSharePage", () => {
 	it("does not render workspace file chrome around the published micro app", async () => {
 		renderPage()
 
-		expect(await screen.findByTestId("mock-html-preview")).toBeInTheDocument()
+		expect(await confirmSafetyNotice()).toBeInTheDocument()
 		expect(screen.getByText("Demo App")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-logo")).not.toBeInTheDocument()
 		expect(screen.getByTestId("micro-app-share-login")).toBeInTheDocument()
@@ -418,10 +197,29 @@ describe("MicroAppSharePage", () => {
 
 		renderPage()
 
-		expect(await screen.findByTestId("mock-html-preview")).toBeInTheDocument()
+		expect(await confirmSafetyNotice()).toBeInTheDocument()
 		expect(screen.getByTestId("micro-app-share-user")).toHaveTextContent("黎增权")
 		expect(screen.getAllByText("Teamshare 研发部").length).toBeGreaterThan(0)
 		expect(screen.queryByTestId("micro-app-share-login")).not.toBeInTheDocument()
+	})
+
+	it("keeps the published app title read-only", async () => {
+		mocks.authorization.current = "token-1"
+		mocks.userInfo.current = {
+			user_id: "usi_1",
+			magic_id: "magic_1",
+			nickname: "黎增权",
+			real_name: "黎增权",
+			avatar: "",
+			status: 1,
+			organization_code: "magic-org-1",
+		}
+
+		renderPage()
+
+		expect(await confirmSafetyNotice()).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-edit-button")).not.toBeInTheDocument()
+		expect(screen.getByText("Demo App")).toBeInTheDocument()
 	})
 
 	it("opens account menu with organization switch and logout actions", async () => {
@@ -450,7 +248,7 @@ describe("MicroAppSharePage", () => {
 
 		renderPage()
 
-		await screen.findByTestId("mock-html-preview")
+		await screen.findByTestId("micro-app-share-safety-notice")
 		fireEvent.click(screen.getByTestId("mock-magic-dropdown-trigger"))
 
 		expect(await screen.findByTestId("micro-app-share-user-menu")).toBeInTheDocument()
@@ -521,6 +319,105 @@ describe("MicroAppSharePage", () => {
 				resource_id: "resource-1",
 				password: "abcd1234",
 			})
+		})
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+
+	it("requires a new confirmation after switching to another shared app", async () => {
+		renderPage()
+		await confirmSafetyNotice()
+
+		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
+
+		await waitFor(() => {
+			expect(mocks.resolvePublishedMicroApp).toHaveBeenCalledWith("app-2")
+			expect(mocks.getShareResource).toHaveBeenCalledTimes(2)
+		})
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+
+	it("ignores a stale file response after switching shared apps", async () => {
+		let resolveFirstFiles: (value: {
+			tree: Array<Record<string, string>>
+			list: Array<Record<string, string>>
+		}) => void = () => undefined
+		const firstFiles = new Promise<{
+			tree: Array<Record<string, string>>
+			list: Array<Record<string, string>>
+		}>((resolve) => {
+			resolveFirstFiles = resolve
+		})
+		const buildFiles = (suffix: string) => ({
+			tree: [
+				{
+					file_id: `app-json-${suffix}`,
+					file_name: "app.json",
+					file_extension: "json",
+					relative_file_path: "app.json",
+				},
+				{
+					file_id: `file-${suffix}`,
+					file_name: "index.html",
+					file_extension: "html",
+					relative_file_path: "index.html",
+				},
+			],
+			list: [
+				{
+					file_id: `app-json-${suffix}`,
+					file_name: "app.json",
+					file_extension: "json",
+					relative_file_path: "app.json",
+				},
+				{
+					file_id: `file-${suffix}`,
+					file_name: "index.html",
+					file_extension: "html",
+					relative_file_path: "index.html",
+				},
+			],
+		})
+
+		mocks.resolvePublishedMicroApp.mockImplementation(async (requestedAppId: string) => ({
+			app_id: requestedAppId,
+			resource_id: `resource-${requestedAppId}`,
+		}))
+		mocks.getShareResource.mockImplementation(
+			async ({ resource_id }: { resource_id: string }) => ({
+				temporary_token: `token-${resource_id}`,
+				data: {
+					project_id: `project-${resource_id}`,
+					project_name: resource_id,
+				},
+			}),
+		)
+		mocks.getShareResourceFiles.mockImplementation(
+			({ resource_id }: { resource_id: string }) =>
+				resource_id === "resource-app-1"
+					? firstFiles
+					: Promise.resolve(buildFiles("app-2")),
+		)
+
+		renderPage()
+		await waitFor(() => {
+			expect(mocks.getShareResourceFiles).toHaveBeenCalledWith({
+				resource_id: "resource-app-1",
+				password: undefined,
+			})
+		})
+
+		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
+		expect(await confirmSafetyNotice()).toHaveAttribute(
+			"data-virtual-storage-marker-id",
+			"file-app-2",
+		)
+
+		resolveFirstFiles(buildFiles("app-1"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-app-2")
 		})
 	})
 

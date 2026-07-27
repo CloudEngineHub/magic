@@ -1,4 +1,4 @@
-import { type ComponentProps, useCallback, useMemo, useState } from "react"
+import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
 import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
@@ -15,6 +15,7 @@ import { useAuthorization, useOrganization, useUserInfo } from "@/models/user/ho
 import { RouteName } from "@/routes/constants"
 import { history } from "@/routes/history"
 import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
+import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
@@ -166,9 +167,6 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 			data-testid="micro-app-share-header"
 		>
 			<div className="flex min-w-0 items-center gap-3">
-				<div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/80 bg-muted/40 text-foreground shadow-sm">
-					<FileCode2 size={18} />
-				</div>
 				<div className="min-w-0">
 					<div className="truncate text-[15px] font-semibold leading-5 text-foreground">
 						{appName?.trim() || t("microAppShare.title")}
@@ -230,9 +228,11 @@ export default function MicroAppSharePage() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
+	const [confirmedSafetyAppId, setConfirmedSafetyAppId] = useState<string | null>(null)
 	const {
 		shareData,
 		resourceId,
+		coverUrl,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,
@@ -253,6 +253,12 @@ export default function MicroAppSharePage() {
 		() => resolveDefaultHtmlEntry(attachmentList),
 		[attachmentList],
 	)
+	const displayAppName = shareMeta.projectName
+	// 将确认绑定到 appId，切换分享路由时不会短暂复用上一应用的确认状态。
+	const hasConfirmedSafetyNotice = confirmedSafetyAppId === appId
+	useEffect(() => {
+		setConfirmedSafetyAppId(null)
+	}, [appId])
 	const previewFile = useMemo(
 		() => attachmentList.find((item) => item.file_id === activeFileId) || defaultEntryFile,
 		[activeFileId, attachmentList, defaultEntryFile],
@@ -282,6 +288,9 @@ export default function MicroAppSharePage() {
 			setActiveFileId(fileItem.file_id)
 		}
 	}, [])
+	const handleLeave = useCallback(() => {
+		window.location.replace("/")
+	}, [])
 
 	if (emptyStateInfo) {
 		return (
@@ -302,7 +311,7 @@ export default function MicroAppSharePage() {
 			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
 			data-testid="micro-app-share-page"
 		>
-			<MicroAppShareHeader appName={shareMeta.projectName} />
+			<MicroAppShareHeader appName={displayAppName} />
 			<main className="min-h-0 flex-1 overflow-hidden">
 				{loading ? (
 					<div
@@ -338,7 +347,16 @@ export default function MicroAppSharePage() {
 
 				{!loading && !error && shareData && !previewFile ? <MicroAppShareEmpty /> : null}
 
-				{!loading && !error && previewFile ? (
+				{!loading && !error && previewFile && !hasConfirmedSafetyNotice ? (
+					<MicroAppSafetyNotice
+						appName={displayAppName}
+						coverUrl={coverUrl}
+						onConfirm={() => setConfirmedSafetyAppId(appId)}
+						onLeave={handleLeave}
+					/>
+				) : null}
+
+				{!loading && !error && previewFile && hasConfirmedSafetyNotice ? (
 					<div
 						className="h-full w-full overflow-hidden bg-background"
 						data-testid="micro-app-share-preview"

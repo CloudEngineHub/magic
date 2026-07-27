@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Camera, ImagePlus, Loader2, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { SuperMagicApi } from "@/apis"
+import { FileApi, SuperMagicApi } from "@/apis"
 import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
@@ -94,7 +94,7 @@ export default function MicroAppEditDialog({
 				setCoverUrl("")
 
 				if (nextCoverFileKey) {
-					const fileUrl = await SuperMagicApi.getFileUrl(nextCoverFileKey)
+					const fileUrl = await FileApi.getFileUrl(nextCoverFileKey)
 					if (!ignore) setCoverUrl(fileUrl.url)
 				}
 			} catch (error) {
@@ -305,6 +305,7 @@ export default function MicroAppEditDialog({
 									src={coverUrl}
 									alt={t("microAppPage.edit.coverPreviewAlt")}
 									className="size-full object-cover"
+									data-testid="micro-app-edit-cover-preview"
 								/>
 							) : (
 								<div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">

@@ -3098,10 +3098,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 将公开微应用 app_id 解析为当前有效分享资源
 	 */
 	resolvePublishedMicroApp(appId: string) {
-		return fetch.get<{ app_id: string; resource_id: string; share_code: string }>(
-			genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }),
-			{ parseJsonLargeIntAsString: true },
-		)
+		return fetch.get<{
+			app_id: string
+			resource_id: string
+			share_code: string
+			cover_url?: string
+		}>(genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }), {
+			parseJsonLargeIntAsString: true,
+		})
 	},
 
 	/**

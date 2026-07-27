@@ -1,6 +1,6 @@
 import type { PublishedMicroAppProjectItem } from "@/apis/modules/superMagic"
 
-/** 兼容发布详情的状态字段与稳定访问资源字段。 */
+/** 后端发布状态是微应用是否已发布的唯一依据。 */
 export function isMicroAppPublished(item?: PublishedMicroAppProjectItem | null): boolean {
-	return Boolean(item?.publish_status === "published" || item?.resource_id || item?.access_url)
+	return item?.publish_status === "published"
 }

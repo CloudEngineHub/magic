@@ -141,7 +141,7 @@ class MicroAppProjectAppService extends AbstractAppService
 
         $authorization = $requestContext->getUserAuthorization();
         [$record, $project] = $this->getValidatedMicroApp($appId);
-        $this->getAccessibleProjectWithManager(
+        $this->getAccessibleProjectWithEditor(
             $project->getId(),
             $authorization->getId(),
             $authorization->getOrganizationCode()
@@ -266,10 +266,18 @@ class MicroAppProjectAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
         }
 
+        $coverKey = trim((string) ($record->getCoverFileKey() ?? ''));
+        $coverRow = [
+            'organization_code' => $record->getOrganizationCode(),
+            'cover_file_key' => $coverKey,
+        ];
+        $coverUrls = $this->resolveCoverUrls([$coverRow]);
+
         return [
             'app_id' => (string) $record->getId(),
             'resource_id' => $record->getResourceId(),
             'share_code' => $shareEntity->getShareCode(),
+            'cover_url' => $coverUrls[$this->coverUrlMapKey($coverRow, $coverKey)] ?? '',
         ];
     }
 

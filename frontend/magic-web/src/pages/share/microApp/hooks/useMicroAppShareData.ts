@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "react-router"
 import { SuperMagicApi } from "@/apis"
 import { RouteName } from "@/routes/constants"
@@ -19,6 +19,11 @@ interface MicroAppShareMeta {
 	projectId: string
 	projectName: string
 	temporaryToken: string
+}
+
+interface ShareRequestContext {
+	appId: string
+	sequence: number
 }
 
 function unwrapResponse<T = any>(response: any): T {
@@ -112,7 +117,10 @@ function redirectToLogin(): void {
 
 export default function useMicroAppShareData({ appId }: UseMicroAppShareDataParams) {
 	const { search } = useLocation()
+	const currentAppIdRef = useRef(appId)
+	const requestSequenceRef = useRef(0)
 	const [resourceId, setResourceId] = useState("")
+	const [coverUrl, setCoverUrl] = useState("")
 	const [shareData, setShareData] = useState<any>(null)
 	const [attachmentsTree, setAttachmentsTree] = useState<AttachmentItem[]>([])
 	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
@@ -125,10 +133,40 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		useSharePermission()
 
 	const shareMeta = useMemo(() => resolveShareMeta(shareData), [shareData])
+	currentAppIdRef.current = appId
+
+	const createRequestContext = useCallback(
+		(): ShareRequestContext => ({
+			appId: currentAppIdRef.current,
+			sequence: ++requestSequenceRef.current,
+		}),
+		[],
+	)
+	const isRequestCurrent = useCallback(
+		(context: ShareRequestContext) =>
+			context.appId === currentAppIdRef.current &&
+			context.sequence === requestSequenceRef.current,
+		[],
+	)
 
 	const applyShareData = useCallback(
-		async (nextShareData: any, resolvedResourceId: string, password?: string) => {
+		async (
+			nextShareData: any,
+			resolvedResourceId: string,
+			context: ShareRequestContext,
+			password?: string,
+		) => {
 			const meta = resolveShareMeta(nextShareData)
+			const filesResponse = await SuperMagicApi.getShareResourceFiles({
+				resource_id: resolvedResourceId,
+				password,
+			})
+			if (!isRequestCurrent(context)) return
+
+			const processedData = AttachmentDataProcessor.processAttachmentData(
+				unwrapResponse(filesResponse),
+			)
+			// app.json 的下载接口依赖这两个全局值；只允许当前请求在读取配置前写入。
 			if (meta.temporaryToken) {
 				// @ts-ignore 复用现有 HTML 预览读取分享文件的临时 token 约定。
 				window.temporary_token = meta.temporaryToken
@@ -138,14 +176,9 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 				window.project_id = meta.projectId
 			}
 
-			const filesResponse = await SuperMagicApi.getShareResourceFiles({
-				resource_id: resolvedResourceId,
-				password,
-			})
-			const processedData = AttachmentDataProcessor.processAttachmentData(
-				unwrapResponse(filesResponse),
-			)
 			const anonymous = await loadAppAnonymous(processedData.list || [])
+			if (!isRequestCurrent(context)) return
+
 			if (!anonymous && !hasLoginAuthorization()) {
 				redirectToLogin()
 				return
@@ -157,28 +190,40 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			setError(null)
 			setRequiredOrgCode("")
 		},
-		[setRequiredOrgCode],
+		[isRequestCurrent, setRequiredOrgCode],
 	)
 
-	const getShareData = useCallback(
-		async ({ resource_id, password }: { resource_id: string; password?: string }) => {
+	const fetchShareData = useCallback(
+		async (
+			{ resource_id, password }: { resource_id: string; password?: string },
+			context: ShareRequestContext,
+		) => {
 			const response = await SuperMagicApi.getShareResource({
 				resource_id,
 				password,
 			})
-			await applyShareData(response, resource_id, password)
+			if (!isRequestCurrent(context)) return response
+			await applyShareData(response, resource_id, context, password)
 			return response
 		},
-		[applyShareData],
+		[applyShareData, isRequestCurrent],
+	)
+
+	const getShareData = useCallback(
+		(params: { resource_id: string; password?: string }) =>
+			fetchShareData(params, createRequestContext()),
+		[createRequestContext, fetchShareData],
 	)
 
 	const loadShare = useCallback(async () => {
 		if (!appId) return
+		const requestContext = createRequestContext()
 
 		setLoading(true)
 		setError(null)
 		setRequiredOrgCode("")
 		setResourceId("")
+		setCoverUrl("")
 		setShareData(null)
 		setAttachmentList([])
 		setAttachmentsTree([])
@@ -186,14 +231,19 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		let checkData: any
 		try {
 			const appResponse = await SuperMagicApi.resolvePublishedMicroApp(appId)
-			const appData = unwrapResponse<{ resource_id?: string }>(appResponse)
+			if (!isRequestCurrent(requestContext)) return
+			const appData = unwrapResponse<{ resource_id?: string; cover_url?: string }>(
+				appResponse,
+			)
 			const resolvedResourceId = readString(appData?.resource_id)
 			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
 			setResourceId(resolvedResourceId)
+			setCoverUrl(readString(appData?.cover_url))
 
 			const checkResponse: any = await SuperMagicApi.checkShareResourcePassword({
 				resource_id: resolvedResourceId,
 			})
+			if (!isRequestCurrent(requestContext)) return
 			checkData = unwrapResponse(checkResponse)
 			const hasPassword = Boolean(checkData?.has_password)
 			setIsNeedPassword(hasPassword)
@@ -202,31 +252,37 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			setPasswordFromUrl(urlPassword)
 
 			if (!hasPassword) {
-				await getShareData({ resource_id: resolvedResourceId })
+				await fetchShareData({ resource_id: resolvedResourceId }, requestContext)
 				return
 			}
 
 			if (urlPassword) {
 				try {
-					await getShareData({ resource_id: resolvedResourceId, password: urlPassword })
-					setVerifiedPassword(urlPassword)
+					await fetchShareData(
+						{ resource_id: resolvedResourceId, password: urlPassword },
+						requestContext,
+					)
+					if (isRequestCurrent(requestContext)) setVerifiedPassword(urlPassword)
 				} catch {
+					if (!isRequestCurrent(requestContext)) return
 					setShareData(null)
 					setAttachmentList([])
 					setAttachmentsTree([])
 				}
 			}
 		} catch (err: any) {
+			if (!isRequestCurrent(requestContext)) return
 			setRequiredOrgCode(resolveRequiredOrgCode(err, checkData))
 			setError(err)
 		} finally {
-			setLoading(false)
+			if (isRequestCurrent(requestContext)) setLoading(false)
 		}
-	}, [appId, getShareData, search, setRequiredOrgCode])
+	}, [appId, createRequestContext, fetchShareData, isRequestCurrent, search, setRequiredOrgCode])
 
 	useEffect(() => {
 		void loadShare()
 		return () => {
+			requestSequenceRef.current += 1
 			// @ts-ignore 清理分享页写入的临时上下文。
 			window.temporary_token = ""
 			// @ts-ignore
@@ -237,12 +293,14 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 	useTokenRefreshPolling({
 		resourceId,
 		password: verifiedPassword,
+		scopeKey: appId,
 		data: shareData,
 	})
 
 	return {
 		shareData,
 		resourceId,
+		coverUrl,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,

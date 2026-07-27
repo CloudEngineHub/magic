@@ -6,6 +6,7 @@ import MicroAppPublishDialog, {
 	buildMicroAppAccessUrl,
 	buildMicroAppPublishPayload,
 	buildMicroAppShareText,
+	getMicroAppPublishValidationError,
 } from "../MicroAppPublishDialog"
 
 const mocks = vi.hoisted(() => ({
@@ -24,11 +25,13 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/apis", () => ({
+	FileApi: {
+		getFileUrl: mocks.getFileUrl,
+	},
 	SuperMagicApi: {
 		getMicroAppProject: mocks.getMicroAppProject,
 		publishMicroAppProject: mocks.publishMicroAppProject,
 		unpublishMicroAppProject: mocks.unpublishMicroAppProject,
-		getFileUrl: mocks.getFileUrl,
 	},
 }))
 
@@ -166,6 +169,19 @@ describe("MicroAppPublishDialog", () => {
 		})
 	})
 
+	it("identifies incomplete publish information", () => {
+		expect(
+			getMicroAppPublishValidationError({
+				appName: "   ",
+				shareType: ShareType.Organization,
+				shareRange: "all",
+				targets: [],
+				password: "123456",
+				coverUrl: "",
+			}),
+		).toBe("projectNameRequired")
+	})
+
 	it("loads publish state through the app detail endpoint", async () => {
 		mocks.getMicroAppProject.mockResolvedValue({
 			app_id: "app-1",
@@ -195,8 +211,48 @@ describe("MicroAppPublishDialog", () => {
 		renderDialog()
 
 		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
-		expect(scrollArea).toHaveClass("min-h-0", "flex-1", "overflow-y-auto")
-		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveClass("max-h-[80dvh]")
+		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(scrollArea).toHaveClass("min-h-0")
+		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveClass(
+			"grid",
+			"max-h-[80dvh]",
+			"grid-rows-[minmax(0,1fr)_auto_auto]",
+		)
+	})
+
+	it("groups the app name and cover in one settings section", async () => {
+		renderDialog()
+
+		const settings = await screen.findByTestId("micro-app-publish-basic-settings")
+		expect(settings).toContainElement(screen.getByTestId("micro-app-publish-project-name"))
+		expect(settings).toContainElement(screen.getByTestId("micro-app-cover-upload"))
+	})
+
+	it("disables publishing and prompts for a missing app name", async () => {
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "" },
+			publish: null,
+		})
+
+		renderDialog({ projectName: "" })
+
+		const saveButton = await screen.findByTestId("micro-app-publish-save")
+		await waitFor(() => {
+			expect(saveButton).toBeDisabled()
+			expect(screen.getByTestId("micro-app-publish-validation-message")).toHaveTextContent(
+				"microAppPage.publish.projectNameRequired",
+			)
+		})
+
+		fireEvent.change(screen.getByTestId("micro-app-publish-project-name"), {
+			target: { value: "库存管理助手" },
+		})
+
+		expect(saveButton).toBeEnabled()
+		expect(screen.queryByTestId("micro-app-publish-validation-message")).toBeNull()
 	})
 
 	it("resolves and renders an existing cover from its file key", async () => {
@@ -324,11 +380,22 @@ describe("MicroAppPublishDialog", () => {
 		).toBe("https://example.com/app-1")
 		expect(
 			buildMicroAppShareText({
-				projectName: "Demo App",
 				accessUrl: "https://example.com/app-1",
-				password: "abcd1234",
-				passwordLabel: "Password",
+				shareTitle: "You're invited to use the micro app “Demo App”",
+				accessHint: "Open the link below to access it:",
+				passwordText: "Password: abcd1234",
 			}),
-		).toBe("Demo App\nhttps://example.com/app-1\nPassword: abcd1234")
+		).toBe(
+			"You're invited to use the micro app “Demo App”\n\nOpen the link below to access it:\nhttps://example.com/app-1\n\nPassword: abcd1234",
+		)
+		expect(
+			buildMicroAppShareText({
+				accessUrl: "https://example.com/app-1",
+				shareTitle: "You're invited to use the micro app “Demo App”",
+				accessHint: "Open the link below to access it:",
+			}),
+		).toBe(
+			"You're invited to use the micro app “Demo App”\n\nOpen the link below to access it:\nhttps://example.com/app-1",
+		)
 	})
 })

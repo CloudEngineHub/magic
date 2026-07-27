@@ -19,7 +19,12 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/apis", () => ({
-	SuperMagicApi: apiMocks,
+	FileApi: {
+		getFileUrl: apiMocks.getFileUrl,
+	},
+	SuperMagicApi: {
+		getMicroAppProject: apiMocks.getMicroAppProject,
+	},
 }))
 
 vi.mock("@/utils/inputFocusPolicy", () => ({
@@ -86,6 +91,31 @@ describe("MicroAppEditDialog", () => {
 
 		await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ app_name: "New App" }))
 		expect(onOpenChange).toHaveBeenCalledWith(false)
+	})
+
+	it("resolves an existing cover through FileApi", async () => {
+		apiMocks.getMicroAppProject.mockResolvedValue({
+			project: { project_name: "Demo App" },
+			publish: { cover_file_key: "micro-app/covers/existing.webp" },
+		})
+
+		render(
+			<MicroAppEditDialog
+				open
+				appId="app-1"
+				projectName="Demo App"
+				onOpenChange={vi.fn()}
+				onConfirm={vi.fn().mockResolvedValue(true)}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(apiMocks.getFileUrl).toHaveBeenCalledWith("micro-app/covers/existing.webp")
+			expect(screen.getByTestId("micro-app-edit-cover-preview")).toHaveAttribute(
+				"src",
+				"https://example.com/cover.webp",
+			)
+		})
 	})
 
 	it("captures the home page, uploads it, and submits the cover key", async () => {
