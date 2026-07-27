@@ -65,7 +65,7 @@ interface UsePluginRuntimeBridgeParams {
 	/** 插件来源元素映射 */
 	sourceElementByAssetKeyRef: MutableRefObject<PluginSourceElementMap>
 	/** 设置框架高度 */
-	setFrameHeight: Dispatch<SetStateAction<number>>
+	setFrameHeight: (height: number) => void
 }
 
 export function usePluginRuntimeBridge({

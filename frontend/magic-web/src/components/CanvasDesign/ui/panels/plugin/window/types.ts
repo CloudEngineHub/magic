@@ -11,6 +11,11 @@ export interface PluginWindowPosition {
 	y: number
 }
 
+export interface PluginWindowSize {
+	width: number
+	height: number
+}
+
 export interface PluginView {
 	label: string
 	description: string

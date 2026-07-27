@@ -34,9 +34,19 @@ import { PluginFilePicker } from "../assets/PluginFilePicker"
 import { PluginRuntimeEmpty } from "./PluginRuntimeEmpty"
 import { PluginRuntimeFrame } from "./PluginRuntimeFrame"
 import { PluginWindowHeader } from "./PluginWindowHeader"
-import { clampPositionToContainer, getInitialPosition, saveCachedPosition } from "./position"
+import {
+	clampPluginPanelSize,
+	clampPositionToContainer,
+	getInitialPosition,
+	saveCachedPosition,
+} from "./position"
 import { getErrorMessage } from "../assets/resourceUtils"
-import type { PluginFileAsset, PluginFilePickerRequest, PluginWindowPosition } from "./types"
+import type {
+	PluginFileAsset,
+	PluginFilePickerRequest,
+	PluginWindowPosition,
+	PluginWindowSize,
+} from "./types"
 import { useCanvasImageExternalDragToPlugin } from "./useCanvasImageExternalDragToPlugin"
 import { usePluginRuntimeBridge } from "../runtime-bridge/usePluginRuntimeBridge"
 import { usePluginView } from "./usePluginView"
@@ -58,23 +68,32 @@ export const PluginWindow = memo(function PluginWindow({
 	locale,
 	plugin,
 	sessionId,
-	frameHeight,
+	panelSize,
+	setPanelSize,
 	setFrameHeight,
+	onManualResizeStart,
+	onManualResizeEnd,
 }: {
 	canvas: Canvas
 	locale: string
 	plugin: CanvasDesignPlugin
 	sessionId: number
-	frameHeight: number
-	setFrameHeight: Dispatch<SetStateAction<number>>
+	panelSize: PluginWindowSize
+	setPanelSize: Dispatch<SetStateAction<PluginWindowSize>>
+	setFrameHeight: (height: number) => void
+	onManualResizeStart: () => void
+	onManualResizeEnd: (size: PluginWindowSize) => void
 }) {
-	const channelToken = useMemo(() => createPluginChannelToken(), [plugin.name, sessionId])
+	const channelToken = useMemo(() => createPluginChannelToken(), [])
 	const [position, setPosition] = useState<PluginWindowPosition>(() =>
 		getInitialPosition(canvas.container),
 	)
+	const panelSizeRef = useRef(panelSize)
+	const resizeStartRef = useRef({ pointerX: 0, pointerY: 0, width: 0, height: 0 })
 	const dragStartRef = useRef({ pointerX: 0, pointerY: 0, windowX: 0, windowY: 0 })
 	const draggingRef = useRef(false)
 	const positionRef = useRef(position)
+	const resizingRef = useRef(false)
 	const pluginWindowRef = useRef<HTMLDivElement>(null)
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const localFileInputRef = useRef<HTMLInputElement>(null)
@@ -87,11 +106,16 @@ export const PluginWindow = memo(function PluginWindow({
 	const sourceElementByAssetKeyRef = useRef(new Map<string, string>())
 
 	useEffect(() => {
-		sourceElementByAssetKeyRef.current.clear()
+		const sourceElementByAssetKey = sourceElementByAssetKeyRef.current
+		sourceElementByAssetKey.clear()
 		return () => {
-			sourceElementByAssetKeyRef.current.clear()
+			sourceElementByAssetKey.clear()
 		}
 	}, [canvas, channelToken])
+
+	useLayoutEffect(() => {
+		panelSizeRef.current = panelSize
+	}, [panelSize])
 
 	// 连接画布图片拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
 	const { canvasAssetDragGhost, handleCanvasAssetDragTarget, isCanvasAssetDragActive } =
@@ -146,7 +170,7 @@ export const PluginWindow = memo(function PluginWindow({
 
 	useLayoutEffect(() => {
 		clampCurrentPosition()
-	}, [clampCurrentPosition, frameHeight])
+	}, [clampCurrentPosition, panelSize])
 
 	useEffect(() => {
 		const resizeObserver = new ResizeObserver(() => {
@@ -348,11 +372,73 @@ export const PluginWindow = memo(function PluginWindow({
 		saveCachedPosition(positionRef.current)
 	}, [])
 
+	const handleResizePointerDown = useCallback<PointerEventHandler<HTMLButtonElement>>(
+		(event) => {
+			event.stopPropagation()
+			onManualResizeStart()
+			const currentSize = panelSizeRef.current
+			resizingRef.current = true
+			resizeStartRef.current = {
+				pointerX: event.clientX,
+				pointerY: event.clientY,
+				width: currentSize.width,
+				height: currentSize.height,
+			}
+			event.currentTarget.setPointerCapture(event.pointerId)
+			event.preventDefault()
+		},
+		[onManualResizeStart],
+	)
+
+	const commitResize = useCallback(() => {
+		if (!resizingRef.current) return
+		resizingRef.current = false
+		onManualResizeEnd(panelSizeRef.current)
+		const currentPosition = positionRef.current
+		const nextPosition = clampPositionToContainer(
+			currentPosition,
+			canvas.container,
+			pluginWindowRef.current,
+		)
+		if (nextPosition.x === currentPosition.x && nextPosition.y === currentPosition.y) return
+		positionRef.current = nextPosition
+		setPosition(nextPosition)
+		saveCachedPosition(nextPosition)
+	}, [canvas.container, onManualResizeEnd])
+
+	const handleResizePointerMove = useCallback<PointerEventHandler<HTMLButtonElement>>(
+		(event) => {
+			if (!resizingRef.current) return
+			const nextSize = clampPluginPanelSize({
+				width:
+					resizeStartRef.current.width + event.clientX - resizeStartRef.current.pointerX,
+				height:
+					resizeStartRef.current.height + event.clientY - resizeStartRef.current.pointerY,
+			})
+			panelSizeRef.current = nextSize
+			setPanelSize(nextSize)
+		},
+		[setPanelSize],
+	)
+
+	const handleResizePointerEnd = useCallback<PointerEventHandler<HTMLButtonElement>>(
+		(event) => {
+			if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+				event.currentTarget.releasePointerCapture(event.pointerId)
+			}
+			commitResize()
+		},
+		[commitResize],
+	)
+
 	return (
 		<div
 			ref={pluginWindowRef}
 			className={styles.pluginWindow}
-			style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
+			style={{
+				transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+				width: panelSize.width,
+			}}
 			data-canvas-ui-component
 			data-canvas-plugin-window
 			onPointerDown={handlePluginWindowPointerDown}
@@ -392,7 +478,7 @@ export const PluginWindow = memo(function PluginWindow({
 					<PluginRuntimeFrame
 						ref={iframeRef}
 						key={`${plugin.name}-${sessionId}`}
-						height={frameHeight}
+						height={panelSize.height}
 						srcDoc={pluginView.srcDoc}
 						title={pluginView.label}
 					/>
@@ -402,8 +488,27 @@ export const PluginWindow = memo(function PluginWindow({
 					)}
 				</>
 			) : (
-				<PluginRuntimeEmpty description={pluginView.description} label={pluginView.label} />
+				<div
+					className={styles.pluginRuntimeEmptyFrame}
+					style={{ height: panelSize.height }}
+				>
+					<PluginRuntimeEmpty
+						description={pluginView.description}
+						label={pluginView.label}
+					/>
+				</div>
 			)}
+			<button
+				type="button"
+				className={styles.pluginWindowResizeHandle}
+				aria-label="Resize plugin panel"
+				onPointerDown={handleResizePointerDown}
+				onPointerMove={handleResizePointerMove}
+				onPointerUp={handleResizePointerEnd}
+				onPointerCancel={handleResizePointerEnd}
+			>
+				<span className={styles.pluginWindowResizeHandleIcon} />
+			</button>
 			{canvasAssetDragGhost}
 		</div>
 	)
