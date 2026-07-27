@@ -8,11 +8,7 @@ if TYPE_CHECKING:
 
 
 class ProjectHandler(BaseMentionHandler):
-    """处理整项目类型的 mention（跨项目挂载）。
-
-    引用的项目会被以只读方式挂载到沙箱内的一个绝对路径下，
-    该绝对路径由后端通过 mention 的 project_path 字段下发。
-    """
+    """处理整项目类型的 mention（跨项目挂载）。"""
 
     def get_type(self) -> str:
         return "project"
