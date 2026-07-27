@@ -71,20 +71,20 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/connectivity-test', [AiAbilityApi::class, 'connectivityTest']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
-    Router::addGroup('/globals', static function () {
-        Router::addGroup('/agents', static function () {
-            Router::put('/settings', [AgentGlobalSettingsApi::class, 'updateGlobalSettings']);
-            Router::get('/settings', [AgentGlobalSettingsApi::class, 'getGlobalSettings']);
-        });
-    }, ['middleware' => [RequestContextMiddleware::class]]);
+    //    Router::addGroup('/globals', static function () {
+    //        Router::addGroup('/agents', static function () {
+    // Router::put('/settings', [AgentGlobalSettingsApi::class, 'updateGlobalSettings']);
+    // Router::get('/settings', [AgentGlobalSettingsApi::class, 'getGlobalSettings']);
+    //        });
+    //    }, ['middleware' => [RequestContextMiddleware::class]]);
 
-    Router::addGroup('/agents', static function () {
-        Router::get('/published', [AdminAgentApi::class, 'getPublishedAgents']);
-        Router::post('/queries', [AdminAgentApi::class, 'queriesAgents']);
-        Router::get('/creators', [AdminAgentApi::class, 'getOrganizationAgentsCreators']);
-        Router::get('/{agentId}', [AdminAgentApi::class, 'getAgentDetail']);
-        Router::delete('/{agentId}', [AdminAgentApi::class, 'deleteAgent']);
-    }, ['middleware' => [RequestContextMiddleware::class]]);
+    //    Router::addGroup('/agents', static function () {
+    // Router::get('/published', [AdminAgentApi::class, 'getPublishedAgents']);
+    // Router::post('/queries', [AdminAgentApi::class, 'queriesAgents']);
+    // Router::get('/creators', [AdminAgentApi::class, 'getOrganizationAgentsCreators']);
+    // Router::get('/{agentId}', [AdminAgentApi::class, 'getAgentDetail']);
+    // Router::delete('/{agentId}', [AdminAgentApi::class, 'deleteAgent']);
+    //    }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 组织管理员
     Router::addGroup('/organization-admin', static function () {
