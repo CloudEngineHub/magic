@@ -35,6 +35,24 @@ describe("plugin panel position", () => {
 		})
 	})
 
+	it("clamps plugin panel size to container bounds", () => {
+		expect(
+			clampPluginPanelSize({ width: 1200, height: 1200 }, { maxWidth: 684, maxHeight: 452 }),
+		).toEqual({
+			width: 684,
+			height: 452,
+		})
+	})
+
+	it("allows container bounds to override minimum size", () => {
+		expect(
+			clampPluginPanelSize({ width: 1200, height: 1200 }, { maxWidth: 320, maxHeight: 120 }),
+		).toEqual({
+			width: 320,
+			height: 120,
+		})
+	})
+
 	it("stores cached plugin panel size after clamping", () => {
 		saveCachedPluginPanelSize({ width: 1200, height: 1200 })
 

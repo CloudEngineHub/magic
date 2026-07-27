@@ -11,6 +11,11 @@ export interface PluginWindowPosition {
 	y: number
 }
 
+export interface PluginWindowSizeBounds {
+	maxWidth?: number
+	maxHeight?: number
+}
+
 export interface PluginWindowSize {
 	width: number
 	height: number

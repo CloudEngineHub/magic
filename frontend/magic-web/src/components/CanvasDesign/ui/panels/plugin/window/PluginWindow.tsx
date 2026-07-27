@@ -37,6 +37,7 @@ import { PluginWindowHeader } from "./PluginWindowHeader"
 import {
 	clampPluginPanelSize,
 	clampPositionToContainer,
+	getPluginPanelSizeBounds,
 	getInitialPosition,
 	saveCachedPosition,
 } from "./position"
@@ -153,6 +154,27 @@ export const PluginWindow = memo(function PluginWindow({
 		filePickerRequestRef.current = filePickerRequest
 	}, [filePickerRequest])
 
+	const getCurrentSizeBounds = useCallback(() => {
+		return getPluginPanelSizeBounds(
+			canvas.container,
+			pluginWindowRef.current,
+			panelSizeRef.current,
+		)
+	}, [canvas.container])
+
+	const clampCurrentSize = useCallback(() => {
+		const bounds = getCurrentSizeBounds()
+		if (!bounds) return false
+		const currentSize = panelSizeRef.current
+		const nextSize = clampPluginPanelSize(currentSize, bounds)
+		panelSizeRef.current = nextSize
+		if (nextSize.width === currentSize.width && nextSize.height === currentSize.height) {
+			return false
+		}
+		setPanelSize(nextSize)
+		return true
+	}, [getCurrentSizeBounds, setPanelSize])
+
 	const clampCurrentPosition = useCallback(() => {
 		setPosition((currentPosition) => {
 			const nextPosition = clampPositionToContainer(
@@ -169,18 +191,20 @@ export const PluginWindow = memo(function PluginWindow({
 	}, [canvas])
 
 	useLayoutEffect(() => {
+		clampCurrentSize()
 		clampCurrentPosition()
-	}, [clampCurrentPosition, panelSize])
+	}, [clampCurrentPosition, clampCurrentSize, panelSize])
 
 	useEffect(() => {
 		const resizeObserver = new ResizeObserver(() => {
+			clampCurrentSize()
 			clampCurrentPosition()
 		})
 		resizeObserver.observe(canvas.container)
 		return () => {
 			resizeObserver.disconnect()
 		}
-	}, [canvas.container, clampCurrentPosition])
+	}, [canvas.container, clampCurrentPosition, clampCurrentSize])
 
 	usePluginRuntimeBridge({
 		awaitingLocalFileDialogRef,
@@ -409,16 +433,23 @@ export const PluginWindow = memo(function PluginWindow({
 	const handleResizePointerMove = useCallback<PointerEventHandler<HTMLButtonElement>>(
 		(event) => {
 			if (!resizingRef.current) return
-			const nextSize = clampPluginPanelSize({
-				width:
-					resizeStartRef.current.width + event.clientX - resizeStartRef.current.pointerX,
-				height:
-					resizeStartRef.current.height + event.clientY - resizeStartRef.current.pointerY,
-			})
+			const nextSize = clampPluginPanelSize(
+				{
+					width:
+						resizeStartRef.current.width +
+						event.clientX -
+						resizeStartRef.current.pointerX,
+					height:
+						resizeStartRef.current.height +
+						event.clientY -
+						resizeStartRef.current.pointerY,
+				},
+				getCurrentSizeBounds() ?? undefined,
+			)
 			panelSizeRef.current = nextSize
 			setPanelSize(nextSize)
 		},
-		[setPanelSize],
+		[getCurrentSizeBounds, setPanelSize],
 	)
 
 	const handleResizePointerEnd = useCallback<PointerEventHandler<HTMLButtonElement>>(

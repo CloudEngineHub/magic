@@ -10,7 +10,7 @@ import {
 	PLUGIN_WINDOW_WIDTH,
 	PLUGIN_LIST_PANEL_SELECTOR,
 } from "./constants"
-import type { PluginWindowPosition, PluginWindowSize } from "./types"
+import type { PluginWindowPosition, PluginWindowSize, PluginWindowSizeBounds } from "./types"
 
 export function getInitialPosition(container: HTMLElement): PluginWindowPosition {
 	const cachedPosition = readCachedPosition()
@@ -104,32 +104,63 @@ export function saveCachedPosition(position: PluginWindowPosition): void {
 }
 
 function clampDimension(value: number, min: number, max: number, fallback: number): number {
-	if (!Number.isFinite(value)) return fallback
-	return Math.min(max, Math.max(min, value))
+	const effectiveMax = Math.max(1, max)
+	const effectiveMin = Math.min(min, effectiveMax)
+	const safeValue = Number.isFinite(value) ? value : fallback
+	return Math.min(effectiveMax, Math.max(effectiveMin, safeValue))
 }
 
-export function clampPluginPanelHeight(height: number): number {
+export function clampPluginPanelHeight(
+	height: number,
+	maxHeight = PLUGIN_WINDOW_MAX_HEIGHT,
+): number {
+	const effectiveMaxHeight = Number.isFinite(maxHeight)
+		? Math.min(PLUGIN_WINDOW_MAX_HEIGHT, maxHeight)
+		: PLUGIN_WINDOW_MAX_HEIGHT
 	return clampDimension(
 		height,
 		PLUGIN_WINDOW_MIN_HEIGHT,
-		PLUGIN_WINDOW_MAX_HEIGHT,
+		effectiveMaxHeight,
 		PLUGIN_WINDOW_DEFAULT_HEIGHT,
 	)
 }
 
-export function clampPluginPanelWidth(width: number): number {
-	return clampDimension(
-		width,
-		PLUGIN_WINDOW_MIN_WIDTH,
-		PLUGIN_WINDOW_MAX_WIDTH,
-		PLUGIN_WINDOW_WIDTH,
-	)
+export function clampPluginPanelWidth(width: number, maxWidth = PLUGIN_WINDOW_MAX_WIDTH): number {
+	const effectiveMaxWidth = Number.isFinite(maxWidth)
+		? Math.min(PLUGIN_WINDOW_MAX_WIDTH, maxWidth)
+		: PLUGIN_WINDOW_MAX_WIDTH
+	return clampDimension(width, PLUGIN_WINDOW_MIN_WIDTH, effectiveMaxWidth, PLUGIN_WINDOW_WIDTH)
 }
 
-export function clampPluginPanelSize(size: PluginWindowSize): PluginWindowSize {
+export function clampPluginPanelSize(
+	size: PluginWindowSize,
+	bounds: PluginWindowSizeBounds = {},
+): PluginWindowSize {
 	return {
-		width: clampPluginPanelWidth(size.width),
-		height: clampPluginPanelHeight(size.height),
+		width: clampPluginPanelWidth(size.width, bounds.maxWidth),
+		height: clampPluginPanelHeight(size.height, bounds.maxHeight),
+	}
+}
+
+export function getPluginPanelSizeBounds(
+	container: HTMLElement,
+	pluginWindow: HTMLElement | null | undefined,
+	currentSize: PluginWindowSize,
+): PluginWindowSizeBounds | null {
+	const rect = container.getBoundingClientRect()
+	if (rect.width <= PLUGIN_WINDOW_MARGIN * 2 || rect.height <= PLUGIN_WINDOW_MARGIN * 2) {
+		return null
+	}
+
+	const pluginWindowRect = pluginWindow?.getBoundingClientRect()
+	const rawChromeHeight = pluginWindowRect?.height
+		? pluginWindowRect.height - currentSize.height
+		: 0
+	const chromeHeight = Number.isFinite(rawChromeHeight) ? Math.max(0, rawChromeHeight) : 0
+
+	return {
+		maxWidth: rect.width - PLUGIN_WINDOW_MARGIN * 2,
+		maxHeight: Math.max(1, rect.height - PLUGIN_WINDOW_MARGIN * 2 - chromeHeight),
 	}
 }
 
