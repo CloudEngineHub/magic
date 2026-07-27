@@ -155,11 +155,12 @@ function EditorBody({
 	})
 
 	const isMobile = useIsMobile()
-	const codeContent = useMemo(() => {
-		const source = isEditMode ? editContent || content : content
-		if (viewMode !== "code") return source
-		return formatLongCurlDataRawForPreview(source)
-	}, [content, editContent, isEditMode, viewMode])
+	const previewCodeContent = useMemo(() => {
+		// Edit mode normalizes once when Monaco mounts. Keeping editContent out of this
+		// dependency list prevents a full-document scan on every Monaco keystroke.
+		if (viewMode !== "code" || isEditMode) return content
+		return formatLongCurlDataRawForPreview(content)
+	}, [content, isEditMode, viewMode])
 
 	// Combine all extensions
 	const allExtensions = [...projectImageExtensions, customLinkNode]
@@ -232,7 +233,7 @@ function EditorBody({
 						key={isEditMode ? "edit" : "preview"}
 						language={language}
 						isEditMode={isEditMode}
-						content={codeContent}
+						content={isEditMode ? editContent || content : previewCodeContent}
 						onChange={setEditContent}
 					/>
 				) : (

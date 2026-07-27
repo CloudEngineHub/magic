@@ -2,12 +2,13 @@ const DATA_RAW_PREFIX = "--data-raw '"
 const MIN_FORMATTABLE_DATA_RAW_LENGTH = 1_000
 
 /**
- * Converts a long JSON curl payload into physical lines for the read-only
- * source preview. This avoids giving Monaco one model line that expands into
- * hundreds of virtual wrapped lines, while leaving the persisted Markdown
- * untouched.
+ * Converts a long JSON curl payload into physical lines for source previews
+ * and pasted editor input. This avoids giving Monaco one model line that
+ * expands into hundreds of virtual wrapped lines.
  */
 export function formatLongCurlDataRawForPreview(content: string): string {
+	if (!content.includes(DATA_RAW_PREFIX)) return content
+
 	return content
 		.split("\n")
 		.map((line) => formatLongCurlDataRawLine(line))

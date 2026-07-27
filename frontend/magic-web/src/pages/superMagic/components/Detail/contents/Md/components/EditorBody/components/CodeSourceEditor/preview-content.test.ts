@@ -18,4 +18,10 @@ describe("formatLongCurlDataRawForPreview", () => {
 
 		expect(formatLongCurlDataRawForPreview(source)).toBe(source)
 	})
+
+	it("returns ordinary source unchanged", () => {
+		const source = "# Heading\n\nA regular Markdown document without a curl command."
+
+		expect(formatLongCurlDataRawForPreview(source)).toBe(source)
+	})
 })

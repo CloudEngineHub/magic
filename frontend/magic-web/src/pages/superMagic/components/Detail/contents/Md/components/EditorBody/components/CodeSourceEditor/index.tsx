@@ -67,16 +67,15 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 	const monacoTheme = prefersColorScheme === "dark" ? "vs-dark" : "vs-light"
 
 	const onDidFocusEditorTextFn = useRef<{ dispose: () => void } | null>(null)
+	const onDidPasteListener = useRef<{ dispose: () => void } | null>(null)
 	const removePasteListener = useRef<(() => void) | null>(null)
-	const onDidChangeModelContent = useRef<{ dispose: () => void } | null>(null)
-	const isNormalizingLongCurlPayload = useRef(false)
 
 	useUnmount(() => {
 		if (onDidFocusEditorTextFn.current) {
 			onDidFocusEditorTextFn.current.dispose()
 		}
+		onDidPasteListener.current?.dispose()
 		removePasteListener.current?.()
-		onDidChangeModelContent.current?.dispose()
 	})
 
 	useEffect(() => {
@@ -176,32 +175,36 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 			onMount={(editor) => {
 				editorRef.current = editor
 				const domNode = editor.getDomNode()
+				const normalizeLongCurlPayload = (source: string) => {
+					const model = editor.getModel()
+					const currentValue = editor.getValue()
+					const formattedValue = formatLongCurlDataRawForPreview(currentValue)
+
+					if (!model || formattedValue === currentValue) return
+
+					editor.executeEdits(source, [
+						{
+							range: model.getFullModelRange(),
+							text: formattedValue,
+							forceMoveMarkers: true,
+						},
+					])
+				}
+
+				if (isEditMode) {
+					// Normalize existing source once when entering edit mode. Do not subscribe
+					// to model changes here, because that would scan the whole document per key.
+					normalizeLongCurlPayload("format-long-curl-data-raw-on-mount")
+
+					// Monaco owns the actual input element, so the native DOM listener below is not
+					// guaranteed to observe every paste route. This callback provides one fallback
+					// normalization pass per paste without affecting ordinary typing.
+					onDidPasteListener.current = editor.onDidPaste(() => {
+						normalizeLongCurlPayload("format-long-curl-data-raw-after-paste")
+					})
+				}
 
 				if (isEditMode && domNode) {
-					const normalizeLongCurlPayload = () => {
-						if (isNormalizingLongCurlPayload.current) return
-
-						const model = editor.getModel()
-						if (!model) return
-
-						const currentValue = editor.getValue()
-						const formattedValue = formatLongCurlDataRawForPreview(currentValue)
-						if (formattedValue === currentValue) return
-
-						isNormalizingLongCurlPayload.current = true
-						editor.executeEdits("format-long-curl-data-raw", [
-							{
-								range: model.getFullModelRange(),
-								text: formattedValue,
-								forceMoveMarkers: true,
-							},
-						])
-						isNormalizingLongCurlPayload.current = false
-					}
-
-					onDidChangeModelContent.current =
-						editor.onDidChangeModelContent(normalizeLongCurlPayload)
-
 					const handlePaste = (event: ClipboardEvent) => {
 						const pastedText = event.clipboardData?.getData("text/plain")
 						if (!pastedText) return
@@ -232,17 +235,15 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 				}
 
 				// Add custom class for preview mode styling
-				if (!isEditMode) {
-					if (domNode) {
-						domNode.classList.add("preview-mode")
-						// Force hide cursor by removing focus
-						onDidFocusEditorTextFn.current = editor.onDidFocusEditorText(() => {
-							const activeElement = document.activeElement
-							if (activeElement && domNode.contains(activeElement)) {
-								;(activeElement as HTMLElement).blur()
-							}
-						})
-					}
+				if (!isEditMode && domNode) {
+					domNode.classList.add("preview-mode")
+					// Force hide cursor by removing focus
+					onDidFocusEditorTextFn.current = editor.onDidFocusEditorText(() => {
+						const activeElement = document.activeElement
+						if (activeElement && domNode.contains(activeElement)) {
+							;(activeElement as HTMLElement).blur()
+						}
+					})
 				}
 			}}
 			className={editorWrapperClasses}
