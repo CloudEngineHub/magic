@@ -526,7 +526,8 @@ class TopicDomainService
                     'id' => $topicId,
                     'user_id' => $dataIsolation->getCurrentUserId(),
                 ],
-                $updateData
+                $updateData,
+                touchUpdatedAt: false
             );
         }
 

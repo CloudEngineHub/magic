@@ -45,7 +45,8 @@ interface ProjectRepositoryInterface
         int $page = 1,
         int $pageSize = 10,
         string $orderBy = 'updated_at',
-        string $orderDirection = 'desc'
+        string $orderDirection = 'desc',
+        bool $pinPriority = false
     ): array;
 
     public function updateProjectByCondition(array $condition, array $data): bool;
