@@ -9,10 +9,18 @@ logger = get_logger(__name__)
 
 
 class AgentLoader:
-    def __init__(self, agents_dir: Path):
+    def __init__(
+        self,
+        agents_dir: Path,
+        *,
+        code_execution_tools: tuple[str, ...],
+        skill_tools: tuple[str, ...],
+    ):
         self._agents: Dict[str, AgentDefine] = {}
         self._agents_dir = agents_dir
         self._syntax_processor = SyntaxProcessor(agents_dir)
+        self._code_execution_tools = code_execution_tools
+        self._skill_tools = skill_tools
 
     def load_agent(
         self,
@@ -33,9 +41,16 @@ class AgentLoader:
             self._syntax_processor.set_variables(variables)
         metadata.prompt = self._syntax_processor.process_dynamic_syntax(prompt_raw)
 
+        # 代码执行默认开启；只读 Agent 可通过 code_execution: false 关闭两个执行入口。
+        if metadata.code_execution:
+            for execution_tool in self._code_execution_tools:
+                if execution_tool not in metadata.tools_config:
+                    metadata.tools_config[execution_tool] = {}
+                    logger.debug(f"因启用了代码执行，自动注入工具: {execution_tool}")
+
         # 配置了 skills 时自动注入 skill 相关工具（无需在 tools 中显式声明）
         if metadata.skills_config and not metadata.skills_config.is_empty():
-            for skill_tool in ("read_skills", "run_sdk_snippet", "find_skills", "install_skills"):
+            for skill_tool in self._skill_tools:
                 if skill_tool not in metadata.tools_config:
                     metadata.tools_config[skill_tool] = {}
                     logger.debug(f"因配置了 skills，自动注入工具: {skill_tool}")

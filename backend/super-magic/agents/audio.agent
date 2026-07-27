@@ -11,8 +11,6 @@ tools:
   - delete_files
   - shell_exec
   - shell_await
-  - run_python_snippet
-  - run_sdk_snippet
   - audio_understanding
   - split_audio
   - setup_audio_project

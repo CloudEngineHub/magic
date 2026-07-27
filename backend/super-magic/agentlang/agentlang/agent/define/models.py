@@ -62,5 +62,7 @@ class AgentDefine:
 
     tools_config: Dict[str, Any]
     skills_config: Optional[SkillsConfig]
+    # 是否向 Agent 提供 Python 与 Code Mode 执行能力；默认开启
+    code_execution: bool = True
     # 经语法处理器处理后的系统提示正文；由 AgentLoader.load_agent 填入
     prompt: str = ""

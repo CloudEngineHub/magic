@@ -8,6 +8,7 @@
     tools:
       - tool_a
       - tool_b
+    code_execution: false
     skills:
       system_skills:
         - name: skill-creator
@@ -59,6 +60,7 @@ def parse_agent_file(content: str) -> Tuple[AgentDefine, str]:
     agent_define = AgentDefine(
         tools_config=_parse_tools(data),
         skills_config=_parse_skills(data),
+        code_execution=_parse_code_execution(data),
     )
 
     prompt = remove_developer_annotations(prompt_raw).strip()
@@ -96,6 +98,16 @@ def _parse_tools(data: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.debug(f"解析 tools: {list(tools.keys())}")
     return tools
+
+
+def _parse_code_execution(data: Dict[str, Any]) -> bool:
+    """解析代码执行能力开关；未声明时默认开启。"""
+    raw = data.get("code_execution", True)
+    if not isinstance(raw, bool):
+        raise ValueError(
+            f"code_execution 字段格式不合法，期望布尔值，实际: {type(raw)}"
+        )
+    return raw
 
 
 def _parse_skills(data: Dict[str, Any]) -> Optional[SkillsConfig]:
@@ -246,4 +258,3 @@ def _parse_skill_source(raw: Any, field_name: str) -> Union[str, List[SystemSkil
     if isinstance(raw, list):
         return _parse_system_skills(raw)
     raise ValueError(f"{field_name} 字段格式不合法，期望字符串或列表，实际: {type(raw)}")
-

@@ -10,8 +10,6 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
-  - run_python_snippet
-  - run_sdk_snippet
   - write_file
   - edit_file
   - edit_file_range

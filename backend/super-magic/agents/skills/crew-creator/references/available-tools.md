@@ -5,6 +5,8 @@ When managing employee tool configuration, refer to this list to select appropri
 
 Tool names must exactly match the names in this list; otherwise, compilation will fail.
 
+`run_python_snippet`, `run_sdk_snippet`, and `compact_chat_history` are runtime-managed tools. Do not list them in `tools`; the runtime provides them automatically unless code execution is explicitly disabled for the Agent.
+
 ---
 
 ## Recommended Tool Combinations by Function
@@ -21,7 +23,6 @@ tools:
   - grep_search
   - write_file
   - edit_file
-  - compact_chat_history
 ```
 
 ### Research & Analysis Employee
@@ -32,8 +33,6 @@ tools:
   - read_webpages_as_markdown
   - visual_understanding
   - video_understanding
-  - run_python_snippet
-  - run_sdk_snippet
 ```
 
 ### Content Creation Employee
@@ -46,7 +45,6 @@ tools:
   - image_search
   - visual_understanding
   - video_understanding
-  - run_python_snippet
 ```
 
 ### Development & Programming Employee
@@ -54,7 +52,6 @@ tools:
 ```yaml
 tools:
   - shell_exec
-  - run_python_snippet
   - web_search
   - read_webpages_as_markdown
   - edit_file_range
@@ -67,12 +64,10 @@ tools:
 
 ```yaml
 tools:
-  - run_python_snippet
   - shell_exec
   - web_search
   - visual_understanding
   - video_understanding
-  - run_python_snippet
 ```
 
 ---
@@ -107,8 +102,6 @@ tools:
 External file downloads use the `download` system skill with `run_sdk_snippet`, including single-file downloads. Do not put `download_from_url` or the Code Mode-only `download_from_urls` tool in an Agent `tools:` list.
 
 ```yaml
-tools:
-  - run_sdk_snippet
 skills:
   system_skills:
     - name: download
@@ -129,14 +122,13 @@ skills:
 | Tool | Description |
 |------|-------------|
 | `shell_exec` | Execute shell commands |
-| `run_python_snippet` | Run Python code directly |
-| `run_sdk_snippet` | Run Code Mode scripts that call tools through `sdk.tool` |
+
+`run_python_snippet` and `run_sdk_snippet` are automatically available when `code_execution` is enabled. They are not TOOLS.md entries.
 
 ### Content Processing
 
 | Tool | Description |
 |------|-------------|
-| `run_python_snippet` | Use Code Mode; document parsing services are called from the `document-converter` skill |
 | `convert_pdf` | Convert files to/from PDF format |
 
 ### Memory Management
@@ -195,14 +187,12 @@ skills:
 
 | Tool | Description |
 |------|-------------|
-| `compact_chat_history` | Compress chat history to save context |
 | `reflection` | Trigger self-reflection for better reasoning |
 | `thinking` | Extended thinking for complex problems |
 | `summarize` | Summarize long content |
 | `deep_write` | Deep writing with multi-pass refinement |
 | `find_skills` | Search for skills by keyword across all sources |
 | `read_skills` | Read a skill's SKILL.md content |
-| `run_sdk_snippet` | Execute a Python code snippet with sdk.tool access (MCP capabilities exposed as mcp_* tools); intermediate results stay in the execution environment and do not flow through model context |
 
 ### IM Channel
 

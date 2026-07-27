@@ -80,7 +80,13 @@ from app.path_manager import PathManager
 from app.service.todo_service import TodoService
 from app.tools.core.app_tool_validator import app_tool_validator
 from app.tools.core.tool_factory import tool_factory
+from app.tools.compact_chat_history import CompactChatHistory
+from app.tools.find_skills import FindSkillsTool
+from app.tools.install_skills import InstallSkillsTool
 from app.tools.list_dir import ListDir
+from app.tools.read_skills import ReadSkills
+from app.tools.run_python_snippet import RunPythonSnippet
+from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.utils.file_utils import (
     WorkspaceSnapshot,
     extract_workspace_entries,
@@ -261,7 +267,18 @@ class Agent(BaseAgent):
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
 
-        self._agent_loader = AgentLoader(agents_dir=agents_dir)
+        self._agent_loader = AgentLoader(
+            agents_dir=agents_dir,
+            code_execution_tools=(
+                RunPythonSnippet.get_registered_name(),
+                RunSdkSnippet.get_registered_name(),
+            ),
+            skill_tools=(
+                ReadSkills.get_registered_name(),
+                FindSkillsTool.get_registered_name(),
+                InstallSkillsTool.get_registered_name(),
+            ),
+        )
 
         # 设置工具验证器，用于过滤无效工具
         self._tool_validator = app_tool_validator
@@ -3405,7 +3422,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     logger.warning(f"工具 {tool_name} 的预定义参数不存在，跳过添加。请运行工具定义生成命令来创建预定义文件。")
 
         # 2. 始终注入 compact_chat_history（永久工具，无需在 .agent 文件中声明）
-        compact_tool_name = "compact_chat_history"
+        compact_tool_name = CompactChatHistory.get_registered_name()
         existing_names = {t.get("function", {}).get("name") for t in tools_list}
         if (
             compact_tool_name not in existing_names

@@ -243,6 +243,14 @@ class BaseTool(Generic[T], ABC):
             if key not in ['name', 'description']:
                 setattr(self, key, value)
 
+    @classmethod
+    def get_registered_name(cls) -> str:
+        """返回 `@tool` 最终注册到 ToolFactory 的名称。"""
+        tool_name = getattr(cls, "_tool_name", None)
+        if not isinstance(tool_name, str) or not tool_name:
+            raise RuntimeError(f"工具类 {cls.__name__} 尚未确定注册名称")
+        return tool_name
+
     @abstractmethod
     async def execute(self, tool_context: ToolContext, params: T) -> ToolResult:
         """执行工具

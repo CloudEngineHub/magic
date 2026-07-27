@@ -104,7 +104,7 @@ Injected into the `<soul>` section of the compiled `.agent` file.
 
 ## 4. TOOLS.md — Tool Configuration (Optional)
 
-YAML header defines the tool whitelist. **Listed tools are loaded; unlisted tools are not.**
+YAML header defines extra tools and exclusions from the template baseline. `run_python_snippet`, `run_sdk_snippet`, and `compact_chat_history` are runtime-managed and must not be listed in `tools`.
 
 ### Example
 
@@ -115,12 +115,10 @@ tools:
   - read_webpages_as_markdown
   - visual_understanding
   - video_understanding
-  - run_python_snippet
   - list_dir
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - write_file
   - edit_file

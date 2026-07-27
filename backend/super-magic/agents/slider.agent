@@ -8,7 +8,6 @@ tools:
   - read_files
   - shell_exec
   - shell_await
-  - run_sdk_snippet
   - create_slide_project
   - create_slide
   - write_file

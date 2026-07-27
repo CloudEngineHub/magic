@@ -11,8 +11,6 @@ tools:
   - delete_files
   - shell_exec
   - shell_await
-  - run_python_snippet
-  - run_sdk_snippet
   - get_youtube_video_info
   - download_youtube_video_media
   - convert_video_to_audio
