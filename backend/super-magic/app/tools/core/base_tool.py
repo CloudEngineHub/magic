@@ -138,6 +138,11 @@ class BaseTool(Generic[T], ABC):
                 f"{cls.__name__} declares 'code_mode_only' in the class body. "
                 "Use @tool(code_mode_only=True) instead."
             )
+        if "auto_mount" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'auto_mount' in the class body. "
+                "Use @tool(auto_mount=AutoMount.<TYPE>) instead."
+            )
 
         logger = get_logger(__name__)
 
@@ -242,14 +247,6 @@ class BaseTool(Generic[T], ABC):
         for key, value in data.items():
             if key not in ['name', 'description']:
                 setattr(self, key, value)
-
-    @classmethod
-    def get_registered_name(cls) -> str:
-        """返回 `@tool` 最终注册到 ToolFactory 的名称。"""
-        tool_name = getattr(cls, "_tool_name", None)
-        if not isinstance(tool_name, str) or not tool_name:
-            raise RuntimeError(f"工具类 {cls.__name__} 尚未确定注册名称")
-        return tool_name
 
     @abstractmethod
     async def execute(self, tool_context: ToolContext, params: T) -> ToolResult:

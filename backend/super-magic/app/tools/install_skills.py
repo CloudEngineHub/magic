@@ -19,7 +19,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.core.skill_utils.installer import InstallBatchResult, InstallResult, InstallService, SkillRef
 from app.core.skill_utils.skill_sources import get_personal_skills_dir, get_workspace_skills_dir
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.utils.async_file_utils import async_exists, async_is_dir, async_iterdir
 
 logger = get_logger(__name__)
@@ -127,7 +127,7 @@ class InstallSkillsParams(BaseToolParams):
         return self
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class InstallSkillsTool(BaseTool[InstallSkillsParams]):
     """<!--zh
     批量安装或升级 skill 的**唯一入口**。

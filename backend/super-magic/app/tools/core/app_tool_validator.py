@@ -51,6 +51,7 @@ class AppToolValidator(ToolValidatorProtocol):
                 remapped[tool_name] = tool_config
 
         code_mode_only_tools: List[str] = []
+        auto_mount_tools: List[str] = []
         for tool_name in remapped:
             if remote_tool_manager.is_remote_tool(tool_name):
                 continue
@@ -58,6 +59,8 @@ class AppToolValidator(ToolValidatorProtocol):
             tool_info = tool_factory.get_tool(tool_name)
             if tool_info is not None and tool_info.code_mode_only:
                 code_mode_only_tools.append(tool_name)
+            if tool_info is not None and tool_info.auto_mount is not None:
+                auto_mount_tools.append(tool_name)
 
         if code_mode_only_tools:
             invalid_tools = ", ".join(
@@ -67,6 +70,15 @@ class AppToolValidator(ToolValidatorProtocol):
                 f"Code Mode Only tools cannot be declared in .agent tools: {invalid_tools}. "
                 "Remove them from the .agent tools list and call them through the corresponding "
                 "Skill with run_sdk_snippet + sdk.tool.call()."
+            )
+
+        if auto_mount_tools:
+            invalid_tools = ", ".join(
+                f"'{tool_name}'" for tool_name in sorted(auto_mount_tools)
+            )
+            raise ValueError(
+                f"Runtime-managed tools cannot be declared in .agent tools: {invalid_tools}. "
+                "Remove them from the tools list; @tool(auto_mount=...) controls when they are mounted."
             )
 
         valid_tools = {}

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
+from agentlang.agent.define import AgentDefine
 from agentlang.agent.loader import AgentLoader
 from agentlang.agent.state import AgentState
 from agentlang.chat_history import ToolCall
@@ -282,7 +283,7 @@ class BaseAgent(ABC):
             from agentlang.llms.token_usage.models import TokenUsageCollection
             return TokenUsageCollection.create_summary_report([])
 
-    def load_agent_config(self, agent_name: str) -> None:
+    def load_agent_config(self, agent_name: str) -> AgentDefine:
         """
         从 .agent 文件加载 agent 配置并设置相关属性
 
@@ -305,6 +306,7 @@ class BaseAgent(ABC):
             self.tools = agent_define.tools_config
 
         logger.info(f"加载完成: 工具数量={len(self.tools)}")
+        return agent_define
 
     def set_agent_state(self, state: AgentState) -> None:
         """

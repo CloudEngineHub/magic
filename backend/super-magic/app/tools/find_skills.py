@@ -28,7 +28,7 @@ from app.core.skill_utils.search_service import (
     SearchSelectionMode,
 )
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 logger = get_logger(__name__)
@@ -117,7 +117,7 @@ class FindSkillsParams(BaseToolParams):
         return []
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class FindSkillsTool(BaseTool[FindSkillsParams]):
     """<!--zh
     按搜索范围查找可用 Skill Candidate。local 只查本机已可直接读取的 Skill；

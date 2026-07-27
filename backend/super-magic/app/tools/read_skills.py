@@ -14,7 +14,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.core.skill_manager import find_skill
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.tools.read_skills_hooks import (
     SkillLoadedHookContext,
     notify_skill_loaded,
@@ -50,7 +50,7 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
         return value
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
     批量读取可用 skills 的完整内容工具

@@ -15,7 +15,7 @@ from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.core import BaseToolParams, tool
+from app.tools.core import AutoMount, BaseToolParams, tool
 from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
@@ -65,7 +65,7 @@ Script working directory. Defaults to the current workspace. Relative paths reso
         return value
 
 
-@tool()
+@tool(auto_mount=AutoMount.CODE_EXECUTION)
 class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
     """<!--zh
     Python代码片段执行工具，适用于数据分析、处理、转换、快速计算、验证及文件操作和处理等场景

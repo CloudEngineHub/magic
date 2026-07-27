@@ -78,15 +78,10 @@ from app.core.entity.message.client_message import MemoryItem
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.todo_service import TodoService
+from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import app_tool_validator
 from app.tools.core.tool_factory import tool_factory
-from app.tools.compact_chat_history import CompactChatHistory
-from app.tools.find_skills import FindSkillsTool
-from app.tools.install_skills import InstallSkillsTool
 from app.tools.list_dir import ListDir
-from app.tools.read_skills import ReadSkills
-from app.tools.run_python_snippet import RunPythonSnippet
-from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.utils.file_utils import (
     WorkspaceSnapshot,
     extract_workspace_entries,
@@ -94,7 +89,7 @@ from app.utils.file_utils import (
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
-from agentlang.agent.define import SkillsConfig, SystemSkillEntry
+from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 
 logger = get_logger(__name__)
@@ -267,18 +262,7 @@ class Agent(BaseAgent):
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
 
-        self._agent_loader = AgentLoader(
-            agents_dir=agents_dir,
-            code_execution_tools=(
-                RunPythonSnippet.get_registered_name(),
-                RunSdkSnippet.get_registered_name(),
-            ),
-            skill_tools=(
-                ReadSkills.get_registered_name(),
-                FindSkillsTool.get_registered_name(),
-                InstallSkillsTool.get_registered_name(),
-            ),
-        )
+        self._agent_loader = AgentLoader(agents_dir=agents_dir)
 
         # 设置工具验证器，用于过滤无效工具
         self._tool_validator = app_tool_validator
@@ -460,7 +444,8 @@ class Agent(BaseAgent):
     def _initialize_agent(self):
         """初始化 agent"""
         # 从 .agent 文件中加载 agent 配置
-        self.load_agent_config(self.agent_name)
+        agent_define = self.load_agent_config(self.agent_name)
+        self._mount_runtime_tools(agent_define)
 
         # 缓存 compact skill 内容，供被动触发时直接注入（避免运行时读文件）
         self._compact_skill_content = self._load_compact_skill_content()
@@ -517,6 +502,31 @@ class Agent(BaseAgent):
         self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
             is_mainland=Environment.is_mainland(),
         )
+
+    def _mount_runtime_tools(self, agent_define: AgentDefine) -> None:
+        """根据工具声明和 Agent 能力配置挂载运行时基础工具。"""
+        mount_types = [AutoMount.ALWAYS]
+        if agent_define.code_execution:
+            mount_types.append(AutoMount.CODE_EXECUTION)
+        if agent_define.skills_config and not agent_define.skills_config.is_empty():
+            mount_types.append(AutoMount.SKILLS)
+
+        candidates = {
+            tool_name: {}
+            for mount_type in mount_types
+            for tool_name in tool_factory.get_auto_mount_tool_names(mount_type)
+            if tool_name not in self.tools
+        }
+        if not candidates:
+            return
+
+        mounted_tools = {
+            tool_name: tool_config
+            for tool_name, tool_config in candidates.items()
+            if tool_factory.check_tool_availability_light(tool_name)
+        }
+        self.tools.update(mounted_tools)
+        logger.debug(f"自动挂载运行时工具: {', '.join(mounted_tools)}")
 
     def _load_compact_skill_content(self) -> str:
         """同步读取 compact-chat-history SKILL.md 内容（去除 frontmatter），缓存供被动触发时直接注入。"""
@@ -3420,17 +3430,6 @@ Since your subsequent output will be merged with pre-interruption content and di
                 else:
                     # 预定义参数不存在，跳过该工具并警告
                     logger.warning(f"工具 {tool_name} 的预定义参数不存在，跳过添加。请运行工具定义生成命令来创建预定义文件。")
-
-        # 2. 始终注入 compact_chat_history（永久工具，无需在 .agent 文件中声明）
-        compact_tool_name = CompactChatHistory.get_registered_name()
-        existing_names = {t.get("function", {}).get("name") for t in tools_list}
-        if (
-            compact_tool_name not in existing_names
-            and self._is_tool_visible_in_current_context(compact_tool_name)
-        ):
-            compact_param = tool_factory.get_llm_direct_tool_param_from_definition(compact_tool_name)
-            if compact_param:
-                tools_list.append(compact_param)
 
         # MCP 工具不再直接挂载：chat 维度的 MCP 配置由 using-mcp skill
         # 按需查看并调用，不再通过 tool_factory 暴露给模型。
