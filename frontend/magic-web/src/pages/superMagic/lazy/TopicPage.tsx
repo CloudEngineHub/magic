@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { observer } from "mobx-react-lite"
 import { projectStore, topicStore } from "../stores/core"
 import superMagicService from "../services"
+import { isTopicRouteContextReady } from "../services/topicProjectConsistency"
 
 // 懒加载桌面端与移动端对应的 TopicPage 组件
 const TopicPageDesktop = lazy(() => import("@/pages/superMagic/pages/TopicPage/index.desktop"))
@@ -28,8 +29,15 @@ const TopicPage = observer(function TopicPage() {
 	const selectedTopic = topicStore.selectedTopic
 	const needsTopicDetailRestore =
 		selectedTopic?.id !== topicId ||
+		Boolean(projectId && selectedTopic?.project_id !== projectId) ||
 		!selectedTopic?.chat_conversation_id ||
 		!selectedTopic?.chat_topic_id
+	const isDesktopRouteContextReady = isTopicRouteContextReady({
+		projectId,
+		routeTopicId: topicId,
+		selectedProjectId: projectStore.selectedProject?.id,
+		selectedTopic,
+	})
 
 	useEffect(() => {
 		// 仅在移动端且存在 projectId 和 topicId 时尝试恢复上下文
@@ -111,6 +119,11 @@ const TopicPage = observer(function TopicPage() {
 				<TopicPageMobile />
 			</Suspense>
 		)
+	}
+
+	// Suspense 只覆盖代码分包加载；路由数据恢复期间也必须继续显示同一套骨架。
+	if (projectId && topicId && !isDesktopRouteContextReady) {
+		return <TopicPageDesktopSkeleton />
 	}
 
 	// 桌面端渲染，对应桌面端骨架屏和页面内容

@@ -61,6 +61,7 @@ export interface ReferenceDropMatchableItem {
 
 export interface ReferenceResourcePathCandidateOptions {
 	resolveResourcePathCandidates?: (path: string) => string[]
+	normalizeResourcePathForStorage?: (path: string) => string
 }
 
 interface UseReferenceResourceDropOptions {
@@ -557,6 +558,27 @@ export function normalizeProjectDropFiles(
 			path: resolvedPath,
 		}
 	})
+}
+
+export function normalizeProjectDropFilesForStorage(
+	files: ReferenceDropProjectFile[],
+	matchableItems: ReferenceDropMatchableItem[],
+	currentReferenceFiles: string[],
+	options?: ReferenceResourcePathCandidateOptions,
+): ReferenceDropProjectFile[] {
+	const normalizedFiles = normalizeProjectDropFiles(
+		files,
+		matchableItems,
+		currentReferenceFiles,
+		options,
+	)
+	const normalizeResourcePathForStorage = options?.normalizeResourcePathForStorage
+	if (!normalizeResourcePathForStorage) return normalizedFiles
+
+	return normalizedFiles.map((file) => ({
+		...file,
+		path: normalizeResourcePathForStorage(file.path),
+	}))
 }
 
 export function checkProjectReferenceResourceDrop(options: {

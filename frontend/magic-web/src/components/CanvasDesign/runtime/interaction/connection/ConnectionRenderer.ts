@@ -372,16 +372,21 @@ export class ConnectionRenderer {
 	private getAncestorElementIds(elementId: string): string[] {
 		const ancestorIds: string[] = []
 		const visitedIds = new Set<string>()
-		let currentId: string | null =
-			this.canvas.elementManager.findParentIdForElement?.(elementId) ?? null
+		let currentId: string | null = this.resolveParentIdForRendering(elementId)
 
 		while (currentId && !visitedIds.has(currentId)) {
 			ancestorIds.push(currentId)
 			visitedIds.add(currentId)
-			currentId = this.canvas.elementManager.findParentIdForElement?.(currentId) ?? null
+			currentId = this.resolveParentIdForRendering(currentId)
 		}
 
 		return ancestorIds
+	}
+
+	private resolveParentIdForRendering(elementId: string): string | null {
+		const dragTargetParentId = this.canvas.frameManager?.getDragTargetParentId?.(elementId)
+		if (dragTargetParentId !== undefined) return dragTargetParentId
+		return this.canvas.elementManager.findParentIdForElement?.(elementId) ?? null
 	}
 
 	private syncLocalConnectionContainerTransform(
