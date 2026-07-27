@@ -86,6 +86,8 @@ Router::addGroup(
             Router::post('/batch-move', [ProjectApi::class, 'batchMoveProjects']);
             // 批量转让项目
             Router::post('/transfer', [ProjectApi::class, 'transferProjects']);
+            // 获取项目可访问性
+            Router::get('/{project_id}/accessibility', [ProjectApi::class, 'getProjectAccessibility']);
 
             // 项目成员资源管理
             Router::addGroup('/{projectId}/members', static function () {

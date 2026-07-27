@@ -738,13 +738,15 @@ class ResourceShareDomainService
      * @param null|string $userId 当前用户ID（可以为null）
      * @param null|string $userOrganizationCode 当前用户组织编码（可以为null）
      * @param string $shareCode 分享code（用于错误提示）
+     * @param bool $validateOrganization 是否校验分享所属组织与当前用户组织一致，默认 true
      * @throws Exception 如果权限验证失败
      */
     public function validateShareAccess(
         ResourceShareEntity $shareEntity,
         ?string $userId,
         ?string $userOrganizationCode,
-        string $shareCode
+        string $shareCode,
+        bool $validateOrganization = true
     ): void {
         // 团队分享（share_type=2），根据 share_range 区分校验逻辑
         if ($shareEntity->getShareType() == ShareAccessType::TeamShare->value) {
@@ -752,8 +754,7 @@ class ResourceShareDomainService
                 ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
             }
 
-            // 必须是同一组织
-            if ($shareEntity->getOrganizationCode() !== $userOrganizationCode) {
+            if ($validateOrganization && $shareEntity->getOrganizationCode() !== $userOrganizationCode) {
                 ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
             }
 

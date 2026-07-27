@@ -663,6 +663,14 @@ class ProjectDomainService
     }
 
     /**
+     * 按 ID 查询项目，不存在时返回 null（不抛错）.
+     */
+    public function findProjectByIdOrNull(int $projectId): ?ProjectEntity
+    {
+        return $this->projectRepository->findById($projectId);
+    }
+
+    /**
      * Keep the project owner's personal workspace binding aligned with project moves.
      */
     private function syncOwnerWorkspaceBinding(ProjectEntity $project, ?int $targetWorkspaceId): void
