@@ -109,6 +109,10 @@ export function getMessageNodeKey(node: any): string {
 	if (isAskUserMessage(node)) {
 		return getAskUserCorrelationId(node) || node?.app_message_id || ""
 	}
+	if (node?.role === "assistant" && node?.correlation_id) {
+		// Final appMessageId 是持久身份；correlationId 才是同一逻辑卡片的稳定渲染 key。
+		return node.correlation_id
+	}
 	return node?.app_message_id || node?.seq_id || ""
 }
 
