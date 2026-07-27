@@ -32,12 +32,16 @@ import type {
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
-import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
+import MessageEditor, {
+	type MessageEditorMentionChangeContext,
+	type MessageEditorRef,
+} from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
 import {
 	buildReferenceAssetInputs,
+	countVideoReferenceAssetInfosByKind,
 	hasVideoInputs,
 	resolveReferenceAssetLimits,
 	resolveVideoFrameRoleSupport,
@@ -67,8 +71,10 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 import LinkedEditorInputsBar from "../connection/LinkedEditorInputsBar"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
 import {
+	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaReferences,
 	type LinkedEditorMediaKind,
+	type LinkedEditorMediaItem,
 	type LinkedEditorMediaPolicy,
 	type LinkedEditorMediaReference,
 } from "../connection/linkedEditorInputs"
@@ -92,6 +98,7 @@ import {
 	type VideoPromptPlaceholderReference,
 } from "./prompt-placeholders/video-prompt-placeholder"
 import { hasVideoGenerationRequestUserIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
+import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -140,6 +147,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
 	const [isSending, setIsSending] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
+	const [mentionedReferencePaths, setMentionedReferencePaths] = useState<string[]>([])
 	const sendingRef = useRef(false)
 	const isMountedRef = useRef(false)
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
@@ -159,7 +167,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		...(syncElementSize !== undefined ? { syncElementSize } : {}),
 	})
 	const { handlers } = config
-	const { buildRequestParams } = handlers
+	const { linkedFrameBindings } = config
+	const { buildRequestParams, replaceFrameImageAt, setLinkedFrameBindings } = handlers
 	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
 		const supportedKinds: LinkedEditorMediaKind[] = []
 		if (config.supportsReferenceImages) supportedKinds.push("image")
@@ -192,6 +201,36 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		targetKind: "video",
 		mediaPolicy: linkedMediaPolicy,
 	})
+	const { handleMentionedReferencePathsChange } = linkedEditorInputs
+	const linkedFrameBindingSync = useMemo(
+		() =>
+			synchronizeLinkedFrameBindings({
+				previous: linkedFrameBindings,
+				currentFrameImages: config.currentFrameImages,
+				supportsStartFrame: config.supportsStartFrame,
+				supportsEndFrame: config.supportsEndFrame,
+				linkedMediaItems: linkedEditorInputs.mediaItems,
+			}),
+		[
+			config.currentFrameImages,
+			config.supportsEndFrame,
+			config.supportsStartFrame,
+			linkedEditorInputs.mediaItems,
+			linkedFrameBindings,
+		],
+	)
+	useEffect(() => {
+		if (linkedFrameBindingSync.bindings !== linkedFrameBindings) {
+			setLinkedFrameBindings(linkedFrameBindingSync.bindings)
+		}
+		linkedFrameBindingSync.frameUpdates.forEach((update) => {
+			replaceFrameImageAt(update.slotIndex, {
+				path: update.path,
+				src: update.path,
+				fileName: update.fileName,
+			})
+		})
+	}, [linkedFrameBindingSync, linkedFrameBindings, replaceFrameImageAt, setLinkedFrameBindings])
 	const mergedReferenceAssetInfos = useMemo(
 		() =>
 			mergeLinkedVideoReferenceAssetInfos(
@@ -390,11 +429,56 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	)
 
 	const handleMentionChange = useCallback(
-		(paths: string[], currentPrompt: string) => {
+		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			setMentionedReferencePaths(paths)
+			handleMentionedReferencePathsChange(paths, {
+				deselectRemoved: context.source === "user",
+			})
 			handlers.handleReferenceMentionPathsChange(paths)
 			void currentPrompt
 		},
-		[handlers],
+		[handleMentionedReferencePathsChange, handlers],
+	)
+
+	const handleLinkedMediaFrameSelect = useCallback(
+		(
+			slotIndex: number,
+			frameRole: "start" | "end",
+			item: LinkedEditorMediaItem & { kind: "image"; path: string },
+		) => {
+			if (!item.path) return
+			const sourceFileName =
+				item.fileName || getCanvasResourceFileName(item.path) || item.path
+			const sourceIdentity = getLinkedMediaReferenceIdentity(item.path)
+			const duplicateSourceFrameIndex = config.currentFrameImages.findIndex(
+				(path, index) =>
+					index !== slotIndex &&
+					Boolean(path) &&
+					getLinkedMediaReferenceIdentity(path) === sourceIdentity,
+			)
+			if (duplicateSourceFrameIndex >= 0) {
+				toast.error(t("videoEditor.frameResourceAlreadyUsed", "该资源已用于其他帧"))
+				return
+			}
+			handlers.replaceFrameImageAt(slotIndex, {
+				path: item.path,
+				src: item.path,
+				fileName: sourceFileName,
+			})
+			setLinkedFrameBindings((previous) => {
+				const next = [...previous]
+				next[slotIndex] = {
+					framePath: item.path,
+					sourceConnectionId: item.connectionId,
+					sourcePath: item.path,
+					sourceKind: "image",
+					sourceFileName,
+					frameRole,
+				}
+				return next
+			})
+		},
+		[config.currentFrameImages, handlers, setLinkedFrameBindings, t],
 	)
 
 	const handleProjectSelect = useCallback(
@@ -787,7 +871,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			/>
 			<LinkedEditorInputsBar
 				textConnections={linkedEditorInputs.textConnections}
-				onRemoveConnection={linkedEditorInputs.removeConnection}
+				isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+				onTextConnectionSelectedChange={linkedEditorInputs.setTextConnectionSelected}
+				onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
 			/>
 			<MessageEditor
 				ref={editorRef}
@@ -818,7 +904,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onFocusEditor={() => editorRef.current?.focus()}
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs.mediaItems}
-				onRemoveLinkedConnection={linkedEditorInputs.removeConnection}
+				linkedMentionedReferencePaths={mentionedReferencePaths}
+				onLinkedMediaSelectionChange={linkedEditorInputs.setMediaConnectionSelected}
+				linkedFrameBindings={linkedFrameBindings}
+				onLinkedMediaFrameSelect={handleLinkedMediaFrameSelect}
 				renderPromptOptimizationButton={() => (
 					<PromptOptimizationButton
 						buildRequest={buildPromptOptimizationRequest}
@@ -890,7 +979,9 @@ function mergeLinkedVideoReferenceAssetInfos(
 	manualInfos: VideoReferenceAssetInfo[],
 	linkedReferences: LinkedEditorMediaReference[],
 ): VideoReferenceAssetInfo[] {
-	const manualInfoByPath = new Map(manualInfos.map((info) => [info.path, info]))
+	const manualInfoByIdentity = new Map(
+		manualInfos.map((info) => [getLinkedMediaReferenceIdentity(info.path), info]),
+	)
 	return mergeLinkedMediaReferences(
 		manualInfos.map((info) => ({
 			kind: info.assetType,
@@ -899,24 +990,8 @@ function mergeLinkedVideoReferenceAssetInfos(
 		linkedReferences,
 	).map(
 		(reference) =>
-			manualInfoByPath.get(reference.path) ??
+			manualInfoByIdentity.get(getLinkedMediaReferenceIdentity(reference.path)) ??
 			buildVideoReferenceAssetInfoFromReference(reference),
-	)
-}
-
-function countVideoReferenceAssetInfosByKind(assets: VideoReferenceAssetInfo[]): {
-	images: number
-	videos: number
-	audios: number
-} {
-	return assets.reduce(
-		(acc, item) => {
-			if (item.assetType === "image") acc.images += 1
-			if (item.assetType === "video") acc.videos += 1
-			if (item.assetType === "audio") acc.audios += 1
-			return acc
-		},
-		{ images: 0, videos: 0, audios: 0 },
 	)
 }
 

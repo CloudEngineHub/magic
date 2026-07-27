@@ -30,6 +30,7 @@ import { createReferenceResourcePanelItemFromPath } from "../message/reference-a
 import type { ReferenceResourceType } from "../message/reference-assets/reference-resource.types"
 import {
 	cloneFrameSlotInfos,
+	cloneLinkedFrameBindings,
 	cloneModeDraftCache,
 	cloneVideoReferenceAssetInfos,
 	mergeCurrentUiIntoModeDraftCache,
@@ -64,6 +65,7 @@ import {
 	resolveReferenceAssetType,
 } from "./model-config/video-editor-config.model"
 import type {
+	LinkedFrameBinding,
 	VideoEditorConfig,
 	VideoInputSlotInfo,
 	VideoModelOption,
@@ -197,6 +199,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const [frameImageInfos, setFrameImageInfos] = useState<Array<UploadFileResponse | undefined>>(
 		[],
 	)
+	const [linkedFrameBindings, setLinkedFrameBindings] = useState<
+		Array<LinkedFrameBinding | undefined>
+	>([])
 	const [referenceImageInfos, setReferenceImageInfos] = useState<VideoReferenceAssetInfo[]>([])
 	const [protectedReferencePaths, setProtectedReferencePaths] = useState<string[]>([])
 	const [isPopoverOpen, setIsPopoverOpen] = useState(false)
@@ -301,6 +306,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					getRequestInputTab(request, inputMode),
 				),
 				frameImageInfos: frameInfos,
+				linkedFrameBindings: [],
 				referenceAssetInfos: referenceInfos,
 			}
 		},
@@ -321,6 +327,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				maxFrameCount > 0
 					? cloneFrameSlotInfos(cachedDraft.frameImageInfos).slice(0, maxFrameCount)
 					: []
+			const linkedFrameBindings =
+				maxFrameCount > 0
+					? cloneLinkedFrameBindings(cachedDraft.linkedFrameBindings).slice(
+							0,
+							maxFrameCount,
+						)
+					: []
 			let referenceInfos = cloneVideoReferenceAssetInfos(cachedDraft.referenceAssetInfos)
 			const maxReferenceCount = getMaxReferenceImageCount(model, inputMode, referenceInfos)
 			if (maxReferenceCount !== Infinity && referenceInfos.length > maxReferenceCount) {
@@ -334,6 +347,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					cachedDraft.activeInputTab,
 				),
 				frameImageInfos: frameInfos,
+				linkedFrameBindings,
 				referenceAssetInfos: referenceInfos,
 			}
 		},
@@ -975,6 +989,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setFrameImageInfos((prev) =>
 				nextFrameMaxCount > 0 ? prev.slice(0, nextFrameMaxCount) : [],
 			)
+			setLinkedFrameBindings((previous) =>
+				nextFrameMaxCount > 0 ? previous.slice(0, nextFrameMaxCount) : [],
+			)
 			const nextModeConfig = getInputModeConfig(nextModel, nextInputMode)
 			const limitedReferenceInfos = clampReferenceAssetsToLimits(
 				referenceImageInfos,
@@ -1123,6 +1140,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				activeInputTab,
 				frameImageInfos,
 				referenceImageInfos,
+				linkedFrameBindings,
 			)
 			modeDraftCacheRef.current = nextCache
 			setSelectedInputMode(value)
@@ -1142,6 +1160,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				resolveModeDraftInputTab(value, selectedModel, nextDraft.activeInputTab),
 			)
 			setFrameImageInfos(nextDraft.frameImageInfos ?? [])
+			setLinkedFrameBindings(nextDraft.linkedFrameBindings ?? [])
 			setReferenceImageInfos(nextReferenceInfos)
 			applyBindingStateFromPromptAndReferences(decodedDraftPrompt, nextReferenceInfos)
 		},
@@ -1152,6 +1171,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			getModeDraftForView,
 			prompt,
 			referenceImageInfos,
+			linkedFrameBindings,
 			resetSelectedResourceSlot,
 			promptPlaceholderTokenConfig,
 			selectedModel,
@@ -1591,6 +1611,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					),
 					draftFromRequest.frameImageInfos ?? [],
 					draftFromRequestReferenceInfos,
+					draftFromRequest.linkedFrameBindings ?? [],
 				)
 			}
 			const restoredModeDraft = getModeDraftForView(
@@ -1600,6 +1621,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			)
 			const restoredReferenceInfosForDraft = restoredModeDraft.referenceAssetInfos ?? []
 			const restoredFrameInfosForDraft = restoredModeDraft.frameImageInfos ?? []
+			const restoredLinkedFrameBindings = restoredModeDraft.linkedFrameBindings ?? []
 			const restoredActiveInputTabForDraft = resolveModeDraftInputTab(
 				restoredInputMode,
 				fallbackModel,
@@ -1620,6 +1642,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			)
 			setPrompt(restoredPrompt)
 			setFrameImageInfos(restoredFrameInfosForDraft)
+			setLinkedFrameBindings(restoredLinkedFrameBindings)
 			setActiveInputTab(restoredActiveInputTabForDraft)
 			setReferenceImageInfos(restoredReferenceInfosForDraft)
 			applyBindingStateFromPromptAndReferences(restoredPrompt, restoredReferenceInfosForDraft)
@@ -1631,6 +1654,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				restoredActiveInputTabForDraft,
 				restoredFrameInfosForDraft,
 				restoredReferenceInfosForDraft,
+				restoredLinkedFrameBindings,
 			)
 			modeDraftCacheRef.current = mergedDrafts
 			elementInstance.saveModeInputDrafts(mergedDrafts as StoredVideoModeDraftsMap)
@@ -1704,6 +1728,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			activeInputTab,
 			frameImageInfos,
 			referenceImageInfos,
+			linkedFrameBindings,
 		)
 		modeDraftCacheRef.current = merged
 		elementInstance.saveModeInputDrafts(merged as StoredVideoModeDraftsMap)
@@ -1715,6 +1740,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		prompt,
 		frameImageInfos,
 		referenceImageInfos,
+		linkedFrameBindings,
 	])
 
 	useUpdateEffect(() => {
@@ -1733,6 +1759,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					activeInputTab,
 					frameImageInfos,
 					referenceImageInfos,
+					linkedFrameBindings,
 				)
 				modeDraftCacheRef.current = merged
 				elementInstance.saveModeInputDrafts(merged as StoredVideoModeDraftsMap)
@@ -1747,6 +1774,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const handlers = useMemo(
 		() => ({
 			setPrompt,
+			setLinkedFrameBindings,
 			setPopoverOpen: setIsPopoverOpen,
 			setReferenceProjectPanelOpen: setIsReferenceProjectPanelOpen,
 			handleModelChange,
@@ -1818,6 +1846,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedCompressionQuality,
 		currentFrameImages,
 		frameImageInfos,
+		linkedFrameBindings,
 		currentReferenceImages,
 		protectedReferencePaths,
 		referenceBindingMode,

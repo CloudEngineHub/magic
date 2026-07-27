@@ -1256,11 +1256,29 @@ export interface CanvasDesignStorageData {
 	tempImageConfigs?: Record<string, Partial<GenerateImageRequest>>
 	/** 视频元素临时配置（未发送前的配置） */
 	tempVideoConfigs?: Record<string, Partial<GenerateVideoRequest>>
+	/** 关联文本/媒体的用户选择与文本顺序（不进入生成 API） */
+	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraft>
 	/**
 	 * 视频元素各 input_mode 互斥区暂存（不入生成 API，仅编辑器与本地缓存）
 	 * key 为画布元素 id
 	 */
 	tempVideoModeDrafts?: Record<string, StoredVideoModeDraftsMap>
+}
+
+export interface StoredLinkedEditorDraft {
+	version: 1
+	selectedTextConnectionIds: string[]
+	orderedTextConnectionIds: string[]
+	selectedMediaConnectionIds: string[]
+}
+
+export interface StoredLinkedFrameBinding {
+	framePath: string
+	sourceConnectionId: string
+	sourcePath: string
+	sourceKind: "image"
+	sourceFileName: string
+	frameRole: "start" | "end"
 }
 
 /** 与 VideoGenerateEditor 中单模式草稿结构一致，用于 localStorage 持久化 */
@@ -1269,6 +1287,7 @@ export interface StoredVideoModeInputDraft {
 	activeInputTab?: "frame" | "reference"
 	frameImageInfos: Array<UploadFileResponse | undefined>
 	referenceImageInfos: Array<UploadFileResponse & { assetType: "image" | "video" | "audio" }>
+	linkedFrameBindings?: Array<StoredLinkedFrameBinding | undefined>
 }
 
 export type StoredVideoModeDraftsMap = Partial<

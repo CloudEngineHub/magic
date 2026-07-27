@@ -20,17 +20,18 @@
 		"useRemote": "Use new"
 	},
 	"connectionEditor": {
-		"linkedMediaActive": "Linked",
+		"includeLinkedMedia": "Include as reference media",
+		"includeLinkedText": "Include in generation",
 		"linkedMediaDuplicate": "Already added",
+		"linkedMediaMentionLocked": "This resource is referenced in the prompt. Remove the @ mention before deselecting it.",
 		"linkedMediaMissingResource": "Missing resource",
 		"linkedMediaOverLimit": "Over limit",
-		"linkedMediaUnavailable": "Unavailable",
 		"linkedMediaUnsupportedMode": "Not supported in current mode",
 		"linkedMediaUnsupportedType": "Unsupported type",
 		"mediaKindAudio": "Audio",
 		"mediaKindImage": "Image",
 		"mediaKindVideo": "Video",
-		"removeConnection": "Remove connection"
+		"reorderLinkedText": "Reorder linked text"
 	},
 	"dropOverlay": {
 		"loading": "Loading",
@@ -504,6 +505,7 @@
 		"aspectRatio": "Aspect ratio",
 		"duration": "Duration",
 		"firstFrame": "First frame",
+		"frameResourceAlreadyUsed": "This resource is already used for another frame",
 		"frames": "First & last frame",
 		"generateAgain": "Generate again",
 		"generationSettings": "Generation settings",
@@ -538,6 +540,8 @@
 		"slotLabelReferenceImage": "Ref",
 		"slotLabelReferenceMedia": "Media",
 		"standard": "Text to video",
+		"useAsEndFrame": "Use as end frame",
+		"useAsStartFrame": "Use as start frame",
 		"videoEdit": "Video Edit",
 		"videoEditRequiresOneVideo": "Video edit mode requires exactly 1 reference video"
 	},

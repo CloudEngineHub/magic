@@ -29,12 +29,13 @@ import SourceList, {
 import sourceListStyles from "../../panels/source-list/SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
-import type { TFunction } from "../../../public/i18n-types"
-import type {
-	LinkedEditorMediaInactiveReason,
-	LinkedEditorMediaItem,
-	LinkedEditorMediaKind,
+import type { LinkedEditorMediaItem, LinkedEditorMediaKind } from "../connection/linkedEditorInputs"
+import {
+	getLinkedMediaReferenceIdentity,
+	mergeLinkedMediaPaths,
+	resolveLinkedMediaDisplay,
 } from "../connection/linkedEditorInputs"
+import { useLinkedMediaSourceListOption } from "../connection/useLinkedMediaSourceListOption"
 
 interface ImageEditorReferencePopoverState {
 	slotKey: string
@@ -147,7 +148,8 @@ interface ImageEditorControlsProps {
 	onReferenceFileRemove?: (path: string) => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
-	onRemoveLinkedConnection?: (connectionId: string) => void
+	linkedMentionedReferencePaths?: string[]
+	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
 	renderSendButton?: () => React.ReactNode
 }
@@ -161,11 +163,21 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onReferenceFileRemove,
 		onPreviewMediaResource,
 		linkedMediaItems = [],
-		onRemoveLinkedConnection,
+		linkedMentionedReferencePaths = [],
+		onLinkedMediaSelectionChange,
 		renderPromptOptimizationButton,
 		renderSendButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
+	const createLinkedMediaSourceListOption = useLinkedMediaSourceListOption()
+	const linkedMediaKindLabelByKind = useMemo<Record<LinkedEditorMediaKind, string>>(
+		() => ({
+			image: t("connectionEditor.mediaKindImage", "图片"),
+			video: t("connectionEditor.mediaKindVideo", "视频"),
+			audio: t("connectionEditor.mediaKindAudio", "音频"),
+		}),
+		[t],
+	)
 
 	const {
 		selectedModelId,
@@ -196,7 +208,24 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				.map((item) => item.path),
 		[linkedMediaItems],
 	)
-	const effectiveReferenceFileCount = currentReferenceFiles.length + linkedActiveImagePaths.length
+	const mentionedReferencePathSet = useMemo(
+		() => new Set(linkedMentionedReferencePaths.map(getLinkedMediaReferenceIdentity)),
+		[linkedMentionedReferencePaths],
+	)
+	const effectiveReferenceFileCount = mergeLinkedMediaPaths(
+		currentReferenceFiles,
+		linkedActiveImagePaths,
+	).length
+	const { manualItems: visibleReferenceFileInfos, linkedItems: visibleLinkedMediaItems } =
+		useMemo(
+			() =>
+				resolveLinkedMediaDisplay(
+					referenceFileInfos.map((info, index) => ({ info, index })),
+					(entry) => entry.info.path,
+					linkedMediaItems,
+				),
+			[linkedMediaItems, referenceFileInfos],
+		)
 
 	useEffect(() => {
 		if (!isPopoverOpen) {
@@ -220,30 +249,26 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 
 	const referenceSourceListOptions = useMemo<SourceListOption[]>(() => {
 		if (!maxReferenceFiles || maxReferenceFiles <= 0) {
-			return linkedMediaItems
-				.filter((item) => item.path)
-				.map((item, index) =>
-					createLinkedMediaSourceListOption({
-						item: item as LinkedEditorMediaItem & { path: string },
-						index,
-						slotIndex: index,
-						label: getLinkedMediaKindLabel(t, item.kind),
-						removeResourceAriaLabel: t(
-							"imageEditor.removeLinkedReferenceResource",
-							"移除该关联资源",
-						),
-						previewResourceAriaLabel: t(
-							"mediaResourceFullscreenPreview.open",
-							"预览媒体资源",
-						),
-						t,
-						onPreviewMediaResource,
-						onRemoveLinkedConnection,
-					}),
-				)
+			return visibleLinkedMediaItems.map((item, index) =>
+				createLinkedMediaSourceListOption({
+					item,
+					index,
+					slotIndex: index,
+					label: linkedMediaKindLabelByKind[item.kind],
+					previewResourceAriaLabel: t(
+						"mediaResourceFullscreenPreview.open",
+						"预览媒体资源",
+					),
+					onPreviewMediaResource,
+					onLinkedMediaSelectionChange,
+					isMentioned: mentionedReferencePathSet.has(
+						getLinkedMediaReferenceIdentity(item.path),
+					),
+				}),
+			)
 		}
 
-		const options: SourceListOption[] = referenceFileInfos.map((info, index) => {
+		const options: SourceListOption[] = visibleReferenceFileInfos.map(({ info, index }) => {
 			return {
 				kind: "slot",
 				label: t("imageEditor.referenceImage", "参考图"),
@@ -260,30 +285,23 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			}
 		})
 
-		const linkedOptions = linkedMediaItems
-			.filter((item) => item.path)
-			.map((item, index) =>
-				createLinkedMediaSourceListOption({
-					item: item as LinkedEditorMediaItem & { path: string },
-					index,
-					slotIndex: currentReferenceFiles.length + index,
-					label:
-						item.kind === "image"
-							? t("imageEditor.referenceImage", "参考图")
-							: getLinkedMediaKindLabel(t, item.kind),
-					removeResourceAriaLabel: t(
-						"imageEditor.removeLinkedReferenceResource",
-						"移除该关联资源",
-					),
-					previewResourceAriaLabel: t(
-						"mediaResourceFullscreenPreview.open",
-						"预览媒体资源",
-					),
-					t,
-					onPreviewMediaResource,
-					onRemoveLinkedConnection,
-				}),
-			)
+		const linkedOptions = visibleLinkedMediaItems.map((item, index) =>
+			createLinkedMediaSourceListOption({
+				item,
+				index,
+				slotIndex: currentReferenceFiles.length + index,
+				label:
+					item.kind === "image"
+						? t("imageEditor.referenceImage", "参考图")
+						: linkedMediaKindLabelByKind[item.kind],
+				previewResourceAriaLabel: t("mediaResourceFullscreenPreview.open", "预览媒体资源"),
+				onPreviewMediaResource,
+				onLinkedMediaSelectionChange,
+				isMentioned: mentionedReferencePathSet.has(
+					getLinkedMediaReferenceIdentity(item.path),
+				),
+			}),
+		)
 		options.push(...linkedOptions)
 
 		if (canAddReferenceFile) {
@@ -302,12 +320,15 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		return options
 	}, [
 		maxReferenceFiles,
-		referenceFileInfos,
-		linkedMediaItems,
+		visibleReferenceFileInfos,
+		visibleLinkedMediaItems,
+		mentionedReferencePathSet,
+		createLinkedMediaSourceListOption,
+		linkedMediaKindLabelByKind,
 		t,
 		onReferenceFileRemove,
 		onPreviewMediaResource,
-		onRemoveLinkedConnection,
+		onLinkedMediaSelectionChange,
 		handlers.handleReferenceFileRemove,
 		canAddReferenceFile,
 		currentReferenceFiles.length,
@@ -320,7 +341,10 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			const filesWithoutSlot = slotPath
 				? currentReferenceFiles.filter((path) => path !== slotPath)
 				: currentReferenceFiles
-			const effectiveFilesWithoutSlot = [...filesWithoutSlot, ...linkedActiveImagePaths]
+			const effectiveFilesWithoutSlot = mergeLinkedMediaPaths(
+				filesWithoutSlot,
+				linkedActiveImagePaths,
+			)
 
 			return {
 				slotKey: option.value,
@@ -336,10 +360,10 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 
 	const renderReferenceSourceListItem = useCallback(
 		(params: SourceListRenderItemParams) => {
-			const { option, className, style, content, slotRootRef } = params
+			const { option, className, style, content, onClick, slotRootRef } = params
 			if (option.readOnly) {
 				return (
-					<div ref={slotRootRef} className={className} style={style}>
+					<div ref={slotRootRef} className={className} style={style} onClick={onClick}>
 						{content}
 					</div>
 				)
@@ -536,78 +560,4 @@ function getSettingTestIdKey(key: string): string {
 		.replace(/[^a-z0-9]+/gi, "-")
 		.replace(/^-|-$/g, "")
 		.toLowerCase()
-}
-
-function getLinkedMediaKindLabel(t: TFunction, kind: LinkedEditorMediaKind): string {
-	if (kind === "image") return t("connectionEditor.mediaKindImage", "图片")
-	if (kind === "video") return t("connectionEditor.mediaKindVideo", "视频")
-	return t("connectionEditor.mediaKindAudio", "音频")
-}
-
-function getLinkedMediaInactiveReasonLabel(
-	t: TFunction,
-	reason: LinkedEditorMediaInactiveReason | undefined,
-): string {
-	if (reason === "unsupported-type")
-		return t("connectionEditor.linkedMediaUnsupportedType", "类型不支持")
-	if (reason === "unsupported-mode")
-		return t("connectionEditor.linkedMediaUnsupportedMode", "当前模式不支持")
-	if (reason === "over-limit") return t("connectionEditor.linkedMediaOverLimit", "数量超限")
-	if (reason === "missing-resource")
-		return t("connectionEditor.linkedMediaMissingResource", "资源缺失")
-	if (reason === "duplicate") return t("connectionEditor.linkedMediaDuplicate", "已添加")
-	return t("connectionEditor.linkedMediaUnavailable", "不可用")
-}
-
-function getLinkedMediaStatusTone(item: LinkedEditorMediaItem): "neutral" | "warning" | "danger" {
-	if (item.status === "active") return "neutral"
-	if (item.reason === "over-limit" || item.reason === "unsupported-type") return "danger"
-	return "warning"
-}
-
-function createLinkedMediaSourceListOption(options: {
-	item: LinkedEditorMediaItem & { path: string }
-	index: number
-	slotIndex: number
-	label: string
-	removeResourceAriaLabel: string
-	previewResourceAriaLabel: string
-	t: TFunction
-	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
-	onRemoveLinkedConnection?: (connectionId: string) => void
-}): SourceListOption {
-	const {
-		item,
-		index,
-		slotIndex,
-		label,
-		removeResourceAriaLabel,
-		previewResourceAriaLabel,
-		t,
-		onPreviewMediaResource,
-		onRemoveLinkedConnection,
-	} = options
-	const statusLabel =
-		item.status === "active"
-			? t("connectionEditor.linkedMediaActive", "已关联")
-			: getLinkedMediaInactiveReasonLabel(t, item.reason)
-	return {
-		kind: "slot",
-		label,
-		value: `linked-reference-${item.connectionId}-${index}`,
-		slotIndex,
-		groupId: item.kind,
-		resourcePath: item.path,
-		resourceFileName: item.fileName,
-		sourceCrop: item.sourceCrop,
-		readOnly: true,
-		statusLabel,
-		statusTone: getLinkedMediaStatusTone(item),
-		removeResourceAriaLabel,
-		previewResourceAriaLabel,
-		onPreviewResource: onPreviewMediaResource,
-		onRemoveResource: onRemoveLinkedConnection
-			? () => onRemoveLinkedConnection(item.connectionId)
-			: undefined,
-	}
 }

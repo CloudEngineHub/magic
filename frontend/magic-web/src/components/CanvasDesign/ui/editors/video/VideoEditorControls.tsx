@@ -3,7 +3,12 @@ import type { CSSProperties, ForwardedRef, PointerEvent, ReactNode, RefCallback 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import EditorModelSelect from "./model-config/EditorModelSelect"
-import type { VideoEditorConfig, VideoReferenceAssetKind } from "./video-editor-config.types"
+import type {
+	VideoEditorConfig,
+	LinkedFrameBinding,
+	VideoReferenceAssetInfo,
+	VideoReferenceAssetKind,
+} from "./video-editor-config.types"
 import type { VideoInputMode } from "../../../public/magic-types"
 import styles from "./index.module.css"
 import sourceListStyles from "../../panels/source-list/SourceList.module.css"
@@ -13,7 +18,10 @@ import SourceList, {
 	type SourceListSlotOption,
 } from "../../panels/source-list/index"
 import { VideoGenerationSettingsPopover } from "./model-config/VideoGenerationSettingsPopover"
-import { resolveReferenceAssetLimits } from "./model-config/video-editor-config.model"
+import {
+	countVideoReferenceAssetInfosByKind,
+	resolveReferenceAssetLimits,
+} from "./model-config/video-editor-config.model"
 import ReferenceResourceSlotPopover from "../message/reference-assets/ReferenceResourceSlotPopover"
 import type {
 	ReferenceResourceSourceType,
@@ -26,12 +34,16 @@ import type {
 import { cn } from "../../../runtime/shared/lib/utils"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
-import type { TFunction } from "../../../public/i18n-types"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
-import type {
-	LinkedEditorMediaInactiveReason,
-	LinkedEditorMediaItem,
+import type { LinkedEditorMediaItem } from "../connection/linkedEditorInputs"
+import {
+	dedupeLinkedMediaItemsByPath,
+	getLinkedMediaReferenceIdentity,
+	mergeLinkedMediaReferences,
+	resolveLinkedMediaDisplay,
 } from "../connection/linkedEditorInputs"
+import { useLinkedMediaSourceListOption } from "../connection/useLinkedMediaSourceListOption"
+import LinkedFrameAssignmentPopover, { type LinkedFrameRole } from "./LinkedFrameAssignmentPopover"
 
 interface VideoEditorEmptyReferenceSlotPopoverProps {
 	inputTab: "frame" | "reference"
@@ -162,92 +174,34 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 	ref.current = value
 }
 
-function getLinkedMediaInactiveReasonLabel(
-	t: TFunction,
-	reason: LinkedEditorMediaInactiveReason | undefined,
-): string {
-	if (reason === "unsupported-type")
-		return t("connectionEditor.linkedMediaUnsupportedType", "类型不支持")
-	if (reason === "unsupported-mode")
-		return t("connectionEditor.linkedMediaUnsupportedMode", "当前模式不支持")
-	if (reason === "over-limit") return t("connectionEditor.linkedMediaOverLimit", "数量超限")
-	if (reason === "missing-resource")
-		return t("connectionEditor.linkedMediaMissingResource", "资源缺失")
-	if (reason === "duplicate") return t("connectionEditor.linkedMediaDuplicate", "已添加")
-	return t("connectionEditor.linkedMediaUnavailable", "不可用")
-}
-
-function getLinkedMediaStatusTone(item: LinkedEditorMediaItem): "neutral" | "warning" | "danger" {
-	if (item.status === "active") return "neutral"
-	if (item.reason === "over-limit" || item.reason === "unsupported-type") return "danger"
-	return "warning"
-}
-
-function countLinkedMediaItemsByKind(items: Array<LinkedEditorMediaItem & { path: string }>): {
-	images: number
-	videos: number
-	audios: number
-} {
-	return items.reduce(
-		(acc, item) => {
-			if (item.kind === "image") acc.images += 1
-			if (item.kind === "video") acc.videos += 1
-			if (item.kind === "audio") acc.audios += 1
-			return acc
-		},
-		{ images: 0, videos: 0, audios: 0 },
-	)
-}
-
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
 	return item.fileName || getCanvasResourceFileName(item.path) || item.path
 }
 
-function createLinkedMediaSourceListOption(options: {
-	item: LinkedEditorMediaItem & { path: string }
-	index: number
-	slotIndex: number
-	label: string
-	removeResourceAriaLabel: string
-	previewResourceAriaLabel: string
-	t: TFunction
-	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
-	onRemoveLinkedConnection?: (connectionId: string) => void
-}): SourceListOption {
-	const {
-		item,
-		index,
-		slotIndex,
-		label,
-		removeResourceAriaLabel,
-		previewResourceAriaLabel,
-		t,
-		onPreviewMediaResource,
-		onRemoveLinkedConnection,
-	} = options
-	const statusLabel =
-		item.status === "active"
-			? t("connectionEditor.linkedMediaActive", "已关联")
-			: getLinkedMediaInactiveReasonLabel(t, item.reason)
-	return {
-		kind: "slot",
-		label,
-		value: `linked-reference-${item.connectionId}-${index}`,
-		slotIndex,
-		groupId: item.kind,
-		resourcePath: item.path,
-		resourceFileName: item.fileName,
-		sourceCrop: item.sourceCrop,
-		readOnly: true,
-		statusLabel,
-		statusTone: getLinkedMediaStatusTone(item),
-		removeResourceAriaLabel,
-		previewResourceAriaLabel,
-		onPreviewResource: onPreviewMediaResource,
-		onRemoveResource: onRemoveLinkedConnection
-			? () => onRemoveLinkedConnection(item.connectionId)
-			: undefined,
-	}
+export function resolveFrameSlotIndex(
+	role: LinkedFrameRole,
+	supportsStartFrame: boolean,
+	supportsEndFrame: boolean,
+): number {
+	if (role === "start") return 0
+	return supportsStartFrame && supportsEndFrame ? 1 : 0
+}
+
+function resolveLinkedFrameAssignedRoles(
+	bindings: Array<LinkedFrameBinding | undefined>,
+	item: LinkedEditorMediaItem & { kind: "image"; path: string },
+): LinkedFrameRole[] {
+	return bindings.flatMap((binding) => {
+		if (!binding) return []
+		if (
+			binding.sourceConnectionId !== item.connectionId ||
+			getLinkedMediaReferenceIdentity(binding.sourcePath) !==
+				getLinkedMediaReferenceIdentity(item.path)
+		) {
+			return []
+		}
+		return [binding.frameRole]
+	})
 }
 
 /** 视频编辑器底部工具区：模型、输入 Tab、参考图与发送区 */
@@ -275,7 +229,14 @@ interface VideoEditorControlsProps {
 	onFocusEditor?: () => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
-	onRemoveLinkedConnection?: (connectionId: string) => void
+	linkedMentionedReferencePaths?: string[]
+	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
+	linkedFrameBindings?: Array<LinkedFrameBinding | undefined>
+	onLinkedMediaFrameSelect?: (
+		slotIndex: number,
+		frameRole: LinkedFrameRole,
+		item: LinkedEditorMediaItem & { kind: "image"; path: string },
+	) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
 }
 
@@ -291,10 +252,14 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onFocusEditor,
 		onPreviewMediaResource,
 		linkedMediaItems = [],
-		onRemoveLinkedConnection,
+		linkedMentionedReferencePaths = [],
+		onLinkedMediaSelectionChange,
+		linkedFrameBindings = [],
+		onLinkedMediaFrameSelect,
 		renderPromptOptimizationButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
+	const createLinkedMediaSourceListOption = useLinkedMediaSourceListOption()
 	const sourceListScrollerRef = useRef<HTMLDivElement | null>(null)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
 	const {
@@ -311,7 +276,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		currentFrameImages,
 		frameImageInfos,
 		referenceImageInfos,
-		referenceAssetCounts,
 		supportsReferenceAssets,
 		supportsReferenceImages,
 		supportsReferenceVideos,
@@ -389,9 +353,41 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			),
 		[linkedMediaItems],
 	)
+	const linkedFrameMediaItems = useMemo(() => {
+		const boundConnectionIds = new Set(
+			linkedFrameBindings.flatMap((binding) => (binding ? [binding.sourceConnectionId] : [])),
+		)
+		const imageItems = linkedDisplayMediaItems
+			.filter(
+				(item): item is LinkedEditorMediaItem & { kind: "image"; path: string } =>
+					item.kind === "image",
+			)
+			.sort(
+				(left, right) =>
+					Number(boundConnectionIds.has(right.connectionId)) -
+					Number(boundConnectionIds.has(left.connectionId)),
+			)
+		return dedupeLinkedMediaItemsByPath(imageItems)
+	}, [linkedDisplayMediaItems, linkedFrameBindings])
 	const linkedActiveMediaItems = useMemo(
 		() => linkedDisplayMediaItems.filter((item) => item.status === "active"),
 		[linkedDisplayMediaItems],
+	)
+	const mentionedReferencePathSet = useMemo(
+		() => new Set(linkedMentionedReferencePaths.map(getLinkedMediaReferenceIdentity)),
+		[linkedMentionedReferencePaths],
+	)
+	const {
+		manualItems: visibleReferenceImageEntries,
+		linkedItems: visibleLinkedDisplayMediaItems,
+	} = useMemo(
+		() =>
+			resolveLinkedMediaDisplay(
+				referenceImageInfos.map((info, index) => ({ info, index })),
+				(entry) => entry.info.path,
+				linkedDisplayMediaItems,
+			),
+		[linkedDisplayMediaItems, referenceImageInfos],
 	)
 	const linkedActiveReferenceAssetInfos = useMemo<VideoReferenceAssetInfo[]>(
 		() =>
@@ -404,8 +400,29 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		[linkedActiveMediaItems],
 	)
 	const effectiveReferenceAssetInfos = useMemo(
-		() => [...referenceImageInfos, ...linkedActiveReferenceAssetInfos],
-		[referenceImageInfos, linkedActiveReferenceAssetInfos],
+		() =>
+			mergeLinkedMediaReferences(
+				referenceImageInfos.map((info) => ({
+					kind: info.assetType,
+					path: info.path,
+				})),
+				linkedActiveReferenceAssetInfos,
+			).map((reference) => {
+				const manualInfo = referenceImageInfos.find(
+					(info) =>
+						getLinkedMediaReferenceIdentity(info.path) ===
+						getLinkedMediaReferenceIdentity(reference.path),
+				)
+				return (
+					manualInfo ?? {
+						path: reference.path,
+						src: reference.path,
+						fileName: getCanvasResourceFileName(reference.path) || reference.path,
+						assetType: reference.kind,
+					}
+				)
+			}),
+		[linkedActiveReferenceAssetInfos, referenceImageInfos],
 	)
 	const effectiveReferenceAssetLimits = useMemo(
 		() => resolveReferenceAssetLimits(currentInputModeConfig, effectiveReferenceAssetInfos),
@@ -417,32 +434,51 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		if (!Number.isFinite(maxCount)) return undefined
 		return maxCount && maxCount > 0 ? maxCount : undefined
 	}, [effectiveReferenceAssetLimits.total.max, supportsReferenceAssets])
-	const linkedActiveReferenceAssetCounts = useMemo(
-		() => countLinkedMediaItemsByKind(linkedActiveMediaItems),
-		[linkedActiveMediaItems],
-	)
 	const effectiveReferenceAssetCounts = useMemo(
-		() => ({
-			images: referenceAssetCounts.images + linkedActiveReferenceAssetCounts.images,
-			videos: referenceAssetCounts.videos + linkedActiveReferenceAssetCounts.videos,
-			audios: referenceAssetCounts.audios + linkedActiveReferenceAssetCounts.audios,
-		}),
-		[referenceAssetCounts, linkedActiveReferenceAssetCounts],
+		() => countVideoReferenceAssetInfosByKind(effectiveReferenceAssetInfos),
+		[effectiveReferenceAssetInfos],
 	)
-	const effectiveReferenceAssetTotalCount =
-		referenceImageInfos.length + linkedActiveMediaItems.length
+	const effectiveReferenceAssetTotalCount = effectiveReferenceAssetInfos.length
 	const displayReferenceKinds = useMemo(() => {
 		const nextKinds: VideoReferenceAssetKind[] = [...supportedReferenceKinds]
-		linkedDisplayMediaItems.forEach((item) => {
+		visibleLinkedDisplayMediaItems.forEach((item) => {
 			if (!nextKinds.includes(item.kind)) {
 				nextKinds.push(item.kind)
 			}
 		})
 		return nextKinds
-	}, [linkedDisplayMediaItems, supportedReferenceKinds])
+	}, [supportedReferenceKinds, visibleLinkedDisplayMediaItems])
 
 	const frameOptions = useMemo((): SourceListOption[] => {
-		const options: SourceListOption[] = []
+		const linkedFrameOptions: SourceListOption[] =
+			supportsStartFrame || supportsEndFrame
+				? linkedFrameMediaItems.map((item, index) => {
+						const assignedRoles = resolveLinkedFrameAssignedRoles(
+							linkedFrameBindings,
+							item,
+						)
+						const resourceStatusLabel = assignedRoles
+							.map((role) =>
+								role === "start"
+									? t("videoEditor.slotLabelFirstFrame", "首帧")
+									: t("videoEditor.slotLabelLastFrame", "尾帧"),
+							)
+							.join(" · ")
+						return {
+							kind: "slot" as const,
+							label: getLinkedMediaFileName(item),
+							value: `linked-frame-${item.connectionId}-${index}`,
+							slotIndex: -1,
+							groupId: "linked-frame",
+							resourcePath: item.path,
+							resourceFileName: getLinkedMediaFileName(item),
+							resourceStatusLabel: resourceStatusLabel || undefined,
+							readOnly: true,
+							isLinked: true,
+						} satisfies SourceListSlotOption
+					})
+				: []
+		const options: SourceListOption[] = [...linkedFrameOptions]
 		let slotIndex = 0
 		if (supportsStartFrame) {
 			const idx = slotIndex
@@ -455,7 +491,11 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
-							resourceFileName: frameImageInfos[idx]?.fileName,
+							resourceFileName:
+								linkedFrameBindings[idx]?.framePath === path
+									? linkedFrameBindings[idx]?.sourceFileName
+									: frameImageInfos[idx]?.fileName,
+							isLinked: linkedFrameBindings[idx]?.framePath === path,
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -476,7 +516,11 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
-							resourceFileName: frameImageInfos[idx]?.fileName,
+							resourceFileName:
+								linkedFrameBindings[idx]?.framePath === path
+									? linkedFrameBindings[idx]?.sourceFileName
+									: frameImageInfos[idx]?.fileName,
+							isLinked: linkedFrameBindings[idx]?.framePath === path,
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -495,6 +539,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			options.push({
 				kind: "overlay",
 				value: "frame-pair-swap-overlay",
+				betweenSlotOrdinals: [linkedFrameOptions.length, linkedFrameOptions.length + 1],
 				render: () => (
 					<button
 						type="button"
@@ -519,8 +564,10 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	}, [
 		supportsStartFrame,
 		supportsEndFrame,
+		linkedFrameMediaItems,
 		currentFrameImages,
 		frameImageInfos,
+		linkedFrameBindings,
 		removeSlotAriaLabel,
 		previewResourceAriaLabel,
 		onPreviewMediaResource,
@@ -529,7 +576,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	])
 
 	const referenceAssetOptions = useMemo((): SourceListOption[] => {
-		if (!supportsReferenceAssets && linkedDisplayMediaItems.length === 0) return []
+		if (!supportsReferenceAssets && visibleLinkedDisplayMediaItems.length === 0) return []
 		const totalCount = effectiveReferenceAssetTotalCount
 		const totalLimitReached =
 			effectiveMaxReferenceFiles !== undefined && totalCount >= effectiveMaxReferenceFiles
@@ -548,7 +595,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			}>,
 		}
 
-		referenceImageInfos.forEach((info, index) => {
+		visibleReferenceImageEntries.forEach(({ info, index }) => {
 			existingItemsByType[info.assetType].push({ info, index })
 		})
 		const linkedItemsByType = {
@@ -556,7 +603,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			video: [] as Array<LinkedEditorMediaItem & { path: string }>,
 			audio: [] as Array<LinkedEditorMediaItem & { path: string }>,
 		}
-		linkedDisplayMediaItems.forEach((item) => {
+		visibleLinkedDisplayMediaItems.forEach((item) => {
 			linkedItemsByType[item.kind].push(item)
 		})
 
@@ -619,11 +666,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						index: linkedIndex,
 						slotIndex: referenceImageInfos.length + linkedIndex,
 						label: referenceSlotLabelByType[kind],
-						removeResourceAriaLabel: removeSlotAriaLabel,
 						previewResourceAriaLabel,
-						t,
 						onPreviewMediaResource,
-						onRemoveLinkedConnection,
+						onLinkedMediaSelectionChange,
+						isMentioned: mentionedReferencePathSet.has(
+							getLinkedMediaReferenceIdentity(item.path),
+						),
 					}),
 				)
 			})
@@ -648,21 +696,23 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		return options
 	}, [
 		supportsReferenceAssets,
-		linkedDisplayMediaItems,
 		effectiveReferenceAssetTotalCount,
 		effectiveMaxReferenceFiles,
+		visibleReferenceImageEntries,
+		visibleLinkedDisplayMediaItems,
+		mentionedReferencePathSet,
 		referenceImageInfos,
 		effectiveReferenceAssetLimits,
 		effectiveReferenceAssetCounts,
 		supportedReferenceKinds,
 		displayReferenceKinds,
 		referenceSlotLabelByType,
+		createLinkedMediaSourceListOption,
 		removeSlotAriaLabel,
 		previewResourceAriaLabel,
 		onPreviewMediaResource,
-		onRemoveLinkedConnection,
+		onLinkedMediaSelectionChange,
 		handlers,
-		t,
 	])
 	const showTopImageInputs =
 		supportsStartFrame ||
@@ -681,34 +731,14 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			const allowedInfos = referenceImageInfos.filter(
 				(info) => info.assetType === referenceAssetKind,
 			)
-			const currentManualInfos = allowedInfos.filter(
-				(info) => !option.resourcePath || info.path !== option.resourcePath,
+			const optionIdentity = getLinkedMediaReferenceIdentity(option.resourcePath)
+			const currentReferenceInfos = effectiveReferenceAssetInfos.filter(
+				(info) =>
+					!optionIdentity ||
+					getLinkedMediaReferenceIdentity(info.path) !== optionIdentity,
 			)
-			const currentLinkedInfos = linkedActiveMediaItems.filter(
-				(info) => info.kind === referenceAssetKind,
-			)
-			const currentManualReferenceCount = referenceImageInfos.filter(
-				(info) => !option.resourcePath || info.path !== option.resourcePath,
-			).length
-			const currentReferenceCount =
-				currentManualReferenceCount + linkedActiveMediaItems.length
-			const currentManualAssetCounts = referenceImageInfos
-				.filter((info) => !option.resourcePath || info.path !== option.resourcePath)
-				.reduce(
-					(acc, info) => {
-						if (info.assetType === "image") acc.images++
-						else if (info.assetType === "video") acc.videos++
-						else acc.audios++
-						return acc
-					},
-					{ images: 0, videos: 0, audios: 0 },
-				)
-			const currentAssetCounts = linkedActiveMediaItems.reduce((acc, info) => {
-				if (info.kind === "image") acc.images++
-				else if (info.kind === "video") acc.videos++
-				else acc.audios++
-				return acc
-			}, currentManualAssetCounts)
+			const currentReferenceCount = currentReferenceInfos.length
+			const currentAssetCounts = countVideoReferenceAssetInfosByKind(currentReferenceInfos)
 			const typeRange =
 				referenceAssetKind === "image"
 					? effectiveReferenceAssetLimits.reference_images
@@ -730,10 +760,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			return {
 				slotKey: option.value,
 				referenceAssetKind,
-				currentFiles: [
-					...currentManualInfos.map((info) => info.path),
-					...currentLinkedInfos.map((info) => info.path),
-				],
+				currentFiles: currentReferenceInfos.map((info) => info.path),
 				maxReferenceFiles:
 					Number.isFinite(effectiveMax) && effectiveMax > 0 ? effectiveMax : undefined,
 				isLimitReached:
@@ -747,7 +774,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		},
 		[
 			effectiveReferenceAssetLimits,
-			linkedActiveMediaItems,
+			effectiveReferenceAssetInfos,
 			referenceImageInfos,
 			referenceResourceTypeByKind,
 		],
@@ -770,7 +797,78 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			},
 		) => {
 			return function renderSourceListSlotItem(params: SourceListRenderItemParams) {
-				const { option, className, style, content, slotRootRef } = params
+				const { option, className, style, content, onClick, slotRootRef } = params
+				if (inputTab === "frame" && option.groupId === "linked-frame") {
+					const linkedFrameItem = linkedFrameMediaItems.find(
+						(item) =>
+							getLinkedMediaReferenceIdentity(item.path) ===
+							getLinkedMediaReferenceIdentity(option.resourcePath ?? ""),
+					)
+					if (!linkedFrameItem) return null
+					const assignedRoles = resolveLinkedFrameAssignedRoles(
+						linkedFrameBindings,
+						linkedFrameItem,
+					)
+					const assignedRoleSet = new Set(assignedRoles)
+					const frameAlreadyAssignedToOtherRole = (role: LinkedFrameRole) =>
+						assignedRoles.some((assignedRole) => assignedRole !== role)
+					const roleOptions = [
+						...(supportsStartFrame
+							? [
+									{
+										role: "start" as const,
+										label: t("videoEditor.useAsStartFrame", "设为首帧"),
+										selected: assignedRoleSet.has("start"),
+										disabled: frameAlreadyAssignedToOtherRole("start"),
+										title: frameAlreadyAssignedToOtherRole("start")
+											? t(
+													"videoEditor.frameResourceAlreadyUsed",
+													"该资源已用于其他帧",
+												)
+											: undefined,
+									},
+								]
+							: []),
+						...(supportsEndFrame
+							? [
+									{
+										role: "end" as const,
+										label: t("videoEditor.useAsEndFrame", "设为尾帧"),
+										selected: assignedRoleSet.has("end"),
+										disabled: frameAlreadyAssignedToOtherRole("end"),
+										title: frameAlreadyAssignedToOtherRole("end")
+											? t(
+													"videoEditor.frameResourceAlreadyUsed",
+													"该资源已用于其他帧",
+												)
+											: undefined,
+									},
+								]
+							: []),
+					]
+					return (
+						<LinkedFrameAssignmentPopover
+							options={roleOptions}
+							className={cn(className, sourceListStyles.sourceItemSelectable)}
+							style={style}
+							content={content}
+							slotRootRef={slotRootRef}
+							onToggleRole={(role, selected) => {
+								const slotIndex = resolveFrameSlotIndex(
+									role,
+									supportsStartFrame,
+									supportsEndFrame,
+								)
+								if (selected) {
+									handlers.handleFrameImageRemove(slotIndex)
+									return
+								}
+								if (frameAlreadyAssignedToOtherRole(role)) return
+								onLinkedMediaFrameSelect?.(slotIndex, role, linkedFrameItem)
+							}}
+						/>
+					)
+				}
 				const {
 					slotKey,
 					referenceAssetKind,
@@ -832,7 +930,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				}
 				if (option.readOnly) {
 					return (
-						<div ref={slotRootRef} className={className} style={style}>
+						<div
+							ref={slotRootRef}
+							className={className}
+							style={style}
+							onClick={onClick}
+						>
 							{content}
 						</div>
 					)
@@ -886,6 +989,11 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			onProjectSelect,
 			hoveredMentionPath,
 			t,
+			linkedFrameMediaItems,
+			linkedFrameBindings,
+			supportsStartFrame,
+			supportsEndFrame,
+			onLinkedMediaFrameSelect,
 		],
 	)
 

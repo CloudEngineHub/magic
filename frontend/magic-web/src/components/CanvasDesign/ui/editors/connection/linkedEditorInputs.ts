@@ -11,6 +11,7 @@ import {
 	extractPromptTextFromRichText,
 } from "../../../runtime/text/richText"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import { normalizeReferenceComparablePath } from "../message/reference-assets/referenceResourceSelection"
 import { getLinkedTextPromptText, type LinkedTextConnection } from "./linkedTextPrompt"
 
 export type LinkedEditorTargetKind = "image" | "video"
@@ -39,6 +40,25 @@ export interface LinkedEditorMediaPolicy {
 	) => LinkedEditorMediaInactiveReason | null
 }
 
+/** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */
+export function getLinkedMediaReferenceIdentity(path?: string): string {
+	return normalizeReferenceComparablePath(path).replace(/^(\.\/)+/, "")
+}
+
+export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
+	const merged: string[] = []
+	const seen = new Set<string>()
+	for (const paths of pathGroups) {
+		for (const path of paths) {
+			const identity = getLinkedMediaReferenceIdentity(path)
+			if (!identity || seen.has(identity)) continue
+			seen.add(identity)
+			merged.push(path)
+		}
+	}
+	return merged
+}
+
 export interface LinkedEditorMediaCandidate {
 	connectionId: string
 	sourceElementId: string
@@ -51,6 +71,93 @@ export interface LinkedEditorMediaCandidate {
 export interface LinkedEditorMediaItem extends LinkedEditorMediaCandidate {
 	status: LinkedEditorMediaStatus
 	reason?: LinkedEditorMediaInactiveReason
+	/** 是否被用户选择参与参考媒体提交 */
+	selected?: boolean
+	/** 未选择项不可勾选时的动态原因（不作为媒体状态展示） */
+	selectionDisabledReason?: LinkedEditorMediaInactiveReason
+}
+
+/** 按资源身份折叠连线媒体；同一路径存在多个连接时优先保留已选择项。 */
+export function dedupeLinkedMediaItemsByPath<T extends LinkedEditorMediaItem>(items: T[]): T[] {
+	const deduped: T[] = []
+	const indexByIdentity = new Map<string, number>()
+	for (const item of items) {
+		const identity = getLinkedMediaReferenceIdentity(item.path)
+		if (!identity) continue
+		const existingIndex = indexByIdentity.get(identity)
+		if (existingIndex === undefined) {
+			indexByIdentity.set(identity, deduped.length)
+			deduped.push(item)
+			continue
+		}
+		if (item.selected && !deduped[existingIndex]?.selected) {
+			deduped[existingIndex] = item
+		}
+	}
+	return deduped
+}
+
+export interface LinkedMediaDisplayResolution<TManual, TLinked extends LinkedEditorMediaItem> {
+	manualItems: TManual[]
+	linkedItems: Array<TLinked & { path: string }>
+}
+
+/** 同一路径存在画布连接时，由关联卡片统一承载展示，避免退化为纯手动资源卡片。 */
+export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorMediaItem>(
+	manualItems: TManual[],
+	getManualPath: (item: TManual) => string,
+	linkedItems: TLinked[],
+): LinkedMediaDisplayResolution<TManual, TLinked> {
+	const visibleLinkedItems = dedupeLinkedMediaItemsByPath(
+		linkedItems.filter((item): item is TLinked & { path: string } => Boolean(item.path)),
+	)
+	const linkedPathIdentities = new Set(
+		visibleLinkedItems.map((item) => getLinkedMediaReferenceIdentity(item.path)),
+	)
+
+	return {
+		manualItems: manualItems.filter(
+			(item) =>
+				!linkedPathIdentities.has(getLinkedMediaReferenceIdentity(getManualPath(item))),
+		),
+		linkedItems: visibleLinkedItems,
+	}
+}
+
+/** @mention 自身已经使资源参与提交，因此统一卡片应显示为勾选并锁定。 */
+export function resolveLinkedMediaSelectionDisplay(
+	item: Pick<LinkedEditorMediaItem, "selected" | "selectionDisabledReason">,
+	isMentioned: boolean,
+): { checked: boolean; disabled: boolean } {
+	const selected = item.selected === true
+	return {
+		checked: selected || isMentioned,
+		disabled: isMentioned || (!selected && Boolean(item.selectionDisabledReason)),
+	}
+}
+
+/** 删除提示词中的 @mention 时，仅取消对应已选择连线媒体。 */
+export function getLinkedMediaConnectionIdsToDeselectAfterMentionChange(
+	items: LinkedEditorMediaItem[],
+	previousMentionedPaths: string[],
+	nextMentionedPaths: string[],
+): string[] {
+	const nextMentionedPathIdentities = new Set(
+		nextMentionedPaths.map(getLinkedMediaReferenceIdentity).filter(Boolean),
+	)
+	const removedMentionedPathIdentities = new Set(
+		previousMentionedPaths
+			.map(getLinkedMediaReferenceIdentity)
+			.filter((identity) => Boolean(identity) && !nextMentionedPathIdentities.has(identity)),
+	)
+	if (removedMentionedPathIdentities.size === 0) return []
+
+	return items.flatMap((item) =>
+		item.selected &&
+		removedMentionedPathIdentities.has(getLinkedMediaReferenceIdentity(item.path))
+			? [item.connectionId]
+			: [],
+	)
 }
 
 export interface LinkedEditorInputsResolution {
@@ -95,8 +202,7 @@ export function resolveLinkedMediaItems(
 	const supportedKindSet = new Set(mediaPolicy?.supportedKinds ?? [])
 	const activePathSet = new Set<string>()
 	const manualReferences = mediaPolicy?.manualReferences ?? []
-	manualReferences.forEach((reference) => activePathSet.add(reference.path))
-	const activeReferences = [...manualReferences]
+	const activeReferences: LinkedEditorMediaReference[] = []
 
 	const totalLimit = getFiniteLimit(mediaPolicy?.maxTotalCount)
 	const activeCountByKind: Record<LinkedEditorMediaKind, number> = {
@@ -105,6 +211,10 @@ export function resolveLinkedMediaItems(
 		audio: 0,
 	}
 	manualReferences.forEach((reference) => {
+		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		if (!identity || activePathSet.has(identity)) return
+		activePathSet.add(identity)
+		activeReferences.push(reference)
 		activeCountByKind[reference.kind] += 1
 	})
 	const maxCountByKind = mediaPolicy?.maxCountByKind ?? {}
@@ -123,7 +233,7 @@ export function resolveLinkedMediaItems(
 		if (!supportedKindSet.has(candidate.kind)) {
 			return { ...candidate, status: "inactive", reason: "unsupported-mode" }
 		}
-		if (activePathSet.has(candidate.path)) {
+		if (activePathSet.has(getLinkedMediaReferenceIdentity(candidate.path))) {
 			return { ...candidate, status: "inactive", reason: "duplicate" }
 		}
 		if (activePathSet.size >= totalLimit) {
@@ -148,11 +258,109 @@ export function resolveLinkedMediaItems(
 			return { ...candidate, status: "inactive", reason: validationReason }
 		}
 
-		activePathSet.add(candidate.path)
+		activePathSet.add(getLinkedMediaReferenceIdentity(candidate.path))
 		activeReferences.push(nextReference)
 		activeCountByKind[candidate.kind] += 1
 		return { ...candidate, status: "active" }
 	})
+}
+
+export interface LinkedEditorMediaSelectionResolution {
+	items: LinkedEditorMediaItem[]
+	activeMediaReferences: LinkedEditorMediaReference[]
+}
+
+/**
+ * 将连线媒体候选拆分为“用户已选择”和“待选择”两类。
+ * 未选择项不会占用媒体数量限制；只有用户选择且通过策略校验的媒体才会进入 activeMediaReferences。
+ */
+export function resolveLinkedMediaSelection(
+	candidates: LinkedEditorMediaCandidate[],
+	selectedConnectionIds: string[],
+	options: {
+		targetKind: LinkedEditorTargetKind
+		mediaPolicy?: LinkedEditorMediaPolicy
+	},
+): LinkedEditorMediaSelectionResolution {
+	const normalizedCandidates = candidates.map(
+		(candidate): LinkedEditorMediaCandidate => ({
+			connectionId: candidate.connectionId,
+			sourceElementId: candidate.sourceElementId,
+			kind: candidate.kind,
+			path: candidate.path,
+			fileName: candidate.fileName,
+			sourceCrop: candidate.sourceCrop,
+		}),
+	)
+	const selectedConnectionIdSet = new Set(selectedConnectionIds)
+	const selectedCandidates = normalizedCandidates.filter((candidate) =>
+		selectedConnectionIdSet.has(candidate.connectionId),
+	)
+	const selectedPathIdentities = new Set(
+		selectedCandidates.map((candidate) => getLinkedMediaReferenceIdentity(candidate.path)),
+	)
+	const selectedMediaPolicy = options.mediaPolicy
+		? {
+				...options.mediaPolicy,
+				manualReferences: options.mediaPolicy.manualReferences?.filter(
+					(reference) =>
+						!selectedPathIdentities.has(
+							getLinkedMediaReferenceIdentity(reference.path),
+						),
+				),
+			}
+		: undefined
+	const selectedResolutionOptions = {
+		targetKind: options.targetKind,
+		mediaPolicy: selectedMediaPolicy,
+	}
+	const selectedItems = resolveLinkedMediaItems(selectedCandidates, selectedResolutionOptions)
+	const selectedItemById = new Map(selectedItems.map((item) => [item.connectionId, item]))
+
+	const items = normalizedCandidates.map((candidate) => {
+		const selectedItem = selectedItemById.get(candidate.connectionId)
+		if (selectedItem?.status === "active") {
+			return {
+				...selectedItem,
+				selected: true,
+			}
+		}
+
+		const standaloneItem = resolveLinkedMediaItems([candidate], options)[0]
+		const attemptItem = resolveLinkedMediaItems(
+			[...selectedCandidates, candidate],
+			selectedResolutionOptions,
+		).find((item) => item.connectionId === candidate.connectionId)
+		const standaloneReason = standaloneItem?.reason
+		const selectionDisabledReason =
+			standaloneReason && standaloneReason !== "over-limit"
+				? standaloneReason
+				: attemptItem?.reason
+
+		return {
+			...candidate,
+			status: "inactive" as const,
+			reason:
+				standaloneReason && standaloneReason !== "over-limit"
+					? standaloneReason
+					: undefined,
+			selected: false,
+			selectionDisabledReason,
+		}
+	})
+
+	const activeMediaReferences = selectedItems
+		.filter(
+			(item): item is LinkedEditorMediaItem & { path: string } =>
+				item.status === "active" && Boolean(item.path),
+		)
+		.map((item) => ({
+			kind: item.kind,
+			path: item.path,
+			sourceCrop: item.sourceCrop,
+		}))
+
+	return { items, activeMediaReferences }
 }
 
 export function mergeLinkedMediaReferences(
@@ -160,11 +368,25 @@ export function mergeLinkedMediaReferences(
 	linkedReferences: LinkedEditorMediaReference[],
 ): LinkedEditorMediaReference[] {
 	const merged: LinkedEditorMediaReference[] = []
+	const linkedByIdentity = new Map<string, LinkedEditorMediaReference>()
+	for (const reference of linkedReferences) {
+		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		if (!identity || linkedByIdentity.has(identity)) continue
+		linkedByIdentity.set(identity, reference)
+	}
 	const seenPathSet = new Set<string>()
 
-	for (const reference of [...manualReferences, ...linkedReferences]) {
-		if (!reference.path || seenPathSet.has(reference.path)) continue
-		seenPathSet.add(reference.path)
+	for (const reference of manualReferences) {
+		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		if (!identity || seenPathSet.has(identity)) continue
+		seenPathSet.add(identity)
+		merged.push(linkedByIdentity.get(identity) ?? reference)
+	}
+
+	for (const reference of linkedReferences) {
+		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		if (!identity || seenPathSet.has(identity)) continue
+		seenPathSet.add(identity)
 		merged.push(reference)
 	}
 
@@ -222,24 +444,15 @@ export function resolveLinkedEditorInputs(
 		})
 	}
 
-	const mediaItems = resolveLinkedMediaItems(mediaCandidates, {
+	const mediaSelection = resolveLinkedMediaSelection(mediaCandidates, [], {
 		targetKind,
 		mediaPolicy,
 	})
-	const activeMediaReferences = mediaItems
-		.filter(
-			(item): item is LinkedEditorMediaItem & { path: string } => item.status === "active",
-		)
-		.map((item) => ({
-			kind: item.kind,
-			path: item.path,
-			sourceCrop: item.sourceCrop,
-		}))
 
 	return {
 		textConnections,
 		textPrompt: getLinkedTextPromptText(textConnections),
-		mediaItems,
-		activeMediaReferences,
+		mediaItems: mediaSelection.items,
+		activeMediaReferences: mediaSelection.activeMediaReferences,
 	}
 }

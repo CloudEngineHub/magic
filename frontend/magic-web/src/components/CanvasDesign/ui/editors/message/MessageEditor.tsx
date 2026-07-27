@@ -54,7 +54,11 @@ interface MessageEditorProps {
 	mentionExtension?: Extension | TiptapNode<unknown, unknown> | null
 	language?: string
 	/** @ 提及路径列表变化时的回调（去重后的路径列表，currentPrompt 为编辑器当前内容） */
-	onMentionChange?: (paths: string[], currentPrompt: string) => void
+	onMentionChange?: (
+		paths: string[],
+		currentPrompt: string,
+		context: MessageEditorMentionChangeContext,
+	) => void
 	/** hover 在某个 @ 提及项上时回调对应 path，离开时回调 null */
 	onMentionItemHoverChange?: (path: string | null) => void
 	/** 是否启用 @ 功能（模型列表加载完成后才为 true） */
@@ -62,6 +66,10 @@ interface MessageEditorProps {
 	/** 为 true 时外层与编辑区宽度 100% 铺满父级（用于视频生成等较宽面板） */
 	fullWidth?: boolean
 	onPaste?: (event: ClipboardEvent<HTMLDivElement>) => void
+}
+
+export interface MessageEditorMentionChangeContext {
+	source: "user" | "sync"
 }
 
 /** insertMentionItems 的可选行为（如上传/模式切换需在文末追加 @，与 appendMentionToString 一致） */
@@ -72,6 +80,11 @@ export interface InsertCanvasMentionItemsOptions {
 interface MessageEditorSelectionRange {
 	from: number
 	to: number
+}
+
+interface MessageEditorMentionSnapshot {
+	paths: string[]
+	currentPrompt: string
 }
 
 const MAX_PERSISTED_SELECTION_RANGE_COUNT = 200
@@ -127,6 +140,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		const placeholderRef = useRef(placeholder ?? "")
 		placeholderRef.current = placeholder ?? ""
 		const hoveredMentionPathRef = useRef<string | null>(null)
+		const lastMentionSnapshotRef = useRef<MessageEditorMentionSnapshot | null>(null)
 
 		useEffect(() => {
 			if (!selectionPersistenceKey) return
@@ -224,7 +238,11 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 					const mentionCb = onMentionChangeRef.current
 					if (mentionCb) {
 						const paths = getMentionPathsFromContent(e.getJSON())
-						mentionCb(paths, str)
+						lastMentionSnapshotRef.current = {
+							paths: [...paths],
+							currentPrompt: str,
+						}
+						mentionCb(paths, str, { source: "user" })
 					}
 				},
 				onSelectionUpdate: ({ editor: e }) => {
@@ -295,10 +313,21 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			const syncMentionChange = (activeEditor: Editor) => {
 				const mentionCb = onMentionChangeRef.current
 				if (!mentionCb) return
-				mentionCb(
-					getMentionPathsFromContent(activeEditor.getJSON()),
-					getStringFromContent(activeEditor.getJSON()),
-				)
+				const paths = getMentionPathsFromContent(activeEditor.getJSON())
+				const currentPrompt = getStringFromContent(activeEditor.getJSON())
+				const previousSnapshot = lastMentionSnapshotRef.current
+				if (
+					previousSnapshot?.currentPrompt === currentPrompt &&
+					previousSnapshot.paths.length === paths.length &&
+					previousSnapshot.paths.every((path, index) => path === paths[index])
+				) {
+					return
+				}
+				lastMentionSnapshotRef.current = {
+					paths: [...paths],
+					currentPrompt,
+				}
+				mentionCb(paths, currentPrompt, { source: "sync" })
 			}
 			let cancelled = false
 
@@ -341,7 +370,10 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 						queueMicrotask(() => {
 							isInternalChangeRef.current = false
 						})
+						return
 					}
+
+					syncMentionChange(activeEditor)
 				})
 			})
 
