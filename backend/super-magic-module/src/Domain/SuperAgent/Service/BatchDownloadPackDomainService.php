@@ -113,35 +113,6 @@ class BatchDownloadPackDomainService
         ];
     }
 
-    /**
-     * @param array{
-     *   selected_visible_entities:array<int,TaskFileEntity>,
-     *   selected_relative_path_map:array<int,string>
-     * } $authorizedContext
-     * @return array<int,array{id:int,path:string,is_directory:bool}>
-     */
-    private function buildSelectedNodes(array $authorizedContext, string $fullProjectWorkDir): array
-    {
-        $selectedNodes = [];
-        foreach ($authorizedContext['selected_visible_entities'] as $entity) {
-            $path = $this->normalizeRelativePath(
-                $authorizedContext['selected_relative_path_map'][$entity->getFileId()]
-                ?? $this->buildLegacyFallbackPath($entity->getFileKey(), $fullProjectWorkDir)
-            );
-            if ($path === '') {
-                continue;
-            }
-
-            $selectedNodes[] = [
-                'id' => $entity->getFileId(),
-                'path' => $path,
-                'is_directory' => $entity->getIsDirectory(),
-            ];
-        }
-
-        return $selectedNodes;
-    }
-
     public function submitPackTask(
         DataIsolation $dataIsolation,
         string $sandboxId,
@@ -218,6 +189,35 @@ class BatchDownloadPackDomainService
             'zip_file_name' => '',
             'file_count' => $data->totalFiles,
         ];
+    }
+
+    /**
+     * @param array{
+     *   selected_visible_entities:array<int,TaskFileEntity>,
+     *   selected_relative_path_map:array<int,string>
+     * } $authorizedContext
+     * @return array<int,array{id:int,path:string,is_directory:bool}>
+     */
+    private function buildSelectedNodes(array $authorizedContext, string $fullProjectWorkDir): array
+    {
+        $selectedNodes = [];
+        foreach ($authorizedContext['selected_visible_entities'] as $entity) {
+            $path = $this->normalizeRelativePath(
+                $authorizedContext['selected_relative_path_map'][$entity->getFileId()]
+                ?? $this->buildLegacyFallbackPath($entity->getFileKey(), $fullProjectWorkDir)
+            );
+            if ($path === '') {
+                continue;
+            }
+
+            $selectedNodes[] = [
+                'id' => $entity->getFileId(),
+                'path' => $path,
+                'is_directory' => $entity->getIsDirectory(),
+            ];
+        }
+
+        return $selectedNodes;
     }
 
     /**
