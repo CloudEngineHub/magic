@@ -12,11 +12,13 @@ use App\Domain\Mode\Entity\ModeEntity;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
+use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -117,6 +119,69 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         );
     }
 
+    public function testCheckAgentAccessAllowsCreatorModeForEditor(): void
+    {
+        $resourceAccessPolicyService = $this->createMock(ResourceAccessPolicyService::class);
+        $resourceAccessPolicyService->expects(self::once())
+            ->method('getCurrentOperation')
+            ->willReturn(Operation::Edit);
+        $this->setProperty($this->service, 'resourceAccessPolicyService', $resourceAccessPolicyService);
+
+        self::assertSame([true, ''], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'crew-creator',
+            'collaborated-agent'
+        ));
+    }
+
+    public function testCheckAgentAccessRejectsCreatorModeForReadOnlyCollaborator(): void
+    {
+        $resourceAccessPolicyService = $this->createMock(ResourceAccessPolicyService::class);
+        $resourceAccessPolicyService->method('getCurrentOperation')->willReturn(Operation::Read);
+        $this->setProperty($this->service, 'resourceAccessPolicyService', $resourceAccessPolicyService);
+
+        self::assertSame([false, 'super_magic.agent.agent_not_available'], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'skill-creator',
+            'collaborated-agent'
+        ));
+    }
+
+    public function testCheckAgentAccessAllowsSmaModeForInstalledAgent(): void
+    {
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([
+            'SMA-installed-agent',
+        ]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        self::assertSame([true, ''], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'SMA-installed-agent',
+            'ignored-agent-code'
+        ));
+    }
+
+    public function testCheckAgentAccessRejectsSmaModeForUninstalledAgent(): void
+    {
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        self::assertSame([false, 'super_magic.agent.agent_not_available'], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'SMA-uninstalled-agent',
+            'ignored-agent-code'
+        ));
+    }
+
+    public function testCheckAgentAccessAllowsOtherTopicPatterns(): void
+    {
+        self::assertSame([true, ''], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'general',
+            'SMA-stale-agent-code'
+        ));
+    }
+
     /**
      * @param array<SuperMagicAgentEntity> $entities
      */
@@ -183,6 +248,15 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
             {
                 return $this->codes;
             }
+
+            public function findUserAgentOwnershipByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): ?UserAgentEntity
+            {
+                if (! in_array($agentCode, $this->codes, true)) {
+                    return null;
+                }
+
+                return (new UserAgentEntity())->setAgentCode($agentCode);
+            }
         };
     }
 
@@ -205,7 +279,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
                     $modes[] = $mode;
                 }
 
-                return ['list' => $modes];
+                return ['total' => count($modes), 'list' => $modes];
             }
         };
     }

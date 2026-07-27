@@ -48,6 +48,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
 use Hyperf\Logger\LoggerFactory;
@@ -258,14 +259,17 @@ class HandleUserMessageAppService extends AbstractAppService
             [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
         }
 
-        if ($resolvedAgentCode !== '') {
-            $this->superMagicAgentAccessAppService->assertAgentUsable(
-                SuperMagicAgentDataIsolation::create(
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $dataIsolation->getCurrentUserId()
-                ),
-                $resolvedAgentCode
-            );
+        $topicPattern = trim((string) ($userMessageDTO->getExtra()?->getTopicPattern() ?? $userMessageDTO->getTopicMode()));
+        [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            ),
+            $topicPattern,
+            $resolvedAgentCode
+        );
+        if (! $allowed) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
         }
 
         // Generate task context
