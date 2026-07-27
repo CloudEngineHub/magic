@@ -478,16 +478,13 @@ export class ConnectionDragManager {
 
 	private isConnectionTargetCandidate(elementId: string): boolean {
 		if (!this.canvas.elementManager.hasElement(elementId)) return false
-		if (this.isConnectionContainerElement(elementId)) return false
+		if (this.isNonConnectableContainerElement(elementId)) return false
 		return this.canvas.elementManager.isElementVisibleInDataTree(elementId)
 	}
 
-	private isConnectionContainerElement(elementId: string): boolean {
+	private isNonConnectableContainerElement(elementId: string): boolean {
 		const elementData = this.canvas.elementManager.getElementData(elementId)
-		return (
-			elementData?.type === ElementTypeEnum.Frame ||
-			elementData?.type === ElementTypeEnum.Group
-		)
+		return elementData?.type === ElementTypeEnum.Group
 	}
 
 	private validateTargetElement(

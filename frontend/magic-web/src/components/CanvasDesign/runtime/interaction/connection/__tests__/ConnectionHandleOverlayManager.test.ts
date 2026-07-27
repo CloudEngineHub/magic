@@ -160,7 +160,6 @@ function createCanvasStub(
 				!!element &&
 				state.visible &&
 				element.interactionConfig?.connectable !== false &&
-				element.type !== ElementTypeEnum.Frame &&
 				element.type !== ElementTypeEnum.Group,
 		},
 		transformManager: {
@@ -302,14 +301,14 @@ describe("ConnectionHandleOverlayManager", () => {
 		manager.destroy()
 	})
 
-	it("does not show handles for non-connectable container elements", () => {
+	it("shows handles for frames but not groups", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub()
 		state.elementTypes.set("element-1", ElementTypeEnum.Frame)
 		state.elementTypes.set("element-2", ElementTypeEnum.Group)
 
 		state.hoveredElementId = "element-1"
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
-		expect(getOverlay(controlsLayer)).toBeNull()
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
 
 		state.hoveredElementId = "element-2"
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-2" } })
@@ -794,7 +793,7 @@ describe("ConnectionHandleOverlayManager", () => {
 	})
 
 	it("hides immediately when a direct element drag starts", () => {
-		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+		const { canvas, controlsLayer, manager } = createCanvasStub({
 			hoveredElementId: "element-1",
 			useRealLayer: true,
 		})

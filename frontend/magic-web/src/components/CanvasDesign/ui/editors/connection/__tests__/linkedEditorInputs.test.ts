@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
+import type { Canvas } from "../../../../runtime/core/Canvas"
 import {
+	ElementTypeEnum,
+	type FrameElement,
+	type LayerElement,
+} from "../../../../runtime/document/types"
+import {
+	collectLinkedFrameSourceElements,
+	createLinkedFrameSourceId,
 	dedupeLinkedMediaItemsByPath,
 	getLinkedMediaConnectionIdsToDeselectAfterMentionChange,
 	getLinkedMediaReferenceIdentity,
@@ -9,8 +17,120 @@ import {
 	resolveLinkedMediaItems,
 	resolveLinkedMediaSelection,
 	resolveLinkedMediaSelectionDisplay,
+	resolveLinkedEditorInputs,
 	type LinkedEditorMediaCandidate,
 } from "../linkedEditorInputs"
+
+function textElement(id: string, text: string, zIndex = 0): LayerElement {
+	return {
+		id,
+		type: ElementTypeEnum.Text,
+		zIndex,
+		content: [{ children: [{ type: "text", text }] }],
+	}
+}
+
+function imageElement(id: string, src: string, zIndex = 0): LayerElement {
+	return { id, type: ElementTypeEnum.Image, zIndex, src }
+}
+
+function videoElement(id: string, src: string, zIndex = 0): LayerElement {
+	return { id, type: ElementTypeEnum.Video, zIndex, src }
+}
+
+describe("linked frame source collection", () => {
+	it("recursively collects consumable visible descendants in stable z-index order", () => {
+		const frame: FrameElement = {
+			id: "frame-source",
+			type: ElementTypeEnum.Frame,
+			children: [
+				textElement("text-top", "top", 20),
+				{
+					id: "nested-group",
+					type: ElementTypeEnum.Group,
+					zIndex: 10,
+					children: [imageElement("image", "/images/a.png", 1)],
+				},
+				{ id: "shape", type: ElementTypeEnum.Rectangle, zIndex: 15 },
+				{ ...videoElement("hidden-video", "/videos/a.mp4", 30), visible: false },
+			],
+		}
+
+		expect(
+			collectLinkedFrameSourceElements("frame-connection", frame).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "image"),
+				sourceElementId: "image",
+			},
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "text-top"),
+				sourceElementId: "text-top",
+			},
+		])
+	})
+
+	it("expands an upstream frame and lets a direct element connection win deduplication", () => {
+		const sharedImage = imageElement("shared-image", "/images/shared.png", 1)
+		const frame: FrameElement = {
+			id: "frame-source",
+			type: ElementTypeEnum.Frame,
+			children: [
+				textElement("frame-text", "frame prompt", 0),
+				sharedImage,
+				videoElement("target", "/videos/target.mp4", 2),
+			],
+		}
+		const elements = new Map<string, LayerElement>([
+			[frame.id, frame],
+			[sharedImage.id, sharedImage],
+		])
+		const canvas = {
+			connectionManager: {
+				getUpstreamConnections: () => [
+					{
+						id: "frame-connection",
+						sourceElementId: frame.id,
+						targetElementId: "target",
+					},
+					{
+						id: "direct-image-connection",
+						sourceElementId: sharedImage.id,
+						targetElementId: "target",
+					},
+				],
+			},
+			elementManager: {
+				getElementData: (elementId: string) => elements.get(elementId),
+			},
+		} as unknown as Canvas
+
+		const result = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: "target",
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["image", "video"] },
+		})
+
+		expect(result.textConnections).toEqual([
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "frame-text"),
+				sourceElementId: "frame-text",
+				text: "frame prompt",
+			},
+		])
+		expect(result.mediaItems).toEqual([
+			expect.objectContaining({
+				connectionId: "direct-image-connection",
+				sourceElementId: "shared-image",
+				path: "/images/shared.png",
+			}),
+		])
+	})
+})
 
 describe("resolveLinkedMediaItems", () => {
 	const imageCandidate: LinkedEditorMediaCandidate = {

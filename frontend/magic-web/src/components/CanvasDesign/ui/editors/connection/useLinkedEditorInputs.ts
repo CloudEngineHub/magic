@@ -192,8 +192,11 @@ export function useLinkedEditorInputs(
 	}, [refreshInputs])
 
 	useCanvasEvent("connection:change", refreshInputs, [refreshInputs])
+	useCanvasEvent("element:created", refreshInputs, [refreshInputs])
 	useCanvasEvent("element:updated", refreshInputs, [refreshInputs])
 	useCanvasEvent("element:deleted", refreshInputs, [refreshInputs])
+	useCanvasEvent("element:batchupdated", refreshInputs, [refreshInputs])
+	useCanvasEvent("element:batchdeleted", refreshInputs, [refreshInputs])
 
 	useEffect(() => {
 		if (

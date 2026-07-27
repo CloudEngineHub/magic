@@ -2,10 +2,13 @@ import type { Canvas } from "../../../runtime/core/Canvas"
 import {
 	type CropConfig,
 	ElementTypeEnum,
+	type FrameElement,
 	type ImageElement,
+	type LayerElement,
 	type TextElement,
 	type VideoElement,
 } from "../../../runtime/document/types"
+import { sortCanvasElementsByZIndexStable } from "../../../runtime/document/elementIndex"
 import {
 	extractPlainTextFromRichText,
 	extractPromptTextFromRichText,
@@ -60,6 +63,10 @@ export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
 }
 
 export interface LinkedEditorMediaCandidate {
+	/**
+	 * 关联输入的稳定 ID。直接元素等于真实连线 ID；画框子元素由连线 ID 与子元素 ID 派生。
+	 * 选择、排序和首尾帧绑定均以此 ID 为准。
+	 */
 	connectionId: string
 	sourceElementId: string
 	kind: LinkedEditorMediaKind
@@ -173,6 +180,119 @@ interface ResolveLinkedEditorInputsOptions {
 	targetKind: LinkedEditorTargetKind
 	enabled?: boolean
 	mediaPolicy?: LinkedEditorMediaPolicy
+}
+
+export interface LinkedEditorSourceElement {
+	connectionId: string
+	sourceElementId: string
+	element: LayerElement
+}
+
+const LINKED_FRAME_SOURCE_ID_PREFIX = "frame-source"
+
+export function createLinkedFrameSourceId(connectionId: string, sourceElementId: string): string {
+	return `${LINKED_FRAME_SOURCE_ID_PREFIX}:${connectionId}:${sourceElementId}`
+}
+
+function isLinkedEditorConsumableElement(element: LayerElement): boolean {
+	return (
+		element.type === ElementTypeEnum.Text ||
+		element.type === ElementTypeEnum.Image ||
+		element.type === ElementTypeEnum.Video
+	)
+}
+
+/**
+ * 按画框内视觉层级从后到前递归收集可作为编辑器输入的元素。
+ * 隐藏容器/元素不属于画框的可见内容；Frame 与 Group 仅承载层级，不生成候选项。
+ */
+export function collectLinkedFrameSourceElements(
+	connectionId: string,
+	frame: FrameElement,
+	options?: { excludedElementIds?: Iterable<string> },
+): LinkedEditorSourceElement[] {
+	const result: LinkedEditorSourceElement[] = []
+	const visitedElementIds = new Set<string>()
+	const excludedElementIds = new Set(options?.excludedElementIds)
+
+	const collect = (elements: LayerElement[] | undefined): void => {
+		for (const element of sortCanvasElementsByZIndexStable(elements ?? [])) {
+			if (
+				visitedElementIds.has(element.id) ||
+				excludedElementIds.has(element.id) ||
+				element.visible === false
+			) {
+				continue
+			}
+			visitedElementIds.add(element.id)
+
+			if (element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group) {
+				collect(element.children)
+				continue
+			}
+
+			if (!isLinkedEditorConsumableElement(element)) continue
+			result.push({
+				connectionId: createLinkedFrameSourceId(connectionId, element.id),
+				sourceElementId: element.id,
+				element,
+			})
+		}
+	}
+
+	collect(frame.children)
+	return result
+}
+
+function collectLinkedEditorSourceElements(
+	canvas: Canvas,
+	targetElementId: string,
+): LinkedEditorSourceElement[] {
+	const upstreamConnections = canvas.connectionManager.getUpstreamConnections(targetElementId)
+	const result: LinkedEditorSourceElement[] = []
+	const collectedSourceElementIds = new Set<string>()
+	const directSourceElementIds = new Set(
+		upstreamConnections.flatMap((connection) => {
+			const sourceElement = canvas.elementManager.getElementData(connection.sourceElementId)
+			return sourceElement && isLinkedEditorConsumableElement(sourceElement)
+				? [sourceElement.id]
+				: []
+		}),
+	)
+
+	for (const connection of upstreamConnections) {
+		const sourceElement = canvas.elementManager.getElementData(connection.sourceElementId)
+		if (!sourceElement) continue
+
+		if (isLinkedEditorConsumableElement(sourceElement)) {
+			if (collectedSourceElementIds.has(sourceElement.id)) continue
+			collectedSourceElementIds.add(sourceElement.id)
+			result.push({
+				connectionId: connection.id,
+				sourceElementId: sourceElement.id,
+				element: sourceElement,
+			})
+			continue
+		}
+
+		if (sourceElement.type !== ElementTypeEnum.Frame) continue
+
+		for (const frameSource of collectLinkedFrameSourceElements(connection.id, sourceElement, {
+			excludedElementIds: [targetElementId],
+		})) {
+			// 同一元素既单独连接、又属于已连接画框时，保留更明确的直接连线身份。
+			if (
+				directSourceElementIds.has(frameSource.sourceElementId) ||
+				collectedSourceElementIds.has(frameSource.sourceElementId)
+			) {
+				continue
+			}
+			collectedSourceElementIds.add(frameSource.sourceElementId)
+			result.push(frameSource)
+		}
+	}
+
+	return result
 }
 
 function getFileName(path: string): string {
@@ -401,17 +521,14 @@ export function resolveLinkedEditorInputs(
 	const mediaCandidates: LinkedEditorMediaCandidate[] = []
 
 	if (canvas && enabled) {
-		const upstreamConnections = canvas.connectionManager.getUpstreamConnections(targetElementId)
-		upstreamConnections.forEach((connection) => {
-			const sourceElement = canvas.elementManager.getElementData(connection.sourceElementId)
-			if (!sourceElement) return
-
+		const sourceElements = collectLinkedEditorSourceElements(canvas, targetElementId)
+		sourceElements.forEach(({ connectionId, sourceElementId, element: sourceElement }) => {
 			if (sourceElement.type === ElementTypeEnum.Text) {
 				const content = (sourceElement as TextElement).content
 				if (!extractPlainTextFromRichText(content).trim()) return
 				textConnections.push({
-					connectionId: connection.id,
-					sourceElementId: connection.sourceElementId,
+					connectionId,
+					sourceElementId,
 					text: extractPromptTextFromRichText(content),
 				})
 				return
@@ -421,8 +538,8 @@ export function resolveLinkedEditorInputs(
 				const imageElement = sourceElement as ImageElement
 				const path = imageElement.src
 				mediaCandidates.push({
-					connectionId: connection.id,
-					sourceElementId: connection.sourceElementId,
+					connectionId,
+					sourceElementId,
 					kind: "image",
 					path,
 					fileName: path ? getFileName(path) : undefined,
@@ -434,8 +551,8 @@ export function resolveLinkedEditorInputs(
 			if (sourceElement.type === ElementTypeEnum.Video) {
 				const path = (sourceElement as VideoElement).src
 				mediaCandidates.push({
-					connectionId: connection.id,
-					sourceElementId: connection.sourceElementId,
+					connectionId,
+					sourceElementId,
 					kind: "video",
 					path,
 					fileName: path ? getFileName(path) : undefined,
