@@ -1,8 +1,8 @@
 import {
 	ArrowLeft,
 	Columns3Cog,
+	Eye,
 	Loader2,
-	MoreHorizontal,
 	Pencil,
 	Plus,
 	RefreshCw,
@@ -21,15 +21,8 @@ import type {
 	MagicBaseTable,
 } from "@/apis/modules/magicBase"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/shadcn-ui/dropdown-menu"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/lib/utils"
 
 import DataFilterBar from "./DataFilterBar"
@@ -89,7 +82,7 @@ interface DatabaseTablePanelProps {
 	onRefresh: () => void
 }
 
-interface DataSettingsMenuProps {
+interface DataToolbarActionsProps {
 	activeTab: DatabasePanelTab
 	canManagePermissions: boolean
 	showSystemFields: boolean
@@ -98,62 +91,104 @@ interface DataSettingsMenuProps {
 	onRefresh: () => void
 }
 
-function DataSettingsMenu({
+function DataToolbarActions({
 	activeTab,
 	canManagePermissions,
 	showSystemFields,
 	onTabChange,
 	onShowSystemFieldsChange,
 	onRefresh,
-}: DataSettingsMenuProps) {
+}: DataToolbarActionsProps) {
 	const { t } = useTranslation("super")
 
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button
-					type="button"
-					variant="outline"
-					size="icon"
-					className="size-8 bg-background shadow-xs"
-					aria-label={t("microAppPage.databasePanel.dataSettings")}
-					data-testid="magicbase-data-settings-trigger"
-				>
-					<MoreHorizontal className="size-4" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-48">
-				<DropdownMenuCheckboxItem
-					checked={showSystemFields}
-					onCheckedChange={(checked) => onShowSystemFieldsChange(checked === true)}
-					onSelect={(event) => event.preventDefault()}
-				>
-					{t("microAppPage.databasePanel.showSystemFields")}
-				</DropdownMenuCheckboxItem>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem
-					disabled={activeTab === "structure"}
-					onSelect={() => onTabChange("structure")}
-				>
-					<Columns3Cog className="size-4" />
-					{t("microAppPage.databasePanel.fieldSettings")}
-				</DropdownMenuItem>
-				{canManagePermissions ? (
-					<DropdownMenuItem
-						disabled={activeTab === "permissions"}
-						onSelect={() => onTabChange("permissions")}
+		<div className="flex items-center gap-1">
+			{activeTab === "data" ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant={showSystemFields ? "secondary" : "outline"}
+							size="icon"
+							className={cn("size-8 shadow-xs", !showSystemFields && "bg-background")}
+							aria-label={t("microAppPage.databasePanel.showSystemFields")}
+							aria-pressed={showSystemFields}
+							onClick={() => onShowSystemFieldsChange(!showSystemFields)}
+							data-testid="magicbase-system-fields-toggle"
+						>
+							<Eye className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{t("microAppPage.databasePanel.showSystemFields")}
+					</TooltipContent>
+				</Tooltip>
+			) : null}
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Button
+						type="button"
+						variant={activeTab === "structure" ? "secondary" : "outline"}
+						size="icon"
+						className={cn(
+							"size-8 shadow-xs",
+							activeTab !== "structure" && "bg-background",
+						)}
+						aria-label={t("microAppPage.databasePanel.fieldSettings")}
+						aria-pressed={activeTab === "structure"}
+						onClick={() => onTabChange("structure")}
+						data-testid="magicbase-field-settings"
 					>
-						<ShieldCheck className="size-4" />
+						<Columns3Cog className="size-4" />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
+					{t("microAppPage.databasePanel.fieldSettings")}
+				</TooltipContent>
+			</Tooltip>
+			{canManagePermissions ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant={activeTab === "permissions" ? "secondary" : "outline"}
+							size="icon"
+							className={cn(
+								"size-8 shadow-xs",
+								activeTab !== "permissions" && "bg-background",
+							)}
+							aria-label={t("microAppPage.databasePanel.accessPermissions")}
+							aria-pressed={activeTab === "permissions"}
+							onClick={() => onTabChange("permissions")}
+							data-testid="magicbase-access-permissions"
+						>
+							<ShieldCheck className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
 						{t("microAppPage.databasePanel.accessPermissions")}
-					</DropdownMenuItem>
-				) : null}
-				<DropdownMenuSeparator />
-				<DropdownMenuItem onSelect={onRefresh}>
-					<RefreshCw className="size-4" />
+					</TooltipContent>
+				</Tooltip>
+			) : null}
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						className="size-8 bg-background shadow-xs"
+						aria-label={t("microAppPage.databasePanel.refresh")}
+						onClick={onRefresh}
+						data-testid="magicbase-refresh"
+					>
+						<RefreshCw className="size-4" />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
 					{t("microAppPage.databasePanel.refresh")}
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
+				</TooltipContent>
+			</Tooltip>
+		</div>
 	)
 }
 
@@ -329,7 +364,7 @@ export default function DatabaseTablePanel({
 								{t("microAppPage.databasePanel.rowCreate")}
 							</Button>
 						) : null}
-						<DataSettingsMenu
+						<DataToolbarActions
 							activeTab={activeTab}
 							canManagePermissions={canManagePermissions}
 							showSystemFields={showSystemFields}

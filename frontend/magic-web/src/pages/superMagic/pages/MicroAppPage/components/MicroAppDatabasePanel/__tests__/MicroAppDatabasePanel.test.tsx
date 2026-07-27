@@ -156,14 +156,38 @@ describe("MicroAppDatabasePanel", () => {
 		expect(screen.queryByText("microAppPage.databasePanel.intro")).not.toBeInTheDocument()
 	})
 
-	it("opens field settings from the secondary data settings menu", async () => {
+	it("exposes database actions directly in the toolbar", async () => {
+		renderPanel()
+
+		await screen.findByText("Apple")
+		expect(screen.queryByTestId("magicbase-data-settings-trigger")).not.toBeInTheDocument()
+		expect(
+			screen.getByRole("button", {
+				name: "microAppPage.databasePanel.showSystemFields",
+			}),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole("button", { name: "microAppPage.databasePanel.fieldSettings" }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole("button", {
+				name: "microAppPage.databasePanel.accessPermissions",
+			}),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole("button", { name: "microAppPage.databasePanel.refresh" }),
+		).toBeInTheDocument()
+	})
+
+	it("opens field settings from the visible toolbar action", async () => {
 		renderPanel()
 
 		await screen.findByText("Apple")
 		expect(screen.getByTestId("magicbase-load-more-status")).toBeInTheDocument()
 
-		fireEvent.keyDown(screen.getByTestId("magicbase-data-settings-trigger"), { key: "Enter" })
-		fireEvent.click(await screen.findByText("microAppPage.databasePanel.fieldSettings"))
+		fireEvent.click(
+			screen.getByRole("button", { name: "microAppPage.databasePanel.fieldSettings" }),
+		)
 
 		expect(screen.queryByTestId("magicbase-load-more-status")).not.toBeInTheDocument()
 		expect(
@@ -178,24 +202,28 @@ describe("MicroAppDatabasePanel", () => {
 		await screen.findByText("Apple")
 		expect(document.body).not.toHaveTextContent("row-1")
 
-		fireEvent.keyDown(screen.getByTestId("magicbase-data-settings-trigger"), { key: "Enter" })
-		fireEvent.click(await screen.findByText("microAppPage.databasePanel.showSystemFields"))
+		const systemFieldsButton = screen.getByRole("button", {
+			name: "microAppPage.databasePanel.showSystemFields",
+		})
+		expect(systemFieldsButton).toHaveAttribute("aria-pressed", "false")
+		fireEvent.click(systemFieldsButton)
 
 		expect(await screen.findByText("row-1")).toBeInTheDocument()
 		expect(screen.getByText("2026-07-06 18:01:42")).toBeInTheDocument()
+		expect(systemFieldsButton).toHaveAttribute("aria-pressed", "true")
 	})
 
 	it("hides access permission settings from non-managers", async () => {
 		renderPanel("editor")
 
 		await screen.findByText("Apple")
-		fireEvent.keyDown(screen.getByTestId("magicbase-data-settings-trigger"), { key: "Enter" })
-
 		expect(
-			await screen.findByText("microAppPage.databasePanel.fieldSettings"),
+			screen.getByRole("button", { name: "microAppPage.databasePanel.fieldSettings" }),
 		).toBeInTheDocument()
 		expect(
-			screen.queryByText("microAppPage.databasePanel.accessPermissions"),
+			screen.queryByRole("button", {
+				name: "microAppPage.databasePanel.accessPermissions",
+			}),
 		).not.toBeInTheDocument()
 	})
 
