@@ -6,6 +6,7 @@ import { Button } from "@/components/shadcn-ui/button"
 
 import { createEmptyMagicBaseFilter, isMagicBaseFilterCondition } from "./utils"
 import useFilterOperatorLabel from "./useFilterOperatorLabel"
+import useMagicBaseColumnLabel from "./useMagicBaseColumnLabel"
 
 interface DataFilterSummaryProps {
 	columns: MagicBaseColumn[]
@@ -16,6 +17,7 @@ interface DataFilterSummaryProps {
 export default function DataFilterSummary({ columns, value, onChange }: DataFilterSummaryProps) {
 	const { t } = useTranslation("super")
 	const getOperatorLabel = useFilterOperatorLabel()
+	const getColumnLabel = useMagicBaseColumnLabel()
 	const conditions = value.items.flatMap((item, itemIndex) =>
 		isMagicBaseFilterCondition(item) ? [{ condition: item, itemIndex }] : [],
 	)
@@ -41,7 +43,7 @@ export default function DataFilterSummary({ columns, value, onChange }: DataFilt
 						key={`${condition.field}:${condition.operator}:${index}`}
 						className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/5 pl-2 text-xs text-foreground"
 					>
-						<span>{column?.column_name || condition.field}</span>
+						<span>{column ? getColumnLabel(column) : condition.field}</span>
 						<span className="text-muted-foreground">
 							{getOperatorLabel(condition.operator)}
 						</span>

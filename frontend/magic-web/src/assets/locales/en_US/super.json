@@ -3292,6 +3292,13 @@
 				"user": "User"
 			},
 			"systemField": "System field",
+			"systemFieldName": {
+				"createdAt": "Created at",
+				"createdBy": "Created by",
+				"id": "Record ID",
+				"organizationCode": "Organization code",
+				"updatedAt": "Updated at"
+			},
 			"tableCount": "{{total}} tables",
 			"tableListTitle": "Data tables",
 			"tablePermission": "Table permissions",

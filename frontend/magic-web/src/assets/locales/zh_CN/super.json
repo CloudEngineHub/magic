@@ -3292,6 +3292,13 @@
 				"user": "用户"
 			},
 			"systemField": "系统字段",
+			"systemFieldName": {
+				"createdAt": "创建时间",
+				"createdBy": "创建人",
+				"id": "记录 ID",
+				"organizationCode": "组织编码",
+				"updatedAt": "更新时间"
+			},
 			"tableCount": "{{total}} 个",
 			"tableListTitle": "数据表",
 			"tablePermission": "表级权限",

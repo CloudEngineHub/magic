@@ -14,7 +14,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
+	SelectLabel,
+	SelectSeparator,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/shadcn-ui/select"
@@ -27,6 +30,7 @@ import {
 	getFilterConditionLimit,
 	getFilterOperators,
 	getRootFilterConditions,
+	isSystemFilterColumn,
 	isValidDraftFilterCondition,
 	MAX_OR_FILTER_CONDITIONS,
 	toDraftFilterValue,
@@ -34,6 +38,7 @@ import {
 } from "./dataFilterRules"
 import { createEmptyMagicBaseFilter, getMagicBaseFilterConditionCount } from "./utils"
 import useFilterOperatorLabel from "./useFilterOperatorLabel"
+import useMagicBaseColumnLabel from "./useMagicBaseColumnLabel"
 
 interface DataFilterProps {
 	columns: MagicBaseColumn[]
@@ -106,8 +111,11 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterPr
 	const [draftLogic, setDraftLogic] = useState<MagicBaseFilterLogic>("and")
 	const [draftConditions, setDraftConditions] = useState<DraftFilterCondition[]>([])
 	const filterableColumns = useMemo(() => getFilterableColumns(columns), [columns])
+	const dynamicFilterColumns = filterableColumns.filter((column) => !isSystemFilterColumn(column))
+	const systemFilterColumns = filterableColumns.filter(isSystemFilterColumn)
 	const conditionCount = getMagicBaseFilterConditionCount(value)
 	const getOperatorLabel = useFilterOperatorLabel()
+	const getColumnLabel = useMagicBaseColumnLabel()
 
 	const createDraftConditions = () => {
 		const conditions = getRootFilterConditions(value).flatMap((condition) => {
@@ -261,15 +269,41 @@ export default function DataFilterBar({ columns, value, onChange }: DataFilterPr
 									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent align="start">
-										{filterableColumns.map((item) => (
-											<SelectItem
-												key={item.column_key}
-												value={item.column_key}
-											>
-												{item.column_name || item.column_key}
-											</SelectItem>
-										))}
+									<SelectContent align="start" className="max-h-72">
+										{dynamicFilterColumns.length > 0 ? (
+											<SelectGroup>
+												<SelectLabel>
+													{t("microAppPage.databasePanel.schemaField")}
+												</SelectLabel>
+												{dynamicFilterColumns.map((item) => (
+													<SelectItem
+														key={item.column_key}
+														value={item.column_key}
+													>
+														{getColumnLabel(item)}
+													</SelectItem>
+												))}
+											</SelectGroup>
+										) : null}
+										{dynamicFilterColumns.length > 0 &&
+										systemFilterColumns.length > 0 ? (
+											<SelectSeparator />
+										) : null}
+										{systemFilterColumns.length > 0 ? (
+											<SelectGroup>
+												<SelectLabel>
+													{t("microAppPage.databasePanel.systemField")}
+												</SelectLabel>
+												{systemFilterColumns.map((item) => (
+													<SelectItem
+														key={item.column_key}
+														value={item.column_key}
+													>
+														{getColumnLabel(item)}
+													</SelectItem>
+												))}
+											</SelectGroup>
+										) : null}
 									</SelectContent>
 								</Select>
 								<Select

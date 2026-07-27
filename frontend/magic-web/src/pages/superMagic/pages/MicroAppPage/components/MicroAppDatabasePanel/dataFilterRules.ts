@@ -18,23 +18,28 @@ export interface DraftFilterCondition {
 export const MAX_FILTER_CONDITIONS = 10
 export const MAX_OR_FILTER_CONDITIONS = 5
 
-const FILTERABLE_DATA_TYPES = new Set(["boolean", "datetime", "number", "text"])
+const FILTERABLE_DATA_TYPES = new Set(["boolean", "datetime", "id", "number", "text"])
 
 const OPERATORS_BY_DATA_TYPE: Record<string, MagicBaseFilterOperator[]> = {
+	id: ["eq", "gt", "gte", "lt", "lte", "in"],
 	text: ["contains", "eq", "in"],
 	number: ["eq", "gt", "gte", "lt", "lte", "in"],
 	datetime: ["eq", "gt", "gte", "lt", "lte"],
 	boolean: ["eq", "in"],
 }
 
+export function isSystemFilterColumn(column: MagicBaseColumn) {
+	return column.source === "system" || column.system === true
+}
+
 export function getFilterableColumns(columns: MagicBaseColumn[]) {
-	return columns.filter(
-		(column) =>
-			column.status !== "disabled" &&
-			column.source !== "system" &&
-			!column.system &&
-			FILTERABLE_DATA_TYPES.has(column.data_type),
+	const filterableColumns = columns.filter(
+		(column) => column.status !== "disabled" && FILTERABLE_DATA_TYPES.has(column.data_type),
 	)
+	return [
+		...filterableColumns.filter((column) => !isSystemFilterColumn(column)),
+		...filterableColumns.filter(isSystemFilterColumn),
+	]
 }
 
 export function getFilterOperators(column?: MagicBaseColumn): MagicBaseFilterOperator[] {
@@ -92,6 +97,7 @@ export function toFilterCondition(
 function isValidScalar(column: MagicBaseColumn, value: string) {
 	const trimmed = value.trim()
 	if (!trimmed) return false
+	if (column.data_type === "id") return /^[1-9]\d*$/.test(trimmed)
 	if (column.data_type === "number") return Number.isFinite(Number(trimmed))
 	if (column.data_type === "boolean") return trimmed === "true" || trimmed === "false"
 	return true

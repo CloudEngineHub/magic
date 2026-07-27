@@ -406,6 +406,52 @@ describe("MicroAppDatabasePanel", () => {
 		})
 	})
 
+	it("filters rows by system fields without showing system columns", async () => {
+		renderPanel()
+
+		await screen.findByText("Apple")
+		expect(screen.queryByText("id")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("magicbase-filter-trigger"))
+		fireEvent.keyDown(screen.getByLabelText("microAppPage.databasePanel.filterField"), {
+			key: "ArrowDown",
+		})
+		expect(await screen.findByRole("listbox")).toHaveClass("max-h-72")
+		fireEvent.keyDown(screen.getByLabelText("microAppPage.databasePanel.filterField"), {
+			key: "Escape",
+		})
+		await selectFilterOption(
+			"microAppPage.databasePanel.filterField",
+			"microAppPage.databasePanel.systemFieldName.createdAt",
+		)
+		await selectFilterOption(
+			"microAppPage.databasePanel.filterOperator",
+			"microAppPage.databasePanel.filterOperatorGte",
+		)
+		fireEvent.change(screen.getByLabelText("microAppPage.databasePanel.filterValue"), {
+			target: { value: "2026-07-25T10:30" },
+		})
+		fireEvent.click(screen.getByText("microAppPage.databasePanel.applyFilters"))
+
+		await waitFor(() => {
+			expect(mocks.queryRows).toHaveBeenLastCalledWith(
+				"project-1",
+				"table-1",
+				expect.objectContaining({
+					filter: {
+						logic: "and",
+						items: [
+							{
+								field: "created_at",
+								operator: "gte",
+								value: "2026-07-25 10:30:00",
+							},
+						],
+					},
+				}),
+			)
+		})
+	})
+
 	it("loads the next page when scrolling near the bottom", async () => {
 		mocks.queryRows.mockImplementation(
 			(_projectId: string, _tableId: string, request: { page: number }) =>

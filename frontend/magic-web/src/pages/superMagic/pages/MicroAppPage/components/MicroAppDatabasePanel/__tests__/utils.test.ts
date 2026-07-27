@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { MagicBaseTable } from "@/apis/modules/magicBase"
 import {
+	getFilterableColumns,
+	getFilterOperators,
+	isValidDraftFilterCondition,
+	toFilterCondition,
+} from "../dataFilterRules"
+import {
 	buildGridColumns,
 	buildMagicBaseRowsRequest,
 	buildMagicBaseSelect,
@@ -122,6 +128,51 @@ describe("MicroAppDatabasePanel utils", () => {
 		expect(normalizeMagicBaseBooleanValue(0)).toBe(false)
 		expect(normalizeMagicBaseBooleanValue("0")).toBe(false)
 		expect(normalizeMagicBaseBooleanValue("false")).toBe(false)
+	})
+
+	it("includes system fields in filters after dynamic fields", () => {
+		const columns = getFilterableColumns(getDisplayColumns(table))
+
+		expect(columns.map((column) => column.column_key)).toEqual([
+			"brand",
+			"id",
+			"organization_code",
+			"created_by",
+			"created_at",
+			"updated_at",
+		])
+		expect(getFilterOperators(columns.find((column) => column.column_key === "id"))).toEqual([
+			"eq",
+			"gt",
+			"gte",
+			"lt",
+			"lte",
+			"in",
+		])
+	})
+
+	it("keeps record ID filter values as validated integer strings", () => {
+		const idColumn = getFilterableColumns(getDisplayColumns(table)).find(
+			(column) => column.column_key === "id",
+		)
+		expect(idColumn).toBeDefined()
+		if (!idColumn) return
+
+		const condition = {
+			field: "id",
+			operator: "eq" as const,
+			value: "9223372036854775807",
+		}
+		expect(isValidDraftFilterCondition(condition, [idColumn])).toBe(true)
+		expect(toFilterCondition(idColumn, condition)).toEqual({
+			field: "id",
+			operator: "eq",
+			value: "9223372036854775807",
+		})
+		expect(isValidDraftFilterCondition({ ...condition, value: "1.5" }, [idColumn])).toBe(false)
+		expect(isValidDraftFilterCondition({ ...condition, value: "not-an-id" }, [idColumn])).toBe(
+			false,
+		)
 	})
 
 	it("hides system fields from the default data grid without changing the query fields", () => {
