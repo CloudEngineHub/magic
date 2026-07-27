@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\BatchDownloadPackReposit
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Request\FileConverterRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Response\FileConverterResponse;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\FileConverter\Response\FileItemDTO;
+use Dtyq\SuperMagic\Infrastructure\Utils\BatchDownloadArchivePathUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 
 class BatchDownloadPackDomainService
@@ -32,6 +33,9 @@ class BatchDownloadPackDomainService
      *   relative_base_path:string,
      *   pack_entries:array<int,string>,
      *   leaf_files:array<int,TaskFileEntity>,
+     *   path_mode:string,
+     *   cache_signature:string,
+     *   selected_nodes:array<int,array{id:int,path:string,is_directory:bool}>,
      *   unique_leaf_file_ids:array<int,int>
      * }
      */
@@ -40,7 +44,8 @@ class BatchDownloadPackDomainService
         array $authorizedEntities,
         int $projectId,
         string $projectWorkDir,
-        string $fullProjectWorkDir = ''
+        string $fullProjectWorkDir = '',
+        bool $useRelativePaths = true
     ): array {
         $authorizedContext = $this->buildAuthorizedSelectionContext(
             $selectedEntities,
@@ -52,7 +57,14 @@ class BatchDownloadPackDomainService
         // file_keys must always be relative to the project root directory,
         // because the sandbox resolves paths from the project root (project_oss_path).
         // Do NOT strip any relativeBasePath prefix from file_keys.
-        $relativeBasePath = '';
+        $selectedNodes = $useRelativePaths
+            ? BatchDownloadArchivePathUtil::removeRedundantSelections(
+                $this->buildSelectedNodes($authorizedContext, $fullProjectWorkDir)
+            )
+            : [];
+        $relativeBasePath = $useRelativePaths
+            ? BatchDownloadArchivePathUtil::buildArchiveBasePath($selectedNodes)
+            : '';
         $basePath = rtrim($projectWorkDir, '/');
 
         $leafFiles = $this->collectLeafFilesForPack(
@@ -66,28 +78,68 @@ class BatchDownloadPackDomainService
         $packFileKeys = $this->buildPackFileKeys(
             $leafFiles,
             $authorizedContext['authorized_relative_path_map'],
-            $relativeBasePath,
+            '',
             $fullProjectWorkDir
         );
 
-        $explicitDirectories = $this->collectExplicitDirectoriesForPack(
-            $authorizedContext['selected_directory_paths'],
-            $packFileKeys,
-            $relativeBasePath
-        );
-        $implicitDirectories = $this->collectAncestorDirectoriesForLeafFiles($packFileKeys);
-        $packEntries = $this->buildPackEntries($explicitDirectories, $implicitDirectories, $packFileKeys);
+        if ($useRelativePaths) {
+            $packEntries = $packFileKeys;
+        } else {
+            $explicitDirectories = $this->collectExplicitDirectoriesForPack(
+                $authorizedContext['selected_directory_paths'],
+                $packFileKeys
+            );
+            $implicitDirectories = $this->collectAncestorDirectoriesForLeafFiles($packFileKeys);
+            $packEntries = $this->buildPackEntries($explicitDirectories, $implicitDirectories, $packFileKeys);
+        }
+
+        $pathMode = $useRelativePaths ? 'relative_lca' : 'workspace_relative';
+        $cacheSignature = $useRelativePaths
+            ? BatchDownloadArchivePathUtil::buildCacheSignature($selectedNodes, $relativeBasePath)
+            : BatchDownloadArchivePathUtil::workspaceRelativeCacheSignature();
 
         return [
             'base_path' => $basePath,
             'relative_base_path' => $relativeBasePath,
             'pack_entries' => $packEntries,
             'leaf_files' => $leafFiles,
+            'path_mode' => $pathMode,
+            'cache_signature' => $cacheSignature,
+            'selected_nodes' => $selectedNodes,
             'unique_leaf_file_ids' => array_values(array_map(
                 static fn (TaskFileEntity $file): int => $file->getFileId(),
                 $leafFiles
             )),
         ];
+    }
+
+    /**
+     * @param array{
+     *   selected_visible_entities:array<int,TaskFileEntity>,
+     *   selected_relative_path_map:array<int,string>
+     * } $authorizedContext
+     * @return array<int,array{id:int,path:string,is_directory:bool}>
+     */
+    private function buildSelectedNodes(array $authorizedContext, string $fullProjectWorkDir): array
+    {
+        $selectedNodes = [];
+        foreach ($authorizedContext['selected_visible_entities'] as $entity) {
+            $path = $this->normalizeRelativePath(
+                $authorizedContext['selected_relative_path_map'][$entity->getFileId()]
+                ?? $this->buildLegacyFallbackPath($entity->getFileKey(), $fullProjectWorkDir)
+            );
+            if ($path === '') {
+                continue;
+            }
+
+            $selectedNodes[] = [
+                'id' => $entity->getFileId(),
+                'path' => $path,
+                'is_directory' => $entity->getIsDirectory(),
+            ];
+        }
+
+        return $selectedNodes;
     }
 
     public function submitPackTask(
@@ -347,35 +399,24 @@ class BatchDownloadPackDomainService
      */
     private function collectExplicitDirectoriesForPack(
         array $selectedDirectoryPaths,
-        array $packFileKeys,
-        string $relativeBasePath
+        array $packFileKeys
     ): array {
         $explicitDirectories = [];
         $seen = [];
 
         foreach ($selectedDirectoryPaths as $directoryPath) {
-            $relativeDirectoryKey = $this->normalizeRelativePath(
-                $this->stripRelativeBasePath($directoryPath, $relativeBasePath)
-            );
-
+            $relativeDirectoryKey = $this->normalizeRelativePath($directoryPath);
             if ($this->isInvalidPackKey($relativeDirectoryKey) || isset($seen[$relativeDirectoryKey])) {
                 continue;
             }
 
-            $hasLeafFile = false;
             foreach ($packFileKeys as $fileKey) {
                 if ($fileKey === $relativeDirectoryKey || str_starts_with($fileKey, $relativeDirectoryKey . '/')) {
-                    $hasLeafFile = true;
+                    $seen[$relativeDirectoryKey] = true;
+                    $explicitDirectories[] = $relativeDirectoryKey;
                     break;
                 }
             }
-
-            if (! $hasLeafFile) {
-                continue;
-            }
-
-            $seen[$relativeDirectoryKey] = true;
-            $explicitDirectories[] = $relativeDirectoryKey;
         }
 
         return $explicitDirectories;
@@ -391,16 +432,7 @@ class BatchDownloadPackDomainService
         $seen = [];
 
         foreach ($packFileKeys as $fileKey) {
-            $normalizedFileKey = $this->normalizeRelativePath($fileKey);
-            if ($normalizedFileKey === '') {
-                continue;
-            }
-
-            $segments = explode('/', $normalizedFileKey);
-            if (count($segments) <= 1) {
-                continue;
-            }
-
+            $segments = explode('/', $this->normalizeRelativePath($fileKey));
             $currentPath = '';
             foreach (array_slice($segments, 0, -1) as $segment) {
                 $currentPath = $currentPath === '' ? $segment : $currentPath . '/' . $segment;
