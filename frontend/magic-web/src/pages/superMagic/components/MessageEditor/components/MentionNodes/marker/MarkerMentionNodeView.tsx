@@ -13,13 +13,17 @@ import {
 	getCanvasMarkerMentionImagePath,
 	normalizeCanvasMarkerMentionData,
 } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
+import { useOptionalMessageEditorStore } from "../../../stores"
 
 function MarkerMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRendererProps) {
 	const isMobile = useIsMobile()
+	const editorStore = useOptionalMessageEditorStore()
+	const projectFilesStore = editorStore?.fileUploadStore.getProjectFilesStore()
 	const markerData = normalizeCanvasMarkerMentionData(attrs.data)
 	const { imageUrl } = useMarkerImageUrl(
 		markerData ? getCanvasMarkerMentionImagePath(markerData) : undefined,
 		markerData?.design_project_id,
+		projectFilesStore,
 	)
 	const displayName = getMentionDisplayName(attrs)
 	const { handleMarkerClick } = useMarkerClickHandler({

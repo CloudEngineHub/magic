@@ -26,6 +26,123 @@ export function isTopicBoundToProject(
 	return topic.project_id === projectId
 }
 
+interface TopicRouteContextParams {
+	projectId: string | undefined
+	routeTopicId: string | undefined
+	selectedProjectId: string | undefined
+	selectedTopic: Topic | null | undefined
+}
+
+interface MainLayoutRouteRestoreParams extends TopicRouteContextParams {
+	isChatProjectRoute: boolean
+	workspaceId: string | undefined
+	selectedWorkspaceId: string | undefined
+}
+
+/**
+ * 话题详情页只有在项目、话题归属和聊天会话映射都完整时才允许挂载真实内容。
+ * 列表态话题可能只有展示字段，因此仅比较 id 会让消息区和输入框提前进入空状态。
+ */
+export function isTopicRouteContextReady({
+	projectId,
+	routeTopicId,
+	selectedProjectId,
+	selectedTopic,
+}: TopicRouteContextParams): boolean {
+	if (!projectId || !routeTopicId) {
+		return false
+	}
+
+	return Boolean(
+		selectedProjectId === projectId &&
+		selectedTopic?.id === routeTopicId &&
+		isTopicBoundToProject(selectedTopic, projectId) &&
+		selectedTopic.chat_conversation_id &&
+		selectedTopic.chat_topic_id,
+	)
+}
+
+/**
+ * MainLayout only restores workspace/project topic routes. Chat detail routes own their
+ * refresh lifecycle in ChatProjectPage so initializeState and refreshState cannot race.
+ */
+export function shouldRestoreRouteStateFromMainLayout({
+	isChatProjectRoute,
+	workspaceId,
+	projectId,
+	routeTopicId,
+	selectedWorkspaceId,
+	selectedProjectId,
+	selectedTopic,
+}: MainLayoutRouteRestoreParams): boolean {
+	if (isChatProjectRoute) {
+		return false
+	}
+
+	return Boolean(
+		(workspaceId && selectedWorkspaceId !== workspaceId) ||
+		(projectId && selectedProjectId !== projectId) ||
+		(routeTopicId &&
+			!isTopicRouteContextReady({
+				projectId,
+				routeTopicId,
+				selectedProjectId,
+				selectedTopic,
+			})),
+	)
+}
+
+interface ChatProjectRouteContextParams {
+	projectId: string | undefined
+	routeTopicId: string | undefined
+	selectedProjectId: string | undefined
+	selectedWorkspaceId: string | undefined
+	selectedTopic: Topic | null | undefined
+	loadedProjects?: ProjectListItem[]
+	/** Read-only projects do not restore a selected topic. */
+	isSelectedProjectReadOnly?: boolean
+}
+
+/**
+ * Chat 项目路由的真实页面门禁。删除后的旧 URL 不应被骨架永久拦住，
+ * 其余场景必须等待项目、工作区和完整话题上下文恢复完成。
+ */
+export function isChatProjectRouteContextReady({
+	projectId,
+	routeTopicId,
+	selectedProjectId,
+	selectedWorkspaceId,
+	selectedTopic,
+	loadedProjects = [],
+	isSelectedProjectReadOnly = false,
+}: ChatProjectRouteContextParams): boolean {
+	if (!projectId) {
+		return true
+	}
+
+	if (selectedProjectId !== projectId) {
+		return wasProjectRemovedFromLoadedList(projectId, loadedProjects)
+	}
+
+	if (!selectedWorkspaceId) {
+		return false
+	}
+
+	if (isSelectedProjectReadOnly) {
+		return true
+	}
+
+	if (!selectedTopic?.id || (routeTopicId && selectedTopic.id !== routeTopicId)) {
+		return false
+	}
+
+	return Boolean(
+		isTopicBoundToProject(selectedTopic, projectId) &&
+		selectedTopic.chat_conversation_id &&
+		selectedTopic.chat_topic_id,
+	)
+}
+
 /**
  * 只有项目、工作区、话题三者都已经对齐时，chat 项目路由才允许跳过状态恢复。
  */
@@ -36,35 +153,17 @@ export function shouldRefreshChatProjectState({
 	selectedWorkspaceId,
 	selectedTopic,
 	loadedProjects = [],
-}: {
-	projectId: string | undefined
-	routeTopicId: string | undefined
-	selectedProjectId: string | undefined
-	selectedWorkspaceId: string | undefined
-	selectedTopic: Topic | null | undefined
-	loadedProjects?: ProjectListItem[]
-}): boolean {
-	if (!projectId) {
-		return false
-	}
-
-	if (selectedProjectId !== projectId) {
-		// After delete/move optimistic removal, do not refetch a stale URL project id.
-		if (wasProjectRemovedFromLoadedList(projectId, loadedProjects)) {
-			return false
-		}
-		return true
-	}
-
-	if (!selectedWorkspaceId) {
-		return true
-	}
-
-	if (routeTopicId && selectedTopic?.id !== routeTopicId) {
-		return true
-	}
-
-	return !isTopicBoundToProject(selectedTopic, projectId)
+	isSelectedProjectReadOnly = false,
+}: ChatProjectRouteContextParams): boolean {
+	return !isChatProjectRouteContextReady({
+		projectId,
+		routeTopicId,
+		selectedProjectId,
+		selectedWorkspaceId,
+		selectedTopic,
+		loadedProjects,
+		isSelectedProjectReadOnly,
+	})
 }
 
 interface ShouldRefreshChatProjectStateOnDesktopParams {
@@ -74,6 +173,7 @@ interface ShouldRefreshChatProjectStateOnDesktopParams {
 	selectedWorkspaceId: string | undefined
 	selectedTopic: Topic | null | undefined
 	loadedProjects?: ProjectListItem[]
+	isSelectedProjectReadOnly?: boolean
 	/** True while switchChatProjectInDesktop optimistic navigation is in flight. */
 	isDesktopChatSwitchInProgress?: boolean
 }

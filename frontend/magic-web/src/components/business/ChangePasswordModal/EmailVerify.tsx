@@ -37,7 +37,7 @@ export function EmailVerify({ form }: EmailVerifyProps) {
 			>
 				<Input
 					autoComplete="off"
-					placeholder={t("form.stateCodeRequired", { ns: "message" })}
+					placeholder={t("setting.accountSecurityPassword.codePlaceholder")}
 					suffix={
 						<VerificationCodeButton
 							phone={email}

@@ -70,11 +70,11 @@ import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
 import {
 	ProjectFileImagePreviewProvider,
-	ProjectFileImagePreviewTooltipContent,
 	resolveProjectFileImagePreviewSource,
 	useProjectFileImagePreviewManager,
 } from "./components/ProjectFileImagePreviewProvider"
 import { ProjectFileImageThumbnailIcon } from "./components/ProjectFileImageThumbnailIcon"
+import { ProjectFileImageSmartTooltip } from "./components/ProjectFileImageSmartTooltip"
 import { InputWithError } from "./components"
 import {
 	getAppEntryFile,
@@ -1740,31 +1740,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : (
 							<>
 								{imagePreviewSource ? (
-									<SmartTooltip
-										placement="right"
+									<ProjectFileImageSmartTooltip
+										source={imagePreviewSource}
 										className={cx(
 											"min-w-0 flex-1",
 											styles.ellipsis,
 											isActiveFile && "font-medium",
 										)}
 										sideOffset={20}
-										forceShowTooltip
-										tooltipContentClassName="max-w-none whitespace-nowrap text-nowrap break-normal"
-										tooltipContentStyle={{ maxWidth: "none" }}
-										content={
-											<ProjectFileImagePreviewTooltipContent
-												source={imagePreviewSource}
-											/>
-										}
-										onOpenChange={(open) => {
-											if (open)
-												imagePreviewManager.ensurePreview(
-													imagePreviewSource,
-												)
-										}}
 									>
 										{item?.file_name}
-									</SmartTooltip>
+									</ProjectFileImageSmartTooltip>
 								) : (
 									<SmartTooltip
 										placement="right"
