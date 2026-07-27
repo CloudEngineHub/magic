@@ -1378,17 +1378,21 @@ export default memo(function HTML(props: HTMLProps) {
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{activeHistory.loading ? (
-				<Flex
-					justify="center"
-					align="center"
-					style={{
-						height: documentFlowFullscreen ? "100dvh" : "100%",
-						width: "100%",
-						backgroundColor: "white",
-					}}
-				>
-					<MagicSpin spinning />
-				</Flex>
+				documentFlowFullscreen ? (
+					<div className="min-h-dvh" />
+				) : (
+					<Flex
+						justify="center"
+						align="center"
+						style={{
+							height: "100%",
+							width: "100%",
+							backgroundColor: "white",
+						}}
+					>
+						<MagicSpin spinning />
+					</Flex>
+				)
 			) : isCodeViewMode ? (
 				<div className={styles.htmlBody}>
 					<CodeEditor
@@ -1483,16 +1487,11 @@ export default memo(function HTML(props: HTMLProps) {
 									onAppendPickingChange={setIsAppendPicking}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
-								{!isPreviewRenderReady && (
+								{!isPreviewRenderReady && !documentFlowFullscreen && (
 									<Flex
 										justify="center"
 										align="center"
-										className={cn(
-											"absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]",
-											// Before cross-origin content reports its height, reserve a full viewport
-											// so the loading indicator never collapses to the document top edge.
-											documentFlowFullscreen && "min-h-dvh",
-										)}
+										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
 									>
 										<MagicSpin spinning />
 									</Flex>

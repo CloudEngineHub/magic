@@ -54,6 +54,8 @@ interface TextEditorProps {
 	onClose?: () => void
 	userSelectDetail?: any
 	isFullscreen?: boolean
+	/** Enables page-level document flow for pure-share previews. */
+	documentFlowFullscreen?: boolean
 	handleShareFile?: () => void
 	allowEdit?: boolean
 	setIsEditMode?: (isEdit: boolean) => void
@@ -145,6 +147,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		allowEdit,
 		viewMode = "desktop",
 		onViewModeChange,
@@ -774,7 +777,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		<>
 			<div
 				className={cn(
-					"flex h-full flex-col overflow-hidden [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted",
+					documentFlowFullscreen
+						? "flex min-h-dvh flex-col overflow-visible [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted"
+						: "flex h-full flex-col overflow-hidden [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted",
 					className,
 				)}
 			>
@@ -809,22 +814,35 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					/>
 				)}
 				{loading ? (
-					<div className="flex h-full w-full items-center justify-center bg-background">
-						<MagicSpin spinning />
-					</div>
+					documentFlowFullscreen ? (
+						<div className="min-h-dvh" />
+					) : (
+						<div className="flex h-full w-full items-center justify-center bg-background">
+							<MagicSpin spinning />
+						</div>
+					)
 				) : isDeleted ? (
 					<Deleted data={displayData} showHeader={false} />
 				) : (
 					<div
 						className={cn(
-							"h-full overflow-auto transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+							documentFlowFullscreen
+								? "min-h-dvh flex-1 overflow-visible transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+								: "min-h-0 flex-1 transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+							!documentFlowFullscreen &&
+								(internalViewMode === "code" ? "overflow-hidden" : "overflow-auto"),
 							internalViewMode === "phone" &&
 								"flex w-full items-center justify-center bg-muted",
 						)}
 					>
 						<div
 							className={cn(
-								"m-auto h-full w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+								documentFlowFullscreen
+									? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+									: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+								!documentFlowFullscreen &&
+									internalViewMode === "code" &&
+									"overflow-hidden",
 								internalViewMode === "phone" &&
 									"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
 							)}
@@ -836,7 +854,13 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								content={currentContent}
 								processedContent={processedContent}
 								className={cn(
-									"h-full flex-1 overflow-auto whitespace-pre-wrap bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+									documentFlowFullscreen
+										? "min-h-dvh flex-1 overflow-visible bg-background text-base"
+										: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+									!documentFlowFullscreen &&
+										(internalViewMode === "code"
+											? "overflow-hidden"
+											: "overflow-auto whitespace-pre-wrap"),
 									internalViewMode === "code" && "[&_>_pre]:!bg-background",
 								)}
 								isEditMode={isEditMode}
@@ -849,6 +873,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								onOpenFile={openFileTab}
 								placeholder={t("fileViewer.placeholder.content")}
 								resolveImagesFolderParentId={resolveImagesFolderParentId}
+								suppressLoadingIndicator={documentFlowFullscreen}
+								documentFlowFullscreen={documentFlowFullscreen}
 							/>
 						</div>
 					</div>

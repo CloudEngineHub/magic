@@ -1,4 +1,5 @@
 import ContentRenderer from "./components/ContentRenderer"
+import { DetailType } from "./types"
 import { SuperMagicApi } from "@/apis"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { Suspense, useEffect, useRef, useState } from "react"
@@ -20,7 +21,7 @@ import { prepareSingleSlideExport } from "@/pages/superMagic/services/pptService
 import { exportPPTX } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { isFileInPPTMode } from "./utils/file"
+import { hasPPTMetadata, isFileInPPTMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import {
@@ -91,6 +92,16 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
+	const isPptRenderer =
+		type === DetailType.PowerPoint ||
+		(type === DetailType.Html &&
+			(hasPPTMetadata(data) || isFileInPPTMode(data?.file_id, attachmentList ?? [])))
+	const supportsDocumentFlow =
+		documentFlowFullscreen &&
+		!isPptRenderer &&
+		[DetailType.Html, DetailType.Md, DetailType.Text, DetailType.Pdf, DetailType.Code].includes(
+			type,
+		)
 	const { isEditMode, setIsEditMode, checkBeforeClose } = useEditMode({
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
@@ -721,7 +732,8 @@ export default function Render(props: any) {
 		onActiveFileChange,
 		showFooter,
 		isPlaybackMode,
-		documentFlowFullscreen,
+		// PPT uses a viewport-sized stage for slide scaling and must keep its original layout.
+		documentFlowFullscreen: supportsDocumentFlow,
 		mdToolbarContainer,
 		isTabActive: props.isTabActive,
 		allowDownload,
@@ -732,25 +744,31 @@ export default function Render(props: any) {
 		<>
 			<div
 				className={cn(
-					documentFlowFullscreen
+					supportsDocumentFlow
 						? "flex min-h-dvh min-w-0 flex-col"
-						: "flex h-full min-h-0 min-w-0 flex-col",
+						: documentFlowFullscreen
+							? "flex h-dvh min-w-0 flex-col overflow-hidden"
+							: "flex h-full min-h-0 min-w-0 flex-col",
 					className,
 				)}
 			>
 				<Suspense
 					fallback={
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								height: "100%",
-								minHeight: "400px",
-							}}
-						>
-							<MagicSpin />
-						</div>
+						supportsDocumentFlow ? (
+							<div className="min-h-dvh" />
+						) : (
+							<div
+								style={{
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									height: "100%",
+									minHeight: "400px",
+								}}
+							>
+								<MagicSpin />
+							</div>
+						)
 					}
 				>
 					<ContentRenderer type={type} data={data} commonProps={commonProps} />

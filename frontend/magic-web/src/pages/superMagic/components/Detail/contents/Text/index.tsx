@@ -27,6 +27,7 @@ export default function Text(props: any) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		viewMode,
 		onViewModeChange,
 		onCopy,
@@ -304,7 +305,13 @@ export default function Text(props: any) {
 	}
 
 	return (
-		<div className={cn("flex h-full flex-col")}>
+		<div
+			className={cn(
+				documentFlowFullscreen
+					? "flex min-h-dvh flex-col overflow-visible"
+					: "flex h-full flex-col",
+			)}
+		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{isEditMode ? (
 				<Input.TextArea
@@ -332,7 +339,9 @@ export default function Text(props: any) {
 				<div
 					key={data.id}
 					className={cn(
-						"h-[calc(100%-40px)] overflow-y-auto overflow-x-hidden p-3",
+						documentFlowFullscreen
+							? "min-h-dvh overflow-visible p-3"
+							: "h-[calc(100%-40px)] overflow-y-auto overflow-x-hidden p-3",
 						"whitespace-pre-wrap break-words text-sm leading-5 text-foreground",
 						"bg-background",
 					)}

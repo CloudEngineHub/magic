@@ -87,6 +87,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		enableSearchReplace = true,
 		isEditable = true,
 		isMobile = false,
+		documentFlow = false,
 	},
 	ref,
 ) {
@@ -376,7 +377,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 			className={cx(
 				"simple-editor-wrapper",
 				"tiptap-editor-root",
-				{ dark: isDark },
+				{ dark: isDark, "simple-editor-document-flow": documentFlow },
 				className,
 			)}
 		>

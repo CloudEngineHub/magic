@@ -3,6 +3,7 @@ import { MonacoEditor } from "@/lib/monacoEditor"
 import type { editor } from "monaco-editor"
 import { useUnmount } from "ahooks"
 import { useTheme } from "@/models/config/hooks"
+import { formatLongCurlDataRawForPreview } from "./preview-content"
 
 interface CodeSourceEditorProps {
 	language: string
@@ -66,11 +67,16 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 	const monacoTheme = prefersColorScheme === "dark" ? "vs-dark" : "vs-light"
 
 	const onDidFocusEditorTextFn = useRef<{ dispose: () => void } | null>(null)
+	const removePasteListener = useRef<(() => void) | null>(null)
+	const onDidChangeModelContent = useRef<{ dispose: () => void } | null>(null)
+	const isNormalizingLongCurlPayload = useRef(false)
 
 	useUnmount(() => {
 		if (onDidFocusEditorTextFn.current) {
 			onDidFocusEditorTextFn.current.dispose()
 		}
+		removePasteListener.current?.()
+		onDidChangeModelContent.current?.dispose()
 	})
 
 	useEffect(() => {
@@ -101,8 +107,16 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 		scrollBeyondLastLine: false,
 		automaticLayout: true,
 		tabSize: 2,
-		wordWrap: "on",
-		wrappingIndent: "indent",
+		// The read-only preview pre-formats long curl JSON payloads into physical
+		// lines. Keep Monaco wrapping for editing, but avoid re-creating the
+		// pathological virtual line in preview mode.
+		wordWrap: isEditMode ? "on" : "off",
+		wrappingIndent: isEditMode ? "indent" : "none",
+		wrappingStrategy: "simple",
+		// Markdown source files can contain a complete request body on one line
+		// (for example, curl --data-raw). Raise Monaco's 10,000-character safety
+		// limit without allowing pathological lines to exhaust the rendering budget.
+		stopRenderingLineAfter: 50_000,
 		padding: { top: 20, bottom: 20 },
 		scrollbar: {
 			verticalScrollbarSize: 10,
@@ -147,10 +161,10 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 		unicodeHighlight: isEditMode
 			? {}
 			: {
-				nonBasicASCII: false,
-				invisibleCharacters: false,
-				ambiguousCharacters: false,
-			},
+					nonBasicASCII: false,
+					invisibleCharacters: false,
+					ambiguousCharacters: false,
+				},
 	}
 
 	const editorContent = (
@@ -161,16 +175,71 @@ function CodeSourceEditor({ language, isEditMode, content, onChange }: CodeSourc
 			onChange={isEditMode ? (value) => onChange?.(value || "") : undefined}
 			onMount={(editor) => {
 				editorRef.current = editor
+				const domNode = editor.getDomNode()
+
+				if (isEditMode && domNode) {
+					const normalizeLongCurlPayload = () => {
+						if (isNormalizingLongCurlPayload.current) return
+
+						const model = editor.getModel()
+						if (!model) return
+
+						const currentValue = editor.getValue()
+						const formattedValue = formatLongCurlDataRawForPreview(currentValue)
+						if (formattedValue === currentValue) return
+
+						isNormalizingLongCurlPayload.current = true
+						editor.executeEdits("format-long-curl-data-raw", [
+							{
+								range: model.getFullModelRange(),
+								text: formattedValue,
+								forceMoveMarkers: true,
+							},
+						])
+						isNormalizingLongCurlPayload.current = false
+					}
+
+					onDidChangeModelContent.current =
+						editor.onDidChangeModelContent(normalizeLongCurlPayload)
+
+					const handlePaste = (event: ClipboardEvent) => {
+						const pastedText = event.clipboardData?.getData("text/plain")
+						if (!pastedText) return
+
+						const formattedText = formatLongCurlDataRawForPreview(pastedText)
+						if (formattedText === pastedText) return
+
+						const selection = editor.getSelection()
+						if (!selection) return
+
+						// Format before Monaco receives the text, so a single oversized
+						// model line never reaches its wrapped-line virtualizer.
+						event.preventDefault()
+						event.stopPropagation()
+						editor.executeEdits("format-long-curl-data-raw-paste", [
+							{
+								range: selection,
+								text: formattedText,
+								forceMoveMarkers: true,
+							},
+						])
+					}
+
+					domNode.addEventListener("paste", handlePaste, true)
+					removePasteListener.current = () => {
+						domNode.removeEventListener("paste", handlePaste, true)
+					}
+				}
+
 				// Add custom class for preview mode styling
 				if (!isEditMode) {
-					const domNode = editor.getDomNode()
 					if (domNode) {
 						domNode.classList.add("preview-mode")
 						// Force hide cursor by removing focus
 						onDidFocusEditorTextFn.current = editor.onDidFocusEditorText(() => {
 							const activeElement = document.activeElement
 							if (activeElement && domNode.contains(activeElement)) {
-								; (activeElement as HTMLElement).blur()
+								;(activeElement as HTMLElement).blur()
 							}
 						})
 					}

@@ -1,0 +1,142 @@
+import { act, render, screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import CodeSourceEditor from "."
+import { formatLongCurlDataRawForPreview } from "./preview-content"
+
+const monacoEditorProps = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/monacoEditor", () => ({
+	MonacoEditor: (props: Record<string, unknown>) => {
+		monacoEditorProps(props)
+		return <div data-testid="monaco-editor" />
+	},
+}))
+
+vi.mock("@/models/config/hooks", () => ({
+	useTheme: () => ({ prefersColorScheme: "light" }),
+}))
+
+vi.mock("ahooks", () => ({
+	useUnmount: () => undefined,
+}))
+
+describe("CodeSourceEditor", () => {
+	beforeEach(() => {
+		monacoEditorProps.mockClear()
+	})
+
+	it("does not truncate a long --data-raw source line", () => {
+		const content = `curl --data-raw '${"x".repeat(10_001)}'`
+
+		render(<CodeSourceEditor language="markdown" content={content} />)
+
+		expect(screen.getByTestId("monaco-editor")).toBeInTheDocument()
+		expect(monacoEditorProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				value: content,
+				options: expect.objectContaining({
+					stopRenderingLineAfter: 50_000,
+					wordWrap: "off",
+					wrappingStrategy: "simple",
+				}),
+			}),
+		)
+	})
+
+	it("keeps word wrapping available while editing", () => {
+		render(<CodeSourceEditor language="markdown" content="--data-raw '{}'" isEditMode />)
+
+		expect(monacoEditorProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					wordWrap: "on",
+				}),
+			}),
+		)
+	})
+
+	it("formats a long curl payload before Monaco inserts a paste", () => {
+		const payload = JSON.stringify({ events: Array.from({ length: 200 }, (_, id) => ({ id })) })
+		const pastedText = `curl https://example.com --data-raw '${payload}'`
+		const domNode = document.createElement("div")
+		const executeEdits = vi.fn()
+		let onDidChangeModelContent: (() => void) | undefined
+
+		render(<CodeSourceEditor language="markdown" content="" isEditMode />)
+
+		const mountedEditor = {
+			getDomNode: () => domNode,
+			getSelection: () => ({
+				startLineNumber: 1,
+				startColumn: 1,
+				endLineNumber: 1,
+				endColumn: 1,
+			}),
+			getModel: () => ({ getFullModelRange: () => ({}) }),
+			getValue: () => "",
+			onDidChangeModelContent: (listener: () => void) => {
+				onDidChangeModelContent = listener
+				return { dispose: vi.fn() }
+			},
+			executeEdits,
+		}
+		const props = monacoEditorProps.mock.calls[0]?.[0] as {
+			onMount?: (editor: typeof mountedEditor) => void
+		}
+
+		act(() => {
+			props.onMount?.(mountedEditor)
+		})
+
+		const pasteEvent = new Event("paste", { bubbles: true, cancelable: true })
+		Object.defineProperty(pasteEvent, "clipboardData", {
+			value: { getData: () => pastedText },
+		})
+
+		act(() => {
+			domNode.dispatchEvent(pasteEvent)
+		})
+
+		expect(pasteEvent.defaultPrevented).toBe(true)
+		expect(executeEdits).toHaveBeenCalledWith("format-long-curl-data-raw-paste", [
+			expect.objectContaining({
+				text: formatLongCurlDataRawForPreview(pastedText),
+			}),
+		])
+		expect(onDidChangeModelContent).toBeDefined()
+	})
+
+	it("normalizes a long curl payload when Monaco changes the model directly", () => {
+		const payload = JSON.stringify({ events: Array.from({ length: 200 }, (_, id) => ({ id })) })
+		const pastedText = `curl https://example.com --data-raw '${payload}'`
+		const executeEdits = vi.fn()
+		let onDidChangeModelContent: (() => void) | undefined
+
+		render(<CodeSourceEditor language="markdown" content="" isEditMode />)
+
+		const mountedEditor = {
+			getDomNode: () => document.createElement("div"),
+			getModel: () => ({ getFullModelRange: () => ({}) }),
+			getValue: () => pastedText,
+			onDidChangeModelContent: (listener: () => void) => {
+				onDidChangeModelContent = listener
+				return { dispose: vi.fn() }
+			},
+			executeEdits,
+		}
+		const props = monacoEditorProps.mock.calls[0]?.[0] as {
+			onMount?: (editor: typeof mountedEditor) => void
+		}
+
+		act(() => {
+			props.onMount?.(mountedEditor)
+			onDidChangeModelContent?.()
+		})
+
+		expect(executeEdits).toHaveBeenCalledWith("format-long-curl-data-raw", [
+			expect.objectContaining({
+				text: formatLongCurlDataRawForPreview(pastedText),
+			}),
+		])
+	})
+})

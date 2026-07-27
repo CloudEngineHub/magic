@@ -38,6 +38,7 @@ export default function CodeViewer(props: any) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,
@@ -90,6 +91,7 @@ export default function CodeViewer(props: any) {
 
 	const [content, setContent] = useState<string>("")
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
+	const isPureShareCodePreview = documentFlowFullscreen && !isEditMode
 
 	// 初始化 content
 	useEffect(() => {
@@ -349,10 +351,19 @@ export default function CodeViewer(props: any) {
 			ref={extensionScopeRef}
 			vertical
 			className={cx(styles.container, className)}
+			style={
+				documentFlowFullscreen
+					? { height: "auto", minHeight: "100dvh", overflow: "visible" }
+					: undefined
+			}
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{isEditMode ? (
+			{isPureShareCodePreview ? (
+				<pre className="m-0 min-h-dvh w-full overflow-visible whitespace-pre-wrap break-words bg-background p-4 font-mono text-sm leading-6 text-foreground">
+					<code>{content}</code>
+				</pre>
+			) : isEditMode ? (
 				<CodeEditor
 					content={content || ""}
 					fileName={file_name || "file"}
