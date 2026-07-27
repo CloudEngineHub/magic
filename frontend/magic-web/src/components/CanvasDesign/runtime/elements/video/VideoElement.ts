@@ -31,7 +31,7 @@ import type {
 	VideoResourceLoadOptions,
 } from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
-import { hasVideoGenerationRequestUserIntent } from "../../shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -159,7 +159,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			!generateVideo ||
 			this.isGenerating ||
 			!request.model_id ||
-			!hasVideoGenerationRequestUserIntent(request)
+			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",

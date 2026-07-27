@@ -4,7 +4,7 @@ import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document
 import { calculateNewElementPosition, generateElementId } from "../../../../runtime/shared/ids"
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
 import { calculateCanvasSizeFromAspectRatio } from "../generation/video-editor-config.generation"
-import { hasVideoGenerationRequestUserIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
 
 interface CreateAndSubmitVideoGenerationOptions {
 	canvas: Canvas | null | undefined
@@ -17,7 +17,7 @@ export async function createAndSubmitVideoGeneration(
 	options: CreateAndSubmitVideoGenerationOptions,
 ): Promise<boolean> {
 	const { canvas, sourceVideoElement, request, newElementSize } = options
-	if (!canvas || !request.model_id || !hasVideoGenerationRequestUserIntent(request)) {
+	if (!canvas || !request.model_id || !hasVideoGenerationRequestSubmitIntent(request)) {
 		return false
 	}
 

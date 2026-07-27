@@ -97,7 +97,7 @@ import {
 	resolveVideoPromptPlaceholderReferences,
 	type VideoPromptPlaceholderReference,
 } from "./prompt-placeholders/video-prompt-placeholder"
-import { hasVideoGenerationRequestUserIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
 
 interface VideoGenerateEditorRenderProps {
@@ -312,7 +312,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		}
 	}, [estimateModelId, buildRequestParamsWithLinkedInputs])
 	const hasSubmitIntent = useMemo(() => {
-		return hasVideoGenerationRequestUserIntent(buildRequestParamsWithLinkedInputs())
+		return hasVideoGenerationRequestSubmitIntent(buildRequestParamsWithLinkedInputs())
 	}, [buildRequestParamsWithLinkedInputs])
 	const estimateSignature = useMemo(() => {
 		if (!estimateRequest) return null
@@ -665,7 +665,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			if (
 				!canvas ||
 				!config.selectedModelId ||
-				!hasVideoGenerationRequestUserIntent(requestParams)
+				!hasVideoGenerationRequestSubmitIntent(requestParams)
 			)
 				return
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
@@ -763,7 +763,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			...(buildRequestParamsWithLinkedInputs(draftRequestParams) as GenerateVideoRequest),
 			video_id: generateUUID(),
 		}
-		if (!hasVideoGenerationRequestUserIntent(requestParams)) return
+		if (!hasVideoGenerationRequestSubmitIntent(requestParams)) return
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
 		await confirmVideoGeneration({
