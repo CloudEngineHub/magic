@@ -882,6 +882,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		messages[existingIndex] = incoming
 	}
 
+	private mergeAuthoritativeMessageStatus(current: MessageItem, incoming: MessageItem) {
+		// IM 可见性状态与 Assistant 内容 revision 是两个独立状态域。
+		// HTTP 快照即使没有提升 seq，也必须能够确认撤回或恢复；内容和 identity
+		// 仍保留当前已裁决出的最高 revision，避免状态更新导致 canonical 回退。
+		if (!incoming.status || current.status === incoming.status) return current
+		return { ...current, status: incoming.status }
+	}
+
 	private hasAssistantPayloadConflict(
 		currentNode: RawSuperMagicMessageNode | undefined,
 		incomingNode: RawSuperMagicMessageNode,
@@ -1176,13 +1184,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							correlationId,
 						)
 						if (currentMessage) {
-							this.upsertAuthoritativeMessage(authoritativeMessages, currentMessage)
+							this.upsertAuthoritativeMessage(
+								authoritativeMessages,
+								this.mergeAuthoritativeMessageStatus(
+									currentMessage,
+									incomingMessage,
+								),
+							)
 						}
+						const currentNode = (this.messageMap.get(appMessageId) ||
+							this.messageMap.get(correlationId)) as
+							| RawSuperMagicMessageNode
+							| undefined
 						if (revisionDecision === "same") {
-							const currentNode = (this.messageMap.get(appMessageId) ||
-								this.messageMap.get(correlationId)) as
-								| RawSuperMagicMessageNode
-								| undefined
 							if (this.hasAssistantPayloadConflict(currentNode, rawNode)) {
 								this.warnAssistantSeqConflict(
 									topicId,
@@ -1191,6 +1205,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 									String(envelope?.seq?.seq_id || ""),
 								)
 							}
+						}
+						if (
+							incomingMessage.status === "revoked" &&
+							currentNode?.role === "assistant"
+						) {
+							// 撤回是旧 generation 的终止屏障，即使 Agent 内层状态仍为 running。
+							// stale/same 只影响内容采用哪个 revision，不影响 HTTP 外层撤回的权威性。
+							settledStream =
+								this.reconcileServerAssistantSnapshot(
+									topicId,
+									appMessageId,
+									correlationId,
+									currentNode,
+									"terminal",
+								) || settledStream
 						}
 						return
 					}
@@ -1214,12 +1243,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 				this.messageMap.set(appMessageId, rawNode)
 				if (rawNode?.role === "assistant" && appMessageId && correlationId) {
+					const isRevokedAssistant = incomingMessage.status === "revoked"
 					const didSettleStream = this.reconcileServerAssistantSnapshot(
 						topicId,
 						appMessageId,
 						correlationId,
 						rawNode,
-						rawNode.status === "finished" ? "terminal" : "nonterminal",
+						rawNode.status === "finished" || isRevokedAssistant
+							? "terminal"
+							: "nonterminal",
 					)
 					if (rawNode.status === "finished") {
 						const canonicalNode = this.messageMap.get(appMessageId) as

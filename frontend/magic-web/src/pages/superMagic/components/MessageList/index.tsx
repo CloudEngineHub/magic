@@ -20,7 +20,7 @@ import BackToLatestButton from "./components/BackToLatestButton"
 import MessageListFallback from "./components/MessageListFallback"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/lib/utils"
-import { MessageStatus, TaskStatus, Topic } from "../../pages/Workspace/types"
+import { TaskStatus, Topic } from "../../pages/Workspace/types"
 import { messageFilter } from "../../utils/handleMessage"
 import { useTranslation } from "react-i18next"
 import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons-react"
@@ -58,7 +58,7 @@ import { extractTurns } from "./export/extractMessageContent"
 import { MessageListProvider, useMessageListContext } from "./context"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 import MessageRenderContent from "./components/MessageRenderContent"
-import { projectVisibleMessagesByRevokedTail } from "../../utils/project-visible-messages-by-revoked-tail"
+import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 
 export { MessageListProvider }
 
@@ -217,60 +217,49 @@ const MessageList = observer(
 			() => new Set(hiddenRevokedOptimisticMessageIds),
 			[hiddenRevokedOptimisticMessageIds],
 		)
-		// Store retains revoked facts for recovery and editing; this component only renders
-		// the current visible branch, including an active revoked tail when one exists.
-		const visibleData = projectVisibleMessagesByRevokedTail(data)
-
-		// Locate the starting index of the active revoked tail in the visible branch.
-		const revokedSegmentStartIndex = useMemo(
-			() =>
-				visibleData.findIndex(
-					(node: SuperMagicMessageItem) => node?.status === MessageStatus.REVOKED,
-				),
-			[visibleData],
+		const activeRevokedAnchor = optimisticMessageStore.getActiveRevokedAnchor(
+			selectedTopic?.chat_topic_id,
 		)
+		// Store retains all server facts. User-anchored projection decides whole-turn
+		// ownership so Assistant/Tool outer statuses cannot split one conversation round.
+		const revokedProjection = projectRevokedMessageBranches(data, activeRevokedAnchor?.seq_id)
 
-		// After all revoked messages are restored (revokedSegmentStartIndex becomes -1), clear the hidden set,
-		// ensuring failed messages and revoked messages restore in the same render cycle.
+		// An anchor can disappear after authoritative replacement or topic cleanup. Remove the
+		// stale UI sidecars only when no canonical User can establish an active revoke branch.
 		useEffect(() => {
-			if (revokedSegmentStartIndex < 0 && selectedTopic?.chat_topic_id) {
-				optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
-					selectedTopic.chat_topic_id,
-				)
+			const chatTopicId = selectedTopic?.chat_topic_id
+			if (!chatTopicId || revokedProjection.activeRevokedAnchorIndex >= 0) return
+
+			optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(chatTopicId)
+			if (activeRevokedAnchor) {
+				optimisticMessageStore.clearActiveRevokedAnchor(chatTopicId)
 			}
-		}, [revokedSegmentStartIndex, selectedTopic?.chat_topic_id])
+		}, [
+			activeRevokedAnchor,
+			revokedProjection.activeRevokedAnchorIndex,
+			selectedTopic?.chat_topic_id,
+		])
 
 		const mainDisplayData = useMemo(() => {
-			if (revokedSegmentStartIndex < 0) return visibleData
-
-			// After entering revoked-edit mode, hide subsequent failed optimistic messages recorded at undo;
-			// the main message stream only keeps stable messages before the revoke point.
-			return visibleData.filter((node, index) => {
-				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
-					return false
-				}
-				return index < revokedSegmentStartIndex
-			})
-		}, [hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex, visibleData])
+			return revokedProjection.mainMessages.filter(
+				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
+			)
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.mainMessages])
 
 		const revokedBranchData = useMemo(() => {
-			if (revokedSegmentStartIndex < 0) {
-				return visibleData.filter((node) => node?.status === MessageStatus.REVOKED)
-			}
+			// Failed optimistic messages stay hidden while the selected revoked branch is edited;
+			// Assistant and Tool descendants remain together regardless of their own status.
+			return revokedProjection.revokedBranchMessages.filter(
+				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
+			)
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.revokedBranchMessages])
 
-			// The revoked-edit preview area still shows normal messages from the old branch in current list order;
-			// failed optimistic messages stay hidden until user confirms send, then cleaned up in background.
-			return visibleData.filter((node, index) => {
-				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
-					return false
-				}
-				if (index >= revokedSegmentStartIndex) return true
-				return false
-			})
-		}, [hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex, visibleData])
+		const visibleData = [...mainDisplayData, ...revokedBranchData]
 
 		const { messages, messageKeys, messageTurnGroups } = useMemo(() => {
-			const messages = messagesConverter(mainDisplayData)
+			// Visibility has already been decided at the User-turn boundary. Do not let the
+			// converter filter a temporarily revoked Assistant out of an otherwise restored turn.
+			const messages = messagesConverter(mainDisplayData, false)
 			const { messageKeys, messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 			return { messages, messageKeys, messageTurnGroups }
 		}, [mainDisplayData])
@@ -485,6 +474,12 @@ const MessageList = observer(
 			try {
 				setIsCancelRevokedLoading(true)
 				await SuperMagicApi.cancelUndoMessage({ topic_id: selectedTopic.id })
+				if (selectedTopic.chat_topic_id) {
+					optimisticMessageStore.clearActiveRevokedAnchor(selectedTopic.chat_topic_id)
+					optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
+						selectedTopic.chat_topic_id,
+					)
+				}
 				magicToast.success(t("warningCard.cancelUndoMessageSuccess"))
 				pubsub.publish(PubSubEvents.Show_Revoked_Messages)
 				pubsub.publish(PubSubEvents.Refresh_Topic_Messages)

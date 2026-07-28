@@ -1050,6 +1050,103 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		)
 	})
 
+	it("[REV-01] Assistant 同 seq 的 HTTP 外层状态可从 read 更新为 revoked。", () => {
+		const store = createStore()
+		const identity = {
+			appMessageId: "same-seq-revoke-app",
+			correlationId: "same-seq-revoke-correlation",
+			seqId: "100",
+			content: "same canonical content",
+			nodeStatus: "running",
+		} as const
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+		])
+
+		expect(
+			getMessageRecords(store).find(
+				(message) => message.app_message_id === identity.appMessageId,
+			)?.status,
+		).toBe(ConversationMessageStatus.Revoked)
+		expect(getNode(store, identity.correlationId)?.content).toBe("same canonical content")
+	})
+
+	it("[REV-02] Assistant 同 seq 的 HTTP 外层状态可从 revoked 恢复为 read。", () => {
+		const store = createStore()
+		const identity = {
+			appMessageId: "same-seq-restore-app",
+			correlationId: "same-seq-restore-correlation",
+			seqId: "100",
+			content: "restorable canonical content",
+			nodeStatus: "finished",
+		} as const
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+
+		expect(
+			getMessageRecords(store).find(
+				(message) => message.app_message_id === identity.appMessageId,
+			)?.status,
+		).toBe(ConversationMessageStatus.Read)
+		expect(getNode(store, identity.correlationId)?.content).toBe("restorable canonical content")
+	})
+
+	it("[REV-03] 低 seq HTTP 撤回状态生效，但不得回退 Assistant canonical 内容。", () => {
+		const store = createStore()
+		const identity = {
+			appMessageId: "stale-content-authoritative-status-app",
+			correlationId: "stale-content-authoritative-status-correlation",
+		} as const
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				seqId: "200",
+				content: "latest canonical content",
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				seqId: "100",
+				content: "stale HTTP content",
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+		])
+
+		expect(
+			getMessageRecords(store).find(
+				(message) => message.app_message_id === identity.appMessageId,
+			),
+		).toMatchObject({
+			seq_id: "200",
+			status: ConversationMessageStatus.Revoked,
+		})
+		expect(getNode(store, identity.correlationId)?.content).toBe("latest canonical content")
+	})
+
 	it("HTTP 响应比本地 StreamState 更新。", () => {
 		const store = createStore()
 
@@ -1069,7 +1166,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("撤回权威快照覆盖活跃非撤回 overlay 时保留完整 Canonical 成员并终结旧流。", () => {
+	it("[REV-04] 外层 revoked 即使内层仍 running，也必须终结旧 correlation 流。", () => {
 		const store = createStore()
 		store.receiveChunk(createChunk({ content: "local non-revoked draft" }))
 		const generation = store.beginTopicSync(TOPIC_A)
@@ -1082,6 +1179,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 					correlationId: CORRELATION_ID,
 					seqId: "200",
 					content: "authoritative revoked branch",
+					nodeStatus: "running",
 					outerStatus: ConversationMessageStatus.Revoked,
 				}),
 				createEnvelope({
@@ -1169,7 +1267,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 	})
 
-	it("撤回权威结算后迟到 chunk 和 Final 不得重开或覆盖旧分支。", () => {
+	it("[REV-05] running Assistant 撤回后迟到 chunk 和 Final 不得重开旧分支。", () => {
 		const store = createStore()
 		store.receiveChunk(createChunk({ i: 0, content: "draft before revoke" }))
 		const generation = store.beginTopicSync(TOPIC_A)
@@ -1182,6 +1280,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 					correlationId: CORRELATION_ID,
 					seqId: "200",
 					content: "revoked canonical",
+					nodeStatus: "running",
 					outerStatus: ConversationMessageStatus.Revoked,
 				}),
 			],

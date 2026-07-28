@@ -391,25 +391,25 @@ class MessageSendService {
 
 		const model = params.selectedModel
 			? {
-				model_id: params.selectedModel.model_id,
-				model_name: params.selectedModel.model_name,
-				model_icon: params.selectedModel.model_icon,
-			}
+					model_id: params.selectedModel.model_id,
+					model_name: params.selectedModel.model_name,
+					model_icon: params.selectedModel.model_icon,
+				}
 			: undefined
 
 		const imageModel = params.selectedImageModel?.model_id
 			? {
-				model_id: params.selectedImageModel.model_id,
-				model_name: params.selectedImageModel.model_name,
-				model_icon: params.selectedImageModel.model_icon,
-			}
+					model_id: params.selectedImageModel.model_id,
+					model_name: params.selectedImageModel.model_name,
+					model_icon: params.selectedImageModel.model_icon,
+				}
 			: undefined
 		const videoModel = params.selectedVideoModel?.model_id
 			? {
-				model_id: params.selectedVideoModel.model_id,
-				model_name: params.selectedVideoModel.model_name,
-				model_icon: params.selectedVideoModel.model_icon,
-			}
+					model_id: params.selectedVideoModel.model_id,
+					model_name: params.selectedVideoModel.model_name,
+					model_icon: params.selectedVideoModel.model_icon,
+				}
 			: undefined
 
 		// 根据话题读取联网搜索开关
@@ -455,6 +455,9 @@ class MessageSendService {
 			})
 			if (!confirmPromise) return false
 			await confirmPromise
+			// Confirmation closes revoke-edit mode even if the following message send later fails;
+			// the sidecar must not keep projecting the old User branch as editable.
+			optimisticMessageStore.clearActiveRevokedAnchor(topic.chat_topic_id)
 			return true
 		} catch (error) {
 			this.deps.logger.error("confirm undo message failed", error)
