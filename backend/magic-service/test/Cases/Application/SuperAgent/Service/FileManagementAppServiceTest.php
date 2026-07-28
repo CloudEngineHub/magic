@@ -9,25 +9,30 @@ namespace HyperfTest\Cases\Application\SuperAgent\Service;
 
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Infrastructure\Core\Exception\BusinessException;
-use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\FileBatchCopyPublisher;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\FileManagementAppService;
-use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\FileCollection\Entity\FileCollectionItemEntity;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
+use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\FileBatchOperationStatusManager;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchCopyFileRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchDeleteFilesRequestDTO;
+use Hyperf\Amqp\Message\ProducerMessage;
+use Hyperf\Amqp\Producer;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
@@ -209,6 +214,57 @@ class FileManagementAppServiceTest extends TestCase
 
         $this->expectExceptionCode(51150);
         $service->batchDeleteFiles($requestContext, $requestDTO);
+    }
+
+    public function testBatchCopyFilePublishesEffectivePreserveParentPathForCrossProjectCopy(): void
+    {
+        $sourceFile = $this->createTaskFileEntity(501, '/workspace/a/1/2.txt');
+        $sourceFile->setProjectId(900);
+        $targetParent = $this->createTaskFileEntity(700, '/workspace/b', true);
+        $targetParent->setProjectId(901);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getProjectFilesByIds')
+            ->with(900, ['501'])
+            ->willReturn([$sourceFile]);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(700)
+            ->willReturn($targetParent);
+
+        $statusManager = $this->createMock(FileBatchOperationStatusManager::class);
+        $statusManager->method('generateBatchKey')->willReturn('batch-copy');
+        $statusManager->method('initializeTask')->willReturn(true);
+
+        $producer = $this->createMock(Producer::class);
+        $producer->expects($this->once())
+            ->method('produce')
+            ->with($this->callback(static function (object $publisher): bool {
+                if (! $publisher instanceof FileBatchCopyPublisher) {
+                    return false;
+                }
+                $property = new ReflectionProperty(ProducerMessage::class, 'payload');
+                $payload = $property->getValue($publisher);
+                return ($payload['preserve_parent_path'] ?? false) === true;
+            }));
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setPrivateProperty($service, 'batchOperationStatusManager', $statusManager);
+        $this->setPrivateProperty($service, 'producer', $producer);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new BatchCopyFileRequestDTO([
+            'file_ids' => ['501'],
+            'project_id' => '900',
+            'target_project_id' => '901',
+            'target_parent_id' => '700',
+            'preserve_parent_path' => true,
+        ]);
+
+        $service->batchCopyFile($requestContext, $requestDTO);
     }
 
     public function testBuildRelativeFilePathUsesParentChain(): void

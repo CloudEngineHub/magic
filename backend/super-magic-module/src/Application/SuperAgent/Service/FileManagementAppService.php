@@ -1573,6 +1573,8 @@ class FileManagementAppService extends AbstractAppService
                     $userAuthorization->getOrganizationCode()
                 )
                 : $sourceProject;
+            $preserveParentPath = $sourceProject->getId() !== $targetProject->getId()
+                && $requestDTO->shouldPreserveParentPath();
 
             // Generate batch key for tracking
             $fileIds = $requestDTO->getFileIds();
@@ -1632,6 +1634,7 @@ class FileManagementAppService extends AbstractAppService
                 'target_parent_id' => $requestDTO->getTargetParentId(),
                 'pre_file_id' => $requestDTO->getPreFileId(),
                 'keep_both_file_ids' => $requestDTO->getKeepBothFileIds(),
+                'preserve_parent_path' => $preserveParentPath,
             ]);
 
             // Create and publish batch copy event
@@ -1671,7 +1674,8 @@ class FileManagementAppService extends AbstractAppService
                 $sourceProject->getId(),
                 $preFileId,
                 $targetParentId,
-                $requestDTO->getKeepBothFileIds()
+                $requestDTO->getKeepBothFileIds(),
+                $preserveParentPath
             );
             $publisher = new FileBatchCopyPublisher($event);
             $this->producer->produce($publisher);
