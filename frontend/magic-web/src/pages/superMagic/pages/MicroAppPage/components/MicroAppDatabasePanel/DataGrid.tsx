@@ -9,13 +9,11 @@ import type {
 import DataGridView from "./DataGridView"
 import {
 	buildHeaderSelection,
-	buildSelectionFromBounds as buildSelectionFromBoundsValue,
-	buildSingleCellSelection as buildSingleCellSelectionValue,
 	EMPTY_GRID_SELECTION,
 	type HeaderColumnSelection,
-	isCellWithinSelection,
 } from "./dataGridSelection"
 import { useDataGridAutoScroll } from "./useDataGridAutoScroll"
+import useDataGridRowSelection from "./useDataGridRowSelection"
 
 export type { MagicBaseCellSelection } from "./DataGrid.types"
 
@@ -39,8 +37,6 @@ export default function DataGrid({
 	onOpenRowPermissions,
 	onOpenColumnPermissions,
 }: DataGridProps) {
-	const [selectionStart, setSelectionStart] = useState<CellCoordinate | null>(null)
-	const [selectionEnd, setSelectionEnd] = useState<CellCoordinate | null>(null)
 	const [headerColumnSelection, setHeaderColumnSelection] =
 		useState<HeaderColumnSelection | null>(null)
 	const [contextSelection, setContextSelection] = useState<MagicBaseCellSelection | null>(null)
@@ -50,47 +46,27 @@ export default function DataGrid({
 	const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition | null>(null)
 	const rootRef = useRef<HTMLDivElement | null>(null)
 	const menuRef = useRef<HTMLDivElement | null>(null)
-	const draggingRef = useRef(false)
 	const headerDraggingRef = useRef(false)
 	const suppressHeaderSortRef = useRef(false)
-	const selectionStartRef = useRef<CellCoordinate | null>(null)
-	const selectionEndRef = useRef<CellCoordinate | null>(null)
 	const currentSelectionRef = useRef<MagicBaseCellSelection>({
 		rowIds: [],
 		columnIds: [],
 		columnKeys: [],
 	})
 	const contextSelectionRef = useRef<MagicBaseCellSelection | null>(null)
-	const pointerRef = useRef<{ x: number; y: number } | null>(null)
-
-	const selectionBounds = useMemo(() => {
-		if (!selectionStart || !selectionEnd) return null
-		return {
-			minRow: Math.min(selectionStart.rowIndex, selectionEnd.rowIndex),
-			maxRow: Math.max(selectionStart.rowIndex, selectionEnd.rowIndex),
-			minColumn: Math.min(selectionStart.columnIndex, selectionEnd.columnIndex),
-			maxColumn: Math.max(selectionStart.columnIndex, selectionEnd.columnIndex),
-		}
-	}, [selectionEnd, selectionStart])
-
-	const buildSelectionFromBounds = useCallback(
-		(bounds: Parameters<typeof buildSelectionFromBoundsValue>[2]) =>
-			buildSelectionFromBoundsValue(rows, columns, bounds),
-		[columns, rows],
-	)
-
-	const buildSelectionFromCoordinates = useCallback(
-		(start: CellCoordinate | null, end: CellCoordinate | null): MagicBaseCellSelection => {
-			if (!start || !end) return EMPTY_GRID_SELECTION
-			return buildSelectionFromBounds({
-				minRow: Math.min(start.rowIndex, end.rowIndex),
-				maxRow: Math.max(start.rowIndex, end.rowIndex),
-				minColumn: Math.min(start.columnIndex, end.columnIndex),
-				maxColumn: Math.max(start.columnIndex, end.columnIndex),
-			})
-		},
-		[buildSelectionFromBounds],
-	)
+	const {
+		rowSelection,
+		draggingRef,
+		pointerRef,
+		isRowSelected,
+		handleCellMouseDown: updateRowSelectionOnMouseDown,
+		handleCellMouseEnter,
+		selectRowForContextMenu,
+		updateSelectionFromPoint,
+		advanceSelectionColumn,
+		clearRows,
+		stopDragging,
+	} = useDataGridRowSelection({ rows, columns })
 
 	const buildHeaderColumnSelection = useCallback(
 		(selection: HeaderColumnSelection | null) => buildHeaderSelection(columns, selection),
@@ -101,26 +77,8 @@ export default function DataGrid({
 		if (headerColumnSelection) {
 			return buildHeaderColumnSelection(headerColumnSelection)
 		}
-		return buildSelectionFromBounds(selectionBounds)
-	}, [
-		buildHeaderColumnSelection,
-		buildSelectionFromBounds,
-		headerColumnSelection,
-		selectionBounds,
-	])
-
-	const isCellInRefSelection = (cell: CellCoordinate) => {
-		return isCellWithinSelection(cell, selectionStartRef.current, selectionEndRef.current)
-	}
-
-	const syncLiveSelection = useCallback(() => {
-		const selection = buildSelectionFromCoordinates(
-			selectionStartRef.current,
-			selectionEndRef.current,
-		)
-		currentSelectionRef.current = selection
-		return selection
-	}, [buildSelectionFromCoordinates])
+		return rowSelection
+	}, [buildHeaderColumnSelection, headerColumnSelection, rowSelection])
 
 	useEffect(() => {
 		currentSelectionRef.current = currentSelection
@@ -131,51 +89,6 @@ export default function DataGrid({
 		contextSelectionRef.current = contextSelection
 	}, [contextSelection])
 
-	const updateSelectionEnd = useCallback(
-		(cell: CellCoordinate) => {
-			selectionEndRef.current = cell
-			currentSelectionRef.current = buildSelectionFromCoordinates(
-				selectionStartRef.current,
-				cell,
-			)
-			setSelectionEnd(cell)
-		},
-		[buildSelectionFromCoordinates],
-	)
-
-	const advanceSelectionColumn = useCallback(
-		(direction: 1 | -1) => {
-			const end = selectionEndRef.current
-			if (!end) return
-			const nextColumnIndex = Math.max(
-				0,
-				Math.min(columns.length - 1, end.columnIndex + direction),
-			)
-			if (nextColumnIndex === end.columnIndex) return
-			updateSelectionEnd({ ...end, columnIndex: nextColumnIndex })
-		},
-		[columns.length, updateSelectionEnd],
-	)
-
-	const updateSelectionFromPoint = useCallback(
-		(x: number, y: number, container?: HTMLElement | null) => {
-			const rect = container?.getBoundingClientRect()
-			const targetX = rect ? Math.min(Math.max(x, rect.left + 4), rect.right - 4) : x
-			const targetY = rect ? Math.min(Math.max(y, rect.top + 4), rect.bottom - 4) : y
-			const target = document.elementFromPoint(targetX, targetY)
-			const cell = target?.closest<HTMLElement>(
-				"[data-magicbase-row-index][data-magicbase-column-index]",
-			)
-			if (!cell) return false
-			const rowIndex = Number(cell.dataset.magicbaseRowIndex)
-			const columnIndex = Number(cell.dataset.magicbaseColumnIndex)
-			if (!Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) return false
-			updateSelectionEnd({ rowIndex, columnIndex })
-			return true
-		},
-		[updateSelectionEnd],
-	)
-
 	const { cancelAutoScroll, handleGridMouseMove, scheduleAutoScroll } = useDataGridAutoScroll({
 		rootRef,
 		draggingRef,
@@ -185,35 +98,16 @@ export default function DataGrid({
 	})
 
 	useEffect(() => {
-		setSelectionStart(null)
-		setSelectionEnd(null)
+		clearRows()
 		setHeaderColumnSelection(null)
-		selectionStartRef.current = null
-		selectionEndRef.current = null
 		currentSelectionRef.current = EMPTY_GRID_SELECTION
 		setContextSelection(null)
 		setContextMenuSelection(null)
 		setContextMenuPosition(null)
 		contextSelectionRef.current = null
-		draggingRef.current = false
 		headerDraggingRef.current = false
-		pointerRef.current = null
 		cancelAutoScroll()
-		onSelectionChange?.(EMPTY_GRID_SELECTION)
-	}, [cancelAutoScroll, columns, onSelectionChange, rows, selectionResetKey])
-
-	const buildSingleCellSelection = (cell: CellCoordinate) =>
-		buildSingleCellSelectionValue(rows, columns, cell)
-
-	const isCellSelected = (rowIndex: number, columnIndex: number) => {
-		if (!selectionBounds) return false
-		return (
-			rowIndex >= selectionBounds.minRow &&
-			rowIndex <= selectionBounds.maxRow &&
-			columnIndex >= selectionBounds.minColumn &&
-			columnIndex <= selectionBounds.maxColumn
-		)
-	}
+	}, [cancelAutoScroll, clearRows, columns, rows, selectionResetKey])
 
 	const isHeaderSelected = (columnIndex: number) => {
 		if (!headerColumnSelection) return false
@@ -225,25 +119,10 @@ export default function DataGrid({
 		)
 	}
 
-	const selectSingleCell = (cell: CellCoordinate) => {
-		selectionStartRef.current = cell
-		selectionEndRef.current = cell
-		setSelectionStart(cell)
-		setSelectionEnd(cell)
-	}
-
 	const handleCellMouseDown = (cell: CellCoordinate, event: MouseEvent) => {
-		if (event.button !== 0) return
-		event.preventDefault()
-		pointerRef.current = { x: event.clientX, y: event.clientY }
-		draggingRef.current = true
-		selectionStartRef.current = cell
-		selectionEndRef.current = cell
-		currentSelectionRef.current = buildSingleCellSelection(cell)
+		updateRowSelectionOnMouseDown(cell, event)
 		setContextSelection(null)
 		setContextMenuSelection(null)
-		setSelectionStart(cell)
-		setSelectionEnd(cell)
 		setHeaderColumnSelection(null)
 	}
 
@@ -252,9 +131,8 @@ export default function DataGrid({
 		event.preventDefault()
 		headerDraggingRef.current = true
 		suppressHeaderSortRef.current = true
+		clearRows()
 		setHeaderColumnSelection({ startIndex: columnIndex, endIndex: columnIndex })
-		setSelectionStart(null)
-		setSelectionEnd(null)
 	}
 
 	const handleHeaderMouseEnter = (columnIndex: number) => {
@@ -284,9 +162,8 @@ export default function DataGrid({
 		const nextSelection = buildHeaderColumnSelection(nextHeaderSelection)
 
 		if (!isWithinCurrentSelection) {
+			clearRows()
 			setHeaderColumnSelection(nextHeaderSelection)
-			setSelectionStart(null)
-			setSelectionEnd(null)
 		}
 		currentSelectionRef.current = nextSelection
 		contextSelectionRef.current = nextSelection
@@ -298,28 +175,17 @@ export default function DataGrid({
 		})
 	}
 
-	const handleCellMouseEnter = (cell: CellCoordinate) => {
-		if (!draggingRef.current) return
-		updateSelectionEnd(cell)
-	}
-
 	const handleCellMouseUp = () => {
-		draggingRef.current = false
-		pointerRef.current = null
+		stopDragging()
 		cancelAutoScroll()
 	}
 
 	const handleCellContextMenu = (cell: CellCoordinate, event: MouseEvent) => {
 		event.preventDefault()
 		event.stopPropagation()
-		const selectedByLiveRange = isCellInRefSelection(cell)
-		const nextSelection = !selectedByLiveRange
-			? buildSingleCellSelection(cell)
-			: syncLiveSelection()
 
-		if (!selectedByLiveRange) {
-			selectSingleCell(cell)
-		}
+		const nextSelection = selectRowForContextMenu(cell)
+		setHeaderColumnSelection(null)
 		currentSelectionRef.current = nextSelection
 		contextSelectionRef.current = nextSelection
 		setContextSelection(nextSelection)
@@ -332,17 +198,12 @@ export default function DataGrid({
 	}
 
 	const clearSelection = () => {
-		setSelectionStart(null)
-		setSelectionEnd(null)
+		clearRows()
 		setHeaderColumnSelection(null)
-		selectionStartRef.current = null
-		selectionEndRef.current = null
 		setContextSelection(null)
 		setContextMenuSelection(null)
 		setContextMenuPosition(null)
 		contextSelectionRef.current = null
-		draggingRef.current = false
-		pointerRef.current = null
 		cancelAutoScroll()
 	}
 
@@ -406,10 +267,9 @@ export default function DataGrid({
 			scheduleAutoScroll()
 		}
 
-		const stopDragging = () => {
-			draggingRef.current = false
+		const stopWindowDragging = () => {
+			stopDragging()
 			headerDraggingRef.current = false
-			pointerRef.current = null
 			cancelAutoScroll()
 		}
 
@@ -418,17 +278,25 @@ export default function DataGrid({
 		window.addEventListener("resize", closeContextMenu)
 		window.addEventListener("keydown", handleKeyDown)
 		window.addEventListener("mousemove", updateWindowPointer)
-		window.addEventListener("mouseup", stopDragging)
+		window.addEventListener("mouseup", stopWindowDragging)
 		return () => {
 			window.removeEventListener("mousedown", handlePointerDown)
 			window.removeEventListener("scroll", closeContextMenu, true)
 			window.removeEventListener("resize", closeContextMenu)
 			window.removeEventListener("keydown", handleKeyDown)
 			window.removeEventListener("mousemove", updateWindowPointer)
-			window.removeEventListener("mouseup", stopDragging)
+			window.removeEventListener("mouseup", stopWindowDragging)
 			cancelAutoScroll()
 		}
-	}, [cancelAutoScroll, closeContextMenu, contextMenuPosition, scheduleAutoScroll])
+	}, [
+		cancelAutoScroll,
+		closeContextMenu,
+		contextMenuPosition,
+		draggingRef,
+		pointerRef,
+		scheduleAutoScroll,
+		stopDragging,
+	])
 
 	if (loading) {
 		return (
@@ -466,7 +334,7 @@ export default function DataGrid({
 			onLoadMore={onLoadMore}
 			onOpenEditRow={onOpenEditRow}
 			isHeaderSelected={isHeaderSelected}
-			isCellSelected={isCellSelected}
+			isRowSelected={isRowSelected}
 			onHeaderMouseDown={handleHeaderMouseDown}
 			onHeaderMouseEnter={handleHeaderMouseEnter}
 			onHeaderMouseUp={handleHeaderMouseUp}

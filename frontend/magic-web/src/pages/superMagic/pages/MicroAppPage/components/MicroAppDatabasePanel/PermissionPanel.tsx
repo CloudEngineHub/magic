@@ -11,6 +11,7 @@ import MagicAvatar from "@/components/base/MagicAvatar"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { STATIC_DATABASE_PERMISSIONS_ENABLED } from "../databasePermissionFeatures"
 import DynamicPermissionPanel from "./DynamicPermissionPanel"
 
 interface PermissionPanelProps {
@@ -22,6 +23,7 @@ interface PermissionPanelProps {
 	canManagePermissions?: boolean
 	onRefreshPermissions: () => void
 	onRefreshTable: () => void
+	onDirtyChange?: (dirty: boolean) => void
 }
 
 type AssignableSubjectType = "user" | "department"
@@ -346,7 +348,7 @@ export default function PermissionPanel(props: PermissionPanelProps) {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-center justify-between border-b border-border px-4 py-2">
+			<div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
 				<div className="inline-flex h-8 items-center rounded-md bg-muted p-[3px]">
 					<button
 						type="button"
@@ -359,17 +361,19 @@ export default function PermissionPanel(props: PermissionPanelProps) {
 						<Settings2 className="size-3.5" />
 						{t("microAppPage.databasePanel.dynamicPermissions")}
 					</button>
-					<button
-						type="button"
-						className={cn(
-							"inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs text-muted-foreground transition-colors",
-							view === "static" && "bg-background text-foreground shadow-sm",
-						)}
-						onClick={() => setView("static")}
-					>
-						<UsersRound className="size-3.5" />
-						{t("microAppPage.databasePanel.staticPermissions")}
-					</button>
+					{STATIC_DATABASE_PERMISSIONS_ENABLED ? (
+						<button
+							type="button"
+							className={cn(
+								"inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs text-muted-foreground transition-colors",
+								view === "static" && "bg-background text-foreground shadow-sm",
+							)}
+							onClick={() => setView("static")}
+						>
+							<UsersRound className="size-3.5" />
+							{t("microAppPage.databasePanel.staticPermissions")}
+						</button>
+					) : null}
 				</div>
 				<span className="text-xs text-muted-foreground">
 					{view === "dynamic"
@@ -379,13 +383,14 @@ export default function PermissionPanel(props: PermissionPanelProps) {
 			</div>
 
 			<div className="min-h-0 flex-1">
-				{view === "dynamic" ? (
+				{view === "dynamic" || !STATIC_DATABASE_PERMISSIONS_ENABLED ? (
 					<DynamicPermissionPanel
 						projectId={props.projectId}
 						table={props.table}
 						columns={props.columns}
 						canManagePermissions={props.canManagePermissions ?? true}
 						onUpdated={props.onRefreshTable}
+						onDirtyChange={props.onDirtyChange}
 					/>
 				) : (
 					<StaticPermissionPanel {...props} />

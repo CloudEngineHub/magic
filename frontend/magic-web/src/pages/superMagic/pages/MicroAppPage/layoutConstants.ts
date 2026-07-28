@@ -5,6 +5,16 @@ export const MESSAGE_PANEL_DEFAULT_PX = 360
 export const MESSAGE_PANEL_MIN_PX = 320
 export const MESSAGE_PANEL_MAX_WIDTH_RATIO = 0.5
 export const COLLAPSED_RAIL_WIDTH_PX = 40
+export const DATABASE_STRUCTURE_PANEL_DEFAULT_PX = 420
+export const DATABASE_STRUCTURE_PANEL_MIN_PX = 360
+export const DATABASE_PERMISSION_PANEL_DEFAULT_PX = 620
+export const DATABASE_PERMISSION_PANEL_MIN_PX = 480
+export const DATABASE_SETTINGS_PANEL_MAX_PX = 900
+export const DATABASE_GRID_MIN_PX = 320
 
 export const MICRO_APP_SIDEBAR_STORAGE_KEY = "MAGIC:micro-app-page-sidebar-width"
 export const MICRO_APP_MESSAGE_PANEL_STORAGE_KEY = "MAGIC:micro-app-page-message-panel-width"
+export const MICRO_APP_DATABASE_STRUCTURE_PANEL_STORAGE_KEY =
+	"MAGIC:micro-app-database-structure-panel-width"
+export const MICRO_APP_DATABASE_PERMISSION_PANEL_STORAGE_KEY =
+	"MAGIC:micro-app-database-permission-panel-width"

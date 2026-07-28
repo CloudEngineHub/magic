@@ -32,7 +32,7 @@ interface DataGridViewProps {
 	onLoadMore: () => void
 	onOpenEditRow?: (rowId: string) => void
 	isHeaderSelected: (columnIndex: number) => boolean
-	isCellSelected: (rowIndex: number, columnIndex: number) => boolean
+	isRowSelected: (rowIndex: number) => boolean
 	onHeaderMouseDown: (columnIndex: number, event: MouseEvent) => void
 	onHeaderMouseEnter: (columnIndex: number) => void
 	onHeaderMouseUp: () => void
@@ -88,7 +88,7 @@ export default function DataGridView({
 	onLoadMore,
 	onOpenEditRow,
 	isHeaderSelected,
-	isCellSelected,
+	isRowSelected,
 	onHeaderMouseDown,
 	onHeaderMouseEnter,
 	onHeaderMouseUp,
@@ -180,6 +180,7 @@ export default function DataGridView({
 					) : (
 						rows.map((row, rowIndex) => {
 							const recordId = getRowRecordId(row)
+							const selected = isRowSelected(rowIndex)
 							return (
 								<tr
 									key={recordId || rowIndex}
@@ -190,7 +191,6 @@ export default function DataGridView({
 								>
 									{columns.map((column, columnIndex) => {
 										const value = row[column.key]
-										const selected = isCellSelected(rowIndex, columnIndex)
 										return (
 											<td
 												key={column.key}
@@ -202,8 +202,7 @@ export default function DataGridView({
 													columnIndex === 0 &&
 														"font-medium text-foreground",
 													value == null && "text-muted-foreground",
-													selected &&
-														"bg-primary/10 ring-1 ring-inset ring-primary/30",
+													selected && "bg-primary/10",
 												)}
 												title={formatCellValue(value)}
 												onMouseDown={(event) =>

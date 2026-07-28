@@ -1,5 +1,4 @@
 import { Database, Info, Loader2, X } from "lucide-react"
-import type { MouseEvent } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -19,17 +18,16 @@ import {
 import { Button } from "@/components/shadcn-ui/button"
 import { MicroAppDatabaseEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
+import { STATIC_DATABASE_PERMISSIONS_ENABLED } from "../databasePermissionFeatures"
 import type { MagicBaseCellSelection } from "./DataGrid"
-import DatabaseTablePanel, { type DatabasePanelTab } from "./DatabaseTablePanel"
-import {
-	DATABASE_INTRO_DISMISSED_KEY,
-	EMPTY_CELL_SELECTION,
-	getRowRecordId,
-	type RowEditorState,
-} from "./panelState"
+import DatabaseTablePanel from "./DatabaseTablePanel"
+import { DATABASE_INTRO_DISMISSED_KEY, getRowRecordId, type RowEditorState } from "./panelState"
 import PermissionEditorDialog, { type PermissionEditorTarget } from "./PermissionEditorDialog"
 import RowEditorDialog from "./RowEditorDialog"
 import TableList, { TableListToggle } from "./TableList"
+import useDatabaseGridSelection from "./useDatabaseGridSelection"
+import useDatabaseRefresh from "./useDatabaseRefresh"
+import useDatabaseSidePanel from "./useDatabaseSidePanel"
 import useMagicBaseRows from "./useMagicBaseRows"
 import {
 	buildGridColumns,
@@ -60,18 +58,23 @@ export default function MicroAppDatabasePanel({
 			window.localStorage.getItem(DATABASE_INTRO_DISMISSED_KEY) === "1",
 	)
 	const tableListModeRef = useRef<"auto" | "manual">("auto")
-	const [activeTab, setActiveTab] = useState<DatabasePanelTab>("data")
 	const [sort, setSort] = useState<MagicBaseSortRule | null>(null)
 	const [filter, setFilter] = useState<MagicBaseFilterGroup>(createEmptyMagicBaseFilter)
 	const [permissionEditor, setPermissionEditor] = useState<{
 		tableId: string
 		target: PermissionEditorTarget
 	} | null>(null)
-	const [selectedCells, setSelectedCells] = useState<MagicBaseCellSelection>(EMPTY_CELL_SELECTION)
-	const [selectionResetVersion, setSelectionResetVersion] = useState(0)
 	const [rowEditor, setRowEditor] = useState<RowEditorState | null>(null)
 	const [deleteSelection, setDeleteSelection] = useState<MagicBaseCellSelection | null>(null)
 	const [deletingRows, setDeletingRows] = useState(false)
+	const {
+		selectedCells,
+		setSelectedCells,
+		selectionResetVersion,
+		clearSelection: handleClearSelection,
+		handlePanelMouseDown,
+	} = useDatabaseGridSelection()
+	const { resetSidePanel, ...sidePanel } = useDatabaseSidePanel()
 
 	const {
 		data: tables = [],
@@ -102,7 +105,8 @@ export default function MicroAppDatabasePanel({
 		setTableListCollapsed(false)
 		setShowSystemFields(false)
 		setFilter(createEmptyMagicBaseFilter())
-	}, [projectId])
+		resetSidePanel()
+	}, [projectId, resetSidePanel])
 
 	// 单表不需要持续占用分类栏；用户手动操作后不再用自动规则覆盖其选择。
 	useEffect(() => {
@@ -151,12 +155,22 @@ export default function MicroAppDatabasePanel({
 		isLoading: permissionsLoading,
 		mutate: refreshPermissions,
 	} = useSWR(
-		active && projectId && selectedTableId && selectedTable
+		STATIC_DATABASE_PERMISSIONS_ENABLED &&
+			active &&
+			projectId &&
+			selectedTableId &&
+			selectedTable
 			? ["magicbase", "permissions", projectId, selectedTableId]
 			: null,
 		([, , currentProjectId, currentTableId]) =>
 			MagicBaseApi.getPermissions(currentProjectId, currentTableId),
 	)
+	const { refreshing, refresh: handleRefresh } = useDatabaseRefresh({
+		refreshTables,
+		refreshTable,
+		refreshRows,
+		refreshPermissions: STATIC_DATABASE_PERMISSIONS_ENABLED ? refreshPermissions : undefined,
+	})
 
 	const gridColumns = useMemo(
 		() => buildGridColumns(selectedTable, rows, showSystemFields),
@@ -165,10 +179,12 @@ export default function MicroAppDatabasePanel({
 	const displayColumns = useMemo(() => getDisplayColumns(selectedTable), [selectedTable])
 
 	const handleSelectTable = (tableId: string) => {
-		setSelectedTableId(tableId)
-		setActiveTab("data")
-		setSelectedCells(EMPTY_CELL_SELECTION)
-		setFilter(createEmptyMagicBaseFilter())
+		sidePanel.runWithPermissionGuard(() => {
+			setSelectedTableId(tableId)
+			resetSidePanel()
+			handleClearSelection()
+			setFilter(createEmptyMagicBaseFilter())
+		})
 	}
 
 	const handleSortChange = (field: string) => {
@@ -214,8 +230,10 @@ export default function MicroAppDatabasePanel({
 	)
 
 	const handleCreateRow = () => {
-		setActiveTab("data")
-		setRowEditor({ mode: "create", row: null })
+		sidePanel.runWithPermissionGuard(() => {
+			resetSidePanel()
+			setRowEditor({ mode: "create", row: null })
+		})
 	}
 
 	const handleOpenEditRow = (recordId: string) => {
@@ -236,11 +254,6 @@ export default function MicroAppDatabasePanel({
 
 	const handleDeleteSelectedRows = () => {
 		handleRequestDeleteRows(selectedCells)
-	}
-
-	const handleClearSelection = () => {
-		setSelectedCells(EMPTY_CELL_SELECTION)
-		setSelectionResetVersion((version) => version + 1)
 	}
 
 	const handleFilterChange = (nextFilter: MagicBaseFilterGroup) => {
@@ -271,13 +284,6 @@ export default function MicroAppDatabasePanel({
 		}
 	}
 
-	const handleRefresh = () => {
-		refreshTables()
-		refreshTable()
-		refreshRows()
-		refreshPermissions()
-	}
-
 	const handleToggleTableList = () => {
 		tableListModeRef.current = "manual"
 		setTableListCollapsed((collapsed) => !collapsed)
@@ -289,6 +295,7 @@ export default function MicroAppDatabasePanel({
 	}
 
 	const canManagePermissions = !projectRole || projectRole === "owner" || projectRole === "manage"
+	const canManageStaticPermissions = STATIC_DATABASE_PERMISSIONS_ENABLED && canManagePermissions
 	const editorTable =
 		permissionEditor?.tableId === selectedTable?.id
 			? selectedTable
@@ -301,19 +308,6 @@ export default function MicroAppDatabasePanel({
 	const selectionResetKey = `${selectedTableId || ""}:${sort?.field || ""}:${
 		sort?.order || ""
 	}:${selectionResetVersion}`
-	const handlePanelMouseDown = (event: MouseEvent<HTMLElement>) => {
-		if (selectedCells.rowIds.length === 0 || event.button !== 0) return
-		const target = event.target as HTMLElement
-		if (
-			target.closest(
-				"[data-magicbase-row-index][data-magicbase-column-index], button, a, input, textarea, select, [data-preserve-grid-selection]",
-			)
-		) {
-			return
-		}
-		handleClearSelection()
-	}
-
 	return (
 		<section
 			className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/30"
@@ -368,7 +362,7 @@ export default function MicroAppDatabasePanel({
 						loading={tablesLoading}
 						error={tablesError}
 						onSelect={handleSelectTable}
-						canManagePermissions={canManagePermissions}
+						canManagePermissions={canManageStaticPermissions}
 						onOpenTablePermissions={handleOpenTablePermissions}
 						onRetry={() => refreshTables()}
 						onToggle={handleToggleTableList}
@@ -390,7 +384,7 @@ export default function MicroAppDatabasePanel({
 						tableError={tableError}
 						tableLoading={tableLoading}
 						tableListCollapsed={tableListCollapsed}
-						activeTab={activeTab}
+						activeSidePanel={sidePanel.activeSidePanel}
 						rows={rows}
 						rowsError={rowsError}
 						rowsLoading={rowsLoading}
@@ -409,9 +403,15 @@ export default function MicroAppDatabasePanel({
 						canEditSelectedRow={canEditSelectedRow}
 						canDeleteSelectedRows={canDeleteSelectedRows}
 						canManagePermissions={canManagePermissions}
+						canManageStaticPermissions={canManageStaticPermissions}
+						refreshing={refreshing}
 						showSystemFields={showSystemFields}
 						filter={filter}
-						onTabChange={setActiveTab}
+						onSidePanelChange={sidePanel.requestSidePanelChange}
+						permissionDiscardConfirmOpen={sidePanel.discardConfirmOpen}
+						onPermissionDirtyChange={sidePanel.setPermissionDirty}
+						onDiscardPermissionChanges={sidePanel.discardPermissionChanges}
+						onContinueEditingPermissions={sidePanel.continueEditing}
 						onShowSystemFieldsChange={setShowSystemFields}
 						onCreateRow={handleCreateRow}
 						onEditSelectedRow={handleEditSelectedRow}
@@ -428,21 +428,23 @@ export default function MicroAppDatabasePanel({
 						onRefreshTable={() => refreshTable()}
 						onRefreshRows={() => refreshRows()}
 						onRefreshPermissions={() => refreshPermissions()}
-						onRefresh={handleRefresh}
+						onRefresh={() => void handleRefresh()}
 					/>
 				</section>
 			</div>
-			<PermissionEditorDialog
-				open={Boolean(permissionEditor)}
-				projectId={projectId || ""}
-				table={editorTable}
-				target={permissionEditor?.target || null}
-				permissions={permissions}
-				onOpenChange={(nextOpen) => {
-					if (!nextOpen) setPermissionEditor(null)
-				}}
-				onSaved={() => refreshPermissions()}
-			/>
+			{STATIC_DATABASE_PERMISSIONS_ENABLED ? (
+				<PermissionEditorDialog
+					open={Boolean(permissionEditor)}
+					projectId={projectId || ""}
+					table={editorTable}
+					target={permissionEditor?.target || null}
+					permissions={permissions}
+					onOpenChange={(nextOpen) => {
+						if (!nextOpen) setPermissionEditor(null)
+					}}
+					onSaved={() => refreshPermissions()}
+				/>
+			) : null}
 			<RowEditorDialog
 				open={Boolean(rowEditor)}
 				mode={rowEditor?.mode || "create"}

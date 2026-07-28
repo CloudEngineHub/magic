@@ -20,6 +20,7 @@ import {
 	getDefaultSort,
 	getDisplayColumns,
 } from "../MicroAppDatabasePanel/utils"
+import { STATIC_DATABASE_PERMISSIONS_ENABLED } from "../databasePermissionFeatures"
 
 type MobileDatabaseTab = "data" | "structure" | "permissions"
 
@@ -37,12 +38,20 @@ function MobileDatabaseTabs({
 }) {
 	const { t } = useTranslation("super")
 	return (
-		<div className="grid shrink-0 grid-cols-3 rounded-xl bg-muted p-1" role="tablist">
+		<div
+			className={cn(
+				"grid shrink-0 rounded-xl bg-muted p-1",
+				STATIC_DATABASE_PERMISSIONS_ENABLED ? "grid-cols-3" : "grid-cols-2",
+			)}
+			role="tablist"
+		>
 			{(
 				[
 					["data", t("microAppPage.databasePanel.dataTab")],
 					["structure", t("microAppPage.databasePanel.structureTab")],
-					["permissions", t("microAppPage.databasePanel.permissionsTab")],
+					...(STATIC_DATABASE_PERMISSIONS_ENABLED
+						? [["permissions", t("microAppPage.databasePanel.permissionsTab")] as const]
+						: []),
 				] as const
 			).map(([key, label]) => (
 				<button
@@ -239,7 +248,7 @@ export default function MobileDatabaseTableDetail({
 		{ keepPreviousData: true },
 	)
 	const { data: permissions, isLoading: permissionsLoading } = useSWR(
-		activeTab === "permissions"
+		STATIC_DATABASE_PERMISSIONS_ENABLED && activeTab === "permissions"
 			? ["magicbase-mobile", "permissions", projectId, tableId]
 			: null,
 		([, , currentProjectId, currentTableId]) =>
@@ -277,7 +286,10 @@ export default function MobileDatabaseTableDetail({
 				{!loading && !error && activeTab === "structure" ? (
 					<MobileDatabaseStructure columns={columns} />
 				) : null}
-				{!loading && !error && activeTab === "permissions" ? (
+				{STATIC_DATABASE_PERMISSIONS_ENABLED &&
+				!loading &&
+				!error &&
+				activeTab === "permissions" ? (
 					<MobileDatabasePermissions permissions={permissions} />
 				) : null}
 			</div>

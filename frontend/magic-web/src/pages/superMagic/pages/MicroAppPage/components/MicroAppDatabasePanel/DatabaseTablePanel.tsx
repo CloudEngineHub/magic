@@ -1,16 +1,7 @@
-import {
-	ArrowLeft,
-	Columns3Cog,
-	Eye,
-	Loader2,
-	Pencil,
-	Plus,
-	RefreshCw,
-	ShieldCheck,
-	Trash2,
-	X,
-} from "lucide-react"
+import { Columns3Cog, Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react"
+import { useRef } from "react"
 import { useTranslation } from "react-i18next"
+import { useSize } from "ahooks"
 
 import type {
 	MagicBaseColumn,
@@ -21,18 +12,19 @@ import type {
 	MagicBaseTable,
 } from "@/apis/modules/magicBase"
 import { Button } from "@/components/shadcn-ui/button"
-import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
+import { ConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
+import { Switch } from "@/components/shadcn-ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/lib/utils"
 
 import DataFilterBar from "./DataFilterBar"
 import DataFilterSummary from "./DataFilterSummary"
 import DataGrid, { type MagicBaseCellSelection } from "./DataGrid"
-import PermissionPanel from "./PermissionPanel"
-import StructureTable from "./StructureTable"
+import DatabaseSettingsSidePanel, { type DatabaseSidePanel } from "./DatabaseSettingsSidePanel"
 import type { MagicBaseGridColumn } from "./utils"
+import * as layout from "../../layoutConstants"
 
-export type DatabasePanelTab = "data" | "structure" | "permissions"
+export type { DatabaseSidePanel } from "./DatabaseSettingsSidePanel"
 
 interface DatabaseTablePanelProps {
 	projectId?: string
@@ -41,7 +33,7 @@ interface DatabaseTablePanelProps {
 	tableError?: unknown
 	tableLoading: boolean
 	tableListCollapsed: boolean
-	activeTab: DatabasePanelTab
+	activeSidePanel: DatabaseSidePanel | null
 	rows: MagicBaseRow[]
 	rowsError?: unknown
 	rowsLoading: boolean
@@ -60,9 +52,12 @@ interface DatabaseTablePanelProps {
 	canEditSelectedRow: boolean
 	canDeleteSelectedRows: boolean
 	canManagePermissions: boolean
+	canManageStaticPermissions: boolean
+	refreshing: boolean
+	permissionDiscardConfirmOpen: boolean
 	showSystemFields: boolean
 	filter: MagicBaseFilterGroup
-	onTabChange: (tab: DatabasePanelTab) => void
+	onSidePanelChange: (panel: DatabaseSidePanel | null) => void
 	onShowSystemFieldsChange: (show: boolean) => void
 	onCreateRow: () => void
 	onEditSelectedRow: () => void
@@ -80,63 +75,45 @@ interface DatabaseTablePanelProps {
 	onRefreshRows: () => void
 	onRefreshPermissions: () => void
 	onRefresh: () => void
+	onPermissionDirtyChange: (dirty: boolean) => void
+	onDiscardPermissionChanges: () => void
+	onContinueEditingPermissions: () => void
 }
 
 interface DataToolbarActionsProps {
-	activeTab: DatabasePanelTab
+	activeSidePanel: DatabaseSidePanel | null
 	canManagePermissions: boolean
-	showSystemFields: boolean
-	onTabChange: (tab: DatabasePanelTab) => void
-	onShowSystemFieldsChange: (show: boolean) => void
+	refreshing: boolean
+	onSidePanelChange: (panel: DatabaseSidePanel | null) => void
 	onRefresh: () => void
 }
 
 function DataToolbarActions({
-	activeTab,
+	activeSidePanel,
 	canManagePermissions,
-	showSystemFields,
-	onTabChange,
-	onShowSystemFieldsChange,
+	refreshing,
+	onSidePanelChange,
 	onRefresh,
 }: DataToolbarActionsProps) {
 	const { t } = useTranslation("super")
 
 	return (
 		<div className="flex items-center gap-1">
-			{activeTab === "data" ? (
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant={showSystemFields ? "secondary" : "outline"}
-							size="icon"
-							className={cn("size-8 shadow-xs", !showSystemFields && "bg-background")}
-							aria-label={t("microAppPage.databasePanel.showSystemFields")}
-							aria-pressed={showSystemFields}
-							onClick={() => onShowSystemFieldsChange(!showSystemFields)}
-							data-testid="magicbase-system-fields-toggle"
-						>
-							<Eye className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="bottom">
-						{t("microAppPage.databasePanel.showSystemFields")}
-					</TooltipContent>
-				</Tooltip>
-			) : null}
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<Button
 						type="button"
-						variant={activeTab === "structure" ? "secondary" : "outline"}
+						variant={activeSidePanel === "structure" ? "secondary" : "outline"}
 						size="icon"
 						className={cn(
 							"size-8 shadow-xs",
-							activeTab !== "structure" && "bg-background",
+							activeSidePanel !== "structure" && "bg-background",
 						)}
 						aria-label={t("microAppPage.databasePanel.fieldSettings")}
-						aria-pressed={activeTab === "structure"}
-						onClick={() => onTabChange("structure")}
+						aria-pressed={activeSidePanel === "structure"}
+						onClick={() =>
+							onSidePanelChange(activeSidePanel === "structure" ? null : "structure")
+						}
 						data-testid="magicbase-field-settings"
 					>
 						<Columns3Cog className="size-4" />
@@ -151,15 +128,19 @@ function DataToolbarActions({
 					<TooltipTrigger asChild>
 						<Button
 							type="button"
-							variant={activeTab === "permissions" ? "secondary" : "outline"}
+							variant={activeSidePanel === "permissions" ? "secondary" : "outline"}
 							size="icon"
 							className={cn(
 								"size-8 shadow-xs",
-								activeTab !== "permissions" && "bg-background",
+								activeSidePanel !== "permissions" && "bg-background",
 							)}
 							aria-label={t("microAppPage.databasePanel.accessPermissions")}
-							aria-pressed={activeTab === "permissions"}
-							onClick={() => onTabChange("permissions")}
+							aria-pressed={activeSidePanel === "permissions"}
+							onClick={() =>
+								onSidePanelChange(
+									activeSidePanel === "permissions" ? null : "permissions",
+								)
+							}
 							data-testid="magicbase-access-permissions"
 						>
 							<ShieldCheck className="size-4" />
@@ -178,14 +159,19 @@ function DataToolbarActions({
 						size="icon"
 						className="size-8 bg-background shadow-xs"
 						aria-label={t("microAppPage.databasePanel.refresh")}
+						aria-busy={refreshing}
+						disabled={refreshing}
 						onClick={onRefresh}
 						data-testid="magicbase-refresh"
 					>
-						<RefreshCw className="size-4" />
+						<RefreshCw
+							className={cn("size-4", refreshing && "animate-spin")}
+							data-testid="magicbase-refresh-icon"
+						/>
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent side="bottom">
-					{t("microAppPage.databasePanel.refresh")}
+					{refreshing ? t("refreshing") : t("microAppPage.databasePanel.refresh")}
 				</TooltipContent>
 			</Tooltip>
 		</div>
@@ -199,7 +185,7 @@ export default function DatabaseTablePanel({
 	tableError,
 	tableLoading,
 	tableListCollapsed,
-	activeTab,
+	activeSidePanel,
 	rows,
 	rowsError,
 	rowsLoading,
@@ -218,9 +204,12 @@ export default function DatabaseTablePanel({
 	canEditSelectedRow,
 	canDeleteSelectedRows,
 	canManagePermissions,
+	canManageStaticPermissions,
+	refreshing,
+	permissionDiscardConfirmOpen,
 	showSystemFields,
 	filter,
-	onTabChange,
+	onSidePanelChange,
 	onShowSystemFieldsChange,
 	onCreateRow,
 	onEditSelectedRow,
@@ -238,8 +227,22 @@ export default function DatabaseTablePanel({
 	onRefreshRows,
 	onRefreshPermissions,
 	onRefresh,
+	onPermissionDirtyChange,
+	onDiscardPermissionChanges,
+	onContinueEditingPermissions,
 }: DatabaseTablePanelProps) {
 	const { t } = useTranslation("super")
+	const workspaceRef = useRef<HTMLDivElement>(null)
+	const workspaceSize = useSize(workspaceRef)
+	const measuredWorkspaceWidth = workspaceSize?.width ?? 0
+	const availableSettingsWidth =
+		measuredWorkspaceWidth > layout.DATABASE_GRID_MIN_PX
+			? measuredWorkspaceWidth - layout.DATABASE_GRID_MIN_PX
+			: layout.DATABASE_SETTINGS_PANEL_MAX_PX
+	const settingsPanelMaxWidth = Math.min(
+		layout.DATABASE_SETTINGS_PANEL_MAX_PX,
+		availableSettingsWidth,
+	)
 
 	if (!selectedTableId) return null
 
@@ -254,18 +257,6 @@ export default function DatabaseTablePanel({
 			>
 				<div className="flex min-w-0 items-center justify-between gap-4">
 					<div className="flex min-w-0 items-center gap-2">
-						{activeTab !== "data" ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								className="size-8 shrink-0"
-								aria-label={t("microAppPage.databasePanel.backToData")}
-								onClick={() => onTabChange("data")}
-							>
-								<ArrowLeft className="size-4" />
-							</Button>
-						) : null}
 						<div className="flex min-w-0 items-center gap-2.5">
 							<h3
 								className="truncate text-sm font-semibold text-foreground"
@@ -279,16 +270,6 @@ export default function DatabaseTablePanel({
 									? t("microAppPage.databasePanel.totalRows", { total })
 									: t("microAppPage.databasePanel.loadedRows", { total })}
 							</span>
-							{activeTab === "structure" ? (
-								<span className="shrink-0 rounded-md bg-primary/5 px-1.5 py-0.5 text-xs text-primary">
-									{t("microAppPage.databasePanel.fieldSettings")}
-								</span>
-							) : null}
-							{activeTab === "permissions" ? (
-								<span className="shrink-0 rounded-md bg-primary/5 px-1.5 py-0.5 text-xs text-primary">
-									{t("microAppPage.databasePanel.accessPermissions")}
-								</span>
-							) : null}
 						</div>
 					</div>
 					<div className="flex shrink-0 items-center gap-2">
@@ -298,7 +279,7 @@ export default function DatabaseTablePanel({
 								{t("microAppPage.databasePanel.loading")}
 							</span>
 						) : null}
-						{activeTab === "data" && selectedRowCount > 0 ? (
+						{selectedRowCount > 0 ? (
 							<div
 								className="flex h-8 items-center gap-1 rounded-md border border-primary/15 bg-primary/5 px-1.5"
 								data-testid="magicbase-selection-actions"
@@ -345,125 +326,141 @@ export default function DatabaseTablePanel({
 								) : null}
 							</div>
 						) : null}
-						{activeTab === "data" ? (
-							<DataFilterBar
-								columns={displayColumns}
-								value={filter}
-								onChange={onFilterChange}
+						<label
+							className="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-xs text-foreground shadow-xs"
+							data-preserve-grid-selection
+						>
+							<span>{t("microAppPage.databasePanel.showSystemFields")}</span>
+							<Switch
+								checked={showSystemFields}
+								onCheckedChange={onShowSystemFieldsChange}
+								aria-label={t("microAppPage.databasePanel.showSystemFields")}
+								data-testid="magicbase-system-fields-toggle"
 							/>
-						) : null}
-						{activeTab === "data" ? (
-							<Button
-								type="button"
-								size="sm"
-								className="h-8 gap-1.5 shadow-sm"
-								disabled={!selectedTable}
-								onClick={onCreateRow}
-							>
-								<Plus className="size-3.5" />
-								{t("microAppPage.databasePanel.rowCreate")}
-							</Button>
-						) : null}
+						</label>
+						<DataFilterBar
+							columns={displayColumns}
+							value={filter}
+							onChange={onFilterChange}
+						/>
+						<Button
+							type="button"
+							size="sm"
+							className="h-8 gap-1.5 shadow-sm"
+							disabled={!selectedTable}
+							onClick={onCreateRow}
+						>
+							<Plus className="size-3.5" />
+							{t("microAppPage.databasePanel.rowCreate")}
+						</Button>
 						<DataToolbarActions
-							activeTab={activeTab}
+							activeSidePanel={activeSidePanel}
 							canManagePermissions={canManagePermissions}
-							showSystemFields={showSystemFields}
-							onTabChange={onTabChange}
-							onShowSystemFieldsChange={onShowSystemFieldsChange}
+							refreshing={refreshing}
+							onSidePanelChange={onSidePanelChange}
 							onRefresh={onRefresh}
 						/>
 					</div>
 				</div>
 			</div>
 
-			<div className="flex min-h-0 flex-1 flex-col bg-background">
-				{activeTab === "data" ? (
+			<div ref={workspaceRef} className="flex min-h-0 flex-1 bg-background">
+				<div className="flex min-w-0 flex-1 flex-col">
 					<DataFilterSummary
 						columns={displayColumns}
 						value={filter}
 						onChange={onFilterChange}
 					/>
+					{tableError ? (
+						<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm">
+							<p className="text-destructive">
+								{t("microAppPage.databasePanel.loadTableFailed")}
+							</p>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								onClick={onRefreshTable}
+							>
+								{t("microAppPage.databasePanel.retry")}
+							</Button>
+						</div>
+					) : (
+						<div className="min-h-0 flex-1">
+							{rowsError ? (
+								<div className="flex h-full flex-col items-center justify-center gap-3 text-sm">
+									<p className="text-destructive">
+										{t("microAppPage.databasePanel.loadRowsFailed")}
+									</p>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										onClick={onRefreshRows}
+									>
+										{t("microAppPage.databasePanel.retry")}
+									</Button>
+								</div>
+							) : (
+								<div className="h-full">
+									<DataGrid
+										columns={gridColumns}
+										rows={rows}
+										sort={sort}
+										loading={rowsLoading || tableLoading}
+										selectionResetKey={selectionResetKey}
+										onSortChange={onSortChange}
+										onSelectionChange={onSelectionChange}
+										onOpenEditRow={onOpenEditRow}
+										onDeleteRows={onRequestDeleteRows}
+										canManagePermissions={canManageStaticPermissions}
+										total={total}
+										totalKnown={totalKnown}
+										loadedRowCount={loadedRowCount}
+										hasMore={hasMoreRows}
+										loadingMore={loadingMoreRows}
+										onLoadMore={onLoadMoreRows}
+										onOpenRowPermissions={onOpenRowPermissions}
+										onOpenColumnPermissions={onOpenColumnPermissions}
+									/>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+
+				{activeSidePanel &&
+				selectedTable &&
+				(activeSidePanel !== "permissions" || canManagePermissions) ? (
+					<DatabaseSettingsSidePanel
+						view={activeSidePanel}
+						projectId={projectId || ""}
+						table={selectedTable}
+						columns={displayColumns}
+						permissions={permissions}
+						permissionsLoading={permissionsLoading}
+						canManagePermissions={canManagePermissions}
+						maxWidth={settingsPanelMaxWidth}
+						onClose={() => onSidePanelChange(null)}
+						onPermissionDirtyChange={onPermissionDirtyChange}
+						onRefreshPermissions={onRefreshPermissions}
+						onRefreshTable={onRefreshTable}
+					/>
 				) : null}
-				{tableError ? (
-					<div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm">
-						<p className="text-destructive">
-							{t("microAppPage.databasePanel.loadTableFailed")}
-						</p>
-						<Button type="button" size="sm" variant="outline" onClick={onRefreshTable}>
-							{t("microAppPage.databasePanel.retry")}
-						</Button>
-					</div>
-				) : (
-					<>
-						{activeTab === "data" ? (
-							<div className="min-h-0 flex-1">
-								{rowsError ? (
-									<div className="flex h-full flex-col items-center justify-center gap-3 text-sm">
-										<p className="text-destructive">
-											{t("microAppPage.databasePanel.loadRowsFailed")}
-										</p>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											onClick={onRefreshRows}
-										>
-											{t("microAppPage.databasePanel.retry")}
-										</Button>
-									</div>
-								) : (
-									<div className="h-full">
-										<DataGrid
-											columns={gridColumns}
-											rows={rows}
-											sort={sort}
-											loading={rowsLoading || tableLoading}
-											selectionResetKey={selectionResetKey}
-											onSortChange={onSortChange}
-											onSelectionChange={onSelectionChange}
-											onOpenEditRow={onOpenEditRow}
-											onDeleteRows={onRequestDeleteRows}
-											canManagePermissions={canManagePermissions}
-											total={total}
-											totalKnown={totalKnown}
-											loadedRowCount={loadedRowCount}
-											hasMore={hasMoreRows}
-											loadingMore={loadingMoreRows}
-											onLoadMore={onLoadMoreRows}
-											onOpenRowPermissions={onOpenRowPermissions}
-											onOpenColumnPermissions={onOpenColumnPermissions}
-										/>
-									</div>
-								)}
-							</div>
-						) : null}
-
-						{activeTab === "structure" ? (
-							<div className="min-h-0 flex-1">
-								<ScrollArea className="h-full">
-									<StructureTable columns={displayColumns} />
-									<ScrollBar orientation="horizontal" />
-								</ScrollArea>
-							</div>
-						) : null}
-
-						{activeTab === "permissions" && selectedTable ? (
-							<div className="min-h-0 flex-1">
-								<PermissionPanel
-									projectId={projectId || ""}
-									table={selectedTable}
-									permissions={permissions}
-									loading={permissionsLoading}
-									columns={displayColumns}
-									canManagePermissions={canManagePermissions}
-									onRefreshPermissions={onRefreshPermissions}
-									onRefreshTable={onRefreshTable}
-								/>
-							</div>
-						) : null}
-					</>
-				)}
 			</div>
+
+			<ConfirmDialog
+				open={permissionDiscardConfirmOpen}
+				title={t("microAppPage.databasePanel.dynamicUnsavedTitle")}
+				description={t("microAppPage.databasePanel.dynamicUnsavedDescription")}
+				confirmText={t("microAppPage.databasePanel.dynamicDiscardChanges")}
+				cancelText={t("microAppPage.databasePanel.dynamicContinueEditing")}
+				variant="destructive"
+				destructivePresentation="soft"
+				dialogSize="sm"
+				onConfirm={onDiscardPermissionChanges}
+				onCancel={onContinueEditingPermissions}
+			/>
 		</>
 	)
 }

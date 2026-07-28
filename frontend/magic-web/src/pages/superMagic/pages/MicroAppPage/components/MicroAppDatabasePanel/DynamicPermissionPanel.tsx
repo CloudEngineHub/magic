@@ -4,12 +4,11 @@ import {
 	Info,
 	Loader2,
 	LockKeyhole,
-	Pencil,
 	Rows3,
 	Save,
 	ShieldCheck,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { MagicBaseApi } from "@/apis"
@@ -21,7 +20,7 @@ import type {
 } from "@/apis/modules/magicBase"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
-import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	Select,
 	SelectContent,
@@ -39,6 +38,7 @@ interface DynamicPermissionPanelProps {
 	columns: MagicBaseColumn[]
 	canManagePermissions: boolean
 	onUpdated: () => void
+	onDirtyChange?: (dirty: boolean) => void
 }
 
 const PERMISSION_SCOPES: PermissionScope[] = [
@@ -104,19 +104,19 @@ function scopeBadgeClass(scope: PermissionScope): string {
 
 function ScopeControl({
 	value,
-	editing,
+	editable,
 	onChange,
 }: {
 	value: PermissionScope
-	editing: boolean
+	editable: boolean
 	onChange: (scope: PermissionScope) => void
 }) {
 	const { t } = useTranslation("super")
-	if (!editing) {
+	if (!editable) {
 		return (
 			<Badge
 				variant="outline"
-				className={cn("rounded-md font-normal", scopeBadgeClass(value))}
+				className={cn("max-w-full rounded-md font-normal", scopeBadgeClass(value))}
 			>
 				{t(`microAppPage.databasePanel.dynamicScope.${value}`)}
 			</Badge>
@@ -125,7 +125,7 @@ function ScopeControl({
 
 	return (
 		<Select value={value} onValueChange={(nextValue) => onChange(nextValue as PermissionScope)}>
-			<SelectTrigger size="sm" className="w-[148px]">
+			<SelectTrigger size="sm" className="w-full max-w-[180px]">
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent align="end">
@@ -143,13 +143,13 @@ function PermissionLine({
 	label,
 	description,
 	value,
-	editing,
+	editable,
 	onChange,
 }: {
 	label: string
 	description: string
 	value: PermissionScope
-	editing: boolean
+	editable: boolean
 	onChange: (scope: PermissionScope) => void
 }) {
 	return (
@@ -158,7 +158,7 @@ function PermissionLine({
 				<div className="text-sm font-medium text-foreground">{label}</div>
 				<div className="mt-0.5 text-xs text-muted-foreground">{description}</div>
 			</div>
-			<ScopeControl value={value} editing={editing} onChange={onChange} />
+			<ScopeControl value={value} editable={editable} onChange={onChange} />
 		</div>
 	)
 }
@@ -169,6 +169,7 @@ export default function DynamicPermissionPanel({
 	columns,
 	canManagePermissions,
 	onUpdated,
+	onDirtyChange,
 }: DynamicPermissionPanelProps) {
 	const { t } = useTranslation("super")
 	const dynamicColumns = useMemo(
@@ -176,13 +177,37 @@ export default function DynamicPermissionPanel({
 		[columns],
 	)
 	const systemColumnCount = columns.length - dynamicColumns.length
-	const [editing, setEditing] = useState(false)
 	const [saving, setSaving] = useState(false)
-	const [draft, setDraft] = useState(() => buildDraft(table, columns))
+	const sourceDraft = useMemo(() => buildDraft(table, columns), [columns, table])
+	const [savedDraft, setSavedDraft] = useState(sourceDraft)
+	const [draft, setDraft] = useState(sourceDraft)
+	const draftTableIdRef = useRef(table.id)
+	const isDirty = useMemo(
+		() => JSON.stringify(draft) !== JSON.stringify(savedDraft),
+		[draft, savedDraft],
+	)
+	const isDirtyRef = useRef(isDirty)
+	isDirtyRef.current = isDirty
 
 	useEffect(() => {
-		if (!editing) setDraft(buildDraft(table, columns))
-	}, [columns, editing, table])
+		const tableChanged = draftTableIdRef.current !== table.id
+		if (!tableChanged && isDirtyRef.current) return
+
+		draftTableIdRef.current = table.id
+		setSavedDraft(sourceDraft)
+		setDraft(sourceDraft)
+	}, [sourceDraft, table.id])
+
+	useEffect(() => {
+		onDirtyChange?.(isDirty)
+	}, [isDirty, onDirtyChange])
+
+	useEffect(
+		() => () => {
+			onDirtyChange?.(false)
+		},
+		[onDirtyChange],
+	)
 
 	const setTableScope = (key: keyof MagicBasePermissionScope, scope: PermissionScope) => {
 		setDraft((current) => ({
@@ -212,19 +237,15 @@ export default function DynamicPermissionPanel({
 		}))
 	}
 
-	const handleCancel = () => {
-		setDraft(buildDraft(table, columns))
-		setEditing(false)
-	}
-
 	const handleSave = async () => {
+		if (!isDirty) return
 		setSaving(true)
 		try {
 			await MagicBaseApi.updateDynamicPermissions(projectId, table.id, {
 				dynamic_permissions: draft,
 			})
+			setSavedDraft(draft)
 			toast.success(t("microAppPage.databasePanel.dynamicSaveSuccess"))
-			setEditing(false)
 			onUpdated()
 		} catch (error) {
 			console.error("Failed to update MagicBase dynamic permissions", error)
@@ -236,64 +257,42 @@ export default function DynamicPermissionPanel({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
-				<div className="flex min-w-0 items-start gap-3">
-					<div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
-						<ShieldCheck className="size-4" />
-					</div>
-					<div className="min-w-0">
-						<h4 className="text-sm font-medium text-foreground">
+			<div className="border-b border-border px-4 py-3">
+				<div className="flex items-center justify-between gap-3">
+					<div className="flex min-w-0 items-center gap-3">
+						<div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
+							<ShieldCheck className="size-4" />
+						</div>
+						<h4 className="truncate text-sm font-medium text-foreground">
 							{t("microAppPage.databasePanel.dynamicTitle")}
 						</h4>
-						<p className="mt-1 text-xs leading-5 text-muted-foreground">
-							{t("microAppPage.databasePanel.dynamicDescription")}
-						</p>
 					</div>
+					{canManagePermissions && isDirty ? (
+						<Button
+							size="sm"
+							className="shrink-0 gap-1.5"
+							disabled={saving}
+							onClick={handleSave}
+						>
+							{saving ? (
+								<Loader2 className="size-3.5 animate-spin" />
+							) : (
+								<Save className="size-3.5" />
+							)}
+							{t("microAppPage.databasePanel.dynamicSave")}
+						</Button>
+					) : null}
 				</div>
-				{canManagePermissions ? (
-					<div className="flex shrink-0 items-center gap-2">
-						{editing ? (
-							<>
-								<Button
-									variant="ghost"
-									size="sm"
-									disabled={saving}
-									onClick={handleCancel}
-								>
-									{t("common.cancel")}
-								</Button>
-								<Button
-									size="sm"
-									className="gap-1.5"
-									disabled={saving}
-									onClick={handleSave}
-								>
-									{saving ? (
-										<Loader2 className="size-3.5 animate-spin" />
-									) : (
-										<Save className="size-3.5" />
-									)}
-									{t("microAppPage.databasePanel.dynamicSave")}
-								</Button>
-							</>
-						) : (
-							<Button
-								variant="outline"
-								size="sm"
-								className="gap-1.5"
-								onClick={() => setEditing(true)}
-							>
-								<Pencil className="size-3.5" />
-								{t("microAppPage.databasePanel.dynamicEdit")}
-							</Button>
-						)}
-					</div>
-				) : null}
+				<p className="mt-2 pl-12 text-xs leading-5 text-muted-foreground">
+					{t("microAppPage.databasePanel.dynamicDescription")}
+				</p>
 			</div>
 
-			<div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50/70 px-4 py-2 text-xs text-amber-800">
-				<Info className="size-3.5 shrink-0" />
-				<span>{t("microAppPage.databasePanel.dynamicAdminNotice")}</span>
+			<div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50/70 px-4 py-2 text-xs leading-5 text-amber-800">
+				<Info className="mt-0.5 size-3.5 shrink-0" />
+				<span className="min-w-0">
+					{t("microAppPage.databasePanel.dynamicAdminNotice")}
+				</span>
 			</div>
 
 			<ScrollArea className="min-h-0 flex-1">
@@ -310,7 +309,7 @@ export default function DynamicPermissionPanel({
 							"microAppPage.databasePanel.dynamicAction.tableReadDescription",
 						)}
 						value={normalizeScope(draft.table.read_scope)}
-						editing={editing}
+						editable={canManagePermissions}
 						onChange={(scope) => setTableScope("read_scope", scope)}
 					/>
 					<PermissionLine
@@ -319,7 +318,7 @@ export default function DynamicPermissionPanel({
 							"microAppPage.databasePanel.dynamicAction.tableInsertDescription",
 						)}
 						value={normalizeScope(draft.table.insert_scope)}
-						editing={editing}
+						editable={canManagePermissions}
 						onChange={(scope) => setTableScope("insert_scope", scope)}
 					/>
 				</section>
@@ -341,7 +340,7 @@ export default function DynamicPermissionPanel({
 								`microAppPage.databasePanel.dynamicAction.row${action[0].toUpperCase()}${action.slice(1)}Description`,
 							)}
 							value={normalizeScope(draft.row[`${action}_scope`])}
-							editing={editing}
+							editable={canManagePermissions}
 							onChange={(scope) => setRowScope(`${action}_scope`, scope)}
 						/>
 					))}
@@ -361,21 +360,15 @@ export default function DynamicPermissionPanel({
 							})}
 						</span>
 					</div>
-					<div className="min-w-[680px]">
-						<div className="grid grid-cols-[minmax(220px,1fr)_110px_180px_180px] border-b border-border bg-background px-4 py-2 text-xs text-muted-foreground">
-							<span>{t("microAppPage.databasePanel.columnName")}</span>
-							<span>{t("microAppPage.databasePanel.dataType")}</span>
-							<span>{t("microAppPage.databasePanel.permissionAction.read")}</span>
-							<span>{t("microAppPage.databasePanel.permissionAction.edit")}</span>
-						</div>
+					<div
+						className="divide-y divide-border/70"
+						data-testid="magicbase-dynamic-column-list"
+					>
 						{dynamicColumns.map((column) => {
 							const permission = draft.columns[column.column_key] || {}
 							return (
-								<div
-									key={column.id || column.column_key}
-									className="grid min-h-14 grid-cols-[minmax(220px,1fr)_110px_180px_180px] items-center border-b border-border/70 px-4 py-2 last:border-b-0"
-								>
-									<div className="min-w-0 pr-4">
+								<div key={column.id || column.column_key} className="px-4 py-3">
+									<div className="min-w-0">
 										<div className="truncate text-sm font-medium text-foreground">
 											{column.column_name}
 										</div>
@@ -383,23 +376,44 @@ export default function DynamicPermissionPanel({
 											{column.column_key}
 										</div>
 									</div>
-									<span className="text-xs text-muted-foreground">
-										{column.data_type}
-									</span>
-									<ScopeControl
-										value={normalizeScope(permission.read_scope)}
-										editing={editing}
-										onChange={(scope) =>
-											setColumnScope(column.column_key, "read_scope", scope)
-										}
-									/>
-									<ScopeControl
-										value={normalizeScope(permission.edit_scope)}
-										editing={editing}
-										onChange={(scope) =>
-											setColumnScope(column.column_key, "edit_scope", scope)
-										}
-									/>
+									<div className="mt-3 grid grid-cols-2 gap-3">
+										<div className="min-w-0">
+											<div className="mb-1.5 text-xs text-muted-foreground">
+												{t(
+													"microAppPage.databasePanel.permissionAction.read",
+												)}
+											</div>
+											<ScopeControl
+												value={normalizeScope(permission.read_scope)}
+												editable={canManagePermissions}
+												onChange={(scope) =>
+													setColumnScope(
+														column.column_key,
+														"read_scope",
+														scope,
+													)
+												}
+											/>
+										</div>
+										<div className="min-w-0">
+											<div className="mb-1.5 text-xs text-muted-foreground">
+												{t(
+													"microAppPage.databasePanel.permissionAction.edit",
+												)}
+											</div>
+											<ScopeControl
+												value={normalizeScope(permission.edit_scope)}
+												editable={canManagePermissions}
+												onChange={(scope) =>
+													setColumnScope(
+														column.column_key,
+														"edit_scope",
+														scope,
+													)
+												}
+											/>
+										</div>
+									</div>
 								</div>
 							)
 						})}
@@ -413,7 +427,6 @@ export default function DynamicPermissionPanel({
 						</div>
 					) : null}
 				</section>
-				<ScrollBar orientation="horizontal" />
 			</ScrollArea>
 		</div>
 	)

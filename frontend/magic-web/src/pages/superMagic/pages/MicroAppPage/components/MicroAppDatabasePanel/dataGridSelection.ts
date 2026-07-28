@@ -1,14 +1,7 @@
 import type { MagicBaseRow } from "@/apis/modules/magicBase"
 
-import type { CellCoordinate, MagicBaseCellSelection } from "./DataGrid.types"
+import type { MagicBaseCellSelection } from "./DataGrid.types"
 import type { MagicBaseGridColumn } from "./utils"
-
-export interface SelectionBounds {
-	minRow: number
-	maxRow: number
-	minColumn: number
-	maxColumn: number
-}
 
 export interface HeaderColumnSelection {
 	startIndex: number
@@ -40,22 +33,36 @@ function buildColumnSelection(
 	}
 }
 
-export function buildSelectionFromBounds(
+export function buildRowSelectionFromIndexes(
 	rows: MagicBaseRow[],
 	columns: MagicBaseGridColumn[],
-	bounds: SelectionBounds | null,
+	rowIndexes: number[],
 ): MagicBaseCellSelection {
-	if (!bounds) return EMPTY_GRID_SELECTION
-
-	const rowIds = rows
-		.slice(bounds.minRow, bounds.maxRow + 1)
+	const rowIds = rowIndexes
+		.map((rowIndex) => rows[rowIndex])
+		.filter(Boolean)
 		.map(getRowRecordId)
 		.filter(Boolean)
-	const selectedColumns = columns.slice(bounds.minColumn, bounds.maxColumn + 1)
 	return {
 		rowIds: [...new Set(rowIds)],
-		...buildColumnSelection(selectedColumns),
+		...buildColumnSelection(columns),
 	}
+}
+
+export function getRowIndexRange(startIndex: number, endIndex: number): number[] {
+	const minIndex = Math.min(startIndex, endIndex)
+	const maxIndex = Math.max(startIndex, endIndex)
+	return Array.from({ length: maxIndex - minIndex + 1 }, (_, offset) => minIndex + offset)
+}
+
+export function mergeRowIndexes(...groups: number[][]): number[] {
+	return [...new Set(groups.flat())].sort((a, b) => a - b)
+}
+
+export function toggleRowIndex(rowIndexes: number[], rowIndex: number): number[] {
+	return rowIndexes.includes(rowIndex)
+		? rowIndexes.filter((currentIndex) => currentIndex !== rowIndex)
+		: mergeRowIndexes(rowIndexes, [rowIndex])
 }
 
 export function buildHeaderSelection(
@@ -69,33 +76,4 @@ export function buildHeaderSelection(
 		Math.max(selection.startIndex, selection.endIndex) + 1,
 	)
 	return { rowIds: [], ...buildColumnSelection(selectedColumns) }
-}
-
-export function buildSingleCellSelection(
-	rows: MagicBaseRow[],
-	columns: MagicBaseGridColumn[],
-	cell: CellCoordinate,
-): MagicBaseCellSelection {
-	const row = rows[cell.rowIndex]
-	const column = columns[cell.columnIndex]
-	const rowId = row ? getRowRecordId(row) : ""
-	return {
-		rowIds: rowId ? [rowId] : [],
-		columnIds: column?.source === "schema" && column.id ? [column.id] : [],
-		columnKeys: column ? [column.key] : [],
-	}
-}
-
-export function isCellWithinSelection(
-	cell: CellCoordinate,
-	start: CellCoordinate | null,
-	end: CellCoordinate | null,
-) {
-	if (!start || !end) return false
-	return (
-		cell.rowIndex >= Math.min(start.rowIndex, end.rowIndex) &&
-		cell.rowIndex <= Math.max(start.rowIndex, end.rowIndex) &&
-		cell.columnIndex >= Math.min(start.columnIndex, end.columnIndex) &&
-		cell.columnIndex <= Math.max(start.columnIndex, end.columnIndex)
-	)
 }

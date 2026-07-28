@@ -3143,7 +3143,9 @@
 			"dynamicAdminNotice": "项目编辑者、管理员和所有者属于数据管理员，可读取、编辑和删除全部记录；只有管理员和所有者可以修改此处权限。",
 			"dynamicColumnCount": "{{total}} 个动态字段",
 			"dynamicColumnSection": "字段权限",
+			"dynamicContinueEditing": "继续编辑",
 			"dynamicDescription": "动态权限按记录创建人、部门或组织实时判断，是普通用户访问数据时的基础权限边界。",
+			"dynamicDiscardChanges": "放弃修改",
 			"dynamicEdit": "编辑动态权限",
 			"dynamicPermissions": "动态权限",
 			"dynamicPermissionsHint": "定义默认访问范围",
@@ -3161,6 +3163,8 @@
 			"dynamicSystemFields": "{{total}} 个系统字段由系统自动维护，不参与字段动态权限配置。",
 			"dynamicTableSection": "数据表权限",
 			"dynamicTitle": "动态权限配置",
+			"dynamicUnsavedDescription": "当前权限配置有尚未保存的修改。关闭后这些修改将丢失。",
+			"dynamicUnsavedTitle": "权限修改尚未保存",
 			"editorTarget": "目标数量：{{total}}",
 			"editorTitle": {
 				"column": "设置列级权限",

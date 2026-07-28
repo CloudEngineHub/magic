@@ -124,6 +124,9 @@ describe("MicroAppDatabasePanelMobile", () => {
 		expect(
 			screen.getByRole("tab", { name: "microAppPage.databasePanel.dataTab" }),
 		).toBeInTheDocument()
+		expect(
+			screen.queryByRole("tab", { name: "microAppPage.databasePanel.permissionsTab" }),
+		).not.toBeInTheDocument()
 		expect(screen.getByText("任务")).toBeInTheDocument()
 		expect(screen.getByText("写测试")).toBeInTheDocument()
 		expect(document.body).not.toHaveTextContent("tasks")

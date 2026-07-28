@@ -3143,7 +3143,9 @@
 			"dynamicAdminNotice": "Project editors, managers, and owners are data administrators who may read, edit, and delete all rows. Only managers and owners may change these permissions.",
 			"dynamicColumnCount": "{{total}} dynamic columns",
 			"dynamicColumnSection": "Column permissions",
+			"dynamicContinueEditing": "Continue editing",
 			"dynamicDescription": "Dynamic permissions evaluate the row creator, department, or organization at request time and form the default data boundary for ordinary users.",
+			"dynamicDiscardChanges": "Discard changes",
 			"dynamicEdit": "Edit dynamic permissions",
 			"dynamicPermissions": "Dynamic permissions",
 			"dynamicPermissionsHint": "Define default access scopes",
@@ -3161,6 +3163,8 @@
 			"dynamicSystemFields": "{{total}} system fields are maintained automatically and are not configurable here.",
 			"dynamicTableSection": "Table permissions",
 			"dynamicTitle": "Dynamic permission configuration",
+			"dynamicUnsavedDescription": "The permission configuration has unsaved changes. Closing the panel will discard them.",
+			"dynamicUnsavedTitle": "Unsaved permission changes",
 			"editorTarget": "Targets: {{total}}",
 			"editorTitle": {
 				"column": "Set column permissions",

@@ -41,7 +41,15 @@ vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 }))
 
 vi.mock("../PermissionPanel", () => ({
-	default: () => null,
+	default: ({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) => (
+		<button
+			type="button"
+			data-testid="mock-permission-dirty"
+			onClick={() => onDirtyChange?.(true)}
+		>
+			change permission
+		</button>
+	),
 }))
 
 vi.mock("../PermissionEditorDialog", () => ({
