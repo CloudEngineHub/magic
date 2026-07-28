@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
-import { PlaybookItem } from "@/apis/modules/crew"
+import type { PlaybookItem } from "@/apis/modules/crew"
+import { normalizeLegacyInspirationConfig } from "@/pages/superMagic/utils/playbookInspirationConfig"
 
 class SceneConfigStore {
 	sceneConfigs: Map<string, PlaybookItem> = new Map()
@@ -73,7 +74,27 @@ class SceneConfigStore {
 	}
 
 	setSkillConfigs(playbookId: string, config: PlaybookItem) {
-		this.sceneConfigs.set(playbookId, config)
+		const inspiration = config.config?.scenes_config?.inspiration
+		const normalizedInspiration = normalizeLegacyInspirationConfig(inspiration)
+
+		if (normalizedInspiration === inspiration) {
+			this.sceneConfigs.set(playbookId, config)
+			return
+		}
+
+		// Compatibility stays at the playbook boundary so built-in demo descriptions are untouched.
+		this.sceneConfigs.set(playbookId, {
+			...config,
+			config: config.config
+				? {
+						...config.config,
+						scenes_config: {
+							...config.config.scenes_config,
+							inspiration: normalizedInspiration,
+						},
+					}
+				: config.config,
+		})
 	}
 
 	getSkillConfigs(playbookId: string) {

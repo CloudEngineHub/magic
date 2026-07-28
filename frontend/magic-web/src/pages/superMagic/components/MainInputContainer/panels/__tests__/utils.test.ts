@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { getPromptRichTextPlainText, serializePromptRichTextLocaleValue } from "../promptRichText"
-import { buildConcatenatedPresetContent, hasSelectableOptions } from "../utils"
+import {
+	buildConcatenatedPresetContent,
+	hasSelectableOptions,
+	resolveDemoPromptText,
+} from "../utils"
 import type { FieldItem } from "../types"
 
 function expectPresetContentText(fields: FieldItem[], locale: string, expected: string) {
@@ -264,5 +268,26 @@ describe("MainInputContainer panel utils", () => {
 		}
 
 		expect(hasSelectableOptions(field)).toBe(false)
+	})
+
+	it("resolves localized rich text demo values to plain input text", () => {
+		const prompt = serializePromptRichTextLocaleValue({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "分析销售趋势" }],
+				},
+			],
+		})
+
+		expect(
+			resolveDemoPromptText(
+				{
+					value: { default: "Fallback", zh_CN: prompt },
+				},
+				"zh_CN",
+			),
+		).toBe("分析销售趋势")
 	})
 })

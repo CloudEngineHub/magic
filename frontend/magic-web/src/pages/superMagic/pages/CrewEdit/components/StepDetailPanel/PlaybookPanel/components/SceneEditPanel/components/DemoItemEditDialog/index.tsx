@@ -31,7 +31,7 @@ import { PromptRichTextLocaleEditor } from "./PromptRichTextLocaleEditor"
 interface DemoItemFormState {
 	thumbnail_url: string
 	label: LocaleText
-	description: LocaleText
+	value: LocaleText
 	group_key: string
 	width?: number
 	height?: number
@@ -57,7 +57,7 @@ interface DemoItemEditDialogProps {
 const EMPTY_FORM: DemoItemFormState = {
 	thumbnail_url: "",
 	label: "",
-	description: "",
+	value: "",
 	group_key: "",
 }
 
@@ -65,7 +65,7 @@ function itemToForm(item: OptionItem, defaultGroupKey: string): DemoItemFormStat
 	return {
 		thumbnail_url: item.thumbnail_url ?? "",
 		label: item.label ?? "",
-		description: item.description ?? "",
+		value: item.value,
 		group_key: defaultGroupKey,
 		width: item.width,
 		height: item.height,
@@ -113,8 +113,8 @@ export function DemoItemEditDialog({
 
 	const isValid = useMemo(() => {
 		const groupValid = groups.length === 0 || !!form.group_key
-		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.description) && groupValid
-	}, [form.label, form.description, form.group_key, groups.length])
+		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.value) && groupValid
+	}, [form.label, form.value, form.group_key, groups.length])
 
 	function handleImageMetadataChange(metadata?: ImageMetadata) {
 		setForm((prev) => ({
@@ -130,7 +130,7 @@ export function DemoItemEditDialog({
 			{
 				thumbnail_url: form.thumbnail_url || undefined,
 				label: form.label,
-				description: form.description,
+				value: form.value,
 				width: form.width,
 				height: form.height,
 				aspect_ratio: form.aspect_ratio,
@@ -195,8 +195,9 @@ export function DemoItemEditDialog({
 							required
 						>
 							<PromptRichTextLocaleEditor
-								value={form.description}
-								onChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+								value={form.value}
+								onChange={(v) => setForm((prev) => ({ ...prev, value: v }))}
+								allowPresetValue={false}
 								placeholder={t("playbook.edit.inspiration.item.promptPlaceholder")}
 								localizeLabel={t("playbook.edit.inspiration.item.prompt")}
 								data-testid="demo-item-prompt-input"

@@ -10,22 +10,24 @@ import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@d
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical } from "lucide-react"
 import { EditableGridCard } from "./EditableGridCard"
-import type { OptionItem } from "../types"
-import { localeTextToDisplayString } from "../utils"
+import type { OptionItem, OptionItemKeyResolver } from "../types"
+import { resolveOptionItemKey } from "../utils"
 import { cn } from "@/lib/utils"
 
 interface EditableGridProps {
 	items: OptionItem[]
 	selectedKeys: Set<string>
-	onSelect: (value: string, checked: boolean) => void
+	getItemKey?: OptionItemKeyResolver
+	onSelect: (itemKey: string, checked: boolean) => void
 	onEdit: (item: OptionItem) => void
-	onDelete: (value: string) => void
+	onDelete: (itemKey: string) => void
 	onReorder?: (items: OptionItem[]) => void
 }
 
 export function EditableGrid({
 	items,
 	selectedKeys,
+	getItemKey,
 	onSelect,
 	onEdit,
 	onDelete,
@@ -36,7 +38,7 @@ export function EditableGrid({
 			activationConstraint: { distance: 8 },
 		}),
 	)
-	const itemIds = items.map((item) => localeTextToDisplayString(item.value))
+	const itemIds = items.map((item, index) => resolveOptionItemKey(item, index, getItemKey))
 	const isSortable = !!onReorder && items.length > 1
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -52,31 +54,32 @@ export function EditableGrid({
 
 	const content = (
 		<div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-			{items.map((item) => {
-				const itemValue = localeTextToDisplayString(item.value)
+			{items.map((item, index) => {
+				const itemKey = resolveOptionItemKey(item, index, getItemKey)
 
 				if (!isSortable) {
 					return (
 						<EditableGridCard
-							key={itemValue}
+							key={itemKey}
 							item={item}
-							isSelected={selectedKeys.has(itemValue)}
+							itemKey={itemKey}
+							isSelected={selectedKeys.has(itemKey)}
 							onSelect={onSelect}
 							onEdit={() => onEdit(item)}
-							onDelete={() => onDelete(itemValue)}
+							onDelete={() => onDelete(itemKey)}
 						/>
 					)
 				}
 
 				return (
 					<SortableEditableGridCard
-						key={itemValue}
+						key={itemKey}
 						item={item}
-						itemValue={itemValue}
-						isSelected={selectedKeys.has(itemValue)}
+						itemKey={itemKey}
+						isSelected={selectedKeys.has(itemKey)}
 						onSelect={onSelect}
 						onEdit={() => onEdit(item)}
-						onDelete={() => onDelete(itemValue)}
+						onDelete={() => onDelete(itemKey)}
 					/>
 				)
 			})}
@@ -96,16 +99,16 @@ export function EditableGrid({
 
 interface SortableEditableGridCardProps {
 	item: OptionItem
-	itemValue: string
+	itemKey: string
 	isSelected: boolean
-	onSelect: (value: string, checked: boolean) => void
+	onSelect: (itemKey: string, checked: boolean) => void
 	onEdit: () => void
 	onDelete: () => void
 }
 
 function SortableEditableGridCard({
 	item,
-	itemValue,
+	itemKey,
 	isSelected,
 	onSelect,
 	onEdit,
@@ -119,7 +122,7 @@ function SortableEditableGridCard({
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id: itemValue })
+	} = useSortable({ id: itemKey })
 
 	const style = {
 		transform: CSS.Transform.toString(transform),
@@ -131,6 +134,7 @@ function SortableEditableGridCard({
 		<div ref={setNodeRef} style={style} className={cn("relative", isDragging && "opacity-70")}>
 			<EditableGridCard
 				item={item}
+				itemKey={itemKey}
 				isSelected={isSelected}
 				onSelect={onSelect}
 				onEdit={onEdit}
@@ -144,7 +148,7 @@ function SortableEditableGridCard({
 					isDragging ? "cursor-grabbing text-primary" : "cursor-grab",
 				)}
 				aria-label="drag"
-				data-testid={`editable-grid-card-drag-${itemValue}`}
+				data-testid={`editable-grid-card-drag-${itemKey}`}
 				{...attributes}
 				{...listeners}
 			>

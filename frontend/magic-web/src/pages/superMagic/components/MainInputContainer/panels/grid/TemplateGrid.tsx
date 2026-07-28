@@ -2,6 +2,7 @@ import { observer } from "mobx-react-lite"
 import { motion } from "framer-motion"
 import TemplateCard from "./TemplateCard"
 import type { OptionItem } from "../types"
+import { getOptionValue } from "../utils"
 import { cn } from "@/lib/utils"
 
 interface TemplateGridProps {
@@ -52,15 +53,19 @@ const TemplateGrid = observer(
 				initial="hidden"
 				animate="visible"
 			>
-				{templates.map((template) => (
-					<motion.div key={template.value} variants={itemVariants}>
-						<TemplateCard
-							template={template}
-							isSelected={selectedTemplate?.value === template.value}
-							onClick={onTemplateClick}
-						/>
-					</motion.div>
-				))}
+				{templates.map((template, index) => {
+					const templateValue = getOptionValue(template)
+
+					return (
+						<motion.div key={`${templateValue}-${index}`} variants={itemVariants}>
+							<TemplateCard
+								template={template}
+								isSelected={selectedTemplate === template}
+								onClick={onTemplateClick}
+							/>
+						</motion.div>
+					)
+				})}
 			</motion.div>
 		)
 	},

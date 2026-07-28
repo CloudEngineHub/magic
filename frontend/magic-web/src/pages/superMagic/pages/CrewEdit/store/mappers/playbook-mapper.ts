@@ -5,6 +5,7 @@ import {
 	type UpdatePlaybookParams,
 } from "@/apis/modules/crew"
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { normalizeLegacyInspirationConfig } from "@/pages/superMagic/utils/playbookInspirationConfig"
 import type { SceneItem } from "../../components/StepDetailPanel/PlaybookPanel/types"
 
 export function mapPlaybookToScene({
@@ -25,6 +26,12 @@ export function mapPlaybookToScene({
 	config: PlaybookConfig | null
 }): SceneItem {
 	const storedConfigs = config?.scenes_config as SceneItem["configs"] | undefined
+	const normalizedConfigs = storedConfigs
+		? {
+				...storedConfigs,
+				inspiration: normalizeLegacyInspirationConfig(storedConfigs.inspiration),
+			}
+		: undefined
 
 	return {
 		id,
@@ -33,7 +40,7 @@ export function mapPlaybookToScene({
 		icon: icon ?? "sparkles",
 		enabled,
 		update_at: updatedAt,
-		configs: storedConfigs,
+		configs: normalizedConfigs,
 	}
 }
 

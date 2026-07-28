@@ -7,6 +7,7 @@ import {
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
+	type OptionItemKeyResolver,
 } from "./types"
 import {
 	isPromptRichTextEmpty,
@@ -86,6 +87,24 @@ export function localeTextToDisplayString(value: LocaleText | undefined): string
 	)
 }
 
+/** Resolve a localized option value to its configured fallback string. */
+export function getOptionValue(option: Pick<OptionItem, "value">): string {
+	return localeTextToDisplayString(option.value)
+}
+
+export function resolveOptionItemKey(
+	option: OptionItem,
+	index: number,
+	resolver?: OptionItemKeyResolver,
+): string {
+	return resolver?.(option, index) ?? getOptionValue(option)
+}
+
+/** Resolve a localized or rich-text demo value into the string inserted into the editor. */
+export function resolveDemoPromptText(option: Pick<OptionItem, "value">, locale: string): string {
+	return resolveLocaleText(option.value, locale)?.trim() ?? ""
+}
+
 export function isImageIconSource(value: string | undefined): value is string {
 	if (!value) return false
 
@@ -97,10 +116,6 @@ export function isImageIconSource(value: string | undefined): value is string {
 		value.startsWith("data:image/") ||
 		value.startsWith("blob:")
 	)
-}
-
-function getOptionValue(option: OptionItem): string {
-	return localeTextToDisplayString(option.value)
 }
 
 function getPresetDisplayValue(field: FieldItem, locale: string): string {

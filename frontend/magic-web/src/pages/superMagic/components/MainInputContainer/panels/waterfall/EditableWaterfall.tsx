@@ -1,12 +1,13 @@
 import { useMemo } from "react"
 import { EditableWaterfallCard } from "./EditableWaterfallCard"
 import { useWaterfallColumns } from "./useWaterfallColumns"
-import type { OptionItem } from "../types"
-import { localeTextToDisplayString } from "../utils"
+import type { OptionItem, OptionItemKeyResolver } from "../types"
+import { resolveOptionItemKey } from "../utils"
 
 interface EditableWaterfallProps {
 	items: OptionItem[]
 	selectedKeys: Set<string>
+	getItemKey?: OptionItemKeyResolver
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: (item: OptionItem) => void
 	onDelete: (value: string) => void
@@ -16,6 +17,7 @@ interface EditableWaterfallProps {
 export function EditableWaterfall({
 	items,
 	selectedKeys,
+	getItemKey,
 	onSelect,
 	onEdit,
 	onDelete,
@@ -34,16 +36,18 @@ export function EditableWaterfall({
 			{columnItems.map((colItems, colIndex) => (
 				<div key={colIndex} className="flex flex-1 flex-col gap-2">
 					{colItems.map((item, itemIndex) => {
-						const itemValue = localeTextToDisplayString(item.value)
+						const sourceIndex = items.indexOf(item)
+						const itemKey = resolveOptionItemKey(item, sourceIndex, getItemKey)
 
 						return (
 							<EditableWaterfallCard
-								key={itemValue || `${colIndex}-${itemIndex}`}
+								key={itemKey || `${colIndex}-${itemIndex}`}
 								item={item}
-								isSelected={selectedKeys.has(itemValue)}
+								itemKey={itemKey}
+								isSelected={selectedKeys.has(itemKey)}
 								onSelect={onSelect}
 								onEdit={() => onEdit(item)}
-								onDelete={() => onDelete(itemValue)}
+								onDelete={() => onDelete(itemKey)}
 							/>
 						)
 					})}

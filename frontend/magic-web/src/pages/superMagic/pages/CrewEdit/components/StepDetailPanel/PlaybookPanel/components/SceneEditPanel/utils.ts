@@ -1,5 +1,6 @@
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { resolveLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import { normalizeLegacyInspirationConfig } from "@/pages/superMagic/utils/playbookInspirationConfig"
 import type { PlaybookItem } from "@/apis/modules/crew"
 import type { SceneItem } from "../../types"
 
@@ -17,6 +18,12 @@ export function resolveLocalText(text: LocaleText, lang: string): string {
  */
 export function playbookToSceneItem(playbook: PlaybookItem): SceneItem {
 	const storedConfigs = playbook.config?.scenes_config as SceneItem["configs"] | undefined
+	const normalizedConfigs = storedConfigs
+		? {
+				...storedConfigs,
+				inspiration: normalizeLegacyInspirationConfig(storedConfigs.inspiration),
+			}
+		: undefined
 	return {
 		id: String(playbook.id),
 		name: (playbook.name_i18n ?? { default: "" }) as LocaleText,
@@ -25,6 +32,6 @@ export function playbookToSceneItem(playbook: PlaybookItem): SceneItem {
 		theme_color: playbook.theme_color ?? undefined,
 		enabled: playbook.enabled,
 		update_at: playbook.updated_at,
-		configs: storedConfigs,
+		configs: normalizedConfigs,
 	}
 }

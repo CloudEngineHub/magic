@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import WaterfallCard from "./WaterfallCard"
 import { useWaterfallColumns } from "./useWaterfallColumns"
 import type { OptionItem } from "../types"
-import { localeTextToDisplayString } from "../utils"
+import { getOptionValue } from "../utils"
 import { cn } from "@/lib/utils"
 
 interface TemplateWaterfallProps {
@@ -29,10 +29,6 @@ const TemplateWaterfall = observer(
 		className,
 	}: TemplateWaterfallProps) => {
 		const { containerRef, columns } = useWaterfallColumns(maxColumns)
-		const selectedTemplateKey = selectedTemplate
-			? localeTextToDisplayString(selectedTemplate.value)
-			: ""
-
 		const columnTemplates = useMemo(() => {
 			const cols: OptionItem[][] = Array.from({ length: columns }, () => [])
 
@@ -59,11 +55,11 @@ const TemplateWaterfall = observer(
 						}}
 					>
 						{columnItems.map((template, itemIndex) => {
-							const templateKey = localeTextToDisplayString(template.value)
+							const templateKey = getOptionValue(template)
 
 							return (
 								<motion.div
-									key={templateKey || `${columnIndex}-${itemIndex}`}
+									key={`${templateKey}-${itemIndex}`}
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{
@@ -74,7 +70,7 @@ const TemplateWaterfall = observer(
 								>
 									<WaterfallCard
 										template={template}
-										isSelected={selectedTemplateKey === templateKey}
+										isSelected={selectedTemplate === template}
 										onClick={onTemplateClick}
 									/>
 								</motion.div>

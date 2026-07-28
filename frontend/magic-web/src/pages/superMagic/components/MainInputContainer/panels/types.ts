@@ -67,6 +67,7 @@ export interface FieldItem {
  * Slide template card configuration
  */
 export interface OptionItem {
+	/** Stable option ID for field panels; insertion prompt for demo/inspiration panels. */
 	value: LocaleText
 	label?: LocaleText
 	/** Replaces {preset_value} in the message while keeping value as the stable option ID. */
@@ -75,6 +76,7 @@ export interface OptionItem {
 	collage_url?: string
 	/** 每页 PPT 预览图访问 URL 列表；为空时前端可降级使用 collage_url */
 	preview_image_urls?: string[]
+	/** Optional display-only description. Demo clicks do not insert this field. */
 	description?: LocaleText
 	icon_url?: string
 	sub_text?: LocaleText
@@ -96,6 +98,9 @@ export interface OptionItemTag {
 	name_i18n?: LocaleTextMap
 	sort?: number
 }
+
+/** Runtime-only resolver used by editable option lists; never persisted in panel config. */
+export type OptionItemKeyResolver = (item: OptionItem, index: number) => string
 
 /**
  * Template group configuration

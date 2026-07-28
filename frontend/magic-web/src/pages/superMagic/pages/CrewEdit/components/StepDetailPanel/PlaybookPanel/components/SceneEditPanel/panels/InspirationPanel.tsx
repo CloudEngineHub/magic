@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Circle, CirclePlus, Ellipsis, PencilLine, Search, Trash2, ViewIcon } from "lucide-react"
@@ -22,7 +22,7 @@ import { DemoGroupEditDialog } from "../components/DemoGroupEditDialog"
 import { DemoItemEditDialog } from "../components/DemoItemEditDialog"
 import { DEFAULT_INSPIRATION_GROUP_KEY, useSceneEditStore } from "../store"
 import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContainer/panels/TemplateViewSwitcher"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import { resolveDemoPromptText } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { cn } from "@/lib/tiptap-utils"
 import { Badge } from "@/components/shadcn-ui/badge"
 
@@ -45,6 +45,16 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [activeGroupKey, setActiveGroupKey] = useState<string | null>(defaultGroupKey)
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [searchValue, setSearchValue] = useState("")
+	const itemKeysRef = useRef(new WeakMap<OptionItem, string>())
+	const nextItemKeyRef = useRef(0)
+	const getItemKey = useCallback((item: OptionItem) => {
+		const existingKey = itemKeysRef.current.get(item)
+		if (existingKey) return existingKey
+
+		const itemKey = `inspiration-item-${nextItemKeyRef.current++}`
+		itemKeysRef.current.set(item, itemKey)
+		return itemKey
+	}, [])
 	const defaultGroupName = useMemo<LocaleText>(
 		() => ({
 			default: t("playbook.edit.inspiration.defaultGroup"),
@@ -69,6 +79,17 @@ export const InspirationPanel = observer(function InspirationPanel() {
 
 	const activeGroup = groups.find((g) => g.group_key === activeGroupKey) ?? null
 	const allItems = useMemo<OptionItem[]>(() => activeGroup?.children ?? [], [activeGroup])
+	const itemsByKey = useMemo(
+		() => new Map(allItems.map((item) => [getItemKey(item), item])),
+		[allItems, getItemKey],
+	)
+
+	useEffect(() => {
+		setSelectedKeys((previousKeys) => {
+			const nextKeys = new Set(Array.from(previousKeys).filter((key) => itemsByKey.has(key)))
+			return nextKeys.size === previousKeys.size ? previousKeys : nextKeys
+		})
+	}, [itemsByKey])
 
 	const filteredItems = useMemo(() => {
 		const search = searchValue.toLowerCase()
@@ -77,28 +98,25 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			const label = item.label
 				? resolveLocalText(item.label, i18n.language).toLowerCase()
 				: ""
-			const itemValue = localeTextToDisplayString(item.value).toLowerCase()
+			const itemValue = resolveDemoPromptText(item, i18n.language).toLowerCase()
 			return label.includes(search) || itemValue.includes(search)
 		})
 	}, [allItems, searchValue, i18n.language])
 
 	const allSelected =
 		filteredItems.length > 0 &&
-		filteredItems.every((item) => selectedKeys.has(localeTextToDisplayString(item.value)))
+		filteredItems.every((item) => selectedKeys.has(getItemKey(item)))
 
 	function handleSelectAll() {
 		if (allSelected) setSelectedKeys(new Set())
-		else
-			setSelectedKeys(
-				new Set(filteredItems.map((item) => localeTextToDisplayString(item.value))),
-			)
+		else setSelectedKeys(new Set(filteredItems.map((item) => getItemKey(item))))
 	}
 
-	function handleSelectOne(value: string, checked: boolean) {
+	function handleSelectOne(itemKey: string, checked: boolean) {
 		setSelectedKeys((prev) => {
 			const next = new Set(prev)
-			if (checked) next.add(value)
-			else next.delete(value)
+			if (checked) next.add(itemKey)
+			else next.delete(itemKey)
 			return next
 		})
 	}
@@ -120,7 +138,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			}),
 			variant: "destructive",
 			onConfirm: () => {
-				store.deleteInspirationItems(Array.from(selectedKeys))
+				const selectedItems = Array.from(selectedKeys)
+					.map((key) => itemsByKey.get(key))
+					.filter((item): item is OptionItem => item !== undefined)
+				store.deleteInspirationItems(selectedItems)
 				setSelectedKeys(new Set())
 				void store.save()
 			},
@@ -162,13 +183,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 
 	const handleItemConfirm = useCallback(
 		(data: Partial<OptionItem>, groupKey: string) => {
-			if (editingItem)
-				store.editInspirationItem(
-					localeTextToDisplayString(editingItem.value),
-					data,
-					groupKey,
-				)
+			if (editingItem) store.editInspirationItem(editingItem, data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
+			setSelectedKeys(new Set())
 			void store.save()
 		},
 		[defaultGroupName, editingItem, store],
@@ -310,7 +327,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 									group={group}
 									isActive={activeGroupKey === group.group_key}
 									lang={i18n.language}
-									onClick={() => setActiveGroupKey(group.group_key)}
+									onClick={() => {
+										setActiveGroupKey(group.group_key)
+										setSelectedKeys(new Set())
+									}}
 									onEdit={() => openEditGroup(group)}
 									onDelete={() =>
 										confirm({
@@ -349,9 +369,13 @@ export const InspirationPanel = observer(function InspirationPanel() {
 						viewType={config?.demo?.view_type}
 						items={filteredItems}
 						selectedKeys={selectedKeys}
+						getItemKey={getItemKey}
 						onSelect={handleSelectOne}
 						onEdit={(item) => openEditItem(item, activeGroupKey ?? "")}
-						onDelete={(value) =>
+						onDelete={(itemKey) => {
+							const targetItem = itemsByKey.get(itemKey)
+							if (!targetItem) return
+
 							confirm({
 								title: t("playbook.edit.inspiration.deleteItemConfirm.title"),
 								description: t(
@@ -359,11 +383,11 @@ export const InspirationPanel = observer(function InspirationPanel() {
 								),
 								variant: "destructive",
 								onConfirm: () => {
-									store.deleteInspirationItem(value)
+									store.deleteInspirationItem(targetItem)
 									void store.save()
 								},
 							})
-						}
+						}}
 					/>
 				)}
 			</div>
