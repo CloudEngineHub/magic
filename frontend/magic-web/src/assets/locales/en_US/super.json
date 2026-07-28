@@ -2593,6 +2593,10 @@
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
+	"messageRenderError": {
+		"retry": "Retry",
+		"title": "This message is temporarily unavailable"
+	},
 	"mobile": {
 		"apps": {
 			"emptyDescription": "No application entry is available for the current organization yet.",

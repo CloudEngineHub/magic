@@ -14,6 +14,7 @@ import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
+import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { toTestIdSegment } from "@/utils/testid"
 import {
@@ -47,6 +48,10 @@ function WorkspaceList() {
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+	const isLoadingMoreWorkspacesRef = useRef(false)
+	// `useRequest` turns `loading` on only after debounce. This marker prevents
+	// a visible sentinel from replacing the queued first search page with page two.
+	const isSearchPendingRef = useRef(false)
 	const projectsByWorkspaceId = useMemo(() => {
 		const result = new Map<string, ProjectListItem[]>()
 		for (const project of searchState.projects) {
@@ -96,9 +101,17 @@ function WorkspaceList() {
 	}
 
 	const loadMoreWorkspaces = useCallback(async () => {
-		if (isLoadingMoreWorkspaces || !hasMoreWorkspaces || workspaceStore.isWorkspaceListLoading)
+		if (
+			isLoadingMoreWorkspacesRef.current ||
+			isLoadingMoreWorkspaces ||
+			!hasMoreWorkspaces ||
+			workspaceStore.isWorkspaceListLoading
+		)
 			return
 
+		// IntersectionObserver can invoke its callback again before React commits
+		// the loading state; the ref closes that short concurrent-request window.
+		isLoadingMoreWorkspacesRef.current = true
 		setIsLoadingMoreWorkspaces(true)
 		try {
 			const nextPage = workspacePage + 1
@@ -112,6 +125,7 @@ function WorkspaceList() {
 			setWorkspacePage(nextPage)
 			setHasMoreWorkspaces(nextWorkspaces.length === SEARCH_PAGE_SIZE)
 		} finally {
+			isLoadingMoreWorkspacesRef.current = false
 			setIsLoadingMoreWorkspaces(false)
 		}
 	}, [hasMoreWorkspaces, isLoadingMoreWorkspaces, workspacePage])
@@ -144,6 +158,7 @@ function WorkspaceList() {
 			manual: true,
 			debounceWait: 300,
 			onSuccess: ([workspaceResponse, projectResponse], [{ page, append }]) => {
+				isSearchPendingRef.current = false
 				const workspaceList = workspaceResponse?.list || []
 				const projectList = projectResponse?.list || []
 				updateSearchState((draft) => {
@@ -158,6 +173,7 @@ function WorkspaceList() {
 				})
 			},
 			onError: (_error, [{ append }]) => {
+				isSearchPendingRef.current = false
 				if (!append) {
 					updateSearchState((draft) => {
 						draft.workspaces = []
@@ -172,6 +188,7 @@ function WorkspaceList() {
 		(workspaceName: string) => {
 			if (!workspaceName.trim()) {
 				cancelSearch()
+				isSearchPendingRef.current = false
 				updateSearchState((draft) => {
 					draft.page = 1
 					draft.hasMoreWorkspaces = true
@@ -183,6 +200,7 @@ function WorkspaceList() {
 
 			// Invalidate a previous in-flight request before the next debounced search starts.
 			cancelSearch()
+			isSearchPendingRef.current = true
 			updateSearchState((draft) => {
 				draft.page = 1
 				draft.hasMoreWorkspaces = true
@@ -198,8 +216,15 @@ function WorkspaceList() {
 			return
 		}
 
-		if (isSearchLoading || !searchState.hasMoreWorkspaces) return
+		if (
+			!searchState.value.trim() ||
+			isSearchLoading ||
+			isSearchPendingRef.current ||
+			!searchState.hasMoreWorkspaces
+		)
+			return
 
+		isSearchPendingRef.current = true
 		runSearch({ keyword: searchState.value, page: searchState.page + 1, append: true })
 	}, [
 		isSearchLoading,
@@ -222,7 +247,9 @@ function WorkspaceList() {
 			(entries) => {
 				if (entries[0]?.isIntersecting) loadNextPage()
 			},
-			{ root: scrollContainer, threshold: 1 },
+			// Observe the actual sidebar scroll container. An initially visible
+			// sentinel naturally fills tall screens without manual height measurements.
+			{ root: scrollContainer, threshold: 0 },
 		)
 		observer.observe(sentinel)
 		return () => observer.disconnect()
@@ -240,6 +267,7 @@ function WorkspaceList() {
 
 	const handleSearchClose = useCallback(() => {
 		cancelSearch()
+		isSearchPendingRef.current = false
 		updateSearchState((draft) => {
 			draft.value = ""
 			draft.workspaces = []
@@ -290,8 +318,8 @@ function WorkspaceList() {
 			data-testid="sidebar-workspace-list"
 		>
 			{isSearchMode ? (
-				<div className="flex h-9 items-center gap-1 px-2 pr-3">
-					<InputGroup className="h-7 flex-1 rounded-md bg-sidebar [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
+				<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
+					<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
 						<InputGroupAddon align="inline-start">
 							<Search size={16} />
 						</InputGroupAddon>
@@ -304,21 +332,22 @@ function WorkspaceList() {
 								updateSearchState((draft) => {
 									draft.value = value
 								})
-								searchWorkspaces(value)
 							}}
+							onValueChangeAfterComposition={searchWorkspaces}
 							autoFocus
 							data-testid="sidebar-workspace-list-search-input"
 						/>
 					</InputGroup>
-					<button
+					<Button
 						type="button"
-						className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent"
+						size="icon-sm"
+						className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
 						onClick={handleSearchClose}
 						aria-label={t("common.cancel")}
 						data-testid="sidebar-workspace-list-search-close"
 					>
 						<X className="size-4" />
-					</button>
+					</Button>
 				</div>
 			) : (
 				<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">

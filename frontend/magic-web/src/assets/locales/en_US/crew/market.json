@@ -312,7 +312,7 @@
 	"noMoreData": "You've seen everything!",
 	"noResults": "No results found.",
 	"pptEmployee": {
-		"delivered": "{{count}} presentations delivered"
+		"delivered": "{{count}} slides delivered"
 	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",

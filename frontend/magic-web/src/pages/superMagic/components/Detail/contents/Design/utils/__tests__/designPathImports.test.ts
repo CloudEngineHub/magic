@@ -7,6 +7,7 @@ const testFileDir = path.dirname(fileURLToPath(import.meta.url))
 const designRootDir = path.resolve(testFileDir, "..", "..")
 const messageEditorRootDir = path.resolve(designRootDir, "..", "..", "..", "MessageEditor")
 const designPathFacadeFile = path.join(designRootDir, "utils", "designPath.ts")
+const designFileDropPathsFile = path.join(designRootDir, "hooks", "useDesignFileDropPaths.ts")
 
 function walkFiles(dir: string): string[] {
 	const results: string[] = []
@@ -55,5 +56,14 @@ describe("design path import scan", () => {
 
 		const offenders = files.filter((filePath) => /findFileBySrc\s*\(/.test(readText(filePath)))
 		expect(offenders).toEqual([])
+	})
+
+	it("uses backend copy naming for external project-file drops", () => {
+		const source = readText(designFileDropPathsFile)
+
+		expect(source).not.toMatch(/\.copyFiles\s*\(|checkBatchOperationStatus|createFile\s*\(/)
+		expect(source).toMatch(/SuperMagicApi\.copyFile\s*\(/)
+		expect(source).toMatch(/keep_both_file_ids/)
+		expect(fs.existsSync(path.join(designRootDir, "hooks", "useDesignFileCopy.ts"))).toBe(false)
 	})
 })

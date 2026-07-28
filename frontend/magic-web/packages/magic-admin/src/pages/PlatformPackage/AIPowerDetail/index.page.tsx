@@ -22,6 +22,13 @@ const hasProvidersConfig = (data?: PlatformPackage.AiPowerDetail | null) => {
 	return Boolean(data?.config && Object.prototype.hasOwnProperty.call(data.config, "providers"))
 }
 
+// 线上偶尔会混入空项或非对象项，先过滤掉再进入 provider 逻辑
+const isProviderConfig = (provider: unknown): provider is PlatformPackage.ProviderConfig => {
+	if (!provider || typeof provider !== "object") return false
+	const providerCode = (provider as Partial<PlatformPackage.ProviderConfig>).provider
+	return typeof providerCode === "string" && providerCode.trim().length > 0
+}
+
 function AIPowerDetailPage() {
 	const { handleDataLoaded } = useDetail("powerDetail")
 	const { t: tCommon } = useTranslation("admin/common")
@@ -48,14 +55,12 @@ function AIPowerDetailPage() {
 	}
 
 	const mergeProviderList = (
-		apiProviders: PlatformPackage.ProviderConfig | PlatformPackage.ProviderConfig[] | undefined,
+		apiProviders: unknown,
 		defaultProviders: PlatformPackage.ProviderConfig[],
 	) => {
-		const apiList = apiProviders
-			? Array.isArray(apiProviders)
-				? apiProviders
-				: [apiProviders]
-			: []
+		const apiList = (Array.isArray(apiProviders) ? apiProviders : [apiProviders]).filter(
+			isProviderConfig,
+		)
 
 		const providerMap = new Map(apiList.map((item) => [item.provider, item] as const))
 
@@ -83,10 +88,7 @@ function AIPowerDetailPage() {
 		return providers.filter((item) => !deprecatedProviders.has(item.provider.toLowerCase()))
 	}
 
-	const getAvailableProviderList = (
-		powerCode?: string,
-		apiProviders?: PlatformPackage.ProviderConfig | PlatformPackage.ProviderConfig[],
-	) => {
+	const getAvailableProviderList = (powerCode?: string, apiProviders?: unknown) => {
 		const defaultList = powerCode ? DefaultProviderListMap[powerCode] || [] : []
 		return filterDeprecatedProviderList(mergeProviderList(apiProviders, defaultList), powerCode)
 	}

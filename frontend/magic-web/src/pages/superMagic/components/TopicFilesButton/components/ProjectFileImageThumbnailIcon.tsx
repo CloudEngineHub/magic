@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import type { AttachmentItem } from "../hooks/types"
 import {
 	resolveProjectFileImagePreviewSource,
 	useProjectFileImagePreviewContext,
+	useProjectFileImagePreviewState,
 } from "./ProjectFileImagePreviewProvider"
+import { observeProjectFileImagePreviewVisibility } from "./projectFileImagePreviewRuntime"
 
 type ImageLoadPhase = "loading" | "loaded" | "error"
 
@@ -26,29 +28,51 @@ export function ProjectFileImageThumbnailIcon({
 }: ProjectFileImageThumbnailIconProps) {
 	const manager = useProjectFileImagePreviewContext()
 	const source = resolveProjectFileImagePreviewSource(item)
-	const previewState = source
-		? manager?.getPreviewState(source) ||
-			(source.directThumbnailUrl
-				? { status: "loaded" as const, url: source.directThumbnailUrl }
-				: { status: "idle" as const })
-		: null
+	const sourceRef = useRef(source)
+	sourceRef.current = source
+	const previewState = useProjectFileImagePreviewState(source)
 	const previewUrl = previewState?.url
 	const [imagePhase, setImagePhase] = useState<ImageLoadPhase>("loading")
+	const containerRef = useRef<HTMLDivElement>(null)
+	const setPreviewVisible = manager?.setPreviewVisible
 
 	useEffect(() => {
 		setImagePhase("loading")
 	}, [previewUrl, source?.cacheKey])
 
+	useEffect(() => {
+		const element = containerRef.current
+		const observedSource = sourceRef.current
+		if (
+			!element ||
+			!observedSource ||
+			!observedSource.fileId ||
+			observedSource.directThumbnailUrl
+		) {
+			return
+		}
+		if (!setPreviewVisible) return
+
+		let isVisible = false
+		return observeProjectFileImagePreviewVisibility(element, (nextVisible) => {
+			if (isVisible === nextVisible) return
+			isVisible = nextVisible
+			setPreviewVisible(observedSource, nextVisible)
+		})
+	}, [setPreviewVisible, source?.cacheKey, source?.directThumbnailUrl, source?.fileId])
+
 	if (!source || (!manager && !source.directThumbnailUrl)) {
 		return <>{fallback}</>
 	}
 
-	if (previewState?.status === "error" || (previewUrl && imagePhase === "error")) {
-		return <>{fallback}</>
-	}
+	const shouldShowFallback =
+		previewState?.status === "error" ||
+		previewState?.status === "unavailable" ||
+		(previewUrl && imagePhase === "error")
 
 	return (
 		<div
+			ref={containerRef}
 			className={cn("relative shrink-0 overflow-hidden rounded bg-muted", className)}
 			style={{
 				width: size,
@@ -61,7 +85,10 @@ export function ProjectFileImageThumbnailIcon({
 			data-testid={dataTestId}
 			aria-hidden
 		>
-			{(!previewUrl || imagePhase !== "loaded") && (
+			{shouldShowFallback ? (
+				<div className="flex h-full w-full items-center justify-center">{fallback}</div>
+			) : null}
+			{!shouldShowFallback && (!previewUrl || imagePhase !== "loaded") && (
 				<div
 					className={cn(
 						"absolute inset-0 rounded bg-muted",
@@ -70,8 +97,9 @@ export function ProjectFileImageThumbnailIcon({
 					data-testid={`${dataTestId}-loading`}
 				/>
 			)}
-			{previewUrl && (
+			{!shouldShowFallback && previewUrl && (
 				<img
+					key={previewUrl}
 					src={previewUrl}
 					alt=""
 					className={cn(

@@ -46,6 +46,11 @@ export interface PendingUserMessageEnvelope {
 	conversation_id: string
 }
 
+export interface InitializeMessagesOptions {
+	mode?: "replace" | "merge"
+	syncGeneration?: number
+}
+
 export interface ServerMessagesConfirmedPayload {
 	chat_topic_id: string
 	app_message_ids: string[]
@@ -168,6 +173,21 @@ export interface StreamRecoveryRequestPayload {
 	correlationId: string
 }
 
+export interface StreamRecoveryState {
+	status: "waiting" | "recovering" | "failed"
+	reason?: "recovery_failed"
+	attempts: number
+	startedAt: number
+	elapsedMs: number
+}
+
+export interface StreamRecoveryFailurePayload extends StreamRecoveryState {
+	topicId: string
+	correlationId: string
+	status: "failed"
+	reason: "recovery_failed"
+}
+
 export interface ToolStreamStepResult {
 	progressed: boolean
 	done: boolean
@@ -237,6 +257,8 @@ export interface TopicMeta {
 	lastActiveAt: number | null
 	/** 最近一次离开可见态的时间 */
 	inactiveAt: number | null
+	/** 最近一次离开可见态的单调时钟时间，用于排除系统时间跳变 */
+	inactiveMonotonicAt: number | null
 	/** 最近一次成功完成服务端权威同步的时间 */
 	lastSyncedAt: number | null
 	/** 最近一次权威同步确认的最大消息序列号 */

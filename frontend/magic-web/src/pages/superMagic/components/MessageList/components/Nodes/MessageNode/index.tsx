@@ -1,6 +1,6 @@
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentProps } from "react"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { useScrollAreaAutoScroll } from "../shared/hooks/useScrollAreaAutoScroll"
 import { useTranslation } from "react-i18next"
@@ -57,6 +57,22 @@ const reasoningMarkdownClassName = cn(
 	"text-xs leading-5 text-muted-foreground",
 )
 
+type RenderableToolCall = ComponentProps<typeof ToolCall>["toolCall"]
+
+function isRenderableToolCall(toolCall: unknown): toolCall is RenderableToolCall {
+	if (!toolCall || typeof toolCall !== "object") return false
+	const candidate = toolCall as {
+		id?: unknown
+		function?: { name?: unknown }
+	}
+	return Boolean(
+		typeof candidate.id === "string" &&
+		candidate.id &&
+		typeof candidate.function?.name === "string" &&
+		candidate.function.name,
+	)
+}
+
 const MessageNode = observer(function MessageNode(props: NodeProps) {
 	const {
 		onMouseEnter,
@@ -100,8 +116,11 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	)
 
 	const [openReasoning, setOpenReasoning] = useState(false)
-	// const hasToolCall = Boolean(node?.tool_calls)
-	const hasToolCall = (node?.tool_calls as any[])?.length > 0
+	// Store 负责根治乱序归并；这里仅做展示边界防御，避免历史脏数据生成无响应 id 的永久 spinner。
+	const renderableToolCalls = (Array.isArray(node?.tool_calls) ? node.tool_calls : []).filter(
+		isRenderableToolCall,
+	)
+	const hasToolCall = renderableToolCalls.length > 0
 
 	// 兼容话题分享场景下，数据清洗不彻底导致附件在props.node中
 	const attachments = Array.isArray(node?.attachments)
@@ -249,7 +268,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 			)}
 
 			{hasToolCall &&
-				(node?.tool_calls as any[])?.map((o) => {
+				renderableToolCalls.map((o) => {
 					if (o?.function?.name === "run_sdk_snippet") {
 						return null
 					}

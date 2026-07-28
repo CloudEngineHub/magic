@@ -26,6 +26,8 @@ function isLikelyLegacyCanvasRelativePath(path: string): boolean {
 export function isDesignDslCanvasRelativeResourcePath(path: string): boolean {
 	const trimmed = path.trim()
 	if (!trimmed || isRemoteOrSpecialPath(trimmed)) return false
+	// A leading slash is an explicit workspace-root anchor, even for `/images/...`.
+	if (trimmed.startsWith("/")) return false
 
 	const resourcePath = hasCurrentDirectoryPrefix(trimmed)
 		? stripCurrentDirectoryPrefix(trimmed)
@@ -85,7 +87,7 @@ export function isRelativeDesignDslPath(path: string): boolean {
 /**
  * 宿主把附件树文件路径传入 CanvasDesign 时，统一只输出两类合法值：
  * - 当前设计目录内资源：`./images/x.png`
- * - 其他工作区资源：`foo/bar.png`
+ * - 其他工作区资源：`/foo/bar.png`
  */
 export function normalizeDesignAttachmentPathForCanvas(
 	workspacePath: string,
@@ -106,10 +108,10 @@ export function normalizeDesignAttachmentPathForCanvas(
 		if (dslPath !== trimmed) return dslPath
 	}
 
-	if (trimmed.startsWith("/")) return stripEdgeSlashes(trimmed)
+	if (trimmed.startsWith("/")) return `/${stripEdgeSlashes(trimmed)}`
 	if (!trimmed.includes("/") && !trimmed.includes("\\")) return trimmed
 
-	return stripEdgeSlashes(trimmed)
+	return `/${stripEdgeSlashes(trimmed)}`
 }
 
 /**
@@ -138,7 +140,10 @@ export function normalizeDesignStoragePathForCanvas(
 		return formatCurrentDirectoryPath(trimmed)
 	}
 
-	if (trimmed.startsWith("/")) return stripEdgeSlashes(trimmed)
+	if (trimmed.startsWith("/")) return `/${stripEdgeSlashes(trimmed)}`
+	if (trimmed.includes("/") || trimmed.includes("\\")) {
+		return `/${stripEdgeSlashes(trimmed)}`
+	}
 
 	return trimmed
 }
@@ -157,7 +162,7 @@ export function normalizeMagicProjectDirToBase(
 /**
  * 将工作区路径转为写入 magic.project.js 的路径：
  * - 当前画布目录内资源：`./images/a.png`
- * - 非当前画布目录资源：`foo/bar.png`
+ * - 非当前画布目录资源：`/foo/bar.png`
  * - 历史裸相对资源根（如 `images/a.png`）保存时迁移为 `./images/a.png`
  * - URL、blob、不含 `/` 的单段（多为 file_id）保持原样
  */
@@ -190,9 +195,7 @@ export function toDesignDslRelativeStoragePath(
 		return formatCurrentDirectoryPath(ws)
 	}
 
-	if (!s.startsWith("/")) return ws || "."
-
-	return ws || workspacePath
+	return ws ? `/${ws}` : workspacePath
 }
 
 /**
@@ -216,7 +219,7 @@ export function resolveDesignDslPathToWorkspaceRelative(
 
 	if (trimmed === "." || trimmed === "./" || trimmed === ".\\") return base
 
-	if (!norm.includes("/")) return storedPath
+	if (!norm.includes("/")) return trimmed.startsWith("/") ? norm : storedPath
 
 	if (norm === base || norm.startsWith(base + "/")) return norm
 

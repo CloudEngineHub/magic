@@ -13,6 +13,7 @@ import {
 	HistoryMode,
 	RelativeMode,
 	RelativeUnit,
+	TimeFilterPrecision,
 	TimeFilterHistoryItem,
 	TimeFilterTab,
 	TimePresetKey,
@@ -21,18 +22,22 @@ import {
 import {
 	buildCustomRelativeRange,
 	createHistoryEntry,
+	DATE_FORMAT,
 	DATE_TIME_FORMAT,
 	formatMonthLabel,
+	formatTimeRangeDisplay,
 	getCommonAbsolutePresetRanges,
 	getMonthRange,
 	getRangeByPreset,
 	getRecentMonthKeys,
+	getHistoryStorageKey,
+	getPresetOptionLabel,
 	loadHistory,
+	DAY_PRECISION_QUICK_PRESET_OPTIONS,
 	QUICK_PRESET_OPTIONS,
 	removeHistory,
 	STANDARD_PRESET_OPTIONS,
 	upsertHistory,
-	getPresetLabel,
 	getAbsolutePresetLabel,
 	formatTemplate,
 	getUnitLabel,
@@ -45,6 +50,8 @@ const DEFAULT_CUSTOM_UNIT = RelativeUnit.minute
 export interface TimeFilterPanelProps {
 	/* 默认预设时间 */
 	defaultPresetKey?: TimePresetKey
+	/* 时间粒度；day 模式只展示天级选项 */
+	precision?: TimeFilterPrecision
 	/* 前缀 */
 	prefix?: React.ReactNode
 	/* 受控值，传 null 表示清空 */
@@ -57,6 +64,7 @@ export interface TimeFilterPanelProps {
 
 function TimeFilterPanel({
 	defaultPresetKey,
+	precision = TimeFilterPrecision.dateTime,
 	prefix,
 	value,
 	clearable = true,
@@ -65,6 +73,8 @@ function TimeFilterPanel({
 	const { styles, cx } = useStyles()
 	const { getLocale } = useAdminComponents()
 	const locale = getLocale("TimeFilterPanel")
+	const isDayPrecision = precision === TimeFilterPrecision.day
+	const historyStorageKey = useMemo(() => getHistoryStorageKey(precision), [precision])
 	const hasInitializedRef = useRef(false)
 	const isControlled = value !== undefined
 	const [timeRangeValue, setTimeRangeValue] = useControllableValue<TimeRangeValue | null>(
@@ -79,69 +89,111 @@ function TimeFilterPanel({
 	const [relativeMode, setRelativeMode] = useState<RelativeMode>(RelativeMode.preset)
 	const [alignToUnit, setAlignToUnit] = useState(false)
 	const [customValue, setCustomValue] = useState(DEFAULT_CUSTOM_VALUE)
-	const [customUnit, setCustomUnit] = useState<RelativeUnit>(DEFAULT_CUSTOM_UNIT)
+	const [customUnit, setCustomUnit] = useState<RelativeUnit>(
+		isDayPrecision ? RelativeUnit.day : DEFAULT_CUSTOM_UNIT,
+	)
 	const [absoluteRange, setAbsoluteRange] = useState<[Dayjs | null, Dayjs | null]>([null, null])
 	const [history, setHistory] = useState<TimeFilterHistoryItem[]>([])
 
 	const monthKeys = useMemo(() => getRecentMonthKeys(dayjs(), 12), [])
 	const unitOptions = useMemo(
-		() => [
-			{ label: locale.unit.minute, value: RelativeUnit.minute },
-			{ label: locale.unit.hour, value: RelativeUnit.hour },
-			{ label: locale.unit.day, value: RelativeUnit.day },
-		],
-		[locale],
+		() =>
+			[
+				{ label: locale.unit.minute, value: RelativeUnit.minute },
+				{ label: locale.unit.hour, value: RelativeUnit.hour },
+				{ label: locale.unit.day, value: RelativeUnit.day },
+			].filter((option) => !isDayPrecision || option.value === RelativeUnit.day),
+		[isDayPrecision, locale],
 	)
 	const absolutePresets = useMemo(
 		() =>
-			getCommonAbsolutePresetRanges(dayjs()).map((item) => ({
+			getCommonAbsolutePresetRanges(dayjs(), precision).map((item) => ({
 				label: getAbsolutePresetLabel(locale, item.key),
 				value: item.value,
 			})),
-		[locale],
+		[locale, precision],
 	)
-	const quickPresetGroups = useMemo(
-		() => [
+	const activeQuickPresetOptions = useMemo(
+		() => (isDayPrecision ? DAY_PRECISION_QUICK_PRESET_OPTIONS : QUICK_PRESET_OPTIONS),
+		[isDayPrecision],
+	)
+	const quickPresetGroups = useMemo(() => {
+		const getOptions = (keys: TimePresetKey[]) =>
+			activeQuickPresetOptions.filter((option) => keys.includes(option.key))
+
+		const dayPresetKeys = [
+			TimePresetKey.last_1_day,
+			TimePresetKey.last_3_days,
+			TimePresetKey.last_7_days,
+			TimePresetKey.last_14_days,
+			TimePresetKey.last_21_days,
+			TimePresetKey.last_30_days,
+			TimePresetKey.last_60_days,
+			TimePresetKey.last_90_days,
+			TimePresetKey.last_120_days,
+			TimePresetKey.last_180_days,
+			TimePresetKey.last_365_days,
+		]
+
+		const groups = [
 			{
 				key: "minute",
-				options: QUICK_PRESET_OPTIONS.filter((option) =>
-					[
-						TimePresetKey.last_1_minute,
-						TimePresetKey.last_5_minutes,
-						TimePresetKey.last_10_minutes,
-						TimePresetKey.last_15_minutes,
-						TimePresetKey.last_30_minutes,
-					].includes(option.key),
-				),
+				options: getOptions([
+					TimePresetKey.last_1_minute,
+					TimePresetKey.last_5_minutes,
+					TimePresetKey.last_10_minutes,
+					TimePresetKey.last_15_minutes,
+					TimePresetKey.last_30_minutes,
+				]),
 			},
 			{
 				key: "hour",
-				options: QUICK_PRESET_OPTIONS.filter((option) =>
-					[
-						TimePresetKey.last_1_hour,
-						TimePresetKey.last_3_hours,
-						TimePresetKey.last_6_hours,
-						TimePresetKey.last_12_hours,
-					].includes(option.key),
-				),
+				options: getOptions([
+					TimePresetKey.last_1_hour,
+					TimePresetKey.last_3_hours,
+					TimePresetKey.last_6_hours,
+					TimePresetKey.last_12_hours,
+				]),
 			},
 			{
 				key: "day",
-				options: QUICK_PRESET_OPTIONS.filter((option) =>
-					[
-						TimePresetKey.last_1_day,
-						TimePresetKey.last_3_days,
-						TimePresetKey.last_7_days,
-						TimePresetKey.last_30_days,
-						TimePresetKey.last_90_days,
-					].includes(option.key),
-				),
+				options: getOptions(dayPresetKeys),
 			},
-		],
-		[],
-	)
+		]
+
+		if (!isDayPrecision) return groups
+
+		return [
+			{
+				key: "day-1",
+				options: getOptions([
+					TimePresetKey.last_1_day,
+					TimePresetKey.last_3_days,
+					TimePresetKey.last_7_days,
+					TimePresetKey.last_14_days,
+				]),
+			},
+			{
+				key: "day-2",
+				options: getOptions([
+					TimePresetKey.last_21_days,
+					TimePresetKey.last_30_days,
+					TimePresetKey.last_60_days,
+					TimePresetKey.last_90_days,
+				]),
+			},
+			{
+				key: "day-3",
+				options: getOptions([
+					TimePresetKey.last_120_days,
+					TimePresetKey.last_180_days,
+					TimePresetKey.last_365_days,
+				]),
+			},
+		]
+	}, [activeQuickPresetOptions, isDayPrecision])
 	const currentRangeText = timeRangeValue
-		? `${timeRangeValue.startDate} ~ ${timeRangeValue.endDate}`
+		? formatTimeRangeDisplay(timeRangeValue, precision)
 		: locale.placeholder
 
 	const applyRange = useCallback(
@@ -164,9 +216,12 @@ function TimeFilterPanel({
 			persist?: boolean
 			closePanel?: boolean
 		}) => {
+			const normalizedStart = isDayPrecision ? start.startOf("day") : start
+			const normalizedEnd = isDayPrecision ? end.endOf("day") : end
+			const format = isDayPrecision ? DATE_FORMAT : DATE_TIME_FORMAT
 			const nextValue: TimeRangeValue = {
-				startDate: start.format(DATE_TIME_FORMAT),
-				endDate: end.format(DATE_TIME_FORMAT),
+				startDate: normalizedStart.format(format),
+				endDate: normalizedEnd.format(format),
 				label,
 				tab,
 				mode,
@@ -176,14 +231,14 @@ function TimeFilterPanel({
 			setTimeRangeValue(nextValue)
 
 			if (persist) {
-				setHistory(upsertHistory(createHistoryEntry(nextValue)))
+				setHistory(upsertHistory(createHistoryEntry(nextValue), historyStorageKey))
 			}
 
 			if (closePanel) {
 				setOpen(false)
 			}
 		},
-		[setTimeRangeValue],
+		[historyStorageKey, isDayPrecision, setTimeRangeValue],
 	)
 
 	const reapplyRelativeRangeForAlign = useCallback(
@@ -197,12 +252,12 @@ function TimeFilterPanel({
 			const mode = timeRangeValue.mode
 
 			if (timeRangeValue.mode === HistoryMode.relative && selectedPresetKey) {
-				;[start, end] = getRangeByPreset(selectedPresetKey, now, nextAlignToUnit)
-				const option = [...QUICK_PRESET_OPTIONS, ...STANDARD_PRESET_OPTIONS].find(
+				;[start, end] = getRangeByPreset(selectedPresetKey, now, nextAlignToUnit, precision)
+				const option = [...activeQuickPresetOptions, ...STANDARD_PRESET_OPTIONS].find(
 					(item) => item.key === selectedPresetKey,
 				)
 				if (option) {
-					label = getPresetLabel(locale, option.labelKey)
+					label = getPresetOptionLabel(locale, option)
 				}
 			} else if (timeRangeValue.mode === HistoryMode.custom) {
 				;[start, end] = buildCustomRelativeRange({
@@ -210,6 +265,7 @@ function TimeFilterPanel({
 					value: customValue,
 					unit: customUnit,
 					alignToUnit: nextAlignToUnit,
+					precision,
 				})
 				label = formatTemplate(locale.customRelativeLabel, {
 					value: String(customValue),
@@ -229,7 +285,16 @@ function TimeFilterPanel({
 				closePanel: false,
 			})
 		},
-		[applyRange, customUnit, customValue, locale, selectedPresetKey, timeRangeValue],
+		[
+			activeQuickPresetOptions,
+			applyRange,
+			customUnit,
+			customValue,
+			locale,
+			precision,
+			selectedPresetKey,
+			timeRangeValue,
+		],
 	)
 
 	const handleAlignToUnitChange = useCallback(
@@ -241,8 +306,23 @@ function TimeFilterPanel({
 	)
 
 	useEffect(() => {
-		setHistory(loadHistory())
-	}, [])
+		setHistory(loadHistory(historyStorageKey))
+	}, [historyStorageKey])
+
+	useEffect(() => {
+		setCustomUnit(isDayPrecision ? RelativeUnit.day : DEFAULT_CUSTOM_UNIT)
+	}, [isDayPrecision])
+
+	const resetPanelState = useCallback(() => {
+		setOpen(false)
+		setActiveTab(TimeFilterTab.relative)
+		setSelectedPresetKey(defaultPresetKey ?? null)
+		setRelativeMode(RelativeMode.preset)
+		setAlignToUnit(false)
+		setCustomValue(DEFAULT_CUSTOM_VALUE)
+		setCustomUnit(isDayPrecision ? RelativeUnit.day : DEFAULT_CUSTOM_UNIT)
+		setAbsoluteRange([null, null])
+	}, [defaultPresetKey, isDayPrecision])
 
 	useEffect(() => {
 		if (!isControlled || !timeRangeValue) return
@@ -278,23 +358,23 @@ function TimeFilterPanel({
 		if (timeRangeValue?.startDate && timeRangeValue?.endDate) return
 
 		resetPanelState()
-	}, [defaultPresetKey, isControlled, timeRangeValue])
+	}, [isControlled, resetPanelState, timeRangeValue])
 
 	useEffect(() => {
 		if (hasInitializedRef.current || !defaultPresetKey || isControlled) return
 		hasInitializedRef.current = true
 
-		const matchedPreset = [...QUICK_PRESET_OPTIONS, ...STANDARD_PRESET_OPTIONS].find(
+		const matchedPreset = [...activeQuickPresetOptions, ...STANDARD_PRESET_OPTIONS].find(
 			(item) => item.key === defaultPresetKey,
 		)
 
-		const [start, end] = getRangeByPreset(defaultPresetKey, dayjs(), false)
+		const [start, end] = getRangeByPreset(defaultPresetKey, dayjs(), false, precision)
 		setAbsoluteRange([start, end])
 		applyRange({
 			start,
 			end,
 			label: matchedPreset
-				? getPresetLabel(locale, matchedPreset.labelKey)
+				? getPresetOptionLabel(locale, matchedPreset)
 				: locale.preset.last24Hours,
 			tab: TimeFilterTab.relative,
 			mode: HistoryMode.relative,
@@ -302,31 +382,20 @@ function TimeFilterPanel({
 			persist: false,
 		})
 		setSelectedPresetKey(defaultPresetKey)
-	}, [applyRange, defaultPresetKey, isControlled, locale])
-
-	const resetPanelState = useCallback(() => {
-		setOpen(false)
-		setActiveTab(TimeFilterTab.relative)
-		setSelectedPresetKey(defaultPresetKey ?? null)
-		setRelativeMode(RelativeMode.preset)
-		setAlignToUnit(false)
-		setCustomValue(DEFAULT_CUSTOM_VALUE)
-		setCustomUnit(DEFAULT_CUSTOM_UNIT)
-		setAbsoluteRange([null, null])
-	}, [defaultPresetKey])
+	}, [activeQuickPresetOptions, applyRange, defaultPresetKey, isControlled, locale, precision])
 
 	const handlePresetApply = (presetKey: TimePresetKey) => {
 		setRelativeMode(RelativeMode.preset)
 		setSelectedPresetKey(presetKey)
-		const option = [...QUICK_PRESET_OPTIONS, ...STANDARD_PRESET_OPTIONS].find(
+		const option = [...activeQuickPresetOptions, ...STANDARD_PRESET_OPTIONS].find(
 			(item) => item.key === presetKey,
 		)
-		const [start, end] = getRangeByPreset(presetKey, dayjs(), alignToUnit)
+		const [nextStart, nextEnd] = getRangeByPreset(presetKey, dayjs(), alignToUnit, precision)
 
 		applyRange({
-			start,
-			end,
-			label: option ? getPresetLabel(locale, option.labelKey) : locale.preset.last24Hours,
+			start: nextStart,
+			end: nextEnd,
+			label: option ? getPresetOptionLabel(locale, option) : locale.preset.last24Hours,
 			tab: TimeFilterTab.relative,
 			mode: HistoryMode.relative,
 			presetKey,
@@ -340,7 +409,7 @@ function TimeFilterPanel({
 		}
 
 		setCustomValue(DEFAULT_CUSTOM_VALUE)
-		setCustomUnit(DEFAULT_CUSTOM_UNIT)
+		setCustomUnit(isDayPrecision ? RelativeUnit.day : DEFAULT_CUSTOM_UNIT)
 		setRelativeMode(RelativeMode.custom)
 	}
 
@@ -350,6 +419,7 @@ function TimeFilterPanel({
 			value: customValue,
 			unit: customUnit,
 			alignToUnit,
+			precision,
 		})
 
 		setRelativeMode(RelativeMode.custom)
@@ -380,12 +450,17 @@ function TimeFilterPanel({
 	const handleAbsoluteApply = () => {
 		if (!absoluteRange[0] || !absoluteRange[1]) return
 
+		const rangeFormat = isDayPrecision ? DATE_FORMAT : DATE_TIME_FORMAT
 		applyRange({
 			start: absoluteRange[0],
 			end: absoluteRange[1],
-			label: `${absoluteRange[0].format(DATE_TIME_FORMAT)} ~ ${absoluteRange[1].format(
-				DATE_TIME_FORMAT,
-			)}`,
+			label: formatTimeRangeDisplay(
+				{
+					startDate: absoluteRange[0].format(rangeFormat),
+					endDate: absoluteRange[1].format(rangeFormat),
+				},
+				precision,
+			),
 			tab: TimeFilterTab.absolute,
 			mode: HistoryMode.absolute,
 		})
@@ -420,15 +495,17 @@ function TimeFilterPanel({
 											{currentRangeText}
 										</div>
 									</div>
-									<div className={styles.switchCard}>
-										<div className={styles.switchLabel}>
-											{locale.alignToUnit}
+									{!isDayPrecision ? (
+										<div className={styles.switchCard}>
+											<div className={styles.switchLabel}>
+												{locale.alignToUnit}
+											</div>
+											<MagicSwitch
+												checked={alignToUnit}
+												onChange={handleAlignToUnitChange}
+											/>
 										</div>
-										<MagicSwitch
-											checked={alignToUnit}
-											onChange={handleAlignToUnitChange}
-										/>
-									</div>
+									) : null}
 								</div>
 
 								<div className={styles.relativeLayout}>
@@ -458,9 +535,9 @@ function TimeFilterPanel({
 																	handlePresetApply(option.key)
 																}
 															>
-																{getPresetLabel(
+																{getPresetOptionLabel(
 																	locale,
-																	option.labelKey,
+																	option,
 																)}
 															</Button>
 														))}
@@ -536,7 +613,7 @@ function TimeFilterPanel({
 															handlePresetApply(option.key)
 														}
 													>
-														{getPresetLabel(locale, option.labelKey)}
+														{getPresetOptionLabel(locale, option)}
 													</Button>
 												))}
 											</div>
@@ -597,7 +674,7 @@ function TimeFilterPanel({
 										needConfirm={false}
 										popupClassName={styles.absolutePickerDropdown}
 										value={absoluteRange}
-										format={DATE_TIME_FORMAT}
+										format={isDayPrecision ? DATE_FORMAT : DATE_TIME_FORMAT}
 										presets={absolutePresets}
 										onChange={(value) =>
 											setAbsoluteRange(
@@ -647,7 +724,7 @@ function TimeFilterPanel({
 										<div className={styles.historyItemMain}>
 											<div className={styles.historyTitle}>{item.label}</div>
 											<div className={styles.historyRange}>
-												{item.startDate} ~ {item.endDate}
+												{formatTimeRangeDisplay(item, precision)}
 											</div>
 										</div>
 										<Button
@@ -655,7 +732,9 @@ function TimeFilterPanel({
 											icon={<IconTrash size={16} />}
 											onClick={(event) => {
 												event.stopPropagation()
-												setHistory(removeHistory(item.id))
+												setHistory(
+													removeHistory(item.id, historyStorageKey),
+												)
 											}}
 										/>
 									</button>

@@ -18,6 +18,7 @@ import {
 } from "../components/HtmlCodeBlockPreview/preview-document"
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string, defaultValue?: string) => defaultValue ?? key,
 	}),
@@ -739,6 +740,20 @@ describe("MessageList Markdown HTML preview", () => {
 		expect(rawHtmlWrapper).toHaveAttribute("align", "center")
 		expect(rawHtmlWrapper).toHaveTextContent("RawTitle")
 		expect(screen.getByText(/我正在为您等待微信扫码登录结果/)).toBeInTheDocument()
+	})
+
+	it("renders raw pre elements with inline styles", () => {
+		const { container } = render(
+			<MarkdownComponent
+				content={'<pre style="color: red; background-color: blue">Styled code</pre>'}
+			/>,
+		)
+
+		const pre = container.querySelector("pre")
+
+		expect(pre).toBeInTheDocument()
+		expect(pre?.style.color).toBe("red")
+		expect(pre?.style.getPropertyValue("background-color")).toBe("blue")
 	})
 
 	it("keeps raw html outside html fences as plain text during streaming html fence messages", () => {
