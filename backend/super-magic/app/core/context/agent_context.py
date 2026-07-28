@@ -381,15 +381,57 @@ class AgentContext(BaseAgentContext):
         return self._agent_target
 
     def get_agent_code(self) -> Optional[str]:
-        """获取当前自定义 Agent 的 agent_code
+        """返回当前场景需要使用的 Agent 编号。
 
-        Returns:
-            Optional[str]: agent_code
+        同一个 `agent_code` 字段在不同模式下用途不同。本方法统一处理这些
+        差异，调用方不用自己判断应该从运行目标还是从当前消息中取值：
+
+        | 当前场景 | 从哪里取编号 | 返回什么 |
+        | --- | --- | --- |
+        | 正在运行数字员工或 Claw | 当前实际运行的 Agent | 它自己的编号 |
+        | 正在使用 crew-creator 编辑员工 | 当前聊天消息 | 被编辑员工的编号 |
+        | 正在使用 skill-creator | 不需要 Agent 编号 | `None` |
+        | 其他内置模式 | 不需要 Agent 编号 | `None` |
+
+        `crew-creator` 的员工编号不会另外保存到共享状态中，而是每次从当前消息
+        读取。这样切换到其他模式，或者新消息没有指定员工时，就不会误用上一次
+        编辑过的员工编号。
+
+        注意：这个方法返回的是“当前功能需要使用的编号”，不一定是系统正在运行
+        的 Agent 编号。例如运行 `crew-creator` 时，它返回的是被编辑员工的编号。
+        如果要判断系统此刻真正运行的是谁，应使用 `get_agent_target()`。
         """
         target = self.get_agent_target()
-        if target is None or target.provider_type == AgentProviderType.BUILTIN:
+        if target is None:
             return None
-        return target.agent_name
+
+        # 如果当前实际运行的是数字员工或 Claw，它的编号已经记录在运行目标中，
+        # 直接返回即可，不需要再从聊天消息里找一次。
+        if target.provider_type != AgentProviderType.BUILTIN:
+            return target.agent_name
+
+        # 内置 Agent 中只有 crew-creator 会使用 agent_code，含义是“正在编辑哪个
+        # 员工”。skill-creator 编辑的是 Skill，使用的是 Skill 自己的编号。
+        if target.agent_name != AgentMode.CREW_CREATOR.get_agent_type():
+            return None
+
+        # 当前运行目标和当前消息必须都是 crew-creator。这样即使消息中残留了旧的
+        # agent_code，也不会在切换模式时把它误认为正在编辑的员工。
+        message = self.get_chat_client_message()
+        if (
+            message is None
+            or AgentMode.resolve_agent_type(message.agent_mode) != target.agent_name
+        ):
+            return None
+
+        # 这里只读取当前消息，不把编号复制到其他状态。没有编号、编号为空或类型
+        # 不正确，都表示这次没有指定要编辑的员工。
+        dynamic_config = message.dynamic_config or {}
+        agent_code = dynamic_config.get("agent_code")
+        if not isinstance(agent_code, str):
+            return None
+        normalized_code = agent_code.strip()
+        return normalized_code or None
 
     def set_execution_source(self, source: SuperMagicExecutionSource) -> None:
         """设置当前 Agent run 的触发来源。"""
