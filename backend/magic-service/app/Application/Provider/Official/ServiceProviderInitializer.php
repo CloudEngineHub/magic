@@ -71,7 +71,7 @@ class ServiceProviderInitializer
             ];
         }
 
-        $message = "Successfully initialized {$insertedCount} items (providers: {$createdProviderCount}.";
+        $message = "Successfully initialized {$insertedCount} items (providers: {$createdProviderCount}).";
         $message .= ' Official video providers must be initialized manually via /api/v1/bootstrap/video-providers.';
 
         return [
