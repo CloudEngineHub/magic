@@ -91,6 +91,32 @@ class ServiceProviderInitializer
 
         return [
             // ========== LLM 类别 ==========
+            // Magic Official - LLM
+            [
+                'name' => 'Magic',
+                'provider_code' => ProviderCode::Official->value,
+                'sort_order' => 999,
+                'description' => '由 Magic 通过官方部署的 API 来实现 AI 模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                'icon' => 'MAGIC/588417216353927169/default/superMagic.png',
+                'provider_type' => 1,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Magic',
+                        'zh_CN' => 'Magic',
+                    ],
+                    'description' => [
+                        'en_US' => 'Magic officially deploys these APIs to provide access to AI models. You can purchase Tokens directly to use a wide range of large models.',
+                        'zh_CN' => '由 Magic 通过官方部署的 API 来实现 AI 模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
             // Microsoft Azure - LLM
             [
                 'name' => 'Microsoft Azure',
@@ -508,6 +534,32 @@ class ServiceProviderInitializer
                 'remark' => '支持 OpenAI API 形式',
             ],
             // ========== VLM 类别 ==========
+            // Magic Official - VLM
+            [
+                'name' => 'Magic',
+                'provider_code' => ProviderCode::Official->value,
+                'sort_order' => 999,
+                'description' => '由 Magic 通过官方部署的 API 来实现多种热门的文生图、图生图等模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                'icon' => 'MAGIC/588417216353927169/default/superMagic.png',
+                'provider_type' => 1,
+                'category' => 'vlm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Magic',
+                        'zh_CN' => 'Magic',
+                    ],
+                    'description' => [
+                        'en_US' => 'Magic officially deploys these APIs to provide access to popular text-to-image and image-to-image models. You can purchase Tokens directly to use a wide range of models.',
+                        'zh_CN' => '由 Magic 通过官方部署的 API 来实现多种热门的文生图、图生图等模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
             // Microsoft Azure - VLM
             [
                 'name' => 'Microsoft Azure',
