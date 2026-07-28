@@ -73,7 +73,8 @@ class ImageEraserAppService extends ImageLLMAppService
                     $providerCode,
                     $callTime,
                     $responseTime,
-                    (int) round($startTime * 1000)
+                    (int) round($startTime * 1000),
+                    $response->getData(),
                 );
             }
 
