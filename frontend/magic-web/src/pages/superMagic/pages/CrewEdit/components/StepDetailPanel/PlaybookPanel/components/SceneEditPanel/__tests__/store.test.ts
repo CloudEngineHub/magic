@@ -153,6 +153,83 @@ describe("SceneEditStore inspiration defaults", () => {
 		).toEqual([keepItem])
 	})
 
+	it("edits and deletes an item selected before the scene is reloaded", () => {
+		const localStore = new SceneEditStore(createScene())
+		localStore.createInspirationItem(
+			{ label: "Original", value: "Same prompt" },
+			"",
+			defaultGroupName,
+		)
+		localStore.createInspirationItem(
+			{ label: "Keep", value: "Same prompt" },
+			DEFAULT_INSPIRATION_GROUP_KEY,
+		)
+
+		const staleTarget = localStore.inspiration?.demo.groups[0]?.children?.[0]
+		expect(staleTarget?.item_key).toBeTruthy()
+		if (!staleTarget) return
+
+		const reloadedStore = new SceneEditStore(JSON.parse(JSON.stringify(localStore.scene)))
+		reloadedStore.editInspirationItem(
+			staleTarget,
+			{ label: "Updated after reload" },
+			DEFAULT_INSPIRATION_GROUP_KEY,
+		)
+
+		expect(reloadedStore.inspiration?.demo.groups[0]?.children?.[0]?.label).toBe(
+			"Updated after reload",
+		)
+		reloadedStore.deleteInspirationItem(staleTarget)
+		expect(
+			reloadedStore.inspiration?.demo.groups[0]?.children?.map((item) => item.label),
+		).toEqual(["Keep"])
+	})
+
+	it("targets the persisted item key after remote items are reordered", () => {
+		const scene = createScene()
+		scene.configs = {
+			...scene.configs,
+			inspiration: {
+				schema_version: 2,
+				type: "demo",
+				demo: {
+					groups: [
+						{
+							group_key: DEFAULT_INSPIRATION_GROUP_KEY,
+							group_name: defaultGroupName,
+							children: [
+								{ item_key: "item-a", value: "Same prompt", label: "A" },
+								{ item_key: "item-b", value: "Same prompt", label: "B" },
+							],
+						},
+					],
+				},
+			},
+		}
+
+		const staleTarget = scene.configs.inspiration.demo.groups[0]?.children?.[1]
+		expect(staleTarget?.item_key).toBe("item-b")
+		if (!staleTarget) return
+
+		const remoteScene = JSON.parse(JSON.stringify(scene)) as SceneItem
+		remoteScene.configs?.inspiration?.demo.groups[0]?.children?.unshift({
+			item_key: "item-x",
+			value: "Same prompt",
+			label: "X",
+		})
+		const remoteStore = new SceneEditStore(remoteScene)
+
+		remoteStore.editInspirationItem(
+			staleTarget,
+			{ label: "Updated B" },
+			DEFAULT_INSPIRATION_GROUP_KEY,
+		)
+
+		expect(
+			remoteStore.inspiration?.demo.groups[0]?.children?.map((item) => item.label),
+		).toEqual(["X", "A", "Updated B"])
+	})
+
 	it("keeps the default group when first custom group is created", () => {
 		const store = new SceneEditStore(createScene())
 

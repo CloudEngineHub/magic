@@ -4,7 +4,7 @@ import { SkillPanelType } from "@/pages/superMagic/components/MainInputContainer
 import { playbookToSceneItem } from "../utils"
 
 describe("playbookToSceneItem", () => {
-	it("migrates all legacy inspiration prompts when loading the edit scene", () => {
+	it("migrates unversioned legacy inspiration before opening the editor", () => {
 		const scene = playbookToSceneItem({
 			id: "playbook-1",
 			name_i18n: { default: "Scene" },
@@ -37,9 +37,10 @@ describe("playbookToSceneItem", () => {
 		} as PlaybookItem)
 
 		const normalizedItem = scene.configs?.inspiration?.demo.groups[0]?.children?.[0]
+		expect(scene.configs?.inspiration?.schema_version).toBe(2)
 		expect(normalizedItem).toEqual({
+			item_key: "k8m4n2p9q1",
 			value: "Insert this prompt",
 		})
-		expect(normalizedItem).not.toHaveProperty("description")
 	})
 })

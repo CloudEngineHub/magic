@@ -4,6 +4,7 @@ import type {
 	OptionGroup,
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { CURRENT_PLAYBOOK_INSPIRATION_SCHEMA_VERSION } from "@/pages/superMagic/utils/playbookInspirationConfig"
 
 export const DEFAULT_INSPIRATION_GROUP_KEY = "__default__"
 
@@ -13,6 +14,7 @@ export function getBaseInspirationConfig(
 	return (
 		inspiration ??
 		({
+			schema_version: CURRENT_PLAYBOOK_INSPIRATION_SCHEMA_VERSION,
 			type: "demo" as DemoPanelConfig["type"],
 			demo: { groups: [] },
 		} satisfies DemoPanelConfig)

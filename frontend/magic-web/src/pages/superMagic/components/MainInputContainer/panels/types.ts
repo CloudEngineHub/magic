@@ -67,6 +67,8 @@ export interface FieldItem {
  * Slide template card configuration
  */
 export interface OptionItem {
+	/** Persistent identity for demo/inspiration items. */
+	item_key?: string
 	/** Stable option ID for field panels; insertion prompt for demo/inspiration panels. */
 	value: LocaleText
 	label?: LocaleText
@@ -210,13 +212,17 @@ export interface GuidePanelConfig extends BasePanelConfig {
 /**
  * 演示面板配置
  */
+export const CURRENT_DEMO_PANEL_SCHEMA_VERSION = 2 as const
+
 export interface DemoPanelConfig extends BasePanelConfig {
+	/** Version 2 separates persistent item identity from the prompt stored in value. */
+	schema_version?: typeof CURRENT_DEMO_PANEL_SCHEMA_VERSION
 	type: SkillPanelType.DEMO
 	demo: {
 		groups: OptionGroup[]
 		// 默认选中的模板组
 		default_selected_group_key?: string
-		// 默认选中的模板
+		// 默认选中的模板。v2 配置使用 OptionItem.item_key。
 		default_selected_template_key?: string
 		// 模板视图模式
 		view_type?: OptionViewType

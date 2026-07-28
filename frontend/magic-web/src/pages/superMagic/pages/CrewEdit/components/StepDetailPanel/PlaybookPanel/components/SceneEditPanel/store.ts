@@ -20,6 +20,15 @@ import {
 	getFallbackGroupKey,
 	patchInspirationGroups,
 } from "./inspirationConfig"
+import {
+	createInspirationItemKey,
+	normalizePlaybookSceneConfigs,
+} from "@/pages/superMagic/utils/playbookInspirationConfig"
+import {
+	type InspirationItemData,
+	removeInspirationItems,
+	updateInspirationItem,
+} from "./inspirationItems"
 
 export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
 
@@ -33,7 +42,14 @@ export class SceneEditStore {
 	private _onSave: ((scene: SceneItem) => Promise<void>) | null = null
 
 	constructor(initialScene: SceneItem, onSave?: (scene: SceneItem) => Promise<void>) {
-		this.scene = initialScene
+		const normalizedConfigs = normalizePlaybookSceneConfigs(initialScene.configs)
+		this.scene =
+			normalizedConfigs === initialScene.configs
+				? initialScene
+				: {
+						...initialScene,
+						configs: normalizedConfigs,
+					}
 		this._onSave = onSave ?? null
 		makeAutoObservable(
 			this,
@@ -156,11 +172,14 @@ export class SceneEditStore {
 	// ─── Inspiration items ────────────────────────────────────────────────────
 
 	createInspirationItem(
-		data: Partial<OptionItem>,
+		data: InspirationItemData,
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
-		const newItem: OptionItem = { ...data, value: data.value ?? "" }
+		const newItem: OptionItem = {
+			...data,
+			item_key: createInspirationItemKey(),
+		}
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
 		const fallbackGroupKey = groupKey || getFallbackGroupKey(base)
@@ -195,65 +214,41 @@ export class SceneEditStore {
 	}
 
 	editInspirationItem(targetItem: OptionItem, data: Partial<OptionItem>, groupKey: string) {
+		const targetItemKey = targetItem.item_key
+		if (!targetItemKey) return
+
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) => {
-				const sourceGroup = gs.find((g) =>
-					(g.children ?? []).some((item) => item === targetItem),
-				)
-				const sourceGroupKey = sourceGroup?.group_key
-				if (!sourceGroupKey) return gs
-
-				const updatedItem: OptionItem = { ...targetItem, ...data }
-
-				if (sourceGroupKey === groupKey) {
-					return gs.map((g) =>
-						g.group_key === groupKey
-							? {
-									...g,
-									children: (g.children ?? []).map((item) =>
-										item === targetItem ? updatedItem : item,
-									),
-								}
-							: g,
-					)
-				}
-
-				return gs.map((g) => {
-					if (g.group_key === sourceGroupKey)
-						return {
-							...g,
-							children: (g.children ?? []).filter((item) => item !== targetItem),
-						}
-					if (g.group_key === groupKey)
-						return { ...g, children: [...(g.children ?? []), updatedItem] }
-					return g
-				})
-			}),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				updateInspirationItem(groups, targetItemKey, data, groupKey),
+			),
 		}
 	}
 
 	deleteInspirationItem(targetItem: OptionItem) {
+		const targetItemKey = targetItem.item_key
+		if (!targetItemKey) return
+
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter((item) => item !== targetItem),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, new Set([targetItemKey])),
 			),
 		}
 	}
 
 	deleteInspirationItems(targetItems: OptionItem[]) {
-		const targetItemSet = new Set(targetItems)
+		const targetItemKeySet = new Set(
+			targetItems
+				.map((item) => item.item_key)
+				.filter((itemKey): itemKey is string => Boolean(itemKey)),
+		)
+		if (targetItemKeySet.size === 0) return
+
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter((item) => !targetItemSet.has(item)),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, targetItemKeySet),
 			),
 		}
 	}

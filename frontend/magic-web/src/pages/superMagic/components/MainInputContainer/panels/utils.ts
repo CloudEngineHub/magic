@@ -1,8 +1,10 @@
 import i18n from "i18next"
 import type { JSONContent } from "@tiptap/core"
 import {
+	CURRENT_DEMO_PANEL_SCHEMA_VERSION,
 	DEFAULT_LOCALE_KEY,
 	OptionViewType,
+	type DemoPanelConfig,
 	type FieldItem,
 	type LocaleText,
 	type OptionGroup,
@@ -92,12 +94,32 @@ export function getOptionValue(option: Pick<OptionItem, "value">): string {
 	return localeTextToDisplayString(option.value)
 }
 
+function matchesOptionValue(option: OptionItem, value: string): boolean {
+	if (getOptionValue(option) === value) return true
+	if (typeof option.value === "string") return false
+
+	return Object.values(option.value).some((localizedValue) => localizedValue?.trim() === value)
+}
+
+/** Resolve the configured default without letting a prompt value override a persistent v2 key. */
+export function findDefaultDemoOption(
+	config: DemoPanelConfig,
+	options: OptionItem[],
+): OptionItem | undefined {
+	const itemKey = config.demo.default_selected_template_key
+	if (!itemKey) return undefined
+
+	const item = options.find((option) => option.item_key === itemKey)
+	if (item || config.schema_version === CURRENT_DEMO_PANEL_SCHEMA_VERSION) return item
+	return options.find((option) => matchesOptionValue(option, itemKey))
+}
+
 export function resolveOptionItemKey(
 	option: OptionItem,
 	index: number,
 	resolver?: OptionItemKeyResolver,
 ): string {
-	return resolver?.(option, index) ?? getOptionValue(option)
+	return resolver?.(option, index) ?? option.item_key ?? getOptionValue(option)
 }
 
 /** Resolve a localized or rich-text demo value into the string inserted into the editor. */

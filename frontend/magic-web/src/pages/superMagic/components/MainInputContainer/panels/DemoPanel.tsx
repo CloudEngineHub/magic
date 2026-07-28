@@ -31,6 +31,7 @@ const DemoPanel = observer(({ config, onTemplateSelect, readOnly = false }: Demo
 	const handleTemplateClick = (template: OptionItem) => {
 		if (readOnly) return
 
+		store.setSelectedTemplate(template)
 		onTemplateSelect?.(template)
 		const prompt = resolveDemoPromptText(template, i18n.language)
 		if (prompt) pubsub.publish(PubSubEvents.Set_Demo_Text_To_Input, prompt)
@@ -66,6 +67,7 @@ const DemoPanel = observer(({ config, onTemplateSelect, readOnly = false }: Demo
 			<TemplateViewSwitcher
 				viewType={config.demo?.view_type}
 				items={store.filteredTemplates}
+				selectedTemplate={store.selectedTemplate ?? undefined}
 				onTemplateClick={handleTemplateClick}
 			/>
 		</CollapsiblePanel>

@@ -25,6 +25,7 @@ import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContain
 import { resolveDemoPromptText } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { cn } from "@/lib/tiptap-utils"
 import { Badge } from "@/components/shadcn-ui/badge"
+import type { InspirationItemData } from "../inspirationItems"
 
 const INSPIRATION_THEME_LABEL_KEY: Record<string, string> = {
 	grid: "playbook.edit.inspiration.config.themeOptions.grid",
@@ -45,15 +46,12 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [activeGroupKey, setActiveGroupKey] = useState<string | null>(defaultGroupKey)
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [searchValue, setSearchValue] = useState("")
-	const itemKeysRef = useRef(new WeakMap<OptionItem, string>())
-	const nextItemKeyRef = useRef(0)
+	// Confirm callbacks can run after a refreshed remote scene replaces the provider store.
+	const storeRef = useRef(store)
+	storeRef.current = store
 	const getItemKey = useCallback((item: OptionItem) => {
-		const existingKey = itemKeysRef.current.get(item)
-		if (existingKey) return existingKey
-
-		const itemKey = `inspiration-item-${nextItemKeyRef.current++}`
-		itemKeysRef.current.set(item, itemKey)
-		return itemKey
+		if (!item.item_key) throw new Error("Inspiration item is missing a persistent item_key")
+		return item.item_key
 	}, [])
 	const defaultGroupName = useMemo<LocaleText>(
 		() => ({
@@ -141,9 +139,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 				const selectedItems = Array.from(selectedKeys)
 					.map((key) => itemsByKey.get(key))
 					.filter((item): item is OptionItem => item !== undefined)
-				store.deleteInspirationItems(selectedItems)
+				storeRef.current.deleteInspirationItems(selectedItems)
 				setSelectedKeys(new Set())
-				void store.save()
+				void storeRef.current.save()
 			},
 		})
 	}
@@ -182,7 +180,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}
 
 	const handleItemConfirm = useCallback(
-		(data: Partial<OptionItem>, groupKey: string) => {
+		(data: InspirationItemData, groupKey: string) => {
 			if (editingItem) store.editInspirationItem(editingItem, data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
 			setSelectedKeys(new Set())
@@ -342,8 +340,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 											),
 											variant: "destructive",
 											onConfirm: () => {
-												store.deleteInspirationGroup(group.group_key)
-												void store.save()
+												storeRef.current.deleteInspirationGroup(
+													group.group_key,
+												)
+												void storeRef.current.save()
 											},
 										})
 									}
@@ -383,8 +383,8 @@ export const InspirationPanel = observer(function InspirationPanel() {
 								),
 								variant: "destructive",
 								onConfirm: () => {
-									store.deleteInspirationItem(targetItem)
-									void store.save()
+									storeRef.current.deleteInspirationItem(targetItem)
+									void storeRef.current.save()
 								},
 							})
 						}}

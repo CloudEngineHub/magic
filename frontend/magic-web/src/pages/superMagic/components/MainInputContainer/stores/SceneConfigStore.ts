@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
 import type { PlaybookItem } from "@/apis/modules/crew"
-import { normalizeLegacyInspirationConfig } from "@/pages/superMagic/utils/playbookInspirationConfig"
+import { normalizePlaybookSceneConfigs } from "@/pages/superMagic/utils/playbookInspirationConfig"
 
 class SceneConfigStore {
 	sceneConfigs: Map<string, PlaybookItem> = new Map()
@@ -74,10 +74,10 @@ class SceneConfigStore {
 	}
 
 	setSkillConfigs(playbookId: string, config: PlaybookItem) {
-		const inspiration = config.config?.scenes_config?.inspiration
-		const normalizedInspiration = normalizeLegacyInspirationConfig(inspiration)
+		const scenesConfig = config.config?.scenes_config
+		const normalizedScenesConfig = normalizePlaybookSceneConfigs(scenesConfig)
 
-		if (normalizedInspiration === inspiration) {
+		if (normalizedScenesConfig === scenesConfig) {
 			this.sceneConfigs.set(playbookId, config)
 			return
 		}
@@ -88,10 +88,7 @@ class SceneConfigStore {
 			config: config.config
 				? {
 						...config.config,
-						scenes_config: {
-							...config.config.scenes_config,
-							inspiration: normalizedInspiration,
-						},
+						scenes_config: normalizedScenesConfig,
 					}
 				: config.config,
 		})

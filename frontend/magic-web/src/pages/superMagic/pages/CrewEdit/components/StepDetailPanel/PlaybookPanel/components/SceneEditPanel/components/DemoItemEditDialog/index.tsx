@@ -27,6 +27,7 @@ import { LocaleTextInput } from "../LocaleTextInput"
 import { ImageUploadField, type ImageMetadata } from "../ImageUploadField"
 import { DemoGroupEditDialog } from "../DemoGroupEditDialog"
 import { PromptRichTextLocaleEditor } from "./PromptRichTextLocaleEditor"
+import type { InspirationItemData } from "../../inspirationItems"
 
 interface DemoItemFormState {
 	thumbnail_url: string
@@ -46,7 +47,7 @@ interface DemoItemEditDialogProps {
 	groups: OptionGroup[]
 	open: boolean
 	onOpenChange: (open: boolean) => void
-	onConfirm: (data: Partial<OptionItem>, groupKey: string) => void
+	onConfirm: (data: InspirationItemData, groupKey: string) => void
 	/**
 	 * Called when user creates a new group inline.
 	 * Returns the new group's key so it can be auto-selected.

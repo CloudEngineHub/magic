@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { ChevronLeft, Loader2, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
@@ -38,7 +38,9 @@ export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelPr
 		error: sceneError,
 		refresh: refreshScene,
 	} = useSceneByPlaybookId(resolvedPlaybookId)
-	const scene = remoteScene ?? localScene
+	// Persisted playbooks are editable only after the authoritative detail payload is available.
+	// The list snapshot may be stale or incomplete and must not create a second set of item IDs.
+	const scene = resolvedPlaybookId ? remoteScene : localScene
 
 	const store = useMemo(
 		() =>

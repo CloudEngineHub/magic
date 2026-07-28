@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { DemoPanelConfig, OptionItem, OptionGroup } from "../panels"
-import { getOptionValue } from "../panels/utils"
+import { findDefaultDemoOption } from "../panels/utils"
 
 /**
  * TemplatePanel 状态管理 Store
@@ -41,13 +41,7 @@ class DemoPanelStore {
 
 			this.templates = config.demo.groups?.flatMap((g) => g.children || []) || []
 
-			// 设置默认选中的模板
-			if (config.demo.default_selected_template_key) {
-				this.selectedTemplate =
-					this.templates.find(
-						(t) => getOptionValue(t) === config.demo.default_selected_template_key,
-					) || null
-			}
+			this.selectedTemplate = findDefaultDemoOption(config, this.templates) ?? null
 		})
 	}
 
