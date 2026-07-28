@@ -1,10 +1,3 @@
-/**
- * useDevConsole
- *
- * Manages the DevTools console state: toggle, entry collection,
- * and error-to-agent forwarding.
- */
-
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { JSONContent } from "@tiptap/react"
 import i18next from "i18next"
@@ -20,6 +13,7 @@ import type {
 	DevConsoleTab,
 } from "../components/DevConsole/types"
 import { DEVTOOLS_MSG } from "../components/DevConsole/types"
+import { sendDevToolsToggle } from "./devConsoleMessaging"
 
 const MAX_CONSOLE_ENTRIES = 2000
 const MAX_NETWORK_ENTRIES = 500
@@ -99,10 +93,7 @@ export function useDevConsole({
 
 			// Runtime-ready handling below re-sends this state when the new
 			// iframe runtime finishes bootstrapping.
-			iframeRef.current?.contentWindow?.postMessage(
-				{ type: DEVTOOLS_MSG.TOGGLE, enabled: nextEnabled, timestamp: Date.now() },
-				"*",
-			)
+			sendDevToolsToggle(iframeRef.current?.contentWindow, nextEnabled)
 		},
 		[iframeRef],
 	)
@@ -246,10 +237,7 @@ export function useDevConsole({
 			if (!enabledRef.current) return
 			// Small delay to ensure iframe-runtime has finished bootstrapping
 			setTimeout(() => {
-				iframeRef.current?.contentWindow?.postMessage(
-					{ type: DEVTOOLS_MSG.TOGGLE, enabled: true, timestamp: Date.now() },
-					"*",
-				)
+				sendDevToolsToggle(iframeRef.current?.contentWindow, true)
 			}, 100)
 		}
 
