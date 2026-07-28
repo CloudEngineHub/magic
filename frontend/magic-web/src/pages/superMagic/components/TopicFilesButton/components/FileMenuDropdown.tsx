@@ -7,6 +7,8 @@ import { useMemoizedFn } from "ahooks"
 interface FileMenuDropdownProps {
 	onAddFile?: (type: PresetFileType) => void
 	onAddDesign?: () => void
+	onAddSelfMedia?: () => void
+	onAddAICard?: () => void
 	children: ReactNode
 }
 
@@ -17,6 +19,8 @@ interface FileMenuDropdownProps {
 function FileMenuDropdown({
 	onAddFile: onAddFileProp,
 	onAddDesign: onAddDesignProp,
+	onAddSelfMedia: onAddSelfMediaProp,
+	onAddAICard: onAddAICardProp,
 	children,
 }: FileMenuDropdownProps) {
 	/**
@@ -35,7 +39,24 @@ function FileMenuDropdown({
 		}, 100)
 	})
 
-	const fileMenuItems = useFileMenuItems({ onAddFile, onAddDesign })
+	const onAddSelfMedia = useMemoizedFn(() => {
+		setTimeout(() => {
+			onAddSelfMediaProp?.()
+		}, 100)
+	})
+
+	const onAddAICard = useMemoizedFn(() => {
+		setTimeout(() => {
+			onAddAICardProp?.()
+		}, 100)
+	})
+
+	const fileMenuItems = useFileMenuItems({
+		onAddFile,
+		onAddDesign,
+		onAddSelfMedia: onAddSelfMediaProp ? onAddSelfMedia : undefined,
+		onAddAICard: onAddAICardProp ? onAddAICard : undefined,
+	})
 
 	return (
 		<MagicDropdown menu={{ items: fileMenuItems }} trigger={["click"]} placement="bottomLeft">
