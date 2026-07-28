@@ -86,9 +86,9 @@ export function getEllipsisText(
 /**
  * Calculate table column widths in inches
  *
- * Prefer explicit widths from <col> elements; if none exist or all are 0,
- * measure the actual rendered widths of first-row cells while expanding colspan.
- * Finally pad to colCount columns and replace zero-width columns with the average width.
+ * Prefer the browser's rendered column widths because they already include CSS table layout.
+ * Fall back to explicit <col> widths and rendered first-row cells, then distribute any
+ * unresolved width across the remaining columns. The result always matches tableWidth.
  *
  * @param table - HTML table element
  * @param colCount - Column count
@@ -101,71 +101,128 @@ export function calculateColumnWidths(
 	tableWidth: number,
 	config: SlideConfig,
 ): number[] {
-	const widths: number[] = []
+	if (colCount <= 0) return []
 
-	const colElements = table.querySelectorAll("col")
-	if (colElements.length > 0) {
-		Array.from(colElements).forEach((col) => {
-			const style = col.getAttribute("style") || ""
-			const widthMatch = style.match(/width:\s*([\d.]+)(px|%)/)
-			if (widthMatch) {
-				const value = parseFloat(widthMatch[1])
-				const unit = widthMatch[2]
-				if (unit === "%") {
-					widths.push(pxToInch(tableWidth * value / 100, config))
-				} else {
-					widths.push(pxToInch(value, config))
-				}
-			} else {
-				widths.push(0)
-			}
-		})
+	const renderedColWidths = getRenderedColWidths(table, colCount)
+	if (hasCompleteWidths(renderedColWidths, colCount)) {
+		return normalizeColumnWidths(renderedColWidths, tableWidth)
+			.map((width) => pxToInch(width, config))
 	}
 
-	if (widths.length === 0 || widths.every((w) => w === 0)) {
-		const firstRow = table.rows[0]
-		if (firstRow) {
-			const cells = Array.from(firstRow.cells)
-			const totalWidth = tableWidth
-			const cellWidths: number[] = []
+	const renderedCellWidths = getFirstRowColumnWidths(table, colCount)
+	if (
+		hasCompleteWidths(renderedCellWidths, colCount) &&
+		firstRowHasOnlySingleColumnCells(table)
+	) {
+		return normalizeColumnWidths(renderedCellWidths, tableWidth)
+			.map((width) => pxToInch(width, config))
+	}
 
-			cells.forEach((cell) => {
-				const rect = cell.getBoundingClientRect()
-				cellWidths.push(rect.width)
-			})
+	const declaredWidths = getDeclaredColWidths(table, colCount, tableWidth)
+	const widths = Array.from({ length: colCount }, (_, index) =>
+		declaredWidths[index] || renderedColWidths[index] || renderedCellWidths[index] || 0,
+	)
 
-			const expandedWidths: number[] = []
-			cells.forEach((cell, i) => {
-				const colspan = parseInt(cell.getAttribute("colspan") || "1")
-				const cellWidth = cellWidths[i] || 0
-				const perColWidth = cellWidth / colspan
-
-				for (let c = 0; c < colspan; c++) {
-					expandedWidths.push(perColWidth)
-				}
-			})
-
-			while (expandedWidths.length < colCount) {
-				expandedWidths.push(totalWidth / colCount)
-			}
-
-			return expandedWidths.map((w) => pxToInch(w, config))
+	const resolvedTotal = widths.reduce((sum, width) => sum + width, 0)
+	const unresolvedCount = widths.filter((width) => width <= 0).length
+	if (unresolvedCount > 0) {
+		const remainingWidth = Math.max(0, tableWidth - resolvedTotal)
+		const fallbackWidth = remainingWidth > 0
+			? remainingWidth / unresolvedCount
+			: tableWidth / colCount
+		for (let index = 0; index < widths.length; index++) {
+			if (widths[index] <= 0) widths[index] = fallbackWidth
 		}
 	}
 
-	const tableWidthInch = pxToInch(tableWidth, config)
-	const avgWidth = tableWidthInch / colCount
+	return normalizeColumnWidths(widths, tableWidth)
+		.map((width) => pxToInch(width, config))
+}
 
-	while (widths.length < colCount) {
-		widths.push(avgWidth)
+function getRenderedColWidths(table: HTMLTableElement, colCount: number): number[] {
+	const widths: number[] = []
+	for (const col of getTableColumnElements(table)) {
+		const span = col.span || 1
+		const renderedWidth = col.getBoundingClientRect().width
+		const perColumnWidth = renderedWidth > 0 ? renderedWidth / span : 0
+		for (let index = 0; index < span && widths.length < colCount; index++) {
+			widths.push(perColumnWidth)
+		}
+		if (widths.length >= colCount) break
 	}
+	return widths
+}
 
-	const nonZeroWidths = widths.filter((w) => w > 0)
-	const avgNonZero = nonZeroWidths.length > 0
-		? nonZeroWidths.reduce((a, b) => a + b, 0) / nonZeroWidths.length
-		: avgWidth
+function getDeclaredColWidths(
+	table: HTMLTableElement,
+	colCount: number,
+	tableWidth: number,
+): number[] {
+	const widths: number[] = []
+	for (const col of getTableColumnElements(table)) {
+		const style = col.getAttribute("style") || ""
+		const widthValue = style.match(/(?:^|;)\s*width:\s*([\d.]+)(px|%)/i)
+		const span = col.span || 1
+		let perColumnWidth = 0
+		if (widthValue) {
+			const value = parseFloat(widthValue[1])
+			perColumnWidth = widthValue[2] === "%" ? tableWidth * value / 100 : value
+		}
+		for (let index = 0; index < span && widths.length < colCount; index++) {
+			widths.push(perColumnWidth)
+		}
+		if (widths.length >= colCount) break
+	}
+	return widths
+}
 
-	return widths.map((w) => (w > 0 ? w : avgNonZero))
+function getFirstRowColumnWidths(table: HTMLTableElement, colCount: number): number[] {
+	const firstRow = table.rows[0]
+	if (!firstRow) return []
+
+	const widths: number[] = []
+	for (const cell of Array.from(firstRow.cells)) {
+		const colspan = cell.colSpan || 1
+		const renderedWidth = cell.getBoundingClientRect().width
+		const perColumnWidth = renderedWidth > 0 ? renderedWidth / colspan : 0
+		for (let index = 0; index < colspan && widths.length < colCount; index++) {
+			widths.push(perColumnWidth)
+		}
+		if (widths.length >= colCount) break
+	}
+	return widths
+}
+
+function hasCompleteWidths(widths: number[], colCount: number): boolean {
+	return widths.length >= colCount && widths.slice(0, colCount).every((width) => width > 0)
+}
+
+function firstRowHasOnlySingleColumnCells(table: HTMLTableElement): boolean {
+	const firstRow = table.rows[0]
+	return Boolean(firstRow) && Array.from(firstRow.cells).every((cell) => cell.colSpan === 1)
+}
+
+function getTableColumnElements(table: HTMLTableElement): HTMLTableColElement[] {
+	const columns: HTMLTableColElement[] = []
+	for (const child of Array.from(table.children)) {
+		if (child.tagName === "COL") {
+			columns.push(child as HTMLTableColElement)
+			continue
+		}
+		if (child.tagName !== "COLGROUP") continue
+		for (const col of Array.from(child.children)) {
+			if (col.tagName === "COL") columns.push(col as HTMLTableColElement)
+		}
+	}
+	return columns
+}
+
+function normalizeColumnWidths(widths: number[], tableWidth: number): number[] {
+	const normalized = widths.map((width) => Math.max(0, width))
+	const totalWidth = normalized.reduce((sum, width) => sum + width, 0)
+	if (tableWidth <= 0 || totalWidth <= 0) return normalized
+	const scale = tableWidth / totalWidth
+	return normalized.map((width) => width * scale)
 }
 
 /**

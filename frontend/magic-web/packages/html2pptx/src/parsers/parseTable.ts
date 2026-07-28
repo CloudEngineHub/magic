@@ -197,7 +197,7 @@ function parseCellElement(
 	}
 
 	const whiteSpace = computed.whiteSpace
-	if (whiteSpace === "nowrap" || whiteSpace === "pre" || whiteSpace === "normal") {
+	if (whiteSpace === "nowrap" || whiteSpace === "pre") {
 		options.wrap = false
 	}
 
