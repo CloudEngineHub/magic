@@ -94,8 +94,12 @@ export interface PPTTableTextRun {
 	options?: {
 		color?: string
 		fontSize?: number
+		fontFace?: string
 		bold?: boolean
 		italic?: boolean
+		charSpacing?: number
+		transparency?: number
+		paraSpaceBefore?: number
 		breakLine?: boolean
 	}
 }
@@ -109,7 +113,11 @@ export interface PPTTableCell {
 		fillTransparency?: number
 		color?: string
 		fontSize?: number
+		fontFace?: string
 		bold?: boolean
+		italic?: boolean
+		charSpacing?: number
+		transparency?: number
 		align?: "left" | "center" | "right"
 		valign?: "top" | "middle" | "bottom"
 		colspan?: number

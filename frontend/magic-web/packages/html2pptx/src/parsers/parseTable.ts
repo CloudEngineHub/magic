@@ -5,12 +5,7 @@
 
 import type { ElementNode } from "../ir/dom"
 import type { PPTNode, PPTTableNode, PPTNodeBase } from "../ir/node"
-import type {
-	PPTTableRow,
-	PPTTableCell,
-	PPTTableCellBorder,
-	PPTTableTextRun,
-} from "../ir/style"
+import type { PPTTableRow, PPTTableCell, PPTTableCellBorder, PPTTableTextRun } from "../ir/style"
 import type { SlideConfig } from "../api/options"
 import { colorToHex, getTransparency } from "../shared/color"
 import {
@@ -41,10 +36,7 @@ export function parseTable(
 	if (tableRows.length === 0) return null
 
 	// Parse the table structure.
-	const { rows, colCount } = parseTableRows(
-		tableRows,
-		iWindow,
-	)
+	const { rows, colCount } = parseTableRows(tableRows, iWindow)
 	if (rows.length === 0) return null
 
 	// Calculate column widths.
@@ -178,7 +170,14 @@ function parseCellElement(
 		const first = runs[0]
 		if (first.options?.color) options.color = first.options.color
 		if (first.options?.fontSize) options.fontSize = first.options.fontSize
+		if (first.options?.fontFace) options.fontFace = first.options.fontFace
 		if (first.options?.bold) options.bold = true
+		if (first.options?.italic) options.italic = true
+		if (first.options?.charSpacing !== undefined)
+			options.charSpacing = first.options.charSpacing
+		if (first.options?.transparency !== undefined) {
+			options.transparency = first.options.transparency
+		}
 	}
 
 	const textAlign = computed.textAlign
@@ -209,9 +208,7 @@ function parseCellElement(
 	const border = parseCellBorder(computed, trComputed)
 	if (border) options.border = border
 
-	const text: string | PPTTableTextRun[] = hasRichText
-		? runs
-		: runs.map((r) => r.text).join("")
+	const text: string | PPTTableTextRun[] = hasRichText ? runs : runs.map((r) => r.text).join("")
 
 	return { text, options: Object.keys(options).length > 0 ? options : undefined }
 }
@@ -224,7 +221,10 @@ function parseCellElement(
 function parseCellBorder(
 	computed: CSSStyleDeclaration,
 	trComputed: CSSStyleDeclaration,
-): PPTTableCellBorder | [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder] | undefined {
+):
+	| PPTTableCellBorder
+	| [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder]
+	| undefined {
 	// Cell borders.
 	let topWidth = parseFloat(computed.borderTopWidth) || 0
 	let rightWidth = parseFloat(computed.borderRightWidth) || 0
@@ -288,11 +288,7 @@ function parseCellBorder(
 	}
 
 	// Build per-side borders, including transparency.
-	const buildBorder = (
-		width: number,
-		color: string,
-		style: string,
-	): PPTTableCellBorder => {
+	const buildBorder = (width: number, color: string, style: string): PPTTableCellBorder => {
 		if (width <= 0) {
 			return { type: "none" }
 		}

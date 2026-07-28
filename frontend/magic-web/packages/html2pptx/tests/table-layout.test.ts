@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { SlideConfig } from "../src/api/options"
 import type { ElementNode } from "../src/ir/dom"
 import type { PPTNodeBase, PPTTableNode } from "../src/ir/node"
 import { parseTable } from "../src/parsers/parseTable"
-import { calculateColumnWidths } from "../src/shared/table-utils"
+import { calculateCellMargin, calculateColumnWidths } from "../src/shared/table-utils"
 
 const config: SlideConfig = {
 	htmlWidth: 1920,
@@ -15,6 +15,7 @@ const config: SlideConfig = {
 }
 
 afterEach(() => {
+	vi.restoreAllMocks()
 	document.body.innerHTML = ""
 })
 
@@ -56,7 +57,7 @@ describe("table layout", () => {
 
 		expect(widths[0]).toBeCloseTo(160 / 96, 8)
 		for (const width of widths.slice(1)) {
-			expect(width).toBeCloseTo(((1134 - 160) / 3) / 96, 8)
+			expect(width).toBeCloseTo((1134 - 160) / 3 / 96, 8)
 		}
 		expect(widths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(1134 / 96, 8)
 	})
@@ -82,12 +83,94 @@ describe("table layout", () => {
 		expect(normal.rows[0].cells[0].options?.wrap).toBeUndefined()
 		expect(nowrap.rows[0].cells[0].options?.wrap).toBe(false)
 	})
+
+	it("keeps centered cell margins symmetric instead of treating centering as indentation", () => {
+		document.body.innerHTML = `
+			<table><thead><tr>
+				<th style="padding: 18px 20px; text-align: center">Core Principle</th>
+			</tr></thead></table>
+		`
+		const cell = document.querySelector("th") as HTMLTableCellElement
+		Object.defineProperty(cell, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({ left: 100, width: 320 }) as DOMRect,
+		})
+		vi.spyOn(document, "createRange").mockReturnValue({
+			selectNode: vi.fn(),
+			getBoundingClientRect: () => ({ left: 198, width: 124 }) as DOMRect,
+		} as unknown as Range)
+
+		const margin = calculateCellMargin(cell, window.getComputedStyle(cell))
+
+		expect(margin).toEqual([18 / 96, 20 / 96, 18 / 96, 20 / 96])
+	})
+
+	it("continues to infer real indentation for left-aligned cell text", () => {
+		document.body.innerHTML = `
+			<table><tbody><tr>
+				<td style="padding: 18px 20px; text-align: left">Indented content</td>
+			</tr></tbody></table>
+		`
+		const cell = document.querySelector("td") as HTMLTableCellElement
+		Object.defineProperty(cell, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({ left: 100, width: 320 }) as DOMRect,
+		})
+		vi.spyOn(document, "createRange").mockReturnValue({
+			selectNode: vi.fn(),
+			getBoundingClientRect: () => ({ left: 148, width: 124 }) as DOMRect,
+		} as unknown as Range)
+
+		const margin = calculateCellMargin(cell, window.getComputedStyle(cell))
+
+		expect(margin).toEqual([18 / 96, 20 / 96, 18 / 96, 48 / 96])
+	})
+
+	it("uses the text node's own alignment when it differs from the cell", () => {
+		document.body.innerHTML = `
+			<table><tbody><tr>
+				<td style="padding: 18px 20px; text-align: left">
+					<div style="text-align: center">Nested centered content</div>
+				</td>
+			</tr></tbody></table>
+		`
+		const cell = document.querySelector("td") as HTMLTableCellElement
+		Object.defineProperty(cell, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({ left: 100, width: 320 }) as DOMRect,
+		})
+		vi.spyOn(document, "createRange").mockReturnValue({
+			selectNode: vi.fn(),
+			getBoundingClientRect: () => ({ left: 198, width: 124 }) as DOMRect,
+		} as unknown as Range)
+
+		const margin = calculateCellMargin(cell, window.getComputedStyle(cell))
+
+		expect(margin).toEqual([18 / 96, 20 / 96, 18 / 96, 20 / 96])
+	})
+
+	it("promotes single-run table typography to cell options", () => {
+		const parsed = parseSingleCellTable(
+			"normal",
+			"font-family: 'SF Mono'; font-style: italic; letter-spacing: 2px; color: rgba(20, 40, 60, .5); text-transform: uppercase",
+		)
+		const cell = parsed.rows[0].cells[0]
+
+		expect(cell.text).toBe("LONG TABLE CELL CONTENT")
+		expect(cell.options).toMatchObject({
+			fontFace: "SF Mono",
+			italic: true,
+			charSpacing: 1.5,
+			color: "14283C",
+			transparency: 50,
+		})
+	})
 })
 
-function parseSingleCellTable(whiteSpace: string): PPTTableNode {
+function parseSingleCellTable(whiteSpace: string, extraStyle = ""): PPTTableNode {
 	document.body.innerHTML = `
 		<table><colgroup><col style="width: 200px"></colgroup>
-			<tr><td style="white-space: ${whiteSpace}">Long table cell content</td></tr>
+			<tr><td style="white-space: ${whiteSpace}; ${extraStyle}">Long table cell content</td></tr>
 		</table>
 	`
 	const table = document.querySelector("table") as HTMLTableElement

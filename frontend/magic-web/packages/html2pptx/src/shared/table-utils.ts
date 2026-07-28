@@ -54,9 +54,10 @@ export function getEllipsisText(
 	const container = htmlEl.offsetParent ?? doc.body
 	container.appendChild(probe)
 
-	const maxWidth = htmlEl.clientWidth
-		- (parseFloat(computed.paddingLeft) || 0)
-		- (parseFloat(computed.paddingRight) || 0)
+	const maxWidth =
+		htmlEl.clientWidth -
+		(parseFloat(computed.paddingLeft) || 0) -
+		(parseFloat(computed.paddingRight) || 0)
 
 	const ellipsis = "…"
 
@@ -105,8 +106,9 @@ export function calculateColumnWidths(
 
 	const renderedColWidths = getRenderedColWidths(table, colCount)
 	if (hasCompleteWidths(renderedColWidths, colCount)) {
-		return normalizeColumnWidths(renderedColWidths, tableWidth)
-			.map((width) => pxToInch(width, config))
+		return normalizeColumnWidths(renderedColWidths, tableWidth).map((width) =>
+			pxToInch(width, config),
+		)
 	}
 
 	const renderedCellWidths = getFirstRowColumnWidths(table, colCount)
@@ -114,29 +116,30 @@ export function calculateColumnWidths(
 		hasCompleteWidths(renderedCellWidths, colCount) &&
 		firstRowHasOnlySingleColumnCells(table)
 	) {
-		return normalizeColumnWidths(renderedCellWidths, tableWidth)
-			.map((width) => pxToInch(width, config))
+		return normalizeColumnWidths(renderedCellWidths, tableWidth).map((width) =>
+			pxToInch(width, config),
+		)
 	}
 
 	const declaredWidths = getDeclaredColWidths(table, colCount, tableWidth)
-	const widths = Array.from({ length: colCount }, (_, index) =>
-		declaredWidths[index] || renderedColWidths[index] || renderedCellWidths[index] || 0,
+	const widths = Array.from(
+		{ length: colCount },
+		(_, index) =>
+			declaredWidths[index] || renderedColWidths[index] || renderedCellWidths[index] || 0,
 	)
 
 	const resolvedTotal = widths.reduce((sum, width) => sum + width, 0)
 	const unresolvedCount = widths.filter((width) => width <= 0).length
 	if (unresolvedCount > 0) {
 		const remainingWidth = Math.max(0, tableWidth - resolvedTotal)
-		const fallbackWidth = remainingWidth > 0
-			? remainingWidth / unresolvedCount
-			: tableWidth / colCount
+		const fallbackWidth =
+			remainingWidth > 0 ? remainingWidth / unresolvedCount : tableWidth / colCount
 		for (let index = 0; index < widths.length; index++) {
 			if (widths[index] <= 0) widths[index] = fallbackWidth
 		}
 	}
 
-	return normalizeColumnWidths(widths, tableWidth)
-		.map((width) => pxToInch(width, config))
+	return normalizeColumnWidths(widths, tableWidth).map((width) => pxToInch(width, config))
 }
 
 function getRenderedColWidths(table: HTMLTableElement, colCount: number): number[] {
@@ -166,7 +169,7 @@ function getDeclaredColWidths(
 		let perColumnWidth = 0
 		if (widthValue) {
 			const value = parseFloat(widthValue[1])
-			perColumnWidth = widthValue[2] === "%" ? tableWidth * value / 100 : value
+			perColumnWidth = widthValue[2] === "%" ? (tableWidth * value) / 100 : value
 		}
 		for (let index = 0; index < span && widths.length < colCount; index++) {
 			widths.push(perColumnWidth)
@@ -283,8 +286,16 @@ export function calculateCellMargin(
 			const textRect = range.getBoundingClientRect()
 
 			const visualOffset = textRect.left - tdRect.left - borderLeftWidth
+			const textParent = textNode.parentElement
+			const textComputed = textParent
+				? (td.ownerDocument.defaultView?.getComputedStyle(textParent) ?? computed)
+				: computed
 
-			if (visualOffset > paddingLeftPx + 2) {
+			// A centered or right-aligned text range naturally starts far from the cell's
+			// left edge. Treating that offset as extra padding makes PowerPoint center the
+			// text again inside an already shifted content box. Only infer indentation when
+			// the browser actually lays the text out from the left side.
+			if (isVisuallyLeftAligned(textComputed) && visualOffset > paddingLeftPx + 2) {
 				marginLeftPx = Math.max(marginLeftPx, visualOffset)
 			}
 			if (textRect.width > 0.5) {
@@ -336,6 +347,20 @@ export function calculateCellMargin(
 	if (top === 0 && right === 0 && bottom === 0 && left === 0) return undefined
 
 	return [top, right, bottom, left]
+}
+
+function isVisuallyLeftAligned(computed: CSSStyleDeclaration): boolean {
+	const textAlign = computed.textAlign.trim().toLowerCase()
+	const direction = computed.direction.trim().toLowerCase()
+
+	if (textAlign.includes("center")) return false
+	if (textAlign.endsWith("right")) return false
+	if (textAlign === "start") return direction !== "rtl"
+	if (textAlign === "end") return direction === "rtl"
+
+	// Preserve the existing indentation inference for left, justify and unknown
+	// browser values. Their first rendered line starts at the left content edge.
+	return true
 }
 
 /**
@@ -395,7 +420,10 @@ export function resolveEffectiveBackgroundColor(input: {
  * @param cell - Table cell element
  * @param iWindow - iframe window used to get computed styles
  */
-export function findDeepestTextElement(cell: HTMLTableCellElement, iWindow: Window): Element | null {
+export function findDeepestTextElement(
+	cell: HTMLTableCellElement,
+	iWindow: Window,
+): Element | null {
 	let current: Element = cell
 	while (true) {
 		const visibleChildren = Array.from(current.children).filter((child) => {
