@@ -95,7 +95,7 @@ function parseSingleCellTable(whiteSpace: string): PPTTableNode {
 		tagName: "TABLE",
 		element: table,
 		rect: { x: 0, y: 0, w: 200, h: 40 },
-	} as ElementNode
+	} as unknown as ElementNode
 	const base: PPTNodeBase = { type: "", x: 0, y: 0, w: 200 / 96, h: 40 / 96, zOrder: 1 }
 	const parsed = parseTable(node, base, config, window)
 	if (!parsed || Array.isArray(parsed)) throw new Error("PPTTableNode is required")
