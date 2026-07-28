@@ -25,13 +25,15 @@ class LLMStreamingMessageBuilderV2(MessageBuilderInterface):
     def __init__(self):
         self._auth_info: Optional[Dict[str, Any]] = None
         self._auth_loaded: bool = False
+        self._task_id: str = ""
 
     def get_version(self) -> str:
         return "v2"
 
     async def prepare_for_streaming(self, agent_context: AgentContext) -> None:
-        """预生成 reply_message_id，确保流式 chunk 与后续非流式消息的 message_id 一致。"""
+        """准备流式消息 ID，并记录当前 AgentContext 中实际生效的任务 ID。"""
         agent_context.refresh_streaming_message_id()
+        self._task_id = agent_context.get_task_id() or ""
 
     async def build_message(self, chunk_data: ChunkData) -> Dict[str, Any]:
         """构建推送消息并进行 Shadow 编码。
@@ -118,6 +120,9 @@ class LLMStreamingMessageBuilderV2(MessageBuilderInterface):
                 f"content_type={chunk_data.metadata.content_type if chunk_data.metadata else 'unknown'}"
             )
             super_magic_chunk = {}
+
+        if self._task_id:
+            super_magic_chunk["task_id"] = self._task_id
 
         # app_message_id 取预生成的 message_id，保证与后续非流式消息一致
         app_message_id = chunk_data.metadata.message_id if chunk_data.metadata else None
