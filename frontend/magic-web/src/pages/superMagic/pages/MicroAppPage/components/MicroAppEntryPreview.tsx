@@ -26,6 +26,8 @@ export interface MicroAppEntryPreviewProps {
 	storageMarkerId?: string
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
+	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
+	onDevConsoleActiveChange?: (active: boolean) => void
 	emptyTestId?: string
 	buildingTestId?: string
 	isBuilding?: boolean
@@ -57,6 +59,8 @@ export default function MicroAppEntryPreview({
 	storageMarkerId,
 	onRegisterAIEdit,
 	onAIEditActiveChange,
+	onRegisterDevConsoleToggle,
+	onDevConsoleActiveChange,
 	emptyTestId = "micro-app-preview-empty",
 	buildingTestId = "micro-app-preview-building",
 	isBuilding = false,
@@ -105,6 +109,8 @@ export default function MicroAppEntryPreview({
 			showPhoneFrame={false}
 			onRegisterAIEdit={onRegisterAIEdit}
 			onAIEditActiveChange={onAIEditActiveChange}
+			onRegisterDevConsoleToggle={onRegisterDevConsoleToggle}
+			onDevConsoleActiveChange={onDevConsoleActiveChange}
 			className="h-full min-h-0 w-full"
 		/>
 	)

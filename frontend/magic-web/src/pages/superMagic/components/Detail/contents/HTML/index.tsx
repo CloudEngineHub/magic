@@ -77,9 +77,8 @@ import {
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
 import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
+import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
 
-/** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
-const devConsoleStateMap = new Map<string, boolean>()
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
 const HtmlPermissionManagerDialog = lazy(
 	() => import("./components/PermissionManager/HtmlPermissionManagerDialog"),
@@ -143,6 +142,8 @@ interface HTMLProps {
 	onRefreshFile?: () => void
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
+	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
+	onDevConsoleActiveChange?: (active: boolean) => void
 	isPlaybackMode?: boolean
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	isInPPTMode?: boolean
@@ -239,6 +240,8 @@ export default memo(function HTML(props: HTMLProps) {
 		onRefreshFile,
 		onRegisterAIEdit,
 		onAIEditActiveChange,
+		onRegisterDevConsoleToggle,
+		onDevConsoleActiveChange,
 		isPlaybackMode = false,
 		onRegisterSaveHandler,
 		isInPPTMode = false,
@@ -361,10 +364,6 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
-	const handleDevConsoleToggle = useMemoizedFn(() => {
-		updateDevConsoleEnabled(!devConsoleEnabled)
-	})
-
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Super_Magic_Detail_Refresh, handleDetailHeaderRefresh)
 		return () => {
@@ -476,21 +475,14 @@ export default memo(function HTML(props: HTMLProps) {
 	useEffect(() => {
 		onAIEditActiveChange?.(isAppendPicking)
 	}, [isAppendPicking, onAIEditActiveChange])
-	// 从模块级 Map 恢复上次的调试面板状态（组件重挂载后仍能保持开启）
-	const [devConsoleState, setDevConsoleState] = useState(() => ({
+	const {
+		enabled: devConsoleEnabled,
+		setEnabled: updateDevConsoleEnabled,
+		toggle: handleDevConsoleToggle,
+	} = useHtmlDevConsoleState({
 		fileId,
-		enabled: fileId ? (devConsoleStateMap.get(fileId) ?? false) : false,
-	}))
-	// 使用当前文件对应的状态，避免 fileId 异步就绪或切换文件时沿用旧值。
-	const devConsoleEnabled =
-		devConsoleState.fileId === fileId
-			? devConsoleState.enabled
-			: fileId
-				? (devConsoleStateMap.get(fileId) ?? false)
-				: false
-	const updateDevConsoleEnabled = useMemoizedFn((enabled: boolean) => {
-		if (fileId) devConsoleStateMap.set(fileId, enabled)
-		setDevConsoleState({ fileId, enabled })
+		onRegisterToggle: onRegisterDevConsoleToggle,
+		onEnabledChange: onDevConsoleActiveChange,
 	})
 
 	const getCurrentEditingContent = useMemoizedFn(async () => {

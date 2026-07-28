@@ -52,7 +52,10 @@ function MicroAppPageInner({
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 	const [isAIEditActive, setIsAIEditActive] = useState(false)
+	const [isDevConsoleActive, setIsDevConsoleActive] = useState(false)
+	const [isDevConsoleAvailable, setIsDevConsoleAvailable] = useState(false)
 	const aiEditHandlerRef = useRef<(() => void) | null>(null)
+	const devConsoleToggleHandlerRef = useRef<(() => void) | null>(null)
 	const workspacePanelsRef = useRef<HTMLDivElement>(null)
 	const workspacePanelsSize = useSize(workspacePanelsRef)
 	const workspaceWidthPx = workspacePanelsSize?.width || window.innerWidth
@@ -170,6 +173,10 @@ function MicroAppPageInner({
 	const handleRegisterAIEdit = useMemoizedFn((handler: (() => void) | null) => {
 		aiEditHandlerRef.current = handler
 	})
+	const handleRegisterDevConsoleToggle = useMemoizedFn((handler: (() => void) | null) => {
+		devConsoleToggleHandlerRef.current = handler
+		setIsDevConsoleAvailable(Boolean(handler))
+	})
 	const handleOpenEditDialog = useMemoizedFn(() => {
 		setEditDialogOpen(true)
 	})
@@ -193,6 +200,8 @@ function MicroAppPageInner({
 		setPreviewMode("desktop")
 		setPreviewRefreshKey(0)
 		setIsAIEditActive(false)
+		setIsDevConsoleActive(false)
+		setIsDevConsoleAvailable(false)
 	}, [projectId, setIsMessagePanelCollapsed])
 
 	useEffect(() => {
@@ -320,10 +329,15 @@ function MicroAppPageInner({
 											htmlFiles={previewFileOptions}
 											allowEdit={!isReadOnly && Boolean(previewEntryFile)}
 											aiEditActive={isAIEditActive}
+											devConsoleActive={isDevConsoleActive}
+											devConsoleAvailable={isDevConsoleAvailable}
 											onViewModeChange={setPreviewMode}
 											onFileChange={handlePreviewFileChange}
 											onRefresh={() => setPreviewRefreshKey((key) => key + 1)}
 											onAIEdit={() => aiEditHandlerRef.current?.()}
+											onDevConsoleToggle={() =>
+												devConsoleToggleHandlerRef.current?.()
+											}
 										/>
 										<div className="min-h-0 flex-1 overflow-hidden">
 											<MicroAppEntryPreview
@@ -338,6 +352,10 @@ function MicroAppPageInner({
 												storageMarkerId={defaultEntryFile?.file_id}
 												onRegisterAIEdit={handleRegisterAIEdit}
 												onAIEditActiveChange={setIsAIEditActive}
+												onRegisterDevConsoleToggle={
+													handleRegisterDevConsoleToggle
+												}
+												onDevConsoleActiveChange={setIsDevConsoleActive}
 												isBuilding={hasRunningTopic}
 											/>
 										</div>

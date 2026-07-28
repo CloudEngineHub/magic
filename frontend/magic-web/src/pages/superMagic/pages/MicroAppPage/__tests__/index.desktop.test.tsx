@@ -12,6 +12,7 @@ const detailMocks = vi.hoisted(() => ({
 
 const previewMocks = vi.hoisted(() => ({
 	aiEdit: vi.fn(),
+	devConsoleToggle: vi.fn(),
 	render: vi.fn(),
 }))
 
@@ -208,13 +209,20 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 		viewMode: "desktop" | "phone"
 		refreshKey: number
 		onRegisterAIEdit?: (handler: (() => void) | null) => void
+		onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
+		onDevConsoleActiveChange?: (active: boolean) => void
 		onOpenFile?: (fileItem?: unknown) => void
 	}) {
-		const { onRegisterAIEdit } = props
+		const { onRegisterAIEdit, onRegisterDevConsoleToggle } = props
+		const hasEntryFile = Boolean(props.entryFile?.file_id)
 		useEffect(() => {
 			onRegisterAIEdit?.(previewMocks.aiEdit)
 			return () => onRegisterAIEdit?.(null)
 		}, [onRegisterAIEdit])
+		useEffect(() => {
+			onRegisterDevConsoleToggle?.(hasEntryFile ? previewMocks.devConsoleToggle : null)
+			return () => onRegisterDevConsoleToggle?.(null)
+		}, [hasEntryFile, onRegisterDevConsoleToggle])
 		previewMocks.render(props)
 		return <div data-testid="desktop-entry-preview" />
 	},
@@ -294,6 +302,7 @@ describe("MicroAppPageDesktop", () => {
 		detailMocks.openFileTab.mockClear()
 		detailMocks.render.mockClear()
 		previewMocks.aiEdit.mockClear()
+		previewMocks.devConsoleToggle.mockClear()
 		previewMocks.render.mockClear()
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
@@ -385,6 +394,7 @@ describe("MicroAppPageDesktop", () => {
 		expect(previewMocks.render).toHaveBeenLastCalledWith(
 			expect.objectContaining({ entryFile: null }),
 		)
+		expect(screen.getByTestId("micro-app-preview-more")).toBeDisabled()
 
 		const generatedEntry = {
 			file_id: "generated-entry",
@@ -402,6 +412,7 @@ describe("MicroAppPageDesktop", () => {
 					entryFile: expect.objectContaining({ file_id: "generated-entry" }),
 				}),
 			)
+			expect(screen.getByTestId("micro-app-preview-more")).toBeEnabled()
 		})
 	})
 
@@ -434,6 +445,20 @@ describe("MicroAppPageDesktop", () => {
 
 		fireEvent.click(screen.getByTestId("micro-app-preview-ai-edit"))
 		expect(previewMocks.aiEdit).toHaveBeenCalledTimes(1)
+
+		fireEvent.keyDown(screen.getByTestId("micro-app-preview-more"), { key: "Enter" })
+		const debugToggle = await screen.findByTestId("micro-app-preview-debug-toggle")
+		expect(debugToggle).toHaveTextContent("microAppPage.previewToolbar.enableDebug")
+		fireEvent.click(debugToggle)
+		expect(previewMocks.devConsoleToggle).toHaveBeenCalledTimes(1)
+
+		act(() => {
+			previewMocks.render.mock.lastCall?.[0].onDevConsoleActiveChange?.(true)
+		})
+		fireEvent.keyDown(screen.getByTestId("micro-app-preview-more"), { key: "Enter" })
+		expect(await screen.findByTestId("micro-app-preview-debug-toggle")).toHaveTextContent(
+			"microAppPage.previewToolbar.disableDebug",
+		)
 
 		act(() => {
 			previewMocks.render.mock.lastCall?.[0].onOpenFile?.({

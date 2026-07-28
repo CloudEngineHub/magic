@@ -1,7 +1,21 @@
-import { Globe2, Monitor, RefreshCw, Smartphone, Sparkles } from "lucide-react"
+import {
+	Globe2,
+	Monitor,
+	MoreHorizontal,
+	RefreshCw,
+	Smartphone,
+	Sparkles,
+	Terminal,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import {
 	Select,
 	SelectContent,
@@ -23,10 +37,13 @@ interface MicroAppPreviewToolbarProps {
 	}>
 	allowEdit: boolean
 	aiEditActive?: boolean
+	devConsoleActive?: boolean
+	devConsoleAvailable?: boolean
 	onViewModeChange: (mode: MicroAppEntryPreviewMode) => void
 	onFileChange: (fileId: string) => void
 	onRefresh: () => void
 	onAIEdit: () => void
+	onDevConsoleToggle: () => void
 }
 
 export default function MicroAppPreviewToolbar({
@@ -35,10 +52,13 @@ export default function MicroAppPreviewToolbar({
 	htmlFiles,
 	allowEdit,
 	aiEditActive = false,
+	devConsoleActive = false,
+	devConsoleAvailable = false,
 	onViewModeChange,
 	onFileChange,
 	onRefresh,
 	onAIEdit,
+	onDevConsoleToggle,
 }: MicroAppPreviewToolbarProps) {
 	const { t } = useTranslation("super")
 
@@ -147,6 +167,33 @@ export default function MicroAppPreviewToolbar({
 					<Sparkles size={15} />
 					{t("microAppPage.previewToolbar.aiEdit")}
 				</Button>
+
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="size-8 shrink-0"
+							disabled={!devConsoleAvailable}
+							aria-label={t("microAppPage.previewToolbar.more")}
+							data-testid="micro-app-preview-more"
+						>
+							<MoreHorizontal size={16} />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="min-w-36">
+						<DropdownMenuItem
+							onSelect={onDevConsoleToggle}
+							data-testid="micro-app-preview-debug-toggle"
+						>
+							<Terminal size={16} />
+							{devConsoleActive
+								? t("microAppPage.previewToolbar.disableDebug")
+								: t("microAppPage.previewToolbar.enableDebug")}
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 		</div>
 	)

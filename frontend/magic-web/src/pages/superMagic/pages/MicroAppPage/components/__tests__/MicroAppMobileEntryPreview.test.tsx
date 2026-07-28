@@ -128,6 +128,8 @@ describe("MicroAppMobileEntryPreview", () => {
 	})
 
 	it("wraps phone preview with the shared phone frame", async () => {
+		const onRegisterDevConsoleToggle = vi.fn()
+		const onDevConsoleActiveChange = vi.fn()
 		render(
 			<MicroAppEntryPreview
 				entryFile={{ file_id: "entry-1", file_name: "index.html" }}
@@ -136,6 +138,8 @@ describe("MicroAppMobileEntryPreview", () => {
 				selectedProject={null}
 				allowEdit
 				viewMode="phone"
+				onRegisterDevConsoleToggle={onRegisterDevConsoleToggle}
+				onDevConsoleActiveChange={onDevConsoleActiveChange}
 			/>,
 		)
 
@@ -144,6 +148,8 @@ describe("MicroAppMobileEntryPreview", () => {
 			expect.objectContaining({
 				viewMode: "phone",
 				showPhoneFrame: false,
+				onRegisterDevConsoleToggle,
+				onDevConsoleActiveChange,
 			}),
 		)
 	})
