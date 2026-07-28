@@ -10,7 +10,7 @@ import {
 	useLayoutEffect,
 } from "react"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
-import { filterInjectedTags } from "./utils"
+import { filterInjectedTags, preserveOriginalTrailingNewline } from "./utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import { genFileData } from "@/pages/chatNew/components/MessageEditor/components/InputFiles/utils"
@@ -544,6 +544,25 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		// V2 编辑机制相关
 		const editorRef = useRef<HTMLEditorV2Ref>(null)
+		// Preserve the API source's EOF newline for both current and legacy visual save paths.
+		const saveEditContentWithOriginalTrailingNewline = useMemoizedFn(
+			async (
+				nextContent: string,
+				nextFileId?: string,
+				enableShadow?: boolean,
+				fetchFileVersions?: (fileId: string) => void,
+				isPPTEditMode?: boolean,
+			) => {
+				if (!saveEditContent) return
+				return saveEditContent(
+					preserveOriginalTrailingNewline(nextContent, rawSourceCode),
+					nextFileId,
+					enableShadow,
+					fetchFileVersions,
+					isPPTEditMode,
+				)
+			},
+		)
 		useHTMLEditorV2({
 			iframeRef,
 			isEditMode,
@@ -552,7 +571,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentInjected,
 			targetOrigin: iframeTargetOrigin,
 			scaleRatio,
-			saveEditContent,
+			saveEditContent: saveEditContentWithOriginalTrailingNewline,
 			fileId,
 			filePathMapping,
 			editorRef,
@@ -1761,7 +1780,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					console.log("收到旧版保存消息 (V1)", event.data)
 					if (saveEditContent && typeof saveEditContent === "function") {
 						const newContent = filterInjectedTags(event.data.content, filePathMapping)
-						saveEditContent(newContent, String(fileId))
+						saveEditContentWithOriginalTrailingNewline(newContent, String(fileId))
 					}
 				} else if (event.data && event.data.type === MEDIA_MESSAGE_TYPES.SPEAKER_EDITED) {
 					// 处理媒体说话人编辑事件
@@ -1940,18 +1959,26 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				// 使用新的编辑机制 V2 保存
 				try {
 					const saveResult = await editorRef.current.save()
+					// Keep the returned baseline identical to the content sent through the save callback.
+					const savedCleanContent = preserveOriginalTrailingNewline(
+						saveResult.cleanContent,
+						rawSourceCode,
+					)
 					console.log("[IsolatedHTMLRenderer] 保存结果:", {
 						success: saveResult.success,
 						fileId: saveResult.fileId,
-						contentLength: saveResult.cleanContent.length,
+						contentLength: savedCleanContent.length,
 					})
 
 					if (!saveResult.success) {
 						console.error("[IsolatedHTMLRenderer] 保存失败")
 					}
 
-					// 返回保存结果，方便调用方获取
-					return saveResult
+					// Return the exact saved content so conflict detection uses the correct baseline.
+					return {
+						...saveResult,
+						cleanContent: savedCleanContent,
+					}
 				} catch (error) {
 					console.error("保存内容时出错:", error)
 					throw error

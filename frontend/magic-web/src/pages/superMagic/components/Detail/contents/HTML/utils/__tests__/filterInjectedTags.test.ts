@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest"
-import { filterInjectedTags } from "../index"
+import { filterInjectedTags, preserveOriginalTrailingNewline } from "../index"
 
 describe("filterInjectedTags", () => {
+	it("should restore the backend-provided EOF newline after DOM serialization removes it", () => {
+		const serializedHtml = "<!DOCTYPE html>\n<html><head></head><body></body></html>"
+		const originalSourceCode = `${serializedHtml}\n`
+
+		expect(preserveOriginalTrailingNewline(serializedHtml, originalSourceCode)).toBe(
+			originalSourceCode,
+		)
+		expect(preserveOriginalTrailingNewline(originalSourceCode, originalSourceCode)).toBe(
+			originalSourceCode,
+		)
+		expect(preserveOriginalTrailingNewline(serializedHtml, serializedHtml)).toBe(serializedHtml)
+	})
+
 	it("should remove only the root html XHTML namespace when saving content", () => {
 		const html = `
 			<!DOCTYPE html>
@@ -58,6 +71,66 @@ describe("filterInjectedTags", () => {
 		)
 		expect(result).not.toContain("<head>\n\n<title>")
 		expect(result).not.toContain('<body class="placeholder-body">\n\n<section>')
+	})
+
+	it("should prevent DOMParser body boundary whitespace from growing across repeated saves", () => {
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head><title>Placeholder document</title></head>
+<body>
+<main>Placeholder content</main>
+</body>
+</html>
+`
+
+		const firstSave = filterInjectedTags(html, new Map())
+		const secondSave = filterInjectedTags(firstSave, new Map())
+		const thirdSave = filterInjectedTags(secondSave, new Map())
+
+		expect(firstSave).toContain("<main>Placeholder content</main>\n</body>\n</html>")
+		expect(secondSave).toBe(firstSave)
+		expect(thirdSave).toBe(firstSave)
+	})
+
+	it("should restore slide-bridge at its placeholder without moving surrounding whitespace", () => {
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head></head>
+<body data-has-slide-bridge="true">
+<main>Placeholder content</main>
+<!--magic-slide-bridge-placeholder-->
+</body>
+</html>`
+
+		const result = filterInjectedTags(html, new Map())
+
+		expect(result).toContain(
+			'<main>Placeholder content</main>\n<script src="slide-bridge.js"></script>',
+		)
+		expect(result).not.toContain(
+			'<main>Placeholder content</main>\n\n<script src="slide-bridge.js"></script>',
+		)
+		expect(result).not.toContain('<script src="slide-bridge.js"></script></body>')
+		expect(result).not.toContain("magic-slide-bridge-placeholder")
+		expect(result).not.toContain("data-has-slide-bridge")
+	})
+
+	it("should restore slide-bridge placeholders inside head", () => {
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--magic-slide-bridge-placeholder-->
+</head>
+<body data-has-slide-bridge="true">
+<main>Placeholder content</main>
+</body>
+</html>`
+
+		const result = filterInjectedTags(html, new Map())
+
+		expect(result).toContain('<head>\n<script src="slide-bridge.js"></script>\n</head>')
+		expect(result).not.toContain("magic-slide-bridge-placeholder")
+		expect(result).not.toContain("data-has-slide-bridge")
 	})
 
 	it("should restore original relative path for inline background-image", () => {
