@@ -187,10 +187,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 					data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-brand-button`}
 				>
 					<div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-						<MobileBrandLogo
-							className="mt-[-6px] h-9 w-9 shrink-0"
-							logoPixelSize={36}
-						/>
+						<MobileBrandLogo className="h-9 w-9 shrink-0" logoPixelSize={36} />
 					</div>
 					<span className="text-[20px] font-medium leading-none text-foreground">
 						{appName}
