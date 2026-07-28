@@ -695,16 +695,13 @@ class FileManagementAppService extends AbstractAppService
 
         try {
             $projectId = (int) $requestDTO->getProjectId();
-            $fileIds = $requestDTO->getFileIds();
+            $fileIds = array_values(array_unique(array_map('intval', $requestDTO->getFileIds())));
 
             // Validate project ownership
             $this->getAccessibleProjectWithEditor($projectId, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
 
-            // Fetch file entities before deletion so the event carries complete data
-            $fileEntities = $this->taskFileDomainService->getProjectFilesByIds($projectId, $fileIds);
-
-            // 调用 MagicFS 统一的批量删除方法（软删除）
-            $this->magicFSFileDomainService->deleteFiles($fileIds);
+            // MagicFS 在项目作用域内加载并校验全部文件，返回删除前实体供事件使用。
+            $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',

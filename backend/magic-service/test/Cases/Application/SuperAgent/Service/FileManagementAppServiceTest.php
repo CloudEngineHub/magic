@@ -7,14 +7,19 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperAgent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\UserType;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\FileManagementAppService;
+use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\FileCollection\Entity\FileCollectionItemEntity;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
@@ -22,6 +27,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchDeleteFilesRequestDTO;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
@@ -150,6 +156,59 @@ class FileManagementAppServiceTest extends TestCase
             [null],
             $this->createAuthorization('U1', 'ORG1')
         );
+    }
+
+    public function testBatchDeleteFilesUsesAuthorizedProjectScopeAndNormalizesDuplicateIds(): void
+    {
+        $file501 = $this->createTaskFileEntity(501, '/workspace/a.md');
+        $file502 = $this->createTaskFileEntity(502, '/workspace/b.md');
+        $file501->setProjectId(900);
+        $file502->setProjectId(900);
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('deleteFiles')
+            ->with([501, 502], false, 900)
+            ->willReturn([$file501, $file502]);
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new BatchDeleteFilesRequestDTO();
+        $requestDTO->projectId = '900';
+        $requestDTO->fileIds = [501, 501, 502];
+
+        $this->assertSame([
+            'project_id' => 900,
+            'file_ids' => [501, 502],
+            'count' => 2,
+        ], $service->batchDeleteFiles($requestContext, $requestDTO));
+    }
+
+    public function testBatchDeleteFilesDoesNotDispatchEventWhenDomainRejectsProjectScope(): void
+    {
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('deleteFiles')
+            ->with([501, 999], false, 900)
+            ->willThrowException(new BusinessException('file.permission_denied', 51150));
+
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $service = $this->createService($dispatcher);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new BatchDeleteFilesRequestDTO();
+        $requestDTO->projectId = '900';
+        $requestDTO->fileIds = [501, 999];
+
+        $this->expectExceptionCode(51150);
+        $service->batchDeleteFiles($requestContext, $requestDTO);
     }
 
     public function testBuildRelativeFilePathUsesParentChain(): void
@@ -371,7 +430,8 @@ class FileManagementAppServiceTest extends TestCase
     {
         return (new MagicUserAuthorization())
             ->setId($userId)
-            ->setOrganizationCode($organizationCode);
+            ->setOrganizationCode($organizationCode)
+            ->setUserType(UserType::Human);
     }
 
     private function createTaskFileEntity(int $fileId, string $fileKey, bool $isDirectory = false): TaskFileEntity
@@ -455,6 +515,11 @@ final readonly class FileManagementAccessTokenTestContainer implements Container
 
 class TestableFileManagementAppService extends FileManagementAppService
 {
+    public function getAccessibleProjectWithEditor(int $projectId, string $userId, string $organizationCode): ProjectEntity
+    {
+        return new ProjectEntity(['id' => $projectId, 'user_id' => $userId, 'user_organization_code' => $organizationCode]);
+    }
+
     public function dispatchOne(?TaskFileEntity $fileEntity, MagicUserAuthorization $authorization): void
     {
         $this->dispatchFileUploadedEvent($fileEntity, $authorization);

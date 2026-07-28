@@ -19,6 +19,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterfa
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskRepositoryInterface;
 use Dtyq\SuperMagic\ErrorCode\MagicFSErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkFileUtil;
 use Hyperf\Logger\LoggerFactory;
@@ -561,19 +562,20 @@ class MagicFSFileDomainService
      *
      * @param array $fileIds 文件ID数组（字符串）
      * @param bool $includeDescendants 是否连带删除目录下的所有子孙节点，默认 false
+     * @param null|int $projectId 项目作用域；传入时要求所有文件均属于该项目
+     * @return TaskFileEntity[] 删除前的文件实体
      */
-    public function deleteFiles(array $fileIds, bool $includeDescendants = false): void
+    public function deleteFiles(array $fileIds, bool $includeDescendants = false, ?int $projectId = null): array
     {
         if (empty($fileIds)) {
-            return;
+            return [];
         }
 
-        $fileIdInts = array_map('intval', $fileIds);
-
-        $files = $this->taskFileRepository->getFilesByIds($fileIdInts);
+        $fileIdInts = array_values(array_unique(array_map('intval', $fileIds)));
+        $files = $this->getValidatedFilesForDeletion($fileIdInts, $projectId);
 
         if (empty($files)) {
-            return;
+            return [];
         }
 
         $deleteIds = $fileIdInts;
@@ -598,7 +600,7 @@ class MagicFSFileDomainService
 
         $deleteIds = array_values(array_unique($deleteIds));
 
-        $this->taskFileRepository->deleteByIds($deleteIds, false);
+        $this->taskFileRepository->deleteByIds($deleteIds, false, $projectId);
 
         if (! empty($parentIds)) {
             $parentIdArray = array_keys($parentIds);
@@ -612,6 +614,8 @@ class MagicFSFileDomainService
                 $this->taskFileRepository->incrementMetadataVersionByIds($allAncestorIds);
             }
         }
+
+        return $files;
     }
 
     /**
@@ -874,5 +878,24 @@ class MagicFSFileDomainService
             $projectId,
             $storageType
         );
+    }
+
+    /**
+     * @param int[] $fileIds
+     * @return TaskFileEntity[]
+     */
+    private function getValidatedFilesForDeletion(array $fileIds, ?int $projectId): array
+    {
+        $files = $this->taskFileRepository->getFilesByIds($fileIds, $projectId ?? 0);
+
+        // file_id 唯一且请求 ID 已去重，数量不一致即存在越权、不存在或已删除文件。
+        if ($projectId !== null && count($files) !== count($fileIds)) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::FILE_PERMISSION_DENIED,
+                'file.permission_denied'
+            );
+        }
+
+        return $files;
     }
 }

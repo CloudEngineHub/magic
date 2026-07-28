@@ -190,8 +190,7 @@ class TaskFileDomainServiceTest extends TestCase
     private function createService(
         TaskFileRepositoryInterface $taskFileRepository,
         ?CloudFileRepositoryInterface $cloudFileRepository = null
-    ): TaskFileDomainService
-    {
+    ): TaskFileDomainService {
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
 
