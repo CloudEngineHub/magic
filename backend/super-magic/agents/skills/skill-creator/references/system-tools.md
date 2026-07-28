@@ -1,4 +1,4 @@
-# Super Magic Tools Reference
+# System Tools
 
 This document lists the tools available to AI in super-magic skills, with descriptions, parameter schemas, and Python call examples.
 
