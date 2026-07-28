@@ -3,18 +3,21 @@ import ReplayIcon from "@/pages/share/assets/icon/replay_icon.svg"
 // @ts-ignore
 import FolderIcon from "@/pages/share/assets/icon/folder_empty.svg"
 import { Button } from "@/components/shadcn-ui/button"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 interface ErrorDisplayProps {
 	errorMessage?: string
 	onRetry?: () => void
 	isFileShare?: boolean
+	illustration?: ReactNode
 }
 
 export default function ErrorDisplay({
 	errorMessage,
 	onRetry,
 	isFileShare = false,
+	illustration,
 }: ErrorDisplayProps) {
 	const { t } = useTranslation("super")
 
@@ -30,9 +33,12 @@ export default function ErrorDisplay({
 			className="flex h-full w-full select-none items-center justify-center"
 			data-testid="error-display"
 		>
-			<div className="flex h-[200px] w-[266px] flex-col items-center justify-center rounded-md">
-				<div className="pb-5 text-muted-foreground" data-testid="error-display-icon">
-					<img src={icon} alt="" />
+			<div className="flex w-[266px] flex-col items-center justify-center rounded-md">
+				<div
+					className={illustration ? "pb-2" : "pb-5 text-muted-foreground"}
+					data-testid="error-display-icon"
+				>
+					{illustration || <img src={icon} alt="" />}
 				</div>
 				<div
 					className="text-center text-[32px] font-semibold text-muted-foreground"

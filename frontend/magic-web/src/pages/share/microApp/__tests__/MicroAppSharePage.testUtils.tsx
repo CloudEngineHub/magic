@@ -176,8 +176,17 @@ vi.mock("@/pages/share/components/WorkspaceButton", () => ({
 }))
 
 vi.mock("@/pages/share/components", () => ({
-	ErrorDisplay: ({ errorMessage }: { errorMessage?: string }) => (
-		<div data-testid="mock-error-display">{errorMessage}</div>
+	ErrorDisplay: ({
+		errorMessage,
+		illustration,
+	}: {
+		errorMessage?: string
+		illustration?: ReactNode
+	}) => (
+		<div data-testid="mock-error-display">
+			{illustration}
+			{errorMessage}
+		</div>
 	),
 	PasswordVerification: () => <div data-testid="mock-password-verification" />,
 	ShareEmptyState: () => <div data-testid="mock-share-empty-state" />,

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
 import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/share/components"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
+import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { resolveDefaultHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
@@ -342,6 +343,13 @@ export default function MicroAppSharePage() {
 						errorMessage={t("microAppShare.errorTitle")}
 						onRetry={reload}
 						isFileShare
+						illustration={
+							<MicroAppPermissionIllustration
+								size="md"
+								className="w-[180px]"
+								testId="micro-app-share-error-illustration"
+							/>
+						}
 					/>
 				) : null}
 

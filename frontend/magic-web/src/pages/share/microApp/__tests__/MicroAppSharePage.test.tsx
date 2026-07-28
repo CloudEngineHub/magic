@@ -309,6 +309,20 @@ describe("MicroAppSharePage", () => {
 		expect(await screen.findByTestId("micro-app-share-empty")).toBeInTheDocument()
 	})
 
+	it("uses the micro app permission illustration when the share is unavailable", async () => {
+		mocks.resolvePublishedMicroApp.mockRejectedValue(new Error("share unavailable"))
+
+		renderPage()
+
+		expect(await screen.findByTestId("mock-error-display")).toHaveTextContent(
+			"microAppShare.errorTitle",
+		)
+		expect(screen.getByTestId("micro-app-share-error-illustration")).toHaveAttribute(
+			"data-state",
+			"permission",
+		)
+	})
+
 	it("uses password query when the resource requires password", async () => {
 		mocks.checkShareResourcePassword.mockResolvedValue({ has_password: true })
 
