@@ -671,10 +671,12 @@ const FilesViewer = memo(
 				</div>
 			)
 
-			// A fixed descendant is still confined by any transformed ancestor in the workspace
-			// layout. Portal fullscreen content to the document root so it always covers the
-			// workspace list and other layout siblings.
-			return effectiveIsFullscreen && typeof document !== "undefined"
+			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so they
+			// need a body portal. Document-flow fullscreen is intentionally excluded: its height
+			// must remain below #root to propagate to the page scroll container and long screenshots.
+			return effectiveIsFullscreen &&
+				!isDocumentFlowFullscreen &&
+				typeof document !== "undefined"
 				? createPortal(viewer, document.body)
 				: viewer
 		}),
