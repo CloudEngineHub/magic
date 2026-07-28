@@ -38,6 +38,9 @@ export function useAutoScroll({
 	const prevTopicKeyRef = useRef(topicKey)
 	const onPullMoreRef = useRef(onPullMore)
 	onPullMoreRef.current = onPullMore
+	const previousScrollTopRef = useRef(0)
+	const isUserScrollInteractionRef = useRef(false)
+	const userHistoryIntentRef = useRef(false)
 
 	const isResizeScrollingRef = useRef(false)
 	const resizeScrollTimerRef = useRef<number>(0)
@@ -70,6 +73,7 @@ export function useAutoScroll({
 			const el = containerRef.current
 			if (!el) return
 			autoFollowRef.current = true
+			userHistoryIntentRef.current = false
 			startGuard(behavior === "smooth" ? 1000 : 300)
 			el.scrollTo({ top: el.scrollHeight, behavior })
 		},
@@ -90,6 +94,9 @@ export function useAutoScroll({
 		prevTopicKeyRef.current = topicKey
 		autoFollowRef.current = true
 		pullMoreSnapshotRef.current = null
+		previousScrollTopRef.current = 0
+		isUserScrollInteractionRef.current = false
+		userHistoryIntentRef.current = false
 	}
 
 	// Scroll to bottom + reset UI on topic change (including initial mount)
@@ -116,7 +123,14 @@ export function useAutoScroll({
 				// 应丢弃过期的 snapshot，走正常逻辑。
 				if (viewport.scrollHeight > scrollHeight) {
 					pullMoreSnapshotRef.current = null
+					// Restoring the viewport after older messages are inserted is a layout correction,
+					// not a new user request to continue loading history.
+					isResizeScrollingRef.current = true
+					window.clearTimeout(resizeScrollTimerRef.current)
 					viewport.scrollTop = scrollTop + (viewport.scrollHeight - scrollHeight)
+					resizeScrollTimerRef.current = window.setTimeout(() => {
+						isResizeScrollingRef.current = false
+					}, 100)
 					return
 				}
 				// snapshot 过期，丢弃
@@ -152,31 +166,56 @@ export function useAutoScroll({
 	useEffect(() => {
 		const el = containerRef.current
 		if (!el) return
+		previousScrollTopRef.current = el.scrollTop
 
 		const pullMessages = debounce(() => {
-			if (el.scrollTop < MIN_TOP_DISTANCE) onPullMoreRef.current?.()
+			if (
+				userHistoryIntentRef.current &&
+				guardTimerRef.current === null &&
+				!isResizeScrollingRef.current &&
+				el.scrollTop < MIN_TOP_DISTANCE
+			) {
+				// One explicit upward gesture starts at most one page request. Further pages require
+				// another user gesture so streaming/layout scrolls cannot create a request loop.
+				userHistoryIntentRef.current = false
+				onPullMoreRef.current?.()
+			}
 		}, 300)
 
 		const handleScroll = throttle(
 			() => {
 				const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+				const isProgrammaticScroll =
+					guardTimerRef.current !== null || isResizeScrollingRef.current
+				if (!isProgrammaticScroll && isUserScrollInteractionRef.current) {
+					if (el.scrollTop < previousScrollTopRef.current) {
+						userHistoryIntentRef.current = true
+					} else if (el.scrollTop > previousScrollTopRef.current) {
+						userHistoryIntentRef.current = false
+					}
+				}
+				previousScrollTopRef.current = el.scrollTop
 
 				setShowBackToLatest(
 					el.scrollTop + el.clientHeight + BACK_TO_LATEST_OFFSET < el.scrollHeight,
 				)
 
-				if (guardTimerRef.current === null && !isResizeScrollingRef.current) {
+				if (!isProgrammaticScroll) {
 					autoFollowRef.current = distanceToBottom < MIN_BOTTOM_DISTANCE
 				}
 
-				pullMessages()
+				if (!isProgrammaticScroll && userHistoryIntentRef.current) pullMessages()
 			},
 			16,
 			{ leading: false, trailing: true },
 		)
 
 		const handleWheel = (event: WheelEvent) => {
-			if (event.deltaY >= 0) return
+			if (event.deltaY >= 0) {
+				userHistoryIntentRef.current = false
+				return
+			}
+			userHistoryIntentRef.current = true
 			if (guardTimerRef.current === null && !isResizeScrollingRef.current) return
 			clearGuard()
 			if (isResizeScrollingRef.current) {
@@ -185,13 +224,25 @@ export function useAutoScroll({
 			}
 			autoFollowRef.current = false
 		}
+		const handlePointerDown = () => {
+			isUserScrollInteractionRef.current = true
+		}
+		const handlePointerEnd = () => {
+			isUserScrollInteractionRef.current = false
+		}
 
 		el.addEventListener("scroll", handleScroll)
 		el.addEventListener("wheel", handleWheel, { passive: true })
+		el.addEventListener("pointerdown", handlePointerDown, { passive: true })
+		window.addEventListener("pointerup", handlePointerEnd, { passive: true })
+		window.addEventListener("pointercancel", handlePointerEnd, { passive: true })
 
 		return () => {
 			el.removeEventListener("scroll", handleScroll)
 			el.removeEventListener("wheel", handleWheel)
+			el.removeEventListener("pointerdown", handlePointerDown)
+			window.removeEventListener("pointerup", handlePointerEnd)
+			window.removeEventListener("pointercancel", handlePointerEnd)
 			pullMessages.cancel()
 			handleScroll.cancel()
 		}
@@ -205,6 +256,7 @@ export function useAutoScroll({
 				const el = containerRef.current
 				if (!el) return
 				autoFollowRef.current = true
+				userHistoryIntentRef.current = false
 				startGuard(options?.time || 1000)
 				el.scrollTo({
 					top: el.scrollHeight,

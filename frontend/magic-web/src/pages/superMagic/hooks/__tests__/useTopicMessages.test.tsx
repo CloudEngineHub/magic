@@ -7,6 +7,7 @@ const mockState = vi.hoisted(() => ({
 	nextSyncGeneration: 1,
 	getMessagesByConversationIdMock: vi.fn(),
 	registerStreamRecoveryOwnerMock: vi.fn(),
+	pubsubHandlers: new Map<string, (data: any) => void>(),
 	superMagicStoreMock: {
 		messages: new Map<string, unknown[]>(),
 		buffer: new Map<string, { messages: unknown[] }>(),
@@ -29,6 +30,7 @@ const mockState = vi.hoisted(() => ({
 		}),
 		enqueueMessage: vi.fn(),
 		setActiveTopicId: vi.fn(),
+		isTopicStreaming: vi.fn(() => false),
 	},
 }))
 
@@ -48,8 +50,14 @@ vi.mock("@/pages/superMagic/services/streamRecoveryCoordinator", () => ({
 
 vi.mock("@/utils/pubsub", () => ({
 	default: {
-		subscribe: vi.fn(),
-		unsubscribe: vi.fn(),
+		subscribe: vi.fn((event: string, callback: (data: any) => void) => {
+			mockState.pubsubHandlers.set(event, callback)
+		}),
+		unsubscribe: vi.fn((event: string, callback?: (data: any) => void) => {
+			if (!callback || mockState.pubsubHandlers.get(event) === callback) {
+				mockState.pubsubHandlers.delete(event)
+			}
+		}),
 	},
 	PubSubEvents: {
 		Super_Magic_New_Message_V2: "Super_Magic_New_Message_V2",
@@ -71,6 +79,8 @@ describe("useTopicMessages", () => {
 		mockState.superMagicStoreMock.messages = new Map()
 		mockState.superMagicStoreMock.buffer = new Map()
 		mockState.superMagicStoreMock.topicMeta = new Map()
+		mockState.superMagicStoreMock.isTopicStreaming.mockReturnValue(false)
+		mockState.pubsubHandlers.clear()
 		mockState.registerStreamRecoveryOwnerMock.mockReturnValue(vi.fn())
 		mockState.getMessagesByConversationIdMock.mockImplementation(
 			() => new Promise(() => undefined),
@@ -518,6 +528,192 @@ describe("useTopicMessages", () => {
 			olderItems,
 			{ mode: "merge" },
 		)
+	})
+
+	it("keeps history pagination single-flight for repeated top-threshold notifications", async () => {
+		const topic = createTopic()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: true,
+			page_token: "older-page",
+		})
+		const { result } = renderHook(() => useTopicMessages({ selectedTopic: topic }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		let resolveHistoryRequest: ((value: any) => void) | undefined
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					resolveHistoryRequest = resolve
+				}),
+		)
+
+		act(() => {
+			result.current.handlePullMoreMessage(topic)
+			result.current.handlePullMoreMessage(topic)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+
+		await act(async () => {
+			resolveHistoryRequest?.({ items: [], has_more: false, page_token: "" })
+			await Promise.resolve()
+		})
+	})
+
+	it("stops history pagination after the server reports no more messages", async () => {
+		const topic = createTopic()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: true,
+			page_token: "older-page",
+		})
+		const { result } = renderHook(() => useTopicMessages({ selectedTopic: topic }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		await act(async () => {
+			result.current.handlePullMoreMessage(topic)
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		act(() => {
+			result.current.handlePullMoreMessage(topic)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+	})
+
+	it("coalesces adjacent persistent-message events into one incremental pull", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		mockState.getMessagesByConversationIdMock.mockClear()
+
+		act(() => {
+			const handleNewMessage = mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")
+			handleNewMessage?.({
+				conversation_id: "conversation-1",
+				message: { topic_id: "chat-topic-1" },
+			})
+			handleNewMessage?.({
+				conversation_id: "conversation-1",
+				message: { topic_id: "chat-topic-1" },
+			})
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(300)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({ limit: 10, chat_topic_id: "chat-topic-1" }),
+		)
+	})
+
+	it("ignores persistent-message events for another topic", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		mockState.getMessagesByConversationIdMock.mockClear()
+
+		act(() => {
+			mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")?.({
+				conversation_id: "conversation-1",
+				message: { topic_id: "another-chat-topic" },
+			})
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(300)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+	})
+
+	it("skips resident polling while the selected topic has an active stream", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		mockState.superMagicStoreMock.isTopicStreaming.mockReturnValue(true)
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		mockState.getMessagesByConversationIdMock.mockClear()
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(40_000)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+	})
+
+	it("stops finished polling after the first successful authoritative sync", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.FINISHED }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		mockState.getMessagesByConversationIdMock.mockClear()
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(20_000)
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(40_000)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 	})
 
 	it("registers the active topic as the recovery owner and forwards its generation to replace", async () => {
