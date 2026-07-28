@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { platformKey } from "@/utils/storage"
 import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
+import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import {
 	Tooltip,
@@ -383,13 +384,17 @@ export function DevConsolePanel({
 
 			{/* Header bar */}
 			<div className="flex h-9 min-w-0 flex-shrink-0 items-center justify-between border-b px-2">
-				<div className="scrollbar-none flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+				<ScrollArea
+					className="h-full min-w-0 flex-1"
+					viewportClassName="h-full"
+					data-testid="dev-console-tabs-scroll-area"
+				>
 					<Tabs
 						value={activeTab}
 						onValueChange={(v) => onTabChange(v as DevConsoleTab)}
-						className="min-w-0"
+						className="flex h-full w-max min-w-full items-center"
 					>
-						<TabsList className="h-7 flex-nowrap whitespace-nowrap bg-transparent p-0">
+						<TabsList className="h-7 w-max flex-nowrap whitespace-nowrap bg-transparent p-0">
 							{visibleTabs.map((tabId, index) => {
 								const isDropTarget =
 									dragOverIdx === index &&
@@ -463,9 +468,10 @@ export function DevConsolePanel({
 							})}
 						</TabsList>
 					</Tabs>
-				</div>
+					<ScrollBar orientation="horizontal" className="h-1.5" />
+				</ScrollArea>
 
-				<div className="flex items-center gap-1">
+				<div className="flex shrink-0 items-center gap-1">
 					{/* Clear button — only for tabs with clearable entries, advanced mode only */}
 					{!isBasicMode &&
 						(activeTab === "console" ||
