@@ -11,8 +11,8 @@ use App\Domain\Mode\Entity\ModeDataIsolation;
 use App\Domain\Mode\Entity\ModeEntity;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
-use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -39,6 +39,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
     {
         parent::setUp();
         $this->service = (new ReflectionClass(SuperMagicAgentAccessAppService::class))->newInstanceWithoutConstructor();
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
     }
 
     public function testListAccessibleAgentCodesReturnsVisibleSharedAgent(): void
@@ -49,6 +50,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         $this->setProperty($this->service, 'resourceVisibilityDomainService', $this->createResourceVisibilityDomainService([
             'shared-agent',
         ]));
+        $this->setReadableAgentCodes(['shared-agent']);
         $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
 
         $result = $this->service->listAccessibleAgentCodes('DT001', 'user-1', ['shared-agent']);
@@ -61,6 +63,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
     {
         $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([]));
         $this->setProperty($this->service, 'resourceVisibilityDomainService', $this->createResourceVisibilityDomainService([]));
+        $this->setReadableAgentCodes([]);
         $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService(['official-agent']));
 
         $result = $this->service->listAccessibleAgentCodes('DT001', 'user-1', ['official-agent', 'unknown-agent']);
@@ -69,17 +72,21 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         self::assertSame(['unknown-agent'], $result['missing_codes']);
     }
 
-    public function testListAccessibleAgentCodesDoesNotGrantCreatorWithoutResourceVisibility(): void
+    public function testListAccessibleAgentCodesIncludesHiredAgentWithoutLegacyVisibility(): void
     {
         $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([
-            $this->createAgentEntity('creator-only-agent'),
+            $this->createAgentEntity('hired-agent'),
+        ]));
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([
+            'hired-agent',
         ]));
         $this->setProperty($this->service, 'resourceVisibilityDomainService', $this->createResourceVisibilityDomainService([]));
+        $this->setReadableAgentCodes([]);
         $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
 
-        $result = $this->service->listAccessibleAgentCodes('DT001', 'user-1', ['creator-only-agent']);
+        $result = $this->service->listAccessibleAgentCodes('DT001', 'user-1', ['hired-agent']);
 
-        self::assertSame([], $result['accessible_codes']);
+        self::assertSame(['hired-agent'], $result['accessible_codes']);
         self::assertSame([], $result['missing_codes']);
     }
 
@@ -196,6 +203,18 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
             {
                 return $this->entities;
             }
+
+            public function getCodesByCreator(SuperMagicAgentDataIsolation $dataIsolation, string $creator): array
+            {
+                $codes = [];
+                foreach ($this->entities as $entity) {
+                    if ($entity->getCreator() === $creator) {
+                        $codes[] = $entity->getCode();
+                    }
+                }
+
+                return $codes;
+            }
         };
     }
 
@@ -218,6 +237,19 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
                 return $this->codes;
             }
         };
+    }
+
+    /** @param array<string> $codes */
+    private function setReadableAgentCodes(array $codes): void
+    {
+        $resourceAccessPolicyService = $this->createMock(ResourceAccessPolicyService::class);
+        $resourceAccessPolicyService->method('getReadableResourceCodes')->willReturn([
+            'operations' => [],
+            'operation_codes' => [],
+            'visibility_codes' => $codes,
+            'all_codes' => $codes,
+        ]);
+        $this->setProperty($this->service, 'resourceAccessPolicyService', $resourceAccessPolicyService);
     }
 
     /**
@@ -288,6 +320,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
     {
         $entity = new SuperMagicAgentEntity();
         $entity->setCode($code);
+        $entity->setCreator('');
 
         return $entity;
     }

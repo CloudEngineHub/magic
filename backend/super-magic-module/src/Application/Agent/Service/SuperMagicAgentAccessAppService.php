@@ -11,7 +11,6 @@ use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\TargetType;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
-use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\BuiltinSkill;
 
@@ -153,16 +152,11 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
 
         $foundAgentCodes = $this->findExistingAgentCodes($organizationCode, $userId, $agentCodes);
         $dataIsolation = SuperMagicAgentDataIsolation::create($organizationCode, $userId);
-        $officialAgentCodes = array_values(array_intersect($agentCodes, $this->getOfficialAgentCodes($dataIsolation)));
-        $visibleAgentCodes = $foundAgentCodes === []
-            ? []
-            : $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $this->createPermissionDataIsolation($dataIsolation),
-                $userId,
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
-                $foundAgentCodes
-            );
-        $accessibleLookup = array_fill_keys(array_merge($officialAgentCodes, $visibleAgentCodes), true);
+        // 完整员工关联资源同时允许创建者、协作者、已雇佣用户和官方员工读取。
+        $readableCodes = $this->getAccessibleAgentCodes($dataIsolation, $userId)['codes'];
+        $usableCodes = $this->getUsableAgentCodes($dataIsolation)['codes'];
+        $officialCodes = array_values(array_intersect($agentCodes, $this->getOfficialAgentCodes($dataIsolation)));
+        $accessibleLookup = array_fill_keys(array_merge($readableCodes, $usableCodes), true);
 
         $accessibleAgentCodes = [];
         foreach ($agentCodes as $agentCode) {
@@ -175,7 +169,7 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
 
         return [
             'accessible_codes' => $accessibleAgentCodes,
-            'missing_codes' => $this->collectMissingCodes($agentCodes, array_values(array_unique(array_merge($foundAgentCodes, $officialAgentCodes)))),
+            'missing_codes' => $this->collectMissingCodes($agentCodes, array_merge($foundAgentCodes, $officialCodes)),
         ];
     }
 
