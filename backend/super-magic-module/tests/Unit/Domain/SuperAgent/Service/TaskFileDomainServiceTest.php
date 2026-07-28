@@ -20,6 +20,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileVersionRepositor
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceVersionRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use Hyperf\Context\ApplicationContext;
@@ -123,7 +124,73 @@ class TaskFileDomainServiceTest extends TestCase
         );
     }
 
-    private function createService(TaskFileRepositoryInterface $taskFileRepository): TaskFileDomainService
+    public function testGetFileInfoFromCloudStorageReadsSizeForOpaqueFileKey(): void
+    {
+        $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
+        $cloudFileRepository->expects($this->once())
+            ->method('getHeadObjectByCredential')
+            ->with('org-code', '/workspace/940615004084371457')
+            ->willReturn(['content_length' => 48]);
+
+        $service = $this->createService(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $cloudFileRepository
+        );
+
+        $fileInfo = $service->getFileInfoFromCloudStorage(
+            '1122.txt',
+            '/workspace/940615004084371457',
+            'org-code'
+        );
+
+        $this->assertSame(48, $fileInfo['size']);
+    }
+
+    public function testGetFileInfoFromCloudStorageSkipsHeadForDirectoryName(): void
+    {
+        $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
+        $cloudFileRepository->expects($this->never())
+            ->method('getHeadObjectByCredential');
+
+        $service = $this->createService(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $cloudFileRepository
+        );
+
+        $fileInfo = $service->getFileInfoFromCloudStorage(
+            'directory-without-trailing-slash',
+            '/workspace/opaque-directory-key',
+            'org-code'
+        );
+
+        $this->assertSame(0, $fileInfo['size']);
+    }
+
+    public function testGetFileInfoFromCloudStorageReturnsZeroWhenHeadFails(): void
+    {
+        $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
+        $cloudFileRepository->expects($this->once())
+            ->method('getHeadObjectByCredential')
+            ->willThrowException(new RuntimeException('head failed'));
+
+        $service = $this->createService(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $cloudFileRepository
+        );
+
+        $fileInfo = $service->getFileInfoFromCloudStorage(
+            'opaque-file.txt',
+            '/workspace/opaque-file-key',
+            'org-code'
+        );
+
+        $this->assertSame(0, $fileInfo['size']);
+    }
+
+    private function createService(
+        TaskFileRepositoryInterface $taskFileRepository,
+        ?CloudFileRepositoryInterface $cloudFileRepository = null
+    ): TaskFileDomainService
     {
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
@@ -133,13 +200,14 @@ class TaskFileDomainServiceTest extends TestCase
             $taskFileRepository,
             $this->createMock(WorkspaceVersionRepositoryInterface::class),
             $this->createMock(TopicRepositoryInterface::class),
-            $this->createMock(CloudFileRepositoryInterface::class),
+            $cloudFileRepository ?? $this->createMock(CloudFileRepositoryInterface::class),
             $this->createMock(ProjectRepositoryInterface::class),
             $this->createMock(ProjectForkRepositoryInterface::class),
             $this->createMock(SandboxGatewayInterface::class),
             $this->createMock(LockerInterface::class),
             $this->createMock(TaskFileVersionRepositoryInterface::class),
             $this->createMock(CacheInterface::class),
+            $this->createMock(AgentDomainService::class),
             $loggerFactory
         );
     }

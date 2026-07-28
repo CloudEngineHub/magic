@@ -1808,10 +1808,13 @@ class FileManagementAppService extends AbstractAppService
                 : null;  // null means keep original filename
 
             // 5. Detect cross-type replace (for version creation and event)
-            if ($newFileName !== null) {
-                $newFileExtension = pathinfo($newFileName, PATHINFO_EXTENSION);
+            if ($newFileName === null || $newFileName === $fileEntity->getFileName()) {
+                // file_key is an opaque storage identifier and cannot represent the file name.
+                $newFileExtension = pathinfo($fileEntity->getFileName(), PATHINFO_EXTENSION);
             } else {
-                $newFileExtension = pathinfo($requestDTO->getFileKey(), PATHINFO_EXTENSION);
+                // A different file_name means replacing and renaming the current file.
+                // The domain service checks whether the target name conflicts with another file.
+                $newFileExtension = pathinfo($newFileName, PATHINFO_EXTENSION);
             }
             $oldFileExtension = $fileEntity->getFileExtension();
             $isCrossTypeReplace = ($oldFileExtension !== $newFileExtension);
