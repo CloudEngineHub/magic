@@ -570,6 +570,7 @@
 	},
 	"zoom": {
 		"fitToScreen": "适配屏幕",
+		"minimap": "小地图",
 		"zoomIn": "放大",
 		"zoomOut": "缩小",
 		"zoomTo": "缩放至{{percent}}%"

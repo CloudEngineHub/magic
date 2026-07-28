@@ -547,6 +547,7 @@
 	},
 	"zoom": {
 		"fitToScreen": "Fit to Screen",
+		"minimap": "Minimap",
 		"zoomIn": "Zoom In",
 		"zoomOut": "Zoom Out",
 		"zoomTo": "Zoom to {{percent}}%"

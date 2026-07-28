@@ -1,6 +1,6 @@
 import { useRef, forwardRef, useCallback } from "react"
 import { useMount, useUnmount, useUpdateEffect } from "ahooks"
-import Zoom from "../../ui/canvas-editor/zoom/index"
+import ViewportControls from "../../ui/canvas-editor/viewport-controls"
 import Tools from "../../ui/toolbar/index"
 import Layers from "../../ui/layers/index"
 import ElementTools from "../../ui/element-toolbar/index"
@@ -238,7 +238,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{!readonly && <Tools />}
 			{!readonly && <PluginPanel />}
 			{!readonly && <CanvasTips />}
-			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
+			<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
 		</FloatingUIProvider>
 	)
 })

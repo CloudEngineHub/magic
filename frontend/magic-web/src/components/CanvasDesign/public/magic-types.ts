@@ -1248,6 +1248,8 @@ export type IdentifyImageMarkResponse =
  */
 export interface CanvasDesignStorageData {
 	viewport?: ViewportState
+	/** 当前设计项目的小地图面板是否展开 */
+	minimapOpen?: boolean
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
