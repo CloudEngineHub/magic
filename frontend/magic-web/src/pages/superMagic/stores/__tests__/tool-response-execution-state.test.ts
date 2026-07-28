@@ -1337,10 +1337,12 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
-		expect(getNode(store, "fast-tool-response")).toBeUndefined()
+		expect(getNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
 		expect(
-			arrivals.events.some((event) => event.message.app_message_id === "fast-tool-response"),
-		).toBe(false)
+			arrivals.events.filter(
+				(event) => event.message.app_message_id === "fast-tool-response",
+			),
+		).toHaveLength(1)
 
 		store.enqueueMessage(
 			TOPIC_ID,

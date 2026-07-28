@@ -607,7 +607,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if ((!streamState && !allowMissingStreamState) || streamState?.isFinalMessageReceived)
 			return
 		if (topicMeta.syncState === "syncing") return
-		if (topicId !== this.activeTopicId || topicMeta.timer) return
+		if (topicId !== this.activeTopicId) return
 		const recoveryState = this.ensureStreamRecoveryState(topicId, correlationId)
 		if (recoveryState.status === "failed") return
 		if (recoveryState.status === "recovering") return
@@ -621,10 +621,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			return
 		}
 
-		const recoveryDelay = Math.min(
+		const recoveryDeadline = Math.min(
 			STREAM_RECOVERY_TIMEOUT_MS * 2 ** recoveryState.attempts,
 			STREAM_RECOVERY_MAX_BACKOFF_MS,
-			STREAM_RECOVERY_TOTAL_BUDGET_MS - elapsedMs,
+			STREAM_RECOVERY_TOTAL_BUDGET_MS,
+		)
+		// Recovery is anchored to the latest effective network/canonical progress. Rendering
+		// time consumes the same budget and must not start a fresh full timeout afterwards.
+		const recoveryDelay = Math.max(
+			Math.min(recoveryDeadline - elapsedMs, STREAM_RECOVERY_TOTAL_BUDGET_MS - elapsedMs),
+			0,
 		)
 		this.markStreamRecoveryWaiting(topicId, correlationId)
 		recoveryState.watchdogTimer = setTimeout(() => {
@@ -643,8 +649,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					currentRecoveryState !== recoveryState ||
 					currentRecoveryState.status === "failed" ||
 					topicMeta.syncState === "syncing" ||
-					topicId !== this.activeTopicId ||
-					topicMeta.timer
+					topicId !== this.activeTopicId
 				)
 					return
 
@@ -818,6 +823,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				syncContext?.generation === generation ? syncContext.correlationIds : undefined,
 			)
 		} else {
+			// Authoritative sync is a render barrier. Finals that depend on a local
+			// StreamState must be consumed only after the generation becomes idle, so
+			// startStreamRendering can create the real card/app-message alias normally.
+			const buffer = this.getTopicBuffer(topicId)
+			buffer.isProcessing = false
+			this.processMessageBuffer(topicId)
 			this.resumeTopicAfterSync(
 				topicId,
 				syncContext?.generation === generation
@@ -1002,10 +1013,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const previousMessages = this.messages.get(topicId) || []
 		const retainedMessages = previousMessages.filter(
 			(message) =>
-				!Boolean(
+				!(
 					message.role === "assistant" &&
 					message.topic_id === topicId &&
-					discardedCorrelationIds.has(message.correlation_id),
+					discardedCorrelationIds.has(message.correlation_id)
 				),
 		)
 		this.removeTopicMessageNodesOutsideSnapshot(topicId, previousMessages, retainedMessages)
@@ -1098,6 +1109,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		)
 		runInAction(() => {
 			const snapshotMessages = (messages || []).slice()
+			const snapshotLatestSeqId = snapshotMessages.reduce((latestSeqId, envelope) => {
+				const currentSeqId = String(envelope?.seq?.seq_id || "")
+				if (!currentSeqId) return latestSeqId
+				if (!latestSeqId || compareMessageSeqId(currentSeqId, latestSeqId) > 0) {
+					return currentSeqId
+				}
+				return latestSeqId
+			}, "")
 			const authoritativeMessages: MessageItem[] =
 				appliedMode === "merge" ? previousMessages.slice() : []
 			const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
@@ -1226,21 +1245,30 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			})
 
 			// HTTP 快照不包含仍在本地流式生成、尚未具备服务端终态的占位卡时，
-			// 该临时卡作为本地 overlay 保留；其他不在快照中的历史消息由 replacement 删除。
+			// 该临时卡作为本地 overlay 保留。WS/IM 已持久落地且 seq 高于本次快照
+			// 水位的消息同样属于并发增量，不能被稍早生成的 authoritative 响应删除。
 			if (appliedMode === "replace")
 				previousMessages.forEach((message) => {
-					if (
-						message.role !== "assistant" ||
-						!message.correlation_id ||
-						!syncTopicMeta.content.has(message.correlation_id)
-					)
-						return
 					const hasSnapshotIdentity = authoritativeMessages.some(
 						(candidate) =>
 							candidate.app_message_id === message.app_message_id ||
-							candidate.correlation_id === message.correlation_id,
+							(Boolean(message.correlation_id) &&
+								candidate.role === "assistant" &&
+								candidate.correlation_id === message.correlation_id),
 					)
-					if (!hasSnapshotIdentity) {
+					if (hasSnapshotIdentity) return
+
+					const isStreamingOverlay = Boolean(
+						message.role === "assistant" &&
+						message.correlation_id &&
+						syncTopicMeta.content.has(message.correlation_id),
+					)
+					const isNewerPersistentMessage = Boolean(
+						snapshotLatestSeqId &&
+						message.seq_id &&
+						compareMessageSeqId(message.seq_id, snapshotLatestSeqId) > 0,
+					)
+					if (isStreamingOverlay || isNewerPersistentMessage) {
 						this.upsertAuthoritativeMessage(authoritativeMessages, message)
 					}
 				})
@@ -1282,15 +1310,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				// 同时由 processMessageBuffer 跳过已确认终态的重复 assistant 消息。
 				const buffer = this.getTopicBuffer(topicId)
 				buffer.isProcessing = false
-				this.processMessageBuffer(topicId)
-				const topicMeta = this.getTopicMetadata(topicId)
-				if (
-					topicId === this.activeTopicId &&
-					topicMeta.content.size > 0 &&
-					!topicMeta.timer
-				) {
-					const nextCorrelationId = topicMeta.content.keys().next().value
-					if (nextCorrelationId) this.startStreamRendering(topicId, nextCorrelationId)
+				// During an authoritative generation, completeTopicSync owns the release
+				// order. Processing here would hit the sync render barrier before the real
+				// Assistant identity/card has been established.
+				if (syncTopicMeta.syncState !== "syncing") {
+					this.processMessageBuffer(topicId)
+					const topicMeta = this.getTopicMetadata(topicId)
+					if (
+						topicId === this.activeTopicId &&
+						topicMeta.content.size > 0 &&
+						!topicMeta.timer
+					) {
+						const nextCorrelationId = topicMeta.content.keys().next().value
+						if (nextCorrelationId) this.startStreamRendering(topicId, nextCorrelationId)
+					}
 				}
 			}
 		})
@@ -1672,10 +1705,23 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			)
 		})
 
+		if (!isFinalChunk && hasEffectiveProgress) {
+			// Arm recovery from chunk receipt even while the typewriter is still projecting.
+			// Only later effective network/canonical progress may reset this correlation clock.
+			this.scheduleStreamRecovery(topicId, messageChunk.correlation_id)
+		}
+
 		// Anonymous argument slots are canonical-only state. Do not create a message
 		// card or typewriter timer until content, reasoning, or a stable tool id exists.
 		const hasProjectableTools = this.getProjectableToolCalls(streamState.tool_calls).length > 0
 		if (streamState.content || streamState.reasoning_content || hasProjectableTools) {
+			if (isFinalChunk && topicMeta.timer) {
+				// A topic has one render timer, but a completed correlation must not wait
+				// forever behind an unrelated stream that may never receive Final. Pause the
+				// current projection; completing this Final resumes the remaining StreamState.
+				clearTimeout(topicMeta.timer)
+				topicMeta.timer = null
+			}
 			this.startStreamRendering(topicId, stableAppMessageId)
 		}
 		return true
@@ -2917,8 +2963,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		)
 		const routedFinalNode = {
 			...messageNode,
-			// Store 的消息归属由 enqueueMessage 的外层 topic 决定，不能被内层 Agent topic 覆盖。
-			topic_id: topicId,
+			// Store bucket/card ownership comes from enqueueMessage(topicId), while the
+			// canonical Agent node retains its inner business topic when the server sent one.
+			topic_id: messageNode.topic_id || topicId,
 			...(correlationId ? { correlation_id: correlationId } : {}),
 		} as RawSuperMagicMessageNode
 		const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(
@@ -2997,11 +3044,38 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.processMessageBuffer(topicId)
 	}
 
+	/**
+	 * A persistent message without StreamState is already canonical and may bypass an
+	 * unrelated Assistant animation. Stream-bound Finals stay ordered until the current
+	 * render/sync barrier is released; this avoids head-of-line starvation without adding
+	 * a second queue or changing message ordering inside either class.
+	 */
+	private getNextProcessableBufferIndex(
+		topicId: string,
+		messages: RawSuperMagicMessageEnvelope[],
+	): number {
+		const topicMeta = this.getTopicMetadata(topicId)
+		return messages.findIndex((envelope) => {
+			const messageNode = getRawMessageNode(envelope?.seq?.message)
+			if (messageNode?.role !== "assistant") return true
+
+			const correlationId = String(messageNode.correlation_id || "")
+			const streamState = correlationId
+				? this.getStreamState(topicId, correlationId)
+				: undefined
+			if (!streamState) return true
+
+			return topicMeta.syncState !== "syncing" && !topicMeta.timer
+		})
+	}
+
 	private processMessageBuffer(topicId: string) {
 		const buffer = this.getTopicBuffer(topicId)
 		if (buffer.messages.length > 0 && !buffer.isProcessing) {
+			const nextMessageIndex = this.getNextProcessableBufferIndex(topicId, buffer.messages)
+			if (nextMessageIndex < 0) return
 			buffer.isProcessing = true
-			const nextMessage = buffer.messages.shift()
+			const [nextMessage] = buffer.messages.splice(nextMessageIndex, 1)
 
 			const messageNode = getRawMessageNode(nextMessage?.seq?.message)
 
@@ -3351,7 +3425,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		const progressed = this.resumeFromCurrentStateV2(topicId, correlationId)
-		if (progressed) this.clearStreamRecoveryTimer(topicId, correlationId)
 
 		if (streamState.isFinalMessageReceived && streamState.stage === "done") {
 			const isStreamContentSame = streamState.content === cache?.content

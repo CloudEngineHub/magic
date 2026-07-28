@@ -299,6 +299,12 @@ function getUiMessages(store: SuperMagicStore, topicId = TOPIC_A): Array<Record<
 	return messagesConverter(getMessageRecords(store, topicId)) as Array<Record<string, unknown>>
 }
 
+function getBufferedAppMessageIds(store: SuperMagicStore, topicId = TOPIC_A): string[] {
+	return (store.buffer.get(topicId)?.messages ?? [])
+		.map((message) => (message as RawSuperMagicMessageEnvelope).seq?.message?.app_message_id)
+		.filter((appMessageId): appMessageId is string => typeof appMessageId === "string")
+}
+
 function getEmbeddedToolState(
 	store: SuperMagicStore,
 	toolId = "tool-1",
@@ -627,14 +633,18 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		store.receiveChunk(createChunk({ content: "target draft" }))
 		const generation = store.beginTopicSync(TOPIC_A)
-		store.initializeMessages(TOPIC_A, [
-			createEnvelope({
-				appMessageId: "unrelated-app",
-				correlationId: "unrelated-correlation",
-				seqId: "200",
-				content: "unrelated",
-			}),
-		])
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "unrelated-app",
+					correlationId: "unrelated-correlation",
+					seqId: "200",
+					content: "unrelated",
+				}),
+			],
+			{ mode: "replace", syncGeneration: generation },
+		)
 		expect(
 			store.completeTopicSync(TOPIC_A, generation, {
 				succeeded: true,
@@ -649,7 +659,121 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			advanceUntilRecovery(recovery.events, 1, INITIAL_RECOVERY_OBSERVATION_MS),
 		).toBeDefined()
 		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "target-app",
+				correlationId: CORRELATION_ID,
+				seqId: "201",
+				content: "target canonical",
+			}),
+		)
+		advanceRendering()
+
+		expect(getNode(store, "target-app")?.content).toBe("target canonical")
+		expect(getNode(store, CORRELATION_ID)?.content).toBe("target canonical")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		recovery.unsubscribe()
+	})
+
+	it("missing Final 触发 recovery 后，HTTP Assistant 完成 canonical 结算并释放 buffer。", () => {
+		const store = createStore()
+		const recoveryEvents: StreamRecoveryRequestPayload[] = []
+		const arrivals = collectTopicArrivals(store)
+		const recoveredAssistant = createEnvelope({
+			appMessageId: "recovered-real-app",
+			correlationId: CORRELATION_ID,
+			seqId: "200",
+			content: "authoritative recovered content",
+		})
+		const followingAssistant = createEnvelope({
+			appMessageId: "following-app",
+			correlationId: "following-correlation",
+			seqId: "202",
+			content: "following canonical content",
+		})
+		const queuedAssistant = createEnvelope({
+			appMessageId: "queued-final-app",
+			correlationId: "queued-final-correlation",
+			seqId: "201",
+			content: "queued canonical content",
+		})
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			recoveryEvents.push(payload)
+			const syncGeneration = store.beginTopicSync(payload.topicId)
+			// Simulate the authoritative HTTP response for A only. B must survive in the pre-existing buffer.
+			store.initializeMessages(payload.topicId, [recoveredAssistant], {
+				mode: "replace",
+				syncGeneration,
+			})
+			store.completeTopicSync(payload.topicId, syncGeneration, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "200",
+			})
+		})
+
+		store.receiveChunk(createChunk({ content: "local draft without Final" }))
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeDefined()
+		// A second real stream contributes a Final at the queue head while A still owns the topic timer.
+		store.receiveChunk(
+			createChunk({
+				correlationId: "queued-final-correlation",
+				content: "queued draft",
+			}),
+		)
+		store.enqueueMessage(TOPIC_A, queuedAssistant)
+		store.enqueueMessage(TOPIC_A, followingAssistant)
+		// C 没有 StreamState，不能被前序 correlation 的动画或 Final 队头阻塞。
+		expect(getNode(store, "following-app")?.content).toBe("following canonical content")
+		expect(getMessageRecords(store)).toEqual(
+			expect.arrayContaining([expect.objectContaining({ app_message_id: "following-app" })]),
+		)
+		expect(
+			arrivals.events.filter((event) => event.message.app_message_id === "following-app"),
+		).toHaveLength(1)
+		expect(getNode(store, "queued-final-app")).toBeUndefined()
+		expect(getBufferedAppMessageIds(store)).toContain("queued-final-app")
+		expect(getBufferedAppMessageIds(store)).not.toContain("following-app")
+
+		expect(
+			advanceUntilRecovery(recoveryEvents, 1, INITIAL_RECOVERY_OBSERVATION_MS),
+		).toBeDefined()
+		advanceRendering()
+
+		expect(recoveryEvents).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
+		expect(getNode(store, "recovered-real-app")?.content).toBe(
+			"authoritative recovered content",
+		)
+		expect(getNode(store, CORRELATION_ID)?.content).toBe("authoritative recovered content")
+		expect(
+			getUiMessages(store).filter(
+				(message) =>
+					message.role === "assistant" && message.correlation_id === CORRELATION_ID,
+			),
+		).toHaveLength(1)
+		expect(getNode(store, "queued-final-app")?.content).toBe("queued canonical content")
+		expect(getNode(store, "following-app")?.content).toBe("following canonical content")
+		expect(getMessageRecords(store)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ app_message_id: "recovered-real-app" }),
+				expect.objectContaining({ app_message_id: "queued-final-app" }),
+				expect.objectContaining({ app_message_id: "following-app" }),
+			]),
+		)
+		expect(store.buffer.get(TOPIC_A)?.messages ?? []).toHaveLength(0)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(getStreamRecoveryState(store)).toBeUndefined()
+		expect(store.topicMeta.get(TOPIC_A)?.timer).toBeNull()
+		expect(store.topicMeta.get(TOPIC_A)?.recoveryTimer).toBeNull()
+		expect(
+			arrivals.events.filter((event) => event.message.app_message_id === "following-app"),
+		).toHaveLength(1)
+		unsubscribe()
+		arrivals.unsubscribe()
 	})
 
 	it("完整 HTTP 请求返回空 authoritative snapshot 时清空 topic。", () => {
@@ -693,6 +817,12 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				correlationId: "buffer-blocker-correlation",
 				seqId: "199",
 				content: "buffer blocker final",
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				correlationId: "buffered-before-sync-correlation",
+				content: "buffered before sync draft",
 			}),
 		)
 		store.enqueueMessage(

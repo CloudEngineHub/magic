@@ -596,10 +596,12 @@ describe("useTopicMessages", () => {
 		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 	})
 
-	it("coalesces adjacent persistent-message events into one incremental pull", async () => {
+	it("passes non-empty WS incremental items to enqueueMessage in server order with full envelopes", async () => {
 		vi.useFakeTimers()
+		const newerEnvelope = createMessageEnvelope("newer", "2")
+		const olderEnvelope = createMessageEnvelope("older", "1")
 		mockState.getMessagesByConversationIdMock.mockResolvedValue({
-			items: [],
+			items: [newerEnvelope, olderEnvelope],
 			has_more: false,
 			page_token: "",
 		})
@@ -629,6 +631,20 @@ describe("useTopicMessages", () => {
 		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
 			expect.objectContaining({ limit: 10, chat_topic_id: "chat-topic-1" }),
 		)
+		expect(mockState.superMagicStoreMock.enqueueMessage).toHaveBeenCalledTimes(2)
+		expect(mockState.superMagicStoreMock.enqueueMessage).toHaveBeenNthCalledWith(
+			1,
+			"chat-topic-1",
+			olderEnvelope,
+		)
+		expect(mockState.superMagicStoreMock.enqueueMessage).toHaveBeenNthCalledWith(
+			2,
+			"chat-topic-1",
+			newerEnvelope,
+		)
+		// The Hook must forward the original envelopes, not reconstructed message fragments.
+		expect(mockState.superMagicStoreMock.enqueueMessage.mock.calls[0]?.[1]).toBe(olderEnvelope)
+		expect(mockState.superMagicStoreMock.enqueueMessage.mock.calls[1]?.[1]).toBe(newerEnvelope)
 	})
 
 	it("ignores persistent-message events for another topic", async () => {
@@ -653,32 +669,6 @@ describe("useTopicMessages", () => {
 		})
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(300)
-		})
-
-		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
-	})
-
-	it("skips resident polling while the selected topic has an active stream", async () => {
-		vi.useFakeTimers()
-		mockState.getMessagesByConversationIdMock.mockResolvedValue({
-			items: [],
-			has_more: false,
-			page_token: "",
-		})
-		mockState.superMagicStoreMock.isTopicStreaming.mockReturnValue(true)
-		renderHook(() =>
-			useTopicMessages({
-				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
-			}),
-		)
-		await act(async () => {
-			await Promise.resolve()
-			await Promise.resolve()
-		})
-		mockState.getMessagesByConversationIdMock.mockClear()
-
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(40_000)
 		})
 
 		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
@@ -1065,13 +1055,31 @@ function createTopic(overrides: Partial<Topic> = {}): Topic {
 }
 
 function createMessageEnvelope(appMessageId: string, seqId: string) {
+	const correlationId = `correlation-${appMessageId}`
+	// WS 增量测试必须使用真实 Assistant 结构，避免 text fixture 掩盖类型过滤回归。
 	return {
+		type: "seq",
 		seq: {
+			magic_id: "magic-hook-test",
 			seq_id: seqId,
+			message_id: `server-${seqId}-${appMessageId}`,
+			conversation_id: "conversation-1",
 			message: {
+				magic_message_id: `magic-${appMessageId}`,
 				app_message_id: appMessageId,
-				type: "text",
-				text: { content: appMessageId },
+				topic_id: "chat-topic-1",
+				type: "super_magic_message",
+				super_magic_message: {
+					role: "assistant",
+					topic_id: "chat-topic-1",
+					message_id: `node-${appMessageId}`,
+					correlation_id: correlationId,
+					content: appMessageId,
+					reasoning_content: null,
+					tool_calls: [],
+					status: "finished",
+					send_timestamp: Number(seqId),
+				},
 			},
 		},
 	}

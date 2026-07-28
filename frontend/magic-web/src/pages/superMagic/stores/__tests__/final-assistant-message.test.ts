@@ -1078,6 +1078,10 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(cards).toHaveLength(1)
 		expect(cards[0]?.app_message_id).toBe("real-app-id")
 		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+		expect(store.messageMap.get("real-app-id")).toBeDefined()
+		expect(getMessageRecords(store)).toMatchObject([
+			{ app_message_id: "real-app-id", correlation_id: CORRELATION_ID },
+		])
 		// D5：canonical Final 不要求继续复用临时 placeholder 对象引用。
 	})
 
@@ -1152,6 +1156,61 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+	})
+
+	it("持久 Assistant 结算后，低序号 chunk、重复 chunk 和旧 Final 都不能删除或降级 canonical。", () => {
+		const store = createStore()
+		const canonicalEnvelope = createFinalEnvelope({
+			appMessageId: "durable-app-id",
+			seqId: "200",
+			content: "durable canonical",
+			nodeStatus: "finished",
+		})
+		const duplicateChunk = createChunk({ i: 1, content: " accepted before Final" })
+		const expectDurableCanonical = () => {
+			expect(getNode(store, "durable-app-id")).toMatchObject({
+				content: "durable canonical",
+				status: "finished",
+			})
+			expect(getNode(store, CORRELATION_ID)).toMatchObject({
+				content: "durable canonical",
+				status: "finished",
+			})
+			expect(getAssistantCards(store)).toMatchObject([{ app_message_id: "durable-app-id" }])
+			expect(getMessageRecords(store)).toMatchObject([
+				{ app_message_id: "durable-app-id", correlation_id: CORRELATION_ID, seq_id: "200" },
+			])
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		}
+
+		store.receiveChunk(createChunk({ i: 0, content: "draft" }))
+		store.receiveChunk(duplicateChunk)
+		store.enqueueMessage(TOPIC_ID, canonicalEnvelope)
+		advanceRendering()
+		expectDurableCanonical()
+
+		// A stale sequence with mutated content must not be treated as a legitimate retry.
+		store.receiveChunk(createChunk({ i: 0, content: "late low-sequence mutation" }))
+		advanceRendering(100)
+		expectDurableCanonical()
+
+		// An exact replay of the last accepted chunk exercises deduplication independently.
+		store.receiveChunk(createChunk({ i: 1, content: " accepted before Final" }))
+		advanceRendering(100)
+		expectDurableCanonical()
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				appMessageId: "durable-app-id",
+				seqId: "199",
+				content: "stale Final",
+				nodeStatus: "running",
+			}),
+		)
+		advanceRendering()
+		expectDurableCanonical()
 	})
 
 	it("同一 appMessageId 的更高 seq Final 不得被重复判断跳过。", () => {

@@ -311,7 +311,18 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(getNode(store, "shared-correlation")?.content).toBe("new")
-		expect(getNode(store, "app-old")).toBe(getNode(store, "app-new"))
+		expect(getNode(store, "app-new")?.content).toBe("new")
+		expect(getNode(store, "app-old")).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) || []).filter(
+				(message) =>
+					message.role === "assistant" && message.correlation_id === "shared-correlation",
+			),
+		).toEqual([
+			expect.objectContaining({
+				app_message_id: "app-new",
+			}),
+		])
 	})
 
 	it("`isProcessing=true` 后异常返回，未恢复为 false。", () => {
@@ -374,6 +385,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 	it("队头 assistant 永不完成，后续消息永久阻塞。", () => {
 		const store = createStore()
+		const arrivals = collectArrivals(store)
 
 		startBlockingAssistantStream(store)
 		store.enqueueMessage(
@@ -388,6 +400,18 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering(32)
 
 		expect(getNode(store, "correlation-after-blocker")?.content).toBe("must not starve")
+		expect(
+			store.messages
+				.get(TOPIC_A)
+				?.some((message) => message.app_message_id === "message-after-blocker"),
+		).toBe(true)
+		expect(store.messageMap.get("message-after-blocker")).toBeDefined()
+		expect(
+			arrivals.events.filter(
+				(event) => event.message.app_message_id === "message-after-blocker",
+			),
+		).toHaveLength(1)
+		arrivals.unsubscribe()
 	})
 
 	it("tool response 被排在永不完成的 assistant 后面。", () => {
@@ -457,7 +481,14 @@ describe("SuperMagicStore / Message Buffer", () => {
 		}
 		settleRendering(100)
 
-		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["10", "20", "30"])
+		// Topic listeners observe raw canonical arrival order. UI/Store projection is
+		// independently sorted by seq_id after each message is committed.
+		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["30", "10", "20"])
+		expect(
+			(store.messages.get(TOPIC_A) || [])
+				.filter((message) => message.role === "tool")
+				.map((message) => message.seq_id),
+		).toEqual(["10", "20", "30"])
 		arrivals.unsubscribe()
 	})
 
