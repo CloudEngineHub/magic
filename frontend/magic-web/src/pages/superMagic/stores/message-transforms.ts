@@ -218,6 +218,7 @@ export function createStreamState(): StreamState {
 		currentToolIndex: 0,
 		tool_calls: [],
 		isFinalMessageReceived: false,
+		finalCatchupDeadlineAt: null,
 		recoveryAttempts: 0,
 	}
 }

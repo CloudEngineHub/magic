@@ -10,7 +10,7 @@ import {
 	resolveCrewDomainEvent,
 	resolveTaskDomainEvent,
 } from "./listener-registry"
-import { persistMessageToStorage } from "./persistence"
+import { persistMessagesToStorage, type PersistableMessage } from "./persistence"
 import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
 import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
 import {
@@ -104,6 +104,13 @@ const STREAM_RECOVERY_TOTAL_BUDGET_MS = 30_000
 
 const TERMINAL_TOPIC_TASK_STATUSES = new Set(["finished", "error", "suspended"])
 
+/** 小 chunk 先短窗口合并，降低深序列化和 IndexedDB 事务频率。 */
+const STREAM_PERSISTENCE_BATCH_SIZE = 10
+const STREAM_PERSISTENCE_FLUSH_MS = 200
+
+/** Final 后保留短暂追赶动画，但必须在该预算内展示完整 canonical 内容。 */
+const FINAL_STREAM_CATCHUP_BUDGET_MS = 1_500
+
 /** Tool response 的 canonical 状态集合；response_missing 是 Store 内部生成的弱终态。 */
 const VALID_TOOL_RESPONSE_STATUSES = new Set([
 	"waiting",
@@ -151,6 +158,11 @@ interface SharedReplayState {
 	}
 }
 
+interface PersistenceQueue {
+	messages: PersistableMessage[]
+	timer: ReturnType<typeof setTimeout> | null
+}
+
 function compareMessageSeqId(left: string, right: string): number {
 	if (left === right) return 0
 	const normalizedLeft = left.replace(/^0+(?=\d)/, "")
@@ -184,6 +196,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private latestToolResponseSeqIds = new Map<string, Map<string, string>>()
 	/** 分享消息会被整批、逐条和旧前缀重复回放；该 sidecar 只记录单 topic 的顺序与待结算工具。 */
 	private sharedReplayStates = new Map<string, SharedReplayState>()
+	/** 持久化是诊断旁路；按 Store 实例隔离，避免不同会话共享未 flush 的 chunk。 */
+	private persistenceQueues = new Map<string, PersistenceQueue>()
 	private onServerMessagesConfirmedCallbacks = new Set<
 		(payload: ServerMessagesConfirmedPayload) => void
 	>()
@@ -234,6 +248,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamChunkLedgers: false,
 				latestToolResponseSeqIds: false,
 				sharedReplayStates: false,
+				persistenceQueues: false,
 				streamRecoveryStates: false,
 			},
 			{ autoBind: true },
@@ -318,6 +333,35 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			: monotonicElapsedMs
 	}
 
+	private queueMessagePersistence(
+		topicId: string,
+		message: PersistableMessage,
+		flushImmediately = false,
+	) {
+		const queue = this.persistenceQueues.get(topicId) || { messages: [], timer: null }
+		queue.messages.push(message)
+		this.persistenceQueues.set(topicId, queue)
+
+		if (flushImmediately || queue.messages.length >= STREAM_PERSISTENCE_BATCH_SIZE) {
+			this.flushMessagePersistence(topicId)
+			return
+		}
+		if (queue.timer) return
+
+		queue.timer = setTimeout(() => {
+			queue.timer = null
+			this.flushMessagePersistence(topicId)
+		}, STREAM_PERSISTENCE_FLUSH_MS)
+	}
+
+	private flushMessagePersistence(topicId: string) {
+		const queue = this.persistenceQueues.get(topicId)
+		if (!queue || queue.messages.length === 0) return
+		if (queue.timer) clearTimeout(queue.timer)
+		this.persistenceQueues.delete(topicId)
+		persistMessagesToStorage(topicId, queue.messages)
+	}
+
 	/**
 	 * 设置当前可见话题。切换后自动回放已完成的流式快照（场景 2）
 	 * 并恢复仍在进行中的流式渲染定时器（场景 1）。
@@ -325,6 +369,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	setActiveTopicId(topicId: string | null) {
 		const prevTopicId = this.activeTopicId
 		if (prevTopicId && prevTopicId !== topicId) {
+			this.flushMessagePersistence(prevTopicId)
 			const previousMeta = this.topicMeta.get(prevTopicId)
 			if (previousMeta) {
 				previousMeta.inactiveAt = Date.now()
@@ -711,6 +756,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** 取消仍在途的同步，使其后续响应只能被读取、不能再写回 store。 */
 	cancelTopicSync(topicId: string, generation: number) {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return
+		this.flushMessagePersistence(topicId)
 		const pendingFinalizations = this.pendingTopicSyncFinalizations.get(topicId)
 		if (pendingFinalizations?.generation === generation) {
 			this.pendingTopicSyncFinalizations.delete(topicId)
@@ -766,6 +812,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const isSuccessfulFinishedSync = Boolean(succeeded && isFinishedSync)
 		const isSuccessfulSuspendedSync = Boolean(succeeded && taskStatus === "suspended")
 		const isTerminalTopic = Boolean(taskStatus && TERMINAL_TOPIC_TASK_STATUSES.has(taskStatus))
+		if (isTerminalTopic) this.flushMessagePersistence(topicId)
 		const hasCurrentFinalizationSnapshot = Boolean(
 			isSuccessfulFinishedSync && pendingFinalizations?.generation === generation,
 		)
@@ -1543,7 +1590,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (chunkIndex < ledger.nextChunkIndex || ledger.pendingChunks.has(chunkIndex)) {
 			return
 		}
-		persistMessageToStorage(topicId, message)
+		this.queueMessagePersistence(topicId, message, Boolean(choice?.finish_reason))
 
 		runInAction(() => {
 			ledger.pendingChunks.set(chunkIndex, messageChunk)
@@ -1643,7 +1690,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (isFinalChunk) {
 			this.clearStreamRecoveryState(topicId, messageChunk.correlation_id)
 			topicMeta.isStream = false
-			streamState.isFinalMessageReceived = true
+			this.beginFinalCatchup(topicMeta, streamState)
 		} else {
 			if (hasEffectiveProgress) {
 				this.resetStreamRecoveryState(topicId, messageChunk.correlation_id)
@@ -2692,7 +2739,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		// 针对客户端的工具调用消息直接过滤
 		if (nextMessage?.type === "user_tool_call") {
-			persistMessageToStorage(topicId, message, true)
+			this.queueMessagePersistence(topicId, message, true)
 			return
 		}
 
@@ -2726,7 +2773,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 				const streamState = this.getStreamState(topicId, correlationId)
 				if (streamState) {
-					streamState.isFinalMessageReceived = true
+					this.beginFinalCatchup(this.getTopicMetadata(topicId), streamState)
 					if (this.hasDefinedFinalField(messageNode, "content")) {
 						streamState.content =
 							typeof messageNode.content === "string" ? messageNode.content : ""
@@ -2765,12 +2812,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 				const currentNode = this.messageMap.get(correlationId)
 				if (appMessageId && currentNode) this.messageMap.set(appMessageId, currentNode)
-				persistMessageToStorage(topicId, message, true)
+				this.queueMessagePersistence(topicId, message, true)
 			}
 			return
 		}
 
-		persistMessageToStorage(topicId, message, true)
+		this.queueMessagePersistence(topicId, message, true)
 
 		if (nextMessage?.type === "rich_text") {
 			const topicId = nextMessage?.topic_id || ""
@@ -3294,7 +3341,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					return
 				}
 
-				streamState.isFinalMessageReceived = true
+				this.beginFinalCatchup(topicMeta, streamState)
 				if (topicMeta.timer) {
 					console.log(
 						"%c 【DEBUG】 消费队列 - 流式（等待流式完成）",
@@ -3904,7 +3951,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * - 最终快照中不存在的匿名或脏工具直接丢弃，避免幽灵工具进入 UI。
 	 */
 	private reconcileFinalToolCalls(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
-		const finalTools = this.dedupeFinalToolCallsById(this.getProjectableToolCalls(incoming))
+		const finalTools = this.dedupeFinalToolCallsById(
+			this.getFinalProjectableToolCalls(incoming),
+		)
 		if (finalTools.length === 0) return []
 
 		return finalTools.map((finalTool, incomingIndex) => {
@@ -3987,8 +4036,36 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return hasArguments && !toolId && !toolName
 	}
 
+	private getToolCallProjectionRejectionReason(toolCall: ToolCall | undefined) {
+		if (!String(toolCall?.id || "").trim()) return "missing-tool-id"
+		const fn = toolCall?.function as unknown
+		if (!fn || Array.isArray(fn) || typeof fn !== "object") return "invalid-function"
+		if (!String((fn as { name?: unknown }).name || "").trim()) {
+			return "missing-function-name"
+		}
+		return undefined
+	}
+
 	private isProjectableToolCall(toolCall: ToolCall | undefined) {
-		return Boolean(String(toolCall?.id || "").trim())
+		return this.getToolCallProjectionRejectionReason(toolCall) === undefined
+	}
+
+	private getFinalProjectableToolCalls(toolCalls: ToolCall[] = []): ToolCall[] {
+		return compactToolCalls(toolCalls).filter((toolCall, incomingIndex) => {
+			const reason = this.getToolCallProjectionRejectionReason(toolCall)
+			if (!reason) return true
+			// Anonymous slots are an existing streamed-arguments compatibility shape. They stay
+			// non-projectable without being reported as a malformed stable tool contract.
+			if (reason === "missing-tool-id") return false
+
+			console.warn("[SuperMagicStore] invalid final tool call", {
+				toolCallId: String(toolCall?.id || ""),
+				incomingIndex,
+				reason,
+				resolution: "exclude-from-canonical-projection",
+			})
+			return false
+		})
 	}
 
 	private getProjectableToolCalls(toolCalls: ToolCall[] = []): ToolCall[] {
@@ -4073,7 +4150,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			console.log("【LS】 reasoning_content", streamState.stage)
 			const rcStep = adjustSliceEnd(
 				remainingReasoningContent,
-				this.getStreamRenderStep(topicId, remainingReasoningContent.length),
+				this.getStreamRenderStep(topicId, remainingReasoningContent.length, streamState),
 			)
 			messageMap.reasoning_content += remainingReasoningContent.slice(0, rcStep)
 			this.messageMap.set(appMessageId, messageMap)
@@ -4098,7 +4175,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			console.log("【LS】 content", streamState.stage)
 			const cStep = adjustSliceEnd(
 				remainingContent,
-				this.getStreamRenderStep(topicId, remainingContent.length),
+				this.getStreamRenderStep(topicId, remainingContent.length, streamState),
 			)
 			messageMap.content += remainingContent.slice(0, cStep)
 			this.messageMap.set(appMessageId, messageMap)
@@ -4158,9 +4235,28 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return false
 	}
 
-	private getStreamRenderStep(topicId: string, remaining: number): number {
+	private beginFinalCatchup(topicMeta: TopicMeta, streamState: StreamState) {
+		streamState.isFinalMessageReceived = true
+		if (topicMeta.renderPolicy === "instant") return
+		topicMeta.renderPolicy = "catchup"
+		streamState.finalCatchupDeadlineAt ??= getMonotonicNow() + FINAL_STREAM_CATCHUP_BUDGET_MS
+	}
+
+	private getStreamRenderStep(
+		topicId: string,
+		remaining: number,
+		streamState: StreamState,
+	): number {
 		const liveStep = getCharsPerTick(remaining)
 		if (this.getTopicMetadata(topicId).renderPolicy !== "catchup") return liveStep
+		if (streamState.finalCatchupDeadlineAt !== null) {
+			const remainingBudgetMs = Math.max(
+				streamState.finalCatchupDeadlineAt - getMonotonicNow(),
+				0,
+			)
+			const remainingFrames = Math.max(Math.ceil(remainingBudgetMs / 16), 1)
+			return Math.max(liveStep, Math.ceil(remaining / remainingFrames))
+		}
 		// 追平必须至少不慢于实时打字机；calculateBatchSize 负责放大小文本尾段的推进步长。
 		return Math.max(liveStep, calculateBatchSize(remaining, true))
 	}
@@ -4223,7 +4319,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 			if (currentArgs.length < finalArgs.length) {
 				const remaining = finalArgs.length - currentArgs.length
-				const step = this.getStreamRenderStep(topicId, remaining)
+				const step = this.getStreamRenderStep(topicId, remaining, streamState)
 				const safeEnd = adjustSliceEnd(finalArgs, currentArgs.length + step)
 				const nextChunk = finalArgs.slice(currentArgs.length, safeEnd)
 				set(messageMap, ["tool_calls", i, "function", "arguments"], currentArgs + nextChunk)

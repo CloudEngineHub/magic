@@ -163,6 +163,8 @@ export interface StreamState {
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
+	/** Final 到达后的视觉追赶截止时间；到期必须投影完整 canonical 内容。 */
+	finalCatchupDeadlineAt: number | null
 	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
 	recoveryAttempts: number
 	finalMessage?: StreamMessage
