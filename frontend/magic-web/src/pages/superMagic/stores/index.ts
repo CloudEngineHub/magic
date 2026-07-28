@@ -2624,6 +2624,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const appMessageId = message?.message?.app_message_id as string
 
 		const correlationId = messageNode?.correlation_id as string
+		const currentAssistantMessage =
+			messageNode?.role === "assistant"
+				? this.getLatestAssistantMessageForIdentity(msgCache, appMessageId, correlationId)
+				: undefined
+		if (currentAssistantMessage?.status === "revoked" && nextMessage.status !== "revoked") {
+			// A successful revoke is the authority barrier for its old Assistant generation.
+			// Reject late IM/WS revisions before persistence, tool-state updates, or listeners;
+			// HTTP initializeMessages remains able to restore the message after cancelUndoMessage.
+			return
+		}
 		const revisionDecision =
 			messageNode?.role === "assistant"
 				? this.getAssistantRevisionDecision(

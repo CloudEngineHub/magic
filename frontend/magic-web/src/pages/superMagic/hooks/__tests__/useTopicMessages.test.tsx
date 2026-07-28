@@ -123,18 +123,13 @@ describe("useTopicMessages", () => {
 		)
 	})
 
-	it("reports a finished completion barrier after resident polling succeeds without a tool response", async () => {
+	it("uses one recent incremental page as the finished resident-poll completion barrier", async () => {
 		vi.useFakeTimers()
 		const initialResponse = { items: [], has_more: false, page_token: "" }
-		const firstPollingResponse = {
-			items: [createMessageEnvelope("newer", "2")],
+		const pollingResponse = {
+			items: [createMessageEnvelope("newer", "2"), createMessageEnvelope("older", "1")],
 			has_more: true,
 			page_token: "page-2",
-		}
-		const finalPollingResponse = {
-			items: [createMessageEnvelope("older", "1")],
-			has_more: false,
-			page_token: "",
 		}
 		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce(initialResponse)
 
@@ -157,21 +152,14 @@ describe("useTopicMessages", () => {
 		mockState.superMagicStoreMock.completeTopicSync.mockClear()
 		mockState.superMagicStoreMock.cancelTopicSync.mockClear()
 		mockState.superMagicStoreMock.initializeMessages.mockClear()
-		let resolveFirstPollingRequest: ((value: typeof firstPollingResponse) => void) | undefined
-		let resolveFinalPollingRequest: ((value: typeof finalPollingResponse) => void) | undefined
-		mockState.getMessagesByConversationIdMock
-			.mockImplementationOnce(
-				() =>
-					new Promise((resolve) => {
-						resolveFirstPollingRequest = resolve
-					}),
-			)
-			.mockImplementationOnce(
-				() =>
-					new Promise((resolve) => {
-						resolveFinalPollingRequest = resolve
-					}),
-			)
+		mockState.superMagicStoreMock.enqueueMessage.mockClear()
+		let resolvePollingRequest: ((value: typeof pollingResponse) => void) | undefined
+		mockState.getMessagesByConversationIdMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolvePollingRequest = resolve
+				}),
+		)
 
 		rerender({
 			selectedTopic: createTopic({ task_status: TaskStatus.FINISHED }),
@@ -187,8 +175,9 @@ describe("useTopicMessages", () => {
 			expect.objectContaining({
 				chat_topic_id: "chat-topic-1",
 				conversation_id: "conversation-1",
-				limit: 30,
+				limit: 20,
 				order: "desc",
+				page_token: "",
 			}),
 		)
 		expect(mockState.superMagicStoreMock.beginTopicSync).toHaveBeenCalledTimes(1)
@@ -205,28 +194,18 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.beginTopicSync).toHaveBeenCalledTimes(1)
 
 		await act(async () => {
-			resolveFirstPollingRequest?.(firstPollingResponse)
+			resolvePollingRequest?.(pollingResponse)
 			await Promise.resolve()
 			await Promise.resolve()
 		})
-		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(2)
-		expect(mockState.getMessagesByConversationIdMock).toHaveBeenLastCalledWith(
-			expect.objectContaining({ page_token: "page-2", limit: 30 }),
-		)
+		// Resident polling is a bounded delta check. has_more belongs to history/recovery,
+		// so it must not make the timer walk the complete topic history.
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
-		expect(mockState.superMagicStoreMock.completeTopicSync).not.toHaveBeenCalled()
-
-		await act(async () => {
-			resolveFinalPollingRequest?.(finalPollingResponse)
-			await Promise.resolve()
-			await Promise.resolve()
-		})
-
-		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
-			"chat-topic-1",
-			[...firstPollingResponse.items, ...finalPollingResponse.items],
-			{ mode: "replace", syncGeneration: pollingGeneration },
-		)
+		expect(mockState.superMagicStoreMock.enqueueMessage.mock.calls).toEqual([
+			["chat-topic-1", pollingResponse.items[1]],
+			["chat-topic-1", pollingResponse.items[0]],
+		])
 
 		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
 			"chat-topic-1",
@@ -238,7 +217,7 @@ describe("useTopicMessages", () => {
 		)
 	})
 
-	it("fails finished polling without committing a partial authoritative snapshot", async () => {
+	it("keeps finished polling retryable when the recent incremental request fails", async () => {
 		vi.useFakeTimers()
 		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
@@ -260,15 +239,12 @@ describe("useTopicMessages", () => {
 		})
 
 		mockState.getMessagesByConversationIdMock.mockReset()
-		mockState.getMessagesByConversationIdMock
-			.mockResolvedValueOnce({
-				items: [createMessageEnvelope("partial", "2")],
-				has_more: true,
-				page_token: "page-2",
-			})
-			.mockRejectedValueOnce(new Error("finished polling second page failed"))
+		mockState.getMessagesByConversationIdMock.mockRejectedValueOnce(
+			new Error("finished polling failed"),
+		)
 		mockState.superMagicStoreMock.beginTopicSync.mockClear()
 		mockState.superMagicStoreMock.initializeMessages.mockClear()
+		mockState.superMagicStoreMock.enqueueMessage.mockClear()
 		mockState.superMagicStoreMock.completeTopicSync.mockClear()
 
 		rerender({ selectedTopic: createTopic({ task_status: TaskStatus.FINISHED }) })
@@ -279,15 +255,195 @@ describe("useTopicMessages", () => {
 		})
 
 		const generation = mockState.superMagicStoreMock.beginTopicSync.mock.results[0]?.value
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
 			"chat-topic-1",
 			generation,
 			expect.objectContaining({ succeeded: false, taskStatus: TaskStatus.FINISHED }),
 		)
+
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(20_000)
+			await Promise.resolve()
+		})
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(2)
 		expect(consoleErrorSpy).toHaveBeenCalled()
 		consoleErrorSpy.mockRestore()
 	})
+
+	it.fails(
+		"P1 contract: continues bounded polling pages until the local anchor is reached",
+		async () => {
+			const { existingMessages, poll } = await prepareFinishedPollingAnchorContract()
+			const firstPageItems = [
+				createMessageEnvelope("newest-4", "4"),
+				createMessageEnvelope("newest-3", "3"),
+			]
+			const secondPageItems = [
+				createMessageEnvelope("newest-2", "2"),
+				createMessageEnvelope("local-anchor", "1"),
+				createMessageEnvelope("older-than-anchor", "0"),
+			]
+			mockState.getMessagesByConversationIdMock
+				.mockResolvedValueOnce({
+					items: firstPageItems,
+					has_more: true,
+					page_token: "page-2",
+				})
+				.mockResolvedValueOnce({
+					items: secondPageItems,
+					has_more: true,
+					page_token: "page-3",
+				})
+
+			await poll()
+
+			expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(2)
+			expect(mockState.getMessagesByConversationIdMock).toHaveBeenNthCalledWith(
+				2,
+				expect.objectContaining({ limit: 20, page_token: "page-2" }),
+			)
+			// Only messages newer than the anchor are committed, in canonical ascending order.
+			expect(mockState.superMagicStoreMock.enqueueMessage.mock.calls).toEqual([
+				["chat-topic-1", secondPageItems[0]],
+				["chat-topic-1", firstPageItems[1]],
+				["chat-topic-1", firstPageItems[0]],
+			])
+			expect(mockState.superMagicStoreMock.messages.get("chat-topic-1")).toBe(
+				existingMessages,
+			)
+			expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+				"chat-topic-1",
+				expect.any(Number),
+				expect.objectContaining({ succeeded: true, taskStatus: TaskStatus.FINISHED }),
+			)
+		},
+	)
+
+	it.fails("P1 contract: commits no partial delta when a later anchor page fails", async () => {
+		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const { existingMessages, poll } = await prepareFinishedPollingAnchorContract()
+		mockState.getMessagesByConversationIdMock
+			.mockResolvedValueOnce({
+				items: [createMessageEnvelope("partial-new", "2")],
+				has_more: true,
+				page_token: "page-2",
+			})
+			.mockRejectedValueOnce(new Error("anchor continuation failed"))
+
+		await poll()
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(2)
+		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.messages.get("chat-topic-1")).toBe(existingMessages)
+		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+			"chat-topic-1",
+			expect.any(Number),
+			expect.objectContaining({ succeeded: false, taskStatus: TaskStatus.FINISHED }),
+		)
+		expect(consoleErrorSpy).toHaveBeenCalled()
+		consoleErrorSpy.mockRestore()
+	})
+
+	it.fails(
+		"P1 contract: stops at the polling page budget when the anchor is still missing",
+		async () => {
+			const { existingMessages, poll } = await prepareFinishedPollingAnchorContract()
+			mockState.getMessagesByConversationIdMock
+				.mockResolvedValueOnce({
+					items: [createMessageEnvelope("page-1-new", "4")],
+					has_more: true,
+					page_token: "page-2",
+				})
+				.mockResolvedValueOnce({
+					items: [createMessageEnvelope("page-2-new", "3")],
+					has_more: true,
+					page_token: "page-3",
+				})
+				.mockResolvedValueOnce({
+					items: [createMessageEnvelope("page-3-new", "2")],
+					has_more: true,
+					page_token: "page-4",
+				})
+
+			await poll()
+
+			// Three recent pages form the bounded P1 safety budget; page-4 belongs to explicit recovery.
+			expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(3)
+			expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
+			expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+			expect(mockState.superMagicStoreMock.messages.get("chat-topic-1")).toBe(
+				existingMessages,
+			)
+			expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+				"chat-topic-1",
+				expect.any(Number),
+				expect.objectContaining({ succeeded: false, taskStatus: TaskStatus.FINISHED }),
+			)
+		},
+	)
+
+	it.fails.each([
+		{
+			label: "the server omits the next page token",
+			responses: [
+				{
+					items: [createMessageEnvelope("missing-token-new", "2")],
+					has_more: true,
+					page_token: "",
+				},
+			],
+			expectedRequestCount: 1,
+		},
+		{
+			label: "the server repeats an already visited page token",
+			responses: [
+				{
+					items: [createMessageEnvelope("repeated-token-new-2", "3")],
+					has_more: true,
+					page_token: "page-2",
+				},
+				{
+					items: [createMessageEnvelope("repeated-token-new-1", "2")],
+					has_more: true,
+					page_token: "page-2",
+				},
+			],
+			expectedRequestCount: 2,
+		},
+	])(
+		"P1 contract: preserves the current list when $label",
+		async ({ responses, expectedRequestCount }) => {
+			const { existingMessages, poll } = await prepareFinishedPollingAnchorContract()
+			responses.forEach((response) => {
+				mockState.getMessagesByConversationIdMock.mockResolvedValueOnce(response)
+			})
+
+			await poll()
+
+			expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(
+				expectedRequestCount,
+			)
+			expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
+			expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+			expect(mockState.superMagicStoreMock.messages.get("chat-topic-1")).toBe(
+				existingMessages,
+			)
+			expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+				"chat-topic-1",
+				expect.any(Number),
+				expect.objectContaining({ succeeded: false, taskStatus: TaskStatus.FINISHED }),
+			)
+		},
+	)
 
 	it("ignores a late finished polling response after the same topic resumes running", async () => {
 		vi.useFakeTimers()
@@ -466,8 +622,12 @@ describe("useTopicMessages", () => {
 		mockState.superMagicStoreMock.beginTopicSync.mockClear()
 		mockState.superMagicStoreMock.completeTopicSync.mockClear()
 		mockState.superMagicStoreMock.cancelTopicSync.mockClear()
-		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce(emptyPollingResponse)
-		mockState.superMagicStoreMock.isTopicSyncCurrent.mockImplementationOnce(() => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createMessageEnvelope("incremental-throws", "2")],
+			has_more: false,
+			page_token: "",
+		})
+		mockState.superMagicStoreMock.enqueueMessage.mockImplementationOnce(() => {
 			throw new Error("incremental processing failed")
 		})
 
@@ -647,6 +807,58 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.enqueueMessage.mock.calls[1]?.[1]).toBe(newerEnvelope)
 	})
 
+	it("commits revoke refresh as one unfiltered authoritative batch", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		const revokedBatch = [
+			createMessageEnvelope("historical-revoked", "1", "revoked"),
+			createMessageEnvelope("normal", "2", "read"),
+			createMessageEnvelope("active-revoked", "3", "revoked"),
+		]
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: revokedBatch,
+			has_more: false,
+			page_token: "",
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+		mockState.superMagicStoreMock.enqueueMessage.mockClear()
+
+		await act(async () => {
+			await mockState.pubsubHandlers.get("Refresh_Topic_Messages")?.()
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				chat_topic_id: "chat-topic-1",
+				limit: 500,
+				order: "desc",
+			}),
+		)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledTimes(1)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			revokedBatch,
+			{ mode: "replace" },
+		)
+		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
+	})
+
 	it("ignores persistent-message events for another topic", async () => {
 		vi.useFakeTimers()
 		mockState.getMessagesByConversationIdMock.mockResolvedValue({
@@ -674,7 +886,7 @@ describe("useTopicMessages", () => {
 		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
 	})
 
-	it("stops finished polling after the first successful authoritative sync", async () => {
+	it("stops finished polling after the first successful incremental completion barrier", async () => {
 		vi.useFakeTimers()
 		mockState.getMessagesByConversationIdMock.mockResolvedValue({
 			items: [],
@@ -1044,6 +1256,48 @@ describe("useTopicMessages", () => {
 	})
 })
 
+async function prepareFinishedPollingAnchorContract(anchorAppMessageId = "local-anchor") {
+	vi.useFakeTimers()
+	mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+		items: [],
+		has_more: false,
+		page_token: "",
+	})
+	const { rerender } = renderHook(
+		({ selectedTopic }: { selectedTopic: Topic }) => useTopicMessages({ selectedTopic }),
+		{
+			initialProps: {
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			},
+		},
+	)
+	await act(async () => {
+		await Promise.resolve()
+		await Promise.resolve()
+	})
+
+	const existingMessages = [{ app_message_id: anchorAppMessageId }]
+	mockState.superMagicStoreMock.messages.set("chat-topic-1", existingMessages)
+	mockState.getMessagesByConversationIdMock.mockReset()
+	mockState.superMagicStoreMock.beginTopicSync.mockClear()
+	mockState.superMagicStoreMock.initializeMessages.mockClear()
+	mockState.superMagicStoreMock.enqueueMessage.mockClear()
+	mockState.superMagicStoreMock.completeTopicSync.mockClear()
+	rerender({ selectedTopic: createTopic({ task_status: TaskStatus.FINISHED }) })
+
+	return {
+		existingMessages,
+		poll: async () => {
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(20_000)
+				await Promise.resolve()
+				await Promise.resolve()
+				await Promise.resolve()
+			})
+		},
+	}
+}
+
 function createTopic(overrides: Partial<Topic> = {}): Topic {
 	return {
 		id: "topic-1",
@@ -1054,7 +1308,7 @@ function createTopic(overrides: Partial<Topic> = {}): Topic {
 	} as Topic
 }
 
-function createMessageEnvelope(appMessageId: string, seqId: string) {
+function createMessageEnvelope(appMessageId: string, seqId: string, status = "read") {
 	const correlationId = `correlation-${appMessageId}`
 	// WS 增量测试必须使用真实 Assistant 结构，避免 text fixture 掩盖类型过滤回归。
 	return {
@@ -1067,6 +1321,7 @@ function createMessageEnvelope(appMessageId: string, seqId: string) {
 			message: {
 				magic_message_id: `magic-${appMessageId}`,
 				app_message_id: appMessageId,
+				status,
 				topic_id: "chat-topic-1",
 				type: "super_magic_message",
 				super_magic_message: {

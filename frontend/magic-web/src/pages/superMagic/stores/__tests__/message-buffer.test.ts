@@ -41,6 +41,7 @@ interface EnvelopeOptions {
 	content?: string
 	role?: "assistant" | "tool" | "user"
 	status?: string
+	outerStatus?: ConversationMessageStatus
 	event?: string
 	toolCallId?: string
 }
@@ -58,6 +59,7 @@ function createEnvelope({
 	content = "message",
 	role = "assistant",
 	status = "finished",
+	outerStatus = ConversationMessageStatus.Read,
 	event,
 	toolCallId = "tool-1",
 }: EnvelopeOptions): RawSuperMagicMessageEnvelope {
@@ -98,7 +100,7 @@ function createEnvelope({
 				app_message_id: appMessageId,
 				sender_id: role === "tool" ? "tool-runner" : "assistant-1",
 				send_time: Number(seqId.replace(/\D/g, "")) || 1,
-				status: ConversationMessageStatus.Read,
+				status: outerStatus,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
@@ -513,6 +515,100 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["2", "10", "11"])
 		arrivals.unsubscribe()
+	})
+
+	it.each([
+		{
+			label: "历史撤回后存在普通消息",
+			statuses: [ConversationMessageStatus.Revoked, ConversationMessageStatus.Read],
+		},
+		{
+			label: "末尾存在连续撤回段",
+			statuses: [
+				ConversationMessageStatus.Read,
+				ConversationMessageStatus.Revoked,
+				ConversationMessageStatus.Revoked,
+			],
+		},
+		{
+			label: "历史撤回和当前撤回段同时存在",
+			statuses: [
+				ConversationMessageStatus.Revoked,
+				ConversationMessageStatus.Read,
+				ConversationMessageStatus.Revoked,
+			],
+		},
+	])("Canonical replace 在$label时保留全部消息事实。", ({ statuses }) => {
+		const store = createStore()
+		const envelopes = statuses.map((outerStatus, index) =>
+			createEnvelope({
+				appMessageId: `revoked-canonical-${index}`,
+				correlationId: `revoked-canonical-correlation-${index}`,
+				seqId: String(index + 1),
+				role: "user",
+				outerStatus,
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, envelopes, { mode: "replace" })
+		settleRendering()
+
+		expect((store.messages.get(TOPIC_A) || []).map((message) => message.status)).toEqual(
+			statuses,
+		)
+	})
+
+	it("批量 replace 与逐条 merge 对同一组撤回状态产生相同 Canonical 成员。", () => {
+		const createInitialMessages = () =>
+			["1", "2", "3"].map((seqId) =>
+				createEnvelope({
+					appMessageId: `revoked-equivalence-${seqId}`,
+					correlationId: `revoked-equivalence-correlation-${seqId}`,
+					seqId,
+					role: "user",
+				}),
+			)
+		const createRevokedRevision = (seqId: string) =>
+			createEnvelope({
+				appMessageId: `revoked-equivalence-${seqId}`,
+				correlationId: `revoked-equivalence-correlation-${seqId}`,
+				seqId,
+				role: "user",
+				outerStatus: ConversationMessageStatus.Revoked,
+			})
+		const initialMessages = createInitialMessages()
+		const expectedSnapshot = [
+			initialMessages[0],
+			createRevokedRevision("2"),
+			createRevokedRevision("3"),
+		]
+
+		const batchStore = createStore()
+		batchStore.initializeMessages(TOPIC_A, expectedSnapshot, { mode: "replace" })
+		settleRendering()
+
+		const incrementalStore = createStore()
+		incrementalStore.initializeMessages(TOPIC_A, createInitialMessages(), { mode: "replace" })
+		incrementalStore.initializeMessages(TOPIC_A, [createRevokedRevision("2")], {
+			mode: "merge",
+		})
+		incrementalStore.initializeMessages(TOPIC_A, [createRevokedRevision("3")], {
+			mode: "merge",
+		})
+		settleRendering()
+
+		const projectMembership = (store: SuperMagicStore) =>
+			(store.messages.get(TOPIC_A) || []).map((message) => ({
+				appMessageId: message.app_message_id,
+				status: message.status,
+			}))
+
+		expect(projectMembership(incrementalStore)).toEqual(projectMembership(batchStore))
+		expect(projectMembership(batchStore)).toEqual([
+			{ appMessageId: "revoked-equivalence-1", status: ConversationMessageStatus.Read },
+			{ appMessageId: "revoked-equivalence-2", status: ConversationMessageStatus.Revoked },
+			{ appMessageId: "revoked-equivalence-3", status: ConversationMessageStatus.Revoked },
+		])
 	})
 
 	it("seqId 缺失。", () => {

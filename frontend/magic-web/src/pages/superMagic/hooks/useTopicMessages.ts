@@ -13,8 +13,8 @@ const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
 // 实时增量同步时每次拉取的消息数量
 const LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT = 10
 
-// 轮询同步时每次拉取的消息数量
-const POLLING_SYNC_MESSAGE_COUNT = 30
+// 常驻轮询只补最近增量；完整分页仅保留给显式 recovery。
+const POLLING_SYNC_MESSAGE_COUNT = 20
 
 // 前台恢复时第一段回拉窗口：先用中等窗口补最近消息，尽量一次命中大多数休眠场景。
 const FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT = 200
@@ -745,7 +745,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		}
 	}, [setForegroundRecoveryBaseAnchor, syncSelectedTopicOnForeground])
 
-	// Timer: poll messages every 30 seconds
+	// Timer: poll messages every 20 seconds
 	useEffect(() => {
 		let disposed = false
 		let inFlightPollingSync: { topicId: string; generation: number } | null = null
@@ -798,18 +798,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				}
 				if (finishedPollingCompletedTopicsRef.current.has(topicId)) return
 
-				// 只有 finished topic 的成功轮询才构成工具缺失响应的完成屏障。
+				// finished polling 只确认最近增量和任务完成屏障，不能复用完整历史 recovery。
 				// generation 必须单飞且不能抢占已有权威同步，避免慢请求持续作废彼此。
 				if (inFlightPollingSync || hasActiveTopicSync()) return
 				const syncGeneration = superMagicStore.beginTopicSync(topicId)
 				inFlightPollingSync = { topicId, generation: syncGeneration }
 
-				void recoverTopicMessages({
-					conversationId: currentTopic.chat_conversation_id,
-					topicId,
-					syncGeneration,
-					limit: POLLING_SYNC_MESSAGE_COUNT,
-				})
+				void pullMessage(pollingParams)
 					.then((pullResult) => {
 						if (disposed || inFlightPollingSync?.generation !== syncGeneration) return
 						if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
@@ -856,20 +851,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			clearInterval(timer)
 			cancelInFlightPollingSync()
 		}
-	}, [pullMessage, recoverTopicMessages, selectedTopic])
+	}, [pullMessage, selectedTopic])
 
 	// Handle refresh topic messages after revoke
 	useEffect(() => {
 		const handleRefreshTopicMessages = () =>
 			updateTopicMessages({
-				// Must use initializeMessages (replace) here.
-				// Using enqueueMessage (incremental) calls sortMessages after each
-				// individual status update, which permanently filters out revoked messages that
-				// appear before the last non-revoked message at the time of processing.
-				// When multiple messages are revoked at once (e.g. undoMessage), only the
-				// last revoked message survives in the revoked section — earlier ones are lost.
-				// initializeMessages applies all status updates in one batch and calls
-				// sortMessages only once at the end, preserving all revoked messages correctly.
+				// Revoke refresh is an authoritative snapshot: replace preserves the server's
+				// complete canonical membership, while visible-branch filtering stays in UI projection.
 				writeIntent: "replace",
 				messageCount: 500,
 			})

@@ -105,7 +105,8 @@ interface EnvelopeOptions {
 	appMessageId?: string
 	correlationId?: string
 	seqId?: string
-	role?: "assistant" | "tool"
+	role?: "assistant" | "tool" | "user"
+	outerStatus?: ConversationMessageStatus
 	content?: string | null
 	toolCalls?: ProjectedToolCall[] | null
 	omitContent?: boolean
@@ -216,6 +217,7 @@ function createEnvelope(options: EnvelopeOptions = {}): RawSuperMagicMessageEnve
 		toolCallId = "legacy-tool-call-1",
 		toolStatus = "finished",
 		nodeStatus = role === "assistant" ? "finished" : "running",
+		outerStatus = ConversationMessageStatus.Read,
 		omitContent = false,
 		omitToolCalls = false,
 	} = options
@@ -262,9 +264,9 @@ function createEnvelope(options: EnvelopeOptions = {}): RawSuperMagicMessageEnve
 			message: {
 				magic_message_id: `magic-${appMessageId}`,
 				app_message_id: appMessageId,
-				sender_id: "assistant-1",
+				sender_id: role === "user" ? "user-1" : "assistant-1",
 				send_time: Number(seqId) || 1,
-				status: ConversationMessageStatus.Read,
+				status: outerStatus,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
@@ -1067,6 +1069,157 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
+	it("撤回权威快照覆盖活跃非撤回 overlay 时保留完整 Canonical 成员并终结旧流。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ content: "local non-revoked draft" }))
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "revoked-old-branch",
+					correlationId: CORRELATION_ID,
+					seqId: "200",
+					content: "authoritative revoked branch",
+					outerStatus: ConversationMessageStatus.Revoked,
+				}),
+				createEnvelope({
+					appMessageId: "normal-new-branch",
+					correlationId: "normal-new-correlation",
+					seqId: "201",
+					content: "authoritative normal branch",
+				}),
+			],
+			{ mode: "replace", syncGeneration: generation },
+		)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "201",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		expect(
+			getMessageRecords(store).map((message) => ({
+				appMessageId: message.app_message_id,
+				status: message.status,
+			})),
+		).toEqual([
+			{
+				appMessageId: "revoked-old-branch",
+				status: ConversationMessageStatus.Revoked,
+			},
+			{
+				appMessageId: "normal-new-branch",
+				status: ConversationMessageStatus.Read,
+			},
+		])
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("同一 HTTP replace 中的多条 revoked 消息作为一个权威批次原子保留。", () => {
+		const store = createStore()
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "revoked-batch-1",
+					correlationId: "revoked-batch-correlation-1",
+					seqId: "200",
+					outerStatus: ConversationMessageStatus.Revoked,
+				}),
+				createEnvelope({
+					appMessageId: "revoked-batch-2",
+					correlationId: "revoked-batch-correlation-2",
+					seqId: "201",
+					outerStatus: ConversationMessageStatus.Revoked,
+				}),
+			],
+			{ mode: "replace", syncGeneration: generation },
+		)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+				latestSeqId: "201",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		expect(
+			getMessageRecords(store).map((message) => ({
+				appMessageId: message.app_message_id,
+				status: message.status,
+			})),
+		).toEqual([
+			{
+				appMessageId: "revoked-batch-1",
+				status: ConversationMessageStatus.Revoked,
+			},
+			{
+				appMessageId: "revoked-batch-2",
+				status: ConversationMessageStatus.Revoked,
+			},
+		])
+	})
+
+	it("撤回权威结算后迟到 chunk 和 Final 不得重开或覆盖旧分支。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ i: 0, content: "draft before revoke" }))
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "revoked-settlement",
+					correlationId: CORRELATION_ID,
+					seqId: "200",
+					content: "revoked canonical",
+					outerStatus: ConversationMessageStatus.Revoked,
+				}),
+			],
+			{ mode: "replace", syncGeneration: generation },
+		)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+				latestSeqId: "200",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		store.receiveChunk(createChunk({ i: 1, content: "late chunk", finishReason: "stop" }))
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "revoked-settlement",
+				correlationId: CORRELATION_ID,
+				seqId: "201",
+				content: "late non-revoked Final",
+			}),
+		)
+		advanceRendering()
+
+		expect(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "revoked-settlement",
+				seq_id: "200",
+				status: ConversationMessageStatus.Revoked,
+			},
+		])
+		expect(getNode(store, CORRELATION_ID)?.content).toBe("revoked canonical")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
 	it("HTTP 响应到达时 final chunk 同时到达。", () => {
 		const store = createStore()
 		const recovery = collectRecoveryRequests(store)
@@ -1474,6 +1627,47 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect.soft(tools[0]?.function?.arguments).toBe('{"local":true}')
 		expect.soft(tools[0]?.tool?.status).toBe("running")
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("轻量 finished completion barrier 不依赖 authoritative snapshot，且不得删除窗口外消息。", () => {
+		const store = createStore()
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "historical-assistant",
+				correlationId: "historical-correlation",
+				seqId: "100",
+				content: "historical content outside the polling window",
+			}),
+			createEnvelope({
+				appMessageId: "terminal-assistant",
+				correlationId: "terminal-correlation",
+				seqId: "200",
+				toolCalls: [
+					createToolCall({
+						id: "missing-terminal-tool",
+						status: "running",
+					}),
+				],
+			}),
+		])
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "finished",
+				latestSeqId: "200",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"historical-assistant",
+			"terminal-assistant",
+		])
+		expect(
+			getEffectiveToolState(store, "missing-terminal-tool", "terminal-correlation")?.status,
+		).toBe("response_missing")
 	})
 
 	it("权威快照完成后公开流式生命周期结束。", () => {

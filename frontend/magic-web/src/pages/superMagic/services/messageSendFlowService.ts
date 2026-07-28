@@ -41,6 +41,7 @@ import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
 import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
+import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 
 const logger = Logger.createLogger("messageSendService")
 
@@ -280,10 +281,10 @@ class MessageSendService {
 				})
 		}
 
-		// 存在撤回消息时先确认撤回状态
-		const hasRevokedMessages = this.getMessageList(currentTopic).some(
-			(message) => message?.status === MessageStatus.REVOKED,
-		)
+		// 仅当前可见分支仍以 revoked 尾段结束时确认撤回；历史撤回事实不应阻塞新消息。
+		const hasRevokedMessages = projectVisibleMessagesByRevokedTail(
+			this.getMessageList(currentTopic),
+		).some((message) => message?.status === MessageStatus.REVOKED)
 		if (hasRevokedMessages) {
 			const isConfirmed = await this.confirmRevokedMessagesBeforeSend(currentTopic)
 			if (!isConfirmed) return false

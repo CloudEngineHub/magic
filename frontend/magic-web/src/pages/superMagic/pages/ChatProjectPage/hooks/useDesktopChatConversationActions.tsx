@@ -38,7 +38,7 @@ export function useDesktopChatConversationActions({
 			selectedTopic,
 		})
 
-	/** Mirror MessageHeader: share eligibility depends on messages before any REVOKED marker. */
+	/** Mirror MessageHeader: share eligibility follows the current visible message branch. */
 	const messages = useMemo(
 		() =>
 			computed(() =>

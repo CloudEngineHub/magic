@@ -42,7 +42,7 @@ export function transformRawMessage(message: RawSuperMagicMessageSequence): Mess
 	} as MessageItem
 }
 
-// ─── 排序与过滤 ──────────────────────────────────────────────
+// ─── Canonical 排序 ──────────────────────────────────────────
 
 export function sortMessages<T extends { seq_id: string; status?: string }>(
 	list: Array<T>,
@@ -58,24 +58,13 @@ export function sortMessages<T extends { seq_id: string; status?: string }>(
 		}
 		return normalizedLeft.localeCompare(normalizedRight)
 	}
-	const result = list
+	return list
 		.map((item, inputIndex) => ({ item, inputIndex }))
 		.sort((left, right) => {
 			const sequenceOrder = compareSeqId(left.item.seq_id, right.item.seq_id)
 			return sequenceOrder || left.inputIndex - right.inputIndex
 		})
 		.map(({ item }) => item)
-
-	if (result[result.length - 1]?.status !== "revoked") {
-		return result.filter((item) => item.status !== "revoked")
-	}
-
-	let firstOfLastSegment = result.length - 1
-	while (firstOfLastSegment > 0 && result[firstOfLastSegment - 1].status === "revoked") {
-		firstOfLastSegment--
-	}
-
-	return result.filter((item, index) => item.status !== "revoked" || index >= firstOfLastSegment)
 }
 
 // ─── 大数字字符串 +1 ────────────────────────────────────────

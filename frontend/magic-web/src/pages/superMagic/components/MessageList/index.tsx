@@ -58,6 +58,7 @@ import { extractTurns } from "./export/extractMessageContent"
 import { MessageListProvider, useMessageListContext } from "./context"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 import MessageRenderContent from "./components/MessageRenderContent"
+import { projectVisibleMessagesByRevokedTail } from "../../utils/project-visible-messages-by-revoked-tail"
 
 export { MessageListProvider }
 
@@ -216,14 +217,17 @@ const MessageList = observer(
 			() => new Set(hiddenRevokedOptimisticMessageIds),
 			[hiddenRevokedOptimisticMessageIds],
 		)
+		// Store retains revoked facts for recovery and editing; this component only renders
+		// the current visible branch, including an active revoked tail when one exists.
+		const visibleData = projectVisibleMessagesByRevokedTail(data)
 
-		// Locate the starting index of revoked messages
+		// Locate the starting index of the active revoked tail in the visible branch.
 		const revokedSegmentStartIndex = useMemo(
 			() =>
-				data.findIndex(
+				visibleData.findIndex(
 					(node: SuperMagicMessageItem) => node?.status === MessageStatus.REVOKED,
 				),
-			[data],
+			[visibleData],
 		)
 
 		// After all revoked messages are restored (revokedSegmentStartIndex becomes -1), clear the hidden set,
@@ -237,33 +241,33 @@ const MessageList = observer(
 		}, [revokedSegmentStartIndex, selectedTopic?.chat_topic_id])
 
 		const mainDisplayData = useMemo(() => {
-			if (revokedSegmentStartIndex < 0) return data
+			if (revokedSegmentStartIndex < 0) return visibleData
 
 			// After entering revoked-edit mode, hide subsequent failed optimistic messages recorded at undo;
 			// the main message stream only keeps stable messages before the revoke point.
-			return data.filter((node, index) => {
+			return visibleData.filter((node, index) => {
 				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
 					return false
 				}
 				return index < revokedSegmentStartIndex
 			})
-		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex, visibleData])
 
 		const revokedBranchData = useMemo(() => {
 			if (revokedSegmentStartIndex < 0) {
-				return data.filter((node) => node?.status === MessageStatus.REVOKED)
+				return visibleData.filter((node) => node?.status === MessageStatus.REVOKED)
 			}
 
 			// The revoked-edit preview area still shows normal messages from the old branch in current list order;
 			// failed optimistic messages stay hidden until user confirms send, then cleaned up in background.
-			return data.filter((node, index) => {
+			return visibleData.filter((node, index) => {
 				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
 					return false
 				}
 				if (index >= revokedSegmentStartIndex) return true
 				return false
 			})
-		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex, visibleData])
 
 		const { messages, messageKeys, messageTurnGroups } = useMemo(() => {
 			const messages = messagesConverter(mainDisplayData)
@@ -627,7 +631,7 @@ const MessageList = observer(
 						)}
 						viewportRef={setScrollViewportRef}
 					>
-						{data.length > 0 || !isEmptyStatus ? (
+						{visibleData.length > 0 || !isEmptyStatus ? (
 							<>
 								<MessageTurnGroupList
 									groups={messageTurnGroups}
@@ -671,7 +675,7 @@ const MessageList = observer(
 																node={firstRevokedUserMessage}
 																selectedTopic={selectedTopic}
 																showLoading={showLoading}
-																messagesLength={data.length}
+																messagesLength={visibleData.length}
 																hiddenOptimisticMessageIds={
 																	hiddenRevokedOptimisticMessageIds
 																}
@@ -876,7 +880,7 @@ const MessageList = observer(
 						)}
 						{showLoading && !isStreamLoading && (
 							<LoadingMessage
-								messages={data}
+								messages={visibleData}
 								showLoading={showLoading}
 								selectedTopic={selectedTopic}
 							/>
