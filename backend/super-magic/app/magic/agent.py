@@ -2551,7 +2551,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     horizon_model_info.description,
                 )
                 self.agent_context.horizon.update_context_usage(
-                    token_usage.input_tokens,
+                    token_usage.total_tokens,
                     current_max_context_tokens,
                 )
                 # 记录当前采用的上下文上限，供前端实时展示。

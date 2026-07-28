@@ -386,7 +386,7 @@ class AgentHorizon:
         self._llm_model_changed: bool = False
         self._image_model_changed: bool = False
         self._video_model_changed: bool = False
-        self._context_used: int = 0    # 上一次 LLM 调用的 input_tokens
+        self._context_used: int = 0    # 上一次 LLM 响应结束后的真实 Token 总量
         self._context_total: int = 0   # 模型最大上下文窗口
 
         # 当前上下文窗口是否尚未完成首包注入；只有为 True 时才输出完整 <initial_context>
@@ -878,9 +878,9 @@ class AgentHorizon:
             return None
         return state.user_manual_max_context_tokens
 
-    def update_context_usage(self, input_tokens: int, current_max_context_tokens: int) -> None:
-        """LLM 调用返回后调用，更新上下文窗口使用量。"""
-        self._context_used = input_tokens
+    def update_context_usage(self, used_tokens: int, current_max_context_tokens: int) -> None:
+        """LLM 调用返回后调用，更新上下文窗口的真实 Token 使用量。"""
+        self._context_used = used_tokens
         self._context_total = current_max_context_tokens
 
     def _calculate_context_used_pct(self, used: int, total: int) -> int:
