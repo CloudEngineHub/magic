@@ -49,14 +49,24 @@ vi.mock("../../../contents/HTML/utils/fetchInterceptor", () => ({
 vi.mock("../../PPTRender", () => ({
 	default: ({
 		slidePaths,
+		attachments,
+		mainFileId,
 		onSortSave,
 		openNewTab,
 	}: {
 		slidePaths?: string[]
+		attachments?: Array<{ file_id?: string; relative_file_path?: string }>
+		mainFileId?: string
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
 	}) => (
-		<div data-testid="ppt-render" data-slide-paths={JSON.stringify(slidePaths || [])}>
+		<div
+			data-testid="ppt-render"
+			data-slide-paths={JSON.stringify(slidePaths || [])}
+			data-main-relative-path={
+				attachments?.find((item) => item.file_id === mainFileId)?.relative_file_path
+			}
+		>
 			<button
 				type="button"
 				data-testid="local-insert"
@@ -288,6 +298,48 @@ describe("PPTRootRender", () => {
 		expect(screen.getByTestId("ppt-render").dataset.slidePaths).toBe(
 			JSON.stringify(["slides/slide-1.html"]),
 		)
+	})
+
+	it("keeps the complete attachment path when mobile preview data is partial", async () => {
+		const folder = {
+			file_id: "deck-folder",
+			file_name: "X11项目一页汇报",
+			is_directory: true,
+			relative_file_path: "projects/x11/deck",
+			parent_id: "project-root",
+			display_config: {
+				type: "slide",
+				slides: ["slide-1.html"],
+			},
+			children: [
+				{
+					file_id: "slide-file",
+					file_name: "slide-1.html",
+					relative_file_path: "projects/x11/deck/slide-1.html",
+				},
+			],
+		}
+
+		render(
+			<PPTRootRender
+				data={{
+					...folder,
+					relative_file_path: undefined,
+					parent_id: undefined,
+				}}
+				attachmentList={[folder]}
+				attachments={[folder]}
+				displayConfig={folder.display_config}
+				activeFileId="deck-folder"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-main-relative-path",
+				"projects/x11/deck",
+			)
+		})
 	})
 
 	it("opens a slide from displayData children in a new tab", async () => {
