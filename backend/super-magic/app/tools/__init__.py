@@ -40,6 +40,7 @@ from app.tools.read_file import ReadFile
 from app.tools.read_files import ReadFiles
 from app.tools.read_webpages_as_markdown import ReadWebpagesAsMarkdown
 from app.tools.reflection import Reflection
+from app.tools.report_risk import ReportRisk
 from app.tools.deep_write import DeepWrite
 from app.tools.run_python_snippet import RunPythonSnippet
 from app.tools.shell_exec import ShellExec
@@ -272,6 +273,7 @@ __all__ = [
     "ReadFiles",
     "ReadWebpagesAsMarkdown",
     "Reflection",
+    "ReportRisk",
     "ShellExec",
     "ShellAwait",
     "Summarize",
