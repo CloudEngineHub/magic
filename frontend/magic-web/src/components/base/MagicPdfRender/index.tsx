@@ -35,6 +35,7 @@ function MagicPdfRender({
 	enableKeyboard = true,
 	autoScale = true,
 	enableTouchGestures = true,
+	documentFlow = false,
 	onLoadError,
 	onLoadSuccess,
 }: MagicPdfRenderProps): JSX.Element {
@@ -147,7 +148,14 @@ function MagicPdfRender({
 	// If no file is selected, display a message
 	if (!file) {
 		return (
-			<div className={styles.container} style={{ height, width }}>
+			<div
+				className={styles.container}
+				style={{
+					height: documentFlow ? "auto" : height,
+					width,
+					overflow: documentFlow ? "visible" : undefined,
+				}}
+			>
 				<div className={styles.error}>
 					<div>{t("magicPdfRender.status.noFile")}</div>
 				</div>
@@ -156,7 +164,15 @@ function MagicPdfRender({
 	}
 
 	return (
-		<div ref={containerRef} className={styles.container} style={{ height, width }}>
+		<div
+			ref={containerRef}
+			className={styles.container}
+			style={{
+				height: documentFlow ? "auto" : height,
+				width,
+				overflow: documentFlow ? "visible" : undefined,
+			}}
+		>
 			{showToolbar && (
 				<Toolbar
 					pageNumber={pdfState.pageNumber}
@@ -181,7 +197,15 @@ function MagicPdfRender({
 				/>
 			)}
 
-			<div ref={viewerRef} className={styles.viewer}>
+			<div
+				ref={viewerRef}
+				className={styles.viewer}
+				style={
+					documentFlow
+						? { flex: "none", minHeight: "100dvh", overflow: "visible" }
+						: undefined
+				}
+			>
 				{pdfState.error && (
 					<div className={styles.error}>
 						<h3 className="error-title">{t("magicPdfRender.status.loadFailed")}</h3>
@@ -200,6 +224,7 @@ function MagicPdfRender({
 					scale={pdfState.scale}
 					rotation={pdfState.rotation}
 					isAutoScaling={pdfState.isAutoScaling}
+					documentFlow={documentFlow}
 					pageDimensions={pageDimensions}
 					onDocumentLoadSuccess={handleDocumentLoadSuccess}
 					onDocumentLoadError={handleDocumentLoadError}

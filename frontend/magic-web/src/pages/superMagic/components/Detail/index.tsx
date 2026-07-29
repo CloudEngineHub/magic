@@ -53,6 +53,8 @@ interface DetailProps {
 	hideTabBar?: boolean
 	/** When true, treats the file viewer as fullscreen without requiring URL params */
 	forceFullscreenMode?: boolean
+	/** Keeps pure share fullscreen content in document flow for whole-page screenshots. */
+	documentFlowFullscreen?: boolean
 	/** 详情页全屏时允许 fixed 预览层脱离 Safari 的祖先裁剪边界 */
 	isFullscreen?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
@@ -106,6 +108,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
+		documentFlowFullscreen,
 		isFullscreen = false,
 		showFileFooter: showFileFooterProp,
 	} = props
@@ -175,8 +178,10 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 	return (
 		<div
 			className={cn(
-				"relative flex h-full flex-col rounded-lg",
-				isFullscreen ? "overflow-visible" : "overflow-hidden",
+				documentFlowFullscreen
+					? "relative flex min-h-dvh flex-col overflow-visible"
+					: "relative flex h-full flex-col rounded-lg",
+				isFullscreen || documentFlowFullscreen ? "overflow-visible" : "overflow-hidden",
 			)}
 		>
 			<FilesViewer
@@ -201,6 +206,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				showFileHeader={showFileHeader}
 				hideTabBar={hideTabBar}
 				forceFullscreenMode={forceFullscreenMode}
+				documentFlowFullscreen={documentFlowFullscreen}
 				currentTopicStatus={currentTopicStatus}
 				messages={messages}
 				autoDetail={autoDetail}

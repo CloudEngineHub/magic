@@ -18,6 +18,7 @@ export default function ShareContent({
 	showCreatedByBadge,
 	allowDownloadProjectFile,
 	forceFullscreenMode,
+	documentFlowFullscreen,
 	hidePreviewHeader,
 	showFileHeader,
 	onPreviewFileChange,
@@ -40,6 +41,7 @@ export default function ShareContent({
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
 	forceFullscreenMode?: boolean
+	documentFlowFullscreen?: boolean
 	hidePreviewHeader?: boolean
 	showFileHeader?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
@@ -65,6 +67,7 @@ export default function ShareContent({
 			showCreatedByBadge={showCreatedByBadge}
 			allowDownloadProjectFile={allowDownloadProjectFile}
 			forceFullscreenMode={forceFullscreenMode}
+			documentFlowFullscreen={documentFlowFullscreen}
 			hidePreviewHeader={hidePreviewHeader}
 			showFileHeader={showFileHeader}
 			onPreviewFileChange={onPreviewFileChange}
