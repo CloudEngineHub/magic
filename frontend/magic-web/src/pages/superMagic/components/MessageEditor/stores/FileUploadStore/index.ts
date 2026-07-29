@@ -615,7 +615,7 @@ export class FileUploadStore {
 							? 0
 							: ((data as ProjectFileMentionData).file_size ?? 0),
 						file_type: isDirectory ? "directory" : "user_upload",
-						project_id: data.source_project_id ?? "",
+						project_id: data.project_id ?? data.source_project_id ?? "",
 						topic_id: "",
 						task_id: "",
 						created_at: "",

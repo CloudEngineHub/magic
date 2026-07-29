@@ -333,6 +333,22 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		})
 	})
 
+	describe("default root items", () => {
+		it("should show other project files without a current project", async () => {
+			projectFilesStore.setSelectedProject(null)
+
+			const items = await getDefaultItems()
+			const otherProjectFilesIndex = items.findIndex(
+				(item) => item.id === "other-project-files",
+			)
+			const uploadFilesIndex = items.findIndex((item) => item.id === "upload-files")
+
+			expect(items.some((item) => item.id === "project-files")).toBe(false)
+			expect(uploadFilesIndex).toBe(0)
+			expect(otherProjectFilesIndex).toBe(1)
+		})
+	})
+
 	describe("searchItems sorting algorithm", () => {
 		beforeEach(() => {
 			// Mock API responses
@@ -757,10 +773,14 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 
 			const items = await getDefaultItems()
 			const projectFilesIndex = items.findIndex((item) => item.id === "project-files")
+			const otherProjectFilesIndex = items.findIndex(
+				(item) => item.id === "other-project-files",
+			)
 			const canvasElementsIndex = items.findIndex((item) => item.id === "canvas-elements")
 
 			expect(projectFilesIndex).toBeGreaterThanOrEqual(0)
-			expect(canvasElementsIndex).toBe(projectFilesIndex + 1)
+			expect(otherProjectFilesIndex).toBe(projectFilesIndex + 1)
+			expect(canvasElementsIndex).toBe(otherProjectFilesIndex + 1)
 			expect(items[canvasElementsIndex]).toMatchObject({
 				type: MentionItemType.FOLDER,
 				name: "画布元素",

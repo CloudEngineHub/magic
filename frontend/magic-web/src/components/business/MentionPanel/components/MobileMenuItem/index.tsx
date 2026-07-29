@@ -12,6 +12,7 @@ import {
 	getMentionItemSkillSourceLabel,
 	shouldRenderMentionItemTypeDescription,
 } from "../../renderers/shared/helpers"
+import { MentionPanelBuiltinItemId } from "../../runtime/builtin/catalog-ids"
 
 const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 	const {
@@ -42,7 +43,12 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 	}
 	const hasRightArrow =
 		!item.tags?.includes("history") &&
-		Boolean(item.hasChildren || item.children?.length || item.type === MentionItemType.FOLDER)
+		Boolean(
+			item.hasChildren ||
+			item.children?.length ||
+			item.type === MentionItemType.FOLDER ||
+			item.id === MentionPanelBuiltinItemId.OTHER_PROJECT_FILES,
+		)
 
 	const handleRowClick = useCallback(
 		(event: React.MouseEvent) => {

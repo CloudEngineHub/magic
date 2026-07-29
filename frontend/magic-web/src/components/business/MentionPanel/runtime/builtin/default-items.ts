@@ -7,12 +7,14 @@ import PlugIcon from "../../components/icons/PlugIcon"
 import BotIcon from "../../components/icons/BotIcon"
 import SkillIcon from "../../components/icons/SkillIcon"
 import ToolIcon from "../../components/icons/ToolIcon"
+import { MentionPanelItemType } from "./panel-item-types"
 
 export const NON_SELECTABLE_BUILTIN_ITEM_IDS = [
 	BuiltinItemId.PERSONAL_DRIVE,
 	BuiltinItemId.ENTERPRISE_DRIVE,
 	BuiltinItemId.ORGANIZATION_DRIVE,
 	BuiltinItemId.PROJECT_FILES,
+	BuiltinItemId.OTHER_PROJECT_FILES,
 	BuiltinItemId.CANVAS_ELEMENTS,
 	BuiltinItemId.MCP_EXTENSIONS,
 	BuiltinItemId.AGENTS,
@@ -42,6 +44,14 @@ export function createDefaultItems(t: I18nTexts): Record<string, MentionItem[]> 
 				icon: "file-folder",
 				hasChildren: true,
 				isFolder: true,
+			},
+			{
+				id: BuiltinItemId.OTHER_PROJECT_FILES,
+				type: MentionPanelItemType.OTHER_PROJECT_FILES,
+				name: t.defaultItems.otherProjectFiles || "其它项目/文件",
+				icon: "file-folder",
+				hasChildren: false,
+				isFolder: false,
 			},
 			{
 				id: BuiltinItemId.AGENTS,

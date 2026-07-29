@@ -19,6 +19,7 @@ export const en: I18nTexts = {
 	error: "Failed to load data",
 	retry: "Retry",
 	empty: "No data available",
+	unnamedProject: "Unnamed Project",
 
 	// Hints
 	mcpHint: "@extension only take effect once",
@@ -44,6 +45,7 @@ export const en: I18nTexts = {
 		personalDrive: "Personal Drive",
 		enterpriseDrive: "Enterprise Drive",
 		projectFiles: "Current Project Files",
+		otherProjectFiles: "Other Projects/Files",
 		mcpExtensions: "Plugins",
 		agents: "Agents",
 		skills: "Skills",
