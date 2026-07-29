@@ -10,6 +10,7 @@ import {
 	checkProjectReferenceResourceDrop,
 	getProjectFilePathCandidates,
 	normalizeProjectDropFiles,
+	normalizeProjectDropFilesForStorage,
 } from "../reference-assets/useReferenceResourcePanelDataService"
 
 function panelItem(
@@ -47,6 +48,19 @@ function resolveDesignAResourceCandidates(path: string): string[] {
 
 function resolveAmbiguousBareResourceCandidates(path: string): string[] {
 	return [path]
+}
+
+function resolveWorkspaceRootFileCandidates(path: string): string[] {
+	return [path, path.replace(/^\/+/, "")]
+}
+
+function normalizeDesignAResourcePathForStorage(path: string): string {
+	if (path.startsWith("./")) return path
+	const normalized = path.replace(/^\/+/, "")
+	if (normalized.startsWith("画布A/")) {
+		return `./${normalized.slice("画布A/".length)}`
+	}
+	return `/${normalized}`
 }
 
 describe("filterReferenceResourcePanelBatchItems", () => {
@@ -160,6 +174,31 @@ describe("project reference resource path candidates", () => {
 				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
 			}).accepted,
 		).toBe(false)
+	})
+
+	it("stores accepted external project drops as workspace-absolute paths", () => {
+		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png" }]
+		const normalized = normalizeProjectDropFilesForStorage(
+			files,
+			[{ path: "画布B/images/cat.png" }],
+			[],
+			{
+				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+				normalizeResourcePathForStorage: normalizeDesignAResourcePathForStorage,
+			},
+		)
+
+		expect(normalized).toEqual([{ path: "/画布B/images/cat.png", fileName: "cat.png" }])
+	})
+
+	it("stores a single project-root file as a workspace-absolute path", () => {
+		const files = [{ path: "/cat.png", fileName: "cat.png" }]
+		const normalized = normalizeProjectDropFilesForStorage(files, [{ path: "cat.png" }], [], {
+			resolveResourcePathCandidates: resolveWorkspaceRootFileCandidates,
+			normalizeResourcePathForStorage: normalizeDesignAResourcePathForStorage,
+		})
+
+		expect(normalized).toEqual([{ path: "/cat.png", fileName: "cat.png" }])
 	})
 
 	it("does not turn an attachment-ambiguous bare resource into a current-canvas reference", () => {

@@ -1,0 +1,9 @@
+# Resolve the magic-web project root from this hook's location.
+MAGIC_WEB_DIR="$(cd "$(dirname -- "$0")/.." && pwd)"
+cd "$MAGIC_WEB_DIR"
+
+. "$MAGIC_WEB_DIR/.husky/node-env.sh"
+
+# git merge does not run pre-commit for an automatically created merge commit.
+echo "🧩 Checking overlay synchronization before merge commit..."
+node scripts/git-hooks/check-overlay-sync.cjs

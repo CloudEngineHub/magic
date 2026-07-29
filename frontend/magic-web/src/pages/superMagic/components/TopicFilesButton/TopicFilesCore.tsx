@@ -70,11 +70,11 @@ import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
 import {
 	ProjectFileImagePreviewProvider,
-	ProjectFileImagePreviewTooltipContent,
 	resolveProjectFileImagePreviewSource,
 	useProjectFileImagePreviewManager,
 } from "./components/ProjectFileImagePreviewProvider"
 import { ProjectFileImageThumbnailIcon } from "./components/ProjectFileImageThumbnailIcon"
+import { ProjectFileImageSmartTooltip } from "./components/ProjectFileImageSmartTooltip"
 import { InputWithError } from "./components"
 import {
 	getAppEntryFile,
@@ -1359,6 +1359,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.name || item.file_name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,
@@ -1617,6 +1619,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.file_name || item.name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,
@@ -1740,31 +1744,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : (
 							<>
 								{imagePreviewSource ? (
-									<SmartTooltip
-										placement="right"
+									<ProjectFileImageSmartTooltip
+										source={imagePreviewSource}
 										className={cx(
 											"min-w-0 flex-1",
 											styles.ellipsis,
 											isActiveFile && "font-medium",
 										)}
 										sideOffset={20}
-										forceShowTooltip
-										tooltipContentClassName="max-w-none whitespace-nowrap text-nowrap break-normal"
-										tooltipContentStyle={{ maxWidth: "none" }}
-										content={
-											<ProjectFileImagePreviewTooltipContent
-												source={imagePreviewSource}
-											/>
-										}
-										onOpenChange={(open) => {
-											if (open)
-												imagePreviewManager.ensurePreview(
-													imagePreviewSource,
-												)
-										}}
 									>
 										{item?.file_name}
-									</SmartTooltip>
+									</ProjectFileImageSmartTooltip>
 								) : (
 									<SmartTooltip
 										placement="right"

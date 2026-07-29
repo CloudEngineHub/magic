@@ -47,9 +47,24 @@ export function transformRawMessage(message: RawSuperMagicMessageSequence): Mess
 export function sortMessages<T extends { seq_id: string; status?: string }>(
 	list: Array<T>,
 ): Array<T> {
-	const result = list.sort((a, b) => {
-		return a.seq_id.localeCompare(b.seq_id)
-	})
+	const compareSeqId = (left: string, right: string) => {
+		if (left === right) return 0
+		const normalizedLeft = String(left || "").replace(/^0+(?=\d)/, "")
+		const normalizedRight = String(right || "").replace(/^0+(?=\d)/, "")
+		if (/^\d+$/.test(normalizedLeft) && /^\d+$/.test(normalizedRight)) {
+			if (normalizedLeft.length !== normalizedRight.length) {
+				return normalizedLeft.length - normalizedRight.length
+			}
+		}
+		return normalizedLeft.localeCompare(normalizedRight)
+	}
+	const result = list
+		.map((item, inputIndex) => ({ item, inputIndex }))
+		.sort((left, right) => {
+			const sequenceOrder = compareSeqId(left.item.seq_id, right.item.seq_id)
+			return sequenceOrder || left.inputIndex - right.inputIndex
+		})
+		.map(({ item }) => item)
 
 	if (result[result.length - 1]?.status !== "revoked") {
 		return result.filter((item) => item.status !== "revoked")
@@ -230,6 +245,7 @@ export function getDefaultTopicMeta(): TopicMeta {
 		finalizedCorrelationIds: new Set(),
 		lastActiveAt: null,
 		inactiveAt: null,
+		inactiveMonotonicAt: null,
 		lastSyncedAt: null,
 		lastSyncedSeqId: "",
 		syncGeneration: 0,
