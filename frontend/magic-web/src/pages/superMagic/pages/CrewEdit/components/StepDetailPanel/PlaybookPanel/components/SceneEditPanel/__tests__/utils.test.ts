@@ -35,6 +35,7 @@ describe("playbookToSceneItem", () => {
 
 		expect(scene.configs?.inspiration?.demo.groups[0]?.children?.[0]).toEqual({
 			value: "stable-id",
+			description: "Legacy prompt",
 			prompt: "Legacy prompt",
 		})
 	})

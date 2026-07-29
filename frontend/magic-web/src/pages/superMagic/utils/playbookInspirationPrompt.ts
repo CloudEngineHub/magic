@@ -13,7 +13,11 @@ function hasPromptContent(value: LocaleText | undefined): value is LocaleText {
 	return Object.values(value).some((text) => typeof text === "string" && text.trim().length > 0)
 }
 
-/** Move the legacy inspiration prompt from description to prompt without changing value identity. */
+function copyLocaleText(value: LocaleText): LocaleText {
+	return typeof value === "string" ? value : { ...value }
+}
+
+/** Copy the legacy inspiration prompt to prompt without deleting compatibility data. */
 export function migratePlaybookInspirationPrompt(
 	config: DemoPanelConfig | undefined,
 ): DemoPanelConfig | undefined {
@@ -28,10 +32,9 @@ export function migratePlaybookInspirationPrompt(
 		const children = group.children?.map((item) => {
 			if (hasPromptContent(item.prompt) || !hasPromptContent(item.description)) return item
 
-			const { description, ...restItem } = item
 			changed = true
 			groupChanged = true
-			return { ...restItem, prompt: description }
+			return { ...item, prompt: copyLocaleText(item.description) }
 		})
 
 		return groupChanged ? { ...group, children } : group

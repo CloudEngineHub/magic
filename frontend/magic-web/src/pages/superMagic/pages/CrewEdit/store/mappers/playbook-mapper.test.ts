@@ -33,6 +33,7 @@ describe("mapPlaybookToScene", () => {
 
 		expect(scene.configs?.inspiration?.demo.groups[0]?.children?.[0]).toEqual({
 			value: "stable-id",
+			description: "Legacy prompt",
 			prompt: "Legacy prompt",
 		})
 	})
@@ -69,6 +70,10 @@ describe("mapSceneToPlaybookParams", () => {
 		})
 
 		const item = params.config.scenes_config?.inspiration?.demo.groups[0]?.children?.[0]
-		expect(item).toEqual({ value: "stable-id", prompt: "Legacy prompt" })
+		expect(item).toEqual({
+			value: "stable-id",
+			description: "Legacy prompt",
+			prompt: "Legacy prompt",
+		})
 	})
 })

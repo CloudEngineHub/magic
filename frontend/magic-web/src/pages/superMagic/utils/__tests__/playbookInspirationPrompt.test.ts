@@ -9,7 +9,7 @@ import {
 } from "../playbookInspirationPrompt"
 
 describe("playbook inspiration prompt migration", () => {
-	it("moves a legacy description to prompt without changing value", () => {
+	it("copies a legacy description to prompt without deleting compatibility data", () => {
 		const config = {
 			type: SkillPanelType.DEMO,
 			demo: {
@@ -34,9 +34,12 @@ describe("playbook inspiration prompt migration", () => {
 
 		expect(item).toEqual({
 			value: "stable-id",
+			description: { default: "Legacy prompt" },
 			prompt: { default: "Legacy prompt" },
 		})
 		expect(migrated?.demo.default_selected_template_key).toBe("stable-id")
+		expect(item?.prompt).not.toBe(item?.description)
+		expect(migratePlaybookInspirationPrompt(migrated)).toBe(migrated)
 	})
 
 	it("does not overwrite an existing prompt", () => {

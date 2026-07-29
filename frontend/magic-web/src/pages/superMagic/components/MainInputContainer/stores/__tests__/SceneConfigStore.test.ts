@@ -35,6 +35,10 @@ describe("SceneConfigStore", () => {
 		const item =
 			store.getSkillConfigs("playbook-1")?.config?.scenes_config?.inspiration?.demo.groups[0]
 				?.children?.[0]
-		expect(item).toEqual({ value: "stable-id", prompt: "Legacy prompt" })
+		expect(item).toEqual({
+			value: "stable-id",
+			description: "Legacy prompt",
+			prompt: "Legacy prompt",
+		})
 	})
 })
