@@ -75,6 +75,7 @@ class ToolSDK:
             return Result.error(error_msg, tool_call_id=tool_call_id)
 
         sdk_execution_id = os.getenv("SUPER_MAGIC_SDK_EXECUTION_ID", "")
+        language = os.getenv("SUPER_MAGIC_LANGUAGE", "zh_CN")
 
         request_data = {
             "tool_name": tool_name,
@@ -82,6 +83,7 @@ class ToolSDK:
             "tool_call_id": tool_call_id,
             "agent_context_id": agent_context_id,
             "sdk_execution_id": sdk_execution_id,
+            "language": language,
         }
 
         url = f"{self.api_base_url}/api/sdk/tool/call"
