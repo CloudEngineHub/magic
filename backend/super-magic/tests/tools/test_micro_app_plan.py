@@ -37,6 +37,14 @@ def test_micro_app_agent_uses_download_skill_instead_of_direct_code_mode_tool():
     assert "download" in agent_define.skills_config.get_system_skill_names()
 
 
+def test_micro_app_agent_does_not_declare_runtime_managed_code_execution_tools():
+    agent_content = AGENT_FILE.read_text(encoding="utf-8")
+    agent_define = parse_agent_file(agent_content)[0]
+
+    assert "run_python_snippet" not in agent_define.tools_config
+    assert agent_define.code_execution is True
+
+
 def test_micro_app_contract_docs_do_not_reference_legacy_plan_tool():
     for contract_file in (AGENT_FILE, MAGICBASE_SKILL_FILE):
         content = contract_file.read_text(encoding="utf-8")

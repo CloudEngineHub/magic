@@ -16,7 +16,6 @@ tools:
   - delete_files
   - shell_exec
   - shell_await
-  - run_python_snippet
   - query_magicbase_tables
   - get_magicbase_table
   - query_magicbase_rows
