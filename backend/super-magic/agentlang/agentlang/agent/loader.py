@@ -1,15 +1,22 @@
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from .define import AgentDefine, SkillsConfig, parse_agent_file
 from .syntax import SyntaxProcessor
 
 
 class AgentLoader:
-    def __init__(self, agents_dir: Path):
+    def __init__(
+        self,
+        agents_dir: Path,
+        definition_normalizer: Optional[
+            Callable[[str, AgentDefine], AgentDefine]
+        ] = None,
+    ):
         self._agents: Dict[str, AgentDefine] = {}
         self._agents_dir = agents_dir
         self._syntax_processor = SyntaxProcessor(agents_dir)
+        self._definition_normalizer = definition_normalizer
 
     def load_agent(
         self,
@@ -25,6 +32,8 @@ class AgentLoader:
 
         content = self._read_agent_file(agent_name)
         metadata, prompt_raw = parse_agent_file(content)
+        if self._definition_normalizer is not None:
+            metadata = self._definition_normalizer(agent_name, metadata)
 
         if variables:
             self._syntax_processor.set_variables(variables)

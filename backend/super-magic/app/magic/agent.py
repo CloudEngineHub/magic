@@ -49,6 +49,7 @@ from agentlang.utils.tool_param_utils import preprocess_tool_calls_batch
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
 from app.core.ai_abilities import get_compact_model_id
+from app.core.agent_definition_normalizer import normalize_agent_definition
 from app.core.context.agent_context import AgentContext
 from app.core.horizon.workspace_tree_display import (
     WORKSPACE_FILES_DISPLAY_MAX_CHARS,
@@ -262,7 +263,10 @@ class Agent(BaseAgent):
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
 
-        self._agent_loader = AgentLoader(agents_dir=agents_dir)
+        self._agent_loader = AgentLoader(
+            agents_dir=agents_dir,
+            definition_normalizer=normalize_agent_definition,
+        )
 
         # 设置工具验证器，用于过滤无效工具
         self._tool_validator = app_tool_validator
