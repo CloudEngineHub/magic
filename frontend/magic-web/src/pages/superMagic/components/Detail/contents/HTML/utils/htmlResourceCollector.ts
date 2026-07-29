@@ -130,7 +130,7 @@ export function collectHtmlResourcePlan(
 	}
 
 	urlMap.forEach((info, id) => {
-		if (info.tag === "img" || info.attr === "css-url" || info.attr === "inline-style") {
+		if (info.contentType?.startsWith("image/")) {
 			imageFileIds.add(id)
 		}
 	})
