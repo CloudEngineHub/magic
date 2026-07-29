@@ -79,6 +79,7 @@ function parseInspectorMarker(text: string) {
 		titleText,
 		inlineBefore: Boolean(metadataMarkerCount & 1),
 		inlineAfter: Boolean(metadataMarkerCount & 2),
+		hasFileMention: Boolean(metadataMarkerCount & 4),
 	}
 }
 
@@ -216,7 +217,8 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 
 		// Detect the marker at the start of a paragraph
 		if (node.type === "paragraph" && text.startsWith(INSPECTOR_DETAIL_MARKER)) {
-			const { titleText, inlineBefore, inlineAfter } = parseInspectorMarker(text)
+			const { titleText, inlineBefore, inlineAfter, hasFileMention } =
+				parseInspectorMarker(text)
 
 			// Collect following detail paragraphs
 			const detailParagraphs: JSONContent[] = []
@@ -249,7 +251,7 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 				if (newContent.length > 0) {
 					const prev = newContent[newContent.length - 1]
 					const fileMention = getOnlyMention(prev)
-					if (fileMention) {
+					if (fileMention && (hasFileMention || !inlineBefore)) {
 						attrs.fileMention = fileMention
 						newContent.pop()
 					} else if (prev.type === "paragraph" && getFirstText(prev) === titleText) {
@@ -353,7 +355,10 @@ export function serializeInspectorContent(
 		}
 
 		// Title with marker
-		const metadataMarkerCount = (inlinePosition.before ? 1 : 0) + (inlinePosition.after ? 2 : 0)
+		const metadataMarkerCount =
+			(inlinePosition.before ? 1 : 0) +
+			(inlinePosition.after ? 2 : 0) +
+			(attrs.fileMention ? 4 : 0)
 		content.push(
 			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
 		)
