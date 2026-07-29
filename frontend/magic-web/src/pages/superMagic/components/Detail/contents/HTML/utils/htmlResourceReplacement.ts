@@ -32,6 +32,15 @@ interface ReplaceHtmlResourceUrlsResult {
 	filePathMapping: Map<string, string>
 }
 
+function escapeHtmlAttributeValue(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+}
+
 async function resolveHtmlResourceUrls({
 	fileIds,
 	resourceFileVersions,
@@ -137,8 +146,7 @@ export async function replaceHtmlResourceUrls({
 			if (resourceInfo.type === "geo" || resourceInfo.type === "cleaned_data") {
 				const configItems =
 					(magicProjectConfig[configKey] as
-						| Array<{ name: string; url: string }>
-						| undefined) ?? []
+						Array<{ name: string; url: string }> | undefined) ?? []
 				configItems.push({
 					name: resourceInfo.fileName?.split(".")[0] ?? "",
 					url: item.url,
@@ -177,7 +185,8 @@ export async function replaceHtmlResourceUrls({
 
 		if (resourceInfo.attr === "data" && resourceInfo.tag === "object") {
 			const objectDataRegex = new RegExp(`${resourceInfo.attr}=["']${escapedPath}["']`, "g")
-			content = content.replace(objectDataRegex, `${resourceInfo.attr}="${item.url}"`)
+			const escapedUrl = escapeHtmlAttributeValue(item.url)
+			content = content.replace(objectDataRegex, () => `${resourceInfo.attr}="${escapedUrl}"`)
 			return
 		}
 
@@ -185,11 +194,11 @@ export async function replaceHtmlResourceUrls({
 			`<(${resourceInfo.tag})([^>]*?)${resourceInfo.attr}=["']${escapedPath}["']([^>]*?)>`,
 			"gi",
 		)
-		content = content.replace(
-			attributeRegex,
-			(match, tagName, beforeAttr, afterAttr) =>
-				`<${tagName}${beforeAttr}${resourceInfo.attr}="${item.url}" data-original-path="${resourceInfo.path}"${afterAttr}>`,
-		)
+		content = content.replace(attributeRegex, (match, tagName, beforeAttr, afterAttr) => {
+			const escapedUrl = escapeHtmlAttributeValue(item.url)
+			const escapedOriginalPath = escapeHtmlAttributeValue(resourceInfo.path)
+			return `<${tagName}${beforeAttr}${resourceInfo.attr}="${escapedUrl}" data-original-path="${escapedOriginalPath}"${afterAttr}>`
+		})
 	})
 
 	if (processingMetadata?.type === "dashboard" && Object.keys(magicProjectConfig).length > 0) {
