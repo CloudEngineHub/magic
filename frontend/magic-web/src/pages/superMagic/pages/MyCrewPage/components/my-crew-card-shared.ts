@@ -1,10 +1,39 @@
-import type { CrewSourceType } from "@/apis/modules/crew"
+import type { AgentPublishTargetType, CrewAgentOrigin, CrewSourceType } from "@/apis/modules/crew"
 import {
 	CollaboratorPermissionEnum,
 	type CollaboratorPermission,
 } from "@/pages/superMagic/types/collaboration"
 import { isOfficialPublisherType } from "@/pages/superMagic/pages/CrewMarket/employee-market/components/employee-card-shared"
 import type { MyCrewView } from "@/services/crew/CrewService"
+
+type MyCrewOriginFields = Pick<MyCrewView, "origin">
+
+/** Resolve the source returned by the employee-list API. */
+export function resolveMyCrewOrigin(employee: MyCrewOriginFields): CrewAgentOrigin | null {
+	return employee.origin ?? null
+}
+
+export function isOfficialMyCrewAgent(employee: MyCrewOriginFields): boolean {
+	return resolveMyCrewOrigin(employee) === "OFFICIAL"
+}
+
+export function resolveMyCrewOriginLabel(
+	employee: MyCrewOriginFields,
+	t: (key: string) => string,
+): string | null {
+	switch (resolveMyCrewOrigin(employee)) {
+		case "OFFICIAL":
+			return t("myCrewPage.origin.official")
+		case "CREATED":
+			return t("myCrewPage.origin.created")
+		case "MARKET":
+			return t("myCrewPage.origin.market")
+		case "TEAM_SHARED":
+			return t("myCrewPage.origin.organizationShared")
+		default:
+			return null
+	}
+}
 
 export function isUnpublishedCreatedCrew(
 	employee: Pick<MyCrewView, "sourceType" | "latestPublishedAt">,
@@ -23,6 +52,24 @@ export function resolveMyCrewCreatedFooterBadgeLabel(
 		case "LOCAL_CREATE":
 		default:
 			return tCrewCreate("status.unpublished")
+	}
+}
+
+export function resolveMyCrewPublishTargetLabel(
+	publishTargetType: AgentPublishTargetType | null | undefined,
+	t: (key: string) => string,
+): string | null {
+	switch (publishTargetType) {
+		case "PRIVATE":
+			return t("skillEditPage.publishPanel.targets.private.label")
+		case "MEMBER":
+			return t("skillEditPage.publishPanel.targets.specific_members.label")
+		case "ORGANIZATION":
+			return t("skillEditPage.publishPanel.targets.organization.label")
+		case "MARKET":
+			return t("skillEditPage.publishPanel.targets.crew_market.label")
+		default:
+			return null
 	}
 }
 
@@ -56,30 +103,6 @@ export function resolveMyCrewPublisherLabel(
 		default:
 			return null
 	}
-}
-
-export function resolveMyCrewHiredActionKind(sourceType: CrewSourceType): "dismiss" | "disable" {
-	if (sourceType === "MARKET") return "dismiss"
-	return "disable"
-}
-
-export function resolveMyCrewDisableActionLabel(
-	allowDelete: boolean,
-	publisherType: string | null | undefined,
-	t: (key: string) => string,
-): string {
-	if (publisherType && isOfficialPublisherType(publisherType))
-		return t("employeeCard.officialBuiltin")
-	if (!allowDelete) return t("myCrewPage.sharedByTeamAction")
-	return t("myCrewPage.disable")
-}
-
-export function resolveMyCrewDisableActionDisabled(
-	allowDelete: boolean,
-	enabled: boolean,
-): boolean {
-	if (!allowDelete) return true
-	return !enabled
 }
 
 export function resolveTeamSharedCrewPermissions(userRole?: CollaboratorPermission) {

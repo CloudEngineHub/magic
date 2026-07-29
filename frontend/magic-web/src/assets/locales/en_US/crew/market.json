@@ -165,9 +165,10 @@
 		"badgeUpdated": "Updated",
 		"crewType": {
 			"ariaLabel": "Crew type",
+			"collaborated": "Collaborated",
 			"createdByMe": "Created by Me",
 			"hiredByMe": "Hired by Me",
-			"teamShared": "Shared by Team"
+			"teamShared": "Organization Shared"
 		},
 		"delete": "Delete",
 		"deleteConfirm": {
@@ -193,7 +194,7 @@
 			"source": {
 				"custom": "My Creation",
 				"market": "Market",
-				"team": "Team"
+				"team": "Organization Shared"
 			},
 			"startChat": "Start chat",
 			"title": "Crew Details",
@@ -220,6 +221,7 @@
 		},
 		"edit": "Edit",
 		"empty": "No crew yet. Create your first Crew now.",
+		"emptyCollaborated": "No crew you're collaborating on yet.",
 		"filterSheet": {
 			"closeAria": "Close filters",
 			"resetAria": "Reset filters",
@@ -245,6 +247,12 @@
 		"moreActionsAria": "More actions",
 		"openConversation": "Chat",
 		"openPublish": "Publish",
+		"origin": {
+			"created": "Created by Me",
+			"market": "Crew Market",
+			"official": "Official",
+			"organizationShared": "Organization Shared"
+		},
 		"pcOnlyNotice": {
 			"confirm": "Confirm",
 			"description": "Please use the desktop version to edit your Digital Crew",
@@ -255,7 +263,7 @@
 			"goToMyCrewAria": "Open My Crew",
 			"sorting": "Sorting"
 		},
-		"sharedByTeamAction": "Share within team",
+		"sharedByTeamAction": "Organization Shared",
 		"sortingDialog": {
 			"atLeastOneDisplayed": "At least one crew member must stay displayed on Home.",
 			"cancel": "Cancel",
@@ -534,6 +542,7 @@
 	"subtitle": "Discover and hire your exclusive digital crew.",
 	"tabs": {
 		"crewMarket": "Crew Market",
+		"organizationShared": "Organization Shared",
 		"skillsLibrary": "Skills Library"
 	},
 	"title": "Crew Market",
