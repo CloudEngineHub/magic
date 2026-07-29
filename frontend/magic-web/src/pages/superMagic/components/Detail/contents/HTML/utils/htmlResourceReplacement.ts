@@ -146,7 +146,8 @@ export async function replaceHtmlResourceUrls({
 			if (resourceInfo.type === "geo" || resourceInfo.type === "cleaned_data") {
 				const configItems =
 					(magicProjectConfig[configKey] as
-						Array<{ name: string; url: string }> | undefined) ?? []
+						| Array<{ name: string; url: string }>
+						| undefined) ?? []
 				configItems.push({
 					name: resourceInfo.fileName?.split(".")[0] ?? "",
 					url: item.url,
@@ -180,13 +181,6 @@ export async function replaceHtmlResourceUrls({
 					return `${beforeStyle}${replacedStyleContent}${afterStyle}`
 				},
 			)
-			return
-		}
-
-		if (resourceInfo.attr === "data" && resourceInfo.tag === "object") {
-			const objectDataRegex = new RegExp(`${resourceInfo.attr}=["']${escapedPath}["']`, "g")
-			const escapedUrl = escapeHtmlAttributeValue(item.url)
-			content = content.replace(objectDataRegex, () => `${resourceInfo.attr}="${escapedUrl}"`)
 			return
 		}
 
