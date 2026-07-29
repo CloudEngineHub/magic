@@ -93,6 +93,7 @@ return [
         'publish_target_value_required' => 'publish_target_value is required for current publish target type',
         'store_agent_not_found' => 'Store agent not found',
         'store_agent_already_added' => 'This store agent has already been added, duplicate addition is not allowed',
+        'agent_not_available' => 'You do not have permission to use this agent',
         'category_used_by_market' => 'This category is used by market agents. Please remove the associations first.',
         // Migrated from crew.php
         'validate_failed' => 'Validation failed',

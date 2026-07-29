@@ -27,7 +27,7 @@ return new class extends Migration {
             $table->string('task_id', 64)->comment('任务ID');
             $table->bigInteger('topic_id')->nullable()->comment('话题ID');
             $table->string('status', 32)->nullable()->comment('任务状态');
-            $table->text('content')->comment('消息内容');
+            $table->longText('content')->comment('消息内容');
             $table->json('steps')->nullable()->comment('步骤信息');
             $table->json('tool')->nullable()->comment('工具调用信息');
             $table->string('event', 64)->comment('事件类型');
@@ -46,6 +46,5 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('magic_general_agent_message');
     }
 };

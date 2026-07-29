@@ -21,9 +21,11 @@ use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\InterruptClientNotification;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\UpsertProjectFileNodeDTO;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\ProjectFileConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
@@ -46,6 +48,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
 use Hyperf\Codec\Json;
@@ -78,6 +81,7 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectMcpConfigService $projectMcpConfigService,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -255,6 +259,19 @@ class HandleUserMessageAppService extends AbstractAppService
             }
             // Request-level extra (topic_pattern / agent_code) overrides persisted topic config
             [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
+        }
+
+        $topicPattern = trim((string) ($userMessageDTO->getExtra()?->getTopicPattern() ?? $userMessageDTO->getTopicMode()));
+        [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            ),
+            $topicPattern,
+            $resolvedAgentCode
+        );
+        if (! $allowed) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
         }
 
         // Generate task context

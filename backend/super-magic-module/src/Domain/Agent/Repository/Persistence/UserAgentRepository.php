@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\UserAgentRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\UserAgentModel;
+use Hyperf\Database\Model\Model;
 use RuntimeException;
 
 class UserAgentRepository extends AbstractRepository implements UserAgentRepositoryInterface
@@ -41,14 +42,20 @@ class UserAgentRepository extends AbstractRepository implements UserAgentReposit
             return $this->toUserAgentEntity($model->toArray());
         }
 
-        $builder = $this->createBuilder($dataIsolation, $this->userAgentModel::query());
+        // 复用最近一次已撤销的关系，避免重新雇佣时持续累积软删除数据。
+        // 数据库只限制同一 org/user/agent 的有效关系唯一，已删除历史允许保留。
+        $builder = $this->createBuilder($dataIsolation, $this->userAgentModel::withTrashed());
         /** @var null|UserAgentModel $model */
         $model = $builder
             ->where('user_id', $entity->getUserId())
             ->where('agent_code', $entity->getAgentCode())
+            ->orderByDesc('id')
             ->first();
 
         if ($model) {
+            if ($model->trashed()) {
+                $model->restore();
+            }
             $model->fill($attributes);
             $model->save();
             return $this->toUserAgentEntity($model->toArray());
@@ -150,6 +157,34 @@ class UserAgentRepository extends AbstractRepository implements UserAgentReposit
         }
 
         return $result;
+    }
+
+    public function findAllByMarketSource(SuperMagicAgentDataIsolation $dataIsolation, int $marketId): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->userAgentModel::query());
+        $models = $builder
+            ->where('source_type', AgentSourceType::MARKET->value)
+            ->where('source_id', $marketId)
+            ->get();
+
+        return $models
+            ->map(fn (Model $model): UserAgentEntity => $this->toUserAgentEntity($model->toArray()))
+            ->all();
+    }
+
+    public function deleteByMarketSourceAndUsers(SuperMagicAgentDataIsolation $dataIsolation, int $marketId, array $userIds): int
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('strval', $userIds))));
+        if ($userIds === []) {
+            return 0;
+        }
+
+        $builder = $this->createBuilder($dataIsolation, $this->userAgentModel::query());
+        return $builder
+            ->where('source_type', AgentSourceType::MARKET->value)
+            ->where('source_id', $marketId)
+            ->whereIn('user_id', $userIds)
+            ->delete();
     }
 
     public function deleteByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool

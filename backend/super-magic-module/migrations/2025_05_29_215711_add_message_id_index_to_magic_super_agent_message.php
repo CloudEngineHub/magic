@@ -32,15 +32,5 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        if (! Schema::hasTable('magic_super_agent_message')) {
-            return;
-        }
-
-        Schema::table('magic_super_agent_message', function (Blueprint $table) {
-            // Check if idx_message_id index exists before dropping
-            if (Schema::hasIndex('magic_super_agent_message', 'idx_message_id')) {
-                $table->dropIndex('idx_message_id');
-            }
-        });
     }
 };
