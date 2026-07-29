@@ -304,9 +304,10 @@ const FilesViewer = memo(
 				if (!activeTab || !tabsContainerRef.current || tabs.length === 0) return
 
 				const container = tabsContainerRef.current
-				const activeTabElement = container.querySelector(
-					`[data-tab-id="${activeTab.id}"]`,
-				) as HTMLElement
+				// Tab ids may contain file-path characters that are invalid inside CSS selectors.
+				const activeTabElement = Array.from(
+					container.querySelectorAll<HTMLElement>("[data-tab-id]"),
+				).find((element) => element.dataset.tabId === activeTab.id)
 
 				if (activeTabElement) {
 					// 计算目标tab相对于容器的位置

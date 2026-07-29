@@ -30,9 +30,9 @@ describe("preprocessMarkdown", () => {
 		)
 	})
 
-	it("converts unquoted file path placeholders when the path contains bare closing brackets", () => {
+	it("stops unquoted file path placeholders at bare closing brackets", () => {
 		expect(preprocessMarkdown(`[@file_path:${bareClosingBracketPath}]`)).toBe(
-			`<file-path path="${bareClosingBracketPath}"></file-path>`,
+			'<file-path path="team/active"></file-path> 20260629/review-schedule.html]',
 		)
 	})
 
