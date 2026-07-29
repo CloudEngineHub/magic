@@ -151,6 +151,8 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
         if message_id is None:
             message_id = str(Snowflake.create_default().get_id())
         inner_message["message_id"] = message_id
+        # super_message_id 保留 super-magic 生成的原始消息 ID，下游服务只透传不覆盖。
+        inner_message["super_message_id"] = message_id
 
         # 当有 token_usage_details 时，注入到 inner_message 供前端消费
         if token_usage_details and token_usage_details.usages:

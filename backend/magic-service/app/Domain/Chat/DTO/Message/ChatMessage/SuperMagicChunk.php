@@ -19,6 +19,11 @@ class SuperMagicChunk extends MagicMessageStruct implements MessageInterface
 
     protected ?string $id = null;
 
+    /**
+     * Super Magic 生成的原始消息 ID。
+     */
+    protected ?string $superMessageId = null;
+
     protected ?string $model = null;
 
     protected ?string $object = null;
@@ -26,6 +31,11 @@ class SuperMagicChunk extends MagicMessageStruct implements MessageInterface
     protected ?array $usage = null;
 
     protected ?string $correlationId = null;
+
+    /**
+     * Super Magic 任务 ID.
+     */
+    protected ?string $taskId = null;
 
     /**
      * chunk 序号.
@@ -38,14 +48,32 @@ class SuperMagicChunk extends MagicMessageStruct implements MessageInterface
             'choices' => $this->choices,
             'created' => $this->created,
             'id' => $this->id,
+            'super_message_id' => $this->superMessageId,
             'model' => $this->model,
             'object' => $this->object,
             'usage' => $this->usage,
             'correlation_id' => $this->correlationId,
+            'task_id' => $this->taskId,
             'i' => $this->i,
         ];
 
         return $filterNull ? array_filter($data, fn ($value) => ! is_null($value)) : $data;
+    }
+
+    /**
+     * 获取 Super Magic 任务 ID.
+     */
+    public function getTaskId(): ?string
+    {
+        return $this->taskId;
+    }
+
+    /**
+     * 设置 Super Magic 任务 ID.
+     */
+    public function setTaskId(?string $taskId): void
+    {
+        $this->taskId = $taskId;
     }
 
     protected function setMessageType(): void
