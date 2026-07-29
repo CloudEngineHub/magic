@@ -74,7 +74,18 @@ class ToolSDK:
             print(f"[SDK Error] {error_msg}", file=sys.stderr)
             return Result.error(error_msg, tool_call_id=tool_call_id)
 
+        # sdk_execution_id 仅由 run_sdk_snippet 注入，用于区分正式 Code Mode
+        # 与 run_python_snippet 等普通 Python 执行环境，并保证请求可按 execution 取消。
         sdk_execution_id = os.getenv("SUPER_MAGIC_SDK_EXECUTION_ID", "")
+        if not sdk_execution_id:
+            error_msg = (
+                "SUPER_MAGIC_SDK_EXECUTION_ID is not set. "
+                "sdk.tool can only be used inside run_sdk_snippet, not run_python_snippet. "
+                "Please use run_sdk_snippet to call SDK tools."
+            )
+            print(f"[SDK Error] {error_msg}", file=sys.stderr)
+            return Result.error(error_msg, tool_call_id=tool_call_id)
+
         language = os.getenv("SUPER_MAGIC_LANGUAGE", "zh_CN")
 
         request_data = {
