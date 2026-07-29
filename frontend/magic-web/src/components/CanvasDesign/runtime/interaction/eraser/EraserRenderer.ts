@@ -3,6 +3,7 @@ import type { Canvas } from "../../core/Canvas"
 import type { ImageElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import type { EraserManager } from "./EraserManager"
+import { syncNodeTransformRelativeTo } from "../../shared/geometry/nodeTransform"
 
 export interface EraserPoint {
 	x: number
@@ -95,26 +96,21 @@ export class EraserRenderer {
 		}
 	}
 
-	public render(): void {
+	public render(): boolean {
 		const metrics = this.getElementMetrics()
-		if (!metrics) return
+		if (!metrics) return false
 		const { elementNode, width, height } = metrics
 
 		this.elementBounds = { width, height }
 
 		this.overlayGroup = new Konva.Group({
-			x: elementNode.x(),
-			y: elementNode.y(),
-			scaleX: elementNode.scaleX(),
-			scaleY: elementNode.scaleY(),
-			rotation: elementNode.rotation(),
-			offset: { x: 0, y: 0 },
 			name: ERASER_OVERLAY_GROUP_NAME,
 			listening: true,
 			clipFunc: (ctx) => {
 				ctx.rect(0, 0, width, height)
 			},
 		})
+		syncNodeTransformRelativeTo(elementNode, this.overlayGroup, this.canvas.controlsLayer)
 
 		this.maskRect = new Konva.Rect({
 			x: 0,
@@ -133,12 +129,14 @@ export class EraserRenderer {
 			fill: DRAW_CONFIG.HIT_FILL,
 			listening: true,
 		})
+		// 先纳入 overlayGroup，后续画笔位图初始化失败时可由 destroy() 统一递归清理。
+		this.overlayGroup.add(this.maskRect, this.hitRect)
 
 		const snapshot = this.captureBrushSnapshot()
-		if (!this.ensureBrushSurfaces(snapshot)) return
+		if (!this.ensureBrushSurfaces(snapshot)) return false
 
 		const display = this.displayCanvas
-		if (!display) return
+		if (!display) return false
 
 		const pad = snapshot.pad
 		this.brushImage = new Konva.Image({
@@ -153,11 +151,12 @@ export class EraserRenderer {
 
 		this.syncBrushLayerFull()
 
-		this.overlayGroup.add(this.maskRect, this.hitRect, this.brushImage)
+		this.overlayGroup.add(this.brushImage)
 
 		this.canvas.controlsLayer.add(this.overlayGroup)
 		this.overlayGroup.moveToTop()
 		this.canvas.controlsLayer.batchDraw()
+		return true
 	}
 
 	public syncTransform(): void {
@@ -169,16 +168,11 @@ export class EraserRenderer {
 
 		this.elementBounds = { width, height }
 		this.overlayGroup.setAttrs({
-			x: elementNode.x(),
-			y: elementNode.y(),
-			scaleX: elementNode.scaleX(),
-			scaleY: elementNode.scaleY(),
-			rotation: elementNode.rotation(),
-			offset: { x: 0, y: 0 },
 			clipFunc: (ctx) => {
 				ctx.rect(0, 0, width, height)
 			},
 		})
+		syncNodeTransformRelativeTo(elementNode, this.overlayGroup, this.canvas.controlsLayer)
 		this.maskRect.size({ width, height })
 		this.hitRect.size({ width, height })
 		this.overlayGroup.moveToTop()
@@ -341,6 +335,11 @@ export class EraserRenderer {
 		if (!this.displayCanvas) {
 			this.displayCanvas = document.createElement("canvas")
 		}
+		// 位图画笔依赖两张 2D Canvas；上下文不可用时必须让会话回滚，避免只隐藏原图却没有笔迹。
+		if (!this.committedCanvas.getContext("2d") || !this.displayCanvas.getContext("2d")) {
+			this.brushSurfaceKey = ""
+			return false
+		}
 
 		if (key !== this.brushSurfaceKey) {
 			this.brushSurfaceKey = key
@@ -446,10 +445,13 @@ export class EraserRenderer {
 			this.overlayGroup.destroy()
 			this.overlayGroup = undefined
 		}
+		this.maskRect = undefined
+		this.hitRect = undefined
 		this.brushImage = undefined
 		this.committedCanvas = null
 		this.displayCanvas = null
 		this.brushSurfaceKey = ""
+		this.elementBounds = null
 		this.canvas.controlsLayer.batchDraw()
 	}
 

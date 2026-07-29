@@ -34,6 +34,10 @@ import {
 	getImageProcessRequestPayload,
 } from "../../../runtime/resources/image/imageCropUtils"
 import { generateElementId, generateUUID } from "../../../runtime/shared/ids"
+import {
+	resolveExpandedResultElementGeometry,
+	resolveExtendedImageElementGeometry,
+} from "../../../runtime/interaction/extend/extendElementGeometry"
 import { extendPresetOptions, scaleOptions } from "./constants"
 import {
 	calculateExtendFrameSizeFromControls,
@@ -225,12 +229,12 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 		if (!canvas) return
 
 		const imageRect = canvas.extendManager.getImageProxyLocalRect()
-		const imageBounds = canvas.extendManager.getImageBounds()
-		if (imageRect && imageBounds) {
+		const imageOriginInContent = canvas.extendManager.getImageOriginInContent()
+		if (imageRect && imageOriginInContent) {
 			const nextSourcePosition = getUpdatedImageElementPosition({
 				canvas,
 				elementId: imageElement.id,
-				imageBounds,
+				imageOriginInContent,
 				imageRect,
 			})
 			canvas.elementManager.update(imageElement.id, nextSourcePosition)
@@ -252,8 +256,9 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 
 		const currentSession = canvas.extendManager.getTempSession()
 		const imageRect = canvas.extendManager.getImageProxyLocalRect()
-		const imageBounds = canvas.extendManager.getImageBounds()
-		if (!currentSession || !imageRect || !imageBounds) {
+		const imageOriginInContent = canvas.extendManager.getImageOriginInContent()
+		const frameBounds = canvas.extendManager.getFrameBounds()
+		if (!currentSession || !imageRect || !imageOriginInContent || !frameBounds) {
 			return
 		}
 
@@ -272,7 +277,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				const nextSourcePosition = getUpdatedImageElementPosition({
 					canvas,
 					elementId: imageElement.id,
-					imageBounds,
+					imageOriginInContent,
 					imageRect,
 				})
 				canvas.elementManager.update(imageElement.id, nextSourcePosition)
@@ -286,13 +291,14 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					}),
 				})
 				createdElementId = generateElementId()
+				const expandedResultGeometry = resolveExpandedResultElementGeometry(
+					frameBounds,
+					currentSession.frame,
+				)
 				const newImageElement: ImageElementData = {
 					id: createdElementId,
 					type: ElementTypeEnum.Image,
-					x: imageBounds.x + imageBounds.width,
-					y: imageBounds.y,
-					width: currentSession.frame.width,
-					height: currentSession.frame.height,
+					...expandedResultGeometry,
 					zIndex: canvas.elementManager.getNextZIndexInLevel(),
 					name: `${imageElement.name || elementInstance.getRenderName()} ${t(
 						"elementTools.imageExtend.title",
@@ -518,38 +524,19 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 function getUpdatedImageElementPosition(params: {
 	canvas: NonNullable<ReturnType<typeof useCanvas>["canvas"]>
 	elementId: string
-	imageBounds: { x: number; y: number; width: number; height: number }
+	imageOriginInContent: { x: number; y: number }
 	imageRect: { x: number; y: number; width: number; height: number }
 }): { x: number; y: number; width: number; height: number } {
-	const { canvas, elementId, imageBounds, imageRect } = params
+	const { canvas, elementId, imageOriginInContent, imageRect } = params
 	const parentId = canvas.elementManager.findParentIdForElement(elementId)
-	if (!parentId) {
-		return {
-			x: imageBounds.x,
-			y: imageBounds.y,
-			width: imageRect.width,
-			height: imageRect.height,
-		}
-	}
+	const parentNode = parentId
+		? canvas.elementManager.getElementInstance(parentId)?.getNode()
+		: null
 
-	const parentNode = canvas.elementManager.getElementInstance(parentId)?.getNode()
-	if (!parentNode) {
-		return {
-			x: imageBounds.x,
-			y: imageBounds.y,
-			width: imageRect.width,
-			height: imageRect.height,
-		}
-	}
-
-	const localPoint = parentNode.getAbsoluteTransform().copy().invert().point({
-		x: imageBounds.x,
-		y: imageBounds.y,
+	return resolveExtendedImageElementGeometry({
+		contentLayer: canvas.contentLayer,
+		parentNode,
+		imageOriginInContent,
+		imageRect,
 	})
-	return {
-		x: localPoint.x,
-		y: localPoint.y,
-		width: imageRect.width,
-		height: imageRect.height,
-	}
 }

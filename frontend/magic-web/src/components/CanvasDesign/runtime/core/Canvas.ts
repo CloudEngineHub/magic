@@ -60,6 +60,7 @@ import { buildVirtualResourceScope } from "../shared/path/canvasResourcePath"
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
+import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import {
 	editActions,
 	layerActions,
@@ -112,6 +113,7 @@ export class Canvas {
 	public eventEmitter: EventEmitter<CanvasEventMap>
 
 	public permissionManager: PermissionManager
+	public imageEditingCoordinator: ImageEditingCoordinator
 	public elementManager: ElementManager
 	public selectionManager: SelectionManager
 	public transformManager: TransformManager
@@ -293,6 +295,10 @@ export class Canvas {
 
 		// 初始化 CursorManager（需要较早初始化，工具管理器依赖它）
 		this.cursorManager = new CursorManager({
+			canvas: this,
+		})
+
+		this.imageEditingCoordinator = new ImageEditingCoordinator({
 			canvas: this,
 		})
 
@@ -1278,6 +1284,13 @@ export class Canvas {
 			this.handleWindowClick = null
 		}
 
+		// 图片特殊编辑退出依赖事件系统、元素、选择、Marker 和 Cursor Manager。
+		// 必须在拆除这些依赖前结束会话，否则活动裁剪恢复元素时会访问已清空的 ElementManager。
+		this.cropManager.destroy()
+		this.extendManager.destroy()
+		this.eraserManager.destroy()
+		this.imageEditingCoordinator.destroy()
+
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
 
@@ -1311,9 +1324,6 @@ export class Canvas {
 		this.sizeLabelManager.destroy()
 		this.backgroundManager.destroy()
 		this.canvasFileUploadManager.destroy()
-		this.cropManager.destroy()
-		this.extendManager.destroy()
-		this.eraserManager.destroy()
 
 		// 清理图片资源管理器
 		this.imageResourceManager.destroy()

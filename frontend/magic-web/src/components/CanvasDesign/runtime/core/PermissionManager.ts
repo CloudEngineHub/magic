@@ -117,12 +117,10 @@ export class PermissionManager {
 	/**
 	 * 判断当前是否允许展示元素级临时交互反馈（hover、控件显隐、装饰器 affordance）。
 	 *
-	 * 裁剪和橡皮模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
+	 * 图片特殊编辑模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
 	 */
 	public canShowTransientElementAffordance(): boolean {
-		if (this.canvas.cropManager.getCroppingElementId()) return false
-		if (this.canvas.eraserManager.getErasingElementId()) return false
-		return true
+		return !this.canvas.imageEditingCoordinator.isActive()
 	}
 
 	/**
