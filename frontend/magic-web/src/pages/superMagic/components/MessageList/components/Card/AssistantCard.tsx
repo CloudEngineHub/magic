@@ -323,7 +323,7 @@ export function withAssistantCard<
 
 				{statusList.has(messageNode?.status) && (
 					<>
-						{messageNode?.content && (
+						{messageNode?.role === "tool" && messageNode?.content && (
 							<div className="mb-1 text-muted-foreground">{messageNode?.content}</div>
 						)}
 						<StatusBadge status={messageNode?.status} />

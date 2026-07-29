@@ -63,7 +63,6 @@ import { isReadOnlyProject } from "../../utils/permission"
 import { MessageHeaderTopicHistoryPanel } from "../../components/MessageHeader"
 import topicReadProgressService from "../../services/topicReadProgressService"
 import dayjs from "@/lib/dayjs"
-import type { MessageItem } from "../../stores/types"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 
@@ -439,25 +438,24 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	useEffect(() => {
 		if (!selectedTopic?.chat_topic_id || !selectedTopic?.id) return
 
-		return superMagicStore.registerTopicMessageListener({
-			topicId: selectedTopic.chat_topic_id,
-			callback: ({
-				message,
-				messageNode,
-			}: {
-				message: MessageItem
-				messageNode: { status?: unknown }
-			}) => {
-				if (message?.role === "user") return
-				const readProgressPayload = resolveReadProgressPayloadFromMessage(message)
+		return superMagicStore.subscribe(
+			"message.committed",
+			({ payload }) => {
+				const { message } = payload
+				if (message.role === "user") return
+				const readProgressPayload = resolveReadProgressPayloadFromMessage({
+					send_time: message.sendTime,
+					app_message_id: message.appMessageId,
+				})
 				handleArrivedTopicStatusChange({
-					nextStatus: messageNode?.status as TaskStatus | undefined,
+					nextStatus: message.status as TaskStatus | undefined,
 					topicId: selectedTopic.id,
 					lastReadAt: readProgressPayload.lastReadAt,
 					lastReadMessageId: readProgressPayload.lastReadMessageId,
 				})
 			},
-		})
+			{ scope: { topicId: selectedTopic.chat_topic_id } },
+		)
 	}, [handleArrivedTopicStatusChange, selectedTopic?.chat_topic_id, selectedTopic?.id])
 
 	const { messages, showLoading } = useTopicConversationLoading({

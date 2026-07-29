@@ -329,7 +329,7 @@ function attachmentOnlyPart(
 				type: "attachment",
 				timestamp,
 				attachments,
-				toolCallId,
+				...(toolCallId ? { toolCallId } : {}),
 			}
 		: null
 }
@@ -360,15 +360,15 @@ function extractToolPart(
 		rawToolName === "finish_task" || options?.fallbackRawName === "finish_task"
 	const hiddenSdkSnippet =
 		rawToolName === "run_sdk_snippet" || options?.fallbackRawName === "run_sdk_snippet"
-	const toolCallId = getToolCallId(source, tool, options?.fallbackToolCallId)
 	if (hiddenToolName) {
+		// finish_task is a task-result projection rather than an ordinary tool call;
+		// do not leak its legacy tool_call_id into the exported attachment part.
 		return attachmentOnlyPart(
 			pickDisplayAttachments(source, options?.fallbackAttachmentsSource, {
 				fallbackContent: options?.fallbackAttachmentContent,
 				workspaceFilesList: opts.workspaceFilesList,
 			}),
 			options?.timestamp,
-			toolCallId,
 		)
 	}
 	if (!opts.includeToolCall) {
@@ -377,6 +377,7 @@ function extractToolPart(
 	if (hiddenSdkSnippet) {
 		return null
 	}
+	const toolCallId = getToolCallId(source, tool, options?.fallbackToolCallId)
 
 	const brief =
 		(typeof tool?.remark === "string" && tool.remark) ||

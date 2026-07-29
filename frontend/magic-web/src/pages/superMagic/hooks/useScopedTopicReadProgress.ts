@@ -2,7 +2,6 @@ import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useEffect, useMemo, useRef } from "react"
 import type { Topic, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
-import type { MessageItem } from "@/pages/superMagic/stores/types"
 import {
 	createTopicReadProgressService,
 	normalizeMessageSendTimeToMs,
@@ -103,26 +102,25 @@ export function useScopedTopicReadProgress({
 	useEffect(() => {
 		if (!selectedTopic?.chat_topic_id || !selectedTopic?.id) return
 
-		return superMagicStore.registerTopicMessageListener({
-			topicId: selectedTopic.chat_topic_id,
-			callback: ({
-				message,
-				messageNode,
-			}: {
-				message: MessageItem
-				messageNode: { status?: unknown }
-			}) => {
+		return superMagicStore.subscribe(
+			"message.committed",
+			({ payload }) => {
+				const { message } = payload
 				// 只跳过纯用户消息；assistant / tool 都可能承载任务状态的有效变化。
-				if (message?.role === "user") return
-				const readProgressPayload = resolveReadProgressPayloadFromMessage(message)
+				if (message.role === "user") return
+				const readProgressPayload = resolveReadProgressPayloadFromMessage({
+					send_time: message.sendTime,
+					app_message_id: message.appMessageId,
+				})
 				handleArrivedTopicStatusChange({
-					nextStatus: messageNode?.status as TaskStatus | undefined,
+					nextStatus: message.status as TaskStatus | undefined,
 					topicId: selectedTopic.id,
 					lastReadAt: readProgressPayload.lastReadAt,
 					lastReadMessageId: readProgressPayload.lastReadMessageId,
 				})
 			},
-		})
+			{ scope: { topicId: selectedTopic.chat_topic_id } },
+		)
 	}, [handleArrivedTopicStatusChange, selectedTopic?.chat_topic_id, selectedTopic?.id])
 
 	/** 在消息变化时同步未读状态，并按 TopicPage 的规则补齐已读上报。 */

@@ -147,9 +147,8 @@ describe("SuperMagicStore / 测试隔离与 Fixture", () => {
 	it("测试 helper 发布了错误的 PubSub 事件名。", () => {
 		const store = createStore()
 		const arrived = vi.fn()
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_ID,
-			callback: arrived,
+		const unsubscribe = store.subscribe("message.committed", arrived, {
+			scope: { topicId: TOPIC_ID },
 		})
 
 		store.enqueueMessage(TOPIC_ID, createFinal("published"))
@@ -157,7 +156,10 @@ describe("SuperMagicStore / 测试隔离与 Fixture", () => {
 
 		expect(arrived).toHaveBeenCalledTimes(1)
 		expect(arrived).toHaveBeenCalledWith(
-			expect.objectContaining({ topicId: TOPIC_ID, stage: "arrived" }),
+			expect.objectContaining({
+				type: "message.committed",
+				meta: expect.objectContaining({ topicId: TOPIC_ID }),
+			}),
 		)
 		unsubscribe()
 	})

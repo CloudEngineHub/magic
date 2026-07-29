@@ -372,7 +372,7 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expectSettledNode(store, { content: "A rewritten answer" })
 	})
 
-	it("final content 为 `null`，流式 content 非空。", () => {
+	it("terminal final content 为 `null` 时显式清空流式 content。", () => {
 		const store = createStore()
 		const finalEnvelope = mutateFinalEnvelope(
 			createFinalEnvelope({ content: "placeholder" }),
@@ -384,17 +384,17 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		store.receiveChunk(createChunk({ content: "可用的流式正文" }))
 		store.enqueueMessage(TOPIC_ID, finalEnvelope)
 
-		// An incomplete final snapshot must not erase meaningful text already received.
-		expectSettledNode(store, { content: "可用的流式正文" })
+		// Terminal Final distinguishes an absent field from an explicit clear value.
+		expectSettledNode(store, { content: "" })
 	})
 
-	it("final content 为空字符串，流式 content 非空。", () => {
+	it("terminal final content 为空字符串时显式清空流式 content。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "可用的流式正文" }))
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "" }))
 
-		expectSettledNode(store, { content: "可用的流式正文" })
+		expectSettledNode(store, { content: "" })
 	})
 
 	it("final message 缺少 reasoning，但流式 reasoning 已存在。", () => {
@@ -466,11 +466,16 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expectSettledNode(store, { content: markup })
 	})
 
-	it("超大正文导致打字机长期无法追平。", () => {
+	it("非 Final 保持打字机展示，Final 对超大正文在 2 秒内有界追平。", () => {
 		const store = createStore()
 		const largeContent = "大段正文".repeat(16_384)
 
-		store.receiveChunk(createChunk({ content: largeContent, finishReason: "stop" }))
+		store.receiveChunk(createChunk({ content: largeContent }))
+		const liveContent = getProjectedNode(store)?.content ?? ""
+		expect(liveContent.length).toBeGreaterThan(0)
+		expect(liveContent.length).toBeLessThan(largeContent.length)
+
+		store.receiveChunk(createChunk({ i: 1, finishReason: "stop" }))
 		advanceRendering(RENDER_SETTLE_MS)
 
 		expect(getProjectedNode(store)?.content).toBe(largeContent)
