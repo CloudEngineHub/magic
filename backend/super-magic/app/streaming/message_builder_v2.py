@@ -126,6 +126,8 @@ class LLMStreamingMessageBuilderV2(MessageBuilderInterface):
 
         # app_message_id 取预生成的 message_id，保证与后续非流式消息一致
         app_message_id = chunk_data.metadata.message_id if chunk_data.metadata else None
+        # super_message_id 与对应落库消息使用同一个 super-magic 预生成 ID。
+        super_magic_chunk["super_message_id"] = app_message_id
 
         timestamp_ms = int(chunk_data.timestamp.timestamp() * 1000)
 

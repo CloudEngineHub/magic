@@ -19,6 +19,11 @@ class SuperMagicChunk extends MagicMessageStruct implements MessageInterface
 
     protected ?string $id = null;
 
+    /**
+     * Super Magic 生成的原始消息 ID。
+     */
+    protected ?string $superMessageId = null;
+
     protected ?string $model = null;
 
     protected ?string $object = null;
@@ -43,6 +48,7 @@ class SuperMagicChunk extends MagicMessageStruct implements MessageInterface
             'choices' => $this->choices,
             'created' => $this->created,
             'id' => $this->id,
+            'super_message_id' => $this->superMessageId,
             'model' => $this->model,
             'object' => $this->object,
             'usage' => $this->usage,
