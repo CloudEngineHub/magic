@@ -53,6 +53,7 @@ from app.tools.magicbase_tools import (
     UpdateMagicColumn,
     UpdateMagicTablePermissions,
 )
+from app.utils.async_file_utils import async_read_json
 
 
 class RecordingMagicBaseApi(MagicBaseApi):
@@ -571,7 +572,7 @@ async def test_magicbase_row_tools_forward_expected_payloads():
 
 
 @pytest.mark.asyncio
-async def test_create_magicbase_table_returns_real_table_id():
+async def test_create_magicbase_table_returns_real_table_id(tmp_path):
     class FakeMagicBase:
         async def create_table_async(self, parameter):
             assert parameter.project_id == "100"
@@ -608,6 +609,7 @@ async def test_create_magicbase_table_returns_real_table_id():
     )
 
     with (
+        patch("app.service.html_app_memory_service.PathManager.get_workspace_dir", return_value=tmp_path),
         patch("app.tools.magicbase_tools.InitClientMessageUtil.get_metadata", return_value={"project_id": "100"}),
         patch("app.tools.magicbase_tools.get_magic_service_sdk", return_value=FakeSdk()),
     ):
@@ -616,3 +618,9 @@ async def test_create_magicbase_table_returns_real_table_id():
     assert result.ok is True
     assert "Use the real table_id 200" in result.content
     assert result.data["table"]["table_id"] == "200"
+
+    state = await async_read_json(tmp_path / ".magicbase" / "migrations.json")
+    assert state["version"] == 2
+    assert len(state["migrations"]) == 1
+    assert state["migrations"][0]["result_table_id"] == "200"
+    assert "result" not in state["migrations"][0]

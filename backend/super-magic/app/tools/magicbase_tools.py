@@ -145,7 +145,6 @@ async def _record_table_update_success(migration_id: str, table: Dict[str, Any])
             migration["status"] = "Success"
             migration["applied_at"] = _now_text()
             migration["result_table_id"] = _table_id(table)
-            migration["result"] = _json_safe(table)
             break
     await write_migrations_state(state)
     await sync_html_app_magicbase_model(state["data_model"])
@@ -172,7 +171,6 @@ async def _record_column_update_success(migration_id: str, target_table_id: str,
             migration["status"] = "Success"
             migration["applied_at"] = _now_text()
             migration["result_column_id"] = _column_id(column)
-            migration["result"] = _json_safe(column)
             break
     await write_migrations_state(state)
     await sync_html_app_magicbase_model(state["data_model"])
@@ -280,7 +278,6 @@ async def _reconcile_pending_migrations_with_tables(tables: List[Dict[str, Any]]
             migration["applied_at"] = now
             migration["reconciled_at"] = now
             migration["result_table_id"] = _table_id(table)
-            migration["result"] = _json_safe(table)
             upsert_table_model(data_model, table)
             changed += 1
         elif operation == "create_column":
@@ -295,7 +292,6 @@ async def _reconcile_pending_migrations_with_tables(tables: List[Dict[str, Any]]
             migration["applied_at"] = now
             migration["reconciled_at"] = now
             migration["result_column_id"] = _column_id(column)
-            migration["result"] = _json_safe(column)
             upsert_column_model(data_model, _table_id(table), column)
             changed += 1
 
