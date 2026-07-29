@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react"
-import type { ReactNode } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import type { ReactNode, RefObject } from "react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import FilesViewer from "../index"
 
 const mockState = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const mockState = vi.hoisted(() => ({
 		},
 	},
 	noop: vi.fn(),
+	scrollTo: vi.fn(),
 }))
 
 vi.mock("antd", () => ({
@@ -54,7 +55,13 @@ vi.mock("@/components/base/MagicSpin", () => ({
 }))
 
 vi.mock("@/components/base/HeadlessHorizontalScroll", () => ({
-	default: ({ children }: { children: ReactNode }) => <>{children}</>,
+	default: ({
+		children,
+		scrollContainerRef,
+	}: {
+		children: ReactNode
+		scrollContainerRef?: RefObject<HTMLDivElement>
+	}) => <div ref={scrollContainerRef}>{children}</div>,
 }))
 
 vi.mock("../hooks/useFilesViewer", () => ({
@@ -116,7 +123,7 @@ vi.mock("../components/TabCache", () => ({
 }))
 
 vi.mock("../components/TabItem", () => ({
-	default: () => null,
+	default: ({ tab }: { tab: { id: string } }) => <div data-tab-id={tab.id} />,
 }))
 
 vi.mock("../components/TabContextMenu", () => ({
@@ -152,8 +159,17 @@ vi.mock("../../DetailEmpty", () => ({
 	default: () => null,
 }))
 
+beforeEach(() => {
+	mockState.tab.id = "test-tab"
+	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+		configurable: true,
+		value: mockState.scrollTo,
+	})
+})
+
 afterEach(() => {
 	cleanup()
+	mockState.scrollTo.mockReset()
 })
 
 describe("FilesViewer fullscreen portal", () => {
@@ -168,5 +184,13 @@ describe("FilesViewer fullscreen portal", () => {
 
 		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeNull()
 		expect(screen.getByTestId("files-viewer-content")).toBeInTheDocument()
+	})
+
+	it("centers an active tab without interpreting its id as a CSS selector", () => {
+		mockState.tab.id =
+			'pending-attachment-path:个人使用画像/个人AI协作画像.md]\n\n10. 部分 [unknown"'
+
+		expect(() => render(<FilesViewer />)).not.toThrow()
+		expect(mockState.scrollTo).toHaveBeenCalledOnce()
 	})
 })

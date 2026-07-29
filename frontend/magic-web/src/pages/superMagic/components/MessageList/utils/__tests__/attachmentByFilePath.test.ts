@@ -16,9 +16,9 @@ describe("extractFilePathsFromContent", () => {
 		])
 	})
 
-	it("extracts unquoted mentions when the path contains bare closing brackets", () => {
+	it("requires quotes when the path contains bare closing brackets", () => {
 		expect(extractFilePathsFromContent(`[@file_path:${bareClosingBracketPath}]`)).toEqual([
-			bareClosingBracketPath,
+			"team/active",
 		])
 	})
 })

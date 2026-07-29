@@ -41,11 +41,35 @@ describe("filePathMention", () => {
 		})
 	})
 
-	it("parses unquoted paths containing bare closing brackets", () => {
+	it("requires quotes for paths containing bare closing brackets", () => {
 		const input = `[@file_path:${bareClosingBracketPath}]`
 		expect(parseFilePathMentionAt(input)).toMatchObject({
-			path: bareClosingBracketPath,
-			fullMatch: input,
+			path: "team/active",
+			fullMatch: "[@file_path:team/active]",
+		})
+	})
+
+	it("stops an unquoted mention before later bracketed multiline content", () => {
+		const content = `[@file_path:个人使用画像/个人AI协作画像.md]
+
+本次采用**最小化更新**。
+
+10. 部分 [unknown]`
+
+		expect(extractFilePathMentions(content)).toEqual([
+			expect.objectContaining({
+				path: "个人使用画像/个人AI协作画像.md",
+				fullMatch: "[@file_path:个人使用画像/个人AI协作画像.md]",
+			}),
+		])
+	})
+
+	it("stops an unquoted mention before later bracketed inline content", () => {
+		const content = "[@file_path:reports/a.md] result 10. [unknown]"
+
+		expect(parseFilePathMentionAt(content)).toMatchObject({
+			path: "reports/a.md",
+			fullMatch: "[@file_path:reports/a.md]",
 		})
 	})
 
@@ -93,7 +117,7 @@ describe("filePathMention", () => {
 	it("does not merge consecutive mentions when an unclosed bracket is followed by another mention", () => {
 		const content = [
 			`[@file_path:${unclosedBracketPath}]`,
-			`[@file_path:${bareClosingBracketPath}]`,
+			`[@file_path:"${bareClosingBracketPath}"]`,
 		].join("\n")
 
 		expect(extractFilePathMentions(content).map((match) => match.path)).toEqual([
@@ -114,7 +138,7 @@ describe("filePathMention", () => {
 		const content = `# sample heading
 [@file_path:${balancedBracketPath}]
 [@file_path:${unclosedBracketPath}]
- [@file_path:${bareClosingBracketPath}]
+ [@file_path:"${bareClosingBracketPath}"]
 `
 
 		expect(extractFilePathMentions(content).map((match) => match.path)).toEqual([
@@ -128,7 +152,7 @@ describe("filePathMention", () => {
 		const content = [
 			`[@file_path:${balancedBracketPath}]noise1`,
 			`[@file_path:${unclosedBracketPath}]noise2`,
-			`[@file_path:${bareClosingBracketPath}]`,
+			`[@file_path:"${bareClosingBracketPath}"]`,
 		].join("")
 
 		expect(extractFilePathMentions(content).map((match) => match.path)).toEqual([
