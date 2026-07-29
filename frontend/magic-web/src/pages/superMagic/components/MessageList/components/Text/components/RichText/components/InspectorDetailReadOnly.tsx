@@ -43,30 +43,29 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 	return (
 		<span
 			className={cn(
-				"select-none rounded-md border border-border/60 bg-muted/30 transition-colors hover:border-border",
+				"inspector-detail-read-only select-none transition-colors",
 				expanded
-					? "my-1 block w-full"
-					: "mx-0.5 inline-flex max-w-[min(360px,100%)] align-baseline",
+					? "my-1 block w-full rounded-md border border-primary/50 bg-primary/5"
+					: "magic-mention inline-flex max-w-[min(360px,100%)] border border-border/60 !bg-muted/30 px-0.5 align-middle",
 			)}
 		>
 			<button
 				type="button"
 				className={cn(
-					"flex max-w-full cursor-pointer items-center gap-1 px-2 py-1 text-left text-xs",
+					"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
 					expanded ? "w-full" : "w-auto",
-					expanded && "border-b border-border/40",
+					expanded &&
+						"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
 				)}
 				onClick={() => setExpanded((v) => !v)}
 				data-testid="set-expanded"
 			>
-				<Crosshair size={12} className="flex-shrink-0 text-muted-foreground/70" />
-				<span className="min-w-0 flex-1 truncate font-medium text-foreground/80">
-					{headerLabel}
-				</span>
+				<Crosshair size={12} className="flex-shrink-0 text-primary" />
+				<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
 				{expanded ? (
-					<ChevronDown size={12} className="flex-shrink-0 text-muted-foreground/50" />
+					<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
 				) : (
-					<ChevronRight size={12} className="flex-shrink-0 text-muted-foreground/50" />
+					<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
 				)}
 			</button>
 

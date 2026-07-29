@@ -67,6 +67,21 @@ function createInspectorParagraph(attrs: ReturnType<typeof extractInspectorAttrs
 	}
 }
 
+function parseInspectorMarker(text: string) {
+	let titleText = text.slice(INSPECTOR_DETAIL_MARKER.length)
+	let metadataMarkerCount = 0
+	while (titleText.startsWith(INSPECTOR_DETAIL_MARKER)) {
+		metadataMarkerCount += 1
+		titleText = titleText.slice(INSPECTOR_DETAIL_MARKER.length)
+	}
+
+	return {
+		titleText,
+		inlineBefore: Boolean(metadataMarkerCount & 1),
+		inlineAfter: Boolean(metadataMarkerCount & 2),
+	}
+}
+
 /**
  * Extracts inspector detail attributes from consecutive paragraphs.
  */
@@ -201,8 +216,7 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 
 		// Detect the marker at the start of a paragraph
 		if (node.type === "paragraph" && text.startsWith(INSPECTOR_DETAIL_MARKER)) {
-			// Extract title text (strip the invisible marker prefix)
-			const titleText = text.slice(INSPECTOR_DETAIL_MARKER.length)
+			const { titleText, inlineBefore, inlineAfter } = parseInspectorMarker(text)
 
 			// Collect following detail paragraphs
 			const detailParagraphs: JSONContent[] = []
@@ -243,8 +257,31 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 					}
 				}
 
-				newContent.push(createInspectorParagraph(attrs))
-				i = j // Skip past the consumed paragraphs
+				const inspectorNode = createInspectorParagraph(attrs).content?.[0]
+				if (!inspectorNode) {
+					i = j
+					continue
+				}
+
+				let targetParagraph: JSONContent
+				const previous = newContent[newContent.length - 1]
+				if (inlineBefore && previous?.type === "paragraph") {
+					targetParagraph = previous
+					targetParagraph.content = [...(targetParagraph.content ?? []), inspectorNode]
+				} else {
+					targetParagraph = createInspectorParagraph(attrs)
+					newContent.push(targetParagraph)
+				}
+
+				if (inlineAfter && doc.content[j]?.type === "paragraph") {
+					targetParagraph.content = [
+						...(targetParagraph.content ?? []),
+						...(doc.content[j].content ?? []),
+					]
+					i = j + 1
+				} else {
+					i = j
+				}
 			} else {
 				// No detail paragraphs found, keep original (strip marker for display)
 				newContent.push(node)
@@ -292,7 +329,10 @@ export function serializeInspectorContent(
 	})
 	const isInspectorNode = (node: JSONContent | undefined): boolean =>
 		node?.type === INSPECTOR_DETAIL_TYPE && Boolean(node.attrs)
-	const serializeInspectorNode = (node: JSONContent): JSONContent[] => {
+	const serializeInspectorNode = (
+		node: JSONContent,
+		inlinePosition: { before: boolean; after: boolean } = { before: false, after: false },
+	): JSONContent[] => {
 		const attrs = node.attrs as {
 			selector?: string
 			size?: string
@@ -313,7 +353,10 @@ export function serializeInspectorContent(
 		}
 
 		// Title with marker
-		content.push(para(text(`${INSPECTOR_DETAIL_MARKER}${labels.title}`)))
+		const metadataMarkerCount = (inlinePosition.before ? 1 : 0) + (inlinePosition.after ? 2 : 0)
+		content.push(
+			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
+		)
 
 		// Selector
 		if (attrs.selector) {
@@ -366,9 +409,21 @@ export function serializeInspectorContent(
 		if (isInspectorNode(node)) {
 			newContent.push(...serializeInspectorNode(node))
 		} else if (node.type === "paragraph" && node.content?.some(isInspectorNode)) {
-			for (const child of node.content) {
+			const paragraphContent = node.content
+			for (let index = 0; index < paragraphContent.length; index += 1) {
+				const child = paragraphContent[index]
 				if (isInspectorNode(child)) {
-					newContent.push(...serializeInspectorNode(child))
+					newContent.push(
+						...serializeInspectorNode(child, {
+							before: Boolean(
+								index > 0 && !isInspectorNode(paragraphContent[index - 1]),
+							),
+							after: Boolean(
+								index < paragraphContent.length - 1 &&
+								!isInspectorNode(paragraphContent[index + 1]),
+							),
+						}),
+					)
 				} else {
 					newContent.push(para(child))
 				}
