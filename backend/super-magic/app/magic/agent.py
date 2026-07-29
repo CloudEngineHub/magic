@@ -80,7 +80,7 @@ from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
-from app.tools.core.app_tool_validator import app_tool_validator
+from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
 from app.utils.file_utils import (
@@ -92,6 +92,7 @@ from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
+from app.core.models.agent_runtime import AgentProviderType
 
 logger = get_logger(__name__)
 
@@ -262,14 +263,28 @@ class Agent(BaseAgent):
         self.agent_context = self._setup_agent_context(agent_context)
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
+        agent_target = self.agent_context.get_agent_target()
+        is_user_agent = bool(
+            agent_target
+            and agent_target.provider_type != AgentProviderType.BUILTIN
+        )
 
         self._agent_loader = AgentLoader(
             agents_dir=agents_dir,
-            definition_normalizer=normalize_agent_definition,
+            definition_normalizer=(
+                normalize_agent_definition if is_user_agent else None
+            ),
         )
 
         # 设置工具验证器，用于过滤无效工具
-        self._tool_validator = app_tool_validator
+        self._tool_validator = (
+            AppToolValidator(
+                ignore_invalid_declarations=True,
+                agent_name=self.agent_name,
+            )
+            if is_user_agent
+            else app_tool_validator
+        )
 
         # 存储加载的 skills 列表（必须在 _initialize_agent 之前初始化）
         self.loaded_skills: List[str] = []
