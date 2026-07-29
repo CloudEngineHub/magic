@@ -93,7 +93,7 @@ class SuperMagicSandboxContext(BaseModel):
     id: str
 
 
-class SuperMagicContext(BaseModel):
+class SuperMagicProductContext(BaseModel):
     """Super Magic 产品位置上下文。"""
 
     workspace: Optional[SuperMagicWorkspaceContext] = None
@@ -201,7 +201,7 @@ class ChatClientMessage(ClientMessage):
     remark: Optional[str] = None  # 备注信息，用于中断消息等场景
     mcp_config: Optional[Dict[str, Any]] = None  # MCP 服务器配置，格式与 config/mcp.json 保持一致
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
-    super_magic_context: Optional[SuperMagicContext] = Field(
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
         default=None,
         description="Current Super Magic workspace, project, topic, and logical sandbox context.",
     )
@@ -335,7 +335,7 @@ class InitClientMessage(ClientMessage):
     )
     sts_token_refresh: Optional[STSTokenRefreshConfig] = None  # STS Token刷新配置，可选字段
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
-    super_magic_context: Optional[SuperMagicContext] = Field(
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
         default=None,
         description="Initial Super Magic workspace, project, topic, and logical sandbox context.",
     )

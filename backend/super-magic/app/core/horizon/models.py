@@ -87,7 +87,7 @@ class SuperMagicSandboxContextState:
 
 
 @dataclass(frozen=True)
-class SuperMagicContextState:
+class SuperMagicProductContextState:
     """模型上次看到的 Super Magic 产品上下文。"""
 
     workspace: Optional[SuperMagicWorkspaceContextState]
@@ -104,7 +104,7 @@ class SuperMagicContextState:
         }
 
     @classmethod
-    def from_dict(cls, data: object) -> Optional["SuperMagicContextState"]:
+    def from_dict(cls, data: object) -> Optional["SuperMagicProductContextState"]:
         if not isinstance(data, dict):
             return None
         project = data.get("project")
@@ -189,7 +189,7 @@ class HorizonState:
     llm_model_name: str = ""
     # 以下字段表示模型上次已经看到的 baseline，而不是"本轮刚采集到的最新值"
     process_started_at_ns: int = 0  # 上次注入给 LLM 的 Python 进程启动时间（纳秒）
-    super_magic_context: Optional[SuperMagicContextState] = None
+    super_magic_product_context: Optional[SuperMagicProductContextState] = None
     user_preferred_language: str = ""
     workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
     workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目

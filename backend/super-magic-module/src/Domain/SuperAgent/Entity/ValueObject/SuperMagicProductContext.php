@@ -16,7 +16,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WorkspaceEntity;
  *
  * ID 在跨服务序列化时统一输出为字符串，避免雪花 ID 在其它运行时中发生精度损失。
  */
-final readonly class SuperMagicContext
+final readonly class SuperMagicProductContext
 {
     public function __construct(
         private ?SuperMagicWorkspaceContext $workspace,
