@@ -415,9 +415,19 @@ export function serializeInspectorContent(
 			newContent.push(...serializeInspectorNode(node))
 		} else if (node.type === "paragraph" && node.content?.some(isInspectorNode)) {
 			const paragraphContent = node.content
+			let inlineContent: JSONContent[] = []
+			const flushInlineContent = () => {
+				if (inlineContent.length === 0) return
+				// Keep every adjacent inline node in one paragraph. The marker only carries
+				// before/after boundaries, so splitting this group would lose its structure on restore.
+				newContent.push(para(...inlineContent))
+				inlineContent = []
+			}
+
 			for (let index = 0; index < paragraphContent.length; index += 1) {
 				const child = paragraphContent[index]
 				if (isInspectorNode(child)) {
+					flushInlineContent()
 					newContent.push(
 						...serializeInspectorNode(child, {
 							before: Boolean(
@@ -430,9 +440,10 @@ export function serializeInspectorContent(
 						}),
 					)
 				} else {
-					newContent.push(para(child))
+					inlineContent.push(child)
 				}
 			}
+			flushInlineContent()
 		} else {
 			newContent.push(node)
 		}

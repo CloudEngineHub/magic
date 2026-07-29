@@ -38,7 +38,6 @@ export const useStyles = createStyles(() => {
 
 		tooltipContent: {
 			color: "inherit",
-			pointerEvents: "none",
 			"& p": {
 				margin: 0,
 				fontSize: "inherit !important",
