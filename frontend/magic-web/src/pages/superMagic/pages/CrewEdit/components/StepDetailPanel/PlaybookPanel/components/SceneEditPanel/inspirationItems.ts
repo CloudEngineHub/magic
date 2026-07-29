@@ -1,12 +1,13 @@
 import type {
 	LocaleText,
+	IdentifiedOptionItem,
 	OptionGroup,
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import { getOptionValue } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import { isIdentifiedOptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 
 export type InspirationItemData = Omit<
-	Partial<OptionItem>,
+	Partial<IdentifiedOptionItem>,
 	"value" | "label" | "prompt" | "description"
 > & {
 	label: LocaleText
@@ -22,12 +23,15 @@ export function updateInspirationItem(
 	if (!groups.some((group) => group.group_key === targetGroupKey)) return groups
 
 	const sourceGroup = groups.find((group) =>
-		(group.children ?? []).some((item) => getOptionValue(item) === targetValue),
+		(group.children ?? []).some(
+			(item) => isIdentifiedOptionItem(item) && item.value === targetValue,
+		),
 	)
 	if (!sourceGroup) return groups
 
 	const currentItem = (sourceGroup.children ?? []).find(
-		(item) => getOptionValue(item) === targetValue,
+		(item): item is IdentifiedOptionItem =>
+			isIdentifiedOptionItem(item) && item.value === targetValue,
 	)
 	if (!currentItem) return groups
 
@@ -45,7 +49,9 @@ export function updateInspirationItem(
 				return {
 					...group,
 					children: (group.children ?? []).map((item) =>
-						getOptionValue(item) === targetValue ? updatedItem : item,
+						isIdentifiedOptionItem(item) && item.value === targetValue
+							? updatedItem
+							: item,
 					),
 				}
 			}
@@ -53,7 +59,7 @@ export function updateInspirationItem(
 			return {
 				...group,
 				children: (group.children ?? []).filter(
-					(item) => getOptionValue(item) !== targetValue,
+					(item) => !isIdentifiedOptionItem(item) || item.value !== targetValue,
 				),
 			}
 		}
@@ -74,6 +80,8 @@ export function removeInspirationItems(
 
 	return groups.map((group) => ({
 		...group,
-		children: (group.children ?? []).filter((item) => !targetValues.has(getOptionValue(item))),
+		children: (group.children ?? []).filter(
+			(item) => !isIdentifiedOptionItem(item) || !targetValues.has(item.value),
+		),
 	}))
 }

@@ -3,6 +3,7 @@ import { getPromptRichTextPlainText, serializePromptRichTextLocaleValue } from "
 import {
 	buildConcatenatedPresetContent,
 	hasSelectableOptions,
+	isIdentifiedOptionItem,
 	resolveDemoPromptText,
 } from "../utils"
 import type { FieldItem } from "../types"
@@ -14,6 +15,12 @@ function expectPresetContentText(fields: FieldItem[], locale: string, expected: 
 }
 
 describe("MainInputContainer panel utils", () => {
+	it("accepts only non-empty string values as stable option identities", () => {
+		expect(isIdentifiedOptionItem({ value: "stable-id" })).toBe(true)
+		expect(isIdentifiedOptionItem({ value: "  " })).toBe(false)
+		expect(isIdentifiedOptionItem({ value: { default: "display text" } })).toBe(false)
+	})
+
 	it("builds mixed preset content per field instead of switching logic for the whole list", () => {
 		const fields: FieldItem[] = [
 			{

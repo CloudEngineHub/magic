@@ -4,11 +4,10 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
-import { getOptionValue } from "../utils"
+import type { IdentifiedOptionItem } from "../types"
 
 interface EditableWaterfallCardProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -24,7 +23,7 @@ export function EditableWaterfallCard({
 }: EditableWaterfallCardProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const itemValue = getOptionValue(item)
+	const itemValue = item.value
 	const label = lt(item.label) ?? itemValue
 	const description = lt(item.description) ?? ""
 

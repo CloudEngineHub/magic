@@ -99,6 +99,9 @@ export interface OptionItemTag {
 	sort?: number
 }
 
+/** Option item whose value is a stable identity rather than localized content. */
+export type IdentifiedOptionItem = Omit<OptionItem, "value"> & { value: string }
+
 /**
  * Template group configuration
  */

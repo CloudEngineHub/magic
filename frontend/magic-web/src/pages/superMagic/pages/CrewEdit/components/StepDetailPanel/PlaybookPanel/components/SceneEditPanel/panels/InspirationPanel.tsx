@@ -10,9 +10,9 @@ import MagicDropdown from "@/components/base/MagicDropdown"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import type {
+	IdentifiedOptionItem,
 	LocaleText,
 	OptionGroup,
-	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { resolveLocalText } from "../utils"
@@ -23,7 +23,7 @@ import { DemoItemEditDialog } from "../components/DemoItemEditDialog"
 import { DEFAULT_INSPIRATION_GROUP_KEY, useSceneEditStore } from "../store"
 import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContainer/panels/TemplateViewSwitcher"
 import {
-	getOptionValue,
+	isIdentifiedOptionItem,
 	resolveDemoPromptText,
 } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { cn } from "@/lib/tiptap-utils"
@@ -64,7 +64,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [editingGroup, setEditingGroup] = useState<OptionGroup | undefined>(undefined)
 	const [itemDialogOpen, setItemDialogOpen] = useState(false)
-	const [editingItem, setEditingItem] = useState<OptionItem | undefined>(undefined)
+	const [editingItem, setEditingItem] = useState<IdentifiedOptionItem | undefined>(undefined)
 	const [editingItemGroupKey, setEditingItemGroupKey] = useState<string>("")
 
 	const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -75,9 +75,12 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}, [activeGroupKey, defaultGroupKey, groups])
 
 	const activeGroup = groups.find((g) => g.group_key === activeGroupKey) ?? null
-	const allItems = useMemo<OptionItem[]>(() => activeGroup?.children ?? [], [activeGroup])
+	const allItems = useMemo<IdentifiedOptionItem[]>(
+		() => (activeGroup?.children ?? []).filter(isIdentifiedOptionItem),
+		[activeGroup],
+	)
 	const itemsByValue = useMemo(
-		() => new Map(allItems.map((item) => [getOptionValue(item), item])),
+		() => new Map(allItems.map((item) => [item.value, item])),
 		[allItems],
 	)
 
@@ -103,12 +106,11 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}, [allItems, searchValue, i18n.language])
 
 	const allSelected =
-		filteredItems.length > 0 &&
-		filteredItems.every((item) => selectedKeys.has(getOptionValue(item)))
+		filteredItems.length > 0 && filteredItems.every((item) => selectedKeys.has(item.value))
 
 	function handleSelectAll() {
 		if (allSelected) setSelectedKeys(new Set())
-		else setSelectedKeys(new Set(filteredItems.map((item) => getOptionValue(item))))
+		else setSelectedKeys(new Set(filteredItems.map((item) => item.value)))
 	}
 
 	function handleSelectOne(value: string, checked: boolean) {
@@ -171,7 +173,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 		setItemDialogOpen(true)
 	}
 
-	function openEditItem(item: OptionItem, groupKey: string) {
+	function openEditItem(item: IdentifiedOptionItem, groupKey: string) {
 		setEditingItem(item)
 		setEditingItemGroupKey(groupKey)
 		setItemDialogOpen(true)
@@ -179,7 +181,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 
 	const handleItemConfirm = useCallback(
 		(data: InspirationItemData, groupKey: string) => {
-			if (editingItem) store.editInspirationItem(getOptionValue(editingItem), data, groupKey)
+			if (editingItem) store.editInspirationItem(editingItem.value, data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
 			setSelectedKeys(new Set())
 			void store.save()

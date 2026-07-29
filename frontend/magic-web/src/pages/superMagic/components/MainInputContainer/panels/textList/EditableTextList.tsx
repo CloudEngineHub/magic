@@ -5,19 +5,18 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
-import { getOptionValue } from "../utils"
+import type { IdentifiedOptionItem } from "../types"
 
 interface EditableTextListProps {
-	items: OptionItem[]
+	items: IdentifiedOptionItem[]
 	selectedKeys: Set<string>
 	onSelect: (value: string, checked: boolean) => void
-	onEdit: (item: OptionItem) => void
+	onEdit: (item: IdentifiedOptionItem) => void
 	onDelete: (value: string) => void
 }
 
 interface EditableTextListItemProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -33,7 +32,7 @@ function EditableTextListItem({
 }: EditableTextListItemProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const itemValue = getOptionValue(item)
+	const itemValue = item.value
 	const label = lt(item.label) ?? itemValue
 
 	const menuItems = [
@@ -94,7 +93,7 @@ export function EditableTextList({
 	return (
 		<div className="flex w-full flex-col gap-2">
 			{items.map((item) => {
-				const itemValue = getOptionValue(item)
+				const itemValue = item.value
 				return (
 					<EditableTextListItem
 						key={itemValue}

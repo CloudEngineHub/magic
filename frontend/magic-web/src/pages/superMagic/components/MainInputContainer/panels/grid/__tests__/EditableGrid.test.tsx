@@ -1,12 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import type { OptionItem } from "../../types"
+import type { IdentifiedOptionItem } from "../../types"
 import { EditableGrid } from "../EditableGrid"
 
 describe("EditableGrid", () => {
 	it("uses the stable option value for selection and deletion", () => {
-		const firstItem: OptionItem = { label: "First", value: "item-1", prompt: "Same prompt" }
-		const secondItem: OptionItem = { label: "Second", value: "item-2", prompt: "Same prompt" }
+		const firstItem: IdentifiedOptionItem = {
+			label: "First",
+			value: "item-1",
+			prompt: "Same prompt",
+		}
+		const secondItem: IdentifiedOptionItem = {
+			label: "Second",
+			value: "item-2",
+			prompt: "Same prompt",
+		}
 		const onSelect = vi.fn()
 		const onDelete = vi.fn()
 

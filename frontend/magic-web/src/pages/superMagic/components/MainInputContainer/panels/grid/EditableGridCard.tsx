@@ -5,11 +5,11 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
-import { getOptionValue, isImageIconSource } from "../utils"
+import type { IdentifiedOptionItem } from "../types"
+import { isImageIconSource } from "../utils"
 
 interface EditableGridCardProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -25,7 +25,7 @@ export function EditableGridCard({
 }: EditableGridCardProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const itemValue = getOptionValue(item)
+	const itemValue = item.value
 	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 

@@ -10,17 +10,16 @@ import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@d
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical } from "lucide-react"
 import { EditableGridCard } from "./EditableGridCard"
-import type { OptionItem } from "../types"
-import { getOptionValue } from "../utils"
+import type { IdentifiedOptionItem } from "../types"
 import { cn } from "@/lib/utils"
 
 interface EditableGridProps {
-	items: OptionItem[]
+	items: IdentifiedOptionItem[]
 	selectedKeys: Set<string>
 	onSelect: (value: string, checked: boolean) => void
-	onEdit: (item: OptionItem) => void
+	onEdit: (item: IdentifiedOptionItem) => void
 	onDelete: (value: string) => void
-	onReorder?: (items: OptionItem[]) => void
+	onReorder?: (items: IdentifiedOptionItem[]) => void
 }
 
 export function EditableGrid({
@@ -36,7 +35,7 @@ export function EditableGrid({
 			activationConstraint: { distance: 8 },
 		}),
 	)
-	const itemIds = items.map(getOptionValue)
+	const itemIds = items.map((item) => item.value)
 	const isSortable = !!onReorder && items.length > 1
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -53,7 +52,7 @@ export function EditableGrid({
 	const content = (
 		<div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
 			{items.map((item) => {
-				const itemValue = getOptionValue(item)
+				const itemValue = item.value
 
 				if (!isSortable) {
 					return (
@@ -95,7 +94,7 @@ export function EditableGrid({
 }
 
 interface SortableEditableGridCardProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	itemValue: string
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void

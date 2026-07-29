@@ -117,6 +117,29 @@ describe("SceneEditStore inspiration defaults", () => {
 		])
 	})
 
+	it("does not treat localized display values as inspiration identities", () => {
+		const scene = createScene()
+		if (!scene.configs?.inspiration) return
+		scene.configs.inspiration.demo.groups = [
+			{
+				group_key: DEFAULT_INSPIRATION_GROUP_KEY,
+				group_name: defaultGroupName,
+				children: [
+					{
+						value: { default: "display-derived-id" },
+						label: "Invalid item",
+						prompt: "Prompt",
+					},
+				],
+			},
+		]
+		const store = new SceneEditStore(scene)
+
+		store.deleteInspirationItem("display-derived-id")
+
+		expect(store.inspiration?.demo.groups[0]?.children).toHaveLength(1)
+	})
+
 	it("keeps the default group when first custom group is created", () => {
 		const store = new SceneEditStore(createScene())
 

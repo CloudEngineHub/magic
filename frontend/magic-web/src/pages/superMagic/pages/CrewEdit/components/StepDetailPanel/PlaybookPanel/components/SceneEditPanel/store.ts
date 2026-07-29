@@ -8,6 +8,7 @@ import {
 	type FieldPanelConfig,
 	type GuideItem,
 	type GuidePanelConfig,
+	type IdentifiedOptionItem,
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
@@ -165,7 +166,7 @@ export class SceneEditStore {
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
-		const newItem: OptionItem = { ...data, value: genKey() }
+		const newItem: IdentifiedOptionItem = { ...data, value: genKey() }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
 		const fallbackGroupKey = groupKey || getFallbackGroupKey(base)

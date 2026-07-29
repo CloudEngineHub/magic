@@ -6,19 +6,19 @@ import { cn } from "@/lib/utils"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
-import { getOptionValue, isImageIconSource } from "../utils"
+import type { IdentifiedOptionItem } from "../types"
+import { isImageIconSource } from "../utils"
 
 interface EditableCapsuleProps {
-	items: OptionItem[]
+	items: IdentifiedOptionItem[]
 	selectedKeys: Set<string>
 	onSelect: (value: string, checked: boolean) => void
-	onEdit: (item: OptionItem) => void
+	onEdit: (item: IdentifiedOptionItem) => void
 	onDelete: (value: string) => void
 }
 
 interface EditableCapsuleItemProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -34,7 +34,7 @@ function EditableCapsuleItem({
 }: EditableCapsuleItemProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const itemValue = getOptionValue(item)
+	const itemValue = item.value
 	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 
@@ -112,7 +112,7 @@ export function EditableCapsule({
 	return (
 		<div className="flex w-full flex-wrap content-start items-start gap-2">
 			{items.map((item) => {
-				const itemValue = getOptionValue(item)
+				const itemValue = item.value
 				return (
 					<EditableCapsuleItem
 						key={itemValue}

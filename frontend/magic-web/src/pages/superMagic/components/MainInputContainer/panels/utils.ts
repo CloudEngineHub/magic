@@ -4,6 +4,7 @@ import {
 	DEFAULT_LOCALE_KEY,
 	OptionViewType,
 	type FieldItem,
+	type IdentifiedOptionItem,
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
@@ -89,6 +90,11 @@ export function localeTextToDisplayString(value: LocaleText | undefined): string
 /** Resolve a localized option value to its configured fallback string. */
 export function getOptionValue(option: Pick<OptionItem, "value">): string {
 	return localeTextToDisplayString(option.value)
+}
+
+/** Narrow editable options to items whose value can safely be used as an identity. */
+export function isIdentifiedOptionItem(option: OptionItem): option is IdentifiedOptionItem {
+	return typeof option.value === "string" && option.value.trim().length > 0
 }
 
 /** Resolve prompt text with compatibility fallbacks for legacy and built-in demo configs. */
