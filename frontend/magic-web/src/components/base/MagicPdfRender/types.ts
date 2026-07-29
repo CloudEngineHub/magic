@@ -21,6 +21,8 @@ export interface MagicPdfRenderProps {
 	autoScale?: boolean
 	/** 是否启用移动端触摸手势（双指缩放） */
 	enableTouchGestures?: boolean
+	/** Lets every PDF page expand into the browser document instead of an internal scroller. */
+	documentFlow?: boolean
 	/** 加载失败回调 */
 	onLoadError?: (error: Error) => void
 	/** 加载成功回调 */

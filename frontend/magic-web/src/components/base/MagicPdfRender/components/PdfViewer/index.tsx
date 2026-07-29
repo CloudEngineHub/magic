@@ -17,6 +17,7 @@ interface PdfViewerProps {
 	scale: number
 	rotation: number
 	isAutoScaling: boolean
+	documentFlow?: boolean
 	pageDimensions: PageDimensions
 	onDocumentLoadSuccess: (pdf: unknown) => void
 	onDocumentLoadError: (err: Error) => void
@@ -34,6 +35,7 @@ function PdfViewer({
 	scale,
 	rotation,
 	isAutoScaling,
+	documentFlow = false,
 	pageDimensions,
 	onDocumentLoadSuccess,
 	onDocumentLoadError,
@@ -125,13 +127,15 @@ function PdfViewer({
 				>
 					{Array.from(new Array(numPages), (_, index) => {
 						const currentPageNum = index + 1
-						const shouldLoad = Math.abs(currentPageNum - pageNumber) <= 2
+						const shouldLoad =
+							documentFlow || Math.abs(currentPageNum - pageNumber) <= 2
 
 						return (
 							<div
 								key={currentPageNum}
-								className={`${styles.pageContainer} ${pageNumber === currentPageNum ? styles.currentPage : ""
-									}`}
+								className={`${styles.pageContainer} ${
+									pageNumber === currentPageNum ? styles.currentPage : ""
+								}`}
 								data-page-number={currentPageNum}
 							>
 								{shouldLoad ? (
