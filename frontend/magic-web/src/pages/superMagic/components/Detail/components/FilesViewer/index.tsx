@@ -485,6 +485,7 @@ const FilesViewer = memo(
 								allowEdit: props.allowEdit,
 								selectedTopic: props.selectedTopic,
 								selectedProject: props.selectedProject,
+								projectId: props.projectId,
 								isFileShare: props.isFileShare,
 								activeFileId: props.activeFileId,
 								onActiveFileChange: props.onActiveFileChange,

@@ -45,6 +45,10 @@ const validationPlugins = [
 		itemType: MentionItemType.DESIGN_MARKER,
 		validate: () => true,
 	},
+	{
+		itemType: MentionItemType.PROJECT,
+		validate: ({ data }) => Boolean(data && "project_id" in data && data.project_id),
+	},
 ]
 
 export const mentionPanelCatalogPluginMap = new Map(

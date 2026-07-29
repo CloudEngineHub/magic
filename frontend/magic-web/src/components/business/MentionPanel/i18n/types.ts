@@ -35,6 +35,7 @@ export interface I18nTexts {
 	error: string
 	retry: string
 	empty: string
+	unnamedProject: string
 
 	// Hints
 	mcpHint: string
@@ -72,6 +73,7 @@ export interface I18nTexts {
 		personalDrive: string
 		enterpriseDrive: string
 		projectFiles: string
+		otherProjectFiles?: string
 		mcpExtensions: string
 		agents: string
 		skills: string

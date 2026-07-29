@@ -2,6 +2,7 @@ import { SuperMagicApi } from "@/apis"
 import { ProjectStorage } from "@/components/Agent/MCP/service/MCPStorageService"
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
+import { stripProjectResourceMentionDisplayMetadata } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import type {
 	HandleSendParams,
@@ -229,6 +230,12 @@ export async function preparePanelSend({
 	)
 	nextMentionItems = result.mentionItems
 	nextContent = result.content
+	const sanitizedMentions = stripProjectResourceMentionDisplayMetadata(
+		nextContent,
+		nextMentionItems,
+	)
+	nextMentionItems = sanitizedMentions.mentionItems
+	nextContent = sanitizedMentions.content
 
 	if (
 		params.selectedModel?.model_id &&
