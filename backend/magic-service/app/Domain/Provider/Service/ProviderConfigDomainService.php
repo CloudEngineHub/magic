@@ -101,8 +101,21 @@ class ProviderConfigDomainService
             return [];
         }
 
+        return $this->getProviderEntitiesByConfigs($configEntities);
+    }
+
+    /**
+     * 批量获取服务商实体，通过服务商配置实体映射.
+     * @param array<int, ProviderConfigEntity> $configEntities 配置ID到服务商配置实体的映射
+     * @return array<int, ProviderEntity> 配置ID到服务商实体的映射
+     */
+    public function getProviderEntitiesByConfigs(array $configEntities): array
+    {
+        if (empty($configEntities)) {
+            return [];
+        }
+
         // 提取服务商ID
-        // $configEntities 现在是以 config_id 为 key 的数组
         $providerIds = [];
         foreach ($configEntities as $configId => $config) {
             $providerIds[] = $config->getServiceProviderId();

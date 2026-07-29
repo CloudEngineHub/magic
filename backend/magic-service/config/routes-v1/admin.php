@@ -56,11 +56,12 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::get('/office-info', [ServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
         Router::get('/templates/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/model-pricing-templates/queries', [ServiceProviderApi::class, 'queriesProviderModelPricingTemplates']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
 
-        // 废弃，上线后可删除
-        Router::get('/available-llm', [ServiceProviderApi::class, 'getAllAvailableLlmProviders']);
-        Router::get('/non-official-llm', [ServiceProviderApi::class, 'getNonOfficialLlmProviders']);
-        Router::get('/non-official/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
+    // 模型视角管理
+    Router::addGroup('/provider-models', static function () {
+        Router::post('/queries', [ServiceProviderApi::class, 'queriesProviderModels']);
+        Router::post('/groups/queries', [ServiceProviderApi::class, 'queriesProviderModelGroups']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // AI能力管理
