@@ -1,7 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("file-saver", () => ({ default: vi.fn() }))
+vi.mock("file-saver", () => {
+	const saveAs = vi.fn()
+	return { default: saveAs, saveAs }
+})
 vi.mock("html-to-image", () => ({
 	toBlob: vi.fn(async () => new Blob(["fallback"], { type: "image/png" })),
 }))
@@ -212,6 +215,65 @@ describe("useExportZip", () => {
 
 		await waitFor(() => expect(result.current.progress.status).toBe("error"))
 		expect(saveAs).not.toHaveBeenCalled()
+	})
+
+	it("saves a partial zip and reports the pages that could not be captured", async () => {
+		const captureMock = vi.fn(async () => "data:image/webp;base64,FFFF")
+		const { result } = renderHook(() => useExportZip())
+
+		await act(async () => {
+			await result.current.exportZip({
+				posts: [
+					{
+						meta: { id: "p1", title: "First" },
+						cards: [{ path: "01.html" }, { path: "02.html" }],
+					},
+				] as SelfMediaPost[],
+				format: "webp",
+				pixelRatio: 2,
+				getCardRef: (_postIdx, cardIdx) =>
+					cardIdx === 0 ? { capture: captureMock, getIframeElement: () => null } : null,
+				getCardPageNumber: (_postIdx, cardIdx) => [2, 5][cardIdx],
+			})
+		})
+
+		await waitFor(() => expect(result.current.progress.status).toBe("done"))
+		expect(result.current.progress).toEqual(
+			expect.objectContaining({
+				exported: 1,
+				failedPageNumbers: [5],
+			}),
+		)
+		expect(saveAs).toHaveBeenCalledTimes(1)
+	})
+
+	it("retries a transient high-resolution WebP capture failure", async () => {
+		const captureMock = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("capture timeout"))
+			.mockResolvedValueOnce("data:image/webp;base64,FFFF")
+		const { result } = renderHook(() => useExportZip())
+
+		await act(async () => {
+			await result.current.exportZip({
+				posts: [
+					{
+						meta: { id: "p1", title: "First" },
+						cards: [{ path: "01.html" }],
+					},
+				] as SelfMediaPost[],
+				format: "webp",
+				pixelRatio: 2,
+				getCardRef: () => ({ capture: captureMock, getIframeElement: () => null }),
+			})
+		})
+
+		await waitFor(() => expect(result.current.progress.status).toBe("done"))
+		expect(captureMock).toHaveBeenCalledTimes(2)
+		expect(captureMock).toHaveBeenCalledWith(
+			expect.objectContaining({ format: "webp", pixelRatio: 2, timeoutMs: 45000 }),
+		)
+		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
 
 	it("captures cards in order and stitches them into one long image", async () => {

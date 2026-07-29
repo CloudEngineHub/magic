@@ -11,7 +11,7 @@ export function useExportProgressToast(progress: ExportProgress, toastId: string
 	const { t } = useTranslation("super")
 
 	useEffect(() => {
-		const { status, current, total } = progress
+		const { status, current, total, exported, failedPageNumbers = [] } = progress
 		if (status === "running") {
 			magicToast.loading({
 				key: toastId,
@@ -21,7 +21,15 @@ export function useExportProgressToast(progress: ExportProgress, toastId: string
 		} else if (status === "done") {
 			magicToast.success({
 				key: toastId,
-				content: t("detail.selfMedia.export.success"),
+				content: failedPageNumbers.length
+					? t("detail.selfMedia.export.partialSuccess", {
+							exported: exported ?? total - failedPageNumbers.length,
+							total,
+							failedPages: failedPageNumbers.join(
+								t("detail.selfMedia.export.pageSeparator"),
+							),
+						})
+					: t("detail.selfMedia.export.success"),
 			})
 		} else if (status === "error") {
 			magicToast.error({
