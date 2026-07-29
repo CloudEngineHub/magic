@@ -169,6 +169,8 @@ export interface TopicFilesCoreRef {
 	createVirtualFile: (type: PresetFileType, key?: string, parentPath?: string) => void
 	createVirtualFolder: (key?: string, parentPath?: string) => void
 	createDesignProject: (parentPath?: string) => Promise<any>
+	createSelfMediaProject: (parentPath?: string) => void
+	createAICardProject: (parentPath?: string) => void
 	handleUploadFile: (item?: any) => void
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
@@ -920,6 +922,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				// 实际的创建逻辑在 confirmVirtualDesignProject 中处理
 				resolve(null)
 			})
+		},
+		createSelfMediaProject: (parentPath?: string) => {
+			createVirtualSelfMediaProject(undefined, parentPath)
+		},
+		createAICardProject: (parentPath?: string) => {
+			openAICardDialog(parentPath)
 		},
 		handleUploadFile,
 		handleUploadFolder,

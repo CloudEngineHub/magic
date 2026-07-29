@@ -218,6 +218,18 @@ export function findMatchingFile(data: {
 	})
 }
 
+interface ResourceFileTypeInfo {
+	file_extension?: string
+	file_name?: string
+	relative_file_path?: string
+}
+
+function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
+	return getContentTypeFromExtension(
+		file.file_extension || file.file_name || file.relative_file_path || fallbackPath,
+	)
+}
+
 // Generic function to process elements with src/href attributes
 export function processElementsWithAttribute(data: {
 	elements: HTMLCollectionOf<Element>
@@ -263,6 +275,7 @@ export function processElementsWithAttribute(data: {
 					path: attributeValue,
 					attr: attributeName,
 					tag: tagName,
+					contentType: getResourceContentType(matchedFile, attributeValue),
 				})
 			}
 		}
@@ -327,7 +340,7 @@ export function processSlidesArray(data: {
 						path: slidePath,
 						attr: "slides",
 						tag: "script",
-						contentType: getContentTypeFromExtension(slidePath),
+						contentType: getResourceContentType(matchedFile, slidePath),
 					})
 					slidesMap.set(slidePath, matchedFile.file_id)
 				}
@@ -354,7 +367,7 @@ export function processSlidesArray(data: {
 								path: slidePath,
 								attr: "slides",
 								tag: "script",
-								contentType: getContentTypeFromExtension(slidePath),
+								contentType: getResourceContentType(matchedFile, slidePath),
 							})
 							slidesMap.set(slidePath, matchedFile.file_id)
 						}
@@ -416,7 +429,7 @@ export function processStyleUrls(data: {
 							path: urlPath,
 							attr: "css-url",
 							tag: "style",
-							contentType: getContentTypeFromExtension(urlPath),
+							contentType: getResourceContentType(matchedFile, urlPath),
 						})
 					}
 				}
@@ -462,7 +475,7 @@ export function processInlineStyles(data: {
 							path: urlPath,
 							attr: "inline-style",
 							tag: element.tagName.toLowerCase(),
-							contentType: getContentTypeFromExtension(urlPath),
+							contentType: getResourceContentType(matchedFile, urlPath),
 						})
 					}
 				}
@@ -473,7 +486,8 @@ export function processInlineStyles(data: {
 
 // Helper function to determine content type based on file extension
 export function getContentTypeFromExtension(filePath: string): string {
-	const extension = filePath.split(".").pop()?.toLowerCase()
+	const cleanPath = filePath.split(/[?#]/, 1)[0]
+	const extension = cleanPath.split(".").pop()?.toLowerCase()
 	switch (extension) {
 		case "html":
 		case "htm":
@@ -488,6 +502,26 @@ export function getContentTypeFromExtension(filePath: string): string {
 			return "text/xml"
 		case "svg":
 			return "image/svg+xml"
+		case "png":
+		case "apng":
+			return "image/png"
+		case "jpg":
+		case "jpeg":
+		case "jfif":
+			return "image/jpeg"
+		case "gif":
+			return "image/gif"
+		case "webp":
+			return "image/webp"
+		case "avif":
+			return "image/avif"
+		case "bmp":
+			return "image/bmp"
+		case "ico":
+			return "image/x-icon"
+		case "tif":
+		case "tiff":
+			return "image/tiff"
 		default:
 			return "text/plain"
 	}

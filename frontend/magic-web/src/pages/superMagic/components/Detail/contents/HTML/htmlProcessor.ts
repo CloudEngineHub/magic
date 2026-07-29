@@ -1,36 +1,21 @@
-import {
-	getTemporaryDownloadUrl,
-	type GetTemporaryDownloadUrlItem,
-} from "@/pages/superMagic/utils/api"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 import {
 	extractSlidesFromScript,
 	flattenAttachments,
-	processElementsWithAttribute,
-	processSlidesArray,
-	processStyleUrls,
-	processInlineStyles,
-	processAudioArray,
 	handleHtCdnUrl,
 	removeRootHtmlXhtmlNamespace,
 	SLIDE_BRIDGE_PLACEHOLDER_COMMENT,
 } from "./utils"
-import { processDashboardArray } from "./dashboard/utils"
-import {
-	createPreloadedUrlMapping,
-	injectMediaInterceptorScript,
-	type FileItem,
-} from "./utils/mediaInterceptor"
 import { injectAtPolyfillScript } from "./utils/polyfill"
-import { UrlCacheManager } from "./utils/urlCache"
 import {
 	applyDashboardBundledShellToHtml,
 	getBundledTemplateHtmlByKind,
 	omitDashboardShellFromFetchPlan,
 	type HtmlPreviewBundledTemplateKind,
 } from "./html-preview-bundled-shell"
-import { resolveResourceUrlsWithVersionOverrides } from "./dashboard/resourceVersioning"
 import { parseMagicProjectJsContent } from "./utils/magicProjectParser"
+import { collectHtmlResourcePlan } from "./utils/htmlResourceCollector"
+import { replaceHtmlResourceUrls } from "./utils/htmlResourceReplacement"
 
 export type { HtmlPreviewBundledTemplateKind }
 
@@ -47,12 +32,6 @@ function mergePreviewBundledMetadata(
 	}
 	return base?.type === "video" ? base : { ...base, type: "video" }
 }
-
-/**
- * URL 缓存管理器实例
- * 使用模块级缓存，避免重复请求未过期的 URL
- */
-const urlCacheManager = new UrlCacheManager()
 
 /**
  * HTML内容处理器 - 可复用的HTML处理逻辑
@@ -173,188 +152,6 @@ export interface ProcessHtmlContentOutput {
 }
 
 /**
- * Internal helper: Process HTML document and collect file IDs
- * Shared logic used by both collectFileIdsFromHtml and processHtmlContent
- * @param htmlDoc - Parsed HTML document
- * @param allFiles - Flattened attachments array
- * @param relativeFolderPath - Relative folder path
- * @param displayConfig - File display config
- * @returns Object containing fileIdsToFetch and other tracking maps
- */
-function processHtmlDocForFileIds(
-	htmlDoc: Document,
-	allFiles: any[],
-	relativeFolderPath: string,
-	displayConfig?: any,
-): {
-	fileIdsToFetch: string[]
-	urlMap: Map<string, any>
-	filePathMap: Map<string, string>
-	slidesMap: Map<string, string>
-	imageFileIds: Set<string>
-} {
-	const fileIdsToFetch: string[] = []
-	const urlsToReplace: string[] = []
-	const urlMap = new Map<string, any>()
-	const filePathMap = new Map<string, string>()
-	const slidesMap = new Map<string, string>()
-	const imageFileIds = new Set<string>()
-
-	// Process all elements with src/href attributes
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("img"),
-		attributeName: "src",
-		tagName: "img",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("link"),
-		attributeName: "href",
-		tagName: "link",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		additionalFilter: (element) => element.getAttribute("rel") === "stylesheet",
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("script"),
-		attributeName: "src",
-		tagName: "script",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("iframe"),
-		attributeName: "src",
-		tagName: "iframe",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("source"),
-		attributeName: "src",
-		tagName: "source",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("video"),
-		attributeName: "src",
-		tagName: "video",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("audio"),
-		attributeName: "src",
-		tagName: "audio",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	processElementsWithAttribute({
-		elements: htmlDoc.getElementsByTagName("object"),
-		attributeName: "src",
-		tagName: "object",
-		allFiles,
-		urlsToReplace,
-		fileIdsToFetch,
-		urlMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-	})
-
-	// Process slides array
-	processSlidesArray({
-		htmlDoc,
-		allFiles,
-		fileIdsToFetch,
-		urlMap,
-		slidesMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-		displayConfig,
-	})
-
-	// Process style URLs (CSS background images)
-	processStyleUrls({
-		htmlDoc,
-		allFiles,
-		fileIdsToFetch,
-		filePathMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-		urlMap,
-	})
-
-	// Process inline style attributes (e.g., style="background-image: url(...)")
-	processInlineStyles({
-		htmlDoc,
-		allFiles,
-		fileIdsToFetch,
-		filePathMap,
-		htmlRelativeFolderPath: relativeFolderPath,
-		urlMap,
-	})
-
-	// Process dashboard arrays
-	if (displayConfig?.type === "dashboard") {
-		processDashboardArray({
-			htmlDoc,
-			allFiles,
-			fileIdsToFetch,
-			urlMap,
-			htmlRelativeFolderPath: relativeFolderPath,
-		})
-	}
-
-	// Process audio/video arrays
-	if (displayConfig?.type === "audio" || displayConfig?.type === "video") {
-		processAudioArray({
-			htmlDoc,
-			allFiles,
-			fileIdsToFetch,
-			urlMap,
-			htmlRelativeFolderPath: relativeFolderPath,
-		})
-	}
-
-	// Determine which collected resources are images.
-	// Only these should receive image processing params (xMagicImageProcess).
-	urlMap.forEach((info, id) => {
-		if (info.tag === "img" || info.attr === "css-url" || info.attr === "inline-style") {
-			imageFileIds.add(id)
-		}
-	})
-
-	return { fileIdsToFetch, urlMap, filePathMap, slidesMap, imageFileIds }
-}
-
-/**
  * Collect all file IDs needed from HTML content (without fetching URLs)
  * Used for batch processing to avoid duplicate requests
  * @param input Input parameters (same as processHtmlContent)
@@ -379,7 +176,7 @@ export function collectFileIdsFromHtml(input: ProcessHtmlContentInput): Set<stri
 	const relativeFolderPath = html_relative_path || ""
 
 	// Use shared logic to collect file IDs
-	const { fileIdsToFetch } = processHtmlDocForFileIds(
+	const { fileIdsToFetch } = collectHtmlResourcePlan(
 		htmlDoc,
 		allFiles,
 		relativeFolderPath,
@@ -529,252 +326,38 @@ export async function processHtmlContent(
 		filePathMap,
 		slidesMap,
 		imageFileIds,
-	} = processHtmlDocForFileIds(newHtmlDoc, allFiles, relativeFolderPath, processingMetadata)
+	} = collectHtmlResourcePlan(newHtmlDoc, allFiles, relativeFolderPath, processingMetadata)
 
 	let fileIdsToFetch = collectedFileIds
 	if (previewKind === "dashboard") {
 		fileIdsToFetch = omitDashboardShellFromFetchPlan(fileIdsToFetch, urlMap)
 	}
 
-	const magicProjectJSConfig: Record<string, unknown> = {}
-
-	const filePathandOssUrlMap = new Map<string, string>()
 	// If there are resources to replace, fetch their temporary URLs
 	if (fileIdsToFetch.length > 0) {
 		try {
-			const urlData = await resolveResourceUrlsWithVersionOverrides({
+			const replacedResources = await replaceHtmlResourceUrls({
 				fileIds: fileIdsToFetch,
 				resourceFileVersions: input.resourceFileVersions,
-				fetchUnversionedUrls: async (fileIds) => {
-					if (fileIds.length === 0) return []
-
-					if (input.preloadedUrlMapping) {
-						const preloadedUrlMapping = input.preloadedUrlMapping
-						const preloadedUrls = fileIds
-							// PPT 预加载映射中的图片是原始 URL；启用图片处理后，
-							// 仅复用非图片资源，避免 CSS/脚本等资源被错误转换。
-							.filter((fileId) =>
-								input.xMagicImageProcess ? !imageFileIds.has(fileId) : true,
-							)
-							.map((fileId) => ({
-								file_id: fileId,
-								url: preloadedUrlMapping.get(fileId),
-							}))
-							.filter((item) => item.url) as GetTemporaryDownloadUrlItem[]
-
-						if (!input.xMagicImageProcess) return preloadedUrls
-
-						const imageFileIdsToProcess = fileIds.filter((fileId) =>
-							imageFileIds.has(fileId),
-						)
-						if (imageFileIdsToProcess.length === 0) return preloadedUrls
-
-						const processedImageUrls = await getTemporaryDownloadUrl({
-							file_ids: imageFileIdsToProcess,
-							options: { xMagicImageProcess: input.xMagicImageProcess },
-						})
-						return [...preloadedUrls, ...(processedImageUrls || [])]
-					}
-
-					const { cached, missing } = urlCacheManager.getCachedUrls(
-						fileIds,
-						fileUpdatedAtMap,
-					)
-					let unversionedUrls = [...cached]
-					if (missing.length === 0) return unversionedUrls
-
-					// Split missing IDs into image vs non-image to avoid applying
-					// image processing params to non-image resources (CSS/JS/fonts etc.)
-					const missingImageIds = missing.filter((id) => imageFileIds.has(id))
-					const missingOtherIds = missing.filter((id) => !imageFileIds.has(id))
-
-					const requests: Promise<GetTemporaryDownloadUrlItem[]>[] = []
-					if (missingImageIds.length > 0) {
-						requests.push(
-							getTemporaryDownloadUrl({
-								file_ids: missingImageIds,
-								...(input.xMagicImageProcess && {
-									options: { xMagicImageProcess: input.xMagicImageProcess },
-								}),
-							}).then((r) => r || []),
-						)
-					}
-					if (missingOtherIds.length > 0) {
-						requests.push(
-							getTemporaryDownloadUrl({
-								file_ids: missingOtherIds,
-							}).then((r) => r || []),
-						)
-					}
-					const results = await Promise.all(requests)
-					const fetchedUrls = results.flat()
-					urlCacheManager.updateUrlCache(fetchedUrls, fileUpdatedAtMap)
-					unversionedUrls = [...unversionedUrls, ...fetchedUrls]
-					return unversionedUrls
-				},
+				preloadedUrlMapping: input.preloadedUrlMapping,
+				imageProcessOptions: input.xMagicImageProcess,
+				imageFileIds,
+				fileUpdatedAtMap,
+				htmlContent: modifiedHtmlContent,
+				urlMap,
+				filePathMap,
+				processingMetadata,
+				allFiles,
+				relativeFolderPath,
 			})
-
-			// Replace URLs in the HTML content
-			let updatedContent = modifiedHtmlContent
-			urlData.forEach((item: GetTemporaryDownloadUrlItem) => {
-				const resourceInfo = urlMap.get(item.file_id)
-				const path = filePathMap.get(item.file_id)
-				filePathandOssUrlMap.set(item.url || "", path || "")
-				if (resourceInfo && item.url) {
-					// 将OSS URL更新到urlMap中，供mediaInterceptor使用
-					urlMap.set(item.file_id, { ...resourceInfo, url: item.url })
-
-					if (resourceInfo.attr === "slides") {
-						// For slides, we keep original paths in the result
-						// No need to replace in HTML content for PPT mode
-						// PPTStore will handle URL conversion internally
-					} else if (resourceInfo.attr === "data-analyst-dashboard") {
-						// 兼容旧页面结构
-						const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-						const urlRegex = new RegExp(
-							`(url\\s*:\\s*)(['"\`])${escapedPath}(['"\`])`,
-							"g",
-						)
-						updatedContent = updatedContent.replace(urlRegex, `$1$2${item.url}$3`)
-					} else if (resourceInfo.attr === "data-analyst-project") {
-						// 数据分析新页面magic.project.js注入
-						switch (resourceInfo.type) {
-							case "geo":
-								if (!magicProjectJSConfig.geo) {
-									magicProjectJSConfig.geo = []
-								}
-								;(magicProjectJSConfig as any).geo.push({
-									name: resourceInfo.fileName.split(".")[0],
-									url: item.url,
-								})
-								break
-							case "cleaned_data":
-								if (!magicProjectJSConfig.dataSources) {
-									magicProjectJSConfig.dataSources = []
-								}
-								;(magicProjectJSConfig as any).dataSources.push({
-									name: resourceInfo.fileName.split(".")[0],
-									url: item.url,
-								})
-								break
-							default:
-								break
-						}
-					} else if (resourceInfo.attr === "css-url") {
-						// 处理CSS中的url()背景图片
-						const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-						// 匹配CSS中的url()函数，支持带引号和不带引号的URL
-						const cssUrlRegex = new RegExp(
-							`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`,
-							"g",
-						)
-						// 使用CSS注释保存原始路径
-						updatedContent = updatedContent.replace(
-							cssUrlRegex,
-							`/*__ORIGINAL_URL__:${resourceInfo.path}__*/url('${item.url}')`,
-						)
-					} else if (resourceInfo.attr === "inline-style") {
-						// 处理内联style属性中的url()背景图片
-						const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-						// 匹配内联style属性中的url()函数，需要匹配整个style属性
-						// 使用更精确的正则，匹配包含该URL的style属性
-						const inlineStyleRegex = new RegExp(
-							`(<${resourceInfo.tag}[^>]*?style=["'])([^"']*?url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)[^"']*?)(["'][^>]*?>)`,
-							"gi",
-						)
-						updatedContent = updatedContent.replace(
-							inlineStyleRegex,
-							(match, beforeStyle, styleContent, afterStyle) => {
-								// 替换style内容中的URL，使用CSS注释保存原始路径
-								const replacedStyleContent = styleContent.replace(
-									new RegExp(`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`, "g"),
-									`/*__ORIGINAL_URL__:${resourceInfo.path}__*/url('${item.url}')`,
-								)
-								return `${beforeStyle}${replacedStyleContent}${afterStyle}`
-							},
-						)
-					} else if (resourceInfo.attr === "data" && resourceInfo.tag === "object") {
-						// 对于object标签的data属性，直接使用OSS链接
-						const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-						const regex = new RegExp(`${resourceInfo.attr}=["']${escapedPath}["']`, "g")
-						updatedContent = updatedContent.replace(
-							regex,
-							`${resourceInfo.attr}="${item.url}"`,
-						)
-					} else {
-						// 处理普通的src/href属性
-						const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-						// 如果是src属性，需要同时添加data-original-path属性
-						if (resourceInfo.attr === "src") {
-							// 匹配src属性，并在替换时添加data-original-path属性
-							const regex = new RegExp(
-								`<(${resourceInfo.tag})([^>]*?)${resourceInfo.attr}=["']${escapedPath}["']([^>]*?)>`,
-								"gi",
-							)
-							updatedContent = updatedContent.replace(
-								regex,
-								(match, tagName, beforeAttr, afterAttr) => {
-									// 添加data-original-path属性保存原始路径，并替换src值
-									return `<${tagName}${beforeAttr}${resourceInfo.attr}="${item.url}" data-original-path="${resourceInfo.path}"${afterAttr}>`
-								},
-							)
-						} else {
-							// 对于非src属性（如href），也添加data-original-path属性
-							const regex = new RegExp(
-								`<(${resourceInfo.tag})([^>]*?)${resourceInfo.attr}=["']${escapedPath}["']([^>]*?)>`,
-								"gi",
-							)
-							updatedContent = updatedContent.replace(
-								regex,
-								(match, tagName, beforeAttr, afterAttr) => {
-									// 添加data-original-path属性保存原始路径，并替换属性值
-									return `<${tagName}${beforeAttr}${resourceInfo.attr}="${item.url}" data-original-path="${resourceInfo.path}"${afterAttr}>`
-								},
-							)
-						}
-					}
-				}
-			})
-
-			// hook配置进去
-			if (
-				processingMetadata?.type === "dashboard" &&
-				Object.keys(magicProjectJSConfig).length > 0
-			) {
-				const splitUpdatedContent = updatedContent.split("</head>")
-				updatedContent = `
-					${splitUpdatedContent[0]}
-					<script data-injected="true">
-						if (window.magicProjectConfigure) {
-							window.magicProjectConfigure(${JSON.stringify(magicProjectJSConfig)});
-						}
-					</script>
-					</head>
-					${splitUpdatedContent[1]}
-				`
-			}
-
-			if (processingMetadata?.type === "audio" || processingMetadata?.type === "video") {
-				// 为 audio/video 类型注入拦截器，使用预加载的URL映射
-				const preloadedMapping = createPreloadedUrlMapping(
-					allFiles as FileItem[],
-					urlMap,
-					relativeFolderPath,
-				)
-
-				updatedContent = injectMediaInterceptorScript(updatedContent, {
-					enableRelativePathInterception: true,
-					preloadedUrlMapping: preloadedMapping,
-				})
-			}
 
 			// 替换 window.location.reload 为 window.Magic.reload
-			updatedContent = replaceLocationReload(updatedContent)
+			let updatedContent = replaceLocationReload(replacedResources.content)
 			// 注入 at() polyfill 脚本
 			updatedContent = injectAtPolyfillScript(updatedContent)
 
 			result.processedContent = applyPreviewShell(updatedContent)
-			result.filePathMapping = filePathandOssUrlMap
+			result.filePathMapping = replacedResources.filePathMapping
 		} catch (error) {
 			console.error("Error fetching resource URLs:", error)
 			// 即使出错，也要替换脚本

@@ -308,6 +308,11 @@ describe("platform shells", () => {
 		expect(screen.getByTestId("wechat-official-shell")).toHaveStyle({
 			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
 		})
+		expect(screen.getByTestId("self-media-shell-header")).toHaveClass("flex", "flex-wrap")
+		expect(screen.getByTestId("self-media-shell-title")).toHaveClass(
+			"min-w-[20rem]",
+			"basis-[24rem]",
+		)
 	})
 
 	it("uses the shared workspace background across platform article editors", () => {

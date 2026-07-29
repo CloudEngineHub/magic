@@ -938,6 +938,8 @@
 				"exporting": "导出中...",
 				"failed": "导出失败",
 				"formatLabel": "图片格式",
+				"pageSeparator": "、",
+				"partialSuccess": "已导出 {{exported}}/{{total}} 页；未导出页码：{{failedPages}}",
 				"postSelectorLabel": "选择文章",
 				"running": "导出中 {{current}}/{{total}}",
 				"scaleLabel": "输出尺寸",

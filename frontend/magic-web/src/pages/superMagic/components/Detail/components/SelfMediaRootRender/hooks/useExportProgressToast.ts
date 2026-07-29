@@ -1,25 +1,41 @@
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
+import magicToast from "@/components/base/MagicToaster/utils"
 import type { ExportProgress } from "./useExportZip"
 
 /**
- * Shows sonner toast notifications for export progress/success/error.
+ * Shows MagicToast notifications for export progress/success/error.
  * Used by all platform shells that support ZIP export.
  */
 export function useExportProgressToast(progress: ExportProgress, toastId: string) {
 	const { t } = useTranslation("super")
 
 	useEffect(() => {
-		const { status, current, total } = progress
+		const { status, current, total, exported, failedPageNumbers = [] } = progress
 		if (status === "running") {
-			toast.loading(t("detail.selfMedia.export.running", { current, total }), {
-				id: toastId,
+			magicToast.loading({
+				key: toastId,
+				content: t("detail.selfMedia.export.running", { current, total }),
+				duration: 0,
 			})
 		} else if (status === "done") {
-			toast.success(t("detail.selfMedia.export.success"), { id: toastId })
+			magicToast.success({
+				key: toastId,
+				content: failedPageNumbers.length
+					? t("detail.selfMedia.export.partialSuccess", {
+							exported: exported ?? total - failedPageNumbers.length,
+							total,
+							failedPages: failedPageNumbers.join(
+								t("detail.selfMedia.export.pageSeparator"),
+							),
+						})
+					: t("detail.selfMedia.export.success"),
+			})
 		} else if (status === "error") {
-			toast.error(t("detail.selfMedia.export.failed"), { id: toastId })
+			magicToast.error({
+				key: toastId,
+				content: t("detail.selfMedia.export.failed"),
+			})
 		}
 	}, [progress, t, toastId])
 }

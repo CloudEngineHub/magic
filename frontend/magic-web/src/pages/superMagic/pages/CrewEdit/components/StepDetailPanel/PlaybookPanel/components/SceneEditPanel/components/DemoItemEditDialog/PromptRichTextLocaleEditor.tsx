@@ -20,6 +20,7 @@ interface PromptRichTextLocaleEditorProps {
 	className?: string
 	"data-testid"?: string
 	error?: string
+	allowPresetValue?: boolean
 }
 
 function getDefaultLocaleValue(text: LocaleText): string {
@@ -35,45 +36,62 @@ export function PromptRichTextLocaleEditor({
 	className,
 	"data-testid": testId,
 	error,
+	allowPresetValue = true,
 }: PromptRichTextLocaleEditorProps) {
 	const { t } = useTranslation("crew/create")
 	const editorRef = useRef<PromptRichTextEditorHandle | null>(null)
 	const mentionDataService = usePromptMentionDataService()
 	const defaultValue = getDefaultLocaleValue(value)
+	const localeDialog = (
+		<PromptRichTextLocaleDialog
+			value={value}
+			onChange={onChange}
+			placeholder={placeholder}
+			localizeLabel={localizeLabel}
+			mentionDataService={mentionDataService}
+			allowPresetValue={allowPresetValue}
+			data-testid={testId}
+		/>
+	)
+	const editor = (
+		<PromptRichTextEditor
+			ref={editorRef}
+			value={defaultValue}
+			onChange={(nextValue) => onChange(setLocaleValue(value, DEFAULT_LOCALE_KEY, nextValue))}
+			placeholder={placeholder}
+			mentionDataService={mentionDataService}
+			className={cn(error && "border-destructive", className)}
+			data-testid={testId}
+		/>
+	)
+
+	if (!allowPresetValue) {
+		return (
+			<div className="flex flex-1 items-start gap-2">
+				<div className="min-w-0 flex-1">{editor}</div>
+				{localeDialog}
+			</div>
+		)
+	}
 
 	return (
 		<div className="flex flex-1 flex-col gap-2">
 			<div className="flex items-center justify-end gap-1.5">
-				<Button
-					type="button"
-					variant="outline"
-					className="h-9 gap-2 px-3 text-xs font-medium text-foreground shadow-xs"
-					onClick={() => editorRef.current?.insertPresetValue()}
-					data-testid={testId ? `${testId}-insert-preset-value-btn` : undefined}
-				>
-					<CirclePlus className="h-4 w-4" />
-					{t("playbook.edit.presets.form.insertPresetValue")}
-				</Button>
-				<PromptRichTextLocaleDialog
-					value={value}
-					onChange={onChange}
-					placeholder={placeholder}
-					localizeLabel={localizeLabel}
-					mentionDataService={mentionDataService}
-					data-testid={testId}
-				/>
+				{allowPresetValue && (
+					<Button
+						type="button"
+						variant="outline"
+						className="h-9 gap-2 px-3 text-xs font-medium text-foreground shadow-xs"
+						onClick={() => editorRef.current?.insertPresetValue()}
+						data-testid={testId ? `${testId}-insert-preset-value-btn` : undefined}
+					>
+						<CirclePlus className="h-4 w-4" />
+						{t("playbook.edit.presets.form.insertPresetValue")}
+					</Button>
+				)}
+				{localeDialog}
 			</div>
-			<PromptRichTextEditor
-				ref={editorRef}
-				value={defaultValue}
-				onChange={(nextValue) =>
-					onChange(setLocaleValue(value, DEFAULT_LOCALE_KEY, nextValue))
-				}
-				placeholder={placeholder}
-				mentionDataService={mentionDataService}
-				className={cn(error && "border-destructive", className)}
-				data-testid={testId}
-			/>
+			{editor}
 		</div>
 	)
 }
