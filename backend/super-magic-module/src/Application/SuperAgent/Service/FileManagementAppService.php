@@ -1449,7 +1449,8 @@ class FileManagementAppService extends AbstractAppService
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
             $hasKeepBoth = ! empty($requestDTO->getKeepBothFileIds());
             $hasPreFileId = ! empty($requestDTO->getPreFileId());
-            $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth || $hasPreFileId;
+            $preserveParentPath = $isCrossProject && $requestDTO->shouldPreserveParentPath();
+            $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth || $hasPreFileId || $preserveParentPath;
 
             if (! $shouldAsync) {
                 return $this->batchMoveFileSync(
@@ -1501,6 +1502,7 @@ class FileManagementAppService extends AbstractAppService
                 'target_parent_id' => $targetParentId,
                 'pre_file_id' => $requestDTO->getPreFileId(),
                 'keep_both_file_ids' => $requestDTO->getKeepBothFileIds(),
+                'preserve_parent_path' => $preserveParentPath,
             ]);
 
             // Create and publish batch move event
@@ -1514,7 +1516,8 @@ class FileManagementAppService extends AbstractAppService
                 $sourceProject->getId(),
                 $preFileId,
                 $targetParentId,
-                $requestDTO->getKeepBothFileIds()
+                $requestDTO->getKeepBothFileIds(),
+                $preserveParentPath
             );
             $publisher = new FileBatchMovePublisher($event);
             $this->producer->produce($publisher);
