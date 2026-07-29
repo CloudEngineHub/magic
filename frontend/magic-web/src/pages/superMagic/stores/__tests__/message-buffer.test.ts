@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type {
-	DomainEventPayload,
-	RawSuperMagicMessageEnvelope,
-	TopicMessageListenerPayload,
-} from "@/pages/superMagic/stores/types"
+import type { MessageCommittedEvent, MessageCompletedEvent } from "@/pages/superMagic/stores/events"
+import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
 	ConversationMessageType,
@@ -41,6 +38,7 @@ interface EnvelopeOptions {
 	content?: string
 	role?: "assistant" | "tool" | "user"
 	status?: string
+	outerStatus?: ConversationMessageStatus
 	event?: string
 	toolCallId?: string
 }
@@ -58,6 +56,7 @@ function createEnvelope({
 	content = "message",
 	role = "assistant",
 	status = "finished",
+	outerStatus = ConversationMessageStatus.Read,
 	event,
 	toolCallId = "tool-1",
 }: EnvelopeOptions): RawSuperMagicMessageEnvelope {
@@ -98,7 +97,7 @@ function createEnvelope({
 				app_message_id: appMessageId,
 				sender_id: role === "tool" ? "tool-runner" : "assistant-1",
 				send_time: Number(seqId.replace(/\D/g, "")) || 1,
-				status: ConversationMessageStatus.Read,
+				status: outerStatus,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
@@ -142,25 +141,22 @@ function collectArrivals(
 	store: SuperMagicStore,
 	topicId = TOPIC_A,
 ): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = store.registerTopicMessageListener({
-		topicId,
-		callback: (payload) => events.push(payload),
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = store.subscribe("message.committed", (event) => events.push(event), {
+		scope: { topicId },
 	})
 	return { events, unsubscribe }
 }
 
 function collectDomainEvents(store: SuperMagicStore): {
-	events: DomainEventPayload[]
+	events: MessageCompletedEvent[]
 	unsubscribe: () => void
 } {
-	const events: DomainEventPayload[] = []
-	const unsubscribe = store.registerDomainEventListener({
-		callback: (payload) => events.push(payload),
-	})
+	const events: MessageCompletedEvent[] = []
+	const unsubscribe = store.subscribe("message.completed", (event) => events.push(event))
 	return { events, unsubscribe }
 }
 
@@ -248,12 +244,12 @@ function startBlockingAssistantStream(
 }
 
 function arrivalSeqIds(
-	events: TopicMessageListenerPayload[],
+	events: MessageCommittedEvent[],
 	ignoredAppMessageIds: string[] = [],
 ): string[] {
 	return events
-		.filter((event) => !ignoredAppMessageIds.includes(event.message.app_message_id))
-		.map((event) => event.message.seq_id)
+		.filter((event) => !ignoredAppMessageIds.includes(event.payload.message.appMessageId || ""))
+		.map((event) => event.payload.message.seqId || "")
 }
 
 describe("SuperMagicStore / Message Buffer", () => {
@@ -281,7 +277,9 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(
-			arrivals.events.filter((event) => event.message.app_message_id === "duplicate-app"),
+			arrivals.events.filter(
+				(event) => event.payload.message.appMessageId === "duplicate-app",
+			),
 		).toHaveLength(1)
 		expect(getNode(store, "duplicate-correlation")?.content).toBe("canonical")
 		arrivals.unsubscribe()
@@ -311,7 +309,18 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(getNode(store, "shared-correlation")?.content).toBe("new")
-		expect(getNode(store, "app-old")).toBe(getNode(store, "app-new"))
+		expect(getNode(store, "app-new")?.content).toBe("new")
+		expect(getNode(store, "app-old")).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) || []).filter(
+				(message) =>
+					message.role === "assistant" && message.correlation_id === "shared-correlation",
+			),
+		).toEqual([
+			expect.objectContaining({
+				app_message_id: "app-new",
+			}),
+		])
 	})
 
 	it("`isProcessing=true` 后异常返回，未恢复为 false。", () => {
@@ -365,7 +374,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 		expect(
 			arrivals.events.filter(
-				(event) => event.message.app_message_id === "blocking-assistant",
+				(event) => event.payload.message.appMessageId === "blocking-assistant",
 			),
 		).toHaveLength(1)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
@@ -374,6 +383,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 	it("队头 assistant 永不完成，后续消息永久阻塞。", () => {
 		const store = createStore()
+		const arrivals = collectArrivals(store)
 
 		startBlockingAssistantStream(store)
 		store.enqueueMessage(
@@ -388,6 +398,18 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering(32)
 
 		expect(getNode(store, "correlation-after-blocker")?.content).toBe("must not starve")
+		expect(
+			store.messages
+				.get(TOPIC_A)
+				?.some((message) => message.app_message_id === "message-after-blocker"),
+		).toBe(true)
+		expect(store.messageMap.get("message-after-blocker")).toBeDefined()
+		expect(
+			arrivals.events.filter(
+				(event) => event.payload.message.appMessageId === "message-after-blocker",
+			),
+		).toHaveLength(1)
+		arrivals.unsubscribe()
 	})
 
 	it("tool response 被排在永不完成的 assistant 后面。", () => {
@@ -432,7 +454,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		expect(getNode(store, "visible-tool-message")?.role).toBe("tool")
 		expect(
 			arrivals.events.some(
-				(event) => event.message.app_message_id === "visible-tool-message",
+				(event) => event.payload.message.appMessageId === "visible-tool-message",
 			),
 		).toBe(true)
 		arrivals.unsubscribe()
@@ -457,7 +479,14 @@ describe("SuperMagicStore / Message Buffer", () => {
 		}
 		settleRendering(100)
 
-		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["10", "20", "30"])
+		// Topic listeners observe raw canonical arrival order. UI/Store projection is
+		// independently sorted by seq_id after each message is committed.
+		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["30", "10", "20"])
+		expect(
+			(store.messages.get(TOPIC_A) || [])
+				.filter((message) => message.role === "tool")
+				.map((message) => message.seq_id),
+		).toEqual(["10", "20", "30"])
 		arrivals.unsubscribe()
 	})
 
@@ -482,6 +511,100 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["2", "10", "11"])
 		arrivals.unsubscribe()
+	})
+
+	it.each([
+		{
+			label: "历史撤回后存在普通消息",
+			statuses: [ConversationMessageStatus.Revoked, ConversationMessageStatus.Read],
+		},
+		{
+			label: "末尾存在连续撤回段",
+			statuses: [
+				ConversationMessageStatus.Read,
+				ConversationMessageStatus.Revoked,
+				ConversationMessageStatus.Revoked,
+			],
+		},
+		{
+			label: "历史撤回和当前撤回段同时存在",
+			statuses: [
+				ConversationMessageStatus.Revoked,
+				ConversationMessageStatus.Read,
+				ConversationMessageStatus.Revoked,
+			],
+		},
+	])("Canonical replace 在$label时保留全部消息事实。", ({ statuses }) => {
+		const store = createStore()
+		const envelopes = statuses.map((outerStatus, index) =>
+			createEnvelope({
+				appMessageId: `revoked-canonical-${index}`,
+				correlationId: `revoked-canonical-correlation-${index}`,
+				seqId: String(index + 1),
+				role: "user",
+				outerStatus,
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, envelopes, { mode: "replace" })
+		settleRendering()
+
+		expect((store.messages.get(TOPIC_A) || []).map((message) => message.status)).toEqual(
+			statuses,
+		)
+	})
+
+	it("批量 replace 与逐条 merge 对同一组撤回状态产生相同 Canonical 成员。", () => {
+		const createInitialMessages = () =>
+			["1", "2", "3"].map((seqId) =>
+				createEnvelope({
+					appMessageId: `revoked-equivalence-${seqId}`,
+					correlationId: `revoked-equivalence-correlation-${seqId}`,
+					seqId,
+					role: "user",
+				}),
+			)
+		const createRevokedRevision = (seqId: string) =>
+			createEnvelope({
+				appMessageId: `revoked-equivalence-${seqId}`,
+				correlationId: `revoked-equivalence-correlation-${seqId}`,
+				seqId,
+				role: "user",
+				outerStatus: ConversationMessageStatus.Revoked,
+			})
+		const initialMessages = createInitialMessages()
+		const expectedSnapshot = [
+			initialMessages[0],
+			createRevokedRevision("2"),
+			createRevokedRevision("3"),
+		]
+
+		const batchStore = createStore()
+		batchStore.initializeMessages(TOPIC_A, expectedSnapshot, { mode: "replace" })
+		settleRendering()
+
+		const incrementalStore = createStore()
+		incrementalStore.initializeMessages(TOPIC_A, createInitialMessages(), { mode: "replace" })
+		incrementalStore.initializeMessages(TOPIC_A, [createRevokedRevision("2")], {
+			mode: "merge",
+		})
+		incrementalStore.initializeMessages(TOPIC_A, [createRevokedRevision("3")], {
+			mode: "merge",
+		})
+		settleRendering()
+
+		const projectMembership = (store: SuperMagicStore) =>
+			(store.messages.get(TOPIC_A) || []).map((message) => ({
+				appMessageId: message.app_message_id,
+				status: message.status,
+			}))
+
+		expect(projectMembership(incrementalStore)).toEqual(projectMembership(batchStore))
+		expect(projectMembership(batchStore)).toEqual([
+			{ appMessageId: "revoked-equivalence-1", status: ConversationMessageStatus.Read },
+			{ appMessageId: "revoked-equivalence-2", status: ConversationMessageStatus.Revoked },
+			{ appMessageId: "revoked-equivalence-3", status: ConversationMessageStatus.Revoked },
+		])
 	})
 
 	it("seqId 缺失。", () => {
@@ -620,7 +743,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 		expect(
 			arrivals.events.filter(
-				(event) => event.message.correlation_id === "finalized-correlation",
+				(event) => event.payload.message.correlationId === "finalized-correlation",
 			),
 		).toHaveLength(1)
 		expect(getNode(store, "finalized-correlation")?.content).toBe("canonical final")
@@ -761,7 +884,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(domainEvents.events.some((event) => event.topicId === TOPIC_A)).toBe(false)
+		expect(domainEvents.events.some((event) => event.meta.topicId === TOPIC_A)).toBe(false)
 		expect(getNode(store, "active-topic-correlation")?.content).toBe("active")
 		domainEvents.unsubscribe()
 	})

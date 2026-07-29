@@ -36,7 +36,7 @@ class SuperMagicAgentSandboxApi extends AbstractSuperMagicSandboxApi
     {
         $authorization = $this->getAuthorization();
         $withToolSchema = (bool) $this->request->input('with_tool_schema', false);
-        $result = $this->superMagicAgentAppService->show($authorization, $code, $withToolSchema, true);
+        $result = $this->superMagicAgentAppService->showUsable($authorization, $code, $withToolSchema, true);
         return SuperMagicAgentAssembler::createDetailResponseDTO(
             $result['agent'],
             $result['skills'],
@@ -50,7 +50,7 @@ class SuperMagicAgentSandboxApi extends AbstractSuperMagicSandboxApi
     {
         $authorization = $this->getAuthorization();
         $withToolSchema = (bool) $this->request->input('with_tool_schema', false);
-        $result = $this->superMagicAgentAppService->showLatestVersion($authorization, $code, $withToolSchema, true);
+        $result = $this->superMagicAgentAppService->showLatestVersionUsable($authorization, $code, $withToolSchema, true);
 
         return SuperMagicAgentAssembler::createDetailResponseDTO(
             $result['agent'],

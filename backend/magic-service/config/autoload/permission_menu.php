@@ -180,10 +180,10 @@ return [
         'platform.setting.slides_template' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
                 ['key' => 'slides_template', 'label' => '幻灯片模板'],
             ],
-            'tag' => '平台管理',
+            'tag' => '智能体增强',
         ],
         'admin.safe.sub_admin' => [
             'path' => [

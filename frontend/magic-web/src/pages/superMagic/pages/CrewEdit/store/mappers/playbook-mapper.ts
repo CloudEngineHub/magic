@@ -5,6 +5,7 @@ import {
 	type UpdatePlaybookParams,
 } from "@/apis/modules/crew"
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { migratePlaybookSceneInspirationPrompts } from "@/pages/superMagic/utils/playbookInspirationPrompt"
 import type { SceneItem } from "../../components/StepDetailPanel/PlaybookPanel/types"
 
 export function mapPlaybookToScene({
@@ -33,7 +34,7 @@ export function mapPlaybookToScene({
 		icon: icon ?? "sparkles",
 		enabled,
 		update_at: updatedAt,
-		configs: storedConfigs,
+		configs: migratePlaybookSceneInspirationPrompts(storedConfigs),
 	}
 }
 
@@ -50,7 +51,10 @@ export function mapSceneToPlaybookParams(scene: SceneItem): UpdatePlaybookParams
 		theme_color: scene.theme_color,
 		enabled: scene.enabled,
 		config: {
-			scenes_config: scene.configs as Record<string, unknown>,
+			scenes_config: migratePlaybookSceneInspirationPrompts(scene.configs) as Record<
+				string,
+				unknown
+			>,
 		},
 	}
 }

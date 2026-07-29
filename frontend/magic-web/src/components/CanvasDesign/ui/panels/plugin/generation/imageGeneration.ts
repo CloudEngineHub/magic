@@ -36,7 +36,7 @@ import {
 } from "../window/pluginSourceElements"
 
 const DEFAULT_MAX_OUTPUT_IMAGES = 4
-const PLUGIN_GENERATED_GRID_MAX_COLUMNS = 4
+const PLUGIN_GENERATED_GRID_MAX_COLUMNS = 6
 
 export async function getPluginImageModels(canvas: Canvas) {
 	const getImageModelList = canvas.magicConfigManager.config?.methods?.getImageModelList
@@ -111,10 +111,12 @@ export async function generatePluginImages(
 		)
 		// 来源元素的障碍矩形
 		const sourceRect = sourceElement ? layerElementToObstacleRect(sourceElement) : null
-		// 没有来源图时，尝试接在同一生成请求的已有输出网格后面，保证多次点击生成能连续排列。
-		const existingGridRects = sourceRect
-			? []
-			: collectMatchingGeneratedGridRects(canvas, allElements, generateImageRequest)
+		// 同配置历史输出会优先延续同一网格；如果没有历史输出，再回到来源图附近找首个落点。
+		const existingGridRects = collectMatchingGeneratedGridRects(
+			canvas,
+			allElements,
+			generateImageRequest,
+		)
 		const positions = findGeneratedMediaGridPositions(obstacles, {
 			count,
 			elementWidth: imageSize.width,
@@ -303,19 +305,16 @@ function stableStringify(value: unknown): string {
 	return JSON.stringify(value) ?? "undefined"
 }
 
-/** 提取影响落点续排的生成参数，作为“同一组生成结果”的判断依据。 */
+/** 提取影响历史网格续排的生成配置；prompt/model/aspect_ratio 不参与画布排布分组。 */
 function getGenerationPlacementKey(request: PluginGenerateAndPlaceParams): string {
 	return stableStringify({
-		model_id: request.model_id,
-		prompt: request.prompt,
-		size: request.size,
 		resolution: request.resolution,
 		references: getNormalizedPluginReferenceKeys(request),
 		image_generation_config: request.image_generation_config ?? {},
 	})
 }
 
-/** 收集同一生成请求已创建的结果矩形，供无来源图的再次生成接着原网格摆放。 */
+/** 收集同配置已创建的结果矩形，供再次生成接着原网格摆放。 */
 function collectMatchingGeneratedGridRects(
 	canvas: Canvas,
 	elements: LayerElement[],

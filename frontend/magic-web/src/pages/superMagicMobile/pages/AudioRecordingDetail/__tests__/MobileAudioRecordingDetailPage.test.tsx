@@ -66,6 +66,14 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
 }))
 
+vi.mock("@/models/config/stores/theme.store", () => ({
+	themeStore: {
+		theme: "light",
+		setTheme: vi.fn(),
+		syncDocumentDarkClass: vi.fn(),
+	},
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => {
@@ -250,11 +258,13 @@ vi.mock(
 		/** Stubs the shared more-actions sheet so the page test never mounts real Vaul drawers. */
 		function MockMobileRecordingMoreSheet({
 			isOpen,
+			onOpenProject,
 			onShare,
 			onDelete,
 			item,
 		}: {
 			isOpen: boolean
+			onOpenProject?: (item: AudioProjectListItem) => void
 			onShare?: () => void
 			onDelete?: (projectId: string) => Promise<boolean>
 			item?: AudioProjectListItem | null
@@ -285,6 +295,13 @@ vi.mock(
 
 			return (
 				<div data-testid="mobile-recording-more-sheet">
+					<button
+						type="button"
+						data-testid="mobile-recording-more-open-project"
+						onClick={() => item && onOpenProject?.(item)}
+					>
+						Open project
+					</button>
 					<button
 						type="button"
 						data-testid="mobile-recording-more-share"
@@ -689,6 +706,17 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		await waitFor(() => {
 			expect(document.body).toHaveAttribute("data-scroll-locked", "1")
+		})
+	})
+
+	it("navigates to the recording project from mobile more actions", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-open-project"))
+
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: "project-mobile-001" },
 		})
 	})
 

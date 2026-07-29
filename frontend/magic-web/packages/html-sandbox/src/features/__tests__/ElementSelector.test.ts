@@ -59,6 +59,13 @@ describe("ElementSelector", () => {
 			selector.disable()
 			expect(document.body.style.cursor).toBe("")
 		})
+
+		it("should inject editor-only text editing styles", () => {
+			const style = document.getElementById("magic-editor-text-editing-style")
+
+			expect(style?.getAttribute("data-injected")).toBe("true")
+			expect(style?.textContent).toContain('[data-text-editing="true"]')
+		})
 	})
 
 	describe("selectElement", () => {
@@ -748,19 +755,20 @@ describe("ElementSelector", () => {
 
 		it("should not enable text editing in multi-select mode", () => {
 			container.innerHTML = `
-				<p id="text1">Text 1</p>
+				<p id="text1" style="COLOR:red; margin:0  8px!important">Text 1</p>
 				<p id="text2">Text 2</p>
 			`
 			const text1 = container.querySelector("#text1") as HTMLElement
 			const text2 = container.querySelector("#text2") as HTMLElement
+			const originalStyle = text1.getAttribute("style")
 
-			// Single select - should enable text editing
+			// Single selection keeps the existing pre-editing DOM state.
 			selector.selectElement(text1, false)
 			expect(text1.contentEditable).toBe("true")
+			expect(text1.getAttribute("data-text-editing")).toBe("true")
+			expect(text1.getAttribute("style")).toBe(originalStyle)
 
-			// Multi-select - should not enable text editing
 			selector.selectElement(text2, true)
-			// contentEditable should NOT be "true" in multi-select mode
 			expect(text2.contentEditable).not.toBe("true")
 			expect(text2.getAttribute("data-text-editing")).not.toBe("true")
 		})

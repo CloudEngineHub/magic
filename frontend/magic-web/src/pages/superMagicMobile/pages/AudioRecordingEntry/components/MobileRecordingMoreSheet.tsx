@@ -17,6 +17,7 @@ interface MobileRecordingMoreSheetProps {
 	onClose: () => void
 	onRename: (projectId: string, name: string) => Promise<boolean>
 	onDelete: (projectId: string) => Promise<boolean>
+	onOpenProject?: (item: AudioProjectListItem) => void
 	onSummarize?: (item: AudioProjectListItem) => Promise<boolean>
 	onMoveToGroup?: (item: AudioProjectListItem) => void
 	onCopyToProject?: (item: AudioProjectListItem) => void
@@ -80,6 +81,7 @@ export function MobileRecordingMoreSheet({
 	onClose,
 	onRename,
 	onDelete,
+	onOpenProject,
 	onSummarize,
 	onMoveToGroup,
 	onCopyToProject,
@@ -150,6 +152,13 @@ export function MobileRecordingMoreSheet({
 		const success = await onDelete(item.id)
 		if (success) handleClose()
 	}, [item, onDelete, handleClose])
+
+	/** Opens the recording's backing project and closes the action sheet before navigation. */
+	const handleOpenProject = useCallback(() => {
+		if (!item || !onOpenProject) return
+		onOpenProject(item)
+		handleClose()
+	}, [handleClose, item, onOpenProject])
 
 	const handleSummarize = useCallback(async () => {
 		if (!item || !onSummarize) return
@@ -252,6 +261,14 @@ export function MobileRecordingMoreSheet({
 			{view === "menu" ? (
 				<>
 					<MenuGroup>
+						{onOpenProject ? (
+							<MenuItem
+								label={t("audioRecordings:card.openProject")}
+								dataTestId="mobile-recording-more-open-project"
+								showDivider
+								onClick={handleOpenProject}
+							/>
+						) : null}
 						{hideRenameAction ? null : (
 							<MenuItem
 								label={t("super:mobile.recordingEntry.moreSheet.rename")}

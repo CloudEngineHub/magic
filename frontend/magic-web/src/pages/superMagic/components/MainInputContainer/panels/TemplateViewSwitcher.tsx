@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react"
-import type { OptionItem, OptionViewType } from "./types"
+import type { IdentifiedOptionItem, OptionItem, OptionViewType } from "./types"
 import { OptionViewType as ViewType } from "./types"
 import { EditableGrid } from "./grid/EditableGrid"
 import { EditableWaterfall } from "./waterfall/EditableWaterfall"
@@ -15,6 +15,7 @@ const SlidesPresetGrid = lazy(() => import("./slides-preset/SlidesPresetGrid"))
 
 type ViewModeProps = {
 	mode?: "view"
+	items: OptionItem[]
 	selectedTemplate?: OptionItem
 	onTemplateClick: (item: OptionItem) => void
 	className?: string
@@ -22,16 +23,16 @@ type ViewModeProps = {
 
 type EditModeProps = {
 	mode: "edit"
+	items: IdentifiedOptionItem[]
 	selectedKeys: Set<string>
 	onSelect: (value: string, checked: boolean) => void
-	onEdit: (item: OptionItem) => void
+	onEdit: (item: IdentifiedOptionItem) => void
 	onDelete: (value: string) => void
-	onReorder?: (items: OptionItem[]) => void
+	onReorder?: (items: IdentifiedOptionItem[]) => void
 }
 
 type TemplateViewSwitcherProps = {
 	viewType?: OptionViewType
-	items: OptionItem[]
 } & (ViewModeProps | EditModeProps)
 
 /**

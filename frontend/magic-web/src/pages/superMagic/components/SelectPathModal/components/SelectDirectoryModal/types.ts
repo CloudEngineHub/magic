@@ -1,4 +1,5 @@
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectResourceSelection } from "../../types"
 
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 
@@ -8,6 +9,8 @@ export interface SelectDirectorySubmitParams {
 	targetProjectId?: string
 	targetAttachments?: AttachmentItem[]
 	sourceAttachments?: AttachmentItem[]
+	selection?: ProjectResourceSelection
+	selections?: ProjectResourceSelection[]
 }
 
 export interface MobileCrossProjectConfig {
@@ -19,6 +22,8 @@ export interface MobileCrossProjectConfig {
 	workspaces?: Array<Pick<Workspace, "id" | "name" | "project_count" | "workspace_type">>
 	includeSpecialWorkspaces?: boolean
 	allowWorkspaceSubmit?: boolean
+	selectionMode?: "destination" | "mention"
+	excludeProjectIds?: string[]
 }
 
 export interface SelectDirectoryModalProps {

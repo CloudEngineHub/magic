@@ -6,19 +6,19 @@ import { cn } from "@/lib/utils"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
+import type { IdentifiedOptionItem } from "../types"
 import { isImageIconSource } from "../utils"
 
 interface EditableCapsuleProps {
-	items: OptionItem[]
+	items: IdentifiedOptionItem[]
 	selectedKeys: Set<string>
 	onSelect: (value: string, checked: boolean) => void
-	onEdit: (item: OptionItem) => void
+	onEdit: (item: IdentifiedOptionItem) => void
 	onDelete: (value: string) => void
 }
 
 interface EditableCapsuleItemProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -34,7 +34,8 @@ function EditableCapsuleItem({
 }: EditableCapsuleItemProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const label = lt(item.label) ?? item.value
+	const itemValue = item.value
+	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 
 	const menuItems = [
@@ -56,12 +57,12 @@ function EditableCapsuleItem({
 	return (
 		<div
 			className="flex items-center gap-1.5"
-			data-testid={`editable-capsule-item-${item.value}`}
+			data-testid={`editable-capsule-item-${itemValue}`}
 		>
 			<Checkbox
 				checked={isSelected}
-				onCheckedChange={(checked) => onSelect(item.value, !!checked)}
-				data-testid={`editable-capsule-item-checkbox-${item.value}`}
+				onCheckedChange={(checked) => onSelect(itemValue, !!checked)}
+				data-testid={`editable-capsule-item-checkbox-${itemValue}`}
 			/>
 			<div
 				className={cn(
@@ -91,7 +92,7 @@ function EditableCapsuleItem({
 						variant="ghost"
 						size="icon"
 						className="h-9 w-9 shrink-0"
-						data-testid={`editable-capsule-item-menu-${item.value}`}
+						data-testid={`editable-capsule-item-menu-${itemValue}`}
 					>
 						<Ellipsis className="size-4" />
 					</Button>
@@ -110,16 +111,19 @@ export function EditableCapsule({
 }: EditableCapsuleProps) {
 	return (
 		<div className="flex w-full flex-wrap content-start items-start gap-2">
-			{items.map((item) => (
-				<EditableCapsuleItem
-					key={item.value}
-					item={item}
-					isSelected={selectedKeys.has(item.value)}
-					onSelect={onSelect}
-					onEdit={() => onEdit(item)}
-					onDelete={() => onDelete(item.value)}
-				/>
-			))}
+			{items.map((item) => {
+				const itemValue = item.value
+				return (
+					<EditableCapsuleItem
+						key={itemValue}
+						item={item}
+						isSelected={selectedKeys.has(itemValue)}
+						onSelect={onSelect}
+						onEdit={() => onEdit(item)}
+						onDelete={() => onDelete(itemValue)}
+					/>
+				)
+			})}
 		</div>
 	)
 }

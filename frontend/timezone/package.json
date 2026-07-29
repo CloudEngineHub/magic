@@ -1,0 +1,91 @@
+{
+	"name": "@dtyq/timezone",
+	"version": "0.0.2",
+	"description": "Timezone utilities and consistent timezone list for web projects.",
+	"keywords": [
+		"timezone",
+		"dayjs",
+		"date-time",
+		"i18n"
+	],
+	"license": "Apache License 2.0",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/es/index.d.ts",
+			"import": "./dist/es/index.js",
+			"require": "./dist/lib/index.js",
+			"default": "./dist/es/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"main": "dist/lib/index.js",
+	"jsdelivr": "dist/index.umd.min.js",
+	"unpkg": "dist/index.umd.min.js",
+	"module": "dist/es/index.js",
+	"types": "dist/es/index.d.ts",
+	"typings": "dist/es/index.d.ts",
+	"files": [
+		"dist",
+		"LICENSE",
+		"README.md",
+		"package.json"
+	],
+	"scripts": {
+		"build": "pnpm run lint && pnpm run typecheck && pnpm run test:ci && vite build && vite build --mode umd",
+		"dev": "vite build --watch",
+		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+		"prepack": "pnpm run build",
+		"prepare": "husky",
+		"prepublishOnly": "pnpm run build",
+		"semantic-release": "semantic-release",
+		"test": "vitest",
+		"test:ci": "vitest run --coverage",
+		"typecheck": "tsc --noEmit"
+	},
+	"lint-staged": {
+		"./src/**/*.{js,jsx,ts,tsx}": [
+			"eslint --fix --config .eslintrc.cjs",
+			"prettier --write"
+		],
+		"./src/assets/locales/**/*.json": [
+			"prettier --write"
+		],
+		"package.json": "sort-package-json"
+	},
+	"devDependencies": {
+		"@commitlint/cli": "^19.2.2",
+		"@dtyq/eslint-config": "~0.0.10",
+		"@typescript-eslint/eslint-plugin": "^7.14.1",
+		"@typescript-eslint/parser": "^7.14.1",
+		"@vitest/coverage-v8": "^2.1.8",
+		"dayjs": "^1.11.12",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-import-resolver-typescript": "^3.6.1",
+		"eslint-plugin-prettier": "^5.1.3",
+		"husky": "^9.0.11",
+		"jsdom": "^25.0.1",
+		"lint-staged": "^15.2.2",
+		"prettier": "^3.3.2",
+		"prettier-plugin-sort-json": "^4.2.0",
+		"semantic-release": "^19.0.3",
+		"sort-package-json": "^2.10.0",
+		"terser": "^5.46.0",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.2.0",
+		"vite": "^5.4.11",
+		"vite-plugin-dts": "^4.2.3",
+		"vitest": "^2.1.8"
+	},
+	"peerDependencies": {
+		"dayjs": "^1.11.12"
+	},
+	"packageManager": "pnpm@10.0.0",
+	"engines": {
+		"node": ">=16",
+		"pnpm": ">=10.0.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

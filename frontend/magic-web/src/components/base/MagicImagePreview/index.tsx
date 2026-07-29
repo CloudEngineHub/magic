@@ -19,6 +19,7 @@ import MagicSegmented from "@/components/base/MagicSegmented"
 import MagicButton from "../MagicButton"
 import MagicIcon from "../MagicIcon"
 import useScale from "./hooks/useScale"
+import useContentFitScale from "./hooks/useContentFitScale"
 import useRotate from "./hooks/useRotate"
 import useOffset from "./hooks/useOffset"
 import useStyles from "./styles"
@@ -27,7 +28,7 @@ import { useDownloadImageMenu } from "@/pages/superMagic/components/Detail/conte
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
 
-const MAX_SCALE = 5
+const MAX_SCALE = 10
 const SCALE_STEP = 0.1
 
 interface Props extends HTMLAttributes<HTMLImageElement> {
@@ -75,22 +76,36 @@ const MagicImagePreview = (props: Props) => {
 	const { t } = useTranslation("interface")
 
 	const containerRef = useRef<HTMLDivElement>(null)
+	const contentRef = useRef<HTMLDivElement>(null)
+	const fitScale = useContentFitScale(contentRef)
 
-	const { scale, addTenPercent, subTenPercent, setScale } = useScale(containerRef, {
-		step: SCALE_STEP,
-		maxScale: MAX_SCALE,
-	})
+	const { scale, transformScale, minScale, addTenPercent, subTenPercent, setScale, resetScale } =
+		useScale(containerRef, {
+			step: SCALE_STEP,
+			maxScale: MAX_SCALE,
+			fitScale,
+		})
 	const { rotate, rotateImage } = useRotate()
 
 	const { offset, setOffset } = useOffset(containerRef)
 
-	// 重置图片
-	const resetImage = useMemoizedFn(() => {
+	const resetPosition = useMemoizedFn(() => {
 		setOffset({
 			x: 0,
 			y: 0,
 		})
+	})
+
+	// 恢复原图真实物理尺寸（1 个原图像素对应 1 个 CSS 像素）
+	const resetToActualSize = useMemoizedFn(() => {
+		resetPosition()
 		setScale(1)
+	})
+
+	// 切换图片后继续保持完整图片适应预览容器的默认体验
+	const resetImage = useMemoizedFn(() => {
+		resetPosition()
+		resetScale()
 	})
 
 	/** 切换图片时, 重置图片位置 */
@@ -121,10 +136,11 @@ const MagicImagePreview = (props: Props) => {
 		<div className={cx(styles.container, rootClassName)}>
 			<div ref={containerRef} className={styles.imageDragWrapper}>
 				<div
+					ref={contentRef}
 					className={cx(styles.imageWrapper, className)}
 					draggable={false}
 					style={{
-						transform: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${scale})`,
+						transform: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
 					}}
 					{...rest}
 				>
@@ -171,7 +187,7 @@ const MagicImagePreview = (props: Props) => {
 					</MagicButton>
 					<Slider
 						className={styles.slider}
-						min={0.1}
+						min={minScale}
 						max={MAX_SCALE}
 						defaultValue={1}
 						value={scale}
@@ -187,7 +203,7 @@ const MagicImagePreview = (props: Props) => {
 					</MagicButton>
 				</Flex>
 				{/* 1:1 */}
-				<MagicButton type="link" className={styles.toolButton} onClick={resetImage}>
+				<MagicButton type="link" className={styles.toolButton} onClick={resetToActualSize}>
 					<MagicIcon
 						color="currentColor"
 						component={IconRelationOneToOne}

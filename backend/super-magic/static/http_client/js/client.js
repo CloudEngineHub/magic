@@ -1797,6 +1797,7 @@ async function sendHttpMessage(messageData) {
     }
 
     try {
+        injectDebugTaskId(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -1826,6 +1827,26 @@ async function sendHttpMessage(messageData) {
         showSystemMessage(`连接失败: ${error.message}。请检查服务器地址是否正确。`);
         return null;
     }
+}
+
+/**
+ * 为调试面板发送的普通聊天消息注入新的任务 ID.
+ * 初始化消息和中断消息不切换任务，避免影响当前运行中的任务状态.
+ */
+function injectDebugTaskId(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+    if (messageData.context_type === ContextType.INTERRUPT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.super_magic_task_id = generateDebugTaskId();
+}
+
+/**
+ * 生成仅用于本地调试的数字字符串任务 ID.
+ */
+function generateDebugTaskId() {
+    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${Date.now()}${randomSuffix}`;
 }
 
 async function clearRemoteChatHistory() {

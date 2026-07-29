@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react"
 import { makeAutoObservable } from "mobx"
 import type { SceneItem } from "../../types"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import {
 	SkillPanelType,
 	type DemoPanelConfig,
@@ -9,60 +8,30 @@ import {
 	type FieldPanelConfig,
 	type GuideItem,
 	type GuidePanelConfig,
+	type IdentifiedOptionItem,
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
 	type OptionViewType,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import {
+	createDefaultInspirationGroup,
+	DEFAULT_INSPIRATION_GROUP_KEY,
+	getBaseInspirationConfig,
+	getFallbackGroupKey,
+	patchInspirationGroups,
+} from "./inspirationConfig"
+import {
+	type InspirationItemData,
+	removeInspirationItems,
+	updateInspirationItem,
+} from "./inspirationItems"
 
 function genKey() {
 	return Math.random().toString(36).slice(2)
 }
 
-export const DEFAULT_INSPIRATION_GROUP_KEY = "__default__"
-
-function getBaseInspirationConfig(inspiration: DemoPanelConfig | undefined): DemoPanelConfig {
-	return (
-		inspiration ??
-		({
-			type: "demo" as DemoPanelConfig["type"],
-			demo: { groups: [] },
-		} satisfies DemoPanelConfig)
-	)
-}
-
-function createDefaultInspirationGroup(
-	groupName: LocaleText,
-	children: OptionItem[] = [],
-): OptionGroup {
-	return {
-		group_key: DEFAULT_INSPIRATION_GROUP_KEY,
-		group_name: groupName,
-		children,
-	}
-}
-
-function getFallbackGroupKey(inspiration: DemoPanelConfig | undefined): string {
-	return (
-		inspiration?.demo?.default_selected_group_key ??
-		inspiration?.demo?.groups?.[0]?.group_key ??
-		""
-	)
-}
-
-function patchGroups(
-	inspiration: DemoPanelConfig | undefined,
-	mapFn: (groups: OptionGroup[]) => OptionGroup[],
-): DemoPanelConfig {
-	const base = getBaseInspirationConfig(inspiration)
-	return {
-		...base,
-		demo: {
-			...base.demo,
-			groups: mapFn(base.demo?.groups ?? []),
-		},
-	}
-}
+export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
 
 export class SceneEditStore {
 	scene: SceneItem
@@ -163,7 +132,7 @@ export class SceneEditStore {
 	editInspirationGroup(groupKey: string, data: { group_name: LocaleText; group_icon?: string }) {
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) =>
 				gs.map((g) => (g.group_key === groupKey ? { ...g, ...data } : g)),
 			),
 		}
@@ -193,11 +162,11 @@ export class SceneEditStore {
 	// ─── Inspiration items ────────────────────────────────────────────────────
 
 	createInspirationItem(
-		data: Partial<OptionItem>,
+		data: InspirationItemData,
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
-		const newItem: OptionItem = { ...data, value: data.value ?? genKey() }
+		const newItem: IdentifiedOptionItem = { ...data, value: genKey() }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
 		const fallbackGroupKey = groupKey || getFallbackGroupKey(base)
@@ -221,7 +190,7 @@ export class SceneEditStore {
 
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(base, (gs) =>
+			inspiration: patchInspirationGroups(base, (gs) =>
 				gs.map((g) =>
 					g.group_key === fallbackGroupKey
 						? { ...g, children: [...(g.children ?? []), newItem] }
@@ -231,58 +200,20 @@ export class SceneEditStore {
 		}
 	}
 
-	editInspirationItem(value: string, data: Partial<OptionItem>, groupKey: string) {
+	editInspirationItem(value: string, data: InspirationItemData, groupKey: string) {
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) => {
-				// Find which group currently holds the item
-				const sourceGroup = gs.find((g) =>
-					(g.children ?? []).some((item) => item.value === value),
-				)
-				const sourceGroupKey = sourceGroup?.group_key
-
-				// Same group (or source not found): update in place
-				if (!sourceGroupKey || sourceGroupKey === groupKey) {
-					return gs.map((g) =>
-						g.group_key === groupKey
-							? {
-								...g,
-								children: (g.children ?? []).map((item) =>
-									item.value === value ? { ...item, ...data } : item,
-								),
-							}
-							: g,
-					)
-				}
-
-				// Group changed: move item from source to target
-				const originalItem = (sourceGroup.children ?? []).find(
-					(item) => item.value === value,
-				)
-				const updatedItem: OptionItem = { value, ...originalItem, ...data }
-
-				return gs.map((g) => {
-					if (g.group_key === sourceGroupKey)
-						return {
-							...g,
-							children: (g.children ?? []).filter((item) => item.value !== value),
-						}
-					if (g.group_key === groupKey)
-						return { ...g, children: [...(g.children ?? []), updatedItem] }
-					return g
-				})
-			}),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				updateInspirationItem(groups, value, data, groupKey),
+			),
 		}
 	}
 
 	deleteInspirationItem(value: string) {
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter((item) => item.value !== value),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, new Set([value])),
 			),
 		}
 	}
@@ -291,13 +222,8 @@ export class SceneEditStore {
 		const valueSet = new Set(values)
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter(
-						(item) => !valueSet.has(localeTextToDisplayString(item.value)),
-					),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, valueSet),
 			),
 		}
 	}

@@ -13,6 +13,11 @@ enum MentionType: string
     case PROJECT_FILE = 'project_file';
 
     /**
+     * 跨项目挂载：引用整个项目（只读挂载到当前沙箱）.
+     */
+    case PROJECT = 'project';
+
+    /**
      * 本次消息中临时上传的文件，后续会统一到 project_file 中.
      */
     case UPLOAD_FILE = 'upload_file';

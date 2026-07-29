@@ -209,6 +209,7 @@ function RevokedEditableUserMessage({
 			onSendSuccess: () => {
 				if (!selectedTopic?.chat_topic_id) return
 
+				optimisticMessageStore.clearActiveRevokedAnchor(selectedTopic.chat_topic_id)
 				hiddenOptimisticMessageIds.forEach((appMessageId) => {
 					optimisticMessageStore.remove({
 						chat_topic_id: selectedTopic.chat_topic_id,

@@ -1,20 +1,17 @@
 import { MessageStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { projectVisibleMessagesByRevokedTail } from "./project-visible-messages-by-revoked-tail"
 
 interface ShareableMessage {
 	status?: string
 }
 
 /**
- * Returns true when the topic has at least one shareable message before any REVOKED marker.
+ * Returns true when the current visible branch contains at least one non-revoked message.
  */
 export function isTopicShareAllowed(messages: ShareableMessage[] | null | undefined): boolean {
 	if (!messages?.length) return false
 
-	const revokedMessageIndex = messages.findIndex(
-		(message) => message?.status === MessageStatus.REVOKED,
+	return projectVisibleMessagesByRevokedTail(messages).some(
+		(message) => message.status !== MessageStatus.REVOKED,
 	)
-	const shareableMessageCount =
-		revokedMessageIndex === -1 ? messages.length : messages.slice(0, revokedMessageIndex).length
-
-	return shareableMessageCount > 0
 }

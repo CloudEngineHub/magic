@@ -1,10 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
+import { RouteName } from "@/routes/constants"
 
-const { storeMock, groupsServiceMock } = vi.hoisted(() => ({
+const { storeMock, groupsServiceMock, navigateMock, superMagicServiceMock } = vi.hoisted(() => ({
 	storeMock: {
-		list: [],
+		list: [] as unknown[],
 		optimisticItems: [],
 		summaryFilter: "all",
 		createdAtStart: undefined as number | undefined,
@@ -33,6 +34,10 @@ const { storeMock, groupsServiceMock } = vi.hoisted(() => ({
 		createGroup: vi.fn(),
 		renameGroup: vi.fn(),
 		deleteGroup: vi.fn(),
+	},
+	navigateMock: vi.fn(),
+	superMagicServiceMock: {
+		initializeState: vi.fn(),
 	},
 }))
 
@@ -84,7 +89,7 @@ vi.mock("@/assets/locales/locale-adapters", () => ({
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
-	default: () => vi.fn(),
+	default: () => navigateMock,
 }))
 
 vi.mock("@/models/config/stores/theme.store", () => ({
@@ -115,9 +120,7 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services", () => ({
-	default: {
-		initializeState: vi.fn(),
-	},
+	default: superMagicServiceMock,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useAutoLoadMoreSentinel", () => ({
@@ -236,6 +239,57 @@ describe("AudioRecordingsDesktop", () => {
 		storeMock.sortOrder = "desc"
 		storeMock.createdAtStart = undefined
 		storeMock.createdAtEnd = undefined
+		storeMock.list = []
+		superMagicServiceMock.initializeState.mockResolvedValue(undefined)
+	})
+
+	it("initializes the recording project before navigating to its project route", async () => {
+		let resolveInitialization: () => void = () => undefined
+		superMagicServiceMock.initializeState.mockReturnValue(
+			new Promise<void>((resolve) => {
+				resolveInitialization = resolve
+			}),
+		)
+		storeMock.list = [
+			{
+				id: "mock-recording-project-id",
+				project_name: "Mock recording",
+				card_status: "summarized",
+				is_summarized: true,
+				created_at: 1710000000,
+				duration: 120,
+				tags: [],
+				audio_source: "recorded",
+				current_phase: "summarizing",
+				phase_status: "completed",
+			},
+		]
+
+		render(<AudioRecordingsDesktop />)
+
+		const trigger = await screen.findByTestId(
+			"audio-recording-card-mock-recording-project-id-more-actions",
+		)
+		trigger.focus()
+		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+		fireEvent.click(
+			screen.getByTestId(
+				"audio-recording-card-mock-recording-project-id-action-open-project",
+			),
+		)
+
+		expect(superMagicServiceMock.initializeState).toHaveBeenCalledWith({
+			projectId: "mock-recording-project-id",
+		})
+		expect(navigateMock).not.toHaveBeenCalled()
+
+		resolveInitialization()
+		await waitFor(() => {
+			expect(navigateMock).toHaveBeenCalledWith({
+				name: RouteName.SuperWorkspaceProjectState,
+				params: { projectId: "mock-recording-project-id" },
+			})
+		})
 	})
 
 	it("persists desktop summary filter changes to sessionStorage", async () => {

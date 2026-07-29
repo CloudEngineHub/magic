@@ -192,6 +192,9 @@ function toFileItem(item: AttachmentItem): FileItem {
 		display_filename: item.name || item.file_name,
 		is_directory: item.is_directory,
 		children: item.children as FileItem[] | undefined,
+		// PPT preview resolves slide paths relative to the project directory.
+		relative_file_path: item.relative_file_path,
+		parent_id: item.parent_id,
 		display_config: item.display_config,
 		file_extension: item.file_extension,
 		file_size: item.file_size,

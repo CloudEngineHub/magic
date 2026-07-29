@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { userStore } from "@/models/user"
+import { useCallback, useEffect, useState } from "react"
 import {
 	getMyCrewAvailableTabs,
 	MY_CREW_TAB_VALUES,
@@ -7,52 +6,28 @@ import {
 	type MyCrewCrewTypeTab,
 } from "../tab-state"
 
-interface UseMyCrewTabsParams {
-	includeTeamShared?: boolean
-}
-
-export function useMyCrewTabs({ includeTeamShared = false }: UseMyCrewTabsParams = {}) {
-	const isPersonalOrganization = userStore.user.isPersonalOrganization
+export function useMyCrewTabs() {
 	const [activeTabState, setActiveTabState] = useState<MyCrewCrewTypeTab>(
 		MY_CREW_TAB_VALUES.created,
 	)
-	const availableTabs = useMemo(
-		() =>
-			getMyCrewAvailableTabs({
-				includeTeamShared,
-				isPersonalOrganization,
-			}),
-		[includeTeamShared, isPersonalOrganization],
-	)
-	const crewTypeTab = normalizeMyCrewTabValue(activeTabState, {
-		includeTeamShared,
-		isPersonalOrganization,
-	})
+	const availableTabs = getMyCrewAvailableTabs()
+	const crewTypeTab = normalizeMyCrewTabValue(activeTabState)
 
 	useEffect(() => {
 		if (crewTypeTab === activeTabState) return
 		setActiveTabState(crewTypeTab)
 	}, [activeTabState, crewTypeTab])
 
-	const setCrewTypeTab = useCallback(
-		(nextTab: MyCrewCrewTypeTab) => {
-			setActiveTabState(
-				normalizeMyCrewTabValue(nextTab, {
-					includeTeamShared,
-					isPersonalOrganization,
-				}),
-			)
-		},
-		[includeTeamShared, isPersonalOrganization],
-	)
+	const setCrewTypeTab = useCallback((nextTab: MyCrewCrewTypeTab) => {
+		setActiveTabState(normalizeMyCrewTabValue(nextTab))
+	}, [])
 
 	return {
 		crewTypeTab,
 		setCrewTypeTab,
 		availableTabs,
-		includeTeamShared: availableTabs.includes(MY_CREW_TAB_VALUES.teamShared),
 		isCreatedTab: crewTypeTab === MY_CREW_TAB_VALUES.created,
-		isTeamSharedTab: crewTypeTab === MY_CREW_TAB_VALUES.teamShared,
 		isHiredTab: crewTypeTab === MY_CREW_TAB_VALUES.hired,
+		isCollaboratedTab: crewTypeTab === MY_CREW_TAB_VALUES.collaborated,
 	}
 }

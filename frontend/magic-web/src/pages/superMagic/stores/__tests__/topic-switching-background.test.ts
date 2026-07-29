@@ -692,16 +692,14 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 	it("同一 callback 的重复注册是独立订阅，并由各自 unsubscribe 管理。", () => {
 		const store = createStore()
 		const arrivedAppMessageIds: string[] = []
-		const callback = ({ message }: { message: { app_message_id: string } }) => {
-			arrivedAppMessageIds.push(message.app_message_id)
+		const callback = ({ payload }: { payload: { message: { appMessageId?: string } } }) => {
+			arrivedAppMessageIds.push(payload.message.appMessageId || "")
 		}
-		const unsubscribeFirst = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback,
+		const unsubscribeFirst = store.subscribe("message.committed", callback, {
+			scope: { topicId: TOPIC_A },
 		})
-		const unsubscribeSecond = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback,
+		const unsubscribeSecond = store.subscribe("message.committed", callback, {
+			scope: { topicId: TOPIC_A },
 		})
 
 		store.enqueueMessage(

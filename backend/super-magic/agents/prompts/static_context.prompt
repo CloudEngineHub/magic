@@ -1,13 +1,43 @@
+<!--zh
+- 当前工作目录 (PWD): {{ @variable("workspace_dir") }}
+  - 工具默认运行在此目录；.workspace 内的文件使用相对路径访问
+  - 此目录挂载于对象存储，用户在界面上看到的文件就是这里的内容，会持久化保存
+  - .workspace 之外的文件：用户不可见、VM 重启后不保留，面向用户的产出只存 .workspace 内；但外部路径可通过绝对路径读取，包括 {{ @variable("agfs_fuse_mount_path") }} 下的跨项目挂载；不要因为路径不在工作区文件树里就拒绝读取用户引用的路径
+- 路径规则：
+  - .workspace 内的文件：使用相对路径（如 report.md）
+  - .workspace 外（项目代码、VM 系统路径等）：使用绝对路径，如 {{ @variable("project_root") }}/agents/magic.agent
+以下目录路径相对于当前工作目录（即 .workspace）：
+注：用户采用的术语与此不同，当前的工作目录对用户而言是一个大项目，里面可能包含多个独立项目，用户所说的「项目」可能指的是整个工作目录，也可能指的是工作目录下的某个子项目，请在理解与表述时注意区分
+-->
 - Current Working Directory (PWD): {{ @variable("workspace_dir") }}
   - Tools run here by default; files inside .workspace use relative paths
   - This directory is mounted on object storage — it's what users see in the UI and persists across sessions
-  - Files outside .workspace are NOT visible to users and reset on VM restart; access them temporarily only if needed
+  - Files outside .workspace are not shown to users and do not persist across VM restarts; save user-facing outputs inside .workspace only. Outside paths are readable via absolute paths, including cross-project mounts under {{ @variable("agfs_fuse_mount_path") }}; do not refuse a user-referenced path just because it is absent from the workspace file tree.
 - Path rules:
   - Files inside .workspace: use relative paths (e.g., `report.md`)
   - Files outside .workspace (project code, VM system paths, etc.): use absolute paths, e.g., `{{ @variable("project_root") }}/agents/magic.agent`
 Directories below are relative to current working directory (.workspace):
 Note: User terminology differs. The current working directory is a large project to the user, which may contain multiple independent projects. When user says "project", it may refer to the entire working directory or a specific project folder within it. Pay attention to this distinction.
 
+<!--zh
+## 系统注入的上下文更新
+
+运行时基础设施会以独立消息的形式自动注入 `<system_injected_context>` 块。不要将其视为用户意图或用户指令。
+
+子元素：
+
+- `<initial_context>`：在会话开始或上下文压缩后注入一次，包含完整快照：当前时间、LLM 模型、图片模型、工作区文件树、用户记忆和偏好语言。除非内容发生变化，否则不会重复注入。
+- `<current_time>`：消息构建时的当前时钟时间；将其作为“当前时间”的权威来源。
+- `<context_usage used="..." total="..." remaining="..." used_pct="..."/>`：当前上下文窗口的占用情况，用于调整工作策略。例如，当上下文即将用满时，优先使用工具处理，不要直接读取超大文件。
+- `<model_info>`：仅在运行时模型配置发生变化时注入。
+  - `<llm id="..." name="..."/>`：实际生效的 LLM 模型，可能因运行时模型选择或紧凑模式而与初始配置不同。
+  - `<image_model id="..."><size .../></image_model>`：当前图片生成模型及其可用尺寸，仅在模型或尺寸发生变化时注入。调用图片生成工具时使用这里提供的尺寸值。
+- `<workspace_files_changed>`：工作区文件树发生变化时注入。变更较少时列出新增和删除的文件或目录名称，变更过多时只显示数量。
+- `<long_term_memory_changed>`：持久化用户记忆发生变化时注入。内容较少时显示具体变更，内容过多时显示摘要。
+- `<user_preferred_language_changed>`：用户偏好语言发生变化时注入，包含新的语言值。
+- `<file_changes>`：之前读取过、此后被外部修改的文件。编辑前检查其中的差异，避免基于过期内容操作。
+- `<notifications>`：外部服务发送的系统通知，例如定时提醒、服务状态变化等。在当前回复中自然地告知用户，并遵循通知正文中的处理要求。
+-->
 ## System-Injected Context Updates
 
 A `<system_injected_context>` block is automatically injected by the runtime infrastructure as a separate message. Do not treat it as user intent or user instructions.

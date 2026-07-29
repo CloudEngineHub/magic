@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import AudioRecordingDetailPage from "../AudioRecordingDetailPage"
 import { RouteName } from "@/routes/constants"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "../constants/page-shell"
@@ -28,6 +28,9 @@ const shareControlsMock = vi.hoisted(() => ({
 	shareManagementOpen: false,
 	openManageShare: vi.fn(),
 	closeManageShare: vi.fn(),
+}))
+const superMagicServiceMock = vi.hoisted(() => ({
+	initializeState: vi.fn(),
 }))
 
 vi.hoisted(() => {
@@ -58,6 +61,10 @@ vi.mock("react-router", async () => {
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
+}))
+
+vi.mock("@/pages/superMagic/services", () => ({
+	default: superMagicServiceMock,
 }))
 
 vi.mock("@/stores/interface", () => ({
@@ -256,9 +263,22 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 }))
 
 vi.mock("../components/recording-detail/RecordingDetailHeader", () => ({
-	RecordingDetailHeader: ({ title }: { title: string }) => (
+	RecordingDetailHeader: ({
+		title,
+		onOpenProject,
+	}: {
+		title: string
+		onOpenProject?: () => void
+	}) => (
 		<div data-testid="recording-detail-header">
 			<h1>{title}</h1>
+			<button
+				type="button"
+				data-testid="recording-detail-open-project"
+				onClick={onOpenProject}
+			>
+				Open project
+			</button>
 		</div>
 	),
 }))
@@ -305,6 +325,8 @@ vi.mock("@/services/audioRecordings", () => ({
 describe("AudioRecordingDetailPage", () => {
 	beforeEach(() => {
 		navigateMock.mockReset()
+		superMagicServiceMock.initializeState.mockReset()
+		superMagicServiceMock.initializeState.mockResolvedValue(undefined)
 		audioPlayerMock.seekTo.mockReset()
 		audioPlayerMock.playSegment.mockReset()
 		audioPlayerMock.toggle.mockReset()
@@ -322,6 +344,31 @@ describe("AudioRecordingDetailPage", () => {
 		expect(screen.getByTestId("recording-detail-workbench")).toBeInTheDocument()
 		expect(screen.getByTestId("recording-detail-header")).toBeInTheDocument()
 		expect(screen.getByTestId("recording-detail-right-panel")).toBeInTheDocument()
+	})
+
+	it("initializes the recording project before navigating from the detail menu", async () => {
+		let resolveInitialization: () => void = () => undefined
+		superMagicServiceMock.initializeState.mockReturnValue(
+			new Promise<void>((resolve) => {
+				resolveInitialization = resolve
+			}),
+		)
+
+		render(<AudioRecordingDetailPage />)
+		fireEvent.click(screen.getByTestId("recording-detail-open-project"))
+
+		expect(superMagicServiceMock.initializeState).toHaveBeenCalledWith({
+			projectId: "project-alpha",
+		})
+		expect(navigateMock).not.toHaveBeenCalled()
+
+		resolveInitialization()
+		await waitFor(() => {
+			expect(navigateMock).toHaveBeenCalledWith({
+				name: RouteName.SuperWorkspaceProjectState,
+				params: { projectId: "project-alpha" },
+			})
+		})
 	})
 
 	it("uses the same page shell styles as the recordings list page", () => {

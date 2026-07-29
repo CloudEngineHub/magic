@@ -124,6 +124,8 @@ export type {
 	UsedFont,
 } from "./api/font"
 export { DEFAULT_CONFIG } from "./shared/unit"
+export { ExportFidelityError, isExportFidelityError } from "./errors"
+export type { ExportFidelityFailureKind } from "./errors"
 export { LogLevel } from "./logger"
 export type { ExternalLogger } from "./logger"
 export {

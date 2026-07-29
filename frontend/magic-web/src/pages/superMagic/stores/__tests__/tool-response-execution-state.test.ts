@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type {
-	RawSuperMagicMessageEnvelope,
-	TopicMessageListenerPayload,
-} from "@/pages/superMagic/stores/types"
+import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
+import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
 	ConversationMessageType,
@@ -258,11 +256,13 @@ function createSharedToolMessage({
 	messageId,
 	toolId,
 	topicId = TOPIC_ID,
+	correlationId = `tool-correlation-${toolId}`,
 	status = "finished",
 }: {
 	messageId: string
 	toolId: string
 	topicId?: string
+	correlationId?: string
 	status?: string
 }): SharedMessageFixture {
 	return {
@@ -272,7 +272,7 @@ function createSharedToolMessage({
 			super_magic_message: {
 				role: "tool",
 				topic_id: topicId,
-				correlation_id: `tool-correlation-${toolId}`,
+				correlation_id: correlationId,
 				tool_call_id: toolId,
 				tool: {
 					id: toolId,
@@ -407,13 +407,12 @@ function getAssistantCardCount(store: SuperMagicStore): number {
 }
 
 function collectArrivals(store: SuperMagicStore): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = store.registerTopicMessageListener({
-		topicId: TOPIC_ID,
-		callback: (payload) => events.push(payload),
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = store.subscribe("message.committed", (event) => events.push(event), {
+		scope: { topicId: TOPIC_ID },
 	})
 	return { events, unsubscribe }
 }
@@ -428,7 +427,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		vi.useRealTimers()
 	})
 
-	it("tool response 先于所属 assistant final 到达。", () => {
+	it("tool response 先于所属 Assistant call 到达时只保留 raw，不建立 canonical 关联。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope())
@@ -450,13 +449,13 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect.soft(getEmbeddedToolState(store)?.status).toBe("running")
 		expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
 			id: "tool-1",
-			status: "finished",
+			status: "response_missing",
 		})
-		expect.soft(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
+		expect.soft(getEffectiveToolState(store, "tool-1")?.status).toBe("response_missing")
 		expect.soft(getAssistantCardCount(store)).toBe(1)
 	})
 
-	it("tool response 先于工具头到达。", () => {
+	it("tool response 先于工具头到达时不得被后续 Assistant call 追认。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope())
@@ -466,11 +465,11 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		expect(getAssistantTool(store)?.id).toBe("tool-1")
 		expect(getEmbeddedToolState(store)?.status).toBe("running")
-		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
-		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
+		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("response_missing")
+		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("response_missing")
 	})
 
-	it("tool response 先于任何 chunk 到达。", () => {
+	it("普通 tool response 在任何 Assistant call 前到达时不进入 canonical Map。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope())
@@ -480,11 +479,11 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			tool: { id: "tool-1", status: "finished" },
 		})
 		expect(getNode(store, "tool-response-1")?.tool_call_id).toBeUndefined()
-		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
+		expect(getCanonicalToolState(store, "tool-1")).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
-	it("tool response 正常到达，但所属 tool call 从未出现。", () => {
+	it("普通 tool response 的所属 call 从未出现时只保留 raw。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ toolId: "orphan-tool" }))
@@ -494,7 +493,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			id: "orphan-tool",
 			status: "finished",
 		})
-		expect(getCanonicalToolState(store, "orphan-tool")?.status).toBe("finished")
+		expect(getCanonicalToolState(store, "orphan-tool")).toBeUndefined()
 		expect(getAssistantNode(store)).toBeUndefined()
 	})
 
@@ -516,12 +515,13 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		const arrivals = collectArrivals(store)
 		const response = createToolEnvelope()
 
+		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
 		store.enqueueMessage(TOPIC_ID, response)
 		store.enqueueMessage(TOPIC_ID, cloneEnvelope(response))
 		settleRendering(100)
 
 		const toolArrivals = arrivals.events.filter(
-			(event) => event.message.app_message_id === "tool-response-1",
+			(event) => event.payload.message.appMessageId === "tool-response-1",
 		)
 		expect(toolArrivals).toHaveLength(1)
 		expect(getNode(store, "tool-response-1")?.tool?.status).toBe("finished")
@@ -578,7 +578,9 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			}),
 		)
 		expect(
-			arrivals.events.some((event) => event.message.app_message_id === "tool-response-stale"),
+			arrivals.events.some(
+				(event) => event.payload.message.appMessageId === "tool-response-stale",
+			),
 		).toBe(true)
 		arrivals.unsubscribe()
 		warnSpy.mockRestore()
@@ -717,6 +719,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 	it("initializeMessages 的低 seq tool response 不覆盖已有 canonical 状态。", () => {
 		const store = createStore()
 
+		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
 		store.enqueueMessage(
 			TOPIC_ID,
 			createToolEnvelope({
@@ -765,6 +768,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		const store = createStore()
 		const attachments = [{ file_id: "late-file" }]
 
+		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
 		store.enqueueMessage(
 			TOPIC_ID,
 			createToolEnvelope({
@@ -909,10 +913,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		)
 		settleRendering()
 
-		expect(getCanonicalToolState(store, "orphan-tool-id")).toMatchObject({
-			id: "orphan-tool-id",
-			status: "finished",
-		})
+		expect(getCanonicalToolState(store, "orphan-tool-id")).toBeUndefined()
 		expect(getCanonicalToolState(store, "tool-1")).toBeUndefined()
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("running")
 	})
@@ -962,6 +963,10 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		const store = createStore()
 
 		store.initializeMessages(TOPIC_ID, [
+			createAssistantEnvelope({
+				appMessageId: "http-assistant-with-tool",
+				status: "running",
+			}),
 			createToolEnvelope({
 				appMessageId: "http-tool-response",
 				toolId: "tool-1",
@@ -979,6 +984,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 	it("loadSharedMessages 中 ID 冲突时仍以 tool.id 建立 canonical 关联。", () => {
 		const store = createStore()
+		const sharedCorrelationId = "shared-tool-correlation"
 		const sharedToolMessage = {
 			message_id: "shared-tool-response",
 			topic_id: TOPIC_ID,
@@ -986,6 +992,8 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			raw_content: {
 				super_magic_message: {
 					role: "tool",
+					topic_id: TOPIC_ID,
+					correlation_id: sharedCorrelationId,
 					tool_call_id: "wrong-shared-tool-call-id",
 					tool: {
 						id: "tool-1",
@@ -996,7 +1004,14 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			},
 		} as unknown as Parameters<SuperMagicStore["loadSharedMessages"]>[0][number]
 
-		store.loadSharedMessages([sharedToolMessage])
+		store.loadSharedMessages([
+			createSharedAssistantMessage({
+				messageId: "shared-assistant-with-tool",
+				correlationId: sharedCorrelationId,
+				toolCalls: [createToolCall()],
+			}),
+			sharedToolMessage,
+		])
 
 		expect(getCanonicalToolState(store, "tool-1")).toMatchObject({
 			id: "tool-1",
@@ -1040,6 +1055,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			createSharedToolMessage({
 				messageId: "1002",
 				toolId,
+				correlationId: "shared-list-dir-correlation",
 			}),
 		])
 
@@ -1155,6 +1171,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const updatedAttachments = [{ file_id: "late-file" }]
 
+		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
 		store.enqueueMessage(
 			TOPIC_ID,
 			createToolEnvelope({ appMessageId: "finished-response", seqId: "101" }),
@@ -1188,14 +1205,17 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		warnSpy.mockRestore()
 	})
 
-	it("assistant 内嵌 tool 状态为 `running`，toolResponseMap 已是 `finished`。", () => {
+	it("assistant 内嵌 tool 状态为 `running`，后到 canonical response 为 `finished`。", () => {
 		const store = createStore()
 
-		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ status: "finished" }))
 		store.enqueueMessage(
 			TOPIC_ID,
-			createAssistantEnvelope({ toolCalls: [createToolCall({ status: "running" })] }),
+			createAssistantEnvelope({
+				status: "running",
+				toolCalls: [createToolCall({ status: "running" })],
+			}),
 		)
+		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ status: "finished" }))
 		settleRendering()
 
 		expect(getEmbeddedToolState(store)?.status).toBe("running")
@@ -1217,28 +1237,226 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getNode(store, "tool-response-1")?.tool?.detail).toBeUndefined()
 	})
 
-	it("tool response 有 detail，但 status 缺失。", () => {
+	it("detail-only tool response 在没有历史状态时规范化为 running，并只记录一次 warning。", () => {
 		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const toolWithoutStatus = {
 			id: "tool-1",
 			name: "read_file",
 			detail: { type: "text", data: "result" },
 		}
 
-		// Keep the assistant non-terminal so the detail-only response is the first canonical payload.
-		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
-		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ tool: toolWithoutStatus }))
-		settleRendering()
+		try {
+			// Keep the assistant non-terminal so the detail-only response is the first canonical payload.
+			store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
+			const detailOnlyEnvelope = createToolEnvelope({
+				appMessageId: "detail-only-response",
+				tool: toolWithoutStatus,
+			})
+			const replayEnvelope = cloneEnvelope(detailOnlyEnvelope)
+			store.enqueueMessage(TOPIC_ID, detailOnlyEnvelope)
+			store.enqueueMessage(TOPIC_ID, replayEnvelope)
+			settleRendering()
 
-		expect(getCanonicalToolState(store, "tool-1")?.detail).toEqual({
-			type: "text",
-			data: "result",
-		})
-		expect(getCanonicalToolState(store, "tool-1")?.status).toBeUndefined()
-		expect(getEffectiveToolState(store, "tool-1")?.detail).toEqual({
-			type: "text",
-			data: "result",
-		})
+			expect.soft(getNode(store, "detail-only-response")?.tool?.status).toBeUndefined()
+			expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
+				id: "tool-1",
+				status: "running",
+				detail: { type: "text", data: "result" },
+			})
+			expect.soft(getEffectiveToolState(store, "tool-1")).toMatchObject({
+				status: "running",
+				detail: { type: "text", data: "result" },
+			})
+
+			// enqueueMessage and buffer consumption both visit recordToolResponse; one malformed
+			// revision must still emit only one stable protocol warning.
+			const missingStatusWarnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"tool-response-missing-status",
+			)
+			expect.soft(missingStatusWarnings).toHaveLength(1)
+			if (missingStatusWarnings[0]) {
+				expect.soft(missingStatusWarnings[0]).toEqual([
+					"[SuperMagicStore] tool response missing status",
+					expect.objectContaining({
+						code: "tool-response-missing-status",
+						topicId: TOPIC_ID,
+						toolId: "tool-1",
+						fallbackStatus: "running",
+						resolution: "default-running",
+					}),
+				])
+			}
+		} finally {
+			warnSpy.mockRestore()
+		}
+	})
+
+	it.each(["waiting", "running", "finished", "error", "suspended"] as const)(
+		"detail-only tool response 保留已有合法状态 %s、合并 detail，并只记录一次 warning。",
+		(historyStatus) => {
+			const store = createStore()
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+			const lateDetail = { type: "text", data: `late-${historyStatus}` }
+
+			try {
+				store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
+				store.enqueueMessage(
+					TOPIC_ID,
+					createToolEnvelope({
+						appMessageId: `tool-${historyStatus}`,
+						seqId: "101",
+						status: historyStatus,
+						detail: { type: "text", data: "initial" },
+					}),
+				)
+				const detailOnlyEnvelope = createToolEnvelope({
+					appMessageId: `detail-only-${historyStatus}`,
+					seqId: "102",
+					tool: {
+						id: "tool-1",
+						name: "read_file",
+						detail: lateDetail,
+					},
+				})
+				const replayEnvelope = cloneEnvelope(detailOnlyEnvelope)
+				store.enqueueMessage(TOPIC_ID, detailOnlyEnvelope)
+				store.enqueueMessage(TOPIC_ID, replayEnvelope)
+				settleRendering()
+
+				expect
+					.soft(getNode(store, `detail-only-${historyStatus}`)?.tool?.status)
+					.toBeUndefined()
+				expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
+					status: historyStatus,
+					detail: lateDetail,
+				})
+				expect.soft(getEffectiveToolState(store, "tool-1")).toMatchObject({
+					status: historyStatus,
+					detail: lateDetail,
+				})
+
+				const missingStatusWarnings = warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"tool-response-missing-status",
+				)
+				expect.soft(missingStatusWarnings).toHaveLength(1)
+				if (missingStatusWarnings[0]) {
+					expect.soft(missingStatusWarnings[0]).toEqual([
+						"[SuperMagicStore] tool response missing status",
+						expect.objectContaining({
+							code: "tool-response-missing-status",
+							topicId: TOPIC_ID,
+							toolId: "tool-1",
+							fallbackStatus: historyStatus,
+							resolution: "preserve-current-status",
+						}),
+					])
+				}
+			} finally {
+				warnSpy.mockRestore()
+			}
+		},
+	)
+
+	it("detail-only tool response 保留真实屏障生成的 response_missing、合并 detail，并只记录一次 warning。", () => {
+		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const lateDetail = { type: "text", data: "late-response-missing-detail" }
+
+		try {
+			store.enqueueMessage(
+				TOPIC_ID,
+				createAssistantEnvelope({
+					appMessageId: "unanswered-assistant-for-detail-only",
+					correlationId: "unanswered-correlation-for-detail-only",
+					seqId: "100",
+					status: "running",
+					toolCalls: [
+						createToolCall({
+							id: "unanswered-tool-for-detail-only",
+							status: "running",
+						}),
+					],
+				}),
+			)
+			store.enqueueMessage(
+				TOPIC_ID,
+				createAssistantEnvelope({
+					appMessageId: "following-assistant-for-detail-only",
+					correlationId: "following-correlation-for-detail-only",
+					seqId: "102",
+					status: "running",
+					toolCalls: [],
+				}),
+			)
+			settleRendering()
+
+			expect
+				.soft(getCanonicalToolState(store, "unanswered-tool-for-detail-only")?.status)
+				.toBe("response_missing")
+
+			const detailOnlyEnvelope = createToolEnvelope({
+				appMessageId: "detail-only-after-response-missing",
+				correlationId: "unanswered-correlation-for-detail-only",
+				seqId: "103",
+				tool: {
+					id: "unanswered-tool-for-detail-only",
+					name: "read_file",
+					detail: lateDetail,
+				},
+			})
+			const replayEnvelope = cloneEnvelope(detailOnlyEnvelope)
+			store.enqueueMessage(TOPIC_ID, detailOnlyEnvelope)
+			store.enqueueMessage(TOPIC_ID, replayEnvelope)
+			settleRendering()
+
+			expect
+				.soft(getNode(store, "detail-only-after-response-missing")?.tool?.status)
+				.toBeUndefined()
+			expect
+				.soft(getCanonicalToolState(store, "unanswered-tool-for-detail-only"))
+				.toMatchObject({
+					status: "response_missing",
+					detail: lateDetail,
+				})
+			expect
+				.soft(
+					getEffectiveToolState(
+						store,
+						"unanswered-tool-for-detail-only",
+						"unanswered-correlation-for-detail-only",
+					),
+				)
+				.toMatchObject({
+					status: "response_missing",
+					detail: lateDetail,
+				})
+
+			const missingStatusWarnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"tool-response-missing-status",
+			)
+			expect.soft(missingStatusWarnings).toHaveLength(1)
+			if (missingStatusWarnings[0]) {
+				expect.soft(missingStatusWarnings[0]).toEqual([
+					"[SuperMagicStore] tool response missing status",
+					expect.objectContaining({
+						code: "tool-response-missing-status",
+						topicId: TOPIC_ID,
+						toolId: "unanswered-tool-for-detail-only",
+						fallbackStatus: "response_missing",
+						resolution: "preserve-current-status",
+					}),
+				])
+			}
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
 	it("tool response 的 attachments 延迟到达。", () => {
@@ -1337,10 +1555,12 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
-		expect(getNode(store, "fast-tool-response")).toBeUndefined()
+		expect(getNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
 		expect(
-			arrivals.events.some((event) => event.message.app_message_id === "fast-tool-response"),
-		).toBe(false)
+			arrivals.events.filter(
+				(event) => event.payload.message.appMessageId === "fast-tool-response",
+			),
+		).toHaveLength(1)
 
 		store.enqueueMessage(
 			TOPIC_ID,
@@ -1365,7 +1585,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
 		expect(
 			arrivals.events.filter(
-				(event) => event.message.app_message_id === "fast-tool-response",
+				(event) => event.payload.message.appMessageId === "fast-tool-response",
 			),
 		).toHaveLength(1)
 		arrivals.unsubscribe()
@@ -1447,7 +1667,10 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		store.enqueueMessage(
 			TOPIC_ID,
-			createAssistantEnvelope({ status: "running", toolCalls: [createToolCall()] }),
+			createAssistantEnvelope({
+				status: "running",
+				toolCalls: [createToolCall(), createToolCall({ id: "other-tool", index: 1 })],
+			}),
 		)
 		settleRendering()
 		store.enqueueMessage(
@@ -1675,10 +1898,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			}),
 		)
 
-		expect(getCanonicalToolState(store, "orphan-tool")).toMatchObject({
-			id: "orphan-tool",
-			status: "finished",
-		})
+		expect(getCanonicalToolState(store, "orphan-tool")).toBeUndefined()
 		expect(getCanonicalToolState(store, "expected-tool")).toMatchObject({
 			id: "expected-tool",
 			status: "response_missing",
@@ -2014,23 +2234,24 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		store.enqueueMessage(
 			TOPIC_ID,
-			createToolEnvelope({
-				appMessageId: "completed-tool-response",
-				toolId: "completed-tool",
-				seqId: "101",
-			}),
-		)
-		store.enqueueMessage(
-			TOPIC_ID,
 			createAssistantEnvelope({
 				appMessageId: "finished-multi-tool-assistant",
 				correlationId: "finished-multi-tool-correlation",
-				seqId: "102",
+				seqId: "100",
 				status: "finished",
 				toolCalls: [
 					createToolCall({ id: "completed-tool", index: 0, status: "running" }),
 					createToolCall({ id: "missing-tool", index: 1, status: "running" }),
 				],
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createToolEnvelope({
+				appMessageId: "completed-tool-response",
+				correlationId: "finished-multi-tool-correlation",
+				toolId: "completed-tool",
+				seqId: "101",
 			}),
 		)
 		settleRendering()

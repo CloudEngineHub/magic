@@ -262,6 +262,14 @@ export default function MobileAudioRecordingDetailPage() {
 		navigate({ name: RouteName.AudioRecordings })
 	}
 
+	/** Navigates to the recording project route so the mobile Super Magic layout can restore its state. */
+	function handleOpenProject(item: AudioProjectListItem) {
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: item.id },
+		})
+	}
+
 	/** Summary time chips only control playback so users can stay on the current summary tab. */
 	function handleSummaryTimeClick(start: number, end?: number) {
 		player.playSegment({ start, end })
@@ -709,6 +717,7 @@ export default function MobileAudioRecordingDetailPage() {
 					}
 				}}
 				onDelete={handleDelete}
+				onOpenProject={handleOpenProject}
 				onSummarize={handleSummaryAction}
 				onMoveToGroup={handleOpenMoveGroup}
 				onCopyToProject={(item) => {

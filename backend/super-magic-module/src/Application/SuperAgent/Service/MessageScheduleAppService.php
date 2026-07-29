@@ -25,8 +25,10 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Chat\Assembler\MessageAssembler;
 use Cron\CronExpression;
 use DateTime;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Assembler\TaskConfigAssembler;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MessageScheduleEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
@@ -85,6 +87,7 @@ class MessageScheduleAppService extends AbstractAppService
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly TaskSchedulerDomainService $taskSchedulerDomainService,
         private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -130,6 +133,7 @@ class MessageScheduleAppService extends AbstractAppService
 
         // Check project permission
         $this->getAccessibleProjectWithEditor((int) $requestDTO->getProjectId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
+        $this->assertMessageContentAgentUsable($dataIsolation, $requestDTO->getMessageContent());
 
         try {
             return Db::transaction(function () use ($requestDTO, $dataIsolation) {
@@ -311,6 +315,10 @@ class MessageScheduleAppService extends AbstractAppService
 
         // Get existing message schedule
         $messageSchedule = $this->messageScheduleDomainService->getMessageScheduleByIdWithValidation($dataIsolation, $id);
+        $this->assertMessageContentAgentUsable(
+            $dataIsolation,
+            $requestDTO->getMessageContent() === [] ? $messageSchedule->getMessageContent() : $requestDTO->getMessageContent()
+        );
 
         // Check project permission (only if project_id is set)
         if ($messageSchedule->getProjectId() > 0) {
@@ -699,6 +707,15 @@ class MessageScheduleAppService extends AbstractAppService
                 if (! $messageScheduleEntity->isEnabled()) {
                     $this->logger->info('Message schedule is disabled, skip execution', ['id' => $messageScheduleId]);
                     throw new RuntimeException('Message schedule is disabled');
+                }
+
+                try {
+                    $this->assertMessageContentAgentUsable($dataIsolation, $messageScheduleEntity->getMessageContent());
+                } catch (BusinessException $throwable) {
+                    $messageScheduleEntity->setEnabled(0);
+                    $this->updateTaskScheduler($messageScheduleEntity);
+                    $this->messageScheduleDomainService->updateMessageSchedule($dataIsolation, $messageScheduleEntity);
+                    throw $throwable;
                 }
 
                 // 2. Get project entity
@@ -1186,6 +1203,23 @@ class MessageScheduleAppService extends AbstractAppService
     {
         $authorization = $requestContext->getUserAuthorization();
         return DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
+    }
+
+    /** @param array<string, mixed> $messageContent */
+    private function assertMessageContentAgentUsable(DataIsolation $dataIsolation, array $messageContent): void
+    {
+        $agentCode = trim((string) ($messageContent['extra']['super_agent']['agent_code'] ?? ''));
+        if ($agentCode === '') {
+            return;
+        }
+
+        $this->superMagicAgentAccessAppService->assertAgentUsable(
+            SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            ),
+            $agentCode
+        );
     }
 
     /**

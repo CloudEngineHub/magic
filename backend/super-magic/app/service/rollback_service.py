@@ -301,7 +301,14 @@ class RollbackService:
             absolute_paths = []
             for file_path in file_paths:
                 path_obj = Path(file_path)
-                local_path = path_obj if path_obj.is_absolute() else PathManager.get_workspace_dir() / file_path.lstrip("/")
+                if path_obj.is_absolute():
+                    # 绝对路径 = referenced-projects 跨项目挂载文件（agent 视角路径）。
+                    # 版本创建按 file_key（s3_key xattr）定位文件，版本天然落在文件
+                    # 所属项目名下，不依赖本地项目上下文，因此无需跳过；
+                    # 文件不存在或无 xattr 时下游已有优雅降级。
+                    local_path = path_obj
+                else:
+                    local_path = PathManager.get_workspace_dir() / file_path.lstrip("/")
                 if await async_exists(local_path):
                     absolute_paths.append(str(local_path))
                 else:

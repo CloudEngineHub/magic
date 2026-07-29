@@ -519,17 +519,88 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
-	it("recovery timer 与渲染 timer 同时存在。", () => {
+	it("tool arguments 已全部投影且 buffer 为空时，没有 finish_reason 仍必须保留 StreamState 并触发 watchdog。", () => {
 		const store = createStore()
 		const recovery = collectRecoveryRequests(store)
-		const content = "streaming".repeat(2_048)
+		const completeArguments = JSON.stringify({
+			path: "workspace/generated/very-long-file.md",
+			content: "argument-body".repeat(256),
+		})
 
-		store.receiveChunk(createChunk({ content }))
+		store.receiveChunk(
+			createChunk({
+				toolCalls: [
+					createToolCall({
+						id: "write-file-complete",
+						index: 0,
+						name: "write_file",
+						arguments: completeArguments,
+					}),
+				],
+			}),
+		)
+		advanceRendering()
+
+		const streamState = store.getStreamState(TOPIC_A, CORRELATION_A)
+		expect(streamState?.stage).toBe("tool")
+		expect(streamState?.tool_calls[0]?.function.arguments).toBe(completeArguments)
+		expect(getProjectedNode(store)?.tool_calls?.[0]?.function?.arguments).toBe(
+			completeArguments,
+		)
+		expect(store.buffer.get(TOPIC_A)?.messages ?? []).toHaveLength(0)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+
+		// Watchdog is anchored at chunk receipt, not after argument projection finishes.
+		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS - RENDER_SETTLE_MS - 101)
+		expect(recovery.events).toHaveLength(0)
+
+		vi.advanceTimersByTime(101)
+
+		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_A }])
+		expect(store.buffer.get(TOPIC_A)?.messages ?? []).toHaveLength(0)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
+		recovery.unsubscribe()
+	})
+
+	it("渲染 timer 存在且 tool arguments 尚未投影完成时，watchdog 仍按 correlation 独立触发一次。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const completeArguments = JSON.stringify({ content: "streaming-tool".repeat(8_192) })
+
+		store.receiveChunk(
+			createChunk({
+				toolCalls: [
+					createToolCall({
+						id: "write-file-pending",
+						index: 0,
+						name: "write_file",
+						arguments: completeArguments,
+					}),
+				],
+			}),
+		)
+		const topicMeta = store.topicMeta.get(TOPIC_A)
+		const renderTimer = topicMeta?.timer
+		expect(renderTimer).not.toBeNull()
+		expect(store.getStreamRecoveryState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			status: "waiting",
+			attempts: 0,
+		})
+
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 
-		expect(getProjectedNode(store)?.content).toBe(content)
 		expect(recovery.events).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_A }])
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
+		expect(
+			recovery.events.filter((event) => event.correlationId === CORRELATION_A),
+		).toHaveLength(1)
+		expect(getProjectedNode(store)?.tool_calls?.[0]?.function?.arguments).not.toBe(
+			completeArguments,
+		)
+		expect(store.getStreamRecoveryState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			status: "recovering",
+			attempts: 1,
+		})
+		expect(store.topicMeta.get(TOPIC_A)?.timer).not.toBeNull()
 		recovery.unsubscribe()
 	})
 

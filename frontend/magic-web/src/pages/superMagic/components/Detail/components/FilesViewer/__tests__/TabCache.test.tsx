@@ -168,6 +168,23 @@ describe("TabCache", () => {
 		expect(container).not.toHaveClass("inset-0")
 	})
 
+	it("keeps the active pure-share tab in document flow instead of a fixed layer", () => {
+		render(
+			<TabCache
+				tab={mockTab}
+				isActive={true}
+				renderProps={mockRenderProps}
+				isFullscreen
+				documentFlowFullscreen
+			/>,
+		)
+
+		const container = screen.getByTestId("render-component").parentElement
+		expect(container).toHaveClass("relative")
+		expect(container).toHaveClass("min-h-dvh")
+		expect(container).not.toHaveClass("fixed")
+	})
+
 	it("keeps Magic App fullscreen content bounded by the safe-area shell", () => {
 		mockDeviceState.isMagicApp = true
 

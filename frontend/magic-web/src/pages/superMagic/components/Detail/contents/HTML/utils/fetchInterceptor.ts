@@ -49,6 +49,7 @@ export interface FileItem {
 	file_id: string
 	relative_file_path: string
 	file_name?: string
+	file_extension?: string
 	updated_at?: string
 }
 
@@ -555,7 +556,7 @@ export function createParentMessageHandler(
 					}
 
 					// 发送成功响应，包含 expires_at
-					; (event.source as Window)?.postMessage(
+					;(event.source as Window)?.postMessage(
 						{
 							type: FETCH_MESSAGE_TYPES.RESPONSE,
 							requestId,
@@ -570,7 +571,7 @@ export function createParentMessageHandler(
 			}
 
 			// 发送失败响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -581,7 +582,7 @@ export function createParentMessageHandler(
 			)
 		} catch (error) {
 			// 发送错误响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,

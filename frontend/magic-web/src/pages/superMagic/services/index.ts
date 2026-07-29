@@ -1117,6 +1117,8 @@ class SuperMagicService {
 				{
 					workspaceId: workspace.id,
 					page: 1,
+					// Route restoration owns the selected project; a failed or empty sidebar refresh must not clear it.
+					clearWhenNoProjects: false,
 				},
 				{ enableErrorMessagePrompt: false },
 			)

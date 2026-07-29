@@ -17,6 +17,7 @@ import { SuperMagicApi } from "@/apis"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/lib/utils"
+import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MY_CLAW_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
@@ -26,9 +27,10 @@ import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBot
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks"
-import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
+import { ProjectResourceIcon } from "../ProjectResourceIcon"
 import { getDirectoriesFromPath, getItemId, getItemName } from "../../utils/attachmentUtils"
 import type { MobileCrossProjectConfig, SelectDirectorySubmitParams } from "./types"
+import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../types"
 
 interface MobileFilesMoveSheetProps {
 	visible: boolean
@@ -46,6 +48,7 @@ interface MobileFilesMoveSheetProps {
 	searchPlaceholder: string
 	searchEmptyDescription: string
 	emptyTip: string
+	closeOnSubmit?: boolean
 	onClose: () => void
 	onSubmit: (params: SelectDirectorySubmitParams) => void
 }
@@ -111,6 +114,10 @@ function getVisibleDirectories(items: AttachmentItem[]): AttachmentItem[] {
 	return items.filter((item) => item.is_directory && !item.is_hidden)
 }
 
+function getVisibleEntries(items: AttachmentItem[]): AttachmentItem[] {
+	return items.filter((item) => !item.is_hidden)
+}
+
 /**
  * 搜索态需要恢复完整目录路径，因此这里从整棵树中回溯目标目录的祖先链。
  */
@@ -156,6 +163,34 @@ function searchDirectories(
 		if (item.children) {
 			results.push(
 				...searchDirectories(item.children, keyword, [...ancestorNames, directoryName]),
+			)
+		}
+	}
+
+	return results
+}
+
+function searchResourceEntries(
+	items: AttachmentItem[],
+	keyword: string,
+	ancestorNames: string[] = [],
+): DirectorySearchResult[] {
+	const normalizedKeyword = keyword.trim().toLowerCase()
+	if (!normalizedKeyword) return []
+
+	const results: DirectorySearchResult[] = []
+	for (const item of getVisibleEntries(items)) {
+		const itemName = getItemName(item)
+		if (itemName.toLowerCase().includes(normalizedKeyword)) {
+			results.push({
+				directory: item,
+				pathLabel: ancestorNames.join(" / "),
+			})
+		}
+
+		if (item.is_directory && item.children) {
+			results.push(
+				...searchResourceEntries(item.children, keyword, [...ancestorNames, itemName]),
 			)
 		}
 	}
@@ -330,31 +365,66 @@ function WorkspaceRow({
 function ProjectRow({
 	project,
 	workspaceEntryType,
+	selected,
+	onSelect,
 	onDrillIn,
 }: {
 	project: ProjectListItem
 	workspaceEntryType?: WorkspaceEntryType
+	selected?: boolean
+	onSelect?: () => void
 	onDrillIn: () => void
 }) {
 	const { t } = useTranslation("super")
 	const Icon = workspaceEntryType === "chats" ? MessageCircle : LibraryBig
 
 	return (
-		<button
-			type="button"
-			onClick={onDrillIn}
-			className="flex min-h-[56px] w-full items-center gap-3 px-[14px] py-3 text-left active:bg-foreground/[0.04]"
-			data-testid={`select-directory-mobile-project-${project.id}`}
-		>
-			<Icon
-				className="size-[22px] shrink-0 text-muted-foreground"
-				data-testid={`select-directory-mobile-project-icon-${project.id}`}
-			/>
-			<p className="min-w-0 flex-1 truncate text-[16px] font-medium leading-5 text-foreground">
-				{getProjectDisplayName(project, t, workspaceEntryType)}
-			</p>
-			<ChevronRight className="size-[18px] shrink-0 text-muted-foreground" />
-		</button>
+		<div className="flex min-h-[56px] items-center">
+			<button
+				type="button"
+				onClick={onSelect || onDrillIn}
+				className="flex min-w-0 flex-1 items-center gap-3 px-[14px] py-3 text-left active:bg-foreground/[0.04]"
+				data-testid={`select-directory-mobile-project-${project.id}`}
+			>
+				{onSelect ? (
+					<div
+						className={cn(
+							"flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+							selected
+								? "border-primary bg-primary text-primary-foreground"
+								: "border-border bg-transparent",
+						)}
+					>
+						{selected ? (
+							<div className="size-2 rounded-full bg-primary-foreground" />
+						) : null}
+					</div>
+				) : null}
+				<Icon
+					className="size-[22px] shrink-0 text-muted-foreground"
+					data-testid={`select-directory-mobile-project-icon-${project.id}`}
+				/>
+				<p className="min-w-0 flex-1 truncate text-[16px] font-medium leading-5 text-foreground">
+					{getProjectDisplayName(project, t, workspaceEntryType)}
+				</p>
+			</button>
+			{onSelect ? (
+				<>
+					<div className="h-8 w-px shrink-0 bg-border" />
+					<button
+						type="button"
+						onClick={onDrillIn}
+						className="flex h-full min-h-[56px] w-12 shrink-0 items-center justify-center text-muted-foreground active:bg-foreground/[0.04]"
+						data-testid={`select-directory-mobile-project-drill-${project.id}`}
+						aria-label={getProjectDisplayName(project, t, workspaceEntryType)}
+					>
+						<ChevronRight className="size-[18px]" />
+					</button>
+				</>
+			) : (
+				<ChevronRight className="mr-[14px] size-[18px] shrink-0 text-muted-foreground" />
+			)}
+		</div>
 	)
 }
 
@@ -363,6 +433,7 @@ function ProjectRow({
  */
 function DirectoryRow({
 	directory,
+	resourceTree,
 	secondaryText,
 	selected,
 	disabled,
@@ -370,6 +441,7 @@ function DirectoryRow({
 	onDrillIn,
 }: {
 	directory: AttachmentItem
+	resourceTree: AttachmentItem[]
 	secondaryText?: string
 	selected: boolean
 	disabled: boolean
@@ -399,15 +471,17 @@ function DirectoryRow({
 						<div className="size-2 rounded-full bg-primary-foreground" />
 					) : null}
 				</div>
-				<img
-					src={FoldIcon}
-					alt=""
-					width={22}
-					height={18}
-					className="h-[18px] w-[22px] shrink-0 object-contain"
-					aria-hidden
-					data-testid="mobile-files-move-sheet-image"
-				/>
+				<div className="flex size-[22px] shrink-0 items-center justify-center">
+					<ProjectResourceIcon
+						item={directory}
+						resourceTree={resourceTree}
+						size={20}
+						folderWidth={22}
+						folderHeight={18}
+						folderClassName="h-[18px] w-[22px] shrink-0 object-contain"
+						folderTestId="mobile-files-move-sheet-image"
+					/>
+				</div>
 				<div className="min-w-0 flex-1">
 					<p className="truncate text-[16px] font-medium leading-5 text-foreground">
 						{getItemName(directory)}
@@ -456,11 +530,13 @@ function MobileFilesMoveSheet({
 	searchPlaceholder,
 	searchEmptyDescription,
 	emptyTip,
+	closeOnSubmit = true,
 	onClose,
 	onSubmit,
 }: MobileFilesMoveSheetProps) {
 	const { t } = useTranslation("super")
 	const supportsCrossProject = Boolean(mobileCrossProjectConfig)
+	const isMentionMode = mobileCrossProjectConfig?.selectionMode === "mention"
 	const initialViewMode = mobileCrossProjectConfig?.initialViewMode || "directory"
 	const includeSpecialWorkspaces = mobileCrossProjectConfig?.includeSpecialWorkspaces ?? true
 	const allowWorkspaceSubmit = mobileCrossProjectConfig?.allowWorkspaceSubmit ?? false
@@ -510,6 +586,7 @@ function MobileFilesMoveSheet({
 	const [activeAttachments, setActiveAttachments] = useState<AttachmentItem[]>(attachments)
 	const [pathStack, setPathStack] = useState<AttachmentItem[]>(defaultPath)
 	const [selectedPath, setSelectedPath] = useState<AttachmentItem[] | null>(null)
+	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const [query, setQuery] = useState("")
 	const [isLoading, setIsLoading] = useState(false)
 	const chatWorkspaceRef = useRef<Workspace | null>(null)
@@ -533,6 +610,7 @@ function MobileFilesMoveSheet({
 		setActiveAttachments(attachments)
 		setPathStack(defaultPath)
 		setSelectedPath(null)
+		setSelectedResources([])
 		setQuery("")
 		setIsLoading(false)
 	}, [
@@ -541,6 +619,7 @@ function MobileFilesMoveSheet({
 		initialBrowsingWorkspace,
 		initialViewMode,
 		mobileCrossProjectConfig,
+		isMentionMode,
 		supportsCrossProject,
 		visible,
 	])
@@ -737,13 +816,27 @@ function MobileFilesMoveSheet({
 	}, [])
 
 	const isSearching = query.trim().length > 0
+	const effectiveSearchPlaceholder = useMemo(() => {
+		if (!supportsCrossProject) return searchPlaceholder
+		if (viewMode === "workspace") return t("selectPathModal.searchWorkspace")
+		if (viewMode === "project") return t("selectPathModal.searchProject")
+		return t("selectPathModal.searchDirectory")
+	}, [searchPlaceholder, supportsCrossProject, t, viewMode])
+	const effectiveSearchEmptyDescription = useMemo(() => {
+		const keyword = query.trim()
+		if (!keyword) return searchEmptyDescription
+		return t("selectPathModal.searchEmptyDescription", { keyword })
+	}, [query, searchEmptyDescription, t])
 	const currentDirectories = useMemo(() => {
-		return getVisibleDirectories(getDirectoriesFromPath(activeAttachments, pathStack))
-	}, [activeAttachments, pathStack])
+		const currentItems = getDirectoriesFromPath(activeAttachments, pathStack)
+		return isMentionMode ? getVisibleEntries(currentItems) : getVisibleDirectories(currentItems)
+	}, [activeAttachments, isMentionMode, pathStack])
 	const searchResults = useMemo(() => {
 		if (!isSearching || viewMode !== "directory") return []
-		return searchDirectories(activeAttachments, query)
-	}, [activeAttachments, isSearching, query, viewMode])
+		return isMentionMode
+			? searchResourceEntries(activeAttachments, query)
+			: searchDirectories(activeAttachments, query)
+	}, [activeAttachments, isMentionMode, isSearching, query, viewMode])
 	const filteredWorkspaces = useMemo(() => {
 		return searchWorkspaceItems(workspaceItems, query, t)
 	}, [query, t, workspaceItems])
@@ -754,8 +847,31 @@ function MobileFilesMoveSheet({
 		return filteredWorkspaces.filter((workspace) => workspace.entryType === "workspace")
 	}, [filteredWorkspaces])
 	const filteredProjects = useMemo(() => {
-		return searchProjectItems(projectItems, query, t, browsingWorkspace?.entryType)
-	}, [browsingWorkspace?.entryType, projectItems, query, t])
+		return searchProjectItems(projectItems, query, t, browsingWorkspace?.entryType).filter(
+			(project) => !mobileCrossProjectConfig?.excludeProjectIds?.includes(project.id),
+		)
+	}, [
+		browsingWorkspace?.entryType,
+		mobileCrossProjectConfig?.excludeProjectIds,
+		projectItems,
+		query,
+		t,
+	])
+	const selectedAttachmentIds = useMemo(
+		() =>
+			new Set(
+				selectedResources
+					.filter(
+						(selection) =>
+							selection.level === "attachment" &&
+							selection.project.id === browsingProject?.id,
+					)
+					.map((selection) =>
+						selection.level === "attachment" ? getItemId(selection.attachment) : "",
+					),
+			),
+		[browsingProject?.id, selectedResources],
+	)
 	const selectedDirectoryId = useMemo(() => {
 		if (selectedPath === null) return null
 
@@ -768,7 +884,9 @@ function MobileFilesMoveSheet({
 		browsingWorkspace?.id &&
 		browsingWorkspace.entryType === "workspace",
 	)
-	const canConfirm = selectedPath !== null || canSubmitWorkspace
+	const canConfirm = isMentionMode
+		? selectedResources.length > 0
+		: selectedPath !== null || canSubmitWorkspace
 	const breadcrumbSegments = useMemo<BreadcrumbSegment[]>(() => {
 		if (!supportsCrossProject) {
 			return pathStack.map((item, index) => ({
@@ -887,12 +1005,79 @@ function MobileFilesMoveSheet({
 		setSelectedPath([])
 	}
 
+	function getSelectedWorkspace(
+		project?: Pick<ProjectListItem, "workspace_id">,
+	): Workspace | null {
+		if (!browsingWorkspace) return null
+		const workspaceId = project?.workspace_id || browsingWorkspace.id
+
+		const configuredWorkspace = mobileCrossProjectConfig?.workspaces?.find(
+			(workspace) => workspace.id === workspaceId,
+		)
+		return {
+			...configuredWorkspace,
+			id: workspaceId,
+			name: browsingWorkspace.name,
+		} as Workspace
+	}
+
+	function getSelectionKey(selection: ProjectResourceSelection) {
+		if (selection.level === "project") return `project:${selection.project.id}`
+		return `attachment:${selection.project.id}:${getItemId(selection.attachment)}`
+	}
+
+	function toggleMentionSelection(selection: ProjectResourceSelection) {
+		const selectionKey = getSelectionKey(selection)
+		const existingIndex = selectedResources.findIndex(
+			(item) => getSelectionKey(item) === selectionKey,
+		)
+		if (existingIndex >= 0) {
+			setSelectedResources((previous) =>
+				previous.filter((_, index) => index !== existingIndex),
+			)
+			return
+		}
+
+		const selectedProjectIds = new Set(selectedResources.map((item) => item.project.id))
+		if (
+			!selectedProjectIds.has(selection.project.id) &&
+			selectedProjectIds.size >= MAX_MENTION_PROJECT_COUNT
+		) {
+			magicToast.info(t("selectPathModal.mentionProjectLimit"))
+			return
+		}
+
+		setSelectedResources((previous) => [...previous, selection])
+	}
+
+	function handleSelectProject(project: ProjectListItem) {
+		const workspace = getSelectedWorkspace(project)
+		if (!workspace) return
+
+		toggleMentionSelection({
+			level: "project",
+			workspace,
+			project,
+		})
+	}
+
 	/**
 	 * 搜索结果和当前层列表最终都要回落为完整路径，保证提交给旧链路的数据结构不变。
 	 */
 	function handleSelectDirectory(directory: AttachmentItem, shouldResolveFromTree = false) {
 		const directoryId = getItemId(directory)
 		if (disabledFolderIds.includes(directoryId)) return
+		if (isMentionMode) {
+			const workspace = getSelectedWorkspace(browsingProject || undefined)
+			if (!workspace || !browsingProject) return
+			toggleMentionSelection({
+				level: "attachment",
+				workspace,
+				project: browsingProject as ProjectListItem,
+				attachment: directory,
+			})
+			return
+		}
 
 		if (shouldResolveFromTree) {
 			const matchedPath = findDirectoryPath(activeAttachments, directoryId)
@@ -974,6 +1159,22 @@ function MobileFilesMoveSheet({
 	 * 确认动作继续向旧的 `onSubmit({ path })` 契约回传，避免改动原有移动文件链路。
 	 */
 	function handleConfirm() {
+		if (isMentionMode) {
+			const firstSelection = selectedResources[0]
+			if (!firstSelection) return
+			onSubmit({
+				path: pathStack,
+				targetWorkspaceId: firstSelection.workspace.id,
+				targetProjectId: firstSelection.project.id,
+				targetAttachments: activeAttachments,
+				sourceAttachments: mobileCrossProjectConfig?.sourceAttachments || [],
+				selection: firstSelection,
+				selections: selectedResources,
+			})
+			if (closeOnSubmit) onClose()
+			return
+		}
+
 		if (canSubmitWorkspace && browsingWorkspace) {
 			onSubmit({
 				path: [],
@@ -982,7 +1183,7 @@ function MobileFilesMoveSheet({
 				targetAttachments: [],
 				sourceAttachments: mobileCrossProjectConfig?.sourceAttachments || [],
 			})
-			onClose()
+			if (closeOnSubmit) onClose()
 			return
 		}
 
@@ -1005,17 +1206,28 @@ function MobileFilesMoveSheet({
 		} else {
 			onSubmit({ path: selectedPath })
 		}
-		onClose()
+		if (closeOnSubmit) onClose()
 	}
 
 	return (
-		<Sheet open={visible} onOpenChange={(nextVisible) => !nextVisible && onClose()}>
+		<Sheet
+			open={visible}
+			onOpenChange={(nextVisible) => {
+				if (!nextVisible && !isMentionMode) onClose()
+			}}
+		>
 			<SheetContent
 				side="bottom"
 				showClose={false}
 				aria-describedby={undefined}
 				className="flex h-[calc(100dvh-var(--safe-area-inset-top,0px))] max-h-[calc(100dvh-var(--safe-area-inset-top,0px))] min-h-[calc(100dvh-var(--safe-area-inset-top,0px))] flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted p-0 !pb-0"
 				data-testid="select-directory-mobile-sheet-root"
+				onPointerDown={(event) => {
+					if (isMentionMode) event.stopPropagation()
+				}}
+				onClick={(event) => {
+					if (isMentionMode) event.stopPropagation()
+				}}
 			>
 				<div className="flex flex-col items-center py-1.5">
 					<div className="h-1 w-20 rounded-full bg-muted-foreground/30" aria-hidden />
@@ -1104,7 +1316,7 @@ function MobileFilesMoveSheet({
 										>
 											<div className="flex items-center gap-2">
 												<Search className="size-4 shrink-0" />
-												<span>{searchEmptyDescription}</span>
+												<span>{effectiveSearchEmptyDescription}</span>
 											</div>
 										</div>
 									) : (
@@ -1144,7 +1356,7 @@ function MobileFilesMoveSheet({
 										>
 											<div className="flex items-center gap-2">
 												<Search className="size-4 shrink-0" />
-												<span>{searchEmptyDescription}</span>
+												<span>{effectiveSearchEmptyDescription}</span>
 											</div>
 										</div>
 									) : (
@@ -1154,6 +1366,16 @@ function MobileFilesMoveSheet({
 													project={project}
 													workspaceEntryType={
 														browsingWorkspace?.entryType
+													}
+													selected={selectedResources.some(
+														(selection) =>
+															selection.level === "project" &&
+															selection.project.id === project.id,
+													)}
+													onSelect={
+														isMentionMode
+															? () => handleSelectProject(project)
+															: undefined
 													}
 													onDrillIn={() => handleProjectDrillIn(project)}
 												/>
@@ -1168,7 +1390,7 @@ function MobileFilesMoveSheet({
 										>
 											<div className="flex items-center gap-2">
 												<Search className="size-4 shrink-0" />
-												<span>{searchEmptyDescription}</span>
+												<span>{effectiveSearchEmptyDescription}</span>
 											</div>
 										</div>
 									) : (
@@ -1180,9 +1402,15 @@ function MobileFilesMoveSheet({
 												<DirectoryCard key={directoryId}>
 													<DirectoryRow
 														directory={directory}
+														resourceTree={activeAttachments}
 														secondaryText={pathLabel || undefined}
 														selected={
-															selectedDirectoryId === directoryId
+															isMentionMode
+																? selectedAttachmentIds.has(
+																		directoryId,
+																	)
+																: selectedDirectoryId ===
+																	directoryId
 														}
 														disabled={isDisabled}
 														onSelect={() =>
@@ -1204,7 +1432,7 @@ function MobileFilesMoveSheet({
 									)
 								) : (
 									<>
-										{pathStack.length === 0 ? (
+										{!isMentionMode && pathStack.length === 0 ? (
 											<DirectoryCard>
 												<RootRow
 													rootLabel={rootLabel}
@@ -1229,8 +1457,14 @@ function MobileFilesMoveSheet({
 													<DirectoryCard key={directoryId}>
 														<DirectoryRow
 															directory={directory}
+															resourceTree={activeAttachments}
 															selected={
-																selectedDirectoryId === directoryId
+																isMentionMode
+																	? selectedAttachmentIds.has(
+																			directoryId,
+																		)
+																	: selectedDirectoryId ===
+																		directoryId
 															}
 															disabled={isDisabled}
 															onSelect={() =>
@@ -1258,7 +1492,7 @@ function MobileFilesMoveSheet({
 					>
 						<MobileBottomSearchBar
 							value={query}
-							placeholder={searchPlaceholder}
+							placeholder={effectiveSearchPlaceholder}
 							clearAriaLabel={clearSearchAriaLabel}
 							onValueChange={handleSearchValueChange}
 							testIdPrefix="select-directory-mobile-search"

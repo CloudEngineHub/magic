@@ -53,6 +53,7 @@ import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
+import SuperMagicService from "@/pages/superMagic/services"
 
 const MobileAudioRecordingDetailPage = lazy(
 	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
@@ -276,6 +277,20 @@ function AudioRecordingDetailPageDesktop() {
 		navigate({ name: RouteName.AudioRecordings })
 	}
 
+	/** Initializes the recording project state before entering its Super Magic project view. */
+	async function handleOpenProject() {
+		try {
+			await SuperMagicService.initializeState({ projectId })
+		} catch (error) {
+			console.error("Failed to initialize project state before navigation:", error)
+		}
+
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId },
+		})
+	}
+
 	async function handleRename(name: string) {
 		const ok = await actions.renameProject(name)
 		if (ok) setTitleOverride(name)
@@ -358,6 +373,7 @@ function AudioRecordingDetailPageDesktop() {
 					onExportAll={() => void actions.downloadAll()}
 					onCreateShare={shareControls.openCreateShare}
 					onManageShare={shareControls.openManageShare}
+					onOpenProject={() => void handleOpenProject()}
 					onMoveGroup={() => setMoveGroupOpen(true)}
 					onCopyToProject={() => {
 						if (resolvedItem) void copyController.openCopyToProject(resolvedItem)

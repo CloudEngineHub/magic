@@ -169,6 +169,8 @@ export interface TopicFilesCoreRef {
 	createVirtualFile: (type: PresetFileType, key?: string, parentPath?: string) => void
 	createVirtualFolder: (key?: string, parentPath?: string) => void
 	createDesignProject: (parentPath?: string) => Promise<any>
+	createSelfMediaProject: (parentPath?: string) => void
+	createAICardProject: (parentPath?: string) => void
 	handleUploadFile: (item?: any) => void
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
@@ -921,6 +923,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				resolve(null)
 			})
 		},
+		createSelfMediaProject: (parentPath?: string) => {
+			createVirtualSelfMediaProject(undefined, parentPath)
+		},
+		createAICardProject: (parentPath?: string) => {
+			openAICardDialog(parentPath)
+		},
 		handleUploadFile,
 		handleUploadFolder,
 		handleImportFromOtherProject,
@@ -1359,6 +1367,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.name || item.file_name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,
@@ -1617,6 +1627,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.file_name || item.name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,

@@ -27,11 +27,12 @@ import { LocaleTextInput } from "../LocaleTextInput"
 import { ImageUploadField, type ImageMetadata } from "../ImageUploadField"
 import { DemoGroupEditDialog } from "../DemoGroupEditDialog"
 import { PromptRichTextLocaleEditor } from "./PromptRichTextLocaleEditor"
+import type { InspirationItemData } from "../../inspirationItems"
 
 interface DemoItemFormState {
 	thumbnail_url: string
 	label: LocaleText
-	description: LocaleText
+	prompt: LocaleText
 	group_key: string
 	width?: number
 	height?: number
@@ -46,7 +47,7 @@ interface DemoItemEditDialogProps {
 	groups: OptionGroup[]
 	open: boolean
 	onOpenChange: (open: boolean) => void
-	onConfirm: (data: Partial<OptionItem>, groupKey: string) => void
+	onConfirm: (data: InspirationItemData, groupKey: string) => void
 	/**
 	 * Called when user creates a new group inline.
 	 * Returns the new group's key so it can be auto-selected.
@@ -57,7 +58,7 @@ interface DemoItemEditDialogProps {
 const EMPTY_FORM: DemoItemFormState = {
 	thumbnail_url: "",
 	label: "",
-	description: "",
+	prompt: "",
 	group_key: "",
 }
 
@@ -65,7 +66,7 @@ function itemToForm(item: OptionItem, defaultGroupKey: string): DemoItemFormStat
 	return {
 		thumbnail_url: item.thumbnail_url ?? "",
 		label: item.label ?? "",
-		description: item.description ?? "",
+		prompt: item.prompt ?? item.description ?? "",
 		group_key: defaultGroupKey,
 		width: item.width,
 		height: item.height,
@@ -113,8 +114,8 @@ export function DemoItemEditDialog({
 
 	const isValid = useMemo(() => {
 		const groupValid = groups.length === 0 || !!form.group_key
-		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.description) && groupValid
-	}, [form.label, form.description, form.group_key, groups.length])
+		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.prompt) && groupValid
+	}, [form.label, form.prompt, form.group_key, groups.length])
 
 	function handleImageMetadataChange(metadata?: ImageMetadata) {
 		setForm((prev) => ({
@@ -130,7 +131,7 @@ export function DemoItemEditDialog({
 			{
 				thumbnail_url: form.thumbnail_url || undefined,
 				label: form.label,
-				description: form.description,
+				prompt: form.prompt,
 				width: form.width,
 				height: form.height,
 				aspect_ratio: form.aspect_ratio,
@@ -195,8 +196,9 @@ export function DemoItemEditDialog({
 							required
 						>
 							<PromptRichTextLocaleEditor
-								value={form.description}
-								onChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+								value={form.prompt}
+								onChange={(v) => setForm((prev) => ({ ...prev, prompt: v }))}
+								allowPresetValue={false}
 								placeholder={t("playbook.edit.inspiration.item.promptPlaceholder")}
 								localizeLabel={t("playbook.edit.inspiration.item.prompt")}
 								data-testid="demo-item-prompt-input"
