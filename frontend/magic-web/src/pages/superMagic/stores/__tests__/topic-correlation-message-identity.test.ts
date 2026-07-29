@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
+import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
-	TopicMessageListenerPayload,
 } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -230,13 +230,12 @@ function collectTopicArrivals(
 	store: SuperMagicStore,
 	topicId: string,
 ): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = store.registerTopicMessageListener({
-		topicId,
-		callback: (payload) => events.push(payload),
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = store.subscribe("message.committed", (event) => events.push(event), {
+		scope: { topicId },
 	})
 	return { events, unsubscribe }
 }
@@ -331,6 +330,67 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).not.toBe(
 			store.getStreamState(TOPIC_B, CORRELATION_ID),
 		)
+	})
+
+	it("不同 Topic 可以复用同一 tool.id，且 canonical response 仍按 Topic 隔离。", () => {
+		const store = createStore()
+		const sharedToolId = "cross-topic-shared-tool"
+		const topicACorrelation = "cross-topic-tool-correlation-a"
+		const topicBCorrelation = "cross-topic-tool-correlation-b"
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				topicId: TOPIC_A,
+				nodeTopicId: TOPIC_A,
+				appMessageId: "cross-topic-assistant-a",
+				correlationId: topicACorrelation,
+				status: "running",
+				toolCalls: [createToolCall({ id: sharedToolId, status: "running" })],
+			}),
+			createEnvelope({
+				topicId: TOPIC_A,
+				nodeTopicId: TOPIC_A,
+				appMessageId: "cross-topic-response-a",
+				correlationId: topicACorrelation,
+				seqId: "101",
+				role: "tool",
+				content: null,
+				status: "finished",
+				toolCallId: sharedToolId,
+				tool: { id: sharedToolId, status: "finished" },
+			}),
+		])
+		store.initializeMessages(TOPIC_B, [
+			createEnvelope({
+				topicId: TOPIC_B,
+				nodeTopicId: TOPIC_B,
+				appMessageId: "cross-topic-assistant-b",
+				correlationId: topicBCorrelation,
+				status: "running",
+				toolCalls: [createToolCall({ id: sharedToolId, status: "running" })],
+			}),
+			createEnvelope({
+				topicId: TOPIC_B,
+				nodeTopicId: TOPIC_B,
+				appMessageId: "cross-topic-response-b",
+				correlationId: topicBCorrelation,
+				seqId: "101",
+				role: "tool",
+				content: null,
+				status: "error",
+				toolCallId: sharedToolId,
+				tool: { id: sharedToolId, status: "error" },
+			}),
+		])
+
+		expect(
+			getNode(store, "cross-topic-assistant-a")?.tool_calls?.map((tool) => tool.id),
+		).toEqual([sharedToolId])
+		expect(
+			getNode(store, "cross-topic-assistant-b")?.tool_calls?.map((tool) => tool.id),
+		).toEqual([sharedToolId])
+		expect(store.toolResponseMap.get(TOPIC_A)?.get(sharedToolId)?.status).toBe("finished")
+		expect(store.toolResponseMap.get(TOPIC_B)?.get(sharedToolId)?.status).toBe("error")
 	})
 
 	it("HTTP Final 不从另一 topic 的同 correlation Assistant 继承 arguments。", () => {
@@ -999,33 +1059,102 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getStreamState(TOPIC_A, "stream-correlation")?.content).toBe("draft")
 	})
 
-	it("tool response 的 correlationId 与所属 assistant 不一致。", () => {
+	it("同 Topic 的 tool response 使用其他 correlation 已占用的 tool.id 时不建立 canonical 关联。", () => {
 		const store = createStore()
+		const ownerCorrelationId = "assistant-correlation"
+		const incomingCorrelationId = "wrong-correlation"
 
 		store.enqueueMessage(
 			TOPIC_A,
 			createEnvelope({
 				appMessageId: "assistant-with-tool",
-				correlationId: "assistant-correlation",
+				correlationId: ownerCorrelationId,
+				status: "running",
 				toolCalls: [createToolCall()],
 			}),
 		)
+		for (const [appMessageId, seqId] of [
+			["tool-response", "101"],
+			["tool-response-retry", "102"],
+		] as const) {
+			store.enqueueMessage(
+				TOPIC_A,
+				createEnvelope({
+					appMessageId,
+					correlationId: incomingCorrelationId,
+					seqId,
+					role: "tool",
+					content: null,
+					status: "finished",
+					toolCallId: "tool-1",
+					tool: { id: "tool-1", status: "finished" },
+				}),
+			)
+		}
+		advanceRendering()
+
+		const embeddedState = getNode(store, ownerCorrelationId)?.tool_calls?.[0]?.tool
+		const effectiveState = store.toolResponseMap.get(TOPIC_A)?.get("tool-1") ?? embeddedState
+		expect(getNode(store, "tool-response")?.tool?.status).toBe("finished")
+		expect(getNode(store, "tool-response-retry")?.tool?.status).toBe("finished")
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")).toBeUndefined()
+		expect(effectiveState?.status).toBe("running")
+	})
+
+	it("普通 orphan response 不抢占 tool.id，首个合法 Assistant call 建立唯一关联。", () => {
+		const store = createStore()
+		const toolId = "orphan-before-assistant-tool"
+		const orphanCorrelationId = "orphan-response-correlation"
+		const ownerCorrelationId = "first-valid-assistant-correlation"
+		const conflictingCorrelationId = "second-assistant-correlation"
+
 		store.enqueueMessage(
 			TOPIC_A,
 			createEnvelope({
-				appMessageId: "tool-response",
-				correlationId: "wrong-correlation",
-				seqId: "101",
+				appMessageId: "orphan-before-assistant-response",
+				correlationId: orphanCorrelationId,
+				seqId: "100",
 				role: "tool",
 				content: null,
-				toolCallId: "tool-1",
-				tool: { id: "tool-1", status: "finished" },
+				status: "finished",
+				toolCallId: toolId,
+				tool: { id: toolId, status: "finished" },
 			}),
 		)
 		advanceRendering()
 
-		expect(getNode(store, "assistant-with-tool")?.tool_calls?.[0]?.tool?.status).toBe("running")
-		expect(getNode(store, "tool-response")?.tool?.status).toBe("finished")
+		expect
+			.soft(getNode(store, "orphan-before-assistant-response")?.tool?.status)
+			.toBe("finished")
+		expect.soft(store.toolResponseMap.get(TOPIC_A)?.get(toolId)).toBeUndefined()
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: ownerCorrelationId,
+				toolCalls: [createToolCall({ id: toolId }) as ChunkToolCall],
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				correlationId: conflictingCorrelationId,
+				toolCalls: [createToolCall({ id: toolId }) as ChunkToolCall],
+			}),
+		)
+
+		expect
+			.soft(
+				store
+					.getStreamState(TOPIC_A, ownerCorrelationId)
+					?.tool_calls?.some((tool) => tool?.id === toolId) ?? false,
+			)
+			.toBe(true)
+		expect
+			.soft(
+				store
+					.getStreamState(TOPIC_A, conflictingCorrelationId)
+					?.tool_calls?.some((tool) => tool?.id === toolId) ?? false,
+			)
+			.toBe(false)
 	})
 
 	it.each(["tool", "user"] as const)(
@@ -1210,8 +1339,8 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 
 		expect(
 			arrivals.events
-				.filter((event) => event.message.app_message_id === "duplicate-final")
-				.map((event) => event.message.seq_id),
+				.filter((event) => event.payload.message.appMessageId === "duplicate-final")
+				.map((event) => event.payload.message.seqId),
 		).toEqual(["100", "101"])
 		expect(getNode(store, "duplicate-final")).toMatchObject({
 			content: "canonical",
@@ -1365,7 +1494,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getStreamState(TOPIC_A, "message-2-correlation")).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, "message-3-correlation")).toBeDefined()
 		expect(
-			arrivals.events.filter((event) => event.message.app_message_id === "message-2"),
+			arrivals.events.filter((event) => event.payload.message.appMessageId === "message-2"),
 		).toHaveLength(1)
 
 		store.receiveChunk(
@@ -1379,7 +1508,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getStreamState(TOPIC_A, "message-2-correlation")).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, "message-3-correlation")).toBeDefined()
 		expect(
-			arrivals.events.filter((event) => event.message.app_message_id === "message-2"),
+			arrivals.events.filter((event) => event.payload.message.appMessageId === "message-2"),
 		).toHaveLength(1)
 
 		store.enqueueMessage(

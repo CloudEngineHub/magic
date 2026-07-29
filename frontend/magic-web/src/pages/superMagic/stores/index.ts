@@ -3,13 +3,6 @@ import pubsub from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
-import {
-	createDomainEventRegistry,
-	createTopicMessageListenerRegistry,
-	RegisterTopicMessageListenerParams,
-	resolveCrewDomainEvent,
-	resolveTaskDomainEvent,
-} from "./listener-registry"
 import { persistMessagesToStorage, type PersistableMessage } from "./persistence"
 import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
 import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
@@ -28,23 +21,56 @@ import {
 	getDefaultTopicMeta,
 } from "./message-transforms"
 import { bindSuperMagicStoreCollaborators, superMagicStoreCollaborators } from "./collaborators"
+import type {
+	MessageCompletedStatus,
+	MessageStreamEndReason,
+	SuperMagicEventMap,
+	SuperMagicEventMessageRef,
+	SuperMagicEventMeta,
+	SuperMagicEventSource,
+	SuperMagicEventType,
+	SuperMagicSubscribeOptions,
+	SuperMagicToolCallDelta,
+	ToolCallSettledStatus,
+	TaskCompletedEvent,
+} from "./events"
+import { createSuperMagicEventEmitter } from "./events/internal/emitter"
+import { SuperMagicEventTransitionLedger } from "./events/internal/transition-ledger"
 
 // Re-export types (preserves all existing public type exports)
 export type {
 	MessageItem,
 	RawSuperMagicMessageNode,
 	RawSuperMagicMessageEnvelope,
-	RegisterTopicMessageListenerParams,
-	TopicMessageListenerPayload,
-	CrewDomainEventPayload,
-	TaskDomainEventPayload,
-	DomainEventPayload,
-	RegisterDomainEventListenerParams,
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
 } from "./types"
+export type {
+	MessageCommittedEvent,
+	MessageCompletedEvent,
+	MessageCompletedStatus,
+	MessageStreamDeltaEvent,
+	MessageStreamEndedEvent,
+	MessageStreamEndReason,
+	MessageStreamStartedEvent,
+	SuperMagicEvent,
+	SuperMagicEventCallback,
+	SuperMagicEventMap,
+	SuperMagicEventMessageRef,
+	SuperMagicEventMeta,
+	SuperMagicEventScope,
+	SuperMagicEventSource,
+	SuperMagicEventType,
+	SuperMagicSubscribe,
+	SuperMagicSubscribeOptions,
+	SuperMagicToolCallDelta,
+	SuperMagicUnsubscribe,
+	ToolCallSettledEvent,
+	ToolCallSettledStatus,
+	TaskCompletedEvent,
+} from "./events"
 
 // Re-export value exports
 export { isV2Message } from "./message-transforms"
@@ -62,9 +88,6 @@ export { suggestionStore } from "./SuggestionStore"
 
 import type {
 	SuperMagicStoreTopicId,
-	TopicMessageNode,
-	TopicMessageListenerPayload,
-	DomainEventPayload,
 	RawSuperMagicMessageNode,
 	RawSuperMagicIMMessage,
 	RawSuperMagicMessageSequence,
@@ -81,7 +104,6 @@ import type {
 	ToolStreamMessageState,
 	ToolResponseState,
 	TopicMeta,
-	RegisterDomainEventListenerParams,
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
@@ -175,14 +197,10 @@ function compareMessageSeqId(left: string, right: string): number {
 	return normalizedLeft.localeCompare(normalizedRight)
 }
 
-function resolveDomainEvents(payload: TopicMessageListenerPayload): DomainEventPayload[] {
-	return [resolveCrewDomainEvent(payload), resolveTaskDomainEvent(payload)].filter(
-		(event): event is DomainEventPayload => Boolean(event),
-	)
-}
-
 export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private collaborators: SuperMagicStoreCollaborators
+	private eventEmitter = createSuperMagicEventEmitter()
+	private eventTransitions = new SuperMagicEventTransitionLedger()
 	private topicSyncGenerationCounter = 0
 	/** HTTP 同步中的 finished assistant 先按代次暂存，只有同步成功且任务 finished 才提升为终态。 */
 	private pendingTopicSyncFinalizations = new Map<
@@ -194,6 +212,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private streamChunkLedgers = new Map<string, StreamChunkLedger>()
 	/** tool response 的 seq 只用于 canonical 覆盖防御，不暴露到 ToolResponseState。 */
 	private latestToolResponseSeqIds = new Map<string, Map<string, string>>()
+	/**
+	 * Tool identity belongs to the first Assistant call inside one Topic. Keep ownership
+	 * outside the observable response Map so UI lookup remains topic + tool.id while all
+	 * ingress paths share the same correlation guard.
+	 */
+	private toolCallOwners = new Map<string, Map<string, string>>()
 	/** 分享消息会被整批、逐条和旧前缀重复回放；该 sidecar 只记录单 topic 的顺序与待结算工具。 */
 	private sharedReplayStates = new Map<string, SharedReplayState>()
 	/** 持久化是诊断旁路；按 Store 实例隔离，避免不同会话共享未 flush 的 chunk。 */
@@ -226,19 +250,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** 当前可见话题 ID，仅该话题执行定时器驱动的打字机渲染 */
 	activeTopicId: string | null = null
 
-	/** 话题消息监听注册中心：用于消息到达阶段的订阅/发布 */
-	private topicMessageListenerRegistry = createTopicMessageListenerRegistry<
-		MessageItem,
-		TopicMessageNode
-	>()
-	/** 领域事件注册中心：用于将消息变更转换后的领域事件统一分发 */
-	private domainEventRegistry = createDomainEventRegistry<DomainEventPayload>()
-
 	constructor(collaborators: SuperMagicStoreCollaborators = superMagicStoreCollaborators) {
 		this.collaborators = collaborators
-		makeAutoObservable(
+		makeAutoObservable<
+			this,
+			| "eventEmitter"
+			| "eventTransitions"
+			| "onServerMessagesConfirmedCallbacks"
+			| "onStreamRecoveryRequestedCallbacks"
+			| "onStreamRecoveryFailedCallbacks"
+			| "topicSyncGenerationCounter"
+			| "pendingTopicSyncFinalizations"
+			| "topicSyncContexts"
+			| "streamChunkLedgers"
+			| "latestToolResponseSeqIds"
+			| "toolCallOwners"
+			| "sharedReplayStates"
+			| "persistenceQueues"
+			| "streamRecoveryStates"
+		>(
 			this,
 			{
+				eventEmitter: false,
+				eventTransitions: false,
 				onServerMessagesConfirmedCallbacks: false,
 				onStreamRecoveryRequestedCallbacks: false,
 				onStreamRecoveryFailedCallbacks: false,
@@ -247,12 +281,389 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				topicSyncContexts: false,
 				streamChunkLedgers: false,
 				latestToolResponseSeqIds: false,
+				toolCallOwners: false,
 				sharedReplayStates: false,
 				persistenceQueues: false,
 				streamRecoveryStates: false,
 			},
 			{ autoBind: true },
 		)
+	}
+
+	private getToolCallOwner(topicId: string, toolId: string) {
+		return this.toolCallOwners.get(topicId)?.get(toolId)
+	}
+
+	private claimToolCallOwner(
+		topicId: string,
+		correlationId: string,
+		toolId: string,
+	): "claimed" | "owned" | "conflict" {
+		if (!topicId || !correlationId || !toolId) return "conflict"
+		const topicOwners = this.toolCallOwners.get(topicId) || new Map<string, string>()
+		const currentOwner = topicOwners.get(toolId)
+		if (currentOwner) return currentOwner === correlationId ? "owned" : "conflict"
+
+		topicOwners.set(toolId, correlationId)
+		this.toolCallOwners.set(topicId, topicOwners)
+		return "claimed"
+	}
+
+	private applyAssistantToolOwnership(
+		topicId: string,
+		messageNode: RawSuperMagicMessageNode | undefined,
+	): RawSuperMagicMessageNode | undefined {
+		if (messageNode?.role !== "assistant" || !Array.isArray(messageNode.tool_calls)) {
+			return messageNode
+		}
+		const correlationId = String(messageNode.correlation_id || "").trim()
+		if (!correlationId) return messageNode
+
+		const acceptedToolCalls = (messageNode.tool_calls as ToolCall[]).filter((toolCall) => {
+			const toolId = String(toolCall?.id || "").trim()
+			if (!toolId) return true
+			return this.claimToolCallOwner(topicId, correlationId, toolId) !== "conflict"
+		})
+		if (acceptedToolCalls.length === messageNode.tool_calls.length) return messageNode
+
+		// Preserve the transport object for diagnostics; only canonical/effective Assistant
+		// projection removes a tool that belongs to another correlation in this Topic.
+		return {
+			...messageNode,
+			tool_calls: acceptedToolCalls,
+		}
+	}
+
+	private isOrphanFinishTaskResponse(messageNode: RawSuperMagicMessageNode, toolId: string) {
+		return Boolean(
+			messageNode.role === "tool" &&
+			messageNode.tool?.name === "finish_task" &&
+			/^\d+$/.test(toolId) &&
+			String(messageNode.task_id || "").trim(),
+		)
+	}
+
+	subscribe<T extends SuperMagicEventType>(
+		type: T,
+		callback: (event: SuperMagicEventMap[T]) => void,
+		options?: SuperMagicSubscribeOptions<T>,
+	) {
+		return this.eventEmitter.subscribe(type, callback, options)
+	}
+
+	private getEventEntityKey(
+		kind: "message" | "stream" | "tool" | "task",
+		topicId: string,
+		identity: string,
+	) {
+		return `${kind}\u0000${topicId}\u0000${identity}`
+	}
+
+	private createEventMeta(
+		source: SuperMagicEventSource,
+		entityKey: string,
+		identity: Omit<SuperMagicEventMeta, "occurredAt" | "revision" | "sequence" | "source">,
+		revision = this.eventTransitions.nextRevision(entityKey),
+	): SuperMagicEventMeta {
+		return {
+			...identity,
+			sequence: this.eventTransitions.nextSequence(),
+			revision,
+			occurredAt: Date.now(),
+			source,
+		}
+	}
+
+	private publishStreamStarted(
+		topicId: string,
+		correlationId: string,
+		chunkIndex: number,
+		startsWith: SuperMagicEventMap["message.stream.started"]["payload"]["startsWith"],
+	) {
+		const streamKey = this.getEventEntityKey("stream", topicId, correlationId)
+		const transition = this.eventTransitions.startStream(streamKey)
+		if (!transition.started) return transition.generation
+		this.eventEmitter.emit({
+			type: "message.stream.started",
+			meta: {
+				...this.createEventMeta("stream", streamKey, {
+					topicId,
+					correlationId,
+					streamGeneration: transition.generation,
+				}),
+				correlationId,
+				streamGeneration: transition.generation,
+			},
+			payload: { chunkIndex, startsWith },
+		})
+		return transition.generation
+	}
+
+	private publishStreamEnded(
+		topicId: string,
+		correlationId: string,
+		reason: MessageStreamEndReason,
+		options: {
+			finishReason?: string | null
+			awaitingCanonicalMessage: boolean
+			replacedByGeneration?: number
+		},
+		source: SuperMagicEventSource = "stream",
+	) {
+		const streamKey = this.getEventEntityKey("stream", topicId, correlationId)
+		const generation = this.eventTransitions.endStream(streamKey)
+		if (!generation) return
+		this.eventEmitter.emit({
+			type: "message.stream.ended",
+			meta: {
+				...this.createEventMeta(source, streamKey, {
+					topicId,
+					correlationId,
+					streamGeneration: generation,
+				}),
+				correlationId,
+				streamGeneration: generation,
+			},
+			payload: { reason, ...options },
+		})
+	}
+
+	private publishStreamDelta(
+		topicId: string,
+		correlationId: string,
+		payload: SuperMagicEventMap["message.stream.delta"]["payload"],
+	) {
+		const streamKey = this.getEventEntityKey("stream", topicId, correlationId)
+		const streamGeneration = this.eventTransitions.getStreamGeneration(streamKey)
+		if (!streamGeneration) return
+		this.eventEmitter.emit({
+			type: "message.stream.delta",
+			meta: {
+				...this.createEventMeta("stream", streamKey, {
+					topicId,
+					correlationId,
+					streamGeneration,
+				}),
+				correlationId,
+				streamGeneration,
+			},
+			payload,
+		})
+	}
+
+	private toEventMessageRef(
+		message: MessageItem,
+		messageNode?: RawSuperMagicMessageNode,
+	): SuperMagicEventMessageRef {
+		const appMessageId = String(message.app_message_id || "") || undefined
+		const correlationId =
+			String(message.correlation_id || messageNode?.correlation_id || "") || undefined
+		const role = message.role
+		const canonicalStatus =
+			message.status === "revoked"
+				? "revoked"
+				: String(messageNode?.status || message.status || "")
+		return {
+			logicalMessageId:
+				role === "assistant"
+					? correlationId || appMessageId || ""
+					: appMessageId || correlationId || "",
+			appMessageId,
+			correlationId,
+			seqId: String(message.seq_id || "") || undefined,
+			role,
+			type: String(message.type || ""),
+			status: canonicalStatus,
+			sendTime: Number(message.send_time || 0),
+		}
+	}
+
+	private publishMessageCommitted(
+		topicId: string,
+		message: MessageItem,
+		messageNode: RawSuperMagicMessageNode | undefined,
+		source: SuperMagicEventSource,
+		authority: "server" | "local" = "server",
+	) {
+		const messageRef = this.toEventMessageRef(message, messageNode)
+		const messageKey = this.getEventEntityKey("message", topicId, messageRef.logicalMessageId)
+		const transition = this.eventTransitions.recordMessage(
+			messageKey,
+			this.getMessageTransitionSnapshot(messageRef, messageNode),
+		)
+		if (!transition) return
+		const revision = this.eventTransitions.nextRevision(messageKey)
+		const identity = {
+			topicId,
+			correlationId: messageRef.correlationId,
+			appMessageId: messageRef.appMessageId,
+			messageSeqId: messageRef.seqId,
+		}
+		this.eventEmitter.emit({
+			type: "message.committed",
+			meta: this.createEventMeta(source, messageKey, identity, revision),
+			payload: {
+				message: messageRef,
+				operation: transition.operation,
+				authority,
+				changedFields: transition.changedFields,
+			},
+		})
+		this.publishTaskCompleted(topicId, message, messageNode, source)
+
+		const terminalStatus = this.resolveCompletedStatus(messageRef.status)
+		if (messageRef.role !== "assistant" || !terminalStatus) return
+		const completion = this.eventTransitions.recordCompleted(messageKey, terminalStatus)
+		if (!completion) return
+		this.eventEmitter.emit({
+			type: "message.completed",
+			meta: this.createEventMeta(source, messageKey, identity, revision),
+			payload: {
+				message: { ...messageRef, role: "assistant" },
+				status: terminalStatus,
+				...(completion.previousStatus ? { previousStatus: completion.previousStatus } : {}),
+			},
+		})
+	}
+
+	private getMessageTransitionSnapshot(
+		messageRef: SuperMagicEventMessageRef,
+		messageNode?: RawSuperMagicMessageNode,
+	) {
+		return {
+			appMessageId: messageRef.appMessageId,
+			correlationId: messageRef.correlationId,
+			seqId: messageRef.seqId,
+			role: messageRef.role,
+			type: messageRef.type,
+			status: messageRef.status,
+			sendTime: messageRef.sendTime,
+			event: messageNode?.event,
+		}
+	}
+
+	private seedMessageEventState(
+		topicId: string,
+		message: MessageItem,
+		messageNode?: RawSuperMagicMessageNode,
+	) {
+		const messageRef = this.toEventMessageRef(message, messageNode)
+		const messageKey = this.getEventEntityKey("message", topicId, messageRef.logicalMessageId)
+		this.eventTransitions.seedMessage(
+			messageKey,
+			this.getMessageTransitionSnapshot(messageRef, messageNode),
+		)
+		const terminalStatus = this.resolveCompletedStatus(messageRef.status)
+		if (messageRef.role === "assistant" && terminalStatus) {
+			this.eventTransitions.recordCompleted(messageKey, terminalStatus)
+		}
+	}
+
+	private resolveCompletedStatus(status: string): MessageCompletedStatus | undefined {
+		if (
+			status === "finished" ||
+			status === "error" ||
+			status === "suspended" ||
+			status === "revoked"
+		) {
+			return status
+		}
+		return undefined
+	}
+
+	private resolveAuthoritativeStreamEndReason(status?: string): MessageStreamEndReason {
+		if (status === "revoked") return "revoked"
+		if (status === "suspended") return "suspended"
+		return "authoritative_final"
+	}
+
+	private publishToolCallSettled(
+		topicId: string,
+		toolId: string,
+		response: ToolResponseState,
+		messageNode?: RawSuperMagicMessageNode,
+		source: SuperMagicEventSource = "im",
+	) {
+		const status = response.status
+		if (
+			status !== "finished" &&
+			status !== "error" &&
+			status !== "suspended" &&
+			status !== "response_missing"
+		)
+			return
+		const strength = status === "response_missing" ? "weak" : "strong"
+		const toolKey = this.getEventEntityKey("tool", topicId, toolId)
+		if (!this.eventTransitions.recordToolSettlement(toolKey, status, strength)) return
+		const correlationId = String(messageNode?.correlation_id || "") || undefined
+		this.eventEmitter.emit({
+			type: "toolCall.settled",
+			meta: {
+				...this.createEventMeta(source, toolKey, {
+					topicId,
+					correlationId,
+					toolCallId: toolId,
+				}),
+				toolCallId: toolId,
+			},
+			payload: {
+				toolCall: { id: toolId, name: response.name },
+				response: {
+					status: status as ToolCallSettledStatus,
+					action: response.action,
+					remark: response.remark,
+					detail: response.detail,
+				},
+				strength,
+				replaceable: strength === "weak",
+			},
+		})
+	}
+
+	private publishTaskCompleted(
+		topicId: string,
+		message: MessageItem,
+		messageNode: RawSuperMagicMessageNode | undefined,
+		source: SuperMagicEventSource,
+	) {
+		if (messageNode?.role !== "tool") return
+		const toolId = String(messageNode.tool?.id || "").trim()
+		if (
+			!toolId ||
+			this.getToolCallOwner(topicId, toolId) ||
+			!this.isOrphanFinishTaskResponse(messageNode, toolId)
+		)
+			return
+
+		const correlationId = String(messageNode.correlation_id || "").trim()
+		const appMessageId = String(message.app_message_id || "").trim()
+		const taskId = String(messageNode.task_id || "").trim()
+		if (!correlationId || !appMessageId || !taskId) return
+
+		const taskKey = this.getEventEntityKey("task", topicId, taskId)
+		if (!this.eventTransitions.recordTaskCompleted(taskKey)) return
+		this.eventEmitter.emit({
+			type: "task.completed",
+			meta: {
+				...this.createEventMeta(source, taskKey, {
+					topicId,
+					correlationId,
+					appMessageId,
+				}),
+				correlationId,
+				appMessageId,
+				taskId,
+			},
+			payload: {
+				source: "finish_task",
+				result: {
+					detail: messageNode.tool?.detail,
+					attachments: Array.isArray(messageNode.attachments)
+						? messageNode.attachments
+						: [],
+				},
+			},
+		} satisfies TaskCompletedEvent)
 	}
 
 	registerOnServerMessagesConfirmed(callback: (payload: ServerMessagesConfirmedPayload) => void) {
@@ -308,16 +719,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				})
 			}
 		})
-	}
-
-	private emitDomainEvents(payload: TopicMessageListenerPayload) {
-		resolveDomainEvents(payload).forEach((event) => {
-			this.domainEventRegistry.emit(event)
-		})
-	}
-
-	private emitTopicMessageArrived(payload: TopicMessageListenerPayload) {
-		this.topicMessageListenerRegistry.emit(payload)
 	}
 
 	private getTopicInactiveElapsedMs(topicMeta: TopicMeta): number {
@@ -863,7 +1264,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		} else if (isSuccessfulSuspendedSync) {
 			// 只有权威 topic 状态才批量结算未完成工具；单个 tool message 的 suspended
 			// 只描述该工具自身，不能扩大为整个任务的中断信号。
-			this.handleTopicSuspended(topicId)
+			this.handleTopicSuspended(topicId, "recovery")
 		} else if (isTerminalTopic && topicMeta.renderPolicy === "instant") {
 			this.settleTopicStreamsInstantly(
 				topicId,
@@ -1113,6 +1514,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicMeta.isStream = topicMeta.content.size > 0
 		topicMeta.isStreamLoading = topicMeta.content.size > 0
 		this.topicMeta.set(topicId, topicMeta)
+		discardedCorrelationIds.forEach((correlationId) => {
+			this.publishStreamEnded(
+				topicId,
+				correlationId,
+				"recovery_replaced",
+				{ awaitingCanonicalMessage: false },
+				"recovery",
+			)
+		})
 	}
 
 	/**
@@ -1128,6 +1538,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const previousMessages = (this.messages.get(topicId) || []).slice()
 		const topicBuffer = this.getTopicBuffer(topicId)
 		const syncTopicMeta = this.getTopicMetadata(topicId)
+		const previousToolResponses = new Map(this.toolResponseMap.get(topicId) || [])
+		const activeEventCorrelationIds = new Set(
+			(messages || []).flatMap((envelope) => {
+				const correlationId = String(
+					getRawMessageNode(envelope?.seq?.message)?.correlation_id || "",
+				)
+				if (!correlationId) return []
+				const streamKey = this.getEventEntityKey("stream", topicId, correlationId)
+				return this.eventTransitions.isStreamActive(streamKey) ? [correlationId] : []
+			}),
+		)
+		// 冷历史先写入 ledger 作为后续 revision 的比较基线，但流式占位卡不属于 committed 事实。
+		previousMessages.forEach((message) => {
+			if (
+				message.role === "assistant" &&
+				message.correlation_id &&
+				activeEventCorrelationIds.has(message.correlation_id)
+			)
+				return
+			const node = (this.messageMap.get(message.app_message_id) ||
+				this.messageMap.get(message.correlation_id)) as RawSuperMagicMessageNode | undefined
+			this.seedMessageEventState(topicId, message, node)
+		})
 		const pendingFinalizations = this.pendingTopicSyncFinalizations.get(topicId)
 		const syncContext = this.topicSyncContexts.get(topicId)
 		const currentSyncFinalizations =
@@ -1178,7 +1611,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			let settledStream = false
 			snapshotMessages.forEach((envelope) => {
 				const imMessage = envelope?.seq?.message
-				const rawNode = getRawMessageNode(imMessage)
+				const rawNode = this.applyAssistantToolOwnership(
+					topicId,
+					getRawMessageNode(imMessage),
+				)
 				const messageType = String(imMessage?.type || "")
 				const appMessageId = imMessage?.app_message_id as string
 				const correlationId = String(rawNode?.correlation_id || "")
@@ -1406,6 +1842,72 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 			}
 		})
+
+		const previousAppMessageIds = new Set(
+			previousMessages.map((message) => message.app_message_id).filter(Boolean),
+		)
+		const previousAssistantCorrelationIds = new Set(
+			previousMessages.flatMap((message) =>
+				message.role === "assistant" && message.correlation_id
+					? [message.correlation_id]
+					: [],
+			),
+		)
+		;(messages || []).forEach((envelope) => {
+			const rawNode = getRawMessageNode(envelope?.seq?.message)
+			const appMessageId = String(envelope?.seq?.message?.app_message_id || "")
+			const correlationId = String(rawNode?.correlation_id || "")
+			const currentMessage = (this.messages.get(topicId) || []).find(
+				(message) =>
+					message.app_message_id === appMessageId ||
+					(Boolean(correlationId) &&
+						message.role === "assistant" &&
+						message.correlation_id === correlationId),
+			)
+			if (!currentMessage) return
+			const canonicalNode = (this.messageMap.get(appMessageId) ||
+				this.messageMap.get(correlationId) ||
+				rawNode) as RawSuperMagicMessageNode | undefined
+			const settledActiveStream = Boolean(
+				correlationId && activeEventCorrelationIds.has(correlationId),
+			)
+			const updatedExistingMessage = Boolean(
+				previousAppMessageIds.has(currentMessage.app_message_id) ||
+				(currentMessage.role === "assistant" &&
+					currentMessage.correlation_id &&
+					previousAssistantCorrelationIds.has(currentMessage.correlation_id)),
+			)
+
+			if (settledActiveStream) {
+				this.publishStreamEnded(
+					topicId,
+					correlationId,
+					currentMessage.status === "revoked" ? "revoked" : "recovery_replaced",
+					{ awaitingCanonicalMessage: false },
+					"http",
+				)
+			}
+			if (settledActiveStream || updatedExistingMessage) {
+				this.publishMessageCommitted(topicId, currentMessage, canonicalNode, "http")
+			} else {
+				this.seedMessageEventState(topicId, currentMessage, canonicalNode)
+			}
+
+			if (rawNode?.role === "tool") {
+				const toolId =
+					rawNode.tool && typeof rawNode.tool === "object" && !Array.isArray(rawNode.tool)
+						? String(rawNode.tool.id || "").trim()
+						: ""
+				const response = toolId ? this.toolResponseMap.get(topicId)?.get(toolId) : undefined
+				const previousResponse = toolId ? previousToolResponses.get(toolId) : undefined
+				const updatedExistingTool = Boolean(
+					previousResponse && response && !isEqual(previousResponse, response),
+				)
+				if (response && (settledActiveStream || updatedExistingTool)) {
+					this.publishToolCallSettled(topicId, toolId, response, rawNode, "http")
+				}
+			}
+		})
 	}
 
 	/**
@@ -1422,21 +1924,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						...(sharedMessage?.raw_content?.rich_text || {}),
 					})
 				} else if (sharedMessage?.type === "super_magic_message") {
-					const rawNode = {
+					let rawNode = {
 						...(sharedMessage?.raw_content?.super_magic_message as Record<
 							string,
 							unknown
 						>),
-					}
+					} as RawSuperMagicMessageNode
 					const topicId = String(sharedMessage?.topic_id || rawNode?.topic_id || "")
+					rawNode = this.applyAssistantToolOwnership(topicId, rawNode) || rawNode
 					if (rawNode?.role === "tool") {
-						this.recordToolResponse(topicId, rawNode as RawSuperMagicMessageNode)
+						this.recordToolResponse(topicId, rawNode, undefined, undefined, "shared")
 					} else if (rawNode?.role === "assistant" && topicId) {
-						this.advanceSharedReplay(
-							topicId,
-							messageId,
-							rawNode as RawSuperMagicMessageNode,
-						)
+						this.advanceSharedReplay(topicId, messageId, rawNode)
 					}
 
 					this.messageMap.set(messageId, rawNode)
@@ -1486,6 +1985,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private settleSharedToolCalls(topicId: string, toolCalls: ToolCall[]) {
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
 		let changed = false
+		const settlements: Array<{ toolId: string; response: ToolResponseState }> = []
 
 		toolCalls.forEach((toolCall) => {
 			const toolId = String(toolCall.id || "")
@@ -1500,19 +2000,23 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			)
 				return
 
-			toolResponseMap.set(
-				toolId,
-				this.mergeToolResponseState(current, {
-					...(toolCall.tool || {}),
-					id: toolId,
-					name: toolCall.tool?.name || toolCall.function?.name || "",
-					status: "response_missing",
-				}),
-			)
+			const nextState = this.mergeToolResponseState(current, {
+				...(toolCall.tool || {}),
+				id: toolId,
+				name: toolCall.tool?.name || toolCall.function?.name || "",
+				status: "response_missing",
+			})
+			toolResponseMap.set(toolId, nextState)
+			settlements.push({ toolId, response: nextState })
 			changed = true
 		})
 
-		if (changed) this.toolResponseMap.set(topicId, toolResponseMap)
+		if (changed) {
+			this.toolResponseMap.set(topicId, toolResponseMap)
+			settlements.forEach(({ toolId, response }) => {
+				this.publishToolCallSettled(topicId, toolId, response, undefined, "shared")
+			})
+		}
 	}
 
 	// ======================================
@@ -1585,6 +2089,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamNode.tool_calls = []
 				this.messageMap.set(correlationId, streamNode)
 			}
+			const currentGeneration = this.eventTransitions.getStreamGeneration(
+				this.getEventEntityKey("stream", topicId, correlationId),
+			)
+			this.publishStreamEnded(topicId, correlationId, "restart", {
+				awaitingCanonicalMessage: false,
+				...(currentGeneration ? { replacedByGeneration: currentGeneration + 1 } : {}),
+			})
 		}
 		// correlationId 负责隔离一轮流，i 负责该轮内的幂等和顺序；旧序号与待处理重复序号都直接忽略。
 		if (chunkIndex < ledger.nextChunkIndex || ledger.pendingChunks.has(chunkIndex)) {
@@ -1618,6 +2129,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				if (!orderedHasCanonicalDelta && !orderedIsFinal) {
 					// 非正文首包也证明该 correlation 已存在；若后续正文丢失，等待 watchdog 发起权威恢复。
 					this.scheduleStreamRecovery(topicId, correlationId, true)
+					this.publishStreamStarted(
+						topicId,
+						correlationId,
+						Number(orderedChunk.i),
+						"metadata",
+					)
 					continue
 				}
 
@@ -1632,6 +2149,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							this.ensureStreamRecoveryState(topicId, correlationId),
 						)
 					}
+					this.publishStreamStarted(
+						topicId,
+						correlationId,
+						Number(orderedChunk.i),
+						"metadata",
+					)
+					this.publishStreamEnded(topicId, correlationId, "finish_reason", {
+						finishReason: String(orderedChoice?.finish_reason || "") || null,
+						awaitingCanonicalMessage: true,
+					})
 					break
 				}
 
@@ -1680,6 +2207,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const choice = messageChunk?.choices?.[0]
 		const delta = choice?.delta
 		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
+		const previousContentLength = streamState.content.length
+		const previousReasoningContentLength = streamState.reasoning_content.length
+		const previousTools = streamState.tool_calls.map((toolCall) => ({
+			id: toolCall?.id,
+			name: toolCall?.function?.name,
+			arguments: toolCall?.function?.arguments || "",
+		}))
 		const isFinalChunk = Boolean(choice?.finish_reason)
 		const hasEffectiveProgress = Boolean(
 			(typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) ||
@@ -1735,10 +2269,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const targetToolId =
 				typeof targetTool?.id === "string" && targetTool.id ? targetTool.id : undefined
 			if (toolId && targetToolId && targetToolId !== toolId) return
+			if (
+				toolId &&
+				matchingIdIndex !== undefined &&
+				matchingIdIndex !== toolIndex &&
+				targetTool
+			)
+				return
+			if (
+				toolId &&
+				this.claimToolCallOwner(topicId, messageChunk.correlation_id, toolId) === "conflict"
+			)
+				return
 
 			let existingTool = targetTool
 			if (toolId && matchingIdIndex !== undefined && matchingIdIndex !== toolIndex) {
-				if (targetTool) return
 				existingTool = streamState.tool_calls[matchingIdIndex]
 				delete streamState.tool_calls[matchingIdIndex]
 			}
@@ -1783,6 +2328,69 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				argCache + incomingArguments,
 			)
 		})
+
+		const toolCallDeltas = streamState.tool_calls.reduce<SuperMagicToolCallDelta[]>(
+			(accumulator, toolCall, index) => {
+				if (!toolCall) return accumulator
+				const previous = previousTools[index]
+				const argumentsValue = toolCall.function?.arguments || ""
+				const changed =
+					!previous ||
+					previous.id !== toolCall.id ||
+					previous.name !== toolCall.function?.name ||
+					previous.arguments !== argumentsValue
+				if (!changed) return accumulator
+				const previousArguments = previous?.arguments || ""
+				accumulator.push({
+					index,
+					...(toolCall.id ? { id: toolCall.id } : {}),
+					...(toolCall.function?.name ? { name: toolCall.function.name } : {}),
+					...(argumentsValue !== previousArguments
+						? {
+								argumentsDelta: argumentsValue.startsWith(previousArguments)
+									? argumentsValue.slice(previousArguments.length)
+									: argumentsValue,
+							}
+						: {}),
+					argumentsLength: argumentsValue.length,
+				})
+				return accumulator
+			},
+			[],
+		)
+		const contentDelta = streamState.content.slice(previousContentLength)
+		const reasoningContentDelta = streamState.reasoning_content.slice(
+			previousReasoningContentLength,
+		)
+		const startsWith = reasoningContentDelta
+			? "reasoning"
+			: contentDelta
+				? "content"
+				: toolCallDeltas.length > 0
+					? "tool_call"
+					: "metadata"
+		this.publishStreamStarted(
+			topicId,
+			messageChunk.correlation_id,
+			Number(messageChunk.i),
+			startsWith,
+		)
+		if (contentDelta || reasoningContentDelta || toolCallDeltas.length > 0) {
+			this.publishStreamDelta(topicId, messageChunk.correlation_id, {
+				chunkIndex: Number(messageChunk.i),
+				contentDelta,
+				contentLength: streamState.content.length,
+				reasoningContentDelta,
+				reasoningContentLength: streamState.reasoning_content.length,
+				toolCallDeltas,
+			})
+		}
+		if (isFinalChunk) {
+			this.publishStreamEnded(topicId, messageChunk.correlation_id, "finish_reason", {
+				finishReason: String(choice?.finish_reason || "") || null,
+				awaitingCanonicalMessage: true,
+			})
+		}
 
 		if (!isFinalChunk && hasEffectiveProgress) {
 			// Arm recovery from chunk receipt even while the typewriter is still projecting.
@@ -2213,6 +2821,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		messageNode?: RawSuperMagicMessageNode,
 		seqId?: unknown,
 		targetMap?: Map<string, ToolResponseState>,
+		source: SuperMagicEventSource = "im",
 	) {
 		if (messageNode?.role !== "tool") return
 		const rawTool = messageNode.tool
@@ -2233,6 +2842,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		const toolResponseMap = targetMap || this.toolResponseMap.get(topicId) || new Map()
+		// A rejected raw response still establishes an empty Topic bucket, preserving the
+		// existing observable shape while keeping the canonical tool identity absent.
+		if (!targetMap && !this.toolResponseMap.has(topicId)) {
+			this.toolResponseMap.set(topicId, toolResponseMap)
+		}
+		const correlationId = String(messageNode.correlation_id || "").trim()
+		const ownerCorrelationId = this.getToolCallOwner(topicId, toolId)
+		const isOrphanFinishTask =
+			!ownerCorrelationId && this.isOrphanFinishTaskResponse(messageNode, toolId)
+		if (!isOrphanFinishTask && ownerCorrelationId !== correlationId) return
+
 		const current = toolResponseMap.get(toolId)
 		const normalizedSeqId = this.getValidToolResponseSeqId(seqId)
 		const seqMap = this.getToolResponseSeqMap(topicId)
@@ -2252,7 +2872,27 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			...(rawTool as ToolResponseState),
 			id: toolId,
 		}
-		if (rawTool.status !== undefined && !this.isValidToolResponseStatus(rawTool.status)) {
+		const publishSettlement = (response: ToolResponseState) => {
+			// HTTP snapshot 使用 targetMap 批量构建 canonical 状态；是否对外发布由同步边界统一裁决。
+			if (!targetMap && !isOrphanFinishTask)
+				this.publishToolCallSettled(topicId, toolId, response, messageNode, source)
+		}
+		if (rawTool.status === undefined) {
+			const hasValidCurrentStatus = this.isValidToolResponseStatus(current?.status)
+			const fallbackStatus = hasValidCurrentStatus ? current?.status : "running"
+			incoming.status = fallbackStatus
+			if (shouldReportProtocolWarning) {
+				console.warn("[SuperMagicStore] tool response missing status", {
+					code: "tool-response-missing-status",
+					topicId,
+					toolId,
+					fallbackStatus,
+					resolution: hasValidCurrentStatus
+						? "preserve-current-status"
+						: "default-running",
+				})
+			}
+		} else if (!this.isValidToolResponseStatus(rawTool.status)) {
 			const fallbackStatus = this.isValidToolResponseStatus(current?.status)
 				? current.status
 				: "running"
@@ -2271,13 +2911,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			toolResponseMap.set(toolId, incoming)
 			if (normalizedSeqId) seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
+			publishSettlement(incoming)
 			return
 		}
 		if (normalizedSeqId && !latestSeqId) {
 			// response_missing 等无版本占位被真实消息接管时，从这条消息开始建立 seq 基线。
-			toolResponseMap.set(toolId, this.mergeToolResponseState(current, incoming))
+			const nextState = this.mergeToolResponseState(current, incoming)
+			toolResponseMap.set(toolId, nextState)
 			seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
+			publishSettlement(nextState)
 			return
 		}
 
@@ -2306,12 +2949,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const supplemented = this.mergeToolResponseState(current, incoming)
 				toolResponseMap.set(toolId, supplemented)
 				this.toolResponseMap.set(topicId, toolResponseMap)
+				publishSettlement(supplemented)
 				return
 			}
 
-			toolResponseMap.set(toolId, this.mergeToolResponseState(current, incoming))
+			const nextState = this.mergeToolResponseState(current, incoming)
+			toolResponseMap.set(toolId, nextState)
 			seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
+			publishSettlement(nextState)
 			return
 		}
 
@@ -2322,6 +2968,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (nextState === current || isEqual(nextState, current)) return
 		toolResponseMap.set(toolId, nextState)
 		this.toolResponseMap.set(topicId, toolResponseMap)
+		publishSettlement(nextState)
 	}
 
 	private mergeUnknownSeqToolResponseState(
@@ -2698,7 +3345,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		const msgIdSet = new Set(msgCache.map((o) => o?.app_message_id))
 
-		const messageNode = getRawMessageNode(message?.message)
+		const messageNode = this.applyAssistantToolOwnership(
+			topicId,
+			getRawMessageNode(message?.message),
+		)
 
 		const appMessageId = message?.message?.app_message_id as string
 
@@ -2729,7 +3379,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.recordToolResponse(topicId, messageNode, message?.seq_id)
 		const isTaskSuspendedEvent = messageNode?.event === TASK_SUSPENDED_EVENT
 		if (isTaskSuspendedEvent) {
-			this.handleTopicSuspended(topicId)
+			this.handleTopicSuspended(topicId, "im")
 		}
 		if (messageNode?.role === "assistant" && !isTaskSuspendedEvent) {
 			// 新 assistant 到达证明上一轮已推进；排除当前 assistant，避免把它自己的
@@ -2812,6 +3462,25 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 				const currentNode = this.messageMap.get(correlationId)
 				if (appMessageId && currentNode) this.messageMap.set(appMessageId, currentNode)
+				const committedMessage =
+					(this.messages.get(topicId) || []).find(
+						(item) =>
+							item.app_message_id === appMessageId ||
+							(item.role === "assistant" && item.correlation_id === correlationId),
+					) || nextMessage
+				const committedNode = (currentNode || messageNode) as RawSuperMagicMessageNode
+				// 该分支接受的是命中流式占位卡的首个持久 Assistant；先完成 canonical
+				// 身份和终态映射，再发布一次标准事件，后续打字机投影不得重复发布。
+				this.publishStreamEnded(
+					topicId,
+					correlationId,
+					this.resolveAuthoritativeStreamEndReason(
+						committedMessage.status === "revoked" ? "revoked" : committedNode.status,
+					),
+					{ awaitingCanonicalMessage: false },
+					"im",
+				)
+				this.publishMessageCommitted(topicId, committedMessage, committedNode, "im")
 				this.queueMessagePersistence(topicId, message, true)
 			}
 			return
@@ -2852,13 +3521,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 			this.processMessageBuffer(topicId)
 		}
-	}
-
-	/** 注册指定话题的新消息到达监听，仅响应增量 arrived 事件。 */
-	registerTopicMessageListener(
-		params: RegisterTopicMessageListenerParams<MessageItem, TopicMessageNode>,
-	) {
-		return this.topicMessageListenerRegistry.register(params)
 	}
 
 	/**
@@ -3116,14 +3778,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			)
 		}
 
-		const payload = {
+		this.publishStreamEnded(
 			topicId,
-			message: finalCard,
-			messageNode: authoritativeNode,
-			stage: "arrived" as const,
-		} satisfies TopicMessageListenerPayload
-		this.emitTopicMessageArrived(payload)
-		this.emitDomainEvents(payload)
+			correlationId,
+			this.resolveAuthoritativeStreamEndReason(
+				finalCard.status === "revoked" ? "revoked" : authoritativeNode.status,
+			),
+			{ awaitingCanonicalMessage: false },
+			"im",
+		)
+		this.publishMessageCommitted(topicId, finalCard, authoritativeNode, "im")
 		if (authoritativeNode.status === "finished") {
 			this.fillMissingToolResponses(topicId)
 		}
@@ -3166,7 +3830,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			buffer.isProcessing = true
 			const [nextMessage] = buffer.messages.splice(nextMessageIndex, 1)
 
-			const messageNode = getRawMessageNode(nextMessage?.seq?.message)
+			const messageNode = this.applyAssistantToolOwnership(
+				topicId,
+				getRawMessageNode(nextMessage?.seq?.message),
+			)
 
 			const message = transformRawMessage(nextMessage?.seq as RawSuperMagicMessageSequence)
 
@@ -3186,19 +3853,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				messages.push(message)
 				this.messages.set(topicId, unionBy(sortMessages(messages), "app_message_id"))
 				this.messageMap.set(message?.app_message_id, messageNode)
-
-				this.emitTopicMessageArrived({
-					topicId,
-					message,
-					messageNode,
-					stage: "arrived",
-				})
-				this.emitDomainEvents({
-					topicId,
-					message,
-					messageNode,
-					stage: "arrived",
-				})
+				this.publishMessageCommitted(topicId, message, messageNode, "im")
 
 				buffer.isProcessing = false
 				this.processMessageBuffer(topicId)
@@ -3325,14 +3980,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						correlationNode?.role,
 						correlationNode?.role === "assistant" ? undefined : correlationId,
 					)
-					const payload = {
+					this.publishStreamEnded(
 						topicId,
-						message: finalCard,
-						messageNode: authoritativeNode,
-						stage: "arrived" as const,
-					} satisfies TopicMessageListenerPayload
-					this.emitTopicMessageArrived(payload)
-					this.emitDomainEvents(payload)
+						correlationId,
+						this.resolveAuthoritativeStreamEndReason(
+							finalCard.status === "revoked" ? "revoked" : authoritativeNode.status,
+						),
+						{ awaitingCanonicalMessage: false },
+						"im",
+					)
+					this.publishMessageCommitted(topicId, finalCard, authoritativeNode, "im")
 					if (authoritativeNode.status === "finished") {
 						this.fillMissingToolResponses(topicId)
 					}
@@ -3391,6 +4048,25 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					if (rawAppMessageId && currentNode)
 						this.messageMap.set(rawAppMessageId, currentNode)
 				}
+				const committedMessage =
+					(this.messages.get(topicId) || []).find(
+						(item) =>
+							item.app_message_id === rawAppMessageId ||
+							(item.role === "assistant" && item.correlation_id === correlationId),
+					) || message
+				const committedNode = (this.messageMap.get(rawAppMessageId) ||
+					this.messageMap.get(correlationId) ||
+					messageNode) as RawSuperMagicMessageNode
+				this.publishStreamEnded(
+					topicId,
+					correlationId,
+					this.resolveAuthoritativeStreamEndReason(
+						committedMessage.status === "revoked" ? "revoked" : committedNode.status,
+					),
+					{ awaitingCanonicalMessage: false },
+					"im",
+				)
+				this.publishMessageCommitted(topicId, committedMessage, committedNode, "im")
 			}
 		}
 	}
@@ -3715,18 +4391,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (correlationId) {
 			const messages = this.messages.get(topicId) || []
 			const targetMessage = this.findAssistantAliasTarget(topicId, correlationId, messages)
-			if (targetMessage) {
-				const payload = {
-					topicId,
-					message: targetMessage,
-					messageNode:
-						this.getMessageNode(targetMessage.app_message_id) ||
-						this.getMessageNode(correlationId),
-					stage: "arrived" as const,
-				} satisfies TopicMessageListenerPayload
-				this.emitTopicMessageArrived(payload)
-				this.emitDomainEvents(payload)
-			}
 
 			const completedNode = this.getMessageNode(correlationId) as
 				| RawSuperMagicMessageNode
@@ -3769,12 +4433,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
-	private handleTopicSuspended(topicId: string) {
+	private handleTopicSuspended(topicId: string, source: SuperMagicEventSource) {
 		const topicMeta = this.topicMeta.get(topicId)
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
+		const previousToolResponses = new Map(toolResponseMap)
+		const suspendedCorrelationIds: string[] = []
 
 		topicMeta?.content.forEach((streamState, correlationId) => {
 			if (streamState.isFinalMessageReceived) return
+			suspendedCorrelationIds.push(correlationId)
 
 			const validToolCalls = this.getProjectableToolCalls(streamState.tool_calls).filter(
 				isToolCallArgumentsComplete,
@@ -3813,6 +4480,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		this.fillInterruptedToolResponses(topicId, toolResponseMap)
 		this.toolResponseMap.set(topicId, toolResponseMap)
+		suspendedCorrelationIds.forEach((correlationId) => {
+			this.publishStreamEnded(
+				topicId,
+				correlationId,
+				"suspended",
+				{ awaitingCanonicalMessage: false },
+				source,
+			)
+		})
+		toolResponseMap.forEach((response, toolId) => {
+			const previous = previousToolResponses.get(toolId)
+			if (previous && isEqual(previous, response)) return
+			this.publishToolCallSettled(topicId, toolId, response, undefined, source)
+		})
 	}
 
 	private isAskUserToolCall(tc: ToolCall) {
@@ -3843,6 +4524,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
 		let changed = false
+		const settlements: Array<{ toolId: string; response: ToolResponseState }> = []
 		const settleToolCalls = (toolCalls: ToolCall[]) => {
 			toolCalls.forEach((toolCall) => {
 				const toolId = String(toolCall.id || "")
@@ -3864,7 +4546,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					name: toolCall.tool?.name || toolCall.function?.name || "",
 					status: "response_missing",
 				}
-				toolResponseMap.set(toolId, this.mergeToolResponseState(current, missingResponse))
+				const nextState = this.mergeToolResponseState(current, missingResponse)
+				toolResponseMap.set(toolId, nextState)
+				settlements.push({ toolId, response: nextState })
 				changed = true
 			})
 		}
@@ -3892,7 +4576,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			settleToolCalls(streamState.tool_calls)
 		})
 
-		if (changed) this.toolResponseMap.set(topicId, toolResponseMap)
+		if (changed) {
+			this.toolResponseMap.set(topicId, toolResponseMap)
+			settlements.forEach(({ toolId, response }) => {
+				this.publishToolCallSettled(topicId, toolId, response)
+			})
+		}
 	}
 
 	/**
@@ -4485,10 +5174,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			content:
 				'{"type":"doc","content":[{"type":"paragraph","attrs":{"suggestion":"，最好能生成一个时间轴图表"},"content":[{"type":"text","text":"帮我整理"漫威"宇宙中的英雄与电影，我需要从钢铁侠开始到现在的蜘蛛侠，每年上映的漫威宇宙电影有哪些？，并列出对应的主要英雄角色、电影海报、上映时间等等，行程可视化的html，按照时间线排序。"}]}]}',
 		})
-	}
-
-	registerDomainEventListener(params: RegisterDomainEventListenerParams) {
-		return this.domainEventRegistry.register(params)
 	}
 }
 

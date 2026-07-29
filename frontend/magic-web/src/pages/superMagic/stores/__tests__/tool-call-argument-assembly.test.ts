@@ -835,7 +835,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		expectSingleFinalMessage(store)
 	})
 
-	it("同一个 tool id 在不同 correlation 中复用。", () => {
+	it("同 Topic 已建立关联的 tool.id 不得再关联到其他 correlation。", () => {
 		const store = createStore()
 		const firstCorrelation = "correlation-a"
 		const secondCorrelation = "correlation-b"
@@ -843,7 +843,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		store.receiveChunk(
 			createChunk({
 				correlationId: firstCorrelation,
-				toolCalls: [createToolCall({ id: "shared-tool", arguments: '{"value":"A"}' })],
+				toolCalls: [createToolCall({ id: "shared-tool", arguments: '{"value":"A"' })],
 			}),
 		)
 		store.receiveChunk(
@@ -852,9 +852,60 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 				toolCalls: [createToolCall({ id: "shared-tool", arguments: '{"value":"B"}' })],
 			}),
 		)
+		store.receiveChunk(
+			createChunk({
+				i: 1,
+				correlationId: secondCorrelation,
+				toolCalls: [createToolCall({ id: "shared-tool" })],
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				i: 1,
+				correlationId: firstCorrelation,
+				toolCalls: [createArgumentsFragment("}")],
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				i: 2,
+				correlationId: secondCorrelation,
+				toolCalls: [createToolCall({ id: "tool-b", arguments: '{"value":"B"}' })],
+			}),
+		)
 
 		expect(getArguments(getStreamTools(store, firstCorrelation)[0])).toBe('{"value":"A"}')
-		expect(getArguments(getStreamTools(store, secondCorrelation)[0])).toBe('{"value":"B"}')
+		expect(getStreamTools(store, secondCorrelation).map((tool) => tool.id)).toEqual(["tool-b"])
+	})
+
+	it("未进入 canonical 的 malformed tool id 不得抢占 Topic owner。", () => {
+		const store = createStore()
+		const malformedCorrelation = "correlation-malformed"
+		const validCorrelation = "correlation-valid"
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: malformedCorrelation,
+				toolCalls: [
+					protocolToolCall({
+						id: "shared-tool",
+						type: "function",
+						function: { name: "read_file", arguments: "{}" },
+					}),
+				],
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				correlationId: validCorrelation,
+				toolCalls: [createToolCall({ id: "shared-tool", arguments: "{}" })],
+			}),
+		)
+
+		expect(getStreamTools(store, malformedCorrelation)).toEqual([])
+		expect(getStreamTools(store, validCorrelation)).toEqual([
+			expect.objectContaining({ id: "shared-tool" }),
+		])
 	})
 
 	it("工具头重复到达。", () => {

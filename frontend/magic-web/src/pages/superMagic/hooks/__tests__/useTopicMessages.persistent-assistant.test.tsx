@@ -4,10 +4,8 @@ import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import type {
-	RawSuperMagicMessageEnvelope,
-	TopicMessageListenerPayload,
-} from "@/pages/superMagic/stores/types"
+import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
+import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
 	ConversationMessageType,
@@ -436,8 +434,8 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		expect(assistantCards[0]?.app_message_id).toBe("assistant-exactly-once")
 		expect(arrivals.events).toHaveLength(1)
 		expect(arrivals.events[0]).toMatchObject({
-			stage: "arrived",
-			message: { app_message_id: "assistant-exactly-once" },
+			type: "message.committed",
+			payload: { message: { appMessageId: "assistant-exactly-once" } },
 		})
 		expect(superMagicStore.buffer.get(topic.chat_topic_id)?.messages ?? []).toHaveLength(0)
 		expect(getNode(correlationId)?.content).toBe("exactly once canonical")
@@ -615,13 +613,14 @@ function getAssistantCards(topicId: string, correlationId: string): ProjectedNod
 }
 
 function collectArrivals(topicId: string): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = superMagicStore.registerTopicMessageListener({
-		topicId,
-		callback: (payload) => events.push(payload),
-	})
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = superMagicStore.subscribe(
+		"message.committed",
+		(event) => events.push(event),
+		{ scope: { topicId } },
+	)
 	return { events, unsubscribe }
 }

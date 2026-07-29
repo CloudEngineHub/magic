@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
+import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
-	TopicMessageListenerPayload,
 } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -379,13 +379,12 @@ function collectRecoveryFailures(store: SuperMagicStore): {
 }
 
 function collectTopicArrivals(store: SuperMagicStore): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = store.registerTopicMessageListener({
-		topicId: TOPIC_A,
-		callback: (payload) => events.push(payload),
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = store.subscribe("message.committed", (event) => events.push(event), {
+		scope: { topicId: TOPIC_A },
 	})
 	return { events, unsubscribe }
 }
@@ -734,7 +733,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			expect.arrayContaining([expect.objectContaining({ app_message_id: "following-app" })]),
 		)
 		expect(
-			arrivals.events.filter((event) => event.message.app_message_id === "following-app"),
+			arrivals.events.filter(
+				(event) => event.payload.message.appMessageId === "following-app",
+			),
 		).toHaveLength(1)
 		expect(getNode(store, "queued-final-app")).toBeUndefined()
 		expect(getBufferedAppMessageIds(store)).toContain("queued-final-app")
@@ -772,7 +773,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.topicMeta.get(TOPIC_A)?.timer).toBeNull()
 		expect(store.topicMeta.get(TOPIC_A)?.recoveryTimer).toBeNull()
 		expect(
-			arrivals.events.filter((event) => event.message.app_message_id === "following-app"),
+			arrivals.events.filter(
+				(event) => event.payload.message.appMessageId === "following-app",
+			),
 		).toHaveLength(1)
 		unsubscribe()
 		arrivals.unsubscribe()
@@ -1373,6 +1376,87 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getCanonicalToolState(store, "legacy-tool-call-1")).toBeUndefined()
 		expect(getEffectiveToolState(store)?.status).toBe("finished")
+	})
+
+	it("首个 correlation 已终态后，独立 HTTP merge 仍拒绝同 Topic 的其他 correlation 复用 tool.id。", () => {
+		const store = createStore()
+		const toolId = "http-shared-tool"
+		const ownerCorrelationId = "http-tool-owner"
+		const incomingCorrelationId = "http-tool-conflict"
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: ownerCorrelationId,
+				toolCalls: [createToolCall({ id: toolId, status: "running" })],
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "http-tool-owner-app",
+				correlationId: ownerCorrelationId,
+				seqId: "100",
+				content: "owner canonical",
+				toolCalls: [createToolCall({ id: toolId, status: "running" })],
+				nodeStatus: "finished",
+			}),
+		)
+		advanceRendering()
+
+		expect(getNode(store, ownerCorrelationId)?.tool_calls?.map((tool) => tool.id)).toEqual([
+			toolId,
+		])
+		expect(store.getStreamState(TOPIC_A, ownerCorrelationId)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+
+		const generation = store.beginTopicSync(TOPIC_A)
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					appMessageId: "http-tool-conflict-app",
+					correlationId: incomingCorrelationId,
+					seqId: "101",
+					content: "conflicting canonical",
+					toolCalls: [createToolCall({ id: toolId, status: "running" })],
+				}),
+			],
+			{ mode: "merge", syncGeneration: generation },
+		)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "101",
+			}),
+		).toBe(true)
+		advanceRendering()
+
+		expect(getNode(store, ownerCorrelationId)?.tool_calls?.map((tool) => tool.id)).toEqual([
+			toolId,
+		])
+		expect(getNode(store, "http-tool-conflict-app")).toMatchObject({
+			role: "assistant",
+			correlation_id: incomingCorrelationId,
+			content: "conflicting canonical",
+		})
+		expect(
+			getNode(store, "http-tool-conflict-app")?.tool_calls?.some(
+				(tool) => tool.id === toolId,
+			) ?? false,
+		).toBe(false)
+		expect(getMessageRecords(store)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					app_message_id: "http-tool-owner-app",
+					correlation_id: ownerCorrelationId,
+				}),
+				expect.objectContaining({
+					app_message_id: "http-tool-conflict-app",
+					correlation_id: incomingCorrelationId,
+				}),
+			]),
+		)
 	})
 
 	it("同 appMessageId、不同 correlationId 的 HTTP 记录必须整体拒绝。", () => {
@@ -2357,8 +2441,8 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		expect(
 			arrivals.events
-				.filter((event) => ["100", "101"].includes(event.message.seq_id))
-				.map((event) => event.message.seq_id),
+				.filter((event) => ["100", "101"].includes(event.payload.message.seqId || ""))
+				.map((event) => event.payload.message.seqId),
 		).toEqual(["100", "101"])
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		arrivals.unsubscribe()

@@ -5,34 +5,10 @@ import type {
 	SuperMagicNode,
 } from "@/types/chat/conversation_message"
 import type { SeqResponse } from "@/types/request"
-import {
-	type CrewDomainEventPayload as InternalCrewDomainEventPayload,
-	type RegisterDomainEventListenerParams as InternalRegisterDomainEventListenerParams,
-	type TaskDomainEventPayload as InternalTaskDomainEventPayload,
-	type RegisterTopicMessageListenerParams as InternalTopicMessageListenerParams,
-	type TopicMessageListenerPayload as TopicMessageListenerEventPayload,
-} from "./listener-registry"
 
 // ─── 基础别名 ────────────────────────────────────────────────
 
 export type SuperMagicStoreTopicId = string
-export type TopicMessageNode = unknown
-
-// ─── 领域事件相关（具化泛型后再导出） ───────────────────────
-
-export type RegisterTopicMessageListenerParams = InternalTopicMessageListenerParams<
-	MessageItem,
-	TopicMessageNode
->
-export type TopicMessageListenerPayload = TopicMessageListenerEventPayload<
-	MessageItem,
-	TopicMessageNode
->
-export type CrewDomainEventPayload = InternalCrewDomainEventPayload<MessageItem, TopicMessageNode>
-export type TaskDomainEventPayload = InternalTaskDomainEventPayload<MessageItem, TopicMessageNode>
-export type DomainEventPayload = CrewDomainEventPayload | TaskDomainEventPayload
-export type RegisterDomainEventListenerParams =
-	InternalRegisterDomainEventListenerParams<DomainEventPayload>
 
 // ─── 原始消息相关 ────────────────────────────────────────────
 

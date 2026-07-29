@@ -5,11 +5,11 @@ import {
 	messagesConverter,
 } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
+import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
 	TokenUsage,
-	TopicMessageListenerPayload,
 } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -359,13 +359,12 @@ function collectRecoveryRequests(store: SuperMagicStore): {
 }
 
 function collectTopicArrivals(store: SuperMagicStore): {
-	events: TopicMessageListenerPayload[]
+	events: MessageCommittedEvent[]
 	unsubscribe: () => void
 } {
-	const events: TopicMessageListenerPayload[] = []
-	const unsubscribe = store.registerTopicMessageListener({
-		topicId: TOPIC_ID,
-		callback: (payload) => events.push(payload),
+	const events: MessageCommittedEvent[] = []
+	const unsubscribe = store.subscribe("message.committed", (event) => events.push(event), {
+		scope: { topicId: TOPIC_ID },
 	})
 	return { events, unsubscribe }
 }

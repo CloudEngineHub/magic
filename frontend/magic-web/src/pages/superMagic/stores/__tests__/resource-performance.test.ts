@@ -234,9 +234,8 @@ describe("SuperMagicStore / 资源和性能", () => {
 	it("MobX 对每个字符片段产生观察更新。", () => {
 		const store = createStore()
 		const arrivals: unknown[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: (payload) => arrivals.push(payload),
+		const unsubscribe = store.subscribe("message.committed", (event) => arrivals.push(event), {
+			scope: { topicId: TOPIC_A },
 		})
 		const text = "a".repeat(128)
 		for (const [index, char] of [...text].entries()) {
@@ -288,10 +287,11 @@ describe("SuperMagicStore / 资源和性能", () => {
 	it("buffer 长期积压大量完整消息对象。", () => {
 		const store = createStore()
 		const arrived: string[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: ({ message }) => arrived.push(message.app_message_id),
-		})
+		const unsubscribe = store.subscribe(
+			"message.committed",
+			({ payload }) => arrived.push(payload.message.appMessageId || ""),
+			{ scope: { topicId: TOPIC_A } },
+		)
 		for (let index = 0; index < 64; index += 1) {
 			store.enqueueMessage(
 				TOPIC_A,
@@ -458,10 +458,11 @@ describe("SuperMagicStore / 资源和性能", () => {
 	it("重复 chunk 导致 IndexedDB 写入量翻倍。", () => {
 		const store = createStore()
 		const canonicalArrivals: unknown[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: (payload) => canonicalArrivals.push(payload),
-		})
+		const unsubscribe = store.subscribe(
+			"message.committed",
+			(event) => canonicalArrivals.push(event),
+			{ scope: { topicId: TOPIC_A } },
+		)
 		const chunk = createChunk({ i: 0, content: "A" })
 		store.receiveChunk(chunk)
 		store.receiveChunk(JSON.parse(JSON.stringify(chunk)) as SuperMagicChunkMessage)
@@ -469,7 +470,8 @@ describe("SuperMagicStore / 资源和性能", () => {
 		settle()
 
 		// The canonical completion may be persisted once, but duplicate transport input must not double it.
-		expect(canonicalArrivals).toHaveLength(1)
+		// chunk 与打字机只改变流式投影，不生成 canonical message committed 事件。
+		expect(canonicalArrivals).toHaveLength(0)
 		expect(getNode(store)?.content).toBe("AB")
 		unsubscribe()
 	})
