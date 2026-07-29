@@ -6,6 +6,7 @@
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
 	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
 	const DEFAULT_MAX_OUTPUT_IMAGES = 4
+	const DEFAULT_PANEL_HEIGHT = 640
 	const SHARED_GENERATION_CONFIG_CACHE_VERSION = 1
 	const SHARED_GENERATION_CONFIG_KEYS = [
 		"modelId",
@@ -571,7 +572,7 @@
 		/** 更新高度 */
 		function updateHeight() {
 			requestAnimationFrame(() => {
-				ctx.ui?.setHeight?.(root.scrollHeight)
+				ctx.ui?.setHeight?.(Math.max(root.scrollHeight, DEFAULT_PANEL_HEIGHT))
 			})
 		}
 

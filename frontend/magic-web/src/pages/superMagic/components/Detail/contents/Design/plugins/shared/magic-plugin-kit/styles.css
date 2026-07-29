@@ -1,7 +1,7 @@
 .mpk-panel {
 	display: flex;
 	flex-direction: column;
-	height: 640px;
+	height: 100vh;
 	overflow: hidden;
 	color: var(--mpk-foreground);
 	--mpk-background-rgb: var(--background-rgb, 255 255 255);
