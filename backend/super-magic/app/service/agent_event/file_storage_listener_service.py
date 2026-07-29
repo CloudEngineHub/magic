@@ -825,7 +825,12 @@ class FileStorageListenerService:
             workspace_dir = PathManager.get_workspace_dir()
             collected = 0
             for relative_path in relative_paths:
-                absolute_path = str(workspace_dir / relative_path.lstrip("/"))
+                # 跨项目挂载（referenced-projects）的变更以 agent 视角绝对路径记录，
+                # 直接使用该路径；workspace 内的相对路径仍拼 workspace 目录
+                if os.path.isabs(relative_path):
+                    absolute_path = relative_path
+                else:
+                    absolute_path = str(workspace_dir / relative_path.lstrip("/"))
 
                 constructed = await FileStorageListenerService._construct_file_key(absolute_path)
                 if not constructed:
@@ -863,7 +868,8 @@ class FileStorageListenerService:
             file_snapshots: checkpoint_info.file_snapshots
 
         Returns:
-            List[str]: 按首次出现顺序去重后的 workspace 相对路径列表
+            List[str]: 按首次出现顺序去重后的文件路径列表；workspace 内文件为
+            相对路径，跨项目挂载（referenced-projects）文件为 agent 视角绝对路径
         """
         seen: set = set()
         ordered: List[str] = []

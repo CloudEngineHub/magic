@@ -15,6 +15,7 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\Uplo
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionInterface;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolMention;
 
@@ -31,6 +32,7 @@ final class MentionAssembler
         return match ($mentionAttrType) {
             MentionType::PROJECT_FILE => new ProjectFileMention($mention),
             MentionType::PROJECT_DIRECTORY => new DirectoryMention($mention),
+            MentionType::PROJECT => new ProjectMention($mention),
             MentionType::UPLOAD_FILE => new UploadFileMention($mention),
             MentionType::AGENT => new AgentMention($mention),
             MentionType::MCP => new McpMention($mention),
