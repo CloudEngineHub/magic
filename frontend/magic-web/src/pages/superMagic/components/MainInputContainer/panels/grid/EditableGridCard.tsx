@@ -10,7 +10,6 @@ import { getOptionValue, isImageIconSource } from "../utils"
 
 interface EditableGridCardProps {
 	item: OptionItem
-	itemKey: string
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -19,7 +18,6 @@ interface EditableGridCardProps {
 
 export function EditableGridCard({
 	item,
-	itemKey,
 	isSelected,
 	onSelect,
 	onEdit,
@@ -28,7 +26,7 @@ export function EditableGridCard({
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const itemValue = getOptionValue(item)
-	const label = lt(item.label) ?? lt(item.value) ?? itemValue
+	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 
 	return (
@@ -37,7 +35,7 @@ export function EditableGridCard({
 				"group relative flex w-full flex-col gap-1.5 overflow-hidden rounded-lg p-1 transition-all",
 				isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
 			)}
-			data-testid={`editable-grid-card-${itemKey}`}
+			data-testid={`editable-grid-card-${itemValue}`}
 		>
 			{/* Image area */}
 			<div className="relative flex h-28 w-full flex-col overflow-hidden rounded-lg border border-border bg-background">
@@ -71,7 +69,7 @@ export function EditableGridCard({
 						size="sm"
 						className="h-9 flex-1 gap-2 shadow-xs"
 						onClick={onEdit}
-						data-testid={`editable-grid-card-edit-${itemKey}`}
+						data-testid={`editable-grid-card-edit-${itemValue}`}
 					>
 						<PencilLine className="size-4" />
 						{t("playbook.edit.inspiration.actions.edit")}
@@ -81,7 +79,7 @@ export function EditableGridCard({
 						size="icon"
 						className="size-9 shrink-0 shadow-xs"
 						onClick={onDelete}
-						data-testid={`editable-grid-card-delete-${itemKey}`}
+						data-testid={`editable-grid-card-delete-${itemValue}`}
 					>
 						<Trash2 className="size-4" />
 					</Button>
@@ -114,8 +112,8 @@ export function EditableGridCard({
 			<div className="absolute left-2.5 top-2.5">
 				<Checkbox
 					checked={isSelected}
-					onCheckedChange={(checked) => onSelect(itemKey, !!checked)}
-					data-testid={`editable-grid-card-checkbox-${itemKey}`}
+					onCheckedChange={(checked) => onSelect(itemValue, !!checked)}
+					data-testid={`editable-grid-card-checkbox-${itemValue}`}
 				/>
 			</div>
 		</div>

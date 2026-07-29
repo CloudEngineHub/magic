@@ -3,14 +3,14 @@ import { SkillPanelType } from "@/pages/superMagic/components/MainInputContainer
 import { mapPlaybookToScene, mapSceneToPlaybookParams } from "./playbook-mapper"
 
 describe("mapPlaybookToScene", () => {
-	it("preserves list snapshot config without generating editable item identities", () => {
+	it("migrates a legacy inspiration prompt while preserving value", () => {
 		const scene = mapPlaybookToScene({
 			id: "playbook-1",
 			name: "Scene",
 			description: null,
 			icon: null,
 			enabled: true,
-			updatedAt: "2026-07-28T00:00:00Z",
+			updatedAt: "2026-07-29T00:00:00Z",
 			config: {
 				scenes_config: {
 					inspiration: {
@@ -21,10 +21,7 @@ describe("mapPlaybookToScene", () => {
 									group_key: "default",
 									group_name: "Default",
 									children: [
-										{
-											value: "k8m4n2p9q1",
-											description: "Insert this prompt",
-										},
+										{ value: "stable-id", description: "Legacy prompt" },
 									],
 								},
 							],
@@ -34,23 +31,22 @@ describe("mapPlaybookToScene", () => {
 			},
 		})
 
-		const listItem = scene.configs?.inspiration?.demo.groups[0]?.children?.[0]
-		expect(scene.configs?.inspiration?.schema_version).toBeUndefined()
-		expect(listItem).toEqual({
-			value: "k8m4n2p9q1",
-			description: "Insert this prompt",
+		expect(scene.configs?.inspiration?.demo.groups[0]?.children?.[0]).toEqual({
+			value: "stable-id",
+			prompt: "Legacy prompt",
 		})
-		expect(listItem).not.toHaveProperty("item_key")
 	})
+})
 
-	it("migrates unversioned legacy inspiration at the save boundary", () => {
+describe("mapSceneToPlaybookParams", () => {
+	it("persists legacy descriptions as prompts while preserving value identity", () => {
 		const params = mapSceneToPlaybookParams({
 			id: "playbook-1",
 			name: "Scene",
 			description: "Description",
 			icon: "sparkles",
 			enabled: true,
-			update_at: "2026-07-28T00:00:00Z",
+			update_at: "2026-07-29T00:00:00Z",
 			configs: {
 				inspiration: {
 					type: SkillPanelType.DEMO,
@@ -61,8 +57,8 @@ describe("mapPlaybookToScene", () => {
 								group_name: "Default",
 								children: [
 									{
-										value: "report2026",
-										description: "Display description",
+										value: "stable-id",
+										description: "Legacy prompt",
 									},
 								],
 							},
@@ -72,11 +68,7 @@ describe("mapPlaybookToScene", () => {
 			},
 		})
 
-		const inspiration = params.config.scenes_config?.inspiration
-		const savedItem = inspiration?.demo.groups[0]?.children?.[0]
-		expect(inspiration?.schema_version).toBe(2)
-		expect(savedItem?.item_key).toBe("report2026")
-		expect(savedItem?.value).toBe("Display description")
-		expect(savedItem).not.toHaveProperty("description")
+		const item = params.config.scenes_config?.inspiration?.demo.groups[0]?.children?.[0]
+		expect(item).toEqual({ value: "stable-id", prompt: "Legacy prompt" })
 	})
 })

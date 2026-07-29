@@ -1,5 +1,4 @@
 import {
-	CURRENT_DEMO_PANEL_SCHEMA_VERSION,
 	SkillPanelType,
 	OptionViewType,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
@@ -45,7 +44,6 @@ export function createDefaultScene(): SceneItem {
 				guide: { items: [] },
 			},
 			inspiration: {
-				schema_version: CURRENT_DEMO_PANEL_SCHEMA_VERSION,
 				type: SkillPanelType.DEMO,
 				demo: {
 					view_type: OptionViewType.TEXT_LIST,

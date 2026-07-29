@@ -3,32 +3,40 @@ import type {
 	OptionGroup,
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { getOptionValue } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 
-export type InspirationItemData = Omit<Partial<OptionItem>, "item_key" | "label" | "value"> & {
+export type InspirationItemData = Omit<
+	Partial<OptionItem>,
+	"value" | "label" | "prompt" | "description"
+> & {
 	label: LocaleText
-	value: LocaleText
+	prompt: LocaleText
 }
 
 export function updateInspirationItem(
 	groups: OptionGroup[],
-	targetItemKey: string,
-	data: Partial<OptionItem>,
+	targetValue: string,
+	data: InspirationItemData,
 	targetGroupKey: string,
 ): OptionGroup[] {
 	if (!groups.some((group) => group.group_key === targetGroupKey)) return groups
 
 	const sourceGroup = groups.find((group) =>
-		(group.children ?? []).some((item) => item.item_key === targetItemKey),
+		(group.children ?? []).some((item) => getOptionValue(item) === targetValue),
 	)
 	if (!sourceGroup) return groups
 
-	const currentItem = (sourceGroup.children ?? []).find((item) => item.item_key === targetItemKey)
+	const currentItem = (sourceGroup.children ?? []).find(
+		(item) => getOptionValue(item) === targetValue,
+	)
 	if (!currentItem) return groups
 
+	// The prompt can change, but value remains the persisted identity used by CRUD and defaults.
 	const updatedItem: OptionItem = {
 		...currentItem,
 		...data,
-		item_key: targetItemKey,
+		value: currentItem.value,
+		description: undefined,
 	}
 
 	return groups.map((group) => {
@@ -37,14 +45,16 @@ export function updateInspirationItem(
 				return {
 					...group,
 					children: (group.children ?? []).map((item) =>
-						item.item_key === targetItemKey ? updatedItem : item,
+						getOptionValue(item) === targetValue ? updatedItem : item,
 					),
 				}
 			}
 
 			return {
 				...group,
-				children: (group.children ?? []).filter((item) => item.item_key !== targetItemKey),
+				children: (group.children ?? []).filter(
+					(item) => getOptionValue(item) !== targetValue,
+				),
 			}
 		}
 
@@ -58,14 +68,12 @@ export function updateInspirationItem(
 
 export function removeInspirationItems(
 	groups: OptionGroup[],
-	targetItemKeys: ReadonlySet<string>,
+	targetValues: ReadonlySet<string>,
 ): OptionGroup[] {
-	if (targetItemKeys.size === 0) return groups
+	if (targetValues.size === 0) return groups
 
 	return groups.map((group) => ({
 		...group,
-		children: (group.children ?? []).filter(
-			(item) => !item.item_key || !targetItemKeys.has(item.item_key),
-		),
+		children: (group.children ?? []).filter((item) => !targetValues.has(getOptionValue(item))),
 	}))
 }

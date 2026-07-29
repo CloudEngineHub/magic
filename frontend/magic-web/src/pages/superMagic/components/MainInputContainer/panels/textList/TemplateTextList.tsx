@@ -75,7 +75,8 @@ const TemplateTextList = observer(
 							<span className="min-w-0 flex-1 truncate text-left leading-5">
 								{lt(template.label) ??
 									lt(template.description) ??
-									lt(template.value)}
+									lt(template.value) ??
+									templateValue}
 							</span>
 							<ArrowUpRight className="size-4 shrink-0" />
 						</motion.button>

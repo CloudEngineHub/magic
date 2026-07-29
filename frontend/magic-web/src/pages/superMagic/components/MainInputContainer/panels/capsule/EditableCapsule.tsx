@@ -6,13 +6,12 @@ import { cn } from "@/lib/utils"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem, OptionItemKeyResolver } from "../types"
-import { getOptionValue, isImageIconSource, resolveOptionItemKey } from "../utils"
+import type { OptionItem } from "../types"
+import { getOptionValue, isImageIconSource } from "../utils"
 
 interface EditableCapsuleProps {
 	items: OptionItem[]
 	selectedKeys: Set<string>
-	getItemKey?: OptionItemKeyResolver
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: (item: OptionItem) => void
 	onDelete: (value: string) => void
@@ -20,7 +19,6 @@ interface EditableCapsuleProps {
 
 interface EditableCapsuleItemProps {
 	item: OptionItem
-	itemKey: string
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -29,7 +27,6 @@ interface EditableCapsuleItemProps {
 
 function EditableCapsuleItem({
 	item,
-	itemKey,
 	isSelected,
 	onSelect,
 	onEdit,
@@ -38,7 +35,7 @@ function EditableCapsuleItem({
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const itemValue = getOptionValue(item)
-	const label = lt(item.label) ?? lt(item.value) ?? itemValue
+	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 
 	const menuItems = [
@@ -58,11 +55,14 @@ function EditableCapsuleItem({
 	]
 
 	return (
-		<div className="flex items-center gap-1.5" data-testid={`editable-capsule-item-${itemKey}`}>
+		<div
+			className="flex items-center gap-1.5"
+			data-testid={`editable-capsule-item-${itemValue}`}
+		>
 			<Checkbox
 				checked={isSelected}
-				onCheckedChange={(checked) => onSelect(itemKey, !!checked)}
-				data-testid={`editable-capsule-item-checkbox-${itemKey}`}
+				onCheckedChange={(checked) => onSelect(itemValue, !!checked)}
+				data-testid={`editable-capsule-item-checkbox-${itemValue}`}
 			/>
 			<div
 				className={cn(
@@ -92,7 +92,7 @@ function EditableCapsuleItem({
 						variant="ghost"
 						size="icon"
 						className="h-9 w-9 shrink-0"
-						data-testid={`editable-capsule-item-menu-${itemKey}`}
+						data-testid={`editable-capsule-item-menu-${itemValue}`}
 					>
 						<Ellipsis className="size-4" />
 					</Button>
@@ -105,24 +105,22 @@ function EditableCapsuleItem({
 export function EditableCapsule({
 	items,
 	selectedKeys,
-	getItemKey,
 	onSelect,
 	onEdit,
 	onDelete,
 }: EditableCapsuleProps) {
 	return (
 		<div className="flex w-full flex-wrap content-start items-start gap-2">
-			{items.map((item, index) => {
-				const itemKey = resolveOptionItemKey(item, index, getItemKey)
+			{items.map((item) => {
+				const itemValue = getOptionValue(item)
 				return (
 					<EditableCapsuleItem
-						key={itemKey}
+						key={itemValue}
 						item={item}
-						itemKey={itemKey}
-						isSelected={selectedKeys.has(itemKey)}
+						isSelected={selectedKeys.has(itemValue)}
 						onSelect={onSelect}
 						onEdit={() => onEdit(item)}
-						onDelete={() => onDelete(itemKey)}
+						onDelete={() => onDelete(itemValue)}
 					/>
 				)
 			})}

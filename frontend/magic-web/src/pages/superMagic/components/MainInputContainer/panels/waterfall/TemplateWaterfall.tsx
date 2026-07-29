@@ -29,6 +29,8 @@ const TemplateWaterfall = observer(
 		className,
 	}: TemplateWaterfallProps) => {
 		const { containerRef, columns } = useWaterfallColumns(maxColumns)
+		const selectedTemplateKey = selectedTemplate ? getOptionValue(selectedTemplate) : ""
+
 		const columnTemplates = useMemo(() => {
 			const cols: OptionItem[][] = Array.from({ length: columns }, () => [])
 
@@ -59,7 +61,7 @@ const TemplateWaterfall = observer(
 
 							return (
 								<motion.div
-									key={`${templateKey}-${itemIndex}`}
+									key={templateKey || `${columnIndex}-${itemIndex}`}
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{
@@ -70,7 +72,7 @@ const TemplateWaterfall = observer(
 								>
 									<WaterfallCard
 										template={template}
-										isSelected={selectedTemplate === template}
+										isSelected={selectedTemplateKey === templateKey}
 										onClick={onTemplateClick}
 									/>
 								</motion.div>

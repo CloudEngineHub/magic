@@ -38,8 +38,8 @@ export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelPr
 		error: sceneError,
 		refresh: refreshScene,
 	} = useSceneByPlaybookId(resolvedPlaybookId)
-	// Persisted playbooks are editable only after the authoritative detail payload is available.
-	// The list snapshot may be stale or incomplete and must not create a second set of item IDs.
+	// Persisted playbooks must wait for the detail response. Using the list snapshot while loading
+	// would create an editable store that gets replaced, along with unsaved edits, when it arrives.
 	const scene = resolvedPlaybookId ? remoteScene : localScene
 
 	const store = useMemo(

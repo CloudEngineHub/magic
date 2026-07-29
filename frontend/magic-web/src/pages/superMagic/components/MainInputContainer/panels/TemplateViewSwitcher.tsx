@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react"
-import type { OptionItem, OptionItemKeyResolver, OptionViewType } from "./types"
+import type { OptionItem, OptionViewType } from "./types"
 import { OptionViewType as ViewType } from "./types"
 import { EditableGrid } from "./grid/EditableGrid"
 import { EditableWaterfall } from "./waterfall/EditableWaterfall"
@@ -23,7 +23,6 @@ type ViewModeProps = {
 type EditModeProps = {
 	mode: "edit"
 	selectedKeys: Set<string>
-	getItemKey?: OptionItemKeyResolver
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: (item: OptionItem) => void
 	onDelete: (value: string) => void
@@ -44,8 +43,8 @@ function TemplateViewSwitcher(props: TemplateViewSwitcherProps) {
 	const { viewType, items } = props
 
 	if (props.mode === "edit") {
-		const { selectedKeys, getItemKey, onSelect, onEdit, onDelete, onReorder } = props
-		const editProps = { items, selectedKeys, getItemKey, onSelect, onEdit, onDelete }
+		const { selectedKeys, onSelect, onEdit, onDelete, onReorder } = props
+		const editProps = { items, selectedKeys, onSelect, onEdit, onDelete }
 
 		if (viewType === ViewType.WATERFALL) return <EditableWaterfall {...editProps} />
 		if (viewType === ViewType.TEXT_LIST) return <EditableTextList {...editProps} />

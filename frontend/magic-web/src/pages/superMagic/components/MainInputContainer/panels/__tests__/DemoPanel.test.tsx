@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { serializePromptRichTextLocaleValue } from "../promptRichText"
-import { SkillPanelType } from "../types"
+import { SkillPanelType, type OptionItem } from "../types"
 import DemoPanel from "../DemoPanel"
 
 const { publishMock } = vi.hoisted(() => ({
@@ -34,9 +34,9 @@ vi.mock("../TemplateViewSwitcher", () => ({
 		onTemplateClick,
 		selectedTemplate,
 	}: {
-		items: unknown[]
-		onTemplateClick: (item: unknown) => void
-		selectedTemplate?: { label?: string }
+		items: OptionItem[]
+		onTemplateClick: (item: OptionItem) => void
+		selectedTemplate?: OptionItem
 	}) => (
 		<>
 			<button type="button" onClick={() => onTemplateClick(items[0])}>
@@ -52,7 +52,7 @@ describe("DemoPanel", () => {
 		publishMock.mockReset()
 	})
 
-	it("publishes the current locale prompt as plain text", () => {
+	it("publishes the current locale prompt without using the stable value", () => {
 		const prompt = serializePromptRichTextLocaleValue({
 			type: "doc",
 			content: [
@@ -74,7 +74,8 @@ describe("DemoPanel", () => {
 								group_name: "Default",
 								children: [
 									{
-										value: { default: "Fallback", zh_CN: prompt },
+										value: "inspiration-1",
+										prompt: { default: "Fallback", zh_CN: prompt },
 										label: "Demo",
 									},
 								],
@@ -90,27 +91,21 @@ describe("DemoPanel", () => {
 		expect(publishMock).toHaveBeenCalledWith("set-demo-text", "插入这段提示词")
 	})
 
-	it("selects the configured default demo by its persistent item key", () => {
+	it("falls back to description for legacy demo configs", () => {
 		render(
 			<DemoPanel
 				config={{
 					type: SkillPanelType.DEMO,
 					demo: {
-						default_selected_template_key: "item-second",
 						groups: [
 							{
 								group_key: "default",
 								group_name: "Default",
 								children: [
 									{
-										item_key: "item-first",
-										value: "Same prompt",
-										label: "First",
-									},
-									{
-										item_key: "item-second",
-										value: "Same prompt",
-										label: "Second",
+										value: "legacy-id",
+										description: "旧版提示词",
+										label: "Legacy demo",
 									},
 								],
 							},
@@ -120,91 +115,25 @@ describe("DemoPanel", () => {
 			/>,
 		)
 
-		expect(screen.getByText("selected: Second")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "select demo" }))
+
+		expect(publishMock).toHaveBeenCalledWith("set-demo-text", "旧版提示词")
 	})
 
-	it("prioritizes a persistent item key over another item's legacy value", () => {
+	it("selects the configured default item by its stable value", () => {
 		render(
 			<DemoPanel
 				config={{
 					type: SkillPanelType.DEMO,
 					demo: {
-						default_selected_template_key: "item-second",
+						default_selected_template_key: "item-2",
 						groups: [
 							{
 								group_key: "default",
 								group_name: "Default",
 								children: [
-									{
-										item_key: "item-first",
-										value: "item-second",
-										label: "First",
-									},
-									{
-										item_key: "item-second",
-										value: "Second prompt",
-										label: "Second",
-									},
-								],
-							},
-						],
-					},
-				}}
-			/>,
-		)
-
-		expect(screen.getByText("selected: Second")).toBeInTheDocument()
-	})
-
-	it("does not reinterpret a schema v2 prompt as the default item key", () => {
-		render(
-			<DemoPanel
-				config={{
-					schema_version: 2,
-					type: SkillPanelType.DEMO,
-					demo: {
-						default_selected_template_key: "Second prompt",
-						groups: [
-							{
-								group_key: "default",
-								group_name: "Default",
-								children: [
-									{
-										item_key: "item-second",
-										value: "Second prompt",
-										label: "Second",
-									},
-								],
-							},
-						],
-					},
-				}}
-			/>,
-		)
-
-		expect(screen.queryByText("selected: Second")).not.toBeInTheDocument()
-	})
-
-	it("keeps compatibility with a default key stored in another locale", () => {
-		render(
-			<DemoPanel
-				config={{
-					type: SkillPanelType.DEMO,
-					demo: {
-						default_selected_template_key: "第二个提示词",
-						groups: [
-							{
-								group_key: "default",
-								group_name: "Default",
-								children: [
-									{
-										value: { default: "First prompt", zh_CN: "第一个提示词" },
-										label: "First",
-									},
-									{
-										value: { default: "Second prompt", zh_CN: "第二个提示词" },
-										label: "Second",
-									},
+									{ value: "item-1", prompt: "Same prompt", label: "First" },
+									{ value: "item-2", prompt: "Same prompt", label: "Second" },
 								],
 							},
 						],

@@ -270,7 +270,7 @@ describe("MainInputContainer panel utils", () => {
 		expect(hasSelectableOptions(field)).toBe(false)
 	})
 
-	it("resolves localized rich text demo values to plain input text", () => {
+	it("resolves localized rich text demo prompts to plain input text", () => {
 		const prompt = serializePromptRichTextLocaleValue({
 			type: "doc",
 			content: [
@@ -284,10 +284,32 @@ describe("MainInputContainer panel utils", () => {
 		expect(
 			resolveDemoPromptText(
 				{
-					value: { default: "Fallback", zh_CN: prompt },
+					prompt: { default: "Fallback", zh_CN: prompt },
 				},
 				"zh_CN",
 			),
 		).toBe("分析销售趋势")
+	})
+
+	it("uses description before falling back to value", () => {
+		expect(
+			resolveDemoPromptText({ value: "Stable ID", description: "Legacy prompt" }, "en_US"),
+		).toBe("Legacy prompt")
+		expect(resolveDemoPromptText({ value: "Built-in prompt" }, "en_US")).toBe("Built-in prompt")
+	})
+
+	it("continues falling back when prompt has no content", () => {
+		expect(
+			resolveDemoPromptText(
+				{ value: "Stable ID", prompt: "  ", description: "Legacy prompt" },
+				"en_US",
+			),
+		).toBe("Legacy prompt")
+		expect(
+			resolveDemoPromptText(
+				{ value: "Built-in prompt", prompt: { default: "", zh_CN: "  " } },
+				"zh_CN",
+			),
+		).toBe("Built-in prompt")
 	})
 })

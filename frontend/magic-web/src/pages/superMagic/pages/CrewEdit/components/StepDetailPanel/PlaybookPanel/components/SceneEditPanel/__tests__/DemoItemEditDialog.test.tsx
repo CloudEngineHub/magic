@@ -100,7 +100,7 @@ vi.mock("../components/DemoItemEditDialog/PromptRichTextLocaleEditor", () => ({
 }))
 
 describe("DemoItemEditDialog", () => {
-	it("returns serialized prompt rich text as the option value on confirm", () => {
+	it("returns serialized rich text in prompt without changing value", () => {
 		const handleConfirm = vi.fn()
 		const handleOpenChange = vi.fn()
 
@@ -134,7 +134,7 @@ describe("DemoItemEditDialog", () => {
 		expect(handleConfirm).toHaveBeenCalledTimes(1)
 		expect(handleConfirm.mock.calls[0][0]).toMatchObject({
 			label: "Demo title",
-			value: {
+			prompt: {
 				default: JSON.stringify({
 					type: "doc",
 					content: [
@@ -146,7 +146,22 @@ describe("DemoItemEditDialog", () => {
 				}),
 			},
 		})
+		expect(handleConfirm.mock.calls[0][0]).not.toHaveProperty("value")
 		expect(handleConfirm.mock.calls[0][0]).not.toHaveProperty("description")
 		expect(handleOpenChange).toHaveBeenCalledWith(false)
+	})
+
+	it("loads a legacy description into the prompt editor", () => {
+		render(
+			<DemoItemEditDialog
+				item={{ value: "legacy-id", label: "Legacy", description: "Legacy prompt" }}
+				groups={[]}
+				open
+				onOpenChange={vi.fn()}
+				onConfirm={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("demo-item-prompt-input")).toHaveValue("Legacy prompt")
 	})
 })

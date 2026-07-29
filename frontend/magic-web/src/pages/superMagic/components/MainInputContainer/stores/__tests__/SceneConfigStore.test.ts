@@ -4,7 +4,7 @@ import { SkillPanelType } from "../../panels/types"
 import { SceneConfigStore } from "../SceneConfigStore"
 
 describe("SceneConfigStore", () => {
-	it("migrates unversioned legacy inspiration before caching a playbook", () => {
+	it("migrates legacy inspiration prompts before caching a playbook", () => {
 		const store = new SceneConfigStore()
 		const playbook = {
 			config: {
@@ -18,8 +18,8 @@ describe("SceneConfigStore", () => {
 									group_name: "Default",
 									children: [
 										{
-											value: "k8m4n2p9q1",
-											description: "Insert this prompt",
+											value: "stable-id",
+											description: "Legacy prompt",
 										},
 									],
 								},
@@ -32,15 +32,9 @@ describe("SceneConfigStore", () => {
 
 		store.setSkillConfigs("playbook-1", playbook)
 
-		const normalizedItem =
+		const item =
 			store.getSkillConfigs("playbook-1")?.config?.scenes_config?.inspiration?.demo.groups[0]
 				?.children?.[0]
-		expect(
-			store.getSkillConfigs("playbook-1")?.config?.scenes_config?.inspiration?.schema_version,
-		).toBe(2)
-		expect(normalizedItem).toEqual({
-			item_key: "k8m4n2p9q1",
-			value: "Insert this prompt",
-		})
+		expect(item).toEqual({ value: "stable-id", prompt: "Legacy prompt" })
 	})
 })

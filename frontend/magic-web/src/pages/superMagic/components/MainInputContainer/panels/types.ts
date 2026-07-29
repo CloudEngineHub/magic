@@ -67,18 +67,16 @@ export interface FieldItem {
  * Slide template card configuration
  */
 export interface OptionItem {
-	/** Persistent identity for demo/inspiration items. */
-	item_key?: string
-	/** Stable option ID for field panels; insertion prompt for demo/inspiration panels. */
 	value: LocaleText
 	label?: LocaleText
+	/** Prompt inserted into the main input for demo/inspiration items. */
+	prompt?: LocaleText
 	/** Replaces {preset_value} in the message while keeping value as the stable option ID. */
 	preset_value?: LocaleText
 	thumbnail_url?: string
 	collage_url?: string
 	/** 每页 PPT 预览图访问 URL 列表；为空时前端可降级使用 collage_url */
 	preview_image_urls?: string[]
-	/** Optional display-only description. Demo clicks do not insert this field. */
 	description?: LocaleText
 	icon_url?: string
 	sub_text?: LocaleText
@@ -100,9 +98,6 @@ export interface OptionItemTag {
 	name_i18n?: LocaleTextMap
 	sort?: number
 }
-
-/** Runtime-only resolver used by editable option lists; never persisted in panel config. */
-export type OptionItemKeyResolver = (item: OptionItem, index: number) => string
 
 /**
  * Template group configuration
@@ -167,12 +162,7 @@ export interface FieldPanelConfig extends BasePanelConfig {
 
 /** Click action type for a guide item */
 export type ClickActionType =
-	| "no_action"
-	| "focus_input"
-	| "ai_enhancement"
-	| "fill_content"
-	| "open_url"
-	| "upload_file"
+	"no_action" | "focus_input" | "ai_enhancement" | "fill_content" | "open_url" | "upload_file"
 
 /** Execution method when click action fills/sends content */
 export type ExecutionMethodType = "send_immediately" | "insert_to_input"
@@ -212,17 +202,13 @@ export interface GuidePanelConfig extends BasePanelConfig {
 /**
  * 演示面板配置
  */
-export const CURRENT_DEMO_PANEL_SCHEMA_VERSION = 2 as const
-
 export interface DemoPanelConfig extends BasePanelConfig {
-	/** Version 2 separates persistent item identity from the prompt stored in value. */
-	schema_version?: typeof CURRENT_DEMO_PANEL_SCHEMA_VERSION
 	type: SkillPanelType.DEMO
 	demo: {
 		groups: OptionGroup[]
 		// 默认选中的模板组
 		default_selected_group_key?: string
-		// 默认选中的模板。v2 配置使用 OptionItem.item_key。
+		// 默认选中的模板
 		default_selected_template_key?: string
 		// 模板视图模式
 		view_type?: OptionViewType

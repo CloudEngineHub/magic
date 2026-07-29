@@ -43,6 +43,8 @@ const itemVariants = {
 
 const TemplateGrid = observer(
 	({ selectedTemplate, templates, onTemplateClick, className }: TemplateGridProps) => {
+		const selectedValue = selectedTemplate ? getOptionValue(selectedTemplate) : ""
+
 		return (
 			<motion.div
 				className={cn(
@@ -55,12 +57,11 @@ const TemplateGrid = observer(
 			>
 				{templates.map((template, index) => {
 					const templateValue = getOptionValue(template)
-
 					return (
 						<motion.div key={`${templateValue}-${index}`} variants={itemVariants}>
 							<TemplateCard
 								template={template}
-								isSelected={selectedTemplate === template}
+								isSelected={selectedValue === templateValue}
 								onClick={onTemplateClick}
 							/>
 						</motion.div>

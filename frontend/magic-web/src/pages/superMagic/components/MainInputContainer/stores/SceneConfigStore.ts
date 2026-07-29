@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
 import type { PlaybookItem } from "@/apis/modules/crew"
-import { normalizePlaybookSceneConfigs } from "@/pages/superMagic/utils/playbookInspirationConfig"
+import { migratePlaybookSceneInspirationPrompts } from "@/pages/superMagic/utils/playbookInspirationPrompt"
 
 class SceneConfigStore {
 	sceneConfigs: Map<string, PlaybookItem> = new Map()
@@ -65,7 +65,7 @@ class SceneConfigStore {
 			runInAction(() => {
 				this.setSkillConfigs(playbookId, configs)
 			})
-			return configs
+			return this.sceneConfigs.get(playbookId) ?? configs
 		} finally {
 			runInAction(() => {
 				this.configLoading.delete(playbookId)
@@ -75,21 +75,17 @@ class SceneConfigStore {
 
 	setSkillConfigs(playbookId: string, config: PlaybookItem) {
 		const scenesConfig = config.config?.scenes_config
-		const normalizedScenesConfig = normalizePlaybookSceneConfigs(scenesConfig)
+		const migratedScenesConfig = migratePlaybookSceneInspirationPrompts(scenesConfig)
 
-		if (normalizedScenesConfig === scenesConfig) {
+		if (migratedScenesConfig === scenesConfig) {
 			this.sceneConfigs.set(playbookId, config)
 			return
 		}
 
-		// Compatibility stays at the playbook boundary so built-in demo descriptions are untouched.
 		this.sceneConfigs.set(playbookId, {
 			...config,
 			config: config.config
-				? {
-						...config.config,
-						scenes_config: normalizedScenesConfig,
-					}
+				? { ...config.config, scenes_config: migratedScenesConfig }
 				: config.config,
 		})
 	}

@@ -21,20 +21,16 @@ import {
 	patchInspirationGroups,
 } from "./inspirationConfig"
 import {
-	createInspirationItemKey,
-	normalizePlaybookSceneConfigs,
-} from "@/pages/superMagic/utils/playbookInspirationConfig"
-import {
 	type InspirationItemData,
 	removeInspirationItems,
 	updateInspirationItem,
 } from "./inspirationItems"
 
-export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
-
 function genKey() {
 	return Math.random().toString(36).slice(2)
 }
+
+export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
 
 export class SceneEditStore {
 	scene: SceneItem
@@ -42,14 +38,7 @@ export class SceneEditStore {
 	private _onSave: ((scene: SceneItem) => Promise<void>) | null = null
 
 	constructor(initialScene: SceneItem, onSave?: (scene: SceneItem) => Promise<void>) {
-		const normalizedConfigs = normalizePlaybookSceneConfigs(initialScene.configs)
-		this.scene =
-			normalizedConfigs === initialScene.configs
-				? initialScene
-				: {
-						...initialScene,
-						configs: normalizedConfigs,
-					}
+		this.scene = initialScene
 		this._onSave = onSave ?? null
 		makeAutoObservable(
 			this,
@@ -176,10 +165,7 @@ export class SceneEditStore {
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
-		const newItem: OptionItem = {
-			...data,
-			item_key: createInspirationItemKey(),
-		}
+		const newItem: OptionItem = { ...data, value: genKey() }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
 		const fallbackGroupKey = groupKey || getFallbackGroupKey(base)
@@ -213,42 +199,30 @@ export class SceneEditStore {
 		}
 	}
 
-	editInspirationItem(targetItem: OptionItem, data: Partial<OptionItem>, groupKey: string) {
-		const targetItemKey = targetItem.item_key
-		if (!targetItemKey) return
-
+	editInspirationItem(value: string, data: InspirationItemData, groupKey: string) {
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
-				updateInspirationItem(groups, targetItemKey, data, groupKey),
+				updateInspirationItem(groups, value, data, groupKey),
 			),
 		}
 	}
 
-	deleteInspirationItem(targetItem: OptionItem) {
-		const targetItemKey = targetItem.item_key
-		if (!targetItemKey) return
-
+	deleteInspirationItem(value: string) {
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
-				removeInspirationItems(groups, new Set([targetItemKey])),
+				removeInspirationItems(groups, new Set([value])),
 			),
 		}
 	}
 
-	deleteInspirationItems(targetItems: OptionItem[]) {
-		const targetItemKeySet = new Set(
-			targetItems
-				.map((item) => item.item_key)
-				.filter((itemKey): itemKey is string => Boolean(itemKey)),
-		)
-		if (targetItemKeySet.size === 0) return
-
+	deleteInspirationItems(values: string[]) {
+		const valueSet = new Set(values)
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
-				removeInspirationItems(groups, targetItemKeySet),
+				removeInspirationItems(groups, valueSet),
 			),
 		}
 	}

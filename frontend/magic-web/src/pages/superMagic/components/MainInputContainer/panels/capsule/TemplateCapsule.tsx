@@ -55,7 +55,9 @@ const TemplateCapsule = observer(
 			>
 				{templates.map((template, index) => {
 					const templateValue = getOptionValue(template)
-					const isSelected = selectedTemplate === template
+					const isSelected = selectedTemplate
+						? getOptionValue(selectedTemplate) === templateValue
+						: false
 					const isImageIcon = isImageIconSource(template.icon_url)
 					const label = lt(template.label) ?? lt(template.value) ?? templateValue
 

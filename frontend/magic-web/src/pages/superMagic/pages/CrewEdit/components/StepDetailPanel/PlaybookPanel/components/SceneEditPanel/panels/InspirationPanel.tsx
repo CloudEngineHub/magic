@@ -22,7 +22,10 @@ import { DemoGroupEditDialog } from "../components/DemoGroupEditDialog"
 import { DemoItemEditDialog } from "../components/DemoItemEditDialog"
 import { DEFAULT_INSPIRATION_GROUP_KEY, useSceneEditStore } from "../store"
 import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContainer/panels/TemplateViewSwitcher"
-import { resolveDemoPromptText } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import {
+	getOptionValue,
+	resolveDemoPromptText,
+} from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { cn } from "@/lib/tiptap-utils"
 import { Badge } from "@/components/shadcn-ui/badge"
 import type { InspirationItemData } from "../inspirationItems"
@@ -46,13 +49,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [activeGroupKey, setActiveGroupKey] = useState<string | null>(defaultGroupKey)
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [searchValue, setSearchValue] = useState("")
-	// Confirm callbacks can run after a refreshed remote scene replaces the provider store.
+	// Confirm callbacks may run after a refreshed scene replaces the provider store.
 	const storeRef = useRef(store)
 	storeRef.current = store
-	const getItemKey = useCallback((item: OptionItem) => {
-		if (!item.item_key) throw new Error("Inspiration item is missing a persistent item_key")
-		return item.item_key
-	}, [])
 	const defaultGroupName = useMemo<LocaleText>(
 		() => ({
 			default: t("playbook.edit.inspiration.defaultGroup"),
@@ -77,17 +76,19 @@ export const InspirationPanel = observer(function InspirationPanel() {
 
 	const activeGroup = groups.find((g) => g.group_key === activeGroupKey) ?? null
 	const allItems = useMemo<OptionItem[]>(() => activeGroup?.children ?? [], [activeGroup])
-	const itemsByKey = useMemo(
-		() => new Map(allItems.map((item) => [getItemKey(item), item])),
-		[allItems, getItemKey],
+	const itemsByValue = useMemo(
+		() => new Map(allItems.map((item) => [getOptionValue(item), item])),
+		[allItems],
 	)
 
 	useEffect(() => {
 		setSelectedKeys((previousKeys) => {
-			const nextKeys = new Set(Array.from(previousKeys).filter((key) => itemsByKey.has(key)))
+			const nextKeys = new Set(
+				Array.from(previousKeys).filter((key) => itemsByValue.has(key)),
+			)
 			return nextKeys.size === previousKeys.size ? previousKeys : nextKeys
 		})
-	}, [itemsByKey])
+	}, [itemsByValue])
 
 	const filteredItems = useMemo(() => {
 		const search = searchValue.toLowerCase()
@@ -96,25 +97,25 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			const label = item.label
 				? resolveLocalText(item.label, i18n.language).toLowerCase()
 				: ""
-			const itemValue = resolveDemoPromptText(item, i18n.language).toLowerCase()
-			return label.includes(search) || itemValue.includes(search)
+			const prompt = resolveDemoPromptText(item, i18n.language).toLowerCase()
+			return label.includes(search) || prompt.includes(search)
 		})
 	}, [allItems, searchValue, i18n.language])
 
 	const allSelected =
 		filteredItems.length > 0 &&
-		filteredItems.every((item) => selectedKeys.has(getItemKey(item)))
+		filteredItems.every((item) => selectedKeys.has(getOptionValue(item)))
 
 	function handleSelectAll() {
 		if (allSelected) setSelectedKeys(new Set())
-		else setSelectedKeys(new Set(filteredItems.map((item) => getItemKey(item))))
+		else setSelectedKeys(new Set(filteredItems.map((item) => getOptionValue(item))))
 	}
 
-	function handleSelectOne(itemKey: string, checked: boolean) {
+	function handleSelectOne(value: string, checked: boolean) {
 		setSelectedKeys((prev) => {
 			const next = new Set(prev)
-			if (checked) next.add(itemKey)
-			else next.delete(itemKey)
+			if (checked) next.add(value)
+			else next.delete(value)
 			return next
 		})
 	}
@@ -136,10 +137,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			}),
 			variant: "destructive",
 			onConfirm: () => {
-				const selectedItems = Array.from(selectedKeys)
-					.map((key) => itemsByKey.get(key))
-					.filter((item): item is OptionItem => item !== undefined)
-				storeRef.current.deleteInspirationItems(selectedItems)
+				storeRef.current.deleteInspirationItems(Array.from(selectedKeys))
 				setSelectedKeys(new Set())
 				void storeRef.current.save()
 			},
@@ -181,7 +179,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 
 	const handleItemConfirm = useCallback(
 		(data: InspirationItemData, groupKey: string) => {
-			if (editingItem) store.editInspirationItem(editingItem, data, groupKey)
+			if (editingItem) store.editInspirationItem(getOptionValue(editingItem), data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
 			setSelectedKeys(new Set())
 			void store.save()
@@ -369,13 +367,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 						viewType={config?.demo?.view_type}
 						items={filteredItems}
 						selectedKeys={selectedKeys}
-						getItemKey={getItemKey}
 						onSelect={handleSelectOne}
 						onEdit={(item) => openEditItem(item, activeGroupKey ?? "")}
-						onDelete={(itemKey) => {
-							const targetItem = itemsByKey.get(itemKey)
-							if (!targetItem) return
-
+						onDelete={(value) =>
 							confirm({
 								title: t("playbook.edit.inspiration.deleteItemConfirm.title"),
 								description: t(
@@ -383,11 +377,11 @@ export const InspirationPanel = observer(function InspirationPanel() {
 								),
 								variant: "destructive",
 								onConfirm: () => {
-									storeRef.current.deleteInspirationItem(targetItem)
+									storeRef.current.deleteInspirationItem(value)
 									void storeRef.current.save()
 								},
 							})
-						}}
+						}
 					/>
 				)}
 			</div>

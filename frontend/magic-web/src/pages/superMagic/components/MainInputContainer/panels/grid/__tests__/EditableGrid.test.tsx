@@ -4,9 +4,9 @@ import type { OptionItem } from "../../types"
 import { EditableGrid } from "../EditableGrid"
 
 describe("EditableGrid", () => {
-	it("uses the runtime item key for duplicate prompt selection and deletion", () => {
-		const firstItem: OptionItem = { label: "First", value: "Same prompt" }
-		const secondItem: OptionItem = { label: "Second", value: "Same prompt" }
+	it("uses the stable option value for selection and deletion", () => {
+		const firstItem: OptionItem = { label: "First", value: "item-1", prompt: "Same prompt" }
+		const secondItem: OptionItem = { label: "Second", value: "item-2", prompt: "Same prompt" }
 		const onSelect = vi.fn()
 		const onDelete = vi.fn()
 
@@ -14,7 +14,6 @@ describe("EditableGrid", () => {
 			<EditableGrid
 				items={[firstItem, secondItem]}
 				selectedKeys={new Set(["item-2"])}
-				getItemKey={(item) => (item === firstItem ? "item-1" : "item-2")}
 				onSelect={onSelect}
 				onEdit={vi.fn()}
 				onDelete={onDelete}

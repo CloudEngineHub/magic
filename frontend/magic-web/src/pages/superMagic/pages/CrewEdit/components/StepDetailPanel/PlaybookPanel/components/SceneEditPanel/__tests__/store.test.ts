@@ -39,7 +39,7 @@ describe("SceneEditStore inspiration defaults", () => {
 		store.createInspirationItem(
 			{
 				label: "Item",
-				value: { default: "Prompt", zh_CN: "提示词" },
+				prompt: "Prompt",
 			},
 			"",
 			defaultGroupName,
@@ -52,182 +52,69 @@ describe("SceneEditStore inspiration defaults", () => {
 		expect(inspiration?.demo.groups[0]?.group_key).toBe(DEFAULT_INSPIRATION_GROUP_KEY)
 		expect(inspiration?.demo.groups[0]?.group_name).toEqual(defaultGroupName)
 		expect(inspiration?.demo.groups[0]?.children).toHaveLength(1)
-		expect(inspiration?.demo.groups[0]?.children?.[0]?.value).toEqual({
-			default: "Prompt",
-			zh_CN: "提示词",
+		expect(inspiration?.demo.groups[0]?.children?.[0]).toMatchObject({
+			label: "Item",
+			prompt: "Prompt",
 		})
+		expect(typeof inspiration?.demo.groups[0]?.children?.[0]?.value).toBe("string")
+		expect(inspiration?.demo.groups[0]?.children?.[0]).not.toHaveProperty("description")
 	})
 
-	it("edits and deletes only the targeted item when prompt values are duplicated", () => {
-		const store = new SceneEditStore(createScene())
-		const duplicatedValue = { default: "Prompt", zh_CN: "提示词" }
-
-		store.createInspirationItem(
-			{ label: "First item", value: duplicatedValue },
-			"",
-			defaultGroupName,
-		)
-		store.createInspirationItem(
-			{ label: "Second item", value: duplicatedValue },
-			DEFAULT_INSPIRATION_GROUP_KEY,
-		)
-
-		const [firstItem, secondItem] = store.inspiration?.demo.groups[0]?.children ?? []
-		expect(firstItem).toBeDefined()
-		expect(secondItem).toBeDefined()
-		if (!firstItem || !secondItem) return
-
-		store.editInspirationItem(
-			secondItem,
-			{ value: { default: "Updated prompt", zh_CN: "更新后的提示词" } },
-			DEFAULT_INSPIRATION_GROUP_KEY,
-		)
-
-		const editedItems = store.inspiration?.demo.groups[0]?.children ?? []
-		expect(editedItems[0]?.value).toEqual(duplicatedValue)
-		expect(editedItems[1]?.value).toEqual({
-			default: "Updated prompt",
-			zh_CN: "更新后的提示词",
-		})
-
-		store.deleteInspirationItem(firstItem)
-		expect(store.inspiration?.demo.groups[0]?.children).toEqual([editedItems[1]])
-	})
-
-	it("moves and batch deletes targeted items without using prompt values as identifiers", () => {
+	it("keeps value stable while editing and moving the prompt", () => {
 		const store = new SceneEditStore(createScene())
 		const customGroupKey = store.createInspirationGroup(
 			{ group_name: customGroupName },
 			defaultGroupName,
 		)
-		const duplicatedValue = { default: "Same prompt", zh_CN: "相同提示词" }
-
 		store.createInspirationItem(
-			{ label: "Keep", value: duplicatedValue },
+			{ label: "Original", prompt: "Same prompt" },
 			DEFAULT_INSPIRATION_GROUP_KEY,
 		)
-		store.createInspirationItem(
-			{ label: "Move", value: duplicatedValue },
-			DEFAULT_INSPIRATION_GROUP_KEY,
+
+		const original = store.inspiration?.demo.groups[0]?.children?.[0]
+		expect(original).toBeDefined()
+		if (!original || typeof original.value !== "string") return
+
+		store.editInspirationItem(
+			original.value,
+			{ label: "Updated", prompt: { default: "Updated prompt" } },
+			customGroupKey,
 		)
-		store.createInspirationItem({ label: "Delete", value: duplicatedValue }, customGroupKey)
 
-		const groups = store.inspiration?.demo.groups ?? []
-		const defaultItems = groups.find(
-			(group) => group.group_key === DEFAULT_INSPIRATION_GROUP_KEY,
-		)?.children
-		const customItems = groups.find((group) => group.group_key === customGroupKey)?.children
-		const keepItem = defaultItems?.[0]
-		const moveItem = defaultItems?.[1]
-		const deleteItem = customItems?.[0]
-		expect(keepItem).toBeDefined()
-		expect(moveItem).toBeDefined()
-		expect(deleteItem).toBeDefined()
-		if (!keepItem || !moveItem || !deleteItem) return
-
-		store.editInspirationItem(moveItem, { label: "Moved" }, customGroupKey)
-
-		const movedGroups = store.inspiration?.demo.groups ?? []
-		const movedDefaultItems = movedGroups.find(
-			(group) => group.group_key === DEFAULT_INSPIRATION_GROUP_KEY,
-		)?.children
-		const movedCustomItems = movedGroups.find(
+		const moved = store.inspiration?.demo.groups.find(
 			(group) => group.group_key === customGroupKey,
-		)?.children
-		expect(movedDefaultItems).toEqual([keepItem])
-		expect(movedCustomItems?.map((item) => item.label)).toEqual(["Delete", "Moved"])
-
-		const movedItem = movedCustomItems?.[1]
-		expect(movedItem).toBeDefined()
-		if (!movedItem) return
-
-		store.deleteInspirationItems([deleteItem, movedItem])
-		expect(
-			store.inspiration?.demo.groups.find((group) => group.group_key === customGroupKey)
-				?.children,
-		).toEqual([])
+		)?.children?.[0]
+		expect(moved).toMatchObject({
+			value: original.value,
+			label: "Updated",
+			prompt: { default: "Updated prompt" },
+		})
 		expect(
 			store.inspiration?.demo.groups.find(
 				(group) => group.group_key === DEFAULT_INSPIRATION_GROUP_KEY,
 			)?.children,
-		).toEqual([keepItem])
+		).toEqual([])
 	})
 
-	it("edits and deletes an item selected before the scene is reloaded", () => {
-		const localStore = new SceneEditStore(createScene())
-		localStore.createInspirationItem(
-			{ label: "Original", value: "Same prompt" },
-			"",
-			defaultGroupName,
-		)
-		localStore.createInspirationItem(
-			{ label: "Keep", value: "Same prompt" },
+	it("deletes one item when multiple items share the same prompt", () => {
+		const store = new SceneEditStore(createScene())
+		store.createInspirationItem({ label: "First", prompt: "Same prompt" }, "", defaultGroupName)
+		store.createInspirationItem(
+			{ label: "Second", prompt: "Same prompt" },
 			DEFAULT_INSPIRATION_GROUP_KEY,
 		)
 
-		const staleTarget = localStore.inspiration?.demo.groups[0]?.children?.[0]
-		expect(staleTarget?.item_key).toBeTruthy()
-		if (!staleTarget) return
+		const items = store.inspiration?.demo.groups[0]?.children ?? []
+		expect(items).toHaveLength(2)
+		const firstValue = items[0]?.value
+		expect(typeof firstValue).toBe("string")
+		if (typeof firstValue !== "string") return
 
-		const reloadedStore = new SceneEditStore(JSON.parse(JSON.stringify(localStore.scene)))
-		reloadedStore.editInspirationItem(
-			staleTarget,
-			{ label: "Updated after reload" },
-			DEFAULT_INSPIRATION_GROUP_KEY,
-		)
+		store.deleteInspirationItem(firstValue)
 
-		expect(reloadedStore.inspiration?.demo.groups[0]?.children?.[0]?.label).toBe(
-			"Updated after reload",
-		)
-		reloadedStore.deleteInspirationItem(staleTarget)
-		expect(
-			reloadedStore.inspiration?.demo.groups[0]?.children?.map((item) => item.label),
-		).toEqual(["Keep"])
-	})
-
-	it("targets the persisted item key after remote items are reordered", () => {
-		const scene = createScene()
-		scene.configs = {
-			...scene.configs,
-			inspiration: {
-				schema_version: 2,
-				type: "demo",
-				demo: {
-					groups: [
-						{
-							group_key: DEFAULT_INSPIRATION_GROUP_KEY,
-							group_name: defaultGroupName,
-							children: [
-								{ item_key: "item-a", value: "Same prompt", label: "A" },
-								{ item_key: "item-b", value: "Same prompt", label: "B" },
-							],
-						},
-					],
-				},
-			},
-		}
-
-		const staleTarget = scene.configs.inspiration.demo.groups[0]?.children?.[1]
-		expect(staleTarget?.item_key).toBe("item-b")
-		if (!staleTarget) return
-
-		const remoteScene = JSON.parse(JSON.stringify(scene)) as SceneItem
-		remoteScene.configs?.inspiration?.demo.groups[0]?.children?.unshift({
-			item_key: "item-x",
-			value: "Same prompt",
-			label: "X",
-		})
-		const remoteStore = new SceneEditStore(remoteScene)
-
-		remoteStore.editInspirationItem(
-			staleTarget,
-			{ label: "Updated B" },
-			DEFAULT_INSPIRATION_GROUP_KEY,
-		)
-
-		expect(
-			remoteStore.inspiration?.demo.groups[0]?.children?.map((item) => item.label),
-		).toEqual(["X", "A", "Updated B"])
+		expect(store.inspiration?.demo.groups[0]?.children?.map((item) => item.label)).toEqual([
+			"Second",
+		])
 	})
 
 	it("keeps the default group when first custom group is created", () => {

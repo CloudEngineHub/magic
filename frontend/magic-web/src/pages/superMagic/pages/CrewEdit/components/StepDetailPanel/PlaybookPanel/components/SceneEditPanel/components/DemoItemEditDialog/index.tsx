@@ -32,7 +32,7 @@ import type { InspirationItemData } from "../../inspirationItems"
 interface DemoItemFormState {
 	thumbnail_url: string
 	label: LocaleText
-	value: LocaleText
+	prompt: LocaleText
 	group_key: string
 	width?: number
 	height?: number
@@ -58,7 +58,7 @@ interface DemoItemEditDialogProps {
 const EMPTY_FORM: DemoItemFormState = {
 	thumbnail_url: "",
 	label: "",
-	value: "",
+	prompt: "",
 	group_key: "",
 }
 
@@ -66,7 +66,7 @@ function itemToForm(item: OptionItem, defaultGroupKey: string): DemoItemFormStat
 	return {
 		thumbnail_url: item.thumbnail_url ?? "",
 		label: item.label ?? "",
-		value: item.value,
+		prompt: item.prompt ?? item.description ?? "",
 		group_key: defaultGroupKey,
 		width: item.width,
 		height: item.height,
@@ -114,8 +114,8 @@ export function DemoItemEditDialog({
 
 	const isValid = useMemo(() => {
 		const groupValid = groups.length === 0 || !!form.group_key
-		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.value) && groupValid
-	}, [form.label, form.value, form.group_key, groups.length])
+		return isLocaleFilled(form.label) && isPromptLocaleFilled(form.prompt) && groupValid
+	}, [form.label, form.prompt, form.group_key, groups.length])
 
 	function handleImageMetadataChange(metadata?: ImageMetadata) {
 		setForm((prev) => ({
@@ -131,7 +131,7 @@ export function DemoItemEditDialog({
 			{
 				thumbnail_url: form.thumbnail_url || undefined,
 				label: form.label,
-				value: form.value,
+				prompt: form.prompt,
 				width: form.width,
 				height: form.height,
 				aspect_ratio: form.aspect_ratio,
@@ -196,8 +196,8 @@ export function DemoItemEditDialog({
 							required
 						>
 							<PromptRichTextLocaleEditor
-								value={form.value}
-								onChange={(v) => setForm((prev) => ({ ...prev, value: v }))}
+								value={form.prompt}
+								onChange={(v) => setForm((prev) => ({ ...prev, prompt: v }))}
 								allowPresetValue={false}
 								placeholder={t("playbook.edit.inspiration.item.promptPlaceholder")}
 								localizeLabel={t("playbook.edit.inspiration.item.prompt")}
