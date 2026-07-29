@@ -13,8 +13,10 @@ import {
 	extractPlainTextFromRichText,
 	extractPromptTextFromRichText,
 } from "../../../runtime/text/richText"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
-import { normalizeReferenceComparablePath } from "../message/reference-assets/referenceResourceSelection"
+import {
+	getCanvasResourceFileName,
+	toCanonicalCanvasResourcePath,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import { getLinkedTextPromptText, type LinkedTextConnection } from "./linkedTextPrompt"
 
 export type LinkedEditorTargetKind = "image" | "video"
@@ -45,7 +47,7 @@ export interface LinkedEditorMediaPolicy {
 
 /** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */
 export function getLinkedMediaReferenceIdentity(path?: string): string {
-	return normalizeReferenceComparablePath(path).replace(/^(\.\/)+/, "")
+	return path ? toCanonicalCanvasResourcePath(path) : ""
 }
 
 export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
@@ -131,7 +133,7 @@ export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorM
 	}
 }
 
-/** @mention 自身已经使资源参与提交，因此统一卡片应显示为勾选并锁定。 */
+/** @mention 自身已经使资源参与提交，因此统一卡片应显示为勾选；取消时由调用方同步删除 mention。 */
 export function resolveLinkedMediaSelectionDisplay(
 	item: Pick<LinkedEditorMediaItem, "selected" | "selectionDisabledReason">,
 	isMentioned: boolean,
@@ -139,7 +141,7 @@ export function resolveLinkedMediaSelectionDisplay(
 	const selected = item.selected === true
 	return {
 		checked: selected || isMentioned,
-		disabled: isMentioned || (!selected && Boolean(item.selectionDisabledReason)),
+		disabled: !selected && !isMentioned && Boolean(item.selectionDisabledReason),
 	}
 }
 

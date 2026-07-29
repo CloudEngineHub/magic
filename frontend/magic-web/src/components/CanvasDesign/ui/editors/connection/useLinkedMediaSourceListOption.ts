@@ -23,10 +23,6 @@ interface LinkedMediaSourceListOptionInput {
 export function useLinkedMediaSourceListOption() {
 	const { t } = useCanvasDesignI18n()
 	const selectionLabel = t("connectionEditor.includeLinkedMedia", "参与参考媒体")
-	const mentionLockedLabel = t(
-		"connectionEditor.linkedMediaMentionLocked",
-		"该资源已在提示词中引用，请先移除 @ 再取消勾选",
-	)
 	const inactiveReasonLabels = useMemo<Record<LinkedEditorMediaInactiveReason, string>>(
 		() => ({
 			"unsupported-type": t("connectionEditor.linkedMediaUnsupportedType", "类型不支持"),
@@ -70,9 +66,9 @@ export function useLinkedMediaSourceListOption() {
 					checked: selectionDisplay.checked,
 					disabled: selectionDisplay.disabled,
 					ariaLabel: `${selectionLabel}：${item.fileName || item.path}`,
-					title: isMentioned
-						? mentionLockedLabel
-						: (selectionDisabledLabel ?? selectionLabel),
+					title: selectionDisplay.disabled
+						? (selectionDisabledLabel ?? selectionLabel)
+						: selectionLabel,
 					onCheckedChange: (selected) =>
 						onLinkedMediaSelectionChange?.(item.connectionId, selected),
 				},
@@ -80,6 +76,6 @@ export function useLinkedMediaSourceListOption() {
 				onPreviewResource: onPreviewMediaResource,
 			}
 		},
-		[inactiveReasonLabels, mentionLockedLabel, selectionLabel],
+		[inactiveReasonLabels, selectionLabel],
 	)
 }

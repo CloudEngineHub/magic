@@ -79,6 +79,7 @@ import {
 	type LinkedEditorMediaReference,
 } from "../connection/linkedEditorInputs"
 import { useLinkedEditorInputs } from "../connection/useLinkedEditorInputs"
+import { useLinkedMediaMentionSelection } from "../connection/useLinkedMediaMentionSelection"
 import PromptOptimizationButton from "../prompt-optimization/PromptOptimizationButton"
 import {
 	buildPromptOptimizationUserPrompt,
@@ -200,6 +201,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		targetElementId: videoElement.id,
 		targetKind: "video",
 		mediaPolicy: linkedMediaPolicy,
+	})
+	const handleLinkedMediaSelectionChange = useLinkedMediaMentionSelection({
+		mediaItems: linkedEditorInputs.mediaItems,
+		mentionedReferencePaths,
+		isMediaConnectionSelected: linkedEditorInputs.isMediaConnectionSelected,
+		onSelectionChange: linkedEditorInputs.setMediaConnectionSelected,
+		editorRef,
 	})
 	const { handleMentionedReferencePathsChange } = linkedEditorInputs
 	const linkedFrameBindingSync = useMemo(
@@ -905,7 +913,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs.mediaItems}
 				linkedMentionedReferencePaths={mentionedReferencePaths}
-				onLinkedMediaSelectionChange={linkedEditorInputs.setMediaConnectionSelected}
+				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
 				linkedFrameBindings={linkedFrameBindings}
 				onLinkedMediaFrameSelect={handleLinkedMediaFrameSelect}
 				renderPromptOptimizationButton={() => (

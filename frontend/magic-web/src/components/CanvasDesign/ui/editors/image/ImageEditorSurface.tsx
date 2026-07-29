@@ -49,6 +49,7 @@ import {
 	type LinkedEditorInputsState,
 	useLinkedEditorInputs,
 } from "../connection/useLinkedEditorInputs"
+import { useLinkedMediaMentionSelection } from "../connection/useLinkedMediaMentionSelection"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
 import {
 	mergeLinkedMediaPaths,
@@ -141,6 +142,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		targetElementId: imageElement.id,
 		targetKind: "image",
 		mediaPolicy: linkedMediaPolicy,
+	})
+	const handleLinkedMediaSelectionChange = useLinkedMediaMentionSelection({
+		mediaItems: linkedEditorInputs.mediaItems,
+		mentionedReferencePaths,
+		isMediaConnectionSelected: linkedEditorInputs.isMediaConnectionSelected,
+		onSelectionChange: linkedEditorInputs.setMediaConnectionSelected,
+		editorRef,
 	})
 	const { handleMentionedReferencePathsChange } = linkedEditorInputs
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
@@ -486,7 +494,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs?.mediaItems}
 				linkedMentionedReferencePaths={mentionedReferencePaths}
-				onLinkedMediaSelectionChange={linkedEditorInputs?.setMediaConnectionSelected}
+				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
 				renderPromptOptimizationButton={() => (
 					<PromptOptimizationButton
 						buildRequest={buildPromptOptimizationRequest}

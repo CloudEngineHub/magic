@@ -18,6 +18,7 @@ import { UndoRedo } from "@tiptap/extensions"
 import { Fragment } from "@tiptap/pm/model"
 import type { MentionDataServicePort, ReferenceResourcePanelItem } from "../../../public/props"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
+import { areCanvasResourcePathsSame } from "../../../runtime/shared/path/canvasResourcePath"
 import {
 	getStringFromContent,
 	getContentFromString,
@@ -75,6 +76,8 @@ export interface MessageEditorMentionChangeContext {
 /** insertMentionItems 的可选行为（如上传/模式切换需在文末追加 @，与 appendMentionToString 一致） */
 export interface InsertCanvasMentionItemsOptions {
 	placement?: "cursor" | "documentEnd"
+	/** 默认替换当前选区；为 false 时折叠到选区末尾插入，避免覆盖已选文本。 */
+	replaceSelection?: boolean
 }
 
 interface MessageEditorSelectionRange {
@@ -98,11 +101,12 @@ export interface MessageEditorRef {
 	insertMentionItem: (
 		item: ReferenceResourcePanelItem,
 		options?: InsertCanvasMentionItemsOptions,
-	) => void
+	) => boolean
 	insertMentionItems: (
 		items: ReferenceResourcePanelItem[],
 		options?: InsertCanvasMentionItemsOptions,
-	) => void
+	) => boolean
+	removeMentionItemByPath: (path: string) => boolean
 	replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => boolean
 }
 
@@ -275,8 +279,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 				item: ReferenceResourcePanelItem,
 				options?: InsertCanvasMentionItemsOptions,
 			) => {
-				if (!editor) return
-				insertMentionItemsToEditor(
+				if (!editor) return false
+				return insertMentionItemsToEditor(
 					editor,
 					[item],
 					options,
@@ -288,14 +292,18 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 				items: ReferenceResourcePanelItem[],
 				options?: InsertCanvasMentionItemsOptions,
 			) => {
-				if (!editor) return
-				insertMentionItemsToEditor(
+				if (!editor) return false
+				return insertMentionItemsToEditor(
 					editor,
 					items,
 					options,
 					getPreferredSelectionRange,
 					syncSelectionRange,
 				)
+			},
+			removeMentionItemByPath: (path: string) => {
+				if (!editor) return false
+				return removeMentionItemByPathInEditor(editor, path, syncSelectionRange)
 			},
 			replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => {
 				if (!editor) return false
@@ -499,72 +507,92 @@ function insertMentionItemsToEditor(
 	getLatestFocusedSelectionRange?: () => MessageEditorSelectionRange | null,
 	onSelectionRangeChange?: (selectionRange: MessageEditorSelectionRange) => void,
 ) {
-	if (items.length === 0) return
+	if (items.length === 0) return false
 
-	runActiveEditor(editor, (activeEditor) => {
-		const content = items.flatMap((item) => [
-			{
-				type: "mention",
-				attrs: item,
-			},
-			{
-				type: "text",
-				text: MENTION_CARET_GUARD_TEXT,
-			},
-		])
+	const didInsert =
+		runActiveEditor(
+			editor,
+			(activeEditor) => {
+				if (!activeEditor.schema.nodes.mention) return false
+				const content = items.flatMap((item) => [
+					{
+						type: "mention",
+						attrs: item,
+					},
+					{
+						type: "text",
+						text: MENTION_CARET_GUARD_TEXT,
+					},
+				])
 
-		const fragment = Fragment.fromArray(
-			content.map((node) => activeEditor.schema.nodeFromJSON(node)),
-		)
-		const fragSize = fragment.size
-		const shouldUsePreservedSelection =
-			options?.placement !== "documentEnd" && !activeEditor.isFocused
+				const fragment = Fragment.fromArray(
+					content.map((node) => activeEditor.schema.nodeFromJSON(node)),
+				)
+				const fragSize = fragment.size
+				const shouldUsePreservedSelection =
+					options?.placement !== "documentEnd" && !activeEditor.isFocused
 
-		const chain = activeEditor.chain()
-		if (options?.placement === "documentEnd") {
-			chain.focus("end")
-		} else {
-			chain.focus()
-		}
-		chain
-			.command(({ tr, commands }) => {
-				const currentSelection = tr.selection
-				const preservedSelection = shouldUsePreservedSelection
-					? getLatestFocusedSelectionRange?.()
-					: null
-				const maxPos = Math.max(1, tr.doc.content.size)
-				const insertFrom = preservedSelection
-					? Math.min(Math.max(preservedSelection.from, 1), maxPos)
-					: currentSelection.from
-				const insertTo = preservedSelection
-					? Math.min(Math.max(preservedSelection.to, insertFrom), maxPos)
-					: currentSelection.to
-				if (
-					!commands.insertContentAt({ from: insertFrom, to: insertTo }, content, {
-						updateSelection: false,
+				const chain = activeEditor.chain()
+				if (options?.placement === "documentEnd") {
+					chain.focus("end", { scrollIntoView: false })
+				} else {
+					chain.focus(undefined, { scrollIntoView: false })
+				}
+				return chain
+					.command(({ tr, commands }) => {
+						const currentSelection = tr.selection
+						const preservedSelection = shouldUsePreservedSelection
+							? getLatestFocusedSelectionRange?.()
+							: null
+						const maxPos = Math.max(1, tr.doc.content.size)
+						const insertionRange = resolveMentionInsertionRange({
+							currentSelection,
+							preservedSelection,
+							maxPos,
+							replaceSelection: options?.replaceSelection !== false,
+						})
+						const { from: insertFrom, to: insertTo } = insertionRange
+						if (
+							!commands.insertContentAt({ from: insertFrom, to: insertTo }, content, {
+								updateSelection: false,
+							})
+						) {
+							return false
+						}
+						const nextSelectionPosition = insertFrom + fragSize
+						if (!commands.setTextSelection(nextSelectionPosition)) {
+							return false
+						}
+						onSelectionRangeChange?.({
+							from: nextSelectionPosition,
+							to: nextSelectionPosition,
+						})
+						return true
 					})
-				) {
-					return false
-				}
-				const nextSelectionPosition = insertFrom + fragSize
-				if (!commands.setTextSelection(nextSelectionPosition)) {
-					return false
-				}
-				onSelectionRangeChange?.({
-					from: nextSelectionPosition,
-					to: nextSelectionPosition,
-				})
-				return true
-			})
-			.run()
-	})
+					.run()
+			},
+			false,
+		) ?? false
 
-	// 拖放等场景下焦点会留在 drop 容器上；延后一步把 DOM 焦点拉回编辑器，落在上面 setTextSelection 的选区（新内容之后）
-	setTimeout(() => {
-		runActiveEditor(editor, (activeEditor) => {
-			activeEditor.commands.focus()
-		})
-	}, 0)
+	if (didInsert) restoreEditorFocusAfterMentionMutation(editor)
+
+	return didInsert
+}
+
+export function resolveMentionInsertionRange(options: {
+	currentSelection: MessageEditorSelectionRange
+	preservedSelection?: MessageEditorSelectionRange | null
+	maxPos: number
+	replaceSelection: boolean
+}): MessageEditorSelectionRange {
+	const { currentSelection, preservedSelection, maxPos, replaceSelection } = options
+	const selection = preservedSelection ?? currentSelection
+	// doc.content.size 包含最外层文本块的闭合边界；该边界位于段落外，不能用于内联 mention 插入。
+	const maxTextPosition = Math.max(1, maxPos - 1)
+	const from = Math.min(Math.max(selection.from, 1), maxTextPosition)
+	const to = Math.min(Math.max(selection.to, from), maxTextPosition)
+	if (replaceSelection) return { from, to }
+	return { from: to, to }
 }
 
 function replaceMentionItemByPathInEditor(
@@ -581,7 +609,8 @@ function replaceMentionItemByPathInEditor(
 			activeEditor.state.doc.descendants((node, pos) => {
 				if (node.type.name !== "mention") return true
 				const data = node.attrs?.data as { file_path?: string } | undefined
-				if (data?.file_path !== oldPath) return true
+				if (!data?.file_path || !areCanvasResourcePathsSame(data.file_path, oldPath))
+					return true
 				targetPositions.push(pos)
 				return true
 			})
@@ -597,6 +626,63 @@ function replaceMentionItemByPathInEditor(
 		},
 		false,
 	)
+}
+
+function removeMentionItemByPathInEditor(
+	editor: NonNullable<ReturnType<typeof useEditor>>,
+	path: string,
+	onSelectionRangeChange?: (selectionRange: MessageEditorSelectionRange) => void,
+): boolean {
+	if (!path) return false
+
+	const didRemove = runActiveEditor(
+		editor,
+		(activeEditor) => {
+			const targetRanges: Array<{ from: number; to: number }> = []
+			activeEditor.state.doc.descendants((node, pos) => {
+				if (node.type.name !== "mention") return true
+				const data = node.attrs?.data as { file_path?: string } | undefined
+				if (!data?.file_path || !areCanvasResourcePathsSame(data.file_path, path))
+					return true
+
+				const mentionEnd = pos + node.nodeSize
+				const nextNode = activeEditor.state.doc.resolve(mentionEnd).nodeAfter
+				const hasCaretGuard =
+					nextNode?.isText === true && nextNode.text?.startsWith(MENTION_CARET_GUARD_TEXT)
+				targetRanges.push({
+					from: pos,
+					to: mentionEnd + (hasCaretGuard ? MENTION_CARET_GUARD_TEXT.length : 0),
+				})
+				return true
+			})
+
+			if (targetRanges.length === 0) return false
+
+			const tr = activeEditor.state.tr
+			targetRanges
+				.sort((a, b) => b.from - a.from)
+				.forEach(({ from, to }) => tr.delete(from, to))
+			activeEditor.view.dispatch(tr)
+			onSelectionRangeChange?.({
+				from: activeEditor.state.selection.from,
+				to: activeEditor.state.selection.to,
+			})
+			return true
+		},
+		false,
+	)
+
+	if (didRemove) restoreEditorFocusAfterMentionMutation(editor)
+	return didRemove
+}
+
+/** 与“+ 添加媒体”保持一致：外部控件操作结束后，将光标恢复到编辑器当前选区。 */
+function restoreEditorFocusAfterMentionMutation(editor: NonNullable<ReturnType<typeof useEditor>>) {
+	setTimeout(() => {
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.focus(undefined, { scrollIntoView: false })
+		})
+	}, 0)
 }
 
 export default MessageEditor

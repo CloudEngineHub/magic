@@ -99,13 +99,16 @@ describe("useLinkedEditorInputs draft persistence", () => {
 				"text-1",
 			])
 			expect(result.current.isTextConnectionSelected("text-1")).toBe(true)
+			expect(result.current.isMediaConnectionSelected("media-1")).toBe(true)
 			expect(result.current.mediaItems[0]?.selected).toBe(true)
 		})
 
+		let mediaSelectionAccepted = false
 		act(() => {
 			result.current.setTextConnectionSelected("text-2", true)
-			result.current.setMediaConnectionSelected("media-1", false)
+			mediaSelectionAccepted = result.current.setMediaConnectionSelected("media-1", false)
 		})
+		expect(mediaSelectionAccepted).toBe(true)
 
 		await waitFor(() => {
 			expect(getStorage().tempLinkedEditorDrafts?.[targetElementId]).toEqual({
@@ -115,5 +118,94 @@ describe("useLinkedEditorInputs draft persistence", () => {
 				selectedMediaConnectionIds: [],
 			})
 		})
+	})
+
+	it("rejects media selections that are disabled by the current policy", async () => {
+		const targetElementId = "target-image"
+		const { canvas } = createCanvas({})
+		mocks.useCanvas.mockReturnValue({ canvas })
+		mocks.resolveLinkedEditorInputs.mockReturnValue({
+			textConnections: [],
+			textPrompt: "",
+			mediaItems: [
+				{
+					connectionId: "media-video",
+					sourceElementId: "source-video",
+					kind: "video",
+					path: "./videos/source.mp4",
+					status: "inactive",
+				},
+			],
+			activeMediaReferences: [],
+		})
+
+		const { result } = renderHook(() =>
+			useLinkedEditorInputs({
+				targetElementId,
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"] },
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.mediaItems[0]?.selectionDisabledReason).toBe("unsupported-type")
+		})
+
+		let mediaSelectionAccepted = true
+		act(() => {
+			mediaSelectionAccepted = result.current.setMediaConnectionSelected("media-video", true)
+		})
+
+		expect(mediaSelectionAccepted).toBe(false)
+		expect(result.current.isMediaConnectionSelected("media-video")).toBe(false)
+	})
+
+	it("returns the actual result for rapid selections evaluated against the latest draft", async () => {
+		const targetElementId = "target-image"
+		const { canvas } = createCanvas({})
+		mocks.useCanvas.mockReturnValue({ canvas })
+		mocks.resolveLinkedEditorInputs.mockReturnValue({
+			textConnections: [],
+			textPrompt: "",
+			mediaItems: [
+				{
+					connectionId: "media-1",
+					sourceElementId: "source-image-1",
+					kind: "image",
+					path: "./images/source-1.png",
+					status: "inactive",
+				},
+				{
+					connectionId: "media-2",
+					sourceElementId: "source-image-2",
+					kind: "image",
+					path: "./images/source-2.png",
+					status: "inactive",
+				},
+			],
+			activeMediaReferences: [],
+		})
+
+		const { result } = renderHook(() =>
+			useLinkedEditorInputs({
+				targetElementId,
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+			}),
+		)
+
+		await waitFor(() => expect(result.current.mediaItems).toHaveLength(2))
+
+		let firstAccepted = false
+		let secondAccepted = true
+		act(() => {
+			firstAccepted = result.current.setMediaConnectionSelected("media-1", true)
+			secondAccepted = result.current.setMediaConnectionSelected("media-2", true)
+		})
+
+		expect(firstAccepted).toBe(true)
+		expect(secondAccepted).toBe(false)
+		expect(result.current.isMediaConnectionSelected("media-1")).toBe(true)
+		expect(result.current.isMediaConnectionSelected("media-2")).toBe(false)
 	})
 })

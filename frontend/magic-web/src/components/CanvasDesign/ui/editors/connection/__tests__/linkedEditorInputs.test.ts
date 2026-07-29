@@ -355,13 +355,22 @@ describe("resolveLinkedMediaDisplay", () => {
 })
 
 describe("resolveLinkedMediaSelectionDisplay", () => {
-	it("shows an unselected linked resource as checked and locked while it is mentioned", () => {
+	it("keeps a mentioned linked resource checked but allows removing it", () => {
 		expect(
 			resolveLinkedMediaSelectionDisplay(
 				{ selected: false, selectionDisabledReason: "duplicate" },
 				true,
 			),
-		).toEqual({ checked: true, disabled: true })
+		).toEqual({ checked: true, disabled: false })
+	})
+
+	it("still disables an unavailable unselected resource", () => {
+		expect(
+			resolveLinkedMediaSelectionDisplay(
+				{ selected: false, selectionDisabledReason: "over-limit" },
+				false,
+			),
+		).toEqual({ checked: false, disabled: true })
 	})
 })
 
