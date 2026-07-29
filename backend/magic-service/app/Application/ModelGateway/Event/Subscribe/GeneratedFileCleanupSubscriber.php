@@ -12,6 +12,7 @@ use App\Domain\File\Service\FileCleanupDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
+use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\File\EasyFileTools;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
@@ -23,9 +24,9 @@ use Throwable;
 #[AsyncListener(driver: 'coroutine')]
 #[Listener]
 /**
- * 监听图片生成与图片处理完成事件，为 Magic 自有文件登记延迟清理任务。
+ * 监听图片与视频生成完成事件，为 Magic 自有文件登记延迟清理任务。
  */
-class GeneratedImageCleanupSubscriber implements ListenerInterface
+class GeneratedFileCleanupSubscriber implements ListenerInterface
 {
     public function __construct(
         private readonly FileCleanupDomainService $fileCleanupDomainService,
@@ -39,15 +40,24 @@ class GeneratedImageCleanupSubscriber implements ListenerInterface
         return [
             ImageGeneratedEvent::class,
             ImageOperationCompletedEvent::class,
+            VideoGeneratedEvent::class,
         ];
     }
 
     public function process(object $event): void
     {
-        if (! $event instanceof ImageGeneratedEvent && ! $event instanceof ImageOperationCompletedEvent) {
+        if ($event instanceof ImageGeneratedEvent || $event instanceof ImageOperationCompletedEvent) {
+            $this->registerImageCleanup($event);
             return;
         }
 
+        if ($event instanceof VideoGeneratedEvent) {
+            $this->registerVideoCleanup($event);
+        }
+    }
+
+    private function registerImageCleanup(ImageGeneratedEvent|ImageOperationCompletedEvent $event): void
+    {
         $expireSeconds = (int) config('image_generate.file_cleanup.expire_seconds', 86400);
         if ($expireSeconds <= 0) {
             return;
@@ -76,6 +86,42 @@ class GeneratedImageCleanupSubscriber implements ListenerInterface
                     'error' => $throwable->getMessage(),
                 ]);
             }
+        }
+    }
+
+    private function registerVideoCleanup(VideoGeneratedEvent $event): void
+    {
+        $expireSeconds = (int) config('model_gateway.video_file_cleanup.expire_seconds', 604800);
+        if ($expireSeconds <= 0) {
+            return;
+        }
+
+        $organizationCode = $event->getOrganizationCode();
+        $fileKey = $event->getGeneratedFileKey();
+        if ($fileKey === null || explode('/', $fileKey, 2)[0] !== $organizationCode) {
+            return;
+        }
+
+        $sourceId = $event->getSourceId() ?? $event->getTaskId() ?? $event->getVideoId();
+        try {
+            $this->fileCleanupDomainService->registerFileForCleanup(
+                $organizationCode,
+                $fileKey,
+                basename($fileKey),
+                0,
+                'video_generate',
+                $sourceId,
+                $expireSeconds,
+                StorageBucketType::Private->value
+            );
+        } catch (Throwable $throwable) {
+            // 清理登记失败不应影响已经成功的视频接口。
+            $this->logger->error('Failed to register generated video cleanup record', [
+                'organization_code' => $organizationCode,
+                'file_key' => $fileKey,
+                'source_id' => $sourceId,
+                'error' => $throwable->getMessage(),
+            ]);
         }
     }
 

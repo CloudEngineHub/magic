@@ -672,6 +672,7 @@ readonly class VideoOperationAppService
         $event->setHasAudioOutput($this->resolveHasAudioOutput($operation));
         $event->setProjectId($operation->getProjectId());
         $event->setVideoId($operation->getVideoId());
+        $event->setGeneratedFileKey($this->buildStoredVideoFileKey($operation));
         $event->setTopicId($operation->getTopicId());
         $event->setTaskId($operation->getTaskId());
         $event->setSourceId($operation->getSourceId());

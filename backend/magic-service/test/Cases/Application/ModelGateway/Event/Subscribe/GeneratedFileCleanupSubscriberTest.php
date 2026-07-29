@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\ModelGateway\Event\Subscribe;
 
-use App\Application\ModelGateway\Event\Subscribe\GeneratedImageCleanupSubscriber;
+use App\Application\ModelGateway\Event\Subscribe\GeneratedFileCleanupSubscriber;
 use App\Domain\File\Entity\FileCleanupRecordEntity;
 use App\Domain\File\Repository\FileCleanupRecordRepository;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
@@ -15,6 +15,8 @@ use App\Domain\File\Service\FileCleanupDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
+use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -25,22 +27,26 @@ use RuntimeException;
 /**
  * @internal
  */
-class GeneratedImageCleanupSubscriberTest extends BaseTest
+class GeneratedFileCleanupSubscriberTest extends BaseTest
 {
     private ConfigInterface $config;
 
     private mixed $originalExpireSeconds;
+
+    private mixed $originalVideoExpireSeconds;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->config = di(ConfigInterface::class);
         $this->originalExpireSeconds = $this->config->get('image_generate.file_cleanup.expire_seconds');
+        $this->originalVideoExpireSeconds = $this->config->get('model_gateway.video_file_cleanup.expire_seconds');
     }
 
     protected function tearDown(): void
     {
         $this->config->set('image_generate.file_cleanup.expire_seconds', $this->originalExpireSeconds);
+        $this->config->set('model_gateway.video_file_cleanup.expire_seconds', $this->originalVideoExpireSeconds);
         parent::tearDown();
     }
 
@@ -137,6 +143,7 @@ class GeneratedImageCleanupSubscriberTest extends BaseTest
         self::assertSame([
             ImageGeneratedEvent::class,
             ImageOperationCompletedEvent::class,
+            VideoGeneratedEvent::class,
         ], $subscriber->listen());
     }
 
@@ -183,6 +190,89 @@ class GeneratedImageCleanupSubscriberTest extends BaseTest
         $this->addToAssertionCount(1);
     }
 
+    public function testRegistersOwnedGeneratedVideoForSevenDays(): void
+    {
+        $this->config->set('model_gateway.video_file_cleanup.expire_seconds', 604800);
+        $fileKey = 'ORG001/open/' . md5(StorageBucketType::Private->value) . '/open/video-generation/op-1.mp4';
+
+        $repository = $this->createMock(FileCleanupRecordRepository::class);
+        $repository->expects($this->once())->method('findByFileKey')->willReturn(null);
+        $repository->expects($this->once())
+            ->method('create')
+            ->willReturnCallback(function (FileCleanupRecordEntity $entity) use ($fileKey): FileCleanupRecordEntity {
+                self::assertSame('ORG001', $entity->getOrganizationCode());
+                self::assertSame($fileKey, $entity->getFileKey());
+                self::assertSame('op-1.mp4', $entity->getFileName());
+                self::assertSame(0, $entity->getFileSize());
+                self::assertSame('video_generate', $entity->getSourceType());
+                self::assertSame('source-1', $entity->getSourceId());
+                self::assertSame('private', $entity->getBucketType());
+                self::assertEqualsWithDelta(time() + 604800, strtotime($entity->getExpireAt()), 2);
+                return $entity;
+            });
+
+        $event = $this->createVideoEvent(
+            'ORG001',
+            $fileKey,
+            'source-1'
+        );
+
+        $this->createSubscriber($this->createCleanupService($repository))->process($event);
+    }
+
+    public function testDoesNotRegisterVideoWithoutOwnedFileKey(): void
+    {
+        $this->config->set('model_gateway.video_file_cleanup.expire_seconds', 604800);
+
+        $repository = $this->createMock(FileCleanupRecordRepository::class);
+        $repository->expects($this->never())->method('findByFileKey');
+        $repository->expects($this->never())->method('create');
+        $subscriber = $this->createSubscriber($this->createCleanupService($repository));
+
+        $subscriber->process($this->createVideoEvent('ORG001', null));
+        $subscriber->process($this->createVideoEvent(
+            'ORG001',
+            'OTHER/open/private-hash/open/video-generation/op-2.mp4'
+        ));
+    }
+
+    /**
+     * @dataProvider disabledExpireSecondsProvider
+     */
+    public function testDoesNotRegisterVideoWhenCleanupIsDisabled(int $expireSeconds): void
+    {
+        $this->config->set('model_gateway.video_file_cleanup.expire_seconds', $expireSeconds);
+
+        $repository = $this->createMock(FileCleanupRecordRepository::class);
+        $repository->expects($this->never())->method('findByFileKey');
+        $repository->expects($this->never())->method('create');
+
+        $event = $this->createVideoEvent(
+            'ORG001',
+            'ORG001/open/' . md5(StorageBucketType::Private->value) . '/open/video-generation/op-3.mp4'
+        );
+
+        $this->createSubscriber($this->createCleanupService($repository))->process($event);
+    }
+
+    public function testVideoRegistrationFailureDoesNotBreakEventProcessing(): void
+    {
+        $this->config->set('model_gateway.video_file_cleanup.expire_seconds', 604800);
+
+        $repository = $this->createMock(FileCleanupRecordRepository::class);
+        $repository->method('findByFileKey')->willReturn(null);
+        $repository->method('create')->willThrowException(new RuntimeException('cleanup storage unavailable'));
+
+        $event = $this->createVideoEvent(
+            'ORG001',
+            'ORG001/open/' . md5(StorageBucketType::Private->value) . '/open/video-generation/op-4.mp4'
+        );
+
+        $this->createSubscriber($this->createCleanupService($repository))->process($event);
+
+        $this->addToAssertionCount(1);
+    }
+
     private function createEvent(string $organizationCode, array $images, ?string $sourceId = null): ImageGeneratedEvent
     {
         $event = new ImageGeneratedEvent();
@@ -192,7 +282,19 @@ class GeneratedImageCleanupSubscriberTest extends BaseTest
         return $event;
     }
 
-    private function createSubscriber(FileCleanupDomainService $cleanupService): GeneratedImageCleanupSubscriber
+    private function createVideoEvent(
+        string $organizationCode,
+        ?string $generatedFileKey,
+        ?string $sourceId = null
+    ): VideoGeneratedEvent {
+        $event = new VideoGeneratedEvent();
+        $event->setOrganizationCode($organizationCode);
+        $event->setGeneratedFileKey($generatedFileKey);
+        $event->setSourceId($sourceId);
+        return $event;
+    }
+
+    private function createSubscriber(FileCleanupDomainService $cleanupService): GeneratedFileCleanupSubscriber
     {
         $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
         $cloudFileRepository->method('getLinks')
@@ -208,7 +310,7 @@ class GeneratedImageCleanupSubscriberTest extends BaseTest
                 return $links;
             });
 
-        return new GeneratedImageCleanupSubscriber(
+        return new GeneratedFileCleanupSubscriber(
             $cleanupService,
             new FileDomainService($cloudFileRepository),
             new NullLogger()

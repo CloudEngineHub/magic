@@ -37,8 +37,7 @@ class FileCleanupDomainServiceTest extends TestCase
                 'ORG001/open/',
                 'ORG001',
                 'ORG001/open/generated/image.png',
-                StorageBucketType::Public,
-                ['internal_endpoint' => false]
+                StorageBucketType::Public
             );
 
         self::assertSame('success', $this->createService($repository, $cloudFileRepository)->cleanupSingleFile($record));
@@ -58,8 +57,31 @@ class FileCleanupDomainServiceTest extends TestCase
                 'MAGIC/open/',
                 'MAGIC',
                 'MAGIC/open/generated/image.png',
-                StorageBucketType::Public,
-                ['internal_endpoint' => false]
+                StorageBucketType::Public
+            );
+
+        self::assertSame('success', $this->createService($repository, $cloudFileRepository)->cleanupSingleFile($record));
+    }
+
+    public function testDeletesOrganizationPrivateObject(): void
+    {
+        $record = $this->createRecord(
+            'ORG001',
+            'ORG001/open/private-hash/open/video-generation/video.mp4',
+            StorageBucketType::Private
+        );
+        $repository = $this->createMock(FileCleanupRecordRepository::class);
+        $repository->expects($this->once())->method('delete')->with(1001);
+
+        $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
+        $cloudFileRepository->expects($this->once())->method('getFullPrefix')->with('ORG001')->willReturn('ORG001/open/');
+        $cloudFileRepository->expects($this->once())
+            ->method('deleteObjectByCredential')
+            ->with(
+                'ORG001/open/',
+                'ORG001',
+                'ORG001/open/private-hash/open/video-generation/video.mp4',
+                StorageBucketType::Private
             );
 
         self::assertSame('success', $this->createService($repository, $cloudFileRepository)->cleanupSingleFile($record));
@@ -81,16 +103,19 @@ class FileCleanupDomainServiceTest extends TestCase
         self::assertSame('failed', $this->createService($repository, $cloudFileRepository)->cleanupSingleFile($record));
     }
 
-    private function createRecord(string $organizationCode, string $fileKey): FileCleanupRecordEntity
-    {
+    private function createRecord(
+        string $organizationCode,
+        string $fileKey,
+        StorageBucketType $bucketType = StorageBucketType::Public
+    ): FileCleanupRecordEntity {
         return (new FileCleanupRecordEntity())
             ->setId(1001)
             ->setOrganizationCode($organizationCode)
             ->setFileKey($fileKey)
             ->setFileName(basename($fileKey))
             ->setFileSize(0)
-            ->setBucketType(StorageBucketType::Public->value)
-            ->setSourceType('image_generate')
+            ->setBucketType($bucketType->value)
+            ->setSourceType($bucketType === StorageBucketType::Private ? 'video_generate' : 'image_generate')
             ->setSourceId('request-123')
             ->setExpireAt('2026-07-28 00:00:00')
             ->setStatus(0)
