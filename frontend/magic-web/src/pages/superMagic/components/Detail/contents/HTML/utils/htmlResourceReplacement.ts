@@ -184,13 +184,6 @@ export async function replaceHtmlResourceUrls({
 			return
 		}
 
-		if (resourceInfo.attr === "data" && resourceInfo.tag === "object") {
-			const objectDataRegex = new RegExp(`${resourceInfo.attr}=["']${escapedPath}["']`, "g")
-			const escapedUrl = escapeHtmlAttributeValue(item.url)
-			content = content.replace(objectDataRegex, () => `${resourceInfo.attr}="${escapedUrl}"`)
-			return
-		}
-
 		const attributeRegex = new RegExp(
 			`<(${resourceInfo.tag})([^>]*?)${resourceInfo.attr}=["']${escapedPath}["']([^>]*?)>`,
 			"gi",

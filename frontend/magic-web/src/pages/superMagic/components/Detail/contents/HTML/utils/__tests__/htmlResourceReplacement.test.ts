@@ -60,23 +60,27 @@ describe("replaceHtmlResourceUrls", () => {
 		expect(image?.hasAttribute("onerror")).toBe(false)
 	})
 
-	it("escapes object data replacement URLs", async () => {
-		const path = "assets/document.pdf"
+	it("uses the common escaped attribute replacement for object data", async () => {
+		const path = 'assets/document" onload="alert(1)&.pdf'
+		const url = 'https://cdn.example.com/document.pdf?x=" onerror="alert(2)&y=<tag>'
 		const result = await replaceResource({
-			htmlContent: `<object data="${path}"></object>`,
+			htmlContent: `<object data='${path}'></object>`,
 			path,
-			url: 'https://cdn.example.com/document.pdf?x=" onerror="alert(1)',
+			url,
 			tag: "object",
 			attr: "data",
 		})
 
 		expect(result.content).toBe(
-			'<object data="https://cdn.example.com/document.pdf?x=&quot; onerror=&quot;alert(1)"></object>',
+			'<object data="https://cdn.example.com/document.pdf?x=&quot; onerror=&quot;alert(2)&amp;y=&lt;tag&gt;" data-original-path="assets/document&quot; onload=&quot;alert(1)&amp;.pdf"></object>',
 		)
 
 		const object = new DOMParser()
 			.parseFromString(result.content, "text/html")
 			.querySelector("object")
+		expect(object?.getAttribute("data")).toBe(url)
+		expect(object?.getAttribute("data-original-path")).toBe(path)
 		expect(object?.hasAttribute("onerror")).toBe(false)
+		expect(object?.hasAttribute("onload")).toBe(false)
 	})
 })
