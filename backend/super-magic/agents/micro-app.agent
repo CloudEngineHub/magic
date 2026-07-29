@@ -17,7 +17,6 @@ tools:
   - shell_exec
   - shell_await
   - run_python_snippet
-  - download_from_urls
   - query_magicbase_tables
   - get_magicbase_table
   - query_magicbase_rows
@@ -39,6 +38,7 @@ skills:
     - name: html-api-sdk
     - name: magicbase
   system_skills:
+    - name: download
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager

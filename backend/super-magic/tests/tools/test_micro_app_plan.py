@@ -1,13 +1,11 @@
 from pathlib import Path
 
 from agentlang.agent.define.parser import parse_agent_file
-
 from app.tools.micro_app_plan import (
     MicroAppPlanTool,
     build_plan_content,
     build_plan_payload,
 )
-
 
 AGENT_FILE = Path(__file__).resolve().parents[2] / "agents" / "micro-app.agent"
 MAGICBASE_SKILL_FILE = Path(__file__).resolve().parents[2] / "agents" / "skills" / "magicbase" / "SKILL.md"
@@ -28,6 +26,15 @@ def test_micro_app_agent_mounts_domain_specific_plan_tool():
 
     assert "micro_app_plan" in agent_define.tools_config
     assert "plan" not in agent_define.tools_config
+
+
+def test_micro_app_agent_uses_download_skill_instead_of_direct_code_mode_tool():
+    agent_content = AGENT_FILE.read_text(encoding="utf-8")
+    agent_define = parse_agent_file(agent_content)[0]
+
+    assert "download_from_urls" not in agent_define.tools_config
+    assert agent_define.skills_config is not None
+    assert "download" in agent_define.skills_config.get_system_skill_names()
 
 
 def test_micro_app_contract_docs_do_not_reference_legacy_plan_tool():
