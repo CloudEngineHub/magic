@@ -541,9 +541,13 @@ class MagicFSFileAppService extends AbstractAppService
                     ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
                 }
             } else {
-                if ($task->getProjectId() !== $parentEntity->getProjectId()) {
-                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
-                }
+                // 跨项目挂接：调用者只需对目标任务所在项目具备可写权限即可，
+                // 不要求与父目录同项目。父目录写权限已由 resolveAndAuthorizeParentProject 校验。
+                $this->assertProjectAccessible(
+                    $task->getProjectId(),
+                    $authorization,
+                    MemberRole::EDITOR
+                );
             }
 
             $taskTopicId = $task->getTopicId();
@@ -565,10 +569,15 @@ class MagicFSFileAppService extends AbstractAppService
                     ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
                 }
             } else {
-                if ($topic === null
-                    || $topic->getProjectId() !== $parentEntity->getProjectId()) {
+                if ($topic === null) {
                     ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
                 }
+                // 跨项目挂接：调用者只需对目标话题所在项目具备可写权限即可。
+                $this->assertProjectAccessible(
+                    $topic->getProjectId(),
+                    $authorization,
+                    MemberRole::EDITOR
+                );
             }
         }
     }
