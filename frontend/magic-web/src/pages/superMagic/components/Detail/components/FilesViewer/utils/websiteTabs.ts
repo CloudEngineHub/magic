@@ -52,13 +52,13 @@ export const WEBSITE_PRESETS: WebsitePreset[] = [
 		iconSrc: xiaohongshuIcon,
 		url: "https://www.xiaohongshu.com/",
 	},
-	{
-		id: "zcool",
-		titleKey: "fileViewer.website.presets.zcool.title",
-		descriptionKey: "fileViewer.website.presets.zcool.description",
-		iconSrc: zcoolIcon,
-		url: "https://www.zcool.com.cn/",
-	},
+	// {
+	// 	id: "zcool",
+	// 	titleKey: "fileViewer.website.presets.zcool.title",
+	// 	descriptionKey: "fileViewer.website.presets.zcool.description",
+	// 	iconSrc: zcoolIcon,
+	// 	url: "https://www.zcool.com.cn/",
+	// },
 	{
 		id: "pexels",
 		titleKey: "fileViewer.website.presets.pexels.title",
