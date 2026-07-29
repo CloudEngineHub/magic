@@ -192,7 +192,7 @@ class AgentContext(BaseAgentContext):
 
     def is_interactive_main_agent_context(self) -> bool:
         """当前上下文是否可以直接向终端用户发起交互。"""
-        return bool(getattr(self, "is_main_agent", False)) and not self.is_subagent_context()
+        return self.is_main_agent_context() and not self.is_subagent_context()
 
     def set_subagent_parent_agent_name(self, agent_name: Optional[str]) -> None:
         """记录调用当前子 Agent 的父 Agent 名称。"""

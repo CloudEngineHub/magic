@@ -5,7 +5,7 @@ This module defines the specific AI abilities used in the Super Magic applicatio
 and their default configurations.
 """
 from enum import Enum
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class AIAbility(str, Enum):
@@ -31,6 +31,7 @@ class AIAbility(str, Enum):
 
     # v1.3 implementations
     SKILL_RERANK = "skill_rerank"
+    MEMORY = "memory"
 
 
 # Default configurations for each AI ability
@@ -113,6 +114,13 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Skill Rerank Ability (v1.3)
     # 用于 find_skills 工具的 LLM 重排驱动，使用轻量快速模型降低延迟
     AIAbility.SKILL_RERANK: {
+        "model_id": "qwen3.5-flash",
+        "enabled": True,
+    },
+
+    # 记忆提取能力 (v1.3)
+    # 为后续回合记忆提取保留独立的轻量模型能力
+    AIAbility.MEMORY: {
         "model_id": "qwen3.5-flash",
         "enabled": True,
     },
@@ -237,6 +245,16 @@ def get_video_understanding_timeout() -> int:
     return int(get_ability_config(AIAbility.VIDEO_UNDERSTANDING, "timeout", default=600))
 
 
+def get_memory_model_id() -> str:
+    """获取后续回合记忆提取使用的模型 ID。
+
+    Returns:
+        str: 记忆提取能力使用的模型 ID。
+    """
+    model_id = get_ability_config(AIAbility.MEMORY, "model_id", default="qwen3.5-flash")
+    return str(model_id).strip() or "qwen3.5-flash"
+
+
 def get_compact_model_id() -> str | None:
     """获取上下文压缩能力使用的模型ID
 
@@ -246,8 +264,8 @@ def get_compact_model_id() -> str | None:
     Returns:
         Optional[str]: 模型ID，未配置或配置不可用时返回 None
     """
-    from agentlang.logger import get_logger
     from agentlang.llms.factory import LLMFactory
+    from agentlang.logger import get_logger
 
     logger = get_logger(__name__)
 

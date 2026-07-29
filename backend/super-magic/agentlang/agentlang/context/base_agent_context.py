@@ -98,6 +98,10 @@ class BaseAgentContext(BaseContext, AgentContextInterface):
         self.is_main_agent = is_main
         logger.debug(f"设置是否为主代理: {is_main}")
 
+    def is_main_agent_context(self) -> bool:
+        """判断当前上下文是否属于主代理。"""
+        return bool(self.is_main_agent)
+
     def set_stream_mode(self, enabled: bool) -> None:
         """设置是否使用流式输出
 
