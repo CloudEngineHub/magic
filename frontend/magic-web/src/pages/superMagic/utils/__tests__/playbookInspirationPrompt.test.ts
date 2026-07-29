@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { SkillPanelType } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import {
+	type DemoPanelConfig,
+	SkillPanelType,
+} from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	migratePlaybookInspirationPrompt,
 	migratePlaybookSceneInspirationPrompts,
@@ -59,5 +62,14 @@ describe("playbook inspiration prompt migration", () => {
 		}
 
 		expect(migratePlaybookSceneInspirationPrompts(configs)).toBe(configs)
+	})
+
+	it("keeps legacy configs without groups unchanged", () => {
+		const config = {
+			type: SkillPanelType.DEMO,
+			demo: {},
+		} as unknown as DemoPanelConfig
+
+		expect(migratePlaybookInspirationPrompt(config)).toBe(config)
 	})
 })

@@ -19,8 +19,11 @@ export function migratePlaybookInspirationPrompt(
 ): DemoPanelConfig | undefined {
 	if (!config) return undefined
 
+	const sourceGroups = config.demo.groups ?? []
+	if (sourceGroups.length === 0) return config
+
 	let changed = false
-	const groups = config.demo.groups.map((group) => {
+	const groups = sourceGroups.map((group) => {
 		let groupChanged = false
 		const children = group.children?.map((item) => {
 			if (hasPromptContent(item.prompt) || !hasPromptContent(item.description)) return item
