@@ -620,7 +620,6 @@ async def test_create_magicbase_table_returns_real_table_id(tmp_path):
     assert result.data["table"]["table_id"] == "200"
 
     state = await async_read_json(tmp_path / ".magicbase" / "migrations.json")
-    assert state["version"] == 2
     assert len(state["migrations"]) == 1
     assert state["migrations"][0]["result_table_id"] == "200"
     assert "result" not in state["migrations"][0]

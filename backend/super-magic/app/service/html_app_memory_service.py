@@ -18,7 +18,6 @@ MICRO_APP_MEMORY_FILE = "MICRO-APP.md"
 LEGACY_HTML_APP_MEMORY_FILE = "HTML-APP.md"
 MAGICBASE_DIR = ".magicbase"
 MAGICBASE_MIGRATIONS_FILE = "migrations.json"
-MAGICBASE_MIGRATIONS_VERSION = 2
 MAGICBASE_MODEL_START = "<!-- HTML_APP_MAGICBASE_DATA_MODEL_START -->"
 MAGICBASE_MODEL_END = "<!-- HTML_APP_MAGICBASE_DATA_MODEL_END -->"
 
@@ -146,18 +145,7 @@ def default_data_model() -> Dict[str, Any]:
 
 
 def default_migrations_state() -> Dict[str, Any]:
-    return {"version": MAGICBASE_MIGRATIONS_VERSION, "migrations": [], "data_model": default_data_model()}
-
-
-def compact_migrations_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    compacted = json_safe(state)
-    compacted["version"] = MAGICBASE_MIGRATIONS_VERSION
-    compacted["migrations"] = [
-        {key: value for key, value in migration.items() if key != "result"}
-        for migration in compacted.get("migrations", [])
-        if isinstance(migration, dict)
-    ]
-    return compacted
+    return {"migrations": [], "data_model": default_data_model()}
 
 
 def default_html_app_memory_content() -> str:
@@ -231,13 +219,13 @@ async def read_migrations_state() -> Dict[str, Any]:
         data["data_model"] = default_data_model()
     if not isinstance(data["data_model"].get("tables"), list):
         data["data_model"]["tables"] = []
-    return compact_migrations_state(data)
+    return data
 
 
 async def write_migrations_state(state: Dict[str, Any]) -> None:
     path = magicbase_migrations_path()
     await async_mkdir(path.parent, parents=True, exist_ok=True)
-    await async_write_json(path, compact_migrations_state(state), ensure_ascii=False, indent=2)
+    await async_write_json(path, json_safe(state), ensure_ascii=False, indent=2)
 
 
 def new_migration(operation: str, target: Dict[str, Any], planned_schema: Dict[str, Any], reason: str) -> Dict[str, Any]:
