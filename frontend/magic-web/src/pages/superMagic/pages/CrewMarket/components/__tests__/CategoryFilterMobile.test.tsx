@@ -4,7 +4,11 @@ import CategoryFilterMobile from "../CategoryFilterMobile"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => (key === "categories.allCrew" ? "All Crew" : key),
+		t: (key: string) => {
+			if (key === "categories.allCrew") return "All Crew"
+			if (key === "tabs.organizationShared") return "Organization Shared"
+			return key
+		},
 	}),
 }))
 
@@ -56,6 +60,23 @@ describe("CategoryFilterMobile", () => {
 		fireEvent.click(screen.getByTestId("category-filter-cat-1"))
 
 		expect(onCategoryChange).toHaveBeenCalledWith("cat-1")
+	})
+
+	it("renders organization shared after all and reports its fixed filter id", () => {
+		const onCategoryChange = vi.fn()
+
+		render(
+			<CategoryFilterMobile
+				categories={buildCategories(1)}
+				activeCategoryId="all"
+				onCategoryChange={onCategoryChange}
+			/>,
+		)
+
+		const organizationTab = screen.getByTestId("category-filter-organization")
+		expect(organizationTab).toHaveTextContent("Organization Shared")
+		fireEvent.click(organizationTab)
+		expect(onCategoryChange).toHaveBeenCalledWith("organization")
 	})
 
 	it("scrolls the active tab into view when activeCategoryId changes", () => {
