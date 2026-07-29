@@ -37,20 +37,21 @@ export const useStyles = createStyles(() => {
 		},
 
 		tooltipContent: {
-			width: "480px",
-			maxWidth: "calc(100vw - 32px)",
 			color: "inherit",
-			"& *": {
-				color: "inherit !important",
-			},
+			pointerEvents: "none",
 			"& p": {
 				margin: 0,
 				fontSize: "inherit !important",
 				lineHeight: "inherit !important",
+				color: "inherit !important",
 			},
 			"& .magic-mention, & .super-placeholder": {
 				fontSize: "inherit !important",
 				lineHeight: "inherit !important",
+				color: "inherit !important",
+			},
+			"& .inspector-detail-read-only, & .inspector-detail-read-only *": {
+				color: "inherit !important",
 			},
 			"& .inspector-detail-read-only > button": {
 				height: "16px",
