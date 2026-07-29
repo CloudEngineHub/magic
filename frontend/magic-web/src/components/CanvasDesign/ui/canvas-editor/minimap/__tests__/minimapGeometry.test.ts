@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { createMinimapTransform, mergeMinimapRects, projectMinimapRect } from "../minimapGeometry"
+import {
+	createMinimapTransform,
+	isPointInsideMinimapRect,
+	mergeMinimapRects,
+	projectMinimapRect,
+	unprojectMinimapPoint,
+} from "../minimapGeometry"
 
 describe("minimap geometry", () => {
 	it("merges element and viewport bounds across negative coordinates", () => {
@@ -40,5 +46,17 @@ describe("minimap geometry", () => {
 		expect(projected.y).toBeCloseTo(1.05)
 		expect(projected.x + projected.width / 2).toBeCloseTo(1.05)
 		expect(projected.y + projected.height / 2).toBeCloseTo(2.05)
+	})
+
+	it("maps pointer coordinates back to canvas coordinates and detects the viewport", () => {
+		const transform = { scale: 0.5, offsetX: 20, offsetY: 30 }
+
+		expect(unprojectMinimapPoint({ x: 70, y: 80 }, transform)).toEqual({ x: 100, y: 100 })
+		expect(
+			isPointInsideMinimapRect({ x: 70, y: 80 }, { x: 60, y: 70, width: 20, height: 20 }),
+		).toBe(true)
+		expect(
+			isPointInsideMinimapRect({ x: 81, y: 80 }, { x: 60, y: 70, width: 20, height: 20 }),
+		).toBe(false)
 	})
 })

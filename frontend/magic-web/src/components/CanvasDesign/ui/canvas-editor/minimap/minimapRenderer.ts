@@ -5,6 +5,7 @@ import {
 	mergeMinimapRects,
 	projectMinimapRect,
 	type MinimapSize,
+	type MinimapTransform,
 } from "./minimapGeometry"
 import type { MinimapSceneItem } from "./minimapScene"
 
@@ -25,6 +26,11 @@ interface DrawMinimapOptions {
 	theme: MinimapTheme
 }
 
+export interface MinimapRenderLayout {
+	transform: MinimapTransform
+	projectedViewportRect: Rect | null
+}
+
 function fillProjectedRect(
 	context: CanvasRenderingContext2D,
 	item: MinimapSceneItem,
@@ -38,7 +44,7 @@ function fillProjectedRect(
 	context.fillRect(rect.x, rect.y, rect.width, rect.height)
 }
 
-export function drawMinimap(options: DrawMinimapOptions): void {
+export function drawMinimap(options: DrawMinimapOptions): MinimapRenderLayout | null {
 	const { context, panelSize, items, selectedElementIds, contentBounds, viewportRect, theme } =
 		options
 	context.clearRect(0, 0, panelSize.width, panelSize.height)
@@ -47,10 +53,11 @@ export function drawMinimap(options: DrawMinimapOptions): void {
 		...(contentBounds ? [contentBounds] : []),
 		...(viewportRect ? [viewportRect] : []),
 	])
-	if (!worldBounds) return
+	if (!worldBounds) return null
 
 	const transform = createMinimapTransform(worldBounds, panelSize, MINIMAP_RENDER_CONFIG.padding)
-	if (!transform) return
+	if (!transform) return null
+	const projectedViewportRect = viewportRect ? projectMinimapRect(viewportRect, transform) : null
 
 	context.save()
 	context.fillStyle = theme.containerFill
@@ -81,12 +88,18 @@ export function drawMinimap(options: DrawMinimapOptions): void {
 		}
 	}
 
-	if (viewportRect) {
-		const viewport = projectMinimapRect(viewportRect, transform)
+	if (projectedViewportRect) {
 		context.strokeStyle = theme.viewportStroke
 		context.globalAlpha = MINIMAP_RENDER_CONFIG.viewportOpacity
 		context.lineWidth = MINIMAP_RENDER_CONFIG.viewportLineWidth
-		context.strokeRect(viewport.x, viewport.y, viewport.width, viewport.height)
+		context.strokeRect(
+			projectedViewportRect.x,
+			projectedViewportRect.y,
+			projectedViewportRect.width,
+			projectedViewportRect.height,
+		)
 	}
 	context.restore()
+
+	return { transform, projectedViewportRect }
 }

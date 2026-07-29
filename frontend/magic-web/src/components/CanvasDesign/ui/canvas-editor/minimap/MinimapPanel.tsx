@@ -5,7 +5,7 @@ import type { CanvasEventMap } from "../../../runtime/core/EventEmitter"
 import type { Rect } from "../../../runtime/shared/ids"
 import { getViewportCanvasRect } from "../../../runtime/shared/placement/elementUtils"
 import { MINIMAP_PANEL_SIZE, MINIMAP_RENDER_CONFIG } from "./constants"
-import { drawMinimap, type MinimapTheme } from "./minimapRenderer"
+import { drawMinimap, type MinimapRenderLayout, type MinimapTheme } from "./minimapRenderer"
 import {
 	collectMinimapScene,
 	getMinimapSceneSubtreeIds,
@@ -14,6 +14,7 @@ import {
 	translateMinimapSceneItems,
 	type MinimapScene,
 } from "./minimapScene"
+import { useMinimapViewportInteraction } from "./useMinimapViewportInteraction"
 
 interface MinimapPanelProps {
 	id: string
@@ -93,6 +94,7 @@ export default function MinimapPanel({ id }: MinimapPanelProps) {
 	const { canvas: canvasInstance } = useCanvas()
 	const panelRef = useRef<HTMLDivElement | null>(null)
 	const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null)
+	const minimapRenderLayoutRef = useRef<MinimapRenderLayout | null>(null)
 	const sceneRef = useRef<MinimapScene | null>(null)
 	const shouldRefreshSceneRef = useRef(true)
 	const pendingSceneElementIdsRef = useRef(new Set<string>())
@@ -105,12 +107,26 @@ export default function MinimapPanel({ id }: MinimapPanelProps) {
 	const specialEditingElementIdsRef = useRef(new Map<MinimapSpecialEditingMode, string>())
 	const selectedSceneElementIdsRef = useRef(new Set<string>())
 	const shouldRefreshSelectionRef = useRef(true)
+	const {
+		isViewportDragging,
+		handlePointerDown,
+		handlePointerMove,
+		handlePointerEnd,
+		handleClick,
+		finishViewportDrag,
+	} = useMinimapViewportInteraction({
+		canvas: canvasInstance,
+		panelRef,
+		panelSizeRef,
+		renderLayoutRef: minimapRenderLayoutRef,
+	})
 
 	const draw = useCallback(() => {
 		animationFrameRef.current = null
 		const panel = panelRef.current
 		const drawingCanvas = drawingCanvasRef.current
 		if (!panel || !drawingCanvas) return
+		minimapRenderLayoutRef.current = null
 
 		let context: CanvasRenderingContext2D | null = null
 		try {
@@ -189,7 +205,7 @@ export default function MinimapPanel({ id }: MinimapPanelProps) {
 			shouldRefreshSelectionRef.current = false
 		}
 
-		drawMinimap({
+		minimapRenderLayoutRef.current = drawMinimap({
 			context,
 			panelSize,
 			items: scene.items,
@@ -428,15 +444,28 @@ export default function MinimapPanel({ id }: MinimapPanelProps) {
 		<div
 			ref={panelRef}
 			id={id}
-			className="relative max-w-full overflow-hidden rounded-2xl border border-border bg-popover shadow-lg"
+			className={`relative max-w-full touch-none select-none overflow-hidden rounded-2xl border border-border bg-popover shadow-lg ${isViewportDragging ? "cursor-grabbing" : "cursor-pointer"}`}
 			style={{
 				width: MINIMAP_PANEL_SIZE.width,
 				aspectRatio: `${MINIMAP_PANEL_SIZE.width} / ${MINIMAP_PANEL_SIZE.height}`,
 			}}
 			role="region"
 			aria-label={t("zoom.minimap", "小地图")}
+			onPointerDown={handlePointerDown}
+			onPointerMove={handlePointerMove}
+			onPointerUp={handlePointerEnd}
+			onPointerCancel={handlePointerEnd}
+			onLostPointerCapture={(event) => {
+				event.stopPropagation()
+				finishViewportDrag(event.pointerId)
+			}}
+			onClick={handleClick}
 		>
-			<canvas ref={drawingCanvasRef} className="block size-full" aria-hidden="true" />
+			<canvas
+				ref={drawingCanvasRef}
+				className="pointer-events-none block size-full"
+				aria-hidden="true"
+			/>
 		</div>
 	)
 }

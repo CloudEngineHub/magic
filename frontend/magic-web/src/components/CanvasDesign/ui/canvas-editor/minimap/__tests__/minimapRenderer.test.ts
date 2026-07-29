@@ -28,7 +28,7 @@ describe("minimap renderer", () => {
 			},
 		} as unknown as CanvasRenderingContext2D
 
-		drawMinimap({
+		const layout = drawMinimap({
 			context,
 			panelSize: { width: 200, height: 150 },
 			items: [
@@ -64,6 +64,19 @@ describe("minimap renderer", () => {
 			{ type: "fill", alpha: 1, color: "#3b82f6" },
 			{ type: "stroke", alpha: 0.55, color: "#0a0a0a" },
 		])
+		expect(layout).toEqual({
+			transform: {
+				scale: expect.closeTo(1.1),
+				offsetX: expect.closeTo(34),
+				offsetY: expect.closeTo(31),
+			},
+			projectedViewportRect: {
+				x: expect.closeTo(12),
+				y: expect.closeTo(20),
+				width: expect.closeTo(176),
+				height: expect.closeTo(110),
+			},
+		})
 	})
 
 	it("uses the cached content bounds instead of rescanning item bounds", () => {

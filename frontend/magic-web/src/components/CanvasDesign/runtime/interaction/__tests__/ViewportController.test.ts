@@ -392,3 +392,66 @@ describe("ViewportController layout center preservation", () => {
 		expect(stage.position).toHaveBeenLastCalledWith({ x: 25, y: -80 })
 	})
 })
+
+describe("ViewportController external wheel input", () => {
+	beforeEach(() => {
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			return window.setTimeout(() => callback(performance.now()), 0)
+		})
+		vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+			window.clearTimeout(id)
+		})
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+		vi.restoreAllMocks()
+	})
+
+	it("keeps the minimap canvas point fixed while applying wheel zoom", () => {
+		const { canvas, controller, stage } = createController({
+			touch: false,
+			scale: 1,
+			position: { x: 10, y: 20 },
+		})
+		const canvasPoint = { x: 30, y: 40 }
+		const initialScreenPoint = {
+			x: stage.position().x + canvasPoint.x * stage.scaleX(),
+			y: stage.position().y + canvasPoint.y * stage.scaleY(),
+		}
+
+		controller.zoomByWheelDeltaAtCanvasPoint(canvasPoint, -120, "minimap")
+
+		const nextScale = stage.scaleX()
+		const nextPosition = stage.position()
+		expect(nextScale).toBeGreaterThan(1)
+		expect(nextPosition.x + canvasPoint.x * nextScale).toBeCloseTo(initialScreenPoint.x)
+		expect(nextPosition.y + canvasPoint.y * nextScale).toBeCloseTo(initialScreenPoint.y)
+		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
+			type: "viewport:changed",
+			data: expect.objectContaining({
+				source: "minimap",
+				phase: "move",
+			}),
+		})
+	})
+
+	it("pans with the same wheel delta semantics as the main canvas", () => {
+		const { canvas, controller, stage } = createController({
+			touch: false,
+			scale: 1,
+			position: { x: 10, y: 20 },
+		})
+
+		controller.panByWheelDelta(12, -8, "minimap")
+
+		expect(stage.position).toHaveBeenLastCalledWith({ x: -2, y: 28 })
+		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
+			type: "viewport:changed",
+			data: expect.objectContaining({
+				source: "minimap",
+				phase: "move",
+			}),
+		})
+	})
+})

@@ -561,10 +561,7 @@ export class ViewportController {
 			return
 		}
 
-		this.queuePanPosition(
-			offsetPanPosition(this.getCurrentPanPosition(), e.deltaX, e.deltaY),
-			"wheel",
-		)
+		this.panByWheelDelta(e.deltaX, e.deltaY, "wheel")
 	}
 
 	/**
@@ -1028,6 +1025,61 @@ export class ViewportController {
 	 */
 	public handleWheelFromFloating(e: WheelEvent): void {
 		this.handleWheelInput(e)
+	}
+
+	/** 按滚轮/触控板增量平移，供画布外部视口组件复用主画布的平移手感。 */
+	public panByWheelDelta(
+		deltaX: number,
+		deltaY: number,
+		source: ViewportChangeSource = "wheel",
+	): void {
+		if (
+			this.isPanZoomDisabled ||
+			!Number.isFinite(deltaX) ||
+			!Number.isFinite(deltaY) ||
+			(deltaX === 0 && deltaY === 0)
+		) {
+			return
+		}
+		this.queuePanPosition(
+			offsetPanPosition(this.getCurrentPanPosition(), deltaX, deltaY),
+			source,
+		)
+	}
+
+	/**
+	 * 按画布世界坐标锚定滚轮缩放，供小地图等画布外部视口组件使用。
+	 */
+	public zoomByWheelDeltaAtCanvasPoint(
+		canvasPoint: ViewportPoint,
+		deltaY: number,
+		source: ViewportChangeSource = "wheel",
+	): void {
+		if (
+			this.isPanZoomDisabled ||
+			!Number.isFinite(canvasPoint.x) ||
+			!Number.isFinite(canvasPoint.y) ||
+			!Number.isFinite(deltaY) ||
+			deltaY === 0
+		) {
+			return
+		}
+
+		const viewport = this.getZoomViewportSnapshot()
+		const anchor = {
+			x: viewport.position.x + canvasPoint.x * viewport.scale,
+			y: viewport.position.y + canvasPoint.y * viewport.scale,
+		}
+		this.queueZoomUpdate(
+			zoomByWheelDeltaAtAnchor(
+				viewport,
+				anchor,
+				deltaY,
+				this.getActiveMinScale(),
+				this.maxScale,
+			),
+			source,
+		)
 	}
 
 	/**

@@ -11,6 +11,11 @@ export interface MinimapTransform {
 	offsetY: number
 }
 
+export interface MinimapPoint {
+	x: number
+	y: number
+}
+
 function isFiniteNumber(value: number): boolean {
 	return Number.isFinite(value)
 }
@@ -96,4 +101,24 @@ export function projectMinimapRect(rect: Rect, transform: MinimapTransform, mini
 	}
 
 	return { x, y, width, height }
+}
+
+export function unprojectMinimapPoint(
+	point: MinimapPoint,
+	transform: MinimapTransform,
+): MinimapPoint | null {
+	if (!isFiniteNumber(transform.scale) || transform.scale <= 0) return null
+	return {
+		x: (point.x - transform.offsetX) / transform.scale,
+		y: (point.y - transform.offsetY) / transform.scale,
+	}
+}
+
+export function isPointInsideMinimapRect(point: MinimapPoint, rect: Rect): boolean {
+	return (
+		point.x >= rect.x &&
+		point.x <= rect.x + rect.width &&
+		point.y >= rect.y &&
+		point.y <= rect.y + rect.height
+	)
 }

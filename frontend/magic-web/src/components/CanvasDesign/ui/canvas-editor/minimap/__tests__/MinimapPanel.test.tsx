@@ -1,5 +1,5 @@
 import { StrictMode } from "react"
-import { cleanup, render } from "@testing-library/react"
+import { cleanup, fireEvent, render } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import MinimapPanel from "../MinimapPanel"
 
@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 	canvas: null as {
 		eventEmitter: {
 			on: (eventName: string, callback: (event: { data: unknown }) => void) => () => void
+			emit: ReturnType<typeof vi.fn>
 		}
 		geometryCacheManager: {
 			getElementsBounds: ReturnType<typeof vi.fn>
@@ -22,6 +23,15 @@ const mocks = vi.hoisted(() => ({
 		}
 		eraserManager: {
 			getErasingElementId: () => string | null
+		}
+		stage: {
+			position: () => { x: number; y: number }
+		}
+		viewportController: {
+			getScale: () => number
+			panByWheelDelta: ReturnType<typeof vi.fn>
+			setPosition: ReturnType<typeof vi.fn>
+			zoomByWheelDeltaAtCanvasPoint: ReturnType<typeof vi.fn>
 		}
 	} | null,
 	collectMinimapScene: vi.fn(),
@@ -90,6 +100,15 @@ function createCanvasMock() {
 		extend: null as string | null,
 		eraser: null as string | null,
 	}
+	let stagePosition = { x: 10, y: 20 }
+	const setPosition = vi.fn((position: { x: number; y: number }) => {
+		stagePosition = position
+	})
+	const panByWheelDelta = vi.fn()
+	const zoomByWheelDeltaAtCanvasPoint = vi.fn()
+	const canvasEventEmit = vi.fn((event: { type: string; data: unknown }) => {
+		listeners.get(event.type)?.forEach((callback) => callback({ data: event.data }))
+	})
 	return {
 		canvas: {
 			eventEmitter: {
@@ -102,6 +121,7 @@ function createCanvasMock() {
 					eventListeners.add(callback)
 					return () => eventListeners?.delete(callback)
 				},
+				emit: canvasEventEmit,
 			},
 			geometryCacheManager: { getElementsBounds },
 			selectionManager: {
@@ -116,6 +136,22 @@ function createCanvasMock() {
 			eraserManager: {
 				getErasingElementId: () => specialEditingElementIds.eraser,
 			},
+			stage: {
+				position: () => ({ ...stagePosition }),
+			},
+			viewportController: {
+				getScale: () => 2,
+				panByWheelDelta,
+				setPosition,
+				zoomByWheelDeltaAtCanvasPoint,
+			},
+		},
+		canvasEventEmit,
+		panByWheelDelta,
+		setPosition,
+		zoomByWheelDeltaAtCanvasPoint,
+		setStagePosition: (position: { x: number; y: number }) => {
+			stagePosition = position
 		},
 		setSelectedIds: (elementIds: string[]) => {
 			selectedIds = elementIds
@@ -132,9 +168,24 @@ function createCanvasMock() {
 	}
 }
 
+function mockMinimapPanelBounds(panel: HTMLElement) {
+	vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({
+		x: 0,
+		y: 0,
+		left: 0,
+		top: 0,
+		right: 200,
+		bottom: 150,
+		width: 200,
+		height: 150,
+		toJSON: () => undefined,
+	})
+}
+
 describe("MinimapPanel", () => {
 	beforeEach(() => {
 		mocks.canvas = null
+		vi.stubGlobal("PointerEvent", MouseEvent)
 		vi.stubGlobal(
 			"ResizeObserver",
 			class ResizeObserver {
@@ -151,10 +202,15 @@ describe("MinimapPanel", () => {
 		mocks.getMinimapSceneSubtreeIds.mockImplementation((_scene, rootIds: readonly string[]) => [
 			...rootIds,
 		])
+		mocks.drawMinimap.mockReturnValue({
+			transform: { scale: 1, offsetX: 0, offsetY: 0 },
+			projectedViewportRect: { x: 50, y: 35, width: 100, height: 80 },
+		})
 	})
 
 	afterEach(() => {
 		cleanup()
+		vi.useRealTimers()
 		vi.unstubAllGlobals()
 		vi.restoreAllMocks()
 		vi.clearAllMocks()
@@ -288,5 +344,152 @@ describe("MinimapPanel", () => {
 		}
 
 		expect(mocks.collectMinimapScene).toHaveBeenCalledTimes(1)
+	})
+
+	it("centers the viewport on click and drags the viewport rectangle", () => {
+		const { canvas, canvasEventEmit, setPosition, setStagePosition } = createCanvasMock()
+		mocks.canvas = canvas
+		const parentPointerDown = vi.fn()
+		const parentClick = vi.fn()
+		const { flush } = createAnimationFrameHarness()
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			setTransform: vi.fn(),
+			clearRect: vi.fn(),
+		} as unknown as CanvasRenderingContext2D)
+
+		const { getByRole } = render(
+			<div onPointerDown={parentPointerDown} onClick={parentClick}>
+				<MinimapPanel id="minimap-panel" />
+			</div>,
+		)
+		flush()
+		const panel = getByRole("region", { name: "小地图" })
+		mockMinimapPanelBounds(panel)
+
+		fireEvent.pointerDown(panel, { button: 0, pointerId: 1, clientX: 20, clientY: 20 })
+		expect(setPosition).toHaveBeenLastCalledWith({ x: 70, y: 60 })
+		expect(canvasEventEmit).toHaveBeenNthCalledWith(1, {
+			type: "viewport:gesture",
+			data: { active: true, source: "minimap", pointerCount: 1 },
+		})
+		expect(canvasEventEmit).toHaveBeenNthCalledWith(2, {
+			type: "viewport:gesture",
+			data: { active: false, source: "minimap" },
+		})
+		expect(parentPointerDown).not.toHaveBeenCalled()
+		fireEvent.click(panel)
+		expect(parentClick).not.toHaveBeenCalled()
+
+		canvasEventEmit.mockClear()
+		setPosition.mockClear()
+		setStagePosition({ x: 10, y: 20 })
+		fireEvent.pointerDown(panel, { button: 0, pointerId: 2, clientX: 60, clientY: 50 })
+		expect(setPosition).not.toHaveBeenCalled()
+		fireEvent.pointerUp(panel, { pointerId: 2, clientX: 60, clientY: 50 })
+		expect(setPosition).toHaveBeenLastCalledWith({ x: -10, y: 0 })
+		expect(canvasEventEmit).toHaveBeenNthCalledWith(1, {
+			type: "viewport:gesture",
+			data: { active: true, source: "minimap", pointerCount: 1 },
+		})
+		expect(canvasEventEmit).toHaveBeenNthCalledWith(2, {
+			type: "viewport:gesture",
+			data: { active: false, source: "minimap" },
+		})
+
+		canvasEventEmit.mockClear()
+		setPosition.mockClear()
+		setStagePosition({ x: 10, y: 20 })
+		fireEvent.pointerDown(panel, { button: 0, pointerId: 3, clientX: 60, clientY: 50 })
+		fireEvent.pointerMove(panel, { pointerId: 3, clientX: 62, clientY: 52 })
+		expect(setPosition).not.toHaveBeenCalled()
+		expect(canvasEventEmit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "viewport:gesture" }),
+		)
+		expect(panel).toHaveClass("cursor-pointer")
+
+		fireEvent.pointerMove(panel, { pointerId: 3, clientX: 80, clientY: 70 })
+		expect(setPosition).toHaveBeenLastCalledWith({ x: -30, y: -20 })
+		expect(canvasEventEmit).toHaveBeenCalledWith({
+			type: "viewport:gesture",
+			data: { active: true, source: "minimap", pointerCount: 1 },
+		})
+		expect(panel).toHaveClass("cursor-grabbing")
+
+		fireEvent.pointerUp(panel, { pointerId: 3, clientX: 80, clientY: 70 })
+		expect(canvasEventEmit).toHaveBeenLastCalledWith({
+			type: "viewport:gesture",
+			data: { active: false, source: "minimap" },
+		})
+		expect(panel).toHaveClass("cursor-pointer")
+	})
+
+	it("pans without Mod and zooms around a stable pointer anchor with Mod", () => {
+		vi.useFakeTimers()
+		const { canvas, canvasEventEmit, panByWheelDelta, zoomByWheelDeltaAtCanvasPoint } =
+			createCanvasMock()
+		mocks.canvas = canvas
+		const parentWheel = vi.fn()
+		const { flush } = createAnimationFrameHarness()
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			setTransform: vi.fn(),
+			clearRect: vi.fn(),
+		} as unknown as CanvasRenderingContext2D)
+
+		const { getByRole } = render(
+			<div onWheel={parentWheel}>
+				<MinimapPanel id="minimap-panel" />
+			</div>,
+		)
+		flush()
+		const panel = getByRole("region", { name: "小地图" })
+		mockMinimapPanelBounds(panel)
+
+		const firstWheelHandled = fireEvent.wheel(panel, {
+			clientX: 40,
+			clientY: 30,
+			deltaX: 12,
+			deltaY: 24,
+		})
+		fireEvent.wheel(panel, {
+			clientX: 80,
+			clientY: 60,
+			deltaY: -120,
+			ctrlKey: true,
+		})
+		fireEvent.wheel(panel, {
+			clientX: 100,
+			clientY: 70,
+			deltaY: -40,
+			ctrlKey: true,
+		})
+
+		expect(firstWheelHandled).toBe(false)
+		expect(parentWheel).not.toHaveBeenCalled()
+		expect(panByWheelDelta).toHaveBeenCalledWith(12, 24, "minimap")
+		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
+			1,
+			{ x: 80, y: 60 },
+			-120,
+			"minimap",
+		)
+		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
+			2,
+			{ x: 80, y: 60 },
+			-40,
+			"minimap",
+		)
+		expect(canvasEventEmit).toHaveBeenCalledTimes(1)
+		expect(canvasEventEmit).toHaveBeenLastCalledWith({
+			type: "viewport:gesture",
+			data: { active: true, source: "minimap", pointerCount: 1 },
+		})
+
+		vi.advanceTimersByTime(119)
+		expect(canvasEventEmit).toHaveBeenCalledTimes(1)
+		vi.advanceTimersByTime(1)
+		expect(canvasEventEmit).toHaveBeenLastCalledWith({
+			type: "viewport:gesture",
+			data: { active: false, source: "minimap" },
+		})
 	})
 })

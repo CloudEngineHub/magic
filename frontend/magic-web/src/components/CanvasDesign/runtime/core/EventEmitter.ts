@@ -20,6 +20,7 @@ import type { ResourceLoadFailureReason } from "../resources/media-common/resour
 export type ViewportChangeSource =
 	| "wheel"
 	| "gesture"
+	| "minimap"
 	| "programmatic"
 	| "resize"
 	| "restore"
@@ -78,7 +79,7 @@ export interface CanvasEventMap {
 	}
 	"viewport:gesture": {
 		active: boolean
-		source: "touch-pinch" | "webkit-gesture"
+		source: "touch-pinch" | "webkit-gesture" | "minimap"
 		pointerCount?: number
 	}
 	"viewport:reset": void
