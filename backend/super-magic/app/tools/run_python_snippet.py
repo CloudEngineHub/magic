@@ -108,6 +108,9 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
         extra_env = {
             "PYTHONPATH": os.pathsep.join([project_root_str, *path_parts]),
             "SUPER_MAGIC_PROJECT_ROOT": project_root_str,
+            # 普通 Python 代码片段不属于 Code Mode，显式清空 execution ID，
+            # 避免继承宿主环境中的同名变量后误调用 sdk.tool。
+            "SUPER_MAGIC_SDK_EXECUTION_ID": "",
         }
 
         if tool_context is None:
