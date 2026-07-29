@@ -12,6 +12,7 @@ import {
 	type MagicClipboardMetadata,
 } from "@/utils/clipboard-helpers"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
+import { transformInspectorContent } from "./inspector-detail"
 
 function prepareMentionAttrs(
 	attrs: TiptapMentionAttributes,
@@ -127,11 +128,16 @@ const CopyMessageExtension = Extension.create({
 									metadata,
 									this.options.dataService ?? null,
 								)
+								const editorContent = transformInspectorContent(content)
 								return (
-									runActiveEditor(this.editor, (editor) => {
-										editor.commands.insertContent(content)
-										return true
-									}, false) ?? false
+									runActiveEditor(
+										this.editor,
+										(editor) => {
+											editor.commands.insertContent(editorContent)
+											return true
+										},
+										false,
+									) ?? false
 								)
 							} catch (err) {
 								console.error("❌ Failed to parse rich text content:", err)
