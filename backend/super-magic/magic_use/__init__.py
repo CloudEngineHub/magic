@@ -1,10 +1,95 @@
-"""
-Magic Browser 模块
+"""Backend-neutral browser automation SDK."""
 
-提供浏览器自动化功能，用于网页内容抓取和交互。
-"""
+from magic_use.client import BrowserClient, create_browser
+from magic_use.config import (
+    BrowserContextConfig,
+    BrowserLifecycleConfig,
+    BrowserResourceLimits,
+    BrowserRuntimeConfig,
+    BrowserScriptConfig,
+    BrowserTimeouts,
+    LocalPlaywrightConfig,
+    ProxyConfig,
+    PureConfig,
+    RemotePlaywrightConfig,
+    SnapshotConfig,
+)
+from magic_use.models import (
+    ActionKind,
+    ActionOutcome,
+    ActionRequest,
+    ActionResult,
+    BoundingBox,
+    BrowserBackendKind,
+    BrowserCapabilities,
+    BrowserEvent,
+    BrowserEventType,
+    BrowserIdentity,
+    BrowserName,
+    BrowserPage,
+    BrowserSession,
+    ConsoleEntry,
+    ElementRefRecord,
+    NavigationResult,
+    NetworkEntry,
+    PageSnapshot,
+    PageState,
+    ScreenshotResult,
+    SessionState,
+    SnapshotDiff,
+    SnapshotNode,
+    SnapshotOptions,
+    SnapshotScope,
+    Viewport,
+    WaitConditionKind,
+    WaitRequest,
+)
+from magic_use.userscripts import Userscript, UserscriptRegistry, UserscriptRunAt, parse_userscript
 
-from magic_use.magic_browser import MagicBrowser
-from magic_use.magic_browser_config import MagicBrowserConfig
-
-__all__ = ['MagicBrowser', 'MagicBrowserConfig']
+__all__ = [
+    "ActionKind",
+    "ActionOutcome",
+    "ActionRequest",
+    "ActionResult",
+    "BoundingBox",
+    "BrowserBackendKind",
+    "BrowserCapabilities",
+    "BrowserClient",
+    "BrowserContextConfig",
+    "BrowserEvent",
+    "BrowserEventType",
+    "BrowserIdentity",
+    "BrowserLifecycleConfig",
+    "BrowserName",
+    "BrowserPage",
+    "BrowserRuntimeConfig",
+    "BrowserResourceLimits",
+    "BrowserScriptConfig",
+    "BrowserSession",
+    "BrowserTimeouts",
+    "ConsoleEntry",
+    "ElementRefRecord",
+    "LocalPlaywrightConfig",
+    "NavigationResult",
+    "NetworkEntry",
+    "PageSnapshot",
+    "PageState",
+    "ProxyConfig",
+    "PureConfig",
+    "RemotePlaywrightConfig",
+    "ScreenshotResult",
+    "SessionState",
+    "SnapshotConfig",
+    "SnapshotDiff",
+    "SnapshotNode",
+    "SnapshotOptions",
+    "SnapshotScope",
+    "Userscript",
+    "UserscriptRegistry",
+    "UserscriptRunAt",
+    "Viewport",
+    "WaitConditionKind",
+    "WaitRequest",
+    "create_browser",
+    "parse_userscript",
+]

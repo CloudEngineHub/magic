@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 
 from app.core.entity.aigc_metadata import AigcMetadataParams
+from app.service.browser.browser_playwright_runtime import SharedBrowserRuntime
 from app.service.convert_task_manager import task_manager
 from app.service.file_convert.base_convert_service import BaseConvertService, ViewportSize
 
@@ -1092,9 +1093,7 @@ class PdfConvertService(BaseConvertService):
 
         # 🎯 优化：移除并发处理，改为串行处理避免网络资源竞争
         # 串行处理确保每个页面都能充分利用网络带宽加载外部资源
-        playwright_instance = None
-        shared_browser = None
-        shared_context = None
+        browser_runtime: SharedBrowserRuntime | None = None
         try:
             logger.info("PDF转换：准备共享浏览器实例（支持服务端模式）")
             # 针对PDF转换，使用高分辨率视口尺寸
@@ -1108,7 +1107,7 @@ class PdfConvertService(BaseConvertService):
                 viewport = ViewportSize(width=1920, height=1080)
                 logger.info("PDF转换：标准模式 1920×1080")
 
-            playwright_instance, shared_browser, shared_context = await self._create_shared_browser_context(
+            browser_runtime = await self._create_shared_browser_context(
                 browser_type="pdf",
                 viewport=viewport,
                 device_scale_factor=1.0,
@@ -1145,7 +1144,7 @@ class PdfConvertService(BaseConvertService):
                         local_error_msg = f"跳过非 HTML/Markdown 文件 (文件类型: {source_suffix})"
                         return None, f"文件 {file_key}: {local_error_msg}"
 
-                    page = await shared_context.new_page()
+                    page = await browser_runtime.context.new_page()
                     page.set_default_timeout(self.PAGE_OPERATION_TIMEOUT)
                     self._bind_page_console_logger(page, debug_info=f"PDF转换-{local_file_path.name}")
 
@@ -1422,9 +1421,7 @@ class PdfConvertService(BaseConvertService):
             if progress_updater_task:
                 await progress_update_queue.put(None)
                 await progress_updater_task
-            await self._close_shared_browser_context(
-                playwright_instance, shared_browser, shared_context, log_prefix="PDF转换"
-            )
+            await self._close_shared_browser_context(browser_runtime, log_prefix="PDF转换")
 
     async def _convert_projects_to_pdf(
         self,

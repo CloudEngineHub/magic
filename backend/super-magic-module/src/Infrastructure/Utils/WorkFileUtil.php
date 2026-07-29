@@ -13,7 +13,7 @@ class WorkFileUtil
      * Hidden directory names that should be marked as hidden.
      * Only files/folders inside these directories (or the directories themselves) are hidden.
      */
-    private const HIDDEN_DIRECTORIES = ['.tmp', '.visual', '.asr_states', '.asr_recordings', '.webview-reports', '.browser_screenshots', '.webview-reports'];
+    private const HIDDEN_DIRECTORIES = ['.tmp', '.visual', '.asr_states', '.asr_recordings', '.webview-reports'];
 
     /**
      * @deprecated Use determineIsHidden() in domain service instead.
@@ -155,7 +155,7 @@ class WorkFileUtil
 
     /**
      * Check if a file path is a snapshot file.
-     * Snapshot files are located in .webview-reports or .browser_screenshots directories.
+     * Snapshot files are located in the existing Workspace snapshot directories.
      *
      * @param string $filePath File path to check
      * @return bool True if the file is a snapshot file, false otherwise
@@ -173,9 +173,9 @@ class WorkFileUtil
         // Split path into components
         $components = explode('/', $normalizedPath);
 
-        // Check if any component is exactly .webview-reports or .browser_screenshots
+        // Check if any component is an existing Workspace snapshot directory
         foreach ($components as $component) {
-            if ($component === '.webview-reports' || $component === '.browser_screenshots' || $component === '.visual') {
+            if ($component === '.webview-reports' || $component === '.visual') {
                 return true;
             }
         }

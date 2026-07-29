@@ -1327,6 +1327,65 @@ input[type="checkbox"] {
     line-height: 1.5;
 }
 
+.tool-call-detail.tool-call-detail-browser {
+    font-family: inherit;
+    word-break: normal;
+    color: #334155;
+    background: #fff;
+    max-height: 360px;
+}
+
+.browser-tool-detail-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.browser-tool-detail-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.browser-tool-detail-summary,
+.browser-tool-detail-target {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #64748b;
+}
+
+.browser-tool-detail-url {
+    overflow: hidden;
+    font-size: 11px;
+    color: #2563eb;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.browser-tool-detail-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 280px;
+    object-fit: contain;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.browser-tool-detail-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 96px;
+    font-size: 11px;
+    color: #94a3b8;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
 /* ask_user 交互卡片 */
 .ask-user-card {
     margin-top: 6px;

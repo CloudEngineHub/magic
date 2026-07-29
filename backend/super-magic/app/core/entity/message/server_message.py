@@ -50,6 +50,13 @@ class DisplayType(str, Enum):
     ASK_USER = "ask_user"  # ask_user 问答结果展示
 
 
+class BrowserDetailStatus(str, Enum):
+    """Browser 工具面向用户的结果状态。"""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class TodoOperationType(str, Enum):
     """Todo操作类型枚举"""
 
@@ -135,6 +142,11 @@ class BrowserContent(BaseModel):
     url: str  # 浏览器URL
     title: str  # 浏览器标题
     file_key: Optional[str] = None  # 浏览器截图
+    action: Optional[str] = None  # 用户可理解的操作名称
+    summary: Optional[str] = None  # 本次操作结果摘要
+    page_title: Optional[str] = None  # 当前页面标题
+    target: Optional[str] = None  # 本次操作对象
+    status: Optional[BrowserDetailStatus] = None  # 本次操作状态
 
 
 class SearchResultItem(BaseModel):

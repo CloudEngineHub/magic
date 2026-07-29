@@ -92,8 +92,8 @@
    */
 
   // 获取视口的尺寸
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  let viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  let viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
   /**
    * 计算字符串的哈希值
@@ -743,7 +743,9 @@
    * @param {string} scope - 'viewport'仅获取可见元素，'all'获取所有元素
    * @returns {Array<Element>} - 过滤后的交互式DOM节点数组
    */
-  function getInteractiveDomNodes(scope = 'viewport') {
+  function getInteractiveDomNodes(scope = 'viewport', assignMagicIds = true) {
+    viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    viewportHeight = window.innerHeight || document.documentElement.clientHeight;
     const initialNodes = [];
 
     // 深度优先遍历DOM树
@@ -778,6 +780,11 @@
       // 递归遍历子节点
       for (const child of node.children) {
         traverse(child);
+      }
+      if (node.shadowRoot) {
+        for (const child of node.shadowRoot.children) {
+          traverse(child);
+        }
       }
     }
 
@@ -830,10 +837,12 @@
     const finalNodes = [...whitelisted, ...filteredByOverlap];
 
     // 在返回前为所有最终确定的节点添加 magic-touch-id
-    finalNodes.forEach(element => {
-      const magicId = generateMagicId(element);
-      element.setAttribute('magic-touch-id', magicId);
-    });
+    if (assignMagicIds) {
+      finalNodes.forEach(element => {
+        const magicId = generateMagicId(element);
+        element.setAttribute('magic-touch-id', magicId);
+      });
+    }
 
     return finalNodes;
   }
@@ -923,10 +932,133 @@
     return result;
   }
 
+  function getStructuralPath(element) {
+    const path = [];
+    let current = element;
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      const parent = current.parentElement;
+      if (!parent) break;
+      path.push(Array.prototype.indexOf.call(parent.children, current));
+      current = parent;
+    }
+    return path.reverse();
+  }
+
+  function getVisibility(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const visible = rect.width > 0 && rect.height > 0 &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      Number.parseFloat(style.opacity || '1') > 0;
+    const inViewport = visible && rect.right > 0 && rect.bottom > 0 &&
+      rect.left < window.innerWidth && rect.top < window.innerHeight;
+    if (!inViewport) return { visible, inViewport, occluded: false };
+
+    const insetX = Math.min(Math.max(rect.width * 0.2, 1), rect.width / 2);
+    const insetY = Math.min(Math.max(rect.height * 0.2, 1), rect.height / 2);
+    const points = [
+      [rect.left + rect.width / 2, rect.top + rect.height / 2],
+      [rect.left + insetX, rect.top + insetY],
+      [rect.right - insetX, rect.top + insetY],
+      [rect.left + insetX, rect.bottom - insetY],
+      [rect.right - insetX, rect.bottom - insetY],
+    ];
+    const hasVisiblePoint = points.some(([rawX, rawY]) => {
+      const x = Math.min(window.innerWidth - 1, Math.max(0, rawX));
+      const y = Math.min(window.innerHeight - 1, Math.max(0, rawY));
+      return document.elementsFromPoint(x, y).some(candidate =>
+        candidate === element || element.contains(candidate)
+      );
+    });
+    return { visible, inViewport, occluded: !hasVisiblePoint };
+  }
+
+  function getProbeRole(element, categoryAndType) {
+    const explicitRole = element.getAttribute('role');
+    if (explicitRole) return explicitRole.split(/\s+/)[0];
+    const tagName = element.tagName.toLowerCase();
+    if (tagName === 'a') return 'link';
+    if (['button', 'summary', 'details'].includes(tagName)) return 'button';
+    if (tagName === 'select') return 'combobox';
+    if (tagName === 'textarea' || element.isContentEditable) return 'textbox';
+    if (tagName === 'input') {
+      const inputType = (element.type || 'text').toLowerCase();
+      if (['button', 'submit', 'reset', 'image'].includes(inputType)) return 'button';
+      if (inputType === 'checkbox') return 'checkbox';
+      if (inputType === 'radio') return 'radio';
+      if (inputType === 'range') return 'slider';
+      if (inputType === 'number') return 'spinbutton';
+      if (inputType === 'search') return 'searchbox';
+      if (inputType === 'file') return 'button';
+      return 'textbox';
+    }
+    if (categoryAndType.category === 'button') return 'button';
+    return categoryAndType.type || 'generic';
+  }
+
+  function getProbeActions(element, role) {
+    const actions = [];
+    const disabled = element.disabled || element.getAttribute('aria-disabled') === 'true';
+    if (!disabled && isInteractive(element)) actions.push('click', 'hover');
+    if (!disabled && isInputable(element)) actions.push('fill', 'press');
+    if (!disabled && ['checkbox', 'switch'].includes(role)) actions.push('check');
+    if (!disabled && ['combobox', 'listbox'].includes(role)) actions.push('select');
+    if (!disabled && element.matches('input[type="file"]')) actions.push('upload');
+    return Array.from(new Set(actions));
+  }
+
+  function collectProbe() {
+    const nodes = getInteractiveDomNodes('all', false).map(element => {
+      const rect = element.getBoundingClientRect();
+      const visibility = getVisibility(element);
+      const categoryAndType = getCategoryAndType(element);
+      const role = getProbeRole(element, categoryAndType);
+      const states = [];
+      if (element.disabled || element.getAttribute('aria-disabled') === 'true') states.push('disabled');
+      if (element.checked === true || element.getAttribute('aria-checked') === 'true') states.push('checked');
+      if (element.selected === true || element.getAttribute('aria-selected') === 'true') states.push('selected');
+      if (element.getAttribute('aria-expanded') === 'true') states.push('expanded');
+      if (element.getAttribute('aria-pressed') === 'true') states.push('pressed');
+      if (element.required === true || element.getAttribute('aria-required') === 'true') states.push('required');
+      if (element.readOnly === true || element.getAttribute('aria-readonly') === 'true') states.push('readonly');
+      if (document.activeElement === element) states.push('focused');
+      const attributes = {};
+      ['id', 'name', 'type', 'href', 'aria-label', 'data-testid', 'aria-controls', 'aria-haspopup'].forEach(name => {
+        const value = element.getAttribute(name);
+        if (value && !((name === 'href') && /^(data|javascript):/i.test(value))) attributes[name] = value;
+      });
+      return {
+        role,
+        name: getReadableName(element),
+        tag: element.tagName.toLowerCase(),
+        attributes,
+        states,
+        actions: getProbeActions(element, role),
+        visible: visibility.visible,
+        inViewport: visibility.inViewport,
+        occluded: visibility.occluded,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        path: getStructuralPath(element),
+      };
+    });
+    return {
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        documentWidth: document.documentElement.scrollWidth,
+        documentHeight: document.documentElement.scrollHeight,
+      },
+      nodes,
+    };
+  }
+
   // 将核心功能暴露到 window 对象上
   window.MagicTouch = {
     getInteractiveDomNodes: getInteractiveDomNodes,     // 获取原始DOM节点 (主要供内部或调试使用)
     getInteractiveElements: getInteractiveElements, // 获取结构化的元素信息 (主要API)
+    collectProbe: collectProbe,
   };
 
   // 可以在控制台调用 MagicTouch.getInteractiveElements() 或 MagicTouch.getInteractiveElements('all') 查看结果

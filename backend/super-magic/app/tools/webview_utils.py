@@ -251,46 +251,6 @@ def generate_search_engine_referer(target_url: str) -> str:
         logger.warning(f"生成referer时发生错误: {e}, 使用默认Google搜索")
         return _generate_google_url("search")
 
-async def goto_external_website_with_referer(browser, url: str, page_id: Optional[str] = None, wait_until: str = "domcontentloaded"):
-    """访问外部网站并设置搜索引擎 referer，模拟人类浏览行为
-
-    Args:
-        browser: MagicBrowser 实例
-        url: 目标网站URL
-        page_id: 页面ID，如果为None则创建新页面
-        wait_until: 等待页面加载状态
-
-    Returns:
-        MagicBrowserResult: 导航结果
-    """
-    try:
-        # 生成智能 referer
-        referer = generate_search_engine_referer(url)
-
-        # 获取或创建页面
-        if page_id is None:
-            # 创建新页面
-            page_id = await browser.new_page()
-
-        # 获取页面对象
-        page = await browser.get_page_by_id(page_id)
-        if not page:
-            logger.error(f"无法获取页面: {page_id}")
-            return await browser.goto(page_id, url, wait_until)
-
-        # 设置 referer 头
-        await page.set_extra_http_headers({"Referer": referer})
-        logger.info(f"已为页面 {page_id} 设置referer: {referer}")
-
-        # 执行导航
-        result = await browser.goto(page_id, url, wait_until)
-        return result
-
-    except Exception as e:
-        logger.warning(f"设置人类行为模拟失败，回退到普通导航: {e}")
-        # 如果设置referer失败，回退到普通导航
-        return await browser.goto(page_id, url, wait_until)
-
 # ====================
 # 文件管理（保留用于未来可能的其他用途）
 # ====================

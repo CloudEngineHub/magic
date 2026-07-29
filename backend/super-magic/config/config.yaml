@@ -9,21 +9,68 @@
 # =====================================================
 
 browser:
+  # 浏览器后端：local_playwright、remote_playwright 或 chrome_extension。
+  # 未配置时，本地环境使用 local_playwright，其他环境使用 remote_playwright。
+  # chrome_extension 必须由受保护的产品配对流程注入 TunnelProvider，不能直接作为普通默认配置启动。
+  backend: ${BROWSER_BACKEND:-None}
+  browser_type: ${BROWSER_TYPE:-chromium}
   headless: ${BROWSER_HEADLESS:-false}
-  cookies_file: ${BROWSER_COOKIES_FILE:-.browser/cookies.json}
   storage_state_template_url: ${BROWSER_STORAGE_STATE_TEMPLATE_URL:-None}
+  viewport_width: ${BROWSER_VIEWPORT_WIDTH:-1280}
+  viewport_height: ${BROWSER_VIEWPORT_HEIGHT:-1940}
+  device_scale_factor: ${BROWSER_DEVICE_SCALE_FACTOR:-2}
+  locale: ${BROWSER_LOCALE:-zh-CN}
+  timezone_id: ${BROWSER_TIMEZONE_ID:-Asia/Shanghai}
+  default_timeout: ${BROWSER_DEFAULT_TIMEOUT:-30000}
+  navigation_timeout: ${BROWSER_NAVIGATION_TIMEOUT:-30000}
+  script_timeout: ${BROWSER_SCRIPT_TIMEOUT:-10000}
+  action_settle_timeout: ${BROWSER_ACTION_SETTLE_TIMEOUT:-150}
+  stability_timeout: ${BROWSER_STABILITY_TIMEOUT:-3000}
+  network_quiet_timeout: ${BROWSER_NETWORK_QUIET_TIMEOUT:-500}
+  dom_quiet_timeout: ${BROWSER_DOM_QUIET_TIMEOUT:-300}
+  event_buffer_size: ${BROWSER_EVENT_BUFFER_SIZE:-1000}
+  diagnostic_buffer_size: ${BROWSER_DIAGNOSTIC_BUFFER_SIZE:-1000}
+  bypass_csp: ${BROWSER_BYPASS_CSP:-true}
+  ignore_https_errors: ${BROWSER_IGNORE_HTTPS_ERRORS:-true}
+  accept_downloads: ${BROWSER_ACCEPT_DOWNLOADS:-true}
 
-  # ========== 浏览器服务端模式配置 ==========
-  # 是否使用服务端模式（连接远程浏览器服务器）
-  # 注意：如果不配置此项，系统会根据环境自动选择：
-  #   - dev 环境（sandbox.app_env=dev 或 APP_ENV=dev）：自动使用本地模式（use_server_mode=false）
-  #   - 非 dev 环境：自动使用服务端模式（use_server_mode=true）
-  # 如果明确配置此项，则使用配置的值，不进行自动选择
-  # 环境变量: BROWSER_USE_SERVER_MODE
-  # use_server_mode: ${BROWSER_USE_SERVER_MODE:-None}  # 注释掉，让系统根据环境自动选择
+  lifecycle:
+    page_idle_seconds: ${BROWSER_PAGE_IDLE_SECONDS:-600}
+    page_keep_alive_max_seconds: ${BROWSER_PAGE_KEEP_ALIVE_MAX_SECONDS:-3600}
+    context_idle_seconds: ${BROWSER_CONTEXT_IDLE_SECONDS:-120}
+    host_idle_seconds: ${BROWSER_HOST_IDLE_SECONDS:-120}
+    sweep_interval_seconds: ${BROWSER_LIFECYCLE_SWEEP_INTERVAL_SECONDS:-5}
+
+  artifacts:
+    webp_quality: ${BROWSER_WEBP_QUALITY:-35}
+    webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-15}
+    webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-5}
+    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-102400}
+    resize_step: ${BROWSER_SNAPSHOT_RESIZE_STEP:-0.85}
+    min_dimension: ${BROWSER_SNAPSHOT_MIN_DIMENSION:-640}
+
+  resources:
+    soft_contexts: ${BROWSER_SOFT_CONTEXTS:-8}
+    hard_contexts: ${BROWSER_HARD_CONTEXTS:-12}
+    soft_pages: ${BROWSER_SOFT_PAGES:-24}
+    hard_pages: ${BROWSER_HARD_PAGES:-32}
+
+  scripts:
+    pure_enabled: ${BROWSER_PURE_ENABLED:-true}
+    # 按需在 config.local.yaml 填写域名列表。
+    pure_disabled_domains: []
+    lens_enabled: ${BROWSER_LENS_ENABLED:-true}
+    marker_enabled: ${BROWSER_MARKER_ENABLED:-true}
+    # 显式目录列表；目录不存在或为空时不改变默认页面行为。
+    userscript_directories:
+      - magic_use/userscripts/scripts
+
+  snapshot:
+    max_nodes: ${BROWSER_SNAPSHOT_MAX_NODES:-500}
+    max_depth: ${BROWSER_SNAPSHOT_MAX_DEPTH:-30}
 
   # 浏览器服务端 WebSocket URL
-  # 仅在 use_server_mode=true 时生效
+  # 仅在 backend=remote_playwright 时生效
   # 示例: ws://127.0.0.1:3000 (本地服务端)
   # 示例: ws://browser-server.example.com:3000 (远程服务端)
   # 环境变量: BROWSER_SERVER_URL
@@ -43,7 +90,6 @@ browser:
   # 默认: 30000 (30秒)
   # 环境变量: BROWSER_SERVER_CONNECT_TIMEOUT
   server_connect_timeout: ${BROWSER_SERVER_CONNECT_TIMEOUT:-30000}
-  # ========== 服务端模式配置结束 ==========
 
 # LLM API 通用配置
 llm:
@@ -150,6 +196,9 @@ providers:
       qwen3.7-plus:
         api_model: "${QWEN3_7_PLUS_MODEL:-qwen3.7-plus}"
         profile: "qwen3.7-plus"
+      qwen3.5-flash:
+        api_model: "${QWEN3_5_FLASH_MODEL:-qwen3.5-flash}"
+        profile: "qwen3.5-flash"
 
   local_embedding:
     client_type: openai_chat_completions
