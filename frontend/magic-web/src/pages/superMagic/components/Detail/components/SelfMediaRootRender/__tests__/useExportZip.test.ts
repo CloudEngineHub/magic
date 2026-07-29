@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("file-saver", () => ({ saveAs: vi.fn() }))
+vi.mock("file-saver", () => ({ default: vi.fn() }))
 vi.mock("html-to-image", () => ({
 	toBlob: vi.fn(async () => new Blob(["fallback"], { type: "image/png" })),
 }))
