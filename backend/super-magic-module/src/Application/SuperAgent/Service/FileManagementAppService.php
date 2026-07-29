@@ -799,6 +799,7 @@ class FileManagementAppService extends AbstractAppService
      * @param int $targetParentId Target parent directory ID
      * @param null|int $targetProjectId Target project ID (null means same project)
      * @param array $keepBothFileIds Array of source file IDs that should not overwrite when conflict occurs
+     * @param bool $preserveParentPath Whether to preserve source parent directories for cross-project moves
      * @return array Move result
      */
     public function moveFile(
@@ -806,7 +807,8 @@ class FileManagementAppService extends AbstractAppService
         int $fileId,
         int $targetParentId,
         ?int $targetProjectId = null,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
@@ -863,6 +865,7 @@ class FileManagementAppService extends AbstractAppService
 
             $isCrossProject = $sourceProject->getId() !== $targetProject->getId();
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
+            $preserveParentPath = $isCrossProject && $preserveParentPath;
             $hasKeepBoth = ! empty($keepBothFileIds);
             $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth;
 
@@ -895,7 +898,8 @@ class FileManagementAppService extends AbstractAppService
                     $sourceProject->getId(),
                     null,
                     $targetParentId,
-                    $keepBothFileIds
+                    $keepBothFileIds,
+                    $preserveParentPath
                 );
 
                 $this->logger->info(sprintf('Move directory request data, batchKey: %s', $batchKey), [
@@ -904,6 +908,7 @@ class FileManagementAppService extends AbstractAppService
                     'target_project_id' => $targetProjectLogId,
                     'target_parent_id' => $targetParentId,
                     'keep_both_file_ids' => $keepBothFileIds,
+                    'preserve_parent_path' => $preserveParentPath,
                 ]);
 
                 $publisher = new FileBatchMovePublisher($event);
@@ -980,6 +985,7 @@ class FileManagementAppService extends AbstractAppService
      * @param null|int $preFileId Previous file ID for positioning
      * @param null|int $targetProjectId Target project ID (null means same project)
      * @param array $keepBothFileIds Array of source file IDs that should not overwrite when conflict occurs
+     * @param bool $preserveParentPath Whether to preserve source parent directories for cross-project copies
      * @return array Copy result
      */
     public function copyFile(
@@ -988,7 +994,8 @@ class FileManagementAppService extends AbstractAppService
         int $targetParentId,
         ?int $preFileId = null,
         ?int $targetProjectId = null,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
@@ -1044,6 +1051,7 @@ class FileManagementAppService extends AbstractAppService
 
             $isCrossProject = $sourceProject->getId() !== $targetProject->getId();
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
+            $preserveParentPath = $isCrossProject && $preserveParentPath;
             $shouldAsync = $fileEntity->getIsDirectory() || $isCrossProject || $isCrossOrganization;
 
             // 5. Directory/cross-project/cross-organization copy: use asynchronous processing
@@ -1076,7 +1084,8 @@ class FileManagementAppService extends AbstractAppService
                     $sourceProject->getId(),
                     $preFileId,
                     $targetParentId,
-                    $keepBothFileIds
+                    $keepBothFileIds,
+                    $preserveParentPath
                 );
 
                 $this->logger->info(sprintf('Copy directory request data, batchKey: %s', $batchKey), [
@@ -1089,6 +1098,7 @@ class FileManagementAppService extends AbstractAppService
                     'is_directory' => $fileEntity->getIsDirectory(),
                     'is_cross_project' => $isCrossProject,
                     'is_cross_organization' => $isCrossOrganization,
+                    'preserve_parent_path' => $preserveParentPath,
                 ]);
 
                 $publisher = new FileBatchCopyPublisher($event);
