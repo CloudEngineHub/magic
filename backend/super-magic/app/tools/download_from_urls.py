@@ -252,6 +252,10 @@ class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
                 item.resumed = progress.resumed
                 item.retry_count = progress.retry_count
                 item.status = progress.phase.value
+                # 驱动的 COMPLETED 只表示单个文件传输完成；由下方结果处理统一更新
+                # 已处理数量并发送文件级完成事件，避免被误判为整个批次完成。
+                if progress.phase == DownloadPhase.COMPLETED:
+                    return
                 await self._dispatch_progress_event(
                     tool_context,
                     correlation_id,
@@ -278,6 +282,7 @@ class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
                 item_progress.downloaded_bytes = int(extra["file_size"])
                 item_progress.total_bytes = int(extra["file_size"])
             progress_state.completed_files += 1
+            progress_event_status = self._item_result_progress_status(status)
 
             await self._dispatch_progress_event(
                 tool_context,
@@ -285,8 +290,8 @@ class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
                 progress_state,
                 current_file=resolved_path.name,
                 current_progress=item_progress,
-                status=status,
-                force=status in {"failed", "skipped"},
+                status=progress_event_status,
+                force=True,
             )
 
             if result.ok:
@@ -411,6 +416,10 @@ class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
     def _progress_message_key(status: str) -> str:
         if status == DownloadPhase.RETRYING.value:
             return "download_from_urls.progress_retrying"
+        if status == "item_completed":
+            return "download_from_urls.progress_file_completed"
+        if status == "item_skipped":
+            return "download_from_urls.progress_file_skipped"
         if status == "cancelled":
             return "download_from_urls.progress_cancelled"
         if status in {"completed", "partial_failed"}:
@@ -418,6 +427,15 @@ class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
         if status == "failed":
             return "download_from_urls.progress_failed"
         return "download_from_urls.progress_downloading"
+
+    @staticmethod
+    def _item_result_progress_status(status: str) -> str:
+        """将单文件结果转换为批量任务的中间进度状态。"""
+        if status == DownloadPhase.COMPLETED.value:
+            return "item_completed"
+        if status == "skipped":
+            return "item_skipped"
+        return status
 
     @staticmethod
     def _resolve_correlation_id(tool_context: ToolContext, agent_context: object | None) -> str:

@@ -603,6 +603,14 @@
         "zh_CN": "正在重试 {{file}}，第 {{retry_count}} 次重试，整体进度 {{progress}}%",
         "en_US": "Retrying {{file}}. Retry {{retry_count}}. Overall progress: {{progress}}%"
     },
+    "download_from_urls.progress_file_completed": {
+        "zh_CN": "{{file}} 下载完成，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Downloaded {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
+    "download_from_urls.progress_file_skipped": {
+        "zh_CN": "{{file}} 已存在，已跳过，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Skipped existing file {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
     "download_from_urls.progress_completed": {
         "zh_CN": "下载任务已结束，已处理 {{completed}}/{{total}} 个文件",
         "en_US": "Download task finished. Processed {{completed}}/{{total}} files"
