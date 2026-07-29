@@ -11,21 +11,18 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Label } from "@/components/shadcn-ui/label"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
 import CardFrame from "./CardFrame"
 import type { CardFrameRef } from "./CardFrame"
 import ExportOptionsSections from "./ExportOptionsSections"
+import type { ExportCaptureSize } from "./ExportOptionsSections"
+import ExportPostSelector from "./ExportPostSelector"
 import { persistPixelRatio, readStoredPixelRatio } from "./exportPixelRatioStorage"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import WechatExportProducts from "./WechatExportProducts"
 import type { SelfMediaAttachmentNode, SelfMediaPost, SelfMediaWechatCoverType } from "../types"
+import { DEFAULT_SELF_MEDIA_EXPORT_FORMAT } from "../utils/exportImageFormat"
+import type { SelfMediaExportFormat } from "../utils/exportImageFormat"
 
 export type SelfMediaExportType = "cardsZip" | "longImage" | "wechatCoverImage"
 export type SelfMediaExportMode = "cards" | "wechatOfficial"
@@ -34,6 +31,7 @@ export interface ExportPreviewConfirmArgs {
 	postIndex: number
 	cardIndexes: number[]
 	pixelRatio: number
+	format: SelfMediaExportFormat
 	exportType: SelfMediaExportType
 	getCardRef: (cardIndex: number) => CardFrameRef | null
 }
@@ -49,8 +47,8 @@ interface ExportPreviewDialogProps {
 	onConfirm: (args: ExportPreviewConfirmArgs) => Promise<void> | void
 	isExporting?: boolean
 	/**
-	 * CSS pixel size for labels (W×H×ratio). Defaults to 1080×1440 card canvas;
-	 * override when iframe body size differs.
+	 * Fixed CSS-pixel size for non-card export surfaces such as the WeChat cover.
+	 * Card exports read their dimensions from the mounted iframe content.
 	 */
 	exportSizeHintCss?: { width: number; height: number }
 	/** Platform-specific export surface. WeChat has cover image + HTML copy outputs. */
@@ -65,10 +63,7 @@ interface ExportPreviewDialogProps {
 
 const PREVIEW_INITIAL_BATCH = 8
 const PREVIEW_BATCH_SIZE = 8
-/**
- * Self-media card canvas (3:4). Capture size = this × pixelRatio
- * (e.g. 2x → 2160×2880). Varies if card HTML has different body size.
- */
+/** Fallback size for fixed export surfaces that do not mount card iframes. */
 const EXPORT_SIZE_HINT_CSS = { width: 1080, height: 1440 } as const
 
 function buildAllCardIndexes(post: SelfMediaPost | undefined): Set<number> {
@@ -98,6 +93,7 @@ function ExportPreviewDialog({
 		buildAllCardIndexes(posts[initialPostIndex]),
 	)
 	const [pixelRatio, setPixelRatio] = useState<number>(() => readStoredPixelRatio())
+	const [format, setFormat] = useState<SelfMediaExportFormat>(DEFAULT_SELF_MEDIA_EXPORT_FORMAT)
 	const [exportType, setExportType] = useState<SelfMediaExportType>("cardsZip")
 	const [previewVersion, setPreviewVersion] = useState(0)
 	const [loadedPreviewCards, setLoadedPreviewCards] = useState<Set<number>>(() => new Set())
@@ -110,6 +106,7 @@ function ExportPreviewDialog({
 		setSelectedPostIndex(safeIndex)
 		setSelectedCards(buildAllCardIndexes(posts[safeIndex]))
 		setPixelRatio(readStoredPixelRatio())
+		setFormat(DEFAULT_SELF_MEDIA_EXPORT_FORMAT)
 		setExportType(exportMode === "wechatOfficial" ? "wechatCoverImage" : "cardsZip")
 		setPreviewVersion((prev) => prev + 1)
 		setLoadedPreviewCards(new Set())
@@ -200,6 +197,16 @@ function ExportPreviewDialog({
 		[selectedPost?.cards, visiblePreviewCount],
 	)
 	const isPreviewLoading = open && totalCards > visibleCards.length
+	const selectedCardSizes = useMemo<ExportCaptureSize[]>(
+		() =>
+			orderedCardIndexes.flatMap((cardIndex) => {
+				if (!loadedPreviewCards.has(cardIndex)) return []
+				const size = previewCardRefs.current[cardIndex]?.getCaptureSize?.()
+				if (!size || size.width <= 0 || size.height <= 0) return []
+				return [{ width: Math.round(size.width), height: Math.round(size.height) }]
+			}),
+		[loadedPreviewCards, orderedCardIndexes],
+	)
 
 	const hintW = Math.max(0, Math.floor(exportSizeHintCss.width))
 	const hintH = Math.max(0, Math.floor(exportSizeHintCss.height))
@@ -232,6 +239,7 @@ function ExportPreviewDialog({
 			postIndex: selectedPostIndex,
 			cardIndexes: isWechatOfficialMode ? [] : orderedCardIndexes,
 			pixelRatio,
+			format,
 			exportType: isWechatOfficialMode ? "wechatCoverImage" : exportType,
 			getCardRef: (cardIndex) => previewCardRefsSnapshot[cardIndex] || null,
 		})
@@ -242,6 +250,7 @@ function ExportPreviewDialog({
 		onConfirm,
 		orderedCardIndexes,
 		pixelRatio,
+		format,
 		selectedPostIndex,
 	])
 
@@ -272,42 +281,12 @@ function ExportPreviewDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="flex shrink-0 flex-col gap-2 px-4 pt-4 sm:px-6">
-					<Label className="text-xs font-medium text-muted-foreground">
-						{t("detail.selfMedia.export.postSelectorLabel")}
-					</Label>
-					<Select
-						value={String(selectedPostIndex)}
-						onValueChange={handleChangePost}
-						disabled={isExporting || posts.length === 0}
-					>
-						<SelectTrigger
-							className="h-9"
-							data-testid="self-media-export-post-selector"
-						>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{posts.map((post, idx) => {
-								const label =
-									post.meta.title ||
-									post.meta.feedTitle ||
-									t("detail.selfMedia.common.postFallbackTitle", {
-										index: idx + 1,
-									})
-								return (
-									<SelectItem
-										key={post.meta.id || idx}
-										value={String(idx)}
-										data-testid={`self-media-export-post-option-${idx}`}
-									>
-										{label}
-									</SelectItem>
-								)
-							})}
-						</SelectContent>
-					</Select>
-				</div>
+				<ExportPostSelector
+					posts={posts}
+					selectedPostIndex={selectedPostIndex}
+					onChange={handleChangePost}
+					disabled={isExporting}
+				/>
 
 				{!isWechatOfficialMode ? (
 					<div className="flex shrink-0 items-center justify-between px-4 pt-4 sm:px-6">
@@ -447,6 +426,8 @@ function ExportPreviewDialog({
 					exportType={exportType}
 					onExportTypeChange={setExportType}
 					pixelRatio={pixelRatio}
+					format={format}
+					onFormatChange={setFormat}
 					onPixelRatioChange={(next) => {
 						setPixelRatio(next)
 						persistPixelRatio(next)
@@ -454,6 +435,8 @@ function ExportPreviewDialog({
 					isExporting={isExporting}
 					hintW={hintW}
 					hintH={hintH}
+					selectedCardCount={orderedCardIndexes.length}
+					selectedCardSizes={selectedCardSizes}
 				/>
 
 				<DialogFooter

@@ -21,7 +21,7 @@ export interface ExportOptions {
 	config?: Partial<SlideConfig>
 	/** Export mode */
 	exportMode?: "single"
-	/** Skip failed pages and continue exporting later pages */
+	/** Skip ordinary failed pages and continue; fatal fidelity failures always stop export. */
 	skipFailedPages?: boolean
 	/**
 	 * Auto-size mode switch (defaults to `false`, standard PPT mode).
@@ -71,6 +71,18 @@ export interface ExportHandle {
 	/** Wait for export completion; resolves on success and rejects on failure or cancelation */
 	promise: Promise<void>
 	/** Cancel this export */
+	cancel: () => void
+}
+
+/** Client-side PPTX artifact produced without triggering a browser download. */
+export interface GeneratedPPTX {
+	data: Blob
+	fileName: string
+}
+
+/** Return handle from generatePPTX, used to await an artifact or cancel actively. */
+export interface GenerateHandle {
+	promise: Promise<GeneratedPPTX>
 	cancel: () => void
 }
 

@@ -1,5 +1,5 @@
 import type { EmbedFontInput, UsedFont } from "./api/font"
-import type { ResourceLoadError, SlideConfig } from "./api/options"
+import type { GeneratedPPTX, ResourceLoadError, SlideConfig } from "./api/options"
 import type { ElementNode } from "./ir/dom"
 import type { PPTNode } from "./ir/node"
 import type { PackagePresentationInput, SerializablePPTNode } from "./ir/serialize"
@@ -13,6 +13,10 @@ import type {
 	SandboxReadyControllerConstructor,
 } from "./sandbox/htmlRenderSandbox"
 import type { TextMergeMode } from "./pipeline/text-merge-mode"
+import type {
+	CreateIncrementalPresentationPackagerInput,
+	IncrementalPresentationPackager,
+} from "./packaging/incremental-types"
 
 export interface RenderSlideRuntime {
 	transformElements?: (
@@ -30,7 +34,11 @@ export interface RenderSlideRuntime {
 	) => PPTNode[]
 	materializePseudoIcons?: (document: Document, window: Window) => IconBackup[]
 	restoreIcons?: (backups: IconBackup[]) => void
-	resolveCaptures?: (nodes: PPTNode[], signal?: AbortSignal) => Promise<void>
+	resolveCaptures?: (
+		nodes: PPTNode[],
+		signal?: AbortSignal,
+		onResourceError?: (error: ResourceLoadError) => void,
+	) => Promise<void>
 	materializeVideoCoverNodes?: (
 		nodes: PPTNode[],
 		signal?: AbortSignal,
@@ -49,8 +57,16 @@ export interface ExportPipelineRuntime extends RenderSlideRuntime {
 	) => Promise<PrepareSlideNodesResult>
 	detectFontsFromNodes?: (slides: SerializablePPTNode[][]) => UsedFont[]
 	packagePresentationInWorker?: (
-		input: PackagePresentationInput & { signal: AbortSignal },
-	) => Promise<void>
+		input: PackagePresentationInput & {
+			signal: AbortSignal
+			onResourceError?: (error: ResourceLoadError) => void
+			/** False returns an artifact instead of triggering a browser download. */
+			download?: boolean
+		},
+	) => Promise<GeneratedPPTX | void>
+	createIncrementalPresentationPackager?: (
+		input: CreateIncrementalPresentationPackagerInput,
+	) => IncrementalPresentationPackager | null
 }
 
 export interface Html2PptxRuntime {

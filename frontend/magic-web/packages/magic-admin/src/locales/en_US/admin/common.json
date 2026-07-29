@@ -76,6 +76,14 @@
 	},
 	"confirmClose": "Confirm Close",
 	"detail": "Detail",
+	"file": {
+		"imageLoadFailed": "Image loading failed",
+		"imageSizeTooLarge": "Image cannot exceed {{size}}",
+		"imageSizeTooSmall": "Image size cannot be less than {{width}}x{{height}}",
+		"maxSize": "Single file limit is {{maxSize}}MB",
+		"onlySupportUploadImage": "Only png/jpg/jpeg/svg/gif/webp images are supported",
+		"uploadFail": "File upload failed, please try again"
+	},
 	"filter": "Filter",
 	"invalidPhone": "Invalid phone number",
 	"lang": {
@@ -107,14 +115,20 @@
 		"ai": "AI Management",
 		"aiSubMenu": {
 			"aiControl": "AI Consumption Control",
+			"applicationMenu": "Application Menu",
+			"consumptionAnalysis": "Consumption Analysis",
 			"customModel": "Custom Model",
-			"dataStatistics": "Data Statistics",
+			"dataDictionary": "Metric Dictionary",
+			"dataStatistics": "Data Dashboard",
+			"digitalEmployeeAnalysis": "Digital Employee Analysis",
 			"employeePublishReview": "Employee Publish Review",
 			"internalEmployeeSkill": "Internal Employees & Skills",
 			"manage": "Application Configuration",
+			"memberAnalysis": "Member Analysis",
 			"modelControl": "Model Control",
 			"modelLogMonitor": "Model Log Monitor",
 			"modelManagement": "Model Management",
+			"organizationAnalysis": "Organization Analysis",
 			"skillPublishReview": "Skill Publish Review",
 			"usageControl": "Usage Control"
 		},

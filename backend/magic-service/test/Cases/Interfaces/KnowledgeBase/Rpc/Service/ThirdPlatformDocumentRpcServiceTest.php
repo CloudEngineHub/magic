@@ -11,8 +11,11 @@ use App\Application\KnowledgeBase\Port\ThirdPlatformDocumentProviderPort;
 use App\Application\KnowledgeBase\Service\Strategy\DocumentFile\DocumentFileStrategy;
 use App\Domain\KnowledgeBase\Entity\ValueObject\DocumentFile\ThirdPlatformDocumentFile;
 use App\Domain\KnowledgeBase\Entity\ValueObject\KnowledgeBaseDataIsolation;
+use App\Domain\KnowledgeBase\Repository\Persistence\Model\KnowledgeBaseDocumentModel;
+use App\Domain\KnowledgeBase\Repository\Persistence\Model\KnowledgeBaseModel;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Interfaces\KnowledgeBase\Rpc\Service\ThirdPlatformDocumentRpcService;
+use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -227,6 +230,55 @@ class ThirdPlatformDocumentRpcServiceTest extends TestCase
         $this->assertSame(0, $result['code']);
         $this->assertSame('success', $result['message']);
         $this->assertSame($rawChildren, $result['data']);
+    }
+
+    public function testResolveRealTeamshareDocumentFromRebuildError(): void
+    {
+        $knowledgeBaseCode = 'KNOWLEDGE-bc64325c9a4648-4280245e';
+        $documentCode = 'b82ef651-3b6d-40a6-95be-6c74fddb2080';
+
+        $document = KnowledgeBaseDocumentModel::query()
+            ->where('knowledge_base_code', $knowledgeBaseCode)
+            ->where('code', $documentCode)
+            ->first();
+
+        $this->assertNotNull($document, '知识库文档不存在');
+
+        $knowledgeBase = KnowledgeBaseModel::query()
+            ->where('code', $knowledgeBaseCode)
+            ->first();
+
+        $this->assertNotNull($knowledgeBase, '知识库不存在');
+
+        $documentFile = (array) $document->document_file;
+
+        $dataIsolation = [
+            'organization_code' => (string) ($document->organization_code ?: $knowledgeBase->organization_code),
+            'user_id' => (string) ($document->created_uid ?: $knowledgeBase->created_uid),
+        ];
+
+        // 如果你本地用户映射拿不到天书用户，可以临时通过环境变量塞进去。
+        if ((string) getenv('TEST_THIRD_PLATFORM_USER_ID') !== '') {
+            $dataIsolation['third_platform_user_id'] = (string) getenv('TEST_THIRD_PLATFORM_USER_ID');
+        }
+        if ((string) getenv('TEST_THIRD_PLATFORM_ORGANIZATION_CODE') !== '') {
+            $dataIsolation['third_platform_organization_code'] = (string) getenv('TEST_THIRD_PLATFORM_ORGANIZATION_CODE');
+        }
+
+        /** @var ThirdPlatformDocumentRpcService $service */
+        $service = ApplicationContext::getContainer()
+            ->get(ThirdPlatformDocumentRpcService::class);
+
+        $result = $service->resolve([
+            'data_isolation' => $dataIsolation,
+            'third_platform_type' => (string) ($documentFile['platform_type'] ?? $documentFile['source_type'] ?? 'teamshare_open_platform_pro'),
+            'third_file_id' => (string) ($documentFile['third_file_id'] ?? $documentFile['third_id'] ?? $documentCode),
+            'document_file' => $documentFile,
+        ]);
+
+        fwrite(STDERR, PHP_EOL . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . PHP_EOL);
+
+        $this->assertSame(0, $result['code'], $result['message'] ?? json_encode($result, JSON_UNESCAPED_UNICODE));
     }
 
     private function newService(

@@ -9,6 +9,29 @@
 		"ok": "确定",
 		"save": "保存"
 	},
+	"connectionConflict": {
+		"deleteConnection": "删除这条连接",
+		"description": "这条连接线有新的同步内容，也有你当前的修改。",
+		"keepConnection": "保留这条连接",
+		"keepDeleted": "保持删除",
+		"restoreNew": "恢复新版",
+		"title": "请选择保留的连接",
+		"useLocal": "保留我的",
+		"useRemote": "使用新的"
+	},
+	"connectionEditor": {
+		"linkedMediaActive": "已关联",
+		"linkedMediaDuplicate": "已添加",
+		"linkedMediaMissingResource": "资源缺失",
+		"linkedMediaOverLimit": "数量超限",
+		"linkedMediaUnavailable": "不可用",
+		"linkedMediaUnsupportedMode": "当前模式不支持",
+		"linkedMediaUnsupportedType": "类型不支持",
+		"mediaKindAudio": "音频",
+		"mediaKindImage": "图片",
+		"mediaKindVideo": "视频",
+		"removeConnection": "删除连线"
+	},
 	"dropOverlay": {
 		"loading": "加载中",
 		"processing": "正在处理 {{current}}/{{total}}",
@@ -179,6 +202,19 @@
 		"resolution": "分辨率",
 		"size": "尺寸"
 	},
+	"imagePromptExtraction": {
+		"createText": "创建文本",
+		"emptyInput": "当前图片无法提炼提示词",
+		"emptyResult": "AI 未生成有效提示词，请重试",
+		"failed": "提示词提炼失败，请重试",
+		"generate": "提炼提示词",
+		"generating": "正在提炼提示词",
+		"regenerate": "重新提炼",
+		"retry": "重试",
+		"title": "图片提炼提示词",
+		"trigger": "提炼提示词",
+		"unavailable": "图片提炼能力暂不可用"
+	},
 	"layers": {
 		"collapse": "收起",
 		"empty": {
@@ -216,6 +252,7 @@
 		"downloadImageNoWatermark": "下载无水印图片",
 		"downloadVideo": "下载视频",
 		"hide": "隐藏",
+		"locateProjectFile": "定位到项目文件",
 		"lock": "锁定",
 		"moveDown": "下移一层",
 		"moveToBottom": "移至底部",
@@ -436,6 +473,20 @@
 	"text": {
 		"defaultName": "文本"
 	},
+	"textContentOptimization": {
+		"apply": "应用",
+		"emptyInput": "请输入文本内容后再优化",
+		"emptyResult": "AI 未生成有效文本，请重试",
+		"failed": "内容优化失败，请重试",
+		"finishEditingFirst": "完成文本编辑后再优化",
+		"generate": "内容优化",
+		"generating": "正在生成优化结果",
+		"regenerate": "重新生成",
+		"retry": "重试",
+		"title": "内容优化",
+		"trigger": "内容优化",
+		"unavailable": "内容优化能力暂不可用"
+	},
 	"tools": {
 		"frame": "画框",
 		"hand": "抓手工具",
@@ -453,6 +504,9 @@
 		"selection": "选择工具",
 		"space": "空格",
 		"text": "文本",
+		"upload": "上传",
+		"uploadImage": "上传图片",
+		"uploadVideo": "上传视频",
 		"videoGenerator": "视频生成"
 	},
 	"triangle": {

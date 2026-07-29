@@ -31,7 +31,7 @@ import type {
 	IdentifyImageMarkResponse,
 	ReferenceImageOptions,
 	RemoveBackgroundRequest,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { PlaybookItem } from "./crew"
 import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
@@ -408,6 +408,26 @@ export interface CompleteImagePromptRequest {
 export interface CompleteImagePromptResponse {
 	/** 最终可直接写入输入框的提示词 */
 	prompt: string
+}
+
+/**
+ * AI 优化文本内容请求参数
+ */
+export interface CompleteTextContentRequest {
+	/** 项目 id */
+	project_id?: string
+	/** 当前场景拼装后的用户提示词 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+}
+
+/**
+ * AI 优化文本内容响应
+ */
+export interface CompleteTextContentResponse {
+	/** 最终可直接写入文本元素的内容 */
+	text: string
 }
 
 /**
@@ -808,6 +828,25 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post(`/api/v1/super-agent/file/${file_id}/move`, requestData)
 	},
 	/**
+	 * @description 复制单个文件或文件夹（支持跨项目）
+	 * @param {object} params
+	 * @param {string} params.file_id 源文件ID
+	 * @param {string} params.target_parent_id 目标父目录ID
+	 * @param {string} params.pre_file_id 前置文件ID
+	 * @param {string} params.target_project_id 目标项目ID
+	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 */
+	copyFile(params: {
+		file_id: string
+		target_parent_id: string
+		pre_file_id?: string
+		target_project_id?: string
+		keep_both_file_ids?: string[]
+	}) {
+		const { file_id, ...requestData } = params
+		return fetch.post(`/api/v1/super-agent/file/${file_id}/copy`, requestData)
+	},
+	/**
 	 * @description 批量移动文件或文件夹（支持跨项目）
 	 * @param {object} params
 	 * @param {string[]} params.file_ids 文件ID列表
@@ -1135,17 +1174,19 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page_size,
 		workspace_type,
 		auto_create,
+		workspace_name,
 	}: {
 		page: number
 		page_size: number
 		workspace_type?: string
 		auto_create?: boolean
+		workspace_name?: string
 	}) {
 		return fetch.get(
 			genRequestUrl(
 				"/api/v1/super-agent/workspaces/queries",
 				{},
-				{ page, page_size, workspace_type, auto_create },
+				{ page, page_size, workspace_type, auto_create, workspace_name },
 			),
 			{
 				enableRequestUnion: true,
@@ -2665,6 +2706,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	completeImagePrompt(params: CompleteImagePromptRequest) {
 		return fetch.post<CompleteImagePromptResponse>(
 			"/api/v1/design/image-prompt/complete",
+			params,
+		)
+	},
+
+	/**
+	 * @description AI 优化文本内容
+	 * @param params 文本内容优化请求参数
+	 * @returns 文本内容优化响应数据
+	 */
+	completeTextContent(params: CompleteTextContentRequest) {
+		return fetch.post<CompleteTextContentResponse>(
+			"/api/v1/design/text-content/complete",
 			params,
 		)
 	},

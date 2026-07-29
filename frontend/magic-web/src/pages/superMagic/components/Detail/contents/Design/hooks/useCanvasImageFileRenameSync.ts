@@ -4,15 +4,18 @@ import type {
 	CanvasDocument,
 	ImageElement,
 	LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDesignDataChangeMeta, CanvasDesignRef } from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CanvasDesignDataChangeMeta,
+	CanvasDesignRef,
+} from "@/components/CanvasDesign/public/props"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { validateFilename } from "@/utils/filename-validator"
-import { normalizeDesignAttachmentPathForCanvas } from "../utils/designDslPathUtils"
-import { compareDesignData, findFileBySrc, normalizePath, splitFileName } from "../utils/utils"
+import { resolveDesignAttachment, toDesignDslPathFromWorkspacePath } from "../utils/designPath"
+import { compareDesignData, normalizePath, splitFileName } from "../utils/utils"
 import { replaceCanvasFilePathReferences } from "../utils/replace-canvas-file-path-references"
 import { registerWaitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 
@@ -254,10 +257,9 @@ export function useCanvasImageFileRenameSync(
 			const latestCanvasData = latestCanvasDataRef.current
 			if (!latestCanvasData) return
 
-			const nextCanvasPath = normalizeDesignAttachmentPathForCanvas(
-				renamedRelativeFilePath,
-				designProjectBasePathRef.current,
-			)
+			const nextCanvasPath = toDesignDslPathFromWorkspacePath(renamedRelativeFilePath, {
+				designProjectBasePath: designProjectBasePathRef.current,
+			})
 			const nextCanvasData = replaceCanvasFilePathReferences(latestCanvasData, {
 				oldWorkspaceRelativePath,
 				newCanvasPath: nextCanvasPath,
@@ -323,22 +325,25 @@ export function useCanvasImageFileRenameSync(
 				const sourcePath = newElement.src || oldElement.src
 				if (!sourcePath) return
 
-				const matchedFileItem = findFileBySrc(
+				const matchedFileItem = resolveDesignAttachment(
 					sourcePath,
-					flatAttachmentsRef.current,
-					designProjectBasePathRef.current,
-					attachmentIndexRef.current,
+					{
+						flatAttachments: flatAttachmentsRef.current,
+						designProjectBasePath: designProjectBasePathRef.current,
+						attachmentIndex: attachmentIndexRef.current,
+					},
+					{ mode: "strict-current-canvas" },
 				)
-				if (!matchedFileItem?.file_id) return
+				if (matchedFileItem.status !== "found" || !matchedFileItem.fileItem.file_id) return
 
-				const currentFileName = getFileDisplayName(matchedFileItem)
+				const currentFileName = getFileDisplayName(matchedFileItem.fileItem)
 				if (!currentFileName || !isGenericClipboardImageFileName(currentFileName)) return
 
 				const targetFileName = buildTargetFileName(nextElementName, currentFileName)
 				if (!targetFileName || targetFileName === currentFileName) return
 
 				enqueueRenameTask({
-					fileId: matchedFileItem.file_id,
+					fileId: matchedFileItem.fileItem.file_id,
 					targetFileName,
 				})
 			}
@@ -355,22 +360,25 @@ export function useCanvasImageFileRenameSync(
 				const sourcePath = change.newSrc || change.oldSrc
 				if (!sourcePath) return
 
-				const matchedFileItem = findFileBySrc(
+				const matchedFileItem = resolveDesignAttachment(
 					sourcePath,
-					flatAttachmentsRef.current,
-					designProjectBasePathRef.current,
-					attachmentIndexRef.current,
+					{
+						flatAttachments: flatAttachmentsRef.current,
+						designProjectBasePath: designProjectBasePathRef.current,
+						attachmentIndex: attachmentIndexRef.current,
+					},
+					{ mode: "strict-current-canvas" },
 				)
-				if (!matchedFileItem?.file_id) return
+				if (matchedFileItem.status !== "found" || !matchedFileItem.fileItem.file_id) return
 
-				const currentFileName = getFileDisplayName(matchedFileItem)
+				const currentFileName = getFileDisplayName(matchedFileItem.fileItem)
 				if (!currentFileName || !isGenericClipboardImageFileName(currentFileName)) return
 
 				const targetFileName = buildTargetFileName(nextElementName, currentFileName)
 				if (!targetFileName || targetFileName === currentFileName) return
 
 				enqueueRenameTask({
-					fileId: matchedFileItem.file_id,
+					fileId: matchedFileItem.fileItem.file_id,
 					targetFileName,
 				})
 			}

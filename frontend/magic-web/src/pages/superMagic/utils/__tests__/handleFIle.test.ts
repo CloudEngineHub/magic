@@ -82,4 +82,17 @@ describe("downloadFileWithAnchor", () => {
 			modalZIndex: 1300,
 		})
 	})
+
+	it("passes the optional modal-close lifecycle callback to the download modal", async () => {
+		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined)
+		const onModalClose = vi.fn()
+
+		await downloadFileWithAnchor("blob:canvas-media", "canvas-media.zip", undefined, {
+			onModalClose,
+		})
+
+		expect(openLightModalMock.mock.calls[0][1]).toMatchObject({
+			onAfterClose: onModalClose,
+		})
+	})
 })

@@ -12,10 +12,14 @@ export type SearchSelectProps = SelectProps & {
 	showAvatar?: boolean
 	/** 是否显示搜索框 */
 	showInput?: boolean
+	/** 搜索框占位文案 */
+	searchPlaceholder?: string
 	/** 标签是否显示边框 */
 	bordered?: boolean
 	/** 是否显示全选 */
 	showAllCheck?: boolean
+	/** 下拉底部内容 */
+	dropdownFooter?: React.ReactNode
 	/** tag 类名 */
 	tagClassName?: string
 }
@@ -28,8 +32,10 @@ const SearchSelect = memo(
 		className,
 		showInput = true,
 		showAvatar = true,
+		searchPlaceholder,
 		bordered = false,
 		showAllCheck = false,
+		dropdownFooter,
 		tagClassName,
 		maxTagPlaceholder,
 		mode,
@@ -44,8 +50,9 @@ const SearchSelect = memo(
 
 		const filteredOptions = useMemo(() => {
 			if (searchValue && showInput) {
+				const normalizedSearch = searchValue.toLowerCase()
 				return allOptions.filter((option) =>
-					option?.label?.toString().toLowerCase().includes(searchValue.toLowerCase()),
+					getOptionSearchText(option).includes(normalizedSearch),
 				)
 			}
 			return allOptions
@@ -179,7 +186,7 @@ const SearchSelect = memo(
 						<Flex vertical gap={4}>
 							{showInput && (
 								<Input
-									placeholder={locale.search}
+									placeholder={searchPlaceholder ?? locale.search}
 									value={searchValue}
 									allowClear
 									onChange={(e) => handleSearch(e.target.value)}
@@ -199,6 +206,9 @@ const SearchSelect = memo(
 									</Checkbox>
 								</Flex>
 							)}
+							{dropdownFooter ? (
+								<div className={styles.dropdownFooter}>{dropdownFooter}</div>
+							) : null}
 						</Flex>
 					)
 				}}
@@ -207,5 +217,16 @@ const SearchSelect = memo(
 		)
 	},
 )
+
+function getOptionSearchText(option: NonNullable<SelectProps["options"]>[number]) {
+	const optionRecord = option as typeof option & {
+		searchText?: string | number | null
+		value?: string | number | null
+	}
+	return [optionRecord.label, optionRecord.value, optionRecord.searchText]
+		.map((item) => String(item ?? ""))
+		.join(" ")
+		.toLowerCase()
+}
 
 export default SearchSelect

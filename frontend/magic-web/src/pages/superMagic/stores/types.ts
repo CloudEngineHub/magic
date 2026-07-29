@@ -46,6 +46,11 @@ export interface PendingUserMessageEnvelope {
 	conversation_id: string
 }
 
+export interface InitializeMessagesOptions {
+	mode?: "replace" | "merge"
+	syncGeneration?: number
+}
+
 export interface ServerMessagesConfirmedPayload {
 	chat_topic_id: string
 	app_message_ids: string[]
@@ -158,7 +163,29 @@ export interface StreamState {
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
+	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
+	recoveryAttempts: number
 	finalMessage?: StreamMessage
+}
+
+export interface StreamRecoveryRequestPayload {
+	topicId: string
+	correlationId: string
+}
+
+export interface StreamRecoveryState {
+	status: "waiting" | "recovering" | "failed"
+	reason?: "recovery_failed"
+	attempts: number
+	startedAt: number
+	elapsedMs: number
+}
+
+export interface StreamRecoveryFailurePayload extends StreamRecoveryState {
+	topicId: string
+	correlationId: string
+	status: "failed"
+	reason: "recovery_failed"
 }
 
 export interface ToolStreamStepResult {
@@ -216,6 +243,10 @@ export interface TopicMeta {
 	isStreamLoading: boolean
 	/** 当前话题流式运行时定时器 */
 	timer: ReturnType<typeof window.setTimeout> | null
+	/** 当前话题等待流式恢复的 watchdog 定时器 */
+	recoveryTimer: ReturnType<typeof window.setTimeout> | null
+	/** recoveryTimer 当前关联的流式 correlationId */
+	recoveryCorrelationId: string | null
 	/** 当前流式文本数据映射（Record<当前流式卡片关联id - correlationId，当前流式文本内容>） */
 	content: Map<string, StreamState>
 	/** 不可见期间已完成的流式快照（用于切回后回放打字机） */
@@ -226,6 +257,8 @@ export interface TopicMeta {
 	lastActiveAt: number | null
 	/** 最近一次离开可见态的时间 */
 	inactiveAt: number | null
+	/** 最近一次离开可见态的单调时钟时间，用于排除系统时间跳变 */
+	inactiveMonotonicAt: number | null
 	/** 最近一次成功完成服务端权威同步的时间 */
 	lastSyncedAt: number | null
 	/** 最近一次权威同步确认的最大消息序列号 */

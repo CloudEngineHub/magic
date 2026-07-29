@@ -13,7 +13,7 @@ import type {
 	SelfMediaInitGlobalSettings,
 	MaterialItem,
 } from "../components/SelfMediaInitPanel/types"
-import type { SelfMediaPostPublishStatus } from "../types"
+import type { SelfMediaPostMeta, SelfMediaPostPublishStatus } from "../types"
 import {
 	removeSelfMediaPostFromIndex,
 	renameSelfMediaPostInIndex,
@@ -351,6 +351,16 @@ export class SelfMediaFileStorageService {
 		if (!title) {
 			throw new Error("postTitleEmpty")
 		}
+		await this.updatePostMeta(postEntryPath, { title })
+	}
+
+	async updatePostMeta(
+		postEntryPath: string,
+		patch: Pick<SelfMediaPostMeta, "title" | "subtitle" | "tags">,
+	): Promise<void> {
+		if (patch.title !== undefined && !patch.title.trim()) {
+			throw new Error("postTitleEmpty")
+		}
 		const files = await this.getProjectFileList()
 		const file = this.findFileByProjectRelativePath(files, postEntryPath)
 		if (!file?.file_id) {
@@ -363,7 +373,7 @@ export class SelfMediaFileStorageService {
 		await SuperMagicApi.saveFileContent([
 			{
 				file_id: file.file_id,
-				content: updatePostManifestTitleContent(content, title),
+				content: updatePostManifestMetaContent(content, patch),
 			},
 		])
 		this.invalidateFileListCache()
@@ -2070,6 +2080,13 @@ function upsertPostOpsHistoryItem<T extends { fetchedAt: string }>(items: T[], n
 }
 
 function updatePostManifestTitleContent(content: string, title: string): string {
+	return updatePostManifestMetaContent(content, { title })
+}
+
+function updatePostManifestMetaContent(
+	content: string,
+	patch: Pick<SelfMediaPostMeta, "title" | "subtitle" | "tags">,
+): string {
 	let manifest: Record<string, unknown>
 	try {
 		const parsed = JSON.parse(content) as Record<string, unknown>
@@ -2092,7 +2109,7 @@ function updatePostManifestTitleContent(content: string, title: string): string 
 			...manifest,
 			meta: {
 				...meta,
-				title,
+				...patch,
 			},
 		},
 		null,

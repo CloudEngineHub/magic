@@ -3,9 +3,9 @@ from pydantic import ValidationError
 
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
-from app.service.cli_manager import CliManagerError
+from app.service.cli_manager import CliManagerError, CliManagerService
 from app.tools.cli_manager.apply import CliManagerApply, CliManagerApplyParams
-from app.tools.cli_manager.list import CliManagerList
+from app.tools.cli_manager.list import CliManagerList, CliManagerListParams
 from app.tools.cli_manager.remove import CliManagerRemove
 
 
@@ -39,6 +39,23 @@ def test_cli_manager_apply_params_only_expose_model_inputs():
                 "resolution": "install_with_prefix",
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_cli_manager_list_scopes_empty_result_to_user_managed_cli(monkeypatch):
+    """验证空注册表不会被描述成运行时 CLI 未持久化。"""
+
+    async def mock_list_items(self, *, validate=False):
+        """返回隔离的空用户注册表。"""
+        return {"count": 0, "items": []}
+
+    monkeypatch.setattr(CliManagerService, "list_items", mock_list_items)
+
+    result = await CliManagerList().execute(None, CliManagerListParams(validate=False))
+
+    assert result.ok is True
+    assert "No user-managed persisted CLIs found." in result.content
+    assert "Runtime-provided CLIs" in result.content
 
 
 @pytest.mark.asyncio
@@ -88,7 +105,7 @@ async def test_cli_manager_tools_are_code_mode_only_and_have_display_hooks():
             "cli_manager_list",
             {"validate": True},
             ToolResult(
-                content="Persisted CLIs: mock-cli.",
+                content="User-managed persisted CLIs: mock-cli.",
                 extra_info={
                     "count": 1,
                     "items": [
@@ -154,8 +171,8 @@ async def test_cli_manager_tool_action_and_remark_are_i18n():
 
     assert before["action"] == "Persist CLI"
     assert before["remark"] == 'Persisting CLI "mock-cli" with adopt mode'
-    assert after["action"] == "List persisted CLIs"
-    assert after["remark"] == "Found 2 persisted CLI(s)"
+    assert after["action"] == "List user-managed persisted CLIs"
+    assert after["remark"] == "Found 2 user-managed persisted CLI(s)"
 
     I18nManager.set_language("zh_CN")
     remove_before = await CliManagerRemove().get_before_tool_call_friendly_action_and_remark(

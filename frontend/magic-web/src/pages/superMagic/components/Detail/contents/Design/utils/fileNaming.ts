@@ -1,6 +1,6 @@
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import type { UploadFile } from "@/components/CanvasDesign/types.magic"
-import { collectFilesInDirectory, splitFileName } from "./utils"
+import type { UploadFile } from "@/components/CanvasDesign/public/magic-types"
+import { collectFilesInDirectory, generateUniqueDesignFileName } from "./utils"
 
 interface PrepareFilesForUploadParams {
 	uploadFiles: UploadFile[]
@@ -90,32 +90,6 @@ function getExistingFileSizesByName(
 }
 
 /**
- * 为文件生成唯一文件名（如果需要）
- */
-function generateUniqueFileName(
-	fileName: string,
-	usedNames: Set<string>,
-	allExistingFileNames: Set<string>,
-): string {
-	if (!usedNames.has(fileName) && !allExistingFileNames.has(fileName)) {
-		return fileName
-	}
-
-	// 需要重命名
-	const { baseName, extension } = splitFileName(fileName)
-	let counter = 1
-	let newFileName: string
-
-	// 持续尝试直到找到未使用的文件名
-	do {
-		newFileName = `${baseName}(${counter})${extension}`
-		counter++
-	} while (usedNames.has(newFileName) || allExistingFileNames.has(newFileName))
-
-	return newFileName
-}
-
-/**
  * 准备要上传的文件列表，处理重命名逻辑
  */
 export function prepareFilesForUpload(
@@ -124,12 +98,11 @@ export function prepareFilesForUpload(
 	const { uploadFiles, suffixDir, attachments, duplicateCheckList } = params
 
 	const filesToUpload: File[] = []
-	const usedNames = new Set<string>()
 	const seenOriginalNames = new Set<string>()
 	const fileNameToUploadFileMap = new Map<string, UploadFile>()
 
 	// 获取所有已存在的文件名
-	const allExistingFileNames = getAllExistingFileNames(suffixDir, attachments, duplicateCheckList)
+	const occupiedNames = getAllExistingFileNames(suffixDir, attachments, duplicateCheckList)
 	const existingFileSizesByName = getExistingFileSizesByName(suffixDir, attachments)
 
 	for (const uploadFile of uploadFiles) {
@@ -144,7 +117,7 @@ export function prepareFilesForUpload(
 
 		// 系统拖拽/粘贴可能出现同名不同内容文件；此时强制改名，避免覆盖或回调按文件名串线。
 		if (shouldUseUniqueFileName) {
-			const newFileName = generateUniqueFileName(file.name, usedNames, allExistingFileNames)
+			const newFileName = generateUniqueDesignFileName(file.name, occupiedNames)
 
 			// 如果需要重命名，创建新的 File 对象
 			if (newFileName !== file.name) {
@@ -153,13 +126,8 @@ export function prepareFilesForUpload(
 					lastModified: file.lastModified,
 				})
 			}
-
-			// 记录使用的文件名（用于同批次内去重）
-			usedNames.add(newFileName)
-		} else {
-			// overwrite 为 true，保持原文件名
-			usedNames.add(file.name)
 		}
+		occupiedNames.add(finalFile.name)
 		seenOriginalNames.add(file.name)
 
 		filesToUpload.push(finalFile)

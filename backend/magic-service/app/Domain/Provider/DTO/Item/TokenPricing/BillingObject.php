@@ -98,6 +98,16 @@ final class BillingObject
     public const OLD_IMAGE_COUNT_COST = 'old_image_count_cost';
 
     /**
+     * ImageCount: 图片参考输入张数售价。
+     */
+    public const IMAGE_REFERENCE_INPUT_COUNT = 'image_reference_input_count';
+
+    /**
+     * ImageCount: 图片参考输入张数成本。
+     */
+    public const IMAGE_REFERENCE_INPUT_COUNT_COST = 'image_reference_input_count_cost';
+
+    /**
      * TextTokens 固定对象。
      */
     private const array TEXT_OBJECTS = [
@@ -131,6 +141,8 @@ final class BillingObject
         self::THOUGHT_TOKEN_COST,
         self::OLD_IMAGE_COUNT,
         self::OLD_IMAGE_COUNT_COST,
+        self::IMAGE_REFERENCE_INPUT_COUNT,
+        self::IMAGE_REFERENCE_INPUT_COUNT_COST,
     ];
 
     private const array OLD_IMAGE_OBJECTS = [
@@ -142,6 +154,11 @@ final class BillingObject
      * ImageCount 动态对象族：image_{1k|2k|4k}_output_count[_cost].
      */
     private const string IMAGE_COUNT_PATTERN = '/^image_[a-z0-9x_]+_output_count(?:_cost)?$/';
+
+    /**
+     * ImageCount 像素条件对象：image_{lte|gt}_{n}w_pixel_output_count[_cost].
+     */
+    private const string IMAGE_PIXEL_COUNT_PATTERN = '/^image_(lte|gt)_([1-9]\d*)w_pixel_output_count(?:_cost)?$/';
 
     /**
      * Video 动态对象族：video.{resolution}.{modifier}.{duration|token}[.cost].
@@ -364,6 +381,22 @@ final class BillingObject
     public function toVideoPricing(): ?array
     {
         return self::parseVideoObjectValue($this->value);
+    }
+
+    /**
+     * @return null|array{operator: string, threshold: int, is_cost: bool}
+     */
+    public function toImagePixelPricing(): ?array
+    {
+        if (preg_match(self::IMAGE_PIXEL_COUNT_PATTERN, $this->value, $matches) !== 1) {
+            return null;
+        }
+
+        return [
+            'operator' => $matches[1],
+            'threshold' => (int) $matches[2] * 10000,
+            'is_cost' => $this->isCostObject(),
+        ];
     }
 
     private static function videoObject(string $resolution, string $modifier, string $billingUnit, bool $isCost = false): self

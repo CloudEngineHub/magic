@@ -8,6 +8,7 @@ from pathlib import Path
 from app.service.cli_manager.constants import NAME_PATTERN, PROTECTED_COMMAND_NAMES
 from app.service.cli_manager.models import CliManagerError, CliManagerPaths, CliRegistryData, CliRegistryItem
 from app.service.cli_manager.path_utils import CliPathUtils
+from app.service.runtime_cli_catalog import RUNTIME_MANAGED_CLI_COMMANDS
 from app.utils.async_file_utils import async_which
 
 
@@ -43,6 +44,20 @@ class CliRequestValidator:
         if not normalized:
             raise CliManagerError("command_required", "At least one command is required.")
         return normalized
+
+    @staticmethod
+    def ensure_user_managed_scope(name: str, commands: list[str]) -> None:
+        """拒绝通过用户持久化流程接管运行时预置 CLI。"""
+        for candidate in [name, *commands]:
+            if candidate not in RUNTIME_MANAGED_CLI_COMMANDS:
+                continue
+            raise CliManagerError(
+                "runtime_managed_cli",
+                f"CLI is provided by the Super Magic runtime and must not be persisted: {candidate}",
+                name=name,
+                command=candidate,
+                management_scope="runtime",
+            )
 
     @staticmethod
     def normalize_env_keys(env_keys: list[str]) -> list[str]:

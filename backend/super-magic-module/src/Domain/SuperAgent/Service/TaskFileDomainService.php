@@ -2424,6 +2424,7 @@ class TaskFileDomainService
         $userId = $dataIsolation->getCurrentUserId();
         $sourceToNewIdMap = [];
         $needFixFileIds = [];
+        $failedFileKeys = [];
 
         $this->logger->info(sprintf(
             'Starting file migration for fork event, source_project_id: %d, fork_project_id: %d, total_files: %d, processed_files: %d',
@@ -2527,12 +2528,15 @@ class TaskFileDomainService
                             $copyResult = $this->sandboxGateway->copyFiles(
                                 $userCtx,
                                 [
-                                    'source_oss_path' => $sourceFile->getFileKey(),
-                                    'target_oss_path' => $newFileKey,
+                                    [
+                                        'source_oss_path' => $sourceFile->getFileKey(),
+                                        'target_oss_path' => $newFileKey,
+                                    ],
                                 ],
                             );
 
                             if (! $copyResult->isSuccess()) {
+                                $failedFileKeys[] = $sourceFile->getFileKey();
                                 $this->logger->error(sprintf(
                                     'Sandbox Copy File Failed to copy file %s to %s',
                                     $sourceFile->getFileKey(),
@@ -2577,6 +2581,7 @@ class TaskFileDomainService
                                 'processed_count' => $processedCount,
                             ]
                         );
+                        $failedFileKeys[] = $sourceFile->getFileKey();
                         // 继续处理下一个文件，不中断整个流程
                     }
                 }
@@ -2614,6 +2619,24 @@ class TaskFileDomainService
             if (count($needFixFileIds) > 0) {
                 $this->batchFixParentIds($needFixFileIds, $sourceToNewIdMap, $userId);
                 $this->logger->info(sprintf('Fixed parent_id for %d files in fork record %d', count($needFixFileIds), $forkRecordId));
+            }
+
+            if ($failedFileKeys !== []) {
+                $failedCount = count($failedFileKeys);
+                $errorMessage = sprintf('Failed to migrate %d of %d files', $failedCount, $totalCount);
+                $finalProgress = $totalCount > 0 ? intval(($processedCount / $totalCount) * 100) : 0;
+                $this->projectForkRepository->updateStatus(
+                    $forkRecordId,
+                    ForkStatus::FAILED->value,
+                    $finalProgress,
+                    $errorMessage,
+                );
+                $this->logger->error(sprintf(
+                    'File migration failed for fork record %d: %s',
+                    $forkRecordId,
+                    $errorMessage,
+                ));
+                return $sourceToNewIdMap;
             }
 
             // Mark as finished
@@ -3994,8 +4017,10 @@ class TaskFileDomainService
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,
                 [
-                    'source_oss_path' => $fileEntity->getFileKey(),
-                    'target_oss_path' => $targetPath,
+                    [
+                        'source_oss_path' => $fileEntity->getFileKey(),
+                        'target_oss_path' => $targetPath,
+                    ],
                 ],
             );
 
@@ -4048,8 +4073,10 @@ class TaskFileDomainService
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,
                 [
-                    'source_oss_path' => $fileEntity->getFileKey(),
-                    'target_oss_path' => $targetPath,
+                    [
+                        'source_oss_path' => $fileEntity->getFileKey(),
+                        'target_oss_path' => $targetPath,
+                    ],
                 ],
             );
 

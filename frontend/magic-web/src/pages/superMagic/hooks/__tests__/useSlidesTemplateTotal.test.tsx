@@ -30,6 +30,7 @@ describe("useSlidesTemplateTotal", () => {
 		getSlidesTemplateCountMock.mockResolvedValue({
 			total: 101582,
 			total_usage_count: 7293,
+			template_count_today_growth: 512,
 		})
 		const { result } = renderHook(() => useSlidesTemplateTotal(), {
 			wrapper: ({ children }) => (
@@ -39,6 +40,20 @@ describe("useSlidesTemplateTotal", () => {
 
 		await waitFor(() => expect(result.current).toBe(101582))
 		expect(getSlidesTemplateCountMock).toHaveBeenCalledWith({})
+	})
+
+	it("maps today's template growth from the shared statistics response", async () => {
+		getSlidesTemplateCountMock.mockResolvedValue({
+			total: 101582,
+			template_count_today_growth: 512,
+		})
+		const { result } = renderHook(() => useSlidesTemplateStatistics(), {
+			wrapper: ({ children }) => (
+				<SWRConfig value={{ provider: () => new Map() }}>{children}</SWRConfig>
+			),
+		})
+
+		await waitFor(() => expect(result.current?.templateCountTodayGrowth).toBe(512))
 	})
 
 	it("keeps cumulative usage optional until the backend returns the new field", async () => {
@@ -51,6 +66,7 @@ describe("useSlidesTemplateTotal", () => {
 
 		await waitFor(() => expect(result.current?.templateTotal).toBe(101582))
 		expect(result.current?.templateTotalUsageCount).toBeUndefined()
+		expect(result.current?.templateCountTodayGrowth).toBeUndefined()
 	})
 
 	it("does not request statistics while the consumer is not visible", async () => {
@@ -94,9 +110,11 @@ describe("useSlidesTemplateTotal", () => {
 			configurable: true,
 			value: "visible",
 		})
-		getSlidesTemplateCountMock.mockResolvedValue({ total: 101582 })
+		getSlidesTemplateCountMock
+			.mockResolvedValueOnce({ total: 101582, template_count_today_growth: 512 })
+			.mockResolvedValue({ total: 101583, template_count_today_growth: 513 })
 
-		renderHook(() => useSlidesTemplateStatistics({ refreshInterval: 20 }), {
+		const { result } = renderHook(() => useSlidesTemplateStatistics({ refreshInterval: 20 }), {
 			wrapper: ({ children }) => (
 				<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
 					{children}
@@ -105,6 +123,7 @@ describe("useSlidesTemplateTotal", () => {
 		})
 
 		await waitFor(() => expect(getSlidesTemplateCountMock.mock.calls.length).toBeGreaterThan(1))
+		await waitFor(() => expect(result.current?.templateCountTodayGrowth).toBe(513))
 	})
 
 	it("keeps the latest successful value when a refresh fails", async () => {
@@ -130,6 +149,7 @@ describe("useSlidesTemplateTotal", () => {
 		expect(result.current).toEqual({
 			templateTotal: 101582,
 			templateTotalUsageCount: 7293,
+			templateCountTodayGrowth: undefined,
 		})
 	})
 

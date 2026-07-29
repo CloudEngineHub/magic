@@ -24,6 +24,7 @@ import {
 	buildWechatClipboardHtmlFromIframe,
 	buildWechatClipboardHtmlFromSource,
 } from "./wechatClipboardHtml"
+import { copyWechatArticleSelection } from "./wechatNativeClipboard"
 
 interface WechatArticleViewProps {
 	post: SelfMediaPost
@@ -44,6 +45,7 @@ interface WechatArticleViewProps {
 export interface WechatArticleViewRef {
 	getIframeElement: () => HTMLIFrameElement | null
 	getArticleHtml: () => string | null
+	copyArticleRichContent: () => Promise<boolean>
 	startInspector: () => void
 	startInspectorAppend: () => void
 	stopInspector: () => void
@@ -203,6 +205,10 @@ function WechatArticleViewInner(
 		isMobile ? "phone" : "desktop",
 	)
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
+	const copyReadyPreviewRef = useRef<{
+		content: string
+		iframe: HTMLIFrameElement
+	} | null>(null)
 	const articleScrollTopsRef = useRef(new Map<string, number>())
 	const userSelectedRenderModeRef = useRef(false)
 	const renderedContent = useMemo(() => {
@@ -228,7 +234,19 @@ function WechatArticleViewInner(
 			getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
 			getArticleHtml: () =>
 				buildWechatClipboardHtmlFromIframe(rendererRef.current?.getIframeElement()) ||
-				(renderedContent ? buildWechatClipboardHtmlFromSource(renderedContent) : content),
+				(content ? buildWechatClipboardHtmlFromSource(content) : null),
+			copyArticleRichContent: () => {
+				const iframe = rendererRef.current?.getIframeElement() ?? null
+				if (
+					!renderedContent ||
+					!iframe ||
+					copyReadyPreviewRef.current?.content !== renderedContent ||
+					copyReadyPreviewRef.current.iframe !== iframe
+				) {
+					return Promise.resolve(false)
+				}
+				return copyWechatArticleSelection(iframe)
+			},
 			startInspector: () => rendererRef.current?.startInspectorAppend(),
 			startInspectorAppend: () => rendererRef.current?.startInspectorAppend(),
 			stopInspector: () => rendererRef.current?.stopInspector(),
@@ -341,6 +359,9 @@ function WechatArticleViewInner(
 	}, [fileId, renderedContent, renderMode])
 
 	const handleRenderReady = useCallback(() => {
+		const iframe = rendererRef.current?.getIframeElement() ?? null
+		copyReadyPreviewRef.current =
+			renderedContent && iframe ? { content: renderedContent, iframe } : null
 		if (!fileId || renderMode !== "desktop") return
 		if (restoredRenderTokenRef.current === articleRenderToken) return
 		restoredRenderTokenRef.current = articleRenderToken
@@ -349,7 +370,7 @@ function WechatArticleViewInner(
 		window.requestAnimationFrame(() => {
 			restoreIframeScrollTop(rendererRef.current?.getIframeElement() ?? null, scrollTop)
 		})
-	}, [articleRenderToken, fileId, renderMode])
+	}, [articleRenderToken, fileId, renderMode, renderedContent])
 
 	const openNewTab = useCallback(() => {
 		// No-op in read-only context

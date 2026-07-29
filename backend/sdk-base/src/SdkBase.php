@@ -59,7 +59,11 @@ class SdkBase
         if (! $logger instanceof LoggerInterface) {
             throw new RuntimeException('Logger Must Be An Instance Of Psr\Log\LoggerInterface');
         }
-        $this->logger = new LoggerProxy($this->getConfig()->getSdkName(), $logger);
+        $this->logger = new LoggerProxy(
+            $this->getConfig()->getSdkName(),
+            $logger,
+            $this->config->getLogSanitizerConfig()
+        );
         return $this->logger;
     }
 

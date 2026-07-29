@@ -294,6 +294,144 @@ describe("useSelfMediaPosts", () => {
 		)
 	})
 
+	it("renders a single shared post folder when magic.project.js is not shared", async () => {
+		const sharedPostTree = [
+			{
+				file_id: "shared-root",
+				file_name: "shared-project",
+				is_directory: true,
+				relative_file_path: "shared-project/",
+				display_config: { type: "self-media" },
+				children: [
+					{
+						file_id: "shared-post-folder",
+						file_name: "rednote-shared-post",
+						is_directory: true,
+						relative_file_path: "shared-project/posts/rednote-shared-post/",
+						display_config: { platform: "rednote" },
+						children: [
+							{
+								file_id: "shared-post-json",
+								file_name: "post.json",
+								is_directory: false,
+								relative_file_path:
+									"shared-project/posts/rednote-shared-post/post.json",
+							},
+							{
+								file_id: "shared-card",
+								file_name: "01.html",
+								is_directory: false,
+								relative_file_path:
+									"shared-project/posts/rednote-shared-post/cards/01.html",
+							},
+						],
+					},
+				],
+			},
+		]
+		mockGetFileContentById.mockImplementation(async (fileId: string) => {
+			if (fileId === "shared-post-json") {
+				return JSON.stringify({
+					id: "shared-post",
+					meta: { title: "Shared Post" },
+					cards: ["cards/01.html"],
+				})
+			}
+			throw new Error(`unexpected file id: ${fileId}`)
+		})
+
+		const { result } = renderHook(() =>
+			useSelfMediaPosts({
+				folderFileId: "shared-root",
+				attachments: sharedPostTree,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		expect(result.current.error).toBeNull()
+		expect(result.current.platform).toBe("rednote")
+		expect(result.current.postEntries).toEqual([
+			expect.objectContaining({
+				id: "shared-post",
+				entry: "posts/rednote-shared-post/post.json",
+			}),
+		])
+		expect(result.current.posts[0].meta.title).toBe("Shared Post")
+		expect(result.current.posts[0].cards[0].fileId).toBe("shared-card")
+		expect(mockGetFileContentById).toHaveBeenCalledTimes(1)
+	})
+
+	it("renders every shared post folder when magic.project.js is not shared", async () => {
+		const sharedPostTree = [
+			{
+				file_id: "shared-root",
+				file_name: "shared-project",
+				is_directory: true,
+				relative_file_path: "shared-project/",
+				display_config: { type: "self-media" },
+				children: [
+					{
+						file_id: "rednote-folder",
+						file_name: "rednote-post",
+						is_directory: true,
+						relative_file_path: "shared-project/posts/rednote-post/",
+						display_config: { platform: "rednote" },
+						children: [
+							{
+								file_id: "rednote-post-json",
+								file_name: "post.json",
+								is_directory: false,
+								relative_file_path: "shared-project/posts/rednote-post/post.json",
+							},
+						],
+					},
+					{
+						file_id: "instagram-folder",
+						file_name: "instagram-post",
+						is_directory: true,
+						relative_file_path: "shared-project/posts/instagram-post/",
+						display_config: { platform: "instagram" },
+						children: [
+							{
+								file_id: "instagram-post-json",
+								file_name: "post.json",
+								is_directory: false,
+								relative_file_path: "shared-project/posts/instagram-post/post.json",
+							},
+						],
+					},
+				],
+			},
+		]
+		mockGetFileContentById.mockImplementation(async (fileId: string) => {
+			if (fileId === "rednote-post-json") {
+				return JSON.stringify({ id: "rednote-post", meta: { title: "Rednote" }, cards: [] })
+			}
+			if (fileId === "instagram-post-json") {
+				return JSON.stringify({
+					id: "instagram-post",
+					meta: { title: "Instagram" },
+					cards: [],
+				})
+			}
+			throw new Error(`unexpected file id: ${fileId}`)
+		})
+
+		const { result } = renderHook(() =>
+			useSelfMediaPosts({
+				folderFileId: "shared-root",
+				attachments: sharedPostTree,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		expect(result.current.error).toBeNull()
+		expect(result.current.platforms).toEqual(["rednote", "instagram"])
+		expect(result.current.posts).toHaveLength(1)
+		expect(result.current.posts[0].meta.title).toBe("Rednote")
+		expect(mockGetFileContentById).toHaveBeenCalledTimes(2)
+	})
+
 	it("prefers the attachments tree when attachmentList is flat", async () => {
 		mockGetFileContentById.mockImplementation(async (fileId: string) => {
 			if (fileId === "magic-id") return rootMagicProjectContent

@@ -114,7 +114,6 @@ class DynamicModelChatTest extends AbstractApiTest
             'n' => 1,
             'images' => [],
             'prompt' => '一只可爱的白色猫咪，毛发蓬松柔软，蓝色的眼睛，背景是温暖的室内环境，高质量图像',
-            'sequential_image_generation' => 'auto',
             'size' => '10:333',
         ];
 

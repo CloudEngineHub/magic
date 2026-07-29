@@ -42,7 +42,7 @@ export function resolveEmployeeMarketPrimaryActionLabel(
 ): string {
 	if (isOfficialBuiltinPublisherType(employee.publisherType))
 		return t("employeeCard.officialBuiltin")
-	if (isNonRemovableAddedStoreAgent(employee)) return t("chat")
+	if (isNonRemovableAddedStoreAgent(employee)) return t("conversation")
 	if (employee.allowDelete) return t("dismiss")
 	return t("hire")
 }

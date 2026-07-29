@@ -43,6 +43,7 @@ describe("FileDownloadModal", () => {
 	const mockOnClose = vi.fn()
 	const mockOnDownload = vi.fn()
 	const mockOnCopyLink = vi.fn()
+	const mockOnAfterClose = vi.fn()
 
 	const defaultProps: OpenableProps<{
 		open: boolean
@@ -51,6 +52,7 @@ describe("FileDownloadModal", () => {
 		downloadUrl: string
 		onDownload?: () => void
 		onCopyLink?: () => void
+		onAfterClose?: () => void
 	}> = {
 		open: true,
 		onClose: mockOnClose,
@@ -58,6 +60,7 @@ describe("FileDownloadModal", () => {
 		downloadUrl: "https://example.com/test-file.pdf",
 		onDownload: mockOnDownload,
 		onCopyLink: mockOnCopyLink,
+		onAfterClose: mockOnAfterClose,
 	}
 
 	beforeEach(() => {
@@ -113,5 +116,19 @@ describe("FileDownloadModal", () => {
 
 		const dialogContent = document.querySelector('[data-slot="dialog-content"]')
 		expect(dialogContent).toHaveStyle({ zIndex: "1300" })
+	})
+
+	it("runs close lifecycle callbacks only once", async () => {
+		vi.useFakeTimers()
+		render(<FileDownloadModal {...defaultProps} />)
+
+		const [closeButton] = screen.getAllByRole("button", { name: "Close" })
+		fireEvent.click(closeButton)
+		fireEvent.click(closeButton)
+		await vi.advanceTimersByTimeAsync(200)
+
+		expect(mockOnAfterClose).toHaveBeenCalledTimes(1)
+		expect(mockOnClose).toHaveBeenCalledTimes(1)
+		vi.useRealTimers()
 	})
 })

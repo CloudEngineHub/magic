@@ -18,6 +18,7 @@ const {
 	injectInspectorHandlerMock,
 	startWechatArticleInspectorMock,
 	startWechatArticleInspectorAppendMock,
+	copyWechatArticleRichContentMock,
 	clipboardWriteMock,
 	clipboardWriteTextMock,
 	clipboardItemPayloads,
@@ -27,6 +28,7 @@ const {
 	injectInspectorHandlerMock: vi.fn(),
 	startWechatArticleInspectorMock: vi.fn(),
 	startWechatArticleInspectorAppendMock: vi.fn(),
+	copyWechatArticleRichContentMock: vi.fn(() => Promise.resolve(false)),
 	clipboardWriteMock: vi.fn(),
 	clipboardWriteTextMock: vi.fn(),
 	clipboardItemPayloads: [] as Array<Record<string, Blob>>,
@@ -93,6 +95,7 @@ vi.mock("../platforms/wechat-official-accounts/article", () => ({
 		useImperativeHandle(ref, () => ({
 			getIframeElement: () => iframeRef.current,
 			getArticleHtml: () => "<section><strong>article html</strong></section>",
+			copyArticleRichContent: copyWechatArticleRichContentMock,
 			startInspector: () => {
 				startWechatArticleInspectorMock()
 				_props.onInspectorActiveChange?.(true)
@@ -267,6 +270,8 @@ const DEFAULT_POSTS: SelfMediaPost[] = [
 
 afterEach(() => {
 	vi.unstubAllGlobals()
+	copyWechatArticleRichContentMock.mockReset()
+	copyWechatArticleRichContentMock.mockResolvedValue(false)
 	clipboardWriteMock.mockReset()
 	clipboardWriteTextMock.mockReset()
 	clipboardItemPayloads.length = 0
@@ -361,6 +366,7 @@ describe("platform shells", () => {
 		expect(screen.getByTestId("red-detail-dot-2").className).toContain(
 			"w-4 bg-[var(--red-brand)]",
 		)
+		expect(screen.queryByTestId("red-detail-next-button")).not.toBeInTheDocument()
 
 		fireEvent.click(prevButton)
 		expect(screen.getByTestId("red-detail-dot-1").className).toContain(
@@ -640,6 +646,35 @@ describe("platform shells", () => {
 		const textBlob = clipboardItemPayloads[0]["text/plain"] as unknown as MockBlob
 		expect(textBlob.type).toBe("text/plain")
 		expect(textBlob.parts).toEqual(["fallback html"])
+	})
+
+	it("uses the preview iframe native rich-text copy before the HTML fallback", async () => {
+		copyWechatArticleRichContentMock.mockResolvedValueOnce(true)
+
+		renderWithStore(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+			{
+				platform: "wechat-official-accounts",
+				view: "detail",
+				posts: [
+					{
+						meta: { id: "wechat-post-1", title: "公众号文章" },
+						cards: [],
+						article: { path: "article.html", fileId: "article-file-1" },
+					},
+				],
+			},
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-panel"))
+		fireEvent.click(await screen.findByTestId("mock-copy-wechat-html"))
+
+		await waitFor(() => expect(copyWechatArticleRichContentMock).toHaveBeenCalledTimes(1))
+		expect(clipboardWriteMock).not.toHaveBeenCalled()
 	})
 
 	it("adds a scroll card to the current chat from the action strip", () => {

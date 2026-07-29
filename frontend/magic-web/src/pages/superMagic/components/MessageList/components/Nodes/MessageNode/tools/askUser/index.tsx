@@ -35,7 +35,10 @@ import { extractQuestionsField, parseQuestionsXml, type ParsedQuestion } from ".
 
 type AskUserDetailQuestion = {
 	default_value?: string | readonly string[] | null
+	sub_id?: string
 }
+
+type AskUserAnswerValue = string | readonly string[]
 
 function normalizeAskUserStatus(status: unknown) {
 	if (status === ASK_USER_CARD_STATUS.answered) return ASK_USER_CARD_STATUS.answered
@@ -72,6 +75,41 @@ function mergeDetailQuestionDefaults(
 	return changed ? nextQuestions : questions
 }
 
+/** 服务端答案以 sub_id 为键，流式 XML 题目以 q-{index} 为键，按题目顺序对齐。 */
+function resolveSubmittedAnswers({
+	answers,
+	detailQuestions,
+	questions,
+}: {
+	answers: unknown
+	detailQuestions: unknown
+	questions: readonly ParsedQuestion[]
+}): Record<string, AskUserAnswerValue> | undefined {
+	if (!answers || typeof answers !== "object" || Array.isArray(answers)) return undefined
+
+	const answerMap = answers as Record<string, unknown>
+	const questionsFromDetail = Array.isArray(detailQuestions) ? detailQuestions : []
+	const mappedAnswers: Record<string, AskUserAnswerValue> = {}
+	let hasAnswer = false
+
+	questions.forEach((question, index) => {
+		const detailQuestion = questionsFromDetail[index] as AskUserDetailQuestion | undefined
+		const subId = typeof detailQuestion?.sub_id === "string" ? detailQuestion.sub_id : ""
+		const answer = answerMap[question.id] ?? (subId ? answerMap[subId] : undefined)
+		if (typeof answer === "string") {
+			mappedAnswers[question.id] = answer
+			hasAnswer = true
+			return
+		}
+		if (Array.isArray(answer) && answer.every((item) => typeof item === "string")) {
+			mappedAnswers[question.id] = answer
+			hasAnswer = true
+		}
+	})
+
+	return hasAnswer ? mappedAnswers : undefined
+}
+
 function AskUserToolCall(props: DefaultToolProps) {
 	const { onMouseEnter, onMouseLeave, loading, classNames, selectedTopic } = props
 
@@ -106,6 +144,15 @@ function AskUserToolCall(props: DefaultToolProps) {
 		prevParsedRef.current = resolvedQuestions
 		return resolvedQuestions
 	}, [deferredRaw, detailData?.questions])
+	const submittedAnswers = useMemo(
+		() =>
+			resolveSubmittedAnswers({
+				answers: detailData?.answers,
+				detailQuestions: detailData?.questions,
+				questions: parsedQuestions,
+			}),
+		[detailData?.answers, detailData?.questions, parsedQuestions],
+	)
 
 	const isOpen = !!loading || open
 	const toolStatus =
@@ -291,16 +338,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 									? (detailData.expires_at as number)
 									: undefined
 							}
-							submittedAnswers={
-								detailData?.answers &&
-								typeof detailData.answers === "object" &&
-								!Array.isArray(detailData.answers)
-									? (detailData.answers as Record<
-											string,
-											string | readonly string[]
-										>)
-									: undefined
-							}
+							submittedAnswers={submittedAnswers}
 							onSubmit={handleSubmit}
 							onSkip={handleSkip}
 							onProgressChange={setAnsweredQuestionCount}

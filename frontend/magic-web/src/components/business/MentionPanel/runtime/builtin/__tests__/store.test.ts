@@ -12,7 +12,7 @@ import type { SkillDomainItem } from "../domains/skills/types"
 import { type ProjectListItem, ProjectStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { ElementTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 
 interface TestWorkspaceEntry {
 	type: "file" | "directory"

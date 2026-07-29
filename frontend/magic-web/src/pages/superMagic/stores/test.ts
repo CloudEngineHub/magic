@@ -1,11 +1,11 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { set } from "lodash-es"
-// import mock from "./mock_v1.json"
+import mock from "./mock_v4.json"
 
 // @ts-ignore
 window.test = (topicId: string = "837333386617253888") => {
-	const mock: any[] = []
+	// const mock: any[] = []
 
 	function check() {
 		const allAfterAgentReply = mock.filter((o) => {
@@ -43,6 +43,7 @@ window.test = (topicId: string = "837333386617253888") => {
 
 		if (message?.type === "super_magic_chunk") {
 			set(message, ["topic_id"], topicId)
+			console.log("chunk", message?.super_magic_chunk)
 			pubsub.publish(PubSubEvents.Stream_Message, message)
 			setTimeout(() => {
 				run(i + 1)

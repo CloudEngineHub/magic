@@ -103,7 +103,6 @@ class ImageGenerateFactory
             'prompt' => $data['user_prompt'] ?? '',
             'model' => $data['model'] ?? '',
             'n' => $data['generate_num'] ?? 1,
-            'sequential_image_generation' => $data['sequential_image_generation'] ?? 'disabled',
             'size' => $data['size'] ?? '1024x1024',
             'images' => $data['reference_images'] ?? [],
         ]);

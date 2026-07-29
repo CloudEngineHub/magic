@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react"
-import { Box, ChevronRight, CirclePlus, UsersRound } from "lucide-react"
+import { useRequest } from "ahooks"
+import { Box, ChevronRight, CirclePlus, Loader2, UsersRound } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -18,6 +19,8 @@ const CollaborationProjectsPanel = lazy(
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
 
+const WORKSPACE_PAGE_SIZE = 20
+
 const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	const { t } = useTranslation()
 	const [isOpen, setIsOpen] = useState(false)
@@ -26,6 +29,8 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false)
 	const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null)
 	const [shareProjectsPanelOpen, setShareProjectsPanelOpen] = useState(false)
+	const [workspacePage, setWorkspacePage] = useState(1)
+	const [hasMoreWorkspaces, setHasMoreWorkspaces] = useState(true)
 	const workspaceScrollRef = useRef<HTMLDivElement>(null)
 
 	const selectedWorkspace = workspaceStore.selectedWorkspace
@@ -46,6 +51,24 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 		setIsOpen(false)
 	}
 
+	const { run: fetchWorkspacePage, loading: isLoadingMoreWorkspaces } = useRequest(
+		(page: number, append: boolean) =>
+			superMagicService.workspace.fetchWorkspaces({
+				page,
+				pageSize: WORKSPACE_PAGE_SIZE,
+				append,
+				isAutoSelect: false,
+				isSelectLast: false,
+			}),
+		{
+			manual: true,
+			onSuccess: (items, [page]) => {
+				setWorkspacePage(page)
+				setHasMoreWorkspaces(items.length === WORKSPACE_PAGE_SIZE)
+			},
+		},
+	)
+
 	useEffect(() => {
 		const scrollElement = workspaceScrollRef.current?.querySelector(
 			"[data-slot='scroll-area-viewport']",
@@ -57,11 +80,26 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 			if (openProjectMenuId) {
 				setOpenProjectMenuId(null)
 			}
+			if (
+				scrollElement.scrollTop + scrollElement.clientHeight >=
+				scrollElement.scrollHeight - 40
+			) {
+				if (!isLoadingMoreWorkspaces && hasMoreWorkspaces) {
+					fetchWorkspacePage(workspacePage + 1, true)
+				}
+			}
 		}
 
 		scrollElement.addEventListener("scroll", handleScroll)
 		return () => scrollElement.removeEventListener("scroll", handleScroll)
-	}, [openProjectMenuId])
+	}, [
+		fetchWorkspacePage,
+		hasMoreWorkspaces,
+		isLoadingMoreWorkspaces,
+		openProjectMenuId,
+		workspacePage,
+		workspaces.length,
+	])
 
 	async function handleCreateWorkspace() {
 		const trimmedName = workspaceName.trim()
@@ -88,11 +126,9 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	function handleWorkspacePopoverOpenChange(open: boolean) {
 		setIsOpen(open)
 		if (open) {
-			void superMagicService.workspace.fetchWorkspaces({
-				page: 1,
-				isAutoSelect: false,
-				isSelectLast: false,
-			})
+			setWorkspacePage(1)
+			setHasMoreWorkspaces(true)
+			fetchWorkspacePage(1, false)
 		}
 	}
 
@@ -185,6 +221,11 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 												/>
 											)
 										})}
+										{isLoadingMoreWorkspaces && (
+											<div className="flex h-6 items-center justify-center">
+												<Loader2 className="size-4 animate-spin text-muted-foreground" />
+											</div>
+										)}
 									</div>
 								</ScrollArea>
 							) : (

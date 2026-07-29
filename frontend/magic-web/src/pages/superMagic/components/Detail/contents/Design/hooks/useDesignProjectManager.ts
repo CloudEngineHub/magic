@@ -66,6 +66,8 @@ export interface UseDesignProjectManagerReturn {
 	resolveBlockingConflictWithLocal: () => Promise<boolean>
 	resolveElementConflictWithLocal: (elementId: string) => boolean
 	resolveElementConflictWithRemote: (elementId: string) => boolean
+	resolveConnectionConflictWithLocal: (connectionId: string) => boolean
+	resolveConnectionConflictWithRemote: (connectionId: string) => boolean
 	resolveEditedElementConflictsWithLocal: (
 		elementIds: string[],
 		nextDesignData: DesignData,
@@ -271,6 +273,10 @@ export function useDesignProjectManager(
 			manager.resolveElementConflictWithLocal(elementId),
 		resolveElementConflictWithRemote: (elementId) =>
 			manager.resolveElementConflictWithRemote(elementId),
+		resolveConnectionConflictWithLocal: (connectionId) =>
+			manager.resolveConnectionConflictWithLocal(connectionId),
+		resolveConnectionConflictWithRemote: (connectionId) =>
+			manager.resolveConnectionConflictWithRemote(connectionId),
 		resolveEditedElementConflictsWithLocal: (elementIds, nextDesignData, metadata) =>
 			manager.resolveEditedElementConflictsWithLocal(elementIds, nextDesignData, metadata),
 

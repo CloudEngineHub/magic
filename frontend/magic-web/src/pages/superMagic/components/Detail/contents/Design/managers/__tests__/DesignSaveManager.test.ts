@@ -4,7 +4,13 @@ import { DesignSaveManager, type DesignSaveLifecycleHandlers } from "../DesignSa
 import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"
 import { hashDesignDataComparable } from "../../utils/designContentHash"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasConnection,
+	CanvasDocument,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document/types"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import { decompressCanvasData, isCompressedCanvas } from "../../utils/magicProjectCompression"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -13,12 +19,16 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-function createDesignData(name: string, elements: LayerElement[] = []): DesignData {
+function createDesignData(
+	name: string,
+	elements: LayerElement[] = [],
+	connections?: CanvasConnection[],
+): DesignData {
 	return {
 		type: "design",
 		name,
 		version: "2.0.0",
-		canvas: { elements },
+		canvas: { elements, ...(connections ? { connections } : {}) },
 	}
 }
 
@@ -179,6 +189,52 @@ describe("DesignSaveManager remote checks", () => {
 			hashDesignDataComparable(remoteSaveData),
 		)
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
+	})
+
+	it("writes canvas connections into the saved magic.project.js content", async () => {
+		const sourceElement: LayerElement = {
+			id: "source",
+			type: "text",
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 40,
+		}
+		const targetElement: LayerElement = {
+			id: "target",
+			type: "text",
+			x: 200,
+			y: 0,
+			width: 100,
+			height: 40,
+		}
+		const connection: CanvasConnection = {
+			id: "connection-1",
+			sourceElementId: "source",
+			targetElementId: "target",
+		}
+		const saveManager = createSaveManager(
+			createDesignData("local", [sourceElement, targetElement], [connection]),
+		)
+		vi.spyOn(saveManager, "checkRemoteUpdate").mockResolvedValue({
+			hasUpdate: false,
+			currentVersion: 2,
+			isCheckReliable: true,
+		})
+
+		const result = await saveManager.commitSave()
+
+		expect(result).toEqual(expect.objectContaining({ ok: true }))
+		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
+		const savedContent = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0]
+			.content as string
+		const config = parseMagicProjectConfigContent(savedContent)
+		const canvasField = (config as { canvas?: unknown }).canvas
+		expect(isCompressedCanvas(canvasField)).toBe(true)
+		if (!isCompressedCanvas(canvasField)) return
+
+		const canvas = decompressCanvasData(canvasField) as CanvasDocument
+		expect(canvas.connections).toEqual([connection])
 	})
 
 	it("stops before writing when the empty canvas save guard blocks the payload", async () => {

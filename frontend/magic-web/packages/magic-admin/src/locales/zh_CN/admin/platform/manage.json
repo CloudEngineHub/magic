@@ -86,7 +86,7 @@
 	"subtitle": "宣传小标题",
 	"subtitlePlaceholder": "请输入宣传小标题，如最受欢迎套餐",
 	"superMagic": "套餐权益",
-	"superMagicCopyLimit": "$t(common:platform.name)项目复制上限",
+	"superMagicCopyLimit": "项目复制上限",
 	"superMagicCopyLimitDesc": "套餐用户每日可复制的项目数量上限",
 	"team": "团队套餐",
 	"teamMemberLimit": "团队人数上限",

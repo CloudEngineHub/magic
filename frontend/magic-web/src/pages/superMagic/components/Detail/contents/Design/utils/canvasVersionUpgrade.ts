@@ -118,6 +118,7 @@ export async function upgradeCanvasToV2(
 
 	const v2Content = generateMagicProjectJsContent(upgradedDesignData, {
 		projectBasePath: designProjectBasePath,
+		flatAttachments,
 	})
 	await SuperMagicApi.saveFileContent([
 		{ file_id: magicProjectJsFileId, content: v2Content, enable_shadow: true },

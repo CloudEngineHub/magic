@@ -121,6 +121,16 @@ class OrganizationAdminDomainService
      */
     public function isOrganizationAdmin(DataIsolation $dataIsolation, string $userId): bool
     {
+        if ($userId === '') {
+            return false;
+        }
+
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        // 个人组织的管理员身份由组织拥有者直接派生，不依赖管理员记录。
+        if ($organization?->isPersonal()) {
+            return $organization->isOwnedBy($userId);
+        }
+
         return $this->organizationAdminRepository->isOrganizationAdmin($dataIsolation, $userId);
     }
 
@@ -136,8 +146,8 @@ class OrganizationAdminDomainService
             $this->logger->warning('找不到组织代码', ['organizationCode' => $orgCode]);
             ExceptionBuilder::throw(PermissionErrorCode::ORGANIZATION_NOT_EXISTS);
         }
-        // 个人组织仅允许授予“组织创建者”管理员身份，避免手工扩散管理员范围
-        if ($organization->getType() === 1 && ! $isOrganizationCreator) {
+        // 个人组织的管理员身份由 creator_id 派生，不写入管理员记录。
+        if ($organization->isPersonal()) {
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.personal_organization_cannot_grant_admin');
         }
 
@@ -183,8 +193,7 @@ class OrganizationAdminDomainService
         }
 
         // 检查是否为组织创建人，组织创建人不可删除管理员权限
-        $organizationAdmin = $this->getByUserId($dataIsolation, $userId);
-        if ($organizationAdmin && $organizationAdmin->isOrganizationCreator()) {
+        if ($this->isOrganizationCreator($dataIsolation, $userId)) {
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.organization_creator_cannot_be_revoked', ['userId' => $userId]);
         }
 
@@ -219,6 +228,15 @@ class OrganizationAdminDomainService
      */
     public function batchCheckOrganizationAdmin(DataIsolation $dataIsolation, array $userIds): array
     {
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        if ($organization?->isPersonal()) {
+            $result = [];
+            foreach ($userIds as $userId) {
+                $result[$userId] = $organization->isOwnedBy((string) $userId);
+            }
+            return $result;
+        }
+
         return $this->organizationAdminRepository->batchCheckOrganizationAdmin($dataIsolation, $userIds);
     }
 
@@ -227,6 +245,16 @@ class OrganizationAdminDomainService
      */
     public function transferOrganizationCreator(DataIsolation $dataIsolation, string $currentCreatorUserId, string $newCreatorUserId, string $operatorUserId): void
     {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $organization = $this->organizationRepository->getByCode($organizationCode);
+        if (! $organization) {
+            ExceptionBuilder::throw(PermissionErrorCode::ORGANIZATION_NOT_EXISTS);
+        }
+
+        if ($organization->isPersonal()) {
+            ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.personal_organization_cannot_transfer_owner');
+        }
+
         // 检查当前创建人是否存在且确实是创建人
         $currentCreator = $this->getByUserId($dataIsolation, $currentCreatorUserId);
         if (! $currentCreator || ! $currentCreator->isOrganizationCreator()) {
@@ -264,8 +292,13 @@ class OrganizationAdminDomainService
      */
     public function isOrganizationCreator(DataIsolation $dataIsolation, string $userId): bool
     {
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        if ($organization?->isPersonal()) {
+            return $organization->isOwnedBy($userId);
+        }
+
         $admin = $this->getByUserId($dataIsolation, $userId);
-        return $admin && $admin->isOrganizationCreator();
+        return $admin !== null && $admin->isOrganizationCreator();
     }
 
     /**

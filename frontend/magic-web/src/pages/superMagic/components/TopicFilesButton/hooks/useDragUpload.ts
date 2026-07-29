@@ -17,6 +17,7 @@ interface UseDragUploadOptions {
 	debug?: boolean
 	attachments?: AttachmentItem[]
 	duplicateFileHandler?: ReturnType<typeof useDuplicateFileHandler>
+	onUpdateAttachments?: () => void
 }
 
 interface UseDragUploadReturn {
@@ -45,6 +46,7 @@ export function useDragUpload({
 	debug = false,
 	attachments = [],
 	duplicateFileHandler: externalDuplicateHandler,
+	onUpdateAttachments,
 }: UseDragUploadOptions): UseDragUploadReturn {
 	const { t } = useTranslation("super")
 
@@ -55,6 +57,7 @@ export function useDragUpload({
 				uploadType: "file",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
+				onUpdateAttachments,
 			})
 
 			let firstError: unknown
@@ -112,7 +115,16 @@ export function useDragUpload({
 				throw firstError
 			}
 		},
-		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t, debug],
+		[
+			attachments,
+			onUpdateAttachments,
+			projectId,
+			workspaceId,
+			selectedProject,
+			selectedTopic,
+			t,
+			debug,
+		],
 	)
 
 	// 实际上传处理函数（用于文件夹上传）
@@ -122,6 +134,7 @@ export function useDragUpload({
 				uploadType: "folder",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
+				onUpdateAttachments,
 			})
 
 			if (debug) {
@@ -176,7 +189,16 @@ export function useDragUpload({
 				throw error
 			}
 		},
-		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t, debug],
+		[
+			attachments,
+			onUpdateAttachments,
+			projectId,
+			workspaceId,
+			selectedProject,
+			selectedTopic,
+			t,
+			debug,
+		],
 	)
 
 	// 同名文件处理 handler（优先使用外部传入的共享 handler）

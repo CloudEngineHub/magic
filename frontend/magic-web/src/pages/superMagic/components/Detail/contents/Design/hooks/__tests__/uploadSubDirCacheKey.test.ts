@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import { buildImagesDirCacheKey, buildUploadSubDirCacheKey } from "../uploadSubDirCacheKey"
 
 function createDesignDirectory(children: FileItem[] = []): FileItem[] {

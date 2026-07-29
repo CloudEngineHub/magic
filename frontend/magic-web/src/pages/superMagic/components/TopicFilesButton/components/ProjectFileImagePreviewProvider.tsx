@@ -6,19 +6,25 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 	type ReactNode,
 } from "react"
 import { IMAGE_EXTENSIONS } from "@/constants/file"
-import {
-	getTemporaryDownloadUrl,
-	type GetTemporaryDownloadUrlItem,
-} from "@/pages/superMagic/utils/api"
 import { resolveSafePreviewUrl } from "@/pages/superMagic/components/Detail/components/FilesViewer/components/previewUrl"
-import { isOssExpired, parseExpiresAt } from "@/components/CanvasDesign/canvas/utils/ossExpiryUtils"
-import type { ImageProcessOptions } from "@/utils/image-processing"
+import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
+import { getAiWatermarkPreferenceUserKey } from "@/utils/aiWatermarkPreferenceCache"
 import type { AttachmentItem } from "../hooks/types"
+import {
+	cancelProjectFileImagePreviewRequest,
+	deleteProjectFileImagePreviewCacheItem,
+	getProjectFileImagePreviewCacheItem,
+	getProjectFileImagePreviewMemoryCacheItem,
+	PROJECT_FILE_IMAGE_PREVIEW_RENDITION_KEY,
+	requestProjectFileImagePreview,
+	requestProjectFileImagePreviewBatch,
+} from "./projectFileImagePreviewCoordinator"
 
-type PreviewStatus = "idle" | "loading" | "loaded" | "error"
+type PreviewStatus = "idle" | "loading" | "loaded" | "error" | "unavailable"
 
 export interface ProjectFileImagePreviewSource {
 	item: AttachmentItem
@@ -33,29 +39,18 @@ interface PreviewState {
 	url?: string
 }
 
-interface PreviewUrlCacheItem {
-	url: string
-	expiresAt?: string
-}
-
 interface ProjectFileImagePreviewManager {
 	ensurePreview: (source: ProjectFileImagePreviewSource) => void
 	getPreviewState: (source: ProjectFileImagePreviewSource) => PreviewState
+	getPreviewSnapshot: (source: ProjectFileImagePreviewSource) => string
 	markPreviewImageError: (source: ProjectFileImagePreviewSource) => void
+	subscribePreview: (cacheKey: string, listener: () => void) => () => void
 	setMountedItems: (items: AttachmentItem[]) => void
-}
-
-const PROJECT_FILE_IMAGE_PREVIEW_PROCESS: ImageProcessOptions = {
-	resize: { w: 320, h: 320, m: "lfit" },
-	quality: 45,
-	format: "webp",
-	autoOrient: 1,
+	setPreviewVisible: (source: ProjectFileImagePreviewSource, visible: boolean) => void
 }
 
 const imageExtSet = new Set(IMAGE_EXTENSIONS.map((ext) => normalizeFileExtension(ext)))
-const previewUrlCache = new Map<string, PreviewUrlCacheItem>()
-const PREVIEW_CACHE_LIMIT = 500
-const THUMBNAIL_BATCH_DELAY_MS = 80
+const THUMBNAIL_BATCH_DELAY_MS = 32
 const THUMBNAIL_BATCH_SIZE = 50
 const TOOLTIP_IMAGE_MAX_WIDTH = 320
 const TOOLTIP_IMAGE_MAX_HEIGHT = 320
@@ -79,6 +74,8 @@ const PREVIEW_CACHE_RESOURCE_FIELD_NAMES = [
 	"etag",
 	"hash",
 	"checksum",
+	"topic_id",
+	"project_id",
 ]
 
 const ProjectFileImagePreviewContext = createContext<ProjectFileImagePreviewManager | null>(null)
@@ -155,6 +152,9 @@ export function resolveProjectFileImagePreviewSource(
 		directThumbnailUrl,
 		pickStringUrlField(item, "file_url"),
 		pickStringUrlField(item, "url"),
+		PROJECT_FILE_IMAGE_PREVIEW_RENDITION_KEY,
+		getPreviewFileUrlWatermarkSignature(),
+		getAiWatermarkPreferenceUserKey(),
 	].join("|")
 
 	return {
@@ -166,44 +166,8 @@ export function resolveProjectFileImagePreviewSource(
 	}
 }
 
-function isPreviewUrlCacheItemValid(
-	cachedItem?: PreviewUrlCacheItem,
-): cachedItem is PreviewUrlCacheItem {
-	if (!cachedItem?.url) return false
-	const expiresAtTs = parseExpiresAt(cachedItem.expiresAt)
-	return !isOssExpired(expiresAtTs)
-}
-
-function getCachedPreviewUrl(cacheKey: string): string | undefined {
-	const cache = previewUrlCache
-	const cachedItem = cache.get(cacheKey)
-	if (isPreviewUrlCacheItemValid(cachedItem)) return cachedItem.url
-	if (cachedItem) cache.delete(cacheKey)
-	return undefined
-}
-
-function setCachedPreviewUrl(cacheKey: string, cachedItem: PreviewUrlCacheItem) {
-	const cache = previewUrlCache
-	if (cache.has(cacheKey)) cache.delete(cacheKey)
-	cache.set(cacheKey, cachedItem)
-
-	const limit = PREVIEW_CACHE_LIMIT
-	while (cache.size > limit) {
-		const oldestKey = cache.keys().next().value
-		if (!oldestKey) break
-		cache.delete(oldestKey)
-	}
-}
-
-function deleteCachedPreviewUrl(cacheKey: string) {
-	previewUrlCache.delete(cacheKey)
-}
-
-function pickTemporaryPreviewRow(
-	fileId: string,
-	rows: GetTemporaryDownloadUrlItem[],
-): GetTemporaryDownloadUrlItem | undefined {
-	return rows.find((row) => row.file_id === fileId)
+function getMemoryCachedPreviewUrl(cacheKey: string): string | undefined {
+	return getProjectFileImagePreviewMemoryCacheItem(cacheKey)?.url
 }
 
 function collectCurrentPreviewKeys(items: AttachmentItem[]): Set<string> {
@@ -221,36 +185,18 @@ function collectCurrentPreviewKeys(items: AttachmentItem[]): Set<string> {
 	return keys
 }
 
-function compactPreviewStates(
-	states: Record<string, PreviewState>,
-	currentKeys: ReadonlySet<string>,
-) {
-	let changed = false
-	const next: Record<string, PreviewState> = {}
-
-	for (const [key, value] of Object.entries(states)) {
-		if (!currentKeys.has(key)) {
-			changed = true
-			continue
-		}
-		next[key] = value
-	}
-
-	return changed ? next : states
-}
-
 function shouldRequestPreview(
 	source: ProjectFileImagePreviewSource,
-	states: Record<string, PreviewState>,
+	states: ReadonlyMap<string, PreviewState>,
 	pendingKeys: ReadonlySet<string>,
 ) {
 	if (!source.fileId) return false
 	if (source.directThumbnailUrl) return false
-	if (getCachedPreviewUrl(source.cacheKey)) return false
+	if (getMemoryCachedPreviewUrl(source.cacheKey)) return false
 	if (pendingKeys.has(source.cacheKey)) return false
 
-	const state = states[source.cacheKey]
-	return !state || state.status === "idle"
+	const state = states.get(source.cacheKey)
+	return !state || state.status === "idle" || state.status === "error"
 }
 
 function resolveTooltipImageSize(naturalWidth: number, naturalHeight: number) {
@@ -280,100 +226,174 @@ export function useProjectFileImagePreviewManager({
 	attachments: AttachmentItem[]
 }): ProjectFileImagePreviewManager {
 	const mountedSourcesRef = useRef<ProjectFileImagePreviewSource[]>([])
+	const mountedSourceKeysRef = useRef<Set<string>>(new Set())
+	const visibleSourcesRef = useRef<
+		Map<string, { source: ProjectFileImagePreviewSource; count: number }>
+	>(new Map())
 	const mountedSourcesFingerprintRef = useRef("")
 	const pendingKeysRef = useRef<Set<string>>(new Set())
 	const thumbnailQueueRef = useRef<Map<string, ProjectFileImagePreviewSource>>(new Map())
 	const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const [mountedSourcesVersion, setMountedSourcesVersion] = useState(0)
-	const [previewStates, setPreviewStates] = useState<Record<string, PreviewState>>({})
+	const previewStatesRef = useRef<Map<string, PreviewState>>(new Map())
+	const previewListenersRef = useRef<Map<string, Set<() => void>>>(new Map())
+	const disposedRef = useRef(false)
 
 	const currentPreviewKeys = useMemo(() => collectCurrentPreviewKeys(attachments), [attachments])
-
-	const requestPreviewSources = useCallback((sources: ProjectFileImagePreviewSource[]) => {
-		const requestSources = sources.filter((source) => source.fileId)
-		if (requestSources.length === 0) return
-
-		const pendingKeys = pendingKeysRef.current
-		const nextPendingSources = requestSources.filter((source) => {
-			if (pendingKeys.has(source.cacheKey)) return false
-			if (getCachedPreviewUrl(source.cacheKey)) return false
-			pendingKeys.add(source.cacheKey)
-			return true
-		})
-		if (nextPendingSources.length === 0) return
-
-		setPreviewStates((prev) => {
-			let changed = false
-			const next = { ...prev }
-			for (const source of nextPendingSources) {
-				const current = next[source.cacheKey]
-				if (current?.status === "loaded" || current?.status === "loading") continue
-				next[source.cacheKey] = { status: "loading" }
-				changed = true
-			}
-			return changed ? next : prev
-		})
-
-		const fileIds = Array.from(new Set(nextPendingSources.map((source) => source.fileId)))
-		void getTemporaryDownloadUrl({
-			file_ids: fileIds,
-			options: {
-				xMagicImageProcess: PROJECT_FILE_IMAGE_PREVIEW_PROCESS,
-			},
-			enableErrorMessagePrompt: false,
-		})
-			.then((rows) => {
-				setPreviewStates((prev) => {
-					const next = { ...prev }
-					for (const source of nextPendingSources) {
-						const previewRow = pickTemporaryPreviewRow(source.fileId, rows ?? [])
-						const previewUrl = previewRow?.url?.trim()
-						const safePreviewUrl = previewUrl
-							? resolveSafePreviewUrl(previewUrl) || ""
-							: ""
-
-						if (safePreviewUrl) {
-							setCachedPreviewUrl(source.cacheKey, {
-								url: safePreviewUrl,
-								expiresAt: previewRow?.expires_at,
-							})
-							next[source.cacheKey] = { status: "loaded", url: safePreviewUrl }
-						} else {
-							next[source.cacheKey] = { status: "error" }
-						}
-					}
-					return next
-				})
-			})
-			.catch(() => {
-				setPreviewStates((prev) => {
-					const next = { ...prev }
-					for (const source of nextPendingSources) {
-						next[source.cacheKey] = { status: "error" }
-					}
-					return next
-				})
-			})
-			.finally(() => {
-				for (const source of nextPendingSources) {
-					pendingKeys.delete(source.cacheKey)
-				}
-			})
+	const isSourceAdmitted = useCallback((cacheKey: string) => {
+		return mountedSourceKeysRef.current.has(cacheKey) || visibleSourcesRef.current.has(cacheKey)
 	}, [])
+	const releasePendingPreviewRequest = useCallback((cacheKey: string) => {
+		if (!pendingKeysRef.current.delete(cacheKey)) return
+		cancelProjectFileImagePreviewRequest(cacheKey)
+	}, [])
+	const notifyPreviewKeys = useCallback((cacheKeys: Iterable<string>) => {
+		for (const cacheKey of cacheKeys) {
+			for (const listener of previewListenersRef.current.get(cacheKey) || []) {
+				listener()
+			}
+		}
+	}, [])
+	const applyPreviewStateChanges = useCallback(
+		(changes: Array<[cacheKey: string, state: PreviewState | undefined]>) => {
+			const changedKeys: string[] = []
+			for (const [cacheKey, nextState] of changes) {
+				const currentState = previewStatesRef.current.get(cacheKey)
+				if (
+					currentState?.status === nextState?.status &&
+					currentState?.url === nextState?.url
+				) {
+					continue
+				}
+
+				if (nextState) previewStatesRef.current.set(cacheKey, nextState)
+				else previewStatesRef.current.delete(cacheKey)
+				changedKeys.push(cacheKey)
+			}
+
+			notifyPreviewKeys(changedKeys)
+		},
+		[notifyPreviewKeys],
+	)
+	const hydrateCachedPreview = useCallback(
+		(source: ProjectFileImagePreviewSource) => {
+			if (!getProjectFileImagePreviewCacheItem(source.cacheKey)) return false
+
+			notifyPreviewKeys([source.cacheKey])
+			return true
+		},
+		[notifyPreviewKeys],
+	)
+	const getPreviewState = useCallback((source: ProjectFileImagePreviewSource): PreviewState => {
+		if (source.directThumbnailUrl) {
+			return { status: "loaded", url: source.directThumbnailUrl }
+		}
+
+		const cachedPreviewUrl = getMemoryCachedPreviewUrl(source.cacheKey)
+		if (cachedPreviewUrl) return { status: "loaded", url: cachedPreviewUrl }
+
+		return previewStatesRef.current.get(source.cacheKey) || EMPTY_PREVIEW_STATE
+	}, [])
+	const getPreviewSnapshot = useCallback(
+		(source: ProjectFileImagePreviewSource) => {
+			const state = getPreviewState(source)
+			return `${state.status}\0${state.url || ""}`
+		},
+		[getPreviewState],
+	)
+	const subscribePreview = useCallback((cacheKey: string, listener: () => void) => {
+		let listeners = previewListenersRef.current.get(cacheKey)
+		if (!listeners) {
+			listeners = new Set()
+			previewListenersRef.current.set(cacheKey, listeners)
+		}
+		listeners.add(listener)
+
+		return () => {
+			listeners?.delete(listener)
+			if (listeners?.size === 0) previewListenersRef.current.delete(cacheKey)
+		}
+	}, [])
+
+	const requestPreviewSources = useCallback(
+		(sources: ProjectFileImagePreviewSource[], options?: { prebatched?: boolean }) => {
+			const requestSources = sources.filter((source) => source.fileId)
+			if (requestSources.length === 0) return
+
+			const pendingKeys = pendingKeysRef.current
+			const nextPendingSources = requestSources.filter((source) => {
+				if (pendingKeys.has(source.cacheKey)) return false
+				if (getMemoryCachedPreviewUrl(source.cacheKey)) return false
+				pendingKeys.add(source.cacheKey)
+				return true
+			})
+			if (nextPendingSources.length === 0) return
+
+			applyPreviewStateChanges(
+				nextPendingSources.map((source) => [source.cacheKey, { status: "loading" }]),
+			)
+
+			const request = options?.prebatched
+				? requestProjectFileImagePreviewBatch(nextPendingSources)
+				: Promise.all(
+						nextPendingSources.map((source) => requestProjectFileImagePreview(source)),
+					)
+
+			void request
+				.then((results) => {
+					if (disposedRef.current) return
+					applyPreviewStateChanges(
+						nextPendingSources.map<[string, PreviewState | undefined]>(
+							(source, index) => {
+								const result = results[index]
+								if (
+									!result ||
+									result.status === "cancelled" ||
+									!isSourceAdmitted(source.cacheKey)
+								) {
+									return [source.cacheKey, undefined]
+								}
+
+								if (result.status === "unavailable") {
+									return [source.cacheKey, { status: "unavailable" }]
+								}
+								if (result.status === "failed") {
+									return [source.cacheKey, { status: "error" }]
+								}
+								return [source.cacheKey, undefined]
+							},
+						),
+					)
+				})
+				.catch(() => {
+					if (disposedRef.current) return
+					applyPreviewStateChanges(
+						nextPendingSources.map<[string, PreviewState | undefined]>((source) => [
+							source.cacheKey,
+							isSourceAdmitted(source.cacheKey) ? { status: "error" } : undefined,
+						]),
+					)
+				})
+				.finally(() => {
+					for (const source of nextPendingSources) {
+						pendingKeys.delete(source.cacheKey)
+					}
+				})
+		},
+		[applyPreviewStateChanges, isSourceAdmitted],
+	)
 
 	const flushThumbnailQueue = useCallback(() => {
 		thumbnailFlushTimerRef.current = null
 
-		const queuedSources = Array.from(thumbnailQueueRef.current.values()).slice(
-			0,
-			THUMBNAIL_BATCH_SIZE,
-		)
-		for (const source of queuedSources) {
-			thumbnailQueueRef.current.delete(source.cacheKey)
+		const queuedSources: ProjectFileImagePreviewSource[] = []
+		for (const [cacheKey, source] of thumbnailQueueRef.current) {
+			thumbnailQueueRef.current.delete(cacheKey)
+			if (isSourceAdmitted(cacheKey)) queuedSources.push(source)
+			if (queuedSources.length >= THUMBNAIL_BATCH_SIZE) break
 		}
 
 		if (queuedSources.length > 0) {
-			requestPreviewSources(queuedSources)
+			requestPreviewSources(queuedSources, { prebatched: true })
 		}
 
 		if (thumbnailQueueRef.current.size > 0) {
@@ -382,7 +402,7 @@ export function useProjectFileImagePreviewManager({
 				THUMBNAIL_BATCH_DELAY_MS,
 			)
 		}
-	}, [requestPreviewSources])
+	}, [isSourceAdmitted, requestPreviewSources])
 
 	const scheduleThumbnailFlush = useCallback(() => {
 		if (thumbnailFlushTimerRef.current) return
@@ -403,81 +423,150 @@ export function useProjectFileImagePreviewManager({
 		[scheduleThumbnailFlush],
 	)
 
-	const setMountedItems = useCallback((items: AttachmentItem[]) => {
-		const sourcesByKey = new Map<string, ProjectFileImagePreviewSource>()
-		for (const item of items) {
-			const source = resolveProjectFileImagePreviewSource(item)
-			if (source) sourcesByKey.set(source.cacheKey, source)
-		}
-
-		const sources = Array.from(sourcesByKey.values())
-		const fingerprint = sources.map((source) => source.cacheKey).join("\n")
-		if (mountedSourcesFingerprintRef.current === fingerprint) return
-
-		mountedSourcesRef.current = sources
-		mountedSourcesFingerprintRef.current = fingerprint
-		setMountedSourcesVersion((version) => version + 1)
-	}, [])
-
-	useEffect(() => {
-		const requestableThumbnailSources = mountedSourcesRef.current.filter((source) =>
-			shouldRequestPreview(source, previewStates, pendingKeysRef.current),
-		)
-
-		if (requestableThumbnailSources.length > 0) {
-			enqueueThumbnailSources(requestableThumbnailSources)
-		}
-	}, [enqueueThumbnailSources, mountedSourcesVersion, previewStates])
-
-	useEffect(() => {
-		setPreviewStates((prev) => compactPreviewStates(prev, currentPreviewKeys))
-	}, [currentPreviewKeys])
-
-	useEffect(() => {
-		return () => {
-			if (thumbnailFlushTimerRef.current) clearTimeout(thumbnailFlushTimerRef.current)
-		}
-	}, [])
-
-	const getPreviewState = useCallback(
-		(source: ProjectFileImagePreviewSource): PreviewState => {
-			if (source.directThumbnailUrl) {
-				return { status: "loaded", url: source.directThumbnailUrl }
+	const setMountedItems = useCallback(
+		(items: AttachmentItem[]) => {
+			const sourcesByKey = new Map<string, ProjectFileImagePreviewSource>()
+			for (const item of items) {
+				const source = resolveProjectFileImagePreviewSource(item)
+				if (source) sourcesByKey.set(source.cacheKey, source)
 			}
 
-			const cachedPreviewUrl = getCachedPreviewUrl(source.cacheKey)
-			if (cachedPreviewUrl) return { status: "loaded", url: cachedPreviewUrl }
+			const sources = Array.from(sourcesByKey.values())
+			const fingerprint = sources.map((source) => source.cacheKey).join("\n")
+			if (mountedSourcesFingerprintRef.current === fingerprint) return
 
-			return previewStates[source.cacheKey] || EMPTY_PREVIEW_STATE
+			const previousMountedKeys = mountedSourceKeysRef.current
+			mountedSourcesRef.current = sources
+			mountedSourceKeysRef.current = new Set(sourcesByKey.keys())
+			mountedSourcesFingerprintRef.current = fingerprint
+			for (const cacheKey of thumbnailQueueRef.current.keys()) {
+				if (
+					!mountedSourceKeysRef.current.has(cacheKey) &&
+					!visibleSourcesRef.current.has(cacheKey)
+				) {
+					thumbnailQueueRef.current.delete(cacheKey)
+					releasePendingPreviewRequest(cacheKey)
+				}
+			}
+			for (const cacheKey of previousMountedKeys) {
+				if (
+					!mountedSourceKeysRef.current.has(cacheKey) &&
+					!visibleSourcesRef.current.has(cacheKey) &&
+					pendingKeysRef.current.has(cacheKey)
+				) {
+					releasePendingPreviewRequest(cacheKey)
+				}
+			}
+
+			const requestableSources = sources.filter((source) => {
+				if (hydrateCachedPreview(source)) return false
+				return shouldRequestPreview(
+					source,
+					previewStatesRef.current,
+					pendingKeysRef.current,
+				)
+			})
+			if (requestableSources.length > 0) enqueueThumbnailSources(requestableSources)
 		},
-		[previewStates],
+		[enqueueThumbnailSources, hydrateCachedPreview, releasePendingPreviewRequest],
 	)
 
-	const markPreviewImageError = useCallback((source: ProjectFileImagePreviewSource) => {
-		deleteCachedPreviewUrl(source.cacheKey)
-		setPreviewStates((prev) => ({
-			...prev,
-			[source.cacheKey]: { status: "error" },
-		}))
-	}, [])
+	const setPreviewVisible = useCallback(
+		(source: ProjectFileImagePreviewSource, visible: boolean) => {
+			const current = visibleSourcesRef.current.get(source.cacheKey)
+
+			if (visible) {
+				if (current) {
+					current.count += 1
+					current.source = source
+					return
+				}
+
+				visibleSourcesRef.current.set(source.cacheKey, { source, count: 1 })
+				if (hydrateCachedPreview(source)) return
+				if (
+					shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)
+				) {
+					enqueueThumbnailSources([source])
+				}
+				return
+			}
+
+			if (!current) return
+			if (current.count > 1) {
+				current.count -= 1
+				return
+			}
+
+			visibleSourcesRef.current.delete(source.cacheKey)
+			if (!mountedSourceKeysRef.current.has(source.cacheKey)) {
+				thumbnailQueueRef.current.delete(source.cacheKey)
+				releasePendingPreviewRequest(source.cacheKey)
+			}
+		},
+		[enqueueThumbnailSources, hydrateCachedPreview, releasePendingPreviewRequest],
+	)
+
+	useEffect(() => {
+		const staleStateChanges: Array<[string, undefined]> = []
+		for (const cacheKey of previewStatesRef.current.keys()) {
+			if (!currentPreviewKeys.has(cacheKey)) staleStateChanges.push([cacheKey, undefined])
+		}
+		if (staleStateChanges.length > 0) applyPreviewStateChanges(staleStateChanges)
+	}, [applyPreviewStateChanges, currentPreviewKeys])
+
+	useEffect(() => {
+		disposedRef.current = false
+		return () => {
+			disposedRef.current = true
+			if (thumbnailFlushTimerRef.current) clearTimeout(thumbnailFlushTimerRef.current)
+			for (const cacheKey of Array.from(pendingKeysRef.current)) {
+				releasePendingPreviewRequest(cacheKey)
+			}
+			previewListenersRef.current.clear()
+		}
+	}, [releasePendingPreviewRequest])
+
+	const markPreviewImageError = useCallback(
+		(source: ProjectFileImagePreviewSource) => {
+			if (source.directThumbnailUrl || getMemoryCachedPreviewUrl(source.cacheKey)) return
+
+			deleteProjectFileImagePreviewCacheItem(source.cacheKey)
+			applyPreviewStateChanges([[source.cacheKey, undefined]])
+			if (isSourceAdmitted(source.cacheKey)) requestPreviewSources([source])
+		},
+		[applyPreviewStateChanges, isSourceAdmitted, requestPreviewSources],
+	)
 
 	const ensurePreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (shouldRequestPreview(source, previewStates, pendingKeysRef.current)) {
+			if (hydrateCachedPreview(source)) return
+			if (shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)) {
 				requestPreviewSources([source])
 			}
 		},
-		[previewStates, requestPreviewSources],
+		[hydrateCachedPreview, requestPreviewSources],
 	)
 
 	return useMemo(
 		() => ({
 			ensurePreview,
 			getPreviewState,
+			getPreviewSnapshot,
+			markPreviewImageError,
+			subscribePreview,
+			setMountedItems,
+			setPreviewVisible,
+		}),
+		[
+			ensurePreview,
+			getPreviewSnapshot,
+			getPreviewState,
 			markPreviewImageError,
 			setMountedItems,
-		}),
-		[ensurePreview, getPreviewState, markPreviewImageError, setMountedItems],
+			setPreviewVisible,
+			subscribePreview,
+		],
 	)
 }
 
@@ -499,25 +588,64 @@ export function useProjectFileImagePreviewContext() {
 	return useContext(ProjectFileImagePreviewContext)
 }
 
+export function useProjectFileImagePreviewState(
+	source: ProjectFileImagePreviewSource | null,
+): PreviewState | null {
+	const manager = useProjectFileImagePreviewContext()
+	const sourceRef = useRef(source)
+	sourceRef.current = source
+
+	const subscribe = useCallback(
+		(listener: () => void) => {
+			const currentSource = sourceRef.current
+			if (!manager || !currentSource) return () => undefined
+			return manager.subscribePreview(currentSource.cacheKey, listener)
+		},
+		[manager?.subscribePreview, source?.cacheKey],
+	)
+	const getSnapshot = useCallback(() => {
+		const currentSource = sourceRef.current
+		if (!currentSource) return "unavailable\0"
+		if (manager) return manager.getPreviewSnapshot(currentSource)
+		return currentSource.directThumbnailUrl
+			? `loaded\0${currentSource.directThumbnailUrl}`
+			: "idle\0"
+	}, [manager?.getPreviewSnapshot, source?.cacheKey, source?.directThumbnailUrl])
+
+	useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+	if (!source) return null
+	if (manager) return manager.getPreviewState(source)
+	if (source.directThumbnailUrl) {
+		return { status: "loaded", url: source.directThumbnailUrl }
+	}
+	return EMPTY_PREVIEW_STATE
+}
+
 export function ProjectFileImagePreviewTooltipContent({
 	source,
+	onPreviewUnavailable,
 }: {
 	source: ProjectFileImagePreviewSource
+	onPreviewUnavailable?: () => void
 }) {
 	const manager = useProjectFileImagePreviewContext()
+	const previewState = useProjectFileImagePreviewState(source)
 	const [previewImageSize, setPreviewImageSize] = useState<{
 		width: number
 		height: number
 	} | null>(null)
+	const [imageFailed, setImageFailed] = useState(false)
 
 	useEffect(() => {
 		setPreviewImageSize(null)
-	}, [source.cacheKey])
+		setImageFailed(false)
+	}, [previewState?.url, source.cacheKey])
 
-	if (!manager) return null
-
-	const previewState = manager.getPreviewState(source)
-	if (previewState.status === "error") return null
+	if (!manager || !previewState) return null
+	if (previewState.status === "error" || previewState.status === "unavailable" || imageFailed) {
+		return null
+	}
 
 	return (
 		<div
@@ -532,6 +660,7 @@ export function ProjectFileImagePreviewTooltipContent({
 			</div>
 			{previewState.url ? (
 				<img
+					key={previewState.url}
 					src={previewState.url}
 					alt=""
 					className="block self-center rounded-sm object-contain"
@@ -558,7 +687,11 @@ export function ProjectFileImagePreviewTooltipContent({
 							),
 						)
 					}}
-					onError={() => manager.markPreviewImageError(source)}
+					onError={() => {
+						setImageFailed(true)
+						onPreviewUnavailable?.()
+						manager.markPreviewImageError(source)
+					}}
 					data-testid="project-file-image-preview-tooltip-image"
 				/>
 			) : (

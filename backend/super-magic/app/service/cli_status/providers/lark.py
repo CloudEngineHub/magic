@@ -2,20 +2,23 @@
 from __future__ import annotations
 
 from agentlang.logger import get_logger
-from app.service.cli_status.common.interfaces import CliCommandResult, CliCommandRunner, CliStatusProbe, CliStatusSnapshot
+from app.service.cli_status.common.interfaces import (
+    CliCommandResult,
+    CliCommandRunner,
+    CliStatusProbe,
+    CliStatusSnapshot,
+)
 from app.service.cli_status.common.parsing import (
     json_find_status,
     loads_json,
     parse_auth_from_text,
 )
 from app.service.cli_status.common.runner import CLI_STATUS_COMMAND_TIMEOUT_SECONDS, run_cli_command
+from app.service.runtime_cli_catalog import RUNTIME_MANAGED_CLIS
 
 logger = get_logger(__name__)
 
-LARK_HORIZON_TEXT = (
-    "lark-cli is currently authenticated. It can connect to Lark/Feishu/飞书 capabilities. "
-    "To use these capabilities, call read_skills(['lark-cli'])."
-)
+LARK_HORIZON_TEXT = RUNTIME_MANAGED_CLIS["lark-cli"].build_authenticated_horizon()
 
 
 class LarkCliStatusProbe(CliStatusProbe):

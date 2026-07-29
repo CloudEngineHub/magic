@@ -42,6 +42,17 @@ interface InspectedElementInfo {
 	attributes: Record<string, string>
 	textContent: string
 	accessibleName?: string
+	resource?: string
+	domContext?: {
+		parentSelector: string
+		siblingIndex: number
+		sameTagSiblingCount: number
+		sameTagIndex: number
+		previousSibling?: string
+		nextSibling?: string
+	}
+	elementHtml?: string
+	selectorMatchCount?: number
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -83,6 +94,143 @@ const STYLE_PROPS = [
 
 const MAX_TEXT_LENGTH = 120
 const MAX_ATTRS = 10
+const MAX_RESOURCE_LENGTH = 240
+const MAX_HTML_LENGTH = 800
+const RESOURCE_ATTRIBUTES = new Set([
+	"src",
+	"href",
+	"poster",
+	"srcset",
+	"data-src",
+	"data-href",
+	"data-url",
+	"data-original",
+])
+const SENSITIVE_ATTRIBUTE_PATTERN = /(authorization|credential|api[-_]?key|token|secret|signature)/i
+const VOID_TAGS = new Set([
+	"area",
+	"base",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"link",
+	"meta",
+	"param",
+	"source",
+	"track",
+	"wbr",
+])
+
+function normalizeResource(value: string | null | undefined): string {
+	if (!value) return ""
+	const raw = value.trim()
+	if (raw.startsWith("data:")) return raw.slice(0, MAX_RESOURCE_LENGTH)
+	const withoutQuery = raw.split(/[?#]/, 1)[0]
+	if (!/^[a-z][a-z\d+.-]*:/i.test(withoutQuery) && !withoutQuery.startsWith("//")) {
+		return withoutQuery.slice(0, MAX_RESOURCE_LENGTH)
+	}
+	try {
+		const url = new URL(raw, window.location.href)
+		url.search = ""
+		url.hash = ""
+		return url.href.slice(0, MAX_RESOURCE_LENGTH)
+	} catch {
+		return withoutQuery.slice(0, MAX_RESOURCE_LENGTH)
+	}
+}
+
+function getElementResource(element: HTMLElement): string {
+	if (element instanceof HTMLImageElement) {
+		return normalizeResource(element.getAttribute("src") || element.currentSrc || element.src)
+	}
+	if (element instanceof HTMLSourceElement) return normalizeResource(element.src)
+	if (element instanceof HTMLMediaElement)
+		return normalizeResource(element.currentSrc || element.src)
+	return normalizeResource(
+		element.getAttribute("src") ||
+			element.getAttribute("href") ||
+			element.getAttribute("poster"),
+	)
+}
+
+function normalizeAttributeValue(name: string, value: string): string {
+	if (name === "srcset") {
+		return value
+			.split(",")
+			.map((item) => {
+				const [resource, ...descriptor] = item.trim().split(/\s+/)
+				return [normalizeResource(resource), ...descriptor].join(" ")
+			})
+			.join(", ")
+	}
+	return RESOURCE_ATTRIBUTES.has(name) ? normalizeResource(value) : value
+}
+
+function isSensitiveAttribute(name: string): boolean {
+	return SENSITIVE_ATTRIBUTE_PATTERN.test(name)
+}
+
+function getElementLabel(element: Element): string {
+	const tag = element.tagName.toLowerCase()
+	const id = element.id ? `#${element.id}` : ""
+	const className =
+		typeof (element as HTMLElement).className === "string"
+			? (element as HTMLElement).className
+					.trim()
+					.split(/\s+/)
+					.filter(Boolean)
+					.slice(0, 2)
+					.map((name) => `.${name}`)
+					.join("")
+			: ""
+	const resource = getElementResource(element as HTMLElement)
+	const text = (element.textContent || "").trim().replace(/\s+/g, " ").slice(0, 48)
+	return `${tag}${id}${className}${resource ? ` resource=${resource}` : ""}${text ? ` text=${text}` : ""}`
+}
+
+function sanitizeOuterHTML(element: HTMLElement): string {
+	const clone = element.cloneNode(false) as HTMLElement
+	clone.removeAttribute("style")
+	for (const attribute of Array.from(clone.attributes)) {
+		if (isSensitiveAttribute(attribute.name)) {
+			clone.removeAttribute(attribute.name)
+			continue
+		}
+		if (!RESOURCE_ATTRIBUTES.has(attribute.name)) continue
+		clone.setAttribute(attribute.name, normalizeAttributeValue(attribute.name, attribute.value))
+	}
+	if (!VOID_TAGS.has(element.tagName.toLowerCase())) {
+		clone.textContent = (element.textContent || "").trim().replace(/\s+/g, " ").slice(0, 120)
+	}
+	return clone.outerHTML.slice(0, MAX_HTML_LENGTH)
+}
+
+function getDomContext(element: HTMLElement) {
+	const parent = element.parentElement
+	if (!parent) {
+		return { parentSelector: "", siblingIndex: 1, sameTagSiblingCount: 1, sameTagIndex: 1 }
+	}
+	const children = Array.from(parent.children)
+	const sameTagSiblings = children.filter(
+		(child) => child.tagName.toLowerCase() === element.tagName.toLowerCase(),
+	)
+	const siblingIndex = children.indexOf(element) + 1
+	return {
+		parentSelector: getElementSelector(parent),
+		siblingIndex,
+		sameTagSiblingCount: sameTagSiblings.length,
+		sameTagIndex: sameTagSiblings.indexOf(element) + 1,
+		previousSibling: element.previousElementSibling
+			? getElementLabel(element.previousElementSibling)
+			: undefined,
+		nextSibling: element.nextElementSibling
+			? getElementLabel(element.nextElementSibling)
+			: undefined,
+	}
+}
 
 function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 	const computed = window.getComputedStyle(element)
@@ -99,9 +247,9 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 	let attrCount = 0
 	for (let i = 0; i < element.attributes.length && attrCount < MAX_ATTRS; i++) {
 		const attr = element.attributes[i]
-		if (!skipAttrs.has(attr.name)) {
-			attributes[attr.name] =
-				attr.value.length > 100 ? `${attr.value.slice(0, 100)}…` : attr.value
+		if (!skipAttrs.has(attr.name) && !isSensitiveAttribute(attr.name)) {
+			const value = normalizeAttributeValue(attr.name, attr.value)
+			attributes[attr.name] = value.length > 160 ? `${value.slice(0, 160)}…` : value
 			attrCount++
 		}
 	}
@@ -119,8 +267,9 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 			.forEach((c) => classList.push(c))
 	}
 
+	const selector = getElementSelector(element)
 	return {
-		selector: getElementSelector(element),
+		selector,
 		tagName: element.tagName.toLowerCase(),
 		id: element.id || "",
 		classList,
@@ -141,6 +290,16 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 		computedStyles,
 		attributes,
 		textContent,
+		resource: getElementResource(element),
+		domContext: getDomContext(element),
+		elementHtml: sanitizeOuterHTML(element),
+		selectorMatchCount: (() => {
+			try {
+				return document.querySelectorAll(selector).length
+			} catch {
+				return 0
+			}
+		})(),
 		accessibleName:
 			element.getAttribute("aria-label") ||
 			element.getAttribute("alt") ||

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
-import { useMemoizedFn, useUpdateEffect, useDeepCompareEffect } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { reaction } from "mobx"
 import { isEmpty, isObject } from "lodash-es"
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { registerStreamRecoveryOwner } from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
@@ -18,8 +19,30 @@ interface UseTopicMessagesReturn {
 	showLoading: boolean
 	isShowLoadingInit: boolean
 	handlePullMoreMessage: (topicInfo: Topic | null, callback?: () => void) => void
-	updateTopicMessages: (options?: { refreshMessages?: boolean }) => void
+	updateTopicMessages: (options?: { writeIntent?: MessageWriteIntent }) => void
 }
+
+type MessageWriteIntent = "replace" | "merge" | "incremental"
+
+interface PullMessageParams {
+	conversation_id: string
+	chat_topic_id: string
+	page_token: string
+	order: "asc" | "desc"
+	limit?: number
+	updatePageToken?: boolean
+	writeIntent: MessageWriteIntent
+	syncGeneration?: number
+	callback?: () => void
+}
+
+interface PullMessageResult {
+	didPullSucceed: boolean
+	pulledItems: any[]
+	response?: any
+}
+
+const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
 
 export function useTopicMessages({
 	selectedTopic,
@@ -28,6 +51,9 @@ export function useTopicMessages({
 }: UseTopicMessagesParams): UseTopicMessagesReturn {
 	const topicNotHaveMoreMessageMap = useRef<Record<string, boolean>>({})
 	const topicPageTokenMap = useRef<Record<string, string>>({})
+	const selectedTopicRef = useRef(selectedTopic)
+	const recoveryOwnerTokenRef = useRef(Symbol("recordingSummaryUseTopicMessages"))
+	selectedTopicRef.current = selectedTopic
 	const [showLoading, setShowLoading] = useState(false)
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 
@@ -38,42 +64,29 @@ export function useTopicMessages({
 		}
 	}, [])
 
-	const pullMessage = useMemoizedFn(
-		({
+	const fetchMessagesPage = useMemoizedFn(
+		async ({
 			conversation_id,
 			chat_topic_id,
 			page_token,
 			order,
 			limit = 20,
 			updatePageToken = true,
-			refreshMessages = false,
 			callback,
-		}: {
-			conversation_id: string
-			chat_topic_id: string
-			page_token: string
-			order: "asc" | "desc"
-			limit?: number
-			updatePageToken?: boolean
-			refreshMessages?: boolean
-			callback?: () => void
-		}) => {
-			if (
-				topicNotHaveMoreMessageMap.current[chat_topic_id] &&
-				page_token &&
-				updatePageToken
-			) {
-				console.log("没有更多消息")
-				return
-			}
-			SuperMagicApi.getMessagesByConversationId({
-				conversation_id,
-				chat_topic_id,
-				page_token,
-				limit,
-				order,
-			}).then((res) => {
-				const newMessage = res?.items
+		}: Omit<
+			PullMessageParams,
+			"writeIntent" | "syncGeneration"
+		>): Promise<PullMessageResult> => {
+			try {
+				const response = await SuperMagicApi.getMessagesByConversationId({
+					conversation_id,
+					chat_topic_id,
+					page_token,
+					limit,
+					order,
+				})
+				const pulledItems = response?.items || []
+				const newMessage = pulledItems
 					.filter((item: any) => {
 						return (
 							item?.seq?.message?.general_agent_card ||
@@ -81,7 +94,7 @@ export function useTopicMessages({
 							item?.seq?.message?.rich_text?.content
 						)
 					})
-					?.map((item: any) => {
+					.map((item: any) => {
 						const data = item?.seq?.message?.general_agent_card
 							? item?.seq?.message?.general_agent_card
 							: item?.seq?.message
@@ -96,33 +109,133 @@ export function useTopicMessages({
 					(item: any) =>
 						item?.attachments?.length > 0 || item?.tool?.attachments?.length > 0,
 				)
-				if (updatePageToken && res?.page_token) {
-					topicPageTokenMap.current[chat_topic_id] = res?.page_token
+				if (hasAttachments) {
+					checkNowDebounced()
 				}
-
-				if (refreshMessages) {
-					res?.items?.reverse()?.forEach((o: any) => {
-						superMagicStore.enqueueMessage(chat_topic_id, o)
-					})
-				} else {
-					superMagicStore.initializeMessages(chat_topic_id, res?.items)
+				if (updatePageToken && response?.page_token) {
+					topicPageTokenMap.current[chat_topic_id] = response.page_token
 				}
 				callback?.()
+				return { didPullSucceed: true, pulledItems, response }
+			} catch (error) {
+				console.error("[RecordingSummary useTopicMessages] pullMessage failed", {
+					error,
+					chat_topic_id,
+					conversation_id,
+					page_token,
+					order,
+					limit,
+				})
+				return { didPullSucceed: false, pulledItems: [] }
+			}
+		},
+	)
+
+	const pullMessage = useMemoizedFn(
+		async ({
+			conversation_id,
+			chat_topic_id,
+			page_token,
+			order,
+			limit = 20,
+			updatePageToken = true,
+			writeIntent,
+			syncGeneration,
+			callback,
+		}: PullMessageParams): Promise<PullMessageResult> => {
+			if (
+				topicNotHaveMoreMessageMap.current[chat_topic_id] &&
+				page_token &&
+				updatePageToken
+			) {
+				console.log("没有更多消息")
+				return { didPullSucceed: true, pulledItems: [] }
+			}
+			const pullResult = await fetchMessagesPage({
+				conversation_id,
+				chat_topic_id,
+				page_token,
+				limit,
+				order,
+				updatePageToken,
+				callback,
 			})
+			if (!pullResult.didPullSucceed) return pullResult
+
+			if (writeIntent === "incremental") {
+				pullResult.pulledItems
+					.slice()
+					.reverse()
+					.forEach((item: any) => {
+						superMagicStore.enqueueMessage(chat_topic_id, item)
+					})
+			} else {
+				superMagicStore.initializeMessages(chat_topic_id, pullResult.pulledItems, {
+					mode: writeIntent,
+					syncGeneration,
+				})
+			}
+			return pullResult
+		},
+	)
+
+	const recoverTopicMessages = useMemoizedFn(
+		async ({
+			conversationId,
+			topicId,
+			syncGeneration,
+		}: {
+			conversationId: string
+			topicId: string
+			syncGeneration: number
+		}): Promise<PullMessageResult> => {
+			const pulledItems: any[] = []
+			const visitedPageTokens = new Set<string>()
+			let pageToken = ""
+			let latestResponse: any
+
+			while (true) {
+				const pageResult = await fetchMessagesPage({
+					conversation_id: conversationId,
+					chat_topic_id: topicId,
+					page_token: pageToken,
+					order: "desc",
+					limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
+					updatePageToken: false,
+				})
+				if (!pageResult.didPullSucceed) return pageResult
+
+				pulledItems.push(...pageResult.pulledItems)
+				latestResponse = pageResult.response
+				if (!latestResponse?.has_more) break
+
+				const nextPageToken = String(latestResponse?.page_token || "")
+				if (!nextPageToken || visitedPageTokens.has(nextPageToken)) {
+					return { didPullSucceed: false, pulledItems: [] }
+				}
+				visitedPageTokens.add(nextPageToken)
+				pageToken = nextPageToken
+			}
+
+			superMagicStore.initializeMessages(topicId, pulledItems, {
+				mode: "replace",
+				syncGeneration,
+			})
+			return { didPullSucceed: true, pulledItems, response: latestResponse }
 		},
 	)
 
 	const updateTopicMessages = useMemoizedFn(
-		({ refreshMessages = false }: { refreshMessages?: boolean } = {}) => {
+		({ writeIntent = "replace" }: { writeIntent?: MessageWriteIntent } = {}) => {
 			if (selectedTopic?.id && selectedWorkspace?.id) {
 				pullMessage({
 					conversation_id: selectedTopic?.chat_conversation_id,
 					chat_topic_id: selectedTopic?.chat_topic_id,
 					page_token: "",
 					order: "desc",
-					limit: 100,
+					limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
 					updatePageToken: true,
-					refreshMessages,
+					writeIntent,
 				})
 			}
 		},
@@ -138,6 +251,7 @@ export function useTopicMessages({
 					order: "desc",
 					limit: 100,
 					updatePageToken: true,
+					writeIntent: "merge",
 					callback,
 				})
 			}
@@ -146,7 +260,7 @@ export function useTopicMessages({
 
 	// Subscribe to WebSocket messages
 	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (data: any) => {
+		const handleNewMessage = (data: any) => {
 			console.log("我接受到的 ws 消息", data)
 			const { topic_id: chat_topic_id = "" } = data.message || {}
 
@@ -158,32 +272,64 @@ export function useTopicMessages({
 					order: "desc",
 					limit: 10,
 					updatePageToken: false,
-					refreshMessages: true,
+					writeIntent: "incremental",
 				})
 			}
-		})
+		}
+		pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		return () => {
-			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2)
+			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedTopic])
 
 	// Update messages when topic changes
-	useDeepCompareEffect(() => {
+	useEffect(() => {
 		superMagicStore.setActiveTopicId(selectedTopic?.chat_topic_id || null)
 		updateTopicMessages()
-	}, [selectedTopic])
+	}, [
+		selectedTopic?.chat_conversation_id,
+		selectedTopic?.chat_topic_id,
+		selectedTopic?.id,
+		selectedWorkspace?.id,
+		updateTopicMessages,
+	])
+
+	useEffect(() => {
+		const topicId = selectedTopic?.chat_topic_id
+		const conversationId = selectedTopic?.chat_conversation_id
+		if (!selectedWorkspace?.id || !topicId || !conversationId) return
+
+		return registerStreamRecoveryOwner({
+			ownerToken: recoveryOwnerTokenRef.current,
+			topicId,
+			conversationId,
+			getTaskStatus: () => {
+				const currentTopic = selectedTopicRef.current
+				if (currentTopic?.chat_topic_id !== topicId) return undefined
+				return currentTopic.task_status || currentTopic.status
+			},
+			recover: ({ syncGeneration }) =>
+				recoverTopicMessages({ conversationId, topicId, syncGeneration }),
+		})
+	}, [
+		recoverTopicMessages,
+		selectedTopic?.chat_conversation_id,
+		selectedTopic?.chat_topic_id,
+		selectedTopic?.id,
+		selectedWorkspace?.id,
+	])
 
 	// Handle message refresh after revoke
 	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Refresh_Topic_Messages, () =>
+		const handleRefreshTopicMessages = () =>
 			updateTopicMessages({
-				refreshMessages: true,
-			}),
-		)
+				writeIntent: "replace",
+			})
+		pubsub.subscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 
 		return () => {
-			pubsub?.unsubscribe(PubSubEvents.Refresh_Topic_Messages)
+			pubsub?.unsubscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 		}
 	}, [updateTopicMessages])
 

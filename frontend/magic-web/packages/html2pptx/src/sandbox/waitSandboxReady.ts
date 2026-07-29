@@ -1,12 +1,16 @@
 import { throwIfAborted, waitForTimeout } from "./abort"
 import type { ResourceLoadError } from "../api/options"
 import { CANVAS_DELAY_MS } from "../shared/constants"
+import { waitForPageRenderReadiness } from "./render-readiness"
 
 export interface SandboxReadyControllerInput {
 	iframeWindow: Window
 	iframeDocument: Document
 	nativeLoadWaitMs: number
 	onResourceError?: (error: ResourceLoadError) => void
+	onPageError?: (error: unknown) => void
+	echartsSourceHint?: boolean
+	expectsExplicitRenderReady?: boolean
 }
 
 export class SandboxReadyController {
@@ -14,26 +18,48 @@ export class SandboxReadyController {
 	private readonly iframeDocument: Document
 	private readonly nativeLoadWaitMs: number
 	private readonly onResourceError?: (error: ResourceLoadError) => void
+	private readonly echartsSourceHint: boolean
+	private readonly expectsExplicitRenderReady: boolean
 
 	constructor({
 		iframeWindow,
 		iframeDocument,
 		nativeLoadWaitMs,
 		onResourceError,
+		onPageError,
+		echartsSourceHint = false,
+		expectsExplicitRenderReady = false,
 	}: SandboxReadyControllerInput) {
 		this.iframeWindow = iframeWindow
 		this.iframeDocument = iframeDocument
 		this.nativeLoadWaitMs = nativeLoadWaitMs
 		this.onResourceError = onResourceError
+		this.echartsSourceHint = echartsSourceHint
+		this.expectsExplicitRenderReady = expectsExplicitRenderReady
+		void onPageError
 	}
 
 	async waitForReady(options: { signal?: AbortSignal } = {}): Promise<void> {
 		void this.onResourceError
 		await waitForTimeout({ ms: this.nativeLoadWaitMs, signal: options.signal })
-		this.iframeWindow.dispatchEvent(new Event("resize"))
 		await waitForRenderResources({
 			iframeDocument: this.iframeDocument,
 			signal: options.signal,
+			skipCanvasDelay: true,
+		})
+		this.iframeWindow.dispatchEvent(new Event("resize"))
+		const readiness = await waitForPageRenderReadiness({
+			iframeWindow: this.iframeWindow,
+			iframeDocument: this.iframeDocument,
+			echartsSourceHint: this.echartsSourceHint,
+			expectsExplicitRenderReady: this.expectsExplicitRenderReady,
+			signal: options.signal,
+			onResourceError: this.onResourceError,
+		})
+		await waitForRenderResources({
+			iframeDocument: this.iframeDocument,
+			signal: options.signal,
+			skipCanvasDelay: readiness.handledCanvas,
 		})
 	}
 
@@ -114,12 +140,14 @@ function waitForCanvasDelay(
 export async function waitForRenderResources({
 	iframeDocument,
 	signal,
+	skipCanvasDelay = false,
 }: {
 	iframeDocument: Document
 	signal?: AbortSignal
+	skipCanvasDelay?: boolean
 }): Promise<void> {
 	throwIfAborted(signal)
-	await waitForCanvasDelay(iframeDocument, signal)
+	if (!skipCanvasDelay) await waitForCanvasDelay(iframeDocument, signal)
 	throwIfAborted(signal)
 	await Promise.all([
 		waitForImages(iframeDocument, signal),

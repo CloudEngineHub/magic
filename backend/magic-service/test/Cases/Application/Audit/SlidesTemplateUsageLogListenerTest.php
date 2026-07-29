@@ -36,16 +36,13 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
             ->setTemplateFileKey('slides/templates/business.zip');
 
         $listener->process(new SlidesTemplateUsedEvent(
-            userId: 'user-1',
             organizationCode: 'DT001',
+            sourceId: 'slides_template_use',
+            callTime: 1234567890000,
+            userId: 'user-1',
             userName: '张三',
+            requestId: 'request-1',
             template: $template,
-            accessContext: [
-                'topic_id' => 'topic-1',
-                'project_id' => 'project-1',
-                'task_id' => 'task-1',
-                'source' => 'super_magic_tool',
-            ]
         ));
 
         $entity = $repository->entity;
@@ -53,18 +50,14 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
         $this->assertSame('DT001', $entity->getOrganizationCode());
         $this->assertSame('user-1', $entity->getUserId());
         $this->assertSame('张三', $entity->getUserName());
-        $this->assertSame('tool', $entity->getActorType());
+        $this->assertSame('user', $entity->getActorType());
         $this->assertSame('slides_template', $entity->getResourceType());
         $this->assertSame('PPT-business-minimal', $entity->getResourceCode());
         $this->assertSame('职场白皮书', $entity->getResourceName());
         $this->assertSame('use', $entity->getOperation());
-        $this->assertSame('super_magic_tool', $entity->getSource());
-        $this->assertSame('topic-1', $entity->getContext()['topic_id']);
-        $this->assertSame('project-1', $entity->getContext()['project_id']);
-        $this->assertSame('task-1', $entity->getContext()['task_id']);
-        $this->assertSame('super_magic_tool', $entity->getContext()['source']);
-        $this->assertArrayNotHasKey('tool_call_id', $entity->getContext());
-        $this->assertArrayNotHasKey('tool_name', $entity->getContext());
+        $this->assertSame('slides_template_use', $entity->getSource());
+        $this->assertSame('request-1', $entity->getRequestId());
+        $this->assertSame([], $entity->getContext());
     }
 
     public function testDomainServiceDoesNotSwallowRepositoryFailure(): void

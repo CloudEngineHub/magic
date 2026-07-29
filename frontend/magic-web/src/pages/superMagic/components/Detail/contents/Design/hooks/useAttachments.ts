@@ -3,12 +3,15 @@ import { flattenAttachmentsList } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 
 interface UseAttachmentsOptions {
 	/** 附件列表 */
 	attachments?: FileItem[]
 	/** 已扁平化的附件列表 */
 	attachmentList?: FileItem[]
+	/** 当前项目 ID，用于请求附件树刷新 */
+	projectId?: string
 }
 
 interface UseAttachmentsReturn {
@@ -26,7 +29,7 @@ interface UseAttachmentsReturn {
  * 文件列表更新处理 Hook
  */
 export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsReturn {
-	const { attachments, attachmentList } = options
+	const { attachments, attachmentList, projectId } = options
 	const hasObservedAttachmentSnapshotRef = useRef(false)
 
 	// 扁平化附件列表
@@ -57,8 +60,12 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 	 * 触发文件列表更新
 	 */
 	const updateAttachments = useCallback(() => {
-        // Remove the full-refresh event.
-	}, [])
+		if (!projectId) return
+		requestProjectAttachmentsFullRefresh({
+			projectId,
+			reason: "design-attachments-refresh",
+		})
+	}, [projectId])
 
 	return {
 		flatAttachments,

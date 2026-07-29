@@ -30,7 +30,7 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import {
 	getShouldSkipVideoPointsConfirm,
 	setShouldSkipVideoPointsConfirm,
-} from "@/components/CanvasDesign/components/VideoGenerateEditor/video-points-confirm.storage"
+} from "@/components/CanvasDesign/ui/editors/video/points/video-points-confirm.storage"
 
 interface UseDesignHeaderPropsOptions {
 	/** 定位到文件时使用的文件 ID，Design 场景下传 magic.project.js 的 fileId */

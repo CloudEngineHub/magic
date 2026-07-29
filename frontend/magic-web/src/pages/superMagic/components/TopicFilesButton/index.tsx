@@ -4,6 +4,8 @@ import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
 import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -82,6 +84,8 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 		ref,
 	) {
 		const { styles, cx } = useStyles()
+		const isMobile = useIsMobile()
+		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
 		const panelRef = useRef<TopicFilesPanelRef>(null)
 
 		// Expose file operation methods to parent
@@ -127,7 +131,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					showMobileActions={showMobileActions}
 					filterMenuItems={filterMenuItems}
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
-					allowDownload={allowDownload}
+					allowDownload={effectiveAllowDownload}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}

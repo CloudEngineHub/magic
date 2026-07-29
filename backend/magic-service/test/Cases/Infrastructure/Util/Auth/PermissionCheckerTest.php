@@ -8,6 +8,9 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Infrastructure\Util\Auth;
 
 use App\Application\Kernel\SuperPermissionEnum;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Permission\Service\OrganizationAdminDomainService;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Util\Auth\PermissionChecker;
 use Hyperf\DbConnection\Db;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -28,6 +31,8 @@ class PermissionCheckerTest extends TestCase
 
     private array $adminUserIds = [];
 
+    private array $organizationCodes = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -35,6 +40,7 @@ class PermissionCheckerTest extends TestCase
         $this->userIds = [];
         $this->magicIds = [];
         $this->adminUserIds = [];
+        $this->organizationCodes = [];
     }
 
     protected function tearDown(): void
@@ -47,6 +53,9 @@ class PermissionCheckerTest extends TestCase
         }
         if (! empty($this->magicIds)) {
             Db::table('magic_contact_accounts')->whereIn('magic_id', $this->magicIds)->delete();
+        }
+        if (! empty($this->organizationCodes)) {
+            Db::table('magic_organizations')->whereIn('magic_organization_code', $this->organizationCodes)->delete();
         }
         parent::tearDown();
     }
@@ -216,6 +225,116 @@ class PermissionCheckerTest extends TestCase
         $this->assertTrue(PermissionChecker::isOrganizationAdmin($organizationCode, $phone));
     }
 
+    public function testPersonalOrganizationOwnerIsAdminWithoutAdminRecord(): void
+    {
+        $organizationCode = 'org_personal_owner_' . $this->runId;
+        $magicId = 'magic_personal_owner_' . $this->runId;
+        $userId = 'user_personal_owner_' . $this->runId;
+        $phone = $this->makePhone();
+
+        $this->insertAccount($magicId, $phone);
+        $this->insertUser($userId, $magicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 1, $userId);
+
+        $this->assertTrue(PermissionChecker::isOrganizationAdmin($organizationCode, $phone));
+        $this->assertTrue(PermissionChecker::isOrganizationAdminByUserId($organizationCode, $userId));
+        $this->assertFalse(Db::table('magic_organization_admins')
+            ->where('organization_code', $organizationCode)
+            ->where('user_id', $userId)
+            ->exists());
+    }
+
+    public function testPersonalOrganizationIgnoresLegacyAdminRecordForNonOwner(): void
+    {
+        $organizationCode = 'org_personal_legacy_' . $this->runId;
+        $magicId = 'magic_personal_legacy_' . $this->runId;
+        $userId = 'user_personal_legacy_' . $this->runId;
+        $phone = $this->makePhone();
+
+        $this->insertAccount($magicId, $phone);
+        $this->insertUser($userId, $magicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 1, 'another_owner_' . $this->runId);
+        $this->insertOrganizationAdmin($userId, $organizationCode, $magicId);
+
+        $this->assertFalse(PermissionChecker::isOrganizationAdmin($organizationCode, $phone));
+        $this->assertFalse(PermissionChecker::isOrganizationAdminByUserId($organizationCode, $userId));
+    }
+
+    public function testTeamOrganizationCreatorWithoutAdminRecordIsNotAdmin(): void
+    {
+        $organizationCode = 'org_team_creator_' . $this->runId;
+        $magicId = 'magic_team_creator_' . $this->runId;
+        $userId = 'user_team_creator_' . $this->runId;
+        $phone = $this->makePhone();
+
+        $this->insertAccount($magicId, $phone);
+        $this->insertUser($userId, $magicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 0, $userId);
+
+        $this->assertFalse(PermissionChecker::isOrganizationAdmin($organizationCode, $phone));
+        $this->assertFalse(PermissionChecker::isOrganizationAdminByUserId($organizationCode, $userId));
+    }
+
+    public function testPersonalOrganizationCannotTransferOwner(): void
+    {
+        $organizationCode = 'org_personal_transfer_' . $this->runId;
+        $currentOwnerMagicId = 'magic_personal_current_' . $this->runId;
+        $newOwnerMagicId = 'magic_personal_new_' . $this->runId;
+        $currentOwnerId = 'user_personal_current_' . $this->runId;
+        $newOwnerId = 'user_personal_new_' . $this->runId;
+
+        $this->insertUser($currentOwnerId, $currentOwnerMagicId, $organizationCode);
+        $this->insertUser($newOwnerId, $newOwnerMagicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 1, $currentOwnerId);
+
+        $service = di(OrganizationAdminDomainService::class);
+        $transferRejected = false;
+        try {
+            $service->transferOrganizationCreator(
+                DataIsolation::simpleMake($organizationCode, $currentOwnerId),
+                $currentOwnerId,
+                $newOwnerId,
+                $currentOwnerId
+            );
+            $this->fail('Personal organization owner transfer should be rejected');
+        } catch (BusinessException) {
+            $transferRejected = true;
+        }
+
+        $this->assertTrue($transferRejected);
+        $this->assertTrue(PermissionChecker::isOrganizationAdminByUserId($organizationCode, $currentOwnerId));
+        $this->assertFalse(PermissionChecker::isOrganizationAdminByUserId($organizationCode, $newOwnerId));
+        $this->assertSame(
+            $currentOwnerId,
+            Db::table('magic_organizations')
+                ->where('magic_organization_code', $organizationCode)
+                ->value('creator_id')
+        );
+        $this->assertFalse(Db::table('magic_organization_admins')
+            ->where('organization_code', $organizationCode)
+            ->exists());
+    }
+
+    public function testPersonalOrganizationCannotGrantAdminRecord(): void
+    {
+        $organizationCode = 'org_personal_grant_' . $this->runId;
+        $magicId = 'magic_personal_grant_' . $this->runId;
+        $userId = 'user_personal_grant_' . $this->runId;
+
+        $this->insertUser($userId, $magicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 1, $userId);
+
+        $this->expectException(BusinessException::class);
+
+        di(OrganizationAdminDomainService::class)->grant(
+            DataIsolation::simpleMake($organizationCode, $userId),
+            $userId,
+            $userId,
+            'personal organization should not persist admin',
+            true
+        );
+    }
+
     public function testIsOrganizationAdminByMobileReturnsFalseWhenNoMagicIds(): void
     {
         $phone = 'test_phone_' . $this->runId;
@@ -269,6 +388,23 @@ class PermissionCheckerTest extends TestCase
             PermissionChecker::getUserOrganizationAdminList($magicId)
         );
         $this->assertSame([], PermissionChecker::getUserOrganizationAdminList(''));
+    }
+
+    public function testGetUserOrganizationAdminListIncludesPersonalOrganizationOwner(): void
+    {
+        $organizationCode = 'org_personal_list_' . $this->runId;
+        $magicId = 'magic_personal_list_' . $this->runId;
+        $userId = 'user_personal_list_' . $this->runId;
+        $phone = $this->makePhone();
+
+        $this->insertAccount($magicId, $phone);
+        $this->insertUser($userId, $magicId, $organizationCode);
+        $this->insertOrganization($organizationCode, 1, $userId);
+
+        $this->assertSame(
+            [$organizationCode],
+            PermissionChecker::getUserOrganizationAdminList($magicId)
+        );
     }
 
     public function testGetUserOrganizationAdminListReturnsEmptyWhenNoUsers(): void
@@ -364,6 +500,22 @@ class PermissionCheckerTest extends TestCase
             'updated_at' => $now,
         ]);
         $this->adminUserIds[] = $userId;
+    }
+
+    private function insertOrganization(string $organizationCode, int $type, string $creatorId): void
+    {
+        $now = date('Y-m-d H:i:s');
+        Db::table('magic_organizations')->insert([
+            'magic_organization_code' => $organizationCode,
+            'name' => 'Permission Checker Test Organization',
+            'industry_type' => 'Technology',
+            'status' => 1,
+            'creator_id' => $creatorId,
+            'type' => $type,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $this->organizationCodes[] = $organizationCode;
     }
 
     private function makePhone(): string

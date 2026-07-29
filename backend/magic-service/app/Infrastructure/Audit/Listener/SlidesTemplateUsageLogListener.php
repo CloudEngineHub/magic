@@ -12,7 +12,6 @@ use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
-use Hyperf\HttpServer\Contract\RequestInterface;
 use Psr\Container\ContainerInterface;
 use Throwable;
 
@@ -54,52 +53,55 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
     private function buildEntity(SlidesTemplateUsedEvent $event): ResourceAccessLogEntity
     {
         $template = $event->getTemplate();
-        $accessContext = $event->getAccessContext();
-        $request = $this->getRequest();
 
         $entity = new ResourceAccessLogEntity();
         $entity->setOrganizationCode($event->getOrganizationCode())
             ->setUserId($event->getUserId())
             ->setUserName($event->getUserName())
-            ->setActorType($this->resolveActorType($accessContext))
+            ->setActorType($this->resolveActorType($event->getSourceId()))
             ->setResourceType(self::RESOURCE_TYPE)
             ->setResourceCode($template->getCode())
             ->setResourceName($this->resolveResourceName($template->getLabel()))
             ->setOperation(self::OPERATION)
-            ->setSource($this->resolveSource($accessContext))
-            ->setRequestId($this->limitString($this->getHeader($request, ['x-request-id', 'request-id']), 128))
-            ->setContext($accessContext);
+            ->setSource($this->resolveSource($event->getSourceId()))
+            ->setRequestId($this->limitString($event->getRequestId(), 128))
+            ->setContext($this->buildContext($event->getBusinessParams()));
 
         return $entity;
     }
 
-    private function getRequest(): ?RequestInterface
+    private function buildContext(array $businessParams): array
     {
-        try {
-            if (! $this->container->has(RequestInterface::class)) {
-                return null;
+        $mapping = [
+            'source' => ['source'],
+            'task_id' => ['task_id', 'magic_task_id'],
+            'topic_id' => ['topic_id', 'magic_topic_id'],
+            'project_id' => ['project_id'],
+            'chat_topic_id' => ['chat_topic_id', 'magic_chat_topic_id'],
+        ];
+
+        $context = [];
+        foreach ($mapping as $contextKey => $paramKeys) {
+            foreach ($paramKeys as $paramKey) {
+                $value = $this->limitString($businessParams[$paramKey] ?? '', 64);
+                if ($value !== null) {
+                    $context[$contextKey] = $value;
+                    break;
+                }
             }
-            $request = $this->container->get(RequestInterface::class);
-            return $request instanceof RequestInterface ? $request : null;
-        } catch (Throwable) {
-            return null;
         }
+
+        return $context;
     }
 
-    /**
-     * @param array<string, mixed> $accessContext
-     */
-    private function resolveActorType(array $accessContext): string
+    private function resolveActorType(string $sourceId): string
     {
-        return trim((string) ($accessContext['source'] ?? '')) === self::SOURCE_SUPER_MAGIC_TOOL ? 'tool' : 'user';
+        return trim($sourceId) === self::SOURCE_SUPER_MAGIC_TOOL ? 'tool' : 'user';
     }
 
-    /**
-     * @param array<string, mixed> $accessContext
-     */
-    private function resolveSource(array $accessContext): string
+    private function resolveSource(string $sourceId): string
     {
-        $source = $this->limitString($accessContext['source'] ?? null, 64);
+        $source = $this->limitString($sourceId, 64);
         return $source ?? 'api';
     }
 
@@ -116,25 +118,6 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
             $name = trim((string) $value);
             if ($name !== '') {
                 return $this->limitString($name, 255);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param string[] $headers
-     */
-    private function getHeader(?RequestInterface $request, array $headers): ?string
-    {
-        if (! $request) {
-            return null;
-        }
-
-        foreach ($headers as $header) {
-            $value = trim($request->getHeaderLine($header));
-            if ($value !== '') {
-                return $value;
             }
         }
 

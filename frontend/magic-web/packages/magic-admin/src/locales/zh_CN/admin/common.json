@@ -77,8 +77,11 @@
 	"confirmClose": "确认关闭",
 	"detail": "详情",
 	"file": {
+		"imageLoadFailed": "图片加载失败",
+		"imageSizeTooLarge": "图片不能超过{{size}}",
+		"imageSizeTooSmall": "图片尺寸不能小于{{width}}x{{height}}",
 		"maxSize": "单个文件上限为 {{maxSize}}MB",
-		"onlySupportUploadImage": "仅支持上传png/jpg/jpeg/gif/webp格式的图片",
+		"onlySupportUploadImage": "仅支持上传png/jpg/jpeg/svg/gif/webp格式的图片",
 		"uploadFail": "文件上传失败，请重试"
 	},
 	"filter": "筛选",
@@ -113,14 +116,19 @@
 		"aiSubMenu": {
 			"aiControl": "AI 消耗管控",
 			"applicationMenu": "应用菜单",
+			"consumptionAnalysis": "消耗分析",
 			"customModel": "自定义大模型",
-			"dataStatistics": "数据统计",
+			"dataDictionary": "指标说明",
+			"dataStatistics": "数据看板",
+			"digitalEmployeeAnalysis": "数字员工分析",
 			"employeePublishReview": "员工发布审核",
 			"internalEmployeeSkill": "内部员工及技能",
 			"manage": "应用配置",
+			"memberAnalysis": "成员分析",
 			"modelControl": "模型管控",
 			"modelLogMonitor": "大模型日志监控",
 			"modelManagement": "模型管理",
+			"organizationAnalysis": "组织分析",
 			"skillPublishReview": "技能发布审核",
 			"usageControl": "用量管控"
 		},

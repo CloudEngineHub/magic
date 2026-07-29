@@ -70,11 +70,11 @@ import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
 import {
 	ProjectFileImagePreviewProvider,
-	ProjectFileImagePreviewTooltipContent,
 	resolveProjectFileImagePreviewSource,
 	useProjectFileImagePreviewManager,
 } from "./components/ProjectFileImagePreviewProvider"
 import { ProjectFileImageThumbnailIcon } from "./components/ProjectFileImageThumbnailIcon"
+import { ProjectFileImageSmartTooltip } from "./components/ProjectFileImageSmartTooltip"
 import { InputWithError } from "./components"
 import {
 	getAppEntryFile,
@@ -89,7 +89,6 @@ import { useOrganization } from "@/models/user/hooks/useOrganization"
 import MagicProgressToast from "@/components/base/MagicProgressToast"
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { handleAttachmentDragEnd } from "../MessageEditor/utils/drag"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
@@ -108,7 +107,12 @@ import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
-import { isMagicApp } from "@/utils/devices"
+import { isNoHoverCoarsePointer } from "@/utils/devices"
+import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
+import {
+	shouldEnableTopicFileSelection,
+	shouldShowMobileBatchActions,
+} from "./utils/batch-selection"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -153,6 +157,8 @@ interface TopicFilesCoreProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// Allow a read-only host such as a public share to expose batch selection without login.
+	allowReadonlySelection?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	// 刷新加载状态
 	refreshLoading?: boolean
@@ -205,6 +211,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		allowDownload,
+		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
 	},
@@ -213,13 +220,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useResponsive().md === false
-	// Magic App can render the desktop layout on iPad, so keep row actions reachable without hover.
-	const shouldShowInlineFileAction = isMobile || isMagicApp
+	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
+	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
-	const hasLogin = userStore.user?.userInfo?.user_id
-	const selectionEnabled = Boolean(isSelectMode || (!allowEdit && hasLogin && allowDownload))
+	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
+	const selectionEnabled = shouldEnableTopicFileSelection({
+		isSelectMode,
+		allowEdit,
+		allowDownload,
+		hasLogin,
+		allowReadonlySelection,
+	})
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
@@ -254,6 +267,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		debug: process.env.NODE_ENV === "development",
 		attachments,
 		duplicateFileHandler: sharedDuplicateHandler,
+		onUpdateAttachments,
 	})
 
 	// 使用hooks
@@ -299,14 +313,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setShareFileInfo,
 		handleShareSave,
 		exportingFiles,
-		isExportingPdf,
-		pdfExportProgress,
-		isExportingPpt,
-		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
 		createFileAndUpload,
 		createFolderAndUpload,
 		createDesignProject,
@@ -315,14 +321,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		movingFiles,
 		downloadingFolders,
 		isFolderDownloading,
-		resetFileOperations,
 		removeFile,
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 	} = useFileOperations({
 		setUserSelectDetail,
 		onFileClick,
@@ -901,7 +900,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		resetFilter()
 		resetUI()
 		resetRename()
-		resetFileOperations()
 		resetVirtualFile()
 		resetVirtualFolder()
 		resetVirtualDesignProject()
@@ -945,6 +943,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const activeFile = activeFileId ? treeIndex.getItemById(activeFileId) : undefined
+	const { activeTreeSelectionKey, effectiveSelectedKeys } = useActiveTreeSelection({
+		activeFileId,
+		treeIndex,
+		expandedKeySet,
+		selectedKeys,
+	})
 	const isActiveFileIndexHtml =
 		activeFile?.file_name === "index.html" ||
 		activeFile?.filename === "index.html" ||
@@ -1036,7 +1040,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
-		const isActiveFile = activeFileId === item?.file_id
+		const isActiveFile = activeTreeSelectionKey === String(itemId)
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
 
@@ -1324,7 +1328,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
-						shouldHighlightFolder && styles.activeFileItemWrapper,
+						(shouldHighlightFolder || isActiveFile) && styles.activeFileItemWrapper,
+						isActiveFile && "bg-blue-500/10",
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
 					data-testid="folder-item"
@@ -1354,6 +1359,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.name || item.file_name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,
@@ -1506,7 +1513,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									placement="right"
 									className={cx(
 										styles.ellipsis,
-										shouldHighlightFolder && styles.activeFileItem,
+										(shouldHighlightFolder || isActiveFile) &&
+											styles.activeFileItem,
 									)}
 									sideOffset={20}
 								>
@@ -1611,6 +1619,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								display_filename: item.file_name || item.name,
 								is_directory: item.is_directory,
 								children: item.children as FileItem[] | undefined,
+								relative_file_path: item.relative_file_path,
+								parent_id: item.parent_id,
 								display_config: item.display_config,
 								file_extension: item.file_extension,
 								file_size: item.file_size,
@@ -1734,31 +1744,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : (
 							<>
 								{imagePreviewSource ? (
-									<SmartTooltip
-										placement="right"
+									<ProjectFileImageSmartTooltip
+										source={imagePreviewSource}
 										className={cx(
 											"min-w-0 flex-1",
 											styles.ellipsis,
 											isActiveFile && "font-medium",
 										)}
 										sideOffset={20}
-										forceShowTooltip
-										tooltipContentClassName="max-w-none whitespace-nowrap text-nowrap break-normal"
-										tooltipContentStyle={{ maxWidth: "none" }}
-										content={
-											<ProjectFileImagePreviewTooltipContent
-												source={imagePreviewSource}
-											/>
-										}
-										onOpenChange={(open) => {
-											if (open)
-												imagePreviewManager.ensurePreview(
-													imagePreviewSource,
-												)
-										}}
 									>
 										{item?.file_name}
-									</SmartTooltip>
+									</ProjectFileImageSmartTooltip>
 								) : (
 									<SmartTooltip
 										placement="right"
@@ -1839,14 +1835,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onUpdateAttachments,
 		removeFile,
 		isMoving,
-		// 批量导出进度回调
-		onBatchPdfExportStart,
-		onBatchPdfExportProgress,
-		onBatchPdfExportEnd,
-		onBatchPptExportStart,
-		onBatchPptExportProgress,
-		onBatchPptExportEnd,
 		allowEdit,
+		allowDownload,
 		downloadProgress,
 		// 批量分享回调
 		onBatchShareClick: async (fileIds: string[]) => {
@@ -1875,6 +1865,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			}
 		},
 		isInProject,
+	})
+	const showMobileBatchActions = shouldShowMobileBatchActions({
+		isMobile,
+		isSelectMode,
+		hasSelection: showBatchDownload,
+	})
+	const handleCancelMobileBatchSelection = useMemoizedFn(() => {
+		resetSelection()
+		onSelectModeChange?.(false)
 	})
 
 	// 配置右键菜单 - 根据选中状态和语言动态调整宽度
@@ -1957,7 +1956,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							// }
 							onSelect={handleSelect}
 							expandedKeys={expandedKeys}
-							selectedKeys={selectedKeys}
+							selectedKeys={effectiveSelectedKeys}
 							titleRender={titleRender}
 							getRowRenderVersion={getRowRenderVersion}
 							rowRenderContextVersion={rowRenderContextVersion}
@@ -2032,17 +2031,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							</MagicDropdown>
 						</Flex>
 					)}
-					{isMobile && isSelectMode && (
+					{showMobileBatchActions && (
 						<Button
 							variant="secondary"
 							className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
 							data-testid="mobile-cancel-select-button"
-							onClick={() => pubsub.publish(PubSubEvents.Cancel_File_Selection)}
+							onClick={handleCancelMobileBatchSelection}
 						>
 							{t("topicFiles.cancelSelect")}
 						</Button>
 					)}
-					{isMobile && isSelectMode && (
+					{showMobileBatchActions && (
 						<MagicDropdown
 							menu={{ items: batchMenuItems }}
 							placement="topLeft"
@@ -2256,62 +2255,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									? t("topicFiles.copying")
 									: t("topicFiles.moving")
 						}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isExportingPdf}
-						progress={pdfExportProgress}
-						text={t("topicFiles.exportingPdf")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isExportingPpt}
-						progress={pptExportProgress}
-						text={t("topicFiles.exportingPpt")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPdf}
-						progress={batchPdfExportProgress}
-						text={t("topicFiles.batchExportingPdf")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPpt}
-						progress={batchPptExportProgress}
-						text={t("topicFiles.batchExportingPpt")}
 						position="top"
 						width={280}
 						showPercentage={true}

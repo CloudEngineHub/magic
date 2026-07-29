@@ -79,6 +79,9 @@ export interface CrewPublisher {
 /** Source type for user agents */
 export type CrewSourceType = "LOCAL_CREATE" | "MARKET"
 
+/** Display origin of an agent in the user's employee lists. */
+export type CrewAgentOrigin = "OFFICIAL" | "CREATED" | "MARKET" | "TEAM_SHARED"
+
 /** Publish status */
 export type CrewPublishStatus = "PUBLISHED" | "OFFLINE" | "DRAFT"
 
@@ -139,7 +142,12 @@ export interface GetStoreAgentsParams {
 	keyword?: string
 	/** Filter by category ID; omit for all */
 	category_id?: string
+	/** Filter by market source; omit to include both public and organization markets. */
+	market_type?: StoreAgentMarketType
 }
+
+/** Market source for store agents. */
+export type StoreAgentMarketType = "MARKET" | "ORGANIZATION"
 
 /** Single store agent item */
 export interface StoreAgentItem {
@@ -159,6 +167,8 @@ export interface StoreAgentItem {
 	playbooks?: CrewPlayBookBaseData[]
 	publisher_type: CrewPublisherType
 	publisher?: CrewPublisher | null
+	/** Market source returned by the store-agent query. */
+	market_type: StoreAgentMarketType
 	category_id: string | null
 	/** Whether the current user has added this agent */
 	is_added: boolean
@@ -224,6 +234,10 @@ export interface AgentItem {
 	icon_type: CrewIconType
 	playbooks: CrewPlayBookBaseData[]
 	source_type: CrewSourceType
+	/** Current user's display source for this agent (returned by list endpoints). */
+	origin: CrewAgentOrigin
+	/** Publish visibility for the current agent. */
+	publish_target_type?: AgentPublishTargetType | null
 	publisher_type?: CrewPublisherType
 	publisher?: CrewPublisher | null
 	enabled: boolean
@@ -258,7 +272,12 @@ export interface GetTeamSharedAgentsResponse extends GetCreatedAgentsResponse {}
 // ======================== Unified Agent List (API: POST /api/v2/super-magic/agents/queries) ========================
 
 /** Scope filter for unified agent list query */
-export type UnifiedAgentScope = "all" | "created" | "team_shared" | "market_installed"
+export type UnifiedAgentScope =
+	| "all"
+	| "created"
+	| "team_shared"
+	| "market_installed"
+	| "collaborated"
 
 /** Sort field for unified agent list query */
 export type UnifiedAgentSort = "updated_at" | "created_at"
@@ -283,7 +302,7 @@ export interface AgentOrganizationInfo {
  */
 export interface UnifiedAgentItem extends AgentItem {
 	scope: "created" | "team_shared" | "market_installed"
-	organization_info: AgentOrganizationInfo
+	organization_info: AgentOrganizationInfo | null
 }
 
 /** Paginated response for unified agent list query */
@@ -491,6 +510,7 @@ export interface AgentDetailResponse {
 	updated_at: string
 	project_id: string | null
 	publish_type?: AgentPublishToType | null
+	publish_target_type?: AgentPublishTargetType | null
 	allowed_publish_target_types?: AgentAllowedPublishTargetType[]
 }
 
@@ -618,12 +638,12 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Get store agents list (marketplace).
-	 * POST with body: page, page_size, keyword, category_id.
+	 * POST with body: page, page_size, keyword, category_id, market_type.
 	 * Results include is_added and allow_delete flags for each agent.
 	 * @param params Request body
 	 */
 	getStoreAgents(params: GetStoreAgentsParams = {}) {
-		const { page = 1, page_size = 20, keyword, category_id } = params
+		const { page = 1, page_size = 20, keyword, category_id, market_type } = params
 		return fetch.post<GetStoreAgentsResponse>(
 			genRequestUrl("/api/v2/super-magic/agent-market/queries"),
 			{
@@ -631,6 +651,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 				page_size,
 				keyword,
 				category_id,
+				...(market_type ? { market_type } : {}),
 			},
 		)
 	},
@@ -977,7 +998,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	/**
 	 * Get unified agent list (all scopes in one query).
 	 * Endpoint: POST /api/v2/super-magic/agents/queries
-	 * Replaces separate created/hired/team-shared endpoints for mobile.
+	 * Supports the unified mobile list and the desktop collaboration list.
 	 * @param params Request body with scope, sort, pagination
 	 */
 	getUnifiedAgentList(params: GetUnifiedAgentListParams = {}) {

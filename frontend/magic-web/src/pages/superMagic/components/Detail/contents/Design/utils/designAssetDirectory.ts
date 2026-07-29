@@ -1,7 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import { findDirectoryByPath, findParentDirectoryId } from "./fileFinder"
-import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/public/magic-types"
 import {
 	calculateUploadDirectory,
 	type CalculateUploadDirectoryParams,

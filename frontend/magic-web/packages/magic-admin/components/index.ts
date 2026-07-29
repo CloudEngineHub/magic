@@ -57,6 +57,7 @@ export {
 	HistoryMode,
 	RelativeMode,
 	RelativeUnit,
+	TimeFilterPrecision,
 	TimeFilterTab,
 	TimePresetKey,
 } from "./TimeFilterPanel"

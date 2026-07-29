@@ -570,6 +570,9 @@
 			"imageIdNotExists": "Image ID does not exist, cannot query image generation result",
 			"imageSrcEmpty": "Image source address is empty",
 			"imagesDirNotFound": "Cannot get upload target directory, please refresh and try again",
+			"invalidImageCrop": "The image crop is invalid and cannot be downloaded.",
+			"mediaDownloadFailed": "Failed to download media files. Please try again later.",
+			"mediaResolveFailed": "Some media elements could not be mapped to project files. Download was not started.",
 			"noDownloadLink": "No download link",
 			"noDownloadableImages": "No downloadable images",
 			"noFileList": "No file list",
@@ -601,6 +604,9 @@
 		"messages": {
 			"downloadSuccess": "Successfully downloaded {{count}} images",
 			"markerNeedDesignMode": "Markers need to switch to \"Design Mode\". Create a new topic to add markers",
+			"mediaDownloadPartial": "Downloaded {{successCount}} media files; {{failedCount}} failed",
+			"mediaDownloadSuccess": "Successfully downloaded {{count}} media files",
+			"mediaDownloading": "Downloading {{count}} media files...",
 			"packingDownloading": "Packing and downloading {{count}} images..."
 		},
 		"offlineNotice": {
@@ -926,15 +932,20 @@
 				"cardFallbackTitle": "Card {{index}}",
 				"confirm": "Start export",
 				"confirmWithCount": "Start export ({{count}})",
-				"dialogDescription": "Pick a post, choose cards, and set the image scale",
+				"dialogDescription": "Pick a post, choose cards, and set the image format and output size",
 				"dialogTitle": "Export preview",
 				"exporting": "Exporting...",
 				"failed": "Export failed",
+				"formatLabel": "Image format",
 				"postSelectorLabel": "Post",
 				"running": "Exporting {{current}}/{{total}}",
-				"scaleLabel": "Image scale",
+				"scaleLabel": "Output size",
 				"scaleOption": "{{ratio}}x",
+				"scaleOutputCalculating": "Calculating actual size",
+				"scaleOutputLongSize": "Long image {{width}} × {{height}} px",
+				"scaleOutputSingleSize": "Each {{width}} × {{height}} px",
 				"scaleOutputSize": "{{width}} × {{height}} px",
+				"scaleOutputVariedSize": "Mixed sizes, max bounds {{width}} × {{height}} px",
 				"selectAll": "Select all",
 				"selectCards": "Cards",
 				"selectNone": "Clear",
@@ -942,11 +953,11 @@
 				"success": "Export complete",
 				"type": {
 					"cardsZip": {
-						"description": "Export selected cards as separate PNG files in a ZIP.",
+						"description": "Export selected cards as separate {{format}} files in a ZIP.",
 						"title": "Individual cards"
 					},
 					"longImage": {
-						"description": "Stitch selected cards vertically from top to bottom, then export one PNG.",
+						"description": "Stitch selected cards vertically from top to bottom, then export one {{format}} image.",
 						"title": "Long image"
 					}
 				},
@@ -1028,6 +1039,7 @@
 				"loadingAutoSync": "Loading auto sync settings...",
 				"loadingPublishedLink": "Loading link...",
 				"mentionPost": "Mention this article",
+				"moreActions": "More actions",
 				"openOpsReview": "View review",
 				"openPlatform": "Open platform content",
 				"opsArtifacts": {
@@ -1692,6 +1704,27 @@
 						"messages": "Messages",
 						"publish": "+",
 						"shopping": "Shop"
+					},
+					"metaEdit": {
+						"addSubtitle": "Add subtitle",
+						"addTag": "Add tag",
+						"addTags": "Add tags",
+						"addTitle": "Add title",
+						"deleteTag": "Delete tag {{tag}}",
+						"editField": "Edit {{field}}",
+						"editTag": "Edit tag {{tag}}",
+						"failed": "Failed to save content. Please try again later.",
+						"finishTags": "Finish editing tags",
+						"newTagPlaceholder": "New tag",
+						"saved": "Synced",
+						"saving": "Syncing",
+						"subtitle": "Subtitle",
+						"tagDuplicate": "Tag {{tag}} already exists",
+						"tagEmpty": "Tag cannot be empty",
+						"tags": "Tags",
+						"tagsHint": "Separate multiple tags with spaces or #",
+						"title": "Title",
+						"titleEmpty": "Title cannot be empty"
 					},
 					"tabs": {
 						"detail": "Post",
@@ -2559,6 +2592,10 @@
 		"title": "Task Queue",
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
+	},
+	"messageRenderError": {
+		"retry": "Retry",
+		"title": "This message is temporarily unavailable"
 	},
 	"mobile": {
 		"apps": {
@@ -4060,6 +4097,9 @@
 		"hideCreatorInfo": "Hide \"Created by $t(common:platform.name)\"",
 		"hideCreatorInfoDescription": "When enabled, the floating watermark at the bottom right corner of the page will be hidden",
 		"hidePassword": "Hide password",
+		"htmlDependenciesAnalysisFailed": "Static-resource analysis failed. Only the HTML file will be processed.",
+		"includeHtmlDependencies": "Include {{count}} linked static resources",
+		"includeHtmlDependenciesDescription": "Without them, images, styles, or scripts in the target HTML may not load correctly.",
 		"includedFiles": "Included Files",
 		"internetFileShare": "Internet accessible",
 		"internetFileShareDescription": "Anyone who obtains the link can access the file",
@@ -4503,10 +4543,17 @@
 			"agentPromptTitle": "I selected an element on the page. Here are its details:",
 			"computedStyles": "Computed Styles",
 			"copySelector": "Copy Selector",
+			"domContext": "DOM Context",
+			"elementAttributes": "Element Attributes",
+			"elementHtml": "Element HTML",
+			"elementPosition": "Child Position",
 			"file": "File",
 			"insertToConsole": "Query in Console",
+			"resource": "Resource",
+			"sameTagPosition": "Same-tag Position",
 			"selectedElement": "Selected element",
 			"selector": "Selector",
+			"selectorMatchCount": "Selector Match Count",
 			"sendToAgent": "Send to Agent",
 			"size": "Size",
 			"start": "Inspect Element",

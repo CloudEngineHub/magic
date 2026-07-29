@@ -21,8 +21,11 @@
 	"confirmClose": "ยืนยันการปิด",
 	"detail": "รายละเอียด",
 	"file": {
+		"imageLoadFailed": "โหลดภาพไม่สำเร็จ",
+		"imageSizeTooLarge": "รูปภาพต้องไม่เกิน {{size}}",
+		"imageSizeTooSmall": "ขนาดรูปภาพต้องไม่น้อยกว่า {{width}}x{{height}}",
 		"maxSize": "ขนาดไฟล์สูงสุดคือ {{maxSize}}MB",
-		"onlySupportUploadImage": "รองรับการอัปโหลดภาพรูปแบบ png/jpg/jpeg/gif/webp เท่านั้น",
+		"onlySupportUploadImage": "รองรับการอัปโหลดภาพรูปแบบ png/jpg/jpeg/svg/gif/webp เท่านั้น",
 		"uploadFail": "อัปโหลดไฟล์ล้มเหลว กรุณาลองใหม่อีกครั้ง"
 	},
 	"filter": "กรอง",

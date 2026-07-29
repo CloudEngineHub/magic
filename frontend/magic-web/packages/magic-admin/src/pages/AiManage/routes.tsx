@@ -9,6 +9,7 @@ import {
 	AI_APP_MENU,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
+import { DataDashboardView } from "./DataDashboard/consts"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -23,6 +24,7 @@ const AIVideoDetailPage = lazy(() => import("../PlatformPackage/VedioModelDetail
 const EmployeeReviewPage = lazy(() => import("./EmployeeReview/index.page"))
 const SkillReviewPage = lazy(() => import("./SkillReview/index.page"))
 const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
+const DataDashboardPage = lazy(() => import("./DataDashboard/index.page"))
 
 const hasAdminAllPermissions = (permissions: string[]) =>
 	permissions.includes(PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS) ||
@@ -54,9 +56,13 @@ const canAccessAIInternalEmployeeSkill = (permissions: string[], isSuperAdmin?: 
 const canAccessAIAppMenu = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin || AI_APP_MENU.some((permission) => permissions.includes(permission))
 
+const canAccessAIDataStatistics = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+
 // 首页重定向
 function AIIndexRedirect() {
-	const { isPermissionInitialized, isOfficialOrg, userPermissions } = useAdminStore()
+	const { isPermissionInitialized, isOfficialOrg, isPersonalOrganization, userPermissions } =
+		useAdminStore()
 
 	if (!isPermissionInitialized) return null
 
@@ -67,6 +73,9 @@ function AIIndexRedirect() {
 			: null,
 		canAccessAIInternalEmployeeSkill(userPermissions, isSuperAdmin)
 			? RoutePath.AIEmployeeReview
+			: null,
+		!isPersonalOrganization && canAccessAIDataStatistics(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardMemberAnalysis
 			: null,
 		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
 			? RoutePath.AIAppMenu
@@ -163,6 +172,32 @@ export default {
 					element: <SkillReviewPage />,
 					title: "nav.aiSubMenu.skillPublishReview",
 					validate: canAccessAIInternalEmployeeSkill,
+				},
+			],
+		},
+		{
+			name: RouteName.AdminAIDataStatistics,
+			path: RoutePath.AIDataStatistics,
+			title: "nav.aiSubMenu.dataStatistics",
+			validate: canAccessAIDataStatistics,
+			children: [
+				{
+					index: true,
+					element: <Navigate to={RoutePath.AIDataDashboardMemberAnalysis} replace />,
+				},
+				{
+					name: RouteName.AdminAIDataDashboardMemberAnalysis,
+					path: RoutePath.AIDataDashboardMemberAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.MemberAnalysis} />,
+					title: "nav.aiSubMenu.memberAnalysis",
+					validate: canAccessAIDataStatistics,
+				},
+				{
+					name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
+					path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
+					title: "nav.aiSubMenu.digitalEmployeeAnalysis",
+					validate: canAccessAIDataStatistics,
 				},
 			],
 		},

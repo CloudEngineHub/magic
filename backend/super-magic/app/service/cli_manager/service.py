@@ -105,6 +105,7 @@ class CliManagerService:
 
         name = self._validator.validate_name(request.name, "name")
         commands = self._validator.normalize_commands(request.commands or [name])
+        self._validator.ensure_user_managed_scope(name, commands)
         command_paths = self._normalize_command_paths(commands, request.command_paths)
         extra_bin_dirs = self._normalize_extra_bin_dirs(name, request.extra_bin_dirs)
         env_keys = self._validator.normalize_env_keys(request.env_keys)

@@ -15,10 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
-import {
-	ASK_USER_CONFIRM_VALUE,
-	type AskUserConfirmValue,
-} from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
+import { ASK_USER_CONFIRM_VALUE } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
 import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
 	clearAskUserDraftAnswers,
@@ -29,7 +26,6 @@ import {
 import type { ParsedQuestion } from "./parse"
 import {
 	getAskUserAutoSubmitInText,
-	getAskUserConfirmActionText,
 	getAskUserDefaultValueHintText,
 	getAskUserInputPlaceholder,
 	getAskUserMultiSelectRangeText,
@@ -37,8 +33,6 @@ import {
 	AskUserOtherInput,
 	getAskUserOtherPlaceholder,
 	getAskUserRenderableOptions,
-	getAskUserRejectActionText,
-	getAskUserRequiredValidationText,
 	getAskUserSkipActionText,
 	getAskUserSubmitActionText,
 	getAskUserUnlimitedText,
@@ -71,6 +65,10 @@ interface AskUserFormProps {
 }
 
 const EMPTY_ARRAY: readonly string[] = Object.freeze([])
+const ASK_USER_CONFIRM_SELECT_OPTIONS = [
+	ASK_USER_CONFIRM_VALUE.yes,
+	ASK_USER_CONFIRM_VALUE.no,
+] as const
 const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
 const askUserBreakTextClass = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
 const askUserBodyTextClass = "text-sm leading-5"
@@ -159,14 +157,8 @@ function getAnsweredQuestionCount(
 	).length
 }
 
-function areAnswersComplete(
-	questions: readonly ParsedQuestion[],
-	answers: Readonly<Record<string, AnswerValue>>,
-) {
-	return (
-		questions.length > 0 &&
-		questions.every((question) => isAnsweredQuestionValueValid(question, answers[question.id]))
-	)
+function getEmptyAnswerValue(question: ParsedQuestion): AnswerValue {
+	return question.type === "multi_select" ? EMPTY_ARRAY : ""
 }
 
 function useCountdown(expiresAt: number | undefined, onExpire?: () => void) {
@@ -242,15 +234,9 @@ function AskUserFormImpl({
 }: AskUserFormProps) {
 	// answersRef 是 submit 时的唯一真源；按键路径只写不读，避免触发父 render
 	const answersRef = useRef<Record<string, AnswerValue>>({})
-	const questionNodesRef = useRef(new Map<string, HTMLDivElement>())
-	const [invalidQuestionIds, setInvalidQuestionIds] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	)
 	const [draftAnswers, setDraftAnswers] = useState<Readonly<Record<string, AnswerValue>>>()
-	const [canSubmit, setCanSubmit] = useState(false)
 
 	const hasPending = useMemo(() => questions.some((q) => !q.isComplete), [questions])
-	const isPending = status === "pending"
 	const isTimeout = status === "timeout"
 	const isTerminal = ["answered", "skipped", "timeout", "cancelled"].includes(status)
 
@@ -260,27 +246,12 @@ function AskUserFormImpl({
 			if (draftCacheKey && !submittedAnswers && !isTerminal) {
 				writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers)
 			}
-			setCanSubmit(
-				getAnsweredQuestionCount(questions, answersRef.current) === questions.length,
-			)
 			onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
-			setInvalidQuestionIds((current) => {
-				if (!current.has(id)) return current
-				const question = questions.find((item) => item.id === id)
-				if (!question || !isAnsweredQuestionValueValid(question, value)) return current
-				const next = new Set(current)
-				next.delete(id)
-				return next
-			})
 		},
 		[draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers],
 	)
 
 	const ctxValue = useMemo<AnswersContextValue>(() => ({ writeAnswer }), [writeAnswer])
-	const registerQuestionNode = useCallback((id: string, node: HTMLDivElement | null) => {
-		if (node) questionNodesRef.current.set(id, node)
-		else questionNodesRef.current.delete(id)
-	}, [])
 
 	const actionsDisabled =
 		Boolean(streaming) ||
@@ -294,26 +265,13 @@ function AskUserFormImpl({
 
 	const handleSubmit = useCallback(
 		(answers?: AskUserAnswers) => {
-			const nextAnswers = (answers ? { ...answers } : { ...answersRef.current }) as Record<
-				string,
-				AnswerValue
-			>
-			const invalidIds = questions
-				.filter(
-					(question) => !isAnsweredQuestionValueValid(question, nextAnswers[question.id]),
-				)
-				.map((question) => question.id)
-			if (invalidIds.length) {
-				setInvalidQuestionIds(new Set(invalidIds))
-				requestAnimationFrame(() =>
-					questionNodesRef.current.get(invalidIds[0])?.scrollIntoView({
-						behavior: "smooth",
-						block: "center",
-					}),
-				)
-				return
-			}
-			setInvalidQuestionIds((current) => (current.size ? new Set() : current))
+			const sourceAnswers = answers || answersRef.current
+			const nextAnswers = Object.fromEntries(
+				questions.map((question) => [
+					question.id,
+					sourceAnswers[question.id] ?? getEmptyAnswerValue(question),
+				]),
+			) as Record<string, AnswerValue>
 			onSubmit?.(nextAnswers as AskUserAnswers)
 		},
 		[onSubmit, questions],
@@ -363,13 +321,8 @@ function AskUserFormImpl({
 		> | null
 		answersRef.current = nextDraftAnswers ? { ...nextDraftAnswers } : {}
 		setDraftAnswers(nextDraftAnswers || undefined)
-		setCanSubmit(getAnsweredQuestionCount(questions, answersRef.current) === questions.length)
 		onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 	}, [draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers])
-
-	useEffect(() => {
-		setCanSubmit(getAnsweredQuestionCount(questions, answersRef.current) === questions.length)
-	}, [questions])
 
 	return (
 		<AnswersContext.Provider value={ctxValue}>
@@ -395,8 +348,6 @@ function AskUserFormImpl({
 								locale={locale}
 								total={questions.length}
 								question={question}
-								invalid={isPending && invalidQuestionIds.has(question.id)}
-								registerQuestionNode={registerQuestionNode}
 								disabled={
 									Boolean(disabled) || (!!streaming && !question.isComplete)
 								}
@@ -467,8 +418,6 @@ interface QuestionItemProps {
 	locale: AskUserLocale
 	total: number
 	question: ParsedQuestion
-	invalid: boolean
-	registerQuestionNode: (id: string, node: HTMLDivElement | null) => void
 	disabled: boolean
 	submittedAnswer?: AnswerValue
 	showDefaultHint: boolean
@@ -480,8 +429,6 @@ const QuestionItem = memo(function QuestionItem({
 	locale,
 	total,
 	question,
-	invalid,
-	registerQuestionNode,
 	disabled,
 	submittedAnswer,
 	showDefaultHint,
@@ -493,9 +440,7 @@ const QuestionItem = memo(function QuestionItem({
 
 	return (
 		<div
-			ref={(node) => registerQuestionNode(question.id, node)}
 			className={cn("space-y-1.5 transition-opacity", !question.isComplete && "opacity-70")}
-			aria-invalid={invalid || undefined}
 			data-testid={`ask-user-v2-card-question-item-${question.id}`}
 		>
 			<p
@@ -511,9 +456,10 @@ const QuestionItem = memo(function QuestionItem({
 
 			<div className={questionContentIndentClass}>
 				{question.type === "confirm" && (
-					<ConfirmField
-						locale={locale}
+					<SelectField
 						questionId={question.id}
+						options={ASK_USER_CONFIRM_SELECT_OPTIONS}
+						otherPlaceholder={getAskUserOtherPlaceholder(locale)}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
 						draftAnswer={draftAnswer}
@@ -524,7 +470,6 @@ const QuestionItem = memo(function QuestionItem({
 					<InputField
 						questionId={question.id}
 						placeholder={question.placeholder ?? getAskUserInputPlaceholder(locale)}
-						invalid={invalid}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
 						draftAnswer={draftAnswer}
@@ -569,81 +514,6 @@ const QuestionItem = memo(function QuestionItem({
 					</span>
 				</p>
 			)}
-			{invalid && (
-				<p className="text-sm leading-5 text-destructive" role="alert">
-					{getAskUserRequiredValidationText(locale)}
-				</p>
-			)}
-		</div>
-	)
-})
-
-interface ConfirmFieldProps {
-	locale: AskUserLocale
-	questionId: string
-	disabled: boolean
-	submittedAnswer?: AnswerValue
-	draftAnswer?: AnswerValue
-}
-
-const ConfirmField = memo(function ConfirmField({
-	locale,
-	questionId,
-	disabled,
-	submittedAnswer,
-	draftAnswer,
-}: ConfirmFieldProps) {
-	const writeAnswer = useWriteAnswer()
-	const [value, setValue] = useState(() => getSingleAnswerValue(draftAnswer))
-
-	const displayValue = typeof submittedAnswer === "string" ? submittedAnswer : value
-
-	useEffect(() => {
-		setValue(getSingleAnswerValue(draftAnswer))
-	}, [draftAnswer, questionId])
-
-	const handleSelect = useCallback(
-		(next: AskUserConfirmValue) => {
-			setValue(next)
-			writeAnswer(questionId, next)
-		},
-		[questionId, writeAnswer],
-	)
-
-	return (
-		<div className="flex w-full justify-start">
-			<div className="flex flex-wrap gap-3">
-				<Button
-					type="button"
-					variant={displayValue === ASK_USER_CONFIRM_VALUE.yes ? "default" : "outline"}
-					size="sm"
-					disabled={disabled}
-					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.yes)}
-					data-testid={`ask-user-v2-card-confirm-yes-button-${questionId}`}
-					className={cn(
-						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
-						displayValue === ASK_USER_CONFIRM_VALUE.yes &&
-							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
-					)}
-				>
-					{getAskUserConfirmActionText(locale)}
-				</Button>
-				<Button
-					type="button"
-					variant={displayValue === ASK_USER_CONFIRM_VALUE.no ? "default" : "outline"}
-					size="sm"
-					disabled={disabled}
-					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.no)}
-					data-testid={`ask-user-v2-card-confirm-no-button-${questionId}`}
-					className={cn(
-						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
-						displayValue === ASK_USER_CONFIRM_VALUE.no &&
-							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
-					)}
-				>
-					{getAskUserRejectActionText(locale)}
-				</Button>
-			</div>
 		</div>
 	)
 })
@@ -651,7 +521,6 @@ const ConfirmField = memo(function ConfirmField({
 interface InputFieldProps {
 	questionId: string
 	placeholder?: string
-	invalid: boolean
 	disabled: boolean
 	submittedAnswer?: AnswerValue
 	draftAnswer?: AnswerValue
@@ -660,7 +529,6 @@ interface InputFieldProps {
 const InputField = memo(function InputField({
 	questionId,
 	placeholder,
-	invalid,
 	disabled,
 	submittedAnswer,
 	draftAnswer,
@@ -702,13 +570,8 @@ const InputField = memo(function InputField({
 			disabled={disabled}
 			onChange={handleChange}
 			rows={1}
-			aria-invalid={invalid || undefined}
 			data-testid={`ask-user-v2-card-input-${questionId}`}
-			className={cn(
-				askUserInputClass,
-				invalid &&
-					"border-destructive ring-4 ring-destructive/15 focus-visible:border-destructive",
-			)}
+			className={askUserInputClass}
 		/>
 	)
 })

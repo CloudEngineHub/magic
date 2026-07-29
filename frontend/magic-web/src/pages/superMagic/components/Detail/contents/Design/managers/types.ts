@@ -1,6 +1,10 @@
 import type { DesignData } from "../types"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDocumentMergeElementConflictReason } from "@/components/CanvasDesign/model"
+import type {
+	CanvasConnection,
+	CanvasDocumentMergeConnectionConflictReason,
+	CanvasDocumentMergeElementConflictReason,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -12,10 +16,13 @@ export type DesignConflictReason =
 	| "save-version-conflict"
 	| "draft-remote-advanced"
 	| "element-level-conflict"
+	| "connection-level-conflict"
 
 export type DesignElementConflictReason = CanvasDocumentMergeElementConflictReason
+export type DesignConnectionConflictReason = CanvasDocumentMergeConnectionConflictReason
 
 export type DesignElementConflictStatus = "unresolved" | "resolved"
+export type DesignConnectionConflictStatus = "unresolved" | "resolved"
 
 export interface DesignElementConflict {
 	elementId: string
@@ -27,6 +34,18 @@ export interface DesignElementConflict {
 	baseParentId: string | null
 	localParentId: string | null
 	remoteParentId: string | null
+	createdAt: number
+	resolvedAt?: number
+	resolution?: "use-local" | "use-remote"
+}
+
+export interface DesignConnectionConflict {
+	connectionId: string
+	reason: DesignConnectionConflictReason
+	status: DesignConnectionConflictStatus
+	baseConnection: CanvasConnection | null
+	localConnection: CanvasConnection | null
+	remoteConnection: CanvasConnection | null
 	createdAt: number
 	resolvedAt?: number
 	resolution?: "use-local" | "use-remote"
@@ -45,6 +64,7 @@ export interface DesignConflict {
 	createdAt: number
 	localDataRestored?: boolean
 	elementConflicts?: DesignElementConflict[]
+	connectionConflicts?: DesignConnectionConflict[]
 	mergedData?: DesignData
 }
 
@@ -106,6 +126,9 @@ export function getDataToCompare(data: DesignData) {
 		type: data.type,
 		name: data.name,
 		version: data.version,
-		canvas: { elements: data.canvas?.elements || [] },
+		canvas: {
+			elements: data.canvas?.elements || [],
+			connections: data.canvas?.connections || [],
+		},
 	}
 }

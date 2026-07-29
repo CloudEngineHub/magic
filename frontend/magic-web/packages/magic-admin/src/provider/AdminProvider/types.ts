@@ -248,6 +248,8 @@ export interface AdminBridgeConfig {
 	areaCodes?: AreaCodeOption[] | null
 	/** 是否是私有部署 */
 	isPrivateDeployment?: boolean
+	/** 宿主平台名称 */
+	platformName?: string
 	/** 安全区域间距 */
 	safeAreaInset?: {
 		bottom?: number | string

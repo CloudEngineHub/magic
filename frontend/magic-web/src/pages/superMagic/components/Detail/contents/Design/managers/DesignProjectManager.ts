@@ -3,6 +3,7 @@ import type { DesignData } from "../types"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type {
 	DesignConflict,
+	DesignConnectionConflict,
 	DesignElementConflict,
 	DesignProjectStateBag,
 	DesignProjectManagerOptions,
@@ -48,11 +49,16 @@ import {
 import {
 	tryApplyCanvasDocumentPatch,
 	tryMergeCanvasElementsByField,
-} from "@/components/CanvasDesign/model"
+} from "@/components/CanvasDesign/runtime/document"
 
 type ElementLevelMergeConflictResult = Extract<
 	DesignDataElementMergeResult,
 	{ ok: false; isElementLevelConflict: true }
+>
+
+type ConnectionLevelMergeConflictResult = Extract<
+	DesignDataElementMergeResult,
+	{ ok: false; isConnectionLevelConflict: true }
 >
 
 interface LocalDraftBaseSnapshot {
@@ -120,6 +126,8 @@ export interface DesignProjectManagerAPI {
 	resolveBlockingConflictWithLocal: () => Promise<boolean>
 	resolveElementConflictWithLocal: (elementId: string) => boolean
 	resolveElementConflictWithRemote: (elementId: string) => boolean
+	resolveConnectionConflictWithLocal: (connectionId: string) => boolean
+	resolveConnectionConflictWithRemote: (connectionId: string) => boolean
 	resolveEditedElementConflictsWithLocal: (
 		elementIds: string[],
 		nextDesignData: DesignData,
@@ -225,7 +233,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				if (
 					didSave &&
 					this.saveManager.wasLastSaveFullyPersisted() &&
-					!this.hasUnresolvedElementConflicts()
+					!this.hasUnresolvedMergeConflicts()
 				) {
 					this.clearLocalDraftAfterFullyPersistedSave()
 				}
@@ -512,15 +520,38 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return !!conflict?.elementConflicts?.some(({ status }) => status === "unresolved")
 	}
 
+	private hasUnresolvedConnectionConflicts(
+		conflict: DesignConflict | null = this.stateBag.getConflictState(),
+	): boolean {
+		return !!conflict?.connectionConflicts?.some(({ status }) => status === "unresolved")
+	}
+
+	private hasUnresolvedMergeConflicts(
+		conflict: DesignConflict | null = this.stateBag.getConflictState(),
+	): boolean {
+		return (
+			this.hasUnresolvedElementConflicts(conflict) ||
+			this.hasUnresolvedConnectionConflicts(conflict)
+		)
+	}
+
+	private getUnresolvedConnectionConflictIds(
+		conflict: DesignConflict | null = this.stateBag.getConflictState(),
+	): string[] {
+		return (conflict?.connectionConflicts ?? [])
+			.filter(({ status }) => status === "unresolved")
+			.map(({ connectionId }) => connectionId)
+	}
+
 	private hasBlockingConflict(): boolean {
 		const conflict = this.stateBag.getConflictState()
-		return !!conflict && !this.hasUnresolvedElementConflicts(conflict)
+		return !!conflict && !this.hasUnresolvedMergeConflicts(conflict)
 	}
 
 	private hasUnsafeLocalChanges(): boolean {
 		return (
 			this.hasBlockingConflict() ||
-			this.hasUnresolvedElementConflicts() ||
+			this.hasUnresolvedMergeConflicts() ||
 			this.saveManager.isLocalDirty() ||
 			this.saveManager.hasPendingAutoSave() ||
 			this.saveManager.hasRemoteConflict()
@@ -529,10 +560,23 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	private getLocalDraftDataForCurrentConflict(designData: DesignData): DesignData {
 		const conflict = this.stateBag.getConflictState()
-		if (!this.hasUnresolvedElementConflicts(conflict) || !conflict?.elementConflicts?.length) {
+		if (!this.hasUnresolvedMergeConflicts(conflict)) {
 			return designData
 		}
-		return this.buildLocalDataFromElementConflicts(designData, conflict.elementConflicts)
+		let localData = designData
+		if (conflict?.elementConflicts?.length) {
+			localData = this.buildLocalDataFromElementConflicts(
+				localData,
+				conflict.elementConflicts,
+			)
+		}
+		if (conflict?.connectionConflicts?.length) {
+			localData = this.buildLocalDataFromConnectionConflicts(
+				localData,
+				conflict.connectionConflicts,
+			)
+		}
+		return localData
 	}
 
 	private getRemoteSaveDataForCurrentElementConflicts(
@@ -589,6 +633,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		localFingerprint?: string
 		remoteFingerprint?: string
 		elementConflicts?: DesignElementConflict[]
+		connectionConflicts?: DesignConnectionConflict[]
 		mergedData?: DesignData
 	}): DesignConflict {
 		const localData = cloneDeep(options.localData) as DesignData
@@ -611,6 +656,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			remoteData,
 			createdAt: Date.now(),
 			elementConflicts: options.elementConflicts,
+			connectionConflicts: options.connectionConflicts,
 			mergedData,
 		}
 	}
@@ -621,7 +667,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	private clearBlockingConflictState(): void {
-		if (this.hasUnresolvedElementConflicts()) return
+		if (this.hasUnresolvedMergeConflicts()) return
 		this.clearConflictState()
 	}
 
@@ -646,6 +692,32 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				createdAt:
 					previousElementConflict?.status === "unresolved"
 						? previousElementConflict.createdAt
+						: createdAt,
+			}
+		})
+	}
+
+	private buildConnectionConflicts(
+		mergeResult: ConnectionLevelMergeConflictResult,
+		previousConnectionConflicts: DesignConnectionConflict[] = [],
+	): DesignConnectionConflict[] {
+		const createdAt = Date.now()
+		const previousConnectionConflictsById = new Map(
+			previousConnectionConflicts.map((connectionConflict) => [
+				connectionConflict.connectionId,
+				connectionConflict,
+			]),
+		)
+		return mergeResult.connectionConflicts.map((connectionConflict) => {
+			const previousConnectionConflict = previousConnectionConflictsById.get(
+				connectionConflict.connectionId,
+			)
+			return {
+				...connectionConflict,
+				status: "unresolved",
+				createdAt:
+					previousConnectionConflict?.status === "unresolved"
+						? previousConnectionConflict.createdAt
 						: createdAt,
 			}
 		})
@@ -796,6 +868,118 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 	}
 
+	private buildLocalDataFromConnectionConflicts(
+		mergedData: DesignData,
+		connectionConflicts: DesignConnectionConflict[],
+	): DesignData {
+		const unresolvedConnectionConflicts = connectionConflicts.filter(
+			({ status }) => status === "unresolved",
+		)
+		if (unresolvedConnectionConflicts.length === 0) {
+			return cloneDeep(mergedData) as DesignData
+		}
+
+		const patchResult = tryApplyCanvasDocumentPatch(
+			mergedData.canvas,
+			{
+				upserts: [],
+				deletedElementIds: [],
+				changedElementIds: [],
+				connectionUpserts: unresolvedConnectionConflicts
+					.map(({ localConnection }) => localConnection)
+					.filter(
+						(
+							connection,
+						): connection is NonNullable<DesignConnectionConflict["localConnection"]> =>
+							!!connection,
+					)
+					.map((connection) => cloneDeep(connection)),
+				deletedConnectionIds: unresolvedConnectionConflicts
+					.filter(({ localConnection }) => !localConnection)
+					.map(({ connectionId }) => connectionId),
+				changedConnectionIds: unresolvedConnectionConflicts.map(
+					({ connectionId }) => connectionId,
+				),
+			},
+			{ strictParent: true },
+		)
+		if (!patchResult.ok) {
+			return cloneDeep(mergedData) as DesignData
+		}
+
+		return {
+			...mergedData,
+			canvas: patchResult.canvas,
+		}
+	}
+
+	private buildLocalDataFromMergeConflicts(
+		baseData: DesignData,
+		options: {
+			elementConflicts?: DesignElementConflict[]
+			connectionConflicts?: DesignConnectionConflict[]
+		},
+	): DesignData {
+		let localData = baseData
+		if (options.elementConflicts?.length) {
+			localData = this.buildLocalDataFromElementConflicts(localData, options.elementConflicts)
+		}
+		if (options.connectionConflicts?.length) {
+			localData = this.buildLocalDataFromConnectionConflicts(
+				localData,
+				options.connectionConflicts,
+			)
+		}
+		return localData
+	}
+
+	private applyConnectionConflictResolutionToData(
+		data: DesignData,
+		connectionConflicts: DesignConnectionConflict[],
+		resolution: "use-local" | "use-remote",
+	): DesignData | null {
+		const targetConnections = connectionConflicts
+			.map((connectionConflict) =>
+				resolution === "use-local"
+					? connectionConflict.localConnection
+					: connectionConflict.remoteConnection,
+			)
+			.filter(
+				(
+					connection,
+				): connection is NonNullable<DesignConnectionConflict["localConnection"]> =>
+					!!connection,
+			)
+			.map((connection) => cloneDeep(connection))
+		const deletedConnectionIds = connectionConflicts
+			.filter((connectionConflict) =>
+				resolution === "use-local"
+					? !connectionConflict.localConnection
+					: !connectionConflict.remoteConnection,
+			)
+			.map(({ connectionId }) => connectionId)
+		const changedConnectionIds = connectionConflicts.map(({ connectionId }) => connectionId)
+
+		const patchResult = tryApplyCanvasDocumentPatch(
+			data.canvas,
+			{
+				upserts: [],
+				deletedElementIds: [],
+				changedElementIds: [],
+				connectionUpserts: targetConnections,
+				deletedConnectionIds,
+				changedConnectionIds,
+			},
+			{ strictParent: true },
+		)
+		if (!patchResult.ok) return null
+
+		return {
+			...data,
+			canvas: patchResult.canvas,
+		}
+	}
+
 	private refreshElementConflictStateAfterRemoteMerge(options: {
 		remoteData: DesignData
 		remoteVersion?: number | null
@@ -920,6 +1104,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 					options,
 				)
 			}
+			if (mergeResult.isConnectionLevelConflict) {
+				return this.applyConnectionLevelMergeConflict(
+					newData,
+					updateType,
+					mergeResult,
+					options,
+				)
+			}
 
 			return false
 		}
@@ -994,6 +1186,52 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 	}
 
+	private applyConnectionLevelMergeConflict(
+		newData: DesignData,
+		updateType: "message",
+		mergeResult: ConnectionLevelMergeConflictResult,
+		options?: { remoteVersion?: number | null },
+	): boolean {
+		if (!this.baseDesignData) return false
+
+		try {
+			const oldData = this.stateBag.getDesignData()
+			const baseRemoteData = cloneDeep(this.baseDesignData) as DesignData
+			const mergedData = mergeResult.mergedData
+			const existingConflict = this.stateBag.getConflictState()
+			const connectionConflicts = this.buildConnectionConflicts(
+				mergeResult,
+				existingConflict?.connectionConflicts ?? [],
+			)
+			const localData = this.buildLocalDataFromConnectionConflicts(
+				mergedData,
+				connectionConflicts,
+			)
+			const conflict = this.buildConflict({
+				reason: "connection-level-conflict",
+				localData,
+				remoteData: newData,
+				remoteVersion: options?.remoteVersion ?? null,
+				connectionConflicts,
+				mergedData,
+			})
+
+			this.pendingRemoteDesignData = null
+			this.saveManager.cancelAutoSave()
+			this.saveManager.clearRemoteConflict()
+			this.stateBag.setters.setIsSaving(false)
+			this.stateBag.setters.setDesignData(localData)
+			this.setSyncedRemoteBaseDesignData(newData)
+			this.options.onRemoteDesignDataUpdate?.(oldData, localData, updateType)
+			this.setConflictState(conflict)
+			this.writeConflictLocalDraftNow(conflict, localData, baseRemoteData)
+
+			return true
+		} catch {
+			return false
+		}
+	}
+
 	private applyRemoteDesignDataSafely(
 		newData: DesignData,
 		updateType: "message" | "revoke" | "restore",
@@ -1035,6 +1273,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	scheduleAutoSave(metadata?: DesignSaveMetadata): void {
 		if (this.isVersionDataSourceLocked()) {
+			return
+		}
+		if (this.hasUnresolvedConnectionConflicts()) {
 			return
 		}
 		if (this.hasUnresolvedElementConflicts()) {
@@ -1271,15 +1512,28 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return true
 		}
 
-		if (!mergeResult.isElementLevelConflict) {
+		if (!mergeResult.isElementLevelConflict && !mergeResult.isConnectionLevelConflict) {
 			return false
 		}
 
 		const mergedData = mergeResult.mergedData
-		const elementConflicts = this.buildElementConflicts(mergeResult)
-		const localData = this.buildLocalDataFromElementConflicts(mergedData, elementConflicts)
+		const elementConflicts = mergeResult.isElementLevelConflict
+			? this.buildElementConflicts(mergeResult)
+			: undefined
+		const connectionConflicts = mergeResult.isConnectionLevelConflict
+			? this.buildConnectionConflicts(mergeResult)
+			: undefined
+		let localData = mergedData
+		if (elementConflicts) {
+			localData = this.buildLocalDataFromElementConflicts(localData, elementConflicts)
+		}
+		if (connectionConflicts) {
+			localData = this.buildLocalDataFromConnectionConflicts(localData, connectionConflicts)
+		}
 		const conflict = this.buildConflict({
-			reason: "element-level-conflict",
+			reason: mergeResult.isConnectionLevelConflict
+				? "connection-level-conflict"
+				: "element-level-conflict",
 			localData,
 			remoteData,
 			baseVersion: draft.baseRemoteVersion,
@@ -1289,6 +1543,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			localFingerprint: hashDesignDataComparable(localData),
 			remoteFingerprint,
 			elementConflicts,
+			connectionConflicts,
 			mergedData,
 		})
 
@@ -1336,12 +1591,22 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
 			const draftData = cloneDeep(draft.designData) as DesignData
 			const dslBase = this.getDesignProjectBasePath()
-			if (dslBase) normalizeDesignDataPathsAfterLoad(draftData, dslBase)
+			if (dslBase) {
+				normalizeDesignDataPathsAfterLoad(draftData, dslBase, {
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				})
+			}
 			const draftBaseData = draft.baseRemoteData
 				? (cloneDeep(draft.baseRemoteData) as DesignData)
 				: null
 			if (draftBaseData) {
-				if (dslBase) normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase)
+				if (dslBase) {
+					normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase, {
+						flatAttachments: this.options.flatAttachments,
+						attachmentIndex: this.options.attachmentIndex,
+					})
+				}
 				if (
 					this.tryMergeRemoteAdvancedDraft({
 						draft,
@@ -1373,7 +1638,12 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		const restoredData = cloneDeep(draft.designData) as DesignData
 		const dslBase = this.getDesignProjectBasePath()
-		if (dslBase) normalizeDesignDataPathsAfterLoad(restoredData, dslBase)
+		if (dslBase) {
+			normalizeDesignDataPathsAfterLoad(restoredData, dslBase, {
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			})
+		}
 
 		const oldData = this.stateBag.getDesignData()
 		this.stateBag.setters.setDesignData(restoredData)
@@ -1397,7 +1667,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	private async handleSaveResultConflict(saveResult: DesignSaveResult): Promise<boolean> {
 		if (saveResult.ok) {
-			if (!this.hasUnresolvedElementConflicts()) {
+			if (!this.hasUnresolvedMergeConflicts()) {
 				this.clearConflictState()
 			}
 			return false
@@ -1479,11 +1749,16 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.refreshElementConflictStateAfterRemoteSave(savedRemoteData, saveResult)
 			return
 		}
+		if (this.hasUnresolvedConnectionConflicts()) return
 		this.clearConflictState()
 	}
 
 	async manualSave(): Promise<void> {
 		if (this.isVersionDataSourceLocked()) {
+			return
+		}
+		if (this.hasUnresolvedConnectionConflicts()) {
+			this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
 			return
 		}
 		if (this.hasUnresolvedElementConflicts()) {
@@ -1518,7 +1793,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.handleSuccessfulSaveResult(saveResult)
 			if (
 				this.saveManager.wasLastSaveFullyPersisted() &&
-				!this.hasUnresolvedElementConflicts()
+				!this.hasUnresolvedMergeConflicts()
 			) {
 				this.clearLocalDraftAfterFullyPersistedSave()
 			}
@@ -1562,6 +1837,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	async saveToRemote(): Promise<void> {
 		if (this.isVersionDataSourceLocked()) return
 		if (this.getIsReadOnly()) return
+		if (this.hasUnresolvedConnectionConflicts()) {
+			this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
+			return
+		}
 		if (this.hasUnresolvedElementConflicts()) {
 			const remoteSaveData = this.getRemoteSaveDataForCurrentElementConflicts()
 			if (!remoteSaveData) {
@@ -1593,7 +1872,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.handleSuccessfulSaveResult(saveResult)
 			if (
 				this.saveManager.wasLastSaveFullyPersisted() &&
-				!this.hasUnresolvedElementConflicts()
+				!this.hasUnresolvedMergeConflicts()
 			) {
 				this.clearLocalDraftAfterFullyPersistedSave()
 			}
@@ -1718,10 +1997,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			.filter(({ status }) => status === "unresolved")
 			.map(({ elementId }) => elementId)
 		const currentData = options.nextDesignData ?? this.stateBag.getDesignData()
-		const nextLocalData =
-			unresolvedElementIds.length > 0
-				? this.buildLocalDataFromElementConflicts(currentData, elementConflicts)
-				: currentData
+		const nextLocalData = this.buildLocalDataFromMergeConflicts(currentData, {
+			elementConflicts,
+			connectionConflicts: conflict.connectionConflicts,
+		})
 		const nextConflict: DesignConflict = {
 			...conflict,
 			elementConflicts,
@@ -1732,7 +2011,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			localFingerprint: hashDesignDataComparable(nextLocalData),
 		}
 
-		if (unresolvedElementIds.length > 0) {
+		if (unresolvedElementIds.length > 0 || this.hasUnresolvedMergeConflicts(nextConflict)) {
 			this.setConflictState(nextConflict)
 			this.writeConflictLocalDraftNow(nextConflict, nextLocalData)
 			return true
@@ -1813,7 +2092,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	resolveBlockingConflictWithRemote(): boolean {
 		const conflict = this.stateBag.getConflictState()
-		if (!conflict || this.hasUnresolvedElementConflicts(conflict)) return false
+		if (
+			conflict &&
+			this.hasUnresolvedConnectionConflicts(conflict) &&
+			!this.hasUnresolvedElementConflicts(conflict)
+		) {
+			return this.resolveAllConnectionConflictsWithRemote()
+		}
+		if (!conflict || this.hasUnresolvedMergeConflicts(conflict)) return false
 
 		const pending = this.pendingRemoteDesignData
 		const remoteData = cloneDeep(pending?.data ?? conflict.remoteData) as DesignData
@@ -1831,7 +2117,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	async resolveBlockingConflictWithLocal(): Promise<boolean> {
 		const conflict = this.stateBag.getConflictState()
-		if (!conflict || this.hasUnresolvedElementConflicts(conflict)) return false
+		if (
+			conflict &&
+			this.hasUnresolvedConnectionConflicts(conflict) &&
+			!this.hasUnresolvedElementConflicts(conflict)
+		) {
+			return this.resolveAllConnectionConflictsWithLocal()
+		}
+		if (!conflict || this.hasUnresolvedMergeConflicts(conflict)) return false
 
 		const localData = cloneDeep(conflict.localData) as DesignData
 		const oldData = this.stateBag.getDesignData()
@@ -1858,7 +2151,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			}
 			if (
 				this.saveManager.wasLastSaveFullyPersisted() &&
-				!this.hasUnresolvedElementConflicts()
+				!this.hasUnresolvedMergeConflicts()
 			) {
 				this.clearLocalDraftAfterFullyPersistedSave()
 			}
@@ -1866,6 +2159,68 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 
 		return false
+	}
+
+	private resolveConnectionConflicts(options: {
+		connectionIds: string[]
+		resolution: "use-local" | "use-remote"
+		nextDesignData?: DesignData
+	}): boolean {
+		const conflict = this.stateBag.getConflictState()
+		if (!conflict?.connectionConflicts?.length) return false
+
+		const targetConnectionIds = new Set(options.connectionIds)
+		const resolvedAt = Date.now()
+		let didResolve = false
+		const connectionConflicts = conflict.connectionConflicts.map((connectionConflict) => {
+			if (
+				connectionConflict.status !== "unresolved" ||
+				!targetConnectionIds.has(connectionConflict.connectionId)
+			) {
+				return connectionConflict
+			}
+
+			didResolve = true
+			return {
+				...connectionConflict,
+				status: "resolved" as const,
+				resolution: options.resolution,
+				resolvedAt,
+			}
+		})
+
+		if (!didResolve) return false
+
+		const currentData = options.nextDesignData ?? this.stateBag.getDesignData()
+		const nextLocalData = this.buildLocalDataFromMergeConflicts(currentData, {
+			elementConflicts: conflict.elementConflicts,
+			connectionConflicts,
+		})
+		const nextConflict: DesignConflict = {
+			...conflict,
+			connectionConflicts,
+			localData: cloneDeep(nextLocalData) as DesignData,
+			mergedData: options.nextDesignData
+				? (cloneDeep(options.nextDesignData) as DesignData)
+				: conflict.mergedData,
+			localFingerprint: hashDesignDataComparable(nextLocalData),
+		}
+
+		if (this.hasUnresolvedMergeConflicts(nextConflict)) {
+			this.setConflictState(nextConflict)
+			this.writeConflictLocalDraftNow(nextConflict, nextLocalData)
+			return true
+		}
+
+		this.clearConflictState()
+		if (
+			hashDesignDataComparable(currentData) === this.stateBag.getPrevDesignDataFingerprint()
+		) {
+			this.clearLocalDraftBecauseAlreadySynced()
+		} else {
+			this.persistLocalDraft(currentData)
+		}
+		return true
 	}
 
 	resolveElementConflictWithLocal(elementId: string): boolean {
@@ -1967,6 +2322,129 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.scheduleAutoSave({ source: "conflict-resolution" })
 		}
 		return didResolve
+	}
+
+	resolveConnectionConflictWithLocal(connectionId: string): boolean {
+		return this.resolveSingleConnectionConflict(connectionId, "use-local")
+	}
+
+	resolveConnectionConflictWithRemote(connectionId: string): boolean {
+		return this.resolveSingleConnectionConflict(connectionId, "use-remote")
+	}
+
+	private resolveSingleConnectionConflict(
+		connectionId: string,
+		resolution: "use-local" | "use-remote",
+	): boolean {
+		const conflict = this.stateBag.getConflictState()
+		const connectionConflict = conflict?.connectionConflicts?.find(
+			(item) => item.connectionId === connectionId && item.status === "unresolved",
+		)
+		if (!conflict || !connectionConflict) return false
+
+		const oldData = this.stateBag.getDesignData()
+		const nextData = this.applyConnectionConflictResolutionToData(
+			oldData,
+			[connectionConflict],
+			resolution,
+		)
+		if (!nextData) return false
+
+		this.stateBag.setters.setDesignData(nextData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, nextData, "draft")
+		const didResolve = this.resolveConnectionConflicts({
+			connectionIds: [connectionId],
+			resolution,
+			nextDesignData: nextData,
+		})
+		if (
+			didResolve &&
+			hashDesignDataComparable(nextData) !== this.stateBag.getPrevDesignDataFingerprint()
+		) {
+			this.scheduleAutoSave({ source: "conflict-resolution" })
+		}
+		return didResolve
+	}
+
+	private resolveAllConnectionConflictsWithRemote(): boolean {
+		const conflict = this.stateBag.getConflictState()
+		const unresolvedConnectionIds = this.getUnresolvedConnectionConflictIds(conflict)
+		if (!conflict || unresolvedConnectionIds.length === 0) return false
+
+		const unresolvedConnectionConflicts = (conflict.connectionConflicts ?? []).filter(
+			({ connectionId, status }) =>
+				status === "unresolved" && unresolvedConnectionIds.includes(connectionId),
+		)
+		const oldData = this.stateBag.getDesignData()
+		const nextData = this.applyConnectionConflictResolutionToData(
+			oldData,
+			unresolvedConnectionConflicts,
+			"use-remote",
+		)
+		if (!nextData) return false
+
+		this.stateBag.setters.setDesignData(nextData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, nextData, "draft")
+		const didResolve = this.resolveConnectionConflicts({
+			connectionIds: unresolvedConnectionIds,
+			resolution: "use-remote",
+			nextDesignData: nextData,
+		})
+		if (
+			didResolve &&
+			hashDesignDataComparable(nextData) !== this.stateBag.getPrevDesignDataFingerprint()
+		) {
+			this.scheduleAutoSave({ source: "conflict-resolution" })
+		}
+		return didResolve
+	}
+
+	private async resolveAllConnectionConflictsWithLocal(): Promise<boolean> {
+		const conflict = this.stateBag.getConflictState()
+		const unresolvedConnectionIds = this.getUnresolvedConnectionConflictIds(conflict)
+		if (!conflict || unresolvedConnectionIds.length === 0) return false
+
+		const localData = cloneDeep(conflict.localData) as DesignData
+		const oldData = this.stateBag.getDesignData()
+		this.saveManager.cancelAutoSave()
+		this.stateBag.setters.setDesignData(localData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, localData, "draft")
+		const didResolve = this.resolveConnectionConflicts({
+			connectionIds: unresolvedConnectionIds,
+			resolution: "use-local",
+			nextDesignData: localData,
+		})
+		if (!didResolve) return false
+
+		this.persistLocalDraft(localData, { immediate: true })
+		this.stateBag.setters.setIsSaving(true)
+		const saveResult = await this.saveManager.commitSave({
+			allowRemoteConflict: true,
+			designData: localData,
+			updateCurrentDesignData: true,
+			skipRemoteUpdateCheck: true,
+			source: "conflict-resolution",
+		})
+		if (saveResult.ok) {
+			this.pendingRemoteDesignData = null
+			this.saveManager.clearRemoteConflict()
+			if (saveResult.fullyPersisted) {
+				this.handleSuccessfulSaveResult(saveResult)
+			} else {
+				this.clearConflictState()
+			}
+			if (
+				this.saveManager.wasLastSaveFullyPersisted() &&
+				!this.hasUnresolvedMergeConflicts()
+			) {
+				this.clearLocalDraftAfterFullyPersistedSave()
+			}
+			return true
+		}
+
+		this.setConflictState(conflict)
+		this.writeConflictLocalDraftNow(conflict, localData)
+		return false
 	}
 
 	resolveEditedElementConflictsWithLocal(

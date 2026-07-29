@@ -32,7 +32,6 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrM
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrNoteFileConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrTranscriptFileConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Response\AsrRecorderResponse;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Throwable;
 
@@ -47,7 +46,6 @@ class AsrSandboxService extends AbstractAppService
     use HasLogger;
 
     public function __construct(
-        private readonly SandboxGatewayInterface $sandboxGateway,
         private readonly AsrRecorderInterface $asrRecorder,
         private readonly AsrSandboxResponseHandler $responseHandler,
         private readonly TaskFileDomainService $taskFileDomainService,

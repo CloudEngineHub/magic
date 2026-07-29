@@ -6,17 +6,16 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import MagicModal from "@/components/base/MagicModal"
 import MagicSpin from "@/components/base/MagicSpin"
+import MagicToaster from "@/components/base/MagicToaster"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDesignMethods } from "./hooks/useDesignMethods"
-import { useConversationAndDownload } from "./hooks/useConversationAndDownload"
 import { useDesignMarker } from "./hooks/useDesignMarker"
 import pubsub from "@/utils/pubsub"
 import { useSuperMagicMarkerManager } from "./marker-manager"
 import { useDesignProjectManager } from "./hooks/useDesignProjectManager"
 import {
-	findFileBySrc,
 	getDesignDirectoryInfo,
 	fileItemsToProjectAttachmentMentionTree,
 	normalizePath,
@@ -24,6 +23,7 @@ import {
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
+import { resolveDesignAttachment } from "./utils/designPath"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -31,7 +31,7 @@ import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignDataPatch,
 	CanvasDesignRef,
-} from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/public/props"
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
 import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSync"
@@ -39,8 +39,8 @@ import type {
 	CanvasDeviceInfo,
 	CanvasDocument,
 	LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
-import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/canvas/utils/utils"
+} from "@/components/CanvasDesign/runtime/document/types"
+import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/runtime/shared/ids"
 import CanvasDesignHeaderV2 from "./components/CanvasDesignHeaderV2"
 import { useDesignHeaderProps } from "./components/CanvasDesignHeaderV2/useDesignHeaderProps"
 import { CanvasDesignMentionDataService } from "./adapters/CanvasDesignMentionDataService"
@@ -50,7 +50,6 @@ import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { setCanvasElementResourceGetter } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
 import { useDesignDownloadPolicy } from "./hooks/useDesignDownloadPolicy"
 import { HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX } from "@/pages/superMagic/components/Detail/components/CommonHeader/components/HistoryVersionBanner"
-import { useAiWatermarkPreference } from "@/hooks/useAiWatermarkPreference"
 import type { DesignRemoteUpdateListenerMode } from "./managers/types"
 import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -59,28 +58,20 @@ import { AlertTriangle, CloudOff } from "lucide-react"
 import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
-import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
+import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
 import { designBuiltinPlugins } from "./plugins/options"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type { DesignDraftReason } from "./utils/designDraftStorage"
 import type { DesignSaveMetadata } from "./managers"
+import { canUseDesignPlugins } from "./utils/pluginAccess"
+import { userStore } from "@/models/user"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
 const CanvasDesign = lazy(() => import("@/components/CanvasDesign"))
 
 const REMOTE_CANVAS_UPDATE_SUPPRESS_MS = 500
-
-// 懒加载协议弹窗
-const loadWaterMarkFreeModal = async () => {
-	const module = await import("@/pages/superMagic/components/WaterMarkFreeModal")
-	return {
-		default: module.WaterMarkFreeModal,
-	}
-}
-
-const WaterMarkFreeModal = lazy(() => loadWaterMarkFreeModal())
 
 const DESIGN_REMOTE_UPDATE_LISTENER_MODE: DesignRemoteUpdateListenerMode = "file-change" as const
 
@@ -306,6 +297,7 @@ function DesignViewer(props: DesignViewerProps) {
 		useAttachments({
 			attachments,
 			attachmentList,
+			projectId: selectedTopic?.project_id,
 		})
 
 	const propsElements = props.data?.elements
@@ -482,6 +474,8 @@ function DesignViewer(props: DesignViewerProps) {
 		conflictState,
 		resolveElementConflictWithLocal,
 		resolveElementConflictWithRemote,
+		resolveConnectionConflictWithLocal,
+		resolveConnectionConflictWithRemote,
 		resolveBlockingConflictWithRemote,
 		resolveBlockingConflictWithLocal,
 		resolveEditedElementConflictsWithLocal,
@@ -640,6 +634,16 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
+	const videoPointsEstimateCacheScope = useMemo(
+		() =>
+			[
+				projectId ?? "",
+				designProjectId ?? "",
+				designProjectBasePath ?? "",
+				currentFile?.id ?? "",
+			].join(":"),
+		[projectId, designProjectId, designProjectBasePath, currentFile?.id],
+	)
 
 	useEffect(() => {
 		if (!designProjectId) {
@@ -664,9 +668,16 @@ function DesignViewer(props: DesignViewerProps) {
 				latestDesignDataRef.current.canvas ??
 				null,
 			resolveFileBySrc: (src) => {
-				return findFileBySrc(src, flatAttachments, designProjectBasePath, attachmentIndex, {
-					strictCanvasRelativeResource: true,
-				})
+				const resolvedFile = resolveDesignAttachment(
+					src,
+					{
+						flatAttachments,
+						designProjectBasePath,
+						attachmentIndex,
+					},
+					{ mode: "strict-current-canvas" },
+				)
+				return resolvedFile.status === "found" ? resolvedFile.fileItem : null
 			},
 		})
 		setCanvasElementResourceGetter(
@@ -688,42 +699,22 @@ function DesignViewer(props: DesignViewerProps) {
 	])
 
 	const downloadPolicy = useDesignDownloadPolicy()
-	const { isFreeTrialVersion } = useAiWatermarkPreference()
 
 	const designCanvasMagicPermissions = useMemo(
 		() => ({
 			...downloadPolicy.permissions,
-			isFreeTrialVersion,
+			allowFileDownload: allowDownload !== false && (allowEdit || allowDownload === true),
 			elementMenuConversationActions: isNewestVersion && !isShareRoute,
+			showPluginEntry: canUseDesignPlugins(userStore.user.organizationCode),
 		}),
-		[downloadPolicy.permissions, isFreeTrialVersion, isNewestVersion, isShareRoute],
+		[allowDownload, allowEdit, downloadPolicy.permissions, isNewestVersion, isShareRoute],
 	)
-
-	const {
-		waterMarkFreeModalVisible,
-		setWaterMarkFreeModalVisible,
-		downloadFileElements,
-		setDownloadFileElements,
-		waterMarkFreeModalInitialized,
-	} = downloadPolicy
 
 	const handleExitFullscreen = useCallback(async () => {
 		if (isFullscreen) {
 			onFullscreen?.()
 		}
 	}, [isFullscreen, onFullscreen])
-
-	// 获取 executeDownload 方法（用于协议弹窗确认后的直接下载）
-	const { executeDownload } = useConversationAndDownload({
-		flatAttachments,
-		designProjectBasePath,
-		selectedWorkspace,
-		selectedProject,
-		afterAddFileToCurrentTopic: undefined,
-		afterAddFileToNewTopic: undefined,
-		onExitFullscreen: handleExitFullscreen,
-		downloadPolicy,
-	})
 
 	// 使用 SuperMagic Marker Manager（需在 useDesignMethods 之前）
 	const markerManager = useSuperMagicMarkerManager()
@@ -1234,7 +1225,10 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const conflictNoticeText = useMemo(() => {
 		if (!conflictState) return null
-		if (conflictState.elementConflicts?.some(({ status }) => status === "unresolved")) {
+		if (
+			conflictState.elementConflicts?.some(({ status }) => status === "unresolved") ||
+			conflictState.connectionConflicts?.some(({ status }) => status === "unresolved")
+		) {
 			return null
 		}
 		const isDraftConflict = conflictState.reason === "draft-remote-advanced"
@@ -1282,9 +1276,18 @@ function DesignViewer(props: DesignViewerProps) {
 				.map(({ elementId }) => elementId),
 		[conflictState?.elementConflicts],
 	)
+	const unresolvedConnectionConflictIds = useMemo(
+		() =>
+			(conflictState?.connectionConflicts ?? [])
+				.filter(({ status }) => status === "unresolved")
+				.map(({ connectionId }) => connectionId),
+		[conflictState?.connectionConflicts],
+	)
 	const [locallyResolvedElementConflictIds, setLocallyResolvedElementConflictIds] = useState<
 		Set<string>
 	>(() => new Set())
+	const [locallyResolvedConnectionConflictIds, setLocallyResolvedConnectionConflictIds] =
+		useState<Set<string>>(() => new Set())
 
 	useEffect(() => {
 		setLocallyResolvedElementConflictIds((prev) => {
@@ -1298,7 +1301,22 @@ function DesignViewer(props: DesignViewerProps) {
 		})
 	}, [unresolvedElementConflictIds])
 
+	useEffect(() => {
+		setLocallyResolvedConnectionConflictIds((prev) => {
+			if (prev.size === 0) return prev
+
+			const unresolvedConnectionIds = new Set(unresolvedConnectionConflictIds)
+			const next = new Set(
+				Array.from(prev).filter((connectionId) =>
+					unresolvedConnectionIds.has(connectionId),
+				),
+			)
+			return next.size === prev.size ? prev : next
+		})
+	}, [unresolvedConnectionConflictIds])
+
 	const hasUnresolvedElementConflicts = unresolvedElementConflictIds.length > 0
+	const hasUnresolvedConnectionConflicts = unresolvedConnectionConflictIds.length > 0
 	const visibleElementConflicts = useMemo(
 		() =>
 			(conflictState?.elementConflicts ?? []).filter(
@@ -1306,6 +1324,15 @@ function DesignViewer(props: DesignViewerProps) {
 					status === "unresolved" && !locallyResolvedElementConflictIds.has(elementId),
 			),
 		[conflictState?.elementConflicts, locallyResolvedElementConflictIds],
+	)
+	const visibleConnectionConflicts = useMemo(
+		() =>
+			(conflictState?.connectionConflicts ?? []).filter(
+				({ connectionId, status }) =>
+					status === "unresolved" &&
+					!locallyResolvedConnectionConflictIds.has(connectionId),
+			),
+		[conflictState?.connectionConflicts, locallyResolvedConnectionConflictIds],
 	)
 	const elementActionHints = useMemo(
 		() =>
@@ -1321,7 +1348,34 @@ function DesignViewer(props: DesignViewerProps) {
 			),
 		[visibleElementConflicts],
 	)
-	const shouldBlockCanvasForConflict = !!conflictState && !hasUnresolvedElementConflicts
+	const connectionActionHints = useMemo(
+		() =>
+			visibleConnectionConflicts.map(
+				({
+					connectionId,
+					reason,
+					status,
+					baseConnection,
+					localConnection,
+					remoteConnection,
+				}) => {
+					const anchorConnection = localConnection ?? remoteConnection ?? baseConnection
+					return {
+						connectionId,
+						sourceElementId: anchorConnection?.sourceElementId,
+						targetElementId: anchorConnection?.targetElementId,
+						reason,
+						status,
+						tone: "warning" as const,
+						localExists: !!localConnection,
+						remoteExists: !!remoteConnection,
+					}
+				},
+			),
+		[visibleConnectionConflicts],
+	)
+	const shouldBlockCanvasForConflict =
+		!!conflictState && !hasUnresolvedElementConflicts && !hasUnresolvedConnectionConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
 	const [blockingConflictResolveAction, setBlockingConflictResolveAction] = useState<
 		"remote" | "local" | null
@@ -1393,6 +1447,30 @@ function DesignViewer(props: DesignViewerProps) {
 		[resolveElementConflictWithRemote, t],
 	)
 
+	const handleUseLocalConnectionConflict = useCallback(
+		(connectionId: string) => {
+			const didResolve = resolveConnectionConflictWithLocal(connectionId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedConnectionConflictIds((prev) => new Set(prev).add(connectionId))
+		},
+		[resolveConnectionConflictWithLocal, t],
+	)
+
+	const handleUseRemoteConnectionConflict = useCallback(
+		(connectionId: string) => {
+			const didResolve = resolveConnectionConflictWithRemote(connectionId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedConnectionConflictIds((prev) => new Set(prev).add(connectionId))
+		},
+		[resolveConnectionConflictWithRemote, t],
+	)
+
 	const handleElementActionHintAction = useCallback(
 		(elementId: string, actionKey: string) => {
 			if (actionKey === "use-local") {
@@ -1406,6 +1484,19 @@ function DesignViewer(props: DesignViewerProps) {
 		[handleUseLocalElementConflict, handleUseRemoteElementConflict],
 	)
 
+	const handleConnectionActionHintAction = useCallback(
+		(connectionId: string, actionKey: string) => {
+			if (actionKey === "use-local") {
+				handleUseLocalConnectionConflict(connectionId)
+				return
+			}
+			if (actionKey === "use-remote") {
+				handleUseRemoteConnectionConflict(connectionId)
+			}
+		},
+		[handleUseLocalConnectionConflict, handleUseRemoteConnectionConflict],
+	)
+
 	// 显示历史版本 banner 时预留顶部空间，避免遮挡画布（与 HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX 一致）
 	const showVersionBanner = !isNewestVersion && !isMobile && !!fileVersionsList?.length
 	const shouldShowInitialLoading =
@@ -1413,6 +1504,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	return (
 		<>
+			<MagicToaster />
 			<div
 				ref={containerRef}
 				className={styles.designViewerContainer}
@@ -1547,6 +1639,7 @@ function DesignViewer(props: DesignViewerProps) {
 										methods,
 										permissions: designCanvasMagicPermissions,
 										hostUiLocale,
+										videoPointsEstimateCacheScope,
 									}}
 									plugins={canvasPluginConfig}
 									viewport={{
@@ -1559,6 +1652,9 @@ function DesignViewer(props: DesignViewerProps) {
 											handleCanvasDesignDataPatchChange,
 										elementActionHints,
 										onElementActionHintAction: handleElementActionHintAction,
+										connectionActionHints,
+										onConnectionActionHintAction:
+											handleConnectionActionHintAction,
 										projectAttachmentMentionTree,
 										defaultProjectAttachmentFolderId,
 										defaultProjectAttachmentFolderName,
@@ -1596,30 +1692,8 @@ function DesignViewer(props: DesignViewerProps) {
 					</>
 				)}
 			</div>
-			{/* 下载无水印图片协议弹窗 */}
-			{(waterMarkFreeModalInitialized || waterMarkFreeModalVisible) && (
-				<Suspense fallback={null}>
-					<WaterMarkFreeModal
-						visible={waterMarkFreeModalVisible}
-						onClose={() => {
-							setWaterMarkFreeModalVisible(false)
-							setDownloadFileElements([])
-						}}
-						onConfirm={async () => {
-							if (downloadFileElements.length > 0 && executeDownload) {
-								// 用户已同意协议，直接执行下载（跳过协议检查）
-								try {
-									await downloadPolicy.handleAgreementConfirm(() =>
-										executeDownload(downloadFileElements, true),
-									)
-								} catch (error) {
-									//
-								}
-							}
-						}}
-					/>
-				</Suspense>
-			)}
+			{/* 与项目文件列表复用同一套 AI 图片无水印协议。 */}
+			{downloadPolicy.agreementModal}
 		</>
 	)
 }

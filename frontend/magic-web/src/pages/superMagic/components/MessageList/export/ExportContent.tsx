@@ -6,6 +6,7 @@ import { globalConfigStore } from "@/stores/globalConfig"
 import { getAvatarUrl } from "@/utils/avatar"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MarkdownComponent from "../components/Text/components/Markdown"
+import MessageRenderErrorBoundary from "../components/MessageRenderErrorBoundary"
 import { useStyles as useMarkdownGithubStyles } from "../components/Nodes/AgentReply/styles"
 import { ToolIconBadge } from "../components/shared/ToolIconConfig"
 import { IconClipboard } from "@tabler/icons-react"
@@ -106,16 +107,21 @@ function UserPart({ part }: { part: ExportMessagePart }) {
 	)
 }
 
-function AssistantPart({ part }: { part: ExportMessagePart }) {
+function AssistantPart({ part, messageKey }: { part: ExportMessagePart; messageKey: string }) {
 	const { styles: mdStyles } = useMarkdownGithubStyles()
 	return (
 		<div className="w-full">
-			{part.markdown || part.text ? (
-				<MarkdownComponent
-					content={part.markdown || part.text || ""}
-					className={mdStyles.githubMarkdown}
-				/>
-			) : null}
+			<MessageRenderErrorBoundary
+				messageKey={messageKey}
+				resetKey={part.markdown || part.text || ""}
+			>
+				{part.markdown || part.text ? (
+					<MarkdownComponent
+						content={part.markdown || part.text || ""}
+						className={mdStyles.githubMarkdown}
+					/>
+				) : null}
+			</MessageRenderErrorBoundary>
 			{part.attachments?.length ? <AttachmentList items={part.attachments} /> : null}
 		</div>
 	)
@@ -187,7 +193,7 @@ function TurnBlock({ turn }: { turn: ExportTurn }) {
 				if (part.type === "thinking" || part.type === "agent_thinking") {
 					return <ThinkingPart key={key} part={part} />
 				}
-				return <AssistantPart key={key} part={part} />
+				return <AssistantPart key={key} part={part} messageKey={key} />
 			})}
 		</div>
 	)

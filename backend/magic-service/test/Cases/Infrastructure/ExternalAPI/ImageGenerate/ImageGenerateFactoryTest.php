@@ -854,16 +854,16 @@ class ImageGenerateFactoryTest extends TestCase
     public function testGoogleGemini25FlashAllSizes()
     {
         $sizes = [
-            ['size' => '1:1', 'width' => '1024', 'height' => '1024', 'ratio' => '1:1'],
-            ['size' => '2:3', 'width' => '1024', 'height' => '1536', 'ratio' => '2:3'],
-            ['size' => '3:2', 'width' => '1536', 'height' => '1024', 'ratio' => '3:2'],
-            ['size' => '3:4', 'width' => '1024', 'height' => '1365', 'ratio' => '3:4'],
-            ['size' => '4:3', 'width' => '1365', 'height' => '1024', 'ratio' => '4:3'],
-            ['size' => '4:5', 'width' => '1024', 'height' => '1280', 'ratio' => '4:5'],
-            ['size' => '5:4', 'width' => '1280', 'height' => '1024', 'ratio' => '5:4'],
-            ['size' => '9:16', 'width' => '1024', 'height' => '1820', 'ratio' => '9:16'],
-            ['size' => '16:9', 'width' => '1820', 'height' => '1024', 'ratio' => '16:9'],
-            ['size' => '21:9', 'width' => '2389', 'height' => '1024', 'ratio' => '21:9'],
+            ['size' => '1:1', 'width' => '1024', 'height' => '1024', 'ratio' => '1:1', 'resolution' => '1K'],
+            ['size' => '2:3', 'width' => '1024', 'height' => '1536', 'ratio' => '2:3', 'resolution' => '1K'],
+            ['size' => '3:2', 'width' => '1536', 'height' => '1024', 'ratio' => '3:2', 'resolution' => '1K'],
+            ['size' => '3:4', 'width' => '1024', 'height' => '1365', 'ratio' => '3:4', 'resolution' => '1K'],
+            ['size' => '4:3', 'width' => '1365', 'height' => '1024', 'ratio' => '4:3', 'resolution' => '1K'],
+            ['size' => '4:5', 'width' => '1024', 'height' => '1280', 'ratio' => '4:5', 'resolution' => '1K'],
+            ['size' => '5:4', 'width' => '1280', 'height' => '1024', 'ratio' => '5:4', 'resolution' => '1K'],
+            ['size' => '9:16', 'width' => '1024', 'height' => '1820', 'ratio' => '9:16', 'resolution' => '1K'],
+            ['size' => '16:9', 'width' => '1820', 'height' => '1024', 'ratio' => '16:9', 'resolution' => '1K'],
+            ['size' => '21:9', 'width' => '2389', 'height' => '1024', 'ratio' => '21:9', 'resolution' => '2K'],
         ];
 
         foreach ($sizes as $testCase) {
@@ -881,7 +881,7 @@ class ImageGenerateFactoryTest extends TestCase
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertSame('1K', $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
+            $this->assertSame($testCase['resolution'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 

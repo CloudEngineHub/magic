@@ -212,7 +212,7 @@ class FilesystemProxy extends Filesystem
         $cacheKey = $credentialPolicy->uniqueKey($options);
         if ($isCache && $data = $this->getCache($cacheKey)) {
             // Check if cached credential has enough remaining validity time for pre-signed URL
-            $requestedExpires = $options['expires'] ?? $credentialPolicy->getExpires();
+            $requestedExpires = $options['expires'] ?? 0;
             $remainingTime = ($data['expires'] ?? 0) - time();
 
             // Only use cache if remaining time >= requested expires + 60s buffer

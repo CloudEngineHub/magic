@@ -328,7 +328,7 @@ readonly class RoleDomainService
         }
 
         $organization = $this->organizationRepository->getByCode($organizationCode);
-        if ($organization && $organization->getType() === 1) {
+        if ($organization && $organization->isPersonal()) {
             return MagicPermission::PERSON_PERMISSIONS;
         }
 
@@ -345,16 +345,24 @@ readonly class RoleDomainService
      */
     private function appendOrganizationAdminFallbackPermissions(PermissionDataIsolation $dataIsolation, string $userId, array $permissions): array
     {
-        if (! (bool) config('permission.enable_organization_admin_permission_fallback', false)) {
-            return $permissions;
-        }
-
         if ($userId === '') {
             return $permissions;
         }
 
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         if ($organizationCode === '') {
+            return $permissions;
+        }
+
+        $organization = $this->organizationRepository->getByCode($organizationCode);
+        if ($organization && $organization->isPersonal()) {
+            if ($organization->isOwnedBy($userId) && ! in_array(MagicPermission::PERSON_PERMISSIONS, $permissions, true)) {
+                $permissions[] = MagicPermission::PERSON_PERMISSIONS;
+            }
+            return array_values(array_unique($permissions));
+        }
+
+        if (! (bool) config('permission.enable_organization_admin_permission_fallback', false)) {
             return $permissions;
         }
 

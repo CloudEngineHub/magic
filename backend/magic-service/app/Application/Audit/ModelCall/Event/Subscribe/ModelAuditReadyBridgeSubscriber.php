@@ -22,6 +22,7 @@ use App\Domain\ModelGateway\Event\ImageGenerateFailedEvent;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Domain\ModelGateway\Event\VideoGenerateFailedEvent;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
@@ -58,6 +59,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             ImageGeneratedEvent::class,
             VideoGenerateFailedEvent::class,
             VideoGeneratedEvent::class,
+            SlidesTemplateUsedEvent::class,
             AfterChatCompletionsEvent::class,
             AfterChatCompletionsStreamEvent::class,
             AfterEmbeddingsEvent::class,
@@ -75,6 +77,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             $event instanceof ImageGeneratedEvent => $this->processImageGenerated($event),
             $event instanceof VideoGenerateFailedEvent => $this->processVideoGenerateFailed($event),
             $event instanceof VideoGeneratedEvent => $this->processVideoGenerated($event),
+            $event instanceof SlidesTemplateUsedEvent => $this->processSlidesTemplateUsed($event),
             $event instanceof AfterChatCompletionsStreamEvent => $this->processAfterChatCompletionsStream($event),
             $event instanceof AfterChatCompletionsEvent => $this->processAfterChatCompletions($event),
             $event instanceof AfterEmbeddingsEvent => $this->processAfterEmbeddings($event),
@@ -199,7 +202,11 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             return [];
         }
 
-        $usage = ['count' => (int) ($businessParams['image_count'] ?? 0)];
+        $usage = [
+            'count' => (int) ($businessParams['image_count'] ?? 0),
+            'output_image_count' => (int) ($businessParams['image_count'] ?? 0),
+            'reference_image_count' => (int) ($businessParams['reference_image_count'] ?? $event->getReferenceImageCount()),
+        ];
         $tokenUsage = $event->getUsage();
         if ($tokenUsage === null || $tokenUsage->getTotalTokens() <= 0) {
             return $usage;
@@ -386,6 +393,52 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
                 'user_name' => (string) ($businessParams['user_name'] ?? ''),
             ],
             usage: $usage,
+            detailInfo: $detailInfo,
+            businessParams: $businessParams,
+            accessScope: $accessScope,
+            eventId: $this->resolveModelAuditEventId($businessParams),
+        );
+    }
+
+    private function processSlidesTemplateUsed(SlidesTemplateUsedEvent $event): void
+    {
+        $template = $event->getTemplate();
+        $businessParams = array_merge($event->getBusinessParams(), [
+            'source_id' => $event->getSourceId(),
+            'operation_time' => $event->getCallTime(),
+            'organization_code' => $event->getOrganizationCode(),
+            'organization_id' => $event->getOrganizationCode(),
+            'user_id' => $event->getUserId(),
+            'user_name' => $event->getUserName(),
+            'request_id' => $event->getRequestId(),
+            'status' => AuditStatus::SUCCESS->value,
+            'audit_source_marker' => 'slidesTemplateUse',
+        ]);
+        $accessScope = $this->resolveAccessScopeForAudit($businessParams);
+
+        $detailInfo = InvocationDetailInfo::forTool(
+            '',
+            $event->getSourceId(),
+            'slides_template',
+            $template->getCode(),
+            [
+                'template_id' => $template->getId(),
+            ],
+        );
+
+        $this->persistAudit(
+            type: AuditType::SLIDES_TEMPLATE->value,
+            productCode: $template->getCode(),
+            status: AuditStatus::SUCCESS->value,
+            ak: (string) ($businessParams['ak'] ?? ''),
+            operationTime: (int) ($businessParams['operation_time'] ?? $event->getCallTime()),
+            allLatency: 0,
+            userInfo: [
+                'organization_code' => (string) ($businessParams['organization_id'] ?? $event->getOrganizationCode()),
+                'user_id' => (string) ($businessParams['user_id'] ?? $event->getUserId()),
+                'user_name' => (string) ($businessParams['user_name'] ?? $event->getUserName()),
+            ],
+            usage: ['count' => 1],
             detailInfo: $detailInfo,
             businessParams: $businessParams,
             accessScope: $accessScope,

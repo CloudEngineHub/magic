@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
-import { reaction } from "mobx"
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
 
+const SIDEBAR_RESIZE_KEYS = new Set([
+	"ArrowDown",
+	"ArrowLeft",
+	"ArrowRight",
+	"ArrowUp",
+	"End",
+	"Home",
+])
+
 function convertPercentToPx(sizePercent: number): number {
 	return (sizePercent / 100) * window.innerWidth
-}
-
-function convertPxToPercent(sizePx: number): number {
-	return convertPxToPercentByViewWidth(sizePx, window.innerWidth)
 }
 
 function convertPxToPercentByViewWidth(sizePx: number, viewWidth: number): number {
@@ -46,9 +50,11 @@ interface UseSidebarResponsiveParams {
 }
 
 function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarResponsiveParams) {
-	const isDraggingRef = useRef(false)
-	const dragEndTimerRef = useRef<number>()
+	const isUserResizingRef = useRef(false)
+	const hasPendingUserResizeRef = useRef(false)
+	const keyboardResizeTimerRef = useRef<number>()
 	const expandedSidebarWidthPxRef = useRef(convertPercentToPx(initialWidth))
+	const expandedSidebarSizePercentRef = useRef(initialWidth)
 	const prevWindowWidthRef = useRef(window.innerWidth)
 	const [minSidebarSizePercent, setMinSidebarSizePercent] = useState(() =>
 		getMinSidebarSizePercent(window.innerWidth),
@@ -61,7 +67,10 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 			100 - (minMainPx / viewWidth) * 100,
 		)
 		const minSidebarPercent = getMinSidebarSizePercent(viewWidth)
-		const desiredPercent = convertPxToPercent(expandedSidebarWidthPxRef.current)
+		const desiredPercent = convertPxToPercentByViewWidth(
+			expandedSidebarWidthPxRef.current,
+			viewWidth,
+		)
 		return Math.max(
 			minSidebarPercent,
 			Math.min(maxSidebarPercent, sidebarStore.MAX_WIDTH_PERCENT, desiredPercent),
@@ -101,62 +110,90 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 		// Initial load: keep persisted expanded/collapsed; shrink-triggered collapse runs in handleResize.
 		syncSidebarByViewport(false)
 		window.addEventListener("resize", handleResize)
-		// When user explicitly expands the sidebar, only resize the panel
-		// to the correct size - never force re-collapse here (that would
-		// prevent the user from opening the sidebar on narrow screens).
-		const dispose = reaction(
-			() => sidebarStore.collapsed,
-			(collapsed) => {
-				if (collapsed || !sidebarPanelRef.current) return
-				const nextSizePercent = getExpandedSidebarSizePercent(window.innerWidth)
-				sidebarPanelRef.current.resize(nextSizePercent)
-				sidebarStore.setWidth(nextSizePercent)
-			},
-		)
 
 		return () => {
-			dispose()
 			window.removeEventListener("resize", handleResize)
 		}
 	}, [syncSidebarByViewport])
 
 	useEffect(() => {
 		return () => {
-			if (dragEndTimerRef.current) {
-				window.clearTimeout(dragEndTimerRef.current)
+			if (keyboardResizeTimerRef.current) {
+				window.clearTimeout(keyboardResizeTimerRef.current)
 			}
-			if (isDraggingRef.current && sidebarPanelRef.current) {
-				const finalSize = sidebarPanelRef.current.getSize()
-				expandedSidebarWidthPxRef.current = convertPercentToPx(finalSize)
-				sidebarStore.setWidth(finalSize)
+			if (hasPendingUserResizeRef.current) {
+				sidebarStore.setWidth(expandedSidebarSizePercentRef.current)
 			}
 			sidebarStore.persistWidth()
 		}
-	}, [sidebarPanelRef])
+	}, [])
 
-	const handleSidebarResize = useCallback(() => {
-		if (sidebarStore.collapsed) return
+	const commitPendingUserResize = useCallback(() => {
+		if (!hasPendingUserResizeRef.current) return
 
-		if (!isDraggingRef.current) {
-			isDraggingRef.current = true
+		sidebarStore.setWidth(expandedSidebarSizePercentRef.current)
+		hasPendingUserResizeRef.current = false
+	}, [])
+
+	const scheduleKeyboardResizeCommit = useCallback(() => {
+		if (keyboardResizeTimerRef.current) {
+			window.clearTimeout(keyboardResizeTimerRef.current)
 		}
 
-		if (dragEndTimerRef.current) {
-			window.clearTimeout(dragEndTimerRef.current)
-		}
-
-		dragEndTimerRef.current = window.setTimeout(() => {
-			if (sidebarPanelRef.current && isDraggingRef.current) {
-				const finalSize = sidebarPanelRef.current.getSize()
-				expandedSidebarWidthPxRef.current = convertPercentToPx(finalSize)
-				sidebarStore.setWidth(finalSize)
-				isDraggingRef.current = false
-			}
+		keyboardResizeTimerRef.current = window.setTimeout(() => {
+			commitPendingUserResize()
+			isUserResizingRef.current = false
+			keyboardResizeTimerRef.current = undefined
 		}, 100)
-	}, [sidebarPanelRef])
+	}, [commitPendingUserResize])
+
+	const handleSidebarResize = useCallback(
+		(sizePercent: number) => {
+			if (sidebarStore.collapsed || !isUserResizingRef.current) return
+
+			expandedSidebarSizePercentRef.current = sizePercent
+			expandedSidebarWidthPxRef.current = convertPercentToPx(sizePercent)
+			hasPendingUserResizeRef.current = true
+
+			// Pointer dragging has an explicit end event. Keyboard resizing uses a
+			// short debounce because the panel library does not expose a key-resize end event.
+			if (keyboardResizeTimerRef.current) {
+				scheduleKeyboardResizeCommit()
+				isUserResizingRef.current = false
+			}
+		},
+		[scheduleKeyboardResizeCommit],
+	)
+
+	const handleSidebarDragging = useCallback(
+		(isDragging: boolean) => {
+			if (keyboardResizeTimerRef.current) {
+				window.clearTimeout(keyboardResizeTimerRef.current)
+				keyboardResizeTimerRef.current = undefined
+			}
+
+			isUserResizingRef.current = isDragging
+			if (!isDragging) commitPendingUserResize()
+		},
+		[commitPendingUserResize],
+	)
+
+	const handleSidebarResizeKeyDown = useCallback(
+		(event: KeyboardEvent<HTMLDivElement>) => {
+			if (!SIDEBAR_RESIZE_KEYS.has(event.key)) return false
+
+			isUserResizingRef.current = true
+			scheduleKeyboardResizeCommit()
+			return true
+		},
+		[scheduleKeyboardResizeCommit],
+	)
 
 	return {
+		getExpandedSidebarSizePercent,
+		handleSidebarDragging,
 		handleSidebarResize,
+		handleSidebarResizeKeyDown,
 		minSidebarSizePercent,
 	}
 }

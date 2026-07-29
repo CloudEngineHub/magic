@@ -21,11 +21,17 @@ describe("RecordingMarkdownContent", () => {
 	})
 
 	it("switches to mobile modifier when layout is mobile", () => {
-		render(<RecordingMarkdownContent content="Paragraph" layout="mobile" />)
+		render(
+			<RecordingMarkdownContent
+				content={"| Col A | Col B |\n| --- | --- |\n| 1 | 2 |"}
+				layout="mobile"
+			/>,
+		)
 
 		const root = screen.getByTestId("recording-detail-markdown-content")
 		expect(root).toHaveClass("recording-md-prose--mobile")
 		expect(root).toHaveAttribute("data-layout", "mobile")
+		expect(root.querySelector(".recording-md-table-wrap table")).toBeInTheDocument()
 	})
 
 	it("renders time links as light mono chips instead of solid pills", () => {
@@ -213,6 +219,8 @@ describe("RecordingMarkdownContent", () => {
 		const tableWrap = container.querySelector(".recording-md-table-wrap")
 		expect(tableWrap).toBeInTheDocument()
 		expect(within(tableWrap as HTMLElement).getByRole("table")).toBeInTheDocument()
+		expect(tableWrap?.querySelectorAll("th > .recording-md-cell-content")).toHaveLength(2)
+		expect(tableWrap?.querySelectorAll("td > .recording-md-cell-content")).toHaveLength(2)
 	})
 
 	it("renders inline br tags as line breaks instead of literal text", () => {

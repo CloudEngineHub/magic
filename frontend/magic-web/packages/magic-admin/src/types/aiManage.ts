@@ -121,6 +121,8 @@ export namespace AiManage {
 		ImageTokens = "ImageTokens",
 		/** 图片 Token 计费（含思考过程） */
 		ImageTokensWithThought = "ImageTokensWithThought",
+		/** Seedream 5 Pro 生图按张计费 */
+		Seedream5ProImage = "Seedream5ProImage",
 		/** 视频按时长计费 */
 		VideoDuration = "VideoResolutionDuration",
 		/** 视频 token 计费 */

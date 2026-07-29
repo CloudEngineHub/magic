@@ -38,11 +38,16 @@ class PermissionInitializer
     public function initialize(string $organizationCode, string $userId, string $magicId): array
     {
         $changed = false;
+        $organization = $this->organizationDomainService->getByCode($organizationCode);
+        $isPersonalOrganization = $organization?->isPersonal() ?? false;
+
         $changed = $this->ensureOrganizationCreatorInfo($organizationCode, $userId);
-        $changed = $this->ensureOrganizationAdminEnabled($organizationCode, $userId, $magicId) || $changed;
+        if (! $isPersonalOrganization) {
+            $changed = $this->ensureOrganizationAdminEnabled($organizationCode, $userId, $magicId) || $changed;
+        }
 
         $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
-        if (! $this->organizationAdminDomainService->isOrganizationAdmin($dataIsolation, $userId)) {
+        if (! $isPersonalOrganization && ! $this->organizationAdminDomainService->isOrganizationAdmin($dataIsolation, $userId)) {
             $this->organizationAdminDomainService->grant(
                 dataIsolation: $dataIsolation,
                 userId: $userId,

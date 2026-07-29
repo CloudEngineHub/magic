@@ -59,10 +59,10 @@ CanvasDesign 按 `manifest.version` 选择 runtime 处理器：
 
 ```text
 manifest.version = 1
-  -> frontend/magic-web/src/components/CanvasDesign/components/PluginPanel/runtime/v1
+  -> frontend/magic-web/src/components/CanvasDesign/ui/panels/plugin/runtime-protocol/v1
 
 manifest.version = 2
-  -> frontend/magic-web/src/components/CanvasDesign/components/PluginPanel/runtime/v2
+  -> frontend/magic-web/src/components/CanvasDesign/ui/panels/plugin/runtime-protocol/v2
 ```
 
 当前只实现 `runtime/v1`。新增 `v2` 的条件必须是插件协议发生不兼容变化，例如：
@@ -144,8 +144,8 @@ pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
 
 ```bash
 pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
-  src/components/CanvasDesign/components/PluginPanel/__tests__/runtimeProtocol.test.ts \
-  src/components/CanvasDesign/components/PluginPanel/__tests__/runtimeLifecycle.test.ts
+  src/components/CanvasDesign/ui/panels/plugin/window/__tests__/runtimeProtocol.test.ts \
+  src/components/CanvasDesign/ui/panels/plugin/window/__tests__/runtimeLifecycle.test.ts
 ```
 
 如果改动触达 CanvasDesign 类型、PluginPanel 或 shared kit，需要补跑相关 focused 测试，并按需执行 typecheck。

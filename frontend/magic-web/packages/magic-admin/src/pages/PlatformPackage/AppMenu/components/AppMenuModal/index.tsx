@@ -34,7 +34,6 @@ export const AppMenuModal = memo(
 	({ info, onCancel, onOk, onSuccess, ...rest }: AppMenuModalProps) => {
 		const { styles } = useStyles()
 		const { t } = useTranslation("admin/common")
-		const { t: tSuper } = useTranslation("super")
 
 		const { AppMenuApi } = useApis()
 		const openModal = useOpenModal()
@@ -117,12 +116,12 @@ export const AppMenuModal = memo(
 		const uploadValidator = (file: File, maxSize = 2): Promise<boolean> => {
 			return new Promise((resolve) => {
 				if (!IMAGE_TYPE.includes(file.type)) {
-					message.error(tSuper("common.onlySupportUploadImage"))
+					message.error(t("file.onlySupportUploadImage"))
 					resolve(false)
 					return
 				}
 				if (file.size / 1024 / 1024 > maxSize) {
-					message.error(tSuper("common.imageSizeTooLarge", { size: "2M" }))
+					message.error(t("file.imageSizeTooLarge", { size: "2M" }))
 					resolve(false)
 					return
 				}
@@ -132,7 +131,7 @@ export const AppMenuModal = memo(
 				img.onload = () => {
 					URL.revokeObjectURL(objectUrl)
 					if (img.width < 28 || img.height < 28) {
-						message.error(tSuper("common.imageSizeTooSmall", { width: 28, height: 28 }))
+						message.error(t("file.imageSizeTooSmall", { width: 28, height: 28 }))
 						resolve(false)
 					} else {
 						resolve(true)
@@ -140,7 +139,7 @@ export const AppMenuModal = memo(
 				}
 				img.onerror = () => {
 					URL.revokeObjectURL(objectUrl)
-					message.error(tSuper("common.imageLoadFailed"))
+					message.error(t("file.imageLoadFailed"))
 					resolve(false)
 				}
 			})

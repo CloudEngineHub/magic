@@ -33,7 +33,6 @@ class _ImageApiPayload:
     images: List[str]
     n: int
     size: Optional[str] = None
-    sequential_image_generation: str = "auto"
 
 
 class MagicServiceHandler(BaseImageGeneratorHandler):

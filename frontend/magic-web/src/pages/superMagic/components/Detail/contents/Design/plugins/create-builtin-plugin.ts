@@ -1,7 +1,7 @@
 import type {
 	CanvasDesignPlugin,
 	CanvasDesignPluginConfig,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { BuiltinPluginSlug } from "./builtin-plugin-slugs"
 
 type PluginManifest = Omit<

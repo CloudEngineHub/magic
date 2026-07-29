@@ -86,6 +86,7 @@ const MentionPanel = observer(
 			className,
 			style,
 			disableKeyboardShortcuts = false,
+			enableMultiSelect = true,
 			lockDismissToExplicitClose = false,
 			canToggleMultiSelectItem,
 			viewMode = MentionPanelViewMode.LIST,
@@ -257,16 +258,18 @@ const MentionPanel = observer(
 		const displayItems = state.items
 		const canToggleMultiSelectItemForItem = useCallback(
 			(item: MentionItem) => {
+				if (!enableMultiSelect) return false
 				if (!canTogglePendingItem(item)) return false
 				return canToggleMultiSelectItem ? canToggleMultiSelectItem(item) : true
 			},
-			[canToggleMultiSelectItem],
+			[canToggleMultiSelectItem, enableMultiSelect],
 		)
 
 		const canUseMultiSelectInCurrentList = useMemo(() => {
+			if (!enableMultiSelect) return false
 			if (isRootDefaultCategoryScreen(state)) return false
 			return displayItems.some((item) => canToggleMultiSelectItemForItem(item))
-		}, [canToggleMultiSelectItemForItem, displayItems, state])
+		}, [canToggleMultiSelectItemForItem, displayItems, enableMultiSelect, state])
 
 		const navigationSignature = useMemo(
 			() =>
@@ -771,6 +774,7 @@ const MentionPanel = observer(
 						catalogBehavior={catalogBehavior}
 						buildStoreRequest={buildStoreRequest}
 						canToggleMultiSelectItem={canToggleMultiSelectItem}
+						enableMultiSelect={enableMultiSelect}
 						{...restProps}
 					/>
 				</Suspense>

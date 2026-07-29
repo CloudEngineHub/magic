@@ -29,6 +29,11 @@ class WorkspaceListRequestDTO extends AbstractDTO
     public string $workspaceType = WorkspaceType::Default->value;
 
     /**
+     * Workspace name for fuzzy search.
+     */
+    public string $workspaceName = '';
+
+    /**
      * 页码
      */
     public int $page = 1;
@@ -63,6 +68,7 @@ class WorkspaceListRequestDTO extends AbstractDTO
             ? (int) $request->input('is_archived')
             : WorkspaceArchiveStatus::NotArchived->value;
         $dto->workspaceType = $request->input('workspace_type', WorkspaceType::Default->value);
+        $dto->workspaceName = (string) $request->input('workspace_name', '');
         $dto->page = (int) ($request->input('page', 1) ?: 1);
         $dto->pageSize = (int) ($request->input('page_size', 10) ?: 10);
         $dto->autoCreate = $request->input('auto_create', true) === true
@@ -100,7 +106,16 @@ class WorkspaceListRequestDTO extends AbstractDTO
         // Add workspace_type filter
         $conditions['workspace_type'] = $this->workspaceType;
 
+        if ($this->hasWorkspaceNameSearch()) {
+            $conditions['workspace_name'] = $this->workspaceName;
+        }
+
         return $conditions;
+    }
+
+    public function hasWorkspaceNameSearch(): bool
+    {
+        return $this->workspaceName !== '';
     }
 
     private static function normalizeOrderBy(string $orderBy): string

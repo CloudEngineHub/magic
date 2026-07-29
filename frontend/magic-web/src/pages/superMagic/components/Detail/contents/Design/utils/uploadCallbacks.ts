@@ -3,10 +3,10 @@ import type {
 	UploadFileResponse,
 	UploadFile,
 	UploadSubDirType,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { normalizeDesignAttachmentPathForCanvas } from "./designDslPathUtils"
+import { toDesignDslPath } from "./designPath"
 
 /**
  * 包含 file_id 的上传图片响应类型
@@ -23,7 +23,7 @@ function normalizeUploadResponsePath(params: {
 	designProjectBasePath?: string
 }): string {
 	const { rawPath, uploadSubDir, fileName, designProjectBasePath } = params
-	const normalized = normalizeDesignAttachmentPathForCanvas(rawPath, designProjectBasePath)
+	const normalized = toDesignDslPath(rawPath, { designProjectBasePath })
 	const uploadSubDirPath = `${uploadSubDir}/${fileName}`.replace(/\/+/g, "/")
 	if (normalized === uploadSubDirPath || normalized.startsWith(`${uploadSubDir}/`)) {
 		return normalized.startsWith("./") ? normalized : `./${normalized}`
@@ -54,6 +54,11 @@ interface CreateUploadCallbacksParams {
 		fileName?: string,
 		fileSize?: number,
 	) => Promise<GetFileInfoResponseWithFileId>
+	setFileInfoCache?: (
+		path: string,
+		fileInfo: GetFileInfoResponse,
+		options?: { allowMissingAttachment?: boolean },
+	) => void
 	setIsUploading: (isUploading: boolean) => void
 	setUploadProgress: (progress: number) => void
 	t: (key: string) => string
@@ -121,6 +126,11 @@ export async function processBatchSavedFiles(params: {
 		fileName?: string,
 		fileSize?: number,
 	) => Promise<GetFileInfoResponseWithFileId>
+	setFileInfoCache?: (
+		path: string,
+		fileInfo: GetFileInfoResponse,
+		options?: { allowMissingAttachment?: boolean },
+	) => void
 	t: (key: string) => string
 }): Promise<{
 	responses: UploadFileResponse[]
@@ -134,6 +144,7 @@ export async function processBatchSavedFiles(params: {
 		fileNameToUploadFileMap,
 		processedFileNames,
 		getFileInfoById,
+		setFileInfoCache,
 		t,
 	} = params
 
@@ -180,6 +191,10 @@ export async function processBatchSavedFiles(params: {
 				if (!fileInfo.fileName && savedFile.file_name) {
 					fileInfo.fileName = savedFile.file_name
 				}
+
+				setFileInfoCache?.(filePath, fileInfo, {
+					allowMissingAttachment: true,
+				})
 
 				// 构造上传响应，file_id 已通过展开 fileInfo 自动包含
 				const uploadResponse: UploadFileResponseWithFileId = {
@@ -233,6 +248,7 @@ export function createUploadCallbacks(params: CreateUploadCallbacksParams): {
 		processedFileNames,
 		pendingGetFileInfoRef,
 		getFileInfoById,
+		setFileInfoCache,
 		setIsUploading,
 		setUploadProgress,
 		t,
@@ -302,6 +318,7 @@ export function createUploadCallbacks(params: CreateUploadCallbacksParams): {
 					processedFileNames,
 					pendingGetFileInfoRef,
 					getFileInfoById,
+					setFileInfoCache,
 					t,
 				})
 

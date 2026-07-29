@@ -2,18 +2,21 @@
 from __future__ import annotations
 
 from agentlang.logger import get_logger
-from app.service.cli_status.common.interfaces import CliCommandResult, CliCommandRunner, CliStatusProbe, CliStatusSnapshot
+from app.service.cli_status.common.interfaces import (
+    CliCommandResult,
+    CliCommandRunner,
+    CliStatusProbe,
+    CliStatusSnapshot,
+)
 from app.service.cli_status.common.parsing import json_contains_truthy, loads_json, parse_auth_from_text
 from app.service.cli_status.common.runner import run_cli_command
+from app.service.runtime_cli_catalog import RUNTIME_MANAGED_CLIS
 
 logger = get_logger(__name__)
 
 DWS_STATUS_COMMAND_TIMEOUT_SECONDS = 2.0
 
-DWS_HORIZON_TEXT = (
-    "dws CLI is currently authenticated. It can connect to DingTalk/钉钉 capabilities. "
-    "To use these capabilities, call read_skills(['dingtalk-cli'])."
-)
+DWS_HORIZON_TEXT = RUNTIME_MANAGED_CLIS["dws"].build_authenticated_horizon()
 
 
 class DwsCliStatusProbe(CliStatusProbe):

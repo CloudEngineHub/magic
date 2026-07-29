@@ -181,6 +181,10 @@ export class PublishPanelStore {
 		}
 	}
 
+	setCurrentPublishTo(publishTo: PublishTo | null) {
+		this.currentPublishTo = publishTo
+	}
+
 	selectInternalTarget(target: PublishInternalTarget) {
 		if (!this.availableInternalTargets.includes(target)) return
 		if (this.draft.internalTarget === target) return

@@ -14,6 +14,7 @@ use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
 use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationRepositoryInterface;
 use App\Domain\Permission\Entity\RoleEntity;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\RoleRepositoryInterface;
 use App\Domain\Permission\Service\RoleDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -59,12 +60,14 @@ class RoleDomainServicePermissionTest extends HttpTestCase
         $permission = Mockery::mock(MagicPermissionInterface::class);
         $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
         $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
 
         $service = new RoleDomainService(
             $roleRepository,
             $permission,
             $userRepository,
-            $organizationRepository
+            $organizationRepository,
+            $organizationAdminRepository
         );
 
         $permission->shouldReceive('isValidPermission')
@@ -106,13 +109,15 @@ class RoleDomainServicePermissionTest extends HttpTestCase
         $roleRepository = Mockery::mock(RoleRepositoryInterface::class);
         $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
         $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
         $permission = new MagicPermission();
 
         $service = new RoleDomainService(
             $roleRepository,
             $permission,
             $userRepository,
-            $organizationRepository
+            $organizationRepository,
+            $organizationAdminRepository
         );
 
         $roleRepository->shouldReceive('getByName')
@@ -156,18 +161,24 @@ class RoleDomainServicePermissionTest extends HttpTestCase
         $permission = Mockery::mock(MagicPermissionInterface::class);
         $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
         $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
 
         $service = new RoleDomainService(
             $roleRepository,
             $permission,
             $userRepository,
-            $organizationRepository
+            $organizationRepository,
+            $organizationAdminRepository
         );
 
         $roleRepository->shouldReceive('getUserPermissions')
             ->once()
             ->with('OFFICIAL_ORG', 'user_1')
             ->andReturn(['permission.a']);
+        $organizationRepository->shouldReceive('getByCode')
+            ->once()
+            ->with('OFFICIAL_ORG')
+            ->andReturn(new OrganizationEntity());
         $permission->shouldReceive('checkPermission')
             ->once()
             ->with('target.permission', ['permission.a'], true)
@@ -190,18 +201,24 @@ class RoleDomainServicePermissionTest extends HttpTestCase
         $permission = Mockery::mock(MagicPermissionInterface::class);
         $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
         $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
 
         $service = new RoleDomainService(
             $roleRepository,
             $permission,
             $userRepository,
-            $organizationRepository
+            $organizationRepository,
+            $organizationAdminRepository
         );
 
         $roleRepository->shouldReceive('getUserPermissions')
             ->once()
             ->with('NORMAL_ORG', 'user_2')
             ->andReturn(['permission.b']);
+        $organizationRepository->shouldReceive('getByCode')
+            ->once()
+            ->with('NORMAL_ORG')
+            ->andReturn(new OrganizationEntity());
         $permission->shouldReceive('checkPermission')
             ->once()
             ->with('target.permission', ['permission.b'], false)
@@ -245,18 +262,98 @@ class RoleDomainServicePermissionTest extends HttpTestCase
         );
     }
 
+    public function testGetUserPermissionsAddsPersonalPermissionForPersonalOrganizationOwner(): void
+    {
+        $roleRepository = Mockery::mock(RoleRepositoryInterface::class);
+        $permission = Mockery::mock(MagicPermissionInterface::class);
+        $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
+        $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
+
+        $organization = new OrganizationEntity();
+        $organization->setType(1);
+        $organization->setCreatorId('personal_owner');
+
+        $roleRepository->shouldReceive('getUserPermissions')
+            ->once()
+            ->with('PERSONAL_ORG', 'personal_owner')
+            ->andReturn([]);
+        $organizationRepository->shouldReceive('getByCode')
+            ->once()
+            ->with('PERSONAL_ORG')
+            ->andReturn($organization);
+        $organizationAdminRepository->shouldNotReceive('isOrganizationAdmin');
+
+        $service = new RoleDomainService(
+            $roleRepository,
+            $permission,
+            $userRepository,
+            $organizationRepository,
+            $organizationAdminRepository
+        );
+
+        $this->assertSame(
+            [MagicPermission::PERSON_PERMISSIONS],
+            $service->getUserPermissions(
+                PermissionDataIsolation::create('PERSONAL_ORG', 'personal_owner'),
+                'personal_owner'
+            )
+        );
+    }
+
+    public function testGetUserPermissionsIgnoresAdminRecordsForPersonalOrganizationNonOwner(): void
+    {
+        $roleRepository = Mockery::mock(RoleRepositoryInterface::class);
+        $permission = Mockery::mock(MagicPermissionInterface::class);
+        $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
+        $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
+
+        $organization = new OrganizationEntity();
+        $organization->setType(1);
+        $organization->setCreatorId('personal_owner');
+
+        $roleRepository->shouldReceive('getUserPermissions')
+            ->once()
+            ->with('PERSONAL_ORG', 'legacy_admin')
+            ->andReturn([]);
+        $organizationRepository->shouldReceive('getByCode')
+            ->once()
+            ->with('PERSONAL_ORG')
+            ->andReturn($organization);
+        $organizationAdminRepository->shouldNotReceive('isOrganizationAdmin');
+
+        $service = new RoleDomainService(
+            $roleRepository,
+            $permission,
+            $userRepository,
+            $organizationRepository,
+            $organizationAdminRepository
+        );
+
+        $this->assertSame(
+            [],
+            $service->getUserPermissions(
+                PermissionDataIsolation::create('PERSONAL_ORG', 'legacy_admin'),
+                'legacy_admin'
+            )
+        );
+    }
+
     private function assertOrganizationAdminPermissionByOrgType(string $organizationCode, int $organizationType, string $expectedPermission): void
     {
         $roleRepository = Mockery::mock(RoleRepositoryInterface::class);
         $userRepository = Mockery::mock(MagicUserRepositoryInterface::class);
         $organizationRepository = Mockery::mock(OrganizationRepositoryInterface::class);
+        $organizationAdminRepository = Mockery::mock(OrganizationAdminRepositoryInterface::class);
         $permission = new MagicPermission();
 
         $service = new RoleDomainService(
             $roleRepository,
             $permission,
             $userRepository,
-            $organizationRepository
+            $organizationRepository,
+            $organizationAdminRepository
         );
 
         $organization = new OrganizationEntity();

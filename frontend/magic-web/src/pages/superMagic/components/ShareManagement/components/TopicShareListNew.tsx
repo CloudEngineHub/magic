@@ -13,7 +13,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { convertTopicShareItemToShareItem } from "../utils/shareTypeHelpers"
 import { useShareItemActions } from "../hooks/useShareItemActions"
 import { useTopicSharePopover } from "../hooks/useTopicSharePopover"
-import { isMagicApp } from "@/utils/devices"
+import { isNoHoverCoarsePointer } from "@/utils/devices"
 
 interface TopicShareListNewProps {
 	data: TopicShareItem[]
@@ -28,6 +28,8 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 	const [selectedItem, setSelectedItem] = useState<TopicShareItem | null>(null)
 	const [hoveredId, setHoveredId] = useState<string | null>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
+	// No-hover touch layouts need the row action trigger pinned without waiting for hover.
+	const shouldShowRowActionsWithoutHover = isNoHoverCoarsePointer()
 
 	// 使用 TopicSharePopover hook
 	const topicSharePopover = useTopicSharePopover()
@@ -99,8 +101,8 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 			<div ref={containerRef} className="flex flex-col gap-2">
 				{data.map((item) => {
 					const isHovered = hoveredId === item.resource_id
-					// Magic App desktop layout has no dependable hover, so pin the action at row end.
-					const showActions = (isHovered || isMagicApp) && !item.deleted_at
+					const showActions =
+						(isHovered || shouldShowRowActionsWithoutHover) && !item.deleted_at
 
 					return (
 						<div

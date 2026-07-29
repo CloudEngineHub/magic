@@ -84,6 +84,38 @@ return [
             ],
         ],
         [
+            'code' => BillingType::Seedream5ProImage->value,
+            'label' => 'Seedream 5.0 Pro 图片计费',
+            'category' => Category::VLM->value,
+            'billing_type' => BillingType::Seedream5ProImage->value,
+            'items' => [
+                [
+                    'billing_object' => BillingObject::IMAGE_REFERENCE_INPUT_COUNT,
+                    'label' => '额外参考输入图片单价',
+                ],
+                [
+                    'billing_object' => BillingObject::IMAGE_REFERENCE_INPUT_COUNT_COST,
+                    'label' => '额外参考输入图片成本价',
+                ],
+                [
+                    'billing_object' => BillingObject::imageCount('lte_236w_pixel')->value,
+                    'label' => '236万像素及以下输出图片单价',
+                ],
+                [
+                    'billing_object' => BillingObject::imageCountCost('lte_236w_pixel')->value,
+                    'label' => '236万像素及以下输出图片成本价',
+                ],
+                [
+                    'billing_object' => BillingObject::imageCount('gt_236w_pixel')->value,
+                    'label' => '236万像素以上输出图片单价',
+                ],
+                [
+                    'billing_object' => BillingObject::imageCountCost('gt_236w_pixel')->value,
+                    'label' => '236万像素以上输出图片成本价',
+                ],
+            ],
+        ],
+        [
             'code' => BillingType::ImageTokensWithThought->value,
             'label' => '图片 Token 计费（含思考过程）',
             'category' => Category::VLM->value,
@@ -318,18 +350,22 @@ return [
     ],
 
     'defaults' => [
+        // 文本模型默认模板
         Category::LLM->value => [
             BillingType::TextTokens->value,
         ],
+        // 生图模型默认模板
         Category::VLM->value => [
             BillingType::ImageCount->value,
         ],
+        // 视频模型默认模板
         Category::VGM->value => [
             BillingType::VideoResolutionDuration->value,
         ],
     ],
 
     'provider_templates' => [
+        // 生图模型服务商模板
         [
             'provider_code' => ProviderCode::Google->value,
             'category' => Category::VLM->value,
@@ -363,6 +399,16 @@ return [
                 BillingType::ImageCount->value,
             ],
         ],
+        [
+            'provider_code' => ProviderCode::VolcengineArk->value,
+            'category' => Category::VLM->value,
+            'template_codes' => [
+                BillingType::ImageCount->value,
+                BillingType::Seedream5ProImage->value,
+            ],
+        ],
+
+        // 视频模型服务商模板
         [
             'provider_code' => ProviderCode::Cloudsway->value,
             'category' => Category::VGM->value,

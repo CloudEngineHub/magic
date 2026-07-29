@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const apiMocks = vi.hoisted(() => ({
 	createFile: vi.fn(),
 	batchSaveFiles: vi.fn(),
+	getProjectAttachmentsV2Page: vi.fn(),
 }))
 
 const uploadTokenServiceMocks = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createFile: apiMocks.createFile,
 		batchSaveFiles: apiMocks.batchSaveFiles,
+		getProjectAttachmentsV2Page: apiMocks.getProjectAttachmentsV2Page,
 	},
 	FileApi: {
 		reportFileUploads: vi.fn(),
@@ -81,6 +83,11 @@ describe("FileUploadStore", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		apiMocks.getProjectAttachmentsV2Page.mockResolvedValue({
+			list: [],
+			next_parent_ids: null,
+			has_more: false,
+		})
 		uploadTokenServiceMocks.getUploadToken.mockResolvedValue(undefined)
 		uploadTokenServiceMocks.changeDir.mockImplementation((credentials, suffixDir) => ({
 			...credentials,
@@ -179,6 +186,16 @@ describe("FileUploadStore", () => {
 			expect(store.isCurrentSessionUploadFile(addedFiles?.[0].id || "")).toBe(true)
 		})
 
+		it("should retain hidden temp metadata before a project exists", async () => {
+			const file = new File(["image"], "photo.png", { type: "image/png" })
+			const addedFiles = await store.addFiles([file], undefined, { useTempDirectory: true })
+
+			expect(addedFiles?.[0]).toMatchObject({
+				defaultRelativePath: ".tmp/photo.png",
+				isHidden: true,
+			})
+		})
+
 		it("should create and use hidden temp directory for pasted text files", async () => {
 			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
 			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
@@ -212,15 +229,171 @@ describe("FileUploadStore", () => {
 				expect.objectContaining({ temporary_credential: { dir: "project/workspace" } }),
 				".tmp",
 			)
-			expect(projectFilesStore.getFileNamesInFolder).toHaveBeenCalledWith(
-				"project/workspace/.tmp/",
-			)
+			expect(apiMocks.getProjectAttachmentsV2Page).toHaveBeenCalledWith({
+				projectId: "project-1",
+				parentId: "tmp-dir-id",
+				nextParentIds: undefined,
+				pageSize: 1000,
+				fileType: ["user_upload", "process", "system_auto_upload", "directory"],
+			})
 			expect(addedFiles?.[0]).toMatchObject({
 				name: "pasted.txt",
 				parentId: "tmp-dir-id",
 				defaultRelativePath: ".tmp/pasted.txt",
 				isHidden: true,
 			})
+		})
+
+		it("should keep repeated temp uploads and increment duplicate image names", async () => {
+			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
+			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
+				temporary_credential: { dir: "project/workspace" },
+			})
+			const projectFilesStore = {
+				workspaceFilesList: [],
+				getFileNamesInFolder: vi.fn(() => []),
+			}
+			store = new FileUploadStore({
+				projectId: "project-1",
+				projectFilesStore: projectFilesStore as any,
+			})
+
+			const first = new File(["image"], "photo.png", { type: "image/png", lastModified: 1 })
+			const second = new File(["image"], "photo.png", { type: "image/png", lastModified: 1 })
+			const firstUpload = await store.addFiles([first], undefined, {
+				useTempDirectory: true,
+			})
+			const secondUpload = await store.addFiles([second], undefined, {
+				useTempDirectory: true,
+			})
+
+			expect(firstUpload?.[0].name).toBe("photo.png")
+			expect(secondUpload?.[0].name).toBe("photo (1).png")
+			expect(store.files.every((file) => file.parentId === "tmp-dir-id")).toBe(true)
+		})
+
+		it("should increment names from direct temp files and ignore nested files", async () => {
+			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
+			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
+				temporary_credential: { dir: "project/workspace" },
+			})
+			apiMocks.getProjectAttachmentsV2Page
+				.mockResolvedValueOnce({ list: [], next_parent_ids: null, has_more: false })
+				.mockResolvedValueOnce({
+					list: [
+						{
+							type: "file",
+							file_id: "topic-a-image",
+							file_name: "image.png",
+							parent_id: "tmp-dir-id",
+							is_hidden: true,
+						},
+					],
+					next_parent_ids: null,
+					has_more: false,
+				})
+				.mockResolvedValueOnce({
+					list: [
+						{
+							type: "file",
+							file_id: "topic-a-image",
+							file_name: "image.png",
+							parent_id: "tmp-dir-id",
+							is_hidden: true,
+						},
+						{
+							type: "file",
+							file_id: "topic-b-image",
+							file_name: "image (1).png",
+							parent_id: "tmp-dir-id",
+							is_hidden: true,
+						},
+						{
+							type: "file",
+							file_id: "nested-image",
+							file_name: "image (2).png",
+							parent_id: "nested-directory-id",
+							is_hidden: true,
+						},
+					],
+					next_parent_ids: null,
+					has_more: false,
+				})
+			const projectFilesStore = {
+				workspaceFilesList: [],
+				getFileNamesInFolder: vi.fn(() => []),
+			}
+			store = new FileUploadStore({
+				projectId: "project-1",
+				projectFilesStore: projectFilesStore as any,
+			})
+
+			await store.addFiles(
+				[new File(["topic-a"], "image.png", { type: "image/png" })],
+				undefined,
+				{ useTempDirectory: true },
+			)
+			store.clearFilesLocalOnly()
+			const topicBFiles = await store.addFiles(
+				[new File(["topic-b"], "image.png", { type: "image/png" })],
+				undefined,
+				{ useTempDirectory: true },
+			)
+
+			expect(topicBFiles?.[0]).toMatchObject({
+				name: "image (1).png",
+				defaultRelativePath: ".tmp/image (1).png",
+			})
+
+			store.clearFilesLocalOnly()
+			const topicCFiles = await store.addFiles(
+				[new File(["topic-c"], "image.png", { type: "image/png" })],
+				undefined,
+				{ useTempDirectory: true },
+			)
+
+			expect(topicCFiles?.[0]).toMatchObject({
+				name: "image (2).png",
+				defaultRelativePath: ".tmp/image (2).png",
+			})
+		})
+
+		it("should stop reading the temp directory after the page limit", async () => {
+			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
+			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
+				temporary_credential: { dir: "project/workspace" },
+			})
+			let pageIndex = 0
+			apiMocks.getProjectAttachmentsV2Page.mockImplementation(async () => {
+				pageIndex += 1
+				return {
+					list: [],
+					has_more: true,
+					next_parent_ids: [
+						{
+							parent_id: "tmp-dir-id",
+							after_sort: pageIndex,
+							after_file_id: `file-${pageIndex}`,
+						},
+					],
+				}
+			})
+			store = new FileUploadStore({
+				projectId: "project-1",
+				projectFilesStore: {
+					workspaceFilesList: [],
+					getFileNamesInFolder: vi.fn(() => []),
+				} as any,
+			})
+
+			await expect(
+				store.addFiles(
+					[new File(["image"], "image.png", { type: "image/png" })],
+					undefined,
+					{ useTempDirectory: true },
+				),
+			).rejects.toThrow("temp directory attachment pages exceeded limit")
+			expect(apiMocks.getProjectAttachmentsV2Page).toHaveBeenCalledTimes(100)
 		})
 
 		it("should mark pasted pending project file as virtual reference", () => {

@@ -103,8 +103,12 @@
 		"title": "技能库"
 	},
 	"slidesTemplates": {
-		"templateCount": "{{count}} 套",
-		"title": "AI PPT"
+		"compactCount": "{{value}} 套",
+		"statisticsTooltip": "{{title}} · 今日新增 {{todayAdded}} 套 · 模板总数 {{total}} 套",
+		"statisticsTooltipWithoutToday": "{{title}} · 模板总数 {{total}} 套",
+		"templateTotalCount": "模板总数 {{value}} 套",
+		"title": "AI PPT",
+		"todayAddedCount": "今日新增 {{value}} 套"
 	},
 	"superLobster": {
 		"card": {

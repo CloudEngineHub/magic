@@ -598,7 +598,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	return (
 		<Dialog open={open} onOpenChange={onClose}>
 			<DialogContent
-				className="w-[600px] max-w-[calc(100vw-2rem)] gap-0 p-0 sm:max-w-[600px]"
+				className="max-h-[calc(100dvh-2rem)] w-[600px] max-w-[calc(100vw-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-[600px]"
 				style={{ zIndex: 1200 }}
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onEscapeKeyDown={(e) => e.preventDefault()}
@@ -614,8 +614,11 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 					</DialogTitle>
 				</DialogHeader>
 
-				{/* Content */}
-				<div className="flex flex-col items-center gap-3 px-8 py-8">
+				{/* Keep the header and footer visible while short viewports scroll the main content. */}
+				<div
+					className="flex min-h-0 flex-col items-center gap-3 overflow-y-auto overscroll-contain px-8 py-8"
+					data-testid="share-success-modal-scroll-content"
+				>
 					{/* Success Icon */}
 					<div className="flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-background p-2 shadow-xs">
 						<IconShare3 className="h-7 w-7 text-foreground" strokeWidth={1} />

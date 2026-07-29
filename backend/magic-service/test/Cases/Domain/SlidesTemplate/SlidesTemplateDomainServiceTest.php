@@ -187,6 +187,22 @@ class SlidesTemplateDomainServiceTest extends TestCase
         );
     }
 
+    public function testDefaultUsageCountPolicyReturnsTodayCreatedCount(): void
+    {
+        $repository = new CapturingSlidesTemplateRepository();
+        $repository->countResult = 100;
+        $repository->totalUsageCount = 200;
+        $repository->todayCreatedCount = 12;
+
+        $policy = new DefaultSlidesTemplateUsageCountPolicy($repository);
+
+        $this->assertSame([
+            'total' => 100,
+            'total_usage_count' => 200,
+            'template_count_today_growth' => 12,
+        ], $policy->getCount($this->makeDataIsolation(), new SlidesTemplateQuery()));
+    }
+
     private function makeTemplate(): SlidesTemplateEntity
     {
         $template = new SlidesTemplateEntity();
@@ -229,6 +245,12 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
 
     public ?SlidesTemplateEntity $entityWithTrashed = null;
 
+    public int $countResult = 0;
+
+    public int $totalUsageCount = 0;
+
+    public int $todayCreatedCount = 0;
+
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateEntity
     {
         return $this->entityToFind;
@@ -251,12 +273,17 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
 
     public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
     {
-        return 0;
+        return $this->countResult;
     }
 
     public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
     {
-        return 0;
+        return $this->totalUsageCount;
+    }
+
+    public function countTodayCreated(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return $this->todayCreatedCount;
     }
 
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity

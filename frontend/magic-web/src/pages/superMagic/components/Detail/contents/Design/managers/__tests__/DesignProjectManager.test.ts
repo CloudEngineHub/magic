@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasConnection,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { DesignProjectManager } from "../DesignProjectManager"
 import type { DesignConflict, DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"
@@ -31,12 +34,24 @@ function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
 	}
 }
 
-function createDesignData(name: string, elements: LayerElement[] = []): DesignData {
+function connection(
+	id: string,
+	sourceElementId = "source",
+	targetElementId = "target",
+): CanvasConnection {
+	return { id, sourceElementId, targetElementId }
+}
+
+function createDesignData(
+	name: string,
+	elements: LayerElement[] = [],
+	connections?: CanvasConnection[],
+): DesignData {
 	return {
 		type: "design",
 		name,
 		version: "2.0.0",
-		canvas: { elements },
+		canvas: { elements, ...(connections ? { connections } : {}) },
 	}
 }
 
@@ -981,6 +996,140 @@ describe("DesignProjectManager conflict boundaries", () => {
 				reason: "local-edit",
 			}),
 		)
+	})
+
+	it("creates a connection-level conflict when both sides change the same connection", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseData = createDesignData("design", elements, [
+			connection("edge", "source", "target"),
+		])
+		const localData = createDesignData("design", elements, [
+			connection("edge", "target", "other"),
+		])
+		const remoteData = createDesignData("design", elements, [
+			connection("edge", "other", "source"),
+		])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			saveManager: {
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		expect(applied).toBe(true)
+		expect(getState().conflictState?.reason).toBe("connection-level-conflict")
+		expect(getState().designData.canvas?.connections).toEqual([
+			connection("edge", "target", "other"),
+		])
+		expect(getState().conflictState?.mergedData?.canvas?.connections).toEqual([
+			connection("edge", "other", "source"),
+		])
+		expect(getState().conflictState?.connectionConflicts).toEqual([
+			expect.objectContaining({
+				connectionId: "edge",
+				reason: "same-connection-changed",
+				status: "unresolved",
+				baseConnection: connection("edge", "source", "target"),
+				localConnection: connection("edge", "target", "other"),
+				remoteConnection: connection("edge", "other", "source"),
+			}),
+		])
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
+	})
+
+	it("resolves a connection-level blocking conflict with the remote connection", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseData = createDesignData("design", elements, [
+			connection("edge", "source", "target"),
+		])
+		const localData = createDesignData("design", elements, [
+			connection("edge", "target", "other"),
+		])
+		const remoteData = createDesignData("design", elements, [
+			connection("edge", "other", "source"),
+		])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			saveManager: {
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+		managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		const didResolve = manager.resolveBlockingConflictWithRemote()
+
+		expect(didResolve).toBe(true)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().designData.canvas?.connections).toEqual([
+			connection("edge", "other", "source"),
+		])
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
+	})
+
+	it("keeps a connection-level conflict recoverable when local force-save fails", async () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseData = createDesignData("design", elements, [
+			connection("edge", "source", "target"),
+		])
+		const localData = createDesignData("design", elements, [
+			connection("edge", "target", "other"),
+		])
+		const remoteData = createDesignData("design", elements, [
+			connection("edge", "other", "source"),
+		])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			saveManager: {
+				commitSave: (options?: unknown) => Promise<unknown>
+			}
+		}
+		managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+		const conflict = getState().conflictState
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: false,
+			reason: "error",
+			error: "save failed",
+		})
+
+		const didResolve = await manager.resolveBlockingConflictWithLocal()
+
+		expect(didResolve).toBe(false)
+		expect(getState().conflictState).toEqual(conflict)
+		expect(getState().designData.canvas?.connections).toEqual([
+			connection("edge", "target", "other"),
+		])
+		expect(writeDesignDraft).toHaveBeenCalled()
 	})
 
 	it("saves non-conflicting changes remotely while unresolved element conflicts keep remote candidates", async () => {

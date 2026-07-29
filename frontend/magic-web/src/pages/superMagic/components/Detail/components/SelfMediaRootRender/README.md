@@ -228,11 +228,11 @@ window.magicProjectConfigure(window.magicProjectConfig)
 
 1. 宿主侧读取 iframe 的实际内容尺寸
 2. 导出前把已支持的 Font Awesome 图标临时替换为内联 SVG
-3. 使用 `snapdom` 直接对 iframe body 截图生成 PNG
+3. 使用 `snapdom` 直接对 iframe body 截图，并按用户选择生成 PNG、JPG 或 WebP
 4. 截图完成后恢复原始 DOM
 5. 父层把所有图片打包成 ZIP
 
-如果 iframe 内自截图失败，则回退到宿主侧 `html-to-image.toPng(iframeElement)`。
+导出弹窗通过同一套实际内容尺寸计算逐张图片和长图的输出像素，长图高度包含卡片间分隔线。如果 iframe 内自截图失败，则回退到宿主侧 `html-to-image.toBlob(iframeElement)`，并保持所选图片格式。
 
 ## 平台视图矩阵
 

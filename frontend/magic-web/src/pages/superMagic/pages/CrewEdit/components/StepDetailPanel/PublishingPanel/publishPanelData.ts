@@ -1,5 +1,6 @@
 import type {
 	AgentDetailResponse,
+	AgentPublishTargetType,
 	AgentVersionItem,
 	CrewI18nText,
 	PublishAgentParams,
@@ -14,6 +15,7 @@ import type {
 	PublishHistoryRecord,
 	PublishRecordStatus,
 	PublishReviewProgress,
+	PublishTo,
 } from "@/pages/superMagic/components/PublishPanel"
 import type { PublishSpecificMember } from "@/pages/superMagic/components/PublishPanel/types"
 import {
@@ -91,11 +93,9 @@ export function createCrewEditPublishPanelData({
 		canPublishTeam,
 	})
 	const draft = createDraftForAvailability(availability)
-	if (
-		agentDetail.publish_type &&
-		availability.availablePublishTo.includes(agentDetail.publish_type)
-	) {
-		draft.publishTo = agentDetail.publish_type
+	const currentPublishTo = resolveCurrentPublishTo(agentDetail, versions)
+	if (currentPublishTo && availability.availablePublishTo.includes(currentPublishTo)) {
+		draft.publishTo = currentPublishTo
 	}
 
 	return {
@@ -119,7 +119,7 @@ export function createCrewEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
-		currentPublishTo: agentDetail.publish_type ?? null,
+		currentPublishTo,
 		marketCategories: categories.map((category) => ({
 			id: category.id,
 			name: category.name,
@@ -334,8 +334,29 @@ function mapPanelTargetToApi(draft: PublishDraft): PublishAgentParams["publish_t
 }
 
 function mapApiTargetToPublishTo(apiTarget: AgentVersionItem["publish_target_type"]) {
-	if (apiTarget === "MARKET") return "MARKET" as const
-	return "INTERNAL" as const
+	return mapAgentPublishTargetTypeToPublishTo(apiTarget) ?? "INTERNAL"
+}
+
+export function mapAgentPublishTargetTypeToPublishTo(
+	apiTarget?: AgentPublishTargetType | null,
+): PublishTo | null {
+	if (!apiTarget) return null
+	return apiTarget === "MARKET" ? "MARKET" : "INTERNAL"
+}
+
+function resolveCurrentPublishTo(
+	agentDetail: AgentDetailResponse,
+	versions: AgentVersionItem[],
+): PublishTo | null {
+	const detailPublishTo = mapAgentPublishTargetTypeToPublishTo(agentDetail.publish_target_type)
+	if (detailPublishTo) return detailPublishTo
+
+	const versionTarget =
+		versions.find((version) => version.is_current_version)?.publish_target_type ??
+		versions.find(isPublishedAgentVersion)?.publish_target_type ??
+		versions[0]?.publish_target_type
+
+	return mapAgentPublishTargetTypeToPublishTo(versionTarget)
 }
 
 function normalizeCategoryId(categoryId?: string | number | null) {

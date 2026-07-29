@@ -3,14 +3,7 @@ import XMarkdown, {
 	type XMarkdownProps,
 } from "@ant-design/x-markdown"
 import { QRCode } from "antd"
-import {
-	memo,
-	useMemo,
-	useRef,
-	type ComponentProps as ReactComponentProps,
-	type MutableRefObject,
-	type ReactElement,
-} from "react"
+import { memo, useMemo, useRef, type MutableRefObject, type ReactElement } from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
@@ -22,6 +15,7 @@ import {
 import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
+import { normalizeInlineStyle } from "./normalizeInlineStyle"
 import { cn } from "@/lib/utils"
 import type { MarkdownComponentProps } from "./types"
 import {
@@ -196,6 +190,7 @@ export function useMarkdownComponent({
 		() => ({
 			pre(props: XMarkdownComponentProps) {
 				const { children, className: preClassName, style, title } = props
+				const normalizedStyle = normalizeInlineStyle(style)
 				const { domNode } = props as XMarkdownComponentProps & {
 					domNode?: unknown
 				}
@@ -225,7 +220,7 @@ export function useMarkdownComponent({
 					return (
 						<pre
 							className={typeof preClassName === "string" ? preClassName : undefined}
-							style={style}
+							style={normalizedStyle}
 							title={typeof title === "string" ? title : undefined}
 						>
 							{children}
@@ -238,7 +233,7 @@ export function useMarkdownComponent({
 				return (
 					<HtmlCodeBlockPreview
 						className={typeof preClassName === "string" ? preClassName : undefined}
-						style={style}
+						style={normalizedStyle}
 						title={typeof title === "string" ? title : undefined}
 						isStreaming={isCodeBlockStreaming}
 						// isSuspended={isSuspendedRef.current}

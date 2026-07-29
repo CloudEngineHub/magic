@@ -93,6 +93,8 @@ interface UseContextMenuOptions {
 	filterMenuItems?: (menuItems: MenuItem[]) => MenuItem[]
 	/** 自定义处理批量菜单渲染 */
 	filterBatchDownloadLayerMenuItems?: (menuItems: MenuItem[]) => MenuItem[]
+	/** 是否允许显示文件下载菜单 */
+	allowDownload?: boolean
 	/* 获取快捷键提示 */
 	getShortcutHint?: (action: "addToCurrentChat") => { modifiers: string[]; key: string } | null
 	/* 进入多选模式并选中当前项 */
@@ -301,6 +303,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		shouldUseSingleDownloadEntry,
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
+		allowDownload,
 		getShortcutHint,
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
@@ -656,6 +659,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				{ type: "divider" as const },
 				// Folder download menu: single source via buildSingleFileDownloadMenu (avoids duplicate entries)
 				...(() => {
+					if (allowDownload === false) return []
 					const downloadMenuItems: MenuItem[] = []
 					appendDownloadContextMenuItems(
 						downloadMenuItems,
@@ -867,14 +871,16 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				{ type: "divider" as const },
 			)
 
-			appendDownloadContextMenuItems(
-				menuItems,
-				item,
-				downloadHandlers,
-				t,
-				downloadIcon,
-				downloadMenuOptions,
-			)
+			if (allowDownload !== false) {
+				appendDownloadContextMenuItems(
+					menuItems,
+					item,
+					downloadHandlers,
+					t,
+					downloadIcon,
+					downloadMenuOptions,
+				)
+			}
 
 			menuItems.push(
 				{ type: "divider" as const },

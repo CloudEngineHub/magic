@@ -1,9 +1,29 @@
-import type { ExportOptions, ExportHandle } from "./api/options"
+import type { ExportOptions, ExportHandle, GeneratedPPTX, GenerateHandle } from "./api/options"
 import { configureLogger, resetLogger } from "./logger"
 import { HtmlRenderSandbox } from "./sandbox"
 import { DEFAULT_CONFIG } from "./shared/unit"
 import { runExport } from "./pipeline/export-slides"
 import type { Html2PptxRuntime } from "./runtime"
+
+/** Create a cancellable PPTX generator that returns a Blob instead of downloading it. */
+export function createPptxGenerator(runtime: Html2PptxRuntime = {}) {
+	return function generatePPTX(
+		content: string | string[],
+		options?: ExportOptions,
+	): GenerateHandle {
+		const controller = new AbortController()
+		const promise = runExportPipeline(content, options, controller.signal, runtime, true).then(
+			(output) => {
+				if (!output) throw new Error("[generatePPTX] No PPTX artifact was produced")
+				return output
+			},
+		)
+		return { promise, cancel: () => controller.abort() }
+	}
+}
+
+/** Generate a PPTX artifact without triggering a browser download. */
+export const generatePPTX = createPptxGenerator()
 
 /**
  * Export HTML as a PPTX file
@@ -28,7 +48,7 @@ import type { Html2PptxRuntime } from "./runtime"
  *
  * // Concurrent exports with independent cancellation
  * const exportA = exportPPTX(htmlA)
- * const exportB = exportPPTX(htmlB, { fileName: 'b.pptx' })
+ * const exportB = exportPPTX(htmlB, { fileName: "b.pptx" })
  * exportA.cancel()
  * await exportB.promise
  * ```
@@ -36,7 +56,9 @@ import type { Html2PptxRuntime } from "./runtime"
 export function createPptxExporter(runtime: Html2PptxRuntime = {}) {
 	return function exportPPTX(content: string | string[], options?: ExportOptions): ExportHandle {
 		const controller = new AbortController()
-		const promise = runExportPipeline(content, options, controller.signal, runtime)
+		const promise = runExportPipeline(content, options, controller.signal, runtime, false).then(
+			() => undefined,
+		)
 		return { promise, cancel: () => controller.abort() }
 	}
 }
@@ -48,7 +70,8 @@ async function runExportPipeline(
 	options: ExportOptions | undefined,
 	signal: AbortSignal,
 	runtime: Html2PptxRuntime,
-): Promise<void> {
+	collectOutput: boolean,
+): Promise<GeneratedPPTX | void> {
 	configureLogger({
 		minLevel: options?.logLevel,
 		logger: options?.logger,
@@ -64,7 +87,7 @@ async function runExportPipeline(
 				ReadyController: runtime.sandboxReadyController,
 			})
 	try {
-		await runExport({
+		return await runExport({
 			config,
 			fileName,
 			htmlSlides,
@@ -75,11 +98,10 @@ async function runExportPipeline(
 			onResourceError: options?.onResourceLoadError,
 			fontResolver: options?.fontResolver,
 			fontMissPolicy: options?.fontMissPolicy,
+			collectOutput,
 			signal,
 			runtime: runtime.pipeline,
 		})
-	} catch (error) {
-		throw error
 	} finally {
 		sandbox.destroy()
 		if (options?.logLevel || options?.logger) resetLogger()
@@ -91,6 +113,8 @@ export type {
 	ExportOptions,
 	ExportPageContext,
 	ExportHandle,
+	GeneratedPPTX,
+	GenerateHandle,
 	ResourceLoadError,
 } from "./api/options"
 export type {
@@ -100,6 +124,8 @@ export type {
 	UsedFont,
 } from "./api/font"
 export { DEFAULT_CONFIG } from "./shared/unit"
+export { ExportFidelityError, isExportFidelityError } from "./errors"
+export type { ExportFidelityFailureKind } from "./errors"
 export { LogLevel } from "./logger"
 export type { ExternalLogger } from "./logger"
 export {

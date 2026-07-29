@@ -1,9 +1,14 @@
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import TopicSharePopover from "../index"
 
 const popoverContentProps = vi.hoisted(() => ({
 	onFocusOutside: undefined as undefined | ((event: { preventDefault: () => void }) => void),
+}))
+
+const deviceMocks = vi.hoisted(() => ({
+	isMagicApp: false,
+	isNoHoverCoarsePointer: false,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -21,7 +26,10 @@ vi.mock("ahooks", async () => {
 })
 
 vi.mock("@/utils/devices", () => ({
-	isMagicApp: true,
+	get isMagicApp() {
+		return deviceMocks.isMagicApp
+	},
+	isNoHoverCoarsePointer: () => deviceMocks.isNoHoverCoarsePointer,
 }))
 
 vi.mock("@/apis", () => ({
@@ -103,8 +111,17 @@ vi.mock("../styles", () => ({
 	}),
 }))
 
-describe("TopicSharePopover iPad App behavior", () => {
+describe("TopicSharePopover touch desktop behavior", () => {
+	beforeEach(() => {
+		// Reset device capabilities so every test declares its intended environment.
+		deviceMocks.isMagicApp = false
+		deviceMocks.isNoHoverCoarsePointer = false
+		popoverContentProps.onFocusOutside = undefined
+	})
+
 	it("keeps the desktop Popover in Magic App desktop viewport and prevents focus-only dismissal", () => {
+		deviceMocks.isMagicApp = true
+
 		render(
 			<TopicSharePopover
 				open
@@ -123,5 +140,43 @@ describe("TopicSharePopover iPad App behavior", () => {
 		popoverContentProps.onFocusOutside?.({ preventDefault })
 
 		expect(preventDefault).toHaveBeenCalledTimes(1)
+	})
+
+	it("prevents focus-only dismissal for iPad Web using a coarse pointer", () => {
+		deviceMocks.isNoHoverCoarsePointer = true
+
+		render(
+			<TopicSharePopover
+				open
+				onOpenChange={vi.fn()}
+				topicId="mock-topic-id"
+				topicTitle="Mock topic"
+			>
+				<button type="button">share</button>
+			</TopicSharePopover>,
+		)
+
+		const preventDefault = vi.fn()
+		popoverContentProps.onFocusOutside?.({ preventDefault })
+
+		expect(preventDefault).toHaveBeenCalledTimes(1)
+	})
+
+	it("allows focus-only dismissal for a regular desktop pointer", () => {
+		render(
+			<TopicSharePopover
+				open
+				onOpenChange={vi.fn()}
+				topicId="mock-topic-id"
+				topicTitle="Mock topic"
+			>
+				<button type="button">share</button>
+			</TopicSharePopover>,
+		)
+
+		const preventDefault = vi.fn()
+		popoverContentProps.onFocusOutside?.({ preventDefault })
+
+		expect(preventDefault).not.toHaveBeenCalled()
 	})
 })

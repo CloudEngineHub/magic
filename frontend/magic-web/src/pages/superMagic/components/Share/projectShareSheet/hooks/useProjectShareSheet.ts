@@ -834,18 +834,22 @@ export function useProjectShareSheet({
 				projectName,
 				t,
 			})
-			clipboard.writeText(shareMessageText)
+			await clipboard.writeText(shareMessageText)
 			magicToast.success(t("share.copySuccess"))
-		} catch (error) {
-			console.error("Failed to copy share message:", error)
+		} catch {
 			magicToast.error(t("common.copyFailed"))
 		}
 	})
 
-	const copySelectedSharePassword = useMemoizedFn(() => {
+	const copySelectedSharePassword = useMemoizedFn(async () => {
 		if (!selectedShare?.password) return
-		clipboard.writeText(selectedShare.password)
-		magicToast.success(t("share.copyPasswordSuccess"))
+
+		try {
+			await clipboard.writeText(selectedShare.password)
+			magicToast.success(t("share.copyPasswordSuccess"))
+		} catch {
+			magicToast.error(t("common.copyFailed"))
+		}
 	})
 
 	/**

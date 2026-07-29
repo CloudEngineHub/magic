@@ -74,6 +74,7 @@ function subscribeStatisticsPolling(
 export interface SlidesTemplateStatistics {
 	templateTotal: number
 	templateTotalUsageCount?: number
+	templateCountTodayGrowth?: number
 }
 
 interface UseSlidesTemplateStatisticsOptions {
@@ -108,6 +109,7 @@ export function useSlidesTemplateStatistics({
 	return {
 		templateTotal: data.total,
 		templateTotalUsageCount: data.total_usage_count,
+		templateCountTodayGrowth: data.template_count_today_growth,
 	}
 }
 

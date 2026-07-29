@@ -46,6 +46,9 @@ export interface SelfMediaStructuredTags {
 
 export type SelfMediaPostTags = string | string[] | SelfMediaStructuredTags
 
+/** Editable metadata fields persisted in a post.json manifest. */
+export type SelfMediaPostMetaPatch = Pick<SelfMediaPostMeta, "title" | "subtitle" | "tags">
+
 export interface SelfMediaPostMeta {
 	id: string
 	title?: string
@@ -155,8 +158,17 @@ export interface PlatformComponentProps {
 		target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
 		title: string,
 	) => Promise<boolean | void> | boolean | void
+	/** Persist editable post metadata fields back to post.json. */
+	onUpdatePostMeta?: (
+		target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
+		patch: SelfMediaPostMetaPatch,
+	) => Promise<boolean | void> | boolean | void
 	/** Open the pre-publish AI diagnosis flow for the active post. */
 	onRequestPrePublishAnalysis?: () => void
+	/** Share the active post directory. */
+	onSharePost?: () => void
+	/** Whether the share lookup is in progress. */
+	shareLoading?: boolean
 	/** Generate missing WeChat cover assets for the selected post. */
 	onRequestWechatCoverGeneration?: (target: {
 		index: number

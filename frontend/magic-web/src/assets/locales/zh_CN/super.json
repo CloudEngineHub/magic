@@ -571,6 +571,9 @@
 			"imageIdNotExists": "图片 ID 不存在，无法查询图片生成结果",
 			"imageSrcEmpty": "图片源地址为空",
 			"imagesDirNotFound": "无法获取上传目标目录，请刷新后重试",
+			"invalidImageCrop": "图片裁剪区域无效，无法下载",
+			"mediaDownloadFailed": "媒体文件下载失败，请稍后重试",
+			"mediaResolveFailed": "部分媒体元素无法映射到项目文件，未开始下载",
 			"noDownloadLink": "无下载链接",
 			"noDownloadableImages": "没有可下载的图片",
 			"noFileList": "没有文件列表",
@@ -602,6 +605,9 @@
 		"messages": {
 			"downloadSuccess": "成功下载 {{count}} 张图片",
 			"markerNeedDesignMode": "标记需切换至「设计模式」，创建新话题即可进行标记",
+			"mediaDownloadPartial": "已下载 {{successCount}} 个媒体文件，{{failedCount}} 个失败",
+			"mediaDownloadSuccess": "成功下载 {{count}} 个媒体文件",
+			"mediaDownloading": "正在下载 {{count}} 个媒体文件...",
 			"packingDownloading": "正在打包下载 {{count}} 张图片..."
 		},
 		"offlineNotice": {
@@ -927,15 +933,20 @@
 				"cardFallbackTitle": "卡片 {{index}}",
 				"confirm": "开始导出",
 				"confirmWithCount": "开始导出 ({{count}})",
-				"dialogDescription": "选择要导出的文章、卡片和图片清晰度",
+				"dialogDescription": "选择要导出的文章、卡片、图片格式和输出尺寸",
 				"dialogTitle": "导出预览",
 				"exporting": "导出中...",
 				"failed": "导出失败",
+				"formatLabel": "图片格式",
 				"postSelectorLabel": "选择文章",
 				"running": "导出中 {{current}}/{{total}}",
-				"scaleLabel": "导出清晰度",
+				"scaleLabel": "输出尺寸",
 				"scaleOption": "{{ratio}}x",
+				"scaleOutputCalculating": "正在计算实际尺寸",
+				"scaleOutputLongSize": "长图 {{width}} × {{height}} px",
+				"scaleOutputSingleSize": "单张 {{width}} × {{height}} px",
 				"scaleOutputSize": "{{width}} × {{height}} px",
+				"scaleOutputVariedSize": "尺寸不一，最大边界 {{width}} × {{height}} px",
 				"selectAll": "全选",
 				"selectCards": "选择卡片",
 				"selectNone": "清空",
@@ -943,11 +954,11 @@
 				"success": "导出成功",
 				"type": {
 					"cardsZip": {
-						"description": "将所选卡片分别导出为 PNG，并打包为 ZIP。",
+						"description": "将所选卡片分别导出为 {{format}}，并打包为 ZIP。",
 						"title": "逐张卡片"
 					},
 					"longImage": {
-						"description": "将所选卡片按顺序从上到下纵向拼接后导出为 PNG。",
+						"description": "将所选卡片按顺序从上到下纵向拼接后导出为 {{format}}。",
 						"title": "长图"
 					}
 				},
@@ -1029,6 +1040,7 @@
 				"loadingAutoSync": "正在加载自动同步配置...",
 				"loadingPublishedLink": "正在读取链接...",
 				"mentionPost": "引用该文章",
+				"moreActions": "更多操作",
 				"openOpsReview": "查看复盘",
 				"openPlatform": "打开平台内容",
 				"opsArtifacts": {
@@ -1693,6 +1705,27 @@
 						"messages": "消息",
 						"publish": "+",
 						"shopping": "购物"
+					},
+					"metaEdit": {
+						"addSubtitle": "添加副标题",
+						"addTag": "新增标签",
+						"addTags": "添加标签",
+						"addTitle": "添加标题",
+						"deleteTag": "删除标签 {{tag}}",
+						"editField": "编辑{{field}}",
+						"editTag": "编辑标签 {{tag}}",
+						"failed": "内容保存失败，请稍后重试",
+						"finishTags": "完成标签编辑",
+						"newTagPlaceholder": "新标签",
+						"saved": "已同步",
+						"saving": "同步中",
+						"subtitle": "副标题",
+						"tagDuplicate": "标签 {{tag}} 已存在",
+						"tagEmpty": "标签内容不能为空",
+						"tags": "标签",
+						"tagsHint": "用空格或 # 分隔多个标签",
+						"title": "标题",
+						"titleEmpty": "标题不能为空"
 					},
 					"tabs": {
 						"detail": "笔记",
@@ -2559,6 +2592,10 @@
 		"title": "任务队列",
 		"updateFailed": "更新队列消息失败",
 		"updateSuccess": "队列消息已更新"
+	},
+	"messageRenderError": {
+		"retry": "重试",
+		"title": "这条消息暂时无法显示"
 	},
 	"mobile": {
 		"apps": {
@@ -4062,6 +4099,9 @@
 		"hideCreatorInfo": "隐藏\"由$t(common:platform.name)创造\"字样",
 		"hideCreatorInfoDescription": "开启后，将隐藏页面右下角悬浮水印",
 		"hidePassword": "隐藏密码",
+		"htmlDependenciesAnalysisFailed": "关联静态资源分析失败，将仅处理 HTML 文件",
+		"includeHtmlDependencies": "同时处理关联静态资源（{{count}} 个）",
+		"includeHtmlDependenciesDescription": "取消后，目标 HTML 中的图片、样式或脚本可能无法正常加载。",
 		"includedFiles": "包含文件",
 		"internetFileShare": "互联网可访问",
 		"internetFileShareDescription": "任何获得链接的人可访问文件",
@@ -4506,10 +4546,17 @@
 			"agentPromptTitle": "我选中了页面中的一个元素，其详细信息如下：",
 			"computedStyles": "计算样式",
 			"copySelector": "复制选择器",
+			"domContext": "DOM 上下文",
+			"elementAttributes": "元素属性",
+			"elementHtml": "元素片段",
+			"elementPosition": "子元素位置",
 			"file": "文件",
 			"insertToConsole": "在控制台查询",
+			"resource": "资源信息",
+			"sameTagPosition": "同标签位置",
 			"selectedElement": "已选取的元素",
 			"selector": "选择器",
+			"selectorMatchCount": "选择器匹配数",
 			"sendToAgent": "发给 Agent 分析",
 			"size": "尺寸",
 			"start": "检查元素",

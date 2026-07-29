@@ -1,4 +1,4 @@
-export const IMAGE_TYPE = ["image/jpg", "image/png", "image/jpeg"]
+export const IMAGE_TYPE = ["image/jpg", "image/png", "image/jpeg", "image/svg+xml"]
 
 /** 权限key映射 */
 export const PERMISSION_KEY_MAP: Record<string, string> = {
@@ -206,6 +206,12 @@ export const AI_APP_MENU = [
 	PERMISSION_KEY_MAP.AI_APP_MENU_QUERY,
 	PERMISSION_KEY_MAP.AI_APP_MENU_EDIT,
 ]
+
+/** AI管理 - 数据看板 */
+// export const AI_DATA_DASHBOARD = [
+// 	PERMISSION_KEY_MAP.AI_DATA_DASHBOARD_QUERY,
+// 	PERMISSION_KEY_MAP.AI_DATA_DASHBOARD_EDIT,
+// ]
 
 /** AI管理 - 总权限 */
 export const AI_MANAGEMENT = [

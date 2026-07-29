@@ -55,7 +55,7 @@ export function OpsReviewHeader({
 	target: SelfMediaPlatformPostItem
 	sourceStatus: string
 	syncing: boolean
-	onSync: () => void
+	onSync?: () => void
 	onEditData?: (target: SelfMediaPlatformPostItem) => void
 	onClose: () => void
 }) {
@@ -92,34 +92,40 @@ export function OpsReviewHeader({
 				</h2>
 			</div>
 			<div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="rounded-full border-0 bg-white px-3 text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.08)] hover:bg-white/85"
-					onClick={onSync}
-					disabled={syncing}
-				>
-					{syncing ? (
-						<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-					) : (
-						<RefreshCw className="size-4" aria-hidden="true" />
-					)}
-					<span className="hidden sm:inline">{t("detail.selfMedia.opsReview.sync")}</span>
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="rounded-full border-0 bg-white px-3 text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.08)] hover:bg-white/85"
-					onClick={() => onEditData?.(target)}
-					disabled={!onEditData}
-					data-testid="self-media-ops-review-edit"
-				>
-					<span className="max-[420px]:hidden">
-						{t("detail.selfMedia.opsReview.edit")}
-					</span>
-				</Button>
+				{onSync ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="rounded-full border-0 bg-white px-3 text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.08)] hover:bg-white/85"
+						onClick={onSync}
+						disabled={syncing}
+						data-testid="self-media-ops-review-sync"
+					>
+						{syncing ? (
+							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+						) : (
+							<RefreshCw className="size-4" aria-hidden="true" />
+						)}
+						<span className="hidden sm:inline">
+							{t("detail.selfMedia.opsReview.sync")}
+						</span>
+					</Button>
+				) : null}
+				{onEditData ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="rounded-full border-0 bg-white px-3 text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.08)] hover:bg-white/85"
+						onClick={() => onEditData(target)}
+						data-testid="self-media-ops-review-edit"
+					>
+						<span className="max-[420px]:hidden">
+							{t("detail.selfMedia.opsReview.edit")}
+						</span>
+					</Button>
+				) : null}
 				<Button
 					type="button"
 					variant="ghost"

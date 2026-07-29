@@ -12,6 +12,10 @@ export interface FetchWorkspacesParams {
 	isEditLast?: boolean
 	isAfterCreate?: boolean
 	page: number
+	/** Workspace list page size. Defaults to the sidebar's incremental page size. */
+	pageSize?: number
+	/** Appends the next page to the existing workspace list instead of replacing it. */
+	append?: boolean
 }
 
 export interface UpdateWorkspaceStatusParams {
@@ -28,15 +32,27 @@ class WorkspaceService {
 		isAutoSelect = true,
 		isSelectLast = true,
 		page,
+		pageSize = 20,
+		append = false,
 	}: FetchWorkspacesParams): Promise<Workspace[]> => {
 		runInAction(() => {
 			workspaceStore.beginWorkspaceListFetch()
 		})
 		try {
-			const res = await SuperMagicApi.getWorkspaces({ page, page_size: 999 })
+			const res = await SuperMagicApi.getWorkspaces({ page, page_size: pageSize })
 			if (res) {
 				runInAction(() => {
-					workspaceStore.setWorkspaces(res.list)
+					const nextWorkspaces = append
+						? Array.from(
+								new Map(
+									[...workspaceStore.workspaces, ...res.list].map((workspace) => [
+										workspace.id,
+										workspace,
+									]),
+								).values(),
+							)
+						: res.list
+					workspaceStore.setWorkspaces(nextWorkspaces)
 					const refreshedSelectedWorkspace = res.list.find(
 						(workspace: Workspace) =>
 							workspace.id === workspaceStore.selectedWorkspace?.id,
@@ -47,7 +63,7 @@ class WorkspaceService {
 					}
 				})
 
-				if (isAutoSelect && isSelectLast && res.list.length > 0) {
+				if (!append && isAutoSelect && isSelectLast && res.list.length > 0) {
 					runInAction(() => {
 						workspaceStore.setSelectedWorkspace(res.list[0])
 					})

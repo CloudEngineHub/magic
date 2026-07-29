@@ -21,8 +21,11 @@
 	"confirmClose": "Подтвердить закрытие",
 	"detail": "Подробнее",
 	"file": {
+		"imageLoadFailed": "Не удалось загрузить изображение",
+		"imageSizeTooLarge": "Размер изображения не может превышать {{size}}",
+		"imageSizeTooSmall": "Размер изображения не может быть меньше {{width}}x{{height}}",
 		"maxSize": "Максимальный размер одного файла {{maxSize}}MB",
-		"onlySupportUploadImage": "Разрешена загрузка только изображений формата png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Разрешена загрузка только изображений формата png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Ошибка загрузки файла, попробуйте снова"
 	},
 	"filter": "Фильтр",

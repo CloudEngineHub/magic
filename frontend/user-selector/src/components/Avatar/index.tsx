@@ -77,7 +77,7 @@ const Avatar = ({
 						src={innerSrc}
 						alt={typeof children === "string" ? children : "avatar"}
 						onError={handleError}
-						className="bg-white"
+						className="bg-white object-cover"
 						draggable={false}
 					/>
 					{/* Fallback when image fails to load */}

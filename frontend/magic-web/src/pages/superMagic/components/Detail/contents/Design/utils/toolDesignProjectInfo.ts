@@ -1,4 +1,4 @@
-import { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import projectFilesStore from "@/stores/projectFiles"
 
 export function getToolDesignProjectInfo(tool: unknown) {

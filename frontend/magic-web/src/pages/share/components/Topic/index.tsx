@@ -1441,6 +1441,7 @@ function Topic({
 						filterMenuItems={filterShareMenuItems}
 						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 						allowDownload={allowDownloadProjectFile}
+						allowReadonlySelection
 					/>
 				</div>
 			</CommonPopup>
