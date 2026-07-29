@@ -9,6 +9,7 @@ import projectFilesStore from "@/stores/projectFiles"
 import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
 import { useAttachments } from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/hooks/useAttachments"
 import { useMemoizedFn } from "ahooks"
+import { useEffect } from "react"
 
 function ChatProjectDetailLayoutComponent() {
 	const selectedProject = projectStore.selectedProject
@@ -42,10 +43,23 @@ function ChatProjectDetailLayoutComponent() {
 		selectedTopic,
 		onOpenConversationFeedback: openConversationFeedback,
 	})
+
+	/** Loads the active chat project's attachments before message file previews are used. */
+	const initializeProjectAttachments = useMemoizedFn(() => {
+		if (!selectedProject) return
+
+		updateAttachments(selectedProject)
+	})
+
+	/** Refreshes attachment state on the first detail mount and when the active project changes. */
+	useEffect(() => {
+		initializeProjectAttachments()
+	}, [initializeProjectAttachments, selectedProject?.id])
+
 	const refreshProjectAttachments = useMemoizedFn(async () => {
 		if (!selectedProject) return
 
-		// chat detail 没有项目详情页那条初始化附件链路，因此弹层打开时需要显式回源同步一次。
+		// Keep an explicit refresh when the file drawer opens so it displays current server data.
 		await updateAttachments(selectedProject)
 	})
 

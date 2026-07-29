@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { RecordingDetailHeader } from "../RecordingDetailHeader"
 import {
 	RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS,
@@ -69,6 +69,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"card.regenerateSummary": "Regenerate summary",
 					"card.moveToGroup": "Move to group",
 					"card.moreActions": "More actions",
+					"card.openProject": "View recording project",
 					"card.copyToProject": "Copy to project",
 					"card.notSummarized": "Not summarized",
 					"card.summarized": "Summarized",
@@ -124,6 +125,7 @@ const baseProps = {
 	onExportAll: vi.fn(),
 	onCreateShare: vi.fn(),
 	onManageShare: vi.fn(),
+	onOpenProject: vi.fn(),
 	onMoveGroup: vi.fn(),
 	onCopyToProject: vi.fn(),
 	onDelete: vi.fn(),
@@ -181,6 +183,18 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.getByTestId("recording-detail-more-trigger")).toHaveClass(
 			...RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS.split(" "),
 		)
+	})
+
+	it("opens the recording project from the first more-actions entry", () => {
+		const onOpenProject = vi.fn()
+		render(<RecordingDetailHeader {...baseProps} onOpenProject={onOpenProject} />)
+
+		const trigger = screen.getByTestId("recording-detail-more-trigger")
+		trigger.focus()
+		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+		fireEvent.click(screen.getByTestId("recording-detail-open-project"))
+
+		expect(onOpenProject).toHaveBeenCalledTimes(1)
 	})
 
 	it("includes open-state classes on export trigger for prototype highlight", () => {
@@ -301,10 +315,12 @@ describe("RecordingDetailHeader action styling", () => {
 		}
 		const shareLikeProps = { ...baseProps }
 		delete (shareLikeProps as Partial<typeof baseProps>).onCopyToProject
+		delete (shareLikeProps as Partial<typeof baseProps>).onOpenProject
 
 		render(<RecordingDetailHeader {...shareLikeProps} />)
 
 		expect(screen.getByTestId("recording-detail-more-trigger")).toBeInTheDocument()
 		expect(screen.queryByTestId("recording-detail-copy-to-project")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-open-project")).not.toBeInTheDocument()
 	})
 })

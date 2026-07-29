@@ -58,4 +58,34 @@ describe("processHtmlContent image processing", () => {
 		expect(result.processedContent).toContain("https://oss.example.com/hero.webp")
 		expect(result.processedContent).toContain("https://oss.example.com/app.js")
 	})
+
+	it("preserves the slide bridge position with an inert placeholder", async () => {
+		const attachments = [
+			{
+				file_id: "placeholder-file",
+				file_name: "placeholder.txt",
+				relative_file_path: "deck/placeholder.txt",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+		const content = `<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+<main>Placeholder content</main>
+<script src="slide-bridge.js"></script>
+</body>
+</html>`
+
+		const result = await processHtmlContent({
+			content,
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+		})
+
+		expect(result.processedContent).toContain('data-has-slide-bridge="true"')
+		expect(result.processedContent).toContain("\n<!--magic-slide-bridge-placeholder-->\n")
+		expect(result.processedContent).not.toContain('<script src="slide-bridge.js"></script>')
+	})
 })

@@ -13,6 +13,7 @@ import {
 	processAudioArray,
 	handleHtCdnUrl,
 	removeRootHtmlXhtmlNamespace,
+	SLIDE_BRIDGE_PLACEHOLDER_COMMENT,
 } from "./utils"
 import { processDashboardArray } from "./dashboard/utils"
 import {
@@ -109,6 +110,19 @@ function serializeDocToHtml(doc: Document): string {
 	return removeRootHtmlXhtmlNamespace(
 		restoreSerializedEntities(new XMLSerializer().serializeToString(doc)),
 	)
+}
+
+/** Replaces slide bridge scripts with inert comments so saving can restore their exact DOM positions. */
+function replaceSlideBridgeScriptsWithPlaceholders(doc: Document): boolean {
+	const slideBridgeScripts = Array.from(doc.querySelectorAll("script")).filter((script) =>
+		script.getAttribute("src")?.includes("slide-bridge.js"),
+	)
+
+	slideBridgeScripts.forEach((script) => {
+		script.replaceWith(doc.createComment(SLIDE_BRIDGE_PLACEHOLDER_COMMENT))
+	})
+
+	return slideBridgeScripts.length > 0
 }
 
 function finalizeHtmlPreviewBundledShell(html: string, input: ProcessHtmlContentInput): string {
@@ -446,9 +460,7 @@ export async function processHtmlContent(
 	let contentWithMarker = sourceHtml
 	const tempParser = new DOMParser()
 	const tempDoc = tempParser.parseFromString(sourceHtml, "text/html")
-	const hasSlideBridge = Array.from(tempDoc.querySelectorAll("script")).some((script) =>
-		script.getAttribute("src")?.includes("slide-bridge.js"),
-	)
+	const hasSlideBridge = replaceSlideBridgeScriptsWithPlaceholders(tempDoc)
 	if (hasSlideBridge && tempDoc.body) {
 		tempDoc.body.setAttribute("data-has-slide-bridge", "true")
 		// 获取DOCTYPE

@@ -882,6 +882,75 @@ export function escapeHTML(html: string): string {
 		.replace(/\n/g, "\\n") // 换行符转为 \n
 }
 
+/** Identifies the inert comment that preserves a removed slide bridge script's DOM position. */
+export const SLIDE_BRIDGE_PLACEHOLDER_COMMENT = "magic-slide-bridge-placeholder"
+
+/** Collects slide bridge placeholders without treating author-owned element attributes as markers. */
+function findSlideBridgePlaceholders(doc: Document): Comment[] {
+	if (!doc.documentElement) return []
+
+	const placeholders: Comment[] = []
+	const walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_COMMENT)
+	let currentNode = walker.nextNode()
+
+	while (currentNode) {
+		if (currentNode.nodeValue === SLIDE_BRIDGE_PLACEHOLDER_COMMENT) {
+			placeholders.push(currentNode as Comment)
+		}
+		currentNode = walker.nextNode()
+	}
+
+	return placeholders
+}
+
+/** Restores slide bridge scripts at their preserved positions and keeps append-only fallback compatibility. */
+function restoreSlideBridgeScripts(doc: Document, hasSlideBridgeMarker: boolean): void {
+	const placeholders = findSlideBridgePlaceholders(doc)
+	const existingScripts = Array.from(doc.querySelectorAll('script[src*="slide-bridge.js"]'))
+
+	placeholders.forEach((placeholder, index) => {
+		const script = existingScripts[index] ?? doc.createElement("script")
+		if (!script.hasAttribute("src")) script.setAttribute("src", "slide-bridge.js")
+		placeholder.replaceWith(script)
+	})
+
+	if (
+		hasSlideBridgeMarker &&
+		placeholders.length === 0 &&
+		existingScripts.length === 0 &&
+		doc.body
+	) {
+		// Older processed documents only have the body marker, so retain the previous recovery behavior.
+		const slideBridgeScript = doc.createElement("script")
+		slideBridgeScript.setAttribute("src", "slide-bridge.js")
+		doc.body.appendChild(slideBridgeScript)
+	}
+}
+
+/**
+ * Prevents repeated DOMParser/save cycles from accumulating blank lines before </body>.
+ * Only the final whitespace-only text node is normalized, so whitespace inside author content is preserved.
+ */
+function normalizeBodyTrailingWhitespace(doc: Document): void {
+	const trailingNode = doc.body?.lastChild
+	if (
+		!trailingNode ||
+		trailingNode.nodeType !== Node.TEXT_NODE ||
+		trailingNode.textContent?.trim()
+	) {
+		return
+	}
+
+	// DOMParser moves whitespace after </body> and </html> into body on the next parse.
+	trailingNode.textContent = "\n"
+}
+
+/** Preserves the source file's EOF newline without adding one to files that did not have it. */
+export function preserveOriginalTrailingNewline(html: string, originalSourceCode?: string): string {
+	if (!originalSourceCode?.endsWith("\n") || html.endsWith("\n")) return html
+	return `${html}\n`
+}
+
 // export function createEditableContent(content: string, isEditMode: boolean = false): string {
 // 	const editScript = isEditMode ? getEditingScript() : ""
 
@@ -1058,16 +1127,8 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 			doc.body.removeAttribute("data-has-slide-bridge")
 		}
 
-		// 如果原始HTML有slide-bridge.js，在保存时恢复它
-		if (hasSlideBridgeMarker) {
-			// 检查是否已经存在slide-bridge.js（避免重复添加）
-			const existingSlideBridge = doc.querySelector('script[src*="slide-bridge.js"]')
-			if (!existingSlideBridge && doc.body) {
-				const slideBridgeScript = doc.createElement("script")
-				slideBridgeScript.setAttribute("src", "slide-bridge.js")
-				doc.body.appendChild(slideBridgeScript)
-			}
-		}
+		// Restore at the preserved DOM position; marker-only documents use the legacy append fallback.
+		restoreSlideBridgeScripts(doc, Boolean(hasSlideBridgeMarker))
 
 		// 恢复原始CDN URL（script标签）
 		const scriptsWithOriginalSrc = doc.querySelectorAll("script[data-original-src]")
@@ -1222,6 +1283,9 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		})
 		const htmlAttrString = htmlAttrs.length > 0 ? " " + htmlAttrs.join(" ") : ""
 
+		// Keep the document boundary stable without changing blank lines inside body content.
+		normalizeBodyTrailingWhitespace(doc)
+
 		// 获取清理后的 head 和 body 内容
 		const headContent = doc.head?.innerHTML || ""
 		const bodyContent = doc.body?.innerHTML || ""
@@ -1236,17 +1300,10 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		const bodyAttrString = bodyAttrs.length > 0 ? " " + bodyAttrs.join(" ") : ""
 
 		// 重新构建完整的HTML文档
-		let processedHtml = `${doctypeString}<html${htmlAttrString}>
-<head>
-${headContent}
-</head>
-<body${bodyAttrString}>
-${bodyContent}
-</body>
+		const processedHtml = `${doctypeString}<html${htmlAttrString}>
+<head>${headContent}</head>
+<body${bodyAttrString}>${bodyContent}</body>
 </html>`
-
-		// 清理移除元素后产生的多余空行
-		processedHtml = processedHtml.replace(/\n\s*\n/g, "\n")
 
 		// 返回清理后的HTML字符串
 		return processedHtml

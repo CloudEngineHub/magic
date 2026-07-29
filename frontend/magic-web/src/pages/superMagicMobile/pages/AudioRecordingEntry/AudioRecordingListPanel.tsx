@@ -258,6 +258,14 @@ function AudioRecordingListPanel({
 		})
 	}
 
+	/** Navigates mobile recordings to the project entry route; MainLayout restores mobile state. */
+	function handleOpenProject(item: AudioProjectListItem) {
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: item.id },
+		})
+	}
+
 	async function handleSummarize(item: AudioProjectListItem) {
 		const result = await store.submitSummary(item)
 		if (result.ok) return true
@@ -550,6 +558,7 @@ function AudioRecordingListPanel({
 				onClose={handleCloseMore}
 				onRename={handleRename}
 				onDelete={handleDelete}
+				onOpenProject={handleOpenProject}
 				onSummarize={handleSummaryAction}
 				onMoveToGroup={handleOpenMoveGroup}
 				onCopyToProject={(item) => {
