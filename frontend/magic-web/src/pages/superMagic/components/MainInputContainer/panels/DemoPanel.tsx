@@ -8,6 +8,7 @@ import type { DemoPanelConfig, OptionItem } from "./types"
 import { DemoPanelStore } from "../stores/DemoPanelStore"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTranslation } from "react-i18next"
+import { resolveDemoPromptText } from "./utils"
 
 interface DemoPanelProps {
 	config: DemoPanelConfig
@@ -17,7 +18,7 @@ interface DemoPanelProps {
 
 const DemoPanel = observer(({ config, onTemplateSelect, readOnly = false }: DemoPanelProps) => {
 	const lt = useLocaleText()
-	const { t } = useTranslation("crew/create")
+	const { t, i18n } = useTranslation("crew/create")
 
 	// Create store instance for this component
 	const store = useMemo(() => new DemoPanelStore(), [])
@@ -30,8 +31,10 @@ const DemoPanel = observer(({ config, onTemplateSelect, readOnly = false }: Demo
 	const handleTemplateClick = (template: OptionItem) => {
 		if (readOnly) return
 
+		store.setSelectedTemplate(template)
 		onTemplateSelect?.(template)
-		pubsub.publish(PubSubEvents.Set_Demo_Text_To_Input, template.value)
+		const prompt = resolveDemoPromptText(template, i18n.language)
+		if (prompt) pubsub.publish(PubSubEvents.Set_Demo_Text_To_Input, prompt)
 	}
 
 	const handleGroupChange = (groupKey: string) => {
@@ -64,6 +67,7 @@ const DemoPanel = observer(({ config, onTemplateSelect, readOnly = false }: Demo
 			<TemplateViewSwitcher
 				viewType={config.demo?.view_type}
 				items={store.filteredTemplates}
+				selectedTemplate={store.selectedTemplate ?? undefined}
 				onTemplateClick={handleTemplateClick}
 			/>
 		</CollapsiblePanel>

@@ -2,6 +2,7 @@ import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
+import { CARD_IMAGE_PROCESS } from "../../constants/imageProcess"
 import type { PlatformComponentProps, SelfMediaAttachmentNode } from "../../types"
 
 function getFileFolderPath(
@@ -97,6 +98,7 @@ export async function loadWechatArticleHtml({
 		fileId,
 		fileName: currentFile?.file_name,
 		html_relative_path: getFileFolderPath(currentFile),
+		xMagicImageProcess: CARD_IMAGE_PROCESS,
 	})
 
 	return {

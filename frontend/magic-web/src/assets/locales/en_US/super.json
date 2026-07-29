@@ -937,6 +937,8 @@
 				"exporting": "Exporting...",
 				"failed": "Export failed",
 				"formatLabel": "Image format",
+				"pageSeparator": ", ",
+				"partialSuccess": "Exported {{exported}}/{{total}} pages. Not exported: pages {{failedPages}}",
 				"postSelectorLabel": "Post",
 				"running": "Exporting {{current}}/{{total}}",
 				"scaleLabel": "Output size",

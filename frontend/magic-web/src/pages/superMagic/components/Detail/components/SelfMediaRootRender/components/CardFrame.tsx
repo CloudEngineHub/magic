@@ -24,6 +24,15 @@ import {
 	SELF_MEDIA_EXPORT_IMAGE_QUALITY,
 } from "../utils/exportImageFormat"
 import type { SelfMediaExportFormat } from "../utils/exportImageFormat"
+import {
+	createAttachmentSignature,
+	createCardFrameCacheKey,
+	createImageProcessSignature,
+	getCachedCardFrameSource,
+	type CardFrameSourceResult,
+} from "./cardFrameSourceCache"
+
+export { invalidateCardFrameSourceCache } from "./cardFrameSourceCache"
 
 export interface CardFrameRef {
 	/** Trigger a screenshot and return the dataUrl. */
@@ -58,21 +67,6 @@ interface CardFrameProps {
 	onLoaded?: () => void
 }
 
-interface CardFrameSourceResult {
-	processedContent: string
-}
-
-const cardFrameSourceCache = new Map<string, Promise<CardFrameSourceResult>>()
-
-export function invalidateCardFrameSourceCache(fileId?: string) {
-	if (!fileId) return
-
-	for (const cacheKey of Array.from(cardFrameSourceCache.keys())) {
-		if (!cacheKey.startsWith(`${fileId}::`)) continue
-		cardFrameSourceCache.delete(cacheKey)
-	}
-}
-
 function getFileFolderPath(
 	file: Pick<FileItem, "file_name" | "relative_file_path"> | null,
 ): string {
@@ -83,28 +77,6 @@ function getFileFolderPath(
 	}
 	const slashIndex = path.lastIndexOf("/")
 	return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
-}
-
-function createAttachmentSignature(files: FileItem[]) {
-	return files
-		.map((item) => `${item.file_id}:${item.relative_file_path}:${item.file_name}`)
-		.sort()
-		.join("|")
-}
-
-function createCardFrameCacheKey({
-	fileId,
-	version,
-	relativeFolderPath,
-	attachmentSignature,
-}: {
-	fileId?: string
-	version?: string
-	relativeFolderPath: string
-	attachmentSignature: string
-}) {
-	if (!fileId) return null
-	return `${fileId}::${version ?? ""}::${relativeFolderPath}::${attachmentSignature}`
 }
 
 function getCaptureDimensions(doc: Document) {
@@ -181,27 +153,6 @@ async function loadCardFrameSource({
 	return { processedContent }
 }
 
-function getCachedCardFrameSource(
-	cacheKey: string,
-	args: {
-		fileId: string
-		attachmentList?: SelfMediaAttachmentNode[]
-		currentFileName?: string
-		relativeFolderPath: string
-		imageProcessOptions?: ImageProcessOptions
-	},
-) {
-	const cachedPromise = cardFrameSourceCache.get(cacheKey)
-	if (cachedPromise) return cachedPromise
-
-	const nextPromise = loadCardFrameSource(args).catch((error) => {
-		cardFrameSourceCache.delete(cacheKey)
-		throw error
-	})
-	cardFrameSourceCache.set(cacheKey, nextPromise)
-	return nextPromise
-}
-
 /**
  * Renders a single self-media card inside an isolated iframe.
  *
@@ -260,6 +211,10 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 		() => createAttachmentSignature(flattenedFiles),
 		[flattenedFiles],
 	)
+	const imageProcessSignature = useMemo(
+		() => createImageProcessSignature(imageProcessOptions),
+		[imageProcessOptions],
+	)
 	if (stableAttachmentListRef.current.signature !== attachmentSignature) {
 		stableAttachmentListRef.current = {
 			signature: attachmentSignature,
@@ -274,8 +229,9 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 				version,
 				relativeFolderPath,
 				attachmentSignature,
+				imageProcessSignature,
 			}),
-		[attachmentSignature, fileId, version, relativeFolderPath],
+		[attachmentSignature, fileId, imageProcessSignature, version, relativeFolderPath],
 	)
 	const scale =
 		contentSize.width > 0 && containerWidth > 0
@@ -327,13 +283,15 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 		setSrcDoc(null)
 		;(async () => {
 			try {
-				const source = await getCachedCardFrameSource(cacheKey, {
-					fileId,
-					attachmentList: stableAttachmentList,
-					currentFileName: currentFile?.file_name,
-					relativeFolderPath,
-					imageProcessOptions,
-				})
+				const source = await getCachedCardFrameSource(cacheKey, () =>
+					loadCardFrameSource({
+						fileId,
+						attachmentList: stableAttachmentList,
+						currentFileName: currentFile?.file_name,
+						relativeFolderPath,
+						imageProcessOptions,
+					}),
+				)
 				if (cancelled) return
 				setSrcDoc(source.processedContent)
 			} catch (err) {
@@ -353,6 +311,8 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 		cardId,
 		currentFile?.file_name,
 		fileId,
+		imageProcessOptions,
+		imageProcessSignature,
 		version,
 		relativeFolderPath,
 		stableAttachmentList,
