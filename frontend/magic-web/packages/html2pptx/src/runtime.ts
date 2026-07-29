@@ -13,6 +13,10 @@ import type {
 	SandboxReadyControllerConstructor,
 } from "./sandbox/htmlRenderSandbox"
 import type { TextMergeMode } from "./pipeline/text-merge-mode"
+import type {
+	CreateIncrementalPresentationPackagerInput,
+	IncrementalPresentationPackager,
+} from "./packaging/incremental-types"
 
 export interface RenderSlideRuntime {
 	transformElements?: (
@@ -30,7 +34,11 @@ export interface RenderSlideRuntime {
 	) => PPTNode[]
 	materializePseudoIcons?: (document: Document, window: Window) => IconBackup[]
 	restoreIcons?: (backups: IconBackup[]) => void
-	resolveCaptures?: (nodes: PPTNode[], signal?: AbortSignal) => Promise<void>
+	resolveCaptures?: (
+		nodes: PPTNode[],
+		signal?: AbortSignal,
+		onResourceError?: (error: ResourceLoadError) => void,
+	) => Promise<void>
 	materializeVideoCoverNodes?: (
 		nodes: PPTNode[],
 		signal?: AbortSignal,
@@ -56,6 +64,9 @@ export interface ExportPipelineRuntime extends RenderSlideRuntime {
 			download?: boolean
 		},
 	) => Promise<GeneratedPPTX | void>
+	createIncrementalPresentationPackager?: (
+		input: CreateIncrementalPresentationPackagerInput,
+	) => IncrementalPresentationPackager | null
 }
 
 export interface Html2PptxRuntime {

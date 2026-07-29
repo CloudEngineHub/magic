@@ -21,7 +21,7 @@ export interface ExportOptions {
 	config?: Partial<SlideConfig>
 	/** Export mode */
 	exportMode?: "single"
-	/** Skip failed pages and continue exporting later pages */
+	/** Skip ordinary failed pages and continue; fatal fidelity failures always stop export. */
 	skipFailedPages?: boolean
 	/**
 	 * Auto-size mode switch (defaults to `false`, standard PPT mode).
