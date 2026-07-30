@@ -1,7 +1,7 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import type { StoredLinkedEditorDraft } from "../../../public/magic-types"
 
-const LINKED_EDITOR_DRAFT_VERSION = 1 as const
+const LINKED_EDITOR_DRAFT_VERSION = 2 as const
 
 function uniqueStrings(values: unknown): string[] {
 	if (!Array.isArray(values)) return []
@@ -23,7 +23,6 @@ export function createEmptyLinkedEditorDraft(): StoredLinkedEditorDraft {
 		version: LINKED_EDITOR_DRAFT_VERSION,
 		selectedTextConnectionIds: [],
 		orderedTextConnectionIds: [],
-		selectedMediaConnectionIds: [],
 	}
 }
 
@@ -34,7 +33,6 @@ export function normalizeLinkedEditorDraft(value: unknown): StoredLinkedEditorDr
 		version: LINKED_EDITOR_DRAFT_VERSION,
 		selectedTextConnectionIds: uniqueStrings(draft.selectedTextConnectionIds),
 		orderedTextConnectionIds: uniqueStrings(draft.orderedTextConnectionIds),
-		selectedMediaConnectionIds: uniqueStrings(draft.selectedMediaConnectionIds),
 	}
 }
 
@@ -42,16 +40,11 @@ export function reconcileLinkedEditorDraft(
 	draft: StoredLinkedEditorDraft,
 	options: {
 		textConnectionIds: string[]
-		mediaConnectionIds: string[]
 	},
 ): StoredLinkedEditorDraft {
 	const textConnectionIdSet = new Set(options.textConnectionIds)
-	const mediaConnectionIdSet = new Set(options.mediaConnectionIds)
 	const selectedTextConnectionIds = draft.selectedTextConnectionIds.filter((connectionId) =>
 		textConnectionIdSet.has(connectionId),
-	)
-	const selectedMediaConnectionIds = draft.selectedMediaConnectionIds.filter((connectionId) =>
-		mediaConnectionIdSet.has(connectionId),
 	)
 	const orderedTextConnectionIds = [
 		...draft.orderedTextConnectionIds.filter((connectionId) =>
@@ -65,7 +58,7 @@ export function reconcileLinkedEditorDraft(
 	if (
 		areStringArraysEqual(selectedTextConnectionIds, draft.selectedTextConnectionIds) &&
 		areStringArraysEqual(orderedTextConnectionIds, draft.orderedTextConnectionIds) &&
-		areStringArraysEqual(selectedMediaConnectionIds, draft.selectedMediaConnectionIds)
+		draft.version === LINKED_EDITOR_DRAFT_VERSION
 	) {
 		return draft
 	}
@@ -74,7 +67,6 @@ export function reconcileLinkedEditorDraft(
 		version: LINKED_EDITOR_DRAFT_VERSION,
 		selectedTextConnectionIds,
 		orderedTextConnectionIds,
-		selectedMediaConnectionIds,
 	}
 }
 
@@ -98,8 +90,7 @@ export function saveLinkedEditorDraftToStorage(
 	const previousDraft = storage.tempLinkedEditorDrafts?.[targetElementId]
 	const isEmpty =
 		normalizedDraft.selectedTextConnectionIds.length === 0 &&
-		normalizedDraft.orderedTextConnectionIds.length === 0 &&
-		normalizedDraft.selectedMediaConnectionIds.length === 0
+		normalizedDraft.orderedTextConnectionIds.length === 0
 	if (isEmpty) {
 		if (previousDraft) clearLinkedEditorDraftFromStorage(canvas, targetElementId)
 		return

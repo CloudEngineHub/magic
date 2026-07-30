@@ -7,6 +7,7 @@ import MessageEditor, {
 	type MessageEditorRef,
 } from "../MessageEditor"
 import { createReferenceResourcePanelItemFromPath } from "../reference-assets/createReferenceResourcePanelItem"
+import { createCanvasMentionPathMatcher } from "../../connection/linkedMediaMentionMatcher"
 
 const TestMentionExtension = Node.create({
 	name: "mention",
@@ -49,10 +50,89 @@ describe("MessageEditor mention synchronization", () => {
 		)
 
 		await waitFor(() => {
-			expect(onMentionChange).toHaveBeenCalledWith(["./images/linked.png"], "@linked.png", {
-				source: "sync",
-			})
+			expect(onMentionChange).toHaveBeenCalledWith(
+				["./images/linked.png"],
+				"@linked.png",
+				expect.objectContaining({ source: "sync", status: "ready" }),
+			)
 		})
+	})
+
+	it("keeps mention synchronization pending until external items are ready", async () => {
+		const onMentionChange = vi.fn()
+		const { rerender } = render(
+			<MessageEditor
+				value="@linked.png"
+				matchableItems={[{ name: "linked.png", path: "./images/linked.png" }]}
+				mentionExtension={TestMentionExtension}
+				mentionItemsReady={false}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(onMentionChange).toHaveBeenCalledWith(
+				["./images/linked.png"],
+				"@linked.png",
+				expect.objectContaining({ source: "sync", status: "pending" }),
+			)
+		})
+		expect(onMentionChange.mock.calls.some(([, , context]) => context.status === "ready")).toBe(
+			false,
+		)
+
+		rerender(
+			<MessageEditor
+				value="@linked.png"
+				matchableItems={[{ name: "linked.png", path: "./images/linked.png" }]}
+				mentionExtension={TestMentionExtension}
+				mentionItemsReady
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(onMentionChange).toHaveBeenCalledWith(
+				["./images/linked.png"],
+				"@linked.png",
+				expect.objectContaining({ source: "sync", status: "ready" }),
+			)
+		})
+	})
+
+	it("does not emit duplicate ready snapshots when only matchable item identity changes", async () => {
+		const onMentionChange = vi.fn()
+		const { rerender } = render(
+			<MessageEditor
+				value="@linked.png"
+				matchableItems={[{ name: "linked.png", path: "./images/linked.png" }]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				onMentionChange.mock.calls.filter(([, , context]) => context.status === "ready"),
+			).toHaveLength(1)
+		})
+
+		rerender(
+			<MessageEditor
+				value="@linked.png"
+				matchableItems={[{ name: "linked.png", path: "./images/linked.png" }]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(
+			onMentionChange.mock.calls.filter(([, , context]) => context.status === "ready"),
+		).toHaveLength(1)
 	})
 
 	it("restores a collapsed editor caret after imperative mention insertion and removal", async () => {
@@ -88,7 +168,11 @@ describe("MessageEditor mention synchronization", () => {
 
 			outsideButton.focus()
 			act(() => {
-				expect(editorRef.current?.removeMentionItemByPath("/images/source.png")).toBe(true)
+				expect(
+					editorRef.current?.removeMentionItems(
+						createCanvasMentionPathMatcher("/images/source.png"),
+					),
+				).toBe(true)
 			})
 			expect(editorRef.current?.getCurrentPrompt()).not.toContain("@source.png")
 			act(() => vi.runOnlyPendingTimers())
@@ -123,9 +207,11 @@ describe("MessageEditor mention synchronization", () => {
 				expect(editorRef.current?.getCurrentPrompt()).toBe("@source.png")
 
 				act(() => {
-					expect(editorRef.current?.removeMentionItemByPath("images/source.png")).toBe(
-						true,
-					)
+					expect(
+						editorRef.current?.removeMentionItems(
+							createCanvasMentionPathMatcher("images/source.png"),
+						),
+					).toBe(true)
 				})
 				expect(editorRef.current?.getCurrentPrompt()).toBe("")
 				vi.clearAllTimers()
@@ -139,8 +225,14 @@ describe("MessageEditor mention synchronization", () => {
 	it("replaces mentions through an equivalent canvas resource path", async () => {
 		const editorRef = createRef<MessageEditorRef>()
 
-		render(<MessageEditor ref={editorRef} value="" mentionExtension={TestMentionExtension} />)
+		const { container } = render(
+			<MessageEditor ref={editorRef} value="" mentionExtension={TestMentionExtension} />,
+		)
 		await waitFor(() => expect(editorRef.current).not.toBeNull())
+		const editorDom = container.querySelector<HTMLElement>("[contenteditable='true']")
+		expect(editorDom).not.toBeNull()
+		const outsideButton = document.createElement("button")
+		document.body.append(outsideButton)
 		vi.useFakeTimers()
 
 		try {
@@ -151,8 +243,8 @@ describe("MessageEditor mention synchronization", () => {
 			})
 			act(() => {
 				expect(
-					editorRef.current?.replaceMentionItemByPath(
-						"/images/source.png",
+					editorRef.current?.replaceMentionItems(
+						createCanvasMentionPathMatcher("/images/source.png"),
 						createReferenceResourcePanelItemFromPath(
 							"images/updated.png",
 							"updated.png",
@@ -162,9 +254,13 @@ describe("MessageEditor mention synchronization", () => {
 			})
 
 			expect(editorRef.current?.getCurrentPrompt()).toBe("@updated.png")
+			outsideButton.focus()
+			act(() => vi.runOnlyPendingTimers())
+			expectCollapsedSelectionInside(editorDom as HTMLElement)
 		} finally {
 			vi.clearAllTimers()
 			vi.useRealTimers()
+			outsideButton.remove()
 		}
 	})
 })

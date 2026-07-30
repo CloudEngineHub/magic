@@ -18,7 +18,6 @@ import { UndoRedo } from "@tiptap/extensions"
 import { Fragment } from "@tiptap/pm/model"
 import type { MentionDataServicePort, ReferenceResourcePanelItem } from "../../../public/props"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
-import { areCanvasResourcePathsSame } from "../../../runtime/shared/path/canvasResourcePath"
 import {
 	getStringFromContent,
 	getContentFromString,
@@ -64,6 +63,8 @@ interface MessageEditorProps {
 	onMentionItemHoverChange?: (path: string | null) => void
 	/** 是否启用 @ 功能（模型列表加载完成后才为 true） */
 	mentionEnabled?: boolean
+	/** 外部资源列表尚未恢复完成时，暂不发出 ready mention 快照。 */
+	mentionItemsReady?: boolean
 	/** 为 true 时外层与编辑区宽度 100% 铺满父级（用于视频生成等较宽面板） */
 	fullWidth?: boolean
 	onPaste?: (event: ClipboardEvent<HTMLDivElement>) => void
@@ -71,7 +72,11 @@ interface MessageEditorProps {
 
 export interface MessageEditorMentionChangeContext {
 	source: "user" | "sync"
+	status: "pending" | "ready"
+	revision: number
 }
+
+export type MessageEditorMentionMatcher = (item: ReferenceResourcePanelItem) => boolean
 
 /** insertMentionItems 的可选行为（如上传/模式切换需在文末追加 @，与 appendMentionToString 一致） */
 export interface InsertCanvasMentionItemsOptions {
@@ -106,8 +111,11 @@ export interface MessageEditorRef {
 		items: ReferenceResourcePanelItem[],
 		options?: InsertCanvasMentionItemsOptions,
 	) => boolean
-	removeMentionItemByPath: (path: string) => boolean
-	replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => boolean
+	removeMentionItems: (matcher: MessageEditorMentionMatcher) => boolean
+	replaceMentionItems: (
+		matcher: MessageEditorMentionMatcher,
+		item: ReferenceResourcePanelItem,
+	) => boolean
 }
 
 const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
@@ -126,6 +134,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			onMentionChange,
 			onMentionItemHoverChange,
 			mentionEnabled = true,
+			mentionItemsReady = true,
 			fullWidth = false,
 			onPaste,
 		} = props
@@ -145,6 +154,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		placeholderRef.current = placeholder ?? ""
 		const hoveredMentionPathRef = useRef<string | null>(null)
 		const lastMentionSnapshotRef = useRef<MessageEditorMentionSnapshot | null>(null)
+		const mentionSyncRevisionRef = useRef(0)
 
 		useEffect(() => {
 			if (!selectionPersistenceKey) return
@@ -246,7 +256,11 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 							paths: [...paths],
 							currentPrompt: str,
 						}
-						mentionCb(paths, str, { source: "user" })
+						mentionCb(paths, str, {
+							source: "user",
+							status: "ready",
+							revision: (mentionSyncRevisionRef.current += 1),
+						})
 					}
 				},
 				onSelectionUpdate: ({ editor: e }) => {
@@ -301,13 +315,16 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 					syncSelectionRange,
 				)
 			},
-			removeMentionItemByPath: (path: string) => {
+			removeMentionItems: (matcher: MessageEditorMentionMatcher) => {
 				if (!editor) return false
-				return removeMentionItemByPathInEditor(editor, path, syncSelectionRange)
+				return removeMentionItemsInEditor(editor, matcher, syncSelectionRange)
 			},
-			replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => {
+			replaceMentionItems: (
+				matcher: MessageEditorMentionMatcher,
+				item: ReferenceResourcePanelItem,
+			) => {
 				if (!editor) return false
-				return replaceMentionItemByPathInEditor(editor, oldPath, item)
+				return replaceMentionItemsInEditor(editor, matcher, item)
 			},
 		}))
 
@@ -318,24 +335,38 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 
 			const valueSnapshot = value ?? ""
 			const itemsSnapshot = matchableItems
+			const syncRevision = (mentionSyncRevisionRef.current += 1)
+			const mentionCb = onMentionChangeRef.current
+			if (mentionCb) {
+				runActiveEditor(editor, (activeEditor) => {
+					mentionCb(
+						getMentionPathsFromContent(activeEditor.getJSON()),
+						getStringFromContent(activeEditor.getJSON()),
+						{ source: "sync", status: "pending", revision: syncRevision },
+					)
+				})
+			}
 			const syncMentionChange = (activeEditor: Editor) => {
 				const mentionCb = onMentionChangeRef.current
 				if (!mentionCb) return
+				if (!mentionItemsReady) return
 				const paths = getMentionPathsFromContent(activeEditor.getJSON())
 				const currentPrompt = getStringFromContent(activeEditor.getJSON())
 				const previousSnapshot = lastMentionSnapshotRef.current
-				if (
+				const isSameSnapshot =
 					previousSnapshot?.currentPrompt === currentPrompt &&
 					previousSnapshot.paths.length === paths.length &&
 					previousSnapshot.paths.every((path, index) => path === paths[index])
-				) {
-					return
-				}
+				if (isSameSnapshot) return
 				lastMentionSnapshotRef.current = {
 					paths: [...paths],
 					currentPrompt,
 				}
-				mentionCb(paths, currentPrompt, { source: "sync" })
+				mentionCb(paths, currentPrompt, {
+					source: "sync",
+					status: "ready",
+					revision: syncRevision,
+				})
 			}
 			let cancelled = false
 
@@ -388,7 +419,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			return () => {
 				cancelled = true
 			}
-		}, [value, matchableItems, editor])
+		}, [value, matchableItems, editor, mentionItemsReady])
 
 		// 空文档时占位文案变更：空事务触发占位装饰重算（不重建 editor）
 		useEffect(() => {
@@ -595,22 +626,18 @@ export function resolveMentionInsertionRange(options: {
 	return { from: to, to }
 }
 
-function replaceMentionItemByPathInEditor(
+function replaceMentionItemsInEditor(
 	editor: NonNullable<ReturnType<typeof useEditor>>,
-	oldPath: string,
+	matcher: MessageEditorMentionMatcher,
 	item: ReferenceResourcePanelItem,
 ): boolean {
-	if (!oldPath) return false
-
-	return runActiveEditor(
+	const didReplace = runActiveEditor(
 		editor,
 		(activeEditor) => {
 			const targetPositions: number[] = []
 			activeEditor.state.doc.descendants((node, pos) => {
 				if (node.type.name !== "mention") return true
-				const data = node.attrs?.data as { file_path?: string } | undefined
-				if (!data?.file_path || !areCanvasResourcePathsSame(data.file_path, oldPath))
-					return true
+				if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
 				targetPositions.push(pos)
 				return true
 			})
@@ -626,24 +653,23 @@ function replaceMentionItemByPathInEditor(
 		},
 		false,
 	)
+
+	if (didReplace) restoreEditorFocusAfterMentionMutation(editor)
+	return didReplace
 }
 
-function removeMentionItemByPathInEditor(
+function removeMentionItemsInEditor(
 	editor: NonNullable<ReturnType<typeof useEditor>>,
-	path: string,
+	matcher: MessageEditorMentionMatcher,
 	onSelectionRangeChange?: (selectionRange: MessageEditorSelectionRange) => void,
 ): boolean {
-	if (!path) return false
-
 	const didRemove = runActiveEditor(
 		editor,
 		(activeEditor) => {
 			const targetRanges: Array<{ from: number; to: number }> = []
 			activeEditor.state.doc.descendants((node, pos) => {
 				if (node.type.name !== "mention") return true
-				const data = node.attrs?.data as { file_path?: string } | undefined
-				if (!data?.file_path || !areCanvasResourcePathsSame(data.file_path, path))
-					return true
+				if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
 
 				const mentionEnd = pos + node.nodeSize
 				const nextNode = activeEditor.state.doc.resolve(mentionEnd).nodeAfter

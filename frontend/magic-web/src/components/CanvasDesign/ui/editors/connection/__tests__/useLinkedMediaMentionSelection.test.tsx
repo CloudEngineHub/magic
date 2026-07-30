@@ -1,7 +1,8 @@
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook } from "@testing-library/react"
 import type { RefObject } from "react"
 import { describe, expect, it, vi } from "vitest"
-import type { MessageEditorRef } from "../../message/MessageEditor"
+import type { MessageEditorMentionMatcher, MessageEditorRef } from "../../message/MessageEditor"
+import { createReferenceResourcePanelItemFromPath } from "../../message/reference-assets/createReferenceResourcePanelItem"
 import type { LinkedEditorMediaItem } from "../linkedEditorInputs"
 import { useLinkedMediaMentionSelection } from "../useLinkedMediaMentionSelection"
 
@@ -21,47 +22,73 @@ function createMediaItem(overrides: Partial<LinkedEditorMediaItem> = {}): Linked
 function createEditorRef(
 	options: { insertResult?: boolean; removeResult?: boolean; replaceResult?: boolean } = {},
 ) {
-	const insertMentionItem = vi.fn(() => options.insertResult ?? true)
-	const removeMentionItemByPath = vi.fn(() => options.removeResult ?? true)
-	const replaceMentionItemByPath = vi.fn(() => options.replaceResult ?? true)
+	const insertMentionItem = vi.fn<MessageEditorRef["insertMentionItem"]>(
+		() => options.insertResult ?? true,
+	)
+	const insertMentionItems = vi.fn<MessageEditorRef["insertMentionItems"]>(() => true)
+	const removeMentionItems = vi.fn<MessageEditorRef["removeMentionItems"]>(
+		() => options.removeResult ?? true,
+	)
+	const replaceMentionItems = vi.fn<MessageEditorRef["replaceMentionItems"]>(
+		() => options.replaceResult ?? true,
+	)
 	const editorRef = {
 		current: {
 			focus: vi.fn(),
 			getCurrentPrompt: vi.fn(() => ""),
 			openMentionPanel: vi.fn(),
 			insertMentionItem,
-			insertMentionItems: vi.fn(() => true),
-			removeMentionItemByPath,
-			replaceMentionItemByPath,
+			insertMentionItems,
+			removeMentionItems,
+			replaceMentionItems,
 		},
 	} as RefObject<MessageEditorRef | null>
 
 	return {
 		editorRef,
 		insertMentionItem,
-		removeMentionItemByPath,
-		replaceMentionItemByPath,
+		insertMentionItems,
+		removeMentionItems,
+		replaceMentionItems,
 	}
 }
 
+const canSelectMediaConnection = vi.fn(() => true)
+
 describe("useLinkedMediaMentionSelection", () => {
-	it("inserts one mention after the linked selection is accepted", () => {
+	it("does not restore or clear any media selection by itself", () => {
+		const mediaItem = createMediaItem({ selected: false })
+		const { editorRef, insertMentionItems, removeMentionItems } = createEditorRef()
+		const { result } = renderHook(() =>
+			useLinkedMediaMentionSelection({
+				mediaItems: [mediaItem],
+				mentionedReferencePaths: [],
+				canSelectMediaConnection,
+				editorRef,
+			}),
+		)
+
+		act(() => result.current(mediaItem.connectionId, false))
+
+		expect(insertMentionItems).not.toHaveBeenCalled()
+		expect(removeMentionItems).not.toHaveBeenCalled()
+	})
+
+	it("inserts one mention after the linked candidate is accepted", () => {
 		const mediaItem = createMediaItem()
-		const onSelectionChange = vi.fn(() => true)
 		const { editorRef, insertMentionItem } = createEditorRef()
 		const { result } = renderHook(() =>
 			useLinkedMediaMentionSelection({
 				mediaItems: [mediaItem],
 				mentionedReferencePaths: [],
-				isMediaConnectionSelected: () => false,
-				onSelectionChange,
+				canSelectMediaConnection,
 				editorRef,
 			}),
 		)
 
 		act(() => result.current(mediaItem.connectionId, true))
 
-		expect(onSelectionChange).toHaveBeenCalledWith(mediaItem.connectionId, true)
+		expect(canSelectMediaConnection).toHaveBeenCalledWith(mediaItem.connectionId)
 		expect(insertMentionItem).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
@@ -73,101 +100,93 @@ describe("useLinkedMediaMentionSelection", () => {
 		)
 	})
 
-	it("rolls the linked selection back when mention insertion fails", () => {
+	it("does not produce a selection when mention insertion fails", () => {
 		const mediaItem = createMediaItem()
-		const onSelectionChange = vi.fn(() => true)
 		const { editorRef } = createEditorRef({ insertResult: false })
 		const { result } = renderHook(() =>
 			useLinkedMediaMentionSelection({
 				mediaItems: [mediaItem],
 				mentionedReferencePaths: [],
-				isMediaConnectionSelected: () => false,
-				onSelectionChange,
+				canSelectMediaConnection,
 				editorRef,
 			}),
 		)
 
 		act(() => result.current(mediaItem.connectionId, true))
 
-		expect(onSelectionChange.mock.calls).toEqual([
-			[mediaItem.connectionId, true],
-			[mediaItem.connectionId, false],
-		])
+		expect(mediaItem.selected).toBe(false)
 	})
 
-	it("does not duplicate an existing mention for the same normalized path", () => {
+	it("does not duplicate an existing mention for the same canonical path", () => {
 		const mediaItem = createMediaItem({ path: "/images/source.png" })
-		const onSelectionChange = vi.fn(() => true)
 		const { editorRef, insertMentionItem } = createEditorRef()
 		const { result } = renderHook(() =>
 			useLinkedMediaMentionSelection({
 				mediaItems: [mediaItem],
 				mentionedReferencePaths: ["./images/source.png"],
-				isMediaConnectionSelected: () => false,
-				onSelectionChange,
+				canSelectMediaConnection,
 				editorRef,
 			}),
 		)
 
 		act(() => result.current(mediaItem.connectionId, true))
 
-		expect(onSelectionChange).toHaveBeenCalledWith(mediaItem.connectionId, true)
 		expect(insertMentionItem).not.toHaveBeenCalled()
 	})
 
-	it("removes the mention before clearing the linked selection", () => {
+	it("removes the matching mention and leaves selection derivation to the next snapshot", () => {
 		const mediaItem = createMediaItem({ selected: true, status: "active" })
-		const onSelectionChange = vi.fn(() => true)
-		const { editorRef, removeMentionItemByPath } = createEditorRef()
+		const { editorRef, removeMentionItems } = createEditorRef()
 		const { result } = renderHook(() =>
 			useLinkedMediaMentionSelection({
 				mediaItems: [mediaItem],
 				mentionedReferencePaths: ["./images/source.png"],
-				isMediaConnectionSelected: () => true,
-				onSelectionChange,
+				canSelectMediaConnection,
 				editorRef,
 			}),
 		)
 
 		act(() => result.current(mediaItem.connectionId, false))
 
-		expect(removeMentionItemByPath).toHaveBeenCalledWith("./images/source.png")
-		expect(onSelectionChange).toHaveBeenCalledWith(mediaItem.connectionId, false)
-		expect(removeMentionItemByPath.mock.invocationCallOrder[0]).toBeLessThan(
-			onSelectionChange.mock.invocationCallOrder[0] ?? Infinity,
-		)
+		expect(removeMentionItems).toHaveBeenCalledTimes(1)
+		const matcher = removeMentionItems.mock.calls[0]?.[0] as
+			| MessageEditorMentionMatcher
+			| undefined
+		expect(
+			matcher?.(createReferenceResourcePanelItemFromPath("/images/source.png", "source.png")),
+		).toBe(true)
+		expect(
+			matcher?.(createReferenceResourcePanelItemFromPath("/images/other.png", "other.png")),
+		).toBe(false)
 	})
 
-	it("keeps the linked selection when mention removal fails", () => {
+	it("keeps the editor and UI state unchanged when mention removal fails", () => {
 		const mediaItem = createMediaItem({ selected: true, status: "active" })
-		const onSelectionChange = vi.fn(() => true)
-		const { editorRef } = createEditorRef({ removeResult: false })
+		const { editorRef, removeMentionItems } = createEditorRef({ removeResult: false })
 		const { result } = renderHook(() =>
 			useLinkedMediaMentionSelection({
 				mediaItems: [mediaItem],
 				mentionedReferencePaths: ["./images/source.png"],
-				isMediaConnectionSelected: () => true,
-				onSelectionChange,
+				canSelectMediaConnection,
 				editorRef,
 			}),
 		)
 
 		act(() => result.current(mediaItem.connectionId, false))
 
-		expect(onSelectionChange).not.toHaveBeenCalled()
+		expect(removeMentionItems).toHaveBeenCalled()
+		expect(mediaItem.selected).toBe(true)
 	})
 
 	it("does not remove a visible mention when its linked source disappears", () => {
-		const mediaItem = createMediaItem()
-		const onSelectionChange = vi.fn(() => true)
-		const { editorRef, insertMentionItem, replaceMentionItemByPath } = createEditorRef()
+		const mediaItem = createMediaItem({ selected: true, status: "active" })
+		const { editorRef, insertMentionItem, replaceMentionItems } = createEditorRef()
 		const { rerender } = renderHook(
 			({ mediaItems }: { mediaItems: LinkedEditorMediaItem[] }) =>
 				useLinkedMediaMentionSelection({
 					mediaItems,
 					mentionedReferencePaths: ["./images/source.png"],
-					isMediaConnectionSelected: () => true,
-					onSelectionChange,
+					canSelectMediaConnection,
 					editorRef,
 				}),
 			{ initialProps: { mediaItems: [mediaItem] } },
@@ -175,35 +194,17 @@ describe("useLinkedMediaMentionSelection", () => {
 
 		rerender({ mediaItems: [] })
 
-		expect(onSelectionChange).not.toHaveBeenCalled()
 		expect(insertMentionItem).not.toHaveBeenCalled()
-		expect(replaceMentionItemByPath).not.toHaveBeenCalled()
+		expect(replaceMentionItems).not.toHaveBeenCalled()
 	})
 
-	it("does not rewrite a mention when only the canvas path spelling changes", () => {
-		const onSelectionChange = vi.fn(() => true)
-		const { editorRef, replaceMentionItemByPath } = createEditorRef()
-		const { rerender } = renderHook(
-			({ mediaItem }: { mediaItem: LinkedEditorMediaItem }) =>
-				useLinkedMediaMentionSelection({
-					mediaItems: [mediaItem],
-					mentionedReferencePaths: ["./images/source.png"],
-					isMediaConnectionSelected: () => true,
-					onSelectionChange,
-					editorRef,
-				}),
-			{ initialProps: { mediaItem: createMediaItem() } },
-		)
-
-		rerender({ mediaItem: createMediaItem({ path: "/images/source.png" }) })
-
-		expect(replaceMentionItemByPath).not.toHaveBeenCalled()
-	})
-
-	it("updates a tracked mention when the linked source path or name changes", async () => {
-		const oldItem = createMediaItem({ path: "/images/source.png" })
-		const onSelectionChange = vi.fn(() => true)
-		const { editorRef, replaceMentionItemByPath } = createEditorRef()
+	it("updates a tracked mention when the linked source path or name changes", () => {
+		const oldItem = createMediaItem({
+			path: "/images/source.png",
+			selected: true,
+			status: "active",
+		})
+		const { editorRef, replaceMentionItems } = createEditorRef()
 		const { rerender } = renderHook(
 			({
 				mediaItem,
@@ -215,42 +216,55 @@ describe("useLinkedMediaMentionSelection", () => {
 				useLinkedMediaMentionSelection({
 					mediaItems: [mediaItem],
 					mentionedReferencePaths: [mentionedPath],
-					isMediaConnectionSelected: () => true,
-					onSelectionChange,
+					canSelectMediaConnection,
 					editorRef,
 				}),
 			{ initialProps: { mediaItem: oldItem, mentionedPath: "./images/source.png" } },
 		)
 
 		rerender({
-			mediaItem: createMediaItem({ path: "./images/updated.png", fileName: "updated.png" }),
+			mediaItem: createMediaItem({
+				path: "./images/updated.png",
+				fileName: "updated.png",
+				selected: true,
+				status: "active",
+			}),
 			mentionedPath: "./images/source.png",
 		})
 
-		await waitFor(() => {
-			expect(replaceMentionItemByPath).toHaveBeenCalledWith(
-				"./images/source.png",
-				expect.objectContaining({
-					data: expect.objectContaining({
-						file_name: "updated.png",
-						file_path: "./images/updated.png",
-					}),
-				}),
-			)
-		})
+		expect(replaceMentionItems).toHaveBeenCalledTimes(1)
+		const firstCall = replaceMentionItems.mock.calls[0] as
+			| [
+					MessageEditorMentionMatcher,
+					ReturnType<typeof createReferenceResourcePanelItemFromPath>,
+			  ]
+			| undefined
+		expect(
+			firstCall?.[0]?.(
+				createReferenceResourcePanelItemFromPath("/images/source.png", "source.png"),
+			),
+		).toBe(true)
+		expect(firstCall?.[1]).toEqual(
+			expect.objectContaining({
+				data: expect.objectContaining({ file_name: "updated.png" }),
+			}),
+		)
 
 		rerender({
-			mediaItem: createMediaItem({ path: "./images/updated.png", fileName: "renamed.png" }),
+			mediaItem: createMediaItem({
+				path: "./images/updated.png",
+				fileName: "renamed.png",
+				selected: true,
+				status: "active",
+			}),
 			mentionedPath: "./images/updated.png",
 		})
 
-		await waitFor(() => {
-			expect(replaceMentionItemByPath).toHaveBeenLastCalledWith(
-				"./images/updated.png",
-				expect.objectContaining({
-					data: expect.objectContaining({ file_name: "renamed.png" }),
-				}),
-			)
-		})
+		expect(replaceMentionItems).toHaveBeenCalledTimes(2)
+		expect(replaceMentionItems.mock.calls[1]?.[1]).toEqual(
+			expect.objectContaining({
+				data: expect.objectContaining({ file_name: "renamed.png" }),
+			}),
+		)
 	})
 })

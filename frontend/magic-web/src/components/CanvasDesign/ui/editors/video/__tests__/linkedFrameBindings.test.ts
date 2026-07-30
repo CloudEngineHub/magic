@@ -47,6 +47,20 @@ describe("reconcileLinkedFrameBindings", () => {
 
 		expect(result).toEqual([{ ...endBinding, frameRole: "start" }, endBinding])
 	})
+
+	it("retains a binding when the frame path only changes canonical spelling", () => {
+		const startBinding = createBinding("./images/start.png", "start")
+		const previous = [startBinding]
+
+		const result = reconcileLinkedFrameBindings({
+			previous,
+			currentFrameImages: ["/images/start.png"],
+			supportsStartFrame: true,
+			supportsEndFrame: false,
+		})
+
+		expect(result).toBe(previous)
+	})
 })
 
 describe("synchronizeLinkedFrameBindings", () => {
@@ -166,6 +180,28 @@ describe("synchronizeLinkedFrameBindings", () => {
 					connectionId: startBinding.sourceConnectionId,
 					kind: "image",
 					path: "./images/start-b.png",
+					fileName: startBinding.sourceFileName,
+				},
+			],
+		})
+
+		expect(result.bindings).toBe(previous)
+		expect(result.frameUpdates).toEqual([])
+	})
+
+	it("does not rewrite a frame when the source path only changes canonical spelling", () => {
+		const startBinding = createBinding("./images/start.png", "start")
+		const previous = [startBinding]
+		const result = synchronizeLinkedFrameBindings({
+			previous,
+			currentFrameImages: ["/images/start.png"],
+			supportsStartFrame: true,
+			supportsEndFrame: false,
+			linkedMediaItems: [
+				{
+					connectionId: startBinding.sourceConnectionId,
+					kind: "image",
+					path: "images/start.png",
 					fileName: startBinding.sourceFileName,
 				},
 			],

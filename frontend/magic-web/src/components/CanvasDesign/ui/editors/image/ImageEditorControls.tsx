@@ -148,7 +148,6 @@ interface ImageEditorControlsProps {
 	onReferenceFileRemove?: (path: string) => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
-	linkedMentionedReferencePaths?: string[]
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
 	renderSendButton?: () => React.ReactNode
@@ -163,7 +162,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onReferenceFileRemove,
 		onPreviewMediaResource,
 		linkedMediaItems = [],
-		linkedMentionedReferencePaths = [],
 		onLinkedMediaSelectionChange,
 		renderPromptOptimizationButton,
 		renderSendButton,
@@ -207,10 +205,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				)
 				.map((item) => item.path),
 		[linkedMediaItems],
-	)
-	const mentionedReferencePathSet = useMemo(
-		() => new Set(linkedMentionedReferencePaths.map(getLinkedMediaReferenceIdentity)),
-		[linkedMentionedReferencePaths],
 	)
 	const effectiveReferenceFileCount = mergeLinkedMediaPaths(
 		currentReferenceFiles,
@@ -261,9 +255,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					),
 					onPreviewMediaResource,
 					onLinkedMediaSelectionChange,
-					isMentioned: mentionedReferencePathSet.has(
-						getLinkedMediaReferenceIdentity(item.path),
-					),
 				}),
 			)
 		}
@@ -297,9 +288,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				previewResourceAriaLabel: t("mediaResourceFullscreenPreview.open", "预览媒体资源"),
 				onPreviewMediaResource,
 				onLinkedMediaSelectionChange,
-				isMentioned: mentionedReferencePathSet.has(
-					getLinkedMediaReferenceIdentity(item.path),
-				),
 			}),
 		)
 		options.push(...linkedOptions)
@@ -322,7 +310,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		maxReferenceFiles,
 		visibleReferenceFileInfos,
 		visibleLinkedMediaItems,
-		mentionedReferencePathSet,
 		createLinkedMediaSourceListOption,
 		linkedMediaKindLabelByKind,
 		t,
@@ -339,7 +326,11 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		(option: { slotIndex: number; value: string }): ImageEditorReferencePopoverState => {
 			const slotPath = currentReferenceFiles[option.slotIndex]
 			const filesWithoutSlot = slotPath
-				? currentReferenceFiles.filter((path) => path !== slotPath)
+				? currentReferenceFiles.filter(
+						(path) =>
+							getLinkedMediaReferenceIdentity(path) !==
+							getLinkedMediaReferenceIdentity(slotPath),
+					)
 				: currentReferenceFiles
 			const effectiveFilesWithoutSlot = mergeLinkedMediaPaths(
 				filesWithoutSlot,
@@ -373,7 +364,9 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				<ImageEditorReferenceSlotPopover
 					className={cn(
 						className,
-						option.resourcePath === hoveredMentionPath &&
+						Boolean(option.resourcePath && hoveredMentionPath) &&
+							getLinkedMediaReferenceIdentity(option.resourcePath) ===
+								getLinkedMediaReferenceIdentity(hoveredMentionPath) &&
 							sourceListStyles.sourceItemMentionHovered,
 					)}
 					style={style}

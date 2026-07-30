@@ -9,16 +9,17 @@ import {
 	collectLinkedFrameSourceElements,
 	createLinkedFrameSourceId,
 	dedupeLinkedMediaItemsByPath,
-	getLinkedMediaConnectionIdsToDeselectAfterMentionChange,
 	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaPaths,
 	mergeLinkedMediaReferences,
 	resolveLinkedMediaDisplay,
+	resolveLinkedMediaAssociation,
 	resolveLinkedMediaItems,
-	resolveLinkedMediaSelection,
+	resolveLinkedMediaPolicySelection,
 	resolveLinkedMediaSelectionDisplay,
 	resolveLinkedEditorInputs,
 	type LinkedEditorMediaCandidate,
+	type ResolveLinkedMediaAssociationOptions,
 } from "../linkedEditorInputs"
 
 function textElement(id: string, text: string, zIndex = 0): LayerElement {
@@ -357,64 +358,230 @@ describe("resolveLinkedMediaDisplay", () => {
 describe("resolveLinkedMediaSelectionDisplay", () => {
 	it("keeps a mentioned linked resource checked but allows removing it", () => {
 		expect(
-			resolveLinkedMediaSelectionDisplay(
-				{ selected: false, selectionDisabledReason: "duplicate" },
-				true,
-			),
+			resolveLinkedMediaSelectionDisplay({
+				selected: true,
+				selectionDisabledReason: "duplicate",
+			}),
 		).toEqual({ checked: true, disabled: false })
 	})
 
 	it("still disables an unavailable unselected resource", () => {
 		expect(
-			resolveLinkedMediaSelectionDisplay(
-				{ selected: false, selectionDisabledReason: "over-limit" },
-				false,
-			),
+			resolveLinkedMediaSelectionDisplay({
+				selected: false,
+				selectionDisabledReason: "over-limit",
+			}),
 		).toEqual({ checked: false, disabled: true })
 	})
 })
 
-describe("getLinkedMediaConnectionIdsToDeselectAfterMentionChange", () => {
-	it("deselects a checked linked resource when its @mention is removed", () => {
-		expect(
-			getLinkedMediaConnectionIdsToDeselectAfterMentionChange(
-				[
-					{
-						connectionId: "connection-image",
-						sourceElementId: "image-source",
-						kind: "image",
-						path: "/images/source.png",
-						status: "active",
-						selected: true,
-					},
-				],
-				["./images/source.png"],
-				[],
-			),
-		).toEqual(["connection-image"])
+describe("resolveLinkedMediaAssociation", () => {
+	it("derives candidate selection from canonical mention paths", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+				},
+			],
+			mentionedPaths: ["/images/source.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items[0]?.selected).toBe(true)
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "./images/source.png", sourceCrop: undefined },
+		])
 	})
 
-	it("keeps checkbox-only linked selections that were never mentioned", () => {
-		expect(
-			getLinkedMediaConnectionIdsToDeselectAfterMentionChange(
-				[
-					{
-						connectionId: "connection-image",
-						sourceElementId: "image-source",
-						kind: "image",
-						path: "/images/source.png",
-						status: "active",
-						selected: true,
-					},
-				],
-				[],
-				[],
-			),
-		).toEqual([])
+	it("keeps unmatched manual references as ordinary active media", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [],
+			mentionedPaths: ["./images/manual.png"],
+			manualReferences: [{ kind: "image", path: "/images/manual.png" }],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items).toEqual([])
+		expect(result.unmatchedManualReferences).toEqual([
+			{ kind: "image", path: "/images/manual.png" },
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/images/manual.png" },
+		])
+	})
+
+	it("keeps one stable candidate for duplicate canonical paths", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-first",
+					sourceElementId: "image-first",
+					kind: "image",
+					path: "./images/source.png",
+				},
+				{
+					connectionId: "connection-second",
+					sourceElementId: "image-second",
+					kind: "image",
+					path: "/images/source.png",
+				},
+			],
+			mentionedPaths: ["images/source.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items).toHaveLength(1)
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({ connectionId: "connection-first", selected: true }),
+		)
+	})
+
+	it("keeps a mentioned candidate checked when media policy makes it inactive", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+				},
+			],
+			mentionedPaths: ["/images/source.png"],
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["video"] },
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: true,
+				status: "inactive",
+				reason: "unsupported-mode",
+				selectionDisabledReason: undefined,
+			}),
+		)
+		expect(result.activeMediaReferences).toEqual([])
+	})
+
+	it("derives every checkbox from mentions while limits only constrain active media", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-first",
+					sourceElementId: "image-first",
+					kind: "image",
+					path: "./images/first.png",
+				},
+				{
+					connectionId: "connection-second",
+					sourceElementId: "image-second",
+					kind: "image",
+					path: "./images/second.png",
+				},
+			],
+			mentionedPaths: ["/images/first.png", "/images/second.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+		})
+
+		expect(result.items).toEqual([
+			expect.objectContaining({ connectionId: "connection-first", selected: true }),
+			expect.objectContaining({
+				connectionId: "connection-second",
+				selected: true,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "./images/first.png", sourceCrop: undefined },
+		])
+	})
+
+	it("allows a linked candidate to replace a same-path manual reference when checked", () => {
+		const associationOptions = {
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+					sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+				},
+			],
+			targetKind: "image",
+			mediaPolicy: {
+				supportedKinds: ["image"],
+				manualReferences: [{ kind: "image", path: "/images/source.png" }],
+				maxTotalCount: 1,
+			},
+		} satisfies Omit<ResolveLinkedMediaAssociationOptions, "mentionedPaths">
+		const result = resolveLinkedMediaAssociation({
+			...associationOptions,
+			mentionedPaths: [],
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: false,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		)
+
+		const checkedResult = resolveLinkedMediaAssociation({
+			...associationOptions,
+			mentionedPaths: ["/images/source.png"],
+		})
+		expect(checkedResult.items[0]?.selected).toBe(true)
+		expect(checkedResult.activeMediaReferences).toEqual([
+			{
+				kind: "image",
+				path: "./images/source.png",
+				sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+			},
+		])
+	})
+
+	it("keeps a same-path manual reference active while the linked candidate is unchecked", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+					sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+				},
+			],
+			mentionedPaths: [],
+			manualReferences: [{ kind: "image", path: "/images/source.png" }],
+			targetKind: "image",
+			mediaPolicy: {
+				supportedKinds: ["image"],
+				maxTotalCount: 1,
+			},
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: false,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		)
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/images/source.png" },
+		])
 	})
 })
 
-describe("resolveLinkedMediaSelection", () => {
+describe("resolveLinkedMediaPolicySelection", () => {
 	const firstImageCandidate: LinkedEditorMediaCandidate = {
 		connectionId: "connection-image-1",
 		sourceElementId: "image-source-1",
@@ -431,7 +598,7 @@ describe("resolveLinkedMediaSelection", () => {
 	}
 
 	it("keeps linked media unselected by default", () => {
-		const result = resolveLinkedMediaSelection([firstImageCandidate], [], {
+		const result = resolveLinkedMediaPolicySelection([firstImageCandidate], [], {
 			targetKind: "image",
 			mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
 		})
@@ -443,7 +610,7 @@ describe("resolveLinkedMediaSelection", () => {
 	})
 
 	it("keeps every candidate selectable while no media has been selected", () => {
-		const result = resolveLinkedMediaSelection(
+		const result = resolveLinkedMediaPolicySelection(
 			[firstImageCandidate, secondImageCandidate],
 			[],
 			{
@@ -467,7 +634,7 @@ describe("resolveLinkedMediaSelection", () => {
 	})
 
 	it("only includes media selected by the user", () => {
-		const result = resolveLinkedMediaSelection(
+		const result = resolveLinkedMediaPolicySelection(
 			[firstImageCandidate, secondImageCandidate],
 			[secondImageCandidate.connectionId],
 			{
@@ -495,7 +662,7 @@ describe("resolveLinkedMediaSelection", () => {
 
 	it("keeps a selected linked resource active when it is also manually mentioned", () => {
 		const sourceCrop = { x: 4, y: 8, width: 200, height: 120 }
-		const result = resolveLinkedMediaSelection(
+		const result = resolveLinkedMediaPolicySelection(
 			[{ ...firstImageCandidate, sourceCrop }],
 			[firstImageCandidate.connectionId],
 			{
@@ -521,10 +688,10 @@ describe("resolveLinkedMediaSelection", () => {
 	})
 
 	it("restores a retained selection after the media kind becomes supported again", () => {
-		const selectedConnectionIds = [firstImageCandidate.connectionId]
-		const unsupportedResult = resolveLinkedMediaSelection(
+		const mentionedConnectionIds = [firstImageCandidate.connectionId]
+		const unsupportedResult = resolveLinkedMediaPolicySelection(
 			[firstImageCandidate],
-			selectedConnectionIds,
+			mentionedConnectionIds,
 			{
 				targetKind: "video",
 				mediaPolicy: { supportedKinds: ["video"] },
@@ -533,9 +700,9 @@ describe("resolveLinkedMediaSelection", () => {
 
 		expect(unsupportedResult.activeMediaReferences).toEqual([])
 
-		const restoredResult = resolveLinkedMediaSelection(
+		const restoredResult = resolveLinkedMediaPolicySelection(
 			[firstImageCandidate],
-			selectedConnectionIds,
+			mentionedConnectionIds,
 			{
 				targetKind: "video",
 				mediaPolicy: { supportedKinds: ["image"] },

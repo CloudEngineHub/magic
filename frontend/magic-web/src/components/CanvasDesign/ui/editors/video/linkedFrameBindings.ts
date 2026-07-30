@@ -39,9 +39,19 @@ function areLinkedFrameBindingsEqual(
 	for (let index = 0; index < left.length; index += 1) {
 		const leftItem = left[index]
 		const rightItem = right[index]
-		if (leftItem?.framePath !== rightItem?.framePath) return false
+		if (
+			getLinkedMediaReferenceIdentity(leftItem?.framePath) !==
+			getLinkedMediaReferenceIdentity(rightItem?.framePath)
+		) {
+			return false
+		}
 		if (leftItem?.sourceConnectionId !== rightItem?.sourceConnectionId) return false
-		if (leftItem?.sourcePath !== rightItem?.sourcePath) return false
+		if (
+			getLinkedMediaReferenceIdentity(leftItem?.sourcePath) !==
+			getLinkedMediaReferenceIdentity(rightItem?.sourcePath)
+		) {
+			return false
+		}
 		if (leftItem?.sourceKind !== rightItem?.sourceKind) return false
 		if (leftItem?.sourceFileName !== rightItem?.sourceFileName) return false
 		if (leftItem?.frameRole !== rightItem?.frameRole) return false
@@ -61,7 +71,10 @@ export function reconcileLinkedFrameBindings(
 	const next = Array.from({ length: currentFrameImages.length }, (_, index) => {
 		const path = currentFrameImages[index]
 		if (!path) return undefined
-		const binding = previous.find((item) => item?.framePath === path)
+		const pathIdentity = getLinkedMediaReferenceIdentity(path)
+		const binding = previous.find(
+			(item) => getLinkedMediaReferenceIdentity(item?.framePath) === pathIdentity,
+		)
 		return binding
 			? { ...binding, frameRole: frameRoles[index] ?? binding.frameRole }
 			: undefined

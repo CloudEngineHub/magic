@@ -3,9 +3,9 @@ import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import type { CropConfig } from "../../../runtime/document/types"
 import {
+	getLinkedMediaReferenceIdentity,
 	resolveLinkedEditorInputs,
-	resolveLinkedMediaSelection,
-	getLinkedMediaConnectionIdsToDeselectAfterMentionChange,
+	resolveLinkedMediaAssociation,
 	type LinkedEditorInputsResolution,
 	type LinkedEditorMediaItem,
 	type LinkedEditorMediaPolicy,
@@ -25,12 +25,7 @@ import type { StoredLinkedEditorDraft } from "../../../public/magic-types"
 export interface LinkedEditorInputsState extends LinkedEditorInputsResolution {
 	isTextConnectionSelected: (connectionId: string) => boolean
 	setTextConnectionSelected: (connectionId: string, selected: boolean) => void
-	isMediaConnectionSelected: (connectionId: string) => boolean
-	setMediaConnectionSelected: (connectionId: string, selected: boolean) => boolean
-	handleMentionedReferencePathsChange: (
-		paths: string[],
-		options?: { deselectRemoved?: boolean },
-	) => void
+	canSelectMediaConnection: (connectionId: string) => boolean
 	reorderTextConnections: (activeConnectionId: string, overConnectionId: string) => void
 }
 
@@ -39,6 +34,7 @@ interface UseLinkedEditorInputsOptions {
 	targetKind: LinkedEditorTargetKind
 	enabled?: boolean
 	mediaPolicy?: LinkedEditorMediaPolicy
+	mentionedReferencePaths?: string[]
 }
 
 function areCropConfigsEqual(a?: CropConfig, b?: CropConfig): boolean {
@@ -66,7 +62,12 @@ function areLinkedMediaItemsEqual(
 		if (prevItem.connectionId !== nextItem.connectionId) return false
 		if (prevItem.sourceElementId !== nextItem.sourceElementId) return false
 		if (prevItem.kind !== nextItem.kind) return false
-		if (prevItem.path !== nextItem.path) return false
+		if (
+			getLinkedMediaReferenceIdentity(prevItem.path) !==
+			getLinkedMediaReferenceIdentity(nextItem.path)
+		) {
+			return false
+		}
 		if (prevItem.fileName !== nextItem.fileName) return false
 		if (!areCropConfigsEqual(prevItem.sourceCrop, nextItem.sourceCrop)) return false
 		if (prevItem.status !== nextItem.status) return false
@@ -87,7 +88,12 @@ function areLinkedMediaReferencesEqual(
 		const nextItem = next[index]
 		if (!prevItem || !nextItem) return false
 		if (prevItem.kind !== nextItem.kind) return false
-		if (prevItem.path !== nextItem.path) return false
+		if (
+			getLinkedMediaReferenceIdentity(prevItem.path) !==
+			getLinkedMediaReferenceIdentity(nextItem.path)
+		) {
+			return false
+		}
 		if (!areCropConfigsEqual(prevItem.sourceCrop, nextItem.sourceCrop)) return false
 	}
 	return true
@@ -117,6 +123,7 @@ export function useLinkedEditorInputs(
 	options: UseLinkedEditorInputsOptions,
 ): LinkedEditorInputsState {
 	const { targetElementId, targetKind, enabled = true, mediaPolicy } = options
+	const mentionedReferencePaths = options.mentionedReferencePaths ?? []
 	const { canvas } = useCanvas()
 	const [resolution, setResolution] = useState<LinkedEditorInputsResolution>(() =>
 		resolveLinkedEditorInputs({
@@ -151,22 +158,16 @@ export function useLinkedEditorInputs(
 		canvas: NonNullable<typeof canvas>
 		targetElementId: string
 	} | null>(() => (canvas ? { canvas, targetElementId } : null))
-	const mentionedMediaPathsRef = useRef<string[]>([])
 	const currentTextConnectionIds = useMemo(
 		() => resolution.textConnections.map((connection) => connection.connectionId),
 		[resolution.textConnections],
-	)
-	const currentMediaConnectionIds = useMemo(
-		() => resolution.mediaItems.map((item) => item.connectionId),
-		[resolution.mediaItems],
 	)
 	const reconcileDraftForCurrentInputs = useCallback(
 		(draft: StoredLinkedEditorDraft) =>
 			reconcileLinkedEditorDraft(draft, {
 				textConnectionIds: currentTextConnectionIds,
-				mediaConnectionIds: currentMediaConnectionIds,
 			}),
-		[currentMediaConnectionIds, currentTextConnectionIds],
+		[currentTextConnectionIds],
 	)
 	const reconciledEditorDraft = useMemo(
 		() => reconcileDraftForCurrentInputs(editorDraft),
@@ -175,11 +176,6 @@ export function useLinkedEditorInputs(
 	const selectedTextConnectionIds = useMemo(
 		() => new Set(reconciledEditorDraft.selectedTextConnectionIds),
 		[reconciledEditorDraft.selectedTextConnectionIds],
-	)
-	const selectedMediaConnectionIds = reconciledEditorDraft.selectedMediaConnectionIds
-	const selectedMediaConnectionIdSet = useMemo(
-		() => new Set(selectedMediaConnectionIds),
-		[selectedMediaConnectionIds],
 	)
 	const orderedTextConnectionIds = reconciledEditorDraft.orderedTextConnectionIds
 
@@ -237,11 +233,14 @@ export function useLinkedEditorInputs(
 
 	const mediaSelectionResolution = useMemo(
 		() =>
-			resolveLinkedMediaSelection(resolution.mediaItems, selectedMediaConnectionIds, {
+			resolveLinkedMediaAssociation({
+				candidates: resolution.mediaItems,
+				mentionedPaths: mentionedReferencePaths,
+				manualReferences: mediaPolicy?.manualReferences,
 				targetKind,
 				mediaPolicy,
 			}),
-		[mediaPolicy, resolution.mediaItems, selectedMediaConnectionIds, targetKind],
+		[mediaPolicy, mentionedReferencePaths, resolution.mediaItems, targetKind],
 	)
 
 	useEffect(() => {
@@ -305,70 +304,14 @@ export function useLinkedEditorInputs(
 		[reconcileDraftForCurrentInputs, updateEditorDraft],
 	)
 
-	const setMediaConnectionSelected = useCallback(
-		(connectionId: string, selected: boolean): boolean => {
-			const currentDraft = reconcileDraftForCurrentInputs(editorDraftRef.current)
-			const previousIds = currentDraft.selectedMediaConnectionIds
-			if (!selected) {
-				if (previousIds.includes(connectionId)) {
-					updateEditorDraft({
-						...currentDraft,
-						selectedMediaConnectionIds: previousIds.filter((id) => id !== connectionId),
-					})
-				}
-				return true
-			}
-
-			if (previousIds.includes(connectionId)) return true
-			const nextIds = [...previousIds, connectionId]
-			const nextResolution = resolveLinkedMediaSelection(resolution.mediaItems, nextIds, {
-				targetKind,
-				mediaPolicy,
-			})
-			const nextItem = nextResolution.items.find((item) => item.connectionId === connectionId)
-			if (!nextItem || nextItem.status !== "active") return false
-
-			updateEditorDraft({ ...currentDraft, selectedMediaConnectionIds: nextIds })
-			return true
-		},
-		[
-			mediaPolicy,
-			reconcileDraftForCurrentInputs,
-			resolution.mediaItems,
-			targetKind,
-			updateEditorDraft,
-		],
-	)
-
-	const isMediaConnectionSelected = useCallback(
-		(connectionId: string) => selectedMediaConnectionIdSet.has(connectionId),
-		[selectedMediaConnectionIdSet],
-	)
-
-	const handleMentionedReferencePathsChange = useCallback(
-		(paths: string[], options?: { deselectRemoved?: boolean }) => {
-			const connectionIdsToDeselect = new Set(
-				getLinkedMediaConnectionIdsToDeselectAfterMentionChange(
-					mediaSelectionResolution.items,
-					mentionedMediaPathsRef.current,
-					paths,
-				),
+	const canSelectMediaConnection = useCallback(
+		(connectionId: string): boolean => {
+			const item = mediaSelectionResolution.items.find(
+				(candidate) => candidate.connectionId === connectionId,
 			)
-			mentionedMediaPathsRef.current = [...paths]
-			if (options?.deselectRemoved === false) return
-			if (connectionIdsToDeselect.size === 0) return
-
-			updateEditorDraft((previousDraft) => {
-				const currentDraft = reconcileDraftForCurrentInputs(previousDraft)
-				const nextIds = currentDraft.selectedMediaConnectionIds.filter(
-					(connectionId) => !connectionIdsToDeselect.has(connectionId),
-				)
-				return nextIds.length === currentDraft.selectedMediaConnectionIds.length
-					? currentDraft
-					: { ...currentDraft, selectedMediaConnectionIds: nextIds }
-			})
+			return Boolean(item && !item.selectionDisabledReason)
 		},
-		[mediaSelectionResolution.items, reconcileDraftForCurrentInputs, updateEditorDraft],
+		[mediaSelectionResolution.items],
 	)
 
 	const reorderTextConnections = useCallback(
@@ -410,20 +353,16 @@ export function useLinkedEditorInputs(
 			activeMediaReferences: mediaSelectionResolution.activeMediaReferences,
 			isTextConnectionSelected,
 			setTextConnectionSelected,
-			isMediaConnectionSelected,
-			setMediaConnectionSelected,
-			handleMentionedReferencePathsChange,
+			canSelectMediaConnection,
 			reorderTextConnections,
 		}),
 		[
+			canSelectMediaConnection,
 			isTextConnectionSelected,
-			isMediaConnectionSelected,
-			handleMentionedReferencePathsChange,
 			mediaSelectionResolution,
 			reorderTextConnections,
 			resolution,
 			orderedTextConnections,
-			setMediaConnectionSelected,
 			setTextConnectionSelected,
 			textPrompt,
 		],

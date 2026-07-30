@@ -12,7 +12,11 @@ import type {
 	VideoInputMode,
 } from "../../../public/magic-types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	areCanvasResourcePathsSame,
+	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import { useFileInput } from "../message/useFileInput"
 import { removeMentionFromString } from "../message/tiptap/contentUtils"
 import {
@@ -80,6 +84,7 @@ import {
 	encodeVideoPromptMentionsToPlaceholders,
 	resolveVideoPromptPlaceholderReferences,
 } from "./prompt-placeholders/video-prompt-placeholder"
+import { createCanvasMentionPathMatcher } from "../connection/linkedMediaMentionMatcher"
 
 export type { VideoEditorConfig } from "./video-editor-config.types"
 
@@ -715,9 +720,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		) => {
 			const previousInfo = frameImageInfos[slotIndex]
 			if (
-				previousInfo?.path === fileInfo.path ||
+				Boolean(
+					previousInfo?.path &&
+					areCanvasResourcePathsSame(previousInfo.path, fileInfo.path),
+				) ||
 				frameImageInfos.some(
-					(info, index) => index !== slotIndex && info?.path === fileInfo.path,
+					(info, index) =>
+						index !== slotIndex &&
+						Boolean(info?.path && areCanvasResourcePathsSame(info.path, fileInfo.path)),
 				)
 			) {
 				if (!options?.retainResourceSlot) {
@@ -770,9 +780,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					: undefined
 			const previousInfo = referenceImageInfos[slotIndex]
 			if (
-				previousInfo?.path === fileInfo.path ||
+				Boolean(
+					previousInfo?.path &&
+					areCanvasResourcePathsSame(previousInfo.path, fileInfo.path),
+				) ||
 				referenceImageInfos.some(
-					(info, index) => index !== slotIndex && info.path === fileInfo.path,
+					(info, index) =>
+						index !== slotIndex && areCanvasResourcePathsSame(info.path, fileInfo.path),
 				)
 			) {
 				if (!options?.retainResourceSlot) {
@@ -787,7 +801,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
 				assetType,
 			}
-			const deduped = referenceImageInfos.filter((info) => info.path !== fileInfo.path)
+			const deduped = referenceImageInfos.filter(
+				(info) => !areCanvasResourcePathsSame(info.path, fileInfo.path),
+			)
 			const nextInfos = [...deduped]
 			const shouldReplaceExisting =
 				previousInfo !== undefined &&
@@ -807,7 +823,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const nextProtectedReferencePaths =
 				shouldReplaceExisting && previousInfo?.path
 					? protectedReferencePaths.map((path) =>
-							path === previousInfo.path ? normalizedFileInfo.path : path,
+							areCanvasResourcePathsSame(path, previousInfo.path)
+								? normalizedFileInfo.path
+								: path,
 						)
 					: protectedReferencePaths
 			updateProtectedReferencePaths(
@@ -817,8 +835,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				),
 			)
 			if (shouldReplaceExisting && previousInfo?.path) {
-				messageEditorRef?.current?.replaceMentionItemByPath(
-					previousInfo.path,
+				messageEditorRef?.current?.replaceMentionItems(
+					createCanvasMentionPathMatcher(previousInfo.path),
 					createReferenceResourcePanelItemFromPath(
 						normalizedFileInfo.path,
 						normalizedFileInfo.fileName,
@@ -827,7 +845,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			}
 			if (
 				!shouldReplaceExisting &&
-				limitedInfos.some((info) => info.path === normalizedFileInfo.path)
+				limitedInfos.some((info) =>
+					areCanvasResourcePathsSame(info.path, normalizedFileInfo.path),
+				)
 			) {
 				scheduleReferenceMentionInserts([normalizedFileInfo], {
 					placement: options?.mentionPlacement ?? "cursor",
@@ -1041,9 +1061,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				limitedReferenceInfos,
 			)
 			if (referenceImageInfos.length > nextReferenceMaxCount) {
-				const removedPathSet = new Set(limitedReferenceInfos.map((info) => info.path))
+				const retainedPathIdentities = new Set(
+					limitedReferenceInfos.map((info) => getCanvasResourceIdentity(info.path)),
+				)
 				const removedInfos = referenceImageInfos.filter(
-					(info) => !removedPathSet.has(info.path),
+					(info) => !retainedPathIdentities.has(getCanvasResourceIdentity(info.path)),
 				)
 				setReferenceImageInfos(limitedReferenceInfos)
 				updateProtectedReferencePaths(
@@ -1192,27 +1214,43 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const handleReferenceMentionPathsChange = useCallback(
 		(paths: string[]) => {
 			if (!supportsReferenceAssets) return
-			const uniquePaths = paths.filter((path, index) => path && paths.indexOf(path) === index)
+			const uniquePathByIdentity = new Map<string, string>()
+			paths.forEach((path) => {
+				const identity = getCanvasResourceIdentity(path)
+				if (identity && !uniquePathByIdentity.has(identity)) {
+					uniquePathByIdentity.set(identity, path)
+				}
+			})
+			const uniquePaths = Array.from(uniquePathByIdentity.values())
 			const nextProtectedPaths = unprotectPromptBoundReferencePaths(
 				protectedReferencePaths,
 				uniquePaths,
 			)
 			updateProtectedReferencePaths(nextProtectedPaths)
+			const nextProtectedPathIdentities = new Set(
+				nextProtectedPaths.map(getCanvasResourceIdentity),
+			)
 			const protectedInfos = referenceImageInfos.filter((info) =>
-				nextProtectedPaths.includes(info.path),
+				nextProtectedPathIdentities.has(getCanvasResourceIdentity(info.path)),
 			)
 			const sourcePaths = [
 				...nextProtectedPaths,
-				...uniquePaths.filter((path) => !nextProtectedPaths.includes(path)),
+				...uniquePaths.filter(
+					(path) => !nextProtectedPathIdentities.has(getCanvasResourceIdentity(path)),
+				),
 			]
 			const nextInfos = sourcePaths
 				.map((path) => {
-					const protectedInfo = protectedInfos.find((info) => info.path === path)
+					const protectedInfo = protectedInfos.find((info) =>
+						areCanvasResourcePathsSame(info.path, path),
+					)
 					if (protectedInfo) return protectedInfo
 					const assetType = resolveReferenceAssetType(path)
 					if (!assetType) return null
 					if (!isReferenceAssetTypeAllowed(assetType, currentInputModeConfig)) return null
-					const matchedItem = matchableItems.find((item) => item.path === path)
+					const matchedItem = matchableItems.find((item) =>
+						Boolean(item.path && areCanvasResourcePathsSame(item.path, path)),
+					)
 					return {
 						path,
 						src: path,
@@ -1285,13 +1323,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				clearTimeout(popoverCloseTimeoutRef.current)
 				popoverCloseTimeoutRef.current = null
 			}
-			const removedInfo = referenceImageInfos.find((info) => info.path === path)
+			const removedInfo = referenceImageInfos.find((info) =>
+				areCanvasResourcePathsSame(info.path, path),
+			)
 			setPrompt((currentPrompt) =>
 				removeMentionFromString(currentPrompt, path, removedInfo?.fileName),
 			)
-			setReferenceImageInfos((prev) => prev.filter((info) => info.path !== path))
+			setReferenceImageInfos((prev) =>
+				prev.filter((info) => !areCanvasResourcePathsSame(info.path, path)),
+			)
 			updateProtectedReferencePaths(
-				protectedReferencePaths.filter((protectedPath) => protectedPath !== path),
+				protectedReferencePaths.filter(
+					(protectedPath) => !areCanvasResourcePathsSame(protectedPath, path),
+				),
 			)
 			setTimeout(() => {
 				isRemovingReferenceImageRef.current = false
@@ -1631,7 +1675,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				requestToRestore?.prompt && requestToRestore.prompt.trim().length > 0
 					? requestToRestore.prompt
 					: (restoredModeDraft.prompt ?? "")
-			const restoredPrompt = decodeVideoPromptPlaceholdersToMentions(
+			const promptToRestore = decodeVideoPromptPlaceholdersToMentions(
 				rawRestoredPrompt,
 				resolveVideoPromptPlaceholderReferences({
 					mode: restoredInputMode,
@@ -1640,17 +1684,20 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				restoredInputMode,
 				promptPlaceholderTokenConfig,
 			)
-			setPrompt(restoredPrompt)
+			setPrompt(promptToRestore)
 			setFrameImageInfos(restoredFrameInfosForDraft)
 			setLinkedFrameBindings(restoredLinkedFrameBindings)
 			setActiveInputTab(restoredActiveInputTabForDraft)
 			setReferenceImageInfos(restoredReferenceInfosForDraft)
-			applyBindingStateFromPromptAndReferences(restoredPrompt, restoredReferenceInfosForDraft)
+			applyBindingStateFromPromptAndReferences(
+				promptToRestore,
+				restoredReferenceInfosForDraft,
+			)
 
 			const mergedDrafts = mergeCurrentUiIntoModeDraftCache(
 				modeDraftCacheRef.current,
 				restoredInputMode,
-				restoredPrompt,
+				promptToRestore,
 				restoredActiveInputTabForDraft,
 				restoredFrameInfosForDraft,
 				restoredReferenceInfosForDraft,

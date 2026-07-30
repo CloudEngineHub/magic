@@ -16,7 +16,6 @@ interface LinkedMediaSourceListOptionInput {
 	previewResourceAriaLabel: string
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
-	isMentioned?: boolean
 }
 
 /** 将关联媒体业务状态统一转换为 SourceList 的纯展示/选择配置。 */
@@ -44,9 +43,8 @@ export function useLinkedMediaSourceListOption() {
 				previewResourceAriaLabel,
 				onPreviewMediaResource,
 				onLinkedMediaSelectionChange,
-				isMentioned = false,
 			} = options
-			const selectionDisplay = resolveLinkedMediaSelectionDisplay(item, isMentioned)
+			const selectionDisplay = resolveLinkedMediaSelectionDisplay(item)
 			const selectionDisabledLabel = item.selectionDisabledReason
 				? inactiveReasonLabels[item.selectionDisabledReason]
 				: undefined

@@ -229,7 +229,6 @@ interface VideoEditorControlsProps {
 	onFocusEditor?: () => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
-	linkedMentionedReferencePaths?: string[]
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	linkedFrameBindings?: Array<LinkedFrameBinding | undefined>
 	onLinkedMediaFrameSelect?: (
@@ -252,7 +251,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onFocusEditor,
 		onPreviewMediaResource,
 		linkedMediaItems = [],
-		linkedMentionedReferencePaths = [],
 		onLinkedMediaSelectionChange,
 		linkedFrameBindings = [],
 		onLinkedMediaFrameSelect,
@@ -373,10 +371,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		() => linkedDisplayMediaItems.filter((item) => item.status === "active"),
 		[linkedDisplayMediaItems],
 	)
-	const mentionedReferencePathSet = useMemo(
-		() => new Set(linkedMentionedReferencePaths.map(getLinkedMediaReferenceIdentity)),
-		[linkedMentionedReferencePaths],
-	)
 	const {
 		manualItems: visibleReferenceImageEntries,
 		linkedItems: visibleLinkedDisplayMediaItems,
@@ -492,10 +486,15 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					? {
 							resourcePath: path,
 							resourceFileName:
-								linkedFrameBindings[idx]?.framePath === path
+								getLinkedMediaReferenceIdentity(
+									linkedFrameBindings[idx]?.framePath,
+								) === getLinkedMediaReferenceIdentity(path)
 									? linkedFrameBindings[idx]?.sourceFileName
 									: frameImageInfos[idx]?.fileName,
-							isLinked: linkedFrameBindings[idx]?.framePath === path,
+							isLinked:
+								getLinkedMediaReferenceIdentity(
+									linkedFrameBindings[idx]?.framePath,
+								) === getLinkedMediaReferenceIdentity(path),
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -517,10 +516,15 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					? {
 							resourcePath: path,
 							resourceFileName:
-								linkedFrameBindings[idx]?.framePath === path
+								getLinkedMediaReferenceIdentity(
+									linkedFrameBindings[idx]?.framePath,
+								) === getLinkedMediaReferenceIdentity(path)
 									? linkedFrameBindings[idx]?.sourceFileName
 									: frameImageInfos[idx]?.fileName,
-							isLinked: linkedFrameBindings[idx]?.framePath === path,
+							isLinked:
+								getLinkedMediaReferenceIdentity(
+									linkedFrameBindings[idx]?.framePath,
+								) === getLinkedMediaReferenceIdentity(path),
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -669,9 +673,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						previewResourceAriaLabel,
 						onPreviewMediaResource,
 						onLinkedMediaSelectionChange,
-						isMentioned: mentionedReferencePathSet.has(
-							getLinkedMediaReferenceIdentity(item.path),
-						),
 					}),
 				)
 			})
@@ -700,7 +701,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		effectiveMaxReferenceFiles,
 		visibleReferenceImageEntries,
 		visibleLinkedDisplayMediaItems,
-		mentionedReferencePathSet,
 		referenceImageInfos,
 		effectiveReferenceAssetLimits,
 		effectiveReferenceAssetCounts,
@@ -947,7 +947,9 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						slotKey={slotKey}
 						className={cn(
 							className,
-							option.resourcePath === hoveredMentionPath &&
+							Boolean(option.resourcePath && hoveredMentionPath) &&
+								getLinkedMediaReferenceIdentity(option.resourcePath) ===
+									getLinkedMediaReferenceIdentity(hoveredMentionPath) &&
 								sourceListStyles.sourceItemMentionHovered,
 						)}
 						style={style}

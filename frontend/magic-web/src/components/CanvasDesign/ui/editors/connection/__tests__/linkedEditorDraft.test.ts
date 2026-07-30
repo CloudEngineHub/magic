@@ -7,6 +7,7 @@ import type {
 import {
 	createEmptyLinkedEditorDraft,
 	getLinkedEditorDraftFromStorage,
+	normalizeLinkedEditorDraft,
 	reconcileLinkedEditorDraft,
 	saveLinkedEditorDraftToStorage,
 } from "../linkedEditorDraft"
@@ -34,34 +35,45 @@ function createStorageCanvas(initialStorage: CanvasDesignStorageData = {}): {
 describe("reconcileLinkedEditorDraft", () => {
 	it("restores valid selections, prunes deleted connections, and appends new text connections", () => {
 		const draft: StoredLinkedEditorDraft = {
-			version: 1,
+			version: 2,
 			selectedTextConnectionIds: ["text-deleted", "text-kept"],
 			orderedTextConnectionIds: ["text-deleted", "text-second", "text-kept"],
-			selectedMediaConnectionIds: ["media-kept", "media-deleted"],
 		}
 
 		expect(
 			reconcileLinkedEditorDraft(draft, {
 				textConnectionIds: ["text-kept", "text-new", "text-second"],
-				mediaConnectionIds: ["media-kept", "media-new"],
 			}),
 		).toEqual({
-			version: 1,
+			version: 2,
 			selectedTextConnectionIds: ["text-kept"],
 			orderedTextConnectionIds: ["text-second", "text-kept", "text-new"],
-			selectedMediaConnectionIds: ["media-kept"],
 		})
 	})
 })
 
 describe("linked editor draft storage", () => {
+	it("migrates a v1 draft to v2 and ignores media selection IDs", () => {
+		expect(
+			normalizeLinkedEditorDraft({
+				version: 1,
+				selectedTextConnectionIds: ["text-1"],
+				orderedTextConnectionIds: ["text-1"],
+				selectedMediaConnectionIds: ["media-1"],
+			}),
+		).toEqual({
+			version: 2,
+			selectedTextConnectionIds: ["text-1"],
+			orderedTextConnectionIds: ["text-1"],
+		})
+	})
+
 	it("round-trips a target editor draft and removes an empty draft", () => {
 		const { canvas, getStorage } = createStorageCanvas()
 		const draft: StoredLinkedEditorDraft = {
-			version: 1,
+			version: 2,
 			selectedTextConnectionIds: ["text-1"],
 			orderedTextConnectionIds: ["text-1"],
-			selectedMediaConnectionIds: ["media-1"],
 		}
 
 		saveLinkedEditorDraftToStorage(canvas, "target-1", draft)

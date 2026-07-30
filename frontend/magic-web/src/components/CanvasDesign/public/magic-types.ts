@@ -1258,8 +1258,8 @@ export interface CanvasDesignStorageData {
 	tempImageConfigs?: Record<string, Partial<GenerateImageRequest>>
 	/** 视频元素临时配置（未发送前的配置） */
 	tempVideoConfigs?: Record<string, Partial<GenerateVideoRequest>>
-	/** 关联文本/媒体的用户选择与文本顺序（不进入生成 API） */
-	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraft>
+	/** 关联文本的用户选择与顺序（不进入生成 API） */
+	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
 	/**
 	 * 视频元素各 input_mode 互斥区暂存（不入生成 API，仅编辑器与本地缓存）
 	 * key 为画布元素 id
@@ -1267,11 +1267,19 @@ export interface CanvasDesignStorageData {
 	tempVideoModeDrafts?: Record<string, StoredVideoModeDraftsMap>
 }
 
-export interface StoredLinkedEditorDraft {
+/** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
+export interface StoredLinkedEditorDraftV1 {
 	version: 1
 	selectedTextConnectionIds: string[]
 	orderedTextConnectionIds: string[]
-	selectedMediaConnectionIds: string[]
+	selectedMediaConnectionIds?: string[]
+}
+
+/** 当前草稿格式；媒体关联状态由编辑器 mention 派生，不持久化 selected ID。 */
+export interface StoredLinkedEditorDraft {
+	version: 2
+	selectedTextConnectionIds: string[]
+	orderedTextConnectionIds: string[]
 }
 
 export interface StoredLinkedFrameBinding {

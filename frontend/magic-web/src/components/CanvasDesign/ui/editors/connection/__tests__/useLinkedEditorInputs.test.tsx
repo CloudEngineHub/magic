@@ -54,7 +54,7 @@ describe("useLinkedEditorInputs draft persistence", () => {
 		vi.clearAllMocks()
 	})
 
-	it("hydrates selections and text order, then persists user changes", async () => {
+	it("hydrates text selections but ignores v1 media selection IDs", async () => {
 		const targetElementId = "target-image"
 		const { canvas, getStorage } = createCanvas({
 			tempLinkedEditorDrafts: {
@@ -90,6 +90,7 @@ describe("useLinkedEditorInputs draft persistence", () => {
 				targetElementId,
 				targetKind: "image",
 				mediaPolicy: { supportedKinds: ["image"] },
+				mentionedReferencePaths: ["./images/source.png"],
 			}),
 		)
 
@@ -99,28 +100,21 @@ describe("useLinkedEditorInputs draft persistence", () => {
 				"text-1",
 			])
 			expect(result.current.isTextConnectionSelected("text-1")).toBe(true)
-			expect(result.current.isMediaConnectionSelected("media-1")).toBe(true)
 			expect(result.current.mediaItems[0]?.selected).toBe(true)
 		})
 
-		let mediaSelectionAccepted = false
-		act(() => {
-			result.current.setTextConnectionSelected("text-2", true)
-			mediaSelectionAccepted = result.current.setMediaConnectionSelected("media-1", false)
-		})
-		expect(mediaSelectionAccepted).toBe(true)
+		act(() => result.current.setTextConnectionSelected("text-2", true))
 
 		await waitFor(() => {
 			expect(getStorage().tempLinkedEditorDrafts?.[targetElementId]).toEqual({
-				version: 1,
+				version: 2,
 				selectedTextConnectionIds: ["text-1", "text-2"],
 				orderedTextConnectionIds: ["text-2", "text-1"],
-				selectedMediaConnectionIds: [],
 			})
 		})
 	})
 
-	it("rejects media selections that are disabled by the current policy", async () => {
+	it("rejects media candidates disabled by the current policy", async () => {
 		const targetElementId = "target-image"
 		const { canvas } = createCanvas({})
 		mocks.useCanvas.mockReturnValue({ canvas })
@@ -150,17 +144,11 @@ describe("useLinkedEditorInputs draft persistence", () => {
 		await waitFor(() => {
 			expect(result.current.mediaItems[0]?.selectionDisabledReason).toBe("unsupported-type")
 		})
-
-		let mediaSelectionAccepted = true
-		act(() => {
-			mediaSelectionAccepted = result.current.setMediaConnectionSelected("media-video", true)
-		})
-
-		expect(mediaSelectionAccepted).toBe(false)
-		expect(result.current.isMediaConnectionSelected("media-video")).toBe(false)
+		expect(result.current.canSelectMediaConnection("media-video")).toBe(false)
+		expect(result.current.mediaItems[0]?.selected).toBe(false)
 	})
 
-	it("returns the actual result for rapid selections evaluated against the latest draft", async () => {
+	it("derives selected state from mentions while preserving policy limits", async () => {
 		const targetElementId = "target-image"
 		const { canvas } = createCanvas({})
 		mocks.useCanvas.mockReturnValue({ canvas })
@@ -191,21 +179,13 @@ describe("useLinkedEditorInputs draft persistence", () => {
 				targetElementId,
 				targetKind: "image",
 				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+				mentionedReferencePaths: ["/images/source-1.png"],
 			}),
 		)
 
-		await waitFor(() => expect(result.current.mediaItems).toHaveLength(2))
-
-		let firstAccepted = false
-		let secondAccepted = true
-		act(() => {
-			firstAccepted = result.current.setMediaConnectionSelected("media-1", true)
-			secondAccepted = result.current.setMediaConnectionSelected("media-2", true)
-		})
-
-		expect(firstAccepted).toBe(true)
-		expect(secondAccepted).toBe(false)
-		expect(result.current.isMediaConnectionSelected("media-1")).toBe(true)
-		expect(result.current.isMediaConnectionSelected("media-2")).toBe(false)
+		await waitFor(() => expect(result.current.mediaItems[0]?.selected).toBe(true))
+		expect(result.current.mediaItems[1]?.selected).toBe(false)
+		expect(result.current.canSelectMediaConnection("media-1")).toBe(true)
+		expect(result.current.canSelectMediaConnection("media-2")).toBe(false)
 	})
 })

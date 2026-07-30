@@ -15,7 +15,7 @@ import {
 } from "../../../runtime/text/richText"
 import {
 	getCanvasResourceFileName,
-	toCanonicalCanvasResourcePath,
+	getCanvasResourceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { getLinkedTextPromptText, type LinkedTextConnection } from "./linkedTextPrompt"
 
@@ -47,7 +47,7 @@ export interface LinkedEditorMediaPolicy {
 
 /** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */
 export function getLinkedMediaReferenceIdentity(path?: string): string {
-	return path ? toCanonicalCanvasResourcePath(path) : ""
+	return getCanvasResourceIdentity(path)
 }
 
 export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
@@ -80,7 +80,7 @@ export interface LinkedEditorMediaCandidate {
 export interface LinkedEditorMediaItem extends LinkedEditorMediaCandidate {
 	status: LinkedEditorMediaStatus
 	reason?: LinkedEditorMediaInactiveReason
-	/** 是否被用户选择参与参考媒体提交 */
+	/** 是否对应当前编辑器中的 mention；不代表一定通过媒体策略进入提交 */
 	selected?: boolean
 	/** 未选择项不可勾选时的动态原因（不作为媒体状态展示） */
 	selectionDisabledReason?: LinkedEditorMediaInactiveReason
@@ -133,40 +133,15 @@ export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorM
 	}
 }
 
-/** @mention 自身已经使资源参与提交，因此统一卡片应显示为勾选；取消时由调用方同步删除 mention。 */
+/** 关联卡片的勾选状态直接来自 mention 驱动的媒体解析结果。 */
 export function resolveLinkedMediaSelectionDisplay(
 	item: Pick<LinkedEditorMediaItem, "selected" | "selectionDisabledReason">,
-	isMentioned: boolean,
 ): { checked: boolean; disabled: boolean } {
 	const selected = item.selected === true
 	return {
-		checked: selected || isMentioned,
-		disabled: !selected && !isMentioned && Boolean(item.selectionDisabledReason),
+		checked: selected,
+		disabled: !selected && Boolean(item.selectionDisabledReason),
 	}
-}
-
-/** 删除提示词中的 @mention 时，仅取消对应已选择连线媒体。 */
-export function getLinkedMediaConnectionIdsToDeselectAfterMentionChange(
-	items: LinkedEditorMediaItem[],
-	previousMentionedPaths: string[],
-	nextMentionedPaths: string[],
-): string[] {
-	const nextMentionedPathIdentities = new Set(
-		nextMentionedPaths.map(getLinkedMediaReferenceIdentity).filter(Boolean),
-	)
-	const removedMentionedPathIdentities = new Set(
-		previousMentionedPaths
-			.map(getLinkedMediaReferenceIdentity)
-			.filter((identity) => Boolean(identity) && !nextMentionedPathIdentities.has(identity)),
-	)
-	if (removedMentionedPathIdentities.size === 0) return []
-
-	return items.flatMap((item) =>
-		item.selected &&
-		removedMentionedPathIdentities.has(getLinkedMediaReferenceIdentity(item.path))
-			? [item.connectionId]
-			: [],
-	)
 }
 
 export interface LinkedEditorInputsResolution {
@@ -392,13 +367,97 @@ export interface LinkedEditorMediaSelectionResolution {
 	activeMediaReferences: LinkedEditorMediaReference[]
 }
 
+export interface LinkedEditorMediaAssociationResolution extends LinkedEditorMediaSelectionResolution {
+	mentionedReferencePaths: string[]
+	unmatchedManualReferences: LinkedEditorMediaReference[]
+}
+
+export interface ResolveLinkedMediaAssociationOptions {
+	candidates: LinkedEditorMediaCandidate[]
+	mentionedPaths: string[]
+	manualReferences?: LinkedEditorMediaReference[]
+	targetKind: LinkedEditorTargetKind
+	mediaPolicy?: LinkedEditorMediaPolicy
+}
+
 /**
- * 将连线媒体候选拆分为“用户已选择”和“待选择”两类。
- * 未选择项不会占用媒体数量限制；只有用户选择且通过策略校验的媒体才会进入 activeMediaReferences。
+ * 以编辑器 mention 为唯一媒体选择状态，将画布连接媒体解析为候选展示与提交输入。
+ * 同一路径最多绑定一个稳定候选；连接本身不参与状态持久化。
  */
-export function resolveLinkedMediaSelection(
+export function resolveLinkedMediaAssociation(
+	options: ResolveLinkedMediaAssociationOptions,
+): LinkedEditorMediaAssociationResolution {
+	const {
+		candidates,
+		mentionedPaths: mentionedReferencePaths,
+		manualReferences = options.mediaPolicy?.manualReferences ?? [],
+		targetKind,
+		mediaPolicy,
+	} = options
+	const effectiveMediaPolicy = mediaPolicy
+		? { ...mediaPolicy, manualReferences }
+		: manualReferences.length > 0
+			? { supportedKinds: [], manualReferences }
+			: undefined
+	const selectionOptions = { targetKind, mediaPolicy: effectiveMediaPolicy }
+	const stableCandidates: LinkedEditorMediaCandidate[] = []
+	const candidateIdentities = new Set<string>()
+	for (const candidate of candidates) {
+		const identity = getLinkedMediaReferenceIdentity(candidate.path)
+		if (identity) {
+			if (candidateIdentities.has(identity)) continue
+			candidateIdentities.add(identity)
+		}
+		stableCandidates.push(candidate)
+	}
+	const mentionedPaths: string[] = []
+	const mentionedIdentities = new Set<string>()
+	mentionedReferencePaths.forEach((path) => {
+		const identity = getLinkedMediaReferenceIdentity(path)
+		if (!identity || mentionedIdentities.has(identity)) return
+		mentionedIdentities.add(identity)
+		mentionedPaths.push(path)
+	})
+
+	const associatedConnectionIds = stableCandidates.flatMap((candidate) => {
+		const identity = getLinkedMediaReferenceIdentity(candidate.path)
+		return identity && mentionedIdentities.has(identity) ? [candidate.connectionId] : []
+	})
+	const associatedConnectionIdSet = new Set(associatedConnectionIds)
+
+	const selectionResolution = resolveLinkedMediaPolicySelection(
+		stableCandidates,
+		associatedConnectionIds,
+		selectionOptions,
+	)
+	const items = selectionResolution.items.map((item) =>
+		associatedConnectionIdSet.has(item.connectionId)
+			? { ...item, selected: true, selectionDisabledReason: undefined }
+			: item,
+	)
+	const unmatchedManualReferences = manualReferences.filter(
+		(reference) => !candidateIdentities.has(getLinkedMediaReferenceIdentity(reference.path)),
+	)
+	const activeMediaReferences = mergeLinkedMediaReferences(
+		manualReferences,
+		selectionResolution.activeMediaReferences,
+	)
+
+	return {
+		items,
+		activeMediaReferences,
+		mentionedReferencePaths: mentionedPaths,
+		unmatchedManualReferences,
+	}
+}
+
+/**
+ * 根据 mention 已匹配出的临时连接 ID 计算媒体策略结果。
+ * 连接 ID 仅用于在一次纯函数计算中定位候选，不作为业务状态持久化或恢复。
+ */
+export function resolveLinkedMediaPolicySelection(
 	candidates: LinkedEditorMediaCandidate[],
-	selectedConnectionIds: string[],
+	mentionedConnectionIds: string[],
 	options: {
 		targetKind: LinkedEditorTargetKind
 		mediaPolicy?: LinkedEditorMediaPolicy
@@ -414,7 +473,7 @@ export function resolveLinkedMediaSelection(
 			sourceCrop: candidate.sourceCrop,
 		}),
 	)
-	const selectedConnectionIdSet = new Set(selectedConnectionIds)
+	const selectedConnectionIdSet = new Set(mentionedConnectionIds)
 	const selectedCandidates = normalizedCandidates.filter((candidate) =>
 		selectedConnectionIdSet.has(candidate.connectionId),
 	)
@@ -449,13 +508,29 @@ export function resolveLinkedMediaSelection(
 		}
 
 		const standaloneItem = resolveLinkedMediaItems([candidate], options)[0]
+		const candidateIdentity = getLinkedMediaReferenceIdentity(candidate.path)
+		const candidateSelectionOptions = {
+			targetKind: options.targetKind,
+			mediaPolicy: options.mediaPolicy
+				? {
+						...options.mediaPolicy,
+						manualReferences: options.mediaPolicy.manualReferences?.filter(
+							(reference) =>
+								getLinkedMediaReferenceIdentity(reference.path) !==
+								candidateIdentity,
+						),
+					}
+				: undefined,
+		}
 		const attemptItem = resolveLinkedMediaItems(
 			[...selectedCandidates, candidate],
-			selectedResolutionOptions,
+			candidateSelectionOptions,
 		).find((item) => item.connectionId === candidate.connectionId)
 		const standaloneReason = standaloneItem?.reason
 		const selectionDisabledReason =
-			standaloneReason && standaloneReason !== "over-limit"
+			standaloneReason &&
+			standaloneReason !== "over-limit" &&
+			standaloneReason !== "duplicate"
 				? standaloneReason
 				: attemptItem?.reason
 
@@ -563,7 +638,7 @@ export function resolveLinkedEditorInputs(
 		})
 	}
 
-	const mediaSelection = resolveLinkedMediaSelection(mediaCandidates, [], {
+	const mediaSelection = resolveLinkedMediaPolicySelection(mediaCandidates, [], {
 		targetKind,
 		mediaPolicy,
 	})
