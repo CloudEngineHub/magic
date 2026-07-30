@@ -34,7 +34,7 @@ vi.mock("@/pages/superMagic/stores/core", () => ({
 }))
 
 vi.mock("@/pages/superMagic/pages/MicroAppPage/utils/microAppModelMode", () => ({
-	resolveMicroAppModelSelectionMode: () => TopicMode.MicroApp,
+	resolveMicroAppModelSelectionMode: () => TopicMode.Default,
 }))
 
 vi.mock(
@@ -93,6 +93,7 @@ describe("MicroAppCreatePrompt", () => {
 		expect(mocks.setSelectedProject).toHaveBeenCalledWith(null)
 		expect(mocks.setSelectedTopic).toHaveBeenCalledWith(null)
 		expect(mocks.editorContext?.topicMode).toBe(TopicMode.MicroApp)
+		expect(mocks.editorContext?.modelTopicMode).toBe(TopicMode.Default)
 		expect(mocks.editorContext?.selectedProject).toBeNull()
 		expect(mocks.editorContext?.selectedTopic).toBeNull()
 		expect(mocks.editorContext?.placeholder).toBe("microAppsPage.heroPlaceholder")

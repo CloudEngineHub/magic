@@ -22,7 +22,7 @@ vi.mock("../../context", () => ({
 }))
 
 vi.mock("../../utils/microAppModelMode", () => ({
-	resolveMicroAppModelSelectionMode: () => "micro-app",
+	resolveMicroAppModelSelectionMode: () => "default",
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
@@ -195,7 +195,7 @@ describe("AppConversationPanel", () => {
 		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyDescription")
 	})
 
-	it("uses the micro-app employee model catalog and send mode", () => {
+	it("uses the default model catalog and keeps the micro-app send mode", () => {
 		const topicStore = {
 			selectedTopic: { id: "topic-1", topic_name: "Topic" },
 			setSelectedTopic: vi.fn(),
@@ -213,7 +213,7 @@ describe("AppConversationPanel", () => {
 
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
 			"data-model-topic-mode",
-			"micro-app",
+			"default",
 		)
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
 			"data-send-topic-mode",

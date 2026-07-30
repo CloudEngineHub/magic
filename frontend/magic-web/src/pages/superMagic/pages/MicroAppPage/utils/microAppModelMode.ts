@@ -1,7 +1,6 @@
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 
-/** Use the micro-app employee catalog whenever it contains any supported model type. */
+/** 微应用统一使用 default 模型目录，不再读取微应用员工的模型配置。 */
 export function resolveMicroAppModelSelectionMode(): TopicMode {
-	return superMagicModeService.resolveModelSelectionMode(TopicMode.MicroApp, TopicMode.Default)
+	return TopicMode.Default
 }
