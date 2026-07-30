@@ -149,6 +149,11 @@ export class FileUploadStore {
 		return this.files.length === 0 || this.files.every((file) => file.status === "done")
 	}
 
+	/** Marker node views reuse the editor-scoped attachment store for preview URL resolution. */
+	getProjectFilesStore(): ProjectFilesStore {
+		return this.projectFilesStore
+	}
+
 	isCurrentSessionUploadFile(fileId: string) {
 		return this.sessionUploadFileIds.has(fileId)
 	}
@@ -610,7 +615,7 @@ export class FileUploadStore {
 							? 0
 							: ((data as ProjectFileMentionData).file_size ?? 0),
 						file_type: isDirectory ? "directory" : "user_upload",
-						project_id: data.source_project_id ?? "",
+						project_id: data.project_id ?? data.source_project_id ?? "",
 						topic_id: "",
 						task_id: "",
 						created_at: "",

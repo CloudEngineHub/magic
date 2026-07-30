@@ -434,6 +434,44 @@ describe("StyleManager", () => {
 		})
 	})
 
+	describe("text editing lifecycle", () => {
+		it("should preserve author inline styles while editing", () => {
+			container.innerHTML =
+				'<p id="placeholder-copy" style="COLOR:red; margin:0  8px!important">Placeholder copy</p>'
+			const element = container.querySelector("#placeholder-copy") as HTMLElement
+			const originalStyle = element.getAttribute("style")
+
+			styleManager.enableTextEditing("p#placeholder-copy")
+
+			expect(element.getAttribute("contenteditable")).toBe("true")
+			expect(element.getAttribute("data-text-editing")).toBe("true")
+			expect(element.getAttribute("style")).toBe(originalStyle)
+
+			styleManager.disableTextEditing("p#placeholder-copy")
+
+			expect(element.getAttribute("contenteditable")).toBeNull()
+			expect(element.getAttribute("data-text-editing")).toBeNull()
+			expect(element.getAttribute("style")).toBe(originalStyle)
+		})
+
+		it("should initialize listeners after clearing pre-existing DOM editing state", () => {
+			container.innerHTML = '<p id="placeholder-copy">Initial placeholder</p>'
+			const element = container.querySelector("#placeholder-copy") as HTMLElement
+			element.setAttribute("contenteditable", "true")
+			element.setAttribute("data-text-editing", "true")
+			element.setAttribute("data-previous-content", "Unmanaged placeholder")
+
+			styleManager.enableTextEditing("p#placeholder-copy")
+			element.textContent = "Updated placeholder"
+			element.dispatchEvent(new FocusEvent("blur"))
+
+			expect(commandHistory.getUndoStackSize()).toBe(1)
+			expect(element.getAttribute("contenteditable")).toBeNull()
+			expect(element.getAttribute("data-text-editing")).toBeNull()
+			expect(element.getAttribute("data-previous-content")).toBeNull()
+		})
+	})
+
 	describe("edge cases", () => {
 		it("should handle non-existent selector gracefully", async () => {
 			await expect(styleManager.setBackgroundColor("#non-existent", "red")).rejects.toThrow()

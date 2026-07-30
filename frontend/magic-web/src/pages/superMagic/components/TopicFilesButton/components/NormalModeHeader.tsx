@@ -28,6 +28,8 @@ interface NormalModeHeaderProps {
 	onSearch?: () => void
 	onAddFile?: (extraType?: PresetFileType) => void
 	onAddDesign?: () => void
+	onAddSelfMedia?: () => void
+	onAddAICard?: () => void
 	onAddFolder?: () => void
 	onUploadFile?: () => void
 	onUploadFolder?: () => void
@@ -47,6 +49,8 @@ function NormalModeHeader({
 	onSearch,
 	onAddFile,
 	onAddDesign,
+	onAddSelfMedia,
+	onAddAICard,
 	onAddFolder,
 	onUploadFile,
 	onUploadFolder,
@@ -84,7 +88,12 @@ function NormalModeHeader({
 					</MagicTooltip>
 				)}
 				{allowEdit && onAddFile && (!isMobile || showMobileActions) && (
-					<FileMenuDropdown onAddFile={onAddFile} onAddDesign={onAddDesign}>
+					<FileMenuDropdown
+						onAddFile={onAddFile}
+						onAddDesign={onAddDesign}
+						onAddSelfMedia={onAddSelfMedia}
+						onAddAICard={onAddAICard}
+					>
 						<span>
 							<MagicTooltip title={t("topicFiles.addFile")}>
 								<button

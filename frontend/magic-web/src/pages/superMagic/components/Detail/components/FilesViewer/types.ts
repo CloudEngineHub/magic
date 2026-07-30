@@ -153,6 +153,8 @@ export interface FilesViewerProps extends BaseComponentProps {
 	showFileFooter?: boolean
 	/** When true, treats the file viewer as fullscreen without requiring URL params */
 	forceFullscreenMode?: boolean
+	/** Lets a pure share fill the viewport while expanding with document content. */
+	documentFlowFullscreen?: boolean
 	/** When false, hides CommonHeaderV2 inside file preview (URL param still works as fallback) */
 	showFileHeader?: boolean
 	/** When true, hides the file tab bar for single-file immersive read-only views */

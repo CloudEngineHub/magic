@@ -35,6 +35,7 @@ export interface PlaybackTabContentProps {
 	allowEdit?: boolean
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
+	projectId?: string
 	isFileShare?: boolean
 	activeFileId?: string | null
 	onActiveFileChange?: (fileId: string | null) => void
@@ -63,6 +64,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		allowEdit,
 		selectedTopic,
 		selectedProject,
+		projectId,
 		isFileShare,
 		activeFileId,
 		onActiveFileChange,
@@ -168,8 +170,31 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 	// 判断是否显示打开原文件按钮
 	const shouldShowOpenSourceFileButton = useMemo(() => {
 		const detail: any = correctedDisPlayDetail
-		return !!detail?.data?.source_file_id
-	}, [correctedDisPlayDetail])
+		const sourceFileId = detail?.data?.source_file_id
+		if (!sourceFileId) return false
+
+		// attachmentList 是当前项目的扁平文件列表。跨项目源文件不会出现在该列表中，
+		// 且附件接口并不保证返回 project_id，因此以文件是否属于当前列表作为判断依据。
+		const sourceFile = attachmentList?.find(
+			(item) => String(item?.file_id) === String(sourceFileId),
+		)
+		if (!sourceFile) return false
+
+		const currentProjectId = selectedProject?.id || selectedTopic?.project_id || projectId
+
+		// 如果接口有返回 project_id，则额外校验，避免切换项目期间使用到旧附件快照。
+		if (currentProjectId && sourceFile.project_id) {
+			return String(currentProjectId) === String(sourceFile.project_id)
+		}
+
+		return true
+	}, [
+		attachmentList,
+		correctedDisPlayDetail,
+		projectId,
+		selectedProject?.id,
+		selectedTopic?.project_id,
+	])
 
 	return (
 		<div className="flex h-full flex-col overflow-hidden p-[14px]">

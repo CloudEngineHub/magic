@@ -139,11 +139,11 @@ function SelfMediaShellHeader({
 
 	return (
 		<header
-			className="grid min-h-[72px] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2 max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:items-center max-sm:min-h-0 max-sm:gap-2 max-sm:px-2 max-sm:py-1.5 sm:min-h-[88px] sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
+			className="flex min-h-[72px] flex-wrap items-center gap-3 bg-transparent px-3 py-2 max-sm:min-h-0 max-sm:gap-2 max-sm:px-2 max-sm:py-1.5 sm:min-h-[88px] sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
 			data-testid="self-media-shell-header"
 		>
 			<div
-				className="flex min-w-0 items-center gap-3 max-sm:gap-2"
+				className="flex min-w-[20rem] flex-1 basis-[24rem] items-center gap-3 max-sm:min-w-0 max-sm:basis-auto max-sm:gap-2"
 				data-testid="self-media-shell-title"
 			>
 				{onBackHome ? (
@@ -271,9 +271,9 @@ function SelfMediaShellHeader({
 					)}
 				</div>
 			</div>
-			<div className="flex min-w-0 items-center justify-end gap-3 max-lg:justify-end max-md:items-start lg:gap-4">
+			<div className="ml-auto flex min-w-0 items-center justify-end gap-3 max-md:items-start lg:gap-4">
 				<div
-					className="-m-1 flex max-w-full shrink-0 items-center justify-end gap-1 overflow-visible rounded-[18px] p-1 max-lg:justify-end max-lg:overflow-x-auto sm:-m-2 sm:gap-2 sm:p-2"
+					className="-m-1 flex max-w-full shrink-0 items-center justify-end gap-1 overflow-visible rounded-[18px] p-1 max-lg:overflow-x-auto sm:-m-2 sm:gap-2 sm:p-2"
 					data-testid="self-media-shell-toolbar"
 				>
 					<div className="flex h-10 shrink-0 items-center gap-1 rounded-[14px] bg-white/80 px-1 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)] sm:h-12 sm:gap-2 sm:rounded-[18px] sm:px-2">

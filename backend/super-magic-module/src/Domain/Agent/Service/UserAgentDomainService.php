@@ -29,6 +29,16 @@ class UserAgentDomainService
     }
 
     /**
+     * 历史迁移按员工收口时，需要枚举同组织下所有用户的现有关系。
+     *
+     * @return UserAgentEntity[]
+     */
+    public function findAllUserAgentOwnershipsByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        return $this->userAgentRepository->findAllByAgentCode($dataIsolation, $agentCode);
+    }
+
+    /**
      * @param array<string> $agentCodes
      * @return array<string, UserAgentEntity>
      */
@@ -58,6 +68,25 @@ class UserAgentDomainService
     public function deleteUserAgentOwnership(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool
     {
         return $this->userAgentRepository->deleteByAgentCode($dataIsolation, $agentCode);
+    }
+
+    /**
+     * @return UserAgentEntity[]
+     */
+    public function findUserAgentOwnershipsByMarketSource(SuperMagicAgentDataIsolation $dataIsolation, int $marketId): array
+    {
+        return $this->userAgentRepository->findAllByMarketSource($dataIsolation, $marketId);
+    }
+
+    /**
+     * @param array<string> $userIds
+     */
+    public function deleteUserAgentOwnershipsByMarketSourceAndUsers(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        int $marketId,
+        array $userIds
+    ): int {
+        return $this->userAgentRepository->deleteByMarketSourceAndUsers($dataIsolation, $marketId, $userIds);
     }
 
     public function deleteAllUserAgentOwnershipsByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): int

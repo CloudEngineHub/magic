@@ -54,6 +54,8 @@ interface UseMessageEditorProps {
 	onChange?: (content: JSONContent) => void
 	selectedTopic?: Topic | null
 	onKeyboardInput?: () => void
+	/** Whether plain Enter sends the current message. */
+	sendWhenEnter?: boolean
 	shouldEnableMention?: boolean
 	isAllowedMention?: (attrs: TiptapMentionAttributes, dataService: MentionPanelStore) => boolean
 	sendEnabled?: boolean
@@ -131,6 +133,7 @@ export const useMessageEditor = ({
 	onChange,
 	selectedTopic,
 	onKeyboardInput,
+	sendWhenEnter,
 	shouldEnableMention = true,
 	isAllowedMention,
 	sendEnabled = true,
@@ -148,6 +151,7 @@ export const useMessageEditor = ({
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
 	const isMobile = useIsMobile()
+	const shouldSendWhenEnter = sendWhenEnter ?? !isMobile
 	// Cache last content snapshot to avoid triggering onChange on selection-only updates
 	const lastContentSnapshotRef = useRef<string>(JSON.stringify(value ?? null))
 	// Track whether focus is on SuperPlaceholder to control AI completion
@@ -271,8 +275,8 @@ export const useMessageEditor = ({
 						return false // 让扩展的键盘快捷键处理
 					}
 
-					// 移动端回车换行
-					if (isMobile) {
+					// Keep newline behavior when Enter-to-send is disabled for this editor.
+					if (!shouldSendWhenEnter) {
 						return false
 					}
 

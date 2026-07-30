@@ -29,10 +29,12 @@ use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Chat\Assembler\MessageAssembler;
 use Carbon\Carbon;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Assembler\UserMessageDTOAssembler;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskInitializationMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TaskInitializationPublisher;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TopicMessageProcessPublisher;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentEventEnum;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MessageQueueEntity;
@@ -104,7 +106,8 @@ class TopicTaskAppService extends AbstractAppService
         protected TranslatorInterface $translator,
         protected UsageCalculatorInterface $usageCalculator,
         protected Redis $redis,
-        protected Producer $producer
+        protected Producer $producer,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
     }
@@ -953,6 +956,21 @@ class TopicTaskAppService extends AbstractAppService
                 );
             }
 
+            $requestedAgentCode = $this->resolveRequestedAgentCode(
+                $topicEntity,
+                // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
+                $contentStruct->getExtra()?->getSuperAgent()
+            );
+            if ($requestedAgentCode !== '') {
+                $this->superMagicAgentAccessAppService->assertAgentUsable(
+                    SuperMagicAgentDataIsolation::create(
+                        $dataIsolation->getCurrentOrganizationCode(),
+                        $dataIsolation->getCurrentUserId()
+                    ),
+                    $requestedAgentCode
+                );
+            }
+
             $businessMessageId = $this->resolveUserMessageId($source);
             if ($businessMessageId !== '') {
                 $existingMessage = $this->taskMessageDomainService->findByTopicIdAndMessageId($topicEntity->getId(), $businessMessageId);
@@ -1383,6 +1401,22 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return $messageStruct;
+    }
+
+    /**
+     * Resolve the effective employee code from request overrides and Topic storage.
+     * An SMA-* topic pattern is itself an employee selection and therefore takes
+     * precedence over both an explicit request code and the persisted Topic code.
+     */
+    private function resolveRequestedAgentCode(TopicEntity $topicEntity, ?SuperAgentExtra $extra): string
+    {
+        $topicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
+        if (str_starts_with($topicPattern, 'SMA-')) {
+            return $topicPattern;
+        }
+
+        $agentCode = trim((string) ($extra?->getAgentCode() ?? ''));
+        return $agentCode !== '' ? $agentCode : trim($topicEntity->getAgentCode());
     }
 
     /**

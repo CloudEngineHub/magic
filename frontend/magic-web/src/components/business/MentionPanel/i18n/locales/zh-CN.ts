@@ -19,6 +19,7 @@ export const zhCN: I18nTexts = {
 	error: "加载失败",
 	retry: "重试",
 	empty: "暂无数据",
+	unnamedProject: "未命名项目",
 
 	// Hints
 	mcpHint: "@插件仅单次生效",
@@ -44,6 +45,7 @@ export const zhCN: I18nTexts = {
 		personalDrive: "个人云盘",
 		enterpriseDrive: "企业云盘",
 		projectFiles: "当前项目文件",
+		otherProjectFiles: "其它项目/文件",
 		mcpExtensions: "插件",
 		agents: "智能体",
 		skills: "技能",

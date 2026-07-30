@@ -25,7 +25,7 @@ import {
 	useHighImageGeneration,
 	toCanvasGenerateHightImageResponse,
 } from "./useHighImageGeneration"
-import { useDesignFileCopy } from "./useDesignFileCopy"
+import { useDesignFileDropPaths } from "./useDesignFileDropPaths"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import {
@@ -33,7 +33,7 @@ import {
 	isLegacyBareDesignResourcePath,
 	isRelativeDesignPath,
 	resolveDesignPathForOperation,
-	toDesignDslPath,
+	toDesignDslPathFromWorkspacePath,
 	toDesignApiPath,
 	toWorkspaceAbsoluteApiPath,
 	toWorkspaceAbsoluteApiPathForOperation,
@@ -90,7 +90,7 @@ interface UseDesignMethodsOptions {
  * - 使用 useFileInfoProvider 提供文件信息获取功能
  * - 使用 useCanvasStorage 提供本地存储功能
  * - 使用 useConversationAndDownload 提供添加到对话和下载图片功能
- * - 使用 useDesignFileCopy 提供拖拽资源复制到 images / videos 目录
+ * - 使用 useDesignFileDropPaths 将项目文件拖拽路径转换为画布存储路径
  */
 export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesignMethods {
 	const {
@@ -217,7 +217,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		[generateHightImage],
 	)
 
-	const { getDataTransferFileInfo } = useDesignFileCopy({
+	const { getDataTransferFileInfo } = useDesignFileDropPaths({
 		projectId,
 		currentFile,
 		flatAttachments,
@@ -225,6 +225,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		designProjectBasePath,
 		updateAttachments,
 		getOrCreateImagesDir,
+		getFileInfoById,
+		setFileInfoCache,
 	})
 
 	const normalizeComparablePath = useCallback(
@@ -408,7 +410,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			})
 			if (operationResolution.status === "found") {
 				addCandidate(operationResolution.resolvedPath)
-				addCandidate(toDesignDslPath(operationResolution.resolvedPath, ctx))
+				addCandidate(
+					toDesignDslPathFromWorkspacePath(operationResolution.resolvedPath, ctx),
+				)
 				return Array.from(candidates)
 			}
 			if (isLegacyBareDesignResourcePath(path)) {
@@ -417,18 +421,27 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 			const workspacePath = toWorkspaceRelativePath(path, ctx)
 			addCandidate(workspacePath)
-			addCandidate(toDesignDslPath(workspacePath, ctx))
+			addCandidate(toDesignDslPathFromWorkspacePath(workspacePath, ctx))
 
 			toWorkspaceRelativeCandidates(path, ctx).forEach((candidate, index) => {
 				if (index === 0 || isCurrentCanvasResourcePath(candidate, ctx)) {
 					addCandidate(candidate)
-					addCandidate(toDesignDslPath(candidate, ctx))
+					addCandidate(toDesignDslPathFromWorkspacePath(candidate, ctx))
 				}
 			})
 
 			return Array.from(candidates)
 		},
 		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
+	)
+	const normalizeResourcePathForStorage: NonNullable<
+		CanvasDesignMethods["normalizeResourcePathForStorage"]
+	> = useCallback(
+		(path) =>
+			toDesignDslPathFromWorkspacePath(path, {
+				designProjectBasePath,
+			}),
+		[designProjectBasePath],
 	)
 
 	const getVirtualResourceScope = useCallback(() => {
@@ -701,6 +714,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			getFileResourceMeta,
 			resolveAbsolutePath,
 			resolveResourcePathCandidates,
+			normalizeResourcePathForStorage,
 			getVirtualResourceScope,
 			getImageProcessCacheSignature: getPreviewFileUrlWatermarkSignature,
 			addToConversation,
@@ -746,6 +760,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getFileResourceMeta,
 		resolveAbsolutePath,
 		resolveResourcePathCandidates,
+		normalizeResourcePathForStorage,
 		getVirtualResourceScope,
 		addToConversation,
 		downloadFiles,

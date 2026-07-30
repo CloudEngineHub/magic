@@ -31,6 +31,7 @@
 		"build:enterprise": "node scripts/build.cjs",
 		"build:iframe": "corepack pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html",
 		"build:widget": "corepack pnpm --filter @magic-web/widget-sdk exec vite build --config ./vite.config.ts --mode production --outDir ../../public/sdk && corepack pnpm --filter @magic-web/widget-sdk build:types",
+		"check:overlay-sync": "node scripts/git-hooks/check-overlay-sync.cjs",
 		"coverage": "vitest run --coverage",
 		"dev": "node scripts/dev.cjs",
 		"dev:iframe": "corepack pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html --watch",

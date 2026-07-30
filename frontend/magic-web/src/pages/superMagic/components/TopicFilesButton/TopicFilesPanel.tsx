@@ -392,6 +392,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			coreRef.current?.createDesignProject()
 		}
 
+		const handleAddSelfMedia = () => {
+			coreRef.current?.createSelfMediaProject()
+		}
+
+		const handleAddAICard = () => {
+			coreRef.current?.createAICardProject()
+		}
+
 		// 处理添加文件夹功能
 		const handleAddFolder = () => {
 			coreRef.current?.createVirtualFolder()
@@ -560,6 +568,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onSearch={handleSearch}
 									onAddFile={handleAddFile}
 									onAddDesign={handleAddDesign}
+									onAddSelfMedia={handleAddSelfMedia}
+									onAddAICard={handleAddAICard}
 									onAddFolder={handleAddFolder}
 									onUploadFile={handleCustomUploadFile}
 									onUploadFolder={handleCustomUploadFolder}

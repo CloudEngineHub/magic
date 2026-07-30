@@ -25,6 +25,7 @@ vi.mock("react-i18next", () => ({
 				"card.regenerateSummary": "Regenerate summary",
 				"card.summarizing": "Summarizing",
 				"card.notSummarized": "Not summarized",
+				"card.openProject": "View recording project",
 				"card.summarize": "Summarize",
 				"card.generateSummary": "Generate summary",
 				"card.retrySummary": "Retry",
@@ -419,22 +420,26 @@ describe("AudioRecordingCard", () => {
 		).toBeInTheDocument()
 	})
 
-	it("does not render the temporary project detail action in the more-actions dropdown", () => {
-		render(<AudioRecordingCard item={createItem()} onRename={vi.fn()} onDelete={vi.fn()} />)
+	it("opens the recording project action without opening the recording preview", () => {
+		const onOpen = vi.fn()
+		const onOpenProject = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem()}
+				onOpen={onOpen}
+				onOpenProject={onOpenProject}
+				onRename={vi.fn()}
+				onDelete={vi.fn()}
+			/>,
+		)
 
 		const trigger = screen.getByTestId("audio-recording-card-project-1-more-actions")
 		trigger.focus()
 		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1-action-open-project"))
 
-		expect(
-			screen.queryByTestId("audio-recording-card-project-1-action-open-project"),
-		).not.toBeInTheDocument()
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-action-rename"),
-		).toBeInTheDocument()
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-action-delete"),
-		).toBeInTheDocument()
+		expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
+		expect(onOpen).not.toHaveBeenCalled()
 	})
 
 	it("shows created_at fallback title when project name is empty", () => {

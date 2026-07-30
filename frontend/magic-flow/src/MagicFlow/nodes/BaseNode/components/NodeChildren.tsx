@@ -18,7 +18,7 @@ interface NodeChildrenProps {
 	type: string
 	desc: string
 	customNodeRenderConfig: any
-	HeaderRight: React.ComponentType<any> | null
+	HeaderRight: React.ReactNode
 	allowDebug: boolean
 	isDebug: boolean
 	onDebugChange: (checked: boolean) => void

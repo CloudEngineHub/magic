@@ -122,7 +122,7 @@ export const useStyles = createStyles(({ token, css, responsive }) => {
 					background: rgba(37, 99, 235, 0.1);
 					display: inline;
 					padding: 1px 4px;
-					vertical-align: top;
+					vertical-align: middle;
 					margin: 0 2px;
 					cursor: pointer;
 				}

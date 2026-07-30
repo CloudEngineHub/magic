@@ -1,42 +1,30 @@
 import { useEffect, useState, useRef } from "react"
 import { reaction } from "mobx"
 import { getFileInfoByPath } from "@/pages/superMagic/components/Detail/contents/Design/utils/designFileInfoCache"
-import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { resolveDesignProjectBasePathFromAttachments } from "@/pages/superMagic/components/Detail/contents/Design/utils/utils"
-import projectFilesStore from "@/stores/projectFiles"
+import projectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
+import { mapWorkspaceFilesToFileItems } from "./markerAttachmentUtils"
 
 function normalizePath(path: string) {
 	if (!path) return ""
 	return path.replace(/^\/+|\/+$/g, "")
 }
 
-function mapWorkspaceFilesToFileItems(): FileItem[] {
-	return projectFilesStore.workspaceFilesList
-		.filter((item): item is typeof item & { file_id: string } => Boolean(item.file_id))
-		.map((item) => ({
-			file_id: item.file_id,
-			file_name: item.file_name ?? item.name ?? item.filename ?? "",
-			display_filename: item.display_filename,
-			filename: item.filename,
-			file_extension: item.file_extension,
-			relative_file_path: item.relative_file_path,
-			is_directory: item.is_directory,
-			parent_id: item.parent_id ?? undefined,
-			source: item.source,
-		}))
-}
-
-function resolveCurrentDesignProjectBasePath(designProjectId?: string) {
+function resolveCurrentDesignProjectBasePath(
+	currentProjectFilesStore: ProjectFilesStore,
+	designProjectId?: string,
+) {
 	// 刷新首屏时 workspaceFilesList 可能尚未加载，必须在每次换链前用最新附件列表重新计算 base path。
 	return resolveDesignProjectBasePathFromAttachments({
 		currentFile: designProjectId ? { id: designProjectId } : undefined,
-		flatAttachments: mapWorkspaceFilesToFileItems(),
+		flatAttachments: mapWorkspaceFilesToFileItems(currentProjectFilesStore.workspaceFilesList),
 	})
 }
 
 export function useMarkerImageUrl(
 	imagePath: string | undefined,
 	designProjectId?: string,
+	projectFilesStoreInstance?: ProjectFilesStore,
 ): {
 	imageUrl: string | null
 	loading: boolean
@@ -44,7 +32,11 @@ export function useMarkerImageUrl(
 	const [imageUrl, setImageUrl] = useState<string | null>(null)
 	const [loading, setLoading] = useState(false)
 	const cancelledRef = useRef(false)
-	const designProjectBasePath = resolveCurrentDesignProjectBasePath(designProjectId)
+	const currentProjectFilesStore = projectFilesStoreInstance ?? projectFilesStore
+	const designProjectBasePath = resolveCurrentDesignProjectBasePath(
+		currentProjectFilesStore,
+		designProjectId,
+	)
 
 	useEffect(() => {
 		cancelledRef.current = false
@@ -63,8 +55,8 @@ export function useMarkerImageUrl(
 		}
 
 		if (
-			!projectFilesStore.workspaceFilesList ||
-			projectFilesStore.workspaceFilesList.length === 0
+			!currentProjectFilesStore.workspaceFilesList ||
+			currentProjectFilesStore.workspaceFilesList.length === 0
 		) {
 			setImageUrl(null)
 			setLoading(true)
@@ -72,11 +64,15 @@ export function useMarkerImageUrl(
 		}
 
 		setLoading(true)
-		getFileInfoByPath(imagePath, undefined, {
-			useImageProcess: true,
-			designProjectId,
-			designProjectBasePath,
-		})
+		getFileInfoByPath(
+			imagePath,
+			mapWorkspaceFilesToFileItems(currentProjectFilesStore.workspaceFilesList),
+			{
+				useImageProcess: true,
+				designProjectId,
+				designProjectBasePath,
+			},
+		)
 			.then((fileInfo) => {
 				if (!cancelledRef.current) {
 					setImageUrl(fileInfo?.src ?? null)
@@ -97,13 +93,13 @@ export function useMarkerImageUrl(
 		return () => {
 			cancelledRef.current = true
 		}
-	}, [designProjectBasePath, designProjectId, imagePath])
+	}, [currentProjectFilesStore, designProjectBasePath, designProjectId, imagePath])
 
 	useEffect(() => {
 		if (!imagePath) return
 
 		const disposer = reaction(
-			() => projectFilesStore.workspaceFilesList,
+			() => currentProjectFilesStore.workspaceFilesList,
 			(attachmentList) => {
 				if (
 					attachmentList &&
@@ -111,15 +107,21 @@ export function useMarkerImageUrl(
 					imagePath &&
 					!cancelledRef.current
 				) {
-					const latestDesignProjectBasePath =
-						resolveCurrentDesignProjectBasePath(designProjectId)
+					const latestDesignProjectBasePath = resolveCurrentDesignProjectBasePath(
+						currentProjectFilesStore,
+						designProjectId,
+					)
 					// MobX reaction 不会触发当前组件重新 render，不能复用首次 render 闭包里的 designProjectBasePath。
 					setLoading(true)
-					getFileInfoByPath(imagePath, undefined, {
-						useImageProcess: true,
-						designProjectId,
-						designProjectBasePath: latestDesignProjectBasePath,
-					})
+					getFileInfoByPath(
+						imagePath,
+						mapWorkspaceFilesToFileItems(currentProjectFilesStore.workspaceFilesList),
+						{
+							useImageProcess: true,
+							designProjectId,
+							designProjectBasePath: latestDesignProjectBasePath,
+						},
+					)
 						.then((fileInfo) => {
 							if (!cancelledRef.current) {
 								setImageUrl(fileInfo?.src ?? null)
@@ -144,7 +146,7 @@ export function useMarkerImageUrl(
 		return () => {
 			disposer()
 		}
-	}, [designProjectBasePath, designProjectId, imagePath])
+	}, [currentProjectFilesStore, designProjectBasePath, designProjectId, imagePath])
 
 	return { imageUrl, loading }
 }

@@ -5,6 +5,7 @@ import { getFolderMentionData } from "./directoryMention"
 
 type ProjectReferenceFileLike = {
 	file_id?: string | number
+	project_id?: string
 	file_name?: string | number
 	display_filename?: string | number
 	filename?: string | number
@@ -367,6 +368,7 @@ export function createProjectFileMentionData(
 		file_name: fileName,
 		file_path: normalizeProjectReferencePath(filePath),
 		file_extension: file.file_extension || "",
+		...(file.project_id ? { project_id: file.project_id } : {}),
 		file_size: file.file_size,
 	}
 }

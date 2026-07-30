@@ -24,6 +24,8 @@ export interface ExportProgress {
 	current: number
 	total: number
 	status: "idle" | "running" | "done" | "error"
+	exported?: number
+	failedPageNumbers?: number[]
 }
 
 interface UseExportZipResult {
@@ -35,6 +37,7 @@ interface UseExportZipResult {
 		/** Output pixel ratio for each captured card. Defaults to 2. */
 		pixelRatio?: number
 		getCardRef: (postIdx: number, cardIdx: number) => CardFrameRef | null
+		getCardPageNumber?: (postIdx: number, cardIdx: number) => number
 	}) => Promise<void>
 	exportLongImage: (args: {
 		post: SelfMediaPost
@@ -78,6 +81,7 @@ export function useExportZip(): UseExportZipResult {
 			format = DEFAULT_SELF_MEDIA_EXPORT_FORMAT,
 			pixelRatio,
 			getCardRef,
+			getCardPageNumber,
 		}) => {
 			if (runningRef.current) return
 			runningRef.current = true
@@ -89,6 +93,7 @@ export function useExportZip(): UseExportZipResult {
 			const zip = new JSZip()
 			let processed = 0
 			let captured = 0
+			const failedPageNumbers: number[] = []
 			const startedAt = Date.now()
 			const rootZipName = resolveZipBaseName(posts, zipName)
 			log.log("📤 开始导出 ZIP", {
@@ -117,6 +122,8 @@ export function useExportZip(): UseExportZipResult {
 							captured += 1
 							const fileName = imageNameForCard(post.cards[c], c + 1, format)
 							folder.file(fileName, dataUrlToBlob(dataUrl))
+						} else {
+							failedPageNumbers.push(getCardPageNumber?.(p, c) ?? c + 1)
 						}
 						processed += 1
 						setProgress({ current: processed, total, status: "running" })
@@ -125,10 +132,18 @@ export function useExportZip(): UseExportZipResult {
 				if (captured === 0) throw new Error("No card images were captured")
 				const blob = await zip.generateAsync({ type: "blob" })
 				saveAs(blob, `${rootZipName}.zip`)
-				setProgress({ current: total, total, status: "done" })
+				setProgress({
+					current: total,
+					total,
+					status: "done",
+					exported: captured,
+					failedPageNumbers,
+				})
 				log.log("✅ 导出 ZIP 完成", {
 					zipName: rootZipName,
 					totalCards: total,
+					capturedCards: captured,
+					failedPageNumbers,
 					durationMs: Date.now() - startedAt,
 				})
 			} catch (err) {

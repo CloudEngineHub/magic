@@ -192,4 +192,14 @@ interface SandboxGatewayInterface
         string $userSpaceRootFileID,
         array $labels = []
     ): GatewayResult;
+
+    /**
+     * 挂载引用项目（被 @ 艾特的外部项目）到指定沙箱作为只读空间.
+     */
+    public function mountReferencedProject(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        string $projectId,
+        string $projectSpaceRootFileId
+    ): GatewayResult;
 }

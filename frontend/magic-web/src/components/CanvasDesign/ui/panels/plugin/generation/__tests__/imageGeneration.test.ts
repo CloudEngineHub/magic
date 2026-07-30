@@ -307,6 +307,73 @@ describe("imageGeneration", () => {
 		)
 	})
 
+	it("continues the existing grid before falling back to source-right placement", async () => {
+		// 有同组历史输出时，先续接历史网格；没有历史输出时才回到来源图右侧。
+		const canvas = createCanvas({ maxOutputImages: 4 })
+		generateImages.mockReset()
+		start.mockReset()
+		ImageBatchPollingManagerMock.mockClear()
+		const previousRequest = {
+			model_id: "model-a",
+			prompt: "Old internal prompt template",
+			size: "1000x1000",
+			aspect_ratio: "9:16",
+			reference_images: ["./images/source.png"],
+		}
+		canvas.elementManager.getAllElements.mockReturnValue([
+			{
+				id: "source-image",
+				type: "image",
+				src: "./images/source.png",
+				x: 100,
+				y: 120,
+				width: 400,
+				height: 300,
+				visible: true,
+			},
+			{
+				id: "generated-output",
+				type: "image",
+				x: 700,
+				y: 1344,
+				width: 1152,
+				height: 2048,
+				visible: true,
+				generateImageRequest: previousRequest,
+			},
+		])
+		canvas.elementManager.getElementData.mockImplementation((elementId: string) =>
+			elementId === "source-image" ? canvas.elementManager.getAllElements()[0] : undefined,
+		)
+		generateImages.mockResolvedValue({ image_id: "batch-1" })
+
+		await generatePluginImages(
+			canvas as never,
+			{
+				model_id: "model-b",
+				prompt: "Generate",
+				size: "1080x1920",
+				aspect_ratio: "9:16",
+				count: 1,
+				reference_images: ["./images/source.png"],
+			},
+			{
+				sourceElementByAssetKey: new Map([["./images/source.png", "source-image"]]),
+			},
+		)
+
+		expect(canvas.__spies.createImageElementsAtPositions).toHaveBeenCalledWith(
+			[{ x: 2052, y: 1344 }],
+			1080,
+			1920,
+		)
+		expect(generateImages).toHaveBeenCalledWith(
+			expect.objectContaining({
+				aspect_ratio: "9:16",
+			}),
+		)
+	})
+
 	it("does not use a selected generated image as the source fallback", async () => {
 		// 选中的生成产物不能作为下一次来源，否则结果会一代一代偏移。
 		const canvas = createCanvas({ maxOutputImages: 4 })
@@ -350,14 +417,14 @@ describe("imageGeneration", () => {
 	})
 
 	it("continues the existing generated grid when the reference image is not on canvas", async () => {
-		// 外部引用图不在画布上时，同参数再次生成要接在已有输出网格之后。
+		// 外部引用图不在画布上时，同配置再次生成要接在已有输出网格之后；prompt/model 不参与排布分组。
 		const canvas = createCanvas({ maxOutputImages: 4 })
 		generateImages.mockReset()
 		start.mockReset()
 		ImageBatchPollingManagerMock.mockClear()
 		const previousRequest = {
 			model_id: "model-a",
-			prompt: "Generate",
+			prompt: "Old prompt",
 			size: "1024x1024",
 			reference_image_options: [{ path: "./images/external-source.png" }],
 		}
@@ -386,9 +453,62 @@ describe("imageGeneration", () => {
 		generateImages.mockResolvedValue({ image_id: "batch-1" })
 
 		await generatePluginImages(canvas as never, {
-			model_id: "model-a",
+			model_id: "model-b",
 			prompt: "Generate",
 			size: "1024x1024",
+			count: 1,
+			reference_image_options: [{ path: "images/external-source.png" }],
+		})
+
+		expect(canvas.__spies.createImageElementsAtPositions).toHaveBeenCalledWith(
+			[{ x: 2548, y: 120 }],
+			1024,
+			1024,
+		)
+	})
+
+	it("continues the previous grid when only aspect ratio changes", async () => {
+		// 只改 aspect ratio 时，也应接着上一批生成结果续排，保持同一组。
+		const canvas = createCanvas({ maxOutputImages: 4 })
+		generateImages.mockReset()
+		start.mockReset()
+		ImageBatchPollingManagerMock.mockClear()
+		const previousRequest = {
+			model_id: "model-a",
+			prompt: "Old prompt",
+			size: "1024x1024",
+			aspect_ratio: "1:1",
+			reference_image_options: [{ path: "./images/external-source.png" }],
+		}
+		canvas.elementManager.getAllElements.mockReturnValue([
+			{
+				id: "generated-output-1",
+				type: "image",
+				x: 100,
+				y: 120,
+				width: 1024,
+				height: 1024,
+				visible: true,
+				generateImageRequest: previousRequest,
+			},
+			{
+				id: "generated-output-2",
+				type: "image",
+				x: 1324,
+				y: 120,
+				width: 1024,
+				height: 1024,
+				visible: true,
+				generateImageRequest: previousRequest,
+			},
+		])
+		generateImages.mockResolvedValue({ image_id: "batch-1" })
+
+		await generatePluginImages(canvas as never, {
+			model_id: "model-b",
+			prompt: "Generate",
+			size: "1024x1024",
+			aspect_ratio: "9:16",
 			count: 1,
 			reference_image_options: [{ path: "images/external-source.png" }],
 		})

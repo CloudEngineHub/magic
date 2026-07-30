@@ -29,11 +29,7 @@ import CreatedCrewCard from "./components/CreatedCrewCard"
 import HiredCrewCard from "./components/HiredCrewCard"
 import MyCrewCrewTypeTabs from "./components/MyCrewCrewTypeTabs"
 import type { MyCrewView } from "@/services/crew/CrewService"
-import {
-	resolveMyCrewDisableActionDisabled,
-	resolveMyCrewDisableActionLabel,
-	resolveMyCrewHiredActionKind,
-} from "./components/my-crew-card-shared"
+import { isOfficialMyCrewAgent } from "./components/my-crew-card-shared"
 import { useMyCrewTabs } from "./hooks/useMyCrewTabs"
 
 const MyCrewManageSortingDialog = lazy(() =>
@@ -52,8 +48,7 @@ function MyCrewPage() {
 	const [isCreating, setIsCreating] = useState(false)
 	const [isSortingDialogOpen, setIsSortingDialogOpen] = useState(false)
 	const [selectedAgent, setSelectedAgent] = useState<MyCrewView | null>(null)
-	const { crewTypeTab, setCrewTypeTab, includeTeamShared, isCreatedTab, isTeamSharedTab } =
-		useMyCrewTabs({ includeTeamShared: true })
+	const { crewTypeTab, setCrewTypeTab, isCreatedTab, isCollaboratedTab } = useMyCrewTabs()
 	const { isAllowed: canCreateAgent } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.AgentCreate,
 	)
@@ -142,7 +137,7 @@ function MyCrewPage() {
 	const handleDismissHiredCrew = useCallback(
 		(agentCode: string) => {
 			const employee = store.list.find((e) => e.agentCode === agentCode)
-			if (!employee?.allowDelete) return
+			if (!employee || isOfficialMyCrewAgent(employee)) return
 			const displayName = employee?.name?.trim() || t("crew/create:untitledCrew") || agentCode
 			confirm({
 				title: t("myCrewPage.dismissConfirm.title", { name: displayName }),
@@ -152,24 +147,6 @@ function MyCrewPage() {
 				destructivePresentation: "soft",
 				dialogSize: "sm",
 				onConfirm: () => store.deleteAgent(agentCode),
-			})
-		},
-		[store, t, confirm],
-	)
-
-	const handleDisableHiredCrew = useCallback(
-		(agentCode: string) => {
-			const employee = store.list.find((e) => e.agentCode === agentCode)
-			if (!employee?.enabled) return
-			const displayName = employee?.name?.trim() || t("crew/create:untitledCrew") || agentCode
-			confirm({
-				title: t("myCrewPage.disableConfirm.title", { name: displayName }),
-				description: t("myCrewPage.disableConfirm.description"),
-				confirmText: t("myCrewPage.disableConfirm.confirm"),
-				variant: "destructive",
-				destructivePresentation: "soft",
-				dialogSize: "sm",
-				onConfirm: () => store.offlineAgent(agentCode),
 			})
 		},
 		[store, t, confirm],
@@ -249,28 +226,13 @@ function MyCrewPage() {
 				versionCode={selectedAgent?.latestVersionCode}
 				avatarUrl={selectedAgent?.icon}
 				primaryAction={
-					selectedAgent != null
-						? resolveMyCrewHiredActionKind(selectedAgent.sourceType) === "dismiss"
-							? {
-									label: t("dismiss"),
-									variant: "destructive",
-									testId: "my-crew-detail-dismiss-button",
-									onClick: () => handleDismissHiredCrew(selectedAgent.agentCode),
-								}
-							: {
-									label: resolveMyCrewDisableActionLabel(
-										selectedAgent.allowDelete,
-										selectedAgent.publisherType,
-										t,
-									),
-									variant: "secondary",
-									disabled: resolveMyCrewDisableActionDisabled(
-										selectedAgent.allowDelete,
-										selectedAgent.enabled,
-									),
-									testId: "my-crew-detail-disable-button",
-									onClick: () => handleDisableHiredCrew(selectedAgent.agentCode),
-								}
+					selectedAgent != null && !isOfficialMyCrewAgent(selectedAgent)
+						? {
+								label: t("dismiss"),
+								variant: "destructive",
+								testId: "my-crew-detail-dismiss-button",
+								onClick: () => handleDismissHiredCrew(selectedAgent.agentCode),
+							}
 						: undefined
 				}
 			/>
@@ -326,7 +288,6 @@ function MyCrewPage() {
 						<MyCrewCrewTypeTabs
 							value={crewTypeTab}
 							onChange={setCrewTypeTab}
-							includeTeamShared={includeTeamShared}
 							className="max-w-md sm:max-w-lg"
 						/>
 
@@ -347,7 +308,11 @@ function MyCrewPage() {
 								data-testid="my-crew-empty"
 							>
 								<p className="text-sm text-muted-foreground">
-									{t("myCrewPage.empty")}
+									{t(
+										isCollaboratedTab
+											? "myCrewPage.emptyCollaborated"
+											: "myCrewPage.empty",
+									)}
 								</p>
 								{isCreatedTab && canCreateAgent ? (
 									<Button
@@ -393,28 +358,22 @@ function MyCrewPage() {
 												onPublishToStore={handleOpenPublishPanel}
 												onDelete={handleDeleteCreatedCrew}
 											/>
+										) : isCollaboratedTab ? (
+											<HiredCrewCard
+												key={employee.id}
+												employee={employee}
+												href={getCrewEditHref(employee.agentCode)}
+												onEdit={handleEdit}
+												isCollaboratedCard
+											/>
 										) : (
 											<HiredCrewCard
 												key={employee.id}
 												employee={employee}
 												href={getCrewEditHref(employee.agentCode)}
-												onEdit={
-													isTeamSharedTab ? handleEdit : handleOpenDetails
-												}
+												onEdit={handleOpenDetails}
 												onConversation={handleOpenConversation}
-												onDelete={
-													isTeamSharedTab
-														? handleDeleteCreatedCrew
-														: undefined
-												}
 												onDismiss={handleDismissHiredCrew}
-												onDisable={handleDisableHiredCrew}
-												onPublishToStore={
-													isTeamSharedTab
-														? handleOpenPublishPanel
-														: undefined
-												}
-												isTeamSharedCard={isTeamSharedTab}
 											/>
 										),
 									)}

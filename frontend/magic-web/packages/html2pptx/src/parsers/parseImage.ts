@@ -62,11 +62,16 @@ export function parseImage(
 		else if (objectFit === "contain" || objectFit === "scale-down" || objectFit === "none") sizing = "contain"
 		else if (objectFit === "fill" || !objectFit) sizing = "stretch"
 
+		const intrinsicSize = imgElement.naturalWidth > 0 && imgElement.naturalHeight > 0
+			? { width: imgElement.naturalWidth, height: imgElement.naturalHeight }
+			: undefined
+
 		return {
 			...finalRect,
 			type: "image",
 			src,
 			sizing,
+			intrinsicSize,
 			transparency,
 			radius, // Apply corner radius.
 			rotate, // Apply rotation.

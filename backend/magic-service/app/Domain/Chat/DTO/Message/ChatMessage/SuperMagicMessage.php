@@ -17,6 +17,11 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
 
     protected ?string $messageId = null;
 
+    /**
+     * Super Magic 生成的原始消息 ID。
+     */
+    protected ?string $superMessageId = null;
+
     protected ?string $taskId = null;
 
     protected ?string $sandboxId = null;
@@ -66,6 +71,7 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
     {
         $data = [
             'message_id' => $this->messageId,
+            'super_message_id' => $this->superMessageId,
             'task_id' => $this->taskId,
             'sandbox_id' => $this->sandboxId,
             'topic_id' => $this->topicId,

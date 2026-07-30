@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../hooks/useLocaleText"
 import type { OptionItem } from "../types"
+import { getOptionValue } from "../utils"
 
 interface TemplateTextListProps {
 	selectedTemplate?: OptionItem
@@ -55,10 +56,11 @@ const TemplateTextList = observer(
 				initial="hidden"
 				animate="visible"
 			>
-				{templates.map((template) => {
+				{templates.map((template, index) => {
+					const templateValue = getOptionValue(template)
 					return (
 						<motion.button
-							key={template.value}
+							key={`${templateValue}-${index}`}
 							type="button"
 							variants={itemVariants}
 							// onClick={() => onTemplateClick?.(template)}
@@ -71,7 +73,10 @@ const TemplateTextList = observer(
 							onClick={() => onTemplateClick?.(template)}
 						>
 							<span className="min-w-0 flex-1 truncate text-left leading-5">
-								{lt(template.label) ?? lt(template.description) ?? template.value}
+								{lt(template.label) ??
+									lt(template.description) ??
+									lt(template.value) ??
+									templateValue}
 							</span>
 							<ArrowUpRight className="size-4 shrink-0" />
 						</motion.button>

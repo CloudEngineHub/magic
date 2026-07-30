@@ -26,6 +26,31 @@ interface AgentMarketRepositoryInterface
     public function findByAgentCode(string $agentCode): ?AgentMarketEntity;
 
     /**
+     * 查询已发布且未隐藏的市场记录并加行锁，供雇佣与撤权事务复用。
+     */
+    public function findPublishedByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity;
+
+    /**
+     * 查询组织共享市场记录并加行锁，协作者变更后用于同步撤权。
+     */
+    public function findPublishedOrganizationByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity;
+
+    /**
+     * 将协作权限中的员工 code 精确转换为当前组织的市场货架 ID。
+     *
+     * @param string[] $agentCodes
+     * @return int[]
+     */
+    public function findPublishedOrganizationIdsByAgentCodes(string $organizationCode, array $agentCodes): array;
+
+    /**
+     * 将创建者拥有的组织共享员工转换为市场 ID，避免市场列表依赖 owner 协作权限。
+     *
+     * @return int[]
+     */
+    public function findPublishedOrganizationIdsByPublisher(string $organizationCode, string $publisherId): array;
+
+    /**
      * 批量根据 agent_code 列表查询市场状态（仅查询已发布的）.
      *
      * @param string[] $agentCodes Agent code 列表

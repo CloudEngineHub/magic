@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -170,7 +171,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		if (currentEditingItem && tiptapEditorRef.current) {
 			if (!prevEditingId || currentEditingId !== prevEditingId) {
 				setTimeout(() => {
-					tiptapEditorRef.current?.setContent?.(currentEditingItem.content)
+					tiptapEditorRef.current?.setContent?.(
+						transformInspectorContent(currentEditingItem.content),
+					)
 					const ed = tiptapEditorRef.current?.editor
 					if (ed && !ed.isDestroyed) {
 						try {

@@ -4,10 +4,10 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
+import type { IdentifiedOptionItem } from "../types"
 
 interface EditableWaterfallCardProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -23,7 +23,8 @@ export function EditableWaterfallCard({
 }: EditableWaterfallCardProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const label = lt(item.label) ?? item.value
+	const itemValue = item.value
+	const label = lt(item.label) ?? itemValue
 	const description = lt(item.description) ?? ""
 
 	const aspectRatio =
@@ -35,7 +36,7 @@ export function EditableWaterfallCard({
 				"group relative flex w-full flex-col gap-0 overflow-hidden rounded-md border border-border bg-background p-1 transition-all",
 				isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
 			)}
-			data-testid={`editable-waterfall-card-${item.value}`}
+			data-testid={`editable-waterfall-card-${itemValue}`}
 		>
 			<div className="relative flex w-full flex-col items-start justify-center overflow-hidden rounded-sm">
 				{item.thumbnail_url ? (
@@ -98,9 +99,9 @@ export function EditableWaterfallCard({
 				>
 					<Button
 						size="sm"
-						className="shadow-xs h-9 flex-1 gap-2"
+						className="h-9 flex-1 gap-2 shadow-xs"
 						onClick={onEdit}
-						data-testid={`editable-waterfall-card-edit-${item.value}`}
+						data-testid={`editable-waterfall-card-edit-${itemValue}`}
 					>
 						<PencilLine className="size-4" />
 						{t("playbook.edit.inspiration.actions.edit")}
@@ -108,9 +109,9 @@ export function EditableWaterfallCard({
 					<Button
 						variant="destructive"
 						size="icon"
-						className="shadow-xs size-9 shrink-0"
+						className="size-9 shrink-0 shadow-xs"
 						onClick={onDelete}
-						data-testid={`editable-waterfall-card-delete-${item.value}`}
+						data-testid={`editable-waterfall-card-delete-${itemValue}`}
 					>
 						<Trash2 className="size-4" />
 					</Button>
@@ -121,8 +122,8 @@ export function EditableWaterfallCard({
 			<div className="absolute left-2.5 top-2.5">
 				<Checkbox
 					checked={isSelected}
-					onCheckedChange={(checked) => onSelect(item.value, !!checked)}
-					data-testid={`editable-waterfall-card-checkbox-${item.value}`}
+					onCheckedChange={(checked) => onSelect(itemValue, !!checked)}
+					data-testid={`editable-waterfall-card-checkbox-${itemValue}`}
 				/>
 			</div>
 		</div>

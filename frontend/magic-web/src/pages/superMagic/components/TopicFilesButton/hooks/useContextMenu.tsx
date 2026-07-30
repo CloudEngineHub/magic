@@ -470,7 +470,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
-			// 判断是否允许创建画布：当前项或父级/更父级没有携带 display_config 时才允许
+			// 特殊项目目录内不允许嵌套创建画布、自媒体项目或 AI 卡片。
 			const canCreateDesignProject =
 				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
 

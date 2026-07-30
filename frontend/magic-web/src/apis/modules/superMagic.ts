@@ -931,6 +931,25 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post(`/api/v1/super-agent/file/${file_id}/move`, requestData)
 	},
 	/**
+	 * @description 复制单个文件或文件夹（支持跨项目）
+	 * @param {object} params
+	 * @param {string} params.file_id 源文件ID
+	 * @param {string} params.target_parent_id 目标父目录ID
+	 * @param {string} params.pre_file_id 前置文件ID
+	 * @param {string} params.target_project_id 目标项目ID
+	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 */
+	copyFile(params: {
+		file_id: string
+		target_parent_id: string
+		pre_file_id?: string
+		target_project_id?: string
+		keep_both_file_ids?: string[]
+	}) {
+		const { file_id, ...requestData } = params
+		return fetch.post(`/api/v1/super-agent/file/${file_id}/copy`, requestData)
+	},
+	/**
 	 * @description 批量移动文件或文件夹（支持跨项目）
 	 * @param {object} params
 	 * @param {string[]} params.file_ids 文件ID列表

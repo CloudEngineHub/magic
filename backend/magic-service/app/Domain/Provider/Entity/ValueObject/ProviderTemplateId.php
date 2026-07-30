@@ -175,6 +175,7 @@ enum ProviderTemplateId: string
             ProviderCode::AWSBedrock => 'AWS Bedrock',
             ProviderCode::Google => 'Google',
             ProviderCode::VolcengineArk => '火山引擎-方舟',
+            ProviderCode::Keling => '可灵',
             ProviderCode::Gemini => 'Google Gemini',
             ProviderCode::Anthropic => 'Anthropic',
             default => '未知服务商',

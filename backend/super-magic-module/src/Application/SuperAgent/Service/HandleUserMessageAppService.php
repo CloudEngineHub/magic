@@ -21,9 +21,11 @@ use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\InterruptClientNotification;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\UpsertProjectFileNodeDTO;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\ProjectFileConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
@@ -46,12 +48,15 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
+use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 use function event_dispatch;
@@ -76,6 +81,7 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectMcpConfigService $projectMcpConfigService,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -253,6 +259,19 @@ class HandleUserMessageAppService extends AbstractAppService
             }
             // Request-level extra (topic_pattern / agent_code) overrides persisted topic config
             [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
+        }
+
+        $topicPattern = trim((string) ($userMessageDTO->getExtra()?->getTopicPattern() ?? $userMessageDTO->getTopicMode()));
+        [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            ),
+            $topicPattern,
+            $resolvedAgentCode
+        );
+        if (! $allowed) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
         }
 
         // Generate task context
@@ -595,6 +614,18 @@ class HandleUserMessageAppService extends AbstractAppService
 
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
+
+        // 挂载引用项目（全有或全无——任一失败则中止）
+        $mentions = Json::decode($taskContext->getTask()->getMentions() ?: '[]') ?: [];
+        $crossProjectIds = $this->extractCrossProjectIds($mentions, $projectEntity->getId());
+        if (! empty($crossProjectIds)) {
+            $this->mountReferencedProjectsWithAccessControl(
+                $dataIsolation,
+                $sandboxId,
+                $crossProjectIds
+            );
+        }
+
         // 发送消息到 agent
         $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
 
@@ -832,5 +863,73 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         return '';
+    }
+
+    /**
+     * Extract unique cross-project IDs from mentions that differ from the
+     * current project.
+     *
+     * @return string[]
+     */
+    private function extractCrossProjectIds(array $mentions, int $currentProjectId): array
+    {
+        $ids = [];
+        foreach ($mentions as $mention) {
+            $pid = $mention['project_id'] ?? null;
+            if ($pid === null || $pid === '') {
+                continue;
+            }
+            $pidStr = (string) $pid;
+            if ((int) $pidStr !== $currentProjectId) {
+                $ids[$pidStr] = true;
+            }
+        }
+        return array_map('strval', array_keys($ids));
+    }
+
+    /**
+     * Mount referenced projects with access control — all-or-nothing.
+     *
+     * Phase 1: validate whether the current user can access ALL target projects.
+     * Phase 2: delegate to Domain layer to mount every validated project.
+     *
+     * A single denied access or mount failure aborts the entire operation with
+     * a RuntimeException, which is caught by handleChatMessage() to notify the
+     * user and prevent the message from reaching the agent.
+     *
+     * @param string[] $projectIds
+     * @throws RuntimeException
+     */
+    private function mountReferencedProjectsWithAccessControl(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        array $projectIds
+    ): void {
+        // Phase 1: validate access for all target projects
+        $denied = [];
+        foreach ($projectIds as $projectId) {
+            try {
+                $this->getAccessibleProject(
+                    (int) $projectId,
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode()
+                );
+            } catch (Throwable) {
+                $denied[] = $projectId;
+            }
+        }
+        if (! empty($denied)) {
+            throw new RuntimeException(sprintf(
+                'Cannot mount referenced projects [%s]: access denied',
+                implode(', ', $denied)
+            ));
+        }
+
+        // Phase 2: mount validated projects
+        $this->agentDomainService->mountReferencedProjects(
+            $dataIsolation,
+            $sandboxId,
+            $projectIds
+        );
     }
 }

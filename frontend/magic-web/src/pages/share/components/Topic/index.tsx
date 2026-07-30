@@ -73,6 +73,7 @@ function Topic({
 	showCreatedByBadge,
 	allowDownloadProjectFile,
 	forceFullscreenMode,
+	documentFlowFullscreen,
 	hidePreviewHeader,
 	showFileHeader,
 	onPreviewFileChange,
@@ -96,6 +97,7 @@ function Topic({
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
 	forceFullscreenMode?: boolean
+	documentFlowFullscreen?: boolean
 	hidePreviewHeader?: boolean
 	showFileHeader?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
@@ -920,7 +922,13 @@ function Topic({
 
 	return (
 		<>
-			<div className="flex h-full w-full flex-row justify-center overflow-hidden bg-transparent">
+			<div
+				className={cn(
+					documentFlowFullscreen
+						? "flex min-h-dvh w-full flex-row justify-center overflow-visible bg-transparent"
+						: "flex h-full w-full flex-row justify-center overflow-hidden bg-transparent",
+				)}
+			>
 				{isMobile ? (
 					<>
 						<PreviewDetailPopup
@@ -950,6 +958,7 @@ function Topic({
 							hideHeader={hidePreviewHeader}
 							showFileHeader={showFileHeader}
 							forceFullscreenMode={forceFullscreenMode}
+							documentFlowFullscreen={documentFlowFullscreen}
 							onPreviewFileChange={(fileId) => {
 								setPrimaryPreviewFileId(fileId)
 								onPreviewFileChange?.(fileId)
@@ -976,6 +985,7 @@ function Topic({
 								hideHeader={hidePreviewHeader}
 								showFileHeader={showFileHeader}
 								forceFullscreenMode={forceFullscreenMode}
+								documentFlowFullscreen={documentFlowFullscreen}
 								onPreviewFileChange={onPreviewFileChange}
 								onPreviewFullscreenChange={onPreviewFullscreenChange}
 							/>
@@ -1036,9 +1046,11 @@ function Topic({
 						isMobile ? null : (
 							<div
 								className={cn(
-									shouldRenderFullscreenFileOnly
-										? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
-										: "mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
+									documentFlowFullscreen
+										? "min-h-dvh w-full flex-1 overflow-visible bg-transparent"
+										: shouldRenderFullscreenFileOnly
+											? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
+											: "mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
 									!isFullscreenMode &&
 										!shouldRenderFullscreenFileOnly &&
 										"my-2 border border-border bg-card",
@@ -1074,6 +1086,7 @@ function Topic({
 										(shouldRenderFullscreenFileOnly ? false : undefined)
 									}
 									forceFullscreenMode={forceFullscreenMode}
+									documentFlowFullscreen={documentFlowFullscreen}
 								/>
 							</div>
 						)}

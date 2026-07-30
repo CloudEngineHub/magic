@@ -12,6 +12,7 @@ enum AgentListScope: string
     case ALL = 'all';
     case CREATED = 'created';
     case TEAM_SHARED = 'team_shared';
+    case COLLABORATED = 'collaborated';
     case MARKET_INSTALLED = 'market_installed';
 
     public static function values(): array

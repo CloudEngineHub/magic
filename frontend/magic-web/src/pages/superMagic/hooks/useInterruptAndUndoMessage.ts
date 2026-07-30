@@ -5,9 +5,7 @@ import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import {
-	optimisticMessageStore,
-} from "@/pages/superMagic/stores/optimisticMessageStore"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import type { Topic } from "../pages/Workspace/types"
 import { useSendInterruptMessage } from "./useSendInterruptMessage"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -65,6 +63,12 @@ export function useInterruptAndUndoMessage({
 					message_id: messageId,
 				})
 				if (selectedTopic?.chat_topic_id) {
+					// The User anchor is the stable branch boundary while User/Assistant outer
+					// statuses may arrive in different HTTP snapshots after undo succeeds.
+					optimisticMessageStore.setActiveRevokedAnchor({
+						chat_topic_id: selectedTopic.chat_topic_id,
+						seq_id: messageId,
+					})
 					const hiddenOptimisticMessageIds =
 						revokedMessageIndex > -1
 							? currentMessageList

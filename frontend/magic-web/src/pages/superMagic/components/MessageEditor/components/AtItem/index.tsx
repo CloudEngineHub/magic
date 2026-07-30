@@ -36,6 +36,7 @@ import { JSONContent } from "@tiptap/core"
 import { type MarkerClickScene } from "../../hooks/useMarkerClickHandler"
 import MarkerAtItem from "../MentionNodes/marker/MarkerAtItem"
 import { observer } from "mobx-react-lite"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 interface AtItemProps {
 	data: TiptapMentionAttributes
@@ -58,6 +59,8 @@ interface AtItemProps {
 	markerClickScene?: MarkerClickScene
 	/** 消息的 content（用于消息列表中通过 mark_number 查找原始 CanvasMarkerMentionData） */
 	messageContent?: JSONContent | string | Record<string, unknown>
+	/** 消息列表作用域内的附件 store；未传时保持全局 store 行为 */
+	projectFilesStore?: ProjectFilesStore
 }
 
 function AtItem({
@@ -75,6 +78,7 @@ function AtItem({
 	markerTooltipProps,
 	markerClickScene,
 	messageContent,
+	projectFilesStore: projectFilesStoreInstance,
 }: AtItemProps) {
 	// 判断是否在消息列表中：消息列表中不会传递 onRemove
 	const isInMessageList = !onRemove
@@ -157,6 +161,7 @@ function AtItem({
 				markerTooltipProps={markerTooltipProps}
 				markerClickScene={markerClickScene}
 				messageContent={messageContent}
+				projectFilesStore={projectFilesStoreInstance}
 			/>
 		)
 	}

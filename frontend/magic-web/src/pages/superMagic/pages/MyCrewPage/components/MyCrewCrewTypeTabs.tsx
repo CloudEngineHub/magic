@@ -7,7 +7,6 @@ interface MyCrewCrewTypeTabsProps {
 	value: MyCrewCrewTypeTab
 	onChange: (value: MyCrewCrewTypeTab) => void
 	className?: string
-	includeTeamShared?: boolean
 	"data-testid"?: string
 }
 
@@ -15,7 +14,6 @@ function MyCrewCrewTypeTabs({
 	value,
 	onChange,
 	className,
-	includeTeamShared = false,
 	"data-testid": dataTestId,
 }: MyCrewCrewTypeTabsProps) {
 	const { t } = useTranslation("crew/market")
@@ -46,24 +44,6 @@ function MyCrewCrewTypeTabs({
 			>
 				{t("myCrewPage.crewType.createdByMe")}
 			</button>
-			{includeTeamShared ? (
-				<button
-					type="button"
-					role="tab"
-					aria-selected={value === "team-shared"}
-					className={cn(
-						"flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-md px-2 py-1",
-						"text-sm font-medium text-foreground transition-colors",
-						value === "team-shared"
-							? "border border-transparent bg-background shadow-sm"
-							: "border border-transparent bg-transparent",
-					)}
-					onClick={() => onChange("team-shared")}
-					data-testid="my-crew-tab-team-shared"
-				>
-					{t("myCrewPage.crewType.teamShared")}
-				</button>
-			) : null}
 			<button
 				type="button"
 				role="tab"
@@ -79,6 +59,22 @@ function MyCrewCrewTypeTabs({
 				data-testid="my-crew-tab-hired"
 			>
 				{t("myCrewPage.crewType.hiredByMe")}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={value === "collaborated"}
+				className={cn(
+					"flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-md px-2 py-1",
+					"text-sm font-medium text-foreground transition-colors",
+					value === "collaborated"
+						? "border border-transparent bg-background shadow-sm"
+						: "border border-transparent bg-transparent",
+				)}
+				onClick={() => onChange("collaborated")}
+				data-testid="my-crew-tab-collaborated"
+			>
+				{t("myCrewPage.crewType.collaborated")}
 			</button>
 		</div>
 	)

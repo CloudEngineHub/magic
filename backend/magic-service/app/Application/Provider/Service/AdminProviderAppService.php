@@ -20,6 +20,7 @@ use App\Domain\Provider\DTO\ProviderConfigDTO;
 use App\Domain\Provider\DTO\ProviderConfigModelsDTO;
 use App\Domain\Provider\DTO\ProviderModelDetailDTO;
 use App\Domain\Provider\DTO\ProviderModelItemDTO;
+use App\Domain\Provider\Entity\ProviderConfigEntity;
 use App\Domain\Provider\Entity\ProviderEntity;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Category;
@@ -46,6 +47,7 @@ use App\Infrastructure\Util\FuzzMatchUtil;
 use App\Interfaces\Agent\Assembler\FileAssembler;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Provider\Assembler\ProviderAdminAssembler;
+use App\Interfaces\Provider\DTO\ProviderModelQueryRequest;
 use App\Interfaces\Provider\DTO\SaveProviderConfigRequest;
 use App\Interfaces\Provider\DTO\SaveProviderModelDTO;
 use Exception;
@@ -393,31 +395,6 @@ readonly class AdminProviderAppService
     }
 
     /**
-     * 获取所有可用的服务商列表（包括官方服务商），不依赖于组织.
-     *
-     * @param Category $category 服务商分类
-     * @param string $organizationCode 组织编码
-     * @return ProviderConfigModelsDTO[] 所有可用服务商列表
-     */
-    public function getAllAvailableLlmProviders(Category $category, string $organizationCode): array
-    {
-        // 获取所有服务商（包括Official）
-        $serviceProviders = $this->adminProviderDomainService->getAllAvailableProviders($category);
-
-        if (empty($serviceProviders)) {
-            return [];
-        }
-
-        // 过滤服务商
-        $serviceProviders = $this->providerControlPolicy->filterSelectableProviders($organizationCode, $category, $serviceProviders);
-
-        // 处理图标
-        $this->processServiceProviderEntityListIcons($serviceProviders, $organizationCode);
-
-        return $serviceProviders;
-    }
-
-    /**
      * 获取官方组织下的所有可用模型.
      * @return ProviderModelDetailDTO[]
      */
@@ -436,6 +413,65 @@ readonly class AdminProviderAppService
         $this->processModelIcons($providerConfigModelsDTOs);
 
         return $providerConfigModelsDTOs;
+    }
+
+    /**
+     * 查询服务商模型明细，并补全模型和服务商图标链接。
+     *
+     * @return array{page: int, page_size: int, total: int, list: ProviderModelEntity[], provider_context: array{configs: array<int, ProviderConfigEntity>, providers: array<int, ProviderEntity>}}
+     */
+    public function queriesProviderModels(MagicUserAuthorization $authorization, ProviderModelQueryRequest $request): array
+    {
+        $dataIsolation = ProviderDataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
+        $page = $request->toPage();
+        $result = $this->adminProviderDomainService->queriesProviderModels(
+            $dataIsolation,
+            $request->toProviderModelQuery(),
+            $page
+        );
+        $providerContext = $this->buildProviderContextMap($dataIsolation, $result['list']);
+        $this->processProviderModelQueryIcons($result['list'], $providerContext);
+
+        return [
+            'page' => $page->getPage(),
+            'page_size' => $page->getPageNum(),
+            'total' => $result['total'],
+            'list' => $result['list'],
+            'provider_context' => $providerContext,
+        ];
+    }
+
+    /**
+     * 按模型标识聚合查询服务商模型，并补全模型和服务商图标链接。
+     *
+     * @return array{page: int, page_size: int, total: int, list: array<string, ProviderModelEntity[]>, provider_context: array{configs: array<int, ProviderConfigEntity>, providers: array<int, ProviderEntity>}}
+     */
+    public function queriesProviderModelGroups(MagicUserAuthorization $authorization, ProviderModelQueryRequest $request): array
+    {
+        $dataIsolation = ProviderDataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
+        $page = $request->toPage();
+        $result = $this->adminProviderDomainService->queriesProviderModelGroups(
+            $dataIsolation,
+            $request->toProviderModelQuery(),
+            $page
+        );
+
+        $models = [];
+        foreach ($result['list'] as $groupModels) {
+            foreach ($groupModels as $model) {
+                $models[] = $model;
+            }
+        }
+        $providerContext = $this->buildProviderContextMap($dataIsolation, $models);
+        $this->processProviderModelQueryIcons($models, $providerContext);
+
+        return [
+            'page' => $page->getPage(),
+            'page_size' => $page->getPageNum(),
+            'total' => $result['total'],
+            'list' => $result['list'],
+            'provider_context' => $providerContext,
+        ];
     }
 
     /**
@@ -588,6 +624,65 @@ readonly class AdminProviderAppService
         }
 
         return $modelInfos;
+    }
+
+    /**
+     * @param ProviderModelEntity[] $models
+     * @return array{configs: array<int, ProviderConfigEntity>, providers: array<int, ProviderEntity>}
+     */
+    private function buildProviderContextMap(ProviderDataIsolation $dataIsolation, array $models): array
+    {
+        $configIds = [];
+        foreach ($models as $model) {
+            $configIds[] = $model->getServiceProviderConfigId();
+        }
+        $configIds = array_values(array_unique($configIds));
+        $configs = $this->providerConfigDomainService->getByIds($dataIsolation, $configIds);
+
+        return [
+            'configs' => $configs,
+            'providers' => $this->providerConfigDomainService->getProviderEntitiesByConfigs($configs),
+        ];
+    }
+
+    /**
+     * @param ProviderModelEntity[] $models
+     * @param array{configs: array<int, ProviderConfigEntity>, providers: array<int, ProviderEntity>} $providerContext
+     */
+    private function processProviderModelQueryIcons(array $models, array $providerContext): void
+    {
+        $iconsByOrg = [];
+        $modelIconMap = [];
+        $providerIconMap = [];
+
+        foreach ($models as $model) {
+            $icon = $this->collectIconByOrganization($iconsByOrg, $model->getIcon());
+            if ($icon === null) {
+                continue;
+            }
+            $modelIconMap[$icon][] = $model;
+        }
+
+        foreach ($providerContext['providers'] as $provider) {
+            $icon = $this->collectIconByOrganization($iconsByOrg, $provider->getIcon());
+            if ($icon === null) {
+                continue;
+            }
+            $providerIconMap[$icon][] = $provider;
+        }
+
+        foreach ($iconsByOrg as $organizationCode => $icons) {
+            $iconUrlMap = $this->fileDomainService->getLinks($organizationCode, array_unique($icons));
+            foreach ($iconUrlMap as $icon => $fileLink) {
+                $url = $fileLink?->getUrl() ?? '';
+                foreach ($modelIconMap[$icon] ?? [] as $model) {
+                    $model->setIcon($url);
+                }
+                foreach ($providerIconMap[$icon] ?? [] as $provider) {
+                    $provider->setIcon($url);
+                }
+            }
+        }
     }
 
     /**

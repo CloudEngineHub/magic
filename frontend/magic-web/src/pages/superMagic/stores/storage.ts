@@ -90,6 +90,34 @@ export class DynamicDatabase extends Dexie {
 		await table.put({ id, value })
 	}
 
+	async addManyToTable(tableName: string, values: StorageValue[]): Promise<void> {
+		await this.init()
+
+		if (!tableName || typeof tableName !== "string") {
+			throw new Error("表名必须是非空字符串")
+		}
+
+		if (!Array.isArray(values) || values.length === 0) return
+		if (
+			values.some(
+				(item) =>
+					!item?.id ||
+					typeof item.id !== "string" ||
+					!item.value ||
+					typeof item.value !== "object",
+			)
+		) {
+			throw new Error("批量写入值必须包含非空字符串 id 和对象 value")
+		}
+
+		if (!this.registeredTables.has(tableName)) {
+			await this.createTable(tableName)
+		}
+
+		const table = this.table<StorageValue>(tableName)
+		await table.bulkPut(values)
+	}
+
 	async queryAllFromTable(tableName: string): Promise<StorageValue[]> {
 		await this.init()
 

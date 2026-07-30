@@ -6,6 +6,7 @@ import {
 	Copy,
 	Download,
 	Ellipsis,
+	FolderOpen,
 	Loader,
 	Pencil,
 	Share2,
@@ -73,6 +74,7 @@ interface RecordingDetailHeaderProps {
 	onExportAll: () => void
 	onCreateShare: () => void
 	onManageShare: () => void
+	onOpenProject?: () => void
 	onMoveGroup: () => void
 	onCopyToProject?: () => void
 	onDelete: () => void
@@ -146,6 +148,7 @@ export function RecordingDetailHeader({
 	onExportAll,
 	onCreateShare,
 	onManageShare,
+	onOpenProject,
 	onMoveGroup,
 	onCopyToProject,
 	onDelete,
@@ -166,6 +169,7 @@ export function RecordingDetailHeader({
 	}, [projectItem, t])
 	const StatusBadgeIcon = statusBadge?.icon
 	const copyAvailability = useMemo(() => canCopyAudioProject(projectItem), [projectItem])
+	const canShowOpenProject = Boolean(onOpenProject)
 	const canShowCopyToProject = capabilities.canCopyToProject && Boolean(onCopyToProject)
 	const isSummaryFailed =
 		projectItem?.card_status === "summary_failed" ||
@@ -387,7 +391,10 @@ export function RecordingDetailHeader({
 						</DropdownMenu>
 					) : null}
 
-					{capabilities.canDelete || capabilities.canMoveGroup || canShowCopyToProject ? (
+					{capabilities.canDelete ||
+					capabilities.canMoveGroup ||
+					canShowOpenProject ||
+					canShowCopyToProject ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<button
@@ -403,6 +410,15 @@ export function RecordingDetailHeader({
 								align="end"
 								className={RECORDING_DETAIL_HEADER_MENU_CONTENT_CLASS}
 							>
+								{canShowOpenProject ? (
+									<RecordingDetailHeaderMenuItem
+										icon={<FolderOpen />}
+										onClick={onOpenProject}
+										data-testid="recording-detail-open-project"
+									>
+										{t("card.openProject")}
+									</RecordingDetailHeaderMenuItem>
+								) : null}
 								{capabilities.canMoveGroup ? (
 									<RecordingDetailHeaderMenuItem
 										icon={<FolderInput />}

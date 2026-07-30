@@ -5,34 +5,10 @@ import type {
 	SuperMagicNode,
 } from "@/types/chat/conversation_message"
 import type { SeqResponse } from "@/types/request"
-import {
-	type CrewDomainEventPayload as InternalCrewDomainEventPayload,
-	type RegisterDomainEventListenerParams as InternalRegisterDomainEventListenerParams,
-	type TaskDomainEventPayload as InternalTaskDomainEventPayload,
-	type RegisterTopicMessageListenerParams as InternalTopicMessageListenerParams,
-	type TopicMessageListenerPayload as TopicMessageListenerEventPayload,
-} from "./listener-registry"
 
 // ─── 基础别名 ────────────────────────────────────────────────
 
 export type SuperMagicStoreTopicId = string
-export type TopicMessageNode = unknown
-
-// ─── 领域事件相关（具化泛型后再导出） ───────────────────────
-
-export type RegisterTopicMessageListenerParams = InternalTopicMessageListenerParams<
-	MessageItem,
-	TopicMessageNode
->
-export type TopicMessageListenerPayload = TopicMessageListenerEventPayload<
-	MessageItem,
-	TopicMessageNode
->
-export type CrewDomainEventPayload = InternalCrewDomainEventPayload<MessageItem, TopicMessageNode>
-export type TaskDomainEventPayload = InternalTaskDomainEventPayload<MessageItem, TopicMessageNode>
-export type DomainEventPayload = CrewDomainEventPayload | TaskDomainEventPayload
-export type RegisterDomainEventListenerParams =
-	InternalRegisterDomainEventListenerParams<DomainEventPayload>
 
 // ─── 原始消息相关 ────────────────────────────────────────────
 
@@ -44,6 +20,11 @@ export type RawSuperMagicMessageEnvelope = SeqRecord<ConversationQueryMessage>
 export interface PendingUserMessageEnvelope {
 	message: ConversationMessageSend["message"]
 	conversation_id: string
+}
+
+export interface InitializeMessagesOptions {
+	mode?: "replace" | "merge"
+	syncGeneration?: number
 }
 
 export interface ServerMessagesConfirmedPayload {
@@ -158,6 +139,8 @@ export interface StreamState {
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
+	/** Final 到达后的视觉追赶截止时间；到期必须投影完整 canonical 内容。 */
+	finalCatchupDeadlineAt: number | null
 	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
 	recoveryAttempts: number
 	finalMessage?: StreamMessage
@@ -166,6 +149,21 @@ export interface StreamState {
 export interface StreamRecoveryRequestPayload {
 	topicId: string
 	correlationId: string
+}
+
+export interface StreamRecoveryState {
+	status: "waiting" | "recovering" | "failed"
+	reason?: "recovery_failed"
+	attempts: number
+	startedAt: number
+	elapsedMs: number
+}
+
+export interface StreamRecoveryFailurePayload extends StreamRecoveryState {
+	topicId: string
+	correlationId: string
+	status: "failed"
+	reason: "recovery_failed"
 }
 
 export interface ToolStreamStepResult {
@@ -237,6 +235,8 @@ export interface TopicMeta {
 	lastActiveAt: number | null
 	/** 最近一次离开可见态的时间 */
 	inactiveAt: number | null
+	/** 最近一次离开可见态的单调时钟时间，用于排除系统时间跳变 */
+	inactiveMonotonicAt: number | null
 	/** 最近一次成功完成服务端权威同步的时间 */
 	lastSyncedAt: number | null
 	/** 最近一次权威同步确认的最大消息序列号 */

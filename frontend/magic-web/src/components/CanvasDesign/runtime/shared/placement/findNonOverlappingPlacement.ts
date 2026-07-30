@@ -235,9 +235,10 @@ function getGridDimensions(
 	elementHeight: number,
 	spacing: number,
 ): { width: number; height: number; rows: number } {
+	const filledColumns = Math.max(1, Math.min(count, columns))
 	const rows = Math.max(1, Math.ceil(count / columns))
 	return {
-		width: columns * elementWidth + Math.max(0, columns - 1) * spacing,
+		width: filledColumns * elementWidth + Math.max(0, filledColumns - 1) * spacing,
 		height: rows * elementHeight + Math.max(0, rows - 1) * spacing,
 		rows,
 	}
@@ -285,33 +286,6 @@ function canPlaceRect(
 		return false
 	}
 	return !obstacles.some((obstacle) => isOverlappingWithSpacing(rect, obstacle, spacing))
-}
-
-/** 插件结果默认按视口可容纳列数收敛，避免无来源图时首屏横向铺太远。 */
-function resolveGridColumns(options: {
-	count: number
-	elementWidth: number
-	spacing: number
-	viewportWidth: number
-	maxColumns: number
-}): number {
-	return Math.max(1, Math.min(options.count, resolveViewportGridSlotColumns(options)))
-}
-
-/** 根据当前视口宽度计算最多能完整展示多少个网格单元。 */
-function resolveViewportGridSlotColumns(options: {
-	elementWidth: number
-	spacing: number
-	viewportWidth: number
-	maxColumns: number
-}): number {
-	const maxColumnsByViewport = Math.max(
-		1,
-		Math.floor(
-			(options.viewportWidth + options.spacing) / (options.elementWidth + options.spacing),
-		),
-	)
-	return Math.max(1, Math.min(options.maxColumns, maxColumnsByViewport))
 }
 
 /**
@@ -384,16 +358,116 @@ function scanRowMajorGridCells(options: {
 	return null
 }
 
-/** 从已有结果矩形反推出网格左上角，用于没有来源图时延续同一组生成结果。 */
-function getGridOriginFromRects(rects: Rect[]): { x: number; y: number } | null {
-	if (rects.length === 0) return null
-	return rects.reduce(
-		(origin, rect) => ({
-			x: Math.min(origin.x, rect.x),
-			y: Math.min(origin.y, rect.y),
-		}),
-		{ x: rects[0].x, y: rects[0].y },
+type GridRowState = {
+	left: number
+	top: number
+	right: number
+	height: number
+	count: number
+}
+
+/**
+ * 把已有矩形按 `y` 聚成行，用来恢复同组生成结果的行结构。
+ * 同一行内会记录最左边、最右边和最高元素，便于后续继续向右追加或换行。
+ */
+function buildGridRowsFromRects(rects: Rect[]): GridRowState[] {
+	const sortedRects = rects.slice().sort((a, b) => {
+		const deltaY = a.y - b.y
+		// 先按 y 从上到下排；如果 y 几乎一样，就按 x 从左到右排。
+		if (Math.abs(deltaY) > LAST_ROW_Y_TOLERANCE_PX) {
+			return deltaY
+		}
+		return a.x - b.x
+	})
+	const rows: GridRowState[] = []
+	for (const rect of sortedRects) {
+		const currentRow = rows[rows.length - 1]
+		// 如果当前行不存在，或者当前元素的 y 与上一行顶部差异较大，就创建新行。
+		if (!currentRow || Math.abs(rect.y - currentRow.top) > LAST_ROW_Y_TOLERANCE_PX) {
+			rows.push({
+				left: rect.x,
+				top: rect.y,
+				right: rect.x + rect.width,
+				height: rect.height,
+				count: 1,
+			})
+			continue
+		}
+		currentRow.left = Math.min(currentRow.left, rect.x)
+		currentRow.top = Math.min(currentRow.top, rect.y)
+		currentRow.right = Math.max(currentRow.right, rect.x + rect.width)
+		currentRow.height = Math.max(currentRow.height, rect.height)
+		currentRow.count += 1
+	}
+	return rows
+}
+
+/**
+ * 按“同组历史结果 -> 继续向右 -> 满 6 列换行”的规则生成后续落点。
+ * 这条路径只服务于同配置历史结果，所以会优先保持顶部对齐和固定列间距。
+ */
+function buildRowFlowPositions(options: {
+	existingRects: Rect[]
+	count: number
+	elementWidth: number
+	elementHeight: number
+	maxColumns: number
+	spacing: number
+	obstacles: Rect[]
+	viewportRect: Rect
+}): Rect[] | null {
+	if (options.existingRects.length === 0) return null
+
+	const rows = buildGridRowsFromRects(options.existingRects)
+	// 无历史图组，直接返回
+	if (rows.length === 0) return null
+
+	const isSameRect = (a: Rect, b: Rect): boolean =>
+		a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+
+	//
+	const originX = rows.reduce((min, row) => Math.min(min, row.left), rows[0].left)
+	const occupied = options.obstacles.filter(
+		(obstacle) =>
+			!options.existingRects.some((existingRect) => isSameRect(obstacle, existingRect)),
 	)
+	const existingRects = options.existingRects
+	const positions: Rect[] = []
+	const currentRow = rows[rows.length - 1]
+	let currentTop = currentRow.top
+	// 当前行未满时，直接接在最后一个元素右侧；满 6 列则从该组最左侧重新开下一行。
+	let currentLeft =
+		currentRow.count >= options.maxColumns ? originX : currentRow.right + options.spacing
+	let currentHeight = currentRow.height
+	let currentCountInRow = currentRow.count
+
+	// 已有结果本身只作为占位历史，不参与后续落点碰撞。
+	for (let i = 0; i < options.count; i++) {
+		// 换行
+		if (currentCountInRow >= options.maxColumns) {
+			currentTop += currentHeight + options.spacing
+			currentLeft = originX
+			currentHeight = 0
+			currentCountInRow = 0
+		}
+
+		const rect = createRect(
+			currentLeft,
+			currentTop,
+			options.elementWidth,
+			options.elementHeight,
+		)
+		if (!canPlaceRect(rect, occupied, options.spacing, options.viewportRect, false)) {
+			return null
+		}
+		positions.push(rect)
+		occupied.push(rect)
+		currentLeft = rect.x + rect.width + options.spacing
+		currentHeight = Math.max(currentHeight, rect.height)
+		currentCountInRow += 1
+	}
+
+	return positions
 }
 
 /**
@@ -452,8 +526,13 @@ function scanViewportGridOrigins(options: {
 }
 
 /**
- * 为插件生成结果计算批量网格落点。
- * 搜索顺序：来源图右侧行优先补位 -> 来源图下方行优先补位 -> 视口锚点附近 -> 后端兼容的末行布局。
+ * 为插件生成结果计算批量落点。
+ * 搜索顺序：
+ * 1. 同配置历史结果，按行流式继续排
+ * 2. 来源图右侧，行优先补位
+ * 3. 来源图下方，行优先补位
+ * 4. 视口中心附近，整组网格搜索
+ * 5. 老的末行占位符逻辑兜底
  * 返回值是画布左上角坐标，调用方再按这些位置创建图片元素。
  * @param obstacles - 障碍矩形
  * @param options - 选项
@@ -462,7 +541,7 @@ function scanViewportGridOrigins(options: {
  * @param options.elementHeight - 元素高度
  * @param options.viewportRect - 视口区域
  * @param options.sourceRect - 来源图矩形
- * @param options.existingGridRects - 已有网格矩形（没有来源图时，同参数历史生成图的位置）
+ * @param options.existingGridRects - 同配置历史生成图的位置
  * @param options.anchor - 视口中心点
  * @param options.spacing - 间距
  * @param options.maxColumns - 最大列数
@@ -486,23 +565,32 @@ export function findGeneratedMediaGridPositions(
 ): Array<{ x: number; y: number }> {
 	const count = Math.max(1, Math.floor(options.count))
 	const spacing = options.spacing ?? AGENT_PLACEHOLDER_ELEMENT_SPACING
-	const maxColumns = Math.max(1, Math.floor(options.maxColumns ?? 4))
+	const maxColumns = Math.max(1, Math.floor(options.maxColumns ?? 6))
 	const maxSearchRings = Math.max(
 		0,
 		Math.floor(options.maxSearchRings ?? DEFAULT_VIEWPORT_SEARCH_RINGS),
 	)
-	const columns = resolveGridColumns({
-		count,
-		elementWidth: options.elementWidth,
-		spacing,
-		viewportWidth: options.viewportRect.width,
-		maxColumns,
-	})
-	const sourceColumns = maxColumns
+	const columns = maxColumns
 	// 视口中心点
 	const anchor = options.anchor ?? {
 		x: options.viewportRect.x + options.viewportRect.width / 2,
 		y: options.viewportRect.y + options.viewportRect.height / 2,
+	}
+
+	// 同配置历史输出优先续排：这会把“连续点生成”变成稳定的行流式布局。
+	const existingGridRects = options.existingGridRects ?? []
+	const existingGridPositions = buildRowFlowPositions({
+		existingRects: existingGridRects,
+		count,
+		elementWidth: options.elementWidth,
+		elementHeight: options.elementHeight,
+		maxColumns: columns,
+		spacing,
+		obstacles,
+		viewportRect: options.viewportRect,
+	})
+	if (existingGridPositions) {
+		return existingGridPositions.map(({ x, y }) => ({ x, y }))
 	}
 
 	// 计算来源图右侧和下方的基点
@@ -527,7 +615,7 @@ export function findGeneratedMediaGridPositions(
 	) => ({
 		base,
 		count,
-		columns: sourceColumns,
+		columns,
 		elementWidth: options.elementWidth,
 		elementHeight: options.elementHeight,
 		obstacles,
@@ -546,27 +634,6 @@ export function findGeneratedMediaGridPositions(
 	const sourceBottomRects =
 		sourceBottomBase && scanRowMajorGridCells(buildSearchOptions(sourceBottomBase, false))
 	if (sourceBottomRects) return sourceBottomRects.map(({ x, y }) => ({ x, y }))
-
-	// 没有来源图时，优先续接已有同组生成网格
-	const existingGridRects = options.existingGridRects ?? []
-	const existingGridOrigin = getGridOriginFromRects(existingGridRects)
-	if (!options.sourceRect && existingGridOrigin) {
-		// 外部引用图不在画布上时，连续生成应接在上一批同参数结果后面，而不是跟随新的视口中心跳走。
-		const existingGridPositions = scanRowMajorGridCells({
-			base: existingGridOrigin,
-			count,
-			columns: sourceColumns,
-			elementWidth: options.elementWidth,
-			elementHeight: options.elementHeight,
-			obstacles,
-			spacing,
-			viewportRect: options.viewportRect,
-			maxSearchRings,
-			requireInsideViewport: false,
-			minRows: Math.ceil((existingGridRects.length + count) / sourceColumns),
-		})
-		if (existingGridPositions) return existingGridPositions.map(({ x, y }) => ({ x, y }))
-	}
 
 	// 绕视口中心找一整组网格
 	const viewportInsideRects = scanViewportGridOrigins({

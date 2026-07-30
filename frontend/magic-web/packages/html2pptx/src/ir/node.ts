@@ -119,6 +119,8 @@ export interface PPTImageNode extends PPTNodeBase {
 	captureExcludeSvgText?: boolean
 	/** Sizing mode */
 	sizing: "cover" | "contain" | "crop" | "stretch"
+	/** Intrinsic source dimensions, used to preserve the image aspect ratio for cover/contain sizing */
+	intrinsicSize?: { width: number; height: number }
 	/** Crop rectangle */
 	cropRect?: { x: number; y: number; w: number; h: number }
 	/** Corner radius */

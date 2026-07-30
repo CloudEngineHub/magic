@@ -8,6 +8,7 @@ from app.service.mention.handlers import (
     FileHandler,
     MCPHandler,
     ProjectDirectoryHandler,
+    ProjectHandler,
     SkillHandler,
     ToolHandler,
 )
@@ -37,6 +38,7 @@ class MentionContextBuilder:
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()
         handlers['project_directory'] = ProjectDirectoryHandler()
+        handlers['project'] = ProjectHandler()
         handlers['skill'] = SkillHandler()
         return handlers
 
@@ -58,8 +60,10 @@ class MentionContextBuilder:
         # 初始化上下文行
         context_lines = [
             "<mentions>",
-            "All paths below are relative to the workspace root:",
+            "Referenced files and resources:",
         ]
+
+
 
         # 收集所有 tip 文本（保留顺序，后续去重）
         tip_texts = []

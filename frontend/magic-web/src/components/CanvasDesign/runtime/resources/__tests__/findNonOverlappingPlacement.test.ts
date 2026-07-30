@@ -23,7 +23,7 @@ const baseOptions = {
 	viewportRect,
 	sourceRect,
 	spacing: 20,
-	maxColumns: 4,
+	maxColumns: 6,
 	maxSearchRings: 2,
 }
 
@@ -45,8 +45,8 @@ describe("findGeneratedMediaGridPositions", () => {
 		expect(positions).toEqual([{ x: 460, y: 100 }])
 	})
 
-	it("continues the current source-right row before wrapping a batch", () => {
-		// 批量生成先填满来源图右侧当前行，再按同一网格换行。
+	it("keeps the first three generated items on the same top row", () => {
+		// 6 列网格里，前三张先排在同一行，不应提前换行。
 		const positions = findGeneratedMediaGridPositions(
 			[
 				sourceRect,
@@ -62,8 +62,30 @@ describe("findGeneratedMediaGridPositions", () => {
 		expect(positions).toEqual([
 			{ x: 460, y: 100 },
 			{ x: 580, y: 100 },
-			{ x: 220, y: 220 },
+			{ x: 700, y: 100 },
 		])
+	})
+
+	it("keeps the same spacing when existing group items have different sizes", () => {
+		// 同组历史输出尺寸不同，也要维持固定间距和顶部对齐。
+		const positions = findGeneratedMediaGridPositions(
+			[
+				{ x: 100, y: 100, width: 100, height: 120 },
+				{ x: 220, y: 100, width: 260, height: 180 },
+			],
+			{
+				...baseOptions,
+				count: 1,
+				elementWidth: 300,
+				elementHeight: 150,
+				existingGridRects: [
+					{ x: 100, y: 100, width: 100, height: 120 },
+					{ x: 220, y: 100, width: 260, height: 180 },
+				],
+			},
+		)
+
+		expect(positions).toEqual([{ x: 500, y: 100 }])
 	})
 
 	it("keeps filling the source-right row even when the next slot is outside the current viewport", () => {
@@ -89,8 +111,8 @@ describe("findGeneratedMediaGridPositions", () => {
 		expect(positions).toEqual([{ x: 460, y: 100 }])
 	})
 
-	it("wraps to the next source-right row before falling back below the source image", () => {
-		// 来源图右侧一行满列后，仍优先在该网格下一行寻找位置。
+	it("wraps to the next row only after all six columns are occupied", () => {
+		// 6 列都被占住后，才进入下一行。
 		const positions = findGeneratedMediaGridPositions(
 			[
 				sourceRect,
@@ -98,6 +120,8 @@ describe("findGeneratedMediaGridPositions", () => {
 				{ x: 340, y: 100, width: 100, height: 100 },
 				{ x: 460, y: 100, width: 100, height: 100 },
 				{ x: 580, y: 100, width: 100, height: 100 },
+				{ x: 700, y: 100, width: 100, height: 100 },
+				{ x: 820, y: 100, width: 100, height: 100 },
 			],
 			{
 				...baseOptions,
@@ -122,7 +146,7 @@ describe("findGeneratedMediaGridPositions", () => {
 			existingGridRects,
 			anchor: { x: 800, y: 800 },
 			spacing: 20,
-			maxColumns: 4,
+			maxColumns: 6,
 			maxSearchRings: 2,
 		})
 
