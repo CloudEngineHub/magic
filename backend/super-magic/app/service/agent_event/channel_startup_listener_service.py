@@ -27,6 +27,7 @@ class ChannelStartupListenerService:
     @staticmethod
     async def _handle_after_init(event: Event[AfterInitEventData]) -> None:
         from app.core.keepalive_registry import KeepaliveRegistry
+        from app.utils.sandbox_env import is_magiclaw_sandbox
 
         agent_context = event.data.agent_context
         if not event.data.success or agent_context is None:
@@ -34,7 +35,7 @@ class ChannelStartupListenerService:
             return
 
         keepalive_registry = KeepaliveRegistry.get_instance()
-        if not agent_context.is_magiclaw():
+        if not await is_magiclaw_sandbox():
             # 非 Claw 沙箱：禁用保活机制并跳过自动连接。
             # 即使 channel 被其他路径手动连接，保活也不会阻止沙箱退出。
             keepalive_registry.set_enabled(False)

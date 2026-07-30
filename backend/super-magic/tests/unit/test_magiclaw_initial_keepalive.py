@@ -38,10 +38,10 @@ if _storage_package_was_stubbed:
     sys.modules.pop("app.infrastructure.storage", None)
 
 
-def _event(*, success: bool, is_magiclaw: bool = False, with_context: bool = True):
+def _event(*, success: bool, with_context: bool = True):
     agent_context = None
     if with_context:
-        agent_context = SimpleNamespace(is_magiclaw=MagicMock(return_value=is_magiclaw))
+        agent_context = SimpleNamespace()
     return SimpleNamespace(
         data=SimpleNamespace(
             success=success,
@@ -75,11 +75,11 @@ async def test_magiclaw_after_init_enables_and_starts_keepalive(
     registry, auto_connect = lifecycle_dependencies
     monkeypatch.setattr(
         "app.utils.sandbox_env.is_magiclaw_sandbox",
-        AsyncMock(return_value=False),
+        AsyncMock(return_value=True),
     )
 
     await ChannelStartupListenerService._handle_after_init(
-        _event(success=True, is_magiclaw=True)
+        _event(success=True)
     )
     await asyncio.sleep(0)
 
@@ -96,11 +96,11 @@ async def test_non_magiclaw_after_init_disables_keepalive(
     registry, auto_connect = lifecycle_dependencies
     monkeypatch.setattr(
         "app.utils.sandbox_env.is_magiclaw_sandbox",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=False),
     )
 
     await ChannelStartupListenerService._handle_after_init(
-        _event(success=True, is_magiclaw=False)
+        _event(success=True)
     )
     await asyncio.sleep(0)
 
@@ -112,12 +112,17 @@ async def test_non_magiclaw_after_init_disables_keepalive(
 @pytest.mark.asyncio
 async def test_magiclaw_keepalive_failure_does_not_block_auto_connect(
     lifecycle_dependencies,
+    monkeypatch,
 ):
     registry, auto_connect = lifecycle_dependencies
     registry.notify_activity.side_effect = RuntimeError("keepalive failed")
+    monkeypatch.setattr(
+        "app.utils.sandbox_env.is_magiclaw_sandbox",
+        AsyncMock(return_value=True),
+    )
 
     await ChannelStartupListenerService._handle_after_init(
-        _event(success=True, is_magiclaw=True)
+        _event(success=True)
     )
     await asyncio.sleep(0)
 
@@ -130,7 +135,7 @@ async def test_magiclaw_keepalive_failure_does_not_block_auto_connect(
 @pytest.mark.parametrize(
     "event",
     [
-        _event(success=False, is_magiclaw=True),
+        _event(success=False),
         _event(success=True, with_context=False),
     ],
 )
@@ -152,6 +157,33 @@ async def test_unsuccessful_after_init_does_not_change_lifecycle(
     registry.set_enabled.assert_not_called()
     registry.notify_activity.assert_not_called()
     auto_connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        ({"agent": {"type": "magiclaw"}}, True),
+        ({"agent": {"type": "general"}}, False),
+        ({"agent": None}, False),
+    ],
+)
+async def test_magiclaw_sandbox_identity_comes_from_init_message(
+    config,
+    expected,
+    monkeypatch,
+):
+    from app.utils import sandbox_env
+
+    read_init_message = AsyncMock(return_value=config)
+    monkeypatch.setattr(sandbox_env, "async_try_read_json", read_init_message, raising=False)
+    monkeypatch.setattr(
+        "app.path_manager.PathManager.get_init_client_message_file",
+        MagicMock(return_value=Path("/tmp/init_client_message.json")),
+    )
+
+    assert await sandbox_env.is_magiclaw_sandbox() is expected
+    read_init_message.assert_awaited_once_with(Path("/tmp/init_client_message.json"))
 
 
 def test_notify_connected_once_does_not_start_rolling_loop(monkeypatch):
