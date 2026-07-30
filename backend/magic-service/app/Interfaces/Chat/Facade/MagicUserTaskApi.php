@@ -91,7 +91,8 @@ class MagicUserTaskApi extends AbstractApi
 
     public function getTask(int $id)
     {
-        return $this->magicUserTaskAppService->getTask($id);
+        $authorization = $this->getAuthorization();
+        return $this->magicUserTaskAppService->getTask($id, $authorization);
     }
 
     public function updateTask(RequestInterface $request, int $id)
@@ -152,7 +153,8 @@ class MagicUserTaskApi extends AbstractApi
 
     public function deleteTask(int $id)
     {
-        $this->magicUserTaskAppService->deleteTask($id);
+        $authorization = $this->getAuthorization();
+        $this->magicUserTaskAppService->deleteTask($id, $authorization);
     }
 
     public function listTask(RequestInterface $request)
