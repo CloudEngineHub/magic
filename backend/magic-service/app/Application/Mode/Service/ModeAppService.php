@@ -197,10 +197,7 @@ class ModeAppService extends AbstractModeAppService
                     'playbooks' => $playbookArray,
                     'sort' => 0,
                 ],
-                'agent' => [
-                    'type' => $agent->getType()->value,
-                    'category' => $agent->getCategory(),
-                ],
+                'agent' => $this->buildFeaturedAgentMetadata($agent),
                 'groups' => $this->buildModeGroups($modeAggregateDTO),
             ];
         }
@@ -248,6 +245,20 @@ class ModeAppService extends AbstractModeAppService
             ],
             'models' => $modeRuntimeData['models'],
             'groups' => $this->buildModeGroups($modeAggregateDTO),
+        ];
+    }
+
+    /**
+     * @return array{type: int, category: string, is_visible: bool}
+     */
+    private function buildFeaturedAgentMetadata(SuperMagicAgentEntity $agent): array
+    {
+        $category = $agent->getCategory();
+
+        return [
+            'type' => $agent->getType()->value,
+            'category' => $category,
+            'is_visible' => $category === 'frequent',
         ];
     }
 
