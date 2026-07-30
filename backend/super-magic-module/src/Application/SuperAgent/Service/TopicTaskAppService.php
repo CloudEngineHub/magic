@@ -62,6 +62,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskMessageDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskStatusValidator;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
@@ -956,19 +957,21 @@ class TopicTaskAppService extends AbstractAppService
                 );
             }
 
-            $requestedAgentCode = $this->resolveRequestedAgentCode(
-                $topicEntity,
-                // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
-                $contentStruct->getExtra()?->getSuperAgent()
+            // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
+            $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
+            // 请求参数优先，未传时回退 Topic，得到本次真正执行的模式与 code。
+            $topicPattern = trim((string) ($superAgentExtra?->getTopicPattern() ?? $topicEntity->getTopicMode()));
+            $agentCode = $this->resolveEffectiveAgentCode($topicEntity, $superAgentExtra);
+            [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+                SuperMagicAgentDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId()
+                ),
+                $topicPattern,
+                $agentCode
             );
-            if ($requestedAgentCode !== '') {
-                $this->superMagicAgentAccessAppService->assertAgentUsable(
-                    SuperMagicAgentDataIsolation::create(
-                        $dataIsolation->getCurrentOrganizationCode(),
-                        $dataIsolation->getCurrentUserId()
-                    ),
-                    $requestedAgentCode
-                );
+            if (! $allowed) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
             }
 
             $businessMessageId = $this->resolveUserMessageId($source);
@@ -1404,11 +1407,10 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * Resolve the effective employee code from request overrides and Topic storage.
-     * An SMA-* topic pattern is itself an employee selection and therefore takes
-     * precedence over both an explicit request code and the persisted Topic code.
+     * 解析本次执行使用的 code：请求优先，未传时回退 Topic 持久值。
+     * SMA-* 本身就是员工 code，因此优先级最高。
      */
-    private function resolveRequestedAgentCode(TopicEntity $topicEntity, ?SuperAgentExtra $extra): string
+    private function resolveEffectiveAgentCode(TopicEntity $topicEntity, ?SuperAgentExtra $extra): string
     {
         $topicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
         if (str_starts_with($topicPattern, 'SMA-')) {

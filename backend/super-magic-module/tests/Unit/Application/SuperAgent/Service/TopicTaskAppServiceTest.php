@@ -22,7 +22,7 @@ class TopicTaskAppServiceTest extends TestCase
     public function testRequestSmaTopicPatternOverridesThePersistedAgentCode(): void
     {
         $service = (new ReflectionClass(TopicTaskAppService::class))->newInstanceWithoutConstructor();
-        $method = new ReflectionMethod(TopicTaskAppService::class, 'resolveRequestedAgentCode');
+        $method = new ReflectionMethod(TopicTaskAppService::class, 'resolveEffectiveAgentCode');
         $method->setAccessible(true);
 
         $topic = new TopicEntity(['agent_code' => 'SMA-persisted']);
