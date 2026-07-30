@@ -14,6 +14,7 @@ import {
 
 const TOPIC_ID = "topic-fixture"
 const CORRELATION_ID = "correlation-fixture"
+const SUPER_MESSAGE_ID = "super-message-fixture"
 
 interface ProjectedNode {
 	content?: string | null
@@ -47,6 +48,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-fixture",
 		super_magic_chunk: {
+			super_message_id: SUPER_MESSAGE_ID,
+			task_id: "task-fixture",
 			i,
 			usage: null,
 			correlation_id: CORRELATION_ID,
@@ -90,6 +93,7 @@ function createFinal(content = "final"): RawSuperMagicMessageEnvelope {
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: "node-final",
+					super_message_id: SUPER_MESSAGE_ID,
 					correlation_id: CORRELATION_ID,
 					content,
 					status: "finished",
@@ -103,7 +107,7 @@ function createFinal(content = "final"): RawSuperMagicMessageEnvelope {
 }
 
 function getContent(store: SuperMagicStore): string | null | undefined {
-	return (store.getMessageNode(CORRELATION_ID) as ProjectedNode | undefined)?.content
+	return (store.getMessageNode(SUPER_MESSAGE_ID) as ProjectedNode | undefined)?.content
 }
 
 function replayFresh(chunks: SuperMagicChunkMessage[]): SuperMagicStore {

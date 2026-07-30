@@ -62,7 +62,7 @@ function RevokedEditableUserMessage({
 	const [isPendingSend, setIsPendingSend] = useState(false)
 	const [pendingSendSnapshot, setPendingSendSnapshot] = useState<PendingSendSnapshot | null>(null)
 	const { t } = useTranslation("super")
-	const messageNode = superMagicStore.getMessageNode(node?.app_message_id) as
+	const messageNode = superMagicStore.getMessageNode(node?.super_message_id) as
 		| {
 				content?: string
 				rich_text?: {

@@ -65,6 +65,8 @@ export interface SharedMessageItem {
 
 export interface MessageItem {
 	app_message_id: string
+	/** Store/UI 统一查询身份；User=app_message_id，Assistant/Tool 历史消息回退 app_message_id。 */
+	super_message_id: string
 	/** 消息相关联Id */
 	correlation_id: string
 	/** 父消息相关联Id */
@@ -133,6 +135,12 @@ export interface StreamMessage {
 }
 
 export interface StreamState {
+	/** Topic 内稳定的 Assistant 逻辑消息身份。 */
+	super_message_id: string
+	/** 协议关联字段，只作为元数据与事件/恢复路由使用。 */
+	correlation_id: string
+	/** Agent 任务身份，不参与消息去重。 */
+	task_id: string
 	stage: "reasoning_content" | "content" | "tool" | "done"
 	reasoning_content: string
 	content: string

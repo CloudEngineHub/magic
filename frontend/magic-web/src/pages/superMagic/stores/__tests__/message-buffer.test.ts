@@ -19,6 +19,8 @@ const TOPIC_B = "topic-buffer-b"
 const RENDER_SETTLE_MS = 3_000
 
 interface ProjectedNode {
+	app_message_id?: string
+	super_message_id?: string
 	role?: string
 	status?: string
 	content?: string | null
@@ -34,6 +36,7 @@ interface EnvelopeOptions {
 	topicId?: string
 	appMessageId: string
 	correlationId: string
+	superMessageId?: string
 	seqId: string
 	content?: string
 	role?: "assistant" | "tool" | "user"
@@ -52,6 +55,7 @@ function createEnvelope({
 	topicId = TOPIC_A,
 	appMessageId,
 	correlationId,
+	superMessageId = `super-${appMessageId}`,
 	seqId,
 	content = "message",
 	role = "assistant",
@@ -60,10 +64,12 @@ function createEnvelope({
 	event,
 	toolCallId = "tool-1",
 }: EnvelopeOptions): RawSuperMagicMessageEnvelope {
+	const resolvedSuperMessageId = role === "user" ? appMessageId : superMessageId
 	const node: SuperMagicNode = {
 		role,
 		topic_id: topicId,
 		message_id: `node-${appMessageId}`,
+		super_message_id: resolvedSuperMessageId,
 		correlation_id: correlationId,
 		content,
 		reasoning_content: "",
@@ -132,8 +138,12 @@ function settleRendering(milliseconds = RENDER_SETTLE_MS): void {
 	vi.advanceTimersByTime(milliseconds)
 }
 
-function getNode(store: SuperMagicStore, messageId: string): ProjectedNode | undefined {
-	const node = store.getMessageNode(messageId)
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	const directNode = store.getMessageNode(superMessageId)
+	const projectedBySuperMessageId = Array.from(store.messages.values())
+		.flatMap((messages) => Array.from(messages))
+		.find((message) => message.super_message_id === superMessageId)
+	const node = directNode ?? projectedBySuperMessageId
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -164,17 +174,20 @@ function createFinalOnlyAssistant({
 	topicId = TOPIC_A,
 	appMessageId = "blocking-assistant",
 	correlationId = "blocking-correlation",
+	superMessageId = "blocking-super-message",
 	seqId = "1",
 }: {
 	topicId?: string
 	appMessageId?: string
 	correlationId?: string
+	superMessageId?: string
 	seqId?: string
 } = {}): RawSuperMagicMessageEnvelope {
 	return createEnvelope({
 		topicId,
 		appMessageId,
 		correlationId,
+		superMessageId,
 		seqId,
 		content: "x".repeat(50_000),
 		status: "finished",
@@ -187,18 +200,23 @@ function startBlockingAssistantStream(
 		topicId = TOPIC_A,
 		appMessageId = "blocking-assistant",
 		correlationId = "blocking-correlation",
+		superMessageId = "blocking-super-message",
 		seqId = "1",
 		event,
 	}: {
 		topicId?: string
 		appMessageId?: string
 		correlationId?: string
+		superMessageId?: string
 		seqId?: string
 		event?: string
 	} = {},
 ): void {
 	const content = "x".repeat(50_000)
-	const createBlockingChunk = (chunkCorrelationId: string): SuperMagicChunkMessage => ({
+	const createBlockingChunk = (
+		chunkCorrelationId: string,
+		chunkSuperMessageId: string,
+	): SuperMagicChunkMessage => ({
 		magic_message_id: `magic-chunk-${chunkCorrelationId}`,
 		app_message_id: `app-chunk-${chunkCorrelationId}`,
 		type: IntermediateMessageType.SuperMagicChunk,
@@ -207,6 +225,8 @@ function startBlockingAssistantStream(
 		chat_topic_id: topicId,
 		message_id: `completion-${chunkCorrelationId}`,
 		super_magic_chunk: {
+			super_message_id: chunkSuperMessageId,
+			task_id: `task-${chunkCorrelationId}`,
 			i: 0,
 			usage: null,
 			correlation_id: chunkCorrelationId,
@@ -227,14 +247,17 @@ function startBlockingAssistantStream(
 
 	// 第一个真实流持有 topic timer；第二个真实流因 timer 已存在而只建立 StreamState，
 	// 它的 Final 才会真实进入 buffer 等待，避免用旧版 Final-only 伪流式制造假阻塞。
-	store.receiveChunk(createBlockingChunk(`${correlationId}-timer-owner`))
-	store.receiveChunk(createBlockingChunk(correlationId))
+	store.receiveChunk(
+		createBlockingChunk(`${correlationId}-timer-owner`, `${superMessageId}-timer-owner`),
+	)
+	store.receiveChunk(createBlockingChunk(correlationId, superMessageId))
 	store.enqueueMessage(
 		topicId,
 		createEnvelope({
 			topicId,
 			appMessageId,
 			correlationId,
+			superMessageId,
 			seqId,
 			content,
 			status: "finished",
@@ -262,7 +285,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		vi.useRealTimers()
 	})
 
-	it("buffer 中同一个 appMessageId 重复入队。", () => {
+	it("buffer 中同一 super_message_id 的同一协议消息重复入队。", () => {
 		const store = createStore()
 		const arrivals = collectArrivals(store)
 		const envelope = createEnvelope({
@@ -281,18 +304,19 @@ describe("SuperMagicStore / Message Buffer", () => {
 				(event) => event.payload.message.appMessageId === "duplicate-app",
 			),
 		).toHaveLength(1)
-		expect(getNode(store, "duplicate-correlation")?.content).toBe("canonical")
+		expect(getNode(store, "super-duplicate-app")?.content).toBe("canonical")
 		arrivals.unsubscribe()
 	})
 
-	it("buffer 中同一个 correlation 的不同 appMessageId 重复入队。", () => {
+	it("buffer 中同一个 super_message_id 的不同 appMessageId 按高 seq 收敛。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
 			TOPIC_A,
 			createEnvelope({
 				appMessageId: "app-old",
-				correlationId: "shared-correlation",
+				superMessageId: "shared-super-message",
+				correlationId: "old-correlation",
 				seqId: "100",
 				content: "old",
 			}),
@@ -301,20 +325,25 @@ describe("SuperMagicStore / Message Buffer", () => {
 			TOPIC_A,
 			createEnvelope({
 				appMessageId: "app-new",
-				correlationId: "shared-correlation",
+				superMessageId: "shared-super-message",
+				correlationId: "new-correlation",
 				seqId: "101",
 				content: "new",
 			}),
 		)
 		settleRendering()
 
-		expect(getNode(store, "shared-correlation")?.content).toBe("new")
-		expect(getNode(store, "app-new")?.content).toBe("new")
-		expect(getNode(store, "app-old")).toBeUndefined()
+		expect(getNode(store, "shared-super-message")).toMatchObject({
+			app_message_id: "app-new",
+			super_message_id: "shared-super-message",
+			correlation_id: "new-correlation",
+			content: "new",
+		})
 		expect(
 			(store.messages.get(TOPIC_A) || []).filter(
 				(message) =>
-					message.role === "assistant" && message.correlation_id === "shared-correlation",
+					message.role === "assistant" &&
+					message.super_message_id === "shared-super-message",
 			),
 		).toEqual([
 			expect.objectContaining({
@@ -356,7 +385,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "after-error-correlation")?.content).toBe("still processed")
+		expect(getNode(store, "super-after-error")?.content).toBe("still processed")
 	})
 
 	it("Final-only 不创建 timer，也不进入 streaming。", () => {
@@ -366,7 +395,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 
 		store.enqueueMessage(TOPIC_A, finalOnly)
 
-		expect(getNode(store, "blocking-correlation")?.content).toBe("x".repeat(50_000))
+		expect(getNode(store, "blocking-super-message")?.content).toBe("x".repeat(50_000))
 		expect(store.getStreamState(TOPIC_A, "blocking-correlation")).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(vi.getTimerCount()).toBe(0)
@@ -397,13 +426,13 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering(32)
 
-		expect(getNode(store, "correlation-after-blocker")?.content).toBe("must not starve")
+		expect(getNode(store, "super-message-after-blocker")?.content).toBe("must not starve")
 		expect(
 			store.messages
 				.get(TOPIC_A)
 				?.some((message) => message.app_message_id === "message-after-blocker"),
 		).toBe(true)
-		expect(store.messageMap.get("message-after-blocker")).toBeDefined()
+		expect(store.messageMap.get("super-message-after-blocker")).toBeDefined()
 		expect(
 			arrivals.events.filter(
 				(event) => event.payload.message.appMessageId === "message-after-blocker",
@@ -428,7 +457,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering(32)
 
-		expect(getNode(store, "tool-after-blocker")?.tool).toMatchObject({
+		expect(getNode(store, "super-tool-after-blocker")?.tool).toMatchObject({
 			id: "tool-after-blocker",
 			status: "finished",
 		})
@@ -451,7 +480,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering(32)
 
-		expect(getNode(store, "visible-tool-message")?.role).toBe("tool")
+		expect(getNode(store, "super-visible-tool-message")?.role).toBe("tool")
 		expect(
 			arrivals.events.some(
 				(event) => event.payload.message.appMessageId === "visible-tool-message",
@@ -632,7 +661,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "valid-after-missing-seq-correlation")?.content).toBe("valid")
+		expect(getNode(store, "super-valid-after-missing-seq")?.content).toBe("valid")
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("101")
 	})
 
@@ -659,8 +688,8 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "same-seq-correlation-a")?.content).toBe("A")
-		expect(getNode(store, "same-seq-correlation-b")?.content).toBe("B")
+		expect(getNode(store, "super-same-seq-a")?.content).toBe("A")
+		expect(getNode(store, "super-same-seq-b")?.content).toBe("B")
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
 	})
 
@@ -679,7 +708,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe(hugeSeqId)
-		expect(getNode(store, "huge-seq-correlation")).toBeDefined()
+		expect(getNode(store, "super-huge-seq")).toBeDefined()
 	})
 
 	it("seqId 带本地后缀，例如 `_timestamp`。", () => {
@@ -704,7 +733,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "local-seq-correlation")).toBeDefined()
+		expect(getNode(store, "super-local-seq")).toBeDefined()
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe(localSeqId)
 	})
 
@@ -746,18 +775,19 @@ describe("SuperMagicStore / Message Buffer", () => {
 				(event) => event.payload.message.correlationId === "finalized-correlation",
 			),
 		).toHaveLength(1)
-		expect(getNode(store, "finalized-correlation")?.content).toBe("canonical final")
+		expect(getNode(store, "super-finalized-app")?.content).toBe("canonical final")
 		arrivals.unsubscribe()
 	})
 
-	it("finalizedCorrelationIds 错误导致合法 assistant 被丢弃。", () => {
+	it("同一 super_message_id 的高 seq Assistant revision 不得被旧 correlation 终态误丢弃。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
 			TOPIC_A,
 			createEnvelope({
 				appMessageId: "first-final",
-				correlationId: "reused-final-correlation",
+				superMessageId: "reused-final-super-message",
+				correlationId: "first-final-correlation",
 				seqId: "100",
 				content: "first final",
 			}),
@@ -767,14 +797,15 @@ describe("SuperMagicStore / Message Buffer", () => {
 			TOPIC_A,
 			createEnvelope({
 				appMessageId: "corrected-final",
-				correlationId: "reused-final-correlation",
+				superMessageId: "reused-final-super-message",
+				correlationId: "corrected-final-correlation",
 				seqId: "101",
 				content: "corrected authoritative final",
 			}),
 		)
 		settleRendering()
 
-		expect(getNode(store, "reused-final-correlation")?.content).toBe(
+		expect(getNode(store, "reused-final-super-message")?.content).toBe(
 			"corrected authoritative final",
 		)
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("101")
@@ -802,7 +833,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering(1_000)
 
 		expect(arrivals.events).toHaveLength(messageCount)
-		expect(getNode(store, `bulk-tool-${messageCount}`)).toBeDefined()
+		expect(getNode(store, `super-bulk-tool-${messageCount}`)).toBeDefined()
 		arrivals.unsubscribe()
 	})
 
@@ -835,7 +866,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(arrivals.events).toHaveLength(101)
-		expect(getNode(store, "cleanup-sentinel-correlation")?.content).toBe("sentinel")
+		expect(getNode(store, "super-cleanup-sentinel")?.content).toBe("sentinel")
 		arrivals.unsubscribe()
 	})
 
@@ -856,7 +887,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		store.setActiveTopicId(null)
 		settleRendering()
 
-		expect(getNode(store, "blocking-correlation")).toBeUndefined()
+		expect(getNode(store, "blocking-super-message")).toBeUndefined()
 		expect(arrivals.events).toHaveLength(0)
 		arrivals.unsubscribe()
 	})
@@ -885,7 +916,7 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering()
 
 		expect(domainEvents.events.some((event) => event.meta.topicId === TOPIC_A)).toBe(false)
-		expect(getNode(store, "active-topic-correlation")?.content).toBe("active")
+		expect(getNode(store, "super-active-topic-message")?.content).toBe("active")
 		domainEvents.unsubscribe()
 	})
 })

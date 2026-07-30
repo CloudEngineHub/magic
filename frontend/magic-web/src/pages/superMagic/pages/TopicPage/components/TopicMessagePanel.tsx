@@ -194,7 +194,7 @@ function TopicMessagePanel({
 		}
 
 		const retryPayload = resolveRetryMessagePayload(
-			superMagicStore.getMessageNode(appMessageId),
+			superMagicStore.getMessageNode(message.super_message_id),
 		)
 		if (!retryPayload) return
 		if (!sendRetryMessageRef.current) return

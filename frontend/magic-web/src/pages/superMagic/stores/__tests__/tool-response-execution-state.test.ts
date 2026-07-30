@@ -66,6 +66,7 @@ interface AssistantOptions {
 
 interface ToolEnvelopeOptions {
 	appMessageId?: string
+	superMessageId?: string
 	correlationId?: string
 	seqId?: string
 	toolId?: string
@@ -163,6 +164,7 @@ function createAssistantEnvelope({
 			role: "assistant",
 			topic_id: TOPIC_ID,
 			message_id: `node-${appMessageId}`,
+			super_message_id: toAssistantSuperMessageId(correlationId),
 			correlation_id: correlationId,
 			content,
 			reasoning_content: "",
@@ -177,6 +179,7 @@ function createAssistantEnvelope({
 function createToolEnvelope(options: ToolEnvelopeOptions = {}): RawSuperMagicMessageEnvelope {
 	const {
 		appMessageId = "tool-response-1",
+		superMessageId = toToolSuperMessageId(appMessageId),
 		correlationId = CORRELATION_ID,
 		seqId = "101",
 		toolId = "tool-1",
@@ -194,6 +197,7 @@ function createToolEnvelope(options: ToolEnvelopeOptions = {}): RawSuperMagicMes
 		role: "tool",
 		topic_id: TOPIC_ID,
 		message_id: `node-${appMessageId}`,
+		super_message_id: superMessageId,
 		correlation_id: correlationId,
 		content: null,
 		reasoning_content: null,
@@ -301,6 +305,8 @@ function createToolHeaderChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id: `super-${correlationId}`,
+			task_id: `task-${correlationId}`,
 			i: 0,
 			usage: null,
 			correlation_id: correlationId,
@@ -346,16 +352,28 @@ function advanceUntil(
 	throw new Error(`Condition not reached: ${description}`)
 }
 
-function getNode(store: SuperMagicStore, appMessageId: string): ProjectedNode | undefined {
-	const node = store.getMessageNode(appMessageId)
+function toAssistantSuperMessageId(correlationId = CORRELATION_ID): string {
+	return `super-${correlationId}`
+}
+
+function toToolSuperMessageId(appMessageId: string): string {
+	return `super-${appMessageId}`
+}
+
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
+}
+
+function getToolNode(store: SuperMagicStore, appMessageId: string): ProjectedNode | undefined {
+	return getNode(store, toToolSuperMessageId(appMessageId))
 }
 
 function getAssistantNode(
 	store: SuperMagicStore,
 	correlationId = CORRELATION_ID,
 ): ProjectedNode | undefined {
-	return getNode(store, correlationId)
+	return getNode(store, toAssistantSuperMessageId(correlationId))
 }
 
 function getAssistantTool(
@@ -434,18 +452,18 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope())
 		settleRendering()
 
-		expect.soft(getNode(store, "tool-response-1")).toMatchObject({
+		expect.soft(getToolNode(store, "tool-response-1")).toMatchObject({
 			role: "tool",
 			tool: {
 				id: "tool-1",
 				status: "finished",
 			},
 		})
-		expect.soft(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect.soft(getAssistantNode(store)).toMatchObject({
 			role: "assistant",
 			content: "assistant response",
 		})
-		expect.soft(getNode(store, "tool-response-1")).not.toBe(getNode(store, CORRELATION_ID))
+		expect.soft(getToolNode(store, "tool-response-1")).not.toBe(getAssistantNode(store))
 		expect.soft(getEmbeddedToolState(store)?.status).toBe("running")
 		expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
 			id: "tool-1",
@@ -474,11 +492,11 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope())
 
-		expect(getNode(store, "tool-response-1")).toMatchObject({
+		expect(getToolNode(store, "tool-response-1")).toMatchObject({
 			role: "tool",
 			tool: { id: "tool-1", status: "finished" },
 		})
-		expect(getNode(store, "tool-response-1")?.tool_call_id).toBeUndefined()
+		expect(getToolNode(store, "tool-response-1")?.tool_call_id).toBeUndefined()
 		expect(getCanonicalToolState(store, "tool-1")).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
@@ -489,7 +507,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ toolId: "orphan-tool" }))
 		settleRendering(100)
 
-		expect(getNode(store, "tool-response-1")?.tool).toMatchObject({
+		expect(getToolNode(store, "tool-response-1")?.tool).toMatchObject({
 			id: "orphan-tool",
 			status: "finished",
 		})
@@ -507,7 +525,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getEmbeddedToolState(store)?.status).toBe("running")
 		expect(getCanonicalToolState(store, "tool-1")).toBeUndefined()
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("running")
-		expect(getNode(store, "tool-response-1")).toBeUndefined()
+		expect(getToolNode(store, "tool-response-1")).toBeUndefined()
 	})
 
 	it("同一个 tool response 重复到达。", () => {
@@ -524,7 +542,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			(event) => event.payload.message.appMessageId === "tool-response-1",
 		)
 		expect(toolArrivals).toHaveLength(1)
-		expect(getNode(store, "tool-response-1")?.tool?.status).toBe("finished")
+		expect(getToolNode(store, "tool-response-1")?.tool?.status).toBe("finished")
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		arrivals.unsubscribe()
 	})
@@ -553,11 +571,11 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "tool-response-latest")?.tool?.detail).toEqual({
+		expect(getToolNode(store, "tool-response-latest")?.tool?.detail).toEqual({
 			type: "text",
 			data: "latest",
 		})
-		expect(getNode(store, "tool-response-stale")?.tool?.detail).toEqual({
+		expect(getToolNode(store, "tool-response-stale")?.tool?.detail).toEqual({
 			type: "text",
 			data: "old",
 		})
@@ -736,7 +754,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			}),
 		])
 
-		expect(getNode(store, "tool-response-stale-from-http")?.tool?.detail).toEqual({
+		expect(getToolNode(store, "tool-response-stale-from-http")?.tool?.detail).toEqual({
 			type: "text",
 			data: "old",
 		})
@@ -878,7 +896,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "tool-response-1")).toMatchObject({
+		expect(getToolNode(store, "tool-response-1")).toMatchObject({
 			tool_call_id: "wrong-legacy-tool-id",
 			tool: { id: "tool-1", status: "finished" },
 		})
@@ -937,7 +955,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		)
 		settleRendering()
 
-		expect(getNode(store, "tool-response-1")).toMatchObject({
+		expect(getToolNode(store, "tool-response-1")).toMatchObject({
 			tool_call_id: "tool-1",
 			tool: { status: "finished" },
 		})
@@ -1146,7 +1164,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ status: "teleporting" }))
 		settleRendering()
 
-		expect(getNode(store, "tool-response-1")?.tool?.status).toBe("teleporting")
+		expect(getToolNode(store, "tool-response-1")?.tool?.status).toBe("teleporting")
 		expect(getCanonicalToolState(store, "tool-1")).toMatchObject({
 			id: "tool-1",
 			status: "running",
@@ -1234,7 +1252,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getCanonicalToolState(store, "tool-1")?.detail).toBeUndefined()
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
-		expect(getNode(store, "tool-response-1")?.tool?.detail).toBeUndefined()
+		expect(getToolNode(store, "tool-response-1")?.tool?.detail).toBeUndefined()
 	})
 
 	it("detail-only tool response 在没有历史状态时规范化为 running，并只记录一次 warning。", () => {
@@ -1258,7 +1276,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			store.enqueueMessage(TOPIC_ID, replayEnvelope)
 			settleRendering()
 
-			expect.soft(getNode(store, "detail-only-response")?.tool?.status).toBeUndefined()
+			expect.soft(getToolNode(store, "detail-only-response")?.tool?.status).toBeUndefined()
 			expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
 				id: "tool-1",
 				status: "running",
@@ -1327,7 +1345,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 				settleRendering()
 
 				expect
-					.soft(getNode(store, `detail-only-${historyStatus}`)?.tool?.status)
+					.soft(getToolNode(store, `detail-only-${historyStatus}`)?.tool?.status)
 					.toBeUndefined()
 				expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
 					status: historyStatus,
@@ -1415,7 +1433,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			settleRendering()
 
 			expect
-				.soft(getNode(store, "detail-only-after-response-missing")?.tool?.status)
+				.soft(getToolNode(store, "detail-only-after-response-missing")?.tool?.status)
 				.toBeUndefined()
 			expect
 				.soft(getCanonicalToolState(store, "unanswered-tool-for-detail-only"))
@@ -1555,7 +1573,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
-		expect(getNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
+		expect(getToolNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
 		expect(
 			arrivals.events.filter(
 				(event) => event.payload.message.appMessageId === "fast-tool-response",
@@ -1578,11 +1596,11 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			}),
 		)
 		advanceUntil(
-			() => getNode(store, "fast-tool-response")?.tool?.status === "finished",
+			() => getToolNode(store, "fast-tool-response")?.tool?.status === "finished",
 			"queued tool response reaches the raw message layer",
 		)
 
-		expect(getNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
+		expect(getToolNode(store, "fast-tool-response")?.tool?.status).toBe("finished")
 		expect(
 			arrivals.events.filter(
 				(event) => event.payload.message.appMessageId === "fast-tool-response",
@@ -1775,7 +1793,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		settleRendering()
 
 		expect(getAssistantNode(store, "next-correlation")?.content).toBe("continued")
-		expect(getNode(store, "late-ask-response")?.tool?.id).toBe("ask-1")
+		expect(getToolNode(store, "late-ask-response")?.tool?.id).toBe("ask-1")
 		expect(getCanonicalToolState(store, "ask-1")).toMatchObject({
 			id: "ask-1",
 			status: "finished",

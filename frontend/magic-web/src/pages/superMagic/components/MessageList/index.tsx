@@ -310,7 +310,7 @@ const MessageList = observer(
 
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
-			const n = superMagicStore.getMessageNode(lastNode?.app_message_id)
+			const n = superMagicStore.getMessageNode(lastNode?.super_message_id)
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -411,7 +411,7 @@ const MessageList = observer(
 			if (!exportStore.previewOpen) return []
 			return extractTurns(messageTurnGroups, new Set(exportStore.selectedKeys), {
 				includeToolCall: exportStore.includeToolCall,
-				resolveNode: (id) => superMagicStore.getMessageNode(id),
+				resolveNode: (superMessageId) => superMagicStore.getMessageNode(superMessageId),
 				workspaceFilesList,
 			})
 		}, [

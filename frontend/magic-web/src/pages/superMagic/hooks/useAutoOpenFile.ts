@@ -48,7 +48,7 @@ function getPrevMessageFilePathAttachments(
 	if (detailIndex <= 0) return []
 
 	const prevMessage = topicMessages[detailIndex - 1]
-	const prevNode = superMagicStore.getMessageNode(prevMessage.app_message_id) as
+	const prevNode = superMagicStore.getMessageNode(prevMessage.super_message_id) as
 		| Record<string, unknown>
 		| undefined
 	const prevContent = prevNode && typeof prevNode?.content === "string" ? prevNode.content : ""
@@ -197,15 +197,15 @@ export function useAutoOpenFile() {
 				return m.role === "assistant" || m.role === "tool"
 			})
 			const lastMessageNode = superMagicStore.getMessageNode(
-				lastMessageWithRole?.app_message_id,
+				lastMessageWithRole?.super_message_id,
 			)
 
 			const lastDetailMessageWithAttachments = topicMessages.findLast((m) => {
-				const node = superMagicStore.getMessageNode(m?.app_message_id)
+				const node = superMagicStore.getMessageNode(m?.super_message_id)
 				return filterMessagesWithAttachments(node) && node?.attachments?.length > 0
 			})
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
-				lastDetailMessageWithAttachments?.app_message_id,
+				lastDetailMessageWithAttachments?.super_message_id,
 			)
 
 			attemptOpenFromNodes({

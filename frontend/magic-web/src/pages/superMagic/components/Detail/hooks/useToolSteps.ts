@@ -63,7 +63,7 @@ function useToolSteps({
 
 			// Extract tool steps from messages
 			messages.forEach((message) => {
-				const node = superMagicStore.getMessageNode(message?.app_message_id)
+				const node = superMagicStore.getMessageNode(message?.super_message_id)
 				if (!filterClickableMessage(node)) {
 					return
 				}

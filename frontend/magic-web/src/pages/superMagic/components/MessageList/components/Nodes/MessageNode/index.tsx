@@ -84,7 +84,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 
 	const { t } = useTranslation("super")
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| Record<string, unknown>
 		| undefined
 	const topicId = props?.node?.topic_id || ""
@@ -131,16 +131,16 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 
 	// 解析前一条消息 content 中的 [@file_path:...]，仅保留在当前工作区附件树中真实存在的文件
 	const rawFilePathAttachments = useMemo<FilePathAttachment[]>(() => {
-		const prevAppMessageId = props?.prevNode?.app_message_id
-		if (!prevAppMessageId) return []
-		const prevMessageNode = superMagicStore.getMessageNode(prevAppMessageId) as
+		const prevSuperMessageId = props?.prevNode?.super_message_id
+		if (!prevSuperMessageId) return []
+		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
 			| Record<string, unknown>
 			| undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		if (!prevContent) return []
 		return buildFilePathAttachments(prevContent)
-	}, [props?.prevNode?.app_message_id])
+	}, [props?.prevNode?.super_message_id])
 
 	const filePathAttachments = rawFilePathAttachments.filter((attachment) => {
 		const found = findAttachmentByPath(

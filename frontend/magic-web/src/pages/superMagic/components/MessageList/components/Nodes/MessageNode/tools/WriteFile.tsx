@@ -46,7 +46,7 @@ const writeFileMarkdownClassName = cn(
 	"[&_h1]:mb-1.5 [&_h1]:mt-1.5 [&_h1]:text-base [&_h1]:font-semibold [&_h1]:leading-tight",
 	"[&_h2]:mb-1.5 [&_h2]:mt-1.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:leading-tight",
 	"[&_h3]:mb-1 [&_h3]:mt-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:leading-tight",
-	"[&_blockquote]:my-1 [&_blockquote]:inline-table [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:bg-muted/30 [&_blockquote]:py-1 [&_blockquote]:px-2 [&_blockquote]:text-muted-foreground [&_blockquote]:rounded-r-md",
+	"[&_blockquote]:my-1 [&_blockquote]:inline-table [&_blockquote]:rounded-r-md [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:bg-muted/30 [&_blockquote]:px-2 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground",
 	"[&_p:has(+p)]:!mb-0.5 [&_p]:!mb-0 [&_p]:!mt-0 [&_p]:whitespace-pre-wrap",
 	"[&_ul]:m-0 [&_ul]:list-outside [&_ul]:p-0 [&_ul]:pl-4",
 	"[&_ol]:m-0 [&_ol]:list-outside [&_ol]:p-0 [&_ol]:pl-4",
@@ -70,7 +70,7 @@ const ESTIMATED_BLOCK_HEIGHT = 28
 function WriteTool(props: WriteToolProps) {
 	const { t } = useTranslation("super")
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| { tool?: ToolDataLike }
 		| undefined
 	const tool = props.toolData || node?.tool
@@ -85,10 +85,7 @@ function WriteTool(props: WriteToolProps) {
 		[tool?.rawArguments, fileData],
 	)
 
-	const committedContent = useStreamingCommittedContent(
-		streamingContent.content || "",
-		loading,
-	)
+	const committedContent = useStreamingCommittedContent(streamingContent.content || "", loading)
 	const markdownContent = useMemo(() => {
 		return normalizeWriteFileMarkdownInput({
 			filePath: streamingContent.filePath || "",

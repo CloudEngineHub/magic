@@ -48,7 +48,7 @@ function RichText(props: NodeProps) {
 	const { onSelectDetail, onFileClick: handleFileClick } = props
 	const { projectFilesStore } = useMessageListContext()
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| RichTextMessageNode
 		| undefined
 	const mentions: NonNullable<MessageRichTextProps["mentions"]> =

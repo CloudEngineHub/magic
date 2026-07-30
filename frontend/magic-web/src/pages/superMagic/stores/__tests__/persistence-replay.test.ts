@@ -14,6 +14,7 @@ import {
 
 const TOPIC_ID = "topic-persistence"
 const CORRELATION_ID = "correlation-persistence"
+const SUPER_MESSAGE_ID = "super-message-persistence"
 const SETTLE_MS = 2_000
 
 interface ProjectedNode {
@@ -70,6 +71,9 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id:
+				correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
@@ -129,6 +133,10 @@ function createFinal({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: `node-${appMessageId}`,
+					super_message_id:
+						correlationId === CORRELATION_ID
+							? SUPER_MESSAGE_ID
+							: `super-${correlationId}`,
 					correlation_id: correlationId,
 					content,
 					status,
@@ -151,8 +159,11 @@ function createStore(): SuperMagicStore {
 	return store
 }
 
-function node(store: SuperMagicStore, id = CORRELATION_ID): ProjectedNode | undefined {
-	const value = store.getMessageNode(id)
+function node(
+	store: SuperMagicStore,
+	superMessageId = SUPER_MESSAGE_ID,
+): ProjectedNode | undefined {
+	const value = store.getMessageNode(superMessageId)
 	return value && typeof value === "object" ? (value as ProjectedNode) : undefined
 }
 
@@ -261,7 +272,7 @@ describe("SuperMagicStore / 持久化和回放", () => {
 				}),
 			)
 
-			expect(node(store, correlationId)).toMatchObject({ content, status })
+			expect(node(store, `super-${correlationId}`)).toMatchObject({ content, status })
 			expect(store.getStreamState(TOPIC_ID, correlationId)).toBeUndefined()
 			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 			expect(vi.getTimerCount()).toBe(0)
@@ -387,7 +398,7 @@ describe("SuperMagicStore / 持久化和回放", () => {
 		expect(beforeReset.isTopicStreaming(TOPIC_ID)).toBe(true)
 
 		const afterReset = createStore()
-		expect(afterReset.getMessageNode(CORRELATION_ID)).toBeUndefined()
+		expect(afterReset.getMessageNode(SUPER_MESSAGE_ID)).toBeUndefined()
 		expect(afterReset.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(afterReset.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
@@ -398,7 +409,7 @@ describe("SuperMagicStore / 持久化和回放", () => {
 		settle()
 
 		const afterReset = createStore()
-		expect(afterReset.getMessageNode(CORRELATION_ID)).toBeUndefined()
+		expect(afterReset.getMessageNode(SUPER_MESSAGE_ID)).toBeUndefined()
 		afterReset.enqueueMessage(TOPIC_ID, createFinal({ content: "fresh" }))
 		settle()
 		expect(node(afterReset)).toMatchObject({ content: "fresh" })

@@ -56,7 +56,7 @@ export function withUserNode<
 >(WrapperComponent: ComponentType<T>) {
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, className } = props
-		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
+		const messageNode = superMagicStore.getMessageNode(node?.super_message_id)
 		const optimisticStatus = node?.optimisticMeta?.status as "sending" | "failed" | undefined
 		const { t } = useTranslation("super")
 		const superIdState = getSuperIdState()

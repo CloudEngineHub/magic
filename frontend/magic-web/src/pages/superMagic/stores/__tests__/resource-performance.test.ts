@@ -70,6 +70,8 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id: `super-${correlationId}`,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
@@ -133,6 +135,7 @@ function createFinal({
 					role,
 					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
+					super_message_id: `super-${correlationId}`,
 					correlation_id: correlationId,
 					content,
 					status: "finished",
@@ -154,8 +157,11 @@ function createStore(topicId = TOPIC_A): SuperMagicStore {
 	return store
 }
 
-function getNode(store: SuperMagicStore, id = "corr-resource"): ProjectedNode | undefined {
-	const value = store.getMessageNode(id)
+function getNode(
+	store: SuperMagicStore,
+	superMessageId = "super-corr-resource",
+): ProjectedNode | undefined {
+	const value = store.getMessageNode(superMessageId)
 	return value && typeof value === "object" ? (value as ProjectedNode) : undefined
 }
 
@@ -328,7 +334,9 @@ describe("SuperMagicStore / 资源和性能", () => {
 		store.setActiveTopicId(TOPIC_A)
 		settle()
 
-		expect(store.getMessageNode("corr-snapshot")).toMatchObject({ content: "background-final" })
+		expect(store.getMessageNode("super-corr-snapshot")).toMatchObject({
+			content: "background-final",
+		})
 		expect(store.getStreamState(TOPIC_A, "corr-snapshot")).toBeUndefined()
 	})
 
@@ -343,7 +351,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		settle()
 
 		store.receiveChunk(createChunk({ correlationId: "corr-final-63", i: 1, content: "late" }))
-		expect(store.getMessageNode("corr-final-63")).toMatchObject({ content: "63" })
+		expect(store.getMessageNode("super-corr-final-63")).toMatchObject({ content: "63" })
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
@@ -375,7 +383,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		}
 		settle()
 
-		expect(store.getMessageNode("assistant-31")).toBeDefined()
+		expect(store.getMessageNode("super-corr-tool-31")).toBeDefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
@@ -405,9 +413,9 @@ describe("SuperMagicStore / 资源和性能", () => {
 		])
 		settle()
 
-		expect(store.getMessageNode("new-a-corr")).toMatchObject({ content: "new-a" })
-		expect(store.getMessageNode("old-a-corr")).toBeUndefined()
-		expect(store.getMessageNode("old-b-corr")).toBeUndefined()
+		expect(store.getMessageNode("super-new-a-corr")).toMatchObject({ content: "new-a" })
+		expect(store.getMessageNode("super-old-a-corr")).toBeUndefined()
+		expect(store.getMessageNode("super-old-b-corr")).toBeUndefined()
 	})
 
 	it("调试日志序列化完整 buffer 或大 arguments。", () => {
@@ -499,7 +507,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		store.setActiveTopicId(TOPIC_A)
 		settle()
 
-		expect(store.getMessageNode("corr-background")).toMatchObject({ content: "AB" })
+		expect(store.getMessageNode("super-corr-background")).toMatchObject({ content: "AB" })
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(recovery.length).toBeLessThanOrEqual(1)
 		unsubscribe()

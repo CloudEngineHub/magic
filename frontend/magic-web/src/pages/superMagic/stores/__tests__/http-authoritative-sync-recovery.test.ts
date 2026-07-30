@@ -22,6 +22,7 @@ const TOPIC_A = "topic-sync-a"
 const TOPIC_B = "topic-sync-b"
 const AGENT_TOPIC_A = "agent-topic-a"
 const CORRELATION_ID = "correlation-sync"
+const SUPER_MESSAGE_ID = "super-message-sync"
 const RENDER_SETTLE_MS = 2_000
 // These broad fake-timer windows keep black-box observation finite; they are not product SLAs.
 const INITIAL_RECOVERY_OBSERVATION_MS = 8_000
@@ -29,6 +30,14 @@ const RETRY_RECOVERY_OBSERVATION_MS = 20_000
 const RECOVERY_MAX_ATTEMPTS = 3
 const RECOVERY_TOTAL_BUDGET_MS = 30_000
 const RECOVERY_POST_BUDGET_OBSERVATION_MS = 60_000
+
+function toAssistantSuperMessageId(correlationId: string): string {
+	return correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`
+}
+
+function toToolSuperMessageId(appMessageId: string): string {
+	return `super-${appMessageId}`
+}
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
 type ChunkToolCall = ChunkChoice["delta"]["tool_calls"][number]
@@ -48,6 +57,8 @@ interface ProjectedToolCall {
 }
 
 interface ProjectedNode {
+	app_message_id?: string
+	super_message_id?: string
 	role?: string
 	topic_id?: string
 	content?: string | null
@@ -90,6 +101,7 @@ interface StreamRecoveryObservableStore {
 interface ChunkOptions {
 	topicId?: string
 	correlationId?: string
+	superMessageId?: string
 	i?: number
 	content?: string
 	reasoningContent?: string
@@ -104,6 +116,7 @@ interface EnvelopeOptions {
 	nodeTopicId?: string
 	appMessageId?: string
 	correlationId?: string
+	superMessageId?: string
 	seqId?: string
 	role?: "assistant" | "tool" | "user"
 	outerStatus?: ConversationMessageStatus
@@ -120,6 +133,7 @@ interface EnvelopeOptions {
 function createChunk({
 	topicId = TOPIC_A,
 	correlationId = CORRELATION_ID,
+	superMessageId = toAssistantSuperMessageId(correlationId),
 	i = 0,
 	content = "",
 	reasoningContent = "",
@@ -137,6 +151,8 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${topicId}`,
 		super_magic_chunk: {
+			super_message_id: superMessageId,
+			task_id: `task-${correlationId}`,
 			i,
 			usage,
 			correlation_id: correlationId,
@@ -211,6 +227,7 @@ function createEnvelope(options: EnvelopeOptions = {}): RawSuperMagicMessageEnve
 		nodeTopicId = topicId,
 		appMessageId = "assistant-sync",
 		correlationId = CORRELATION_ID,
+		superMessageId,
 		seqId = "100",
 		role = "assistant",
 		toolId = "tool-1",
@@ -231,10 +248,20 @@ function createEnvelope(options: EnvelopeOptions = {}): RawSuperMagicMessageEnve
 		: role === "assistant"
 			? []
 			: null
+	const resolvedSuperMessageId =
+		role === "user"
+			? appMessageId
+			: String(
+					superMessageId ||
+						(role === "assistant"
+							? toAssistantSuperMessageId(correlationId)
+							: toToolSuperMessageId(appMessageId)),
+				)
 	const node = {
 		role,
 		topic_id: nodeTopicId,
 		message_id: `node-${appMessageId}`,
+		super_message_id: resolvedSuperMessageId,
 		correlation_id: correlationId,
 		reasoning_content: null,
 		status: nodeStatus,
@@ -285,8 +312,12 @@ function createStore(): SuperMagicStore {
 	return store
 }
 
-function getNode(store: SuperMagicStore, id: string): ProjectedNode | undefined {
-	const node = store.getMessageNode(id)
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	const directNode = store.getMessageNode(superMessageId)
+	const projectedBySuperMessageId = Array.from(store.messages.values())
+		.flatMap((messages) => Array.from(messages))
+		.find((message) => message.super_message_id === superMessageId)
+	const node = directNode ?? projectedBySuperMessageId
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -312,7 +343,8 @@ function getEmbeddedToolState(
 	toolId = "tool-1",
 	correlationId = CORRELATION_ID,
 ): ProjectedToolCall["tool"] | undefined {
-	return getNode(store, correlationId)?.tool_calls?.find((tool) => tool.id === toolId)?.tool
+	const superMessageId = toAssistantSuperMessageId(correlationId)
+	return getNode(store, superMessageId)?.tool_calls?.find((tool) => tool.id === toolId)?.tool
 }
 
 function getCanonicalToolState(store: SuperMagicStore, toolId: string, topicId = TOPIC_A) {
@@ -546,8 +578,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(false)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("new")
-		expect(getNode(store, "same-response")?.content).toBe("new")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("new")
 		expect(getMessageRecords(store)).toMatchObject([
 			{
 				app_message_id: "same-response",
@@ -579,8 +610,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				topic_id: TOPIC_B,
 			},
 		])
-		expect(getNode(store, "dual-domain-response")?.topic_id).toBe(AGENT_TOPIC_A)
-		expect(getNode(store, "dual-domain-correlation")?.topic_id).toBe(AGENT_TOPIC_A)
+		expect(getNode(store, toAssistantSuperMessageId("dual-domain-correlation"))?.topic_id).toBe(
+			AGENT_TOPIC_A,
+		)
 		expect(
 			store.completeTopicSync(TOPIC_B, generationB, {
 				succeeded: true,
@@ -620,10 +652,10 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(true)
 
-		expect.soft(getNode(store, "outer-a-app")?.content).toBe("keep topic A")
-		expect.soft(getNode(store, "outer-a-correlation")?.content).toBe("keep topic A")
-		expect.soft(getNode(store, "outer-b-app")).toBeUndefined()
-		expect.soft(getNode(store, "outer-b-correlation")).toBeUndefined()
+		expect
+			.soft(getNode(store, toAssistantSuperMessageId("outer-a-correlation"))?.content)
+			.toBe("keep topic A")
+		expect(getNode(store, toAssistantSuperMessageId("outer-b-correlation"))).toBeUndefined()
 		expect.soft(getMessageRecords(store, TOPIC_A)).toHaveLength(1)
 		expect.soft(getMessageRecords(store, TOPIC_B)).toHaveLength(0)
 	})
@@ -655,7 +687,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)?.content).toBe("target draft")
-		expect(getNode(store, "unrelated-correlation")?.content).toBe("unrelated")
+		expect(getNode(store, toAssistantSuperMessageId("unrelated-correlation"))?.content).toBe(
+			"unrelated",
+		)
 		expect(
 			advanceUntilRecovery(recovery.events, 1, INITIAL_RECOVERY_OBSERVATION_MS),
 		).toBeDefined()
@@ -672,8 +706,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "target-app")?.content).toBe("target canonical")
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("target canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("target canonical")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		recovery.unsubscribe()
@@ -728,7 +761,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		store.enqueueMessage(TOPIC_A, queuedAssistant)
 		store.enqueueMessage(TOPIC_A, followingAssistant)
 		// C 没有 StreamState，不能被前序 correlation 的动画或 Final 队头阻塞。
-		expect(getNode(store, "following-app")?.content).toBe("following canonical content")
+		expect(getNode(store, "super-following-correlation")?.content).toBe(
+			"following canonical content",
+		)
 		expect(getMessageRecords(store)).toEqual(
 			expect.arrayContaining([expect.objectContaining({ app_message_id: "following-app" })]),
 		)
@@ -737,7 +772,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				(event) => event.payload.message.appMessageId === "following-app",
 			),
 		).toHaveLength(1)
-		expect(getNode(store, "queued-final-app")).toBeUndefined()
+		expect(getNode(store, "super-queued-final-correlation")).toBeUndefined()
 		expect(getBufferedAppMessageIds(store)).toContain("queued-final-app")
 		expect(getBufferedAppMessageIds(store)).not.toContain("following-app")
 
@@ -747,18 +782,19 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		advanceRendering()
 
 		expect(recoveryEvents).toEqual([{ topicId: TOPIC_A, correlationId: CORRELATION_ID }])
-		expect(getNode(store, "recovered-real-app")?.content).toBe(
-			"authoritative recovered content",
-		)
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("authoritative recovered content")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("authoritative recovered content")
 		expect(
 			getUiMessages(store).filter(
 				(message) =>
 					message.role === "assistant" && message.correlation_id === CORRELATION_ID,
 			),
 		).toHaveLength(1)
-		expect(getNode(store, "queued-final-app")?.content).toBe("queued canonical content")
-		expect(getNode(store, "following-app")?.content).toBe("following canonical content")
+		expect(getNode(store, "super-queued-final-correlation")?.content).toBe(
+			"queued canonical content",
+		)
+		expect(getNode(store, "super-following-correlation")?.content).toBe(
+			"following canonical content",
+		)
 		expect(getMessageRecords(store)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ app_message_id: "recovered-real-app" }),
@@ -801,7 +837,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(true)
 
-		expect.soft(getNode(store, "removed-by-empty-correlation")).toBeUndefined()
+		expect(
+			getNode(store, toAssistantSuperMessageId("removed-by-empty-correlation")),
+		).toBeUndefined()
 		expect.soft(getMessageRecords(store)).toHaveLength(0)
 		expect.soft(getUiMessages(store)).toHaveLength(0)
 	})
@@ -851,8 +889,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
-		expect.soft(getNode(store, "buffered-before-sync")).toBeUndefined()
-		expect.soft(getNode(store, "buffered-before-sync-correlation")).toBeUndefined()
+		expect(
+			getNode(store, toAssistantSuperMessageId("buffered-before-sync-correlation")),
+		).toBeUndefined()
 		expect.soft(getMessageRecords(store)).toHaveLength(0)
 		expect.soft(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
 	})
@@ -876,7 +915,10 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(true)
 
-		expect(getNode(store, "preserved-after-incomplete-correlation")?.content).toBe("preserved")
+		expect(
+			getNode(store, toAssistantSuperMessageId("preserved-after-incomplete-correlation"))
+				?.content,
+		).toBe("preserved")
 		expect(getMessageRecords(store)).toMatchObject([
 			{
 				app_message_id: "preserved-after-incomplete-request",
@@ -953,9 +995,13 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		store.initializeMessages(TOPIC_A, aggregatedPages)
 
-		expect.soft(getNode(store, "snapshot-only-old-correlation")).toBeUndefined()
-		expect.soft(getNode(store, "same-correlation")?.content).toBe("local newer")
-		expect.soft(getNode(store, "newest-correlation")?.content).toBe("newest")
+		expect(
+			getNode(store, toAssistantSuperMessageId("snapshot-only-old-correlation")),
+		).toBeUndefined()
+		expect.soft(getNode(store, "super-same-correlation")?.content).toBe("local newer")
+		expect
+			.soft(getNode(store, toAssistantSuperMessageId("newest-correlation"))?.content)
+			.toBe("newest")
 		const records = getMessageRecords(store)
 		expect
 			.soft(records)
@@ -990,8 +1036,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			createEnvelope({ appMessageId: "same-app", seqId: "100", content: "HTTP old" }),
 		])
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("local new")
-		expect(getNode(store, "same-app")?.content).toBe("local new")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("local new")
 		expect(getMessageRecords(store)).toMatchObject([
 			{
 				app_message_id: "same-app",
@@ -1030,7 +1075,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		])
 
-		expect.soft(getNode(store, "equal-seq-correlation")?.content).toBe("first canonical")
+		expect
+			.soft(getNode(store, toAssistantSuperMessageId("equal-seq-correlation"))?.content)
+			.toBe("first canonical")
 		expect.soft(getMessageRecords(store)).toMatchObject([
 			{
 				app_message_id: "equal-seq-app",
@@ -1058,6 +1105,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		const identity = {
 			appMessageId: "same-seq-revoke-app",
 			correlationId: "same-seq-revoke-correlation",
+			superMessageId: "same-seq-revoke-super-message",
 			seqId: "100",
 			content: "same canonical content",
 			nodeStatus: "running",
@@ -1078,10 +1126,10 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		expect(
 			getMessageRecords(store).find(
-				(message) => message.app_message_id === identity.appMessageId,
+				(message) => message.super_message_id === identity.superMessageId,
 			)?.status,
 		).toBe(ConversationMessageStatus.Revoked)
-		expect(getNode(store, identity.correlationId)?.content).toBe("same canonical content")
+		expect(getNode(store, identity.superMessageId)?.content).toBe("same canonical content")
 	})
 
 	it("[REV-02] Assistant 同 seq 的 HTTP 外层状态可从 revoked 恢复为 read。", () => {
@@ -1089,6 +1137,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		const identity = {
 			appMessageId: "same-seq-restore-app",
 			correlationId: "same-seq-restore-correlation",
+			superMessageId: "same-seq-restore-super-message",
 			seqId: "100",
 			content: "restorable canonical content",
 			nodeStatus: "finished",
@@ -1109,10 +1158,12 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		expect(
 			getMessageRecords(store).find(
-				(message) => message.app_message_id === identity.appMessageId,
+				(message) => message.super_message_id === identity.superMessageId,
 			)?.status,
 		).toBe(ConversationMessageStatus.Read)
-		expect(getNode(store, identity.correlationId)?.content).toBe("restorable canonical content")
+		expect(getNode(store, identity.superMessageId)?.content).toBe(
+			"restorable canonical content",
+		)
 	})
 
 	it("[REV-03] 低 seq HTTP 撤回状态生效，但不得回退 Assistant canonical 内容。", () => {
@@ -1120,6 +1171,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		const identity = {
 			appMessageId: "stale-content-authoritative-status-app",
 			correlationId: "stale-content-authoritative-status-correlation",
+			superMessageId: "stale-content-authoritative-status-super-message",
 		} as const
 
 		store.initializeMessages(TOPIC_A, [
@@ -1141,13 +1193,13 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		expect(
 			getMessageRecords(store).find(
-				(message) => message.app_message_id === identity.appMessageId,
+				(message) => message.super_message_id === identity.superMessageId,
 			),
 		).toMatchObject({
 			seq_id: "200",
 			status: ConversationMessageStatus.Revoked,
 		})
-		expect(getNode(store, identity.correlationId)?.content).toBe("latest canonical content")
+		expect(getNode(store, identity.superMessageId)?.content).toBe("latest canonical content")
 	})
 
 	it("HTTP 响应比本地 StreamState 更新。", () => {
@@ -1159,7 +1211,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("HTTP canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("HTTP canonical")
 		expect(getMessageRecords(store)).toMatchObject([
 			{ app_message_id: "assistant-sync", correlation_id: CORRELATION_ID, seq_id: "200" },
 		])
@@ -1317,7 +1369,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				status: ConversationMessageStatus.Revoked,
 			},
 		])
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("revoked canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("revoked canonical")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
@@ -1341,7 +1393,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("HTTP canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("HTTP canonical")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		vi.advanceTimersByTime(RECOVERY_POST_BUDGET_OBSERVATION_MS)
 		expect(recovery.events).toHaveLength(0)
@@ -1372,7 +1424,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		advanceRendering()
 
 		expect(getEmbeddedToolState(store)?.status).toBe("running")
-		expect(getNode(store, "tool-response")?.tool_call_id).toBe("legacy-tool-call-1")
+		expect(getNode(store, toToolSuperMessageId("tool-response"))?.tool_call_id).toBe(
+			"legacy-tool-call-1",
+		)
 		expect(getCanonicalToolState(store, "tool-1")?.status).toBe("finished")
 		expect(getCanonicalToolState(store, "legacy-tool-call-1")).toBeUndefined()
 		expect(getEffectiveToolState(store)?.status).toBe("finished")
@@ -1403,9 +1457,11 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, ownerCorrelationId)?.tool_calls?.map((tool) => tool.id)).toEqual([
-			toolId,
-		])
+		expect(
+			getNode(store, toAssistantSuperMessageId(ownerCorrelationId))?.tool_calls?.map(
+				(tool) => tool.id,
+			),
+		).toEqual([toolId])
 		expect(store.getStreamState(TOPIC_A, ownerCorrelationId)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
@@ -1432,16 +1488,18 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
-		expect(getNode(store, ownerCorrelationId)?.tool_calls?.map((tool) => tool.id)).toEqual([
-			toolId,
-		])
-		expect(getNode(store, "http-tool-conflict-app")).toMatchObject({
+		expect(
+			getNode(store, toAssistantSuperMessageId(ownerCorrelationId))?.tool_calls?.map(
+				(tool) => tool.id,
+			),
+		).toEqual([toolId])
+		expect(getNode(store, toAssistantSuperMessageId(incomingCorrelationId))).toMatchObject({
 			role: "assistant",
 			correlation_id: incomingCorrelationId,
 			content: "conflicting canonical",
 		})
 		expect(
-			getNode(store, "http-tool-conflict-app")?.tool_calls?.some(
+			getNode(store, toAssistantSuperMessageId(incomingCorrelationId))?.tool_calls?.some(
 				(tool) => tool.id === toolId,
 			) ?? false,
 		).toBe(false)
@@ -1459,14 +1517,13 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		)
 	})
 
-	it("同 appMessageId、不同 correlationId 的 HTTP 记录必须整体拒绝。", () => {
+	it("同 super_message_id、不同 app/correlation 的 HTTP revision 按高 seq 收敛。", () => {
 		const store = createStore()
 
-		// Use an HTTP canonical baseline so stream-path app-id normalization cannot
-		// blur the D3 identity-conflict input.
 		store.initializeMessages(TOPIC_A, [
 			createEnvelope({
-				appMessageId: "shared-app",
+				appMessageId: "old-app",
+				superMessageId: "shared-http-super-message",
 				correlationId: "original-correlation",
 				seqId: "100",
 				content: "original",
@@ -1474,62 +1531,120 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		store.initializeMessages(TOPIC_A, [
 			createEnvelope({
-				appMessageId: "shared-app",
+				appMessageId: "new-app",
+				superMessageId: "shared-http-super-message",
 				correlationId: "different-correlation",
 				seqId: "200",
 				content: "must not overwrite",
 			}),
 		])
 
-		expect.soft(getNode(store, "original-correlation")?.content).toBe("original")
-		expect.soft(getNode(store, "different-correlation")).toBeUndefined()
+		expect.soft(getNode(store, "shared-http-super-message")).toMatchObject({
+			app_message_id: "new-app",
+			super_message_id: "shared-http-super-message",
+			correlation_id: "different-correlation",
+			content: "must not overwrite",
+		})
 		expect.soft(getMessageRecords(store)).toMatchObject([
 			{
-				app_message_id: "shared-app",
-				correlation_id: "original-correlation",
-				seq_id: "100",
+				app_message_id: "new-app",
+				super_message_id: "shared-http-super-message",
+				correlation_id: "different-correlation",
+				seq_id: "200",
 			},
 		])
 		expect.soft(getUiMessages(store)).toMatchObject([
 			{
-				app_message_id: "shared-app",
-				correlation_id: "original-correlation",
-				seq_id: "100",
+				app_message_id: "new-app",
+				super_message_id: "shared-http-super-message",
+				correlation_id: "different-correlation",
+				seq_id: "200",
 			},
 		])
 		expect.soft(getUiMessages(store)).toHaveLength(1)
-		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
 	})
 
-	it("同一 HTTP snapshot 内同 appMessageId、不同 correlationId 的后续记录必须拒绝。", () => {
+	it("同一 HTTP snapshot 内同 super_message_id 的后续高 seq revision 胜出。", () => {
 		const store = createStore()
 
 		store.initializeMessages(TOPIC_A, [
 			createEnvelope({
-				appMessageId: "shared-batch-app",
+				appMessageId: "old-batch-app",
+				superMessageId: "shared-batch-super-message",
 				correlationId: "original-batch-correlation",
 				seqId: "100",
 				content: "original",
 			}),
 			createEnvelope({
-				appMessageId: "shared-batch-app",
+				appMessageId: "new-batch-app",
+				superMessageId: "shared-batch-super-message",
 				correlationId: "different-batch-correlation",
 				seqId: "200",
 				content: "must not overwrite",
 			}),
 		])
 
-		expect.soft(getNode(store, "original-batch-correlation")?.content).toBe("original")
-		expect.soft(getNode(store, "different-batch-correlation")).toBeUndefined()
+		expect.soft(getNode(store, "shared-batch-super-message")).toMatchObject({
+			app_message_id: "new-batch-app",
+			super_message_id: "shared-batch-super-message",
+			correlation_id: "different-batch-correlation",
+			content: "must not overwrite",
+		})
 		expect.soft(getMessageRecords(store)).toMatchObject([
 			{
-				app_message_id: "shared-batch-app",
-				correlation_id: "original-batch-correlation",
-				seq_id: "100",
+				app_message_id: "new-batch-app",
+				super_message_id: "shared-batch-super-message",
+				correlation_id: "different-batch-correlation",
+				seq_id: "200",
 			},
 		])
 		expect.soft(getUiMessages(store)).toHaveLength(1)
-		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
+	})
+
+	it("跨分页聚合的同 super_message_id revision 仍按高 seq 收敛。", () => {
+		const store = createStore()
+		const newestPage = [
+			createEnvelope({
+				appMessageId: "newest-page-app",
+				superMessageId: "cross-page-super-message",
+				correlationId: "newest-page-correlation",
+				seqId: "200",
+				content: "newest page revision",
+			}),
+		]
+		const olderPage = [
+			createEnvelope({
+				appMessageId: "older-page-app",
+				superMessageId: "cross-page-super-message",
+				correlationId: "older-page-correlation",
+				seqId: "100",
+				content: "older page revision",
+			}),
+		]
+
+		// 页面层先聚合所有分页，再把一个完整 authoritative snapshot 交给 Store。
+		store.initializeMessages(TOPIC_A, [...newestPage, ...olderPage])
+
+		expect.soft(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "newest-page-app",
+				super_message_id: "cross-page-super-message",
+				correlation_id: "newest-page-correlation",
+				seq_id: "200",
+			},
+		])
+		expect.soft(getUiMessages(store)).toMatchObject([
+			{
+				app_message_id: "newest-page-app",
+				super_message_id: "cross-page-super-message",
+				correlation_id: "newest-page-correlation",
+				seq_id: "200",
+			},
+		])
+		expect.soft(getUiMessages(store)).toHaveLength(1)
+		expect.soft(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
 	})
 
 	it("initializeMessages 按 correlationId 隔离不同 role 的消息。", () => {
@@ -1552,9 +1667,8 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		])
 
-		expect(getNode(store, "tool-app")?.role).toBe("tool")
-		expect(getNode(store, "assistant-app")?.role).toBe("assistant")
-		expect(getNode(store, "role-collision")?.role).toBe("assistant")
+		expect(getNode(store, toToolSuperMessageId("tool-app"))?.role).toBe("tool")
+		expect(getNode(store, "super-role-collision")?.role).toBe("assistant")
 		expect(getMessageRecords(store)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ app_message_id: "tool-app", role: "tool" }),
@@ -1579,10 +1693,12 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		])
 
-		expect.soft(getNode(store, "missing-tool-id-response")).toMatchObject({
-			role: "tool",
-			tool_call_id: "legacy-tool-call-must-not-be-used",
-		})
+		expect
+			.soft(getNode(store, toToolSuperMessageId("missing-tool-id-response")))
+			.toMatchObject({
+				role: "tool",
+				tool_call_id: "legacy-tool-call-must-not-be-used",
+			})
 		expect.soft(getCanonicalToolState(store, "")).toBeUndefined()
 		expect
 			.soft(getCanonicalToolState(store, "legacy-tool-call-must-not-be-used"))
@@ -1642,7 +1758,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
 			"canonical-tool",
 		])
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
@@ -1668,7 +1784,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id) ?? []).toEqual(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.map((tool) => tool.id) ?? []).toEqual(
 			expectedToolIds,
 		)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
@@ -1690,7 +1806,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content ?? "").toBe(expectedContent)
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content ?? "").toBe(expectedContent)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
@@ -1717,7 +1833,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		const tools = getNode(store, CORRELATION_ID)?.tool_calls ?? []
+		const tools = getNode(store, SUPER_MESSAGE_ID)?.tool_calls ?? []
 		const toolIds = tools.map((tool) => tool.id)
 		expect.soft(toolIds).toEqual(expect.arrayContaining(["local-tool", "http-tool"]))
 		expect.soft(toolIds).toHaveLength(2)
@@ -1751,7 +1867,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		const tools = getNode(store, CORRELATION_ID)?.tool_calls ?? []
+		const tools = getNode(store, SUPER_MESSAGE_ID)?.tool_calls ?? []
 		expect(tools.map((tool) => tool.id)).toEqual(["local-tool"])
 		expect(tools[0]?.function?.arguments).toBe('{"local":true}')
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
@@ -1776,7 +1892,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			])
 			advanceRendering()
 
-			expect(getNode(store, CORRELATION_ID)?.content).toBe("local draft")
+			expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("local draft")
 			expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 		},
 	)
@@ -1804,7 +1920,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		const tools = getNode(store, CORRELATION_ID)?.tool_calls ?? []
+		const tools = getNode(store, SUPER_MESSAGE_ID)?.tool_calls ?? []
 		expect.soft(tools).toHaveLength(1)
 		expect.soft(tools[0]?.id).toBe("shared-tool")
 		expect.soft(tools[0]?.function?.arguments).toBe('{"local":true}')
@@ -1899,8 +2015,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		).toBe(true)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("current")
-		expect(getNode(store, "same-response")?.content).toBe("current")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("current")
 		expect(getMessageRecords(store)).toMatchObject([
 			{ app_message_id: "same-response", correlation_id: CORRELATION_ID, seq_id: "200" },
 		])
@@ -1938,7 +2053,10 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 
 		expect
-			.soft(getNode(store, "current-generation-correlation")?.content)
+			.soft(
+				getNode(store, toAssistantSuperMessageId("current-generation-correlation"))
+					?.content,
+			)
 			.toBe("current generation")
 		expect.soft(getMessageRecords(store)).toMatchObject([
 			{
@@ -1970,8 +2088,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		store.receiveChunk(createChunk({ i: 0, content: "late chunk" }))
 		advanceRendering()
 
-		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("terminal canonical")
-		expect.soft(getNode(store, "terminal-before-cancel")?.content).toBe("terminal canonical")
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("terminal canonical")
 		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
@@ -1995,8 +2112,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		store.receiveChunk(createChunk({ i: 0, content: "late chunk" }))
 		advanceRendering()
 
-		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("terminal canonical")
-		expect.soft(getNode(store, "terminal-without-stream")?.content).toBe("terminal canonical")
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("terminal canonical")
 		expect.soft(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
@@ -2267,7 +2383,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 		// Recovery exhaustion is not a task-terminal signal. Keep the visible draft
 		// and thinking state until task finished/final/cancel arrives.
-		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("unrecoverable draft")
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("unrecoverable draft")
 		expect.soft(getMessageRecords(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
 		expect.soft(getUiMessages(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
@@ -2332,7 +2448,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		advanceRendering()
 
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
-		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("draft")
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("draft")
 		expect.soft(getUiMessages(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
 
 		// Retry is a separate authoritative sync lifecycle; it must not resurrect the finished stream.
@@ -2345,7 +2461,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				latestSeqId: "200",
 			}),
 		).toBe(true)
-		expect.soft(getNode(store, CORRELATION_ID)?.content).toBe("recovered")
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("recovered")
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
 		store.receiveChunk(
@@ -2356,7 +2472,9 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			}),
 		)
 		advanceRendering()
-		expect.soft(getNode(store, "next-task-correlation")?.content).toBe("next task draft")
+		expect
+			.soft(getNode(store, toAssistantSuperMessageId("next-task-correlation"))?.content)
+			.toBe("next task draft")
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
@@ -2376,8 +2494,8 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("complete")
-		expect(getNode(store, CORRELATION_ID)?.status).toBe("finished")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("complete")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.status).toBe("finished")
 		expect(getMessageRecords(store)).toMatchObject([
 			{ app_message_id: "assistant-sync", correlation_id: CORRELATION_ID, seq_id: "200" },
 		])
@@ -2421,8 +2539,12 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
-		expect(getNode(store, "buffered-correlation-1")?.content).toBe("first")
-		expect(getNode(store, "buffered-correlation-2")?.content).toBe("second")
+		expect(getNode(store, toAssistantSuperMessageId("buffered-correlation-1"))?.content).toBe(
+			"first",
+		)
+		expect(getNode(store, toAssistantSuperMessageId("buffered-correlation-2"))?.content).toBe(
+			"second",
+		)
 		expect(getMessageRecords(store)).toMatchObject([
 			{
 				app_message_id: "buffered-1",
@@ -2465,7 +2587,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("updated snapshot")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("updated snapshot")
 		expect(getMessageRecords(store)).toMatchObject([
 			{ app_message_id: "same-app", correlation_id: CORRELATION_ID, seq_id: "200" },
 		])

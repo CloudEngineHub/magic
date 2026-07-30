@@ -14,6 +14,7 @@ import {
 
 const TOPIC_ID = "topic-tool-arguments"
 const CORRELATION_ID = "correlation-tool-arguments"
+const SUPER_MESSAGE_ID = "super-message-tool-arguments"
 const RENDER_SETTLE_MS = 2_500
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -133,6 +134,9 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id:
+				correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
@@ -169,6 +173,8 @@ function createFinalEnvelope({
 		role: "assistant",
 		topic_id: TOPIC_ID,
 		message_id: `node-${appMessageId}`,
+		super_message_id:
+			correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`,
 		correlation_id: correlationId,
 		content: "",
 		reasoning_content: "",
@@ -213,17 +219,17 @@ function createStore(): SuperMagicStore {
 
 function getProjectedNode(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(correlationId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
 function getProjectedTools(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedToolCall[] {
-	return (getProjectedNode(store, correlationId)?.tool_calls ?? []).filter(
+	return (getProjectedNode(store, superMessageId)?.tool_calls ?? []).filter(
 		(tool): tool is ProjectedToolCall => Boolean(tool && typeof tool === "object"),
 	)
 }

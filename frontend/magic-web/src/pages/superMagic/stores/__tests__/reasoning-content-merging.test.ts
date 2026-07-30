@@ -17,6 +17,7 @@ import {
 
 const TOPIC_ID = "topic-reasoning"
 const CORRELATION_ID = "correlation-reasoning"
+const SUPER_MESSAGE_ID = "super-message-reasoning"
 const RENDER_SETTLE_MS = 2_000
 const RECOVERY_TIMEOUT_MS = 5_100
 
@@ -92,6 +93,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-reasoning",
 		super_magic_chunk: {
+			super_message_id: SUPER_MESSAGE_ID,
+			task_id: "task-reasoning",
 			i,
 			usage: null,
 			correlation_id: CORRELATION_ID,
@@ -151,6 +154,7 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: "node-final-reasoning",
+					super_message_id: SUPER_MESSAGE_ID,
 					correlation_id: CORRELATION_ID,
 					content,
 					...(includeReasoning ? { reasoning_content: reasoningContent } : {}),
@@ -187,7 +191,7 @@ function createStore(): SuperMagicStore {
 }
 
 function getProjectedNode(store: SuperMagicStore): ProjectedNode | undefined {
-	const node = store.getMessageNode(CORRELATION_ID)
+	const node = store.getMessageNode(SUPER_MESSAGE_ID)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 

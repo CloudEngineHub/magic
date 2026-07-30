@@ -62,7 +62,7 @@ export default function LoadingMessage({
 					// 过滤条件：有时间戳的消息
 					const hasTimestamp = msg.send_time
 					// 需要显示的消息才需要计算
-					const node = superMagicStore.getMessageNode(msg?.app_message_id)
+					const node = superMagicStore.getMessageNode(msg?.super_message_id)
 					const isMessageShow = !messageFilter(node)
 
 					return hasTimestamp && isMessageShow

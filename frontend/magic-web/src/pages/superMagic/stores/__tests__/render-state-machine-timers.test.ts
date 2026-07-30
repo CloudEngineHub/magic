@@ -19,6 +19,8 @@ const TOPIC_A = "topic-timer-a"
 const TOPIC_B = "topic-timer-b"
 const CORRELATION_A = "correlation-timer-a"
 const CORRELATION_B = "correlation-timer-b"
+const SUPER_MESSAGE_A = "super-message-timer-a"
+const SUPER_MESSAGE_B = "super-message-timer-b"
 const RENDER_SETTLE_MS = 2_000
 const RECOVERY_TIMEOUT_MS = 5_100
 
@@ -94,6 +96,8 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id: correlationId === CORRELATION_A ? SUPER_MESSAGE_A : SUPER_MESSAGE_B,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
@@ -171,6 +175,8 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
+					super_message_id:
+						correlationId === CORRELATION_A ? SUPER_MESSAGE_A : SUPER_MESSAGE_B,
 					correlation_id: correlationId,
 					content,
 					reasoning_content: reasoningContent,
@@ -193,9 +199,9 @@ function createStore(activeTopicId = TOPIC_A): SuperMagicStore {
 
 function getProjectedNode(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_A,
+	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(correlationId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -225,7 +231,8 @@ function expectSettled(
 	},
 ): void {
 	advanceRendering()
-	expect(getProjectedNode(store, correlationId)).toMatchObject(expected)
+	const superMessageId = correlationId === CORRELATION_B ? SUPER_MESSAGE_B : SUPER_MESSAGE_A
+	expect(getProjectedNode(store, superMessageId)).toMatchObject(expected)
 	expect(store.getStreamState(topicId, correlationId)).toBeUndefined()
 }
 
@@ -499,7 +506,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 		// A queued callback may finish canonical bookkeeping, but it must not render into topic B.
 		expect(store.isTopicStreaming(TOPIC_B)).toBe(false)
-		expect(getProjectedNode(store, CORRELATION_B)).toBeUndefined()
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)).toBeUndefined()
 
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
@@ -664,8 +671,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("A")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 	})
@@ -679,7 +686,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B done")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B done")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
 	})
@@ -709,8 +716,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("final-b")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("final-b")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 	})
@@ -726,7 +733,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B pending")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B pending")
 
 		store.receiveChunk(
 			createChunk({
@@ -761,8 +768,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("final-b")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("final-b")
 	})
 
 	it("complete 后立即被晚到 chunk 重新创建。", () => {
@@ -835,14 +842,14 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 
 		store.setActiveTopicId(TOPIC_A)
 		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "new-live" }))
 		advanceRendering(200)
 
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("new-live")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("new-live")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
 	})
 
@@ -862,13 +869,13 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("AB")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("AB")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 
 		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "live-again" }))
 		advanceRendering(200)
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("live-again")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("live-again")
 	})
 
 	it("完整成功的空 authoritative snapshot 终结旧流并拒绝在途晚包。", () => {

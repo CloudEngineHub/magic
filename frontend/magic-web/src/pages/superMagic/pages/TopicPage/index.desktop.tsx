@@ -475,12 +475,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			const targetTopicId = currentTopic?.id || selectedTopic?.id
 
 			const lastDetailMessage = topicMessages.findLast((message) => {
-				const node = superMagicStore.getMessageNode(message?.app_message_id)
+				const node = superMagicStore.getMessageNode(message?.super_message_id)
 				return filterClickableMessageWithoutRevoked(node)
 			})
 
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
-				lastDetailMessage?.app_message_id,
+				lastDetailMessage?.super_message_id,
 			) as
 				| {
 						tool?: {

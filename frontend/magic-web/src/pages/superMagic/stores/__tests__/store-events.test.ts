@@ -24,7 +24,9 @@ import {
 
 const TOPIC_ID = "topic-events"
 const CORRELATION_ID = "correlation-events"
+const SUPER_MESSAGE_ID = "super-message-events"
 const FINISH_TASK_APP_MESSAGE_ID = "938540548324491265"
+const FINISH_TASK_SUPER_MESSAGE_ID = "super-finish-task-events"
 const FINISH_TASK_TOOL_ID = "938540548324491266"
 const FINISH_TASK_LEGACY_TOOL_CALL_ID = "call_4d361d6c459b4a93b04767dd"
 const FINISH_TASK_CORRELATION_ID = "4d361d6c-459b-4a93-b047-67dd99eedc96"
@@ -70,6 +72,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-events",
 		super_magic_chunk: {
+			super_message_id: SUPER_MESSAGE_ID,
+			task_id: "task-events",
 			i,
 			usage: null,
 			correlation_id: CORRELATION_ID,
@@ -100,6 +104,14 @@ function createEnvelope({
 	node: SuperMagicNode
 	outerStatus?: ConversationMessageStatus
 }): RawSuperMagicMessageEnvelope {
+	const normalizedNode = {
+		...node,
+		super_message_id:
+			node.role === "user"
+				? appMessageId
+				: node.super_message_id ||
+					(node.role === "assistant" ? SUPER_MESSAGE_ID : `super-${appMessageId}`),
+	}
 	const envelope = {
 		type: SeqRecordType.seq,
 		seq: {
@@ -119,7 +131,7 @@ function createEnvelope({
 				unread_count: 0,
 				topic_id: TOPIC_ID,
 				type: ConversationMessageType.SuperMagicMessage,
-				super_magic_message: node,
+				super_magic_message: normalizedNode,
 			},
 		},
 	} satisfies SeqRecord<SuperMagicConversationMessageV2>
@@ -213,6 +225,7 @@ function createSharedToolMessage(toolId: string): SharedMessageFixture {
 
 function createToolEnvelope({
 	appMessageId = "tool-response-events",
+	superMessageId = `super-${appMessageId}`,
 	toolId = "tool-events",
 	name = "update_agent",
 	seqId = "101",
@@ -224,6 +237,7 @@ function createToolEnvelope({
 	toolAttachments = [],
 }: {
 	appMessageId?: string
+	superMessageId?: string
 	toolId?: string
 	name?: string
 	seqId?: string
@@ -241,6 +255,7 @@ function createToolEnvelope({
 			role: "tool",
 			topic_id: TOPIC_ID,
 			message_id: `node-${appMessageId}`,
+			super_message_id: superMessageId,
 			correlation_id: correlationId,
 			...(taskId ? { task_id: taskId } : {}),
 			content: null,
@@ -264,6 +279,7 @@ function createToolEnvelope({
 function createFinishTaskEnvelope() {
 	return createToolEnvelope({
 		appMessageId: FINISH_TASK_APP_MESSAGE_ID,
+		superMessageId: FINISH_TASK_SUPER_MESSAGE_ID,
 		toolId: FINISH_TASK_TOOL_ID,
 		legacyToolCallId: FINISH_TASK_LEGACY_TOOL_CALL_ID,
 		correlationId: FINISH_TASK_CORRELATION_ID,
@@ -377,7 +393,7 @@ describe("SuperMagic Store typed events", () => {
 				replaceable: false,
 			},
 		})
-		expect(store.getMessageNode("tool-response-events")).toMatchObject({
+		expect(store.getMessageNode("super-tool-response-events")).toMatchObject({
 			tool_call_id: "tool-events",
 			tool: { id: "tool-events" },
 		})
@@ -403,11 +419,11 @@ describe("SuperMagic Store typed events", () => {
 
 		expect(settled).toEqual([])
 		expect(store.toolResponseMap.get(TOPIC_ID)?.has(FINISH_TASK_TOOL_ID)).toBe(false)
-		expect(store.getMessageNode("generic-orphan-tool-response")).toMatchObject({
+		expect(store.getMessageNode("super-generic-orphan-tool-response")).toMatchObject({
 			role: "tool",
 			tool: { id: FINISH_TASK_TOOL_ID, name: "list_dir" },
 		})
-		expect(store.getMessageNode("generic-orphan-tool-response")).not.toHaveProperty(
+		expect(store.getMessageNode("super-generic-orphan-tool-response")).not.toHaveProperty(
 			"tool_call_id",
 		)
 	})
@@ -445,7 +461,7 @@ describe("SuperMagic Store typed events", () => {
 		})
 		expect(completed).toEqual([])
 
-		const rawNode = store.getMessageNode(FINISH_TASK_APP_MESSAGE_ID)
+		const rawNode = store.getMessageNode(FINISH_TASK_SUPER_MESSAGE_ID)
 		expect(rawNode).toMatchObject({
 			role: "tool",
 			task_id: FINISH_TASK_TASK_ID,
@@ -460,7 +476,7 @@ describe("SuperMagic Store typed events", () => {
 				attachments: [],
 			},
 		})
-		expect(store.getMessageNode(FINISH_TASK_CORRELATION_ID)).toBeUndefined()
+		expect(rawNode).toHaveProperty("super_message_id", FINISH_TASK_SUPER_MESSAGE_ID)
 		expect(
 			(store.messages.get(TOPIC_ID) || []).some((message) => message.role === "assistant"),
 		).toBe(false)

@@ -23,8 +23,13 @@ import {
 
 const TOPIC_ID = "topic-1"
 const CORRELATION_ID = "correlation-1"
+const SUPER_MESSAGE_ID = "super-message-1"
 const RENDER_SETTLE_MS = 2_000
 const RECOVERY_TIMEOUT_MS = 5_100
+
+function toSuperMessageId(correlationId: string): string {
+	return correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`
+}
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
 type ChunkDelta = ChunkChoice["delta"]
@@ -54,6 +59,9 @@ interface ProjectedToolCall {
 }
 
 interface ProjectedNode {
+	app_message_id?: string
+	super_message_id?: string
+	correlation_id?: string
 	content?: string | null
 	reasoning_content?: string | null
 	tool_calls?: ProjectedToolCall[] | null
@@ -135,6 +143,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-message-1",
 		super_magic_chunk: {
+			super_message_id: toSuperMessageId(correlationId),
+			task_id: `task-${correlationId}`,
 			i,
 			usage,
 			correlation_id: correlationId,
@@ -321,6 +331,7 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: `node-${appMessageId}`,
+					super_message_id: toSuperMessageId(correlationId),
 					correlation_id: correlationId,
 					content,
 					reasoning_content: reasoningContent,
@@ -349,14 +360,14 @@ function createStore(): SuperMagicStore {
 /**
  * @description 获取投影节点
  * @param store SuperMagicStore 实例
- * @param messageId 消息 ID
+ * @param superMessageId SuperMessage ID
  * @returns 投影节点
  */
 function getProjectedNode(
 	store: SuperMagicStore,
-	messageId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(messageId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -394,7 +405,7 @@ function expectSettledContent(
 	correlationId = CORRELATION_ID,
 ): void {
 	advanceRendering()
-	expect(getProjectedNode(store, correlationId)).toMatchObject({ content })
+	expect(getProjectedNode(store, toSuperMessageId(correlationId))).toMatchObject({ content })
 	expect(store.getStreamState(TOPIC_ID, correlationId)).toBeUndefined()
 	expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 }
@@ -1192,7 +1203,7 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		})
 		const messageCardsBeforeFinal = store.messages.get(TOPIC_ID) ?? []
 		expect(messageCardsBeforeFinal).toHaveLength(1)
-		expect(messageCardsBeforeFinal[0]?.app_message_id).toBe(CORRELATION_ID)
+		expect(messageCardsBeforeFinal[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
 
 		store.enqueueMessage(
 			TOPIC_ID,
@@ -1221,8 +1232,12 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		const messageCardsAfterFinal = store.messages.get(TOPIC_ID) ?? []
 		expect(messageCardsAfterFinal).toHaveLength(messageCardsBeforeFinal.length)
 		expect(messageCardsAfterFinal[0]?.app_message_id).toBe("final-app-1")
+		expect(messageCardsAfterFinal[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
 		expect(messageCardsAfterFinal[0]?.correlation_id).toBe(CORRELATION_ID)
-		expect(getProjectedNode(store, "final-app-1")).toEqual(getProjectedNode(store))
+		expect(getProjectedNode(store)).toMatchObject({
+			app_message_id: "final-app-1",
+			super_message_id: SUPER_MESSAGE_ID,
+		})
 	})
 
 	it("StreamState 已清理后，完整 final message 的空流式字段会清除旧内容。", () => {

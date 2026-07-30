@@ -33,6 +33,7 @@ interface RecoveryOwnerRegistration {
 
 interface ProjectedNode {
 	app_message_id?: string
+	super_message_id?: string
 	role?: string
 	topic_id?: string
 	correlation_id?: string
@@ -149,8 +150,11 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		expect(mockState.enqueueCalls).toHaveLength(1)
 		expect(mockState.enqueueCalls[0]).toEqual({ topicId: topic.chat_topic_id, envelope })
 		expect(mockState.enqueueCalls[0]?.envelope).toBe(envelope)
-		expect(getNode("assistant-ws-write")?.content).toBe("canonical from WS pull")
-		expect(getNode(correlationId)?.content).toBe("canonical from WS pull")
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-ws-write",
+			super_message_id: toSuperMessageId(correlationId),
+			content: "canonical from WS pull",
+		})
 	})
 
 	it("WS 回拉到持久 Assistant 后用 canonical 替换 draft 并结束对应 StreamState。", async () => {
@@ -167,7 +171,11 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		})
 
 		superMagicStore.receiveChunk(
-			createChunk({ topicId: topic.chat_topic_id, correlationId, content: "draft pending" }),
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId,
+				content: "draft pending",
+			}),
 		)
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeDefined()
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(true)
@@ -176,14 +184,14 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		await triggerPersistentMessageEvent(topic)
 		await settleStoreRendering()
 
-		expect(getNode(correlationId)).toMatchObject({
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
 			content: "canonical settled",
 			status: "finished",
 		})
-		expect(getNode("assistant-ws-settle")?.content).toBe("canonical settled")
-		expect(getAssistantCards(topic.chat_topic_id, correlationId)).toMatchObject([
-			{ app_message_id: "assistant-ws-settle" },
-		])
+		expect(getNode(toSuperMessageId(correlationId))?.app_message_id).toBe("assistant-ws-settle")
+		expect(
+			getAssistantCards(topic.chat_topic_id, toSuperMessageId(correlationId)),
+		).toMatchObject([{ app_message_id: "assistant-ws-settle" }])
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeUndefined()
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
 		expect(superMagicStore.topicMeta.get(topic.chat_topic_id)?.timer).toBeNull()
@@ -221,10 +229,13 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		})
 		await settleStoreRendering()
 
-		expect(getNode("assistant-resident-poll")?.content).toBe("persistent result from polling")
-		expect(getAssistantCards(topic.chat_topic_id, correlationId)).toMatchObject([
-			{ app_message_id: "assistant-resident-poll" },
-		])
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-resident-poll",
+			content: "persistent result from polling",
+		})
+		expect(
+			getAssistantCards(topic.chat_topic_id, toSuperMessageId(correlationId)),
+		).toMatchObject([{ app_message_id: "assistant-resident-poll" }])
 	})
 
 	it("active stream 跳过常驻轮询时，真实 watchdog coordinator 接管并只回拉一次。", async () => {
@@ -241,7 +252,11 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		const recoveryResponse = createDeferred<ReturnType<typeof createResponse>>()
 
 		superMagicStore.receiveChunk(
-			createChunk({ topicId: topic.chat_topic_id, correlationId, content: "stalled draft" }),
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId,
+				content: "stalled draft",
+			}),
 		)
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeDefined()
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(true)
@@ -273,7 +288,10 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		})
 		await settleStoreRendering()
 
-		expect(getNode("assistant-watchdog-owner")?.content).toBe("recovered by watchdog owner")
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-watchdog-owner",
+			content: "recovered by watchdog owner",
+		})
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeUndefined()
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
 	})
@@ -322,7 +340,9 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		})
 		await settleStoreRendering()
 
-		expect(getNode(correlationId)?.content).toBe("finished authoritative snapshot")
+		expect(getNode(toSuperMessageId(correlationId))?.content).toBe(
+			"finished authoritative snapshot",
+		)
 		expect(
 			superMagicStore.getStreamState(runningTopic.chat_topic_id, correlationId),
 		).toBeUndefined()
@@ -359,12 +379,16 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 
 		superMagicStore.receiveChunk(
-			createChunk({ topicId: topic.chat_topic_id, correlationId, content: "draft survives" }),
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId,
+				content: "draft survives",
+			}),
 		)
 		mockState.getMessagesByConversationId.mockRejectedValueOnce(new Error("first pull failed"))
 		await triggerPersistentMessageEvent(topic)
 
-		expect(getNode(correlationId)?.content).toBe("draft survives")
+		expect(getNode(toSuperMessageId(correlationId))?.content).toBe("draft survives")
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeDefined()
 
 		mockState.getMessagesByConversationId.mockResolvedValueOnce(createResponse([envelope]))
@@ -372,7 +396,10 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		await settleStoreRendering()
 
 		expect(consoleErrorSpy).toHaveBeenCalled()
-		expect(getNode("assistant-ws-retry")?.content).toBe("recovered on retry")
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-ws-retry",
+			content: "recovered on retry",
+		})
 		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeUndefined()
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
 	})
@@ -381,11 +408,12 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		const topic = createTopic("outer-route")
 		await renderInitializedTopic(topic)
 		const innerAgentTopicId = "agent-inner-topic"
+		const correlationId = "correlation-outer-route"
 		const envelope = createAssistantEnvelope({
 			topicId: topic.chat_topic_id,
 			nodeTopicId: innerAgentTopicId,
 			appMessageId: "assistant-outer-route",
-			correlationId: "correlation-outer-route",
+			correlationId,
 			seqId: "150",
 			content: "routed by outer topic",
 		})
@@ -399,7 +427,10 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 				.get(topic.chat_topic_id)
 				?.some((message) => message.app_message_id === "assistant-outer-route"),
 		).toBe(true)
-		expect(getNode("assistant-outer-route")?.topic_id).toBe(innerAgentTopicId)
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-outer-route",
+			topic_id: innerAgentTopicId,
+		})
 		expect(superMagicStore.messages.get(innerAgentTopicId)).toBeUndefined()
 	})
 
@@ -438,8 +469,10 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 			payload: { message: { appMessageId: "assistant-exactly-once" } },
 		})
 		expect(superMagicStore.buffer.get(topic.chat_topic_id)?.messages ?? []).toHaveLength(0)
-		expect(getNode(correlationId)?.content).toBe("exactly once canonical")
-		expect(getNode("assistant-exactly-once")?.content).toBe("exactly once canonical")
+		expect(getNode(toSuperMessageId(correlationId))?.content).toBe("exactly once canonical")
+		expect(getNode(toSuperMessageId(correlationId))?.app_message_id).toBe(
+			"assistant-exactly-once",
+		)
 		arrivals.unsubscribe()
 	})
 })
@@ -525,6 +558,8 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id: toSuperMessageId(correlationId),
+			task_id: `task-${correlationId}`,
 			i: 0,
 			usage: null,
 			correlation_id: correlationId,
@@ -563,6 +598,7 @@ function createAssistantEnvelope({
 		role: "assistant",
 		topic_id: nodeTopicId,
 		message_id: `node-${appMessageId}`,
+		super_message_id: toSuperMessageId(correlationId),
 		correlation_id: correlationId,
 		content,
 		reasoning_content: null,
@@ -601,14 +637,18 @@ function createResponse(items: RawSuperMagicMessageEnvelope[]) {
 	return { items, has_more: false, page_token: "" }
 }
 
-function getNode(id: string): ProjectedNode | undefined {
-	const node = superMagicStore.getMessageNode(id)
+function toSuperMessageId(correlationId: string): string {
+	return `super-${correlationId}`
+}
+
+function getNode(superMessageId: string): ProjectedNode | undefined {
+	const node = superMagicStore.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
-function getAssistantCards(topicId: string, correlationId: string): ProjectedNode[] {
+function getAssistantCards(topicId: string, superMessageId: string): ProjectedNode[] {
 	return messagesConverter(Array.from(superMagicStore.messages.get(topicId) ?? [])).filter(
-		(message) => message?.role === "assistant" && message?.correlation_id === correlationId,
+		(message) => message?.role === "assistant" && message?.super_message_id === superMessageId,
 	) as ProjectedNode[]
 }
 

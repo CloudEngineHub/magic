@@ -20,6 +20,7 @@ import {
 
 const TOPIC_ID = "topic-events-recovery"
 const CORRELATION_ID = "correlation-events-recovery"
+const SUPER_MESSAGE_ID = "super-message-events-recovery"
 
 function createChunk(): SuperMagicChunkMessage {
 	return {
@@ -31,6 +32,8 @@ function createChunk(): SuperMagicChunkMessage {
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-events-recovery",
 		super_magic_chunk: {
+			super_message_id: SUPER_MESSAGE_ID,
+			task_id: "task-events-recovery",
 			i: 0,
 			usage: null,
 			correlation_id: CORRELATION_ID,
@@ -82,6 +85,7 @@ function createAssistantEnvelope({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: `node-${appMessageId}`,
+					super_message_id: SUPER_MESSAGE_ID,
 					correlation_id: CORRELATION_ID,
 					content: `canonical-${seqId}`,
 					reasoning_content: "",

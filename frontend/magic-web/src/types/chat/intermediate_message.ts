@@ -89,6 +89,10 @@ export interface SuperMagicChunkMessage extends SeqMessageBase {
 	chat_topic_id: string
 	message_id: string
 	super_magic_chunk: {
+		/** 同一逻辑消息的稳定 ID；后端保证至少在 Topic 内唯一 */
+		super_message_id: string
+		/** 当前流式消息所属任务 ID */
+		task_id: string
 		/** 当前流式块索引 */
 		i: number
 		/** 使用统计 */

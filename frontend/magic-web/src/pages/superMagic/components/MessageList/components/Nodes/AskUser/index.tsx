@@ -70,7 +70,7 @@ function AskUser(props: NodeProps) {
 		resolvedAskUser.status === ASK_USER_CARD_STATUS.answered
 			? "askUser.answersTitle"
 			: "askUser.title"
-	const messageNode = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| { tool?: { action?: string } }
 		| undefined
 	const askUserAction = messageNode?.tool?.action

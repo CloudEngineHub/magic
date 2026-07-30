@@ -58,7 +58,7 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	const handleTopicMessagesChange = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
 		const { isLoading, lastMessage, lastMessageNode } = resolveTopicConversationLoadingState({
 			topicMessages,
-			getMessageNode: (appMessageId) => superMagicStore.getMessageNode(appMessageId),
+			getMessageNode: (superMessageId) => superMagicStore.getMessageNode(superMessageId),
 			getOptimisticStatus: getOptimisticMessageStatus,
 		})
 

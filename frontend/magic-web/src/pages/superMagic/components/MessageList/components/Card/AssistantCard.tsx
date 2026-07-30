@@ -46,7 +46,7 @@ export function withAssistantCard<
 >(WrapperComponent: ComponentType<T>) {
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, classNames, checkIsLastMessage } = props
-		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
+		const messageNode = superMagicStore.getMessageNode(node?.super_message_id)
 		const { t } = useTranslation("super")
 		const { isShareRoute, isMagicShareRoute } = useShareRoute()
 		const {
@@ -90,7 +90,7 @@ export function withAssistantCard<
 			let userNode: any = null
 			for (let i = currentIdx - 1; i >= 0; i--) {
 				if (messages[i].role === "user") {
-					userNode = superMagicStore.getMessageNode(messages[i].app_message_id)
+					userNode = superMagicStore.getMessageNode(messages[i].super_message_id)
 					break
 				}
 			}
@@ -248,7 +248,7 @@ export function withAssistantCard<
 			const messages = toJS(roundMessages).map((message: any) => ({
 				...message,
 				debug: toJS(
-					superMagicStore.getMessageNode(message.app_message_id) || message.debug,
+					superMagicStore.getMessageNode(message.super_message_id) || message.debug,
 				),
 			}))
 

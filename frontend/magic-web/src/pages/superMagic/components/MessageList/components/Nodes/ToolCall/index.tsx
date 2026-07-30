@@ -12,7 +12,7 @@ import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/c
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
 					name?: string

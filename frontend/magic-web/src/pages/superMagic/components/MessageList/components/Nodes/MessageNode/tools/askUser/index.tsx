@@ -116,7 +116,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| { tool?: ToolDataLike }
 		| undefined
 	const tool = props.toolData || node?.tool
@@ -187,7 +187,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 			const messages = (topicId ? superMagicStore.messages.get(topicId) : undefined) || []
 			const relatedMessage = toolId
 				? (messages as Array<Record<string, unknown>>).find((o) => {
-						const m = superMagicStore.getMessageNode(o.app_message_id as string)
+						const m = superMagicStore.getMessageNode(o.super_message_id as string)
 						const toolCalls = (m as { tool_calls?: Array<{ id?: string }> })?.tool_calls
 						return (
 							Array.isArray(toolCalls) &&
@@ -196,7 +196,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 					})
 				: undefined
 			const relatedMessageNode = superMagicStore.getMessageNode(
-				relatedMessage?.app_message_id as string,
+				relatedMessage?.super_message_id as string,
 			) as { task_id?: unknown } | undefined
 			const taskId =
 				typeof relatedMessageNode?.task_id === "string" ? relatedMessageNode.task_id : ""

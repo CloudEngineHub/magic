@@ -122,7 +122,7 @@ function MessageTurnGroupListInner({
 
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
-		const card = superMagicStore.getMessageNode(node?.app_message_id) as
+		const card = superMagicStore.getMessageNode(node?.super_message_id) as
 			| { status?: string }
 			| undefined
 		if (!statusList.has(card?.status as string) && node?.role === "tool") {
