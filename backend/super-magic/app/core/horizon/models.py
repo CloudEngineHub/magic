@@ -177,7 +177,6 @@ class ContextUsage:
 class HorizonState:
     """AgentHorizon 的持久化状态。"""
     agent_id: str
-    security_restricted: bool = False  # 当前会话是否已因明确恶意行为进入安全限制状态
     file_records: dict[str, FileReadRecord] = field(default_factory=dict)        # abs_path -> record
     pending_notifications: list[PendingNotification] = field(default_factory=list)
     loaded_skills: list[str] = field(default_factory=list)

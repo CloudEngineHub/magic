@@ -147,7 +147,6 @@ def _encode_state(state: HorizonState) -> dict:
     data = {
         "version": CURRENT_VERSION,
         "agent_id": state.agent_id,
-        "security_restricted": state.security_restricted,
         "loaded_skills": state.loaded_skills,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
         "file_records": {k: _record_to_dict(v) for k, v in state.file_records.items()},
@@ -187,7 +186,6 @@ def _decode_state(data: dict) -> HorizonState:
     """
     decoded_fields = {
         "agent_id",
-        "security_restricted",
         "file_records",
         "pending_notifications",
         "loaded_skills",
@@ -213,7 +211,6 @@ def _decode_state(data: dict) -> HorizonState:
     _assert_codec_covers_horizon_state("decoder", decoded_fields)
 
     state = HorizonState(agent_id=data.get("agent_id", ""))
-    state.security_restricted = bool(data.get("security_restricted", False))
     state.loaded_skills = data.get("loaded_skills", [])
     state.pending_notifications = [
         _notif_from_dict(notification)

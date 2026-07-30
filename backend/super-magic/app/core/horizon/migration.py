@@ -11,7 +11,7 @@ from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 2
 
 
 def _migrate_v1_to_v2(data: dict) -> dict:
@@ -36,16 +36,8 @@ def _migrate_v1_to_v2(data: dict) -> dict:
     return data
 
 
-def _migrate_v2_to_v3(data: dict) -> dict:
-    """v2 → v3: 增加话题级安全限制状态。"""
-    data.setdefault("security_restricted", False)
-    data["version"] = 3
-    return data
-
-
 _MIGRATIONS: dict[int, Callable[[dict], dict]] = {
     1: _migrate_v1_to_v2,
-    2: _migrate_v2_to_v3,
 }
 
 
