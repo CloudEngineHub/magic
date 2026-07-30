@@ -21,6 +21,41 @@ function appendWidgetScript(src = "https://www.letsmagic.cn/sdk/magic-widget.js"
 	return script
 }
 
+/** Announces that a mounted iframe can receive runtime configuration snapshots. */
+function dispatchConfigReady(iframe: HTMLIFrameElement, frameWindow: Window, origin: string) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "config_ready",
+			},
+		}),
+	)
+}
+
+/** Resolves one config request using the same mock iframe identity. */
+function respondToConfig(frameWindow: Window, origin: string, message: Record<string, unknown>) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: message.protocol,
+				version: message.version,
+				instanceId: message.instanceId,
+				requestId: message.requestId,
+				type: "response",
+				ok: true,
+			},
+		}),
+	)
+}
+
 describe("createMagicWidgetController", () => {
 	beforeEach(() => {
 		setViewport(1024, 768)
@@ -561,5 +596,155 @@ describe("createMagicWidgetController", () => {
 		expect(panel.style.backgroundColor).toBe("rgb(1, 2, 3)")
 		expect(header.style.borderBottomColor).toBe("rgb(4, 5, 6)")
 		expect(iframe.style.backgroundColor).toBe("rgb(7, 8, 9)")
+	})
+
+	it("uses the latest locally updated config when the iframe first opens", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-latest-config" },
+			config: {
+				layout: "desktop",
+				conversation: { projectFiles: true },
+			},
+		})
+		await widget.updateConfig({
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		widget.open()
+
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const config = JSON.parse(
+			new URL(iframe.src).searchParams.get("magicWidgetConfig") ?? "null",
+		)
+		expect(config).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		widget.destroy()
+	})
+
+	it("updates a loaded iframe without changing its URL", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-runtime-config" },
+			target,
+			config: { layout: "desktop" },
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const initialSrc = iframe.src
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, "https://widget-app.example.invalid")
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		respondToConfig(
+			frameWindow,
+			"https://widget-app.example.invalid",
+			postMessage.mock.calls[0]?.[0] as Record<string, unknown>,
+		)
+		await Promise.resolve()
+		postMessage.mockClear()
+
+		const updatePromise = widget.updateConfig({
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		const configMessage = postMessage.mock.calls[0]?.[0] as {
+			protocol: string
+			version: number
+			instanceId: string
+			requestId: string
+			config: unknown
+		}
+		expect(configMessage.config).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+
+		respondToConfig(frameWindow, "https://widget-app.example.invalid", configMessage)
+
+		await expect(updatePromise).resolves.toBeUndefined()
+		expect(iframe.src).toBe(initialSrc)
+		widget.destroy()
+	})
+
+	it("resynchronizes the latest runtime config after iframe reload without changing its URL", async () => {
+		const origin = "https://widget-app.example.invalid"
+		const widget = createMagicWidgetController()
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-reload-config" },
+			target,
+			config: { layout: "desktop" },
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const initialSrc = iframe.src
+
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, origin)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		respondToConfig(frameWindow, origin, postMessage.mock.calls[0]?.[0])
+		postMessage.mockClear()
+
+		const updatePromise = widget.updateConfig({ layout: "mobile" })
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const runtimeMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
+		expect(runtimeMessage.config).toEqual({ layout: "mobile" })
+		respondToConfig(frameWindow, origin, runtimeMessage)
+		await expect(updatePromise).resolves.toBeUndefined()
+		postMessage.mockClear()
+
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, origin)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const reloadMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
+		expect(reloadMessage.config).toEqual({ layout: "mobile" })
+		expect(iframe.src).toBe(initialSrc)
+		respondToConfig(frameWindow, origin, reloadMessage)
+		widget.destroy()
+	})
+
+	it("rejects invalid runtime config without opening the iframe", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		widget.mount({ page: { type: "crew", crewId: "crew-mock-invalid-config" } })
+
+		await expect(widget.updateConfig({ layout: "tablet" } as never)).rejects.toMatchObject({
+			code: "INVALID_CONFIG",
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		expect(iframe.getAttribute("src")).toBeNull()
+		widget.destroy()
 	})
 })

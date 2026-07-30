@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vitest"
 import {
+	getCrewConversationLayout,
 	getCrewConversationRouteOrganizationCode,
 	shouldForceMobileCrewConversation,
 } from "../route-layout"
+
+describe("getCrewConversationLayout", () => {
+	it("lets explicit Widget layout override viewport and legacy query detection", () => {
+		expect(
+			getCrewConversationLayout({
+				widgetLayout: "desktop",
+				isMobileViewport: true,
+				search: "?layout=mobile",
+			}),
+		).toBe("desktop")
+		expect(
+			getCrewConversationLayout({
+				widgetLayout: "mobile",
+				isMobileViewport: false,
+				search: "",
+			}),
+		).toBe("mobile")
+	})
+
+	it("keeps existing automatic mobile detection when Widget layout is absent", () => {
+		expect(getCrewConversationLayout({ isMobileViewport: true, search: "" })).toBe("mobile")
+		expect(getCrewConversationLayout({ isMobileViewport: false, search: "?view=mobile" })).toBe(
+			"mobile",
+		)
+		expect(getCrewConversationLayout({ isMobileViewport: false, search: "" })).toBe("desktop")
+	})
+})
 
 describe("shouldForceMobileCrewConversation", () => {
 	it.each(["?view=mobile", "?layout=mobile", "?mobile=1", "?mobile=true", "?view=Mobile"])(

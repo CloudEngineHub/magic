@@ -23,13 +23,18 @@ import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory
 import { useCrewConversationStore } from "./context"
 import CrewConversationPanel from "./components/CrewConversationPanel"
 import CrewStateView from "./components/CrewStateView"
+import type { MagicWidgetConfig } from "@/providers/MagicWidgetProvider/types"
 
 interface CrewConversationDesktopProps {
 	widgetContext?: { instanceId: string; hostOrigin: string } | null
+	widgetConfig?: MagicWidgetConfig
 }
 
 /** Renders the desktop Crew layout and forwards optional widget bridge metadata. */
-function CrewConversationDesktop({ widgetContext = null }: CrewConversationDesktopProps) {
+function CrewConversationDesktop({
+	widgetContext = null,
+	widgetConfig = {},
+}: CrewConversationDesktopProps) {
 	const { t } = useTranslation("crew/market")
 	const { styles } = useStyles()
 	const store = useCrewConversationStore()
@@ -40,6 +45,10 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 	const selectedTopic = store.selectedTopic
 	const selectedWorkspace = store.selectedWorkspace
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+	const isWidgetEmbed = Boolean(widgetContext)
+	const showProjectSidebar = !isWidgetEmbed || widgetConfig.conversation?.projectFiles !== false
+	const showTopicHistory =
+		!isReadOnly && (!isWidgetEmbed || widgetConfig.conversation?.topicHistory !== false)
 
 	useNamedPageTitle({
 		entityName: store.agent?.name,
@@ -83,7 +92,8 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
 		useTopicHistoryLayoutState({
 			storageKey: `${TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage}.crew-conversation`,
-			isEnabled: !isReadOnly,
+			isEnabled: showTopicHistory,
+			persistOpenState: !isWidgetEmbed,
 		})
 
 	const mergeCrewTopic = useMemoizedFn((topicId: string, topic: Partial<Topic>) => {
@@ -103,6 +113,8 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 				store.setSelectedTopic(topic)
 				setUserSelectDetail(undefined)
 				clearActiveDetailTabType()
+				// Embedded history behaves like a temporary picker; ordinary pages keep existing behavior.
+				if (isWidgetEmbed) closeTopicHistoryPanel()
 			},
 			renameTopic: async ({ topicId, topicName }) => {
 				if (!selectedProject?.id) return
@@ -143,6 +155,8 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 		}),
 		[
 			clearActiveDetailTabType,
+			closeTopicHistoryPanel,
+			isWidgetEmbed,
 			mergeCrewTopic,
 			selectedProject?.id,
 			store,
@@ -165,6 +179,7 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 			containerClassName={styles.container}
 			detailPanelClassName={styles.detailPanel}
 			isDetailPanelFullscreen={isDetailPanelFullscreen}
+			showProjectSidebar={showProjectSidebar}
 			sidebar={
 				<TopicSidebar
 					selectedProject={selectedProject}
@@ -201,27 +216,31 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 			}
 			isReadOnly={isReadOnly}
 			keepDetailMountedWhenHidden
-			historyLayout={{
-				isOpen: isTopicHistoryPanelOpen,
-				onClose: closeTopicHistoryPanel,
-				onToggle: toggleTopicHistoryPanel,
-				renderPanel: ({
-					isConversationPanelCollapsed,
-					onExpandConversationPanel,
-					onClose,
-					closeButtonRef,
-				}) => (
-					<MessageHeaderTopicHistoryPanel
-						selectedProject={selectedProject}
-						topicStore={store.topicStore}
-						topicActions={topicActions}
-						isConversationPanelCollapsed={isConversationPanelCollapsed}
-						onExpandConversationPanel={onExpandConversationPanel}
-						onClose={onClose}
-						closeButtonRef={closeButtonRef}
-					/>
-				),
-			}}
+			historyLayout={
+				showTopicHistory
+					? {
+							isOpen: isTopicHistoryPanelOpen,
+							onClose: closeTopicHistoryPanel,
+							onToggle: toggleTopicHistoryPanel,
+							renderPanel: ({
+								isConversationPanelCollapsed,
+								onExpandConversationPanel,
+								onClose,
+								closeButtonRef,
+							}) => (
+								<MessageHeaderTopicHistoryPanel
+									selectedProject={selectedProject}
+									topicStore={store.topicStore}
+									topicActions={topicActions}
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									onExpandConversationPanel={onExpandConversationPanel}
+									onClose={onClose}
+									closeButtonRef={closeButtonRef}
+								/>
+							),
+						}
+					: undefined
+			}
 			shouldShowDetailPanel={shouldShowDetailPanel}
 			renderMessagePanel={({
 				isConversationPanelCollapsed,
@@ -238,9 +257,14 @@ function CrewConversationDesktop({ widgetContext = null }: CrewConversationDeskt
 					onToggleConversationPanel={onToggleConversationPanel}
 					onExpandConversationPanel={onExpandConversationPanel}
 					detailPanelVisible={shouldShowDetailPanel}
-					historyTriggerMode={historyTriggerMode}
-					isHistoryPanelOpen={isHistoryPanelOpen}
-					onToggleHistoryPanel={onToggleHistoryPanel}
+					showTopicHistory={showTopicHistory}
+					historyTriggerMode={isWidgetEmbed ? "layout" : historyTriggerMode}
+					isHistoryPanelOpen={
+						isWidgetEmbed ? isTopicHistoryPanelOpen : isHistoryPanelOpen
+					}
+					onToggleHistoryPanel={
+						isWidgetEmbed ? toggleTopicHistoryPanel : onToggleHistoryPanel
+					}
 					topicActions={topicActions}
 					onFileClick={handleFileClickWithPanel}
 				/>

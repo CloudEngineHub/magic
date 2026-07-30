@@ -1,14 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { forwardRef } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { forwardRef, useImperativeHandle } from "react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import BaseLayoutPc from "../BaseLayoutPc"
 
-const { cancelSidebarAnimationMock, handleSidebarDraggingMock, handleSidebarResizeKeyDownMock } =
-	vi.hoisted(() => ({
-		cancelSidebarAnimationMock: vi.fn(),
-		handleSidebarDraggingMock: vi.fn(),
-		handleSidebarResizeKeyDownMock: vi.fn(() => true),
-	}))
+const {
+	cancelSidebarAnimationMock,
+	handleSidebarDraggingMock,
+	handleSidebarResizeKeyDownMock,
+	sidebarResizeMock,
+	widgetContextMock,
+} = vi.hoisted(() => ({
+	cancelSidebarAnimationMock: vi.fn(),
+	handleSidebarDraggingMock: vi.fn(),
+	handleSidebarResizeKeyDownMock: vi.fn(() => true),
+	sidebarResizeMock: vi.fn(),
+	widgetContextMock: {
+		current: { embedContext: null, config: {} } as {
+			embedContext: { instanceId: string; hostOrigin: string } | null
+			config: { layout?: "desktop" | "mobile"; shell?: { appSidebar?: boolean } }
+		},
+	},
+}))
 
 vi.mock("mobx-react-lite", () => ({
 	observer: <T,>(component: T) => component,
@@ -61,25 +73,46 @@ vi.mock("@/utils/redirect", () => ({
 	getHomeURL: () => Promise.resolve("/mock-home"),
 }))
 
+vi.mock("react-router-dom", () => ({
+	useLocation: () => ({ search: "" }),
+}))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => false,
+}))
+
+vi.mock("@/providers/MagicWidgetProvider", () => ({
+	useMagicWidgetConfig: () => widgetContextMock.current,
+}))
+
+vi.mock("@/providers/MagicWidgetProvider/config", () => ({
+	resolveMagicWidgetCrewLayout: ({ configuredLayout }: { configuredLayout?: string }) =>
+		configuredLayout ?? "desktop",
+}))
+
 vi.mock("@/components/shadcn-ui/resizable", () => ({
 	ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => (
 		<div data-testid="mock-resizable-group">{children}</div>
 	),
-	ResizablePanel: forwardRef<HTMLDivElement, { children: React.ReactNode }>(function MockPanel(
+	ResizablePanel: forwardRef<unknown, { children: React.ReactNode }>(function MockPanel(
 		{ children },
 		ref,
 	) {
-		return <div ref={ref}>{children}</div>
+		useImperativeHandle(ref, () => ({ resize: sidebarResizeMock }))
+		return <div>{children}</div>
 	}),
 	ResizableHandle: ({
+		disabled,
 		onDragging,
 		onKeyDownCapture,
 	}: {
+		disabled?: boolean
 		onDragging?: (isDragging: boolean) => void
 		onKeyDownCapture?: React.KeyboardEventHandler<HTMLDivElement>
 	}) => (
 		<div
 			data-testid="mock-resize-handle"
+			data-disabled={String(Boolean(disabled))}
 			onPointerDown={() => onDragging?.(true)}
 			onPointerUp={() => onDragging?.(false)}
 			onKeyDownCapture={onKeyDownCapture}
@@ -132,6 +165,14 @@ vi.mock("../components/LayoutModalContainer", () => ({
 }))
 
 describe("BaseLayoutPc safe area", () => {
+	beforeEach(() => {
+		cancelSidebarAnimationMock.mockClear()
+		handleSidebarDraggingMock.mockClear()
+		handleSidebarResizeKeyDownMock.mockClear()
+		sidebarResizeMock.mockClear()
+		widgetContextMock.current = { embedContext: null, config: {} }
+	})
+
 	it("renders the desktop shell with safe-area aware containers", () => {
 		render(<BaseLayoutPc />)
 
@@ -140,6 +181,8 @@ describe("BaseLayoutPc safe area", () => {
 			"--safe-area-inset-top",
 		)
 		expect(screen.getByTestId("base-layout-pc-main-frame").className).toContain("pr-2")
+		expect(sidebarResizeMock).toHaveBeenCalledWith(20)
+		cancelSidebarAnimationMock.mockClear()
 
 		const resizeHandle = screen.getByTestId("mock-resize-handle")
 		fireEvent.pointerDown(resizeHandle)
@@ -150,5 +193,25 @@ describe("BaseLayoutPc safe area", () => {
 		expect(handleSidebarDraggingMock).toHaveBeenNthCalledWith(2, false)
 		expect(handleSidebarResizeKeyDownMock).toHaveBeenCalled()
 		expect(cancelSidebarAnimationMock).toHaveBeenCalledTimes(2)
+	})
+
+	it("hides the application sidebar only for a desktop Widget configuration", () => {
+		widgetContextMock.current = {
+			embedContext: {
+				instanceId: "widget-mock-sidebar",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: { layout: "desktop", shell: { appSidebar: false } },
+		}
+
+		render(<BaseLayoutPc />)
+
+		expect(sidebarResizeMock).toHaveBeenCalledWith(0)
+		expect(screen.getByTestId("mock-magic-sidebar").parentElement).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+		expect(screen.getByTestId("mock-resize-handle")).toHaveAttribute("data-disabled", "true")
+		expect(screen.getByTestId("mock-keep-alive-content")).toBeInTheDocument()
 	})
 })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buildWidgetIframeUrl } from "../src/url"
+import { WIDGET_QUERY_CONFIG } from "../src/protocol"
 
 describe("buildWidgetIframeUrl", () => {
 	it("builds a typed crew page with script origin, login strategy, organization and extra query", () => {
@@ -45,6 +46,32 @@ describe("buildWidgetIframeUrl", () => {
 		)
 
 		expect(url.toString()).toBe("https://magic.example.com/global/super/crew/crew-001")
+	})
+
+	it("writes protected initial config after host query values", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: { type: "crew", crewId: "crew-mock-config" },
+				config: {
+					layout: "desktop",
+					shell: { appSidebar: false },
+					conversation: { projectFiles: false, topicHistory: true },
+				},
+				iframe: { query: { [WIDGET_QUERY_CONFIG]: "forged-config" } },
+			},
+			{
+				fallbackAppOrigin: "https://widget-app.example.invalid",
+				instanceId: "widget-mock-config",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+		)
+
+		expect(JSON.parse(url.searchParams.get(WIDGET_QUERY_CONFIG) ?? "null")).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		expect(url.searchParams.getAll(WIDGET_QUERY_CONFIG)).toHaveLength(1)
 	})
 
 	it("uses the private deployment code as the crew route segment", () => {

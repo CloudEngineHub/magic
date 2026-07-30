@@ -33,6 +33,7 @@ interface TopicDesktopPanelsProps {
 	sidebar: ReactNode
 	detailPanel: ReactNode
 	isReadOnly: boolean
+	showProjectSidebar?: boolean
 	showProjectResizeHandle?: boolean
 	keepDetailMountedWhenHidden?: boolean
 	historyLayout?: TopicDesktopPanelsHistoryLayout
@@ -55,6 +56,7 @@ function TopicDesktopPanels({
 	sidebar,
 	detailPanel,
 	isReadOnly,
+	showProjectSidebar = true,
 	showProjectResizeHandle = !isReadOnly,
 	keepDetailMountedWhenHidden = false,
 	historyLayout,
@@ -69,7 +71,7 @@ function TopicDesktopPanels({
 	const {
 		containerRef,
 		containerWidthPx,
-		projectSiderWidthPx,
+		projectSiderWidthPx: storedProjectSiderWidthPx,
 		messagePanelWidthPx,
 		collapsedMessagePanelWidthPx,
 		isConversationPanelCollapsed,
@@ -80,7 +82,13 @@ function TopicDesktopPanels({
 		toggleConversationPanel,
 		expandConversationPanel,
 		ensureExpandedWhenDetailVisible,
-	} = useTopicDesktopLayout({ isReadOnly, allowProjectSiderResize: showProjectResizeHandle })
+	} = useTopicDesktopLayout({
+		isReadOnly,
+		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
+	})
+	// Preserve the stored project width while removing both its visual slot and resize affordance.
+	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0
+	const shouldShowProjectResizeHandle = showProjectSidebar && showProjectResizeHandle
 	const {
 		panelResizeTransition,
 		messageTransform,
@@ -95,7 +103,7 @@ function TopicDesktopPanels({
 	} = useTopicDesktopPanelMotion({
 		isReadOnly,
 		isTopicHistoryPanelOpen,
-		showProjectResizeHandle,
+		showProjectResizeHandle: shouldShowProjectResizeHandle,
 		shouldShowDetailPanel,
 		containerWidthPx,
 		projectSiderWidthPx,
@@ -217,11 +225,17 @@ function TopicDesktopPanels({
 			data-testid="main-workspace-container"
 		>
 			<div className="flex h-full w-full min-w-0">
-				<div className="shrink-0" style={{ width: projectSiderWidthPx }}>
-					{sidebar}
-				</div>
+				{showProjectSidebar ? (
+					<div
+						className="shrink-0"
+						style={{ width: projectSiderWidthPx }}
+						data-testid="topic-project-sidebar-slot"
+					>
+						{sidebar}
+					</div>
+				) : null}
 
-				{showProjectResizeHandle && (
+				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
 						onResizeStart={(clientX) => {
 							startDragProjectSider(clientX)

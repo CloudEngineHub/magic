@@ -3,6 +3,7 @@ import type { MagicWidget } from "./types"
 import { getWidgetScriptOrigin } from "./scriptOrigin"
 import { buildWidgetIframeUrl, validateWidgetMountOptions } from "./url"
 import { WidgetBridge, createWidgetCommandError, createWidgetId } from "./bridge"
+import { mergeWidgetConfig, normalizeWidgetConfig } from "./config"
 
 const ROOT_ATTRIBUTE = "data-magic-widget-root"
 const TRIGGER_ATTRIBUTE = "data-magic-widget-trigger"
@@ -186,6 +187,10 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let instanceId: string | null = null
 	let appOrigin: string | null = null
 	let inlineMode = false
+	let currentConfig: MagicWidget.WidgetConfig = {}
+	let confirmedConfig: MagicWidget.WidgetConfig = {}
+	let configUpdateQueue: Promise<void> = Promise.resolve()
+	let lifecycleId = 0
 	const agentReadyListeners = new Set<MagicWidget.EventListener>()
 
 	/** Notifies host subscribers whenever the current iframe editor becomes usable. */
@@ -526,6 +531,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	}
 
 	const destroy = () => {
+		lifecycleId += 1
 		clearOpenTimer()
 		clearCloseTimer()
 		stopDragging()
@@ -545,6 +551,9 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		instanceId = null
 		appOrigin = null
 		inlineMode = false
+		currentConfig = {}
+		confirmedConfig = {}
+		configUpdateQueue = Promise.resolve()
 	}
 
 	/** Validates public text commands before data crosses into the iframe. */
@@ -595,9 +604,54 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		return () => agentReadyListeners.delete(listener)
 	}
 
+	/** Applies one serialized configuration update while preserving iframe and conversation state. */
+	const updateConfig = (update: Partial<MagicWidget.WidgetConfig>): Promise<void> => {
+		if (!options || !bridge || !iframe) {
+			return Promise.reject(
+				createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first"),
+			)
+		}
+
+		const updateLifecycleId = lifecycleId
+		const task = configUpdateQueue.then(async () => {
+			if (!options || !bridge || !iframe || lifecycleId !== updateLifecycleId) {
+				throw createWidgetCommandError("DESTROYED", "Magic widget was destroyed")
+			}
+
+			const nextConfig = mergeWidgetConfig(currentConfig, update)
+			currentConfig = nextConfig
+			options = { ...options, config: nextConfig }
+
+			// A closed or still-loading iframe consumes the latest snapshot from its initial URL or load sync.
+			if (!bridge.isIframeLoaded()) {
+				confirmedConfig = nextConfig
+				return
+			}
+
+			try {
+				await bridge.sendConfig(nextConfig)
+				if (lifecycleId !== updateLifecycleId) {
+					throw createWidgetCommandError("DESTROYED", "Magic widget was destroyed")
+				}
+				confirmedConfig = nextConfig
+			} catch (error) {
+				if (lifecycleId === updateLifecycleId && options) {
+					currentConfig = confirmedConfig
+					options = { ...options, config: confirmedConfig }
+				}
+				throw error
+			}
+		})
+
+		// Keep later updates serialized even when one caller observes a rejected request.
+		configUpdateQueue = task.catch(() => undefined)
+		return task
+	}
+
 	const mount = (nextOptions: MagicWidget.MountOptions) => {
 		requireDocument()
 		validateWidgetMountOptions(nextOptions)
+		const initialConfig = normalizeWidgetConfig(nextOptions.config)
 		destroy()
 		if (
 			nextOptions.target &&
@@ -605,7 +659,9 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		) {
 			throw new Error("Magic widget target must be connected to the document")
 		}
-		options = nextOptions
+		options = { ...nextOptions, config: initialConfig }
+		currentConfig = initialConfig
+		confirmedConfig = initialConfig
 		inlineMode = Boolean(nextOptions.target)
 		instanceId = createWidgetId("widget")
 		appOrigin = initialWidgetScriptOrigin ?? getWidgetScriptOrigin()
@@ -719,6 +775,20 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 
 		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
 		bridge.onAgentReady(notifyAgentReady)
+		bridge.onConfigReady(() => {
+			if (!bridge || !options) return
+			const loadLifecycleId = lifecycleId
+			const snapshot = currentConfig
+			// The initial query covers first paint; the explicit handshake avoids racing the Provider listener.
+			void bridge
+				.sendConfig(snapshot)
+				.then(() => {
+					if (lifecycleId === loadLifecycleId && currentConfig === snapshot) {
+						confirmedConfig = snapshot
+					}
+				})
+				.catch(() => undefined)
+		})
 		if (inlineMode) open()
 	}
 
@@ -747,5 +817,6 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		newConversation: async () => {
 			await sendNoPayloadCommand("newConversation")
 		},
+		updateConfig,
 	}
 }

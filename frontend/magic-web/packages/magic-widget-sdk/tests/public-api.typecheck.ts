@@ -29,6 +29,11 @@ const validOptions: MagicWidget.MountOptions = {
 			},
 		},
 	},
+	config: {
+		layout: "desktop",
+		shell: { appSidebar: false },
+		conversation: { projectFiles: false, topicHistory: true },
+	},
 }
 
 void validOptions
@@ -49,6 +54,15 @@ void window.MagicWidget?.clearInput()
 void window.MagicWidget?.getInput()
 void window.MagicWidget?.sendMessage("mock message")
 void window.MagicWidget?.newConversation()
+void window.MagicWidget?.updateConfig({
+	layout: "mobile",
+	conversation: { topicHistory: false },
+})
+
+void window.MagicWidget?.updateConfig({
+	// @ts-expect-error unsupported layouts are rejected by the public configuration contract.
+	layout: "tablet",
+})
 
 const invalidRouteOptions: MagicWidget.MountOptions = {
 	page: {

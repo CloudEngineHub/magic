@@ -18,6 +18,7 @@ const magicWidget: MagicWidget.Global = {
 	getInput: controller.getInput,
 	sendMessage: controller.sendMessage,
 	newConversation: controller.newConversation,
+	updateConfig: controller.updateConfig,
 }
 
 declare global {

@@ -39,6 +39,23 @@ export declare namespace MagicWidget {
 		query?: Record<string, QueryValue>
 	}
 
+	export type Layout = "desktop" | "mobile"
+
+	export interface ShellConfig {
+		appSidebar?: boolean
+	}
+
+	export interface ConversationConfig {
+		projectFiles?: boolean
+		topicHistory?: boolean
+	}
+
+	export interface WidgetConfig {
+		layout?: Layout
+		shell?: ShellConfig
+		conversation?: ConversationConfig
+	}
+
 	export interface CrewPageOptions {
 		type: "crew"
 		crewId: string
@@ -74,6 +91,7 @@ export declare namespace MagicWidget {
 	export interface MountOptions {
 		page: PageOptions
 		auth?: AuthOptions
+		config?: WidgetConfig
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
@@ -82,6 +100,7 @@ export declare namespace MagicWidget {
 	export type CommandErrorCode =
 		| "NOT_MOUNTED"
 		| "INVALID_INPUT"
+		| "INVALID_CONFIG"
 		| "IFRAME_NOT_READY"
 		| "COMMAND_FAILED"
 		| "DESTROYED"
@@ -105,6 +124,7 @@ export declare namespace MagicWidget {
 		getInput(): Promise<string>
 		sendMessage(content: string): Promise<void>
 		newConversation(): Promise<void>
+		updateConfig(config: Partial<WidgetConfig>): Promise<void>
 	}
 
 	export interface Global extends Controller {

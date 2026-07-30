@@ -1,8 +1,10 @@
 import type { MagicWidget } from "./types"
+import { normalizeWidgetConfig, serializeWidgetConfig } from "./config"
 import {
 	WIDGET_PROTOCOL_VERSION,
 	WIDGET_QUERY_EMBED,
 	WIDGET_QUERY_DEPLOYMENT_CODE,
+	WIDGET_QUERY_CONFIG,
 	WIDGET_QUERY_HOST_ORIGIN,
 	WIDGET_QUERY_INSTANCE_ID,
 	WIDGET_QUERY_PROTOCOL_VERSION,
@@ -115,6 +117,7 @@ export function validateWidgetMountOptions(options: MagicWidget.MountOptions | n
 	)
 	resolvePagePath(options.page, deploymentCode)
 	normalizeOptionalString(options.auth?.organizationCode, "auth.organizationCode")
+	normalizeWidgetConfig(options.config)
 }
 
 function appendQueryValue(url: URL, key: string, value: MagicWidget.QueryValue) {
@@ -170,6 +173,7 @@ export function buildWidgetIframeUrl(
 		url.searchParams.set(WIDGET_QUERY_INSTANCE_ID, context.instanceId)
 		url.searchParams.set(WIDGET_QUERY_PROTOCOL_VERSION, String(WIDGET_PROTOCOL_VERSION))
 		if (context.hostOrigin) url.searchParams.set(WIDGET_QUERY_HOST_ORIGIN, context.hostOrigin)
+		url.searchParams.set(WIDGET_QUERY_CONFIG, serializeWidgetConfig(options.config ?? {}))
 	}
 
 	return url

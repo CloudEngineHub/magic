@@ -131,6 +131,23 @@ describe("TopicDesktopPanels", () => {
 		mockUseTopicDesktopPanelMotion.mockImplementation(() => motionState)
 	})
 
+	it("隐藏项目侧栏时同时移除宽度占位和左侧拖拽手柄", () => {
+		renderComponent({ showProjectSidebar: false })
+
+		expect(screen.queryByTestId("topic-project-sidebar-slot")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("topic-sidebar")).not.toBeInTheDocument()
+		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(1)
+		expect(mockUseTopicDesktopLayout).toHaveBeenCalledWith(
+			expect.objectContaining({ allowProjectSiderResize: false }),
+		)
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectSiderWidthPx: 0,
+				showProjectResizeHandle: false,
+			}),
+		)
+	})
+
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {
 		motionState = createMotionState({
 			topicHistoryMode: "full-right",

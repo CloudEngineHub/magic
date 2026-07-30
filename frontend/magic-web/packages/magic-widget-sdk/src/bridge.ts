@@ -4,6 +4,7 @@ import {
 	WIDGET_PROTOCOL_VERSION,
 	type WidgetCommandName,
 	type WidgetCommandMessage,
+	type WidgetConfigMessage,
 	type WidgetResponseMessage,
 } from "./protocol"
 import type { MagicWidget } from "./types"
@@ -13,6 +14,7 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 10_000
 const NEW_CONVERSATION_COMMAND_TIMEOUT_MS = 30_000
 
 type WidgetCommandResult = WidgetResponseMessage["result"]
+type WidgetRequestMessage = WidgetCommandMessage | WidgetConfigMessage
 
 interface PendingRequest {
 	resolve: (result?: WidgetCommandResult) => void
@@ -43,6 +45,7 @@ export function createWidgetId(prefix: string): string {
 export class WidgetBridge {
 	private ready = false
 	private iframeLoaded = false
+	private configReady = false
 	private destroyed = false
 	private loadWaiters = new Set<{
 		resolve: () => void
@@ -51,6 +54,7 @@ export class WidgetBridge {
 	}>()
 	private pendingRequests = new Map<string, PendingRequest>()
 	private agentReadyListeners = new Set<() => void>()
+	private configReadyListeners = new Set<() => void>()
 
 	constructor(
 		private readonly iframe: HTMLIFrameElement,
@@ -70,6 +74,17 @@ export class WidgetBridge {
 	onAgentReady(listener: () => void): () => void {
 		this.agentReadyListeners.add(listener)
 		return () => this.agentReadyListeners.delete(listener)
+	}
+
+	/** Registers a listener used by the controller after the iframe configuration channel is ready. */
+	onConfigReady(listener: () => void): () => void {
+		this.configReadyListeners.add(listener)
+		return () => this.configReadyListeners.delete(listener)
+	}
+
+	/** Reports whether the current iframe document can receive protocol requests. */
+	isIframeLoaded(): boolean {
+		return this.iframeLoaded && !this.destroyed
 	}
 
 	/** Marks a reloaded iframe as unavailable until it announces READY again. */
@@ -93,18 +108,68 @@ export class WidgetBridge {
 	/** Marks the iframe transport unavailable before a new document starts loading. */
 	private resetTransport = (): void => {
 		this.iframeLoaded = false
+		this.configReady = false
 		this.ready = false
 	}
 
 	/** Releases transport waiters once the iframe document can receive commands. */
 	private handleIframeLoad = (): void => {
 		this.iframeLoaded = true
+		// The embedded React effect can announce config_ready before the parent observes iframe load.
+		// Preserve that handshake so the later load event cannot discard a valid listener signal.
 		this.ready = false
 		this.loadWaiters.forEach((waiter) => {
 			window.clearTimeout(waiter.timer)
 			waiter.resolve()
 		})
 		this.loadWaiters.clear()
+	}
+
+	/** Marks the configuration listener ready and releases queued configuration updates. */
+	private markConfigReady(): void {
+		this.configReady = true
+		this.configReadyWaiters.forEach((waiter) => {
+			window.clearTimeout(waiter.timer)
+			waiter.resolve()
+		})
+		this.configReadyWaiters.clear()
+		this.configReadyListeners.forEach((listener) => {
+			try {
+				listener()
+			} catch (error) {
+				console.error("Magic widget config-ready listener failed", error)
+			}
+		})
+	}
+
+	private configReadyWaiters = new Set<{
+		resolve: () => void
+		reject: (error: Error) => void
+		timer: number
+	}>()
+
+	/** Waits until Magic Web has installed the validated configuration message listener. */
+	private waitUntilConfigReady(): Promise<void> {
+		if (this.destroyed) {
+			return Promise.reject(
+				createWidgetCommandError("DESTROYED", "Magic widget was destroyed"),
+			)
+		}
+		if (this.configReady) return Promise.resolve()
+
+		return new Promise((resolve, reject) => {
+			const waiter = { resolve, reject, timer: 0 }
+			waiter.timer = window.setTimeout(() => {
+				this.configReadyWaiters.delete(waiter)
+				reject(
+					createWidgetCommandError(
+						"IFRAME_NOT_READY",
+						"Magic widget configuration channel did not become ready",
+					),
+				)
+			}, DEFAULT_IFRAME_LOAD_TIMEOUT_MS)
+			this.configReadyWaiters.add(waiter)
+		})
 	}
 
 	/** Waits only for iframe transport readiness, keeping agent_ready informational. */
@@ -131,10 +196,10 @@ export class WidgetBridge {
 		})
 	}
 
-	/** Sends a validated command and resolves only after the iframe acknowledges it. */
-	async send(
-		command: WidgetCommandName,
-		payload?: WidgetCommandMessage["payload"],
+	/** Sends one correlated protocol request after the iframe transport becomes available. */
+	private async sendRequest(
+		createMessage: (requestId: string) => WidgetRequestMessage,
+		timeoutMs: number,
 	): Promise<WidgetCommandResult> {
 		await this.waitUntilIframeLoaded()
 		if (!this.iframe.contentWindow) {
@@ -142,21 +207,9 @@ export class WidgetBridge {
 		}
 
 		const requestId = createWidgetId("request")
-		const message: WidgetCommandMessage = {
-			protocol: WIDGET_PROTOCOL,
-			version: WIDGET_PROTOCOL_VERSION,
-			instanceId: this.instanceId,
-			requestId,
-			type: "command",
-			command,
-			...(payload ? { payload } : {}),
-		}
+		const message = createMessage(requestId)
 
 		return new Promise((resolve, reject) => {
-			const timeoutMs =
-				command === "newConversation"
-					? NEW_CONVERSATION_COMMAND_TIMEOUT_MS
-					: DEFAULT_COMMAND_TIMEOUT_MS
 			const timer = window.setTimeout(() => {
 				this.pendingRequests.delete(requestId)
 				reject(createWidgetCommandError("COMMAND_FAILED", "Magic widget command timed out"))
@@ -164,6 +217,45 @@ export class WidgetBridge {
 			this.pendingRequests.set(requestId, { resolve, reject, timer })
 			this.iframe.contentWindow?.postMessage(message, this.targetOrigin)
 		})
+	}
+
+	/** Sends a validated command and resolves only after the iframe acknowledges it. */
+	async send(
+		command: WidgetCommandName,
+		payload?: WidgetCommandMessage["payload"],
+	): Promise<WidgetCommandResult> {
+		const timeoutMs =
+			command === "newConversation"
+				? NEW_CONVERSATION_COMMAND_TIMEOUT_MS
+				: DEFAULT_COMMAND_TIMEOUT_MS
+		return this.sendRequest(
+			(requestId) => ({
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: this.instanceId,
+				requestId,
+				type: "command",
+				command,
+				...(payload ? { payload } : {}),
+			}),
+			timeoutMs,
+		)
+	}
+
+	/** Sends a complete configuration snapshot without changing the iframe URL. */
+	async sendConfig(config: MagicWidget.WidgetConfig): Promise<void> {
+		await this.waitUntilConfigReady()
+		await this.sendRequest(
+			(requestId) => ({
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: this.instanceId,
+				requestId,
+				type: "config",
+				config,
+			}),
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		)
 	}
 
 	/** Accepts messages only from the bound iframe, origin, protocol, and instance. */
@@ -180,6 +272,10 @@ export class WidgetBridge {
 
 		if (event.data.type === "ready") {
 			this.markReady(true)
+			return
+		}
+		if (event.data.type === "config_ready") {
+			this.markConfigReady()
 			return
 		}
 
@@ -215,11 +311,17 @@ export class WidgetBridge {
 			waiter.reject(error)
 		})
 		this.loadWaiters.clear()
+		this.configReadyWaiters.forEach((waiter) => {
+			window.clearTimeout(waiter.timer)
+			waiter.reject(createWidgetCommandError("DESTROYED", "Magic widget was destroyed"))
+		})
+		this.configReadyWaiters.clear()
 		this.pendingRequests.forEach((pending) => {
 			window.clearTimeout(pending.timer)
 			pending.reject(error)
 		})
 		this.pendingRequests.clear()
 		this.agentReadyListeners.clear()
+		this.configReadyListeners.clear()
 	}
 }

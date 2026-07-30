@@ -53,6 +53,7 @@ interface CrewConversationPanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	showTopicHistory?: boolean
 	onOpenTopics?: () => void
 	topicActions?: MessageHeaderTopicActions
 	onFileClick?: (fileItem?: unknown) => void
@@ -67,6 +68,7 @@ function CrewConversationPanel({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	showTopicHistory = true,
 	onOpenTopics,
 	topicActions,
 	onFileClick,
@@ -320,6 +322,7 @@ function CrewConversationPanel({
 						historyTriggerMode={historyTriggerMode}
 						isHistoryPanelOpen={isHistoryPanelOpen}
 						onToggleHistoryPanel={onToggleHistoryPanel}
+						showTopicHistory={showTopicHistory}
 					/>
 				) : null}
 				{selectedTopic ? (

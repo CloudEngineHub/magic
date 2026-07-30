@@ -37,6 +37,22 @@ function dispatchLoad(iframe: HTMLIFrameElement) {
 	iframe.dispatchEvent(new Event("load"))
 }
 
+/** Announces that the embedded provider has installed its validated config listener. */
+function dispatchConfigReady(iframe: HTMLIFrameElement) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin: TEST_ORIGIN,
+			source: iframe.contentWindow,
+			data: {
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: TEST_INSTANCE_ID,
+				type: "config_ready",
+			},
+		}),
+	)
+}
+
 describe("WidgetBridge", () => {
 	beforeEach(() => {
 		document.body.innerHTML = ""
@@ -171,6 +187,83 @@ describe("WidgetBridge", () => {
 		)
 
 		expect(await inputPromise).toEqual({ content: "mock input" })
+	})
+
+	it("sends a complete config snapshot and resolves its correlated response", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+
+		const configPromise = bridge.sendConfig({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		await Promise.resolve()
+		expect(postMessage).not.toHaveBeenCalled()
+
+		dispatchConfigReady(iframe)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const message = postMessage.mock.calls[0]?.[0] as {
+			requestId: string
+			type: string
+			config: unknown
+		}
+		expect(message).toMatchObject({
+			type: "config",
+			config: {
+				layout: "desktop",
+				shell: { appSidebar: false },
+				conversation: { projectFiles: false, topicHistory: true },
+			},
+		})
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: message.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+
+		await expect(configPromise).resolves.toBeUndefined()
+	})
+
+	it("preserves config readiness when the child handshake arrives before iframe load", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchConfigReady(iframe)
+
+		const configPromise = bridge.sendConfig({ layout: "mobile" })
+		await Promise.resolve()
+		expect(postMessage).not.toHaveBeenCalled()
+
+		dispatchLoad(iframe)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const message = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: message.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+
+		await expect(configPromise).resolves.toBeUndefined()
 	})
 
 	it("rejects pending work after destroy", async () => {
