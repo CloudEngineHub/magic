@@ -14,7 +14,8 @@ use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
-use App\Infrastructure\Util\SSRF\SSRFUtil;
+use Dtyq\CloudFile\Kernel\Utils\RemoteDownloadSecurityConfig;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Psr\SimpleCache\CacheInterface;
@@ -29,11 +30,11 @@ readonly class VideoInputMediaMetadataResolver
 
     private const int PROBE_DOWNLOAD_MAX_BYTES = 104857600;
 
-    private const int STREAM_BUFFER_BYTES = 8192;
-
     private const int CACHE_TTL_SECONDS = 86400;
 
     private const string CACHE_KEY_PREFIX = 'video_input_metadata:v1';
+
+    private SafeRemoteFileDownloader $remoteFileDownloader;
 
     /**
      * 注入文件服务和媒体探测器，用于读取工作区或外部 URL 视频真实时长。
@@ -44,6 +45,11 @@ readonly class VideoInputMediaMetadataResolver
         private VideoMediaProbeInterface $videoMediaProbe,
         private CacheInterface $cache,
     ) {
+        $this->remoteFileDownloader = new SafeRemoteFileDownloader(new RemoteDownloadSecurityConfig(
+            enabled: true,
+            level: RemoteDownloadSecurityConfig::LEVEL_STANDARD,
+            maxDownloadSize: self::PROBE_DOWNLOAD_MAX_BYTES,
+        ));
     }
 
     /**
@@ -186,13 +192,10 @@ readonly class VideoInputMediaMetadataResolver
      */
     private function probeRemoteVideo(string $url): VideoMediaMetadata
     {
-        $tempPath = tempnam(sys_get_temp_dir(), self::TEMP_FILE_PREFIX);
-        if ($tempPath === false) {
-            throw new RuntimeException('create temp file failed');
-        }
+        $downloadedFile = $this->remoteFileDownloader->download($url);
+        $tempPath = $downloadedFile->getRealPath();
 
         try {
-            $this->downloadRemoteVideoToTempFile($url, $tempPath);
             return $this->videoMediaProbe->probe($tempPath);
         } finally {
             if (is_file($tempPath)) {
@@ -263,54 +266,6 @@ readonly class VideoInputMediaMetadataResolver
         $scheme = strtolower((string) parse_url($uri, PHP_URL_SCHEME));
 
         return in_array($scheme, ['http', 'https'], true);
-    }
-
-    private function downloadRemoteVideoToTempFile(string $url, string $tempPath): void
-    {
-        // 远程 URL 仍保留 SSRF 安全校验，但不做缓存，保持每次读取最新媒体元数据。
-        $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
-        $context = stream_context_create([
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ],
-        ]);
-        $remoteStream = fopen($safeUrl, 'rb', false, $context);
-        $localStream = fopen($tempPath, 'wb');
-        if (! is_resource($remoteStream) || ! is_resource($localStream)) {
-            if (is_resource($remoteStream)) {
-                fclose($remoteStream);
-            }
-            if (is_resource($localStream)) {
-                fclose($localStream);
-            }
-            throw new RuntimeException('open video probe stream failed');
-        }
-
-        try {
-            $downloadedBytes = 0;
-            while (! feof($remoteStream)) {
-                $buffer = fread($remoteStream, self::STREAM_BUFFER_BYTES);
-                if ($buffer === false) {
-                    throw new RuntimeException('read video probe stream failed');
-                }
-                if ($buffer === '') {
-                    continue;
-                }
-
-                $downloadedBytes += strlen($buffer);
-                if ($downloadedBytes > self::PROBE_DOWNLOAD_MAX_BYTES) {
-                    throw new RuntimeException('video probe file exceeds max size');
-                }
-
-                if (fwrite($localStream, $buffer) === false) {
-                    throw new RuntimeException('write video probe temp file failed');
-                }
-            }
-        } finally {
-            fclose($remoteStream);
-            fclose($localStream);
-        }
     }
 
     /**
