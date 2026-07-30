@@ -342,7 +342,6 @@ const ModeManagementPage = () => {
 					onChange={handleDefaultAgentChange}
 				/>
 			</div>
-			<div className={styles.title}>{t("superMagic")}</div>
 			<Flex align={isMobile ? "stretch" : "center"} gap={10} vertical={isMobile}>
 				<MagicSelect
 					prefix={tCommon("status")}
