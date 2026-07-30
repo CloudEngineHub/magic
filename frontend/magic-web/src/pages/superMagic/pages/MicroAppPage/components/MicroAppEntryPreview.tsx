@@ -102,11 +102,11 @@ export default function MicroAppEntryPreview({
 			virtualStorageMarkerId={storageMarkerId}
 			updatedAt={entryData.updated_at}
 			allowEdit={allowEdit}
-			viewMode={viewMode}
+			// 自己模拟手机壳，不复用原来的viewMode
+			viewMode="desktop"
 			openFileTab={onOpenFile}
 			showFileHeader={false}
 			showFooter={false}
-			showPhoneFrame={false}
 			onRegisterAIEdit={onRegisterAIEdit}
 			onAIEditActiveChange={onAIEditActiveChange}
 			onRegisterDevConsoleToggle={onRegisterDevConsoleToggle}

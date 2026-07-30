@@ -143,7 +143,6 @@ interface HTMLProps {
 	showFileHeader?: boolean
 	activeFileId?: string | null
 	showFooter?: boolean
-	showPhoneFrame?: boolean
 	onRefreshFile?: () => void
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
@@ -242,7 +241,6 @@ export default memo(function HTML(props: HTMLProps) {
 		showFileHeader = true,
 		activeFileId,
 		showFooter,
-		showPhoneFrame = true,
 		onRefreshFile,
 		onRegisterAIEdit,
 		onAIEditActiveChange,
@@ -1473,14 +1471,14 @@ export default memo(function HTML(props: HTMLProps) {
 			) : (
 				<div
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: (viewMode === "phone" && showPhoneFrame) || shouldUsePhonePreviewFrame,
+						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
 						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
 				>
 					<div
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: (viewMode === "phone" && showPhoneFrame) || shouldUsePhonePreviewFrame,
+							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,

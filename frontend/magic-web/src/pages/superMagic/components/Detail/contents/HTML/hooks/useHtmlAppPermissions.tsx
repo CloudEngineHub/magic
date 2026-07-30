@@ -312,7 +312,7 @@ export function useHtmlAppPermissions({
 			return
 		}
 		const appConfigFile = fileList.find(
-			(file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath,
+			(file) => file.relative_file_path?.replace(/^\/+/, "") === appConfigPath,
 		)
 
 		if (!appConfigFile) {
