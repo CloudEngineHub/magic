@@ -242,9 +242,9 @@ class HandleUserMessageAppService extends AbstractAppService
         if (empty($taskId)) {
             // Fresh path (WebSocket): create task + persist user message in this service
             $taskEntity = $this->initializeChatTask($dataIsolation, $topicEntity, $userMessageDTO);
-            // Use resolved agent config from topicEntity (initTopicTask handles SMA- prefix and persistence)
-            $agentMode = $topicEntity->getTopicMode();
-            $resolvedAgentCode = $topicEntity->getAgentCode();
+            // Request-level topic_pattern must also win on the WebSocket path. This keeps
+            // built-in modes such as micro-app independent from a Topic's historical mode.
+            [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
         } else {
             // Reuse path (HTTP queue): task already created and user message already persisted
             $taskEntity = $this->taskDomainService->getTaskById($taskId);
@@ -435,6 +435,12 @@ class HandleUserMessageAppService extends AbstractAppService
         if ($agentMode !== '' && str_starts_with($agentMode, 'SMA-')) {
             $agentCode = $agentMode;
             $agentMode = ProjectMode::CUSTOM_AGENT->value;
+        }
+
+        // micro-app is a built-in runtime mode. It must never inherit a stale custom
+        // employee code from the Topic or request and therefore never enters Crew logic.
+        if ($agentMode === ProjectMode::MICRO_APP->value) {
+            $agentCode = '';
         }
 
         return [$agentMode, $agentCode];

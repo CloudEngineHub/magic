@@ -1730,6 +1730,9 @@ class AgentDomainService
         return match ($agentMode) {
             ProjectMode::MAGICLAW->value => $this->buildMagicClawProfile($dataIsolation, $agentCode),
             ProjectMode::CUSTOM_AGENT->value => $this->buildCustomAgentProfile($dataIsolation, $agentCode, $language),
+            // micro-app is backed by the built-in micro-app.agent file. Its localized
+            // profile is supplied by the Python runtime, not the digital employee table.
+            ProjectMode::MICRO_APP->value => [],
             default => $this->buildOfficialAgentProfile($agentMode, $language),
         };
     }
