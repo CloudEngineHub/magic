@@ -38,23 +38,38 @@ def test_magic_agent_uses_file_based_memory_prompt():
 
     assert "File-Based Persistent Memory" in agent.prompt
     assert f"Persistent Memory Root (absolute): `{MEMORY_ROOT}`" in agent.prompt
+    assert "<current_project_id>" not in agent.prompt
     assert f"{MEMORY_ROOT}/" in agent.prompt
     assert "$HOME/.magic/memory" not in agent.prompt
     assert "do not run shell commands to discover or resolve the home directory" in agent.prompt
     assert "global/" in agent.prompt
     assert "projects/p_<project_id>/" in agent.prompt
-    assert "/tmp/mock-project/.credentials/init_client_message.json" in agent.prompt
-    assert "Do not read or print the full credential file" in agent.prompt
-    assert "Horizon provides `global/MEMORY.md`" in agent.prompt
+    assert ".credentials/init_client_message.json" not in agent.prompt
+    assert "Core memory appears inside `<persistent_memory>`" in agent.prompt
+    assert '<project_memory project_id="..." path="...">' in agent.prompt
     assert "<memory_filesystem>" in agent.prompt
     assert "<persistent_memory>" in agent.prompt
     assert 'include="*.md"' in agent.prompt
-    assert "Prefer the general-purpose `grep_search` tool" in agent.prompt
-    assert "Do not create symbolic links inside the memory tree" in agent.prompt
+    assert "By default, use `grep_search`" in agent.prompt
+    assert 'include="MEMORY.md"' in agent.prompt
+    assert "You may search and use another project's memory" in agent.prompt
+    assert "never assume that another project's conventions apply to the current project" in agent.prompt
+    assert "project-specific knowledge in the source project's directory" in agent.prompt
+    assert "Files under `notes/` are not loaded automatically" in agent.prompt
+    assert "Modify an existing memory file only with an edit capability" in agent.prompt
+    assert "Use `write_file` only to create a new file" in agent.prompt
+    assert "use `delete_files` and follow its confirmation workflow" in agent.prompt
+    assert "Never use shell deletion for memory files" in agent.prompt
+    assert "Do not create or use symbolic links inside the memory tree" in agent.prompt
     assert {"grep_search", "read_files", "write_file", "edit_file", "shell_exec"}.issubset(agent.tools_config)
     memory_prompt = agent.prompt.split("<memory_filesystem>", maxsplit=1)[1].split("</memory_filesystem>", maxsplit=1)[
         0
     ]
+    assert "Horizon" not in memory_prompt
+    assert "AgentContext" not in memory_prompt
+    assert "initialization messages" not in memory_prompt
+    assert "credential files" not in memory_prompt
+    assert "VM restarts" not in memory_prompt
     assert re.search(r"[\u4e00-\u9fff]", memory_prompt) is None
 
 

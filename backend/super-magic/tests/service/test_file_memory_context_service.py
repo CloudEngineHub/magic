@@ -8,6 +8,7 @@ import pytest
 from agentlang.event.data import AfterMainAgentRunEventData, BeforeMainAgentRunEventData
 from agentlang.event.event import Event, EventType
 from agentlang.interface.context import AgentContextInterface
+from app.core.context.agent_context import AgentContext
 from app.core.horizon.agent_horizon import AgentHorizon
 from app.core.horizon.models import HorizonState
 from app.core.horizon.store import HorizonStore
@@ -28,17 +29,15 @@ class FakeAgentContext:
     """提供 Horizon 依赖的模拟 AgentContext。"""
 
     def __init__(self, project_id: str | None = None) -> None:
-        """初始化模拟上下文、当前聊天消息和 Horizon。"""
+        """初始化模拟上下文、项目 ID 和 Horizon。"""
         self.context_id = "context-1"
         self.horizon = Mock()
         self.horizon.set_memory = AsyncMock()
-        self._chat_client_message = Mock()
-        self._chat_client_message.metadata = Mock()
-        self._chat_client_message.metadata.project_id = project_id
+        self._project_id = project_id
 
-    def get_chat_client_message(self) -> Mock:
-        """返回包含模拟项目 ID 的当前聊天消息。"""
-        return self._chat_client_message
+    def get_project_id(self) -> str | None:
+        """返回模拟的当前项目 ID。"""
+        return self._project_id
 
 
 def _mock_memory_io(
@@ -83,16 +82,30 @@ def _build_large_multiline_memory_context() -> str:
     project_memory = "\n".join(f"project line {index:03d} " + "p" * 70 for index in range(60))
     return MemoryCoreContextService._build_memory_context(
         global_memory=global_memory,
+        global_path=MEMORY_ROOT / "global" / "MEMORY.md",
         project_memory=project_memory,
+        project_path=MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md",
         project_id="project-1",
     )
 
 
-def _assert_empty_memory_snapshot(memory_context: str) -> None:
-    """断言上下文是由服务组装的不含实际作用域内容的空记忆快照。"""
+def _assert_global_scope_without_content(memory_context: str) -> None:
+    """断言上下文保留全局路径标签，但未注入实际记忆内容。"""
     assert memory_context.startswith("<persistent_memory>")
-    assert "<global_memory>" not in memory_context
+    global_file = MEMORY_ROOT / "global" / "MEMORY.md"
+    assert f'<global_memory path="{global_file}">\n\n</global_memory>' in memory_context
     assert "<project_memory" not in memory_context
+
+
+def test_agent_context_reads_project_id_from_current_message():
+    """AgentContext 应直接从当前聊天消息读取并规范化项目 ID。"""
+    chat_client_message = Mock()
+    chat_client_message.metadata = Mock()
+    chat_client_message.metadata.project_id = " project-1 "
+    agent_context = Mock(spec=AgentContext)
+    agent_context.get_chat_client_message.return_value = chat_client_message
+
+    assert AgentContext.get_project_id(agent_context) == "project-1"
 
 
 @pytest.mark.asyncio
@@ -112,8 +125,8 @@ async def test_file_memory_context_loads_global_and_current_project(monkeypatch)
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    assert "<global_memory>\nglobal &lt;preference&gt;\n</global_memory>" in memory_context
-    assert '<project_memory project_id="project-1">' in memory_context
+    assert f'<global_memory path="{global_file}">\nglobal &lt;preference&gt;\n</global_memory>' in memory_context
+    assert f'<project_memory project_id="project-1" path="{project_file}">' in memory_context
     assert "project decision" in memory_context
 
 
@@ -137,15 +150,39 @@ async def test_file_memory_context_skips_unsafe_project_id(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_file_memory_context_builds_empty_snapshot_when_files_are_missing(monkeypatch):
-    """核心记忆文件都不存在时应推送不含作用域内容的完整空快照。"""
+    """核心记忆文件尚未创建时仍应推送当前作用域和绝对路径。"""
     _, read_bytes = _mock_memory_io(monkeypatch, {})
     agent_context = FakeAgentContext(project_id="project-1")
 
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    _assert_empty_memory_snapshot(memory_context)
+    global_file = MEMORY_ROOT / "global" / "MEMORY.md"
+    project_file = MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md"
+    assert f'<global_memory path="{global_file}">\n\n</global_memory>' in memory_context
+    assert f'<project_memory project_id="project-1" path="{project_file}">\n\n</project_memory>' in memory_context
     read_bytes.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_file_memory_context_refreshes_project_scope_for_each_load(monkeypatch):
+    """每轮加载都应使用当前项目 ID，且不得保留上一项目的作用域。"""
+    _mock_memory_io(monkeypatch, {})
+    agent_context = FakeAgentContext(project_id="project-1")
+    service = MemoryCoreContextService(MEMORY_ROOT)
+
+    await service.load(agent_context)
+    agent_context._project_id = "project-2"
+    await service.load(agent_context)
+
+    first_context = agent_context.horizon.set_memory.await_args_list[0].args[0]
+    second_context = agent_context.horizon.set_memory.await_args_list[1].args[0]
+    assert 'project_id="project-1"' in first_context
+    assert "projects/p_project-1/MEMORY.md" in first_context
+    assert 'project_id="project-1"' not in second_context
+    assert "projects/p_project-1/MEMORY.md" not in second_context
+    assert 'project_id="project-2"' in second_context
+    assert "projects/p_project-2/MEMORY.md" in second_context
 
 
 @pytest.mark.asyncio
@@ -161,7 +198,9 @@ async def test_file_memory_context_truncates_oversized_core_file(monkeypatch):
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    global_memory = memory_context.split("<global_memory>\n", maxsplit=1)[1].split("\n</global_memory>", maxsplit=1)[0]
+    global_memory = memory_context.split(f'<global_memory path="{global_file}">\n', maxsplit=1)[1].split(
+        "\n</global_memory>", maxsplit=1
+    )[0]
     assert len(global_memory) == MEMORY_FILE_MAX_CHARS
     assert global_memory.endswith("[Memory content truncated at the startup injection limit.]")
     assert read_bytes.await_args.kwargs["size"] == MEMORY_FILE_READ_MAX_BYTES + 1
@@ -185,10 +224,12 @@ async def test_file_memory_context_limits_xml_escaped_payload(monkeypatch):
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    global_memory = memory_context.split("<global_memory>\n", maxsplit=1)[1].split("\n</global_memory>", maxsplit=1)[0]
-    project_memory = memory_context.split('<project_memory project_id="project-1">\n', maxsplit=1)[1].split(
-        "\n</project_memory>", maxsplit=1
+    global_memory = memory_context.split(f'<global_memory path="{global_file}">\n', maxsplit=1)[1].split(
+        "\n</global_memory>", maxsplit=1
     )[0]
+    project_memory = memory_context.split(
+        f'<project_memory project_id="project-1" path="{project_file}">\n', maxsplit=1
+    )[1].split("\n</project_memory>", maxsplit=1)[0]
     assert len(global_memory) <= MEMORY_FILE_MAX_CHARS
     assert len(project_memory) <= MEMORY_FILE_MAX_CHARS
     assert len(memory_context) <= MEMORY_CONTEXT_MAX_CHARS
@@ -212,7 +253,7 @@ async def test_file_memory_context_ignores_symlink_path(monkeypatch):
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    _assert_empty_memory_snapshot(memory_context)
+    _assert_global_scope_without_content(memory_context)
     read_bytes.assert_not_awaited()
 
 
@@ -234,21 +275,21 @@ async def test_file_memory_context_ignores_symlink_memory_root(monkeypatch):
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    _assert_empty_memory_snapshot(memory_context)
+    _assert_global_scope_without_content(memory_context)
     read_bytes.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_file_memory_context_builds_empty_snapshot_after_load_failure(monkeypatch):
-    """读取当前聊天消息发生意外异常时应推送空快照且不阻断主流程。"""
+    """读取当前项目 ID 发生意外异常时应推送空快照且不阻断主流程。"""
     _mock_memory_io(monkeypatch, {})
     agent_context = FakeAgentContext()
-    agent_context.get_chat_client_message = Mock(side_effect=RuntimeError("mock context failure"))
+    agent_context.get_project_id = Mock(side_effect=RuntimeError("mock context failure"))
 
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    _assert_empty_memory_snapshot(memory_context)
+    _assert_global_scope_without_content(memory_context)
 
 
 @pytest.mark.asyncio
@@ -282,8 +323,25 @@ async def test_file_memory_context_isolates_single_scope_read_failure(monkeypatc
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
-    assert "<global_memory>" not in memory_context
+    assert f'<global_memory path="{global_file}">\n\n</global_memory>' in memory_context
     assert "project decision" in memory_context
+
+
+def test_file_memory_context_escapes_absolute_path_attributes():
+    """记忆文件绝对路径应作为经过 XML 转义的标签属性注入。"""
+    global_path = Path('/mock/home/a & "b"/.magic/memory/global/MEMORY.md')
+    project_path = Path('/mock/home/a & "b"/.magic/memory/projects/p_project-1/MEMORY.md')
+
+    memory_context = MemoryCoreContextService._build_memory_context(
+        global_memory="global preference",
+        global_path=global_path,
+        project_memory="project decision",
+        project_path=project_path,
+        project_id="project-1",
+    )
+
+    assert 'path="/mock/home/a &amp; &quot;b&quot;/.magic/memory/global/MEMORY.md"' in memory_context
+    assert 'path="/mock/home/a &amp; &quot;b&quot;/.magic/memory/projects/p_project-1/MEMORY.md"' in memory_context
 
 
 @pytest.mark.asyncio
@@ -370,7 +428,9 @@ async def test_horizon_injects_prebuilt_memory_in_initial_context():
     horizon, _ = _create_mock_horizon()
     memory_context = MemoryCoreContextService._build_memory_context(
         global_memory="global preference",
+        global_path=MEMORY_ROOT / "global" / "MEMORY.md",
         project_memory="project decision",
+        project_path=MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md",
         project_id="project-1",
     )
     await horizon.set_memory(memory_context)
@@ -386,9 +446,11 @@ async def test_horizon_reinjects_memory_after_context_reset():
     """新上下文窗口应重新注入已加载的通用记忆字符串。"""
     horizon, _ = _create_mock_horizon()
     memory_context = MemoryCoreContextService._build_memory_context(
-        "global preference",
-        "project decision",
-        "project-1",
+        global_memory="global preference",
+        global_path=MEMORY_ROOT / "global" / "MEMORY.md",
+        project_memory="project decision",
+        project_path=MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md",
+        project_id="project-1",
     )
     await horizon.set_memory(memory_context)
     await horizon.build_context_update("unit-test")

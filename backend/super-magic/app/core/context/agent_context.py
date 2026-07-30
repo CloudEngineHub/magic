@@ -599,6 +599,15 @@ class AgentContext(BaseAgentContext):
         """
         return self.shared_context.get_field("chat_client_message")
 
+    def get_project_id(self) -> Optional[str]:
+        """从当前聊天消息中获取项目 ID。"""
+        chat_client_message = self.get_chat_client_message()
+        if chat_client_message is None or chat_client_message.metadata is None:
+            return None
+
+        project_id = str(chat_client_message.metadata.project_id or "").strip()
+        return project_id or None
+
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流
 
