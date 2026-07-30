@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
-import { createContext, useContext } from "react"
+import { createContext, useContext, useRef } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
@@ -12,6 +12,7 @@ const {
 } = vi.hoisted(() => {
 	const modeList = [
 		{
+			agent: { is_visible: true },
 			mode: {
 				identifier: "mode-a",
 				name: "Mode A",
@@ -20,11 +21,20 @@ const {
 			},
 		},
 		{
+			agent: { is_visible: true },
 			mode: {
 				identifier: "mode-b",
 				name: "Mode B",
 				description:
 					"This is a very long description for Mode B that should also be expandable.",
+			},
+		},
+		{
+			agent: { is_visible: false },
+			mode: {
+				identifier: "mode-hidden",
+				name: "Hidden Mode",
+				description: "This mode is hidden from the home crew list.",
 			},
 		},
 	]
@@ -38,7 +48,7 @@ const {
 				_flag: boolean,
 				agentCode?: string | null,
 			) => {
-				const identifier = topicMode === "CustomAgent" && agentCode ? agentCode : topicMode
+				const identifier = topicMode === "custom_agent" && agentCode ? agentCode : topicMode
 				return modeList.find((item) => item.mode.identifier === identifier) ?? null
 			},
 		),
@@ -53,7 +63,17 @@ vi.mock("mobx-react-lite", () => ({
 }))
 
 vi.mock("ahooks", () => ({
-	useMemoizedFn: (fn: (...args: any[]) => any) => fn,
+	useMemoizedFn: <T extends (...args: never[]) => unknown>(fn: T) => {
+		const fnRef = useRef(fn)
+		fnRef.current = fn
+		const stableFnRef = useRef<T | null>(null)
+
+		if (!stableFnRef.current) {
+			stableFnRef.current = ((...args: Parameters<T>) => fnRef.current(...args)) as T
+		}
+
+		return stableFnRef.current
+	},
 }))
 
 vi.mock("react-i18next", () => ({
@@ -65,6 +85,7 @@ vi.mock("react-i18next", () => ({
 				"modeToggle.selectCrew": "Select Crew",
 				"modeToggle.searchPlaceholder": "Search crew",
 				"modeToggle.emptySearchResult": "No matching crew",
+				"modeToggle.hiddenCrew": "Hidden Crew",
 				"modeToggle.createNewTopic": "Create New Topic",
 				"modeToggle.createNewChat": "Create New Chat",
 				"messageEditor.modelSwitch.expandDescription": "Expand description",
@@ -296,6 +317,87 @@ describe("ModeToggle", () => {
 
 		expect(screen.getByTestId("super-message-editor-mode-toggle-content")).toBeInTheDocument()
 		expect(toggleButton).toHaveAttribute("aria-expanded", "true")
+	})
+
+	it("keeps hidden modes collapsed at the bottom by default", () => {
+		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		const hiddenTrigger = screen.getByTestId("super-message-editor-mode-toggle-hidden-trigger")
+		expect(hiddenTrigger).toHaveAttribute("aria-expanded", "false")
+		expect(screen.queryByText("Hidden Mode")).not.toBeInTheDocument()
+
+		fireEvent.click(hiddenTrigger)
+
+		expect(hiddenTrigger).toHaveAttribute("aria-expanded", "true")
+		expect(screen.getByText("Hidden Mode")).toBeInTheDocument()
+	})
+
+	it("keeps the list scroll position when manually expanding hidden modes", () => {
+		const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+		const requestAnimationFrameSpy = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) => {
+				callback(0)
+				return 1
+			})
+
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: vi.fn(function (this: HTMLElement) {
+				const list = this.closest(
+					'[data-testid="super-message-editor-mode-toggle-list"]',
+				) as HTMLElement | null
+				if (list) list.scrollTop = 0
+			}),
+		})
+
+		try {
+			render(
+				<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />,
+			)
+
+			fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+			const list = screen.getByTestId("super-message-editor-mode-toggle-list")
+			list.scrollTop = 160
+
+			fireEvent.click(screen.getByTestId("super-message-editor-mode-toggle-hidden-trigger"))
+
+			expect(list.scrollTop).toBe(160)
+		} finally {
+			requestAnimationFrameSpy.mockRestore()
+			if (originalScrollIntoView) {
+				Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+					configurable: true,
+					value: originalScrollIntoView,
+				})
+			} else {
+				Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
+			}
+		}
+	})
+
+	it("automatically expands hidden modes when the current topic uses one", () => {
+		render(
+			<ModeToggle
+				topicMode={"custom_agent" as never}
+				agentCode="mode-hidden"
+				allowChangeMode
+				onModeChange={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		expect(
+			screen.getByTestId("super-message-editor-mode-toggle-hidden-trigger"),
+		).toHaveAttribute("aria-expanded", "true")
+		expect(screen.getAllByText("Hidden Mode")).toHaveLength(2)
+		expect(
+			screen.getByTestId("super-message-editor-mode-toggle-item-selected"),
+		).toBeInTheDocument()
 	})
 
 	it("supports keyboard selection for mode items", () => {

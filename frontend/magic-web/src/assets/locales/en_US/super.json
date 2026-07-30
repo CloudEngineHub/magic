@@ -3040,6 +3040,7 @@
 		"createNewChat": "Create New Chat",
 		"createNewTopic": "Create New Topic",
 		"emptySearchResult": "No matching crew found",
+		"hiddenCrew": "Hidden Crew",
 		"searchPlaceholder": "Search crew",
 		"selectCrew": "Select Crew",
 		"selectMode": "Select Mode"
