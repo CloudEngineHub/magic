@@ -55,6 +55,29 @@ describe("CodeSourceEditor", () => {
 		)
 	})
 
+	it("disables expensive Monaco decorations for large files", () => {
+		render(
+			<CodeSourceEditor
+				language="markdown"
+				content="# Large document"
+				isLargeFile
+				isEditMode
+			/>,
+		)
+
+		expect(monacoEditorProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					largeFileOptimizations: true,
+					folding: false,
+					colorDecorators: false,
+					links: false,
+					bracketPairColorization: { enabled: false },
+				}),
+			}),
+		)
+	})
+
 	it("formats a long curl payload before Monaco inserts a paste", () => {
 		const payload = JSON.stringify({ events: Array.from({ length: 200 }, (_, id) => ({ id })) })
 		const pastedText = `curl https://example.com --data-raw '${payload}'`

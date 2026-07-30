@@ -1,5 +1,5 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { cn } from "@/lib/utils"
@@ -36,6 +36,7 @@ import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { documentExportService } from "@/pages/superMagic/services/documentExport"
+import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
 
 interface TextEditorProps {
 	data?: any
@@ -216,6 +217,27 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent = savedContent || displayData?.content || fileData || ""
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
+	const wasEditingLargeMarkdownRef = useRef(false)
+
+	// Large documents use the virtual preview while reading and Monaco while editing.
+	// Keep the public view-mode state aligned so the header never advertises rich preview during edits.
+	useEffect(() => {
+		if (isLargeMarkdown && isEditMode) {
+			wasEditingLargeMarkdownRef.current = true
+			if (internalViewMode !== "code") {
+				setInternalViewMode("code")
+				onViewModeChange?.("code")
+			}
+			return
+		}
+
+		if (wasEditingLargeMarkdownRef.current && !isEditMode) {
+			wasEditingLargeMarkdownRef.current = false
+			setInternalViewMode("desktop")
+			onViewModeChange?.("desktop")
+		}
+	}, [internalViewMode, isEditMode, isLargeMarkdown, onViewModeChange])
 
 	// 初始化编辑内容和原始内容
 	useEffect(() => {

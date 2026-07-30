@@ -17,6 +17,8 @@ import {
 } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
 import { Editor } from "@tiptap/react"
+import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
+import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
 	isLoading: boolean
@@ -161,6 +163,8 @@ function EditorBody({
 		if (viewMode !== "code" || isEditMode) return content
 		return formatLongCurlDataRawForPreview(content)
 	}, [content, isEditMode, viewMode])
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(content), [content])
+	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
 	// Combine all extensions
 	const allExtensions = [...projectImageExtensions, customLinkNode]
@@ -202,12 +206,12 @@ function EditorBody({
 		<EditorErrorBoundary
 			fallbackMode="simple"
 			inputData={{
-				content,
-				processedContent,
+				contentLength: content.length,
+				processedContentLength: processedContent?.length ?? 0,
 				viewMode,
 				isLoading,
 				isEditMode,
-				editContent,
+				editContentLength: editContent?.length ?? 0,
 				language,
 				className,
 			}}
@@ -228,13 +232,21 @@ function EditorBody({
 							<MagicSpin spinning />
 						</div>
 					)
-				) : viewMode === "code" ? (
+				) : shouldUseCodeSourceEditor ? (
 					<CodeSourceEditor
 						key={isEditMode ? "edit" : "preview"}
 						language={language}
 						isEditMode={isEditMode}
+						isLargeFile={isLargeMarkdown}
 						content={isEditMode ? editContent || content : previewCodeContent}
 						onChange={setEditContent}
+					/>
+				) : isLargeMarkdown ? (
+					<LargeMarkdownPreview
+						content={processedContent || content}
+						documentFlow={documentFlowFullscreen}
+						urlResolver={urlResolver}
+						onLinkClick={handleLinkClick}
 					/>
 				) : (
 					<SimpleEditor

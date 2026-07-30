@@ -1,5 +1,5 @@
-import { render } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { render, screen } from "@testing-library/react"
+import { forwardRef, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import EditorBody from "."
 import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/preview-content"
@@ -18,7 +18,11 @@ vi.mock("./components/EditorErrorBoundary", () => ({
 }))
 
 vi.mock("@/components/tiptap-templates/simple/simple-editor", () => ({
-	SimpleEditor: () => <div data-testid="simple-editor" />,
+	SimpleEditor: forwardRef(() => <div data-testid="simple-editor" />),
+}))
+
+vi.mock("./components/LargeMarkdownPreview", () => ({
+	default: () => <div data-testid="large-markdown-preview" />,
 }))
 
 vi.mock("@/components/tiptap-templates/simple/hooks", () => ({
@@ -68,6 +72,44 @@ describe("EditorBody code source content", () => {
 
 		expect(codeSourceEditorProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({ content: source, isEditMode: true }),
+		)
+	})
+
+	it("keeps small markdown documents in SimpleEditor", () => {
+		render(<EditorBody isLoading={false} viewMode="desktop" content="# Small document" />)
+
+		expect(screen.getByTestId("simple-editor")).toBeInTheDocument()
+		expect(screen.queryByTestId("large-markdown-preview")).not.toBeInTheDocument()
+	})
+
+	it("uses the virtual preview for read-only markdown larger than 3 MB", () => {
+		render(
+			<EditorBody
+				isLoading={false}
+				viewMode="desktop"
+				content={"a".repeat(3 * 1024 * 1024 + 1)}
+			/>,
+		)
+
+		expect(screen.getByTestId("large-markdown-preview")).toBeInTheDocument()
+		expect(screen.queryByTestId("simple-editor")).not.toBeInTheDocument()
+	})
+
+	it("forces large markdown editing through the source editor", () => {
+		const content = "a".repeat(3 * 1024 * 1024 + 1)
+		render(
+			<EditorBody
+				isLoading={false}
+				viewMode="desktop"
+				content={content}
+				editContent={content}
+				isEditMode
+			/>,
+		)
+
+		expect(screen.getByTestId("code-source-editor")).toBeInTheDocument()
+		expect(codeSourceEditorProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ content, isEditMode: true, language: "text" }),
 		)
 	})
 })
