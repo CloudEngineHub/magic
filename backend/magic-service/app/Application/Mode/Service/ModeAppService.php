@@ -141,8 +141,16 @@ class ModeAppService extends AbstractModeAppService
         // 合并常用和全部 agent 列表，常用在前
         /** @var array<SuperMagicAgentEntity> $allAgents */
         $allAgents = array_merge($agentData['frequent'], $agentData['all']);
+        $systemDefaultAgentCode = $this->modeDomainService->getSystemDefaultAgent(
+            $this->createSystemDefaultAgentModeDataIsolation()
+        );
         if (empty($allAgents)) {
-            return [];
+            return [
+                'default_agent_code' => $systemDefaultAgentCode,
+                'total' => 0,
+                'list' => [],
+                'models' => [],
+            ];
         }
 
         // 获取后台的所有模式，用于封装数据到 Agent 中
@@ -203,6 +211,7 @@ class ModeAppService extends AbstractModeAppService
         }
 
         return [
+            'default_agent_code' => $systemDefaultAgentCode,
             'total' => count($list),
             'list' => $list,
             'models' => $modeRuntimeData['models'],
