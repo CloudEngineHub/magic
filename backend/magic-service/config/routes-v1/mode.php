@@ -13,8 +13,8 @@ use Hyperf\HttpServer\Router\Router;
 Router::addGroup('/api/v1', static function () {
     Router::addGroup('/official/admin', static function () {
         // 系统默认数字员工
-        Router::get('/system-default-agent', [AdminModeApi::class, 'getSystemDefaultAgent']);
-        Router::put('/system-default-agent', [AdminModeApi::class, 'updateSystemDefaultAgent']);
+        Router::get('/mode-settings/default-agent', [AdminModeApi::class, 'getSystemDefaultAgent']);
+        Router::put('/mode-settings/default-agent', [AdminModeApi::class, 'updateSystemDefaultAgent']);
 
         // 模式管理
         Router::addGroup('/modes', static function () {
