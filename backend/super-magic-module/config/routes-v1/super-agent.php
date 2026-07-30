@@ -363,8 +363,8 @@ Router::addGroup(
 
         // 文件相关
         Router::addGroup('/file', static function () {
-            // 沙盒文件变更通知
-            Router::post('/sandbox/notifications', [FileApi::class, 'handleSandboxNotification']);
+            // 沙盒文件变更通知 (目前已废弃，改成 magic fs)
+//            Router::post('/sandbox/notifications', [FileApi::class, 'handleSandboxNotification']);
             // 刷新 STS Token (提供 super - magic 使用， 通过 metadata 换取目录信息)
             Router::post('/refresh-sts-token', [FileApi::class, 'refreshStsToken']);
             // 新增话题附件列表(git 管理)
