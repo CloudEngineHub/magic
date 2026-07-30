@@ -33,18 +33,10 @@ import {
 
 export type ProjectAttachmentsSourceVersion = "v1" | "v2"
 export type ProjectAttachmentsLoadStrategy =
-	| "force_v1"
-	| "force_v2"
-	| "count_v1"
-	| "count_v2"
-	| "fallback_v1"
+	"force_v1" | "force_v2" | "count_v1" | "count_v2" | "fallback_v1"
 
 export type ProjectAttachmentsFallbackReason =
-	| "count_failed"
-	| "count_below_threshold"
-	| "v2_fetch_failed"
-	| "bfs_anomaly"
-	| "forced_v1"
+	"count_failed" | "count_below_threshold" | "v2_fetch_failed" | "bfs_anomaly" | "forced_v1"
 
 export interface ProjectAttachmentsDiagnostics extends Partial<ProjectAttachmentsV2Diagnostics> {
 	fallback_reason?: ProjectAttachmentsFallbackReason
@@ -77,7 +69,8 @@ export type ProjectAttachmentsBatchSnapshotPayload = ProjectAttachmentsV2Snapsho
 
 export interface ProjectAttachmentsLoaderOptions {
 	projectId: string
-	temporaryToken?: string
+	/** Pass null to explicitly disable the share token inherited from window. */
+	temporaryToken?: string | null
 	threshold?: number
 	pageSize?: number
 	signal?: AbortSignal
@@ -119,7 +112,8 @@ function resolveWindowSearchParams() {
 	return new URLSearchParams(window.location.search)
 }
 
-function resolveTemporaryToken(temporaryToken?: string) {
+function resolveTemporaryToken(temporaryToken?: string | null) {
+	if (temporaryToken === null) return ""
 	if (temporaryToken) return temporaryToken
 	if (typeof window === "undefined") return ""
 	const tokenWindow = window as TemporaryTokenWindow

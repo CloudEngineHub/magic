@@ -41,6 +41,8 @@ export interface TopicFilesButtonProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读场景复制文件到当前用户的项目
+	allowCopyTo?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
@@ -77,6 +79,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterMenuItems,
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
+			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
@@ -132,6 +135,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					filterMenuItems={filterMenuItems}
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 					allowDownload={effectiveAllowDownload}
+					allowCopyTo={allowCopyTo}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}

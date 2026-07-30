@@ -64,6 +64,7 @@ interface UseBatchDownloadOptions {
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	allowEdit?: boolean
+	allowCopyTo?: boolean
 	allowDownload?: boolean
 	// 新增：批量分享回调
 	onBatchShareClick?: (fileIds: string[]) => void
@@ -94,6 +95,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		getParentPathByFileId,
 		isMoving = false,
 		allowEdit,
+		allowCopyTo = false,
 		allowDownload,
 		onBatchShareClick,
 		isInProject,
@@ -640,7 +642,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(isInProject && allowEdit && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && !hideCopyTo
 			? [
 					{
 						key: "copy",

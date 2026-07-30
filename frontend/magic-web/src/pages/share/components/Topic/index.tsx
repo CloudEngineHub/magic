@@ -136,6 +136,7 @@ function Topic({
 	// 使用分享页面菜单过滤 Hook
 	const { filterShareMenuItems, filterBatchDownloadLayerMenuItems } = useShareMenuFilters({
 		allowDownloadProjectFile,
+		allowCopyProjectFile: isLogined,
 	})
 
 	// 判断是否需要调整 BackToLatestButton 的位置
@@ -1005,6 +1006,7 @@ function Topic({
 													}}
 													activeFileId={activeFileId}
 													allowEdit={false}
+													allowCopyTo={isLogined}
 													filterMenuItems={filterShareMenuItems}
 													filterBatchDownloadLayerMenuItems={
 														filterBatchDownloadLayerMenuItems
@@ -1451,6 +1453,7 @@ function Topic({
 						allLoading={allLoading}
 						activeFileId={activeFileId}
 						allowEdit={false}
+						allowCopyTo={isLogined}
 						filterMenuItems={filterShareMenuItems}
 						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 						allowDownload={allowDownloadProjectFile}

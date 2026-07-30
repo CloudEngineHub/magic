@@ -157,6 +157,8 @@ interface TopicFilesCoreProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读分享场景中的已登录用户复制文件到自己的项目
+	allowCopyTo?: boolean
 	// Allow a read-only host such as a public share to expose batch selection without login.
 	allowReadonlySelection?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
@@ -213,6 +215,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		allowDownload,
+		allowCopyTo = false,
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
@@ -232,6 +235,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isSelectMode,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
 		hasLogin,
 		allowReadonlySelection,
 	})
@@ -1784,7 +1788,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{/* 更多按钮 */}
 				{!showCheckbox &&
 					renamingItemId !== itemId &&
-					(allowEdit || (filterMenuItems && allowDownload !== false)) && (
+					(allowEdit ||
+						(filterMenuItems && (allowDownload !== false || allowCopyTo))) && (
 						<MagicIcon
 							className={cx(
 								styles.attachmentAction,
@@ -1845,6 +1850,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isMoving,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
 		downloadProgress,
 		// 批量分享回调
 		onBatchShareClick: async (fileIds: string[]) => {
