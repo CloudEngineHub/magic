@@ -26,15 +26,27 @@ class ChannelStartupListenerService:
 
     @staticmethod
     async def _handle_after_init(event: Event[AfterInitEventData]) -> None:
-        from app.utils.sandbox_env import is_magiclaw_sandbox
+        from app.core.keepalive_registry import KeepaliveRegistry
 
-        if not await is_magiclaw_sandbox():
+        agent_context = event.data.agent_context
+        if not event.data.success or agent_context is None:
+            logger.warning("[ChannelStartup] 初始化未成功或 AgentContext 不可用，跳过生命周期与 IM 自动连接")
+            return
+
+        keepalive_registry = KeepaliveRegistry.get_instance()
+        if not agent_context.is_magiclaw():
             # 非 Claw 沙箱：禁用保活机制并跳过自动连接。
             # 即使 channel 被其他路径手动连接，保活也不会阻止沙箱退出。
-            from app.core.keepalive_registry import KeepaliveRegistry
-            KeepaliveRegistry.get_instance().set_enabled(False)
+            keepalive_registry.set_enabled(False)
             logger.info("[ChannelStartup] 非 magiclaw 模式，已禁用保活并跳过 IM 渠道自动连接")
             return
+
+        try:
+            keepalive_registry.set_enabled(True)
+            keepalive_registry.notify_activity("magiclaw:init")
+            logger.info("[ChannelStartup] MagicClaw 初始化完成，已启动 72 小时滚动保活")
+        except Exception as e:
+            logger.warning(f"[ChannelStartup] MagicClaw 初始化保活失败，继续连接 IM 渠道: {e}")
 
         async def _run() -> None:
             try:
