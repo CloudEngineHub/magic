@@ -20,6 +20,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\TopicTaskMessageDTO;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
+use ReflectionProperty;
 
 /**
  * @internal
@@ -118,7 +119,7 @@ class TopicTaskAppServiceTest extends TestCase
 
     private function setServiceProperty(TopicTaskAppService $service, string $name, object $value): void
     {
-        $property = new \ReflectionProperty(TopicTaskAppService::class, $name);
+        $property = new ReflectionProperty(TopicTaskAppService::class, $name);
         $property->setAccessible(true);
         $property->setValue($service, $value);
     }

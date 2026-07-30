@@ -19,6 +19,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
+use Dtyq\SuperMagic\Domain\Agent\Entity\MagicClawEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -197,7 +198,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         $repository->expects(self::once())
             ->method('findByCode')
             ->with('CLAW-1', 'user-1', 'DT001')
-            ->willReturn(new \Dtyq\SuperMagic\Domain\Agent\Entity\MagicClawEntity());
+            ->willReturn(new MagicClawEntity());
         $this->setProperty($this->service, 'magicClawDomainService', new MagicClawDomainService($repository));
 
         self::assertSame([true, ''], $this->service->checkAgentAccess(
