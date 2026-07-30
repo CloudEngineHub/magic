@@ -19,7 +19,7 @@ from playwright.async_api import (
 from magic_use.config import BrowserRuntimeConfig
 from magic_use.errors import BrowserConnectionError, BrowserPageError
 from magic_use.models.common import BrowserEventType, BrowserName, JsonValue, PageState
-from magic_use.models.diagnostics import ConsoleEntry, NetworkEntry
+from magic_use.models.diagnostics import ConsoleEntry, DiagnosticBatch, NetworkEntry
 from magic_use.models.events import BrowserEvent
 from magic_use.models.page import BrowserPage
 from magic_use.playwright.context_lease import PlaywrightContextLease
@@ -168,17 +168,23 @@ class PlaywrightRuntime:
         self.events.clear()
         return events
 
-    def read_console(self, page_id: str, *, clear: bool) -> tuple[ConsoleEntry, ...]:
-        result = tuple(entry for entry in self.console_entries if entry.page_id == page_id)
+    def read_console(self, page_id: str, *, clear: bool, limit: int) -> DiagnosticBatch[ConsoleEntry]:
+        page_entries = tuple(entry for entry in self.console_entries if entry.page_id == page_id)
+        result = page_entries[-limit:]
         if clear:
             self.console_entries = [entry for entry in self.console_entries if entry.page_id != page_id]
-        return result
+        return DiagnosticBatch(entries=result, total_count=len(page_entries))
 
-    def read_network(self, page_id: str, *, clear: bool) -> tuple[NetworkEntry, ...]:
-        result = tuple(entry for entry in self.network_entries if entry.page_id == page_id)
+    def read_network(self, page_id: str, *, clear: bool, limit: int) -> DiagnosticBatch[NetworkEntry]:
+        page_entries = tuple(entry for entry in self.network_entries if entry.page_id == page_id)
+        result = page_entries[-limit:]
         if clear:
             self.network_entries = [entry for entry in self.network_entries if entry.page_id != page_id]
-        return result
+        return DiagnosticBatch(
+            entries=result,
+            total_count=len(page_entries),
+            pending_count=len(self.active_requests.get(page_id, ())),
+        )
 
     def set_document_ready_handler(self, handler: Callable[[Page], Awaitable[None]]) -> None:
         self.document_ready_handler = handler

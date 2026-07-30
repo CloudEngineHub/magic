@@ -14,8 +14,9 @@ from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.service.browser import BrowserArtifactService, BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
-from app.tools.core import BaseTool, BaseToolParams
+from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.browser.presentation import BrowserDetailBuilder, BrowserRemarkBuilder
+from app.tools.core import BaseToolParams
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
 
 P = TypeVar("P", bound=BaseToolParams)
@@ -23,7 +24,7 @@ P = TypeVar("P", bound=BaseToolParams)
 logger = get_logger(__name__)
 
 
-class BrowserToolBase(BaseTool[P], Generic[P]):
+class BrowserToolBase(AbstractFileTool[P], Generic[P]):
     """Browser Skill 的 Code Mode Only 工具基类。"""
 
     operation_key = "browser.unknown_operation"
@@ -36,7 +37,7 @@ class BrowserToolBase(BaseTool[P], Generic[P]):
         except BrowserSDKError as exc:
             logger.warning("Browser SDK operation failed: %s", exc, exc_info=True)
             return ToolResult.error(
-                f"Browser operation failed [{exc.code.value}]: {exc}",
+                self._model_error_message(exc),
                 data={"error_code": exc.code.value},
                 extra_info={
                     "error_code": exc.code.value,
@@ -132,6 +133,7 @@ class BrowserToolBase(BaseTool[P], Generic[P]):
             tool_name=tool_name,
             action=self._operation_name(),
             result=result,
+            arguments=arguments or {},
         )
 
     async def get_tool_detail(
@@ -140,7 +142,12 @@ class BrowserToolBase(BaseTool[P], Generic[P]):
         result: ToolResult,
         arguments: dict[str, object] | None = None,
     ) -> ToolDetail:
-        presentation = BrowserDetailBuilder.presentation(self._operation_name(), result)
+        presentation = BrowserDetailBuilder.presentation(
+            self._operation_name(),
+            result,
+            tool_name=self.name,
+            arguments=arguments or {},
+        )
         event_context = tool_context.get_extension_typed("event_context", EventContext)
         if event_context is not None and event_context.attachments:
             screenshot_file_key = self._screenshot_file_key(result)
@@ -161,6 +168,13 @@ class BrowserToolBase(BaseTool[P], Generic[P]):
 
     def _error_message(self, code: BrowserErrorCode) -> str:
         return self._message(f"browser.error.{code.value}")
+
+    @staticmethod
+    def _model_error_message(error: BrowserSDKError) -> str:
+        prefix = f"Browser operation failed [{error.code.value}]: {error}"
+        if error.code in {BrowserErrorCode.STALE_REF, BrowserErrorCode.AMBIGUOUS_REF}:
+            return prefix + " Take a fresh interactive snapshot and retry with a current ref."
+        return prefix
 
     @staticmethod
     def _message(key: str, **kwargs: object) -> str:
@@ -186,7 +200,7 @@ class BrowserToolBase(BaseTool[P], Generic[P]):
         if isinstance(direct_page_id, str) and direct_page_id:
             return direct_page_id
         page = BrowserToolBase._page_data(result)
-        page_id = page.get("id") if page else None
+        page_id = page.get("page_id") if page else None
         if isinstance(page_id, str) and page_id:
             return page_id
         action = result.data.get("action")

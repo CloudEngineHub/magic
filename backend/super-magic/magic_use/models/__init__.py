@@ -1,4 +1,11 @@
-from magic_use.models.actions import ActionRequest, ActionResult, ActionTarget, NavigationResult, ScreenshotResult
+from magic_use.models.actions import (
+    ActionRequest,
+    ActionResult,
+    ActionState,
+    ActionTarget,
+    NavigationResult,
+    ScreenshotResult,
+)
 from magic_use.models.common import (
     ActionKind,
     ActionOutcome,
@@ -11,6 +18,7 @@ from magic_use.models.common import (
 )
 from magic_use.models.diagnostics import (
     ConsoleEntry,
+    DiagnosticBatch,
     NetworkEntry,
     WaitConditionKind,
     WaitRequest,
@@ -27,6 +35,7 @@ __all__ = [
     "ActionOutcome",
     "ActionRequest",
     "ActionResult",
+    "ActionState",
     "ActionTarget",
     "BoundingBox",
     "BrowserBackendKind",
@@ -38,6 +47,7 @@ __all__ = [
     "BrowserPage",
     "BrowserSession",
     "ConsoleEntry",
+    "DiagnosticBatch",
     "ElementRefRecord",
     "NavigationResult",
     "NetworkEntry",

@@ -1,142 +1,215 @@
 ---
 name: browser
-description: Use when a task requires opening or controlling web pages, reading rendered page content, interacting with forms and controls, inspecting browser console or network activity, or using an authorized remote Chrome tab.
+description: Open and control rendered web pages, read page content, complete forms, inspect page state, capture screenshots, analyze visual layout, debug console or network activity, and operate an authorized user Chrome session.
 ---
 
 # Browser
 
-Call Browser tools from one Python snippet through `run_sdk_snippet`:
+Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults.
+
+## Default path
+
+For most tasks, use this four-step path:
+
+1. Open a new URL with `browser_open_page`.
+2. Read with `browser_read_page`, or take one `browser_snapshot` when interaction is needed.
+3. Find the exact ref, perform the action, and keep using the same `page_id`.
+4. Verify the result with a read, an explicit wait, or a changes snapshot.
+
+Do not list sessions before opening a normal sandbox page. Do not navigate to a URL that `browser_open_page` already opened.
 
 ```python
 from sdk.tool import tool
-```
 
-Pass only fields required by the task. Omit optional fields to use the safe defaults.
-
-## Open and Read
-
-For a new URL, call `browser_open_page` directly. It creates the default isolated session when needed and opens the supplied URL. Do not list sessions first or navigate to the same URL again.
-
-```python
 page = tool.call("browser_open_page", {"url": "https://example.com"})
-if not page.ok:
-    raise RuntimeError(page.content)
-
-page_id = page.data["page_id"]
-content = tool.call("browser_read_page", {"page_id": page_id})
-if not content.ok:
-    raise RuntimeError(content.content)
-
-print(content.content)
+print(page.content)
+if page.ok:
+    page_id = page.data["page_id"]
+    print(tool.call("browser_read_page", {"page_id": page_id}).content)
 ```
 
-Use `browser_list_pages` only to reuse a page opened earlier. Use `browser_list_sessions` only to select an authorized user Browser, handle multiple sessions, or recover from a disconnected session.
+Use `browser_list_pages` only to reuse an existing page. Use `browser_list_sessions` only when choosing an authorized user Browser, resolving multiple sessions, or recovering from a disconnect.
 
-## Choose One Observation
+## Find a control once
 
-- Read text and rendered content: `browser_read_page`.
-- Find controls and obtain refs: `browser_snapshot`.
-- Answer a question about layout, images, charts, canvas, maps, or other visual content: `browser_visual_query`.
-- Find a visually described control when the snapshot is insufficient: `browser_find_visual`.
-- Create or show a screenshot without analyzing it: `browser_screenshot`.
+Take one interactive snapshot. Its ref records contain exactly these useful fields:
 
-Do not call `browser_screenshot` and then manually pass its file to another visual tool. Call `browser_visual_query` directly when the task requires visual understanding.
+- `ref`
+- `role`
+- `accessible_name`
+- `text`
+- `attributes`
+- `allowed_actions`
 
-## Interact
+A ref record is an accessibility record, not a DOM element. It has no `tag_name` field. HTML details such as input `type` are inside `attributes`.
 
-Take the default interactive snapshot, use exact refs from that snapshot, then verify the result:
+Use all returned refs when locating a target. Do not truncate `snapshot.content`, inspect only the first N refs, guess a ref, or repeatedly retry different elements. The normal path is to print the snapshot content, read its hierarchy, then use the exact ref in the next snippet.
 
 ```python
 snapshot = tool.call("browser_snapshot", {"page_id": page_id})
-if not snapshot.ok:
-    raise RuntimeError(snapshot.content)
-
-field_ref = "<ref-from-snapshot>"
-submit_ref = "<ref-from-snapshot>"
-
-filled = tool.call("browser_fill", {
-    "page_id": page_id,
-    "ref": field_ref,
-    "value": "example query",
-})
-if not filled.ok:
-    raise RuntimeError(filled.content)
-
-submitted = tool.call("browser_click", {
-    "page_id": page_id,
-    "ref": submit_ref,
-})
-if not submitted.ok:
-    raise RuntimeError(submitted.content)
-
-changes = tool.call("browser_snapshot", {
-    "page_id": page_id,
-    "scope": "changes",
-})
-print(changes.content)
+print(snapshot.content)
 ```
 
-Use `browser_press` with `key="Enter"` when pressing Enter is the page's normal submission behavior. After `browser_fill`, omit `ref` so the key goes to the current focus even if the page replaced the input node:
+After reading the printed tree, continue with its exact ref:
 
 ```python
+field_ref = "<exact-ref-from-snapshot-content>"
 filled = tool.call("browser_fill", {
     "page_id": page_id,
     "ref": field_ref,
     "value": "example query",
 })
-if not filled.ok:
-    raise RuntimeError(filled.content)
-
-submitted = tool.call("browser_press", {
-    "page_id": page_id,
-    "key": "Enter",
-})
-if not submitted.ok:
-    raise RuntimeError(submitted.content)
+print(filled.content)
+if filled.ok:
+    print(tool.call("browser_press", {"page_id": page_id, "key": "Enter"}).content)
+    print(tool.call("browser_read_page", {"page_id": page_id}).content)
 ```
 
-Pass `ref` to `browser_press` only when the task must focus a different control first. Do not add waits unless the task has a specific completion condition.
+Add `name` or `attributes` only when the first filter is ambiguous. Use the hierarchy in `snapshot.content` when repeated labels belong to different forms, dialogs, or page regions.
 
-## Human Verification and Blocked Pages
+When a same-snippet pipeline must select from many refs, inspect `snapshot.data["snapshot"]["refs"]` in code and filter by `allowed_actions`, role, name, attributes, and hierarchy. This is a pipeline optimization, not the default reading path. Print `snapshot.content` when the code cannot prove one unique target.
 
-When a page shows a CAPTCHA, unusual-traffic warning, human-verification step, or equivalent challenge:
+After `browser_fill`, omit `ref` from `browser_press` when Enter should go to the current focus. Pass a fresh ref only when focus may have moved or a specific autocomplete/menu control must receive the key.
 
-1. Stop automated interaction. Do not bypass, solve, or script around the challenge.
-2. If the user explicitly says they can interact with the visible or authorized Browser, keep the page open, tell them what must be completed, and wait for their confirmation.
-3. Otherwise, do not wait indefinitely. Try a legitimate alternative suited to the task, such as a direct target URL, another source, a dedicated search or data tool, or an authorized user Browser.
-4. If no valid alternative exists, explain that the page is blocked and what remains incomplete.
-5. After the user completes verification, take a fresh page read or snapshot before continuing. Previous refs may be stale.
+After a submit, search, sign-in, or checkout action, read the current page once before waiting for a final URL. The read may already prove success and also exposes CAPTCHA, consent, redirect, or error pages immediately. Use `browser_wait` only when the required result is still pending.
 
-Honor an explicit user instruction to wait for manual verification. Do not assume the user can interact with a sandbox page unless they say so.
+## Common actions
 
-## Visual Failures
+These are the normal parameter forms. Apply the shared Code Mode result rules to each returned result.
 
-If `browser_visual_query` is unavailable, use `browser_read_page` or `browser_snapshot` when text or structure can answer the question. If the question requires appearance or spatial layout, report that visual analysis is unavailable instead of claiming the screenshot was understood.
+```python
+tool.call("browser_click", {"page_id": page_id, "ref": ref})
+tool.call("browser_fill", {"page_id": page_id, "ref": ref, "value": "text"})
+tool.call("browser_press", {"page_id": page_id, "key": "Enter"})
+tool.call("browser_hover", {"page_id": page_id, "ref": ref})
 
-## Refs and Results
+# Page scroll: positive delta_y moves down; negative moves up.
+tool.call("browser_scroll", {"page_id": page_id, "delta_y": 500})
 
-- Refs are opaque and belong to one page and document state. Never construct or edit them.
-- After navigation or a stale, missing, or ambiguous ref error, take a fresh snapshot.
-- Never replace a ref with a CSS selector, XPath, coordinate, or guessed text match on the normal interaction path.
-- Always check `result.ok` and read the complete `result.content` on failure.
-- Common handles are top-level in `result.data`: `page_id` and `snapshot_id`.
-- Detailed objects remain under keys such as `page`, `snapshot`, `action`, and `screenshot`.
-- An action outcome of `dispatched` means the input was sent; verify the page before claiming the business result succeeded.
+# Bring one referenced element into view without additional wheel movement.
+tool.call("browser_scroll", {"page_id": page_id, "ref": ref})
 
-Leave pages open after the task unless the user asks to close them or resource pressure requires cleanup. Normal page operations renew sandbox page lifetime automatically.
+# Select by exact option value or unique visible label.
+tool.call("browser_select", {"page_id": page_id, "ref": ref, "value": "Two"})
 
-## Required Rules
+tool.call("browser_check", {"page_id": page_id, "ref": ref, "checked": True})
+tool.call("browser_upload_file", {
+    "page_id": page_id,
+    "ref": ref,
+    "file_paths": ["path/inside/workspace.txt"],
+})
+```
 
-- Operate only pages and tabs authorized for the current Browser session.
-- Do not expose connection endpoints, pairing tokens, resume tokens, cookies, passwords, or browser history.
-- Do not print raw protocol payloads, complete DOM snapshots, accessibility trees, or screenshot bytes into model context.
-- Do not use `browser_evaluate` to replace normal reading, snapshot, ref interaction, or authorization boundaries.
-- Use `browser_keep_alive` only when a known long-running step must retain the same sandbox page.
+Only use an action listed in that ref's `allowed_actions`. The model-readable snapshot also shows actions inline, for example:
+
+```text
+[textbox ref=e12 actions=click,fill,press,scroll] Search
+[button ref=e13 actions=click,hover,scroll] Submit
+```
+
+## Wait and verify
+
+Actions report that input was dispatched, not that the user's intended outcome occurred. Verify only what matters:
+
+```python
+waited = tool.call("browser_wait", {
+    "page_id": page_id,
+    "condition": "text",
+    "value": "Completed",
+    "timeout_ms": 10000,
+})
+print(waited.content)
+```
+
+Use:
+
+- `condition="url"` with `value` for navigation to a known URL pattern.
+- `condition="load_state"` with `state="domcontentloaded"` or `state="load"`.
+- `condition="text"` with `value` for visible result text.
+- `condition="ref"` with the exact ref in `value`.
+- `condition="time"` with `duration_ms` only when no observable condition exists.
+
+For a quick post-action check, use `browser_snapshot(scope="changes")`. After navigation, take a normal fresh snapshot instead; old refs no longer belong to the current document.
+
+## Choose the right observation
+
+- Use `browser_read_page` for rendered text and links. Read its `content` to answer the user; do not parse `data["markdown"]` by default.
+- Use `browser_snapshot` to find controls and inspect interaction state. Read its tree from `content`; use structured refs only for exact chaining or deterministic filtering.
+- Use `browser_visual_query(page_id=..., query=...)` for layout, images, charts, maps, canvas, or other visual questions. Its answer is in `content`.
+- Use `browser_find_visual(page_id=..., target=...)` only when a control cannot be identified from the snapshot.
+- Use `browser_screenshot` when the user should see an image but no visual analysis is needed.
+
+Visual model calls are expensive. Do not run multiple `browser_visual_query` or `browser_find_visual` calls concurrently, and do not call both for the same question. Put a required visual call in a dedicated snippet or set the snippet timeout to at least 120 seconds when it follows other Browser work.
+
+Exact visual calls:
+
+```python
+shot = tool.call("browser_screenshot", {"page_id": page_id})
+print(shot.content)
+
+labeled = tool.call("browser_screenshot", {"page_id": page_id, "labels": True})
+print(labeled.content)
+
+saved = tool.call("browser_screenshot", {
+    "page_id": page_id,
+    "output_path": "screenshots/page.webp",
+})
+print(saved.content)
+if saved.ok:
+    print(saved.data["output_path"])
+
+visual = tool.call("browser_visual_query", {
+    "page_id": page_id,
+    "query": "Describe the main visible regions and their spatial arrangement.",
+})
+print(visual.content)
+
+match = tool.call("browser_find_visual", {
+    "page_id": page_id,
+    "target": "the primary search field",
+})
+print(match.content)
+if match.ok:
+    target_ref = match.data["ref"]
+```
+
+Use the validated `data["ref"]` from `browser_find_visual` for the next interaction.
+
+Without `output_path`, screenshots are temporary UI snapshots displayed through the tool detail. They do not return `screenshot_data`, base64 bytes, or a reusable local path. Set `output_path` only when the user asks to save the screenshot or a later step needs a workspace file. The extension selects the format automatically: use `.webp` for the normal size-quality balance, `.jpg` or `.jpeg` when JPEG is required, and `.png` for lossless output. Omit `scale` and `quality` normally; the saved file then uses the same adaptive resolution and compression chosen for the Tool Detail snapshot. Set `scale` only when the user requests a specific output size. Lower it first when reducing file size. Increasing it enlarges captured pixels but does not create new page detail. Set `quality` only when the user explicitly requests a different WebP/JPEG compression level; it is invalid for PNG. Read the saved workspace path from `result.data["output_path"]`.
+
+If visual analysis is unavailable, continue with reads and snapshots when text or structure is sufficient. If the task requires appearance or spatial judgment, report the real visual error instead of claiming the image was understood.
+
+## Refs, pages, and failures
+
+- Read page IDs from `result.data["page_id"]`. Items in `browser_list_pages().data["pages"]` also use `page_id`.
+- Reuse returned IDs exactly. Never construct `page_id`, `session_id`, refs, or visual labels.
+- Refs remain stable within the same document only when the runtime can prove element identity. Navigation invalidates them.
+- On `stale_ref`, `ref_not_found`, or `ambiguous_ref`, take one fresh interactive snapshot and locate the target again.
+- Leave pages open unless the user asks to close them. Normal operations renew sandbox page lifetime.
+- Use `browser_keep_alive` only when a known long-running step must preserve the same sandbox page.
+
+## CAPTCHA and human verification
+
+When a page shows a CAPTCHA, unusual-traffic warning, or human-verification step:
+
+1. Stop automated interaction immediately. Do not bypass or script around it.
+2. If the user said they can operate the visible or authorized Browser, keep the page open, state the exact manual action needed, and wait for confirmation.
+3. Otherwise use a legitimate alternative only when the task allows one. Do not evade an explicit Browser-only test.
+4. After manual verification, read the page or take a fresh snapshot. Do not reuse old refs.
+
+Do not wait only for the final URL on sites that may insert verification. After the triggering action, read the current page first; if verification is present, stop immediately instead of retrying the wait.
+
+## Boundaries
+
+- Operate only pages authorized for the current Browser session.
+- Do not expose endpoints, pairing or resume tokens, cookies, passwords, or browser history.
+- Do not print raw protocol payloads, full DOM/accessibility dumps, or screenshot bytes.
+- Use `browser_evaluate` only for focused application-specific inspection. Do not replace normal reading, snapshots, or ref interaction with JavaScript.
 
 ## References
 
-- Complete tool signatures: [references/tools.md](references/tools.md)
-- Snapshots, refs, changes, and labeled screenshots: [references/snapshots.md](references/snapshots.md)
+- Tool signatures and low-frequency tools: [references/tools.md](references/tools.md)
+- Snapshot scopes, ref lifetime, and labeled screenshots: [references/snapshots.md](references/snapshots.md)
 - Sessions, pages, lifecycle, and capabilities: [references/sessions.md](references/sessions.md)
 - Console, network, JavaScript, and troubleshooting: [references/debugging.md](references/debugging.md)
 - Authorized user Chrome sessions: [references/remote-chrome.md](references/remote-chrome.md)

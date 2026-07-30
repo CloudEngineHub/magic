@@ -20,6 +20,8 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
+    ElementRefRecord,
     NavigationResult,
     NetworkEntry,
     PageSnapshot,
@@ -71,6 +73,8 @@ class PlaywrightBackend(ABC):
             self._runtime.set_context_idle_handler(self._close_after_context_idle)
             self._state = SessionState.CONNECTED
             self._runtime.emit(BrowserEventType.SESSION_CONNECTED, None)
+            # 保留 Browser SDK 的既有契约：独立调用方创建 BrowserClient 后即可取得一个活动页面。
+            # Agent Browser 工具会在首次打开网址时复用这个空白页，避免额外残留 about:blank 标签。
             await self.open_page()
             return await self.get_session()
         except asyncio.CancelledError:
@@ -253,6 +257,7 @@ class PlaywrightBackend(ABC):
             )
             record = resolved.record
             backend_node_id = resolved.backend_node_id
+            self._validate_ref_action(request, record)
         elif request.action not in {ActionKind.SCROLL, ActionKind.PRESS}:
             raise BrowserSDKError(BrowserErrorCode.REF_NOT_FOUND, "This action requires an element ref")
 
@@ -264,7 +269,7 @@ class PlaywrightBackend(ABC):
                 "Browser actions require a Chromium CDP session",
             )
         await self._runtime.prepare_stability(page_id)
-        await self._actions.dispatch(
+        post_action_state = await self._actions.dispatch(
             page=handle.page,
             cdp=handle.cdp,
             request=request,
@@ -317,7 +322,7 @@ class PlaywrightBackend(ABC):
             ),
             snapshot_diff=snapshot_diff,
             target=ActionTarget.from_ref_record(record) if record is not None else None,
-            message="The browser action was dispatched.",
+            post_action_state=post_action_state,
         )
 
     async def screenshot(
@@ -334,13 +339,25 @@ class PlaywrightBackend(ABC):
             labels=labels,
         )
 
-    async def read_console(self, page_id: str, *, clear: bool = True) -> tuple[ConsoleEntry, ...]:
+    async def read_console(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[ConsoleEntry]:
         self._runtime.require_page(page_id)
-        return self._runtime.read_console(page_id, clear=clear)
+        return self._runtime.read_console(page_id, clear=clear, limit=limit)
 
-    async def read_network(self, page_id: str, *, clear: bool = True) -> tuple[NetworkEntry, ...]:
+    async def read_network(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[NetworkEntry]:
         self._runtime.require_page(page_id)
-        return self._runtime.read_network(page_id, clear=clear)
+        return self._runtime.read_network(page_id, clear=clear, limit=limit)
 
     async def drain_events(self) -> tuple[BrowserEvent, ...]:
         events = self._runtime.drain_events()
@@ -370,6 +387,19 @@ class PlaywrightBackend(ABC):
         if self._state is not SessionState.CLOSED:
             self._state = SessionState.DISCONNECTED
             self._observer.clear()
+
+    @staticmethod
+    def _validate_ref_action(request: ActionRequest, record: ElementRefRecord) -> None:
+        if request.action in record.allowed_actions:
+            return
+        name = record.accessible_name or record.text or "unnamed element"
+        raise BrowserSDKError(
+            BrowserErrorCode.ACTION_FAILED,
+            (
+                f"Action '{request.action.value}' is not supported by {record.role} '{name}'. "
+                "Take a fresh interactive snapshot and use a ref that lists this action."
+            ),
+        )
 
     async def _close_after_context_idle(self) -> None:
         if self._state is SessionState.CONNECTED:

@@ -22,6 +22,7 @@ from magic_use.models import (
     ActionOutcome,
     ActionRequest,
     ActionResult,
+    ActionState,
     ActionTarget,
     BrowserCapabilities,
     BrowserEvent,
@@ -31,6 +32,8 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
+    ElementRefRecord,
     NavigationResult,
     NetworkEntry,
     PageSnapshot,
@@ -315,6 +318,7 @@ class ChromeExtensionBackend:
             resolved = await self._observer.resolve_ref(page_before, request.ref)
             record = resolved.record
             backend_node_id = resolved.backend_node_id
+            self._validate_ref_action(request, record)
         elif request.action not in {ActionKind.SCROLL, ActionKind.PRESS}:
             raise BrowserSDKError(BrowserErrorCode.REF_NOT_FOUND, "This action requires an element ref")
 
@@ -364,7 +368,31 @@ class ChromeExtensionBackend:
             dialogs=self._parser.string_tuple(result.get("dialogs")),
             snapshot_diff=snapshot_diff,
             target=ActionTarget.from_ref_record(record) if record is not None else None,
-            message="The browser action was dispatched.",
+            post_action_state=self._parse_action_state(result.get("state")),
+        )
+
+    @staticmethod
+    def _validate_ref_action(request: ActionRequest, record: ElementRefRecord) -> None:
+        if request.action in record.allowed_actions:
+            return
+        name = record.accessible_name or record.text or "unnamed element"
+        raise BrowserSDKError(
+            BrowserErrorCode.ACTION_FAILED,
+            (
+                f"Action '{request.action.value}' is not supported by {record.role} '{name}'. "
+                "Take a fresh interactive snapshot and use a ref that lists this action."
+            ),
+        )
+
+    @staticmethod
+    def _parse_action_state(value: JsonValue) -> ActionState | None:
+        if not isinstance(value, dict):
+            return None
+        selected_value = value.get("value")
+        label = value.get("label")
+        return ActionState(
+            value=selected_value if isinstance(selected_value, str) else None,
+            label=label if isinstance(label, str) else None,
         )
 
     async def screenshot(
@@ -381,23 +409,47 @@ class ChromeExtensionBackend:
             labels=labels,
         )
 
-    async def read_console(self, page_id: str, *, clear: bool = True) -> tuple[ConsoleEntry, ...]:
+    async def read_console(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[ConsoleEntry]:
         peer = await self._prepare_peer()
         result = await self._request(
             peer,
             RemoteMethod.DIAGNOSTICS_CONSOLE,
-            {"page_token": self._pages.require_token(page_id), "clear": clear},
+            {"page_token": self._pages.require_token(page_id), "clear": clear, "limit": limit},
         )
-        return self._parser.console_entries(page_id, result.get("entries", []))
+        total_count = result.get("total_count")
+        pending_count = result.get("pending_count")
+        return DiagnosticBatch(
+            entries=self._parser.console_entries(page_id, result.get("entries", [])),
+            total_count=total_count if isinstance(total_count, int) else 0,
+            pending_count=pending_count if isinstance(pending_count, int) else 0,
+        )
 
-    async def read_network(self, page_id: str, *, clear: bool = True) -> tuple[NetworkEntry, ...]:
+    async def read_network(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[NetworkEntry]:
         peer = await self._prepare_peer()
         result = await self._request(
             peer,
             RemoteMethod.DIAGNOSTICS_NETWORK,
-            {"page_token": self._pages.require_token(page_id), "clear": clear},
+            {"page_token": self._pages.require_token(page_id), "clear": clear, "limit": limit},
         )
-        return self._parser.network_entries(page_id, result.get("entries", []))
+        total_count = result.get("total_count")
+        pending_count = result.get("pending_count")
+        return DiagnosticBatch(
+            entries=self._parser.network_entries(page_id, result.get("entries", [])),
+            total_count=total_count if isinstance(total_count, int) else 0,
+            pending_count=pending_count if isinstance(pending_count, int) else 0,
+        )
 
     async def drain_events(self) -> tuple[BrowserEvent, ...]:
         self._sync_peer_state()

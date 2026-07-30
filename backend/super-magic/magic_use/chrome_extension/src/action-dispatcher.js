@@ -6,6 +6,7 @@ export class ActionDispatcher {
   async dispatch(pageToken, params, ownerSessionId, signal) {
     signal?.throwIfAborted();
     const { action, backend_node_id: backendNodeId } = params;
+    let state = null;
     if (action === "click" || action === "hover") {
       await this.scrollNodeIntoView(pageToken, backendNodeId, ownerSessionId, signal);
       const { x, y } = await this.boxCenter(pageToken, backendNodeId, ownerSessionId, signal);
@@ -46,10 +47,21 @@ export class ActionDispatcher {
       }
       await this.pressKey(pageToken, params.key || "", ownerSessionId, signal);
     } else if (action === "select") {
-      await this.callOnNode(pageToken, backendNodeId, function (value) {
-        this.value = value;
+      state = await this.callOnNode(pageToken, backendNodeId, function (requested) {
+        const options = Array.from(this.options || []);
+        let option = options.find((candidate) => candidate.value === requested);
+        if (!option) {
+          const labelMatches = options.filter((candidate) =>
+            (candidate.label || candidate.text || "").trim() === requested
+          );
+          if (labelMatches.length > 1) throw new Error(`More than one option has label: ${requested}`);
+          option = labelMatches[0];
+        }
+        if (!option) throw new Error(`No option has value or label: ${requested}`);
+        this.value = option.value;
         this.dispatchEvent(new Event("input", { bubbles: true }));
         this.dispatchEvent(new Event("change", { bubbles: true }));
+        return { value: this.value, label: option?.label || option?.text || null };
       }, [params.value], ownerSessionId, signal);
     } else if (action === "check") {
       await this.callOnNode(pageToken, backendNodeId, function (checked) {
@@ -61,7 +73,10 @@ export class ActionDispatcher {
       throw new Error(`Unsupported action: ${action}`);
     }
     signal?.throwIfAborted();
-    return this.controller.hasPage(pageToken) ? this.controller.describe(pageToken, ownerSessionId) : null;
+    return {
+      page: this.controller.hasPage(pageToken) ? await this.controller.describe(pageToken, ownerSessionId) : null,
+      state,
+    };
   }
 
   async scroll(pageToken, backendNodeId, params, ownerSessionId, signal) {
@@ -97,9 +112,11 @@ export class ActionDispatcher {
         functionDeclaration: fn.toString(),
         arguments: args.map((value) => ({ value })),
         awaitPromise: true,
+        returnByValue: true,
         userGesture: true,
       }, signal);
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || "Page action failed");
+      return result.result?.value ?? null;
     } finally {
       await this.controller.send(pageToken, ownerSessionId, "Runtime.releaseObject", { objectId }).catch(() => {});
     }

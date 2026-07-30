@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agentlang.tools.tool_result import ToolResult
 from app.service.browser.browser_artifact_service import BrowserScreenshotArtifact
+from app.service.browser.browser_file_adapter import BrowserSavedScreenshot
 from magic_use.errors import BrowserSDKError
 from magic_use.models import (
     ActionResult,
@@ -18,6 +20,7 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
     NetworkEntry,
     PageSnapshot,
     ScreenshotResult,
@@ -26,6 +29,9 @@ from magic_use.models import (
 )
 
 StructuredValue: TypeAlias = str | int | float | bool | None | list["StructuredValue"] | dict[str, "StructuredValue"]
+_MAX_VALUE_PREVIEW_CHARS = 2000
+_MAX_VISUAL_EVIDENCE_CHARS = 1000
+_MAX_DIAGNOSTIC_CONTENT_ENTRIES = 20
 
 
 class BrowserToolResultBuilder:
@@ -76,7 +82,7 @@ class BrowserToolResultBuilder:
                 f"- Document generation: {page.document_generation}\n"
                 f"- Expires: {expires}{warning}"
             ),
-            data={"page_id": page.id, "page": cls._structured(page)},
+            data={"page_id": page.id, "session_id": page.session_id, "page": cls._structured(page)},
         )
 
     @classmethod
@@ -91,6 +97,7 @@ class BrowserToolResultBuilder:
             content=content,
             data={
                 "page_id": page.id,
+                "session_id": page.session_id,
                 "page": cls._structured(page),
                 "scope": scope,
                 "markdown": markdown,
@@ -124,12 +131,22 @@ class BrowserToolResultBuilder:
     @classmethod
     def action(cls, result: ActionResult) -> ToolResult:
         lines = [
-            f"Browser action: {result.action.value}",
+            "Browser action dispatched.",
             f"Page ID: {result.page_id}",
+            f"Action: {result.action.value}",
             f"Outcome: {result.outcome.value}",
         ]
+        if result.target is not None:
+            target_name = result.target.name or result.target.text or "(unnamed)"
+            lines.append(f"Target: {result.target.role} — {target_name}")
         if result.ref is not None:
             lines.append(f"Ref: {result.ref}")
+        if result.post_action_state is not None:
+            if result.post_action_state.value is not None:
+                lines.append(f"Selected value: {result.post_action_state.value}")
+            if result.post_action_state.label is not None:
+                lines.append(f"Selected label: {result.post_action_state.label}")
+        lines.append("Verification: the input event was dispatched; verify the resulting page state before assuming the task succeeded.")
         if result.message:
             lines.append(result.message)
         if result.navigation is not None:
@@ -161,6 +178,7 @@ class BrowserToolResultBuilder:
         page: BrowserPage,
         result: ScreenshotResult,
         artifact: BrowserScreenshotArtifact,
+        saved: BrowserSavedScreenshot | None = None,
     ) -> ToolResult:
         label_to_ref = dict(result.labels)
         lines = [
@@ -171,18 +189,43 @@ class BrowserToolResultBuilder:
         ]
         if label_to_ref:
             lines.append("Labels: " + ", ".join(f"{label}={ref}" for label, ref in label_to_ref.items()))
+        if saved is not None:
+            lines.append(f"Saved file: {saved.workspace_path}")
+            lines.append(f"Saved format: {saved.format}")
+            lines.append(f"Saved resolution: {saved.width}x{saved.height}")
+            profile = " (Tool Detail snapshot default)" if saved.uses_snapshot_defaults else ""
+            lines.append(f"Saved scale: {saved.scale:g}{profile}")
+            if saved.quality is not None:
+                lines.append(f"Saved quality: {saved.quality}")
+            lines.append(f"Saved size: {saved.file_size} bytes")
+        screenshot_data: dict[str, StructuredValue] = {
+            "page_id": result.page_id,
+            "full_page": result.full_page,
+            "width": artifact.width,
+            "height": artifact.height,
+        }
+        if saved is not None:
+            screenshot_data.update(
+                {
+                    "output_path": saved.workspace_path,
+                    "format": saved.format,
+                    "scale": saved.scale,
+                    "saved_width": saved.width,
+                    "saved_height": saved.height,
+                    "quality": saved.quality,
+                    "file_size": saved.file_size,
+                    "uses_snapshot_defaults": saved.uses_snapshot_defaults,
+                }
+            )
         return ToolResult(
             content="\n".join(lines),
             data={
                 "page_id": result.page_id,
-                "screenshot": {
-                    "page_id": result.page_id,
-                    "full_page": result.full_page,
-                    "width": artifact.width,
-                    "height": artifact.height,
-                },
+                "session_id": page.session_id,
+                "screenshot": screenshot_data,
                 "page": cls._structured(page),
                 "label_to_ref": label_to_ref,
+                **({"output_path": saved.workspace_path} if saved is not None else {}),
             },
             extra_info={
                 "browser_snapshot_file_key": artifact.file_key,
@@ -221,32 +264,107 @@ class BrowserToolResultBuilder:
             extra_info=screenshot_result.extra_info,
         )
 
-    @classmethod
-    def console(cls, entries: tuple[ConsoleEntry, ...], page_id: str) -> ToolResult:
-        if not entries:
-            return ToolResult(
-                content=f"No console entries are available for page {page_id}.",
-                data={"page_id": page_id, "console_entries": []},
-            )
-        lines = [f"Console entries for page {page_id}:"]
-        lines.extend(
-            f"- {cls._format_time(entry.occurred_at)} [{entry.level}] {entry.text}"
-            for entry in entries
-        )
+    @staticmethod
+    def visual_match(
+        visual_result: ToolResult,
+        *,
+        page_id: str,
+        document_generation: int,
+        target: str,
+        label: str,
+        ref: str,
+        evidence: str,
+    ) -> ToolResult:
+        evidence = BrowserToolResultBuilder._bounded_text(evidence, _MAX_VISUAL_EVIDENCE_CHARS)
         return ToolResult(
-            content="\n".join(lines),
-            data={"page_id": page_id, "console_entries": cls._structured(entries)},
+            content=(
+                "Visual target matched.\n"
+                f"Page ID: {page_id}\n"
+                f"Document generation: {document_generation}\n"
+                f"Target: {target}\n"
+                f"Label: {label}\n"
+                f"Ref: {ref}\n"
+                f"Evidence: {evidence}"
+            ),
+            data={
+                **visual_result.data,
+                "document_generation": document_generation,
+                "target": target,
+                "label": label,
+                "ref": ref,
+                "evidence": evidence,
+            },
+            extra_info=visual_result.extra_info,
+        )
+
+    @staticmethod
+    def visual_match_error(visual_result: ToolResult, message: str) -> ToolResult:
+        return ToolResult.error(
+            message,
+            data=visual_result.data,
+            extra_info=visual_result.extra_info,
         )
 
     @classmethod
-    def network(cls, entries: tuple[NetworkEntry, ...], page_id: str) -> ToolResult:
+    def console(cls, batch: DiagnosticBatch[ConsoleEntry], page_id: str) -> ToolResult:
+        entries = batch.entries
+        error_count = sum(entry.level.lower() in {"error", "assert"} for entry in entries)
+        data = {
+            "page_id": page_id,
+            "console_entries": cls._structured(entries),
+            "total_count": batch.total_count,
+            "returned_count": len(entries),
+            "error_count": error_count,
+        }
         if not entries:
             return ToolResult(
-                content=f"No network entries are available for page {page_id}.",
-                data={"page_id": page_id, "network_entries": []},
+                content=f"Console entries for page {page_id}: total={batch.total_count}, returned=0, errors=0.",
+                data=data,
             )
-        lines = [f"Network entries for page {page_id}:"]
-        for entry in entries:
+        lines = [
+            f"Console entries for page {page_id}: total={batch.total_count}, "
+            f"returned={len(entries)}, errors={error_count}."
+        ]
+        preview_entries = entries[-_MAX_DIAGNOSTIC_CONTENT_ENTRIES:]
+        if len(preview_entries) < len(entries):
+            lines.append(f"Showing the newest {len(preview_entries)} returned entries in content.")
+        lines.extend(
+            f"- {cls._format_time(entry.occurred_at)} [{entry.level}] {entry.text}"
+            for entry in preview_entries
+        )
+        return ToolResult(
+            content="\n".join(lines),
+            data=data,
+        )
+
+    @classmethod
+    def network(cls, batch: DiagnosticBatch[NetworkEntry], page_id: str) -> ToolResult:
+        entries = batch.entries
+        error_count = sum(entry.error is not None or entry.phase == "failed" for entry in entries)
+        data = {
+            "page_id": page_id,
+            "network_entries": cls._structured(entries),
+            "total_count": batch.total_count,
+            "returned_count": len(entries),
+            "error_count": error_count,
+            "pending_count": batch.pending_count,
+        }
+        if not entries:
+            return ToolResult(
+                content=(
+                    f"Network entries for page {page_id}: total={batch.total_count}, "
+                    f"returned=0, errors=0, pending={batch.pending_count}."
+                ),
+                data=data,
+            )
+        lines = [
+            f"Network entries for page {page_id}: total={batch.total_count}, returned={len(entries)}, "
+            f"errors={error_count}, pending={batch.pending_count}."
+        ]
+        preview_entries = entries[-_MAX_DIAGNOSTIC_CONTENT_ENTRIES:]
+        if len(preview_entries) < len(entries):
+            lines.append(f"Showing the newest {len(preview_entries)} returned entries in content.")
+        for entry in preview_entries:
             status = str(entry.status) if entry.status is not None else "-"
             detail = f"; error={entry.error}" if entry.error else ""
             lines.append(
@@ -255,7 +373,7 @@ class BrowserToolResultBuilder:
             )
         return ToolResult(
             content="\n".join(lines),
-            data={"page_id": page_id, "network_entries": cls._structured(entries)},
+            data=data,
         )
 
     @classmethod
@@ -270,9 +388,13 @@ class BrowserToolResultBuilder:
         )
         return ToolResult(content="\n".join(lines), data={"events": cls._structured(events)})
 
-    @staticmethod
-    def value(value: StructuredValue, message: str) -> ToolResult:
-        return ToolResult(content=message, data={"value": value})
+    @classmethod
+    def value(cls, value: StructuredValue, message: str) -> ToolResult:
+        preview = cls._value_preview(value)
+        return ToolResult(
+            content=f"{message}\nValue: {preview}",
+            data={"value": value},
+        )
 
     @staticmethod
     def error(error: BrowserSDKError, *, user_error: str) -> ToolResult:
@@ -290,6 +412,8 @@ class BrowserToolResultBuilder:
             attributes.append(f"ref={node.ref}")
         if node.states:
             attributes.extend(sorted(node.states))
+        if node.actions:
+            attributes.append("actions=" + ",".join(sorted(node.actions)))
         label = node.name or node.text or node.value or node.description
         line = f"{indent}[{' '.join(attributes)}]"
         if label:
@@ -316,6 +440,14 @@ class BrowserToolResultBuilder:
             return value
         if isinstance(value, datetime):
             return value.isoformat()
+        if isinstance(value, BrowserPage):
+            result = {
+                field.name: cls._structured(getattr(value, field.name))
+                for field in fields(value)
+            }
+            result["page_id"] = result.pop("id")
+            result["url"] = cls.safe_url(value.url)
+            return result
         if is_dataclass(value) and not isinstance(value, type):
             result: dict[str, StructuredValue] = {}
             for field in fields(value):
@@ -341,6 +473,28 @@ class BrowserToolResultBuilder:
     def _format_time(value: datetime) -> str:
         normalized = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
         return normalized.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    @staticmethod
+    def _value_preview(value: StructuredValue) -> str:
+        if isinstance(value, str):
+            rendered = value
+        elif value is None or isinstance(value, (int, float, bool)):
+            rendered = json.dumps(value, ensure_ascii=False)
+        else:
+            rendered = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        if len(rendered) <= _MAX_VALUE_PREVIEW_CHARS:
+            return rendered
+        return (
+            rendered[:_MAX_VALUE_PREVIEW_CHARS]
+            + '… [truncated; the complete value is available in data["value"]]'
+        )
+
+    @staticmethod
+    def _bounded_text(value: str, max_chars: int) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return normalized[:max_chars] + "… [truncated]"
 
     @staticmethod
     def safe_url(value: str) -> str:

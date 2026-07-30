@@ -24,6 +24,7 @@ tools:
 skills:
   system_skills:
     - name: subagents
+    - name: browser
     - name: share
     - name: skill-vetter
     - name: using-mcp

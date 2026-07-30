@@ -33,8 +33,8 @@ class BrowserPressParams(BaseToolParams):
 class BrowserScrollParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
     ref: str | None = Field(None, description="Optional ref to scroll into view or use as scroll context.")
-    delta_x: float = Field(0, description="Horizontal wheel delta.")
-    delta_y: float = Field(0, description="Vertical wheel delta.")
+    delta_x: float = Field(0, description="Horizontal distance: positive scrolls right, negative scrolls left.")
+    delta_y: float = Field(0, description="Vertical distance: positive scrolls down, negative scrolls up.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
     @model_validator(mode="after")
@@ -45,7 +45,7 @@ class BrowserScrollParams(BaseToolParams):
 
 
 class BrowserSelectParams(BrowserRefParams):
-    value: str = Field(..., description="Single option value to select.")
+    value: str = Field(..., description="Exact option value or unique visible label to select.")
 
 
 class BrowserCheckParams(BrowserRefParams):
@@ -53,7 +53,11 @@ class BrowserCheckParams(BrowserRefParams):
 
 
 class BrowserUploadFileParams(BrowserRefParams):
-    file_paths: list[str] = Field(..., min_length=1, description="Workspace file paths to upload.")
+    file_paths: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Relative or absolute file paths inside the current workspace.",
+    )
 
 
 async def _dispatch_action(
@@ -180,7 +184,7 @@ class BrowserScroll(BrowserToolBase[BrowserScrollParams]):
 # Agent-facing usage is documented in agents/skills/browser/.
 @tool(name="browser_select", code_mode_only=True)
 class BrowserSelect(BrowserToolBase[BrowserSelectParams]):
-    """Select one option value by snapshot ref."""
+    """Select one option by exact value or unique visible label."""
 
     name = "browser_select"
     operation_key = "browser.select"

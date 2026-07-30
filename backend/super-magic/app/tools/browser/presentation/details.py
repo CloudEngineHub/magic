@@ -20,9 +20,16 @@ from app.tools.browser.presentation.models import (
 
 class BrowserDetailBuilder:
     @classmethod
-    def presentation(cls, action: str, result: ToolResult) -> BrowserOperationPresentation:
+    def presentation(
+        cls,
+        action: str,
+        result: ToolResult,
+        *,
+        tool_name: str | None = None,
+        arguments: Mapping[str, object] | None = None,
+    ) -> BrowserOperationPresentation:
         page = cls._page_data(result)
-        target = cls._target_text(result)
+        target = cls._argument_target(tool_name, arguments or {}, result) or cls._target_text(result)
         stats = cls._stats(result)
         status = BrowserDetailStatus.SUCCEEDED if result.ok else BrowserDetailStatus.FAILED
         return BrowserOperationPresentation(
@@ -139,7 +146,7 @@ class BrowserDetailBuilder:
                 if not isinstance(entry, Mapping):
                     continue
                 status = entry.get("status")
-                if entry.get("error") or isinstance(status, int) and status >= 400:
+                if entry.get("error") or (isinstance(status, int) and status >= 400):
                     failed += 1
                 if status is None and not entry.get("error"):
                     pending += 1
@@ -174,6 +181,9 @@ class BrowserDetailBuilder:
 
     @classmethod
     def _target_text(cls, result: ToolResult) -> str:
+        direct_target = result.data.get("target")
+        if isinstance(direct_target, str) and direct_target.strip():
+            return direct_target.strip()
         action = result.data.get("action")
         if not isinstance(action, Mapping):
             return ""
@@ -192,6 +202,37 @@ class BrowserDetailBuilder:
             ),
             "",
         )
+
+    @classmethod
+    def _argument_target(
+        cls,
+        tool_name: str | None,
+        arguments: Mapping[str, object],
+        result: ToolResult,
+    ) -> str:
+        if tool_name == "browser_fill":
+            if not result.ok:
+                return ""
+            if cls._is_sensitive_target(result):
+                return cls._message("browser.detail.sensitive_value")
+            return cls._string(arguments.get("value")).strip()
+        key_by_tool = {
+            "browser_press": "key",
+            "browser_select": "value",
+            "browser_screenshot": "output_path",
+            "browser_visual_query": "query",
+            "browser_find_visual": "target",
+        }
+        argument_key = key_by_tool.get(tool_name or "")
+        return cls._string(arguments.get(argument_key)).strip() if argument_key else ""
+
+    @staticmethod
+    def _is_sensitive_target(result: ToolResult) -> bool:
+        action = result.data.get("action")
+        if not isinstance(action, Mapping):
+            return False
+        target = action.get("target")
+        return isinstance(target, Mapping) and target.get("is_sensitive") is True
 
     @staticmethod
     def _page_data(result: ToolResult) -> Mapping[str, object]:

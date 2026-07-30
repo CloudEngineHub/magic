@@ -23,6 +23,8 @@ Do not use it to:
 
 Keep expressions focused and return small serializable values. Do not return a complete DOM tree or large application state object.
 
+The result content shows a bounded value preview. The complete JSON-serializable value remains in `result.data["value"]`.
+
 ```python
 result = tool.call("browser_evaluate", {
     "page_id": page_id,
@@ -33,7 +35,7 @@ print(result.content)
 
 ## Console
 
-Use `browser_read_console` when the task involves runtime errors, warnings, logs, or client-side behavior. The default `clear=True` returns buffered entries and removes them, so later calls are incremental.
+Use `browser_read_console` when the task involves runtime errors, warnings, logs, or client-side behavior. It returns the newest 100 entries by default; set `limit` from 1 to 500 when needed. The default `clear=True` clears that page's current console buffer after reading, so later calls are incremental.
 
 Do not expose secrets found in console output. Summarize the relevant errors and preserve exact error text only when it is safe and useful.
 
@@ -41,7 +43,7 @@ Do not expose secrets found in console output. Summarize the relevant errors and
 
 Use `browser_read_network` when the task involves failed requests, status codes, redirects, API timing, downloads, or page loading behavior.
 
-The default `clear=True` returns buffered entries and removes them. Use `clear=False` only when another call must inspect the same buffer.
+It returns the newest 100 entries by default; set `limit` from 1 to 500 when needed. The default `clear=True` clears that page's current network buffer after reading. Use `clear=False` only when another call must inspect the same buffer.
 
 Prefer metadata such as method, sanitized URL, status, resource type, timing, and failure reason. Do not print authorization headers, cookies, request bodies containing secrets, or large response bodies.
 
@@ -57,4 +59,4 @@ Prefer metadata such as method, sanitized URL, status, resource type, timing, an
 
 ## Output Control
 
-Browser diagnostics can be large. Inspect counts and a small number of entries first. Filter in Code Mode and print only evidence relevant to the user's question.
+Browser diagnostics can be large, so they are a normal exception to content-first reading. For a small batch, print and read `result.content`. For a large batch or a pipeline step, filter `result.data["console_entries"]` or `result.data["network_entries"]` in code and print only the conclusion and relevant evidence. Do not print the complete structured batch.

@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
 
 
 class WaitConditionKind(str, Enum):
@@ -78,3 +81,10 @@ class NetworkEntry:
     status: int | None
     error: str | None
     occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticBatch(Generic[T]):
+    entries: tuple[T, ...]
+    total_count: int
+    pending_count: int = 0

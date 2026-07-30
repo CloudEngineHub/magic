@@ -54,6 +54,7 @@ class ActionTarget:
     role: str
     name: str
     text: str
+    is_sensitive: bool = False
 
     @classmethod
     def from_ref_record(cls, record: ElementRefRecord) -> "ActionTarget":
@@ -62,7 +63,14 @@ class ActionTarget:
             role=record.role,
             name=record.accessible_name,
             text=record.text,
+            is_sensitive=record.attributes.get("type", "").lower() == "password",
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionState:
+    value: str | None = None
+    label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +86,7 @@ class ActionResult:
     dialogs: tuple[str, ...] = ()
     snapshot_diff: SnapshotDiff | None = None
     target: ActionTarget | None = None
+    post_action_state: ActionState | None = None
     message: str = ""
 
 

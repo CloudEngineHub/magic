@@ -3,7 +3,7 @@ from __future__ import annotations
 from playwright.async_api import CDPSession, Page
 
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
-from magic_use.models.actions import ActionRequest
+from magic_use.models.actions import ActionRequest, ActionState
 from magic_use.models.common import ActionKind, JsonValue
 from magic_use.models.refs import ElementRefRecord
 
@@ -17,7 +17,7 @@ class PlaywrightActionDispatcher:
         request: ActionRequest,
         record: ElementRefRecord | None,
         backend_node_id: int | None,
-    ) -> None:
+    ) -> ActionState | None:
         if request.action is ActionKind.SCROLL and record is None:
             if request.delta_x == 0 and request.delta_y == 0:
                 raise BrowserSDKError(
@@ -25,20 +25,20 @@ class PlaywrightActionDispatcher:
                     "Page scrolling requires a non-zero delta when no element ref is provided",
                 )
             await page.mouse.wheel(request.delta_x, request.delta_y)
-            return
+            return None
         if request.action is ActionKind.PRESS and record is None:
             if request.key is None:
                 raise BrowserSDKError(BrowserErrorCode.ACTION_FAILED, "Press requires a key")
             await page.keyboard.press(request.key)
-            return
+            return None
         if record is None or backend_node_id is None:
             raise BrowserSDKError(BrowserErrorCode.REF_NOT_FOUND, "This action requires an element ref")
         if request.action is ActionKind.HOVER:
             await self._hover(cdp, backend_node_id)
-            return
+            return None
         if request.action is ActionKind.SCROLL:
             await self._scroll(page, cdp, request, backend_node_id)
-            return
+            return None
         if request.action is ActionKind.UPLOAD:
             if not request.file_paths:
                 raise BrowserSDKError(BrowserErrorCode.ACTION_FAILED, "Upload requires at least one file path")
@@ -46,7 +46,7 @@ class PlaywrightActionDispatcher:
                 "DOM.setFileInputFiles",
                 {"backendNodeId": backend_node_id, "files": list(request.file_paths)},
             )
-            return
+            return None
 
         object_id = await self._resolve_object(cdp, backend_node_id)
         try:
@@ -83,17 +83,38 @@ class PlaywrightActionDispatcher:
             elif request.action is ActionKind.SELECT:
                 if request.value is None:
                     raise BrowserSDKError(BrowserErrorCode.ACTION_FAILED, "Select requires a value")
-                await self._call(
+                selected = await self._call(
                     cdp,
                     object_id,
                     """
-                    function(value) {
-                      this.value = value;
+                    function(requested) {
+                      const options = Array.from(this.options || []);
+                      let option = options.find(candidate => candidate.value === requested);
+                      if (!option) {
+                        const labelMatches = options.filter(candidate =>
+                          (candidate.label || candidate.text || '').trim() === requested
+                        );
+                        if (labelMatches.length > 1) {
+                          throw new Error(`More than one option has label: ${requested}`);
+                        }
+                        option = labelMatches[0];
+                      }
+                      if (!option) throw new Error(`No option has value or label: ${requested}`);
+                      this.value = option.value;
                       this.dispatchEvent(new Event('input', {bubbles: true}));
                       this.dispatchEvent(new Event('change', {bubbles: true}));
+                      return {value: this.value, label: option?.label || option?.text || null};
                     }
                     """,
                     [request.value],
+                )
+                if not isinstance(selected, dict):
+                    raise BrowserSDKError(BrowserErrorCode.ACTION_FAILED, "The selected option state is unavailable")
+                value = selected.get("value")
+                label = selected.get("label")
+                return ActionState(
+                    value=value if isinstance(value, str) else None,
+                    label=label if isinstance(label, str) else None,
                 )
             elif request.action is ActionKind.CHECK:
                 if request.checked is None:
@@ -115,6 +136,7 @@ class PlaywrightActionDispatcher:
                     BrowserErrorCode.CAPABILITY_UNAVAILABLE,
                     f"Unsupported Playwright action: {request.action.value}",
                 )
+            return None
         finally:
             try:
                 await cdp.send("Runtime.releaseObject", {"objectId": object_id})
@@ -136,11 +158,12 @@ class PlaywrightActionDispatcher:
         object_id: str,
         function: str,
         arguments: list[JsonValue] | None = None,
-    ) -> None:
+    ) -> JsonValue:
         params: dict[str, JsonValue] = {
             "objectId": object_id,
             "functionDeclaration": function,
             "awaitPromise": True,
+            "returnByValue": True,
             "userGesture": True,
         }
         if arguments:
@@ -153,6 +176,8 @@ class PlaywrightActionDispatcher:
                 BrowserErrorCode.ACTION_FAILED,
                 text if isinstance(text, str) else "Page action failed",
             )
+        remote_result = result.get("result")
+        return remote_result.get("value") if isinstance(remote_result, dict) else None
 
     @staticmethod
     async def _click(cdp: CDPSession, backend_node_id: int) -> None:

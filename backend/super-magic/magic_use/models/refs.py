@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
+from magic_use.models.common import ActionKind
 from magic_use.models.geometry import BoundingBox
 
 
@@ -21,6 +22,7 @@ class ElementRefRecord:
     accessible_name: str
     text: str
     attributes: Mapping[str, str]
+    allowed_actions: frozenset[ActionKind]
     structural_path: tuple[int, ...]
     bounding_box: BoundingBox | None
     stable_fingerprint: str

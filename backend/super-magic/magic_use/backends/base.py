@@ -11,6 +11,7 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
     NetworkEntry,
     PageSnapshot,
     ScreenshotResult,
@@ -68,8 +69,20 @@ class BrowserBackend(Protocol):
         labels: bool = False,
     ) -> ScreenshotResult: ...
 
-    async def read_console(self, page_id: str, *, clear: bool = True) -> tuple[ConsoleEntry, ...]: ...
+    async def read_console(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[ConsoleEntry]: ...
 
-    async def read_network(self, page_id: str, *, clear: bool = True) -> tuple[NetworkEntry, ...]: ...
+    async def read_network(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[NetworkEntry]: ...
 
     async def drain_events(self) -> tuple[BrowserEvent, ...]: ...

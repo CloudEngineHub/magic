@@ -14,26 +14,35 @@ A snapshot may be truncated. If the target is outside the returned region, narro
 
 ## Reading the Tree
 
+Read `result.content` first. Structured data lives under `result.data["snapshot"]`:
+
+- `root_nodes`: the snapshot tree.
+- `refs`: the ref records and allowed actions.
+
+There are no `controls` or `elements` fields.
+
 The model-readable tree uses roles, names, states, and refs:
 
 ```text
 [dialog] Sign in
-  [textbox ref=e12] Email
-  [textbox ref=e13] Password
-  [button ref=e14] Sign in
+  [textbox ref=e12 actions=click,fill,press,scroll] Email
+  [textbox ref=e13 actions=click,fill,press,scroll] Password
+  [button ref=e14 actions=click,hover,scroll] Sign in
 
 [main]
   [heading] Product details
-  [button ref=e21] Add to cart
+  [button ref=e21 actions=click,hover,scroll] Add to cart
 ```
 
 Use the hierarchy to distinguish repeated labels. A button named `Close` inside an advertisement dialog is not the same target as a button named `Close` inside the user's current form.
 
 Nodes may include states such as disabled, checked, selected, expanded, pressed, required, readonly, or focused. They may also include actions confirmed by the runtime, such as click, fill, select, check, scroll, hover, or upload.
 
+Each structured ref record contains `ref`, `role`, `accessible_name`, `text`, `attributes`, and `allowed_actions`. It is an accessibility record, not a DOM record: do not read `tag_name` or a top-level HTML `type`. HTML attributes are under `attributes`.
+
 ## Ref Lifetime
 
-A ref is valid only for the session, page, frame, document generation, and snapshot state in which it was created.
+A ref is valid only for its session, page, frame, and document generation. Within one document generation, repeated snapshots keep a ref stable when backend identity, a unique strong identity, or a unique full fingerprint proves it is the same compatible element. Ambiguous identity or changed allowed actions produce a new ref.
 
 Take a fresh snapshot when:
 
@@ -70,6 +79,8 @@ If no observable change is available, report that the action was dispatched and 
 
 `browser_screenshot(labels=True)` first obtains an interactive viewport snapshot, then renders labels for selected snapshot refs, captures the image, and removes the overlay.
 
+Labels exist only for that screenshot. The overlay is temporary, and labels are not stable identifiers.
+
 The result includes a `label_to_ref` mapping. Convert a visual choice back to the mapped ref and use a normal interaction tool:
 
 ```python
@@ -77,17 +88,18 @@ shot = tool.call("browser_screenshot", {
     "page_id": page_id,
     "labels": True,
 })
-if not shot.ok:
-    raise RuntimeError(shot.content)
-
-target_ref = shot.data["label_to_ref"]["A2"]
-clicked = tool.call("browser_click", {
-    "page_id": page_id,
-    "ref": target_ref,
-})
+print(shot.content)
+if shot.ok:
+    target_ref = shot.data["label_to_ref"]["A2"]
+    print(tool.call("browser_click", {
+        "page_id": page_id,
+        "ref": target_ref,
+    }).content)
 ```
 
 Do not infer a ref from the label text. Do not reuse a label mapping after scrolling, resizing, navigation, or another snapshot that changes the page state.
+
+Prefer `browser_find_visual` when the goal is to find one visually described control. It performs the labeled screenshot and returns one validated ref directly.
 
 ## Stale Ref Recovery
 

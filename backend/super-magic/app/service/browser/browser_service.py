@@ -30,6 +30,7 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
     NetworkEntry,
     PageSnapshot,
     ScreenshotResult,
@@ -114,7 +115,9 @@ class BrowserService:
 
     async def open_page(self, url: str, session_id: str | None = None) -> BrowserPage:
         entry = await self._resolve_entry(session_id)
-        page = await await_browser_operation(self._tool_context, entry.client.open_page(url))
+        page = await self._reuse_initial_playwright_page(entry, url)
+        if page is None:
+            page = await await_browser_operation(self._tool_context, entry.client.open_page(url))
         await self._refresh(entry)
         return page
 
@@ -157,14 +160,29 @@ class BrowserService:
         page_id: str,
         request: WaitRequest,
         session_id: str | None = None,
-    ) -> None:
+    ) -> BrowserPage:
         entry = await self._resolve_entry(session_id)
         keep_alive = request.timeout_ms > 60_000 or (request.duration_ms or 0) > 60_000
-        await await_browser_operation(
-            self._tool_context,
-            entry.client.wait(page_id, request),
-            keep_alive=keep_alive,
-        )
+        try:
+            await await_browser_operation(
+                self._tool_context,
+                entry.client.wait(page_id, request),
+                keep_alive=keep_alive,
+            )
+        except asyncio.CancelledError:
+            raise
+        except BrowserSDKError as error:
+            if error.code in {
+                BrowserErrorCode.SESSION_CLOSED,
+                BrowserErrorCode.PAGE_NOT_FOUND,
+                BrowserErrorCode.PAGE_CLOSED,
+                BrowserErrorCode.PAGE_EXPIRED,
+            }:
+                raise
+            raise await self._build_wait_error(entry, page_id, request, error) from error
+        except Exception as error:
+            raise await self._build_wait_error(entry, page_id, request, error) from error
+        return await self._find_page(entry, page_id)
 
     async def read_page(
         self,
@@ -290,12 +308,13 @@ class BrowserService:
         page_id: str,
         *,
         clear: bool,
+        limit: int,
         session_id: str | None = None,
-    ) -> tuple[ConsoleEntry, ...]:
+    ) -> DiagnosticBatch[ConsoleEntry]:
         entry = await self._resolve_entry(session_id)
         return await await_browser_operation(
             self._tool_context,
-            entry.client.read_console(page_id, clear=clear),
+            entry.client.read_console(page_id, clear=clear, limit=limit),
         )
 
     async def read_network(
@@ -303,12 +322,13 @@ class BrowserService:
         page_id: str,
         *,
         clear: bool,
+        limit: int,
         session_id: str | None = None,
-    ) -> tuple[NetworkEntry, ...]:
+    ) -> DiagnosticBatch[NetworkEntry]:
         entry = await self._resolve_entry(session_id)
         return await await_browser_operation(
             self._tool_context,
-            entry.client.read_network(page_id, clear=clear),
+            entry.client.read_network(page_id, clear=clear, limit=limit),
         )
 
     async def drain_events(self, session_id: str | None = None) -> tuple[BrowserEvent, ...]:
@@ -325,15 +345,22 @@ class BrowserService:
             try:
                 candidate = await async_realpath(candidate, strict=True)
             except FileNotFoundError as error:
-                raise ValueError(f"Upload file does not exist: {file_path}") from error
+                raise ValueError(
+                    f"Upload file does not exist in the workspace shared with the browser: {file_path}"
+                ) from error
             if os.path.commonpath((workspace, candidate)) != str(workspace):
-                raise ValueError(f"Upload file must be inside the workspace: {file_path}")
+                raise ValueError(
+                    "Upload files must be inside the current workspace. "
+                    f"Use a workspace-relative path or an absolute path within the workspace: {file_path}"
+                )
             try:
                 file_stat = await async_stat(candidate)
             except FileNotFoundError as error:
-                raise ValueError(f"Upload file does not exist: {file_path}") from error
+                raise ValueError(
+                    f"Upload file does not exist in the workspace shared with the browser: {file_path}"
+                ) from error
             if not stat.S_ISREG(file_stat.st_mode):
-                raise ValueError(f"Upload path is not a file: {file_path}")
+                raise ValueError(f"Upload path must identify a regular workspace file: {file_path}")
             resolved.append(str(candidate))
         return tuple(resolved)
 
@@ -406,3 +433,43 @@ class BrowserService:
             if page.id == page_id:
                 return page
         raise BrowserSDKError(BrowserErrorCode.PAGE_NOT_FOUND, f"Browser page is not available: {page_id}")
+
+    async def _reuse_initial_playwright_page(
+        self,
+        entry: BrowserRuntimeEntry,
+        url: str,
+    ) -> BrowserPage | None:
+        if entry.session.backend is BrowserBackendKind.CHROME_EXTENSION:
+            return None
+        pages = await await_browser_operation(self._tool_context, entry.client.list_pages())
+        if len(pages) != 1 or pages[0].url != "about:blank":
+            return None
+        if url == "about:blank":
+            return pages[0]
+        return await await_browser_operation(
+            self._tool_context,
+            entry.client.navigate(pages[0].id, url),
+        )
+
+    async def _build_wait_error(
+        self,
+        entry: BrowserRuntimeEntry,
+        page_id: str,
+        request: WaitRequest,
+        error: Exception,
+    ) -> BrowserSDKError:
+        expected = request.value or request.state or request.duration_ms
+        condition = request.condition.value
+        try:
+            page = await self._find_page(entry, page_id)
+            current_page = f"Current page title: {page.title!r}. Current URL: {page.url}."
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            current_page = "The current page state could not be read."
+        return BrowserSDKError(
+            BrowserErrorCode.ACTION_FAILED,
+            f"Wait condition was not satisfied: {condition}={expected!r}. {current_page} "
+            "Read the current page before retrying; navigation may have stopped on an intermediate "
+            f"page such as human verification. Original wait error: {error}",
+        )

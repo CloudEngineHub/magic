@@ -1520,8 +1520,8 @@
         "en_US": "Wait for webpage"
     },
     "browser.keep_alive": {
-        "zh_CN": "延长网页保留时间",
-        "en_US": "Keep webpage active"
+        "zh_CN": "保持网页可继续操作",
+        "en_US": "Keep webpage available"
     },
     "browser.screenshot": {
         "zh_CN": "截取网页",
@@ -1642,6 +1642,10 @@
     "browser.detail.network": {
         "zh_CN": "读取到 {{count}} 条网络请求，其中 {{failed}} 条失败、{{pending}} 条尚未完成",
         "en_US": "Read {{count}} network requests, including {{failed}} failed and {{pending}} pending"
+    },
+    "browser.detail.sensitive_value": {
+        "zh_CN": "敏感内容（已隐藏）",
+        "en_US": "Sensitive value (hidden)"
     },
     "browser.attachment.snapshot": {
         "zh_CN": "网页操作截图",

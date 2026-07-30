@@ -134,7 +134,7 @@ export class RequestRouter {
     const before = new Set((await this.controller.listPages(owner)).map((page) => page.page_token));
     const signalCursor = this.controller.actionSignalCursor();
     await this.controller.prepareStability(pageToken, owner, signal);
-    const page = await this.controller.dispatchAction(pageToken, params, owner, signal);
+    const actionResult = await this.controller.dispatchAction(pageToken, params, owner, signal);
     const settleMs = Number.isFinite(params.settle_ms) && params.settle_ms >= 0 ? params.settle_ms : 150;
     await this.controller.waitForStable(pageToken, {
       minimum_wait_ms: settleMs,
@@ -147,7 +147,8 @@ export class RequestRouter {
     const after = await this.controller.listPages(owner);
     const signals = this.controller.actionSignalsSince(pageToken, signalCursor);
     return {
-      page: page || pageBefore,
+      page: actionResult.page || pageBefore,
+      state: actionResult.state,
       opened_pages: after.filter((candidate) => !before.has(candidate.page_token)),
       downloads: signals.downloads,
       dialogs: signals.dialogs,
@@ -155,11 +156,21 @@ export class RequestRouter {
   }
 
   readConsole(params, owner) {
-    return { entries: this.controller.readConsole(requireString(params, "page_token"), owner, params.clear !== false) };
+    return this.controller.readConsole(
+      requireString(params, "page_token"),
+      owner,
+      params.clear !== false,
+      diagnosticLimit(params.limit),
+    );
   }
 
   readNetwork(params, owner) {
-    return { entries: this.controller.readNetwork(requireString(params, "page_token"), owner, params.clear !== false) };
+    return this.controller.readNetwork(
+      requireString(params, "page_token"),
+      owner,
+      params.clear !== false,
+      diagnosticLimit(params.limit),
+    );
   }
 }
 
@@ -180,6 +191,14 @@ function requireString(value, key) {
 function requireLogicalSession(value) {
   if (typeof value !== "string" || !value) {
     throw new ProtocolError("invalid_config", "logical_session_id is required");
+  }
+  return value;
+}
+
+function diagnosticLimit(value) {
+  if (value === undefined) return 100;
+  if (!Number.isInteger(value) || value < 1 || value > 500) {
+    throw new ProtocolError("invalid_config", "limit must be an integer from 1 to 500");
   }
   return value;
 }

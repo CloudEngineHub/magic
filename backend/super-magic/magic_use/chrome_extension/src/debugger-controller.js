@@ -388,18 +388,24 @@ export class DebuggerController {
     signal?.throwIfAborted();
   }
 
-  readConsole(pageToken, ownerSessionId, clear) {
+  readConsole(pageToken, ownerSessionId, clear, limit) {
     this.requirePage(pageToken, ownerSessionId);
-    const entries = [...(this.consoleEntries.get(pageToken) || [])];
+    const buffered = this.consoleEntries.get(pageToken) || [];
+    const entries = buffered.slice(-limit);
     if (clear) this.consoleEntries.set(pageToken, []);
-    return entries;
+    return { entries, total_count: buffered.length, pending_count: 0 };
   }
 
-  readNetwork(pageToken, ownerSessionId, clear) {
+  readNetwork(pageToken, ownerSessionId, clear, limit) {
     this.requirePage(pageToken, ownerSessionId);
-    const entries = [...(this.networkEntries.get(pageToken) || [])];
+    const buffered = this.networkEntries.get(pageToken) || [];
+    const entries = buffered.slice(-limit);
     if (clear) this.networkEntries.set(pageToken, []);
-    return entries;
+    return {
+      entries,
+      total_count: buffered.length,
+      pending_count: this.activeNetworkRequests.get(pageToken)?.size || 0,
+    };
   }
 
   actionSignalCursor() {

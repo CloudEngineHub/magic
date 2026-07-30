@@ -524,6 +524,10 @@
       return true;
     }
 
+    if (element.isContentEditable) {
+      return true;
+    }
+
     // 检查是否有tabindex属性 (非-1)
     if (element.hasAttribute('tabindex') && element.getAttribute('tabindex') !== '-1') {
       return true;
@@ -582,7 +586,12 @@
     const tagName = element.tagName.toLowerCase();
 
     // 检查是否被禁用或只读
-    if (element.disabled || element.readOnly) {
+    if (
+      element.disabled ||
+      element.readOnly ||
+      element.getAttribute('aria-disabled') === 'true' ||
+      element.getAttribute('aria-readonly') === 'true'
+    ) {
         return false;
     }
 
@@ -999,10 +1008,11 @@
   function getProbeActions(element, role) {
     const actions = [];
     const disabled = element.disabled || element.getAttribute('aria-disabled') === 'true';
+    const readonly = element.readOnly || element.getAttribute('aria-readonly') === 'true';
     if (!disabled && isInteractive(element)) actions.push('click', 'hover');
-    if (!disabled && isInputable(element)) actions.push('fill', 'press');
+    if (!disabled && !readonly && isInputable(element)) actions.push('fill', 'press');
     if (!disabled && ['checkbox', 'switch'].includes(role)) actions.push('check');
-    if (!disabled && ['combobox', 'listbox'].includes(role)) actions.push('select');
+    if (!disabled && ['combobox', 'listbox'].includes(role)) actions.push('press', 'select');
     if (!disabled && element.matches('input[type="file"]')) actions.push('upload');
     return Array.from(new Set(actions));
   }

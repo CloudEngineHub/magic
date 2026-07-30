@@ -21,7 +21,8 @@ class BrowserEvaluateParams(BaseToolParams):
 
 class BrowserDiagnosticParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
-    clear: bool = Field(True, description="Clear returned entries from the session buffer.")
+    clear: bool = Field(True, description="Clear this page's current diagnostic buffer after reading.")
+    limit: int = Field(100, ge=1, le=500, description="Maximum number of newest entries to return.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
@@ -56,12 +57,13 @@ class BrowserReadConsole(BrowserToolBase[BrowserDiagnosticParams]):
 
     async def execute(self, tool_context: ToolContext, params: BrowserDiagnosticParams) -> ToolResult:
         async def operation() -> ToolResult:
-            entries = await BrowserService(tool_context).read_console(
+            batch = await BrowserService(tool_context).read_console(
                 params.page_id,
                 clear=params.clear,
+                limit=params.limit,
                 session_id=params.session_id,
             )
-            return BrowserToolResultBuilder.console(entries, params.page_id)
+            return BrowserToolResultBuilder.console(batch, params.page_id)
 
         return await self.execute_safely(operation())
 
@@ -76,11 +78,12 @@ class BrowserReadNetwork(BrowserToolBase[BrowserDiagnosticParams]):
 
     async def execute(self, tool_context: ToolContext, params: BrowserDiagnosticParams) -> ToolResult:
         async def operation() -> ToolResult:
-            entries = await BrowserService(tool_context).read_network(
+            batch = await BrowserService(tool_context).read_network(
                 params.page_id,
                 clear=params.clear,
+                limit=params.limit,
                 session_id=params.session_id,
             )
-            return BrowserToolResultBuilder.network(entries, params.page_id)
+            return BrowserToolResultBuilder.network(batch, params.page_id)
 
         return await self.execute_safely(operation())

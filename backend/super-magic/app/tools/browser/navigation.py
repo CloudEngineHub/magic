@@ -34,11 +34,14 @@ class BrowserNavigateParams(BaseToolParams):
 
 class BrowserWaitParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
-    condition: WaitConditionKind = Field(..., description="Condition: time, url, load_state, text, ref, or download.")
+    condition: WaitConditionKind = Field(
+        ...,
+        description="Wait condition: time, url, load_state, text, ref, or download.",
+    )
     timeout_ms: float = Field(30_000, gt=0, description="Maximum wait time in milliseconds.")
-    value: str | None = Field(None, description="URL pattern, text, or ref required by the selected condition.")
+    value: str | None = Field(None, description="Required URL pattern, text, or ref for url, text, or ref waits.")
     duration_ms: float | None = Field(None, gt=0, description="Duration in milliseconds for a time wait.")
-    state: str | None = Field(None, description="Expected load, text, or ref state when applicable.")
+    state: str | None = Field(None, description="Required load state, or optional text/ref state.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
@@ -91,14 +94,17 @@ class BrowserWait(BrowserToolBase[BrowserWaitParams]):
                 duration_ms=params.duration_ms,
                 state=params.state,
             )
-            await BrowserService(tool_context).wait(params.page_id, request, params.session_id)
-            return ToolResult(
-                content=f"Browser wait completed: {params.condition.value}",
-                data={
-                    "page_id": params.page_id,
-                    "condition": params.condition.value,
-                },
+            page = await BrowserService(tool_context).wait(
+                params.page_id,
+                request,
+                params.session_id,
             )
+            result = BrowserToolResultBuilder.page(
+                page,
+                f"Browser wait completed: {params.condition.value}",
+            )
+            result.data["condition"] = params.condition.value
+            return result
 
         return await self.execute_safely(operation())
 

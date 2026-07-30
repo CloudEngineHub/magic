@@ -12,6 +12,7 @@ from magic_use.models import (
     BrowserPage,
     BrowserSession,
     ConsoleEntry,
+    DiagnosticBatch,
     NetworkEntry,
     PageSnapshot,
     ScreenshotResult,
@@ -108,11 +109,25 @@ class BrowserClient:
     ) -> ScreenshotResult:
         return await self._backend.screenshot(page_id, full_page=full_page, labels=labels)
 
-    async def read_console(self, page_id: str, *, clear: bool = True) -> tuple[ConsoleEntry, ...]:
-        return await self._backend.read_console(page_id, clear=clear)
+    async def read_console(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[ConsoleEntry]:
+        _validate_diagnostic_limit(limit)
+        return await self._backend.read_console(page_id, clear=clear, limit=limit)
 
-    async def read_network(self, page_id: str, *, clear: bool = True) -> tuple[NetworkEntry, ...]:
-        return await self._backend.read_network(page_id, clear=clear)
+    async def read_network(
+        self,
+        page_id: str,
+        *,
+        clear: bool = True,
+        limit: int = 100,
+    ) -> DiagnosticBatch[NetworkEntry]:
+        _validate_diagnostic_limit(limit)
+        return await self._backend.read_network(page_id, clear=clear, limit=limit)
 
     async def drain_events(self) -> tuple[BrowserEvent, ...]:
         return await self._backend.drain_events()
@@ -126,6 +141,11 @@ class BrowserClient:
 
 async def create_browser(config: BrowserRuntimeConfig | None = None) -> BrowserClient:
     return await BrowserClient.create(config)
+
+
+def _validate_diagnostic_limit(limit: int) -> None:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+        raise ValueError("Diagnostic limit must be between 1 and 500")
 
 
 def _create_backend(config: BrowserRuntimeConfig) -> BrowserBackend:

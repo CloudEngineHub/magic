@@ -5002,8 +5002,10 @@ function renderBrowserToolDetail(toolState, data, tool) {
     const attachments = Array.isArray(tool.attachments) ? tool.attachments : [];
     const attachment = attachments.find(item => item && item.file_key === data.file_key);
     const imageUrl = attachment && typeof attachment.file_url === 'string' ? attachment.file_url : '';
-    const title = data.page_title || data.title || data.action || '网页操作';
-    const summary = data.summary || '';
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const summary = browserDetailSummary(data, action, pageTitle);
     const target = data.target || '';
     const pageUrl = data.url || '';
 
@@ -5025,7 +5027,7 @@ function renderBrowserToolDetail(toolState, data, tool) {
     if (target) {
         const targetEl = document.createElement('div');
         targetEl.className = 'browser-tool-detail-target';
-        targetEl.textContent = target;
+        targetEl.textContent = `操作对象：${target}`;
         meta.appendChild(targetEl);
     }
     if (pageUrl) {
@@ -5034,7 +5036,7 @@ function renderBrowserToolDetail(toolState, data, tool) {
         link.href = pageUrl;
         link.target = '_blank';
         link.rel = 'noreferrer';
-        link.textContent = pageUrl;
+        link.textContent = `页面地址：${pageUrl}`;
         link.addEventListener('click', event => event.stopPropagation());
         meta.appendChild(link);
     }
@@ -5049,8 +5051,6 @@ function renderBrowserToolDetail(toolState, data, tool) {
             image.replaceWith(createBrowserSnapshotPlaceholder('截图已过期或暂时无法加载'));
         });
         toolState.detailEl.appendChild(image);
-    } else {
-        toolState.detailEl.appendChild(createBrowserSnapshotPlaceholder('本次操作没有可用截图'));
     }
 
     const previewMarkdown = buildBrowserDetailMarkdown(data, imageUrl);
@@ -5058,6 +5058,16 @@ function renderBrowserToolDetail(toolState, data, tool) {
     toolState.openDetailPreview = () => openToolDetailPreview(tool, detailFromBrowserData(data), previewMarkdown, toolState.modelContent || '');
     toolState.detailEl.style.display = 'none';
     toolState.arrow.textContent = '▶';
+}
+
+function browserDetailSummary(data, action, pageTitle) {
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+    if (summary) return summary;
+    if (data.status === 'failed') return `${action}未完成，请查看错误信息。`;
+    if (data.target) return `${action}已完成：${data.target}`;
+    if (pageTitle) return `${action}已完成，当前页面为「${pageTitle}」`;
+    if (data.status === 'succeeded') return `${action}已完成。`;
+    return '';
 }
 
 function createBrowserSnapshotPlaceholder(text) {
@@ -5072,15 +5082,16 @@ function detailFromBrowserData(data) {
 }
 
 function buildBrowserDetailMarkdown(data, imageUrl) {
-    const title = data.page_title || data.title || data.action || '网页操作';
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
     const lines = [`## ${title}`];
-    if (data.summary) lines.push('', String(data.summary));
+    const summary = browserDetailSummary(data, action, pageTitle);
+    if (summary) lines.push('', summary);
     if (data.target) lines.push('', `操作对象：${data.target}`);
     if (data.url) lines.push('', `<a href="${escapeHtml(data.url)}" target="_blank" rel="noreferrer">${escapeHtml(data.url)}</a>`);
     if (imageUrl) {
         lines.push('', `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" style="max-height:720px;max-width:100%;height:auto">`);
-    } else {
-        lines.push('', '本次操作没有可用截图。');
     }
     return lines.join('\n');
 }
