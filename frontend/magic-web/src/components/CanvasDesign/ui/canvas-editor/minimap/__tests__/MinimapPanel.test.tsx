@@ -423,7 +423,7 @@ describe("MinimapPanel", () => {
 		expect(panel).toHaveClass("cursor-pointer")
 	})
 
-	it("pans without Mod and zooms around a stable pointer anchor with Mod", () => {
+	it("pans without Mod and reverses anchored zoom with Mod", () => {
 		vi.useFakeTimers()
 		const { canvas, canvasEventEmit, panByWheelDelta, zoomByWheelDeltaAtCanvasPoint } =
 			createCanvasMock()
@@ -469,13 +469,13 @@ describe("MinimapPanel", () => {
 		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
 			1,
 			{ x: 80, y: 60 },
-			-120,
+			120,
 			"minimap",
 		)
 		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
 			2,
 			{ x: 80, y: 60 },
-			-40,
+			40,
 			"minimap",
 		)
 		expect(canvasEventEmit).toHaveBeenCalledTimes(1)

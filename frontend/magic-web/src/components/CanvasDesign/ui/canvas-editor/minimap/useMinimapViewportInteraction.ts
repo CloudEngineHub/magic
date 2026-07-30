@@ -323,7 +323,7 @@ export function useMinimapViewportInteraction({
 			if (!wheelAnchor) return
 			canvas.viewportController.zoomByWheelDeltaAtCanvasPoint(
 				wheelAnchor,
-				event.deltaY,
+				-event.deltaY,
 				"minimap",
 			)
 		},
