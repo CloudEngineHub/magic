@@ -21,6 +21,31 @@ pnpm run build
 pnpm run test
 ```
 
+## Benchmark
+
+Run the quick Node packaging and real-browser smoke benchmarks:
+
+```bash
+pnpm run benchmark:smoke
+```
+
+Run the 200-page browser baseline against the tracked source code:
+
+```bash
+pnpm run benchmark
+```
+
+Run a comparison against an existing built `dist` artifact:
+
+```bash
+pnpm run benchmark:dist
+```
+
+Every report records the Git revision, target (`dist` or `source`), artifact SHA-256,
+PptxGenJS version, timings, output size, and memory samples. Results from different target or
+artifact hashes must not be compared as the same baseline. See [benchmarks/README.md](./benchmarks/README.md)
+for scenarios, profiles, and CLI options.
+
 ## Layered Overlay Architecture
 
 The package derives its active edition from the folders present in the repository:

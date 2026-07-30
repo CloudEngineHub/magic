@@ -1178,6 +1178,9 @@ importers:
       pptxgenjs:
         specifier: ^4.0.1
         version: 4.0.1(patch_hash=7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228)
+      puppeteer:
+        specifier: 24.32.0
+        version: 24.32.0(typescript@5.8.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0

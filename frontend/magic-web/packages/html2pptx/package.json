@@ -28,6 +28,12 @@
 		"dist"
 	],
 	"scripts": {
+		"benchmark": "pnpm run benchmark:browser -- --profile baseline --target source",
+		"benchmark:browser": "node --import tsx ./benchmarks/browser/run.ts",
+		"benchmark:dist": "pnpm run benchmark:browser -- --profile baseline --target dist",
+		"benchmark:node": "node --expose-gc --import tsx ./benchmarks/node/run.ts",
+		"benchmark:smoke": "pnpm run benchmark:node -- --profile quick --slides 1 --iterations 1 --warmup 0 && pnpm run benchmark:browser -- --profile quick --target source --slides 1 --iterations 1 --warmup 0",
+		"benchmark:source": "pnpm run benchmark:browser -- --profile baseline --target source",
 		"build": "pnpm exec vite build --config ./vite.config.ts --mode production && pnpm run build:types",
 		"build:types": "tsc -p ./tsconfig.json --emitDeclarationOnly",
 		"dev": "pnpm exec vite --config ./vite.config.ts",
@@ -43,6 +49,7 @@
 		"@types/node": "^22.13.10",
 		"@zumer/snapdom": "^2.0.2",
 		"pptxgenjs": "^4.0.1",
+		"puppeteer": "24.32.0",
 		"tsx": "^4.21.0",
 		"typescript": "^5.4.5",
 		"vite": "^8.0.3",
