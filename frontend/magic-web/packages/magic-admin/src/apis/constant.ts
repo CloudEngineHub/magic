@@ -131,6 +131,8 @@ export const RequestUrl = {
 	getModeList: "/api/v1/official/admin/modes",
 	/** 获取默认模式 */
 	getDefaultMode: "/api/v1/official/admin/modes/default",
+	/** 获取、更新平台默认数字员工 */
+	defaultAgentSetting: "/api/v1/official/admin/mode-settings/default-agent",
 	/** 获取模式详情 */
 	getModeDetail: "/api/v1/official/admin/modes/${id}",
 	/** 修改模式状态 */

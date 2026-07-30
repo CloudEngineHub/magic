@@ -12,6 +12,14 @@ export interface ModeListParams extends Required<PageParams> {
 	identifier?: string
 }
 
+/** 平台默认数字员工配置 */
+export interface DefaultAgentSetting {
+	default_agent_code: string
+}
+
+/** 更新平台默认数字员工配置 */
+export type UpdateDefaultAgentSettingParams = DefaultAgentSetting
+
 /** 模式分配方式 */
 export enum DistributionType {
 	/** 独立 */
