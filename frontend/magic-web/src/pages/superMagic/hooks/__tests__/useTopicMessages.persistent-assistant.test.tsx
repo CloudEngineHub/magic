@@ -147,9 +147,7 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		await triggerPersistentMessageEvent(topic)
 		await settleStoreRendering()
 
-		expect(mockState.enqueueCalls).toHaveLength(1)
-		expect(mockState.enqueueCalls[0]).toEqual({ topicId: topic.chat_topic_id, envelope })
-		expect(mockState.enqueueCalls[0]?.envelope).toBe(envelope)
+		expect(mockState.enqueueCalls).toHaveLength(0)
 		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
 			app_message_id: "assistant-ws-write",
 			super_message_id: toSuperMessageId(correlationId),
@@ -460,7 +458,7 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 			(message) => message?.role === "assistant" && message?.correlation_id === correlationId,
 		)
 		expect(mockState.getMessagesByConversationId).toHaveBeenCalledTimes(1)
-		expect(mockState.enqueueCalls).toEqual([{ topicId: topic.chat_topic_id, envelope }])
+		expect(mockState.enqueueCalls).toEqual([])
 		expect(assistantCards).toHaveLength(1)
 		expect(assistantCards[0]?.app_message_id).toBe("assistant-exactly-once")
 		expect(arrivals.events).toHaveLength(1)
@@ -475,6 +473,257 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		)
 		arrivals.unsubscribe()
 	})
+
+	it("公共锚点尾部替换会移除跨 Tab 撤回后缺席的整轮 User/Assistant/Tool 分支。", async () => {
+		const topic = createTopic("cross-tab-authoritative-tail")
+		await renderInitializedTopic(topic)
+		const prefix = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "stable-prefix",
+			seqId: "100",
+		})
+		const removedUser = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-a-user",
+			seqId: "200",
+		})
+		const removedAssistant = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-a-assistant",
+			correlationId: "message-a-correlation",
+			seqId: "201",
+			content: "message A assistant",
+		})
+		const removedTool = createToolEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-a-tool",
+			superMessageId: "message-a-tool-super",
+			correlationId: "message-a-correlation",
+			seqId: "202",
+			toolId: "message-a-tool-id",
+		})
+		superMagicStore.initializeMessages(topic.chat_topic_id, [
+			prefix,
+			removedUser,
+			removedAssistant,
+			removedTool,
+		])
+
+		const messageB = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-b",
+			seqId: "300",
+		})
+		mockState.getMessagesByConversationId.mockResolvedValueOnce({
+			items: [messageB, prefix],
+			has_more: true,
+			page_token: "older-page",
+		})
+
+		await triggerPersistentMessageEvent(topic, 1, "300")
+
+		const canonicalMessages = superMagicStore.messages.get(topic.chat_topic_id) ?? []
+		const uiMessages = messagesConverter(Array.from(canonicalMessages))
+		expect(canonicalMessages.map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"message-b",
+		])
+		expect(uiMessages.map((message) => message?.app_message_id)).toEqual([
+			"stable-prefix",
+			"message-b",
+		])
+		expect(getNode(toSuperMessageId("message-a-correlation"))).toBeUndefined()
+		expect(getNode("message-a-tool-super")).toBeUndefined()
+		expect(
+			superMagicStore.toolResponseMap.get(topic.chat_topic_id)?.get("message-a-tool-id"),
+		).toBeUndefined()
+	})
+
+	it("权威尾部请求期间新产生的流保留，但请求开始前缺席的旧分支被移除。", async () => {
+		const topic = createTopic("authoritative-tail-concurrent-stream")
+		await renderInitializedTopic(topic)
+		const prefix = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "stable-prefix",
+			seqId: "100",
+		})
+		const removedUser = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "old-user",
+			seqId: "200",
+		})
+		superMagicStore.initializeMessages(topic.chat_topic_id, [prefix, removedUser])
+		superMagicStore.receiveChunk(
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId: "old-stream",
+				content: "old draft",
+			}),
+		)
+		const response = createDeferred<ReturnType<typeof createResponse>>()
+		mockState.getMessagesByConversationId.mockImplementationOnce(() => response.promise)
+		const initializeSpy = vi.spyOn(superMagicStore, "initializeMessages")
+
+		const handler = mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")
+		if (!handler) throw new Error("persistent message handler was not registered")
+		act(() => {
+			handler({
+				conversation_id: topic.chat_conversation_id,
+				seq_id: "300",
+				message: { topic_id: topic.chat_topic_id },
+			})
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(200)
+			await flushPromises()
+		})
+		expect(mockState.getMessagesByConversationId).toHaveBeenCalledTimes(1)
+		superMagicStore.receiveChunk(
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId: "new-stream",
+				content: "new draft",
+			}),
+		)
+		expect(
+			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("new-stream")),
+		).toBeDefined()
+		const messageB = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-b",
+			seqId: "300",
+		})
+		response.resolve({
+			items: [messageB, prefix],
+			has_more: true,
+			page_token: "older-page",
+		})
+		await act(async () => {
+			await flushPromises()
+		})
+
+		expect(initializeSpy).toHaveBeenLastCalledWith(
+			topic.chat_topic_id,
+			[messageB, prefix],
+			expect.objectContaining({
+				mode: "replace_tail",
+				preserveStreamSuperMessageIds: [toSuperMessageId("new-stream")],
+			}),
+		)
+		expect(
+			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("old-stream")),
+		).toBeUndefined()
+		expect(
+			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("new-stream")),
+		).toBeDefined()
+		expect(getNode(toSuperMessageId("old-stream"))).toBeUndefined()
+		expect(getNode(toSuperMessageId("new-stream"))).toBeDefined()
+		expect(
+			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("new-stream"))
+				?.content,
+		).toBe("new draft")
+	})
+
+	it("增量 HTTP 明确撤回活动 Assistant 时立即更新状态、终止旧流并只提交一次。", async () => {
+		const topic = createTopic("http-revoke-active-stream")
+		await renderInitializedTopic(topic)
+		const correlationId = "correlation-http-revoke-active-stream"
+		const superMessageId = toSuperMessageId(correlationId)
+		const envelope = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-http-revoke-active-stream",
+			correlationId,
+			seqId: "180",
+			content: "revoked canonical content",
+			outerStatus: ConversationMessageStatus.Revoked,
+		})
+		const arrivals = collectArrivals(topic.chat_topic_id)
+
+		superMagicStore.receiveChunk(
+			createChunk({ topicId: topic.chat_topic_id, correlationId, content: "revoked draft" }),
+		)
+		expect(superMagicStore.getStreamState(topic.chat_topic_id, superMessageId)).toBeDefined()
+		mockState.getMessagesByConversationId.mockResolvedValueOnce(createResponse([envelope]))
+
+		await triggerPersistentMessageEvent(topic)
+
+		const canonicalCard = (superMagicStore.messages.get(topic.chat_topic_id) ?? []).find(
+			(message) =>
+				message.role === "assistant" && message.super_message_id === superMessageId,
+		)
+		expect(canonicalCard).toMatchObject({
+			app_message_id: "assistant-http-revoke-active-stream",
+			super_message_id: superMessageId,
+			seq_id: "180",
+			status: ConversationMessageStatus.Revoked,
+		})
+		expect(superMagicStore.getStreamState(topic.chat_topic_id, superMessageId)).toBeUndefined()
+		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
+		expect(arrivals.events).toHaveLength(1)
+		expect(arrivals.events[0]).toMatchObject({
+			payload: {
+				message: {
+					appMessageId: "assistant-http-revoke-active-stream",
+					logicalMessageId: superMessageId,
+					seqId: "180",
+					status: ConversationMessageStatus.Revoked,
+				},
+			},
+		})
+		arrivals.unsubscribe()
+	})
+
+	it("WS 只作为通知时，增量 HTTP 仍能恢复已有消息状态且不删除窗口外消息。", async () => {
+		const topic = createTopic("http-status-reconciliation", TaskStatus.FINISHED)
+		await renderInitializedTopic(topic)
+		const targetCorrelationId = "correlation-http-status-target"
+		const historicalCorrelationId = "correlation-http-status-historical"
+		const targetRevoked = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-http-status-target",
+			correlationId: targetCorrelationId,
+			seqId: "200",
+			content: "target canonical content",
+			outerStatus: ConversationMessageStatus.Revoked,
+		})
+		const targetRestored = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-http-status-target",
+			correlationId: targetCorrelationId,
+			seqId: "200",
+			content: "stale duplicate content",
+			outerStatus: ConversationMessageStatus.Read,
+		})
+		const historical = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-http-status-historical",
+			correlationId: historicalCorrelationId,
+			seqId: "100",
+			content: "outside incremental window",
+		})
+		superMagicStore.initializeMessages(topic.chat_topic_id, [historical, targetRevoked])
+
+		mockState.getMessagesByConversationId.mockResolvedValueOnce(
+			createResponse([targetRestored]),
+		)
+		await triggerPersistentMessageEvent(topic)
+
+		const messageRecords = superMagicStore.messages.get(topic.chat_topic_id) ?? []
+		expect(messageRecords).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					app_message_id: "assistant-http-status-historical",
+				}),
+				expect.objectContaining({
+					app_message_id: "assistant-http-status-target",
+					status: ConversationMessageStatus.Read,
+				}),
+			]),
+		)
+		expect(getNode(toSuperMessageId(targetCorrelationId))?.content).toBe(
+			"target canonical content",
+		)
+	})
 })
 
 async function renderInitializedTopic(topic: Topic) {
@@ -487,13 +736,18 @@ async function renderInitializedTopic(topic: Topic) {
 	return rendered
 }
 
-async function triggerPersistentMessageEvent(topic: Topic, times = 1): Promise<void> {
+async function triggerPersistentMessageEvent(
+	topic: Topic,
+	times = 1,
+	seqId?: string,
+): Promise<void> {
 	const handler = mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")
 	if (!handler) throw new Error("persistent message handler was not registered")
 	act(() => {
 		for (let index = 0; index < times; index += 1) {
 			handler({
 				conversation_id: topic.chat_conversation_id,
+				...(seqId ? { seq_id: seqId } : {}),
 				message: { topic_id: topic.chat_topic_id },
 			})
 		}
@@ -587,6 +841,7 @@ function createAssistantEnvelope({
 	correlationId,
 	seqId,
 	content,
+	outerStatus = ConversationMessageStatus.Read,
 }: {
 	topicId: string
 	nodeTopicId?: string
@@ -594,6 +849,7 @@ function createAssistantEnvelope({
 	correlationId: string
 	seqId: string
 	content: string
+	outerStatus?: ConversationMessageStatus
 }): RawSuperMagicMessageEnvelope {
 	const node: SuperMagicNode = {
 		role: "assistant",
@@ -622,7 +878,7 @@ function createAssistantEnvelope({
 				app_message_id: appMessageId,
 				sender_id: "assistant-hook-integration",
 				send_time: Number(seqId),
-				status: ConversationMessageStatus.Read,
+				status: outerStatus,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
@@ -631,6 +887,99 @@ function createAssistantEnvelope({
 		},
 	} satisfies SeqRecord<SuperMagicConversationMessageV2>
 
+	return envelope as unknown as RawSuperMagicMessageEnvelope
+}
+
+function createUserEnvelope({
+	topicId,
+	appMessageId,
+	seqId,
+}: {
+	topicId: string
+	appMessageId: string
+	seqId: string
+}): RawSuperMagicMessageEnvelope {
+	const node: SuperMagicNode = {
+		role: "user",
+		topic_id: topicId,
+		message_id: `node-${appMessageId}`,
+		super_message_id: appMessageId,
+		content: appMessageId,
+		reasoning_content: null,
+		tool_calls: [],
+		status: "finished",
+		send_timestamp: Number(seqId),
+	}
+	return createNodeEnvelope({ topicId, appMessageId, seqId, node })
+}
+
+function createToolEnvelope({
+	topicId,
+	appMessageId,
+	superMessageId,
+	correlationId,
+	seqId,
+	toolId,
+}: {
+	topicId: string
+	appMessageId: string
+	superMessageId: string
+	correlationId: string
+	seqId: string
+	toolId: string
+}): RawSuperMagicMessageEnvelope {
+	const node = {
+		role: "tool",
+		topic_id: topicId,
+		message_id: `node-${appMessageId}`,
+		super_message_id: superMessageId,
+		correlation_id: correlationId,
+		content: null,
+		reasoning_content: null,
+		tool_calls: null,
+		tool_call_id: toolId,
+		tool: { id: toolId, name: "read_file", status: "finished" },
+		status: "finished",
+		send_timestamp: Number(seqId),
+	} as SuperMagicNode
+	return createNodeEnvelope({ topicId, appMessageId, seqId, node })
+}
+
+function createNodeEnvelope({
+	topicId,
+	appMessageId,
+	seqId,
+	node,
+}: {
+	topicId: string
+	appMessageId: string
+	seqId: string
+	node: SuperMagicNode
+}): RawSuperMagicMessageEnvelope {
+	const envelope = {
+		type: SeqRecordType.seq,
+		seq: {
+			magic_id: "magic-hook-integration",
+			seq_id: seqId,
+			message_id: `server-${seqId}-${appMessageId}`,
+			refer_message_id: "",
+			sender_message_id: "",
+			conversation_id: `conversation-${topicId}`,
+			organization_code: "organization-hook-integration",
+			message: {
+				magic_message_id: `magic-${appMessageId}`,
+				app_message_id: appMessageId,
+				sender_id:
+					node.role === "user" ? "user-hook-integration" : "assistant-hook-integration",
+				send_time: Number(seqId),
+				status: ConversationMessageStatus.Read,
+				unread_count: 0,
+				topic_id: topicId,
+				type: ConversationMessageType.SuperMagicMessage,
+				super_magic_message: node,
+			},
+		},
+	} satisfies SeqRecord<SuperMagicConversationMessageV2>
 	return envelope as unknown as RawSuperMagicMessageEnvelope
 }
 

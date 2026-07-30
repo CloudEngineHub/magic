@@ -23,7 +23,11 @@ export interface PendingUserMessageEnvelope {
 }
 
 export interface InitializeMessagesOptions {
-	mode?: "replace" | "merge"
+	mode?: "replace" | "merge" | "replace_tail"
+	/** `replace_tail` 保留该 SuperMessage 及其之前的本地前缀，并权威替换其后的 membership。 */
+	anchorSuperMessageId?: string
+	/** HTTP 请求期间新产生的流不属于请求开始时的权威覆盖范围，提交时必须保留。 */
+	preserveStreamSuperMessageIds?: string[]
 	syncGeneration?: number
 }
 

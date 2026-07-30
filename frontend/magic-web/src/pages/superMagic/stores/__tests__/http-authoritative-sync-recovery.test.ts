@@ -591,6 +591,193 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
 	})
 
+	it("公共锚点尾部替换保留锚点前缀，并移除 HTTP 覆盖范围内缺席的完整撤回分支。", () => {
+		const store = createStore()
+		const prefix = createEnvelope({
+			appMessageId: "stable-prefix",
+			seqId: "100",
+			role: "user",
+		})
+		const revokedUser = createEnvelope({
+			appMessageId: "removed-user",
+			seqId: "200",
+			role: "user",
+		})
+		const removedAssistant = createEnvelope({
+			appMessageId: "removed-assistant",
+			correlationId: "removed-assistant-correlation",
+			superMessageId: "removed-assistant-super-message",
+			seqId: "201",
+		})
+		const removedTool = createEnvelope({
+			appMessageId: "removed-tool",
+			correlationId: "removed-assistant-correlation",
+			superMessageId: "removed-tool-super-message",
+			seqId: "202",
+			role: "tool",
+			toolId: "removed-tool-id",
+		})
+		store.initializeMessages(TOPIC_A, [prefix, revokedUser, removedAssistant, removedTool])
+
+		const messageB = createEnvelope({
+			appMessageId: "message-b",
+			seqId: "300",
+			role: "user",
+		})
+		store.initializeMessages(TOPIC_A, [messageB, prefix], {
+			mode: "replace_tail",
+			anchorSuperMessageId: "stable-prefix",
+		})
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"message-b",
+		])
+		expect(getNode(store, "removed-assistant-super-message")).toBeUndefined()
+		expect(getNode(store, "removed-tool-super-message")).toBeUndefined()
+	})
+
+	it("公共锚点尾部替换清理缺席活动流及工具派生状态，并阻断旧分支晚到 Chunk/Final。", () => {
+		const store = createStore()
+		const prefix = createEnvelope({
+			appMessageId: "stable-prefix",
+			seqId: "100",
+			role: "user",
+		})
+		const removedUser = createEnvelope({
+			appMessageId: "removed-user",
+			seqId: "200",
+			role: "user",
+		})
+		const removedTool = createEnvelope({
+			appMessageId: "removed-tool",
+			correlationId: "removed-stream-correlation",
+			superMessageId: "removed-tool-super-message",
+			seqId: "202",
+			role: "tool",
+			toolId: "removed-tool-id",
+		})
+		store.initializeMessages(TOPIC_A, [prefix, removedUser])
+		vi.setSystemTime(201)
+		store.receiveChunk(
+			createChunk({
+				correlationId: "removed-stream-correlation",
+				superMessageId: "removed-stream-super-message",
+				content: "removed draft",
+				toolCalls: [createToolCall({ id: "removed-tool-id" })],
+			}),
+		)
+		store.enqueueMessage(TOPIC_A, removedTool)
+
+		expect(store.getStreamState(TOPIC_A, "removed-stream-super-message")).toBeDefined()
+		expect(getCanonicalToolState(store, "removed-tool-id")).toBeDefined()
+
+		const messageB = createEnvelope({
+			appMessageId: "message-b",
+			seqId: "300",
+			role: "user",
+		})
+		store.initializeMessages(TOPIC_A, [messageB, prefix], {
+			mode: "replace_tail",
+			anchorSuperMessageId: "stable-prefix",
+			preserveStreamSuperMessageIds: [],
+		})
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"message-b",
+		])
+		expect(store.getStreamState(TOPIC_A, "removed-stream-super-message")).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(getNode(store, "removed-stream-super-message")).toBeUndefined()
+		expect(getCanonicalToolState(store, "removed-tool-id")).toBeUndefined()
+
+		store.receiveChunk(
+			createChunk({
+				correlationId: "removed-stream-correlation",
+				superMessageId: "removed-stream-super-message",
+				i: 1,
+				content: "late chunk",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "removed-assistant-final",
+				correlationId: "removed-stream-correlation",
+				superMessageId: "removed-stream-super-message",
+				seqId: "201",
+				content: "late final",
+			}),
+		)
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"message-b",
+		])
+		expect(store.getStreamState(TOPIC_A, "removed-stream-super-message")).toBeUndefined()
+		expect(getNode(store, "removed-stream-super-message")).toBeUndefined()
+	})
+
+	it("公共锚点仍保留当前 User 轮次时，不删除尚未收到 Final 的同轮活动流。", () => {
+		const store = createStore()
+		const prefix = createEnvelope({
+			appMessageId: "stable-prefix",
+			seqId: "100",
+			role: "user",
+		})
+		const currentUser = createEnvelope({
+			appMessageId: "current-user",
+			seqId: "200",
+			role: "user",
+		})
+		store.initializeMessages(TOPIC_A, [prefix, currentUser])
+		store.receiveChunk(
+			createChunk({
+				correlationId: "current-stream-correlation",
+				superMessageId: "current-stream-super-message",
+				content: "current draft",
+			}),
+		)
+
+		store.initializeMessages(TOPIC_A, [currentUser, prefix], {
+			mode: "replace_tail",
+			anchorSuperMessageId: "current-user",
+			preserveStreamSuperMessageIds: [],
+		})
+
+		expect(store.getStreamState(TOPIC_A, "current-stream-super-message")).toBeDefined()
+		expect(getNode(store, "current-stream-super-message")).toBeDefined()
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"current-user",
+			"current-stream-super-message",
+		])
+	})
+
+	it("公共锚点在提交前消失时降级为 merge，不得执行缺席删除。", () => {
+		const store = createStore()
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({ appMessageId: "stable-prefix", seqId: "100", role: "user" }),
+			createEnvelope({ appMessageId: "keep-local", seqId: "200", role: "user" }),
+		])
+
+		store.initializeMessages(
+			TOPIC_A,
+			[createEnvelope({ appMessageId: "message-b", seqId: "300", role: "user" })],
+			{
+				mode: "replace_tail",
+				anchorSuperMessageId: "missing-anchor",
+			},
+		)
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"keep-local",
+			"message-b",
+		])
+	})
+
 	it("HTTP 外层 transport topic 负责路由，内层 Agent topic 保留业务映射。", () => {
 		const store = createStore()
 		const generationB = store.beginTopicSync(TOPIC_B)

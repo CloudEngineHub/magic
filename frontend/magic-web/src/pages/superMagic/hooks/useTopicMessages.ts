@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import { registerStreamRecoveryOwner } from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { TaskStatus, Topic } from "../pages/Workspace/types"
+import { MessageStatus, TaskStatus, Topic } from "../pages/Workspace/types"
 
 // 完全同步时单次拉取的消息数量
 const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
@@ -15,6 +16,9 @@ const LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT = 10
 
 // 常驻轮询只补最近增量；完整分页仅保留给显式 recovery。
 const POLLING_SYNC_MESSAGE_COUNT = 20
+
+// 实时/轮询权威尾部同步最多向前寻找三页公共锚点；超过预算交给后续轮询或完整 recovery。
+const AUTHORITATIVE_TAIL_MAX_PAGE_COUNT = 3
 
 // 前台恢复时第一段回拉窗口：先用中等窗口补最近消息，尽量一次命中大多数休眠场景。
 const FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT = 200
@@ -40,8 +44,10 @@ interface PullMessageParams {
 	order: "asc" | "desc"
 	limit?: number
 	updatePageToken?: boolean
-	writeIntent: "replace" | "merge" | "incremental"
+	writeIntent: "replace" | "merge" | "incremental" | "authoritative_tail"
 	syncGeneration?: number
+	requiredSeqId?: string
+	allowRemoteRevokedAnchorCleanup?: boolean
 	callback?: () => void
 }
 
@@ -49,6 +55,16 @@ interface PullMessageResult {
 	didPullSucceed: boolean
 	pulledItems: any[]
 	response?: any
+}
+
+interface AuthoritativeTailPullResult extends PullMessageResult {
+	writeOptions?:
+		| { mode: "replace"; preserveStreamSuperMessageIds: string[] }
+		| {
+				mode: "replace_tail"
+				anchorSuperMessageId: string
+				preserveStreamSuperMessageIds: string[]
+		  }
 }
 
 interface ForegroundRecoveryAnchorState {
@@ -86,6 +102,40 @@ function dedupePulledItemsByAppMessageId(items: any[]) {
 	})
 }
 
+function getFetchedMessageSuperMessageId(item: any) {
+	const message = item?.seq?.message
+	const appMessageId = String(message?.app_message_id || "")
+	if (!appMessageId) return ""
+	const node = message?.type ? message?.[message.type] || message?.general_agent_card : undefined
+	return node?.role === "user" ? appMessageId : String(node?.super_message_id || appMessageId)
+}
+
+function getStoredMessageSuperMessageId(message: any) {
+	return String(message?.super_message_id || message?.app_message_id || "")
+}
+
+function dedupePulledItemsBySuperMessageId(items: any[]) {
+	const seenSuperMessageIds = new Set<string>()
+	return items.filter((item) => {
+		const superMessageId = getFetchedMessageSuperMessageId(item)
+		if (!superMessageId || seenSuperMessageIds.has(superMessageId)) return false
+		seenSuperMessageIds.add(superMessageId)
+		return true
+	})
+}
+
+function compareMessageSeqId(left: string, right: string) {
+	if (left === right) return 0
+	const normalizedLeft = String(left || "").replace(/^0+(?=\d)/, "")
+	const normalizedRight = String(right || "").replace(/^0+(?=\d)/, "")
+	if (/^\d+$/.test(normalizedLeft) && /^\d+$/.test(normalizedRight)) {
+		if (normalizedLeft.length !== normalizedRight.length) {
+			return normalizedLeft.length - normalizedRight.length
+		}
+	}
+	return normalizedLeft.localeCompare(normalizedRight)
+}
+
 /**
  * 判断前台恢复是否还需要继续向更早的分页扩展。
  * 只要当前聚合结果还没覆盖到恢复锚点，就继续拉第二段窗口。
@@ -115,7 +165,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	const foregroundRecoveryAnchorRef = useRef<Record<string, ForegroundRecoveryAnchorState>>({})
 	const historyPullInFlightTopicsRef = useRef<Set<string>>(new Set())
 	const lastHistoryPageTokenMapRef = useRef<Record<string, string>>({})
-	const finishedPollingCompletedTopicsRef = useRef<Set<string>>(new Set())
 	selectedTopicRef.current = selectedTopic
 
 	const [isMessagesInitialLoading, setIsMessagesInitialLoading] = useState(() =>
@@ -166,6 +215,55 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			latestCommittedAnchor,
 		}
 	})
+
+	/**
+	 * 本地撤回锚点只在本 Tab 发起 undo 时创建。后续非本地撤回刷新入口若从 HTTP
+	 * 明确读到同一 User 已恢复，说明其他浏览器已经取消撤回，需要清理本 Tab sidecar。
+	 */
+	const reconcileActiveRevokedAnchorFromHttp = useMemoizedFn(
+		(
+			topicId: string,
+			pulledItems: any[],
+			writeOptions?: AuthoritativeTailPullResult["writeOptions"],
+		) => {
+			const activeAnchor = optimisticMessageStore.getActiveRevokedAnchor(topicId)
+			if (!activeAnchor?.seq_id) return
+
+			const authoritativeAnchor = pulledItems.find((item) => {
+				const sequence = item?.seq
+				const message = sequence?.message
+				return [sequence?.seq_id, sequence?.message_id, message?.app_message_id].some(
+					(identity) => String(identity || "") === activeAnchor.seq_id,
+				)
+			})
+			const authoritativeStatus = String(authoritativeAnchor?.seq?.message?.status || "")
+			if (authoritativeStatus === MessageStatus.REVOKED) return
+			if (authoritativeStatus) {
+				optimisticMessageStore.clearActiveRevokedAnchor(topicId)
+				optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(topicId)
+				return
+			}
+
+			// 未返回锚点只有在 HTTP 已证明覆盖该 seq 区间时才具备删除语义。
+			// replace 覆盖完整查询范围；replace_tail 仅覆盖公共锚点之后的后缀。
+			if (!writeOptions) return
+			if (writeOptions.mode === "replace_tail") {
+				const commonAnchor = pulledItems.find(
+					(item) =>
+						getFetchedMessageSuperMessageId(item) === writeOptions.anchorSuperMessageId,
+				)
+				const commonAnchorSeqId = String(commonAnchor?.seq?.seq_id || "")
+				if (
+					!commonAnchorSeqId ||
+					compareMessageSeqId(activeAnchor.seq_id, commonAnchorSeqId) <= 0
+				)
+					return
+			}
+
+			optimisticMessageStore.clearActiveRevokedAnchor(topicId)
+			optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(topicId)
+		},
+	)
 
 	/**
 	 * 只请求一页消息，不直接写入 store。
@@ -251,6 +349,152 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	)
 
 	/**
+	 * `messages/queries` 对最新消息到公共锚点之间的 membership 具有权威语义。
+	 * 所有分页结果先在本地聚合；只有找到稳定公共锚点或确认 has_more=false 后才允许写 Store。
+	 */
+	const fetchAuthoritativeTail = useMemoizedFn(
+		async ({
+			conversation_id,
+			chat_topic_id,
+			page_token,
+			order,
+			limit = POLLING_SYNC_MESSAGE_COUNT,
+			requiredSeqId,
+			callback,
+		}: Pick<
+			PullMessageParams,
+			| "conversation_id"
+			| "chat_topic_id"
+			| "page_token"
+			| "order"
+			| "limit"
+			| "requiredSeqId"
+			| "callback"
+		>): Promise<AuthoritativeTailPullResult> => {
+			const activeStreamIdsAtRequestStart = new Set<string>()
+			const topicContent = superMagicStore.topicMeta.get(chat_topic_id)?.content
+			topicContent?.forEach((_state, superMessageId) =>
+				activeStreamIdsAtRequestStart.add(superMessageId),
+			)
+			const localStableIdentities = new Set(
+				(superMagicStore.messages.get(chat_topic_id) || []).flatMap((message: any) => {
+					const superMessageId = getStoredMessageSuperMessageId(message)
+					if (!superMessageId || activeStreamIdsAtRequestStart.has(superMessageId))
+						return []
+					if (optimisticMessageStore.getStatus(chat_topic_id, message?.app_message_id))
+						return []
+					if (
+						requiredSeqId &&
+						message?.seq_id &&
+						compareMessageSeqId(String(message.seq_id), requiredSeqId) >= 0
+					)
+						return []
+					return [superMessageId]
+				}),
+			)
+			const visitedPageTokens = new Set<string>()
+			let nextPageToken = page_token
+			let aggregatedPulledItems: any[] = []
+			let lastResponse: any
+			const getConcurrentStreamSuperMessageIds = () => {
+				const currentContent = superMagicStore.topicMeta.get(chat_topic_id)?.content
+				if (!currentContent) return []
+				return Array.from(currentContent.keys()).filter(
+					(superMessageId) => !activeStreamIdsAtRequestStart.has(superMessageId),
+				)
+			}
+
+			for (let pageIndex = 0; pageIndex < AUTHORITATIVE_TAIL_MAX_PAGE_COUNT; pageIndex += 1) {
+				if (visitedPageTokens.has(nextPageToken)) {
+					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+				}
+				visitedPageTokens.add(nextPageToken)
+
+				const pageResult = await fetchMessagesPage({
+					conversation_id,
+					chat_topic_id,
+					page_token: nextPageToken,
+					order,
+					limit,
+					updatePageToken: false,
+					callback,
+				})
+				if (!pageResult.didPullSucceed) {
+					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+				}
+				lastResponse = pageResult.response
+				aggregatedPulledItems = dedupePulledItemsBySuperMessageId([
+					...aggregatedPulledItems,
+					...pageResult.pulledItems.filter(shouldIncludeFetchedMessage),
+				])
+
+				if (pageIndex === 0 && requiredSeqId) {
+					const latestHttpSeqId = aggregatedPulledItems.reduce((latestSeqId, item) => {
+						const seqId = String(item?.seq?.seq_id || "")
+						if (
+							!seqId ||
+							(latestSeqId && compareMessageSeqId(seqId, latestSeqId) <= 0)
+						) {
+							return latestSeqId
+						}
+						return seqId
+					}, "")
+					// WS 已确认更高 seq 持久化，但 HTTP 最新页尚未追上时不能执行缺席删除。
+					if (
+						!latestHttpSeqId ||
+						compareMessageSeqId(latestHttpSeqId, requiredSeqId) < 0
+					) {
+						return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+					}
+				}
+
+				const anchorIndex = aggregatedPulledItems.findIndex((item) =>
+					localStableIdentities.has(getFetchedMessageSuperMessageId(item)),
+				)
+				if (anchorIndex >= 0) {
+					const anchorSuperMessageId = getFetchedMessageSuperMessageId(
+						aggregatedPulledItems[anchorIndex],
+					)
+					return {
+						didPullSucceed: true,
+						pulledItems: aggregatedPulledItems.slice(0, anchorIndex + 1),
+						response: lastResponse,
+						writeOptions: {
+							mode: "replace_tail",
+							anchorSuperMessageId,
+							preserveStreamSuperMessageIds: getConcurrentStreamSuperMessageIds(),
+						},
+					}
+				}
+
+				if (!lastResponse?.has_more) {
+					return {
+						didPullSucceed: true,
+						pulledItems: aggregatedPulledItems,
+						response: lastResponse,
+						writeOptions: {
+							mode: "replace",
+							preserveStreamSuperMessageIds: getConcurrentStreamSuperMessageIds(),
+						},
+					}
+				}
+
+				const responsePageToken = String(lastResponse?.page_token || "")
+				if (!responsePageToken || visitedPageTokens.has(responsePageToken)) {
+					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+				}
+				nextPageToken = responsePageToken
+			}
+
+			return {
+				didPullSucceed: false,
+				pulledItems: aggregatedPulledItems,
+				response: lastResponse,
+			}
+		},
+	)
+
+	/**
 	 * 发起一次消息拉取，并按原有语义把结果写回 store。
 	 * 非恢复场景仍复用这条主路径，避免改动 WS、轮询、切话题等既有行为。
 	 */
@@ -264,6 +508,8 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			updatePageToken = true,
 			writeIntent,
 			syncGeneration,
+			requiredSeqId,
+			allowRemoteRevokedAnchorCleanup = true,
 			callback,
 		}: PullMessageParams): Promise<PullMessageResult> => {
 			if (
@@ -276,30 +522,68 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					setIsSelectedTopicMessagesReady(true)
 				return { didPullSucceed: true, pulledItems: [] }
 			}
-			const pullResult = await fetchMessagesPage({
-				conversation_id,
-				chat_topic_id,
-				page_token,
-				order,
-				limit,
-				updatePageToken,
-				callback,
-			})
+			const pullResult =
+				writeIntent === "authoritative_tail"
+					? await fetchAuthoritativeTail({
+							conversation_id,
+							chat_topic_id,
+							page_token,
+							order,
+							limit,
+							requiredSeqId,
+							callback,
+						})
+					: await fetchMessagesPage({
+							conversation_id,
+							chat_topic_id,
+							page_token,
+							order,
+							limit,
+							updatePageToken,
+							callback,
+						})
 			if (!pullResult.didPullSucceed) return pullResult
-			if (writeIntent === "incremental") {
+			if (writeIntent === "authoritative_tail") {
+				const authoritativeTailResult = pullResult as AuthoritativeTailPullResult
+				if (!authoritativeTailResult.writeOptions) {
+					return { ...pullResult, didPullSucceed: false }
+				}
+				superMagicStore.initializeMessages(
+					chat_topic_id,
+					authoritativeTailResult.pulledItems,
+					authoritativeTailResult.writeOptions,
+				)
+			} else if (writeIntent === "incremental") {
 				// 增量模式保留现有 messages/buffer 状态，只把最新节点逐条灌进 store，
-				// 让现有的去重、流式和 buffer 逻辑继续生效。
-				pullResult.pulledItems
-					.slice()
-					.reverse()
-					.forEach((item: any) => {
-						superMagicStore.enqueueMessage(chat_topic_id, item)
-					})
+				// 同时先合并响应中已有身份的外层状态；有限窗口的缺席不具备删除语义。
+				const orderedItems = pullResult.pulledItems.slice().reverse()
+				superMagicStore.reconcileHttpMessageStatuses(chat_topic_id, orderedItems)
+				orderedItems.forEach((item: any) => {
+					superMagicStore.enqueueMessage(chat_topic_id, item)
+				})
 			} else {
 				superMagicStore.initializeMessages(chat_topic_id, pullResult.pulledItems, {
 					mode: writeIntent,
 					syncGeneration,
 				})
+			}
+			if (allowRemoteRevokedAnchorCleanup) {
+				const cleanupWriteOptions =
+					writeIntent === "authoritative_tail"
+						? (pullResult as AuthoritativeTailPullResult).writeOptions
+						: writeIntent === "replace" && pullResult.response?.has_more === false
+							? ({
+									mode: "replace",
+									preserveStreamSuperMessageIds: [],
+								} satisfies NonNullable<
+									AuthoritativeTailPullResult["writeOptions"]
+								>)
+							: undefined
+				reconcileActiveRevokedAnchorFromHttp(
+					chat_topic_id,
+					pullResult.pulledItems,
+					cleanupWriteOptions,
+				)
 			}
 			updateForegroundRecoveryCommittedAnchor(chat_topic_id)
 			if (!initialLoadedTopicsRef.current.has(chat_topic_id)) {
@@ -362,6 +646,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				mode: "replace",
 				syncGeneration,
 			})
+			reconcileActiveRevokedAnchorFromHttp(topicId, pulledItems, {
+				mode: "replace",
+				preserveStreamSuperMessageIds: [],
+			})
 			return {
 				didPullSucceed: true,
 				pulledItems,
@@ -418,9 +706,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		({
 			writeIntent = "replace",
 			messageCount = FULL_TOPIC_SYNC_MESSAGE_COUNT,
+			allowRemoteRevokedAnchorCleanup = true,
 		}: {
 			writeIntent?: PullMessageParams["writeIntent"]
 			messageCount?: number
+			allowRemoteRevokedAnchorCleanup?: boolean
 		} = {}) => {
 			// if (selectedTopic?.id && selectedWorkspace) {
 			if (selectedTopic?.id) {
@@ -432,6 +722,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					limit: messageCount,
 					updatePageToken: true,
 					writeIntent,
+					allowRemoteRevokedAnchorCleanup,
 				})
 			}
 		},
@@ -451,17 +742,24 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		const currentSelectedTopic = selectedTopicRef.current
 		if (!currentSelectedTopic?.id || document.visibilityState !== "visible") return
 		if (foregroundTopicSyncRef.current) return
-		if (!shouldRunForegroundRecovery(currentSelectedTopic)) {
-			// 当前会话已经稳定收尾时，hidden -> visible 不需要再触发恢复补拉；
-			// 同时清理掉这次 hidden 周期留下的锚点，避免后续切页继续误判为待恢复。
-			delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
-			return
-		}
 		const now = Date.now()
-		// 某些浏览器在切回前台时会连续触发 visibilitychange，
-		// 这里做一个很轻的去重，避免同一轮恢复打出多次全量回拉。
+		// 某些浏览器在切回前台时会连续触发 visibilitychange，所有前台 HTTP 对账共享去重窗口。
 		if (now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
 		lastForegroundSyncAtRef.current = now
+		if (!shouldRunForegroundRecovery(currentSelectedTopic)) {
+			// 稳定会话无需完整快照恢复，但仍做一次最近窗口状态对账，覆盖 WS 通知丢失。
+			delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
+			await pullMessage({
+				conversation_id: currentSelectedTopic.chat_conversation_id,
+				chat_topic_id: currentSelectedTopic.chat_topic_id,
+				page_token: "",
+				order: "desc",
+				limit: POLLING_SYNC_MESSAGE_COUNT,
+				updatePageToken: false,
+				writeIntent: "authoritative_tail",
+			})
+			return
+		}
 		const topicId = currentSelectedTopic.chat_topic_id
 		const syncGeneration = superMagicStore.beginTopicSync(topicId)
 		const inFlightSync = { topicId, generation: syncGeneration }
@@ -482,6 +780,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(topicId)
 		try {
 			let aggregatedPulledItems: any[] = []
+			let isAuthoritativeQueryComplete = false
 			const firstPageResult = await fetchMessagesPage({
 				conversation_id: currentSelectedTopic.chat_conversation_id,
 				chat_topic_id: topicId,
@@ -506,6 +805,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				),
 			)
 			const isFirstPageServerComplete = !firstPageResult.response?.has_more
+			isAuthoritativeQueryComplete = isFirstPageServerComplete
 			const shouldFetchSecondPage = !didReachAnchorOnFirstPage && !isFirstPageServerComplete
 			if (shouldFetchSecondPage) {
 				const nextPageToken = String(firstPageResult.response?.page_token || "")
@@ -537,6 +837,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					),
 				)
 				const isSecondPageServerComplete = !secondPageResult.response?.has_more
+				isAuthoritativeQueryComplete = isSecondPageServerComplete
 				if (!didReachAnchorOnSecondPage && !isSecondPageServerComplete) {
 					completeFailedSync()
 					return
@@ -549,6 +850,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				mode: "replace",
 				syncGeneration,
 			})
+			reconcileActiveRevokedAnchorFromHttp(
+				topicId,
+				aggregatedPulledItems,
+				isAuthoritativeQueryComplete
+					? { mode: "replace", preserveStreamSuperMessageIds: [] }
+					: undefined,
+			)
 			if (!isCurrentForegroundOwner()) return
 			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
 			const latestSelectedTopic = selectedTopicRef.current
@@ -669,6 +977,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		let liveSyncTimer: number | null = null
 		let liveSyncInFlight = false
 		let liveSyncPending = false
+		let pendingRequiredSeqId = ""
 
 		const scheduleLiveIncrementalSync = () => {
 			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
@@ -684,16 +993,26 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (!currentTopic?.chat_conversation_id || !currentTopic.chat_topic_id) return
 				liveSyncInFlight = true
 				liveSyncPending = false
+				const requiredSeqId = pendingRequiredSeqId
 				try {
-					await pullMessage({
+					const pullResult = await pullMessage({
 						conversation_id: currentTopic.chat_conversation_id,
 						chat_topic_id: currentTopic.chat_topic_id,
 						page_token: "",
 						order: "desc",
 						limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
 						updatePageToken: false,
-						writeIntent: "incremental",
+						writeIntent: "authoritative_tail",
+						requiredSeqId: requiredSeqId || undefined,
 					})
+					if (
+						pullResult.didPullSucceed &&
+						requiredSeqId &&
+						(!pendingRequiredSeqId ||
+							compareMessageSeqId(pendingRequiredSeqId, requiredSeqId) <= 0)
+					) {
+						pendingRequiredSeqId = ""
+					}
 				} finally {
 					liveSyncInFlight = false
 					if (!disposed && liveSyncPending) scheduleLiveIncrementalSync()
@@ -713,6 +1032,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				return
 			if (data.conversation_id && data.conversation_id !== currentTopic.chat_conversation_id)
 				return
+			const incomingSeqId = String(data.seq_id || data.message?.seq_id || "")
+			if (
+				incomingSeqId &&
+				(!pendingRequiredSeqId ||
+					compareMessageSeqId(incomingSeqId, pendingRequiredSeqId) > 0)
+			) {
+				// 同一防抖窗口只需等待最高 WS 水位，较低 HTTP 快照不得执行缺席删除。
+				pendingRequiredSeqId = incomingSeqId
+			}
 			scheduleLiveIncrementalSync()
 		}
 		pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
@@ -784,11 +1112,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					// 轮询兜底保持中等窗口，兼顾稳定性和请求成本。
 					limit: POLLING_SYNC_MESSAGE_COUNT,
 					updatePageToken: false,
-					writeIntent: "incremental" as const,
+					writeIntent: "authoritative_tail" as const,
 				}
 
 				if (taskStatus !== TaskStatus.FINISHED) {
-					finishedPollingCompletedTopicsRef.current.delete(topicId)
 					// Active chunks are the primary realtime source. The Store watchdog owns stalled
 					// stream recovery, so resident polling would only duplicate healthy traffic.
 					if (superMagicStore.isTopicStreaming(topicId)) return
@@ -799,8 +1126,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					void pullMessage(pollingParams)
 					return
 				}
-				if (finishedPollingCompletedTopicsRef.current.has(topicId)) return
-
 				// finished polling 只确认最近增量和任务完成屏障，不能复用完整历史 recovery。
 				// generation 必须单飞且不能抢占已有权威同步，避免慢请求持续作废彼此。
 				if (inFlightPollingSync || hasActiveTopicSync()) return
@@ -820,20 +1145,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							superMagicStore.cancelTopicSync(topicId, syncGeneration)
 							return
 						}
-						const didComplete = superMagicStore.completeTopicSync(
-							topicId,
-							syncGeneration,
-							{
-								succeeded: pullResult.didPullSucceed,
-								taskStatus: currentTaskStatus,
-								latestSeqId: pullResult.didPullSucceed
-									? superMagicStore.getLatestMessageSeqId(topicId)
-									: undefined,
-							},
-						)
-						if (pullResult.didPullSucceed && didComplete) {
-							finishedPollingCompletedTopicsRef.current.add(topicId)
-						}
+						superMagicStore.completeTopicSync(topicId, syncGeneration, {
+							succeeded: pullResult.didPullSucceed,
+							taskStatus: currentTaskStatus,
+							latestSeqId: pullResult.didPullSucceed
+								? superMagicStore.getLatestMessageSeqId(topicId)
+								: undefined,
+						})
 					})
 					.catch(() => {
 						// HTTP 后处理或 Store 写入异常时释放 generation；失败同步不能成为完成屏障。
@@ -864,6 +1182,8 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				// complete canonical membership, while visible-branch filtering stays in UI projection.
 				writeIntent: "replace",
 				messageCount: 500,
+				// 本地 undo 成功后会先设置锚点；紧随其后的刷新不能把尚未收敛的 read 当作远端恢复。
+				allowRemoteRevokedAnchorCleanup: false,
 			})
 
 		pubsub.subscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
@@ -881,7 +1201,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			topicNotHaveMoreMessageMap.current = {}
 			historyPullInFlightTopicsRef.current.clear()
 			lastHistoryPageTokenMapRef.current = {}
-			finishedPollingCompletedTopicsRef.current.clear()
 		}
 	}, [])
 
