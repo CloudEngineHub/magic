@@ -334,6 +334,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			let pageToken = ""
 			let latestResponse: any
 
+			// eslint-disable-next-line no-constant-condition
 			while (true) {
 				const pageResult = await fetchMessagesPage({
 					conversation_id: conversationId,
@@ -475,6 +476,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			superMagicStore.completeTopicSync(topicId, syncGeneration, {
 				succeeded: false,
 				taskStatus: currentTopic?.task_status || currentTopic?.status,
+				renderStrategy: "foreground-instant",
 			})
 		}
 		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(topicId)
@@ -554,6 +556,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				succeeded: true,
 				taskStatus: latestSelectedTopic?.task_status || latestSelectedTopic?.status,
 				latestSeqId: superMagicStore.getLatestMessageSeqId(topicId),
+				renderStrategy: "foreground-instant",
 			})
 
 			if (!initialLoadedTopicsRef.current.has(topicId)) {

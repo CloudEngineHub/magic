@@ -1109,6 +1109,7 @@ describe("useTopicMessages", () => {
 				succeeded: true,
 				taskStatus: TaskStatus.RUNNING,
 				latestSeqId: "assistant-seq-1",
+				renderStrategy: "foreground-instant",
 			}),
 		)
 	})
@@ -1170,6 +1171,7 @@ describe("useTopicMessages", () => {
 			expect.objectContaining({
 				succeeded: false,
 				taskStatus: TaskStatus.RUNNING,
+				renderStrategy: "foreground-instant",
 			}),
 		)
 		expect(consoleErrorSpy).toHaveBeenCalled()
@@ -1251,7 +1253,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
 			"chat-topic-1",
 			generation,
-			expect.objectContaining({ succeeded: false, taskStatus: TaskStatus.RUNNING }),
+			expect.objectContaining({
+				succeeded: false,
+				taskStatus: TaskStatus.RUNNING,
+				renderStrategy: "foreground-instant",
+			}),
 		)
 	})
 })

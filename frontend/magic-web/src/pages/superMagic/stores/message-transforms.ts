@@ -235,7 +235,10 @@ export function createStreamState({
 		currentToolIndex: 0,
 		tool_calls: [],
 		isFinalMessageReceived: false,
+		renderPace: "live",
+		settlingStartedAt: null,
 		finalCatchupDeadlineAt: null,
+		catchupMinimumFramesRemaining: 0,
 		recoveryAttempts: 0,
 	}
 }
@@ -243,6 +246,7 @@ export function createStreamState({
 export function getDefaultTopicMeta(): TopicMeta {
 	return {
 		timer: null,
+		activeRenderSuperMessageId: null,
 		recoveryTimer: null,
 		recoveryCorrelationId: null,
 		isStream: false,

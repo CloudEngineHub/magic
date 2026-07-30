@@ -59,6 +59,7 @@ import { MessageListProvider, useMessageListContext } from "./context"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
+import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
 
 export { MessageListProvider }
 
@@ -178,34 +179,17 @@ const MessageList = observer(
 			return { fadeColor: "mobile-background" as ScrollEdgeFadeColor }
 		}, [scrollEdgeFade, isMobile, isShare])
 
-		const {
-			scrollRef: fadeScrollRef,
-			showTopMask,
-			showBottomMask,
-		} = useScrollEdgeFadeMask({
-			contentDeps: [
-				data.length,
-				showLoading,
-				isMessagesLoading,
-				isEmptyStatus,
-				selectedTopic?.id,
-			],
-		})
-
-		/** Keeps auto-scroll, edge-fade hook, and optional parent ref on one viewport node. */
-		const setScrollViewportRef = useCallback(
-			(element: HTMLDivElement | null) => {
-				nodesPanelRef.current = element
-				if (scrollEdgeFadeConfig) fadeScrollRef.current = element
-				assignScrollViewportRef(element, viewportRef)
-			},
-			[viewportRef, scrollEdgeFadeConfig, fadeScrollRef],
-		)
 		const renderedMessageKeysRef = useRef<Set<string>>(new Set())
 		const canAnimateNewMessagesRef = useRef(false)
 		const currentTopicKeyRef = useRef<string>("")
 
-		const isStreamLoading = superMagicStore.isTopicStreaming(selectedTopic?.chat_topic_id || "")
+		/** 是否展开已撤销消息 */
+		const [isRevokedMessagesExpanded, setIsRevokedMessagesExpanded] = useState(false)
+		/** 是否强制隐藏已撤销消息 */
+		const [forceHideRevokedMessages, setForceHideRevokedMessages] = useState(false)
+		const [isCancelRevokedLoading, setIsCancelRevokedLoading] = useState(false)
+		const [isFirstRevokedUserMessagePendingSend, setIsFirstRevokedUserMessagePendingSend] =
+			useState(false)
 
 		// When entering revoked-edit mode, read the set of failed messages recorded at undo success.
 		// These messages are hidden from display first; actual deletion happens after user confirms sending the new message.
@@ -265,6 +249,7 @@ const MessageList = observer(
 		}, [mainDisplayData])
 
 		const currentTopicKey = selectedTopic?.chat_topic_id || ""
+		const isStreamLoading = superMagicStore.isTopicStreaming(currentTopicKey)
 		if (currentTopicKeyRef.current !== currentTopicKey) {
 			currentTopicKeyRef.current = currentTopicKey
 			renderedMessageKeysRef.current = new Set(messageKeys)
@@ -298,27 +283,11 @@ const MessageList = observer(
 			renderedMessageKeysRef.current = new Set(messageKeys)
 		}, [messageKeys])
 
-		const { showBackToLatest, scrollToBottom, notifyPullMoreStarted } = useAutoScroll({
-			containerRef: nodesPanelRef,
-			topicKey: selectedTopic?.chat_topic_id || "",
-			onPullMore: () => {
-				handlePullMoreMessage?.(selectedTopic, () => {
-					notifyPullMoreStarted()
-				})
-			},
-		})
-
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id)
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
-
-		const showAiGeneratedTip =
-			(mainDisplayData.length > 0 &&
-				!showLoading &&
-				currentTopicStatus !== TaskStatus.RUNNING) ||
-			isLastMessageError
 
 		const revokedDisplayMessages = useMemo<Array<SuperMagicMessageItem>>(
 			() => messagesConverter(revokedBranchData, false) as Array<SuperMagicMessageItem>,
@@ -349,6 +318,71 @@ const MessageList = observer(
 					({ node }) => node?.app_message_id !== firstRevokedUserMessage.app_message_id,
 				)
 		}, [firstRevokedUserMessage, revokedDisplayMessages])
+
+		const effectiveVisibleMessages = useMemo(() => {
+			if (forceHideRevokedMessages) return messages
+			if (!isFirstRevokedUserMessagePendingSend) {
+				return [...messages, ...revokedDisplayMessages]
+			}
+			return firstRevokedUserMessage ? [...messages, firstRevokedUserMessage] : messages
+		}, [
+			firstRevokedUserMessage,
+			forceHideRevokedMessages,
+			isFirstRevokedUserMessagePendingSend,
+			messages,
+			revokedDisplayMessages,
+		])
+		const activeStreamSuperMessageIds =
+			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
+		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
+		// projected node 尚未形成可见内容时需要保留底部兜底 Loading。
+		const shouldShowBottomLoading = resolveBottomLoadingVisibility({
+			showLoading: Boolean(showLoading),
+			activeStreamSuperMessageIds,
+			visibleMessages: effectiveVisibleMessages,
+			resolveMessageNode: (superMessageId) => superMagicStore.getMessageNode(superMessageId),
+			resolveStreamStage: (superMessageId) =>
+				superMagicStore.getStreamState(currentTopicKey, superMessageId)?.stage,
+		})
+		const showAiGeneratedTip =
+			!shouldShowBottomLoading &&
+			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
+				isLastMessageError)
+
+		const {
+			scrollRef: fadeScrollRef,
+			showTopMask,
+			showBottomMask,
+		} = useScrollEdgeFadeMask({
+			contentDeps: [
+				data.length,
+				isStreamLoading,
+				shouldShowBottomLoading,
+				isMessagesLoading,
+				isEmptyStatus,
+				selectedTopic?.id,
+			],
+		})
+
+		/** Keeps auto-scroll, edge-fade hook, and optional parent ref on one viewport node. */
+		const setScrollViewportRef = useCallback(
+			(element: HTMLDivElement | null) => {
+				nodesPanelRef.current = element
+				if (scrollEdgeFadeConfig) fadeScrollRef.current = element
+				assignScrollViewportRef(element, viewportRef)
+			},
+			[viewportRef, scrollEdgeFadeConfig, fadeScrollRef],
+		)
+
+		const { showBackToLatest, scrollToBottom, notifyPullMoreStarted } = useAutoScroll({
+			containerRef: nodesPanelRef,
+			topicKey: currentTopicKey,
+			onPullMore: () => {
+				handlePullMoreMessage?.(selectedTopic, () => {
+					notifyPullMoreStarted()
+				})
+			},
+		})
 
 		const firstRevokedUserMessageKey = firstRevokedUserMessage
 			? getMessageNodeKey(firstRevokedUserMessage) ||
@@ -450,14 +484,6 @@ const MessageList = observer(
 				exportEnterRequest,
 			],
 		)
-
-		/** 是否展开已撤销消息 */
-		const [isRevokedMessagesExpanded, setIsRevokedMessagesExpanded] = useState(false)
-		/** 是否强制隐藏已撤销消息 */
-		const [forceHideRevokedMessages, setForceHideRevokedMessages] = useState(false)
-		const [isCancelRevokedLoading, setIsCancelRevokedLoading] = useState(false)
-		const [isFirstRevokedUserMessagePendingSend, setIsFirstRevokedUserMessagePendingSend] =
-			useState(false)
 
 		/** 展开或收起已撤销消息 */
 		const handleRevokedMessagesExpanded = useMemoizedFn(() => {
@@ -873,10 +899,10 @@ const MessageList = observer(
 						) : (
 							<Empty />
 						)}
-						{showLoading && !isStreamLoading && (
+						{shouldShowBottomLoading && (
 							<LoadingMessage
 								messages={visibleData}
-								showLoading={showLoading}
+								showLoading={shouldShowBottomLoading}
 								selectedTopic={selectedTopic}
 							/>
 						)}

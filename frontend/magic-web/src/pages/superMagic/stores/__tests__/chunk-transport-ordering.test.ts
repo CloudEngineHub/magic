@@ -32,6 +32,7 @@ function toSuperMessageId(correlationId: string): string {
 }
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
+type IndexedChunkChoice = ChunkChoice & { index?: number }
 type ChunkDelta = ChunkChoice["delta"]
 type ChunkToolCall = ChunkDelta["tool_calls"][number]
 type ChunkUsage = NonNullable<SuperMagicChunkMessage["super_magic_chunk"]["usage"]>
@@ -45,7 +46,7 @@ interface ChunkOptions {
 	reasoningContent?: string
 	toolCalls?: ChunkToolCall[]
 	usage?: ChunkUsage | null
-	choices?: ChunkChoice[]
+	choices?: IndexedChunkChoice[]
 }
 
 interface ProjectedToolCall {
@@ -75,6 +76,7 @@ interface MutableProtocolChunk {
 		i?: unknown
 		id?: string
 		choices?: Array<{
+			index?: unknown
 			finish_reason?: unknown
 			delta?: unknown
 		}>
@@ -83,6 +85,8 @@ interface MutableProtocolChunk {
 
 /**
  * @description 创建 delta
+ * @param index choice 级候选索引
+ * @param deltaIndex delta 内部兼容字段，用于证明选择规则不依赖数组位置或 delta.index
  * @param content 内容，默认空字符串
  * @param finishReason 完成原因，默认 null
  * @param reasoningContent 推理内容，默认空字符串
@@ -90,26 +94,37 @@ interface MutableProtocolChunk {
  * @returns 创建的 delta
  */
 function createChoice({
+	index = 0,
+	deltaIndex = index,
 	content = "",
 	finishReason = null,
 	reasoningContent = "",
 	toolCalls = [],
 }: {
+	index?: number
+	deltaIndex?: number
 	content?: string
 	finishReason?: FinishReason
 	reasoningContent?: string
 	toolCalls?: ChunkToolCall[]
-} = {}): ChunkChoice {
+} = {}): IndexedChunkChoice {
 	return {
+		index,
 		finish_reason: finishReason,
 		delta: {
 			content,
 			role: "assistant",
 			tool_calls: toolCalls,
 			reasoning_content: reasoningContent,
-			index: 0,
+			index: deltaIndex,
 		},
 	}
+}
+
+function createChoiceWithoutIndex(options: Parameters<typeof createChoice>[0] = {}): ChunkChoice {
+	const choice = createChoice(options)
+	delete choice.index
+	return choice
 }
 
 /**
@@ -206,7 +221,7 @@ function createChunkWithoutDelta({
 	correlationId?: string
 } = {}): SuperMagicChunkMessage {
 	return mutateProtocolChunk(createChunk({ i, correlationId, finishReason }), (draft) => {
-		draft.super_magic_chunk.choices = [{ finish_reason: finishReason }]
+		draft.super_magic_chunk.choices = [{ index: 0, finish_reason: finishReason }]
 	})
 }
 
@@ -1110,34 +1125,348 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
-	it("`choices` 为空数组。", () => {
+	it("`choices` 为空数组时按 heartbeat/usage chunk 推进，不创建主答案。", () => {
 		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
-		store.receiveChunk(createChunk({ choices: [] }))
-		expect(getProjectedNode(store)).toBeUndefined()
-		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		try {
+			store.receiveChunk(
+				createChunk({
+					choices: [],
+					usage: { completion_tokens: 1, prompt_tokens: 2, total_tokens: 3 },
+				}),
+			)
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(warnSpy).not.toHaveBeenCalled()
 
-		store.receiveChunk(createChunk({ i: 1, content: "A", finishReason: "stop" }))
-		expectSettledContent(store, "A")
+			store.receiveChunk(createChunk({ i: 1, content: "A", finishReason: "stop" }))
+			expectSettledContent(store, "A")
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
-	it("`choices` 包含多个 choice，但 store 只消费第一个。", () => {
+	it("多个 choice 整包忽略，不合并正文、推理、工具或 finish_reason，并按 correlation 只告警一次。", () => {
 		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const streamEvents: string[] = []
+		const unsubscribeStreamEvents = [
+			store.subscribe("message.stream.started", (event) => streamEvents.push(event.type)),
+			store.subscribe("message.stream.delta", (event) => streamEvents.push(event.type)),
+			store.subscribe("message.stream.ended", (event) => streamEvents.push(event.type)),
+		]
 		const ignoredTool = createToolCall({ id: "ignored-tool" })
+		const secondaryCorrelationId = "correlation-secondary-choice"
 
-		store.receiveChunk(
-			createChunk({
-				choices: [
-					createChoice({ content: "A", finishReason: "stop" }),
-					createChoice({ content: "B", toolCalls: [ignoredTool] }),
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [
+						createChoice({
+							index: 0,
+							content: "ignored-A",
+							reasoningContent: "ignored-reasoning",
+							toolCalls: [ignoredTool],
+							finishReason: "stop",
+						}),
+						createChoice({ index: 1, content: "ignored-B" }),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoice({ index: 0, content: "ignored-replay" }),
+						createChoice({ index: 1, content: "ignored-alternative" }),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					correlationId: secondaryCorrelationId,
+					choices: [
+						createChoice({ index: 0, content: "ignored-secondary-primary" }),
+						createChoice({ index: 1, content: "ignored-secondary-alternative" }),
+					],
+				}),
+			)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(
+				getProjectedNode(store, toSuperMessageId(secondaryCorrelationId)),
+			).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, secondaryCorrelationId)).toBeUndefined()
+			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+			expect(recovery.events).toHaveLength(0)
+			expect(streamEvents).toEqual([])
+
+			store.receiveChunk(createChunk({ i: 2, content: "accepted", finishReason: "stop" }))
+			expectSettledContent(store, "accepted")
+			expect(getProjectedNode(store)?.tool_calls ?? []).not.toContainEqual(
+				expect.objectContaining({ id: "ignored-tool" }),
+			)
+
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code === "chunk-multiple-choices",
+			)
+			expect(warnings).toHaveLength(2)
+			expect(
+				warnings.map(
+					([, payload]) => (payload as { correlationId?: string }).correlationId,
+				),
+			).toEqual([CORRELATION_ID, secondaryCorrelationId])
+			expect(warnings[0]).toEqual([
+				"[SuperMagicStore] multiple choices ignored",
+				expect.objectContaining({
+					code: "chunk-multiple-choices",
+					topicId: TOPIC_ID,
+					superMessageId: SUPER_MESSAGE_ID,
+					correlationId: CORRELATION_ID,
+					choiceCount: 2,
+					choiceIndexes: [0, 1],
+					resolution: "ignore-choice-payload",
+				}),
+			])
+		} finally {
+			unsubscribeStreamEvents.forEach((unsubscribe) => unsubscribe())
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it.each([
+		{ caseName: "重复 index=0", choiceIndexes: [0, 0] },
+		{ caseName: "不存在 index=0", choiceIndexes: [1, 2] },
+	])("多 choice 且 $caseName 时整包拒绝，并请求一次权威恢复。", ({ choiceIndexes }) => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					choices: choiceIndexes.map((index) =>
+						createChoice({ index, content: `ignored-${index}` }),
+					),
+				}),
+			)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-multiple-choices",
+				),
+			).toHaveLength(1)
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("跨 chunk 固定 choice.index=0，非零候选不切换主答案、不结束文本流，并请求权威恢复。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [createChoice({ index: 0, deltaIndex: 9, content: "A" })],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoice({
+							index: 1,
+							deltaIndex: 0,
+							content: "ignored-1",
+							finishReason: "stop",
+						}),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 2,
+					choices: [createChoice({ index: 1, deltaIndex: 0, content: "ignored-2" })],
+				}),
+			)
+
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+				content: "A",
+				isFinalMessageReceived: false,
+			})
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+
+			store.receiveChunk(
+				createChunk({
+					i: 3,
+					choices: [createChoice({ index: 0, content: "C", finishReason: "stop" })],
+				}),
+			)
+			expectSettledContent(store, "AC")
+
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"chunk-choice-index-invalid",
+			)
+			expect(warnings).toEqual([
+				[
+					"[SuperMagicStore] invalid choice index",
+					expect.objectContaining({
+						code: "chunk-choice-index-invalid",
+						topicId: TOPIC_ID,
+						superMessageId: SUPER_MESSAGE_ID,
+						correlationId: CORRELATION_ID,
+						choiceIndex: 1,
+						expectedChoiceIndex: 0,
+						resolution: "ignore-choice-payload-and-recover",
+					}),
 				],
-			}),
-		)
+			])
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
 
-		expectSettledContent(store, "A")
-		expect(getProjectedNode(store)?.tool_calls ?? []).not.toContainEqual(
-			expect.objectContaining({ id: "ignored-tool" }),
-		)
+	it("字符串 choice.index='0' 不等同数值 0，候选内容和 finish_reason 均被拒绝。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const invalidChunk = mutateProtocolChunk(createChunk(), (draft) => {
+			draft.super_magic_chunk.choices = [
+				{
+					index: "0",
+					finish_reason: "stop",
+					delta: {
+						content: "ignored-string-index",
+						role: "assistant",
+						tool_calls: [],
+						reasoning_content: "ignored-reasoning",
+						index: 0,
+					},
+				},
+			]
+		})
+
+		try {
+			store.receiveChunk(invalidChunk)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-choice-index-invalid",
+				),
+			).toHaveLength(1)
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("单 choice 缺失 index 时兼容回退数组首项，并按 correlation 只记录一次 warning。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [createChoiceWithoutIndex({ deltaIndex: 7, content: "legacy-" })],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoiceWithoutIndex({ content: "compatible", finishReason: "stop" }),
+					],
+				}),
+			)
+
+			expectSettledContent(store, "legacy-compatible")
+			expect(recovery.events).toHaveLength(0)
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"chunk-choice-index-missing",
+			)
+			expect(warnings).toEqual([
+				[
+					"[SuperMagicStore] missing choice index",
+					expect.objectContaining({
+						code: "chunk-choice-index-missing",
+						topicId: TOPIC_ID,
+						superMessageId: SUPER_MESSAGE_ID,
+						correlationId: CORRELATION_ID,
+						fallbackChoiceIndex: 0,
+						resolution: "fallback-single-choice",
+					}),
+				],
+			])
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("choice.index=0 缺少 delta 且存在其他候选时整包忽略，后续只由 canonical Final 收敛。", () => {
+		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const invalidMultipleChoices = mutateProtocolChunk(createChunk(), (draft) => {
+			draft.super_magic_chunk.choices = [
+				{ index: 0, finish_reason: null },
+				{
+					index: 1,
+					finish_reason: "stop",
+					delta: {
+						content: "ignored-alternative",
+						role: "assistant",
+						tool_calls: [],
+						reasoning_content: "ignored-reasoning",
+						index: 1,
+					},
+				},
+			]
+		})
+
+		try {
+			store.receiveChunk(invalidMultipleChoices)
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+
+			store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "canonical" }))
+			expectSettledContent(store, "canonical")
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-multiple-choices",
+				),
+			).toHaveLength(1)
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
 	it("`choices[0].delta` 缺失。", () => {

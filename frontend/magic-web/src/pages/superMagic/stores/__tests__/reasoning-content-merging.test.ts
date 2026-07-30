@@ -19,6 +19,8 @@ const TOPIC_ID = "topic-reasoning"
 const CORRELATION_ID = "correlation-reasoning"
 const SUPER_MESSAGE_ID = "super-message-reasoning"
 const RENDER_SETTLE_MS = 2_000
+const FINAL_SETTLING_OBSERVATION_MS = 1_600
+const FINAL_SETTLING_SAFETY_MS = 3_600
 const RECOVERY_TIMEOUT_MS = 5_100
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -65,6 +67,7 @@ function createChoice({
 	toolCalls = [],
 }: Omit<ChunkOptions, "i" | "choices"> = {}): ChunkChoice {
 	return {
+		...({ index: 0 } as const),
 		finish_reason: finishReason,
 		delta: {
 			content,
@@ -470,7 +473,7 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expectSettledNode(store, { content: markup })
 	})
 
-	it("非 Final 保持打字机展示，Final 对超大正文在 2 秒内有界追平。", () => {
+	it("非 Final 保持打字机展示，Final 单独到达时先温和结算并在安全预算内完成。", () => {
 		const store = createStore()
 		const largeContent = "大段正文".repeat(16_384)
 
@@ -480,7 +483,16 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(liveContent.length).toBeLessThan(largeContent.length)
 
 		store.receiveChunk(createChunk({ i: 1, finishReason: "stop" }))
-		advanceRendering(RENDER_SETTLE_MS)
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+
+		const settlingContent = getProjectedNode(store)?.content ?? ""
+		expect(settlingContent.length).toBeGreaterThan(liveContent.length)
+		expect(settlingContent.length).toBeLessThan(largeContent.length)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			renderPace: "settling",
+		})
+
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
 
 		expect(getProjectedNode(store)?.content).toBe(largeContent)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()

@@ -46,6 +46,7 @@ export type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	TopicSyncRenderStrategy,
 } from "./types"
 export type {
 	MessageCommittedEvent,
@@ -108,6 +109,7 @@ import type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	TopicSyncRenderStrategy,
 } from "./types"
 
 /** 离开话题达到该时长后，重新进入时直接展示当前已知 draft。 */
@@ -130,8 +132,20 @@ const TERMINAL_TOPIC_TASK_STATUSES = new Set(["finished", "error", "suspended"])
 const STREAM_PERSISTENCE_BATCH_SIZE = 10
 const STREAM_PERSISTENCE_FLUSH_MS = 200
 
-/** Final 后保留短暂追赶动画，但必须在该预算内展示完整 canonical 内容。 */
+/** 流式渲染保持约一帧一次；提速只增加单帧字符量。 */
+const STREAM_RENDER_FRAME_MS = 16
+
+/** Final 单独到达时先温和提速，给正文保留自然的连续流式效果。 */
+const FINAL_STREAM_SETTLING_MULTIPLIER = 3
+const FINAL_STREAM_MAX_SETTLING_BATCH = 384
+const FINAL_STREAM_SETTLING_MAX_MS = 4_000
+
+/** 检测到后继 Agent 消息压力后，从压力发生时开始计算快速追赶预算。 */
 const FINAL_STREAM_CATCHUP_BUDGET_MS = 1_500
+const FINAL_STREAM_SAFETY_CATCHUP_BUDGET_MS = 1_000
+const FINAL_STREAM_MAX_CATCHUP_BATCH = 1_024
+const FINAL_STREAM_MIN_VISIBLE_FRAMES = 4
+const FINAL_STREAM_SMALL_TAIL = 32
 
 /** Tool response 的 canonical 状态集合；response_missing 是 Store 内部生成的弱终态。 */
 const VALID_TOOL_RESPONSE_STATUSES = new Set([
@@ -928,6 +942,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				if (previousMeta.timer) {
 					clearTimeout(previousMeta.timer)
 					previousMeta.timer = null
+					previousMeta.activeRenderSuperMessageId = null
 				}
 				this.clearStreamRecoveryTimer(prevTopicId)
 			}
@@ -1277,6 +1292,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
+			topicMeta.activeRenderSuperMessageId = null
 		}
 		const generation = ++this.topicSyncGenerationCounter
 		topicMeta.syncGeneration = generation
@@ -1340,10 +1356,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			succeeded,
 			taskStatus,
 			latestSeqId,
+			renderStrategy = "auto",
 		}: {
 			succeeded: boolean
 			taskStatus?: string
 			latestSeqId?: string
+			renderStrategy?: TopicSyncRenderStrategy
 		},
 	): boolean {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return false
@@ -1373,7 +1391,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			isSuccessfulFinishedSync && pendingFinalizations?.generation === generation,
 		)
 
-		if (isTerminalTopic) {
+		if (renderStrategy === "foreground-instant") {
+			// 浏览器重新激活是一次性的无动画恢复；startStreamRendering 会在投影后
+			// 把非终态 StreamState 切回 live，不影响后续新 Chunk 的正常流式节奏。
+			topicMeta.renderPolicy = "instant"
+		} else if (isTerminalTopic) {
 			topicMeta.renderPolicy = "instant"
 		} else if (hasLongRecoveryGap) {
 			topicMeta.renderPolicy = "instant"
@@ -1601,6 +1623,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
+			topicMeta.activeRenderSuperMessageId = null
 		}
 
 		const previousMessages = this.messages.get(topicId) || []
@@ -2233,6 +2256,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			console.error("chunk error")
 			return
 		}
+		if (hasCanonicalDelta || choice?.finish_reason) {
+			this.promoteActiveFinalStreamForSuccessor(topicId, superMessageId)
+		}
 
 		const ledger = this.getStreamChunkLedger(topicId, superMessageId)
 		const hasBufferedLaterChunk = Array.from(ledger.pendingChunks.keys()).some(
@@ -2253,6 +2279,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (topicMeta.timer) {
 				clearTimeout(topicMeta.timer)
 				topicMeta.timer = null
+				topicMeta.activeRenderSuperMessageId = null
 			}
 
 			const cachedNode = this.getAssistantMessageNode(topicId, superMessageId)
@@ -2430,7 +2457,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (isFinalChunk) {
 			this.clearStreamRecoveryState(topicId, superMessageId)
 			topicMeta.isStream = false
-			this.beginFinalCatchup(topicMeta, streamState)
+			this.beginFinalSettling(topicMeta, streamState)
 		} else {
 			if (hasEffectiveProgress) {
 				this.resetStreamRecoveryState(topicId, superMessageId)
@@ -2618,12 +2645,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// card or typewriter timer until content, reasoning, or a stable tool id exists.
 		const hasProjectableTools = this.getProjectableToolCalls(streamState.tool_calls).length > 0
 		if (streamState.content || streamState.reasoning_content || hasProjectableTools) {
-			if (isFinalChunk && topicMeta.timer) {
-				// A topic has one render timer, but a completed correlation must not wait
-				// forever behind an unrelated stream that may never receive Final. Pause the
-				// current projection; completing this Final resumes the remaining StreamState.
+			if (
+				isFinalChunk &&
+				topicMeta.timer &&
+				topicMeta.activeRenderSuperMessageId === superMessageId
+			) {
+				// Final 需要立即应用新的结算节奏；这里只重启属于当前 SuperMessage 的
+				// timer，不能抢占同 Topic 中正在投影的其他消息。
 				clearTimeout(topicMeta.timer)
 				topicMeta.timer = null
+				topicMeta.activeRenderSuperMessageId = null
 			}
 			this.startStreamRendering(topicId, superMessageId)
 		}
@@ -2832,6 +2863,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
+			topicMeta.activeRenderSuperMessageId = null
 		}
 
 		snapshots.forEach(({ appMessageId, node }, superMessageId) => {
@@ -2926,6 +2958,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
+			topicMeta.activeRenderSuperMessageId = null
 		}
 		topicMeta.content.delete(superMessageId)
 		topicMeta.streamSnapshots.delete(superMessageId)
@@ -3580,6 +3613,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				: "new"
 		if (revisionDecision === "same" || revisionDecision === "stale") return
 		const isHigherAssistantRevision = revisionDecision === "higher"
+		if (messageNode?.role === "assistant" && superMessageId) {
+			this.promoteActiveFinalStreamForSuccessor(topicId, superMessageId)
+		}
 
 		const buffer = this.getTopicBuffer(topicId)
 		this.recordToolResponse(topicId, messageNode, message?.seq_id)
@@ -3629,7 +3665,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 				const streamState = this.getStreamState(topicId, superMessageId)
 				if (streamState) {
-					this.beginFinalCatchup(this.getTopicMetadata(topicId), streamState)
+					this.beginFinalSettling(this.getTopicMetadata(topicId), streamState)
 					if (this.hasDefinedFinalField(messageNode, "content")) {
 						streamState.content =
 							typeof messageNode.content === "string" ? messageNode.content : ""
@@ -4106,7 +4142,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 				const streamState = existingStreamState
 
-				this.beginFinalCatchup(topicMeta, streamState)
+				this.beginFinalSettling(topicMeta, streamState)
 				if (topicMeta.timer) {
 					console.log(
 						"%c 【DEBUG】 消费队列 - 流式（等待流式完成）",
@@ -4263,6 +4299,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 			return
 		}
+		topicMeta.activeRenderSuperMessageId = superMessageId
 
 		const progressed = this.resumeFromCurrentStateV2(topicId, superMessageId)
 		this.syncAssistantCardProjection(topicId, superMessageId)
@@ -4293,6 +4330,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			// 流式无新数据且未收到最终消息 → 暂停定时器，等待下一个 chunk
 			// 到达后由 receiveChunk 重启渲染；若长期没有有效数据则 watchdog 请求 HTTP 快照。
 			if (topicMeta.renderPolicy === "catchup") topicMeta.renderPolicy = "live"
+			topicMeta.activeRenderSuperMessageId = null
 			this.scheduleStreamRecovery(topicId, superMessageId)
 			// 一个 Topic 只有一个打字机 timer；当前流追平后立即让出给其他 SuperMessage。
 			const nextStreamIdentity = Array.from(topicMeta.content.keys()).find(
@@ -4305,9 +4343,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicMeta.timer = setTimeout(() => {
 			runInAction(() => {
 				topicMeta.timer = null
+				topicMeta.activeRenderSuperMessageId = null
 				this.startStreamRendering(topicId, superMessageId)
 			})
-		}, 16)
+		}, STREAM_RENDER_FRAME_MS)
 	}
 
 	/**
@@ -4379,6 +4418,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (topicMeta.timer) {
 			clearTimeout(topicMeta.timer)
 			topicMeta.timer = null
+			topicMeta.activeRenderSuperMessageId = null
 		}
 
 		const messages = this.messages.get(topicId) || []
@@ -4439,6 +4479,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (meta.timer) {
 			clearTimeout(meta.timer)
 			meta.timer = null
+		}
+		if (!superMessageId || meta.activeRenderSuperMessageId === superMessageId) {
+			meta.activeRenderSuperMessageId = null
 		}
 		const completedStreamState = superMessageId ? meta.content?.get(superMessageId) : undefined
 		if (superMessageId && completedStreamState?.isFinalMessageReceived) {
@@ -4878,14 +4921,79 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const finalContent = streamState.content || ""
 		const finalReasoningContent = streamState.reasoning_content || ""
 		const finalTools = this.getProjectableToolCalls(streamState.tool_calls)
+		if (!messageMap.reasoning_content) messageMap.reasoning_content = ""
+		if (!messageMap.content) messageMap.content = ""
+
+		if (streamState.isFinalMessageReceived) {
+			// 非前缀 Final 是权威纠错，不能伪造追加动画；只对可安全续接的尾部做多帧推进。
+			if (
+				messageMap.reasoning_content &&
+				finalReasoningContent &&
+				!finalReasoningContent.startsWith(messageMap.reasoning_content)
+			) {
+				messageMap.reasoning_content = finalReasoningContent
+			}
+			if (
+				messageMap.content &&
+				finalContent &&
+				!finalContent.startsWith(messageMap.content)
+			) {
+				messageMap.content = finalContent
+			}
+
+			const remainingReasoningContent = finalReasoningContent.startsWith(
+				messageMap.reasoning_content,
+			)
+				? finalReasoningContent.slice(messageMap.reasoning_content.length)
+				: ""
+			const remainingContent = finalContent.startsWith(messageMap.content)
+				? finalContent.slice(messageMap.content.length)
+				: ""
+			const totalRemaining = remainingReasoningContent.length + remainingContent.length
+
+			if (totalRemaining > 0) {
+				let frameBudget = this.getStreamRenderStep(topicId, totalRemaining, streamState)
+				let progressed = false
+
+				if (remainingReasoningContent && frameBudget > 0) {
+					streamState.stage = "reasoning_content"
+					const reasoningStep = adjustSliceEnd(
+						remainingReasoningContent,
+						Math.min(frameBudget, remainingReasoningContent.length),
+					)
+					messageMap.reasoning_content += remainingReasoningContent.slice(
+						0,
+						reasoningStep,
+					)
+					frameBudget = Math.max(frameBudget - reasoningStep, 0)
+					progressed = reasoningStep > 0
+				}
+
+				if (remainingContent && frameBudget > 0) {
+					streamState.stage = "content"
+					const contentStep = adjustSliceEnd(
+						remainingContent,
+						Math.min(frameBudget, remainingContent.length),
+					)
+					messageMap.content += remainingContent.slice(0, contentStep)
+					progressed = contentStep > 0 || progressed
+				}
+
+				if (progressed) {
+					this.setAssistantMessageNode(topicId, superMessageId, messageMap)
+					return true
+				}
+			}
+		}
 
 		// --------------------------
 		// 1. 续流思考（直接补全）
 		// --------------------------
-		if (!messageMap?.reasoning_content) {
-			messageMap.reasoning_content = ""
-		}
-		if (finalReasoningContent && finalReasoningContent !== messageMap?.reasoning_content) {
+		if (
+			!streamState.isFinalMessageReceived &&
+			finalReasoningContent &&
+			finalReasoningContent !== messageMap?.reasoning_content
+		) {
 			if (
 				messageMap.reasoning_content &&
 				!finalReasoningContent.startsWith(messageMap.reasoning_content)
@@ -4912,10 +5020,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// --------------------------
 		// 2. 续流正文（从当前截断位置续流）
 		// --------------------------
-		if (!messageMap?.content) {
-			messageMap.content = ""
-		}
-		if (finalContent && finalContent !== messageMap?.content) {
+		if (
+			!streamState.isFinalMessageReceived &&
+			finalContent &&
+			finalContent !== messageMap?.content
+		) {
 			if (messageMap.content && !finalContent.startsWith(messageMap.content)) {
 				messageMap.content = finalContent
 			}
@@ -4987,11 +5096,62 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return false
 	}
 
-	private beginFinalCatchup(topicMeta: TopicMeta, streamState: StreamState) {
+	private beginFinalSettling(topicMeta: TopicMeta, streamState: StreamState) {
 		streamState.isFinalMessageReceived = true
 		if (topicMeta.renderPolicy === "instant") return
-		topicMeta.renderPolicy = "catchup"
-		streamState.finalCatchupDeadlineAt ??= getMonotonicNow() + FINAL_STREAM_CATCHUP_BUDGET_MS
+		if (streamState.renderPace !== "live") return
+
+		// Final 单独到达时只提高每帧字符量；真正的 1.5 秒预算必须等后继消息出现后再开始。
+		streamState.renderPace = "settling"
+		streamState.settlingStartedAt = getMonotonicNow()
+		streamState.finalCatchupDeadlineAt = null
+		streamState.catchupMinimumFramesRemaining = 0
+	}
+
+	private promoteFinalStreamToCatchup(
+		streamState: StreamState,
+		budgetMs = FINAL_STREAM_CATCHUP_BUDGET_MS,
+		remaining = this.getFinalTextRemaining(streamState),
+	) {
+		if (!streamState.isFinalMessageReceived || streamState.renderPace === "catchup") return
+
+		streamState.renderPace = "catchup"
+		streamState.finalCatchupDeadlineAt = getMonotonicNow() + budgetMs
+		streamState.catchupMinimumFramesRemaining =
+			remaining > FINAL_STREAM_SMALL_TAIL ? FINAL_STREAM_MIN_VISIBLE_FRAMES : 0
+	}
+
+	/**
+	 * 新消息进入 Store 时立即提升当前 Final 的视觉速度，不能等到 Buffer 消费，
+	 * 否则当前 Topic 的唯一 timer 本身会阻塞后继消息并形成队头等待。
+	 */
+	private promoteActiveFinalStreamForSuccessor(topicId: string, successorSuperMessageId: string) {
+		const topicMeta = this.getTopicMetadata(topicId)
+		const activeSuperMessageId = topicMeta.activeRenderSuperMessageId
+		if (!activeSuperMessageId || activeSuperMessageId === successorSuperMessageId) return
+
+		const activeStreamState = topicMeta.content.get(activeSuperMessageId)
+		if (!activeStreamState || activeStreamState.stage === "done") return
+		this.promoteFinalStreamToCatchup(
+			activeStreamState,
+			FINAL_STREAM_CATCHUP_BUDGET_MS,
+			this.getFinalTextRemaining(
+				activeStreamState,
+				this.getAssistantMessageNode(topicId, activeSuperMessageId),
+			),
+		)
+	}
+
+	private getFinalTextRemaining(streamState: StreamState, messageMap?: RawSuperMagicMessageNode) {
+		const reasoningContent = String(messageMap?.reasoning_content || "")
+		const content = String(messageMap?.content || "")
+		const remainingReasoning = streamState.reasoning_content.startsWith(reasoningContent)
+			? streamState.reasoning_content.length - reasoningContent.length
+			: 0
+		const remainingContent = streamState.content.startsWith(content)
+			? streamState.content.length - content.length
+			: 0
+		return Math.max(remainingReasoning, 0) + Math.max(remainingContent, 0)
 	}
 
 	private getStreamRenderStep(
@@ -5000,14 +5160,46 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		streamState: StreamState,
 	): number {
 		const liveStep = getCharsPerTick(remaining)
-		if (this.getTopicMetadata(topicId).renderPolicy !== "catchup") return liveStep
+		const topicMeta = this.getTopicMetadata(topicId)
+		const settlingStep = Math.min(
+			liveStep * FINAL_STREAM_SETTLING_MULTIPLIER,
+			FINAL_STREAM_MAX_SETTLING_BATCH,
+		)
+		if (
+			streamState.renderPace === "settling" &&
+			streamState.settlingStartedAt !== null &&
+			getMonotonicNow() - streamState.settlingStartedAt >= FINAL_STREAM_SETTLING_MAX_MS
+		) {
+			// 没有后继消息也不能永久占用渲染通道；安全追平仍保持多帧推进。
+			this.promoteFinalStreamToCatchup(
+				streamState,
+				FINAL_STREAM_SAFETY_CATCHUP_BUDGET_MS,
+				remaining,
+			)
+		}
+
+		const shouldCatchup =
+			topicMeta.renderPolicy === "catchup" || streamState.renderPace === "catchup"
+		if (!shouldCatchup) {
+			return streamState.renderPace === "settling" ? settlingStep : liveStep
+		}
 		if (streamState.finalCatchupDeadlineAt !== null) {
 			const remainingBudgetMs = Math.max(
 				streamState.finalCatchupDeadlineAt - getMonotonicNow(),
 				0,
 			)
-			const remainingFrames = Math.max(Math.ceil(remainingBudgetMs / 16), 1)
-			return Math.max(liveStep, Math.ceil(remaining / remainingFrames))
+			const deadlineFrames = Math.ceil(remainingBudgetMs / STREAM_RENDER_FRAME_MS)
+			const minimumVisibleFrames =
+				remaining > FINAL_STREAM_SMALL_TAIL ? streamState.catchupMinimumFramesRemaining : 0
+			const remainingFrames = Math.max(deadlineFrames, minimumVisibleFrames, 1)
+			if (streamState.catchupMinimumFramesRemaining > 0) {
+				streamState.catchupMinimumFramesRemaining -= 1
+			}
+			return Math.min(
+				remaining,
+				FINAL_STREAM_MAX_CATCHUP_BATCH,
+				Math.max(settlingStep, Math.ceil(remaining / remainingFrames)),
+			)
 		}
 		// 追平必须至少不慢于实时打字机；calculateBatchSize 负责放大小文本尾段的推进步长。
 		return Math.max(liveStep, calculateBatchSize(remaining, true))
@@ -5120,6 +5312,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	isTopicStreaming(topicId: string): boolean {
 		return (this.topicMeta.get(topicId)?.content?.size ?? 0) > 0
+	}
+
+	/**
+	 * 返回当前 Topic 的活跃流身份快照，供 UI 判断流式消息是否已经形成可见消息行。
+	 * 始终创建新数组，避免调用方修改 TopicMeta 内部的 StreamState Map。
+	 */
+	getActiveStreamSuperMessageIds(topicId: string): string[] {
+		return Array.from(this.topicMeta.get(topicId)?.content?.keys() ?? [])
 	}
 
 	/**

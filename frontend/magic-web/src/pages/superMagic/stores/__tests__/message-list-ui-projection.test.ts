@@ -117,6 +117,7 @@ function createChunk({
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -464,6 +465,59 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 			correlation_id: CORRELATION_ID,
 		})
 		expect(getMessageNodeKey(card)).toBe(SUPER_MESSAGE_ID)
+	})
+
+	it("活跃流 selector 返回独立快照，不暴露 TopicMeta 内部 Map。", () => {
+		const store = createStore()
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_A)).toEqual([])
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		const snapshot = store.getActiveStreamSuperMessageIds(TOPIC_A)
+		expect(snapshot).toEqual([SUPER_MESSAGE_ID])
+
+		snapshot.push("external-mutation")
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_A)).toEqual([SUPER_MESSAGE_ID])
+	})
+
+	it("活跃流 selector 返回 Topic 内全部 super_message_id，并在 Final 后移除对应身份。", () => {
+		const store = createStore()
+		store.receiveChunk(
+			createChunk({
+				correlationId: "correlation-a-1",
+				superMessageId: "super-message-a-1",
+				content: "A1",
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				correlationId: "correlation-a-2",
+				superMessageId: "super-message-a-2",
+				content: "A2",
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				topicId: TOPIC_B,
+				correlationId: "correlation-b-1",
+				superMessageId: "super-message-b-1",
+				content: "B1",
+			}),
+		)
+
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_A)).toEqual([
+			"super-message-a-1",
+			"super-message-a-2",
+		])
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_B)).toEqual(["super-message-b-1"])
+
+		enqueueAssistant(store, {
+			appMessageId: "assistant-final-a-1",
+			correlationId: "correlation-a-1",
+			superMessageId: "super-message-a-1",
+			content: "final A1",
+		})
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_A)).toEqual(["super-message-a-2"])
+		expect(store.getActiveStreamSuperMessageIds(TOPIC_B)).toEqual(["super-message-b-1"])
 	})
 
 	it("`isTopicStreaming()` 因残留 StreamState 永远为 true。", () => {

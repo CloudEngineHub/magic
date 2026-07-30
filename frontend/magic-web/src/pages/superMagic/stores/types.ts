@@ -134,6 +134,9 @@ export interface StreamMessage {
 	tool_calls?: ToolCall[]
 }
 
+/** 单条 Assistant 流的视觉推进速度；消息身份与 canonical 完成状态不受其影响。 */
+export type StreamRenderPace = "live" | "settling" | "catchup"
+
 export interface StreamState {
 	/** Topic 内稳定的 Assistant 逻辑消息身份。 */
 	super_message_id: string
@@ -147,8 +150,14 @@ export interface StreamState {
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
-	/** Final 到达后的视觉追赶截止时间；到期必须投影完整 canonical 内容。 */
+	/** 当前逻辑消息的视觉推进速度，避免 Topic 级策略泄漏到后继 SuperMessage。 */
+	renderPace: StreamRenderPace
+	/** Final/finish_reason 到达后开始温和结算的单调时钟时间。 */
+	settlingStartedAt: number | null
+	/** 检测到后继消息压力后才创建的快速追赶截止时间。 */
 	finalCatchupDeadlineAt: number | null
+	/** 快速追赶至少保留的可见帧数，防止调度停顿后单帧写入整段正文。 */
+	catchupMinimumFramesRemaining: number
 	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
 	recoveryAttempts: number
 	finalMessage?: StreamMessage
@@ -222,6 +231,9 @@ export type TopicSyncState = "idle" | "syncing"
 
 export type TopicRenderPolicy = "live" | "catchup" | "instant"
 
+/** 权威同步完成后如何恢复 UI 投影；前台恢复使用一次性无动画投影。 */
+export type TopicSyncRenderStrategy = "auto" | "foreground-instant"
+
 export interface TopicMeta {
 	/** 当前是否正在处于流式开启中 */
 	isStream: boolean
@@ -229,6 +241,8 @@ export interface TopicMeta {
 	isStreamLoading: boolean
 	/** 当前话题流式运行时定时器 */
 	timer: ReturnType<typeof window.setTimeout> | null
+	/** 当前唯一渲染 timer 所属的 SuperMessage ID，用于识别真正的后继压力。 */
+	activeRenderSuperMessageId: string | null
 	/** 当前话题等待流式恢复的 watchdog 定时器 */
 	recoveryTimer: ReturnType<typeof window.setTimeout> | null
 	/** recoveryTimer 当前关联的流式 correlationId */

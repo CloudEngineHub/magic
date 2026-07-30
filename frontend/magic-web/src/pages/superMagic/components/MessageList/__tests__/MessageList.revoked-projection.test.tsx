@@ -121,6 +121,7 @@ vi.mock("@/pages/superMagic/components/MessageList/components/ExportPreviewModal
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
 		isTopicStreaming: () => false,
+		getActiveStreamSuperMessageIds: () => [],
 		getMessageNode: () => ({ status: "finished" }),
 	},
 }))

@@ -39,6 +39,7 @@ function createChunk(): SuperMagicChunkMessage {
 			correlation_id: CORRELATION_ID,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: null,
 					delta: {
 						content: "draft removed by authoritative recovery",

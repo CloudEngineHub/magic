@@ -87,6 +87,7 @@ function createChunk({
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -617,6 +618,36 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(getProjectedNode(store)?.content).toBe(localDraft)
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(localDraft)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("Tab 前台恢复使用一次性 instant，投影当前 draft 后让后续 Chunk 回到 live。", () => {
+		const store = createStore()
+		const hiddenDraft = "hidden draft".repeat(1_024)
+		const nextChunk = "next chunk".repeat(1_024)
+
+		store.receiveChunk(createChunk({ content: hiddenDraft }))
+		const contentBeforeSync = getProjectedNode(store)?.content ?? ""
+		expect(contentBeforeSync.length).toBeLessThan(hiddenDraft.length)
+
+		const generation = store.beginTopicSync(TOPIC_A)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: false,
+				taskStatus: "running",
+				renderStrategy: "foreground-instant",
+			}),
+		).toBe(true)
+
+		expect(getProjectedNode(store)?.content).toBe(hiddenDraft)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(hiddenDraft)
+
+		store.receiveChunk(createChunk({ i: 1, content: nextChunk }))
+		const projectedAfterNextChunk = getProjectedNode(store)?.content ?? ""
+		const canonicalAfterNextChunk = store.getStreamState(TOPIC_A, CORRELATION_A)?.content ?? ""
+
+		expect(projectedAfterNextChunk.length).toBeGreaterThan(hiddenDraft.length)
+		expect(projectedAfterNextChunk.length).toBeLessThan(canonicalAfterNextChunk.length)
+		expect(canonicalAfterNextChunk).toBe(hiddenDraft + nextChunk)
 	})
 
 	it("HTTP 权威快照完成后只保留一张最新 Assistant 卡片。", () => {

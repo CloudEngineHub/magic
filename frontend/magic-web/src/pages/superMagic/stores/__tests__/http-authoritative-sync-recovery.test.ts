@@ -158,6 +158,7 @@ function createChunk({
 			correlation_id: correlationId,
 			choices: choices ?? [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -183,6 +184,7 @@ function createMetadataOnlyChunk({
 		i,
 		choices: [
 			{
+				...({ index: 0 } as const),
 				finish_reason: finishReason,
 				delta: { index: 0 } as ChunkChoice["delta"],
 			},

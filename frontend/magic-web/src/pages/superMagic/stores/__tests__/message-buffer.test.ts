@@ -232,6 +232,7 @@ function startBlockingAssistantStream(
 			correlation_id: chunkCorrelationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: null,
 					delta: {
 						content,

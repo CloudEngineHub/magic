@@ -22,6 +22,8 @@ const CORRELATION_B = "correlation-timer-b"
 const SUPER_MESSAGE_A = "super-message-timer-a"
 const SUPER_MESSAGE_B = "super-message-timer-b"
 const RENDER_SETTLE_MS = 2_000
+const FINAL_SETTLING_OBSERVATION_MS = 1_600
+const FINAL_SETTLING_SAFETY_MS = 3_600
 const RECOVERY_TIMEOUT_MS = 5_100
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -66,6 +68,7 @@ function createChoice({
 	toolCalls = [],
 }: Omit<ChunkOptions, "topicId" | "correlationId" | "i" | "choices"> = {}): ChunkChoice {
 	return {
+		...({ index: 0 } as const),
 		finish_reason: finishReason,
 		delta: {
 			content,
@@ -140,6 +143,7 @@ function createFinalEnvelope({
 	correlationId = CORRELATION_A,
 	appMessageId = `final-${correlationId}`,
 	seqId = "100",
+	role = "assistant",
 	content = "",
 	reasoningContent = "",
 	toolCalls = [],
@@ -148,6 +152,7 @@ function createFinalEnvelope({
 	correlationId?: string
 	appMessageId?: string
 	seqId?: string
+	role?: "assistant" | "user"
 	content?: string
 	reasoningContent?: string
 	toolCalls?: ProjectedToolCall[]
@@ -165,18 +170,22 @@ function createFinalEnvelope({
 			message: {
 				magic_message_id: `magic-${appMessageId}`,
 				app_message_id: appMessageId,
-				sender_id: "assistant-timers",
+				sender_id: role === "user" ? "user-timers" : "assistant-timers",
 				send_time: Number(seqId),
 				status: ConversationMessageStatus.Read,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
 				super_magic_message: {
-					role: "assistant",
+					role,
 					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
 					super_message_id:
-						correlationId === CORRELATION_A ? SUPER_MESSAGE_A : SUPER_MESSAGE_B,
+						role === "user"
+							? appMessageId
+							: correlationId === CORRELATION_A
+								? SUPER_MESSAGE_A
+								: SUPER_MESSAGE_B,
 					correlation_id: correlationId,
 					content,
 					reasoning_content: reasoningContent,
@@ -244,6 +253,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 	afterEach(() => {
 		// Self-scheduling render loops are deliberately never drained without a bound.
 		vi.clearAllTimers()
+		vi.restoreAllMocks()
 		vi.useRealTimers()
 	})
 
@@ -829,6 +839,199 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 		expect(getProjectedNode(store)?.content).toBe(finalContent)
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+	})
+
+	it("Final 单独到达时温和结算，不强制在 1.5 秒内追平整段正文。", () => {
+		const store = createStore()
+		const finalContent = `draft${"F".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		const projectedLength = getProjectedNode(store)?.content?.length || 0
+		expect(projectedLength).toBeGreaterThan("draft".length)
+		expect(projectedLength).toBeLessThan(finalContent.length)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "settling",
+		})
+
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+	})
+
+	it("不同 super_message_id 的后继 Chunk 到达后，当前 Final 才升级为快速追平。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+
+		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "next-stream" }))
+		const catchupDeadline = store.getStreamState(TOPIC_A, CORRELATION_A)?.finalCatchupDeadlineAt
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "catchup",
+		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toMatchObject({
+			renderPace: "live",
+		})
+
+		advanceRendering(100)
+		store.receiveChunk(
+			createChunk({ correlationId: CORRELATION_B, i: 1, content: " continues" }),
+		)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.finalCatchupDeadlineAt).toBe(
+			catchupDeadline,
+		)
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+		advanceRendering(1_600)
+
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next-stream continues")
+	})
+
+	it("不同 super_message_id 的后继 Final 即使没有 Chunk，也会提升当前消息的追平速度。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				correlationId: CORRELATION_B,
+				appMessageId: "final-b",
+				seqId: "101",
+				content: "next final",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "catchup",
+		})
+		advanceRendering(1_600)
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next final")
+	})
+
+	it("Final 后只有 User 消息时保持温和结算，不升级为强制追平。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				appMessageId: "user-next",
+				correlationId: "user-next-correlation",
+				seqId: "101",
+				role: "user",
+				content: "next question",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "settling",
+		})
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+	})
+
+	it("相同 super_message_id 的迟到 Chunk 不构成后继压力。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.receiveChunk(createChunk({ i: 1, content: " late" }))
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "settling",
+		})
+	})
+
+	it("其他 Topic 的 Chunk 不得提升当前 Topic 的 Final 追平速度。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.receiveChunk(
+			createChunk({
+				topicId: TOPIC_B,
+				correlationId: CORRELATION_B,
+				content: "other-topic",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
+			renderPace: "settling",
+		})
+	})
+
+	it("后继压力晚到时从压力发生时重新计算预算，不能因旧 deadline 过期而单帧写完。", () => {
+		let monotonicNow = 0
+		vi.spyOn(performance, "now").mockImplementation(() => monotonicNow)
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		const beforePressureLength = getProjectedNode(store)?.content?.length || 0
+
+		monotonicNow = 2_000
+		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "next-stream" }))
+		advanceRendering(16)
+
+		const afterFirstCatchupFrameLength = getProjectedNode(store)?.content?.length || 0
+		expect(afterFirstCatchupFrameLength).toBeGreaterThan(beforePressureLength)
+		expect(afterFirstCatchupFrameLength).toBeLessThan(finalContent.length)
+	})
+
+	it("Final 的 reasoning 与 content 共用同一帧配额，短 reasoning 不阻塞正文推进。", () => {
+		const store = createStore()
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				reasoningContent: "R".repeat(100),
+				content: `draft${"C".repeat(10_000)}`,
+			}),
+		)
+		advanceRendering(16)
+
+		expect(getProjectedNode(store)?.reasoning_content?.length).toBe(100)
+		expect(getProjectedNode(store)?.content?.length).toBeGreaterThan("draft".length)
+	})
+
+	it("提高字符批量时仍保持 16ms 的渲染 timer 间隔。", () => {
+		const store = createStore()
+		const finalContent = `draft${"A".repeat(10_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		const firstFrameLength = getProjectedNode(store)?.content?.length || 0
+
+		advanceRendering(15)
+		expect(getProjectedNode(store)?.content?.length).toBe(firstFrameLength)
+		advanceRendering(1)
+		expect(getProjectedNode(store)?.content?.length).toBeGreaterThan(firstFrameLength)
 	})
 
 	it("`renderPolicy` 在 live、catchup、instant 间错误切换。", () => {

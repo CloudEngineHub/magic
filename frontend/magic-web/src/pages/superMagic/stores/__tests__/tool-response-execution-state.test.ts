@@ -312,6 +312,7 @@ function createToolHeaderChunk({
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: null,
 					delta: {
 						content: "",

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
+import { db } from "@/pages/superMagic/stores/storage"
 import type { RawSuperMagicMessageEnvelope, ToolCall } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -16,6 +17,9 @@ const TOPIC_ID = "topic-persistence"
 const CORRELATION_ID = "correlation-persistence"
 const SUPER_MESSAGE_ID = "super-message-persistence"
 const SETTLE_MS = 2_000
+
+type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
+type IndexedChunkChoice = ChunkChoice & { index?: number }
 
 interface ProjectedNode {
 	content?: string | null
@@ -55,12 +59,14 @@ function createChunk({
 	correlationId = CORRELATION_ID,
 	finishReason = null,
 	toolCalls = [],
+	choices,
 }: {
 	i?: number
 	content?: string
 	correlationId?: string
 	finishReason?: "stop" | "tool_calls" | "length" | null
 	toolCalls?: ToolCall[]
+	choices?: IndexedChunkChoice[]
 } = {}): SuperMagicChunkMessage {
 	return {
 		magic_message_id: `magic-${correlationId}-${i}`,
@@ -77,8 +83,9 @@ function createChunk({
 			i,
 			usage: null,
 			correlation_id: correlationId,
-			choices: [
+			choices: choices ?? [
 				{
+					index: 0,
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -89,6 +96,28 @@ function createChunk({
 					},
 				},
 			],
+		},
+	}
+}
+
+function createChoice({
+	index = 0,
+	content = "",
+	finishReason = null,
+}: {
+	index?: number
+	content?: string
+	finishReason?: "stop" | "tool_calls" | "length" | null
+} = {}): IndexedChunkChoice {
+	return {
+		index,
+		finish_reason: finishReason,
+		delta: {
+			content,
+			role: "assistant",
+			tool_calls: [],
+			reasoning_content: "",
+			index,
 		},
 	}
 }
@@ -187,6 +216,41 @@ describe("SuperMagicStore / 持久化和回放", () => {
 
 		settle()
 		expect(node(store)).toMatchObject({ content: "AB" })
+	})
+
+	it("多 choice 协议异常保留原始持久化记录，fresh Store 回放时仍不得投影隐藏候选。", () => {
+		const store = createStore()
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const chunk = createChunk({
+			choices: [
+				createChoice({ index: 0, content: "ignored-primary" }),
+				createChoice({ index: 1, content: "ignored-alternative" }),
+			],
+		})
+
+		try {
+			store.receiveChunk(chunk)
+			vi.advanceTimersByTime(201)
+
+			expect(addManySpy).toHaveBeenCalledTimes(1)
+			const persistedEntries = addManySpy.mock.calls[0]?.[1] as
+				| Array<{ value?: SuperMagicChunkMessage }>
+				| undefined
+			expect(persistedEntries?.[0]?.value?.super_magic_chunk.choices).toEqual(
+				chunk.super_magic_chunk.choices,
+			)
+			expect(node(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+
+			const replayStore = createStore()
+			replayStore.receiveChunk(clone(persistedEntries?.[0]?.value ?? chunk))
+			expect(node(replayStore)).toBeUndefined()
+			expect(replayStore.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		} finally {
+			addManySpy.mockRestore()
+			warnSpy.mockRestore()
+		}
 	})
 
 	it("IndexedDB 中消息顺序不按 `i`。", () => {
