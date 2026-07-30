@@ -2590,6 +2590,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Agent列表
+	 * @deprecated 当前主流程已迁移至 v2 智能体列表接口，请勿新增调用。
 	 */
 	getAgentsList() {
 		return fetch.post<SuperMagicAgentListResponse>("/api/v1/super-magic/agents/queries")
@@ -2597,24 +2598,28 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * 新增/编辑Agent
+	 * @deprecated 当前主流程已迁移至 v2 的创建和更新接口，请勿新增调用。
 	 */
 	editAgent({ data }: { data: any }) {
 		return fetch.post(`/api/v1/super-magic/agents`, data)
 	},
 	/**
 	 * AI优化Agent
+	 * @deprecated 当前主流程已不再使用该接口，请勿新增调用。
 	 */
 	AIOptimizationAgent({ data }: { data: { optimization_type: string; agent: any } }) {
 		return fetch.post(`/api/v1/super-magic/agents/ai-optimize`, data)
 	},
 	/**
 	 * 获取Agent详情
+	 * @deprecated 当前主流程已迁移至 v2 智能体详情接口，请勿新增调用。
 	 */
 	getAgentDetail({ agent_id }: { agent_id: string }) {
 		return fetch.get(`/api/v1/super-magic/agents/${agent_id}`)
 	},
 	/**
 	 * 删除Agent
+	 * @deprecated 当前主流程已迁移至 v2 智能体删除接口，请勿新增调用。
 	 */
 	deleteAgent({ agent_id }: { agent_id: string }) {
 		return fetch.delete(`/api/v1/super-magic/agents/${agent_id}`)
