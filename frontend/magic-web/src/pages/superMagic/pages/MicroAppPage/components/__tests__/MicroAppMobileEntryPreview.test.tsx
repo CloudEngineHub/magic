@@ -146,8 +146,7 @@ describe("MicroAppMobileEntryPreview", () => {
 		expect(await screen.findByTestId("micro-app-phone-preview-frame")).toBeInTheDocument()
 		expect(htmlPreviewMocks.props).toEqual(
 			expect.objectContaining({
-				viewMode: "phone",
-				showPhoneFrame: false,
+				viewMode: "desktop",
 				onRegisterDevConsoleToggle,
 				onDevConsoleActiveChange,
 			}),
