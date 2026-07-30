@@ -216,6 +216,16 @@ return [
     ],
     'attachment' => [
         'invalid_url' => 'External attachment URL must be an HTTP or HTTPS URL with a host',
+        'blocked' => 'External attachment URL was blocked by the SSRF security policy: :reason',
+        'block_reason' => [
+            'invalid_url' => 'invalid URL format',
+            'blacklisted' => 'the target address is blacklisted',
+            'protocol_not_allowed' => 'the URL protocol is not allowed',
+            'non_public_ip' => 'the target address is not a public IP',
+            'redirect_not_allowed' => 'the target URL redirects unexpectedly',
+            'resolve_failed' => 'the target host could not be resolved',
+            'unknown' => 'the target address does not meet the security policy',
+        ],
     ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Unsupported node type',

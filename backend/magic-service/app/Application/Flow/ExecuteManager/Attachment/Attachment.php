@@ -7,8 +7,6 @@ declare(strict_types=1);
 
 namespace App\Application\Flow\ExecuteManager\Attachment;
 
-use App\Infrastructure\Util\FileType;
-
 /**
  * 这里的附件一定是已经在云服务端了.
  */
@@ -30,11 +28,29 @@ class Attachment extends AbstractAttachment
         $this->size = $size;
         $this->chatFileId = $chatFileId;
         $this->url = trim($url);
-        // 如果没有 ext，从 url 中提取
-        if (empty($this->ext)) {
-            $this->ext = FileType::getType($this->url);
-        } else {
-            $this->ext = $ext;
+        $this->ext = $this->resolveExtension($ext, $name, $this->url);
+    }
+
+    /**
+     * 从附件参数、文件名或 URL 路径解析扩展名，避免在附件构造阶段发起远程请求。
+     */
+    private function resolveExtension(string $extension, string $name, string $url): string
+    {
+        $extension = ltrim(strtolower(trim($extension)), '.');
+        if ($extension !== '') {
+            return $extension;
         }
+
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        if ($extension !== '') {
+            return $extension;
+        }
+
+        $urlPath = parse_url($url, PHP_URL_PATH);
+        if (! is_string($urlPath)) {
+            return '';
+        }
+
+        return strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
     }
 }

@@ -10,6 +10,9 @@ namespace App\Application\Flow\ExecuteManager\Attachment;
 use App\Domain\File\Service\FileDomainService;
 use App\ErrorCode\FlowErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\SSRF\Exception\SSRFException;
+use App\Infrastructure\Util\SSRF\SSRFUtil;
+use App\Infrastructure\Util\SSRF\SSRFViolation;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 
 abstract class AbstractAttachment implements AttachmentInterface
@@ -157,20 +160,26 @@ abstract class AbstractAttachment implements AttachmentInterface
     }
 
     /**
-     * 校验待上传的外部附件地址必须是包含主机的 HTTP 或 HTTPS URL。
+     * 校验待上传的外部附件地址必须是安全的 HTTP 或 HTTPS URL。
      */
     private function assertRemoteUrl(string $url): void
     {
-        $urlParts = parse_url($url);
-        if (! is_array($urlParts)) {
-            ExceptionBuilder::throw(FlowErrorCode::ExecuteValidateFailed, 'flow.attachment.invalid_url');
+        try {
+            SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
+        } catch (SSRFException $exception) {
+            ExceptionBuilder::throw(
+                FlowErrorCode::ExecuteValidateFailed,
+                'flow.attachment.blocked',
+                ['reason' => $this->getSsrfViolationTranslationKey($exception->getViolation())]
+            );
         }
+    }
 
-        $scheme = strtolower((string) ($urlParts['scheme'] ?? ''));
-        $host = (string) ($urlParts['host'] ?? '');
-
-        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
-            ExceptionBuilder::throw(FlowErrorCode::ExecuteValidateFailed, 'flow.attachment.invalid_url');
-        }
+    /**
+     * 获取 SSRF 拦截类型对应的国际化文案键。
+     */
+    private function getSsrfViolationTranslationKey(SSRFViolation $violation): string
+    {
+        return 'flow.attachment.block_reason.' . $violation->value;
     }
 }
