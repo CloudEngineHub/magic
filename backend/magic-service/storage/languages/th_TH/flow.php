@@ -214,6 +214,9 @@ return [
         'max_record_error' => 'จำนวนบันทึกสูงสุดต้องเป็นจำนวนเต็มระหว่าง 0 และ 500',
         'temperature_error' => 'อุณหภูมิต้องเป็นเลขทศนิยมระหว่าง 0 และ 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL ไฟล์แนบภายนอกต้องเป็น URL HTTP หรือ HTTPS ที่มีโฮสต์',
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] ประเภทโหนดไม่รองรับ',
         'has_circular_dependencies' => '[:label] มีการพึ่งพาเป็นวงกลม',

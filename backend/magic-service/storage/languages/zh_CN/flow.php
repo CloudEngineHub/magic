@@ -227,6 +227,9 @@ return [
         'max_record_error' => '最大记录数 只能是 0-500 之间的整数',
         'temperature_error' => '温度参数 只能是 0-1 之间的小数',
     ],
+    'attachment' => [
+        'invalid_url' => '外部附件地址必须是包含主机的 HTTP 或 HTTPS URL',
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] 不支持的节点类型',
         'has_circular_dependencies' => '[:label] 存在循环依赖',

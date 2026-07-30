@@ -214,6 +214,9 @@ return [
         'max_record_error' => 'Maximum record count must be an integer between 0 and 500',
         'temperature_error' => 'Temperature must be a decimal between 0 and 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'External attachment URL must be an HTTP or HTTPS URL with a host',
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Unsupported node type',
         'has_circular_dependencies' => '[:label] Circular dependencies exist',

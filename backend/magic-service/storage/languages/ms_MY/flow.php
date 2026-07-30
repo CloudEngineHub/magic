@@ -214,6 +214,9 @@ return [
         'max_record_error' => 'Bilangan rekod maksimum mesti integer antara 0 dan 500',
         'temperature_error' => 'Suhu mesti nombor perpuluhan antara 0 dan 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL lampiran luaran mestilah URL HTTP atau HTTPS yang mengandungi hos',
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Jenis nod tidak disokong',
         'has_circular_dependencies' => '[:label] Pergantungan kitaran wujud',

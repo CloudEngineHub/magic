@@ -8,6 +8,8 @@ declare(strict_types=1);
 namespace App\Application\Flow\ExecuteManager\Attachment;
 
 use App\Domain\File\Service\FileDomainService;
+use App\ErrorCode\FlowErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 
 abstract class AbstractAttachment implements AttachmentInterface
@@ -147,9 +149,28 @@ abstract class AbstractAttachment implements AttachmentInterface
         if (! $this->needUpload || empty($this->organizationCode)) {
             return;
         }
+        $this->assertRemoteUrl($this->url);
         $uploadFile = new UploadFile($this->url, 'flow-execute/external-attachment');
         di(FileDomainService::class)->uploadByCredential($this->organizationCode, $uploadFile);
         $this->fileKey = $uploadFile->getKey();
         $this->needUpload = false;
+    }
+
+    /**
+     * 校验待上传的外部附件地址必须是包含主机的 HTTP 或 HTTPS URL。
+     */
+    private function assertRemoteUrl(string $url): void
+    {
+        $urlParts = parse_url($url);
+        if (! is_array($urlParts)) {
+            ExceptionBuilder::throw(FlowErrorCode::ExecuteValidateFailed, 'flow.attachment.invalid_url');
+        }
+
+        $scheme = strtolower((string) ($urlParts['scheme'] ?? ''));
+        $host = (string) ($urlParts['host'] ?? '');
+
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            ExceptionBuilder::throw(FlowErrorCode::ExecuteValidateFailed, 'flow.attachment.invalid_url');
+        }
     }
 }

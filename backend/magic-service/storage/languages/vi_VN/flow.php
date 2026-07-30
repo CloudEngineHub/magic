@@ -214,6 +214,9 @@ return [
         'max_record_error' => 'Số lượng bản ghi tối đa phải là số nguyên từ 0 đến 500',
         'temperature_error' => 'Nhiệt độ phải là số thập phân từ 0 đến 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL tệp đính kèm bên ngoài phải là URL HTTP hoặc HTTPS có máy chủ',
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Loại nút không được hỗ trợ',
         'has_circular_dependencies' => '[:label] Tồn tại phụ thuộc vòng',
