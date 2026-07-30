@@ -46,6 +46,18 @@ return ToolResult.error("转换失败", extra_info={"path": "/tmp/file"})    # �
 - 同一个工具的一次输出中，时间格式、精度和时区口径必须一致
 - 如果原始时间字段可能是秒级或毫秒级时间戳，必须先规范化再展示，避免出现年份错误
 
+### 3.2 ToolResult 在 Code Mode 中的默认读取规则
+
+- `ToolResult.content` 是工具提供给模型的语义接口。无论成功或失败，都必须清楚说明执行状态、实际结果和必要的下一步信息，使模型只读 `content` 也能理解发生了什么并继续推理
+- `ToolResult.ok` 表示该工具所定义的业务操作是否成功，供代码做程序化分支判断，不是 `content` 的替代。不能只因请求完成、进程正常退出或代码未抛异常就返回 `ok=True`
+- `ok` 的成功标准由工具的业务契约决定。合法的空结果可以是成功；部分完成是否成功取决于该工具是否将其定义为有效结果。遇到空结果或部分完成时，`content` 必须清楚说明实际状态、完成范围和未完成原因
+- `ok` 与 `content` 的语义必须一致。发现现有工具将技术执行成功误报为业务成功，或结构化状态与模型可读说明矛盾时，应修正工具实现
+- `ToolResult.data` 是结构化编排接口，主要用于跨工具传递精确 ID、句柄、路径等字段，处理大数据量，连接同一管线的中间节点，或执行必须依赖结构化字段的程序分支
+- Skill 和 Code Mode 示例默认应打印并阅读 `result.content`。只有确实需要程序化编排时才读取 `result.data`，不要在 `content` 已足够时从 `data` 重新拼装一份语义摘要
+- 大型 `data` 不得完整打印进模型上下文。应在代码中完成筛选、聚合或校验，只输出结论、相关证据和后续所需的少量精确字段
+- 工具实现不能因为已经返回 `data` 就降低 `content` 质量；两者服务不同用途，`content` 必须始终能独立支持模型理解和继续决策
+- `ok=False` 不表示代码必须立即终止。调用方应先保留或输出 `content`，再根据步骤间的依赖关系决定重试、改用其它路径、继续独立步骤或向用户说明；只有该结果是后续步骤的必要前置时才终止管线
+
 ## 4. 给你（当前这个助手）的规则
 
 - 给用户看的所有内容——对话回复、方案说明、计划文档、`docs/plans/` 下的 Markdown——使用用户当前使用的语言
@@ -184,7 +196,7 @@ return ToolResult.error("转换失败", extra_info={"path": "/tmp/file"})    # �
 
 ### 5.8 数据工具 Skill 编写原则
 
-- 数据 Skill 默认引导 Agent 阅读 `result.content`；`result.data`, `data_view` 只用于跨工具传递精确 ID 和结构化脚本
+- 数据工具同样遵循 3.2 的默认读取规则；`result.data`、`data_view` 只用于结构化编排，不替代 `result.content` 的模型语义
 - 主 Skill 不堆 data schema 字段清单；字段契约写进 reference/data-schema.md 或 reference/xxx-data-schema.md 中
 - schema 必须说明字段可能缺失、为空或类型随上游变化
 - schema 应提供结构查看方法：字段取不到时先打印 `data_view` 的 keys、类型和少量截断样例，不要将大量完整数据打印到 Agent 上下文中
