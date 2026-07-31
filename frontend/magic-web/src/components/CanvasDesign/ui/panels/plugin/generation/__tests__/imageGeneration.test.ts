@@ -548,6 +548,7 @@ describe("imageGeneration", () => {
 			[{ x: 2052, y: 1344 }],
 			1080,
 			1920,
+			{ temporary: true },
 		)
 		expect(generateImages).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -755,6 +756,7 @@ describe("imageGeneration", () => {
 			[{ x: 2548, y: 120 }],
 			1024,
 			1024,
+			{ temporary: true },
 		)
 	})
 
