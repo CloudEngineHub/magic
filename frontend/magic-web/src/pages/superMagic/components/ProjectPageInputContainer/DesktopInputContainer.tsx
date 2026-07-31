@@ -76,7 +76,7 @@ function DesktopInputContainer({
 				<div
 					ref={containerRef}
 					id={GuideTourElementId.MessagePanel}
-					className={containerClassName}
+					className={cn(containerClassName, "bg-muted")}
 				>
 					<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
 						{editorNodes?.taskDataNode}
@@ -92,7 +92,9 @@ function DesktopInputContainer({
 						>
 							<div
 								className="flex h-full items-center justify-center [&>div]:w-full"
-								style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.TopicPage }}
+								style={{
+									minHeight: INPUT_CONTAINER_MIN_HEIGHT.InvalidModeFallback,
+								}}
 							>
 								<InvalidModeFallback onCreateTopic={onCreateTopic} />
 							</div>

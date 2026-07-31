@@ -14,8 +14,8 @@ export function TopicInvalidModeFallback({ onCreateTopic }: InvalidModeFallbackP
 	const shouldHideTopicEntry = hideCreateNewTopic
 
 	return (
-		<div className="mx-4 flex h-full min-h-[122px] flex-col items-center justify-center gap-2.5">
-			<div className="text-xs leading-4 text-muted-foreground">
+		<div className="mx-2 flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl px-4 py-3">
+			<div className="text-center text-xs leading-4 text-muted-foreground">
 				{t("messageEditor.modeNotAvailableMessage")}
 			</div>
 			{!shouldHideTopicEntry ? (
