@@ -228,7 +228,7 @@ class ResourceCollaborationAppService extends AbstractKernelAppService
      *
      * 这里承载协作角色规则：
      * - 创建人拥有最高权限，可调整协作者角色
-     * - 管理员只能邀请或调整为编辑权限，不能操作创建人，也不能移除自己
+     * - 管理员只能邀请或调整为管理、编辑或查看权限，不能操作创建人，也不能移除自己
      * - 可编辑用户不能管理协作者；对应入口会先被 manage 权限拦截
      *
      * @param array<int, OperationPermissionEntity> $operationPermissions
@@ -306,7 +306,7 @@ class ResourceCollaborationAppService extends AbstractKernelAppService
      *
      * 当前规则是：
      * - 创建人可以授予任意协作角色（owner 不在接口入参范围内）
-     * - 管理员可以授予管理员、编辑权限
+     * - 管理员可以授予管理员、编辑、查看权限
      * - 其他角色不会进入该分支，前置 manage 校验已拦截
      */
     private function assertCollaboratorRoleAssignable(Operation $currentOperation, Operation $targetOperation): void
@@ -315,7 +315,7 @@ class ResourceCollaborationAppService extends AbstractKernelAppService
             return;
         }
 
-        if (in_array($targetOperation, [Operation::Admin, Operation::Edit], true)) {
+        if (in_array($targetOperation, [Operation::Admin, Operation::Edit, Operation::Read], true)) {
             return;
         }
 
