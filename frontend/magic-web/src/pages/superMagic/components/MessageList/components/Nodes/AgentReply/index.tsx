@@ -1,5 +1,5 @@
 import type { NodeProps } from "../types"
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import MarkdownComponent from "../../Text/components/Markdown"
@@ -10,6 +10,7 @@ import { extractCitations, trimIncompleteCitationTag } from "@/pages/superMagic/
 import { CitationCard } from "../../Citations"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
+import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
 
 interface AgentReplyNode {
 	content?: string
@@ -20,14 +21,16 @@ function AgentReply(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave, classNames, selectedTopic } = props
 	const { styles, cx } = useStyles()
 
-	const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null)
+	const [highlightedCitation, setHighlightedCitation] = useMessageViewState<number | null>(
+		"highlighted-citation",
+		null,
+	)
 
 	// 同时使用消息级和话题级两层信息来判断当前这条 agent reply 是否仍在流式中：让 HTML 预览增强组件在流式阶段锁定 code mode，避免过早进入 preview。
 	// 1. `app_message_id` 用于从 store 中拿到这条消息节点的最新内容与事件类型，确保读取的是流式推进后的最新 node。
 	// 2. `selectedTopic.chat_topic_id` 用于读取当前话题的流式状态，判断整个会话是否仍在流式阶段。
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| AgentReplyNode
-		| undefined
+		AgentReplyNode | undefined
 
 	const rawContent = node?.content || ""
 	const topicId = props?.node?.topic_id || selectedTopic?.chat_topic_id || ""

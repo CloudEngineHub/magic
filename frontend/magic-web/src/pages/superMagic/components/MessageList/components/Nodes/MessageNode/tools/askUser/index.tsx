@@ -32,6 +32,7 @@ import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AskUserForm, type AskUserAnswers } from "./AskUserForm"
 import { extractQuestionsField, parseQuestionsXml, type ParsedQuestion } from "./parse"
+import { useMessageViewState } from "../../../../../view-state/MessageViewStateContext"
 
 type AskUserDetailQuestion = {
 	default_value?: string | readonly string[] | null
@@ -117,8 +118,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 	const { isShareRoute } = useShareRoute()
 
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const detailData = tool?.detail?.data as Record<string, unknown> | undefined
 
@@ -136,7 +136,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 
 	const deferredRaw = useDeferredValue(rawQuestions)
 	const prevParsedRef = useRef<readonly ParsedQuestion[]>([])
-	const [open, setOpen] = useState(true)
+	const [open, setOpen] = useMessageViewState("ask-user-tool-expanded", true)
 
 	const parsedQuestions = useMemo(() => {
 		const next = parseQuestionsXml(deferredRaw, prevParsedRef.current)

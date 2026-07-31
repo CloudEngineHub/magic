@@ -1123,7 +1123,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
-											topicId={data?.project_id}
+											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
 												setUserDetail(detail)
@@ -1134,8 +1134,9 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="-top-[10px] pt-[10px] [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 											projectFilesStore={projectFilesStore}
+											scrollContainerRef={messageContainerRef}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
@@ -1280,9 +1281,12 @@ function Topic({
 										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
 								)}
 							>
-								<div className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5">
+								<div
+									ref={messageContainerRef}
+									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
+								>
 									<MessageList
-										topicId={data?.project_id}
+										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {
 											setUserDetail(detail)
@@ -1293,8 +1297,9 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="top-0 z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 										projectFilesStore={projectFilesStore}
+										scrollContainerRef={messageContainerRef}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />

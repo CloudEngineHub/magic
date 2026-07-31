@@ -53,6 +53,15 @@ vi.mock("@/pages/superMagic/components/MessageList/hooks/useAutoScroll", () => (
 	}),
 }))
 
+vi.mock("@/pages/superMagic/components/MessageList/hooks/useVirtualMessageScroll", () => ({
+	useVirtualMessageScroll: () => ({
+		showBackToLatest: false,
+		scrollToBottom: vi.fn(),
+		notifyPullMoreStarted: vi.fn(),
+		onVirtualizerChange: vi.fn(),
+	}),
+}))
+
 vi.mock("@/pages/superMagic/components/MessageList/components/Nodes", () => ({
 	Node: ({ node }: { node: SuperMagicMessageItem }) => (
 		<div data-testid={`message-${node.super_message_id}`}>{node.content}</div>
@@ -79,6 +88,22 @@ vi.mock("@/pages/superMagic/components/MessageList/MessageTurnGroupList", () => 
 					<div key={`${group.key}-${item.index}`}>{renderNode(item)}</div>
 				)),
 			)}
+		</div>
+	),
+}))
+
+vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList", () => ({
+	VirtualMessageList: ({
+		items,
+		renderNode,
+	}: {
+		items: Array<{ key: string }>
+		renderNode: (args: { item: any }) => ReactNode
+	}) => (
+		<div data-testid="virtual-message-stream">
+			{items.map((item) => (
+				<div key={item.key}>{renderNode({ item })}</div>
+			))}
 		</div>
 	),
 }))
@@ -231,6 +256,26 @@ afterEach(() => {
 })
 
 describe("MessageList bottom loading", () => {
+	it("routes every converted top-level message through the virtual list", () => {
+		render(
+			<MessageList
+				data={[
+					userMessage,
+					createMessage({
+						appMessageId: "assistant-virtual",
+						role: "assistant",
+						correlationId: "assistant-virtual-correlation",
+					}),
+				]}
+				selectedTopic={topicA}
+			/>,
+		)
+
+		expect(screen.getByTestId("virtual-message-stream")).toBeInTheDocument()
+		expect(screen.getByTestId("message-user-message")).toBeInTheDocument()
+		expect(screen.getByTestId("message-assistant-virtual")).toBeInTheDocument()
+	})
+
 	it("刷新恢复时活跃流不可见则显示 Loading，可见后隐藏，Final 清理后不会重新出现。", () => {
 		storeState.activeStreamsByTopic.set(topicA.chat_topic_id, ["stream-message-a"])
 		const { rerender } = render(

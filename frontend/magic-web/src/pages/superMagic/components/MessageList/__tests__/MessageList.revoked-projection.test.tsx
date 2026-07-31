@@ -46,6 +46,15 @@ vi.mock("@/pages/superMagic/components/MessageList/hooks/useAutoScroll", () => (
 	}),
 }))
 
+vi.mock("@/pages/superMagic/components/MessageList/hooks/useVirtualMessageScroll", () => ({
+	useVirtualMessageScroll: () => ({
+		showBackToLatest: false,
+		scrollToBottom: vi.fn(),
+		notifyPullMoreStarted: vi.fn(),
+		onVirtualizerChange: vi.fn(),
+	}),
+}))
+
 vi.mock("@/pages/superMagic/components/MessageList/components/Nodes", () => ({
 	Node: () => null,
 }))
@@ -70,6 +79,33 @@ vi.mock("@/pages/superMagic/components/MessageList/MessageTurnGroupList", () => 
 					<div key={`${group.key}-${item.index}`}>{renderNode(item)}</div>
 				)),
 			)}
+		</div>
+	),
+}))
+
+vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList", () => ({
+	VirtualMessageList: ({
+		items,
+		renderNode,
+	}: {
+		items: Array<{ key: string; renderMode: string }>
+		renderNode: (args: { item: any }) => React.ReactNode
+	}) => (
+		<div data-testid="virtual-message-stream">
+			<div data-testid="normal-message-stream">
+				{items
+					.filter((item) => item.renderMode === "message")
+					.map((item) => (
+						<div key={item.key}>{renderNode({ item })}</div>
+					))}
+			</div>
+			<div data-testid="revoked-message-stream">
+				{items
+					.filter((item) => item.renderMode !== "message")
+					.map((item) => (
+						<div key={item.key}>{renderNode({ item })}</div>
+					))}
+			</div>
 		</div>
 	),
 }))

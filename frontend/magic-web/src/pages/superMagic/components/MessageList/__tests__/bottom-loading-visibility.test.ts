@@ -23,7 +23,7 @@ function createVisibleMessage({
 		app_message_id: appMessageId,
 		super_message_id: superMessageId,
 		correlation_id: correlationId,
-	} as SuperMagicMessageItem
+	} as unknown as SuperMagicMessageItem
 }
 
 function resolveVisibility({

@@ -1,4 +1,4 @@
-import { memo, useState } from "react"
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -9,6 +9,7 @@ import {
 	openFileByPath,
 	type FilePathAttachment,
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
+import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
 
 interface FilePathAttachmentListProps {
 	attachments: FilePathAttachment[]
@@ -17,7 +18,7 @@ interface FilePathAttachmentListProps {
 
 function FilePathAttachmentListInner({ attachments, className }: FilePathAttachmentListProps) {
 	const { t } = useTranslation("super")
-	const [expanded, setExpanded] = useState(false)
+	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
 
 	if (attachments.length === 0) return null
 

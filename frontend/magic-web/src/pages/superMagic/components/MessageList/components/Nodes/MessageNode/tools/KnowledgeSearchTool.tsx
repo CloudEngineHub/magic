@@ -1,5 +1,5 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react"
-import { memo, useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
 import { AlertCircle, BookOpen, ChevronDown, Hash, Loader2, Sparkles } from "lucide-react"
@@ -14,6 +14,7 @@ import {
 	type KnowledgeSearchSnippet,
 } from "@/pages/superMagic/utils/knowledgeSearchDetail"
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
+import { useMessageViewState } from "../../../../view-state/MessageViewStateContext"
 
 type ToolCardStatus = "running" | "success" | "error"
 
@@ -146,7 +147,7 @@ function ToolCardHeader({
 					<span className="min-w-0 flex-1" />
 				)}
 				{duration ? (
-					<span className="shrink-0 text-[12px] leading-4 text-muted-foreground tabular-nums">
+					<span className="shrink-0 text-[12px] tabular-nums leading-4 text-muted-foreground">
 						{duration}
 					</span>
 				) : null}
@@ -184,7 +185,7 @@ function ToolCardBody({ children }: { children: ReactNode }) {
 
 function StatusBadge({ children }: { children: ReactNode }) {
 	return (
-		<span className="inline-flex h-[18px] items-center rounded border border-border bg-muted px-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums">
+		<span className="inline-flex h-[18px] items-center rounded border border-border bg-muted px-1.5 text-[11px] tabular-nums leading-4 text-muted-foreground">
 			{children}
 		</span>
 	)
@@ -265,7 +266,7 @@ function KnowledgeSearchTool({
 			),
 		[data?.documents, t, untitledDocument],
 	)
-	const [expanded, setExpanded] = useState(true)
+	const [expanded, setExpanded] = useMessageViewState("knowledge-search-expanded", true)
 
 	const action = t("knowledgeSearch.action", "检索知识库")
 	const remark =
@@ -278,13 +279,13 @@ function KnowledgeSearchTool({
 				: query
 					? `${query} · ${hits.length} ${t("knowledgeSearch.hits", "命中")}`
 					: data?.summary?.message ||
-					toolData?.remark ||
-					`${hits.length} ${t("knowledgeSearch.hits", "命中")}`
+						toolData?.remark ||
+						`${hits.length} ${t("knowledgeSearch.hits", "命中")}`
 
 	const toggleExpanded = useCallback(() => {
 		pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)
 		setExpanded((value) => !value)
-	}, [])
+	}, [setExpanded])
 
 	const openHitSource = useCallback(
 		(hit: KnowledgeSearchHit) => {

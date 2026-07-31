@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
@@ -20,6 +20,7 @@ import { AnsweredQuestionContent } from "./components/AnsweredQuestionContent"
 import { renderAskUserPendingQuestion } from "./components/InteractionQuestionRenderers"
 import { useAskUserViewModel } from "./hooks/useAskUserViewModel"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
 
 /** 题目区：卡片内次级背景（随主题 / 深浅色变化） */
 const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
@@ -38,7 +39,7 @@ interface AskUserQuestionListItem {
 function AskUser(props: NodeProps) {
 	const { node } = props
 	const { i18n } = useTranslation("super")
-	const [isCollapsed, setIsCollapsed] = useState(false)
+	const [isCollapsed, setIsCollapsed] = useMessageViewState("ask-user-collapsed", false)
 	const {
 		answeredQuestionCount,
 		errorState,
@@ -71,8 +72,7 @@ function AskUser(props: NodeProps) {
 			? "askUser.answersTitle"
 			: "askUser.title"
 	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: { action?: string } }
-		| undefined
+		{ tool?: { action?: string } } | undefined
 	const askUserAction = messageNode?.tool?.action
 	const askUserLocale = useMemo(
 		() => resolveAskUserLocaleFromAction(askUserAction),

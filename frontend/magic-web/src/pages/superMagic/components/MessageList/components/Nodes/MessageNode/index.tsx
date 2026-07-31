@@ -1,6 +1,6 @@
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
-import { useEffect, useMemo, useState, type ComponentProps } from "react"
+import { useEffect, useMemo, type ComponentProps } from "react"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { useScrollAreaAutoScroll } from "../shared/hooks/useScrollAreaAutoScroll"
 import { useTranslation } from "react-i18next"
@@ -24,6 +24,10 @@ import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/
 import projectFilesStore from "@/stores/projectFiles"
 import { FilePathAttachmentList } from "./FilePathAttachmentList"
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
+import {
+	MessageViewStateScopeProvider,
+	useMessageViewState,
+} from "../../../view-state/MessageViewStateContext"
 
 const markdownBaseClassName = cn(
 	"w-full break-words leading-relaxed text-foreground",
@@ -85,8 +89,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	const { t } = useTranslation("super")
 
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| Record<string, unknown>
-		| undefined
+		Record<string, unknown> | undefined
 	const topicId = props?.node?.topic_id || ""
 	const correlationId = props?.node?.correlation_id || ""
 	const messageId = props?.node?.app_message_id || ""
@@ -98,7 +101,10 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	const hasContent = !/^\s*$/.test(rawContent)
 	const hasAssistantContent = node?.role === "assistant" && hasContent
 
-	const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null)
+	const [highlightedCitation, setHighlightedCitation] = useMessageViewState<number | null>(
+		"highlighted-citation",
+		null,
+	)
 
 	const streamState =
 		superMagicStore.getStreamState(topicId, correlationId)?.stage ||
@@ -115,7 +121,11 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 		[rawContent, isContentStreaming],
 	)
 
-	const [openReasoning, setOpenReasoning] = useState(false)
+	const [openReasoning, setOpenReasoning] = useMessageViewState("reasoning-expanded", false)
+	const [hasUserControlledReasoning, setHasUserControlledReasoning] = useMessageViewState(
+		"reasoning-user-controlled",
+		false,
+	)
 	// Store 负责根治乱序归并；这里仅做展示边界防御，避免历史脏数据生成无响应 id 的永久 spinner。
 	const renderableToolCalls = (Array.isArray(node?.tool_calls) ? node.tool_calls : []).filter(
 		isRenderableToolCall,
@@ -134,8 +144,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 		const prevSuperMessageId = props?.prevNode?.super_message_id
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		if (!prevContent) return []
@@ -163,8 +172,9 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	})
 
 	useEffect(() => {
+		if (hasUserControlledReasoning) return
 		setOpenReasoning(streamState === "reasoning_content")
-	}, [messageId, streamState])
+	}, [hasUserControlledReasoning, messageId, setOpenReasoning, streamState])
 
 	// console.log("@=======>", JSON.parse(JSON.stringify(node || {})), props?.node)
 	if (node?.role === "tool") {
@@ -204,6 +214,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 					}
 					onToggle={() => {
 						pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)
+						setHasUserControlledReasoning(true)
 						setOpenReasoning((open) => !open)
 					}}
 				>
@@ -273,17 +284,18 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 						return null
 					}
 					return (
-						<ToolCall
-							key={o?.id}
-							toolCall={o}
-							topicId={topicId}
-							selectedTopic={selectedTopic}
-							isShare={props.isShare}
-							correlationId={correlationId || messageId}
-							onSelectDetail={onSelectDetail}
-							onMouseEnter={onMouseEnter}
-							onMouseLeave={onMouseLeave}
-						/>
+						<MessageViewStateScopeProvider key={o?.id} messageKey={o?.id}>
+							<ToolCall
+								toolCall={o}
+								topicId={topicId}
+								selectedTopic={selectedTopic}
+								isShare={props.isShare}
+								correlationId={correlationId || messageId}
+								onSelectDetail={onSelectDetail}
+								onMouseEnter={onMouseEnter}
+								onMouseLeave={onMouseLeave}
+							/>
+						</MessageViewStateScopeProvider>
 					)
 				})}
 			{/* 路径附件优先展示；无路径附件时兜底使用原有 attachments */}
