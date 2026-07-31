@@ -132,6 +132,27 @@ describe("DefaultAgentSelectionService", () => {
 		})
 	})
 
+	it("uses configured default when mode identifier is empty", () => {
+		modeServiceMock.defaultAgentCode = TopicMode.PPT
+		isModeValidMock.mockImplementation((mode) => mode === TopicMode.PPT)
+
+		expect(resolveAgentSelection()).toEqual({
+			modeIdentifier: TopicMode.PPT,
+			topicPattern: TopicMode.PPT,
+		})
+	})
+
+	it("uses configured default when mode is custom_agent without agent_code", () => {
+		modeServiceMock.defaultAgentCode = "SMA-agent-default"
+		isModeValidMock.mockImplementation((mode) => mode === "SMA-agent-default")
+
+		expect(resolveAgentSelection(TopicMode.CustomAgent)).toEqual({
+			modeIdentifier: "SMA-agent-default",
+			topicPattern: TopicMode.CustomAgent,
+			agentCode: "SMA-agent-default",
+		})
+	})
+
 	it("clears agent_code when switching to a built-in mode", () => {
 		expect(resolveAgentSelection(TopicMode.Chat, "stale-agent")).toEqual({
 			modeIdentifier: TopicMode.Chat,

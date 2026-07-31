@@ -154,6 +154,15 @@ function getStoredMode({ userKey, projectKey }: GetStoredModeParams) {
 	return undefined
 }
 
+/** Raw preference without availability checks. */
+function getRawStoredMode({ userKey, projectKey }: GetStoredModeParams) {
+	const store = readStore()
+	const bucket = store.users[userKey]
+
+	if (projectKey) return bucket?.projects?.[projectKey]
+	return bucket?.global
+}
+
 function getOrFallback({ userKey, projectKey, fallbackMode }: GetModeParams) {
 	const storedMode = getStoredMode({ userKey, projectKey })
 	if (storedMode) return storedMode
@@ -191,6 +200,7 @@ function setProjects(userKey: string, projects: Record<string, TopicMode>) {
 
 const DefaultTopicModeStorageService = {
 	getStoredMode,
+	getRawStoredMode,
 	getOrFallback,
 	setMode,
 	getProjects,

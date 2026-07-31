@@ -61,6 +61,15 @@ describe("DefaultTopicModeStorageService", () => {
 		expect(localStorage.length).toBe(0)
 	})
 
+	it("reads raw stored preference even when availability changes", () => {
+		DefaultTopicModeStorageService.setMode({
+			userKey,
+			mode: TopicMode.Chat,
+		})
+
+		expect(DefaultTopicModeStorageService.getRawStoredMode({ userKey })).toBe(TopicMode.Chat)
+	})
+
 	it("migrates legacy global and project keys into aggregated store", () => {
 		const legacyGlobalKey = `${platformKey("super_magic/default_topic_mode")}/orgA/userA`
 		const legacyProjectKey = `${platformKey(

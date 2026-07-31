@@ -6,6 +6,7 @@ import type { useElementInspector } from "@/components/business/ElementInspector
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { roleStore } from "@/pages/superMagic/stores"
+import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
 
@@ -58,14 +59,17 @@ export function useInspectorToolbarMode(
 			return
 		}
 
-		// Only specify General mode if it's available in the current project
-		const topicMode = superMagicModeService.isModeValid(TopicMode.General)
-			? TopicMode.General
+		const defaultSelection = resolveDefaultAgentSelection()
+		const topicMode = superMagicModeService.isModeValid(
+			defaultSelection.modeIdentifier,
+			defaultSelection.agentCode,
+		)
+			? (defaultSelection.modeIdentifier as TopicMode)
 			: undefined
 
 		// Sync the role store so tabPattern is consistent with the new topic's mode
 		if (topicMode) {
-			roleStore.setCurrentRole(topicMode)
+			roleStore.applyResolvedRole(topicMode)
 		}
 
 		// Pass content via afterCreate so it is inserted AFTER navigation completes

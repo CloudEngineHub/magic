@@ -160,6 +160,8 @@ class SuperMagicModeService {
 
 	_isModeListLoading = false
 
+	_isModeAvailabilityResolved = false
+
 	_retryTimer: ReturnType<typeof setTimeout> | null = null
 
 	private _modeListRequestState = createEmptyRequestState<ModeItem[]>()
@@ -196,6 +198,7 @@ class SuperMagicModeService {
 			([displayLanguage, organizationCode, userId]) => {
 				runInAction(() => {
 					this._defaultAgentCode = undefined
+					this._isModeAvailabilityResolved = false
 				})
 				if (!organizationCode || !userId) {
 					this.resetModeList()
@@ -550,6 +553,7 @@ class SuperMagicModeService {
 			this._modeList = modeList
 			this._modeMap = buildModeMapFromModeList(modeList)
 			this._defaultAgentCode = defaultAgentCode
+			this._isModeAvailabilityResolved = true
 		})
 	}
 
@@ -558,6 +562,7 @@ class SuperMagicModeService {
 			this._modeList = []
 			this._modeMap = new Map()
 			this._defaultAgentCode = undefined
+			this._isModeAvailabilityResolved = false
 		})
 	}
 
@@ -583,6 +588,10 @@ class SuperMagicModeService {
 
 	get isModeListLoading() {
 		return this._isModeListLoading
+	}
+
+	get isModeAvailabilityResolved() {
+		return this._isModeAvailabilityResolved
 	}
 
 	/**
@@ -1008,6 +1017,7 @@ class SuperMagicModeService {
 						this._modeMap.set(TopicMode.Default, preservedDefaultEntry)
 					}
 					this._defaultAgentCode = res.default_agent_code?.trim() || undefined
+					this._isModeAvailabilityResolved = true
 					this._modeListFreshnessState = this.markFreshForContext(
 						requestContext.contextKey,
 					)
@@ -1215,7 +1225,7 @@ class SuperMagicModeService {
 	 */
 	getModeConfigWithLegacy(
 		mode: string,
-		t?: TFunction,
+		_t?: TFunction,
 		_isMobile: boolean = false,
 		agentCode?: string | null,
 	) {

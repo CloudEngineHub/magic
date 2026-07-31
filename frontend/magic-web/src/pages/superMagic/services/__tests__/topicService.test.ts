@@ -16,6 +16,10 @@ const defaultSelectionState = vi.hoisted(() => ({
 	},
 }))
 
+const modeServiceMock = vi.hoisted(() => ({
+	isModeValid: vi.fn(() => true),
+}))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createTopic: vi.fn(),
@@ -44,6 +48,12 @@ vi.mock("@/stores/interface", () => ({
 
 vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
 	resolveDefaultAgentSelection: () => defaultSelectionState.selection,
+}))
+
+vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
+	default: {
+		isModeValid: modeServiceMock.isModeValid,
+	},
 }))
 
 function createTopic(overrides: Partial<Topic> = {}): Topic {
@@ -184,6 +194,7 @@ describe("TopicService frontend mode patch", () => {
 		vi.useRealTimers()
 		window.sessionStorage.clear()
 		interfaceStore.isMobile = false
+		modeServiceMock.isModeValid.mockReturnValue(true)
 		defaultSelectionState.selection = {
 			modeIdentifier: TopicMode.General,
 			topicPattern: TopicMode.General,
@@ -466,6 +477,38 @@ describe("TopicService frontend mode patch", () => {
 
 		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(newTopic)
 		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+	})
+
+	it("drops unavailable employee patches from session storage after refresh", async () => {
+		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		window.sessionStorage.setItem(
+			storageKey,
+			JSON.stringify({
+				"topic-2": {
+					project_id: "project-1",
+					topic_mode: TopicMode.CustomAgent,
+					agent_code: "offline-employee",
+					createdAt: Date.now(),
+					expiresAt: Date.now() + 60_000,
+				},
+			}),
+		)
+		modeServiceMock.isModeValid.mockReturnValue(false)
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(newTopic)
+		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+		expect(modeServiceMock.isModeValid).toHaveBeenCalledWith(
+			TopicMode.CustomAgent,
+			"offline-employee",
+		)
 	})
 
 	it("updates the frontend employee patch when the user manually switches employee", async () => {

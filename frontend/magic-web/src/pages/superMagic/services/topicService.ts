@@ -8,6 +8,7 @@ import { TopicMode } from "../pages/Workspace/TopicMode"
 import { RequestConfig } from "@/apis/core/HttpClient"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -372,7 +373,10 @@ class TopicService {
 
 	private isFrontendModePatchUsable(topic: Topic, patch?: TopicFrontendModePatch) {
 		if (!patch) return false
-		return patch.project_id === topic.project_id && patch.expiresAt > Date.now()
+		if (patch.project_id !== topic.project_id || patch.expiresAt <= Date.now()) return false
+
+		// Drop stale patches when the selected employee is no longer available.
+		return superMagicModeService.isModeValid(patch.topic_mode, patch.agent_code)
 	}
 
 	private canApplyFrontendModePatch(topic: Topic) {

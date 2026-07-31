@@ -35,7 +35,7 @@ describe("shouldShowInvalidTopicModeFallback", () => {
 		).toBe(false)
 	})
 
-	it("returns true when topic mode is invalid and fallback is configured", () => {
+	it("returns false when topic mode is invalid but the topic has no messages", () => {
 		isModeValidMock.mockReturnValue(false)
 
 		expect(
@@ -43,6 +43,20 @@ describe("shouldShowInvalidTopicModeFallback", () => {
 				invalidModeFallback: FallbackStub,
 				selectedTopic: { agent_code: "missing-agent" } as never,
 				topicMode: "missing-agent" as TopicMode,
+				messagesLength: 0,
+			}),
+		).toBe(false)
+	})
+
+	it("returns true when topic mode is invalid, fallback is configured, and messages exist", () => {
+		isModeValidMock.mockReturnValue(false)
+
+		expect(
+			shouldShowInvalidTopicModeFallback({
+				invalidModeFallback: FallbackStub,
+				selectedTopic: { agent_code: "missing-agent" } as never,
+				topicMode: "missing-agent" as TopicMode,
+				messagesLength: 2,
 			}),
 		).toBe(true)
 	})

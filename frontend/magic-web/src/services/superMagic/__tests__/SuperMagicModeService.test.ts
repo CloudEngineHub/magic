@@ -180,6 +180,7 @@ describe("SuperMagicModeService", () => {
 		} as any
 		superMagicModeService._modeList = []
 		superMagicModeService._defaultAgentCode = undefined
+		;(superMagicModeService as any)._isModeAvailabilityResolved = false
 		superMagicModeService._modeMap = new Map([
 			[
 				"general",
@@ -336,6 +337,7 @@ describe("SuperMagicModeService", () => {
 			"agent-b",
 		])
 		expect(superMagicModeService.defaultAgentCode).toBe("agent-b")
+		expect(superMagicModeService.isModeAvailabilityResolved).toBe(true)
 		expect(store.currentRole).toBe("agent-b")
 	})
 
@@ -488,6 +490,34 @@ describe("SuperMagicModeService", () => {
 		await superMagicModeService.fetchModeList({ force: true })
 
 		expect(store.currentRole).toBe("agent-b")
+	})
+
+	it("reconciles a stored mode after an authoritative empty response", async () => {
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+		const store = createRoleStore()
+
+		expect(store.currentRole).toBe("agent-c")
+
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			list: [],
+			total: 0,
+			models: {},
+		})
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.isModeAvailabilityResolved).toBe(true)
+		expect(store.currentRole).toBe("general")
 	})
 
 	it("uses featured is_visible when checking whether a mode can be selected", async () => {

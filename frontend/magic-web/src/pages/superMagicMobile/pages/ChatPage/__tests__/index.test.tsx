@@ -91,6 +91,7 @@ vi.mock("@/pages/superMagic/stores/RoleStore", () => ({
 	roleStore: {
 		currentRole: null,
 		setCurrentRole: vi.fn(),
+		applyResolvedRole: vi.fn(),
 	},
 }))
 
@@ -171,6 +172,7 @@ vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
 	default: () => ({
 		topicMode: "general",
 		setTopicMode: vi.fn(),
+		recoverTopicMode: vi.fn(),
 	}),
 }))
 

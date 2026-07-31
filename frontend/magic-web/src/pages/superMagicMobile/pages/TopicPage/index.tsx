@@ -624,7 +624,7 @@ function TopicPage({
 	}, [isProgrammaticScroll, nodesPanelRef, handlePullMoreMessage, selectedTopic])
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -735,8 +735,15 @@ function TopicPage({
 					/>
 				</MessageListProvider>
 			</div>
-			<div ref={footerRef} className={cn(styles.footer, footerClassName)} data-testid="topic-page-footer">
-				<div className={cn("flex flex-col gap-2", footerInnerClassName)} data-testid="topic-page-input-panel">
+			<div
+				ref={footerRef}
+				className={cn(styles.footer, footerClassName)}
+				data-testid="topic-page-footer"
+			>
+				<div
+					className={cn("flex flex-col gap-2", footerInnerClassName)}
+					data-testid="topic-page-input-panel"
+				>
 					{!hideChatActions && (
 						<ChatActions
 							onNewTopicClick={
@@ -764,6 +771,7 @@ function TopicPage({
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 					/>
 				</div>

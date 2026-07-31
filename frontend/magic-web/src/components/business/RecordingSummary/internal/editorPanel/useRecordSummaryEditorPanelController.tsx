@@ -22,6 +22,7 @@ import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioSourceType } from "@/services/recordSummary/MediaRecorderService/types/RecorderTypes"
 import { type Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { getEditorPanelMode } from "./getEditorPanelMode"
 import { useRecordingEditorRuntime } from "../editorRuntime"
 import type { RecordSummaryEditorPanelProps, RecordSummaryEditorPanelRef } from "./types"
@@ -204,7 +205,9 @@ export function useRecordSummaryEditorPanelController({
 						project,
 					},
 					{
-						topicMode: selectedProject ? TopicMode.RecordSummary : TopicMode.General,
+						topicMode: selectedProject
+							? TopicMode.RecordSummary
+							: getFallbackTopicModeIdentifier(),
 					},
 				)
 

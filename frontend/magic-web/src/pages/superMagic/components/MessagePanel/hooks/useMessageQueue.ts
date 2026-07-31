@@ -16,6 +16,7 @@ import localstorage from "@/utils/localstorage"
 import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 // Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
 const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
@@ -666,6 +667,7 @@ function useMessageQueue({
 
 		// 转换 mention items，自定义发送给 agent 的内容
 		const transformedMentionItems = transformMentions(mentionItems)
+		const sendSelection = resolveAgentSelection(topicMode, agentCode)
 
 		return {
 			instructs: [
@@ -679,8 +681,8 @@ function useMessageQueue({
 					mentions: transformedMentionItems,
 					input_mode: inputMode || "plan",
 					chat_mode: "normal",
-					topic_pattern: topicMode || "general",
-					...(agentCode && { agent_code: agentCode }),
+					topic_pattern: sendSelection.topicPattern,
+					...(sendSelection.agentCode && { agent_code: sendSelection.agentCode }),
 					...(clientSyncId && { client_queue_sync_id: clientSyncId }),
 					model: modelObj,
 					...(imageModelObj && { image_model: imageModelObj }),
@@ -1370,6 +1372,7 @@ function useMessageQueue({
 			editingQueueItem,
 			projectId,
 			topicId,
+			agentCode,
 			fetchQueueList,
 			t,
 			acquireLock,

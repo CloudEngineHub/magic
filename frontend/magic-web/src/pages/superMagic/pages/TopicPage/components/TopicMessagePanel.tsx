@@ -74,8 +74,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -147,7 +146,7 @@ function TopicMessagePanel({
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -349,6 +348,7 @@ function TopicMessagePanel({
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 						size={detailPanelVisible ? "small" : "default"}
 					/>

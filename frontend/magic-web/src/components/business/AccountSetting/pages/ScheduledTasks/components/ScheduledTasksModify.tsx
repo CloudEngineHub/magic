@@ -347,6 +347,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				current_project_id: null,
 				workspace_status: WorkspaceStatus.WAITING,
 				project_count: 0,
+				workspace_type: "default",
 			})
 		})
 
@@ -360,7 +361,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				id: item.value,
 				project_name: item.label,
 				project_status: ProjectStatus.WAITING,
-				project_mode: TopicMode.General,
+				project_mode: topicMode,
 				workspace_id: workspaceId ?? "",
 				work_dir: "",
 				workspace_name: selectedWorkspace?.name ?? "",
@@ -368,9 +369,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				current_topic_status: "",
 				created_at: "",
 				updated_at: "",
-				is_recycled: false,
-				task_count: 0,
-				member_list: [],
+				tag: "",
 			})
 		})
 

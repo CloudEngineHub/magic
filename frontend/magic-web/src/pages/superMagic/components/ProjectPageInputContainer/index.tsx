@@ -88,13 +88,18 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode: innerTopicMode, setTopicMode: innerSetTopicMode } = useTopicMode({
+	const {
+		topicMode: innerTopicMode,
+		setTopicMode: innerSetTopicMode,
+		recoverTopicMode: innerRecoverTopicMode,
+	} = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
 
 	const topicMode = topicModeLogicProps?.topicMode ?? innerTopicMode
 	const setTopicMode = topicModeLogicProps?.setTopicMode ?? innerSetTopicMode
+	const recoverTopicMode = topicModeLogicProps?.recoverTopicMode ?? innerRecoverTopicMode
 
 	const { handleInterrupt } = useTaskInterrupt({
 		selectedTopic: selectedTopic ?? null,
@@ -196,6 +201,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			topicMode: topicMode,
 			agentCode: selectedTopic?.agent_code,
 			setTopicMode: setTopicMode,
+			recoverTopicMode,
 			topicExamplesMode: tabPattern,
 			size: editorSize,
 			className: editPanelClassName,
@@ -246,6 +252,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		setSelectedProject,
 		topicMode,
 		setTopicMode,
+		recoverTopicMode,
 		tabPattern,
 		editorSize,
 		editPanelClassName,

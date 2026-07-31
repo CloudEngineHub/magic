@@ -9,7 +9,6 @@ export interface DefaultAgentSelection {
 
 const builtInTopicModes = new Set<string>([
 	TopicMode.General,
-	TopicMode.Chat,
 	TopicMode.DataAnalysis,
 	TopicMode.PPT,
 	TopicMode.Report,
@@ -26,6 +25,18 @@ function createGeneralSelection(): DefaultAgentSelection {
 		modeIdentifier: TopicMode.General,
 		topicPattern: TopicMode.General,
 	}
+}
+
+/** UI/storage fallback when no topic or saved mode is present. */
+export function getFallbackTopicModeIdentifier(): TopicMode {
+	return resolveDefaultAgentSelection().modeIdentifier as TopicMode
+}
+
+/** project_mode for create-project when caller did not specify one. */
+export function resolveProjectModeForCreate(projectMode?: TopicMode | string | null): TopicMode {
+	const normalized = projectMode?.toString().trim()
+	if (normalized) return normalized as TopicMode
+	return getFallbackTopicModeIdentifier()
 }
 
 /**
@@ -59,17 +70,24 @@ export function resolveDefaultAgentSelection(): DefaultAgentSelection {
 	if (defaultAgentCode === TopicMode.General) return createGeneralSelection()
 	if (!superMagicModeService.isModeValid(defaultAgentCode)) return createGeneralSelection()
 
-	if (builtInTopicModes.has(defaultAgentCode) || !defaultAgentCode.startsWith("SMA")) {
+	if (builtInTopicModes.has(defaultAgentCode)) {
 		return {
 			modeIdentifier: defaultAgentCode,
 			topicPattern: defaultAgentCode as TopicMode,
 		}
 	}
 
+	if (defaultAgentCode.startsWith("SMA")) {
+		return {
+			modeIdentifier: defaultAgentCode,
+			topicPattern: TopicMode.CustomAgent,
+			agentCode: defaultAgentCode,
+		}
+	}
+
 	return {
 		modeIdentifier: defaultAgentCode,
-		topicPattern: TopicMode.CustomAgent,
-		agentCode: defaultAgentCode,
+		topicPattern: defaultAgentCode as TopicMode,
 	}
 }
 
@@ -110,7 +128,7 @@ export function resolveAgentSelection(
 	}
 
 	if (!normalizedMode || normalizedMode === TopicMode.CustomAgent) {
-		return createGeneralSelection()
+		return resolveDefaultAgentSelection()
 	}
 
 	return {

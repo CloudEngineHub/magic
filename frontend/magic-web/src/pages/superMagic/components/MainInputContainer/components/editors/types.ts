@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import type { ReactNode, RefObject } from "react"
+import type { ComponentType, ReactNode, RefObject } from "react"
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
@@ -17,6 +17,7 @@ import type {
 	MessageEditorSize,
 } from "@/pages/superMagic/components/MessageEditor/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
+import type { InvalidModeFallbackProps } from "@/pages/superMagic/components/MessageEditor/components/TopicInvalidModeFallback"
 import type {
 	CreatedProject,
 	ProjectListItem,
@@ -57,6 +58,8 @@ export interface SceneEditorContext {
 	/** custom_agent: same as featured mode.identifier */
 	agentCode?: string
 	setTopicMode?: (mode: TopicMode) => void
+	/** Runtime recovery that must not persist user preferences. */
+	recoverTopicMode?: (mode: TopicMode) => void
 	topicExamplesMode?: TopicMode
 	size?: MessageEditorSize
 	className?: string

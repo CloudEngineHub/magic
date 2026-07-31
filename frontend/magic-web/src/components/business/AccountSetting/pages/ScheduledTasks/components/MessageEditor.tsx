@@ -23,7 +23,7 @@ import type { MentionPanelStore } from "@/components/business/MentionPanel/built
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { TopicMode as TopicModeEnum } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
 import { cn } from "@/lib/utils"
 
@@ -98,7 +98,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 		selectedTopic = null,
 		selectedProject = null,
 		selectedWorkspace = null,
-		topicMode = TopicModeEnum.General,
+		topicMode,
 		setTopicMode,
 		agentCode,
 		size = "default",
@@ -119,6 +119,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 ) {
 	const innerRef = useRef<BaseMessageEditorRef>(null)
 	const [editorStore] = useState(() => new MessageEditorStore({ mentionPanelStore }))
+	const resolvedTopicMode = topicMode ?? getFallbackTopicModeIdentifier()
 
 	useEffect(() => {
 		editorStore.topicModelStore.setSelectedLanguageModel(selectedModelProp)
@@ -159,7 +160,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			selectedTopic,
 			selectedProject,
 			selectedWorkspace,
-			topicMode,
+			topicMode: resolvedTopicMode,
 			setTopicMode,
 			agentCode,
 			size,
@@ -205,7 +206,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			setTopicMode,
 			showModeToggle,
 			size,
-			topicMode,
+			resolvedTopicMode,
 		],
 	)
 
@@ -297,7 +298,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 				{showModeToggle ? (
 					<ModeToggle
 						size={size}
-						topicMode={topicMode}
+						topicMode={resolvedTopicMode}
 						agentCode={agentCode}
 						allowChangeMode={allowChangeMode}
 						onModeChange={setTopicMode}

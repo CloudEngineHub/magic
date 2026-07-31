@@ -13,7 +13,7 @@ import { MobileOnlyRoute } from "@/routes/components/ViewportRouteGuard"
 import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
 import { roleStore } from "@/pages/superMagic/stores"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { resolveProjectModeForCreate } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
 import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
@@ -206,7 +206,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 
 		try {
 			const createdProject = await createProjectInChatWorkspace({
-				projectMode: currentRole || TopicMode.General,
+				projectMode: resolveProjectModeForCreate(currentRole),
 			})
 
 			if (!createdProject?.project || !createdProject.topic) {

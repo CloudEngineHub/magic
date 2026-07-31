@@ -1,101 +1,99 @@
-import { makeAutoObservable, computed, reaction } from "mobx"
+import { makeAutoObservable, reaction } from "mobx"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import ProjectTopicService from "@/services/superMagic/ProjectTopicService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { interfaceStore } from "@/stores/interface"
 import { userStore } from "@/models/user"
-import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import DefaultTopicModeStorageService from "@/services/superMagic/DefaultTopicModeStorageService"
+import {
+	getFallbackTopicModeIdentifier,
+	resolveDefaultAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
 
 /**
  * Role Store
  * Manages the role (topic mode) state for super magic workspace
  */
-class RoleStore {
-	// Global topic mode state
+export class RoleStore {
 	currentRole: TopicMode = TopicMode.General
 
 	constructor() {
-		makeAutoObservable(
-			this,
-			{
-				isChatMode: computed,
-			},
-			{ autoBind: true },
-		)
+		makeAutoObservable(this, {}, { autoBind: true })
 
 		// Initialize from storage
-		this.loadFromStorage()
+		this.reresolveFromAvailability()
 
-		// 用户、组织、平台默认员工或可用员工列表变化时重新解析默认选择。
+		// 用户、组织、平台默认员工或可用员工列表变化时重新解析运行时选择。
 		reaction(
 			() => [
 				userStore.user.organizationCode,
 				userStore.user.userInfo?.user_id,
 				superMagicModeService.defaultAgentCode,
 				superMagicModeService.modeList.map((item) => item.mode.identifier).join(","),
+				superMagicModeService.isModeAvailabilityResolved,
 			],
 			([organizationCode, userId]) => {
 				if (organizationCode && userId) {
-					this.loadFromStorage()
+					this.reresolveFromAvailability()
 				}
 			},
 		)
+	}
 
-		// @deprecated
-		// React to mobile state changes
-		// reaction(
-		// 	() => interfaceStore.isMobile,
-		// 	(isMobile) => {
-		// 		if (isMobile && this.currentRole === TopicMode.Chat) {
-		// 			this.setCurrentRole(TopicMode.General)
-		// 		}
-		// 	},
-		// )
+	private getUserKey() {
+		const organizationCode = userStore.user.organizationCode || "unknown"
+		const userId = userStore.user.userInfo?.user_id || "legacy"
+		return `${organizationCode}/${userId}`
 	}
 
 	/**
-	 * Load global topic mode from storage
+	 * Prefer a still-available stored preference; otherwise use platform default.
+	 * Does not persist automatic fallbacks.
 	 */
-	private loadFromStorage() {
-		const mode = ProjectTopicService.getGlobalTopicMode()
-		if (mode) {
-			this.currentRole = mode
-		} else {
-			this.currentRole = resolveDefaultAgentSelection().modeIdentifier as TopicMode
+	private resolveRuntimeRole(): TopicMode {
+		const rawStored = DefaultTopicModeStorageService.getRawStoredMode({
+			userKey: this.getUserKey(),
+		})
+
+		if (rawStored) {
+			if (!superMagicModeService.isModeAvailabilityResolved) {
+				return rawStored as TopicMode
+			}
+			if (superMagicModeService.isModeValid(rawStored)) return rawStored as TopicMode
 		}
+
+		return getFallbackTopicModeIdentifier()
 	}
 
 	/**
-	 * Set global topic mode with validation
-	 * @param mode - Topic mode to set
+	 * Re-read availability and update runtime selection without writing localStorage.
+	 */
+	reresolveFromAvailability() {
+		this.currentRole = this.resolveRuntimeRole()
+	}
+
+	/**
+	 * Apply a resolved mode for system recovery paths without persisting.
+	 */
+	applyResolvedRole(mode: TopicMode) {
+		if (superMagicModeService.isModeValid(mode)) {
+			this.currentRole = mode
+			return
+		}
+		this.currentRole = resolveDefaultAgentSelection().modeIdentifier as TopicMode
+	}
+
+	/**
+	 * Explicit user selection: update runtime state and persist when valid.
 	 */
 	setCurrentRole(mode: TopicMode) {
-		let validMode = mode
-
-		// Validate mode
-		if (!superMagicModeService.isModeValid(mode)) {
-			validMode = resolveDefaultAgentSelection().modeIdentifier as TopicMode
+		if (superMagicModeService.isModeValid(mode)) {
+			this.currentRole = mode
+			ProjectTopicService.setGlobalTopicMode(mode)
+			return
 		}
 
-		// Check mobile compatibility
-		if (interfaceStore.isMobile && validMode === TopicMode.Chat) {
-			validMode = TopicMode.General
-		}
-
-		if (validMode) {
-			this.currentRole = validMode
-			ProjectTopicService.setGlobalTopicMode(validMode)
-		}
-	}
-
-	/**
-	 * Computed: Check if current mode is chat mode
-	 * Chat mode is active when:
-	 * - globalTopicMode is Chat
-	 * - Not on mobile device
-	 */
-	get isChatMode(): boolean {
-		return this.currentRole === TopicMode.Chat && !interfaceStore.isMobile
+		// Invalid request: runtime fallback only, do not overwrite stored preference.
+		this.currentRole = resolveDefaultAgentSelection().modeIdentifier as TopicMode
 	}
 
 	/**

@@ -29,6 +29,10 @@ import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { refreshFeaturedModeList } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import {
+	getFallbackTopicModeIdentifier,
+	resolveProjectModeForCreate,
+} from "@/services/superMagic/DefaultAgentSelectionService"
 import { useLocation } from "react-router"
 import { MobileTabParam } from "@/pages/mobileTabs/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
@@ -96,7 +100,7 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 
 		try {
 			const createdProject = await createProjectInChatWorkspace({
-				projectMode: currentRole || TopicMode.General,
+				projectMode: resolveProjectModeForCreate(currentRole),
 			})
 
 			if (!createdProject?.project || !createdProject.topic) {
@@ -135,7 +139,11 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
 
-	const { topicMode, setTopicMode: setTopicModeFromHook } = useTopicMode({
+	const {
+		topicMode,
+		setTopicMode: setTopicModeFromHook,
+		recoverTopicMode: recoverTopicModeFromHook,
+	} = useTopicMode({
 		selectedTopic: selectedTopic ?? null,
 		selectedProject: selectedProject ?? null,
 	})
@@ -166,6 +174,14 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		roleStore.setCurrentRole(mode)
 	})
 
+	const recoverTopicMode = useMemoizedFn((mode: TopicMode) => {
+		if (!selectedProject && !selectedTopic) {
+			setHomepageModeOverride(mode)
+		}
+		recoverTopicModeFromHook(mode)
+		roleStore.applyResolvedRole(mode)
+	})
+
 	const refreshHomepageModeList = useMemoizedFn(async () => {
 		const nextModeList = await refreshFeaturedModeList().catch(() => null)
 		if (!nextModeList?.length) return
@@ -173,10 +189,13 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		const currentAgentCode = selectedTopic?.agent_code ?? null
 		if (superMagicModeService.isModeValid(displayTopicMode, currentAgentCode)) return
 
-		const fallbackMode = nextModeList[0]?.mode?.identifier as TopicMode | undefined
+		const defaultMode = getFallbackTopicModeIdentifier()
+		const fallbackMode = superMagicModeService.isModeValid(defaultMode)
+			? defaultMode
+			: (nextModeList[0]?.mode?.identifier as TopicMode | undefined)
 		if (!fallbackMode || fallbackMode === displayTopicMode) return
 
-		setTopicMode(fallbackMode)
+		recoverTopicMode(fallbackMode)
 	})
 
 	useEffect(() => {
@@ -229,6 +248,7 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 			topicMode: displayTopicMode,
 			agentCode: selectedTopic?.agent_code,
 			setTopicMode,
+			recoverTopicMode,
 			topicExamplesMode: currentRole,
 			messagesLength: threadMessageCount,
 			layoutConfig: MOBILE_LAYOUT_CONFIG,
@@ -262,6 +282,7 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 			selectedProject,
 			displayTopicMode,
 			setTopicMode,
+			recoverTopicMode,
 			currentRole,
 			threadMessageCount,
 			isTaskRunning,

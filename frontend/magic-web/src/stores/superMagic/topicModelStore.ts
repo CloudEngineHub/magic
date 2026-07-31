@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { DEFAULT_TOPIC_ID } from "@/services/superMagic/topicModel/constants"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 
 /**
  * Super Magic Topic Model Store
@@ -123,7 +124,7 @@ class SuperMagicTopicModelStore {
 		this.isLoading = false
 		this.currentTopicId = DEFAULT_TOPIC_ID
 		this.currentProjectId = ""
-		this.currentTopicMode = "general" as TopicMode
+		this.currentTopicMode = getFallbackTopicModeIdentifier()
 		this.currentAgentCode = ""
 	}
 }

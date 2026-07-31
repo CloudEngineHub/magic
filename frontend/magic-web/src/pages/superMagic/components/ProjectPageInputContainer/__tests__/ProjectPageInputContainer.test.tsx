@@ -31,7 +31,11 @@ vi.mock("@/pages/superMagic/hooks/useTaskInterrupt", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
-	default: () => ({ topicMode: TopicMode.General, setTopicMode: vi.fn() }),
+	default: () => ({
+		topicMode: TopicMode.General,
+		setTopicMode: vi.fn(),
+		recoverTopicMode: vi.fn(),
+	}),
 }))
 
 vi.mock("@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue", () => ({
@@ -134,7 +138,11 @@ describe("ProjectPageInputContainer", () => {
 				selectedProject={selectedProject}
 				selectedTopic={selectedTopic}
 				setSelectedTopic={vi.fn()}
-				topicModeLogic={{ topicMode: TopicMode.PPT, setTopicMode: vi.fn() }}
+				topicModeLogic={{
+					topicMode: TopicMode.PPT,
+					setTopicMode: vi.fn(),
+					recoverTopicMode: vi.fn(),
+				}}
 			/>,
 		)
 
