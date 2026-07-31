@@ -19,9 +19,12 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
+use Dtyq\SuperMagic\Domain\Agent\Entity\MagicClawEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\MagicClawRepositoryInterface;
+use Dtyq\SuperMagic\Domain\Agent\Service\MagicClawDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use PHPUnit\Framework\TestCase;
@@ -186,6 +189,61 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
             SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
             'general',
             'SMA-stale-agent-code'
+        ));
+    }
+
+    public function testCheckAgentAccessAllowsOwnedMagiclawClawWithoutEmployeeHire(): void
+    {
+        $repository = $this->createMock(MagicClawRepositoryInterface::class);
+        $repository->expects(self::once())
+            ->method('findByCode')
+            ->with('CLAW-1', 'user-1', 'DT001')
+            ->willReturn(new MagicClawEntity());
+        $this->setProperty($this->service, 'magicClawDomainService', new MagicClawDomainService($repository));
+
+        self::assertSame([true, ''], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'magiclaw',
+            'CLAW-1'
+        ));
+    }
+
+    public function testCheckAgentAccessRejectsMagiclawClawOwnedByAnotherUser(): void
+    {
+        $repository = $this->createMock(MagicClawRepositoryInterface::class);
+        $repository->expects(self::once())
+            ->method('findByCode')
+            ->willReturn(null);
+        $this->setProperty($this->service, 'magicClawDomainService', new MagicClawDomainService($repository));
+
+        self::assertSame([false, 'super_magic.agent.agent_not_available'], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'magiclaw',
+            'CLAW-1'
+        ));
+    }
+
+    public function testCheckAgentAccessChecksCustomAgentCodeAsUsableEmployee(): void
+    {
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService(['SMA-1']));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        self::assertSame([true, ''], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'custom_agent',
+            'SMA-1'
+        ));
+    }
+
+    public function testCheckAgentAccessRejectsVisibleButUnhiredCustomAgentCode(): void
+    {
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        self::assertSame([false, 'super_magic.agent.agent_not_available'], $this->service->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'custom_agent',
+            'SMA-1'
         ));
     }
 

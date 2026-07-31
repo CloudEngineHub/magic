@@ -70,6 +70,16 @@ readonly class MagicClawDomainService
         return $this->getByCodeOrFail($code, $userId, $organizationCode);
     }
 
+    /** 校验 MagicClaw 是否属于当前组织下的当前用户。 */
+    public function isOwnedBy(string $code, string $userId, string $organizationCode): bool
+    {
+        if ($code === '' || $userId === '' || $organizationCode === '') {
+            return false;
+        }
+
+        return $this->magicClawRepository->findByCode($code, $userId, $organizationCode) !== null;
+    }
+
     /**
      * Get paginated list of magic claws for a user.
      *
