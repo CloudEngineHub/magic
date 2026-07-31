@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\ImageGenerateAPI\Model\Google;
 
+use App\Domain\Provider\DTO\Item\GoogleProviderConfigItem;
 use App\ErrorCode\ImageGenerateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\AbstractImageGenerate;
@@ -28,13 +29,26 @@ use function Hyperf\Translation\__;
 
 class GoogleGeminiModel extends AbstractImageGenerate
 {
+    /** Google Gemini 生图接口客户端。 */
     protected GoogleGeminiInterface $api;
+
+    /** Google 生图参考图传输策略。 */
+    protected string $referenceImageTransport;
+
+    /** Google 生图参考图 Base64 准备器。 */
+    protected GoogleReferenceImagePreparer $referenceImagePreparer;
 
     public function __construct(array $serviceProviderConfig)
     {
         $proxyUrl = $serviceProviderConfig['proxy_url'] ?? null;
 
         $this->api = GoogleGeminiFactory::create($serviceProviderConfig, $serviceProviderConfig['model_version'], $proxyUrl);
+
+        $this->referenceImageTransport = GoogleProviderConfigItem::normalizeReferenceImageTransport(
+            $serviceProviderConfig['reference_image_transport'] ?? null
+        );
+
+        $this->referenceImagePreparer = new GoogleReferenceImagePreparer();
     }
 
     public function generateImageRaw(ImageGenerateRequest $imageGenerateRequest): array
@@ -83,34 +97,38 @@ class GoogleGeminiModel extends AbstractImageGenerate
 
         // 3. 并发处理 - 直接操作响应对象
         $count = $imageGenerateRequest->getGenerateNum();
-        $parallel = new Parallel();
-        $fromCoroutineId = Coroutine::id();
+        $originalReferImages = $imageGenerateRequest->getReferImages();
 
-        for ($i = 0; $i < $count; ++$i) {
-            $parallel->add(function () use ($imageGenerateRequest, $response, $fromCoroutineId) {
-                CoContext::copy($fromCoroutineId);
-                try {
-                    $result = $this->requestImageGeneration($imageGenerateRequest);
-                    $this->validateGoogleGeminiResponse($result);
+        try {
+            $this->prepareBase64ReferenceImages($imageGenerateRequest);
+            $parallel = new Parallel();
+            $fromCoroutineId = Coroutine::id();
 
-                    // 成功：设置图片数据到响应对象
-                    $this->addImageDataToResponseGemini($response, $result, $imageGenerateRequest);
-                } catch (Exception $e) {
-                    // 失败：设置错误信息到响应对象（只设置第一个错误）
-                    if (! $response->hasError()) {
-                        $response->setProviderErrorCode($e->getCode());
-                        $response->setProviderErrorMessage($e->getMessage());
+            for ($i = 0; $i < $count; ++$i) {
+                $parallel->add(function () use ($imageGenerateRequest, $response, $fromCoroutineId) {
+                    CoContext::copy($fromCoroutineId);
+                    try {
+                        $result = $this->requestImageGeneration($imageGenerateRequest);
+                        $this->validateGoogleGeminiResponse($result);
+                        $this->addImageDataToResponseGemini($response, $result, $imageGenerateRequest);
+                    } catch (Exception $e) {
+                        if (! $response->hasError()) {
+                            $response->setProviderErrorCode($e->getCode());
+                            $response->setProviderErrorMessage($e->getMessage());
+                        }
+
+                        $this->logger->error('GoogleGemini OpenAI格式生图：单个请求失败', [
+                            'error_code' => $e->getCode(),
+                            'error_message' => $e->getMessage(),
+                        ]);
                     }
+                });
+            }
 
-                    $this->logger->error('GoogleGemini OpenAI格式生图：单个请求失败', [
-                        'error_code' => $e->getCode(),
-                        'error_message' => $e->getMessage(),
-                    ]);
-                }
-            });
+            $parallel->wait();
+        } finally {
+            $imageGenerateRequest->setReferImages($originalReferImages);
         }
-
-        $parallel->wait();
 
         // 4. 记录最终结果
         $this->logger->info('GoogleGemini OpenAI格式生图：并发处理完成', [
@@ -170,7 +188,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
     {
         $prompt = $imageGenerateRequest->getPrompt();
         $modelId = $imageGenerateRequest->getModel();
-        $referImages = $imageGenerateRequest->getReferImages();
+        $referImages = array_slice($imageGenerateRequest->getReferImages(), 0, 14);
 
         // 如果请求中指定了模型，则动态设置
         if (! empty($modelId)) {
@@ -183,8 +201,6 @@ class GoogleGeminiModel extends AbstractImageGenerate
         try {
             // 如果有参考图像，则执行图像编辑
             if (! empty($referImages)) {
-                // 限制最多14张参考图像
-                $referImages = array_slice($referImages, 0, 14);
                 return $this->processImageEdit($referImages, $prompt, $config);
             }
 
@@ -218,10 +234,16 @@ class GoogleGeminiModel extends AbstractImageGenerate
     }
 
     /**
-     * Convert a reference image into the request shape expected by Gemini.
+     * 将原始图片地址或已准备的 Base64 数据转换为 Gemini 请求结构。
+     *
+     * @param array{type: 'base64', mimeType: string, data: string}|string $image
      */
-    private function formatReferenceImage(string $image): array
+    private function formatReferenceImage(array|string $image): array
     {
+        if (is_array($image)) {
+            return $image;
+        }
+
         $base64Image = ImageBase64DataUriParser::parseDecoded($image);
         if ($base64Image !== null) {
             return [
@@ -251,6 +273,18 @@ class GoogleGeminiModel extends AbstractImageGenerate
         };
     }
 
+    /**
+     * Base64 模式在并发请求前只准备一次，避免同一批图片重复下载。
+     */
+    private function prepareBase64ReferenceImages(GoogleGeminiRequest $request): void
+    {
+        if ($this->referenceImageTransport !== GoogleProviderConfigItem::REFERENCE_IMAGE_TRANSPORT_BASE64) {
+            return;
+        }
+
+        $request->setReferImages($this->referenceImagePreparer->prepare($request->getReferImages()));
+    }
+
     private function generateImageRawInternal(ImageGenerateRequest $imageGenerateRequest): array
     {
         if (! $imageGenerateRequest instanceof GoogleGeminiRequest) {
@@ -263,36 +297,42 @@ class GoogleGeminiModel extends AbstractImageGenerate
         $rawResults = [];
         $errors = [];
 
-        $parallel = new Parallel();
-        $fromCoroutineId = Coroutine::id();
+        $originalReferImages = $imageGenerateRequest->getReferImages();
+        try {
+            $this->prepareBase64ReferenceImages($imageGenerateRequest);
+            $parallel = new Parallel();
+            $fromCoroutineId = Coroutine::id();
 
-        for ($i = 0; $i < $count; ++$i) {
-            $parallel->add(function () use ($imageGenerateRequest, $i, $fromCoroutineId) {
-                CoContext::copy($fromCoroutineId);
-                try {
-                    $result = $this->requestImageGeneration($imageGenerateRequest);
-                    $imageData = $this->extractImageDataFromResponse($result);
+            for ($i = 0; $i < $count; ++$i) {
+                $parallel->add(function () use ($imageGenerateRequest, $i, $fromCoroutineId) {
+                    CoContext::copy($fromCoroutineId);
+                    try {
+                        $result = $this->requestImageGeneration($imageGenerateRequest);
+                        $imageData = $this->extractImageDataFromResponse($result);
 
-                    return [
-                        'success' => true,
-                        'data' => ['imageData' => $imageData],
-                        'index' => $i,
-                    ];
-                } catch (Exception $e) {
-                    $this->logger->error('Google Gemini文生图：图片生成失败', [
-                        'error' => $e->getMessage(),
-                        'index' => $i,
-                    ]);
-                    return [
-                        'success' => false,
-                        'error' => $e->getMessage(),
-                        'index' => $i,
-                    ];
-                }
-            });
+                        return [
+                            'success' => true,
+                            'data' => ['imageData' => $imageData],
+                            'index' => $i,
+                        ];
+                    } catch (Exception $e) {
+                        $this->logger->error('Google Gemini文生图：图片生成失败', [
+                            'error' => $e->getMessage(),
+                            'index' => $i,
+                        ]);
+                        return [
+                            'success' => false,
+                            'error' => $e->getMessage(),
+                            'index' => $i,
+                        ];
+                    }
+                });
+            }
+
+            $results = $parallel->wait();
+        } finally {
+            $imageGenerateRequest->setReferImages($originalReferImages);
         }
-
-        $results = $parallel->wait();
 
         foreach ($results as $result) {
             if ($result['success']) {
