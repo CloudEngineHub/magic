@@ -126,7 +126,7 @@ class BrowserArtifactService:
         )
 
     def _snapshot_file_key(self, workspace_key: str, content_hash: str) -> str:
-        context = self._agent_context.get_super_magic_context()
+        context = self._agent_context.get_super_magic_product_context()
         metadata = self._agent_context.get_metadata()
         project_id = context.project.id if context is not None else str(metadata.get("project_id") or "")
         topic_id = context.topic.id if context is not None else str(
