@@ -993,7 +993,9 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             role="tool",
             correlation_id=event.data.correlation_id,
             tool_call_id=tool_call_id,
-            content="",
+            # Keep tool messages empty for normal completion/waiting states,
+            # but expose the final error text in the structured message too.
+            content=content if status == TaskStatus.ERROR else "",
             status=status.value,
             tool=tool_obj,
         )

@@ -8,6 +8,11 @@ declare(strict_types=1);
 namespace App\Application\Flow\ExecuteManager\Attachment;
 
 use App\Domain\File\Service\FileDomainService;
+use App\ErrorCode\FlowErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\SSRF\Exception\SSRFException;
+use App\Infrastructure\Util\SSRF\SSRFUtil;
+use App\Infrastructure\Util\SSRF\SSRFViolation;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 
 abstract class AbstractAttachment implements AttachmentInterface
@@ -147,9 +152,34 @@ abstract class AbstractAttachment implements AttachmentInterface
         if (! $this->needUpload || empty($this->organizationCode)) {
             return;
         }
+        $this->assertRemoteUrl($this->url);
         $uploadFile = new UploadFile($this->url, 'flow-execute/external-attachment');
         di(FileDomainService::class)->uploadByCredential($this->organizationCode, $uploadFile);
         $this->fileKey = $uploadFile->getKey();
         $this->needUpload = false;
+    }
+
+    /**
+     * 校验待上传的外部附件地址必须是安全的 HTTP 或 HTTPS URL。
+     */
+    private function assertRemoteUrl(string $url): void
+    {
+        try {
+            SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
+        } catch (SSRFException $exception) {
+            ExceptionBuilder::throw(
+                FlowErrorCode::ExecuteValidateFailed,
+                'flow.attachment.blocked',
+                ['reason' => $this->getSsrfViolationTranslationKey($exception->getViolation())]
+            );
+        }
+    }
+
+    /**
+     * 获取 SSRF 拦截类型对应的国际化文案键。
+     */
+    private function getSsrfViolationTranslationKey(SSRFViolation $violation): string
+    {
+        return 'flow.attachment.block_reason.' . $violation->value;
     }
 }
