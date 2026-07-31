@@ -66,6 +66,10 @@ function mergeAttachmentNodes(items: any[]): any[] {
 		map.set(key, {
 			...(existing || {}),
 			...item,
+			// Mobile preview details may be partial. Keep the attachment tree's path
+			// metadata when the detail payload does not provide a concrete value.
+			relative_file_path: item?.relative_file_path ?? existing?.relative_file_path,
+			parent_id: item?.parent_id ?? existing?.parent_id,
 			children: item?.children || existing?.children,
 		})
 	}

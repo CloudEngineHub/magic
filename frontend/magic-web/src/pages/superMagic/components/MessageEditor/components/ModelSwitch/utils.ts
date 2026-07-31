@@ -1,5 +1,19 @@
 import { ModelItem, ModelStatusEnum, ModelTagEnum } from "./types"
 
+interface ResolveShowSelectedModelNameOptions {
+	showSelectedModelName: boolean
+	showImageTab: boolean
+	showVideoTab: boolean
+}
+
+export function resolveShowSelectedModelName({
+	showSelectedModelName,
+	showImageTab,
+	showVideoTab,
+}: ResolveShowSelectedModelNameOptions): boolean {
+	return showSelectedModelName || (!showImageTab && !showVideoTab)
+}
+
 export function isMaxModel(model?: ModelItem): boolean {
 	if (!model) return false
 	return (model.model_name || model.model_id).toLocaleLowerCase() === "max"

@@ -6,6 +6,7 @@ import {
 import AtItem from "@/pages/superMagic/components/MessageEditor/components/AtItem"
 import { memo } from "react"
 import { MentionItemType, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 
 const Mentions = ({
 	data,
@@ -16,6 +17,7 @@ const Mentions = ({
 	onFileClick?: (fileId: string, item: TiptapMentionAttributes) => void
 	className?: string
 }) => {
+	const { projectFilesStore } = useMessageListContext()
 	const mentions =
 		data?.[data?.type]?.extra?.super_agent?.mentions ||
 		data.raw_content?.[data.raw_content.type]?.extra?.super_agent?.mentions
@@ -37,6 +39,7 @@ const Mentions = ({
 									} as TiptapMentionAttributes)
 							: undefined
 					}
+					projectFilesStore={projectFilesStore}
 				/>
 			))}
 		</FlexBox>

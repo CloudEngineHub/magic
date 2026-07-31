@@ -179,9 +179,11 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management'));
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management.application_menu'));
         $this->assertTrue($this->containsPermissionKey($tree, $applicationQueryPermission));
-        $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management.slides_template'));
+        $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.agent_enhancement.slides_template'));
+        $this->assertFalse($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management.slides_template'));
         $this->assertTrue($this->containsPermissionKey($tree, $slidesTemplateQueryPermission));
         $this->assertTrue($this->containsPermissionKey($tree, $slidesTemplateEditPermission));
+        $this->assertSame('智能体增强', $this->permission->getResourceModule(MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE->value));
     }
 
     /**

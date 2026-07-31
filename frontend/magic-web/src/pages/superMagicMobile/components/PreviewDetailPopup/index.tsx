@@ -91,6 +91,8 @@ interface PreviewDetailPopupProps {
 	hideHeader?: boolean
 	showFileHeader?: boolean
 	forceFullscreenMode?: boolean
+	/** Allows pure-share preview content to expand into the browser page. */
+	documentFlowFullscreen?: boolean
 	allowEdit?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
@@ -109,6 +111,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		hideHeader: hideHeaderProp,
 		showFileHeader,
 		forceFullscreenMode,
+		documentFlowFullscreen = false,
 		allowEdit,
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
@@ -313,6 +316,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				onClose={onClose}
 				userSelectDetail={userSelectDetail}
 				isFullscreen={effectiveIsFullscreen}
+				documentFlowFullscreen={documentFlowFullscreen}
 				attachmentList={attachmentList}
 				display_config={meta?.display_config}
 				// New props for ActionButtons functionality
@@ -352,11 +356,13 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				// Mobile preview hides version footer; desktop keeps version selector when allowed.
 				showFooter={!isMobile && !effectiveIsFullscreen && !isShareRoute}
 				className={
-					effectiveIsFullscreen
-						? "h-full min-h-0 w-full flex-1"
-						: isMobile
-							? "min-h-0 flex-1"
-							: undefined
+					documentFlowFullscreen
+						? "min-h-dvh w-full overflow-visible"
+						: effectiveIsFullscreen
+							? "h-full min-h-0 w-full flex-1"
+							: isMobile
+								? "min-h-0 flex-1"
+								: undefined
 				}
 			/>
 		)
@@ -391,6 +397,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		showFileHeader,
 		userSelectDetail,
 		viewMode,
+		documentFlowFullscreen,
 	])
 
 	const displayFileName = useMemo(() => {
@@ -417,6 +424,11 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 					[styles.immersiveRenderContainer]:
 						enableImmersiveShareChrome && isImmersiveFullscreen,
 				})}
+				style={
+					documentFlowFullscreen
+						? { height: "auto", minHeight: "100dvh", marginTop: 0, overflow: "visible" }
+						: undefined
+				}
 				data-testid="share-preview-detail-popup-root"
 			>
 				{RenderComponent}

@@ -39,6 +39,11 @@ export interface SimpleEditorProps {
 	 * @default false
 	 */
 	isMobile?: boolean
+	/**
+	 * Lets the editor expand with its content so the browser page owns scrolling.
+	 * @default false
+	 */
+	documentFlow?: boolean
 }
 
 export interface SimpleEditorRef {

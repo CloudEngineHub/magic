@@ -147,7 +147,7 @@ function MessageQueue({
 										>
 											<CollapsibleText
 												content={message.content}
-												maxLines={2}
+												maxLines={1}
 											/>
 										</div>
 									</div>

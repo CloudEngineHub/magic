@@ -1,6 +1,4 @@
-import { useState, useRef, useEffect } from "react"
 import { cx } from "antd-style"
-import { useTranslation } from "react-i18next"
 import RichText from "@/pages/superMagic/components/MessageList/components/Text/components/RichText"
 import { useStyles } from "./styles"
 import type { JSONContent } from "@tiptap/core"
@@ -15,53 +13,20 @@ export interface CollapsibleTextProps {
 
 function CollapsibleText({ content, maxLines = 2, className, onFileClick }: CollapsibleTextProps) {
 	const { styles } = useStyles()
-	const { t } = useTranslation("super")
-	const [isExpanded, setIsExpanded] = useState(false)
-	const [shouldShowToggle, setShouldShowToggle] = useState(false)
-	const textRef = useRef<HTMLDivElement>(null)
-
-	// 检测文本是否超过指定行数
-	useEffect(() => {
-		if (textRef.current) {
-			const element = textRef.current
-			const computedStyle = window.getComputedStyle(element)
-			const lineHeight = parseFloat(computedStyle.lineHeight)
-			const maxHeight = lineHeight * maxLines
-
-			// 暂时展开以获取真实高度
-			element.style.maxHeight = "none"
-			element.style.webkitLineClamp = "none"
-
-			const actualHeight = element.scrollHeight
-			setShouldShowToggle(actualHeight > maxHeight)
-
-			// 恢复限制
-			if (!isExpanded) {
-				element.style.maxHeight = `${maxHeight}px`
-				element.style.webkitLineClamp = maxLines.toString()
-			}
-		}
-	}, [content, maxLines, isExpanded])
-
-	const handleToggle = () => {
-		setIsExpanded(!isExpanded)
-	}
-
-	const tooltipTitle =
-		shouldShowToggle && !isExpanded ? t("warningCard.clickToExpandContent") : undefined
+	const tooltipTitle = (
+		<div className={styles.tooltipContent}>
+			<RichText content={content} onFileClick={onFileClick} />
+		</div>
+	)
 
 	return (
-		<SuperTooltip className={cx(styles.container, className)} title={tooltipTitle}>
+		<SuperTooltip title={tooltipTitle}>
 			<div
-				ref={textRef}
-				className={cx(
-					styles.textContainer,
-					!isExpanded && shouldShowToggle && styles.collapsed,
-				)}
+				className={cx(styles.container, styles.textContainer, styles.collapsed, className)}
 				style={{
-					WebkitLineClamp: !isExpanded && shouldShowToggle ? maxLines : "none",
+					WebkitLineClamp: maxLines,
+					maxHeight: `${maxLines * 16}px`,
 				}}
-				onClick={shouldShowToggle ? handleToggle : undefined}
 				data-testid="collapsible-text"
 			>
 				<RichText content={content} onFileClick={onFileClick} />

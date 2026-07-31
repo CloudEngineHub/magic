@@ -681,71 +681,27 @@ export class StyleManager {
 	}
 
 	/**
-	 * Enable text selection while editing
-	 */
-	private enableTextSelectionForEditing(element: HTMLElement): void {
-		const previousUserSelect = element.style.userSelect
-		const previousWebkitUserSelect = element.style.getPropertyValue("-webkit-user-select")
-
-		if (previousUserSelect) {
-			element.setAttribute("data-previous-user-select", previousUserSelect)
-		}
-		if (previousWebkitUserSelect) {
-			element.setAttribute("data-previous-webkit-user-select", previousWebkitUserSelect)
-		}
-
-		element.style.userSelect = "text"
-		element.style.setProperty("-webkit-user-select", "text")
-	}
-
-	private restoreTextSelectionAfterEditing(element: HTMLElement): void {
-		const previousUserSelect = element.getAttribute("data-previous-user-select")
-		const previousWebkitUserSelect = element.getAttribute("data-previous-webkit-user-select")
-
-		if (previousUserSelect !== null) {
-			element.style.userSelect = previousUserSelect
-			element.removeAttribute("data-previous-user-select")
-		} else {
-			element.style.removeProperty("user-select")
-		}
-
-		if (previousWebkitUserSelect !== null) {
-			element.style.setProperty("-webkit-user-select", previousWebkitUserSelect)
-			element.removeAttribute("data-previous-webkit-user-select")
-		} else {
-			element.style.removeProperty("-webkit-user-select")
-		}
-	}
-
-	/**
 	 * Enable text editing (set contenteditable)
 	 */
 	enableTextEditing(selector: string): void {
 		const element = findElement(selector) as HTMLElement
 
-		// Clean up any existing editing state and event listeners
-		// This ensures we always have a fresh start even if the element
-		// still has the data-text-editing attribute from a previous session
+		// Remove unmanaged DOM state from ElementSelector or stale HTML, then initialize listeners.
 		if (element.getAttribute("data-text-editing") === "true") {
 			EditorLogger.warn("Text editing state exists, cleaning up first", { selector })
-			// Force remove all attributes and reset state
 			element.removeAttribute("contenteditable")
 			element.removeAttribute("data-text-editing")
 			element.removeAttribute("data-previous-content")
-			element.style.outline = ""
 		}
 
 		EditorLogger.info("Enabling text editing", { selector })
 
 		const previousContent = element.textContent || ""
 
-		this.enableTextSelectionForEditing(element)
 		element.setAttribute("contenteditable", "true")
 		element.setAttribute("data-text-editing", "true")
 		element.setAttribute("data-previous-content", previousContent)
 		element.focus()
-
-		element.style.outline = "none"
 
 		// Handle input event (real-time content change)
 		let updateTimer: number | null = null
@@ -815,8 +771,6 @@ export class StyleManager {
 			element.removeAttribute("contenteditable")
 			element.removeAttribute("data-text-editing")
 			element.removeAttribute("data-previous-content")
-			this.restoreTextSelectionAfterEditing(element)
-			element.style.outline = ""
 			element.removeEventListener("blur", handleBlur)
 			element.removeEventListener("input", handleInput)
 			element.removeEventListener("keydown", handleKeyDown)
@@ -853,17 +807,6 @@ export class StyleManager {
 		element.removeAttribute("contenteditable")
 		element.removeAttribute("data-text-editing")
 		element.removeAttribute("data-previous-content")
-
-		// Remove visual feedback
-		element.style.outline = ""
-		element.style.outlineOffset = ""
-
-		if (
-			element.hasAttribute("data-previous-user-select") ||
-			element.hasAttribute("data-previous-webkit-user-select")
-		) {
-			this.restoreTextSelectionAfterEditing(element)
-		}
 
 		EditorLogger.info("Text editing disabled", { selector })
 	}
@@ -1447,7 +1390,6 @@ export class StyleManager {
 		if (!command.previousState) return
 
 		try {
-
 			// Handle batch styles multiple restoration FIRST (before destructuring selector)
 			if (command.commandType === "BATCH_STYLES_MULTIPLE") {
 				const { elements } = command.previousState as {

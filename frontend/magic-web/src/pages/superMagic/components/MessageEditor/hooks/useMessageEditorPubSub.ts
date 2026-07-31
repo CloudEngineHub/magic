@@ -15,6 +15,7 @@ import {
 	type PPTSlideDragData,
 } from "../utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "../utils/editorLifecycle"
+import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
 
 interface UseMessageEditorPubSubParams {
 	editor: Editor | null
@@ -248,6 +249,19 @@ function useMessageEditorPubSub({
 			if (!newNodes.length) return
 
 			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				const inspectorNode = newNodes[0]?.content?.[0]
+				const isSingleInspectorNode =
+					newNodes.length === 1 &&
+					newNodes[0]?.type === "paragraph" &&
+					newNodes[0]?.content?.length === 1 &&
+					inspectorNode?.type === INSPECTOR_DETAIL_TYPE
+
+				if (isSingleInspectorNode && inspectorNode) {
+					activeEditor.commands.insertContent(inspectorNode)
+					activeEditor.commands.focus()
+					return
+				}
+
 				const currentContent = activeEditor.getJSON()
 				const mergedContent: JSONContent = !activeEditor.isEmpty
 					? {
@@ -272,6 +286,21 @@ function useMessageEditorPubSub({
 			const newNodes: JSONContent[] =
 				content.type === "doc" ? (content.content ?? []) : [content]
 			if (newNodes.length === 0) return
+
+			const inspectorNode = newNodes[0]?.content?.[0]
+			const isSingleInspectorNode =
+				newNodes.length === 1 &&
+				newNodes[0]?.type === "paragraph" &&
+				newNodes[0]?.content?.length === 1 &&
+				inspectorNode?.type === INSPECTOR_DETAIL_TYPE
+
+			if (isSingleInspectorNode && inspectorNode) {
+				runActiveEditor(activeEditorRef.current, (activeEditor) => {
+					activeEditor.commands.insertContent(inspectorNode)
+				})
+				safeEditorFocus(activeEditorRef.current)
+				return
+			}
 
 			const currentContent = activeEditorRef.current.getJSON()
 			const mergedContent: JSONContent = !activeEditorRef.current?.isEmpty

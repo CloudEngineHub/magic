@@ -1,13 +1,5 @@
 import { memo } from "react"
-import {
-	CircleArrowUp,
-	Ellipsis,
-	MessageCircleMore,
-	Rocket,
-	Settings2,
-	ShieldCheck,
-	Trash2,
-} from "lucide-react"
+import { CircleArrowUp, Ellipsis, MessageCircleMore, Rocket, Settings2, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -21,7 +13,6 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import { CardFooterBadge } from "@/pages/superMagic/components/CardFooterBadge"
 import { CardFooterLabel } from "@/pages/superMagic/components/CardFooterLabel"
 import { cn } from "@/lib/utils"
-import { isOfficialPublisherType } from "@/pages/superMagic/pages/CrewMarket/employee-market/components/employee-card-shared"
 import type { MyCrewView } from "@/services/crew/CrewService"
 import { MyCrewCardMainSection } from "./MyCrewCardMainSection"
 import {
@@ -30,9 +21,8 @@ import {
 } from "./my-crew-card-interaction"
 import {
 	formatVersionBadge,
-	resolveMyCrewDisableActionDisabled,
-	resolveMyCrewDisableActionLabel,
-	resolveMyCrewHiredActionKind,
+	isOfficialMyCrewAgent,
+	resolveMyCrewOriginLabel,
 	resolveMyCrewPublisherLabel,
 	resolveTeamSharedCrewPermissions,
 } from "./my-crew-card-shared"
@@ -44,9 +34,9 @@ interface HiredCrewCardProps {
 	onConversation?: (agentCode: string) => void
 	onDelete?: (agentCode: string) => void
 	onDismiss?: (agentCode: string) => void
-	onDisable?: (agentCode: string) => void
 	onPublishToStore?: (agentCode: string) => void
 	isTeamSharedCard?: boolean
+	isCollaboratedCard?: boolean
 }
 
 function HiredCrewCard({
@@ -56,25 +46,15 @@ function HiredCrewCard({
 	onConversation,
 	onDelete,
 	onDismiss,
-	onDisable,
 	onPublishToStore,
 	isTeamSharedCard = false,
+	isCollaboratedCard = false,
 }: HiredCrewCardProps) {
-	const removeFromCrew = employee.allowDelete ? (onDelete ?? onDismiss) : undefined
+	const removeFromCrew = onDismiss ?? onDelete
 	const { t } = useTranslation("crew/market")
-	const hiredActionKind = resolveMyCrewHiredActionKind(employee.sourceType)
-	const disableActionLabel = resolveMyCrewDisableActionLabel(
-		employee.allowDelete,
-		employee.publisherType,
-		t,
-	)
-	const isDisableActionDisabled = resolveMyCrewDisableActionDisabled(
-		employee.allowDelete,
-		employee.enabled,
-	)
-
 	const versionBadgeLabel = formatVersionBadge(employee.latestVersionCode) ?? ""
-	const isOfficialPublisher = isOfficialPublisherType(employee.publisherType ?? "")
+	const isOfficialAgent = isOfficialMyCrewAgent(employee)
+	const originLabel = resolveMyCrewOriginLabel(employee, t)
 	const publisherLabel = resolveMyCrewPublisherLabel(
 		employee.publisherType,
 		employee.publisherName,
@@ -86,7 +66,7 @@ function HiredCrewCard({
 			})
 		: null
 	const { canDelete, canEdit, canPublish } = resolveTeamSharedCrewPermissions(employee.userRole)
-	const canOpenCardByRootClick = !isTeamSharedCard || canEdit
+	const canOpenCardByRootClick = isCollaboratedCard || !isTeamSharedCard || canEdit
 	const canRenderSharedEditorActions = isTeamSharedCard && canEdit && onEdit
 	const canRenderSharedMenu =
 		isTeamSharedCard &&
@@ -226,12 +206,33 @@ function HiredCrewCard({
 		)
 	}
 
+	function renderCollaboratedActions() {
+		return (
+			<div className="pointer-events-auto flex w-full">
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					className="h-8 min-h-8 w-full gap-2 px-3 text-xs font-medium shadow-xs"
+					onClick={(event) => {
+						preventMyCrewCardInteractiveClick(event)
+						onEdit?.(employee.agentCode)
+					}}
+					data-testid="my-crew-card-edit-button"
+				>
+					<Settings2 className="size-4 shrink-0" aria-hidden />
+					{t("myCrewPage.edit")}
+				</Button>
+			</div>
+		)
+	}
+
 	return (
 		<div
 			className="relative flex h-full min-h-0 min-w-0 flex-col text-current"
 			data-href={href}
 			data-testid="my-crew-card"
-			data-my-crew-card-kind="hired"
+			data-my-crew-card-kind={isCollaboratedCard ? "collaborated" : "hired"}
 			onClick={(event) => {
 				if (isInsideMyCrewCardInteractiveTarget(event.target)) return
 				handleCardRootClick()
@@ -250,16 +251,12 @@ function HiredCrewCard({
 										withTooltip
 										dataTestId="my-crew-card-team-shared-creator"
 									/>
-								) : isOfficialPublisher ? (
-									<div
-										className="flex min-w-0 flex-1 items-center gap-1"
-										data-testid="my-crew-card-official-publisher"
-									>
-										<ShieldCheck className="size-4 shrink-0 text-muted-foreground" />
-										<span className="truncate text-xs leading-4 text-muted-foreground">
-											{publisherLabel}
-										</span>
-									</div>
+								) : originLabel ? (
+									<CardFooterLabel
+										label={originLabel}
+										withTooltip
+										dataTestId="my-crew-card-origin"
+									/>
 								) : footerPoweredByText ? (
 									<CardFooterLabel label={footerPoweredByText} withTooltip />
 								) : (
@@ -270,7 +267,9 @@ function HiredCrewCard({
 						</>
 					}
 					actions={
-						isTeamSharedCard ? (
+						isCollaboratedCard ? (
+							renderCollaboratedActions()
+						) : isTeamSharedCard ? (
 							renderTeamSharedActions()
 						) : (
 							<div className="pointer-events-auto flex w-full flex-col gap-1">
@@ -288,7 +287,7 @@ function HiredCrewCard({
 									<MessageCircleMore className="size-4 shrink-0" aria-hidden />
 									{t("myCrewPage.openConversation")}
 								</Button>
-								{hiredActionKind === "dismiss" && removeFromCrew ? (
+								{!isOfficialAgent && removeFromCrew ? (
 									<button
 										type="button"
 										className={cn(
@@ -309,22 +308,6 @@ function HiredCrewCard({
 									>
 										{t("dismiss")}
 									</button>
-								) : null}
-								{hiredActionKind === "disable" ? (
-									<Button
-										type="button"
-										variant="secondary"
-										size="sm"
-										className="h-8 min-h-8 w-full px-3 text-xs font-medium shadow-xs"
-										onClick={(event) => {
-											preventMyCrewCardInteractiveClick(event)
-											onDisable?.(employee.agentCode)
-										}}
-										disabled={isDisableActionDisabled}
-										data-testid="my-crew-card-disable-button"
-									>
-										{disableActionLabel}
-									</Button>
 								) : null}
 							</div>
 						)

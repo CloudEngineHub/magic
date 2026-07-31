@@ -109,6 +109,15 @@ describe("MentionExtension Integration Tests", () => {
 			expect(id).toBe("project:project-file-123//project/document.docx")
 		})
 
+		it("should generate unique id for project mention", () => {
+			const mention = {
+				type: MentionItemType.PROJECT,
+				data: { project_id: "project-123" },
+			}
+
+			expect(getMentionUniqueId(mention)).toBe("project:project-123")
+		})
+
 		it("should handle cloud file mentions", () => {
 			const mention = {
 				type: MentionItemType.CLOUD_FILE,
@@ -171,6 +180,32 @@ describe("MentionExtension Integration Tests", () => {
 
 			const name = getMentionDisplayName(mention)
 			expect(name).toBe("document.docx")
+		})
+
+		it("should prefix cross-project file mentions with the project name", () => {
+			const mention = {
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: "other-project-file-123",
+					file_name: "document.docx",
+					file_path: "/other-project/document.docx",
+					file_extension: "docx",
+					project_id: "other-project-id",
+					project_name: "Other Project",
+					source_project_id: "other-project-id",
+				},
+			}
+
+			expect(getMentionDisplayName(mention)).toBe("Other Project/document.docx")
+		})
+
+		it("should use the project fallback name for project mentions", () => {
+			const mention = {
+				type: MentionItemType.PROJECT,
+				data: { project_id: "project-123", project_name: "Other Project" },
+			}
+
+			expect(getMentionDisplayName(mention)).toBe("Other Project")
 		})
 
 		it("should get display name for cloud file mention", () => {

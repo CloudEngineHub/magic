@@ -13,6 +13,8 @@ import { MCPTool } from "./tools/MCPTool"
 
 const AskUserToolCall = lazy(() => import("./tools/askUser"))
 
+const TERMINAL_TOOL_STATUSES = new Set(["finished", "error", "suspended", "response_missing"])
+
 interface ToolDetail {
 	type?: string
 	data?: Record<string, unknown>
@@ -72,11 +74,10 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 				: undefined,
 		[effectiveResponse],
 	)
-	const effectiveStatus = useMemo(
-		() => resolveToolStatus(effectiveResponse, effectiveDetail),
-		[effectiveResponse, effectiveDetail],
-	)
-	const isToolLoading = effectiveStatus ? effectiveStatus === "running" : !effectiveResponse
+	const effectiveStatus = useMemo(() => resolveToolStatus(effectiveResponse), [effectiveResponse])
+	// Store normalization owns protocol status; nested detail.status is domain data.
+	// Missing or unknown status stays loading defensively until a known terminal state arrives.
+	const isToolLoading = !effectiveStatus || !TERMINAL_TOOL_STATUSES.has(effectiveStatus)
 
 	const toolData = useMemo(() => {
 		const action =
@@ -189,7 +190,7 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 			<Suspense fallback={null}>
 				<AskUserToolCall
 					toolData={toolData}
-					loading={!toolResponse}
+					loading={isToolLoading}
 					classNames={classNames}
 					selectedTopic={selectedTopic}
 					isShare={isShare}
@@ -246,15 +247,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
-function resolveToolStatus(response: unknown, detail?: ToolDetail) {
+function resolveToolStatus(response: unknown) {
 	const responseRecord = isRecord(response) ? response : undefined
-	const detailData = isRecord(detail?.data) ? detail.data : undefined
-
-	return (
-		getStringValue(responseRecord, "status") ||
-		getStringValue(detail, "status") ||
-		getStringValue(detailData, "status")
-	)
+	return getStringValue(responseRecord, "status")
 }
 
 function getStringValue(record: Record<string, unknown> | undefined, key: string) {

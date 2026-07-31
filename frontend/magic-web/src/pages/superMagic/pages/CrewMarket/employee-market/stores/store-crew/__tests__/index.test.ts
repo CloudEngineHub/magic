@@ -27,6 +27,7 @@ function createStore() {
 			playbooks: [],
 			publisherType: "USER",
 			publisherName: "Test User",
+			marketType: "MARKET",
 			categoryId: "1",
 			isAdded: false,
 			allowDelete: false,
@@ -55,14 +56,33 @@ describe("StoreCrewStore", () => {
 
 	it("marks a market agent as removable after hire", async () => {
 		const store = createStore()
+		const originalAgent = store.list[0]
 
 		await store.hireAgent("market-1")
 
 		expect(crewService.hireAgent).toHaveBeenCalledWith("agent-market-1")
+		expect(store.list[0]).toBe(originalAgent)
 		expect(store.list[0]).toMatchObject({
 			isAdded: true,
 			allowDelete: true,
 		})
+	})
+
+	it("prevents duplicate hire requests while an action is pending", async () => {
+		const store = createStore()
+		const deferred = createDeferred<void>()
+		vi.mocked(crewService.hireAgent).mockReturnValueOnce(deferred.promise)
+
+		const firstHire = store.hireAgent("market-1")
+		const secondHire = store.hireAgent("market-1")
+
+		expect(store.isAgentActionPending("market-1")).toBe(true)
+		expect(crewService.hireAgent).toHaveBeenCalledTimes(1)
+
+		deferred.resolve()
+		await Promise.all([firstHire, secondHire])
+
+		expect(store.isAgentActionPending("market-1")).toBe(false)
 	})
 
 	it("ignores dismiss when allowDelete is false", async () => {
@@ -95,16 +115,17 @@ describe("StoreCrewStore", () => {
 		})
 	})
 
-	it("hides category filter when fetchCategories returns an empty list", async () => {
+	it("stores an empty market category response", async () => {
 		const store = createStore()
 		vi.mocked(crewService.getStoreCategories).mockResolvedValueOnce([])
 
 		await store.fetchCategories()
 
-		expect(store.shouldShowCategoryFilter).toBe(false)
+		expect(store.categories).toEqual([])
+		expect(store.categoriesLoaded).toBe(true)
 	})
 
-	it("shows category filter when fetchCategories returns categories", async () => {
+	it("stores available market categories", async () => {
 		const store = createStore()
 		vi.mocked(crewService.getStoreCategories).mockResolvedValueOnce([
 			{ id: "cat-1", name: "Analytics", logo: null },
@@ -112,7 +133,7 @@ describe("StoreCrewStore", () => {
 
 		await store.fetchCategories()
 
-		expect(store.shouldShowCategoryFilter).toBe(true)
+		expect(store.categories).toEqual([{ id: "cat-1", name: "Analytics", logo: null }])
 	})
 
 	it("clears keyword when search input is emptied", async () => {
@@ -131,8 +152,113 @@ describe("StoreCrewStore", () => {
 			page_size: 20,
 			keyword: undefined,
 			category_id: undefined,
+			market_type: undefined,
 		})
 		expect(store.keyword).toBe("")
+	})
+
+	it("queries a public-market category with MARKET and category_id", async () => {
+		const store = createStore()
+		vi.mocked(crewService.getStoreAgents).mockResolvedValueOnce({
+			list: [],
+			page: 1,
+			pageSize: 20,
+			total: 0,
+		})
+
+		await store.fetchAgents({ page: 1, market_type: "MARKET", category_id: "cat-1" })
+
+		expect(store.marketType).toBe("MARKET")
+		expect(store.categoryId).toBe("cat-1")
+		expect(crewService.getStoreAgents).toHaveBeenCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: undefined,
+			category_id: "cat-1",
+			market_type: "MARKET",
+		})
+	})
+
+	it("switches to the organization market without public category filters", async () => {
+		const store = createStore()
+		store.page = 3
+		store.total = 41
+		store.keyword = "assistant"
+		store.categoryId = "cat-1"
+		store.hasLoadedOnce = true
+		const deferred = createDeferred<{
+			list: []
+			page: number
+			pageSize: number
+			total: number
+		}>()
+		vi.mocked(crewService.getStoreAgents).mockReturnValueOnce(deferred.promise)
+
+		const fetchPromise = store.fetchAgents({
+			page: 1,
+			market_type: "ORGANIZATION",
+		})
+
+		expect(store.marketType).toBe("ORGANIZATION")
+		expect(store.categoryId).toBeUndefined()
+		expect(store.page).toBe(1)
+		expect(store.list).toEqual([])
+		expect(crewService.getStoreAgents).toHaveBeenCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: "assistant",
+			category_id: undefined,
+			market_type: "ORGANIZATION",
+		})
+
+		deferred.resolve({ list: [], page: 1, pageSize: 20, total: 0 })
+		await fetchPromise
+	})
+
+	it("switches back to the combined view without sending a market type", async () => {
+		const store = createStore()
+		store.marketType = "ORGANIZATION"
+		store.categoryId = undefined
+		vi.mocked(crewService.getStoreAgents).mockResolvedValueOnce({
+			list: [],
+			page: 1,
+			pageSize: 20,
+			total: 0,
+		})
+
+		await store.fetchAgents({ page: 1, market_type: undefined, category_id: undefined })
+
+		expect(store.marketType).toBeUndefined()
+		expect(crewService.getStoreAgents).toHaveBeenCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: undefined,
+			category_id: undefined,
+			market_type: undefined,
+		})
+	})
+
+	it("keeps the organization market filter when loading more", async () => {
+		const store = createStore()
+		store.marketType = "ORGANIZATION"
+		store.page = 1
+		store.total = 2
+		vi.mocked(crewService.getStoreAgents).mockResolvedValueOnce({
+			list: [],
+			page: 2,
+			pageSize: 20,
+			total: 2,
+		})
+
+		await store.loadMore()
+
+		expect(crewService.getStoreAgents).toHaveBeenCalledWith({
+			page: 2,
+			page_size: 20,
+			keyword: undefined,
+			category_id: undefined,
+			market_type: "ORGANIZATION",
+		})
 	})
 
 	it("keeps the latest search result when a previous request resolves later", async () => {
@@ -180,6 +306,7 @@ describe("StoreCrewStore", () => {
 					playbooks: [],
 					publisherType: "USER",
 					publisherName: "Stale User",
+					marketType: "MARKET",
 					categoryId: "1",
 					isAdded: false,
 					allowDelete: false,

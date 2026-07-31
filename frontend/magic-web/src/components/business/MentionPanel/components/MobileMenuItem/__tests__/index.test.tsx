@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 import MobileMenuItem from "../index"
 import type { MentionItem } from "../../../types"
 import { MentionItemType } from "../../../types"
+import { MentionPanelBuiltinItemId } from "../../../runtime/builtin/catalog-ids"
 
 vi.mock("../../../renderers/context", () => ({
 	useMentionItemRenderContextValue: () => ({}),
@@ -214,6 +215,21 @@ describe("MobileMenuItem", () => {
 			render(<MobileMenuItem item={baseItem} onClick={mockOnClick} />)
 
 			expect(screen.queryByText("➤")).not.toBeInTheDocument()
+		})
+
+		it("should render right arrow for the other-project files entry", () => {
+			render(
+				<MobileMenuItem
+					item={{
+						id: MentionPanelBuiltinItemId.OTHER_PROJECT_FILES,
+						type: "other_project_files",
+						name: "Other Projects/Files",
+					}}
+					onClick={mockOnClick}
+				/>,
+			)
+
+			expect(screen.getByText("➤")).toBeInTheDocument()
 		})
 
 		it("should render checkbox for folder items that can also enter children", () => {

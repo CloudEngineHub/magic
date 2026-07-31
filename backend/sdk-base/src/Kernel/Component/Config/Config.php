@@ -31,4 +31,13 @@ class Config extends Dot
     {
         return (int) $this->get('request_timeout', 30);
     }
+
+    /**
+     * 获取日志脱敏配置值对象。
+     */
+    public function getLogSanitizerConfig(): LogSanitizerConfig
+    {
+        $config = $this->get('log_sanitizer', []);
+        return new LogSanitizerConfig(is_array($config) ? $config : []);
+    }
 }

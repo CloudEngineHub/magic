@@ -1,5 +1,6 @@
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { resolveLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import { migratePlaybookSceneInspirationPrompts } from "@/pages/superMagic/utils/playbookInspirationPrompt"
 import type { PlaybookItem } from "@/apis/modules/crew"
 import type { SceneItem } from "../../types"
 
@@ -25,6 +26,6 @@ export function playbookToSceneItem(playbook: PlaybookItem): SceneItem {
 		theme_color: playbook.theme_color ?? undefined,
 		enabled: playbook.enabled,
 		update_at: playbook.updated_at,
-		configs: storedConfigs,
+		configs: migratePlaybookSceneInspirationPrompts(storedConfigs),
 	}
 }

@@ -72,16 +72,6 @@ function hasPathContinuationAfter(content: string, indexAfterClose: number): boo
 	return looksLikePathSegment(sliceUntilNextMentionOrClose(content, index))
 }
 
-function hasBareClosingBracketInPath(content: string, closeIndex: number): boolean {
-	const nextCloseIndex = content.indexOf("]", closeIndex + 1)
-	if (nextCloseIndex === -1) return false
-
-	const between = content.slice(closeIndex + 1, nextCloseIndex)
-	if (between.includes(FILE_PATH_MENTION_PREFIX)) return false
-
-	return looksLikePathSegment(between)
-}
-
 function parseUnquotedFilePath(
 	content: string,
 	start: number,
@@ -95,10 +85,8 @@ function parseUnquotedFilePath(
 			depth++
 		} else if (char === "]") {
 			if (depth === 0) {
-				if (hasBareClosingBracketInPath(content, index)) {
-					index++
-					continue
-				}
+				// A bare closing bracket deterministically ends an unquoted mention.
+				// Paths containing an unmatched `]` must use the quoted syntax instead.
 				return { path: content.slice(start, index), endIndex: index + 1 }
 			}
 

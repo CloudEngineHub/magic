@@ -18,11 +18,28 @@ import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { toast } from "sonner"
 
 /**
  * 拖拽类型
  */
 type DragType = "Files" | "text/plain"
+
+const DEFAULT_IMAGE_DROP_DIMENSIONS = { width: 1024, height: 1024 } as const
+const DEFAULT_VIDEO_DROP_DIMENSIONS = { width: 1280, height: 720 } as const
+
+interface PreparedCustomDropResource {
+	filePath: string
+	fileInfo: CustomDropFileInfo
+	isVideo: boolean
+	dimensions: { width: number; height: number }
+}
+
+interface CustomDropFileInfo {
+	src: string
+	fileName: string
+	expires_at?: string
+}
 
 /**
  * DropOverlayManager
@@ -41,6 +58,7 @@ export class DropOverlayManager {
 	private handleDragLeaveBound: ((e: DragEvent) => void) | null = null
 	private handleDragOverBound: ((e: DragEvent) => void) | null = null
 	private handleDropBound: ((e: DragEvent) => Promise<void>) | null = null
+	private dragEventHost?: HTMLElement
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
@@ -55,6 +73,21 @@ export class DropOverlayManager {
 		const t = this.canvas.t
 		if (t) return t(key, fallback)
 		return fallback
+	}
+
+	private isNestedResourceDropSurfaceEvent(e: DragEvent): boolean {
+		const target = e.target
+		return (
+			target instanceof Element &&
+			target.closest("[data-canvas-resource-drop-surface]") !== null
+		)
+	}
+
+	private yieldToNestedResourceDropSurface(e: DragEvent): boolean {
+		if (!this.isNestedResourceDropSurfaceEvent(e)) return false
+		this.dragCounter = 0
+		this.hideOverlay()
+		return true
 	}
 
 	/**
@@ -211,6 +244,8 @@ export class DropOverlayManager {
 	 * @param e 拖拽事件
 	 */
 	private handleDragEnter(e: DragEvent): void {
+		if (this.yieldToNestedResourceDropSurface(e)) return
+
 		e.preventDefault()
 		e.stopPropagation()
 
@@ -238,10 +273,12 @@ export class DropOverlayManager {
 	 * @param e 拖拽事件
 	 */
 	private handleDragLeave(e: DragEvent): void {
+		if (this.isNestedResourceDropSurfaceEvent(e)) return
+
 		e.preventDefault()
 		e.stopPropagation()
 
-		this.dragCounter--
+		this.dragCounter = Math.max(0, this.dragCounter - 1)
 
 		// 当完全离开容器时隐藏遮罩
 		if (this.dragCounter === 0) {
@@ -254,6 +291,8 @@ export class DropOverlayManager {
 	 * @param e 拖拽事件
 	 */
 	private handleDragOver(e: DragEvent): void {
+		if (this.yieldToNestedResourceDropSurface(e)) return
+
 		e.preventDefault()
 		e.stopPropagation()
 
@@ -286,6 +325,8 @@ export class DropOverlayManager {
 	 * @param e 拖拽事件
 	 */
 	private async handleDrop(e: DragEvent): Promise<void> {
+		if (this.yieldToNestedResourceDropSurface(e)) return
+
 		e.preventDefault()
 		e.stopPropagation()
 
@@ -308,18 +349,39 @@ export class DropOverlayManager {
 		// 检查是否有自定义拖拽数据（从文件列表或Tab拖拽）
 		const getDataTransferFileInfo =
 			this.canvas.magicConfigManager.config?.methods?.getDataTransferFileInfo
-		if (getDataTransferFileInfo && e.dataTransfer) {
-			const filePaths = await getDataTransferFileInfo(e.dataTransfer)
-			// 过滤有效的图片/视频文件路径
-			const validFilePaths = filePaths.filter(
-				(filePath) =>
-					validateCanvasFilePath(filePath).valid &&
-					getMediaResourcePathKind(filePath) !== "audio",
-			)
-			if (validFilePaths.length > 0) {
-				// 隐藏拖拽遮罩，进度遮罩由 handleCustomDragData 内部管理
-				this.hideOverlay()
-				await this.handleCustomDragData(validFilePaths, canvasPos)
+		if (
+			getDataTransferFileInfo &&
+			e.dataTransfer &&
+			e.dataTransfer.types.includes("text/plain")
+		) {
+			// 资源准备可能包含跨目录复制，必须在等待宿主解析期间就给出反馈。
+			this.hideOverlay()
+			const loadingText =
+				this.canvas.t?.("dropOverlay.preparingMedia", "正在添加媒体文件，请稍候...") ||
+				"正在添加媒体文件，请稍候..."
+			const loadingToastId = toast.loading(loadingText)
+
+			try {
+				const filePaths = await getDataTransferFileInfo(e.dataTransfer)
+				// 过滤有效的图片/视频文件路径
+				const validFilePaths = filePaths.filter(
+					(filePath) =>
+						validateCanvasFilePath(filePath).valid &&
+						getMediaResourcePathKind(filePath) !== "audio",
+				)
+				if (validFilePaths.length > 0) {
+					await this.handleCustomDragData(validFilePaths, canvasPos, loadingToastId)
+					return
+				}
+
+				toast.dismiss(loadingToastId)
+			} catch (error) {
+				console.warn("[DropOverlayManager] 准备拖拽资源失败:", error)
+				toast.error(
+					this.canvas.t?.("dropOverlay.mediaLoadFailed", "媒体文件加载失败，请重试") ||
+						"媒体文件加载失败，请重试",
+					{ id: loadingToastId },
+				)
 				return
 			}
 		}
@@ -333,7 +395,8 @@ export class DropOverlayManager {
 	 * 设置拖放事件处理
 	 */
 	private setupDragAndDropHandlers(): void {
-		const container = this.canvas.container
+		const eventHost = this.getOverlayHostElement()
+		this.dragEventHost = eventHost
 
 		// 绑定事件处理函数
 		this.handleDragEnterBound = this.handleDragEnter.bind(this)
@@ -342,10 +405,10 @@ export class DropOverlayManager {
 		this.handleDropBound = this.handleDrop.bind(this)
 
 		// 添加事件监听
-		container.addEventListener("dragenter", this.handleDragEnterBound)
-		container.addEventListener("dragleave", this.handleDragLeaveBound)
-		container.addEventListener("dragover", this.handleDragOverBound)
-		container.addEventListener("drop", this.handleDropBound)
+		eventHost.addEventListener("dragenter", this.handleDragEnterBound)
+		eventHost.addEventListener("dragleave", this.handleDragLeaveBound)
+		eventHost.addEventListener("dragover", this.handleDragOverBound)
+		eventHost.addEventListener("drop", this.handleDropBound)
 	}
 
 	/**
@@ -379,6 +442,23 @@ export class DropOverlayManager {
 	}
 
 	/**
+	 * 获取拖拽遮罩的宿主层。
+	 *
+	 * canvasContainer 自身是 z-index: 1 的 stacking context，元素工具栏在其
+	 * 同级的更高层。遮罩挂到父级后，才能真正覆盖工具栏；悬停遮罩本身会
+	 * 关闭 pointer-events，避免影响画布的 drop 事件。
+	 */
+	private getOverlayHostElement(): HTMLElement {
+		return this.canvas.container.parentElement ?? this.canvas.container
+	}
+
+	private ensureOverlayHostPosition(host: HTMLElement): void {
+		if (window.getComputedStyle(host).position === "static") {
+			host.style.position = "relative"
+		}
+	}
+
+	/**
 	 * 创建遮罩层 DOM 元素
 	 * @param text 提示文字
 	 * @param centerX 中心点 X 坐标
@@ -394,6 +474,7 @@ export class DropOverlayManager {
 		overlayElement.style.height = "100%"
 		overlayElement.style.backgroundColor = "rgba(255, 255, 255, 0.6)"
 		overlayElement.style.zIndex = "9999"
+		overlayElement.style.pointerEvents = "none"
 
 		const textElement = document.createElement("div")
 		textElement.textContent = text
@@ -426,7 +507,7 @@ export class DropOverlayManager {
 			this.overlayElement = undefined
 		}
 
-		const container = this.canvas.container
+		const container = this.getOverlayHostElement()
 		const center = this.getCanvasAreaCenter()
 		const text = this.getDropText(dataTransfer, dragType)
 
@@ -434,10 +515,7 @@ export class DropOverlayManager {
 		this.overlayElement = this.createOverlayElement(text, center.x, center.y)
 
 		// 确保 container 有相对定位
-		const containerPosition = window.getComputedStyle(container).position
-		if (containerPosition === "static") {
-			container.style.position = "relative"
-		}
+		this.ensureOverlayHostPosition(container)
 
 		// 插入到 container
 		container.appendChild(this.overlayElement)
@@ -465,15 +543,12 @@ export class DropOverlayManager {
 	private showLoadingOverlay(): void {
 		// 如果遮罩层不存在，先创建它
 		if (!this.overlayElement) {
-			const container = this.canvas.container
+			const container = this.getOverlayHostElement()
 			const center = this.getCanvasAreaCenter()
 			this.overlayElement = this.createOverlayElement("", center.x, center.y)
 
 			// 确保 container 有相对定位
-			const containerPosition = window.getComputedStyle(container).position
-			if (containerPosition === "static") {
-				container.style.position = "relative"
-			}
+			this.ensureOverlayHostPosition(container)
 
 			// 插入到 container
 			container.appendChild(this.overlayElement)
@@ -502,15 +577,12 @@ export class DropOverlayManager {
 	 * 显示批量处理进度遮罩
 	 */
 	public showProgressOverlay(current: number, total: number): void {
-		const container = this.canvas.container
+		const container = this.getOverlayHostElement()
 
 		if (!this.progressOverlayElement) {
 			this.progressOverlayElement = this.createProgressOverlayElement(current, total)
 
-			const containerPosition = window.getComputedStyle(container).position
-			if (containerPosition === "static") {
-				container.style.position = "relative"
-			}
+			this.ensureOverlayHostPosition(container)
 			container.appendChild(this.progressOverlayElement)
 		} else {
 			this.updateProgressOverlay(current, total)
@@ -820,81 +892,59 @@ export class DropOverlayManager {
 		return SUPPORTED_VIDEO_EXTENSIONS.some((ext) => lowerCasePath.endsWith(ext))
 	}
 
-	/**
-	 * 获取文件信息列表
-	 * @param filePaths 文件路径数组
-	 * @returns 有效的文件信息列表
-	 */
-	private async getFileInfos(
-		filePaths: string[],
-		onProgress?: (current: number) => void,
-	): Promise<
-		Array<{
-			filePath: string
-			fileInfo: { src: string; fileName: string; expires_at?: string }
-		}>
-	> {
+	private async getCustomDropFileInfo(filePath: string): Promise<CustomDropFileInfo> {
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo || filePaths.length === 0) {
-			return []
+		if (!getFileInfo) {
+			throw new Error("File info provider is unavailable")
 		}
 
-		// 全部并发发起请求——底层 designFileInfoCache 会自动合并为单次批量 API 调用
-		let completed = 0
-		const fileInfos = await Promise.all(
-			filePaths.map(async (filePath) => {
-				try {
-					const fileInfo = await getFileInfo(filePath, {
-						useImageProcess: !this.isVideoFilePath(filePath),
-					})
-					return { filePath, fileInfo }
-				} catch (error) {
-					console.warn(`[DropOverlayManager] 获取文件信息失败: ${filePath}`, error)
-					return null
-				} finally {
-					completed++
-					if (onProgress) {
-						onProgress(completed)
-					}
-				}
-			}),
-		)
-
-		// 过滤掉失败的文件
-		return fileInfos.filter(
-			(
-				item,
-			): item is {
-				filePath: string
-				fileInfo: { src: string; fileName: string; expires_at?: string }
-			} => item !== null && item.fileInfo?.src !== undefined,
-		)
+		const fileInfo = await getFileInfo(filePath, {
+			useImageProcess: !this.isVideoFilePath(filePath),
+		})
+		if (!fileInfo || !fileInfo.src) {
+			throw new Error("File info does not contain a resource URL")
+		}
+		return fileInfo
 	}
 
-	/**
-	 * 获取媒体尺寸列表
-	 * @param fileInfos 文件信息列表
-	 * @returns 媒体尺寸列表和对应的临时元素 ID
-	 */
-	private async getMediaDimensions(
-		fileInfos: Array<{ filePath: string; fileInfo: { src: string } }>,
-	): Promise<Array<{ width: number; height: number; tempElementId: string }>> {
-		return Promise.all(
-			fileInfos.map(async ({ filePath, fileInfo }) => {
-				const tempElementId = generateElementId()
-				try {
-					const dimensions = this.isVideoFilePath(filePath)
-						? await this.getVideoDimensionsFromUrl(fileInfo.src)
-						: await this.getImageDimensionsFromUrl(filePath)
-					return { ...dimensions, tempElementId }
-				} catch (error) {
-					console.warn(`[DropOverlayManager] 获取媒体尺寸失败: ${filePath}`, error)
-					return this.isVideoFilePath(filePath)
-						? { width: 1280, height: 720, tempElementId }
-						: { width: 1024, height: 1024, tempElementId }
-				}
-			}),
-		)
+	private getCustomDropPlaceholderDimensions(filePath: string): {
+		width: number
+		height: number
+	} {
+		return this.isVideoFilePath(filePath)
+			? { ...DEFAULT_VIDEO_DROP_DIMENSIONS }
+			: { ...DEFAULT_IMAGE_DROP_DIMENSIONS }
+	}
+
+	private async getCustomDropMediaDimensions(
+		filePath: string,
+		isVideo: boolean,
+		fileInfo: CustomDropFileInfo,
+	): Promise<{ width: number; height: number }> {
+		try {
+			return isVideo
+				? await this.getVideoDimensionsFromUrl(fileInfo.src)
+				: await this.getImageDimensionsFromUrl(filePath)
+		} catch (error) {
+			console.warn(`[DropOverlayManager] 获取媒体尺寸失败: ${filePath}`, error)
+			return this.getCustomDropPlaceholderDimensions(filePath)
+		}
+	}
+
+	private async prepareCustomDropResource(filePath: string): Promise<PreparedCustomDropResource> {
+		const isVideo = this.isVideoFilePath(filePath)
+		const fileInfo = await this.getCustomDropFileInfo(filePath)
+
+		if (isVideo) {
+			this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
+			this.canvas.videoResourceManager.loadResource(filePath)
+		} else {
+			this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
+			this.canvas.imageResourceManager.loadResource(filePath)
+		}
+
+		const dimensions = await this.getCustomDropMediaDimensions(filePath, isVideo, fileInfo)
+		return { filePath, fileInfo, isVideo, dimensions }
 	}
 
 	/**
@@ -939,7 +989,6 @@ export class DropOverlayManager {
 			zIndex,
 		}
 
-		// 创建元素
 		this.canvas.elementManager.create(imageElement)
 		return elementId
 	}
@@ -995,94 +1044,95 @@ export class DropOverlayManager {
 	private async handleCustomDragData(
 		filePaths: string[],
 		anchorPosition: { x: number; y: number },
+		loadingToastId?: ReturnType<typeof toast.loading>,
 	): Promise<void> {
-		// 禁用历史记录
-		this.canvas.historyManager.disable()
+		if (filePaths.length === 0) return
 
-		const total = filePaths.length
-		const showProgress = total > 1
-		if (showProgress) {
-			this.showProgressOverlay(0, total)
+		const activeLoadingToastId =
+			loadingToastId ??
+			toast.loading(
+				this.canvas.t?.("dropOverlay.preparingMedia", "正在加载媒体文件，请稍候...") ||
+					"正在加载媒体文件，请稍候...",
+			)
+
+		const preparationResults = await Promise.allSettled(
+			filePaths.map((filePath) => this.prepareCustomDropResource(filePath)),
+		)
+		const preparedResources = preparationResults.flatMap((result) =>
+			result.status === "fulfilled" ? [result.value] : [],
+		)
+		let failedCount = preparationResults.length - preparedResources.length
+
+		if (preparedResources.length === 0) {
+			toast.error(
+				this.canvas.t?.("dropOverlay.mediaLoadFailed", "媒体文件加载失败，请重试") ||
+					"媒体文件加载失败，请重试",
+				{ id: activeLoadingToastId },
+			)
+			return
 		}
 
+		const positions = calculateGridImageLayout(
+			preparedResources.map(({ dimensions }) => dimensions),
+			anchorPosition,
+		)
+		const existingNames = getAllExistingNames(this.canvas.elementManager)
+		const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
+		const createdElementIds: string[] = []
+
+		this.canvas.historyManager.disable()
 		try {
-			// 获取所有文件信息（逐个获取，实时更新进度）
-			const validFileInfos = await this.getFileInfos(
-				filePaths,
-				showProgress
-					? (current) => {
-							this.updateProgressOverlay(current, total)
-						}
-					: undefined,
-			)
-			if (validFileInfos.length === 0) {
-				return
-			}
-
-			const mediaDimensionsWithIds = await this.getMediaDimensions(validFileInfos)
-
-			const mediaDimensions = mediaDimensionsWithIds.map(({ width, height }) => ({
-				width,
-				height,
-			}))
-
-			const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
-
-			// 生成唯一的名称
-			const existingNames = getAllExistingNames(this.canvas.elementManager)
-			const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
-
-			const createdElementIds: string[] = []
-			for (let i = 0; i < validFileInfos.length; i++) {
-				const { filePath, fileInfo } = validFileInfos[i]
-				const { width, height } = mediaDimensionsWithIds[i]
+			for (let i = 0; i < preparedResources.length; i++) {
+				const { filePath, fileInfo, isVideo, dimensions } = preparedResources[i]
 				const position = positions[i]
 				const zIndex = maxZIndex + 1 + i
-
-				const elementId = this.isVideoFilePath(filePath)
-					? this.createVideoElement(
-							filePath,
-							fileInfo,
-							{ width, height },
-							position,
-							zIndex,
-							existingNames,
-						)
-					: this.createImageElement(
-							filePath,
-							fileInfo,
-							{ width, height },
-							position,
-							zIndex,
-							existingNames,
-						)
-				createdElementIds.push(elementId)
-
-				if (this.isVideoFilePath(filePath)) {
-					this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
-					this.canvas.videoResourceManager.loadResource(filePath)
-				} else {
-					this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
-					this.canvas.imageResourceManager.loadResource(filePath)
+				try {
+					const elementId = isVideo
+						? this.createVideoElement(
+								filePath,
+								fileInfo,
+								dimensions,
+								position,
+								zIndex,
+								existingNames,
+							)
+						: this.createImageElement(
+								filePath,
+								fileInfo,
+								dimensions,
+								position,
+								zIndex,
+								existingNames,
+							)
+					createdElementIds.push(elementId)
+				} catch (error) {
+					failedCount++
+					console.warn(`[DropOverlayManager] 创建拖拽资源失败: ${filePath}`, error)
 				}
 			}
-
-			// 重新启用历史记录并立即记录一次
-			this.canvas.historyManager.enable()
-			this.canvas.historyManager.recordHistoryImmediate()
-
-			// 聚焦到所有新创建的元素
-			if (createdElementIds.length > 0) {
-				this.canvas.selectionManager.selectMultiple(createdElementIds)
-			}
-		} catch (error) {
-			// 确保异常情况下也能重新启用历史记录
-			this.canvas.historyManager.enable()
-			console.error("[DropOverlayManager] 处理自定义拖拽数据失败:", error)
 		} finally {
-			if (showProgress) {
-				this.hideProgressOverlay()
-			}
+			this.canvas.historyManager.enable()
+		}
+
+		if (createdElementIds.length > 0) {
+			this.canvas.historyManager.recordHistoryImmediate()
+			this.canvas.selectionManager.selectMultiple(createdElementIds)
+		}
+
+		if (failedCount >= filePaths.length) {
+			toast.error(
+				this.canvas.t?.("dropOverlay.mediaLoadFailed", "媒体文件加载失败，请重试") ||
+					"媒体文件加载失败，请重试",
+				{ id: activeLoadingToastId },
+			)
+		} else if (failedCount > 0) {
+			const failureText =
+				this.canvas
+					.t?.("dropOverlay.someMediaLoadFailed", "部分媒体文件加载失败")
+					?.replace("{{failed}}", String(failedCount)) || "部分媒体文件加载失败"
+			toast.warning(failureText, { id: activeLoadingToastId })
+		} else {
+			toast.dismiss(activeLoadingToastId)
 		}
 	}
 
@@ -1090,25 +1140,26 @@ export class DropOverlayManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
-		const container = this.canvas.container
+		const eventHost = this.dragEventHost ?? this.getOverlayHostElement()
 
 		// 移除事件监听
 		if (this.handleDragEnterBound) {
-			container.removeEventListener("dragenter", this.handleDragEnterBound)
+			eventHost.removeEventListener("dragenter", this.handleDragEnterBound)
 			this.handleDragEnterBound = null
 		}
 		if (this.handleDragLeaveBound) {
-			container.removeEventListener("dragleave", this.handleDragLeaveBound)
+			eventHost.removeEventListener("dragleave", this.handleDragLeaveBound)
 			this.handleDragLeaveBound = null
 		}
 		if (this.handleDragOverBound) {
-			container.removeEventListener("dragover", this.handleDragOverBound)
+			eventHost.removeEventListener("dragover", this.handleDragOverBound)
 			this.handleDragOverBound = null
 		}
 		if (this.handleDropBound) {
-			container.removeEventListener("drop", this.handleDropBound)
+			eventHost.removeEventListener("drop", this.handleDropBound)
 			this.handleDropBound = null
 		}
+		this.dragEventHost = undefined
 
 		// 清理遮罩层
 		this.hideOverlay()

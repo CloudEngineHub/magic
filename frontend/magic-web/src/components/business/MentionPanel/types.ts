@@ -38,6 +38,7 @@ export const MentionBusinessItemType = {
 	AGENT: "agent",
 	SKILL: "skill",
 	TOOL: "tool",
+	PROJECT: "project",
 	PROJECT_FILE: "project_file",
 	UPLOAD_FILE: "upload_file",
 	CLOUD_FILE: "cloud_file",
@@ -90,12 +91,22 @@ export interface ToolMentionData {
 	description?: string
 }
 
+export interface ProjectMentionData {
+	project_id: string
+	/** Display name retained for rendering the mention chip after insertion. */
+	project_name?: string
+}
+
 export interface ProjectFileMentionData {
 	file_id: string
 	file_name: string
 	file_path: string
 	relative_file_path?: string
 	file_extension: string
+	/** Project that owns this file. Optional for compatibility with historical mention data. */
+	project_id?: string
+	/** Frontend-only source project name used to render cross-project mention chips. */
+	project_name?: string
 	file_size?: number
 	is_hidden?: boolean
 	/** Internal: source project for project-file mentions pasted outside their original project. */
@@ -111,6 +122,10 @@ export interface DirectoryMentionData {
 	directory_name: string
 	directory_path: string
 	directory_metadata: DirectoryMentionMetadata
+	/** Project that owns this directory. */
+	project_id?: string
+	/** Frontend-only source project name used to render cross-project mention chips. */
+	project_name?: string
 	/** Internal: source project for directory mentions pasted outside their original project. */
 	source_project_id?: string
 	/** Internal: source directory id before copying into the target project. */
@@ -197,6 +212,7 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.AGENT]: AgentMentionData
 	[MentionBusinessItemType.SKILL]: SkillMentionData
 	[MentionBusinessItemType.TOOL]: ToolMentionData
+	[MentionBusinessItemType.PROJECT]: ProjectMentionData
 	[MentionBusinessItemType.PROJECT_FILE]: ProjectFileMentionData
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData
 	[MentionBusinessItemType.CLOUD_FILE]: CloudFileMentionData
@@ -387,6 +403,13 @@ export interface SkillMentionItem extends MentionBusinessItem<
 export interface ToolMentionItem extends MentionBusinessItem<typeof MentionBusinessItemType.TOOL> {
 	type: typeof MentionBusinessItemType.TOOL
 	data: ToolMentionData
+}
+
+export interface ProjectMentionItem extends MentionBusinessItem<
+	typeof MentionBusinessItemType.PROJECT
+> {
+	type: typeof MentionBusinessItemType.PROJECT
+	data: ProjectMentionData
 }
 
 export interface ProjectFileMentionItem extends MentionBusinessItem<

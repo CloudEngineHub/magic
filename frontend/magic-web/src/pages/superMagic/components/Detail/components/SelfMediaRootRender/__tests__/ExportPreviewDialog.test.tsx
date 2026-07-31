@@ -215,10 +215,8 @@ describe("ExportPreviewDialog", () => {
 		)
 	})
 
-	it("keeps long-image export disabled until every selected preview card is ready", () => {
+	it("keeps every card export disabled until all selected preview cards are ready", () => {
 		const { onConfirm } = renderDialog({ posts: [manyCardPost], initialPostIndex: 0 })
-
-		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
 
 		const confirm = screen.getByTestId("self-media-export-confirm") as HTMLButtonElement
 		expect(confirm.disabled).toBe(true)

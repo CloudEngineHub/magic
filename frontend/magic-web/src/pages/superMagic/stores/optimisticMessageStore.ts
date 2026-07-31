@@ -46,6 +46,16 @@ export namespace OptimisticMessage {
 		pending_message?: PendingUserMessageEnvelope
 	}
 
+	/** Identifies the User message that currently anchors revoke-edit mode for one topic. */
+	export interface RevokedAnchorPayload {
+		chat_topic_id: string
+		seq_id: string
+	}
+
+	export interface RevokedAnchor {
+		seq_id: string
+	}
+
 	/** In-memory structure of topicOptimisticMap: chat_topic_id -> app_message_id -> sidecar. */
 	export type TopicOptimisticMap = Record<string, Record<string, StatusRecord>>
 }
@@ -243,6 +253,7 @@ export function createOptimisticMessageStore() {
 	/** Optimistic store only drives send status; persisted snapshots are written back to SuperMagicStore on recovery. */
 	const store = {
 		topicOptimisticMap: {} as OptimisticMessage.TopicOptimisticMap,
+		activeRevokedAnchorMap: {} as Record<string, OptimisticMessage.RevokedAnchor>,
 		hydratedStorageKey: undefined as string | undefined,
 
 		/** Reads local snapshot on first topic entry; only converges expired sending to failed. */
@@ -421,6 +432,29 @@ export function createOptimisticMessageStore() {
 		getStatus(chat_topic_id?: string, app_message_id?: string) {
 			if (!chat_topic_id || !app_message_id) return undefined
 			return store.topicOptimisticMap[chat_topic_id]?.[app_message_id]?.status
+		},
+
+		/** Keeps the selected User boundary stable while HTTP message statuses are converging. */
+		setActiveRevokedAnchor({ chat_topic_id, seq_id }: OptimisticMessage.RevokedAnchorPayload) {
+			if (!chat_topic_id || !seq_id) return
+			store.activeRevokedAnchorMap = {
+				...store.activeRevokedAnchorMap,
+				[chat_topic_id]: { seq_id },
+			}
+		},
+
+		/** Returns the current revoke-edit User boundary without changing Canonical messages. */
+		getActiveRevokedAnchor(chat_topic_id?: string) {
+			if (!chat_topic_id) return undefined
+			return store.activeRevokedAnchorMap[chat_topic_id]
+		},
+
+		/** Clears the UI-only boundary after restore, confirmation, or removal from the topic. */
+		clearActiveRevokedAnchor(chat_topic_id?: string) {
+			if (!chat_topic_id || !store.activeRevokedAnchorMap[chat_topic_id]) return
+			const nextActiveRevokedAnchorMap = { ...store.activeRevokedAnchorMap }
+			delete nextActiveRevokedAnchorMap[chat_topic_id]
+			store.activeRevokedAnchorMap = nextActiveRevokedAnchorMap
 		},
 
 		/** Records failed optimistic messages to temporarily hide when entering revoke-edit mode. */

@@ -159,6 +159,7 @@ export const generateChatApi = (fetch: HttpClient, socket: ChatWebSocket) => ({
 		return fetch.post<PaginationResponse<ConversationFromService>>(
 			genRequestUrl("/api/v1/im/conversations/queries"),
 			{ ids, ...options },
+			{ enableRequestUnion: true },
 		)
 	},
 

@@ -1857,6 +1857,83 @@ function getInlineInspectorFallbackScript(enable = false): string {
 	`
 }
 
+/**
+ * The cross-origin sandbox cannot be measured from its parent. Document-flow shares report
+ * their natural dimensions so the parent can give the iframe an equal height.
+ */
+const getContentMetricsReporterScript = (parentOrigin: string) => `
+	(function() {
+		if (window.__MAGIC_DOCUMENT_FLOW_METRICS__) return;
+		window.__MAGIC_DOCUMENT_FLOW_METRICS__ = true;
+
+		var frameId = 0;
+		var settledTimer = null;
+		var parentOrigin = ${JSON.stringify(parentOrigin)};
+
+		function getDimension(property) {
+			var root = document.documentElement;
+			var body = document.body;
+			var rectProperty = property === "scrollHeight" ? "height" : "width";
+			return Math.ceil(Math.max(
+				root ? Number(root[property]) || 0 : 0,
+				body ? Number(body[property]) || 0 : 0,
+				root ? root.getBoundingClientRect()[rectProperty] : 0,
+				body ? body.getBoundingClientRect()[rectProperty] : 0
+			));
+		}
+
+		function report(phase) {
+			try {
+				window.parent.postMessage({
+					type: "contentMetrics",
+					contentWidth: getDimension("scrollWidth"),
+					contentHeight: getDimension("scrollHeight"),
+					phase: phase
+				}, parentOrigin);
+			} catch (error) {}
+		}
+
+		function scheduleReport() {
+			if (frameId) cancelAnimationFrame(frameId);
+			frameId = requestAnimationFrame(function() {
+				frameId = 0;
+				report("initial");
+			});
+			if (settledTimer) clearTimeout(settledTimer);
+			settledTimer = setTimeout(function() { report("settled"); }, 200);
+		}
+
+		function observe() {
+			var root = document.documentElement;
+			var body = document.body;
+			if (!root || !body) return;
+			if (typeof ResizeObserver !== "undefined") {
+				var resizeObserver = new ResizeObserver(scheduleReport);
+				resizeObserver.observe(root);
+				resizeObserver.observe(body);
+			}
+			if (typeof MutationObserver !== "undefined") {
+				var mutationObserver = new MutationObserver(scheduleReport);
+				mutationObserver.observe(root, {
+					attributes: true,
+					attributeFilter: ["class", "style"],
+					childList: true,
+					subtree: true,
+					characterData: true
+				});
+			}
+			scheduleReport();
+		}
+
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", observe, { once: true });
+		} else {
+			observe();
+		}
+		window.addEventListener("load", scheduleReport, { once: true });
+	})();
+`
+
 //TAILWIND_CSS_URL和ECHARTS_JS_URL注入后不删除，其他资源注入后删除
 export const getFullContent = (
 	decodedContent: string,
@@ -1928,6 +2005,13 @@ export const getFullContent = (
 		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
 		${getLinkHandlingScript()}
 		${getNestedIframeInterceptorScript()}
+		${
+			options.reportContentMetrics
+				? getContentMetricsReporterScript(
+						options.contentMetricsTargetOrigin || window.location.origin,
+					)
+				: ""
+		}
 		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
 		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
 	`
@@ -2007,6 +2091,9 @@ interface GetFullContentOptions {
 	dynamicInterception?: DynamicResourceInterceptorOptions
 	containOverscroll?: boolean
 	hideVerticalScroll?: boolean
+	reportContentMetrics?: boolean
+	/** Origin of the React page that owns the sandbox iframe. */
+	contentMetricsTargetOrigin?: string
 	disableParentClickBridge?: boolean
 	enableInlineInspectorFallback?: boolean
 	postMessageTargetStrategy?: PostMessageTargetStrategy

@@ -42,6 +42,8 @@ describe("FrameManager drag stacking", () => {
 
 		expect(contentLayer.getChildren().map((node) => node.id())).toEqual(["frame", "element"])
 		expect(elementNode.position()).toEqual({ x: 20, y: 30 })
+		expect(manager.getDragTargetParentId("element")).toBeNull()
+		expect(manager.getDragTargetParentId("other")).toBeUndefined()
 	})
 
 	it("raises multiple same-parent elements while preserving their visual order", () => {

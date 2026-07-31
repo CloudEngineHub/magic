@@ -90,7 +90,7 @@ export async function prepareSlideNodes({
 		})
 
 		ensureNotAborted(signal)
-		await activeResolveCaptures(pptNodes, signal)
+		await activeResolveCaptures(pptNodes, signal, onResourceError)
 		await activeMaterializeVideoCoverNodes(pptNodes, signal, onResourceError)
 		await activeMaterializePptImageNodes(pptNodes, signal, onResourceError)
 		return { pptNodes, totalWidth, totalHeight, bodyBackground }

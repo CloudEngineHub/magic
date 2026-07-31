@@ -75,6 +75,29 @@
 	padding: 1.5rem 4rem 30vh;
 }
 
+// Pure shares use browser scrolling for whole-page screenshots. Do not retain
+// the editor's usual viewport-bounded scroll containers in that mode.
+.simple-editor-wrapper.simple-editor-document-flow {
+	height: auto;
+	min-height: 100dvh;
+	overflow: visible;
+	overscroll-behavior: auto;
+}
+
+.simple-editor-wrapper.simple-editor-document-flow .simple-editor-content {
+	height: auto;
+	min-height: 100dvh;
+	flex: none;
+	overflow: visible;
+}
+
+.simple-editor-wrapper.simple-editor-document-flow
+	.simple-editor-content
+	.tiptap.ProseMirror.simple-editor {
+	min-height: 100dvh;
+	flex: none;
+}
+
 @media screen and (max-width: 480px) {
 	.simple-editor-wrapper .simple-editor-content .tiptap.ProseMirror.simple-editor {
 		padding: 1rem 1.5rem 30vh;

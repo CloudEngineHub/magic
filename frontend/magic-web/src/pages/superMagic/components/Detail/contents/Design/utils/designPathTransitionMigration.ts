@@ -11,6 +11,7 @@ import type { DesignAttachmentIndex } from "./designAttachmentIndex"
 import {
 	resolveDesignAttachment,
 	toDesignDslPath,
+	toDesignDslPathFromWorkspacePath,
 	toWorkspaceRelativeCandidates,
 	rewriteLayerElementsToDesignDslPaths,
 } from "./designPath"
@@ -40,8 +41,8 @@ function areSameWorkspacePath(left: string, right: string): boolean {
  * 过渡期历史裸路径修复。
  *
  * `images/a.png` 在旧 DSL 中可能表示当前画布资源，也可能表示工作区根资源。
- * 仅当附件树能唯一确认它属于当前画布时，才收口为 `./images/a.png`；其它情况
- * 原样保留，避免发布后将工作区资源误写到当前画布目录。
+ * 附件树唯一确认当前画布资源时收口为 `./images/a.png`；唯一确认工作区根资源时
+ * 收口为 `/images/a.png`。附件缺失或多候选歧义时原样保留，避免猜错归属。
  *
  * 这是历史数据平滑迁移逻辑。所有新建资源仍应直接产出显式 `./images|videos|audios/...`。
  */
@@ -71,14 +72,13 @@ export function normalizeDesignPathForTransitionMigration(
 	const resolved = resolveDesignAttachment(path, attachmentContext, {
 		mode: "legacy-recovery",
 	})
-	if (
-		resolved.status !== "found" ||
-		!areSameWorkspacePath(resolved.resolvedPath, currentCanvasCandidate)
-	) {
-		return path
+	if (resolved.status !== "found") return path
+
+	if (areSameWorkspacePath(resolved.resolvedPath, currentCanvasCandidate)) {
+		return toDesignDslPath(path, attachmentContext)
 	}
 
-	return toDesignDslPath(path, attachmentContext)
+	return toDesignDslPathFromWorkspacePath(resolved.resolvedPath, attachmentContext)
 }
 
 export function rewriteDesignLayerPathsForTransitionMigration(

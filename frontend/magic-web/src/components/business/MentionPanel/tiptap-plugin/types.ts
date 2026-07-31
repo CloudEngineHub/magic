@@ -16,12 +16,14 @@ import type {
 	UploadFileMentionData,
 	CloudFileMentionData,
 	ToolMentionData,
+	ProjectMentionData,
 	DirectoryMentionData,
 	CanvasMarkerMentionData,
 	DataService,
 	MentionSelectContext,
 } from "../types"
 import { MentionItemType, ProjectFileMentionData } from "../types"
+import { LANGUAGE_PACKS, normalizeLocale } from "../i18n"
 import type { Language } from "../i18n/types"
 import {
 	getSelectedCanvasMarkerMentionSuggestion,
@@ -174,6 +176,8 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			}`
 		case MentionItemType.TOOL:
 			return `tool:${(data as ToolMentionData)?.id || ""}`
+		case MentionItemType.PROJECT:
+			return `project:${(data as ProjectMentionData)?.project_id || ""}`
 		case MentionItemType.DESIGN_MARKER:
 			const canvasMarkData = data as CanvasMarkerMentionData
 			const markerData = normalizeCanvasMarkerMentionData(canvasMarkData)
@@ -190,8 +194,17 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 	}
 }
 
+function getProjectDisplayName(data: Record<string, unknown>, language?: string) {
+	const projectName = (data.project_name as string)?.trim()
+	// Keep unnamed project references identifiable instead of silently dropping their project segment.
+	return projectName || LANGUAGE_PACKS[normalizeLocale(language || "")].unnamedProject
+}
+
 // Get display name for mention
-export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
+export function getMentionDisplayName(
+	attrs: TiptapMentionAttributes,
+	language = i18n.resolvedLanguage || i18n.language,
+): string {
 	const data = attrs?.data as Record<string, unknown>
 
 	if (!data) return ""
@@ -205,15 +218,26 @@ export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
 			return (data?.agent_name as string) || "Agent"
 		case MentionItemType.SKILL:
 			return (data?.name as string) || "Skill"
-		case MentionItemType.PROJECT_FILE:
+		case MentionItemType.PROJECT_FILE: {
+			const fileName = (data?.file_name as string) || "File"
+			return data?.project_id
+				? `${getProjectDisplayName(data, language)}/${fileName}`
+				: fileName
+		}
 		case MentionItemType.UPLOAD_FILE:
 			return (data?.file_name as string) || "File"
 		case MentionItemType.CLOUD_FILE:
 			return (data?.file_name as string) || "Cloud File"
-		case MentionItemType.FOLDER:
-			return (data?.directory_name as string) || "Folder"
+		case MentionItemType.FOLDER: {
+			const directoryName = (data?.directory_name as string) || "Folder"
+			return data?.project_id
+				? `${getProjectDisplayName(data, language)}/${directoryName}`
+				: directoryName
+		}
 		case MentionItemType.TOOL:
 			return (data?.name as string) || "Tool"
+		case MentionItemType.PROJECT:
+			return getProjectDisplayName(data, language)
 		case MentionItemType.DESIGN_MARKER:
 			const markerData = normalizeCanvasMarkerMentionData(data)
 			if (markerData?.loading === true) return t ? t("common.loading", "加载中...") : ""
@@ -243,6 +267,8 @@ export function getMentionDescription(attrs: TiptapMentionAttributes | null | un
 			return (data?.directory_path as string) || ""
 		case MentionItemType.TOOL:
 			return (data?.description as string) || ""
+		case MentionItemType.PROJECT:
+			return ""
 		case MentionItemType.DESIGN_MARKER:
 			const markerData = normalizeCanvasMarkerMentionData(data)
 			return markerData
@@ -279,6 +305,7 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return (data as ToolMentionData)?.icon as string
 		case MentionItemType.CLOUD_FILE:
 			return "ts-cloud-doc"
+		case MentionItemType.PROJECT:
 		case MentionItemType.FOLDER:
 			return "ts-folder"
 		default:

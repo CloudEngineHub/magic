@@ -202,13 +202,9 @@ class MagicUserTaskAppService extends AbstractAppService
         ];
     }
 
-    public function getTask(int $taskId): array
+    public function getTask(int $taskId, MagicUserAuthorization $authorization): array
     {
-        $task = $this->taskSchedulerDomainService->getByCrontabId($taskId);
-
-        if (! $task) {
-            ExceptionBuilder::throw(UserTaskErrorCode::TASK_NOT_FOUND);
-        }
+        $task = $this->getAuthorizedTask($taskId, $authorization);
         $task = UserTaskResponseDTO::entityToDTO($task);
         return $task->toArray();
     }
@@ -216,10 +212,7 @@ class MagicUserTaskAppService extends AbstractAppService
     #[Transactional]
     public function updateTask(int $taskId, UserTaskDTO $userTaskDTO, UserTaskValueDTO $userTaskValueDTO, MagicUserAuthorization $authorization)
     {
-        $task = $this->taskSchedulerDomainService->getByCrontabId($taskId);
-        if (! $task) {
-            ExceptionBuilder::throw(UserTaskErrorCode::TASK_NOT_FOUND);
-        }
+        $task = $this->getAuthorizedTask($taskId, $authorization);
 
         // Validate authorization for agent_id and conversation_id (if provided)
         if (! empty($userTaskDTO->getConversationId())) {
@@ -294,12 +287,9 @@ class MagicUserTaskAppService extends AbstractAppService
     }
 
     #[Transactional]
-    public function deleteTask(int $taskId)
+    public function deleteTask(int $taskId, MagicUserAuthorization $authorization)
     {
-        $task = $this->taskSchedulerDomainService->getByCrontabId($taskId);
-        if (! $task) {
-            ExceptionBuilder::throw(UserTaskErrorCode::TASK_NOT_FOUND);
-        }
+        $task = $this->getAuthorizedTask($taskId, $authorization);
         $this->taskSchedulerDomainService->clearByExternalId($task->getExternalId());
     }
 
@@ -361,6 +351,19 @@ class MagicUserTaskAppService extends AbstractAppService
         $receiveUserId = $user_task['agent_user_id'];
         $topicId = $user_task['topic_id'] ?? '';
         di(MagicChatMessageAppService::class)->userSendMessageToAgent($receiveSeqDTO, $senderUserId, $receiveUserId, $appMessageId, false, null, ConversationType::Ai, $topicId);
+    }
+
+    /**
+     * 获取当前用户有权访问的定时任务.
+     */
+    private function getAuthorizedTask(int $taskId, MagicUserAuthorization $authorization): TaskSchedulerCrontab
+    {
+        $task = $this->taskSchedulerDomainService->getByCrontabId($taskId);
+        if (! $task || $task->getCreator() !== $authorization->getId()) {
+            ExceptionBuilder::throw(UserTaskErrorCode::TASK_NOT_FOUND);
+        }
+
+        return $task;
     }
 
     // 后台任务,不会模拟用户发送消息,  预留方法，暂时没有用到

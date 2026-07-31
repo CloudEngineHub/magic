@@ -58,6 +58,7 @@ import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
 import { runActiveEditor } from "@/pages/superMagic/components/MessageEditor/utils/editorLifecycle"
+import { shouldUseDesktopEnterBehavior } from "@/utils/devices"
 
 interface ReEditPayload {
 	content?: JSONContent | string
@@ -521,6 +522,7 @@ export default function useMobileComposerLogic({
 		onMentionRemoveItems: handleMentionRemoveItems,
 		selectedTopic,
 		onKeyboardInput: handleKeyboardInput,
+		sendWhenEnter: shouldUseDesktopEnterBehavior(),
 		shouldEnableMention,
 		sendEnabled,
 		aiCompletionEnabled: resolvedModules.aiCompletion.enabled,

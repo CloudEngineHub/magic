@@ -74,9 +74,7 @@ function AIIndexRedirect() {
 		canAccessAIInternalEmployeeSkill(userPermissions, isSuperAdmin)
 			? RoutePath.AIEmployeeReview
 			: null,
-		!isOfficialOrg &&
-		!isPersonalOrganization &&
-		canAccessAIDataStatistics(userPermissions, isSuperAdmin)
+		!isPersonalOrganization && canAccessAIDataStatistics(userPermissions, isSuperAdmin)
 			? RoutePath.AIDataDashboardMemberAnalysis
 			: null,
 		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
@@ -194,13 +192,13 @@ export default {
 					title: "nav.aiSubMenu.memberAnalysis",
 					validate: canAccessAIDataStatistics,
 				},
-				// {
-				// 	name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
-				// 	path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
-				// 	element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
-				// 	title: "nav.aiSubMenu.digitalEmployeeAnalysis",
-				// 	validate: canAccessAIDataStatistics,
-				// },
+				{
+					name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
+					path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
+					title: "nav.aiSubMenu.digitalEmployeeAnalysis",
+					validate: canAccessAIDataStatistics,
+				},
 			],
 		},
 		{

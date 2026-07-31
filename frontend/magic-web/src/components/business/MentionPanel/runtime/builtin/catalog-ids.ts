@@ -3,6 +3,7 @@ export const MentionPanelBuiltinItemId = {
 	ENTERPRISE_DRIVE: "enterprise-drive",
 	ORGANIZATION_DRIVE: "organization-drive",
 	PROJECT_FILES: "project-files",
+	OTHER_PROJECT_FILES: "other-project-files",
 	MCP_EXTENSIONS: "mcp-extensions",
 	AGENTS: "agents",
 	SKILLS: "skills",

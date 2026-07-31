@@ -64,7 +64,7 @@ export function ScheduledItem({ value, onChange, disabled }: ScheduledItemProps)
 				},
 			}}
 			defaultValue={
-				formValues.time ? dayjs(`2000-01-01 ${formValues.time}`, "HH:mm") : undefined
+				formValues.time ? dayjs(`2000-01-01 ${formValues.time}`, "YYYY-MM-DD HH:mm") : null
 			}
 			onChange={(time) => {
 				if (time) updateFormValues({ time: time.format("HH:mm") })

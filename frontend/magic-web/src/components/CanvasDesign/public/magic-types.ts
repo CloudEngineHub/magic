@@ -1496,6 +1496,11 @@ export interface CanvasDesignMethods {
 	 */
 	resolveResourcePathCandidates?: (path: string) => string[]
 	/**
+	 * 将宿主工作区路径转换为画布持久化路径。
+	 * 当前画布资源应返回 `./...`，其他工作区资源应返回 `/...`。
+	 */
+	normalizeResourcePathForStorage?: (path: string) => string
+	/**
 	 * 获取画布虚拟媒体资源的宿主 scope，用于在同源虚拟链接中隔离工作区/项目上下文。
 	 * @returns 例如：/global/super/{workspaceId}/{projectId}
 	 */
@@ -1547,9 +1552,9 @@ export interface CanvasDesignMethods {
 	 */
 	saveRootStorage: (data: CanvasDesignRootStorageData) => void
 	/**
-	 * 从 DataTransfer 获取文件路径信息
+	 * 从 DataTransfer 获取可写入画布的文件路径信息
 	 * @param dataTransfer DataTransfer 对象
-	 * @returns 文件路径数组（Promise）
+	 * @returns 当前画布可持久化路径；宿主可在返回前完成资源复制等准备工作
 	 */
 	getDataTransferFileInfo: (dataTransfer: DataTransfer) => Promise<string[]>
 	/**

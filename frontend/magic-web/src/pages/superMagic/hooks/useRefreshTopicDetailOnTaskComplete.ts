@@ -61,22 +61,19 @@ export function useRefreshTopicDetailOnTaskComplete({
 				})
 		}
 
-		const unregister = superMagicStore.registerDomainEventListener({
-			matcher: (payload) =>
-				payload.type === "task_completed" &&
-				payload.topicId === selectedTopic.chat_topic_id,
-			callback: (payload) => {
-				if (payload.type !== "task_completed") return
-
-				const { message, status } = payload
-				// 同一条终态消息只处理一次，避免刷新用量时重复请求。
-				const eventKey = `${message.app_message_id}:${message.seq_id}:${status}`
+		const unregister = superMagicStore.subscribe(
+			"task.completed",
+			({ meta }) => {
+				// task.completed 已在 Store 按 task identity 去重；保留 Hook 侧防线，避免
+				// 订阅生命周期重建时同一持久结果触发重复请求。
+				const eventKey = `${meta.taskId}:${meta.appMessageId}`
 				if (lastHandledEventKeyRef.current === eventKey) return
 
 				lastHandledEventKeyRef.current = eventKey
 				triggerRefresh()
 			},
-		})
+			{ scope: { topicId: selectedTopic.chat_topic_id } },
+		)
 
 		return () => {
 			isActive = false

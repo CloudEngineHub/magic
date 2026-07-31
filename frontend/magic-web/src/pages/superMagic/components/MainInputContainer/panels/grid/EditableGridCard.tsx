@@ -5,11 +5,11 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { useLocaleText } from "../hooks/useLocaleText"
-import type { OptionItem } from "../types"
+import type { IdentifiedOptionItem } from "../types"
 import { isImageIconSource } from "../utils"
 
 interface EditableGridCardProps {
-	item: OptionItem
+	item: IdentifiedOptionItem
 	isSelected: boolean
 	onSelect: (value: string, checked: boolean) => void
 	onEdit: () => void
@@ -25,7 +25,8 @@ export function EditableGridCard({
 }: EditableGridCardProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
-	const label = lt(item.label) ?? item.value
+	const itemValue = item.value
+	const label = lt(item.label) ?? itemValue
 	const isImageIcon = isImageIconSource(item.icon_url)
 
 	return (
@@ -34,7 +35,7 @@ export function EditableGridCard({
 				"group relative flex w-full flex-col gap-1.5 overflow-hidden rounded-lg p-1 transition-all",
 				isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
 			)}
-			data-testid={`editable-grid-card-${item.value}`}
+			data-testid={`editable-grid-card-${itemValue}`}
 		>
 			{/* Image area */}
 			<div className="relative flex h-28 w-full flex-col overflow-hidden rounded-lg border border-border bg-background">
@@ -68,7 +69,7 @@ export function EditableGridCard({
 						size="sm"
 						className="h-9 flex-1 gap-2 shadow-xs"
 						onClick={onEdit}
-						data-testid={`editable-grid-card-edit-${item.value}`}
+						data-testid={`editable-grid-card-edit-${itemValue}`}
 					>
 						<PencilLine className="size-4" />
 						{t("playbook.edit.inspiration.actions.edit")}
@@ -78,7 +79,7 @@ export function EditableGridCard({
 						size="icon"
 						className="size-9 shrink-0 shadow-xs"
 						onClick={onDelete}
-						data-testid={`editable-grid-card-delete-${item.value}`}
+						data-testid={`editable-grid-card-delete-${itemValue}`}
 					>
 						<Trash2 className="size-4" />
 					</Button>
@@ -111,8 +112,8 @@ export function EditableGridCard({
 			<div className="absolute left-2.5 top-2.5">
 				<Checkbox
 					checked={isSelected}
-					onCheckedChange={(checked) => onSelect(item.value, !!checked)}
-					data-testid={`editable-grid-card-checkbox-${item.value}`}
+					onCheckedChange={(checked) => onSelect(itemValue, !!checked)}
+					data-testid={`editable-grid-card-checkbox-${itemValue}`}
 				/>
 			</div>
 		</div>

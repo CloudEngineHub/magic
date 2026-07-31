@@ -95,7 +95,7 @@ describe("project attachment drag helpers", () => {
 		).toEqual([{ path: "/images/cover.png", fileName: "cover.png" }])
 	})
 
-	it("does not treat plain text payloads as drop authority", () => {
+	it("uses the trusted hover bridge instead of plain text payloads on drop", () => {
 		setProjectAttachmentDragHoverPlainText(
 			JSON.stringify({
 				type: "project_file",
@@ -120,6 +120,6 @@ describe("project attachment drag helpers", () => {
 								},
 							}),
 			}),
-		).toEqual([])
+		).toEqual([{ path: "/images/bridge.png", fileName: "bridge.png" }])
 	})
 })

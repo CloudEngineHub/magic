@@ -136,6 +136,10 @@ class SandboxApi extends AbstractApi
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'message_id is required');
         }
 
+        // message_id maps to the topic/sandbox being upgraded. Verify that the
+        // authenticated user owns it before invoking the destructive operation.
+        $this->topicAppService->getTopic($requestContext, (int) $messageId);
+
         // 创建数据隔离对象
         $dataIsolation = DataIsolation::create($this->getAuthorization()->getOrganizationCode(), $this->getAuthorization()->getId());
         $dataIsolation->setThirdPartyOrganizationCode($this->getAuthorization()->getOrganizationCode());

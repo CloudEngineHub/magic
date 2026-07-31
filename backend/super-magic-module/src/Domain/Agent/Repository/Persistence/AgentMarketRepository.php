@@ -11,6 +11,7 @@ use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -45,6 +46,77 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         }
 
         return new AgentMarketEntity($model->toArray());
+    }
+
+    public function findPublishedByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()
+            ->where('agent_code', $agentCode)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->where(static function ($query) use ($organizationCode) {
+                $query->where('market_type', AgentMarketType::MARKET->value)
+                    ->orWhere(static function ($organizationQuery) use ($organizationCode) {
+                        $organizationQuery->where('market_type', AgentMarketType::ORGANIZATION->value)
+                            ->where('organization_code', $organizationCode);
+                    });
+            })
+            ->lockForUpdate()
+            ->first();
+
+        return $model === null ? null : new AgentMarketEntity($model->toArray());
+    }
+
+    public function findPublishedOrganizationByAgentCodeForUpdate(string $organizationCode, string $agentCode): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()
+            ->where('agent_code', $agentCode)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('organization_code', $organizationCode)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->lockForUpdate()
+            ->first();
+
+        return $model === null ? null : new AgentMarketEntity($model->toArray());
+    }
+
+    public function findPublishedOrganizationIdsByAgentCodes(string $organizationCode, array $agentCodes): array
+    {
+        $agentCodes = array_values(array_unique(array_filter(array_map('strval', $agentCodes))));
+        if ($organizationCode === '' || $agentCodes === []) {
+            return [];
+        }
+
+        // 先转成市场 ID，主列表继续只按货架 ID 过滤，避免新增 agent_code OR 条件。
+        return $this->agentMarketModel::query()
+            ->where('organization_code', $organizationCode)
+            ->whereIn('agent_code', $agentCodes)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    public function findPublishedOrganizationIdsByPublisher(string $organizationCode, string $publisherId): array
+    {
+        if ($organizationCode === '' || $publisherId === '') {
+            return [];
+        }
+
+        return $this->agentMarketModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('publisher_id', $publisherId)
+            ->where('market_type', AgentMarketType::ORGANIZATION->value)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
     }
 
     /**
@@ -173,9 +245,8 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->first();
 
         $attributes = $this->getAttributes($entity);
-        if ($entity->getOrganizationCode()) {
-            $attributes['organization_code'] = $entity->getOrganizationCode();
-        }
+        // 组织编码保留资源归属上下文；市场性质只由 market_type 决定，不可依赖空值推断。
+        $attributes['organization_code'] = $entity->getOrganizationCode();
         if ($existingModel) {
             // 更新
             $existingModel->fill($attributes);
@@ -240,6 +311,36 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         $builder = $this->agentMarketModel::query()
             ->where('publish_status', PublishStatus::PUBLISHED->value)
             ->where('is_hidden', false);
+
+        // 市场性质只认显式 market_type，空值统一不进入市场列表。
+        $visibleOrganizationCode = $query->getVisibleOrganizationCode();
+        $visibleOrganizationMarketIds = $query->getVisibleOrganizationMarketIds();
+        $marketType = $query->getMarketType();
+        $hasOrganizationShelf = $visibleOrganizationCode !== null
+            && $visibleOrganizationCode !== ''
+            && $visibleOrganizationMarketIds !== [];
+        if ($marketType === AgentMarketType::ORGANIZATION && ! $hasOrganizationShelf) {
+            // 组织内筛选没有命中货架时，避免生成空嵌套条件并确保分页总数为零。
+            $builder->whereRaw('1 = 0');
+        } else {
+            $builder->where(function ($visibilityQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds, $marketType) {
+                if ($marketType === null || $marketType === AgentMarketType::MARKET) {
+                    $visibilityQuery->where('market_type', AgentMarketType::MARKET->value);
+                }
+
+                if (($marketType === null || $marketType === AgentMarketType::ORGANIZATION)
+                    && $visibleOrganizationCode !== null
+                    && $visibleOrganizationCode !== ''
+                    && $visibleOrganizationMarketIds !== []) {
+                    $method = $marketType === AgentMarketType::ORGANIZATION ? 'where' : 'orWhere';
+                    $visibilityQuery->{$method}(function ($organizationQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
+                        $organizationQuery->where('organization_code', $visibleOrganizationCode)
+                            ->whereIn('id', $visibleOrganizationMarketIds)
+                            ->where('market_type', AgentMarketType::ORGANIZATION->value);
+                    });
+                }
+            });
+        }
 
         // 关键词搜索优先使用统一搜索字段；旧数据无该字段时回退到历史 JSON 搜索。
         if (! empty($query->getKeyword()) && ! empty($query->getLanguageCode())) {

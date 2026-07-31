@@ -8,15 +8,28 @@ import {
 } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import projectFilesStore from "@/stores/projectFiles"
 import { getFileInfoByPath } from "@/pages/superMagic/components/Detail/contents/Design/utils/designFileInfoCache"
+import { resolveDesignProjectBasePathFromAttachments } from "@/pages/superMagic/components/Detail/contents/Design/utils/utils"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { mapWorkspaceFilesToFileItems } from "./markerAttachmentUtils"
 
 async function hydrateMarkerImageSize(
 	markerData: CanvasMarkerMentionData,
+	currentProjectFilesStore: ProjectFilesStore,
 ): Promise<CanvasMarkerMentionData | null> {
 	const imagePath = getCanvasMarkerMentionImagePath(markerData)
 	if (!imagePath) return markerData
 
-	const fileInfo = await getFileInfoByPath(imagePath, undefined, {
+	const workspaceFiles = mapWorkspaceFilesToFileItems(currentProjectFilesStore.workspaceFilesList)
+	const designProjectBasePath = resolveDesignProjectBasePathFromAttachments({
+		currentFile: markerData.design_project_id
+			? { id: markerData.design_project_id }
+			: undefined,
+		flatAttachments: workspaceFiles,
+	})
+	const fileInfo = await getFileInfoByPath(imagePath, workspaceFiles, {
 		useImageProcess: true,
+		designProjectId: markerData.design_project_id,
+		designProjectBasePath,
 	})
 	if (!fileInfo?.src) {
 		return markerData
@@ -26,7 +39,8 @@ async function hydrateMarkerImageSize(
 	img.crossOrigin = "anonymous"
 	await new Promise<void>((resolve, reject) => {
 		img.onload = () => resolve()
-		img.onerror = reject
+		img.onerror = () =>
+			reject(new Error("Marker image failed to load while hydrating its dimensions"))
 		img.src = fileInfo.src
 	})
 
@@ -43,11 +57,13 @@ async function hydrateMarkerImageSize(
 export function useTransformedMarkerData(
 	data: TiptapMentionAttributes,
 	isInMessageList: boolean,
+	projectFilesStoreInstance?: ProjectFilesStore,
 ): { markerData: CanvasMarkerMentionData | null; loading: boolean } {
 	const [transformedData, setTransformedData] = useState<CanvasMarkerMentionData | null>(null)
 	const [loading, setLoading] = useState(false)
 	const cancelledRef = useRef(false)
 	const markerDataRef = useRef<CanvasMarkerMentionData | null>(null)
+	const currentProjectFilesStore = projectFilesStoreInstance ?? projectFilesStore
 
 	const performHydrate = (markerData: CanvasMarkerMentionData) => {
 		if (!getCanvasMarkerMentionImagePath(markerData)) {
@@ -57,8 +73,8 @@ export function useTransformedMarkerData(
 		}
 
 		if (
-			!projectFilesStore.workspaceFilesList ||
-			projectFilesStore.workspaceFilesList.length === 0
+			!currentProjectFilesStore.workspaceFilesList ||
+			currentProjectFilesStore.workspaceFilesList.length === 0
 		) {
 			setTransformedData(null)
 			setLoading(true)
@@ -66,7 +82,7 @@ export function useTransformedMarkerData(
 		}
 
 		setLoading(true)
-		hydrateMarkerImageSize(markerData)
+		hydrateMarkerImageSize(markerData, currentProjectFilesStore)
 			.then((result) => {
 				if (!cancelledRef.current) {
 					setTransformedData(result)
@@ -118,7 +134,7 @@ export function useTransformedMarkerData(
 		return () => {
 			cancelledRef.current = true
 		}
-	}, [data, isInMessageList])
+	}, [currentProjectFilesStore, data, isInMessageList])
 
 	useEffect(() => {
 		if (!isInMessageList || !markerDataRef.current) {
@@ -127,7 +143,7 @@ export function useTransformedMarkerData(
 
 		// 历史消息刷新时附件列表可能晚于消息到达，等附件加载后再补一次图片尺寸。
 		const disposer = reaction(
-			() => projectFilesStore.workspaceFilesList,
+			() => currentProjectFilesStore.workspaceFilesList,
 			(attachmentList) => {
 				if (
 					attachmentList &&
@@ -144,7 +160,7 @@ export function useTransformedMarkerData(
 		return () => {
 			disposer()
 		}
-	}, [isInMessageList])
+	}, [currentProjectFilesStore, isInMessageList])
 
 	return { markerData: transformedData, loading }
 }

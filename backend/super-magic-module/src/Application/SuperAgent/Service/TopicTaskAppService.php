@@ -29,10 +29,12 @@ use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Chat\Assembler\MessageAssembler;
 use Carbon\Carbon;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Assembler\UserMessageDTOAssembler;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskInitializationMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TaskInitializationPublisher;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TopicMessageProcessPublisher;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentEventEnum;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MessageQueueEntity;
@@ -60,6 +62,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskMessageDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskStatusValidator;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
@@ -104,7 +107,8 @@ class TopicTaskAppService extends AbstractAppService
         protected TranslatorInterface $translator,
         protected UsageCalculatorInterface $usageCalculator,
         protected Redis $redis,
-        protected Producer $producer
+        protected Producer $producer,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
     }
@@ -114,18 +118,11 @@ class TopicTaskAppService extends AbstractAppService
      *
      * @return array Operation result
      */
-    public function deliverTopicTaskMessage(TopicTaskMessageDTO $messageDTO): array
+    public function deliverTopicTaskMessage(DataIsolation $dataIsolation, TopicTaskMessageDTO $messageDTO): array
     {
-        // 获取当前任务 id
-        $taskId = $messageDTO->getMetadata()->getSuperMagicTaskId();
-        $taskEntity = $this->taskDomainService->getTaskById((int) $taskId);
-        if (! $taskEntity) {
-            $this->logger->warning('无效的task_id，无法处理消息', ['messageData' => $taskId]);
-            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'message_missing_task_id');
-        }
-
-        // 获取sandbox_id
-        $sandboxId = $messageDTO->getMetadata()->getSandboxId();
+        [$taskEntity, $topicEntity] = $this->getAuthorizedTaskAndTopic($dataIsolation, $messageDTO);
+        $taskId = (string) $taskEntity->getId();
+        $sandboxId = $taskEntity->getSandboxId() ?: $topicEntity->getSandboxId();
         $metadata = $messageDTO->getMetadata();
         $language = $this->translator->getLocale();
         $metadata->setLanguage($language);
@@ -147,13 +144,6 @@ class TopicTaskAppService extends AbstractAppService
             // Attempt to acquire distributed mutex lock
             $lockAcquired = $this->locker->spinLock($lockKey, $lockOwner, $lockExpireSeconds);
             if ($lockAcquired) {
-                // 1. 根据sandbox_id获取topic_id
-                $topicEntity = $this->topicDomainService->getTopicBySandboxId($sandboxId);
-                if (! $topicEntity) {
-                    $this->logger->error('根据sandbox_id未找到对应的topic', ['sandbox_id' => $sandboxId]);
-                    ExceptionBuilder::throw(GenericErrorCode::SystemError, 'topic_not_found_by_sandbox_id');
-                }
-
                 // 判断 seq_id 是否是期望的值
                 $exceptedSeqId = $this->taskMessageDomainService->getNextSeqId($topicEntity->getId(), $taskEntity->getId());
                 if ($seqId !== $exceptedSeqId) {
@@ -214,23 +204,16 @@ class TopicTaskAppService extends AbstractAppService
         return DeliverMessageResponseDTO::fromResult(true, $messageId)->toArray();
     }
 
-    public function handleTopicTaskMessage(TopicTaskMessageDTO $messageDTO): array
+    public function handleTopicTaskMessage(DataIsolation $dataIsolation, TopicTaskMessageDTO $messageDTO): array
     {
-        // 1，初始化数据
-        $taskId = $messageDTO->getMetadata()->getSuperMagicTaskId();
-        $taskEntity = $this->taskDomainService->getTaskById((int) $taskId);
-        if (! $taskEntity) {
-            $this->logger->warning('无效的task_id，无法处理消息', ['messageData' => $taskId]);
-            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'message_missing_task_id');
-        }
-
+        [$taskEntity, $topicEntity] = $this->getAuthorizedTaskAndTopic($dataIsolation, $messageDTO);
+        $taskId = (string) $taskEntity->getId();
         $metadata = $messageDTO->getMetadata();
         $language = $this->translator->getLocale();
         $metadata->setLanguage($language);
         $messageDTO->setMetadata($metadata);
-        $dataIsolation = DataIsolation::simpleMake($metadata->getOrganizationCode(), $metadata->getUserId());
         $messageId = $messageDTO->getPayload()->getMessageId();
-        $topicId = $taskEntity->getTopicId();
+        $topicId = $topicEntity->getId();
 
         $this->logger->debug('开始处理话题任务消息', [
             'topic_id' => $topicId,
@@ -829,6 +812,27 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
+     * @return array{TaskEntity, TopicEntity}
+     */
+    private function getAuthorizedTaskAndTopic(
+        DataIsolation $dataIsolation,
+        TopicTaskMessageDTO $messageDTO
+    ): array {
+        $taskId = (int) $messageDTO->getMetadata()->getSuperMagicTaskId();
+        $taskEntity = $this->taskDomainService->getTaskById($taskId);
+        if (! $taskEntity || $taskEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TASK_ACCESS_DENIED, 'task.access_denied');
+        }
+
+        $topicEntity = $this->topicDomainService->getTopicById($taskEntity->getTopicId());
+        if (! $topicEntity || $topicEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TASK_ACCESS_DENIED, 'task.access_denied');
+        }
+
+        return [$taskEntity, $topicEntity];
+    }
+
+    /**
      * ask_user Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
      *
      * 消息存储和推送由步骤 2、3 完成；此处只补充本路径泛型步骤 4 未覆盖的状态（终态仍走步骤 4）。
@@ -951,6 +955,23 @@ class TopicTaskAppService extends AbstractAppService
                     SuperAgentErrorCode::VALIDATE_FAILED,
                     'Project ID does not match topic'
                 );
+            }
+
+            // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
+            $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
+            // 请求参数优先，未传时回退 Topic，得到本次真正执行的模式与 code。
+            $topicPattern = trim((string) ($superAgentExtra?->getTopicPattern() ?? $topicEntity->getTopicMode()));
+            $agentCode = $this->resolveEffectiveAgentCode($topicEntity, $superAgentExtra);
+            [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+                SuperMagicAgentDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId()
+                ),
+                $topicPattern,
+                $agentCode
+            );
+            if (! $allowed) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
             }
 
             $businessMessageId = $this->resolveUserMessageId($source);
@@ -1383,6 +1404,21 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return $messageStruct;
+    }
+
+    /**
+     * 解析本次执行使用的 code：请求优先，未传时回退 Topic 持久值。
+     * SMA-* 本身就是员工 code，因此优先级最高。
+     */
+    private function resolveEffectiveAgentCode(TopicEntity $topicEntity, ?SuperAgentExtra $extra): string
+    {
+        $topicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
+        if (str_starts_with($topicPattern, 'SMA-')) {
+            return $topicPattern;
+        }
+
+        $agentCode = trim((string) ($extra?->getAgentCode() ?? ''));
+        return $agentCode !== '' ? $agentCode : trim($topicEntity->getAgentCode());
     }
 
     /**

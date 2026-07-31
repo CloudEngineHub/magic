@@ -54,7 +54,7 @@ import {
 	checkProjectReferenceResourceDrop,
 	getReferenceResourceHoverState,
 	getReferenceResourceLocalHoverState,
-	normalizeProjectDropFiles,
+	normalizeProjectDropFilesForStorage,
 	type ReferenceDropProjectFile,
 	useReferenceResourceDrop,
 } from "../message/reference-assets/useReferenceResourcePanelDataService"
@@ -133,6 +133,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const { canvas } = useCanvas()
 	const resolveResourcePathCandidates =
 		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
+	const normalizeResourcePathForStorage =
+		canvas.magicConfigManager.config?.methods?.normalizeResourcePathForStorage
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [hasEditorScrollbar, setHasEditorScrollbar] = useState(false)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
@@ -510,11 +512,11 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const handleProjectFilesDrop = useCallback(
 		(files: ReferenceDropProjectFile[]) => {
-			const normalizedFiles = normalizeProjectDropFiles(
+			const normalizedFiles = normalizeProjectDropFilesForStorage(
 				files,
 				matchableItems,
 				effectiveReferencePaths,
-				{ resolveResourcePathCandidates },
+				{ resolveResourcePathCandidates, normalizeResourcePathForStorage },
 			)
 			const existingReferencePathSet = new Set(effectiveReferencePaths)
 			const nextFiles: ReferenceDropProjectFile[] = []
@@ -539,6 +541,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveReferencePaths,
 			handlers,
 			matchableItems,
+			normalizeResourcePathForStorage,
 			resolveResourcePathCandidates,
 		],
 	)

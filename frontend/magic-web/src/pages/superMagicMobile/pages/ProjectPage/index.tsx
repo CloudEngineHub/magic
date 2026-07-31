@@ -99,7 +99,13 @@ function LegacyProjectPage() {
 	const setUserSelectDetail = useMemoizedFn(
 		(detail: Parameters<PreviewDetailPopupRef["open"]>[0] | null) => {
 			if (detail) {
-				previewDetailPopupRef.current?.open(detail, [], [])
+				// Read the store at invocation time so content-type folders (including PPT)
+				// receive the complete path metadata needed by their preview renderer.
+				previewDetailPopupRef.current?.open(
+					detail,
+					projectFilesStore.workspaceFileTree,
+					projectFilesStore.workspaceFilesList,
+				)
 			}
 		},
 	)

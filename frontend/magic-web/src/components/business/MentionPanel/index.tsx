@@ -15,7 +15,7 @@ import { Virtuoso, VirtuosoGrid } from "react-virtuoso"
 import type { VirtuosoGridHandle, VirtuosoHandle } from "react-virtuoso"
 
 // Types
-import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
+import type { MentionItem, MentionPanelProps, MentionPanelRef, MentionSelectContext } from "./types"
 import { MentionPanelViewMode, PanelState } from "./types"
 
 // Hooks
@@ -52,9 +52,14 @@ import {
 	type PendingMentionEntry,
 } from "./utils/multiSelect"
 import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
+import { MentionPanelBuiltinItemId } from "./runtime/builtin/catalog-ids"
+import { createOtherProjectMentionItem } from "./utils/otherProjectMention"
+import projectFilesStore from "@/stores/projectFiles"
+import type { ProjectResourceSelection } from "@/pages/superMagic/components/SelectPathModal/types"
 
 const MentionPanelMobile = lazy(() => import("./MentionPanelMobile"))
 const GalleryPreviewDialog = lazy(() => import("./components/GalleryPreviewDialog"))
+const OtherProjectFileMentionModal = lazy(() => import("./components/OtherProjectFileMentionModal"))
 
 const LIST_PANEL_WIDTH = 320
 const GALLERY_PANEL_WIDTH = 600
@@ -108,6 +113,7 @@ const MentionPanel = observer(
 		const [multiSelectMode, setMultiSelectMode] = useState(false)
 		const [previewItem, setPreviewItem] = useState<MentionItem | null>(null)
 		const [internalViewMode, setInternalViewMode] = useState<MentionPanelViewMode>(viewMode)
+		const [otherProjectModalVisible, setOtherProjectModalVisible] = useState(false)
 		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
 			() => new Map(),
 		)
@@ -145,6 +151,16 @@ const MentionPanel = observer(
 				}),
 			[runtime, dataService, catalogBehavior, buildStoreRequest],
 		)
+		const handlePanelSelect = useCallback(
+			(item: MentionItem, context?: MentionSelectContext) => {
+				if (item.id === MentionPanelBuiltinItemId.OTHER_PROJECT_FILES) {
+					setOtherProjectModalVisible(true)
+					return
+				}
+				onSelect?.(item, context)
+			},
+			[onSelect],
+		)
 
 		useEffect(() => {
 			setInternalViewMode(viewMode)
@@ -155,7 +171,7 @@ const MentionPanel = observer(
 			initialState,
 			initialLoadOptions,
 			initialNavigationStack,
-			onSelect,
+			onSelect: handlePanelSelect,
 			onClose,
 			enabled: visible && !disableKeyboardShortcuts,
 			keyboardShortcutsEnabled: !isMobile,
@@ -242,6 +258,9 @@ const MentionPanel = observer(
 				setInternalSearchQuery("")
 				setPreviewItem(null)
 				resetLocalMultiSelectState()
+				// Mobile editor blur will set MentionPanel `visible` to false while the
+				// other-project selector is open. Keep that selector mounted until it
+				// closes or submits itself; do not reset `otherProjectModalVisible` here.
 			}
 		}, [visible, resetLocalMultiSelectState])
 
@@ -381,6 +400,31 @@ const MentionPanel = observer(
 			resetLocalMultiSelectState()
 			onClose?.()
 		}, [onClose, resetLocalMultiSelectState])
+
+		const handleOtherProjectResourceSelect = useCallback(
+			async (selections: ProjectResourceSelection[]) => {
+				setOtherProjectModalVisible(false)
+				for (let index = 0; index < selections.length; index++) {
+					const isLast = index === selections.length - 1
+					const result = onSelect?.(createOtherProjectMentionItem(selections[index]), {
+						batch: {
+							index,
+							total: selections.length,
+						},
+						...(isLast
+							? {
+									reset: () => {
+										resetLocalMultiSelectState()
+										actions.reset()
+									},
+								}
+							: undefined),
+					})
+					await Promise.resolve(result)
+				}
+			},
+			[actions, onSelect, resetLocalMultiSelectState],
+		)
 
 		const handleConfirmMultiSelect = useCallback(async () => {
 			const entries = getSubmittablePendingEntries(pendingByKey)
@@ -748,36 +792,50 @@ const MentionPanel = observer(
 			],
 		)
 
+		const otherProjectFileMentionModal = otherProjectModalVisible ? (
+			<Suspense fallback={null}>
+				<OtherProjectFileMentionModal
+					visible
+					currentProject={projectFilesStore.currentSelectedProject}
+					onClose={() => setOtherProjectModalVisible(false)}
+					onSelect={handleOtherProjectResourceSelect}
+				/>
+			</Suspense>
+		) : null
+
 		// Don't render if not visible
 		if (!isMobile && !visible) return null
 
 		// Use mobile version on mobile devices
 		if (isMobile) {
 			return (
-				<Suspense fallback={null}>
-					<MentionPanelMobile
-						ref={ref}
-						visible={visible}
-						onSelect={onSelect}
-						onClose={onClose}
-						initialState={initialState}
-						initialLoadOptions={initialLoadOptions}
-						initialNavigationStack={initialNavigationStack}
-						searchPlaceholder={searchPlaceholder}
-						triggerRef={triggerRef}
-						language={language}
-						className={className}
-						lastHistoryIndex={lastHistoryIndex}
-						style={style}
-						runtime={resolvedRuntime}
-						dataService={dataService}
-						catalogBehavior={catalogBehavior}
-						buildStoreRequest={buildStoreRequest}
-						canToggleMultiSelectItem={canToggleMultiSelectItem}
-						enableMultiSelect={enableMultiSelect}
-						{...restProps}
-					/>
-				</Suspense>
+				<>
+					<Suspense fallback={null}>
+						<MentionPanelMobile
+							ref={ref}
+							visible={visible && !otherProjectModalVisible}
+							onSelect={handlePanelSelect}
+							onClose={onClose}
+							initialState={initialState}
+							initialLoadOptions={initialLoadOptions}
+							initialNavigationStack={initialNavigationStack}
+							searchPlaceholder={searchPlaceholder}
+							triggerRef={triggerRef}
+							language={language}
+							className={className}
+							lastHistoryIndex={lastHistoryIndex}
+							style={style}
+							runtime={resolvedRuntime}
+							dataService={dataService}
+							catalogBehavior={catalogBehavior}
+							buildStoreRequest={buildStoreRequest}
+							canToggleMultiSelectItem={canToggleMultiSelectItem}
+							enableMultiSelect={enableMultiSelect}
+							{...restProps}
+						/>
+					</Suspense>
+					{otherProjectFileMentionModal}
+				</>
 			)
 		}
 
@@ -1091,27 +1149,31 @@ const MentionPanel = observer(
 		// Fallback for legacy callers without triggerRef
 		if (!triggerRef) {
 			return (
-				<div
-					ref={internalRef}
-					data-mention-panel
-					className={cn("fixed", panelClassName)}
-					style={{
-						...style,
-						...panelSizeStyle,
-					}}
-					role="dialog"
-					aria-modal="true"
-					aria-label={t.ariaLabels.panel}
-					tabIndex={-1}
-					{...restProps}
-				>
-					{panelBody}
-				</div>
+				<>
+					<div
+						ref={internalRef}
+						data-mention-panel
+						className={cn("fixed", panelClassName)}
+						style={{
+							...style,
+							...panelSizeStyle,
+						}}
+						role="dialog"
+						aria-modal="true"
+						aria-label={t.ariaLabels.panel}
+						tabIndex={-1}
+						{...restProps}
+					>
+						{panelBody}
+					</div>
+					{otherProjectFileMentionModal}
+				</>
 			)
 		}
 
 		const handleOpenChange = (open: boolean) => {
 			if (!open) {
+				if (otherProjectModalVisible) return
 				handleClosePanel()
 			}
 		}
@@ -1126,63 +1188,70 @@ const MentionPanel = observer(
 		}
 
 		return (
-			<Popover open={visible} onOpenChange={handleOpenChange} modal={false}>
-				<PopoverAnchor virtualRef={triggerRef as unknown as RefObject<HTMLElement>} />
-				<PopoverContent
-					ref={internalRef}
-					data-mention-panel
-					className={cn(panelClassName, "p-0")}
-					side="bottom"
-					align="start"
-					sideOffset={4}
-					collisionPadding={8}
-					avoidCollisions
-					onOpenAutoFocus={handleOpenAutoFocus}
-					onCloseAutoFocus={(event) => event.preventDefault()}
-					onInteractOutside={(event) => {
-						const root = internalRef.current
-						const target = event.target
-						if (isMentionPanelGalleryPreviewTarget(target)) {
-							event.preventDefault()
-							return
-						}
-						if (lockDismissToExplicitClose) {
-							event.preventDefault()
-							return
-						}
-						const outsideDetail = event as unknown as {
-							detail?: { originalEvent?: Event }
-						}
-						const orig = outsideDetail.detail?.originalEvent
-						const path =
-							orig && typeof orig.composedPath === "function"
-								? orig.composedPath()
-								: []
-						const pathInsideRoot =
-							root && path.some((n) => n instanceof Node && root.contains(n))
-						const targetInsideRoot =
-							root && target instanceof Node && root.contains(target)
-						if (pathInsideRoot || targetInsideRoot) {
-							event.preventDefault()
-							return
-						}
-						if (disableKeyboardShortcuts) {
-							event.preventDefault()
-						}
-					}}
-					style={{
-						...style,
-						...panelSizeStyle,
-					}}
-					role="dialog"
-					aria-modal="true"
-					aria-label={t.ariaLabels.panel}
-					tabIndex={-1}
-					{...restProps}
-				>
-					{panelBody}
-				</PopoverContent>
-			</Popover>
+			<>
+				<Popover open={visible} onOpenChange={handleOpenChange} modal={false}>
+					<PopoverAnchor virtualRef={triggerRef as unknown as RefObject<HTMLElement>} />
+					<PopoverContent
+						ref={internalRef}
+						data-mention-panel
+						className={cn(panelClassName, "p-0")}
+						side="bottom"
+						align="start"
+						sideOffset={4}
+						collisionPadding={8}
+						avoidCollisions
+						onOpenAutoFocus={handleOpenAutoFocus}
+						onCloseAutoFocus={(event) => event.preventDefault()}
+						onInteractOutside={(event) => {
+							if (otherProjectModalVisible) {
+								event.preventDefault()
+								return
+							}
+							const root = internalRef.current
+							const target = event.target
+							if (isMentionPanelGalleryPreviewTarget(target)) {
+								event.preventDefault()
+								return
+							}
+							if (lockDismissToExplicitClose) {
+								event.preventDefault()
+								return
+							}
+							const outsideDetail = event as unknown as {
+								detail?: { originalEvent?: Event }
+							}
+							const orig = outsideDetail.detail?.originalEvent
+							const path =
+								orig && typeof orig.composedPath === "function"
+									? orig.composedPath()
+									: []
+							const pathInsideRoot =
+								root && path.some((n) => n instanceof Node && root.contains(n))
+							const targetInsideRoot =
+								root && target instanceof Node && root.contains(target)
+							if (pathInsideRoot || targetInsideRoot) {
+								event.preventDefault()
+								return
+							}
+							if (disableKeyboardShortcuts) {
+								event.preventDefault()
+							}
+						}}
+						style={{
+							...style,
+							...panelSizeStyle,
+						}}
+						role="dialog"
+						aria-modal="true"
+						aria-label={t.ariaLabels.panel}
+						tabIndex={-1}
+						{...restProps}
+					>
+						{panelBody}
+					</PopoverContent>
+				</Popover>
+				{otherProjectFileMentionModal}
+			</>
 		)
 	}),
 )

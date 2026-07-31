@@ -32,6 +32,7 @@ import { MagicDropdown } from "@/components/base"
 import { ModelEmptyState } from "./components/ModelEmptyState"
 import { ModelSwitchTriggerContent } from "./components/ModelSwitchTriggerContent"
 import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
+import { resolveShowSelectedModelName } from "./utils"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -257,6 +258,11 @@ export const ModelSwitch = observer(function ModelSwitch({
 	const showImageTab = hasImageModels || canAddModel
 	const showVideoTab = hasVideoModels
 	const showTabSwitcher = showImageTab || showVideoTab
+	const resolvedShowSelectedModelName = resolveShowSelectedModelName({
+		showSelectedModelName,
+		showImageTab,
+		showVideoTab,
+	})
 	const tabSwitcher = showTabSwitcher ? (
 		<ModelTabSwitcher
 			activeTab={activeTab}
@@ -328,7 +334,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 							isLoading={isLoading}
 							iconSize={iconSize}
 							triggerTab={triggerTab}
-							showSelectedModelName={showSelectedModelName}
+							showSelectedModelName={resolvedShowSelectedModelName}
 						/>
 					)}
 					<ChevronsUpDownIcon size={chevronSize} />
@@ -454,7 +460,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 											isLoading={isLoading}
 											iconSize={iconSize}
 											triggerTab={triggerTab}
-											showSelectedModelName={showSelectedModelName}
+											showSelectedModelName={resolvedShowSelectedModelName}
 										/>
 									)}
 									<ChevronsUpDownIcon size={chevronSize} />
