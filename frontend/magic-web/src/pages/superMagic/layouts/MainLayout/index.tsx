@@ -13,7 +13,6 @@ import { useFeaturedModeListRefreshOnDocumentVisible } from "../../hooks/useFeat
 import EditionActivityModal from "@/components/business/EditionActivity/Modal"
 import { MobileImagePreviewProvider } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MobileImagePreview"
 import { projectStore, topicStore, workspaceStore } from "../../stores/core"
-import { shouldRestoreRouteStateFromMainLayout } from "../../services/topicProjectConsistency"
 
 const MainLayoutDesktop = lazy(() => import("./index.desktop"))
 const MainLayoutMobile = lazy(() => import("@/pages/superMagicMobile/layout/MainLayout"))
@@ -30,16 +29,15 @@ function MainLayout() {
 		const stateParams = resolveSuperPopRefreshParams(pathname)
 		if (!stateParams) return
 
-		const needsRestore = shouldRestoreRouteStateFromMainLayout({
-			// ChatProjectPage owns chat route recovery; MainLayout must not start initializeState in parallel.
-			isChatProjectRoute: SuperMagicService.route.isCurrentChatProjectRoute(),
-			workspaceId: stateParams.workspaceId,
-			projectId: stateParams.projectId,
-			routeTopicId: stateParams.topicId,
-			selectedWorkspaceId: workspaceStore.selectedWorkspace?.id,
-			selectedProjectId: projectStore.selectedProject?.id,
-			selectedTopic: topicStore.selectedTopic,
-		})
+		const needsRestore =
+			Boolean(
+				stateParams.workspaceId &&
+				workspaceStore.selectedWorkspace?.id !== stateParams.workspaceId,
+			) ||
+			Boolean(
+				stateParams.projectId && projectStore.selectedProject?.id !== stateParams.projectId,
+			) ||
+			Boolean(stateParams.topicId && topicStore.selectedTopic?.id !== stateParams.topicId)
 
 		if (!needsRestore) return
 
