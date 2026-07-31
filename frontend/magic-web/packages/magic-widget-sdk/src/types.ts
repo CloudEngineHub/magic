@@ -114,8 +114,14 @@ export declare namespace MagicWidget {
 		code: CommandErrorCode
 	}
 
+	/** Lists lifecycle and UI state events exposed to the embedding host. */
 	export type EventName = "agent_ready" | "preview_fullscreen"
+	/** Handles notifications that the current Agent editor and draft state are ready. */
 	export type AgentReadyEventListener = () => void
+	/**
+	 * Handles complete snapshots of whether the Agent preview is using fullscreen presentation.
+	 * @param isFullscreen Whether the current Agent preview is presented fullscreen.
+	 */
 	export type PreviewFullscreenEventListener = (isFullscreen: boolean) => void
 
 	export interface Controller {
@@ -123,7 +129,12 @@ export declare namespace MagicWidget {
 		open(): void
 		close(): void
 		destroy(): void
+		/** Subscribes to Agent readiness and returns a function that removes the listener. */
 		on(event: "agent_ready", listener: AgentReadyEventListener): () => void
+		/**
+		 * Subscribes to preview fullscreen state and immediately replays the current boolean snapshot.
+		 * The host owns any container resizing or fullscreen styling triggered by this state.
+		 */
 		on(event: "preview_fullscreen", listener: PreviewFullscreenEventListener): () => void
 		setInput(content: string): Promise<void>
 		appendInput(content: string): Promise<void>

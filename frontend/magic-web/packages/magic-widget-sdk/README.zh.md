@@ -75,22 +75,75 @@ UMD 脚本会暴露一个全局对象：
 window.MagicWidget
 ```
 
-| 方法              | 签名                                                           | 作用                                                                                    | 边界限制                                                      |
-| ----------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `mount`           | `(options: MagicWidget.MountOptions) => void`                  | 创建 widget 并显示悬浮按钮。重复调用 `mount` 会销毁上一次实例，并使用新的配置重新创建。 | 必须在浏览器文档中调用，并且调用时 `document.body` 需要存在。 |
-| `open`            | `() => void`                                                   | 主动打开面板。面板打开时，悬浮按钮会隐藏。                                              | 必须在 `mount` 后调用；未挂载时调用会抛错。                   |
-| `close`           | `() => void`                                                   | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
-| `destroy`         | `() => void`                                                   | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
-| `on`              | `("agent_ready"                                                | "preview_fullscreen", listener) => () => void`                                          | 订阅 Agent 就绪或预览全屏状态事件，并返回取消订阅函数。       | `preview_fullscreen` 只通知状态，容器样式和尺寸由宿主业务决定。 |
-| `setInput`        | `(content: string) => Promise<void>`                           | 将文本写入 Agent 输入框并聚焦，但不发送。                                               | 仅接受非空字符串；以 iframe response 为准。                   |
-| `appendInput`     | `(content: string) => Promise<void>`                           | 将文本追加到当前输入末尾并聚焦，但不发送。                                              | 仅接受非空字符串；以 iframe response 为准。                   |
-| `clearInput`      | `() => Promise<void>`                                          | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
-| `getInput`        | `() => Promise<string>`                                        | 返回当前输入框的纯文本内容。                                                            | 以 iframe response 为准。                                     |
-| `sendMessage`     | `(content: string) => Promise<void>`                           | 通过现有会话链路立即发送一条文本消息。                                                  | 仅接受非空字符串；超时或 iframe 错误时 Promise 会拒绝。       |
-| `newConversation` | `() => Promise<void>`                                          | 创建并选中新对话，Promise 在新编辑器再次 `agent_ready` 后完成。                         | 创建失败或新编辑器超时就绪时 Promise 会拒绝。                 |
-| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | 增量更新当前嵌入页面的展示配置。                                                        | 不更新 URL、不替换 `iframe.src`，也不刷新 iframe。            |
+| 方法              | 签名                                                                  | 作用                                                                                    | 边界限制                                                      |
+| ----------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `mount`           | `(options: MagicWidget.MountOptions) => void`                         | 创建 widget 并显示悬浮按钮。重复调用 `mount` 会销毁上一次实例，并使用新的配置重新创建。 | 必须在浏览器文档中调用，并且调用时 `document.body` 需要存在。 |
+| `open`            | `() => void`                                                          | 主动打开面板。面板打开时，悬浮按钮会隐藏。                                              | 必须在 `mount` 后调用；未挂载时调用会抛错。                   |
+| `close`           | `() => void`                                                          | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
+| `destroy`         | `() => void`                                                          | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
+| `on`              | `on("agent_ready", listener)`<br>`on("preview_fullscreen", listener)` | 订阅 Agent 就绪或预览全屏状态事件，并返回取消订阅函数。                                 | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
+| `setInput`        | `(content: string) => Promise<void>`                                  | 将文本写入 Agent 输入框并聚焦，但不发送。                                               | 仅接受非空字符串；以 iframe response 为准。                   |
+| `appendInput`     | `(content: string) => Promise<void>`                                  | 将文本追加到当前输入末尾并聚焦，但不发送。                                              | 仅接受非空字符串；以 iframe response 为准。                   |
+| `clearInput`      | `() => Promise<void>`                                                 | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
+| `getInput`        | `() => Promise<string>`                                               | 返回当前输入框的纯文本内容。                                                            | 以 iframe response 为准。                                     |
+| `sendMessage`     | `(content: string) => Promise<void>`                                  | 通过现有会话链路立即发送一条文本消息。                                                  | 仅接受非空字符串；超时或 iframe 错误时 Promise 会拒绝。       |
+| `newConversation` | `() => Promise<void>`                                                 | 创建并选中新对话，Promise 在新编辑器再次 `agent_ready` 后完成。                         | 创建失败或新编辑器超时就绪时 Promise 会拒绝。                 |
+| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>`        | 增量更新当前嵌入页面的展示配置。                                                        | 不更新 URL、不替换 `iframe.src`，也不刷新 iframe。            |
 
 同时可以通过 `window.MagicWidget.version` 获取当前脚本版本，便于排查接入问题。
+
+### 事件 API
+
+#### `preview_fullscreen`
+
+```ts
+on(event: "preview_fullscreen", listener: (isFullscreen: boolean) => void): () => void
+```
+
+当 Agent 预览进入或退出全屏呈现状态时，SDK 会向宿主传递完整的布尔状态：
+
+- `true`：预览已进入全屏呈现状态。
+- `false`：预览已退出全屏呈现状态，或当前没有处于全屏状态的预览。
+- 订阅成功后，listener 会立即同步收到一次当前状态；尚未进入全屏时为 `false`。宿主可据此在下一次绘制前完成初始布局。
+- 后续仅在状态发生变化时再次通知。iframe 重新加载、Widget 销毁或全屏预览退出时，状态会重置为 `false`。
+- 返回值是取消订阅函数。组件卸载或宿主不再关注状态时应调用它，避免残留监听。
+
+该事件只描述 Agent 内部预览状态。SDK 不会自动放大、Portal 或重设 Widget 容器样式；如果需要覆盖宿主视口，应由宿主根据事件调整容器布局：
+
+```js
+const container = document.querySelector("#agent-slot")
+
+const unsubscribePreviewFullscreen = window.MagicWidget.on("preview_fullscreen", (isFullscreen) => {
+	// Keep the host-owned container aligned with the complete SDK state snapshot.
+	container.classList.toggle("agent-preview-fullscreen", isFullscreen)
+})
+
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: container,
+})
+
+// Keep this function and invoke it when the host component is cleaned up.
+// unsubscribePreviewFullscreen()
+```
+
+```css
+.agent-preview-fullscreen {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+}
+```
+
+建议先订阅再调用 `mount`，这样宿主可以覆盖首次挂载以及后续重新挂载的完整状态变化。若同时订阅多个事件，需要分别保存并调用各自的取消订阅函数。
+
+#### `agent_ready`
+
+```ts
+on(event: "agent_ready", listener: () => void): () => void
+```
+
+`agent_ready` 表示当前 iframe 已完成页面初始化和编辑器事件订阅，并且当前话题的草稿阶段已经结束。它是状态通知，不是普通命令的强制执行前置条件。若宿主首次操作必须等待该状态，应在 `mount` 前订阅，并在首次触发后取消订阅。
 
 ## Mount 参数
 
@@ -124,8 +177,6 @@ window.MagicWidget.sendMessage("请立即处理这段虚构内容")
 ### Agent 就绪与输入维护
 
 `agent_ready` 表示当前 iframe 已完成页面初始化和编辑器事件订阅，并且当前话题的草稿阶段已经通过成功恢复、主动跳过或失败降级结束。它只是状态通知，SDK 和 iframe bridge 都不会把它作为普通命令的执行前置条件。iframe 文档完成加载后，普通命令会直接发送，不会在 bridge 内等待或排队到 `agent_ready`。
-
-`preview_fullscreen` 会在 Agent 预览进入或退出配置的全屏呈现状态时传递布尔值。SDK 不会为该事件调整、Portal 或重设 Widget 容器样式，具体布局由宿主业务自行处理。
 
 如果宿主首次操作必须发生在已有话题草稿处理完成之后，应由宿主业务逻辑自行等待一次 `agent_ready`。建议在 `mount` 前订阅，避免错过首次事件：
 
@@ -191,14 +242,14 @@ namespace MagicWidget {
 }
 ```
 
-| 字段                         | 作用                                                  | 边界限制                                                                                         |
-| ---------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；未传时根据 `responsive.mobileDetection` 选择的移动端语义及旧移动端 query 覆盖项决定响应式布局。 |
-| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                     |
+| 字段                         | 作用                                                  | 边界限制                                                                                                                   |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；未传时根据 `responsive.mobileDetection` 选择的移动端语义及旧移动端 query 覆盖项决定响应式布局。        |
+| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                                               |
 | `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 嵌入默认使用 `device-and-viewport`，将现有设备 `isMobile` 结果与 iframe 断点组合；配置为 `viewport` 可恢复仅视口判断。 |
-| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                   |
-| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                   |
-| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                        |
+| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                                             |
+| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                                             |
+| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                                  |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 

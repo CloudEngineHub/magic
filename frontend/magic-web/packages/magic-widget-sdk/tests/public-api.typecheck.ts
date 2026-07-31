@@ -49,6 +49,15 @@ void knownLoginStrategies
 
 const unsubscribeReady = window.MagicWidget?.on("agent_ready", () => undefined)
 void unsubscribeReady
+// Verifies that the public overload infers a boolean preview state and returns an unsubscribe function.
+const unsubscribePreviewFullscreen = window.MagicWidget?.on(
+	"preview_fullscreen",
+	(isFullscreen) => {
+		const previewFullscreenState: boolean = isFullscreen
+		void previewFullscreenState
+	},
+)
+void unsubscribePreviewFullscreen
 void window.MagicWidget?.setInput("mock input")
 void window.MagicWidget?.appendInput("mock suffix")
 void window.MagicWidget?.clearInput()
