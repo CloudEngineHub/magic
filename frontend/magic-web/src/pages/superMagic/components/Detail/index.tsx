@@ -45,6 +45,8 @@ interface DetailProps {
 	previewSessionKey?: number
 	/** Hides the preview surface while preserving cached tabs and renderer state. */
 	onPreviewDismiss?: () => void
+	/** Controls whether project-level preview tabs survive a page remount. */
+	persistFileTabs?: boolean
 	// Topic name for share scenario
 	topicName?: string
 	projectId?: string
@@ -114,6 +116,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		previewMode,
 		previewSessionKey,
 		onPreviewDismiss,
+		persistFileTabs,
 		topicName,
 		projectId,
 		allowDownload,
@@ -223,6 +226,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				previewMode={previewMode}
 				previewSessionKey={previewSessionKey}
 				onPreviewDismiss={onPreviewDismiss}
+				persistFileTabs={persistFileTabs}
 				openFileTab={openNewTab}
 				activeFileId={activeFileId}
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}

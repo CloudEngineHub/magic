@@ -6,6 +6,8 @@ import { TopicLayoutStore } from "../stores/TopicLayoutStore"
 interface UseTopicDesktopLayoutOptions {
 	isReadOnly: boolean
 	allowProjectSiderResize?: boolean
+	/** Controls whether conversation collapse state survives remounts. */
+	persistConversationPanelState?: boolean
 }
 
 interface UseTopicDesktopLayoutReturn {
@@ -28,12 +30,13 @@ interface UseTopicDesktopLayoutReturn {
 export function useTopicDesktopLayout({
 	isReadOnly,
 	allowProjectSiderResize = !isReadOnly,
+	persistConversationPanelState = true,
 }: UseTopicDesktopLayoutOptions): UseTopicDesktopLayoutReturn {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const storeRef = useRef<TopicLayoutStore | null>(null)
 
 	if (!storeRef.current) {
-		storeRef.current = new TopicLayoutStore()
+		storeRef.current = new TopicLayoutStore({ persistConversationPanelState })
 	}
 	const store = storeRef.current
 

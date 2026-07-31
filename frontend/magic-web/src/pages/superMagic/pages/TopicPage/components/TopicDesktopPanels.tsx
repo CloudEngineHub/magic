@@ -37,6 +37,7 @@ interface TopicDesktopPanelsProps {
 	showProjectResizeHandle?: boolean
 	keepDetailMountedWhenHidden?: boolean
 	autoExpandConversationWhenDetailVisible?: boolean
+	persistConversationPanelState?: boolean
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
 	renderMessagePanel: (params: {
@@ -61,6 +62,7 @@ function TopicDesktopPanels({
 	showProjectResizeHandle = !isReadOnly,
 	keepDetailMountedWhenHidden = false,
 	autoExpandConversationWhenDetailVisible = true,
+	persistConversationPanelState = true,
 	historyLayout,
 	shouldShowDetailPanel,
 	renderMessagePanel,
@@ -87,6 +89,7 @@ function TopicDesktopPanels({
 	} = useTopicDesktopLayout({
 		isReadOnly,
 		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
+		persistConversationPanelState,
 	})
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
 	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0

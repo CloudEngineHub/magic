@@ -258,6 +258,7 @@ function CrewConversationDesktop({
 					previewMode={previewMode}
 					previewSessionKey={previewSessionKey}
 					onPreviewDismiss={handlePreviewDismiss}
+					persistFileTabs={!isWidgetEmbed}
 					projectId={selectedProject.id}
 					showFallbackWhenEmpty
 					allowDownload
@@ -266,6 +267,7 @@ function CrewConversationDesktop({
 			isReadOnly={isReadOnly}
 			keepDetailMountedWhenHidden
 			autoExpandConversationWhenDetailVisible={previewMode !== "switchable"}
+			persistConversationPanelState={!isWidgetEmbed}
 			historyLayout={
 				showTopicHistory
 					? {

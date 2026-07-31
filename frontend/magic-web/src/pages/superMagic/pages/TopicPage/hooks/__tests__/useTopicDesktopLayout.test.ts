@@ -185,4 +185,32 @@ describe("useTopicDesktopLayout", () => {
 
 		expect(result.current.messagePanelWidthPx).toBe(DEFAULT_WIDTH.MESSAGE_PANEL)
 	})
+
+	it("should start expanded and avoid persisting collapse state for embedded layouts", () => {
+		localStorage.setItem(
+			"supermagic-topic-conversation-panel",
+			JSON.stringify({ collapsed: true, lastExpandedSize: 420 }),
+		)
+		vi.mocked(localStorage.setItem).mockClear()
+
+		const { result, rerender } = renderHook(() =>
+			useTopicDesktopLayout({
+				isReadOnly: false,
+				persistConversationPanelState: false,
+			}),
+		)
+
+		expect(result.current.isConversationPanelCollapsed).toBe(false)
+
+		act(() => {
+			result.current.toggleConversationPanel()
+		})
+		rerender()
+
+		expect(result.current.isConversationPanelCollapsed).toBe(true)
+		expect(localStorage.setItem).not.toHaveBeenCalledWith(
+			"supermagic-topic-conversation-panel",
+			expect.any(String),
+		)
+	})
 })

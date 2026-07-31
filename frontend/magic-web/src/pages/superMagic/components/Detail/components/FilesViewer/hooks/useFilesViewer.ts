@@ -360,6 +360,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		previewMode = "split",
 		previewSessionKey = 0,
 		onPreviewDismiss,
+		persistFileTabs = true,
 	} = props
 
 	const onFileTabsCacheLoadedRef = useRef(onFileTabsCacheLoaded)
@@ -1172,6 +1173,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 			return
 		}
 
+		if (!persistFileTabs) {
+			// Embedded preview sessions must always start from the conversation surface.
+			setCacheLoaded(true)
+			notifyFileTabsCacheLoaded(selectedProject.id)
+			return
+		}
+
 		// 无组织上下文时无法读写本地 tab 缓存；对 `onFileTabsCacheLoaded` 订阅方仍视为「tabs 决策已结束」
 		if (!organizationCode) {
 			notifyFileTabsCacheLoaded(selectedProject.id)
@@ -1364,6 +1372,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		openPlaybackTab,
 		fileList,
 		isAwaitingProjectAttachments,
+		persistFileTabs,
 	])
 
 	useEffect(() => {
@@ -1572,7 +1581,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// 保存文件状态到缓存
 	const saveCacheState = useCallback(async () => {
-		if (!organizationCode || !selectedProject?.id || !cacheLoaded || isProjectSwitching) {
+		if (
+			!persistFileTabs ||
+			!organizationCode ||
+			!selectedProject?.id ||
+			!cacheLoaded ||
+			isProjectSwitching
+		) {
 			return
 		}
 
@@ -1657,6 +1672,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		isProjectSwitching,
 		projectStateRepository,
 		playbackTab,
+		persistFileTabs,
 	])
 
 	// 当 tabs 状态变化时保存缓存

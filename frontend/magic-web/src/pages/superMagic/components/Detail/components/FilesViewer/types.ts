@@ -150,6 +150,8 @@ export interface FilesViewerProps extends BaseComponentProps {
 	previewSessionKey?: number
 	/** Hides the preview surface while preserving its cached tabs and content. */
 	onPreviewDismiss?: () => void
+	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
+	persistFileTabs?: boolean
 
 	// Render component props
 	allowEdit?: boolean
