@@ -17,11 +17,8 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageGenerateResponse;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageUsage;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 use Exception;
-use Hyperf\Coroutine\Parallel;
-use Hyperf\Engine\Coroutine;
 use Hyperf\Retry\Annotation\Retry;
 use Throwable;
 
@@ -95,44 +92,36 @@ class GoogleGeminiModel extends AbstractImageGenerate
             return $response; // 返回空数据响应
         }
 
-        // 3. 并发处理 - 直接操作响应对象
-        $count = $imageGenerateRequest->getGenerateNum();
+        // 3. 单次处理：Google 当前链路只生成一张图
+        if ($imageGenerateRequest->getGenerateNum() > 1) {
+            $this->logger->warning('GoogleGemini OpenAI格式生图：不支持一次生成多张图片，将只生成一张');
+        }
         $originalReferImages = $imageGenerateRequest->getReferImages();
 
         try {
             $this->prepareBase64ReferenceImages($imageGenerateRequest);
-            $parallel = new Parallel();
-            $fromCoroutineId = Coroutine::id();
+            try {
+                $result = $this->requestImageGeneration($imageGenerateRequest);
+                $this->validateGoogleGeminiResponse($result);
+                $this->addImageDataToResponseGemini($response, $result, $imageGenerateRequest);
+            } catch (Exception $e) {
+                if (! $response->hasError()) {
+                    $response->setProviderErrorCode($e->getCode());
+                    $response->setProviderErrorMessage($e->getMessage());
+                }
 
-            for ($i = 0; $i < $count; ++$i) {
-                $parallel->add(function () use ($imageGenerateRequest, $response, $fromCoroutineId) {
-                    CoContext::copy($fromCoroutineId);
-                    try {
-                        $result = $this->requestImageGeneration($imageGenerateRequest);
-                        $this->validateGoogleGeminiResponse($result);
-                        $this->addImageDataToResponseGemini($response, $result, $imageGenerateRequest);
-                    } catch (Exception $e) {
-                        if (! $response->hasError()) {
-                            $response->setProviderErrorCode($e->getCode());
-                            $response->setProviderErrorMessage($e->getMessage());
-                        }
-
-                        $this->logger->error('GoogleGemini OpenAI格式生图：单个请求失败', [
-                            'error_code' => $e->getCode(),
-                            'error_message' => $e->getMessage(),
-                        ]);
-                    }
-                });
+                $this->logger->error('GoogleGemini OpenAI格式生图：请求失败', [
+                    'error_code' => $e->getCode(),
+                    'error_message' => $e->getMessage(),
+                ]);
             }
-
-            $parallel->wait();
         } finally {
             $imageGenerateRequest->setReferImages($originalReferImages);
         }
 
         // 4. 记录最终结果
-        $this->logger->info('GoogleGemini OpenAI格式生图：并发处理完成', [
-            '总请求数' => $count,
+        $this->logger->info('GoogleGemini OpenAI格式生图：处理完成', [
+            '总请求数' => 1,
             '成功图片数' => count($response->getData()),
             '是否有错误' => $response->hasError(),
             '错误码' => $response->getProviderErrorCode(),
@@ -274,7 +263,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
     }
 
     /**
-     * Base64 模式在并发请求前只准备一次，避免同一批图片重复下载。
+     * Base64 模式在生成请求前只准备一次，避免同一批图片重复下载。
      */
     private function prepareBase64ReferenceImages(GoogleGeminiRequest $request): void
     {
@@ -292,54 +281,28 @@ class GoogleGeminiModel extends AbstractImageGenerate
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR);
         }
 
-        // Google Gemini API每次只能生成一张图，通过并发调用实现多图生成
-        $count = $imageGenerateRequest->getGenerateNum();
+        // Google Gemini 当前链路只支持单次生成一张图
+        if ($imageGenerateRequest->getGenerateNum() > 1) {
+            $this->logger->warning('Google Gemini文生图：不支持一次生成多张图片，将只生成一张');
+        }
         $rawResults = [];
         $errors = [];
 
         $originalReferImages = $imageGenerateRequest->getReferImages();
         try {
             $this->prepareBase64ReferenceImages($imageGenerateRequest);
-            $parallel = new Parallel();
-            $fromCoroutineId = Coroutine::id();
-
-            for ($i = 0; $i < $count; ++$i) {
-                $parallel->add(function () use ($imageGenerateRequest, $i, $fromCoroutineId) {
-                    CoContext::copy($fromCoroutineId);
-                    try {
-                        $result = $this->requestImageGeneration($imageGenerateRequest);
-                        $imageData = $this->extractImageDataFromResponse($result);
-
-                        return [
-                            'success' => true,
-                            'data' => ['imageData' => $imageData],
-                            'index' => $i,
-                        ];
-                    } catch (Exception $e) {
-                        $this->logger->error('Google Gemini文生图：图片生成失败', [
-                            'error' => $e->getMessage(),
-                            'index' => $i,
-                        ]);
-                        return [
-                            'success' => false,
-                            'error' => $e->getMessage(),
-                            'index' => $i,
-                        ];
-                    }
-                });
+            try {
+                $result = $this->requestImageGeneration($imageGenerateRequest);
+                $imageData = $this->extractImageDataFromResponse($result);
+                $rawResults[] = ['imageData' => $imageData];
+            } catch (Exception $e) {
+                $errors[] = $e->getMessage();
+                $this->logger->error('Google Gemini文生图：图片生成失败', [
+                    'error' => $e->getMessage(),
+                ]);
             }
-
-            $results = $parallel->wait();
         } finally {
             $imageGenerateRequest->setReferImages($originalReferImages);
-        }
-
-        foreach ($results as $result) {
-            if ($result['success']) {
-                $rawResults[$result['index']] = $result['data'];
-            } else {
-                $errors[] = $result['error'] ?? '未知错误';
-            }
         }
 
         if (empty($rawResults)) {

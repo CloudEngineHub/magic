@@ -20,10 +20,10 @@ use function Hyperf\Translation\__;
  */
 class GoogleReferenceImagePreparer
 {
-    /** Google 生图参考图传输：单张参考图最大字节数（100 MiB）。 */
+    /** Google 生图参考图传输：单张参考图最大字节数（60 MiB）。 */
     private const MAX_IMAGE_BYTES = 60 * 1024 * 1024;
 
-    /** Google 生图参考图传输：全部参考图最大累计字节数（100 MiB）。 */
+    /** Google 生图参考图传输：全部参考图最大累计字节数（60 MiB）。 */
     private const MAX_IMAGES_BYTES = 60 * 1024 * 1024;
 
     /** Google 生图参考图安全下载器。 */
