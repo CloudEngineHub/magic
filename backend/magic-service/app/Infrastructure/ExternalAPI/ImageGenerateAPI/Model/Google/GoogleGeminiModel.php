@@ -96,7 +96,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
         try {
             $this->prepareBase64ReferenceImages($imageGenerateRequest);
             try {
-                $result = $this->requestImageGeneration($imageGenerateRequest);
+                $result = $this->requestImageGenerationWithFallback($imageGenerateRequest);
                 $this->addImageDataToResponseGemini($response, $result, $imageGenerateRequest);
             } catch (Exception $e) {
                 if (! $response->hasError()) {
@@ -252,6 +252,26 @@ class GoogleGeminiModel extends AbstractImageGenerate
         $request->setReferImages($this->referenceImagePreparer->prepare($request->getReferImages()));
     }
 
+    /** URL 请求失败时，下载参考图并以 Base64 重试一次。 */
+    private function requestImageGenerationWithFallback(GoogleGeminiRequest $request): array
+    {
+        try {
+            return $this->requestImageGeneration($request);
+        } catch (Exception $e) {
+            if ($this->referenceImageTransport !== GoogleProviderConfigItem::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64
+                || empty($request->getReferImages())) {
+                throw $e;
+            }
+
+            $this->logger->warning('Google Gemini 生图：URL 传输失败，改用 Base64 重试', [
+                'error' => $e->getMessage(),
+            ]);
+            $request->setReferImages($this->referenceImagePreparer->prepare($request->getReferImages()));
+
+            return $this->requestImageGeneration($request);
+        }
+    }
+
     private function generateImageRawInternal(ImageGenerateRequest $imageGenerateRequest): array
     {
         if (! $imageGenerateRequest instanceof GoogleGeminiRequest) {
@@ -264,7 +284,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
         $originalReferImages = $imageGenerateRequest->getReferImages();
         try {
             $this->prepareBase64ReferenceImages($imageGenerateRequest);
-            $result = $this->requestImageGeneration($imageGenerateRequest);
+            $result = $this->requestImageGenerationWithFallback($imageGenerateRequest);
             return [['imageData' => $this->extractImageDataFromResponse($result)]];
         } catch (Exception $e) {
             $this->logger->error('Google Gemini文生图：图片生成失败', ['error' => $e->getMessage()]);

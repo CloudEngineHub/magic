@@ -42,6 +42,9 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
     /** Google 生图参考图传输策略：将参考图 URL 直接传递给 Google。 */
     public const REFERENCE_IMAGE_TRANSPORT_URL = 'url';
 
+    /** Google 生图参考图传输策略：URL 请求失败后改用 Base64。 */
+    public const REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64 = 'url_fallback_base64';
+
     /** Google 服务认证方式：使用 API Key 认证。 */
     public const AUTH_TYPE_API_KEY = 'api_key';
 
@@ -125,9 +128,9 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
     protected string $gcsBucket = '';
 
     /**
-     * Google 参考图传输策略，默认使用内联 Base64，避免 Google 回源国内 OSS。
+     * Google 参考图传输策略，默认使用url，避免 Google 回源国内 OSS。
      */
-    protected string $referenceImageTransport = self::REFERENCE_IMAGE_TRANSPORT_BASE64;
+    protected string $referenceImageTransport = self::REFERENCE_IMAGE_TRANSPORT_URL;
 
     public function __construct(?array $data = null)
     {
@@ -365,6 +368,7 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
         return in_array($transport, [
             self::REFERENCE_IMAGE_TRANSPORT_BASE64,
             self::REFERENCE_IMAGE_TRANSPORT_URL,
+            self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64,
         ], true) ? $transport : self::REFERENCE_IMAGE_TRANSPORT_BASE64;
     }
 
