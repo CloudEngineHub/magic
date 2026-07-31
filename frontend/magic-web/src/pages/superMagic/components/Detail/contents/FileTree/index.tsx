@@ -7,9 +7,9 @@ import {
 	IconCornerLeftUp,
 	IconCornerRightDown,
 } from "@tabler/icons-react"
-import { useResponsive } from "ahooks"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicIcon from "@/components/base/MagicIcon"
 import { formatFileSize, formatTime } from "@/utils/string"
 import { useStyles } from "./styles"
@@ -206,7 +206,13 @@ function FileTreeItem({
 						)}
 						<div className={styles.fileIconWrapper}>
 							{isDirectory ? (
-								<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="file-tree-image"/>
+								<img
+									src={FoldIcon}
+									alt="folder"
+									width={18}
+									height={18}
+									data-testid="file-tree-image"
+								/>
 							) : (
 								<MagicFileIcon
 									type={getFileExtension(node.file_name)}
@@ -275,8 +281,7 @@ export default memo(function FileTree(props: FileTreeProps) {
 
 	const { styles, cx } = useStyles({ isAllFileType: false })
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.mobile
+	const isMobile = useIsMobile()
 
 	// 获取所有目录路径
 	const allDirectoryPaths = useMemo(() => {
@@ -450,7 +455,11 @@ export default memo(function FileTree(props: FileTreeProps) {
 									justify="center"
 									vertical
 								>
-									<img src={EmptyFiles} alt="empty"  data-testid="file-tree-image-2"/>
+									<img
+										src={EmptyFiles}
+										alt="empty"
+										data-testid="file-tree-image-2"
+									/>
 									<span>{t("fileTree.empty")}</span>
 								</Flex>
 							)}

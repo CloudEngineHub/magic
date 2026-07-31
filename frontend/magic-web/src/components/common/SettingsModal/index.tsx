@@ -9,17 +9,16 @@ import {
 } from "react"
 import { IconX } from "@tabler/icons-react"
 import type { SettingsModalProps, SettingsModalChildrenProps } from "./types"
-import { useResponsive } from "ahooks"
 import { Tabs } from "antd-mobile"
 import { useTranslation } from "react-i18next"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export default function SettingsModal(props: SettingsModalProps) {
 	const { t } = useTranslation("super")
 	const { onClose, tabs, defaultTab } = props
 
 	const { styles, cx } = useStyles()
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
 
 	const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.key)
 
