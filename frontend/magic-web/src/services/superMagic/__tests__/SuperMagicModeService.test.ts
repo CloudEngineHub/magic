@@ -82,6 +82,7 @@ import superMagicCustomModelService from "../SuperMagicCustomModelService"
 import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
 import { configStore } from "@/models/config"
+import { roleStore } from "@/pages/superMagic/stores/RoleStore"
 
 function createModelItem({
 	id,
@@ -129,6 +130,14 @@ function createCrewList(identifier: string) {
 		],
 		models: {},
 	} as any
+}
+
+function createModeItem(identifier: string): ModeItem {
+	return createCrewList(identifier).list[0] as ModeItem
+}
+
+function createRoleStore() {
+	return new (roleStore.constructor as new () => typeof roleStore)()
 }
 
 function createModeListStorageKey(lang: string) {
@@ -298,6 +307,38 @@ describe("SuperMagicModeService", () => {
 		expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("cached-en")
 	})
 
+	it("hydrates cached default agent together with the mode list", async () => {
+		const storageKey = createModeListStorageKey("zh_CN")
+		const general = createModeItem("general")
+		const agentB = createModeItem("agent-b")
+		mockModeListStore.set(storageKey, [general, agentB])
+		window.localStorage.setItem(
+			"super_magic/default_agent_code/test-org/test-user/zh_CN",
+			"agent-b",
+		)
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+
+		await superMagicModeService.hydrateFromStorage(storageKey)
+		const store = createRoleStore()
+
+		expect(superMagicModeService.modeList.map((item) => item.mode.identifier)).toEqual([
+			"general",
+			"agent-b",
+		])
+		expect(superMagicModeService.defaultAgentCode).toBe("agent-b")
+		expect(store.currentRole).toBe("agent-b")
+	})
+
 	it("prefers custom language model over official model", async () => {
 		vi.mocked(superMagicCustomModelService.findMyModelById).mockResolvedValue({
 			id: "custom-1",
@@ -402,6 +443,51 @@ describe("SuperMagicModeService", () => {
 		await superMagicModeService.fetchModeList({ force: true })
 
 		expect(superMagicModeService.defaultAgentCode).toBe("general")
+		await vi.waitFor(() => {
+			expect(
+				window.localStorage.getItem(
+					"super_magic/default_agent_code/test-org/test-user/zh_CN",
+				),
+			).toBe("general")
+		})
+	})
+
+	it("reconciles stored C to configured default B after featured refresh removes C", async () => {
+		const general = createModeItem("general")
+		const agentB = createModeItem("agent-b")
+		const agentC = createModeItem("agent-c")
+		superMagicModeService._modeList = [general, agentB, agentC]
+		superMagicModeService._modeMap = new Map(
+			superMagicModeService._modeList.map((item) => [item.mode.identifier, item]),
+		)
+		superMagicModeService._defaultAgentCode = "agent-b"
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+		const store = createRoleStore()
+		expect(store.currentRole).toBe("agent-c")
+
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			list: [general, agentB],
+			models: {},
+			default_agent_code: "agent-b",
+		} as any)
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(store.currentRole).toBe("agent-b")
 	})
 
 	it("uses featured is_visible when checking whether a mode can be selected", async () => {

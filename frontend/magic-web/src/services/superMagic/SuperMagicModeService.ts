@@ -114,6 +114,14 @@ const REFRESH_INTERVAL = 15 * 60 * 1000
 const MAX_RETRY_COUNT = 3
 const RETRY_DELAY_BASE = 1000 // Base delay for retry in milliseconds
 
+function resolveDefaultAgentCodeStorageKey(modeListStorageKey: string) {
+	const modeListPrefix = `${platformKey("super_magic/mode_list")}/`
+	const defaultAgentPrefix = `${platformKey("super_magic/default_agent_code")}/`
+	return modeListStorageKey.startsWith(modeListPrefix)
+		? modeListStorageKey.replace(modeListPrefix, defaultAgentPrefix)
+		: `${modeListStorageKey}:default_agent_code`
+}
+
 interface RequestState<T> {
 	promise: Promise<T> | null
 	contextKey: string | null
@@ -298,6 +306,7 @@ class SuperMagicModeService {
 		}
 
 		this.logTemporaryDiagnostic("mode-storage:hydrate-start", { storageKey })
+		const cachedDefaultAgentCode = this.readPersistedDefaultAgentCode(storageKey)
 
 		// Make sure any legacy entry for this key has been moved to IDB first
 		await this.migrateLegacyLocalStorage()
@@ -305,7 +314,7 @@ class SuperMagicModeService {
 		try {
 			const data = await superMagicModeListRepository.getByKey(storageKey)
 			if (Array.isArray(data)) {
-				this.applyModeListSnapshot(data)
+				this.applyModeListSnapshot(data, cachedDefaultAgentCode)
 				this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
 					source: "indexedDB",
 					...getModeListPayloadShape(data),
@@ -321,7 +330,7 @@ class SuperMagicModeService {
 				"Failed to load mode list from IndexedDB, falling back to localStorage",
 				error,
 			)
-			this.hydrateFromLocalStorageFallback(storageKey)
+			this.hydrateFromLocalStorageFallback(storageKey, cachedDefaultAgentCode)
 			this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
 				source: "localStorage-fallback-after-idb-error",
 				...getModeListPayloadShape(this._modeList),
@@ -329,14 +338,14 @@ class SuperMagicModeService {
 			return
 		}
 
-		this.hydrateFromLocalStorageFallback(storageKey)
+		this.hydrateFromLocalStorageFallback(storageKey, cachedDefaultAgentCode)
 		this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
 			source: "localStorage-fallback",
 			...getModeListPayloadShape(this._modeList),
 		})
 	}
 
-	private hydrateFromLocalStorageFallback(storageKey: string) {
+	private hydrateFromLocalStorageFallback(storageKey: string, cachedDefaultAgentCode?: string) {
 		try {
 			const raw = window.localStorage.getItem(storageKey)
 			if (!raw) {
@@ -345,7 +354,7 @@ class SuperMagicModeService {
 			}
 			const parsed = JSON.parse(raw)
 			if (Array.isArray(parsed)) {
-				this.applyModeListSnapshot(parsed)
+				this.applyModeListSnapshot(parsed, cachedDefaultAgentCode)
 				logger.log("Loaded mode list from localStorage fallback")
 			} else {
 				logger.warn("Invalid mode list data in localStorage fallback")
@@ -380,6 +389,7 @@ class SuperMagicModeService {
 			storageKey,
 			...getModeListPayloadShape(modeList),
 		})
+		this.persistDefaultAgentCode(storageKey, this._defaultAgentCode)
 
 		try {
 			await superMagicModeListRepository.saveByKey(storageKey, modeList)
@@ -403,6 +413,34 @@ class SuperMagicModeService {
 			})
 		} catch (error) {
 			logger.error("Failed to persist mode list to localStorage fallback", error)
+		}
+	}
+
+	private readPersistedDefaultAgentCode(storageKey: string) {
+		if (typeof window === "undefined" || !window.localStorage) return undefined
+		try {
+			return (
+				window.localStorage
+					.getItem(resolveDefaultAgentCodeStorageKey(storageKey))
+					?.trim() || undefined
+			)
+		} catch (error) {
+			logger.warn("Failed to read cached default agent code", error)
+			return undefined
+		}
+	}
+
+	private persistDefaultAgentCode(storageKey: string, defaultAgentCode?: string) {
+		if (typeof window === "undefined" || !window.localStorage) return
+		const key = resolveDefaultAgentCodeStorageKey(storageKey)
+		try {
+			if (defaultAgentCode) {
+				window.localStorage.setItem(key, defaultAgentCode)
+			} else {
+				window.localStorage.removeItem(key)
+			}
+		} catch (error) {
+			logger.warn("Failed to persist default agent code", error)
 		}
 	}
 
@@ -507,10 +545,11 @@ class SuperMagicModeService {
 		}
 	}
 
-	private applyModeListSnapshot(modeList: ModeItem[]) {
+	private applyModeListSnapshot(modeList: ModeItem[], defaultAgentCode?: string) {
 		runInAction(() => {
 			this._modeList = modeList
 			this._modeMap = buildModeMapFromModeList(modeList)
+			this._defaultAgentCode = defaultAgentCode
 		})
 	}
 
