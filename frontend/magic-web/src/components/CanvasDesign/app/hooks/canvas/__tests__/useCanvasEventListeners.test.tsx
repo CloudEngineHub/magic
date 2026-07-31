@@ -33,6 +33,10 @@ function createCanvasStub() {
 	}
 	const elementManager = {
 		exportDocumentPatch: vi.fn(),
+		getTemporaryElementMetadata: vi.fn((elementId: string) => {
+			void elementId
+			return null
+		}),
 	}
 	const canvas = {
 		eventEmitter,
@@ -117,5 +121,85 @@ describe("useCanvasEventListeners connection changes", () => {
 				changedConnectionIds: [connection.id],
 			}),
 		)
+	})
+
+	it("does not forward runtime-only generation deletions to the host patch", async () => {
+		const { canvas, elementManager, eventEmitter } = createCanvasStub()
+		elementManager.exportDocumentPatch.mockReturnValue({
+			upserts: [],
+			deletedElementIds: [],
+			changedElementIds: ["persisted-image"],
+		})
+		const onPatch = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("element:deleted")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({
+				type: "element:deleted",
+				data: { elementId: "runtime-result", persistence: "runtime-only" },
+			})
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["persisted-image"], phase: "commit" },
+			})
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(elementManager.exportDocumentPatch).toHaveBeenCalledWith({
+			changedElementIds: ["persisted-image"],
+			deletedElementIds: [],
+			elementNameChanges: undefined,
+			includeTemporary: false,
+		})
+		expect(onPatch).toHaveBeenCalledWith(
+			expect.objectContaining({ deletedElementIds: [] }),
+			expect.anything(),
+		)
+	})
+
+	it("does not schedule a host patch for generation-only element changes", async () => {
+		const { canvas, elementManager, eventEmitter } = createCanvasStub()
+		elementManager.getTemporaryElementMetadata.mockImplementation((elementId: string) =>
+			elementId === "runtime-result"
+				? {
+						kind: "generation-result",
+						historyPolicy: "exclude",
+						clipboardPolicy: "exclude",
+					}
+				: null,
+		)
+		const onPatch = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("element:change")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["runtime-result"], phase: "commit" },
+			})
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(elementManager.exportDocumentPatch).not.toHaveBeenCalled()
+		expect(onPatch).not.toHaveBeenCalled()
 	})
 })

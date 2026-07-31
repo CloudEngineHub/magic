@@ -12,7 +12,6 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useUpdateEffect } from "ahooks"
-import { GenerationStatus } from "../../../public/magic-types"
 import { Button } from "../../primitives/shadcn/button"
 import {
 	Select,
@@ -265,6 +264,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 		setIsSubmitting(true)
 
 		let createdElementId: string | undefined
+		let generationAttemptId: string | undefined
 		const imageSrc = imageElement.src
 
 		void (async () => {
@@ -284,6 +284,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 
 				const requestImageId = generateUUID()
 				const placeholderTaskMeta = createExpandImageTaskMeta({
+					image_id: requestImageId,
 					file_path: imageSrc,
 					reference_image_options: buildReferenceImageOptions({
 						filePath: imageSrc,
@@ -304,11 +305,22 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 						"elementTools.imageExtend.title",
 						"扩展",
 					)}`,
-					status: GenerationStatus.Pending,
-					imageGenerationTaskMeta: placeholderTaskMeta,
 				}
 
-				canvas.elementManager.create(newImageElement)
+				// 扩图包含本地合成和文件上传，整个提交窗口都不能把占位元素导出。
+				canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
+				generationAttemptId = canvas.generationRuntimeManager.beginAttempt({
+					operation: "image-extend",
+					originElementId: imageElement.id,
+					phase: "preparing",
+					failurePolicy: "remove-placeholder",
+					targets: [
+						{
+							elementId: createdElementId,
+							imageGenerationTaskMeta: placeholderTaskMeta,
+						},
+					],
+				})
 				canvas.extendManager.confirmExtend()
 				canvas.selectionManager.select(createdElementId, false)
 
@@ -430,7 +442,14 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				}
 			} catch (error) {
 				if (createdElementId) {
-					canvas.elementManager.delete(createdElementId)
+					if (generationAttemptId) {
+						canvas.generationAttemptCoordinator.rejectAttempt(generationAttemptId)
+					} else {
+						canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
+							createdElementId,
+							"remove-placeholder",
+						)
+					}
 				}
 			} finally {
 				setIsSubmitting(false)

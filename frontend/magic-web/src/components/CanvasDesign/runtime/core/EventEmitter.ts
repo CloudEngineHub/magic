@@ -18,13 +18,7 @@ import type { LoadedVideoResource } from "../resources/video/VideoResourceManage
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
 
 export type ViewportChangeSource =
-	| "wheel"
-	| "gesture"
-	| "minimap"
-	| "programmatic"
-	| "resize"
-	| "restore"
-	| "unknown"
+	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
 
 export type ViewportChangePhase = "start" | "move" | "end"
 
@@ -96,7 +90,7 @@ export interface CanvasEventMap {
 		nameChange?: CanvasElementNameChange
 	}
 	"element:rerendered": { elementId: string; data: LayerElement } // 元素节点重新渲染（不记录历史）
-	"element:deleted": { elementId: string }
+	"element:deleted": { elementId: string; persistence?: "runtime-only" }
 	"element:change": CanvasElementChangePayload | undefined // 任何元素变化时触发，用于触发UI更新
 	"element:batchupdated": void // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件

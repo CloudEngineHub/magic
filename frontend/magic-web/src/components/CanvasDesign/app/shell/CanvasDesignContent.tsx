@@ -43,6 +43,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const {
 		defaultData,
+		elementDetailsProvenance,
+		onElementDetailsProvenanceChange,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
 		elementActionHints,
@@ -129,6 +131,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			getDevice: getDevice,
 			t: t,
 		})
+		canvasInstance.elementDetailsRuntimeManager.setOnChange(onElementDetailsProvenanceChange)
 
 		setCanvas(canvasInstance)
 		// 保存到 ref，确保卸载时能拿到实例
@@ -154,7 +157,10 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			}
 			// 使用传入的 defaultCanvasData 或默认空数据
 			// 兼容 useImmer 创建的 Proxy 对象，转换为普通对象
-			canvasInstance.loadDocument(defaultData ? toPlainObject(defaultData) : { elements: [] })
+			canvasInstance.loadDocument(
+				defaultData ? toPlainObject(defaultData) : { elements: [] },
+				{ elementDetailsProvenance },
+			)
 			// 从 storage 读取 viewport 信息并加载
 			if (methods?.getStorage) {
 				const storageData = methods.getStorage()
@@ -188,6 +194,10 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	useUpdateEffect(() => {
 		canvas?.setT(t)
 	}, [t, canvas])
+
+	useUpdateEffect(() => {
+		canvas?.elementDetailsRuntimeManager.setOnChange(onElementDetailsProvenanceChange)
+	}, [canvas, onElementDetailsProvenanceChange])
 
 	useUpdateEffect(() => {
 		canvas?.updateDeviceInfo(getDevice)

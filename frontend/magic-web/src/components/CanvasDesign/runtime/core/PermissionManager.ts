@@ -109,6 +109,7 @@ export class PermissionManager {
 	public canConnect(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (!this.canHover(element)) return false
+		if (!this.canvas.elementManager.canParticipateInDocumentRelations(element.id)) return false
 		if (NON_CONNECTABLE_ELEMENT_TYPES.has(element.type)) return false
 		if (element.interactionConfig?.connectable === false) return false
 		return true

@@ -6,6 +6,7 @@ import type {
 	ViewportState,
 	ToolType,
 } from "../document/types"
+import type { ElementDetailsProvenance } from "../document/elementDetailsProvenance"
 import { ToolTypeEnum } from "../document/types"
 import { ViewportController } from "../interaction/viewport/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
@@ -51,6 +52,9 @@ import { CropManager } from "../interaction/crop/CropManager"
 import { ExtendManager } from "../interaction/extend/ExtendManager"
 import { EraserManager } from "../interaction/eraser/EraserManager"
 import { PluginManager } from "../plugins/PluginManager"
+import { GenerationRuntimeManager } from "../generation/GenerationRuntimeManager"
+import { ElementDetailsRuntimeManager } from "../generation/ElementDetailsRuntimeManager"
+import { GenerationAttemptCoordinator } from "../generation/GenerationAttemptCoordinator"
 import { ElementRenameManager } from "../interaction/rename/ElementRenameManager"
 import { TextEditingManager } from "../interaction/text-editing/TextEditingManager"
 import { TextFormattingManager } from "../interaction/text-editing/TextFormattingManager"
@@ -160,6 +164,9 @@ export class Canvas {
 	public textEditingManager: TextEditingManager
 	public textFormattingManager: TextFormattingManager
 	public pluginManager: PluginManager
+	public generationRuntimeManager: GenerationRuntimeManager
+	public generationAttemptCoordinator: GenerationAttemptCoordinator
+	public elementDetailsRuntimeManager: ElementDetailsRuntimeManager
 
 	public readonly: boolean
 	public deviceInfo: CanvasDeviceInfo
@@ -227,6 +234,8 @@ export class Canvas {
 
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
+		this.generationRuntimeManager = new GenerationRuntimeManager({ canvas: this })
+		this.elementDetailsRuntimeManager = new ElementDetailsRuntimeManager()
 
 		this.pluginManager = new PluginManager()
 		this.pluginManager.registerMany(options.plugins?.builtin ?? [])
@@ -311,6 +320,7 @@ export class Canvas {
 		this.elementManager = new ElementManager({
 			canvas: this,
 		})
+		this.generationAttemptCoordinator = new GenerationAttemptCoordinator(this)
 
 		this.imagePresentationScheduler = new CanvasImagePresentationScheduler({
 			canvas: this,
@@ -899,8 +909,12 @@ export class Canvas {
 	 * 加载文档数据
 	 * @param doc - 画布文档
 	 */
-	public loadDocument(doc: CanvasDocument): void {
+	public loadDocument(
+		doc: CanvasDocument,
+		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
+	): void {
 		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocument")
+		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
 		// 禁用历史记录，避免在加载时记录
 		this.historyManager.disable()
@@ -928,8 +942,14 @@ export class Canvas {
 	 * 智能加载文档数据
 	 * @param doc - 画布文档
 	 */
-	public loadDocumentSmart(doc: CanvasDocument): void {
+	public loadDocumentSmart(
+		doc: CanvasDocument,
+		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
+	): void {
 		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocumentSmart")
+		if (options?.elementDetailsProvenance) {
+			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
+		}
 		const previousConnections = this.connectionManager.exportConnections()
 		let didEmitDocumentRestored = false
 		const unsubscribeDocumentRestored = this.eventEmitter.on("document:restored", () => {
@@ -954,7 +974,7 @@ export class Canvas {
 	/**
 	 * 导出文档数据
 	 * @param options 导出选项
-	 * @param options.includeTemporary 是否包含临时元素（默认 false）
+	 * @param options.includeTemporary 是否包含允许进入历史的临时元素（默认 false）
 	 * @returns 画布文档
 	 */
 	public exportDocument(options?: { includeTemporary?: boolean }): CanvasDocument {
@@ -1290,6 +1310,8 @@ export class Canvas {
 		this.extendManager.destroy()
 		this.eraserManager.destroy()
 		this.imageEditingCoordinator.destroy()
+		this.generationRuntimeManager.destroy()
+		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()

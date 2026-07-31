@@ -12,6 +12,7 @@ import type {
 	Marker,
 	PaddingInsetConfig,
 } from "../runtime/document/types"
+import type { ElementDetailsProvenance } from "../runtime/document/elementDetailsProvenance"
 import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
 import type {
@@ -339,7 +340,14 @@ export interface CanvasDesignRef {
 	/** 适配屏幕 */
 	fitToScreen: () => void
 	/** 热更新画布数据，远端快照可使用 replace 模式确保嵌套元素完整同步 */
-	updateData: (data: CanvasDocument, options?: { mode?: "smart" | "replace" }) => void
+	updateData: (
+		data: CanvasDocument,
+		options?: {
+			mode?: "smart" | "replace"
+			/** sidecar 解析出的运行时来源；不会写入画布 DSL */
+			elementDetailsProvenance?: ElementDetailsProvenance
+		},
+	) => void
 	/** 导出当前画布文档；用于宿主在页面卸载前保存本地草稿 */
 	exportCurrentDocument: () => CanvasDocument | null
 	/** 获取当前 Canvas 实例；用于跨 React 树的画布资源预览 */
@@ -405,6 +413,10 @@ export interface CanvasDesignProps {
 	data?: {
 		/** 默认画布数据，用于初始化画布 */
 		defaultData?: CanvasDocument
+		/** sidecar 解析出的运行时来源；不会写入画布 DSL */
+		elementDetailsProvenance?: ElementDetailsProvenance
+		/** 当前会话成功提交新任务后同步运行时来源，供宿主在 Canvas 重建时继续使用 */
+		onElementDetailsProvenanceChange?: (provenance: ElementDetailsProvenance) => void
 		/** 画布数据变化回调 */
 		onCanvasDesignDataChange?: (
 			canvasData: CanvasDocument,
@@ -466,10 +478,7 @@ export interface CanvasDesignProps {
 }
 
 export type CanvasDesignDataChangeSource =
-	| "element:change"
-	| "canvas:clear"
-	| "element:temporary:converted"
-	| "connection:change"
+	"element:change" | "canvas:clear" | "element:temporary:converted" | "connection:change"
 
 export interface CanvasDesignDataChangeMeta {
 	source: CanvasDesignDataChangeSource

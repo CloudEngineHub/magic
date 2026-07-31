@@ -24,3 +24,20 @@ export function extractSmartNameFromFileName(fileName: string): string {
 export function shouldContinueGenerationPolling(status: GenerationStatusValue): boolean {
 	return status === GenerationStatus.Pending || status === GenerationStatus.Processing
 }
+
+const DESIGN_INVALID_ARGUMENT_CODE = 14000
+
+/**
+ * 后端查询不存在的生成任务时返回 14000，并在 message 中回显任务 ID。
+ * 同一个错误码还用于其他参数错误，因此必须同时匹配当前任务 ID，不能只按 code 自愈。
+ */
+export function isGenerationTaskNotFoundError(error: unknown, taskId: string): boolean {
+	if (!taskId || !error || typeof error !== "object") return false
+
+	const response = error as { code?: unknown; message?: unknown }
+	return (
+		Number(response.code) === DESIGN_INVALID_ARGUMENT_CODE &&
+		typeof response.message === "string" &&
+		response.message.includes(taskId)
+	)
+}

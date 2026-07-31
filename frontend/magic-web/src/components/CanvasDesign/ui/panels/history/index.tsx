@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import ImageMessageHistoryRender from "./ImageMessageHistoryRender"
 import VideoMessageHistoryRender from "./VideoMessageHistoryRender"
 import { useCanvasPanelUI } from "../../../app/providers/CanvasUIProvider"
-import { useCanvasElement } from "../../../app/hooks/canvas"
+import { useCanvasElement, useGenerationRuntime } from "../../../app/hooks/canvas"
 import {
 	ElementTypeEnum,
 	type ImageElement,
@@ -21,8 +21,8 @@ export default function MessageHistory() {
 		setPreviewingMediaResource(null)
 	}, [])
 
-	// 提交接口确认前的配置是瞬时数据，也需要立即刷新已打开的生成记录面板。
-	const element = useCanvasElement(messageHistoryElementId, { includeTransient: true })
+	const element = useCanvasElement(messageHistoryElementId)
+	const generationRuntime = useGenerationRuntime(messageHistoryElementId)
 
 	useEffect(() => {
 		setPreviewingMediaResource(null)
@@ -32,7 +32,10 @@ export default function MessageHistory() {
 		if (!messageHistoryElementId || !element) return null
 		if (element.id !== messageHistoryElementId) return null
 
-		if (element.type === ElementTypeEnum.Image && element.generateImageRequest) {
+		if (
+			element.type === ElementTypeEnum.Image &&
+			(generationRuntime?.generateImageRequest || element.generateImageRequest)
+		) {
 			return (
 				<ImageMessageHistoryRender
 					key={element.id}
@@ -42,7 +45,10 @@ export default function MessageHistory() {
 			)
 		}
 
-		if (element.type === ElementTypeEnum.Video && element.generateVideoRequest) {
+		if (
+			element.type === ElementTypeEnum.Video &&
+			(generationRuntime?.generateVideoRequest || element.generateVideoRequest)
+		) {
 			return (
 				<VideoMessageHistoryRender
 					key={element.id}
@@ -53,7 +59,7 @@ export default function MessageHistory() {
 		}
 
 		return null
-	}, [messageHistoryElementId, element])
+	}, [messageHistoryElementId, element, generationRuntime])
 
 	if (!panel) return null
 

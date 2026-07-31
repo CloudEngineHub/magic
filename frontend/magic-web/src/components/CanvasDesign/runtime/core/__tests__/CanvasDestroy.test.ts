@@ -23,6 +23,7 @@ describe("Canvas destroy", () => {
 			extendManager: destroyable("extendManager"),
 			eraserManager: destroyable("eraserManager"),
 			imageEditingCoordinator: destroyable("imageEditingCoordinator"),
+			generationRuntimeManager: destroyable("generationRuntimeManager"),
 			eventEmitter: {
 				removeAllListeners: vi.fn(() => destroyOrder.push("eventEmitter")),
 			},
