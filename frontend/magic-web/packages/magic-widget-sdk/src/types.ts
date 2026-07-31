@@ -45,6 +45,13 @@ export declare namespace MagicWidget {
 		appSidebar?: boolean
 	}
 
+	export type MobileDetection = "viewport" | "device-and-viewport"
+
+	export interface ResponsiveConfig {
+		/** Selects viewport-only or device-and-viewport mobile semantics. */
+		mobileDetection?: MobileDetection
+	}
+
 	/** Controls how Agent previews share the desktop viewport with the conversation. */
 	export type PreviewMode = "split" | "fullscreen" | "switchable"
 
@@ -59,6 +66,7 @@ export declare namespace MagicWidget {
 		layout?: Layout
 		shell?: ShellConfig
 		conversation?: ConversationConfig
+		responsive?: ResponsiveConfig
 	}
 
 	export interface CrewPageOptions {

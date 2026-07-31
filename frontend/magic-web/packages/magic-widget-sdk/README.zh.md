@@ -34,6 +34,9 @@ SDK 不提供独立的 `appOrigin` 配置。脚本地址决定 Magic Web Origin�
 		config: {
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: {
+				mobileDetection: "device-and-viewport",
+			},
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
@@ -176,6 +179,9 @@ namespace MagicWidget {
 		shell?: {
 			appSidebar?: boolean
 		}
+		responsive?: {
+			mobileDetection?: "viewport" | "device-and-viewport"
+		}
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
@@ -185,13 +191,14 @@ namespace MagicWidget {
 }
 ```
 
-| 字段                        | 作用                                                  | 边界限制                                                                     |
-| --------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `layout`                    | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；未传时继续使用现有视口和旧移动端 query 判断。            |
-| `shell.appSidebar`          | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。 |
-| `conversation.projectFiles` | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                               |
-| `conversation.topicHistory` | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                               |
-| `conversation.previewMode`  | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。    |
+| 字段                         | 作用                                                  | 边界限制                                                                                         |
+| ---------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；未传时根据 `responsive.mobileDetection` 选择的移动端语义及旧移动端 query 覆盖项决定响应式布局。 |
+| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                     |
+| `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 嵌入默认使用 `device-and-viewport`，将现有设备 `isMobile` 结果与 iframe 断点组合；配置为 `viewport` 可恢复仅视口判断。 |
+| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                   |
+| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                   |
+| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                        |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 
@@ -199,6 +206,9 @@ namespace MagicWidget {
 
 ```js
 await window.MagicWidget.updateConfig({
+	responsive: {
+		mobileDetection: "device-and-viewport",
+	},
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
@@ -206,6 +216,8 @@ await window.MagicWidget.updateConfig({
 	},
 })
 ```
+
+`layout` 决定 Crew 使用哪套展示布局，`responsive.mobileDetection` 决定 Magic Web 现有组件使用的设备交互语义。SDK 嵌入默认使用 `device-and-viewport`，因此窄尺寸 PC iframe 中普通 Enter 会保持桌面端发送行为；只有宿主明确需要旧的仅视口语义时，才配置为 `viewport`。设备判断直接复用 Magic Web `utils/devices.ts` 中已有的 `isMobile` 结果。
 
 初始配置会写入 SDK 自有的受保护 query，以便 iframe 首屏直接使用正确布局，避免错误布局闪现。只有真实 SDK iframe 且受保护的嵌入元数据匹配时，这份配置才会生效。
 

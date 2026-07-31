@@ -1,11 +1,4 @@
-import {
-	createContext,
-	useContext,
-	useEffect,
-	useMemo,
-	useState,
-	type PropsWithChildren,
-} from "react"
+import { useEffect, useMemo, useState, type PropsWithChildren } from "react"
 import { useLocation } from "react-router-dom"
 import { flushSync } from "react-dom"
 import {
@@ -17,13 +10,9 @@ import {
 	normalizeMagicWidgetConfig,
 } from "./config"
 import type { MagicWidgetContextValue, MagicWidgetEmbedContext } from "./types"
+import { MagicWidgetContextProvider } from "./context"
 
-const DEFAULT_CONTEXT_VALUE: MagicWidgetContextValue = {
-	embedContext: null,
-	config: {},
-}
-
-const MagicWidgetContext = createContext<MagicWidgetContextValue>(DEFAULT_CONTEXT_VALUE)
+export { useMagicWidgetConfig } from "./context"
 
 /** Owns one document-scoped embed identity and validates all runtime configuration updates. */
 export function MagicWidgetProvider({ children }: PropsWithChildren) {
@@ -110,10 +99,5 @@ export function MagicWidgetProvider({ children }: PropsWithChildren) {
 		() => ({ embedContext, config }),
 		[config, embedContext],
 	)
-	return <MagicWidgetContext.Provider value={value}>{children}</MagicWidgetContext.Provider>
-}
-
-/** Exposes the validated document-scoped configuration to shell and Crew consumers. */
-export function useMagicWidgetConfig(): MagicWidgetContextValue {
-	return useContext(MagicWidgetContext)
+	return <MagicWidgetContextProvider value={value}>{children}</MagicWidgetContextProvider>
 }

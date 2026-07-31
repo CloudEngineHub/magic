@@ -33,6 +33,7 @@ const validOptions: MagicWidget.MountOptions = {
 		layout: "desktop",
 		shell: { appSidebar: false },
 		conversation: { projectFiles: false, topicHistory: true },
+		responsive: { mobileDetection: "device-and-viewport" },
 	},
 }
 
@@ -57,6 +58,14 @@ void window.MagicWidget?.newConversation()
 void window.MagicWidget?.updateConfig({
 	layout: "mobile",
 	conversation: { topicHistory: false },
+	responsive: { mobileDetection: "viewport" },
+})
+
+void window.MagicWidget?.updateConfig({
+	responsive: {
+		// @ts-expect-error unsupported detection strategies are rejected by the public contract.
+		mobileDetection: "device-only",
+	},
 })
 
 void window.MagicWidget?.updateConfig({

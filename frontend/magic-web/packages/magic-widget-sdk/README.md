@@ -34,6 +34,9 @@ Call `mount` after `document.body` is available:
 		config: {
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: {
+				mobileDetection: "device-and-viewport",
+			},
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
@@ -176,6 +179,9 @@ namespace MagicWidget {
 		shell?: {
 			appSidebar?: boolean
 		}
+		responsive?: {
+			mobileDetection?: "viewport" | "device-and-viewport"
+		}
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
@@ -185,13 +191,14 @@ namespace MagicWidget {
 }
 ```
 
-| Field                       | Description                                                    | Boundary                                                                                                                                     |
-| --------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layout`                    | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. When omitted, the existing viewport and legacy mobile-query detection remains active. |
-| `shell.appSidebar`          | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                      |
-| `conversation.projectFiles` | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                        |
-| `conversation.topicHistory` | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                        |
-| `conversation.previewMode`  | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                       |
+| Field                        | Description                                                    | Boundary                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. When omitted, responsive layout selection follows the mobile semantics selected by `responsive.mobileDetection` together with legacy mobile-query overrides. |
+| `shell.appSidebar`           | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                      |
+| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `device-and-viewport`, combining the existing device `isMobile` result with the iframe breakpoint. Set `viewport` to restore viewport-only detection. |
+| `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                        |
+| `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                        |
+| `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                       |
 
 `split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
 
@@ -199,6 +206,9 @@ namespace MagicWidget {
 
 ```js
 await window.MagicWidget.updateConfig({
+	responsive: {
+		mobileDetection: "device-and-viewport",
+	},
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
@@ -206,6 +216,8 @@ await window.MagicWidget.updateConfig({
 	},
 })
 ```
+
+`layout` controls which Crew presentation is rendered, while `responsive.mobileDetection` controls device-sensitive interactions used by existing Magic Web components. SDK embeds use `device-and-viewport` by default, so a narrow desktop iframe keeps ordinary Enter as the desktop send behavior. Set the option to `viewport` only when the host intentionally wants legacy viewport-only semantics. Device detection directly reuses Magic Web's existing `utils/devices.ts` `isMobile` result.
 
 Initial configuration is encoded in an SDK-owned protected query parameter so the first frame can render the selected layout without a flash. This configuration only becomes active inside a real SDK iframe with matching protected embed metadata.
 

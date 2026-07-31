@@ -629,11 +629,13 @@ describe("createMagicWidgetController", () => {
 			page: { type: "crew", crewId: "crew-mock-latest-config" },
 			config: {
 				layout: "desktop",
+				responsive: { mobileDetection: "viewport" },
 				conversation: { projectFiles: true },
 			},
 		})
 		await widget.updateConfig({
 			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
 			conversation: { projectFiles: false, topicHistory: true },
 		})
 		widget.open()
@@ -647,6 +649,7 @@ describe("createMagicWidgetController", () => {
 		expect(config).toEqual({
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
 			conversation: { projectFiles: false, topicHistory: true },
 		})
 		widget.destroy()

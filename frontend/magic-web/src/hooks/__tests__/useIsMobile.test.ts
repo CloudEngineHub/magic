@@ -1,11 +1,44 @@
 import { renderHook, waitFor } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { useIsMobile } from "../useIsMobile"
-import { interfaceStore } from "@/opensource/stores/interface"
+import { interfaceStore } from "@/stores/interface"
+
+const mocks = vi.hoisted(() => ({
+	interfaceIsMobile: false,
+	setInterfaceIsMobile: vi.fn((value: boolean) => {
+		mocks.interfaceIsMobile = value
+	}),
+	isMobileDevice: false,
+	widgetContext: {
+		embedContext: null as { instanceId: string; hostOrigin: string } | null,
+		config: {} as {
+			responsive?: { mobileDetection?: "viewport" | "device-and-viewport" }
+		},
+	},
+}))
+
+vi.mock("@/stores/interface", () => ({
+	interfaceStore: {
+		get isMobile() {
+			return mocks.interfaceIsMobile
+		},
+		setIsMobile: mocks.setInterfaceIsMobile,
+	},
+}))
 
 // Mock ahooks useResponsive
 vi.mock("ahooks", () => ({
 	useResponsive: vi.fn(),
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMobile() {
+		return mocks.isMobileDevice
+	},
+}))
+
+vi.mock("@/providers/MagicWidgetProvider/context", () => ({
+	useMagicWidgetConfig: () => mocks.widgetContext,
 }))
 
 import { useResponsive } from "ahooks"
@@ -13,6 +46,12 @@ import { useResponsive } from "ahooks"
 describe("useIsMobile", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.isMobileDevice = false
+		mocks.interfaceIsMobile = false
+		mocks.widgetContext = {
+			embedContext: null,
+			config: {},
+		}
 		// Reset the store state
 		interfaceStore.setIsMobile(false)
 	})
@@ -43,6 +82,86 @@ describe("useIsMobile", () => {
 		await waitFor(() => {
 			expect(interfaceStore.isMobile).toBe(false)
 		})
+	})
+
+	it("should use device-and-viewport detection for Widget embeds by default", () => {
+		vi.mocked(useResponsive).mockReturnValue({ md: false })
+		mocks.isMobileDevice = false
+		mocks.widgetContext = {
+			embedContext: {
+				instanceId: "widget-mock-device-aware-default",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: {},
+		}
+
+		const { result } = renderHook(() => useIsMobile())
+
+		expect(result.current).toBe(false)
+	})
+
+	it("should allow Widget embeds to opt into viewport-only detection", () => {
+		vi.mocked(useResponsive).mockReturnValue({ md: false })
+		mocks.isMobileDevice = false
+		mocks.widgetContext = {
+			embedContext: {
+				instanceId: "widget-mock-viewport-override",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: { responsive: { mobileDetection: "viewport" } },
+		}
+
+		const { result } = renderHook(() => useIsMobile())
+
+		expect(result.current).toBe(true)
+	})
+
+	it("should keep narrow desktop devices in desktop semantics when device-aware detection is enabled", () => {
+		vi.mocked(useResponsive).mockReturnValue({ md: false })
+		mocks.isMobileDevice = false
+		mocks.widgetContext = {
+			embedContext: {
+				instanceId: "widget-mock-device-aware-desktop",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: { responsive: { mobileDetection: "device-and-viewport" } },
+		}
+
+		const { result } = renderHook(() => useIsMobile())
+
+		expect(result.current).toBe(false)
+	})
+
+	it("should keep narrow mobile devices in mobile semantics when device-aware detection is enabled", () => {
+		vi.mocked(useResponsive).mockReturnValue({ md: false })
+		mocks.isMobileDevice = true
+		mocks.widgetContext = {
+			embedContext: {
+				instanceId: "widget-mock-device-aware-mobile",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: { responsive: { mobileDetection: "device-and-viewport" } },
+		}
+
+		const { result } = renderHook(() => useIsMobile())
+
+		expect(result.current).toBe(true)
+	})
+
+	it("should require a small viewport even when the device is mobile", () => {
+		vi.mocked(useResponsive).mockReturnValue({ md: true })
+		mocks.isMobileDevice = true
+		mocks.widgetContext = {
+			embedContext: {
+				instanceId: "widget-mock-device-aware-wide",
+				hostOrigin: "https://widget-host.example.invalid",
+			},
+			config: { responsive: { mobileDetection: "device-and-viewport" } },
+		}
+
+		const { result } = renderHook(() => useIsMobile())
+
+		expect(result.current).toBe(false)
 	})
 
 	it("should update interfaceStore when breakpoint changes", async () => {

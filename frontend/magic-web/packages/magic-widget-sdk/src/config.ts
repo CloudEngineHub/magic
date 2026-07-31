@@ -1,9 +1,14 @@
 import type { MagicWidget } from "./types"
 
-const CONFIG_KEYS = new Set(["layout", "shell", "conversation"])
+const CONFIG_KEYS = new Set(["layout", "shell", "conversation", "responsive"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
 const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
 const PREVIEW_MODES = new Set<MagicWidget.PreviewMode>(["split", "fullscreen", "switchable"])
+const MOBILE_DETECTION_MODES = new Set<MagicWidget.MobileDetection>([
+	"viewport",
+	"device-and-viewport",
+])
 
 /** Creates a public configuration error without coupling validation to iframe transport. */
 function createInvalidConfigError(message: string): MagicWidget.CommandError {
@@ -62,6 +67,25 @@ function readOptionalPreviewMode(
 	return field as MagicWidget.PreviewMode
 }
 
+/** Copies the optional mobile detection strategy after validating its public enum value. */
+function readOptionalMobileDetection(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+): MagicWidget.MobileDetection | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (
+		typeof field !== "string" ||
+		!MOBILE_DETECTION_MODES.has(field as MagicWidget.MobileDetection)
+	) {
+		throw createInvalidConfigError(
+			`Magic widget ${label}.${key} must be viewport or device-and-viewport`,
+		)
+	}
+	return field as MagicWidget.MobileDetection
+}
+
 /** Normalizes the shell section into an immutable SDK-owned snapshot. */
 function normalizeShellConfig(value: unknown): MagicWidget.ShellConfig | undefined {
 	if (value === undefined) return undefined
@@ -86,6 +110,19 @@ function normalizeConversationConfig(value: unknown): MagicWidget.ConversationCo
 	}
 }
 
+/** Normalizes responsive behavior without changing legacy viewport defaults. */
+function normalizeResponsiveConfig(value: unknown): MagicWidget.ResponsiveConfig | undefined {
+	if (value === undefined) return undefined
+	const record = requirePlainObject(value, "config.responsive")
+	assertKnownKeys(record, RESPONSIVE_CONFIG_KEYS, "config.responsive")
+	const mobileDetection = readOptionalMobileDetection(
+		record,
+		"mobileDetection",
+		"config.responsive",
+	)
+	return mobileDetection === undefined ? {} : { mobileDetection }
+}
+
 /** Validates and clones a complete or partial public Widget configuration. */
 export function normalizeWidgetConfig(value: unknown): MagicWidget.WidgetConfig {
 	if (value === undefined) return {}
@@ -101,10 +138,12 @@ export function normalizeWidgetConfig(value: unknown): MagicWidget.WidgetConfig 
 
 	const shell = normalizeShellConfig(record.shell)
 	const conversation = normalizeConversationConfig(record.conversation)
+	const responsive = normalizeResponsiveConfig(record.responsive)
 	return {
 		...(layout === undefined ? {} : { layout }),
 		...(shell === undefined ? {} : { shell }),
 		...(conversation === undefined ? {} : { conversation }),
+		...(responsive === undefined ? {} : { responsive }),
 	}
 }
 
@@ -122,6 +161,9 @@ export function mergeWidgetConfig(
 			: {}),
 		...(normalizedUpdate.conversation
 			? { conversation: { ...current.conversation, ...normalizedUpdate.conversation } }
+			: {}),
+		...(normalizedUpdate.responsive
+			? { responsive: { ...current.responsive, ...normalizedUpdate.responsive } }
 			: {}),
 	}
 }

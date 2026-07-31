@@ -9,13 +9,21 @@ const MAGIC_WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 const MAGIC_WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 const MAGIC_WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
 const MAX_INITIAL_CONFIG_LENGTH = 4_096
-const CONFIG_KEYS = new Set(["layout", "shell", "conversation"])
+const CONFIG_KEYS = new Set(["layout", "shell", "conversation", "responsive"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
 const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
 type MagicWidgetPreviewMode = NonNullable<
 	NonNullable<MagicWidgetConfig["conversation"]>["previewMode"]
 >
+type MagicWidgetMobileDetection = NonNullable<
+	NonNullable<MagicWidgetConfig["responsive"]>["mobileDetection"]
+>
 const PREVIEW_MODES = new Set<MagicWidgetPreviewMode>(["split", "fullscreen", "switchable"])
+const MOBILE_DETECTION_MODES = new Set<MagicWidgetMobileDetection>([
+	"viewport",
+	"device-and-viewport",
+])
 
 /** Narrows untrusted Widget configuration values to plain records. */
 function requirePlainObject(value: unknown, label: string): Record<string, unknown> {
@@ -61,6 +69,23 @@ function readOptionalPreviewMode(
 	return field as MagicWidgetPreviewMode
 }
 
+/** Reads one optional mobile detection strategy from an untrusted configuration section. */
+function readOptionalMobileDetection(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+): MagicWidgetMobileDetection | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (
+		typeof field !== "string" ||
+		!MOBILE_DETECTION_MODES.has(field as MagicWidgetMobileDetection)
+	) {
+		throw new Error(`${label}.${key} must be viewport or device-and-viewport`)
+	}
+	return field as MagicWidgetMobileDetection
+}
+
 /** Validates and clones the complete configuration snapshot sent by the SDK. */
 export function normalizeMagicWidgetConfig(value: unknown): MagicWidgetConfig {
 	const record = requirePlainObject(value, "config")
@@ -104,10 +129,23 @@ export function normalizeMagicWidgetConfig(value: unknown): MagicWidgetConfig {
 		}
 	}
 
+	let responsive: MagicWidgetConfig["responsive"]
+	if (record.responsive !== undefined) {
+		const responsiveRecord = requirePlainObject(record.responsive, "config.responsive")
+		assertKnownKeys(responsiveRecord, RESPONSIVE_CONFIG_KEYS, "config.responsive")
+		const mobileDetection = readOptionalMobileDetection(
+			responsiveRecord,
+			"mobileDetection",
+			"config.responsive",
+		)
+		responsive = mobileDetection === undefined ? {} : { mobileDetection }
+	}
+
 	return {
 		...(layout === undefined ? {} : { layout }),
 		...(shell === undefined ? {} : { shell }),
 		...(conversation === undefined ? {} : { conversation }),
+		...(responsive === undefined ? {} : { responsive }),
 	}
 }
 

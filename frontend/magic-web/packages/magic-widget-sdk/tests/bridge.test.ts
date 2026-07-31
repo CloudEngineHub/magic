@@ -218,6 +218,7 @@ describe("WidgetBridge", () => {
 		const configPromise = bridge.sendConfig({
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
 			conversation: { projectFiles: false, topicHistory: true },
 		})
 		await Promise.resolve()
@@ -235,6 +236,7 @@ describe("WidgetBridge", () => {
 			config: {
 				layout: "desktop",
 				shell: { appSidebar: false },
+				responsive: { mobileDetection: "device-and-viewport" },
 				conversation: { projectFiles: false, topicHistory: true },
 			},
 		})

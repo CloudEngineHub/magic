@@ -7,6 +7,7 @@ describe("Widget config", () => {
 			normalizeWidgetConfig({
 				layout: "desktop",
 				shell: { appSidebar: false },
+				responsive: { mobileDetection: "device-and-viewport" },
 				conversation: {
 					projectFiles: false,
 					topicHistory: true,
@@ -16,6 +17,7 @@ describe("Widget config", () => {
 		).toEqual({
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
@@ -30,13 +32,18 @@ describe("Widget config", () => {
 				{
 					layout: "desktop",
 					shell: { appSidebar: false },
+					responsive: { mobileDetection: "viewport" },
 					conversation: { projectFiles: false },
 				},
-				{ conversation: { topicHistory: true, previewMode: "switchable" } },
+				{
+					conversation: { topicHistory: true, previewMode: "switchable" },
+					responsive: { mobileDetection: "device-and-viewport" },
+				},
 			),
 		).toEqual({
 			layout: "desktop",
 			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
@@ -58,6 +65,15 @@ describe("Widget config", () => {
 		)
 		expect(() => normalizeWidgetConfig({ conversation: { previewMode: true } })).toThrow(
 			/previewMode/,
+		)
+		expect(() =>
+			normalizeWidgetConfig({ responsive: { mobileDetection: "device-only" } }),
+		).toThrow(/mobileDetection/)
+		expect(() => normalizeWidgetConfig({ responsive: { mobileDetection: true } })).toThrow(
+			/mobileDetection/,
+		)
+		expect(() => normalizeWidgetConfig({ responsive: { breakpoint: 640 } })).toThrow(
+			/breakpoint/,
 		)
 	})
 })

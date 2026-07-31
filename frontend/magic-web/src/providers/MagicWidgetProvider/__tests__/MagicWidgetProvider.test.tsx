@@ -188,12 +188,16 @@ describe("MagicWidgetProvider", () => {
 				layout: "desktop",
 				shell: { appSidebar: false },
 				conversation: { projectFiles: false, previewMode: "switchable" },
+				responsive: { mobileDetection: "viewport" },
 			}),
 		)
 
 		expect(screen.getByTestId("widget-context")).toHaveTextContent(INSTANCE_ID)
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"projectFiles":false')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"switchable"')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent(
+			'"mobileDetection":"viewport"',
+		)
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "config_ready",
@@ -216,6 +220,7 @@ describe("MagicWidgetProvider", () => {
 						config: {
 							layout: "mobile",
 							conversation: { topicHistory: false, previewMode: "fullscreen" },
+							responsive: { mobileDetection: "device-and-viewport" },
 						},
 					},
 				}),
@@ -225,6 +230,9 @@ describe("MagicWidgetProvider", () => {
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"layout":"mobile"')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"topicHistory":false')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"fullscreen"')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent(
+			'"mobileDetection":"device-and-viewport"',
+		)
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				requestId: "request-mock-provider-update",
@@ -262,6 +270,48 @@ describe("MagicWidgetProvider", () => {
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				requestId: "request-mock-provider-invalid",
+				ok: false,
+				error: expect.objectContaining({ code: "INVALID_CONFIG" }),
+			}),
+			HOST_ORIGIN,
+		)
+	})
+
+	it("rejects invalid responsive detection without replacing the last valid snapshot", () => {
+		Object.defineProperty(window, "parent", {
+			configurable: true,
+			value: parentWindow,
+		})
+		renderProvider(
+			createWidgetSearch({
+				layout: "desktop",
+				responsive: { mobileDetection: "viewport" },
+			}),
+		)
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						requestId: "request-mock-provider-invalid-responsive",
+						type: "config",
+						config: { responsive: { mobileDetection: "device-only" } },
+					},
+				}),
+			)
+		})
+
+		expect(screen.getByTestId("widget-config")).toHaveTextContent(
+			'"mobileDetection":"viewport"',
+		)
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				requestId: "request-mock-provider-invalid-responsive",
 				ok: false,
 				error: expect.objectContaining({ code: "INVALID_CONFIG" }),
 			}),
