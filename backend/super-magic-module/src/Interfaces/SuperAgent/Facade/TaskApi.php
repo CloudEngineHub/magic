@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Interfaces\SuperAgent\Facade;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\ShadowCode\ShadowCode;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AccessTokenAuthorizationService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AgentAppService;
@@ -80,11 +82,17 @@ class TaskApi extends AbstractApi
 
         // 从请求中创建DTO
         $messageDTO = TopicTaskMessageDTO::fromArray($requestData);
+        /** @var MagicUserAuthorization $authorization */
+        $authorization = $this->getAuthorization();
+        $dataIsolation = DataIsolation::create(
+            $authorization->getOrganizationCode(),
+            $authorization->getId()
+        );
         // 调用应用服务进行消息投递
         if (config('super-magic.message.process_mode') === 'direct') {
-            return $this->topicTaskAppService->handleTopicTaskMessage($messageDTO);
+            return $this->topicTaskAppService->handleTopicTaskMessage($dataIsolation, $messageDTO);
         }
-        return $this->topicTaskAppService->deliverTopicTaskMessage($messageDTO);
+        return $this->topicTaskAppService->deliverTopicTaskMessage($dataIsolation, $messageDTO);
     }
 
     /**

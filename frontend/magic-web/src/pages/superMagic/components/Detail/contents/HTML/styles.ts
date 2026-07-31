@@ -18,6 +18,11 @@ export const useStyles = createStyles(({ token, responsive, css }) => {
 			width: "100%",
 			backgroundColor: "transparent",
 		},
+		// Document-flow fullscreen starts at viewport height, then expands with the iframe content.
+		documentFlowHtmlContainer: {
+			height: "auto",
+			minHeight: "100dvh",
+		},
 		htmlBody: {
 			overflow: "hidden auto",
 			flex: 1,
@@ -28,6 +33,12 @@ export const useStyles = createStyles(({ token, responsive, css }) => {
 				background: `${token.colorBgBase}!important`,
 			},
 		},
+		documentFlowHtmlBody: {
+			flex: "none",
+			height: "auto",
+			minHeight: "100dvh",
+			overflow: "visible",
+		},
 		previewContainerBase: createPreviewContainerBaseStyle(),
 		previewInnerBase: createPreviewInnerBaseStyle(),
 		immersivePreviewContainer: {
@@ -36,6 +47,12 @@ export const useStyles = createStyles(({ token, responsive, css }) => {
 			height: "100%",
 			padding: 0,
 			background: "transparent",
+		},
+		documentFlowPreviewContainer: {
+			flex: "none",
+			height: "auto",
+			minHeight: "100dvh",
+			overflow: "visible",
 		},
 		immersivePreviewInner: {
 			flex: 1,
@@ -46,6 +63,12 @@ export const useStyles = createStyles(({ token, responsive, css }) => {
 			borderRadius: 0,
 			border: "none",
 			boxShadow: "none",
+		},
+		documentFlowPreviewInner: {
+			flex: "none",
+			height: "auto",
+			minHeight: "100dvh",
+			overflow: "visible",
 		},
 		phoneModeContainer: createPhoneModeContainerStyle(token),
 		phoneModeInner: createPhoneModeInnerStyle(token),

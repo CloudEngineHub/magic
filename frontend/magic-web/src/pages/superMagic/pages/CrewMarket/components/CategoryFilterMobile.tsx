@@ -2,13 +2,13 @@ import { memo, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useCenteredHorizontalScroll } from "@/pages/superMagic/components/MainInputContainer/hooks/useCenteredHorizontalScroll"
 import type { CategoryView } from "@/services/crew/CrewService"
-
-const ALL_CATEGORY_ID = "all"
+import { ALL_MARKET_FILTER_ID, ORGANIZATION_MARKET_FILTER_ID } from "./market-filter"
 
 interface CategoryFilterMobileProps {
 	categories: CategoryView[]
 	activeCategoryId: string
 	onCategoryChange: (categoryId: string) => void
+	showOrganizationShared?: boolean
 }
 
 interface TabItem {
@@ -26,11 +26,15 @@ function CategoryFilterMobile({
 	categories,
 	activeCategoryId,
 	onCategoryChange,
+	showOrganizationShared = true,
 }: CategoryFilterMobileProps) {
 	const { t } = useTranslation("crew/market")
 
 	const tabs: TabItem[] = [
-		{ id: ALL_CATEGORY_ID, label: t("categories.allCrew") },
+		{ id: ALL_MARKET_FILTER_ID, label: t("categories.allCrew") },
+		...(showOrganizationShared
+			? [{ id: ORGANIZATION_MARKET_FILTER_ID, label: t("tabs.organizationShared") }]
+			: []),
 		...categories.map((c) => ({ id: c.id, label: c.name })),
 	]
 

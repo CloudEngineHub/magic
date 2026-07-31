@@ -289,6 +289,7 @@ return [
                     'options.json.thinking',
                     'options.json.top_k',
                     'options.json.repetition_penalty',
+                    'options.json.reasoning_effort',
 
                     // 使用量统计
                     'usage',                       // 完整的usage对象

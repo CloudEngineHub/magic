@@ -6,6 +6,12 @@ cd "$MAGIC_WEB_DIR"
 
 . "$MAGIC_WEB_DIR/.husky/node-env.sh"
 
+# Prevent enterprise changes from being silently hidden by customer overrides.
+echo "🧩 Checking overlay synchronization..."
+if ! node scripts/git-hooks/check-overlay-sync.cjs; then
+	exit 1
+fi
+
 # Check for hardcoded tokens
 echo "🔍 Checking for hardcoded tokens..."
 if ! node scripts/git-hooks/check-hardcoded-tokens.cjs; then

@@ -20,6 +20,7 @@ import {
 
 interface EmployeeCardMobileProps {
 	employee: StoreAgentView
+	actionPending?: boolean
 	onHire?: (id: string) => void
 	onDetails?: (id: string) => void
 	onOpenMarketDetail?: (id: string) => void
@@ -99,6 +100,7 @@ function CapabilitiesRow({ playbooks }: { playbooks: StoreAgentView["playbooks"]
 
 function EmployeeCardMobile({
 	employee,
+	actionPending = false,
 	onHire,
 	onDetails,
 	onOpenMarketDetail,
@@ -116,7 +118,8 @@ function EmployeeCardMobile({
 	// Mobile card keeps a single action: added agents enter chat; only not-added agents can hire.
 	const actionIsChat = employee.isAdded
 	const actionLabel = actionIsChat ? t("conversation") : t("hire")
-	const actionDisabled = actionIsChat ? false : isEmployeeMarketPrimaryActionDisabled(employee)
+	const actionDisabled =
+		actionPending || (actionIsChat ? false : isEmployeeMarketPrimaryActionDisabled(employee))
 
 	function handleInfoClick() {
 		// Prototype: info area always opens the detail sheet regardless of hired state.

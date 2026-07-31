@@ -22,6 +22,7 @@ from app.api.http_dto.response import (
 from app.service.agent_dispatcher import AgentDispatcher
 from app.service.sdk_call_registry import SdkCallEntry, SdkCallRegistry
 from app.tools.core.tool_call_executor import tool_call_executor
+from app.i18n import i18n
 
 router = APIRouter(prefix="/sdk", tags=["SDK"])
 
@@ -44,6 +45,10 @@ class SdkToolCallRequest(BaseModel):
     sdk_execution_id: str = Field(
         "",
         description="本次 Code Mode 执行的唯一标识，用于精确取消本轮发起的服务端请求",
+    )
+    language: str = Field(
+        "zh_CN",
+        description="调用方 Agent task 当前使用的 i18n 语言",
     )
 
 
@@ -77,6 +82,9 @@ async def sdk_tool_call(request: SdkToolCallRequest):
             message=error_msg,
             data={"ok": False, "content": error_msg},
         )
+
+    # SDK 调用由新的 HTTP task 执行，需要恢复调用方显式传递的 i18n ContextVar。
+    i18n.set_language(request.language)
 
     tool_call_id = request.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 

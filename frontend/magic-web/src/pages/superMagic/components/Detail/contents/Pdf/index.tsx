@@ -15,6 +15,7 @@ export default function PDFViewer(props: any) {
 		onDownload,
 
 		isFromNode,
+		documentFlowFullscreen = false,
 		isFullscreen,
 		data,
 		viewMode,
@@ -52,10 +53,18 @@ export default function PDFViewer(props: any) {
 	})
 	const containerRef = useRef<HTMLDivElement>(null)
 
-	const quitEditMode = () => { }
+	const quitEditMode = () => {}
 
 	return (
-		<div ref={containerRef} className={cx(styles.pdfViewer, className)}>
+		<div
+			ref={containerRef}
+			className={cx(styles.pdfViewer, className)}
+			style={
+				documentFlowFullscreen
+					? { height: "auto", minHeight: "100dvh", overflow: "visible" }
+					: undefined
+			}
+		>
 			{showFileHeader && (
 				<CommonHeaderV2
 					type={type}
@@ -82,9 +91,17 @@ export default function PDFViewer(props: any) {
 				/>
 			)}
 			{fileUrl ? (
-				<MagicPdfRender file={fileUrl} height="100%" />
+				<MagicPdfRender
+					file={fileUrl}
+					height={documentFlowFullscreen ? "auto" : "100%"}
+					documentFlow={documentFlowFullscreen}
+				/>
 			) : (
-				<FlexBox justify="center" align="center" style={{ height: "100%" }}>
+				<FlexBox
+					justify="center"
+					align="center"
+					style={documentFlowFullscreen ? { minHeight: "100dvh" } : { height: "100%" }}
+				>
 					<MagicSpin spinning />
 				</FlexBox>
 			)}

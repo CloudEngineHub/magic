@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Provider\Official;
 
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\DbConnection\Db;
 use Throwable;
 
@@ -41,18 +42,24 @@ class ServiceProviderInitializer
             Db::beginTransaction();
 
             // Step 1: Initialize service_provider table (provider definitions)
-            $existingProviderCount = Db::table('service_provider')->count();
-            if ($existingProviderCount === 0) {
-                $providers = self::getProviderData($officialOrgCode);
-                foreach ($providers as $provider) {
-                    Db::table('service_provider')->insert($provider);
-                    ++$insertedCount;
-                }
-            }
+            $createdProviderCount = 0;
+            $providers = self::getProviderData($officialOrgCode);
+            foreach ($providers as $provider) {
+                $exists = Db::table('service_provider')
+                    ->where('provider_code', $provider['provider_code'])
+                    ->where('category', $provider['category'])
+                    ->whereNull('deleted_at')
+                    ->exists();
 
-            // Step 2: Initialize service_provider_configs table (organization-specific configurations)
-            $configCount = self::initializeProviderConfigs($officialOrgCode);
-            $insertedCount += $configCount;
+                if ($exists) {
+                    continue;
+                }
+
+                $provider['id'] = IdGenerator::getSnowId();
+                Db::table('service_provider')->insert($provider);
+                ++$createdProviderCount;
+                ++$insertedCount;
+            }
 
             Db::commit();
         } catch (Throwable $e) {
@@ -64,9 +71,7 @@ class ServiceProviderInitializer
             ];
         }
 
-        $message = $existingProviderCount > 0
-            ? "Service provider table already has {$existingProviderCount} records. Configs initialized: {$configCount}."
-            : "Successfully initialized {$insertedCount} items (providers + configs).";
+        $message = "Successfully initialized {$insertedCount} items (providers: {$createdProviderCount}).";
         $message .= ' Official video providers must be initialized manually via /api/v1/bootstrap/video-providers.';
 
         return [
@@ -74,68 +79,6 @@ class ServiceProviderInitializer
             'message' => $message,
             'count' => $insertedCount,
         ];
-    }
-
-    /**
-     * Initialize service provider configurations for the organization.
-     * Ensures that the official provider config exists and is enabled.
-     * @param string $orgCode Organization code
-     * @return int Number of configs created or updated
-     */
-    private static function initializeProviderConfigs(string $orgCode): int
-    {
-        $count = 0;
-        $now = now();
-
-        $officialProviders = Db::table('service_provider')
-            ->where('provider_type', 1) // Official provider type
-            ->whereIn('category', ['llm', 'vlm'])
-            ->get();
-
-        if ($officialProviders->isEmpty()) {
-            return 0;
-        }
-
-        foreach ($officialProviders as $officialProvider) {
-            $providerData = is_object($officialProvider) ? $officialProvider : (object) $officialProvider;
-            $officialProviderId = $providerData->id;
-
-            $existingConfig = Db::table('service_provider_configs')
-                ->where('organization_code', $orgCode)
-                ->where('service_provider_id', $officialProviderId)
-                ->first();
-
-            if ($existingConfig) {
-                $configData = is_object($existingConfig) ? $existingConfig : (object) $existingConfig;
-                if ($configData->status != 1) {
-                    Db::table('service_provider_configs')
-                        ->where('id', $configData->id)
-                        ->update(['status' => 1, 'updated_at' => $now]);
-                    ++$count;
-                }
-                continue;
-            }
-
-            Db::table('service_provider_configs')->insert([
-                'organization_code' => $orgCode,
-                'service_provider_id' => $officialProviderId,
-                'alias' => $providerData->category === 'vlm' ? 'Magic Official Vision' : 'Magic Official',
-                'translate' => json_encode([
-                    'alias' => [
-                        'en_US' => $providerData->category === 'vlm' ? 'Magic Official Vision' : 'Magic Official',
-                        'zh_CN' => $providerData->category === 'vlm' ? 'Magic 官方视觉' : 'Magic 官方',
-                    ],
-                ]),
-                'config' => json_encode([]),
-                'status' => 1, // Enabled
-                'sort' => 0,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-            ++$count;
-        }
-
-        return $count;
     }
 
     /**
@@ -148,6 +91,32 @@ class ServiceProviderInitializer
 
         return [
             // ========== LLM 类别 ==========
+            // Magic Official - LLM
+            [
+                'name' => 'Magic',
+                'provider_code' => ProviderCode::Official->value,
+                'sort_order' => 999,
+                'description' => '由 Magic 通过官方部署的 API 来实现 AI 模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                'icon' => 'MAGIC/588417216353927169/default/superMagic.png',
+                'provider_type' => 1,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Magic',
+                        'zh_CN' => 'Magic',
+                    ],
+                    'description' => [
+                        'en_US' => 'Magic officially deploys these APIs to provide access to AI models. You can purchase Tokens directly to use a wide range of large models.',
+                        'zh_CN' => '由 Magic 通过官方部署的 API 来实现 AI 模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
             // Microsoft Azure - LLM
             [
                 'name' => 'Microsoft Azure',
@@ -330,6 +299,188 @@ class ServiceProviderInitializer
                 ]),
                 'remark' => '',
             ],
+            // Tencent Hunyuan - LLM
+            [
+                'name' => '腾讯云混元',
+                'provider_code' => ProviderCode::Tencent->value,
+                'sort_order' => 991,
+                'description' => '腾讯云混元是腾讯云提供的大语言模型服务，支持中文理解、复杂推理、代码生成和多轮对话等场景。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Tencent Hunyuan',
+                        'zh_CN' => '腾讯云混元',
+                    ],
+                    'description' => [
+                        'en_US' => 'Tencent Hunyuan is a large language model service provided by Tencent Cloud, supporting Chinese understanding, complex reasoning, code generation, and multi-turn conversation scenarios.',
+                        'zh_CN' => '腾讯云混元是腾讯云提供的大语言模型服务，支持中文理解、复杂推理、代码生成和多轮对话等场景。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // Baidu Qianfan - LLM
+            [
+                'name' => '百度千帆',
+                'provider_code' => ProviderCode::Baidu->value,
+                'sort_order' => 990,
+                'description' => '百度千帆是百度智能云提供的大模型平台，支持文心系列及多种主流模型的企业级接入。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Baidu Qianfan',
+                        'zh_CN' => '百度千帆',
+                    ],
+                    'description' => [
+                        'en_US' => 'Baidu Qianfan is a large model platform provided by Baidu AI Cloud, supporting enterprise access to ERNIE series and other mainstream models.',
+                        'zh_CN' => '百度千帆是百度智能云提供的大模型平台，支持文心系列及多种主流模型的企业级接入。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // National Supercomputing Platform - LLM
+            [
+                'name' => '国家超算平台',
+                'provider_code' => ProviderCode::SCNet->value,
+                'sort_order' => 989,
+                'description' => '国家超算平台提供兼容 OpenAI 接口的大模型 API 服务，适合国产算力与模型能力接入场景。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'National Supercomputing Platform',
+                        'zh_CN' => '国家超算平台',
+                    ],
+                    'description' => [
+                        'en_US' => 'National Supercomputing Platform provides OpenAI-compatible large model API services for domestic computing power and model access scenarios.',
+                        'zh_CN' => '国家超算平台提供兼容 OpenAI 接口的大模型 API 服务，适合国产算力与模型能力接入场景。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // Kimi - LLM
+            [
+                'name' => 'Kimi',
+                'provider_code' => ProviderCode::Moonshot->value,
+                'sort_order' => 988,
+                'description' => 'Kimi 是月之暗面提供的大模型服务，支持长上下文对话、复杂推理和代码生成等能力。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Kimi',
+                        'zh_CN' => 'Kimi',
+                    ],
+                    'description' => [
+                        'en_US' => 'Kimi is a large model service provided by Moonshot AI, supporting long-context conversation, complex reasoning, and code generation.',
+                        'zh_CN' => 'Kimi 是月之暗面提供的大模型服务，支持长上下文对话、复杂推理和代码生成等能力。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // Zhipu AI - LLM
+            [
+                'name' => '智谱 AI',
+                'provider_code' => ProviderCode::BigModel->value,
+                'sort_order' => 987,
+                'description' => '智谱 AI 提供 GLM 系列大模型服务，支持对话、推理、代码生成和 Agent 场景接入。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Zhipu AI',
+                        'zh_CN' => '智谱 AI',
+                    ],
+                    'description' => [
+                        'en_US' => 'Zhipu AI provides GLM series large model services for chat, reasoning, code generation, and agent scenarios.',
+                        'zh_CN' => '智谱 AI 提供 GLM 系列大模型服务，支持对话、推理、代码生成和 Agent 场景接入。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // MiniMax - LLM
+            [
+                'name' => 'MiniMax',
+                'provider_code' => ProviderCode::MiniMax->value,
+                'sort_order' => 986,
+                'description' => 'MiniMax 提供文本、语音和多模态大模型服务，支持通过兼容接口快速接入多类 AI 能力。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'MiniMax',
+                        'zh_CN' => 'MiniMax',
+                    ],
+                    'description' => [
+                        'en_US' => 'MiniMax provides text, speech, and multimodal large model services, supporting quick access to multiple AI capabilities through compatible APIs.',
+                        'zh_CN' => 'MiniMax 提供文本、语音和多模态大模型服务，支持通过兼容接口快速接入多类 AI 能力。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
+            // SiliconFlow - LLM
+            [
+                'name' => '硅基流动',
+                'provider_code' => ProviderCode::SiliconFlow->value,
+                'sort_order' => 985,
+                'description' => '硅基流动提供兼容 OpenAI 接口的大模型服务，支持多种国产与开源模型的统一调用。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'llm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'SiliconFlow',
+                        'zh_CN' => '硅基流动',
+                    ],
+                    'description' => [
+                        'en_US' => 'SiliconFlow provides OpenAI-compatible large model services, supporting unified calls to domestic and open-source models.',
+                        'zh_CN' => '硅基流动提供兼容 OpenAI 接口的大模型服务，支持多种国产与开源模型的统一调用。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
             // Anthropic - LLM
             [
                 'name' => 'Anthropic',
@@ -383,6 +534,32 @@ class ServiceProviderInitializer
                 'remark' => '支持 OpenAI API 形式',
             ],
             // ========== VLM 类别 ==========
+            // Magic Official - VLM
+            [
+                'name' => 'Magic',
+                'provider_code' => ProviderCode::Official->value,
+                'sort_order' => 999,
+                'description' => '由 Magic 通过官方部署的 API 来实现多种热门的文生图、图生图等模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                'icon' => 'MAGIC/588417216353927169/default/superMagic.png',
+                'provider_type' => 1,
+                'category' => 'vlm',
+                'status' => 1,
+                'is_models_enable' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Magic',
+                        'zh_CN' => 'Magic',
+                    ],
+                    'description' => [
+                        'en_US' => 'Magic officially deploys these APIs to provide access to popular text-to-image and image-to-image models. You can purchase Tokens directly to use a wide range of models.',
+                        'zh_CN' => '由 Magic 通过官方部署的 API 来实现多种热门的文生图、图生图等模型的调用，可直接购买 Tokens 使用海量的大模型。',
+                    ],
+                ]),
+                'remark' => '',
+            ],
             // Microsoft Azure - VLM
             [
                 'name' => 'Microsoft Azure',
@@ -512,6 +689,67 @@ class ServiceProviderInitializer
                     ],
                 ]),
                 'remark' => '',
+            ],
+            // ========== VGM 类别 ==========
+            // Keling - VGM
+            [
+                'name' => '可灵',
+                'provider_code' => ProviderCode::Keling->value,
+                'sort_order' => 1000,
+                'description' => '可灵提供视频生成模型服务，支持文生视频、图生视频等创意视频生成场景。',
+                'icon' => 'MAGIC/713471849556451329/default/magic.png',
+                'provider_type' => 0,
+                'category' => 'vgm',
+                'status' => 1,
+                'is_models_enable' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Kling',
+                        'zh_CN' => '可灵',
+                    ],
+                    'alias' => [
+                        'en_US' => 'Kling',
+                        'zh_CN' => '可灵',
+                    ],
+                    'description' => [
+                        'en_US' => 'Kling provides video generation model services for creative text-to-video and image-to-video scenarios.',
+                        'zh_CN' => '可灵提供视频生成模型服务，支持文生视频、图生视频等创意视频生成场景。',
+                    ],
+                ]),
+                'remark' => '可灵',
+            ],
+            // Volcengine Ark - VGM
+            [
+                'name' => '火山引擎（方舟）',
+                'provider_code' => ProviderCode::VolcengineArk->value,
+                'sort_order' => 1000,
+                'description' => '火山引擎方舟提供视频生成模型服务，支持文生视频、图生视频等视频创作场景。',
+                'icon' => 'MAGIC/713471849556451329/default/magic.png',
+                'provider_type' => 0,
+                'category' => 'vgm',
+                'status' => 1,
+                'is_models_enable' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Volcengine Ark',
+                        'zh_CN' => '火山引擎（方舟）',
+                    ],
+                    'alias' => [
+                        'en_US' => 'Volcengine Ark',
+                        'zh_CN' => '火山引擎（方舟）',
+                    ],
+                    'description' => [
+                        'en_US' => 'Volcengine Ark provides video generation model services for text-to-video and image-to-video creation scenarios.',
+                        'zh_CN' => '火山引擎方舟提供视频生成模型服务，支持文生视频、图生视频等视频创作场景。',
+                    ],
+                ]),
+                'remark' => '聚合文生视频',
             ],
         ];
     }

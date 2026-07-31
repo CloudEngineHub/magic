@@ -316,6 +316,7 @@ export const MessageEditorContainer = observer(
 				canSendMessage,
 				hasLoadingMarker,
 				isAllFilesUploaded,
+				isEditingQueueItem,
 				store,
 				t,
 				onSend,

@@ -55,7 +55,7 @@ export function PhoneVerify({ form }: PhoneVerifyProps) {
 			>
 				<Input
 					autoComplete="off"
-					placeholder={t("form.stateCodeRequired", { ns: "message" })}
+					placeholder={t("setting.accountSecurityPassword.codePlaceholder")}
 					suffix={
 						<VerificationCodeButton
 							phone={phone}

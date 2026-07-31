@@ -17,7 +17,6 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -102,6 +101,13 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         if ($agentVersion === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
         }
+        $this->fillMarketCategoryIds([$agentMarket]);
+
+        $this->assertMarketDiscoverableForUser(
+            $this->createPermissionDataIsolation($dataIsolation),
+            $agentMarket,
+            $dataIsolation->getCurrentUserId()
+        );
 
         $this->updateAgentMarketIcon($dataIsolation, $agentMarket);
 
@@ -137,6 +143,16 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         if ($requestDTO->getCategoryIds() !== []) {
             $query->setCategoryIds($requestDTO->getCategoryIds());
         }
+        $query->setMarketType($requestDTO->getMarketType());
+
+        $visibleMarketIds = $this->superMagicAgentMarketDomainService->getDiscoverableOrganizationMarketIds(
+            $this->createPermissionDataIsolation($dataIsolation),
+            $dataIsolation->getCurrentUserId()
+        );
+        $query->setVisibleOrganizationShelf(
+            $dataIsolation->getCurrentOrganizationCode(),
+            array_map('intval', $visibleMarketIds)
+        );
 
         // Build the page request.
         $page = new Page($requestDTO->getPage(), $requestDTO->getPageSize());
@@ -144,6 +160,7 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         // Fetch the published market list.
         $result = $this->superMagicAgentMarketDomainService->queries($query, $page);
         $agentMarkets = $result['list'];
+        $this->fillMarketCategoryIds($agentMarkets);
         $total = $result['total'];
 
         if (empty($agentMarkets)) {
@@ -166,9 +183,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
 
         // load user agents map
         $userAgentsMap = $this->superMagicUserAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $agentCodes);
-
-        // merge visible agent ownerships
-        $userAgentsMap = $this->mergeVisibleAgentOwnerships($dataIsolation, $agentCodes, $userAgentsMap);
 
         // load latest versions map
         $latestVersionsMap = $this->superMagicAgentVersionDomainService->getLatestPublishedByCodes($dataIsolation, $agentCodes);
@@ -213,10 +227,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
 
         $pathMapByOrganization = [];
         foreach ($agentMarkets as $marketEntity) {
-            if (! $marketEntity instanceof AgentMarketEntity) {
-                continue;
-            }
-
             $icon = $marketEntity->getIcon() ?? [];
             $formattedPath = EasyFileTools::formatPath($icon['url'] ?? $icon['value'] ?? '');
             if ($formattedPath === '') {
@@ -237,10 +247,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
 
         foreach ($agentMarkets as $marketEntity) {
-            if (! $marketEntity instanceof AgentMarketEntity) {
-                continue;
-            }
-
             $icon = $marketEntity->getIcon() ?? [];
             $formattedPath = EasyFileTools::formatPath($icon['url'] ?? $icon['value'] ?? '');
             if ($formattedPath === '') {
@@ -257,37 +263,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             $icon['value'] = $fileLink->getUrl();
             $marketEntity->setIcon($icon);
         }
-    }
-
-    /**
-     * Merge visible non-market agents into the ownership map so the UI can treat
-     * them as already added while keeping delete disabled.
-     *
-     * @param string[] $agentCodes
-     * @param array<string, UserAgentEntity> $userAgentsMap
-     * @return array<string, UserAgentEntity>
-     */
-    private function mergeVisibleAgentOwnerships(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        array $agentCodes,
-        array $userAgentsMap
-    ): array {
-        $accessibleAgentResult = $this->getAccessibleAgentCodes($dataIsolation, $dataIsolation->getCurrentUserId());
-        $visibleAgentCodes = array_intersect($agentCodes, $accessibleAgentResult['codes']);
-
-        foreach ($visibleAgentCodes as $agentCode) {
-            if (isset($userAgentsMap[$agentCode])) {
-                continue;
-            }
-
-            $userAgentsMap[$agentCode] = (new UserAgentEntity())
-                ->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
-                ->setUserId($dataIsolation->getCurrentUserId())
-                ->setAgentCode($agentCode)
-                ->setSourceType(AgentSourceType::LOCAL_CREATE);
-        }
-
-        return $userAgentsMap;
     }
 
     /**

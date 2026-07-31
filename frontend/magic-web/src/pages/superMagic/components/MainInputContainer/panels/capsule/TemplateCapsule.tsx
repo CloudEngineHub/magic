@@ -5,7 +5,7 @@ import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../hooks/useLocaleText"
 import type { OptionItem } from "../types"
-import { isImageIconSource } from "../utils"
+import { getOptionValue, isImageIconSource } from "../utils"
 
 interface TemplateCapsuleProps {
 	selectedTemplate?: OptionItem
@@ -53,13 +53,16 @@ const TemplateCapsule = observer(
 				initial="hidden"
 				animate="visible"
 			>
-				{templates.map((template) => {
-					const isSelected = selectedTemplate?.value === template.value
+				{templates.map((template, index) => {
+					const templateValue = getOptionValue(template)
+					const isSelected = selectedTemplate
+						? getOptionValue(selectedTemplate) === templateValue
+						: false
 					const isImageIcon = isImageIconSource(template.icon_url)
-					const label = lt(template.label) ?? template.value
+					const label = lt(template.label) ?? lt(template.value) ?? templateValue
 
 					return (
-						<motion.div key={template.value} variants={itemVariants}>
+						<motion.div key={`${templateValue}-${index}`} variants={itemVariants}>
 							<Button
 								variant="outline"
 								className={cn(

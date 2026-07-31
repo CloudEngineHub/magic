@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react"
+import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import EditorErrorBoundary from "./components/EditorErrorBoundary"
@@ -6,6 +6,7 @@ import { SimpleEditor, SimpleEditorRef } from "@/components/tiptap-templates/sim
 import { useProjectImageExtensions } from "@/components/tiptap-templates/simple/hooks"
 import { useCustomLinkNode } from "./hooks/useCustomLinkNode"
 import CodeSourceEditor from "./components/CodeSourceEditor"
+import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/preview-content"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -19,6 +20,10 @@ import { Editor } from "@tiptap/react"
 
 interface EditorBodyProps {
 	isLoading: boolean
+	/** Keeps pure-share loading in the page-level overlay instead of rendering a second spinner. */
+	suppressLoadingIndicator?: boolean
+	/** Lets the markdown editor contribute its full height to the page scroll range. */
+	documentFlowFullscreen?: boolean
 	viewMode: "code" | "desktop" | "phone" | "markdown"
 	language?: string
 	content: string
@@ -47,6 +52,8 @@ interface EditorBodyProps {
 
 function EditorBody({
 	isLoading,
+	suppressLoadingIndicator = false,
+	documentFlowFullscreen = false,
 	viewMode,
 	language = "text",
 	content,
@@ -148,6 +155,12 @@ function EditorBody({
 	})
 
 	const isMobile = useIsMobile()
+	const previewCodeContent = useMemo(() => {
+		// Edit mode normalizes once when Monaco mounts. Keeping editContent out of this
+		// dependency list prevents a full-document scan on every Monaco keystroke.
+		if (viewMode !== "code" || isEditMode) return content
+		return formatLongCurlDataRawForPreview(content)
+	}, [content, isEditMode, viewMode])
 
 	// Combine all extensions
 	const allExtensions = [...projectImageExtensions, customLinkNode]
@@ -201,21 +214,26 @@ function EditorBody({
 		>
 			<div className={className} data-testid={dataTestId}>
 				{isLoading ? (
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							minHeight: 120,
-						}}
-					>
-						<MagicSpin spinning />
-					</div>
+					suppressLoadingIndicator ? (
+						<div className="min-h-dvh" />
+					) : (
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								minHeight: 120,
+							}}
+						>
+							<MagicSpin spinning />
+						</div>
+					)
 				) : viewMode === "code" ? (
 					<CodeSourceEditor
+						key={isEditMode ? "edit" : "preview"}
 						language={language}
 						isEditMode={isEditMode}
-						content={isEditMode ? editContent || content : content}
+						content={isEditMode ? editContent || content : previewCodeContent}
 						onChange={setEditContent}
 					/>
 				) : (
@@ -232,6 +250,7 @@ function EditorBody({
 						additionalExtensions={allExtensions}
 						isEditable={isEditMode}
 						isMobile={isMobile || viewMode === "phone"}
+						documentFlow={documentFlowFullscreen}
 						placeholder={placeholder}
 						onSave={onSave}
 					/>

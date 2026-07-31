@@ -50,6 +50,7 @@ interface AudioRecordingCardProps {
 	layout?: "desktop" | "mobile"
 	onOpen?: (item: AudioProjectListItem) => void
 	onSummarize?: (item: AudioProjectListItem) => void
+	onOpenProject?: (item: AudioProjectListItem) => void
 	onRename?: (item: AudioProjectListItem) => void
 	onDelete?: (item: AudioProjectListItem) => void
 	onCopyToProject?: (item: AudioProjectListItem) => void
@@ -242,11 +243,13 @@ function SummaryLoadingButton({
 interface CardActionMenuProps {
 	cardId: string
 	label: string
+	openProjectLabel: string
 	renameLabel: string
 	deleteLabel: string
 	copyToProjectLabel: string
 	copyUnavailableLabel: string
 	moveToGroupLabel?: string
+	onOpenProject?: () => void
 	onRename?: () => void
 	onDelete?: () => void
 	onCopyToProject?: () => void
@@ -260,11 +263,13 @@ interface CardActionMenuProps {
 function CardActionMenu({
 	cardId,
 	label,
+	openProjectLabel,
 	renameLabel,
 	deleteLabel,
 	copyToProjectLabel,
 	copyUnavailableLabel,
 	moveToGroupLabel,
+	onOpenProject,
 	onRename,
 	onDelete,
 	onCopyToProject,
@@ -273,6 +278,15 @@ function CardActionMenu({
 	regenerateSummaryLabel,
 	canCopyToProject = true,
 }: CardActionMenuProps) {
+	/** Routes to the recording project without triggering the card preview action. */
+	const handleOpenProject = useCallback(
+		(event: MouseEvent) => {
+			event.stopPropagation()
+			onOpenProject?.()
+		},
+		[onOpenProject],
+	)
+
 	const handleRename = useCallback(
 		(event: MouseEvent) => {
 			event.stopPropagation()
@@ -339,6 +353,13 @@ function CardActionMenu({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="min-w-[120px]">
 				<DropdownMenuItem
+					onClick={handleOpenProject}
+					data-testid={`audio-recording-card-${cardId}-action-open-project`}
+				>
+					<FolderOpen className="h-4 w-4" aria-hidden />
+					{openProjectLabel}
+				</DropdownMenuItem>
+				<DropdownMenuItem
 					onClick={handleRename}
 					data-testid={`audio-recording-card-${cardId}-action-rename`}
 				>
@@ -393,6 +414,7 @@ function AudioRecordingCard({
 	layout = "desktop",
 	onOpen,
 	onSummarize,
+	onOpenProject,
 	onRename,
 	onDelete,
 	onCopyToProject,
@@ -473,6 +495,11 @@ function AudioRecordingCard({
 	const handleMoveToGroup = useCallback(() => {
 		onMoveToGroup?.(item)
 	}, [item, onMoveToGroup])
+
+	/** Opens the backing project while keeping the recording preview as the card's primary action. */
+	const handleOpenProject = useCallback(() => {
+		onOpenProject?.(item)
+	}, [item, onOpenProject])
 
 	const handleRetryMerge = useCallback(
 		(event: MouseEvent) => {
@@ -828,11 +855,13 @@ function AudioRecordingCard({
 						<CardActionMenu
 							cardId={item.id}
 							label={t("card.moreActions")}
+							openProjectLabel={t("card.openProject")}
 							renameLabel={t("card.rename")}
 							deleteLabel={t("card.delete")}
 							copyToProjectLabel={t("card.copyToProject")}
 							copyUnavailableLabel={t("copy.unavailable")}
 							moveToGroupLabel={t("card.moveToGroup")}
+							onOpenProject={handleOpenProject}
 							onRename={handleRename}
 							onDelete={handleDelete}
 							onCopyToProject={handleCopyToProject}

@@ -111,8 +111,12 @@ function slideDataTransformer(item: FileItem) {
 		name: fileName,
 		is_directory: item.is_directory,
 		children: item.children,
-		relative_file_path: item.relative_file_path,
-		parent_id: item.parent_id,
+		// Callers merge transformed data over the full attachment node. Omitting missing
+		// path fields prevents an incomplete adapter from erasing valid PPT metadata.
+		...(item.relative_file_path !== undefined
+			? { relative_file_path: item.relative_file_path }
+			: {}),
+		...(item.parent_id !== undefined ? { parent_id: item.parent_id } : {}),
 		display_config: item.display_config,
 	}
 }

@@ -181,9 +181,9 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
             file_size_mb = file_stat.st_size / (1024 * 1024)  # 转换为 MB
 
             # 前置检查：判断是否需要拆分音频
-            # 默认阈值：400MB 或 4小时
-            max_size_mb = 400
-            max_duration_hours = 4.0
+            # 固定阈值：480MB 或 4.8小时
+            max_size_mb = 480
+            max_duration_hours = 4.8
             max_duration_seconds = max_duration_hours * 3600
             
             duration_hours = (audio_duration / 3600) if audio_duration else 0
@@ -218,8 +218,6 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
 🎯 操作步骤：
 1. 使用 split_audio 工具拆分音频文件：
    - audio_path: '{params.audio_path}'
-   - max_size_mb: {max_size_mb}
-   - max_duration_hours: {max_duration_hours}
 
 2. 拆分完成后，对每个拆分的音频文件分别使用 audio_understanding 进行转录
 

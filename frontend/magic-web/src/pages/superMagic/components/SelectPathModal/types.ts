@@ -91,6 +91,43 @@ export interface CrossProjectFileOperationModalProps {
 	}) => void
 }
 
+export type ProjectResourceSelection =
+	| {
+			level: "project"
+			workspace: Workspace
+			project: ProjectListItem
+	  }
+	| {
+			level: "attachment"
+			workspace: Workspace
+			project: ProjectListItem
+			attachment: AttachmentItem
+	  }
+
+export const MAX_MENTION_PROJECT_COUNT = 10
+
+export interface ProjectResourceSelectorSubmitData {
+	targetProjectId: string
+	targetWorkspaceId?: string
+	targetProject?: ProjectListItem
+	targetPath: AttachmentItem[]
+	targetAttachments: AttachmentItem[]
+	sourceAttachments: AttachmentItem[]
+	selection?: ProjectResourceSelection
+	selections?: ProjectResourceSelection[]
+}
+
+export interface ProjectResourceSelectorModalProps extends Omit<
+	CrossProjectFileOperationModalProps,
+	"onSubmit"
+> {
+	selectionMode?: "destination" | "mention"
+	excludeProjectIds?: string[]
+	emptyDirectoryDescription?: string
+	emptyDirectoryActionLabel?: string | null
+	onSubmit: (data: ProjectResourceSelectorSubmitData) => void
+}
+
 export interface ImportFromOtherProjectModalProps {
 	visible: boolean
 	workspaces: Workspace[]

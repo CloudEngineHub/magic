@@ -340,7 +340,10 @@ function renderLogEntry(entry) {
         case 'client':    renderClientEntry(entry); break;
         case 'ai':        showAIMessage(entry.content, entry.timestamp, true); break;
         case 'thinking':  showThinkingMessage(entry.content, entry.timestamp, true); break;
-        case 'tool_call': showToolCallMessage(entry.tool, entry.eventType, entry.timestamp, true, { modelContent: entry.modelContent || '' }); break;
+        case 'tool_call': showToolCallMessage(entry.tool, entry.eventType, entry.timestamp, true, {
+            modelContent: entry.modelContent || '',
+            attachments: entry.attachments || entry.tool?.attachments || [],
+        }); break;
         case 'event':     showEventLog(entry.data, true); break;
         case 'system':    showSystemMessage(entry.text, true, { key: entry.key }); break;
     }
@@ -1808,6 +1811,7 @@ async function sendHttpMessage(messageData) {
     }
 
     try {
+        injectDebugTaskId(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -1839,6 +1843,26 @@ async function sendHttpMessage(messageData) {
     }
 }
 
+/**
+ * 为调试面板发送的普通聊天消息注入新的任务 ID.
+ * 初始化消息和中断消息不切换任务，避免影响当前运行中的任务状态.
+ */
+function injectDebugTaskId(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+    if (messageData.context_type === ContextType.INTERRUPT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.super_magic_task_id = generateDebugTaskId();
+}
+
+/**
+ * 生成仅用于本地调试的数字字符串任务 ID.
+ */
+function generateDebugTaskId() {
+    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${Date.now()}${randomSuffix}`;
+}
+
 async function clearRemoteChatHistory() {
     const serverUrl = (serverUrlInput.value.trim() || 'http://127.0.0.1:8002').replace(/\/+$/, '');
 
@@ -1867,6 +1891,7 @@ function applyLocalDebugOptions(messageData) {
     if (!messageData || typeof messageData !== 'object') return;
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
         enable_debug_tool_result_content: true,
+        enable_debug_finished_attachments: true,
         client_context: buildLocalDebugClientContext(),
         super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
@@ -4153,11 +4178,17 @@ function handleSuperMagicMessage(smsg, payload) {
     }
 
     const tools = collectToolsFromSuperMagicMessage(smsg, payload);
+    const finishedAttachments = isMainAgentFinished(payload) && Array.isArray(payload.attachments)
+        ? payload.attachments
+        : null;
     for (const item of tools) {
         showToolCallMessage(item.tool, payload.event, payload.send_timestamp, false, {
             correlationId: smsg.correlation_id || payload.correlation_id,
             toolCallId: item.toolCallId,
             modelContent: item.modelContent,
+            attachments: isFinalTaskTool(item.tool)
+                ? (finishedAttachments || [])
+                : undefined,
         });
         if (payload.event === 'before_tool_call') {
             showAssistantActivity('tool');
@@ -4251,7 +4282,98 @@ function renderMarkdown(text) {
         a.setAttribute('target', '_blank');
         a.setAttribute('rel', 'noopener');
     });
+    enhanceRenderedFilePathMentions(div);
     return div;
+}
+
+/**
+ * 将 Markdown 正文中的文件路径标记渲染为可点击的工作区文件标签。
+ */
+function enhanceRenderedFilePathMentions(root) {
+    if (!root || !root.textContent.includes('[@file_path:')) return;
+    const textNodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || parent.closest('pre, code, a, button, .ai-file-path-mention')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return node.textContent.includes('[@file_path:')
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT;
+        },
+    });
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(replaceFilePathMentionsInTextNode);
+}
+
+/**
+ * 替换单个文本节点中的文件路径标记，保留标记前后的普通文本。
+ */
+function replaceFilePathMentionsInTextNode(textNode) {
+    const text = textNode.textContent || '';
+    const pattern = /\[@file_path:(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\]]+))\]/g;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+    let hasMatch = false;
+
+    while ((match = pattern.exec(text)) !== null) {
+        const rawPath = match[1] ?? match[2] ?? match[3] ?? '';
+        const filePath = normalizeRenderedFilePath(rawPath, match[1] !== undefined || match[2] !== undefined);
+        if (!filePath) continue;
+        hasMatch = true;
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        fragment.appendChild(createRenderedFilePathMention(filePath));
+        lastIndex = match.index + match[0].length;
+    }
+
+    if (!hasMatch) return;
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    textNode.replaceWith(fragment);
+}
+
+/**
+ * 标准化消息正文中的工作区文件路径，内部始终使用相对路径。
+ */
+function normalizeRenderedFilePath(rawPath, isQuoted = false) {
+    let filePath = String(rawPath || '').trim();
+    if (isQuoted) filePath = filePath.replace(/\\(.)/g, '$1');
+    try {
+        filePath = decodeURI(filePath);
+    } catch (_) {
+        // 解码失败时继续使用原始路径。
+    }
+    return filePath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+}
+
+/**
+ * 创建与 magic-web 展示一致的文件路径标签，并复用现有文件预览能力。
+ */
+function createRenderedFilePathMention(filePath) {
+    const mention = document.createElement('span');
+    mention.className = 'ai-file-path-mention';
+    mention.setAttribute('role', 'button');
+    mention.setAttribute('tabindex', '0');
+    mention.title = filePath;
+    mention.textContent = `@${filePath}`;
+
+    const openPreview = () => {
+        void openApiFilePreviewTab({
+            name: getWorkspaceFileBaseName(filePath),
+            path: filePath,
+            type: 'file',
+            size: 0,
+            updated_at: 0,
+        });
+    };
+    mention.addEventListener('click', openPreview);
+    mention.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openPreview();
+    });
+    return mention;
 }
 
 function renderMarkdownContent(text) {
@@ -4807,6 +4929,7 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
     if (!_noLog) {
         const logEntry = { type: 'tool_call', tool, eventType, timestamp };
         if (options.modelContent) logEntry.modelContent = options.modelContent;
+        if (Array.isArray(options.attachments)) logEntry.attachments = options.attachments;
         pushLog(logEntry);
     }
 
@@ -4860,6 +4983,10 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
     detailEl.className = 'tool-call-detail';
     detailEl.style.display = 'none';
 
+    const attachmentsEl = document.createElement('div');
+    attachmentsEl.className = 'tool-call-attachments';
+    attachmentsEl.style.display = 'none';
+
     header.style.cursor = 'pointer';
     header.addEventListener('click', () => {
         if (toolState.openDetailPreview) {
@@ -4874,8 +5001,21 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
 
     wrapper.appendChild(header);
     wrapper.appendChild(detailEl);
+    wrapper.appendChild(attachmentsEl);
 
-    toolState = { wrapper, header, actionSpan, remarkSpan, timeSpan, arrow, detailEl, copyBtn, openDetailPreview: null, modelContent: '' };
+    toolState = {
+        wrapper,
+        header,
+        actionSpan,
+        remarkSpan,
+        timeSpan,
+        arrow,
+        detailEl,
+        attachmentsEl,
+        copyBtn,
+        openDetailPreview: null,
+        modelContent: '',
+    };
     updateToolCallState(toolState, tool, eventType, timeStr, options);
     if (toolKey) {
         toolCallRegistry.set(toolKey, toolState);
@@ -4933,7 +5073,148 @@ function updateToolCallState(toolState, tool, eventType, timeStr, options = {}) 
     toolState.timeSpan.textContent = timeStr;
 
     updateToolDetailView(toolState, detail, tool, eventType);
+    const attachments = Array.isArray(options.attachments)
+        ? options.attachments
+        : (Array.isArray(tool.attachments) ? tool.attachments : null);
+    if (attachments !== null) {
+        renderToolCallAttachments(toolState.attachmentsEl, attachments);
+    }
     syncScrollAfterMessageChange(shouldStickToBottom);
+}
+
+/**
+ * 渲染工具完成消息携带的附件，严格保留后端数组顺序。
+ */
+function renderToolCallAttachments(container, attachments) {
+    if (!container) return;
+    container.innerHTML = '';
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const title = document.createElement('div');
+    title.className = 'tool-call-attachments-title';
+    title.textContent = `附件（${attachments.length}）`;
+
+    const list = document.createElement('ol');
+    list.className = 'tool-call-attachments-list';
+    attachments.forEach((attachment, index) => {
+        list.appendChild(createToolCallAttachmentItem(attachment, index));
+    });
+
+    container.appendChild(title);
+    container.appendChild(list);
+    container.style.display = '';
+}
+
+/**
+ * 创建单个附件列表项；本地模拟附件复用工作区预览，线上附件使用安全的 HTTP 地址。
+ */
+function createToolCallAttachmentItem(attachment, index) {
+    const item = document.createElement('li');
+    item.className = 'tool-call-attachment-item';
+
+    const localPath = getLocalDebugAttachmentPath(attachment);
+    const fileUrl = getAttachmentHttpUrl(attachment);
+    const canOpen = Boolean(localPath || fileUrl);
+    const content = document.createElement(canOpen ? 'button' : 'div');
+    content.className = `tool-call-attachment-content${canOpen ? ' is-clickable' : ''}`;
+    if (canOpen) content.type = 'button';
+
+    const order = document.createElement('span');
+    order.className = 'tool-call-attachment-order';
+    order.textContent = String(index + 1);
+
+    const text = document.createElement('span');
+    text.className = 'tool-call-attachment-text';
+
+    const name = document.createElement('span');
+    name.className = 'tool-call-attachment-name';
+    name.textContent = getAttachmentDisplayName(attachment, localPath);
+    name.title = name.textContent;
+
+    const metaText = getAttachmentMetaText(attachment);
+    text.appendChild(name);
+    if (metaText) {
+        const meta = document.createElement('span');
+        meta.className = 'tool-call-attachment-meta';
+        meta.textContent = metaText;
+        text.appendChild(meta);
+    }
+
+    content.appendChild(order);
+    content.appendChild(text);
+    if (canOpen) {
+        const action = document.createElement('span');
+        action.className = 'tool-call-attachment-action';
+        action.textContent = localPath ? '预览' : '打开';
+        content.appendChild(action);
+        content.addEventListener('click', () => {
+            if (localPath) {
+                void openApiFilePreviewTab({
+                    name: getAttachmentDisplayName(attachment, localPath),
+                    path: localPath,
+                    type: 'file',
+                    size: Number(attachment?.file_size) || 0,
+                    updated_at: Number(attachment?.timestamp) || 0,
+                });
+                return;
+            }
+            window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        });
+    }
+
+    item.appendChild(content);
+    return item;
+}
+
+/**
+ * 从本地调试附件标识中提取工作区相对路径，不对工作区做额外扫描。
+ */
+function getLocalDebugAttachmentPath(attachment) {
+    const prefix = 'local-debug/workspace/';
+    const fileKey = String(attachment?.file_key || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!fileKey.startsWith(prefix)) return '';
+    return fileKey.slice(prefix.length).replace(/^\/+/, '');
+}
+
+/**
+ * 获取允许在新窗口打开的附件 HTTP 地址。
+ */
+function getAttachmentHttpUrl(attachment) {
+    const value = String(attachment?.file_url || '').trim();
+    if (!value) return '';
+    try {
+        const url = new URL(value, window.location.href);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+    } catch (_) {
+        return '';
+    }
+}
+
+/**
+ * 获取附件展示名称，缺失时依次回退到本地路径和通用名称。
+ */
+function getAttachmentDisplayName(attachment, localPath = '') {
+    return attachment?.display_filename ||
+        attachment?.filename ||
+        getWorkspaceFileBaseName(localPath) ||
+        '未命名附件';
+}
+
+/**
+ * 生成附件扩展名和大小摘要。
+ */
+function getAttachmentMetaText(attachment) {
+    const parts = [];
+    const extension = String(attachment?.file_extension || '').replace(/^\./, '').trim();
+    if (extension) parts.push(extension.toUpperCase());
+    const fileSize = Number(attachment?.file_size);
+    if (Number.isFinite(fileSize) && fileSize >= 0) {
+        parts.push(formatFileSizeBytes(fileSize));
+    }
+    return parts.join(' · ');
 }
 
 function normalizeToolStatus(status, eventType) {

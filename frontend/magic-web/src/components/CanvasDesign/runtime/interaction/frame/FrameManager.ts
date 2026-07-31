@@ -41,6 +41,18 @@ export class FrameManager {
 		)
 	}
 
+	/**
+	 * 返回画框换父级拖拽期间的临时目标父级。
+	 *
+	 * 拖拽节点会先临时提升到 contentLayer，文档树要等 dragend 才提交；连线渲染
+	 * 需要这个过渡状态来判断当前应该使用画框内副本、全局副本，还是两者同时使用。
+	 * 返回 undefined 表示元素不在这次换父级拖拽中，null 表示临时目标是根级。
+	 */
+	public getDragTargetParentId(elementId: string): string | null | undefined {
+		if (!this.dragSession?.elementIds.includes(elementId)) return undefined
+		return this.dragSession.targetParentId
+	}
+
 	private handleFrameDropDragStart(elementIds: string[]): void {
 		this.cancelFrameDropDrag()
 		const uniqueElementIds = Array.from(new Set(elementIds))

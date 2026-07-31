@@ -18,6 +18,8 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\DirectoryDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileContentSavedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\MagicFSErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeBuilder;
@@ -41,6 +43,8 @@ class MagicFSFileAppService extends AbstractAppService
 
     public function __construct(
         protected MagicFSFileDomainService $magicFSFileDomainService,
+        protected TaskDomainService $taskDomainService,
+        protected TopicDomainService $topicDomainService,
         protected FileTreeBuilder $fileTreeBuilder,
         protected EventDispatcherInterface $eventDispatcher,
         LoggerFactory $loggerFactory
@@ -101,6 +105,30 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
+     * 根据项目 ID 获取项目根目录 file_id.
+     *
+     * agfs-server 在动态挂载 referenced-project 时调用：agent 仅通过挂载路径
+     * 提供 project_id，本端点解析出对应的根目录 file_id 供 magicfs 挂载使用。
+     * 要求当前用户对该项目至少具备 VIEWER 角色。
+     */
+    public function getProjectRootFileId(MagicUserAuthorization $authorization, string $projectId): array
+    {
+        $projectIdInt = (int) $projectId;
+        if ($projectIdInt <= 0) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+        }
+
+        $this->assertProjectAccessible($projectIdInt, $authorization, MemberRole::VIEWER);
+
+        $rootFileId = $this->magicFSFileDomainService->getProjectRootFileId($projectIdInt);
+
+        return [
+            'project_id' => (string) $projectIdInt,
+            'root_file_id' => (string) $rootFileId,
+        ];
+    }
+
+    /**
      * 批量获取文件元数据版本号.
      */
     public function getFileVersions(MagicUserAuthorization $authorization, GetFileVersionsRequestDTO $requestDTO): FileVersionsResponseDTO
@@ -123,11 +151,20 @@ class MagicFSFileAppService extends AbstractAppService
      */
     public function createFile(MagicUserAuthorization $authorization, CreateFileRequestDTO $requestDTO): FileInfoResponseDTO
     {
-        // 校验当前用户对父目录所属项目至少具备 EDITOR 角色
-        $this->resolveAndAuthorizeParentProject($requestDTO->parent_id, $authorization, MemberRole::EDITOR);
+        // 校验当前用户对父目录所属项目至少具备 EDITOR 角色，并取回父目录实体用于后续归属一致性校验
+        $parentEntity = $this->resolveAndAuthorizeParentProject($requestDTO->parent_id, $authorization, MemberRole::EDITOR);
 
         // 获取 per-request 上下文（user/trace/authorization/...）
         $messageMetadata = $requestDTO->getMessageMetadataValueObject();
+
+        // 安全校验：请求透传的 super_magic_task_id / topic_id 必须与父目录已授权范围一致，
+        // 防止在自有目录创建文件却挂接到他人任务/话题的越权附件注入
+        $this->assertAttachTargetsAuthorized(
+            $messageMetadata->getSuperMagicTaskId(),
+            (int) $messageMetadata->getTopicId(),
+            $parentEntity,
+            $authorization
+        );
 
         // project_id、user_id 和 organization_code 将从父文件或认证信息中自动获取
         $fileEntity = $this->magicFSFileDomainService->createFile(
@@ -214,6 +251,21 @@ class MagicFSFileAppService extends AbstractAppService
         $responseDTO->file = MagicFSFileDTO::fromTaskFileEntity($fileEntity);
 
         return $responseDTO;
+    }
+
+    /**
+     * 写权限预检（无副作用）.
+     *
+     * 与 updateFile 复用同一套 assertFileAccessible(fileId, EDITOR) 鉴权逻辑，
+     * 仅校验、不写状态。供 magicfs 客户端在写 S3 / 本地缓存之前确认当前用户
+     * 具备写权限，避免"先写 S3 再被元数据服务拒绝"导致的数据不一致。
+     *
+     * 用户空间文件（project_id<=0）同样要求文件 owner 本人（assertUserSpaceFileAccessible），
+     * 与 updateFile 完全一致。
+     */
+    public function checkFileWriteAccess(MagicUserAuthorization $authorization, string $fileId): void
+    {
+        $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
     }
 
     /**
@@ -405,7 +457,7 @@ class MagicFSFileAppService extends AbstractAppService
      *
      * user-space 父目录（project_id<=0 但有 user_id）按 user 维度校验，返回的 project_id 为 0。
      */
-    protected function resolveAndAuthorizeParentProject(string $parentId, MagicUserAuthorization $authorization, MemberRole $requiredRole): int
+    protected function resolveAndAuthorizeParentProject(string $parentId, MagicUserAuthorization $authorization, MemberRole $requiredRole): TaskFileEntity
     {
         if ($parentId === '' || $parentId === '0') {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
@@ -414,10 +466,10 @@ class MagicFSFileAppService extends AbstractAppService
         $parentEntity = $this->magicFSFileDomainService->getFileById($parentId);
         if ($parentEntity->getProjectId() <= 0) {
             $this->assertUserSpaceFileAccessible($parentEntity, $authorization);
-            return 0;
+            return $parentEntity;
         }
         $this->assertProjectAccessible($parentEntity->getProjectId(), $authorization, $requiredRole);
-        return $parentEntity->getProjectId();
+        return $parentEntity;
     }
 
     /**
@@ -452,6 +504,81 @@ class MagicFSFileAppService extends AbstractAppService
             || $fileUserId !== $authorization->getId()
             || $fileOrgCode !== $authorization->getOrganizationCode()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+        }
+    }
+
+    /**
+     * 校验请求透传的 super_magic_task_id / topic_id 与父目录已授权范围一致.
+     *
+     * 防止调用方在自己有权的目录创建文件，却通过 message_metadata 把文件挂接到
+     * 他人任务/话题，从而在受害者附件视图中注入文件。
+     *
+     * 校验规则：
+     *   - task 非空 → task 必须与父目录同 scope（user 空间比对 userId，
+     *     project 空间比对 projectId）；若请求同时携带 topic_id 且与 task.topicId
+     *     不一致则拒绝；task 命中即覆盖 topic，结束。
+     *   - task 未命中但 topic_id 非空 → topic 必须与父目录同 scope。
+     *   - task 未命中但 task.topicId 为 0 且请求 topic_id 非空 → 落入 Domain
+     *     的 fallback 路径，因此仍需独立校验请求 topic_id 的归属。
+     */
+    protected function assertAttachTargetsAuthorized(
+        string $superMagicTaskId,
+        int $topicId,
+        TaskFileEntity $parentEntity,
+        MagicUserAuthorization $authorization
+    ): void {
+        $isUserSpace = $parentEntity->getProjectId() <= 0;
+        $taskIdInt = (int) $superMagicTaskId;
+
+        if ($taskIdInt > 0) {
+            $task = $this->taskDomainService->getTaskById($taskIdInt);
+            if ($task === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+            }
+
+            if ($isUserSpace) {
+                if ($task->getUserId() !== $authorization->getId()) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+                }
+            } else {
+                // 跨项目挂接：调用者只需对目标任务所在项目具备可写权限即可，
+                // 不要求与父目录同项目。父目录写权限已由 resolveAndAuthorizeParentProject 校验。
+                $this->assertProjectAccessible(
+                    $task->getProjectId(),
+                    $authorization,
+                    MemberRole::EDITOR
+                );
+            }
+
+            $taskTopicId = $task->getTopicId();
+            if ($taskTopicId > 0) {
+                if ($topicId > 0 && $topicId !== $taskTopicId) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+                }
+                return;
+            }
+            // task 无 topic，请求 topic_id 会被 Domain 用作 fallback，需独立校验
+        }
+
+        if ($topicId > 0) {
+            $topic = $this->topicDomainService->getTopicById($topicId);
+            if ($isUserSpace) {
+                if ($topic === null
+                    || $topic->getUserId() !== $authorization->getId()
+                    || $topic->getUserOrganizationCode() !== $authorization->getOrganizationCode()) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+                }
+            } else {
+                if ($topic === null) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
+                }
+                // 跨项目挂接：调用者只需对目标话题所在项目具备可写权限即可。
+                $this->assertProjectAccessible(
+                    $topic->getProjectId(),
+                    $authorization,
+                    MemberRole::EDITOR
+                );
+            }
         }
     }
 }

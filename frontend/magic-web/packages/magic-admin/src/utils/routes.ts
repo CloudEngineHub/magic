@@ -32,6 +32,15 @@ const routeNameToPathMap: Record<RouteName, RoutePath> = {
 	[RouteName.AdminAIInternalEmployeeSkill]: RoutePath.AIInternalEmployeeSkill,
 	[RouteName.AdminAIEmployeeReview]: RoutePath.AIEmployeeReview,
 	[RouteName.AdminAISkillReview]: RoutePath.AISkillReview,
+	[RouteName.AdminAIDataStatistics]: RoutePath.AIDataStatistics,
+	[RouteName.AdminAIDataDashboardMemberAnalysis]: RoutePath.AIDataDashboardMemberAnalysis,
+	[RouteName.AdminAIDataDashboardOrganizationAnalysis]:
+		RoutePath.AIDataDashboardOrganizationAnalysis,
+	[RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis]:
+		RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
+	[RouteName.AdminAIDataDashboardConsumptionAnalysis]:
+		RoutePath.AIDataDashboardConsumptionAnalysis,
+	[RouteName.AdminAIDataDashboardDataDictionary]: RoutePath.AIDataDashboardDataDictionary,
 	[RouteName.AdminAIManage]: RoutePath.AIManage,
 	[RouteName.AdminAIAppMenu]: RoutePath.AIAppMenu,
 

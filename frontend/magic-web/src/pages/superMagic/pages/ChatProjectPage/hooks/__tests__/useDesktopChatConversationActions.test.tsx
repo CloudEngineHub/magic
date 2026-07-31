@@ -97,6 +97,42 @@ describe("useDesktopChatConversationActions", () => {
 		expect(shareAction?.disabled).toBe(true)
 	})
 
+	it.each([
+		{
+			label: "历史撤回后已有普通消息",
+			messages: [{ status: MessageStatus.REVOKED }, { status: "finished" }],
+		},
+		{
+			label: "普通消息后存在当前撤回段",
+			messages: [
+				{ status: "finished" },
+				{ status: MessageStatus.REVOKED },
+				{ status: MessageStatus.REVOKED },
+			],
+		},
+		{
+			label: "历史撤回和当前撤回段同时存在",
+			messages: [
+				{ status: MessageStatus.REVOKED },
+				{ status: "finished" },
+				{ status: MessageStatus.REVOKED },
+			],
+		},
+	])("enables share when $label", ({ messages }) => {
+		messagesMap.clear()
+		messagesMap.set("chat-topic-1", messages)
+
+		const { result } = renderHook(() =>
+			useDesktopChatConversationActions({
+				selectedProject,
+				selectedTopic,
+			}),
+		)
+
+		const shareAction = result.current.conversationActionGroups[0]?.actions[0]
+		expect(shareAction?.disabled).toBe(false)
+	})
+
 	it("includes the pin action ahead of rename/save-as/delete actions", () => {
 		messagesMap.clear()
 		messagesMap.set("chat-topic-1", [{ status: "finished" }])

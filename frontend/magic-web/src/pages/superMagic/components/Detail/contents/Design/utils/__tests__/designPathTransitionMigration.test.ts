@@ -52,7 +52,7 @@ describe("design path transition migration", () => {
 		expect(getImageSrc(data)).toBe("./images/cat.png")
 	})
 
-	it("preserves a legacy bare workspace-root resource instead of misrepairing it", () => {
+	it("migrates an attachment-confirmed workspace-root resource to an absolute path", () => {
 		const data = designWithImagePath("images/cat.png")
 
 		migrateLoadedDesignDataPaths(data, {
@@ -60,7 +60,7 @@ describe("design path transition migration", () => {
 			flatAttachments: [fileItem("workspace-cat", "images/cat.png")],
 		})
 
-		expect(getImageSrc(data)).toBe("images/cat.png")
+		expect(getImageSrc(data)).toBe("/images/cat.png")
 	})
 
 	it("preserves ambiguous bare resources and waits for a later safe save", () => {
@@ -104,6 +104,6 @@ describe("design path transition migration", () => {
 		)
 
 		expect(currentCanvasContent).toContain("./images/cat.png")
-		expect(workspaceRootContent).toContain('"src": "images/cat.png"')
+		expect(workspaceRootContent).toContain('"src": "/images/cat.png"')
 	})
 })

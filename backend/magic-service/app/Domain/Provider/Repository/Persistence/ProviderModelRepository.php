@@ -57,6 +57,9 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
                 ->toArray();
             $builder->whereIn('service_provider_config_id', $enabledProviderConfigIds);
         }
+        $builder->orderBy('sort', 'desc')
+            ->orderBy('service_provider_config_id', 'desc')
+            ->orderBy('id', 'asc');
         $result = Db::select($builder->toSql(), $builder->getBindings());
         if (! isset($result[0])) {
             return null;
@@ -397,20 +400,7 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
     public function queries(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array
     {
         $builder = $this->createBuilder($dataIsolation, ProviderModelModel::query());
-        if (! is_null($query->getModelIds())) {
-            $builder->whereIn('model_id', $query->getModelIds());
-        }
-        if (! is_null($query->getStatus())) {
-            $builder->where('status', $query->getStatus()->value);
-        }
-        if (! is_null($query->getModelTypes())) {
-            $builder->whereIn('model_type', array_map(fn ($t) => $t->value, $query->getModelTypes()));
-        } elseif (! is_null($query->getModelType())) {
-            $builder->where('model_type', $query->getModelType()->value);
-        }
-        if (! is_null($query->getProviderModelType())) {
-            $builder->where('type', $query->getProviderModelType()->value);
-        }
+        $this->applyProviderModelQuery($builder, $dataIsolation, $query);
 
         $data = $this->getByPage($builder, $page, $query);
         $list = [];
@@ -425,6 +415,60 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         }
         $data['list'] = $list;
         return $data;
+    }
+
+    /**
+     * @return array{total: int, list: array<string, ProviderModelEntity[]>}
+     */
+    public function queriesModelGroups(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array
+    {
+        $builder = $this->createBuilder($dataIsolation, ProviderModelModel::query());
+        $this->applyProviderModelQuery($builder, $dataIsolation, $query);
+
+        $total = $page->isTotal() ? (clone $builder)->distinct()->count('model_id') : -1;
+        if ($page->isTotal() && $total === 0) {
+            return ['total' => 0, 'list' => []];
+        }
+
+        $groupBuilder = clone $builder;
+        $groupBuilder
+            ->select('model_id')
+            ->selectRaw('MAX(name) as sort_name')
+            ->groupBy('model_id')
+            ->orderBy('sort_name', 'asc')
+            ->where('type', ProviderModelType::ATOM->value);
+
+        if ($page->isEnabled()) {
+            $groupBuilder->forPage($page->getPage(), $page->getPageNum());
+        }
+
+        $modelIds = [];
+        foreach ($groupBuilder->get() as $row) {
+            $modelId = (string) $row->model_id;
+            if ($modelId !== '') {
+                $modelIds[] = $modelId;
+            }
+        }
+
+        if ($modelIds === []) {
+            return ['total' => $total, 'list' => []];
+        }
+
+        $recordBuilder = $this->createBuilder($dataIsolation, ProviderModelModel::query());
+        $this->applyProviderModelQuery($recordBuilder, $dataIsolation, $query);
+        $recordBuilder
+            ->whereIn('model_id', $modelIds)
+            ->orderBy('sort', 'desc')
+            ->orderBy('id', 'asc');
+
+        $groupedModels = array_fill_keys($modelIds, []);
+        /** @var ProviderModelModel $model */
+        foreach ($recordBuilder->get() as $model) {
+            $entity = ProviderModelAssembler::toEntity($model->toArray());
+            $groupedModels[$entity->getModelId()][] = $entity;
+        }
+
+        return ['total' => $total, 'list' => $groupedModels];
     }
 
     /**
@@ -590,6 +634,51 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
     {
         /* @phpstan-ignore-next-line */
         return ProviderModelModel::query()->whereNull('deleted_at');
+    }
+
+    private function applyProviderModelQuery(Builder $builder, ProviderDataIsolation $dataIsolation, ProviderModelQuery $query): void
+    {
+        if (! is_null($query->getKeyword())) {
+            $keyword = '%' . addcslashes($query->getKeyword(), '%_') . '%';
+            $builder->where(static function (Builder $builder) use ($keyword) {
+                $builder->where('model_id', 'like', $keyword)
+                    ->orWhere('name', 'like', $keyword);
+            });
+        }
+        if (! is_null($query->getModelIds())) {
+            $builder->whereIn('model_id', $query->getModelIds());
+        }
+        if (! is_null($query->getCategories())) {
+            $builder->whereIn('category', array_map(static fn (Category $category) => $category->value, $query->getCategories()));
+        } elseif (! is_null($query->getCategory())) {
+            $builder->where('category', $query->getCategory()->value);
+        }
+        if (! is_null($query->getStatuses())) {
+            $builder->whereIn('status', array_map(static fn (Status $status) => $status->value, $query->getStatuses()));
+        } elseif (! is_null($query->getStatus())) {
+            $builder->where('status', $query->getStatus()->value);
+        }
+        if (! is_null($query->getModelTypes())) {
+            $builder->whereIn('model_type', array_map(static fn (ModelType $type) => $type->value, $query->getModelTypes()));
+        } elseif (! is_null($query->getModelType())) {
+            $builder->where('model_type', $query->getModelType()->value);
+        }
+        if (! is_null($query->getServiceProviderConfigIds())) {
+            $builder->whereIn('service_provider_config_id', $query->getServiceProviderConfigIds());
+        }
+        if (! is_null($query->getProviderCodes())) {
+            $providerCodes = $query->getProviderCodes();
+            $builder->whereIn('service_provider_config_id', static function ($subQuery) use ($dataIsolation, $providerCodes) {
+                $subQuery->select('id')
+                    ->from('service_provider_configs')
+                    ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
+                    ->whereNull('deleted_at')
+                    ->whereIn('provider_code', $providerCodes);
+            });
+        }
+        if (! is_null($query->getProviderModelType())) {
+            $builder->where('type', $query->getProviderModelType()->value);
+        }
     }
 
     /**

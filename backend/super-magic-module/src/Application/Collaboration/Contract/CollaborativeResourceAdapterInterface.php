@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Application\Collaboration\Contract;
 
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use Qbhy\HyperfAuth\Authenticatable;
 
@@ -39,4 +40,9 @@ interface CollaborativeResourceAdapterInterface
      * 返回资源在可见性表中的资源类型。
      */
     public function getVisibilityResourceType(): ResourceVisibilityResourceType;
+
+    /**
+     * 协作权限变更后同步资源派生权限，调用仍处于原协作事务中。
+     */
+    public function afterCollaboratorRemoved(PermissionDataIsolation $permissionIsolation, string $resourceCode): void;
 }

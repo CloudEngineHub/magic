@@ -23,6 +23,7 @@ import MobileMenuItem from "./components/MobileMenuItem"
 import { cn } from "@/lib/utils"
 import {
 	canTogglePendingItem,
+	canTogglePendingLeafItem,
 	getMentionItemSelectionKey,
 	getPendingSourceRootId,
 	getSubmittablePendingEntries,
@@ -41,6 +42,8 @@ import { useI18nStatic } from "./hooks/useI18n"
 import type { I18nTexts } from "./i18n/types"
 import { MentionPanelRootProviders, useMentionItemRenderer } from "./renderers/context"
 import { resolveMentionPanelRuntime } from "./runtime/default-runtime"
+import { MentionPanelBuiltinItemId } from "./runtime/builtin/catalog-ids"
+import { MentionPanelItemType } from "./runtime/builtin/panel-item-types"
 
 // Store
 import { useMemoizedFn } from "ahooks"
@@ -152,6 +155,56 @@ const MentionPanelMobile = observer(
 		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
 			() => new Map(),
 		)
+		const isRootMobileMenu = isRootDefaultCategoryScreen(state)
+		const displayItems = useMemo(() => {
+			if (!isRootMobileMenu) return state.items
+
+			const projectFilesIndex = state.items.findIndex(
+				(item) => item.id === MentionPanelBuiltinItemId.PROJECT_FILES,
+			)
+			const existingOtherProjectItem = state.items.find(
+				(item) => item.id === MentionPanelBuiltinItemId.OTHER_PROJECT_FILES,
+			)
+			const uploadFilesIndex = state.items.findIndex(
+				(item) => item.id === MentionPanelBuiltinItemId.UPLOAD_FILES,
+			)
+			const expectedIndex =
+				projectFilesIndex >= 0
+					? projectFilesIndex + 1
+					: uploadFilesIndex >= 0
+						? uploadFilesIndex + 1
+						: state.items.length
+			if (state.items[expectedIndex] === existingOtherProjectItem) return state.items
+
+			const nextItems = state.items.filter(
+				(item) => item.id !== MentionPanelBuiltinItemId.OTHER_PROJECT_FILES,
+			)
+			const nextProjectFilesIndex = nextItems.findIndex(
+				(item) => item.id === MentionPanelBuiltinItemId.PROJECT_FILES,
+			)
+			const nextUploadFilesIndex = nextItems.findIndex(
+				(item) => item.id === MentionPanelBuiltinItemId.UPLOAD_FILES,
+			)
+			const nextInsertIndex =
+				nextProjectFilesIndex >= 0
+					? nextProjectFilesIndex + 1
+					: nextUploadFilesIndex >= 0
+						? nextUploadFilesIndex + 1
+						: nextItems.length
+			nextItems.splice(
+				nextInsertIndex,
+				0,
+				existingOtherProjectItem || {
+					id: MentionPanelBuiltinItemId.OTHER_PROJECT_FILES,
+					type: MentionPanelItemType.OTHER_PROJECT_FILES,
+					name: t.defaultItems.otherProjectFiles || "其它项目/文件",
+					icon: "file-folder",
+					hasChildren: false,
+					isFolder: false,
+				},
+			)
+			return nextItems
+		}, [isRootMobileMenu, state.items, t.defaultItems.otherProjectFiles])
 
 		const totalPending = pendingByKey.size
 
@@ -266,18 +319,20 @@ const MentionPanelMobile = observer(
 		// Checkbox taps select the current row visually, then only toggle pending selection.
 		const handleItemCheckboxClick = useCallback(
 			async (index: number) => {
-				const selectedItem = state.items[index]
+				const selectedItem = displayItems[index]
 				if (!selectedItem) return
+				const stateIndex = state.items.indexOf(selectedItem)
+				if (stateIndex < 0) return
 
-				actions.selectItem(index)
+				actions.selectItem(stateIndex)
 				await requestPendingToggleForItem(selectedItem)
 			},
-			[actions, requestPendingToggleForItem, state.items],
+			[actions, displayItems, requestPendingToggleForItem, state.items],
 		)
 
 		const handleItemClick = useCallback(
 			async (index: number, event?: React.MouseEvent) => {
-				const selectedItem = state.items[index]
+				const selectedItem = displayItems[index]
 				if (!selectedItem) return
 
 				event?.stopPropagation()
@@ -305,7 +360,17 @@ const MentionPanelMobile = observer(
 				const enterFolder = isRightArrow || shouldEnterFolderDirectly || isFolderRow
 				if (selectedItem.unSelectable && !enterFolder) return
 
-				actions.selectItem(index)
+				if (
+					isRootDefaultScreen &&
+					selectedItem.id === MentionPanelBuiltinItemId.OTHER_PROJECT_FILES
+				) {
+					onSelect?.(selectedItem)
+					return
+				}
+
+				const stateIndex = state.items.indexOf(selectedItem)
+				if (stateIndex < 0) return
+				actions.selectItem(stateIndex)
 
 				if (enterFolder) {
 					setTimeout(() => {
@@ -357,6 +422,8 @@ const MentionPanelMobile = observer(
 			[
 				actions,
 				canTogglePendingItemForItem,
+				displayItems,
+				onSelect,
 				requestPendingToggleForItem,
 				enableMultiSelect,
 				ensureMcpItemReadyForPending,
@@ -459,7 +526,7 @@ const MentionPanelMobile = observer(
 
 		const renderItem = useCallback(
 			(index: number) => {
-				const item = state.items[index]
+				const item = displayItems[index]
 				if (!item) return null
 
 				const isHistoryItem = item.tags?.includes("history")
@@ -490,6 +557,7 @@ const MentionPanelMobile = observer(
 				)
 			},
 			[
+				displayItems,
 				state,
 				t,
 				canTogglePendingItemForItem,
@@ -520,7 +588,7 @@ const MentionPanelMobile = observer(
 			return () => {
 				cancelAnimationFrame(frame)
 			}
-		}, [state.selectedIndex, state.items.length, mobileSheetView])
+		}, [state.selectedIndex, displayItems.length, mobileSheetView])
 
 		const leftAriaLabel = useMemo(() => {
 			if (mobileSheetView === "selected") return t.ariaLabels.goBackButton
@@ -552,7 +620,7 @@ const MentionPanelMobile = observer(
 			>
 				<MentionPanelRootProviders
 					getItemRenderer={resolvedRuntime.getItemRenderer}
-					items={state.items}
+					items={displayItems}
 				>
 					<div
 						className={cn(
@@ -676,7 +744,7 @@ const MentionPanelMobile = observer(
 										{t.retry}
 									</button>
 								</div>
-							) : state.items.length === 0 ? (
+							) : displayItems.length === 0 ? (
 								<div
 									className={cn(
 										styles.empty,
@@ -688,7 +756,7 @@ const MentionPanelMobile = observer(
 							) : (
 								<Virtuoso
 									ref={virtuosoRef}
-									totalCount={state.items.length}
+									totalCount={displayItems.length}
 									itemContent={renderItem}
 									className={styles.virtuosoContainer}
 									style={{

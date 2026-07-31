@@ -569,6 +569,7 @@ class Agent(BaseAgent):
             "workspace_dir": self.agent_context._workspace_dir,
             "workspace_skills_dir": str(get_workspace_skills_dir().relative_to(PathManager.get_workspace_dir())),
             "project_root": str(PathManager.get_project_root()),
+            "agfs_fuse_mount_path": os.getenv("AGFS_FUSE_MOUNT_PATH", "/mnt/agfs"),
             "cwd": self.agent_context._workspace_dir,
             "python_version": sys.version,
             "nodejs_version": subprocess.check_output(["node", "--version"]).decode("utf-8").strip(),

@@ -148,6 +148,12 @@ function getMenuKeys(items: TopicFilesMenuItem[]) {
 	return items.filter((item) => item && item.type !== "divider").map((item) => String(item?.key))
 }
 
+function getSubMenuItems(items: TopicFilesMenuItem[], key: string): TopicFilesMenuItem[] {
+	const item = items.find((menuItem) => menuItem?.key === key)
+	if (!item || !("children" in item) || !Array.isArray(item.children)) return []
+	return item.children as TopicFilesMenuItem[]
+}
+
 function expectCopyPathInReferenceGroup(keys: string[]) {
 	const shareIndex = keys.indexOf("share")
 	const copyPathIndex = keys.indexOf("copyPath")
@@ -188,5 +194,40 @@ describe("useContextMenu copy path menu", () => {
 
 		expect(keys).toContain("copyPath")
 		expectCopyPathInReferenceGroup(keys)
+	})
+})
+
+describe("useContextMenu project creation menu", () => {
+	it("hides project creation entries in slide project folders", () => {
+		const createVirtualDesignProject = vi.fn()
+		const createVirtualSelfMediaProject = vi.fn()
+		const createVirtualAICardProject = vi.fn()
+		const folder: AttachmentItem = {
+			file_id: "slide-folder-1",
+			name: "季度汇报",
+			is_directory: true,
+			relative_file_path: "/季度汇报",
+			display_config: { type: "slide" },
+			children: [],
+		}
+
+		const { result } = renderHook(() =>
+			useContextMenu(
+				createOptions({
+					createVirtualDesignProject,
+					createVirtualSelfMediaProject,
+					createVirtualAICardProject,
+				}),
+			),
+		)
+		const createItems = getSubMenuItems(result.current.getMenuItems(folder), "createFile")
+		const createKeys = getMenuKeys(createItems)
+
+		expect(createKeys).not.toContain("createDesign")
+		expect(createKeys).not.toContain("createSelfMedia")
+		expect(createKeys).not.toContain("createAICard")
+		expect(createVirtualDesignProject).not.toHaveBeenCalled()
+		expect(createVirtualSelfMediaProject).not.toHaveBeenCalled()
+		expect(createVirtualAICardProject).not.toHaveBeenCalled()
 	})
 })

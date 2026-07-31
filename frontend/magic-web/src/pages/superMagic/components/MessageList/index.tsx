@@ -20,7 +20,7 @@ import BackToLatestButton from "./components/BackToLatestButton"
 import MessageListFallback from "./components/MessageListFallback"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/lib/utils"
-import { MessageStatus, TaskStatus, Topic } from "../../pages/Workspace/types"
+import { TaskStatus, Topic } from "../../pages/Workspace/types"
 import { messageFilter } from "../../utils/handleMessage"
 import { useTranslation } from "react-i18next"
 import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons-react"
@@ -56,6 +56,9 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
+import MessageRenderContent from "./components/MessageRenderContent"
+import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 
 export { MessageListProvider }
 
@@ -214,57 +217,49 @@ const MessageList = observer(
 			() => new Set(hiddenRevokedOptimisticMessageIds),
 			[hiddenRevokedOptimisticMessageIds],
 		)
-
-		// Locate the starting index of revoked messages
-		const revokedSegmentStartIndex = useMemo(
-			() =>
-				data.findIndex(
-					(node: SuperMagicMessageItem) => node?.status === MessageStatus.REVOKED,
-				),
-			[data],
+		const activeRevokedAnchor = optimisticMessageStore.getActiveRevokedAnchor(
+			selectedTopic?.chat_topic_id,
 		)
+		// Store retains all server facts. User-anchored projection decides whole-turn
+		// ownership so Assistant/Tool outer statuses cannot split one conversation round.
+		const revokedProjection = projectRevokedMessageBranches(data, activeRevokedAnchor?.seq_id)
 
-		// After all revoked messages are restored (revokedSegmentStartIndex becomes -1), clear the hidden set,
-		// ensuring failed messages and revoked messages restore in the same render cycle.
+		// An anchor can disappear after authoritative replacement or topic cleanup. Remove the
+		// stale UI sidecars only when no canonical User can establish an active revoke branch.
 		useEffect(() => {
-			if (revokedSegmentStartIndex < 0 && selectedTopic?.chat_topic_id) {
-				optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
-					selectedTopic.chat_topic_id,
-				)
+			const chatTopicId = selectedTopic?.chat_topic_id
+			if (!chatTopicId || revokedProjection.activeRevokedAnchorIndex >= 0) return
+
+			optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(chatTopicId)
+			if (activeRevokedAnchor) {
+				optimisticMessageStore.clearActiveRevokedAnchor(chatTopicId)
 			}
-		}, [revokedSegmentStartIndex, selectedTopic?.chat_topic_id])
+		}, [
+			activeRevokedAnchor,
+			revokedProjection.activeRevokedAnchorIndex,
+			selectedTopic?.chat_topic_id,
+		])
 
 		const mainDisplayData = useMemo(() => {
-			if (revokedSegmentStartIndex < 0) return data
-
-			// After entering revoked-edit mode, hide subsequent failed optimistic messages recorded at undo;
-			// the main message stream only keeps stable messages before the revoke point.
-			return data.filter((node, index) => {
-				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
-					return false
-				}
-				return index < revokedSegmentStartIndex
-			})
-		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+			return revokedProjection.mainMessages.filter(
+				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
+			)
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.mainMessages])
 
 		const revokedBranchData = useMemo(() => {
-			if (revokedSegmentStartIndex < 0) {
-				return data.filter((node) => node?.status === MessageStatus.REVOKED)
-			}
+			// Failed optimistic messages stay hidden while the selected revoked branch is edited;
+			// Assistant and Tool descendants remain together regardless of their own status.
+			return revokedProjection.revokedBranchMessages.filter(
+				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
+			)
+		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.revokedBranchMessages])
 
-			// The revoked-edit preview area still shows normal messages from the old branch in current list order;
-			// failed optimistic messages stay hidden until user confirms send, then cleaned up in background.
-			return data.filter((node, index) => {
-				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
-					return false
-				}
-				if (index >= revokedSegmentStartIndex) return true
-				return false
-			})
-		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+		const visibleData = [...mainDisplayData, ...revokedBranchData]
 
 		const { messages, messageKeys, messageTurnGroups } = useMemo(() => {
-			const messages = messagesConverter(mainDisplayData)
+			// Visibility has already been decided at the User-turn boundary. Do not let the
+			// converter filter a temporarily revoked Assistant out of an otherwise restored turn.
+			const messages = messagesConverter(mainDisplayData, false)
 			const { messageKeys, messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 			return { messages, messageKeys, messageTurnGroups }
 		}, [mainDisplayData])
@@ -479,6 +474,12 @@ const MessageList = observer(
 			try {
 				setIsCancelRevokedLoading(true)
 				await SuperMagicApi.cancelUndoMessage({ topic_id: selectedTopic.id })
+				if (selectedTopic.chat_topic_id) {
+					optimisticMessageStore.clearActiveRevokedAnchor(selectedTopic.chat_topic_id)
+					optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
+						selectedTopic.chat_topic_id,
+					)
+				}
 				magicToast.success(t("warningCard.cancelUndoMessageSuccess"))
 				pubsub.publish(PubSubEvents.Show_Revoked_Messages)
 				pubsub.publish(PubSubEvents.Refresh_Topic_Messages)
@@ -569,7 +570,20 @@ const MessageList = observer(
 					data-message-role={node?.role || "user"}
 					className={cn("relative", isUser && USER_MESSAGE_ROW_CLASS)}
 				>
-					{renderNodeContent(node, index, options)}
+					<MessageRenderErrorBoundary
+						messageKey={nodeKey}
+						resetKey={
+							typeof node?.content === "string"
+								? node.content
+								: typeof node?.status === "string"
+									? node.status
+									: undefined
+						}
+					>
+						<MessageRenderContent
+							render={() => renderNodeContent(node, index, options)}
+						/>
+					</MessageRenderErrorBoundary>
 				</div>
 			)
 		}
@@ -612,7 +626,7 @@ const MessageList = observer(
 						)}
 						viewportRef={setScrollViewportRef}
 					>
-						{data.length > 0 || !isEmptyStatus ? (
+						{visibleData.length > 0 || !isEmptyStatus ? (
 							<>
 								<MessageTurnGroupList
 									groups={messageTurnGroups}
@@ -637,42 +651,67 @@ const MessageList = observer(
 																firstRevokedUserMessageIndex - 1
 															]
 														: undefined
-												const firstRevokedUserMessageContent =
-													enableRevokedUserMessageReedit && !isMobile ? (
-														<RevokedEditableUserMessage
-															node={firstRevokedUserMessage}
-															selectedTopic={selectedTopic}
-															showLoading={showLoading}
-															messagesLength={data.length}
-															hiddenOptimisticMessageIds={
-																hiddenRevokedOptimisticMessageIds
-															}
-															onFileClick={onFileClick}
-															topicModelStore={topicModelStore}
-															onPendingSendChange={
-																setIsFirstRevokedUserMessagePendingSend
-															}
-															fallbackContent={renderNodeContent(
-																firstRevokedUserMessage,
-																firstRevokedUserMessageIndex,
-																{
-																	disableEntryAnimation: true,
-																	previousNode:
-																		firstRevokedPreviousNode,
-																},
-															)}
-														/>
-													) : (
-														renderNodeContent(
-															firstRevokedUserMessage,
-															firstRevokedUserMessageIndex,
-															{
-																disableEntryAnimation: true,
-																previousNode:
-																	firstRevokedPreviousNode,
-															},
-														)
-													)
+												const firstRevokedUserMessageContent = (
+													<MessageRenderErrorBoundary
+														messageKey={firstRevokedUserMessageKey}
+														resetKey={
+															typeof firstRevokedUserMessage?.content ===
+															"string"
+																? firstRevokedUserMessage.content
+																: typeof firstRevokedUserMessage?.status ===
+																	  "string"
+																	? firstRevokedUserMessage.status
+																	: undefined
+														}
+													>
+														{enableRevokedUserMessageReedit &&
+														!isMobile ? (
+															<RevokedEditableUserMessage
+																node={firstRevokedUserMessage}
+																selectedTopic={selectedTopic}
+																showLoading={showLoading}
+																messagesLength={visibleData.length}
+																hiddenOptimisticMessageIds={
+																	hiddenRevokedOptimisticMessageIds
+																}
+																onFileClick={onFileClick}
+																topicModelStore={topicModelStore}
+																onPendingSendChange={
+																	setIsFirstRevokedUserMessagePendingSend
+																}
+																fallbackContent={
+																	<MessageRenderContent
+																		render={() =>
+																			renderNodeContent(
+																				firstRevokedUserMessage,
+																				firstRevokedUserMessageIndex,
+																				{
+																					disableEntryAnimation: true,
+																					previousNode:
+																						firstRevokedPreviousNode,
+																				},
+																			)
+																		}
+																	/>
+																}
+															/>
+														) : (
+															<MessageRenderContent
+																render={() =>
+																	renderNodeContent(
+																		firstRevokedUserMessage,
+																		firstRevokedUserMessageIndex,
+																		{
+																			disableEntryAnimation: true,
+																			previousNode:
+																				firstRevokedPreviousNode,
+																		},
+																	)
+																}
+															/>
+														)}
+													</MessageRenderErrorBoundary>
+												)
 
 												const revokedUserMessageWrapperClassName = isMobile
 													? "relative mb-2"
@@ -836,7 +875,7 @@ const MessageList = observer(
 						)}
 						{showLoading && !isStreamLoading && (
 							<LoadingMessage
-								messages={data}
+								messages={visibleData}
 								showLoading={showLoading}
 								selectedTopic={selectedTopic}
 							/>

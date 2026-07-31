@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from "vitest"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { resolveTopicConversationLoadingState } from "../topic-conversation-loading"
 
-function createUserMessage(appMessageId = "user-message"): SuperMagicMessageItem {
+function createUserMessage(appMessageId = "user-message", status?: string): SuperMagicMessageItem {
 	return {
 		type: "rich_text",
 		role: "user",
 		app_message_id: appMessageId,
+		status,
 	} as SuperMagicMessageItem
 }
 
@@ -60,5 +61,21 @@ describe("resolveTopicConversationLoadingState", () => {
 
 		expect(state.isLoading).toBe(false)
 		expect(getMessageNode).toHaveBeenCalledWith("assistant-message")
+	})
+
+	it("does not reopen loading when the active branch ends with revoked messages", () => {
+		const getMessageNode = vi.fn(() => ({ status: "running" }))
+
+		const state = resolveTopicConversationLoadingState({
+			topicMessages: [
+				createAssistantMessage("old-running-assistant"),
+				createUserMessage("active-revoked-user", "revoked"),
+			],
+			getMessageNode,
+			getOptimisticStatus: () => undefined,
+		})
+
+		expect(state.isLoading).toBe(false)
+		expect(state.lastMessage?.status).toBe("revoked")
 	})
 })

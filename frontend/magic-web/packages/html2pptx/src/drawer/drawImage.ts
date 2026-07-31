@@ -4,7 +4,7 @@ import { bytesToDataUrl } from "./data-url"
 
 
 export function drawImage(slide: Slide, node: PPTImageNode): void {
-	const { x, y, w, h, sizing, transparency, rotate } = node
+	const { x, y, w, h, sizing, intrinsicSize, transparency, rotate } = node
 	const src = resolveImageSrc(node)
 
 	if (!src) return
@@ -24,6 +24,22 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 		y,
 		w,
 		h,
+	}
+
+	if (
+		(sizing === "cover" || sizing === "contain") &&
+		intrinsicSize &&
+		Number.isFinite(intrinsicSize.width) &&
+		Number.isFinite(intrinsicSize.height) &&
+		intrinsicSize.width > 0 &&
+		intrinsicSize.height > 0
+	) {
+		// PptxGenJS derives the source aspect ratio from the image option's initial w/h,
+		// then replaces them with the sizing box. Use a normalized intrinsic frame here;
+		// otherwise target w/h are mistaken for the source ratio and cover/contain becomes stretch.
+		const maxDimension = Math.max(intrinsicSize.width, intrinsicSize.height)
+		options.w = intrinsicSize.width / maxDimension
+		options.h = intrinsicSize.height / maxDimension
 	}
 
 	if (isDataUrl) {
@@ -59,6 +75,7 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 			src: String(src).slice(0, 80),
 			error: String(error),
 		})
+		throw error
 	}
 }
 

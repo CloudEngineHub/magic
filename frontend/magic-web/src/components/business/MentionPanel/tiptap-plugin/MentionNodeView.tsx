@@ -16,7 +16,8 @@ import SkillIcon from "@/components/business/MentionPanel/components/icons/Skill
 import ToolIcon from "@/components/business/MentionPanel/components/icons/ToolIcon"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { logger as Logger } from "@/utils/log"
-import { MentionItemType } from "../types"
+import type { LocaleInput } from "../i18n"
+import { MentionItemType, type ProjectMentionData } from "../types"
 import {
 	getMentionDisplayName,
 	getMentionIcon,
@@ -59,6 +60,7 @@ interface MentionNodeIconProps {
 
 interface MentionNodeChipProps {
 	attrs: TiptapMentionAttributes
+	language?: LocaleInput
 	deleteNode?: () => void
 }
 
@@ -76,6 +78,19 @@ const mentionIconFallbackMap: Partial<Record<string, ComponentType<{ size: numbe
 	[MentionItemType.TOOL]: ToolIcon,
 }
 
+function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: LocaleInput) {
+	if (!attrs) return "Unknown"
+
+	if (attrs.type === MentionItemType.PROJECT) {
+		return (
+			(attrs.data as ProjectMentionData | undefined)?.project_name?.trim() ||
+			getMentionDisplayName(attrs, language)
+		)
+	}
+
+	return getMentionDisplayName(attrs, language)
+}
+
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
 	if (type === MentionItemType.PROJECT_FILE || type === MentionItemType.UPLOAD_FILE)
 		return <MagicFileIcon type={icon} size={16} />
@@ -89,8 +104,8 @@ const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
 	return <TSIcon type={icon as IconParkIconElement["name"]} size="16" radius={4} />
 })
 
-function MentionNodeChip({ attrs, deleteNode }: MentionNodeChipProps) {
-	const displayName = getMentionDisplayName(attrs)
+function MentionNodeChip({ attrs, language, deleteNode }: MentionNodeChipProps) {
+	const displayName = getMentionNodeDisplayName(attrs, language)
 	const icon = getMentionIcon(attrs)
 
 	const handleMouseDown = useCallback((event: MouseEvent) => {
@@ -132,10 +147,16 @@ function MentionNodeChip({ attrs, deleteNode }: MentionNodeChipProps) {
 	)
 }
 
-function MentionNodeViewFallback({ attrs }: { attrs?: TiptapMentionAttributes }) {
+function MentionNodeViewFallback({
+	attrs,
+	language,
+}: {
+	attrs?: TiptapMentionAttributes
+	language?: LocaleInput
+}) {
 	let displayName = "@"
 	try {
-		displayName = `@${getMentionDisplayName(attrs!)}`
+		displayName = `@${getMentionNodeDisplayName(attrs, language)}`
 	} catch {
 		const data = attrs?.data as Record<string, unknown> | undefined
 		displayName = `@${(data?.name as string) || (data?.file_name as string) || "..."}`
@@ -161,7 +182,9 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 
 	if (Renderer) {
 		return (
-			<MentionNodeViewErrorBoundary fallback={<MentionNodeViewFallback attrs={attrs} />}>
+			<MentionNodeViewErrorBoundary
+				fallback={<MentionNodeViewFallback attrs={attrs} language={options.language} />}
+			>
 				<Renderer {...props} attrs={attrs} />
 			</MentionNodeViewErrorBoundary>
 		)
@@ -177,9 +200,13 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 			contentEditable={false}
 		>
 			{isMobile ? (
-				<MentionNodeChip attrs={attrs} deleteNode={props.deleteNode} />
+				<MentionNodeChip
+					attrs={attrs}
+					language={options.language}
+					deleteNode={props.deleteNode}
+				/>
 			) : (
-				`@${getMentionDisplayName(attrs)}` +
+				`@${getMentionNodeDisplayName(attrs, options.language)}` +
 				(attrs.type === MentionItemType.FOLDER ? "/" : "")
 			)}
 		</NodeViewWrapper>
@@ -188,6 +215,7 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 
 function MentionNodeView(props: ReactNodeViewProps) {
 	const attrs = props.node.attrs as TiptapMentionAttributes
+	const options = props.extension.options as MentionPanelPluginOptions
 
 	useEffect(() => {
 		logger.log("mounted", { type: attrs.type, data: attrs.data })
@@ -197,7 +225,9 @@ function MentionNodeView(props: ReactNodeViewProps) {
 	}, []) // eslint-disable-line react-hooks/exhaustive-deps
 
 	return (
-		<MentionNodeViewErrorBoundary fallback={<MentionNodeViewFallback attrs={attrs} />}>
+		<MentionNodeViewErrorBoundary
+			fallback={<MentionNodeViewFallback attrs={attrs} language={options.language} />}
+		>
 			<MentionNodeViewInner {...props} />
 		</MentionNodeViewErrorBoundary>
 	)

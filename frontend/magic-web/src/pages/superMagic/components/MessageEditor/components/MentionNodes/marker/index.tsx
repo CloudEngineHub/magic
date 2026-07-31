@@ -214,10 +214,10 @@ function MarkerTooltip(props: PropsWithChildren<MarkerTooltipProps>) {
 	)
 
 	const handleMouseEnter = useCallback(() => {
-		if (!dropdownOpen) {
+		if (!dropdownOpen && actualMarkerData) {
 			setPreviewOpen(true)
 		}
-	}, [dropdownOpen])
+	}, [actualMarkerData, dropdownOpen])
 
 	const handleMouseLeave = useCallback(() => {
 		setPreviewOpen(false)
@@ -233,7 +233,6 @@ function MarkerTooltip(props: PropsWithChildren<MarkerTooltipProps>) {
 	useUpdateEffect(() => {
 		if (!loading) return
 
-		setPreviewOpen(false)
 		closeDropdown()
 	}, [loading, closeDropdown])
 
@@ -279,9 +278,7 @@ function MarkerTooltip(props: PropsWithChildren<MarkerTooltipProps>) {
 		</div>
 	)
 
-	const triggerElement = loading ? (
-		previewTriggerElement
-	) : (
+	const triggerElement = (
 		<Popover open={previewOpen} onOpenChange={handlePreviewOpenChange} modal={false}>
 			<PopoverAnchor asChild>{previewTriggerElement}</PopoverAnchor>
 			<PopoverContent

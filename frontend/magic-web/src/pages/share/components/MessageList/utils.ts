@@ -8,15 +8,16 @@ export function messagesTransformer(messages: Array<any>) {
 	superMagicStore.loadSharedMessages(messages)
 	return (messages || [])?.map((o) => {
 		let role = o?.role
+		const rawSuperMagicMessage = o?.raw_content?.super_magic_message
 
 		if (o?.type === "super_magic_message") {
-			role = o?.raw_content?.super_magic_message?.role
+			role = rawSuperMagicMessage?.role
 		}
 		return {
 			...o,
 			magic_message_id: o?.message_id,
 			app_message_id: o?.message_id,
-			topic_id: o?.topic_id,
+			topic_id: o?.topic_id || rawSuperMagicMessage?.topic_id,
 			type: o?.type,
 			send_time: o?.send_timestamp,
 			status: o?.status,

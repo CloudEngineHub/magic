@@ -7,6 +7,8 @@ import type { EditorBridge } from "../core/EditorBridge"
 import { getElementSelector, isInjectedElement } from "../utils/dom"
 import { normalizeColor, normalizeTextAlign } from "../utils/css"
 
+const TEXT_EDITING_STYLE_ID = "magic-editor-text-editing-style"
+
 interface ElementInfo {
 	selector: string
 	tagName: string
@@ -34,6 +36,7 @@ export class ElementSelector {
 	private updateTimer: number | null = null
 	private scrollCleanup: (() => void) | null = null
 	private onTextEditingRequest?: (selector: string) => void
+	private injectedTextEditingStyle: HTMLStyleElement | null = null
 
 	constructor(bridge: EditorBridge) {
 		this.bridge = bridge
@@ -68,13 +71,10 @@ export class ElementSelector {
 	 * Remove element from selection
 	 */
 	removeFromSelection(element: HTMLElement): void {
-		// Clean up text editing attributes if removing
+		// Remove editor-owned DOM state without changing author inline styles.
 		if (element.getAttribute("data-text-editing") === "true") {
 			element.contentEditable = "false"
 			element.removeAttribute("data-text-editing")
-			element.style.removeProperty("outline")
-			element.style.removeProperty("outline-offset")
-			this.restoreElementTextSelection(element)
 		}
 		this.selectedElements.delete(element)
 		this.notifySelectionChanged()
@@ -132,9 +132,24 @@ export class ElementSelector {
 		this.notifySelectionChanged()
 	}
 
-	private injectStyles() {
-		// No longer inject visual styles - bounding boxes will be rendered in parent window
-		// Keep this method for potential future use or legacy compatibility
+	/**
+	 * Inject editor-only text editing rules without touching author inline styles.
+	 */
+	private injectStyles(): void {
+		if (document.getElementById(TEXT_EDITING_STYLE_ID)) return
+
+		const style = document.createElement("style")
+		style.id = TEXT_EDITING_STYLE_ID
+		style.setAttribute("data-injected", "true")
+		style.textContent = `
+[data-text-editing="true"] {
+	-webkit-user-select: text !important;
+	user-select: text !important;
+	outline: none !important;
+}
+`
+		document.head.appendChild(style)
+		this.injectedTextEditingStyle = style
 	}
 
 	private getElementStyles(element: HTMLElement): Record<string, string> {
@@ -453,40 +468,6 @@ export class ElementSelector {
 		return false
 	}
 
-	private enableElementTextSelection(element: HTMLElement): void {
-		const previousUserSelect = element.style.userSelect
-		const previousWebkitUserSelect = element.style.getPropertyValue("-webkit-user-select")
-
-		if (previousUserSelect) {
-			element.setAttribute("data-previous-user-select", previousUserSelect)
-		}
-		if (previousWebkitUserSelect) {
-			element.setAttribute("data-previous-webkit-user-select", previousWebkitUserSelect)
-		}
-
-		element.style.userSelect = "text"
-		element.style.setProperty("-webkit-user-select", "text")
-	}
-
-	private restoreElementTextSelection(element: HTMLElement): void {
-		const previousUserSelect = element.getAttribute("data-previous-user-select")
-		const previousWebkitUserSelect = element.getAttribute("data-previous-webkit-user-select")
-
-		if (previousUserSelect !== null) {
-			element.style.userSelect = previousUserSelect
-			element.removeAttribute("data-previous-user-select")
-		} else {
-			element.style.removeProperty("user-select")
-		}
-
-		if (previousWebkitUserSelect !== null) {
-			element.style.setProperty("-webkit-user-select", previousWebkitUserSelect)
-			element.removeAttribute("data-previous-webkit-user-select")
-		} else {
-			element.style.removeProperty("-webkit-user-select")
-		}
-	}
-
 	/**
 	 * Extract rotation angle from transform matrix
 	 */
@@ -628,12 +609,11 @@ export class ElementSelector {
 		// Add element to selection
 		this.selectedElements.add(element)
 
-		// Auto-enable text editing for text elements (only in single select mode)
+		// Preserve the existing first-selection editing state while CSS provides visual feedback.
 		const isText = this.isTextElement(element)
 		if (!multiSelect && isText && !element.isContentEditable) {
 			element.contentEditable = "true"
 			element.setAttribute("data-text-editing", "true")
-			this.enableElementTextSelection(element)
 		}
 
 		// Notify selection changed
@@ -657,14 +637,11 @@ export class ElementSelector {
 	 * Clear all selections
 	 */
 	clearSelection() {
-		// Clean up text editing attributes for all selected elements
+		// Remove editor-owned DOM state without changing author inline styles.
 		this.selectedElements.forEach((element) => {
 			if (element.getAttribute("data-text-editing") === "true") {
 				element.contentEditable = "false"
 				element.removeAttribute("data-text-editing")
-				element.style.removeProperty("outline")
-				element.style.removeProperty("outline-offset")
-				this.restoreElementTextSelection(element)
 			}
 		})
 
@@ -855,16 +832,13 @@ export class ElementSelector {
 		this.enabled = false
 		this.deselectElement()
 
-		// Clean up all elements that might still be in text editing mode
+		// Clean up editor-owned DOM state without changing author inline styles.
 		const editingElements = document.querySelectorAll("[data-text-editing='true']")
 		editingElements.forEach((element) => {
 			if (element instanceof HTMLElement) {
 				element.contentEditable = "false"
 				element.removeAttribute("data-text-editing")
 				element.removeAttribute("data-previous-content")
-				element.style.removeProperty("outline")
-				element.style.removeProperty("outline-offset")
-				this.restoreElementTextSelection(element)
 			}
 		})
 
@@ -924,6 +898,8 @@ export class ElementSelector {
 			this.scrollCleanup = null
 		}
 
-		// No longer need to remove styles (they're not injected anymore)
+		// Remove only the style node owned by this selector instance.
+		this.injectedTextEditingStyle?.remove()
+		this.injectedTextEditingStyle = null
 	}
 }

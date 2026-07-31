@@ -7,7 +7,12 @@ import { routesMatch } from "@/routes/history/helpers"
 
 function shouldRenderChildrenDuringInit(pathname: string) {
 	const routeName = routesMatch(pathname)?.route.name
-	return routeName === RouteName.Login || routeName === RouteName.Invite
+	return (
+		routeName === RouteName.Login ||
+		routeName === RouteName.Invite ||
+		routeName === RouteName.SuperMagicShare ||
+		routeName === RouteName.SuperMagicFileShare
+	)
 }
 
 /**

@@ -56,5 +56,12 @@ export const useStyles = createStyles(({ css, token }) => {
 			padding-top: 4px;
 			border-top: 1px solid ${token.magicColorUsages.border};
 		`,
+		dropdownFooter: css`
+			padding: 6px 4px 2px;
+			border-top: 1px solid ${token.magicColorUsages.border};
+			color: ${token.colorTextTertiary};
+			font-size: 12px;
+			line-height: 18px;
+		`,
 	}
 })
