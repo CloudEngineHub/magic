@@ -458,6 +458,24 @@ describe("ModeToggle", () => {
 		).toHaveTextContent("Create New Chat")
 	})
 
+	it("shows a selectable fallback trigger when the current mode is unavailable", () => {
+		render(
+			<ModeToggle
+				topicMode={"missing-mode" as never}
+				allowChangeMode
+				onModeChange={vi.fn()}
+			/>,
+		)
+
+		const trigger = screen.getByTestId("mode-toggle-button")
+		expect(trigger).toHaveAttribute("data-mode-unavailable", "true")
+		expect(trigger).toHaveTextContent("Select Crew")
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		expect(screen.getByTestId("super-message-editor-mode-toggle-popover")).toBeInTheDocument()
+	})
+
 	it("publishes the requested mode when creating a new topic from a locked topic", () => {
 		vi.useFakeTimers()
 		const onModeChange = vi.fn()

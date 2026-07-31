@@ -22,6 +22,7 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 		firstModeIdentifier: "general",
 		getModelGroupsByMode: vi.fn(() => []),
 		getImageModelGroupsByMode: vi.fn(() => []),
+		getVideoModelGroupsByMode: vi.fn(() => []),
 	},
 }))
 
@@ -34,7 +35,9 @@ describe("useTopicModel", () => {
 	const mockTopicModelStore = {
 		selectedLanguageModel: null,
 		selectedImageModel: null,
+		selectedVideoModel: null,
 		isLoading: false,
+		isLanguageModelReady: false,
 		currentTopicId: "default",
 		currentProjectId: "",
 		currentTopicMode: defaultTopicMode,
@@ -42,6 +45,7 @@ describe("useTopicModel", () => {
 		setCurrentContext: vi.fn(),
 		setSelectedLanguageModel: vi.fn(),
 		setSelectedImageModel: vi.fn(),
+		setSelectedVideoModel: vi.fn(),
 		setLoading: vi.fn(),
 		reset: vi.fn(),
 	}
@@ -177,6 +181,7 @@ describe("useTopicModel", () => {
 				"project-1",
 				mockLanguageModel,
 				undefined,
+				undefined,
 				mockTopicModelStore,
 			)
 		})
@@ -202,6 +207,7 @@ describe("useTopicModel", () => {
 				"project-1",
 				undefined,
 				mockImageModel,
+				undefined,
 				mockTopicModelStore,
 			)
 		})

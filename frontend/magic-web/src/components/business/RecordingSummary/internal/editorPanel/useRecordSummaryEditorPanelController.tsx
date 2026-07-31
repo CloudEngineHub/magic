@@ -87,6 +87,7 @@ export function useRecordSummaryEditorPanelController({
 	})
 
 	const selectedModel = store.topicModelStore.selectedLanguageModel
+	const isModelReady = store.topicModelStore.isLanguageModelReady
 	const [uploadFileId, setUploadFileId] = useState<string | null>(null)
 	const [uploadProgress, setUploadProgress] = useState(0)
 	const [selectedAudioSource, setSelectedAudioSource] = useState<AudioSourceType>("microphone")
@@ -174,7 +175,7 @@ export function useRecordSummaryEditorPanelController({
 	})
 
 	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
-		if (!selectedWorkspace?.id || !selectedModel?.model_id) {
+		if (!isModelReady || !selectedWorkspace?.id || !selectedModel?.model_id) {
 			console.error("workspace, topic, project, model not selected")
 			return
 		}
@@ -352,6 +353,7 @@ export function useRecordSummaryEditorPanelController({
 		handleUploadFile,
 		isCurrentRecording,
 		isMediaRecorderNotSupported: recordSummaryStore.isMediaRecorderNotSupported,
+		isModelReady,
 		isOtherTabRecording: recordSummaryStore.isOtherTabRecording,
 		isPaused: runtime.state.isPaused,
 		isRecording: runtime.state.isRecording,

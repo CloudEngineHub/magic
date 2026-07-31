@@ -11,6 +11,7 @@
 			"addProject": "Create New Project",
 			"addTopic": "Add Topic",
 			"addWorkspace": "Add Workspace",
+			"agentUnavailable": "The selected agent is no longer available. Please choose another agent before saving.",
 			"cancel": "Cancel",
 			"clawPromptPlaceholder": "Describe your needs, e.g. \"Organize today's news\".",
 			"clear": "Clear",
@@ -403,10 +404,6 @@
 		"organizationPointsUsageNote": "Note: If team points are depleted, personal quota cannot be used.",
 		"organizationUsedPoints": "Team Used Points",
 		"organizationUsedPointsUsageDescription": "Shared team used points for all team members",
-		"paymentPlatformLabel": "Payment platform",
-		"platformTransactionId": "Platform transaction ID",
-		"refundTime": "Refund time",
-		"refundedTag": "Refunded",
 		"originalPrice": "Original Price",
 		"package": "Plan",
 		"packageRights": "Plan Benefits",
@@ -467,6 +464,7 @@
 		"paymentLoading": "Payment in progress, please wait",
 		"paymentOrderId": "Payment Order ID",
 		"paymentPlatform": "Payment Platform",
+		"paymentPlatformLabel": "Payment platform",
 		"paymentPlatformOptions": {
 			"ALIPAY": "AliPay",
 			"APPLE_PAY": "Apple Pay",
@@ -479,13 +477,14 @@
 		"pendingSubscriptions": "Pending Subscriptions:",
 		"pendingValidated": "Pending Activation",
 		"personal": "Personal",
+		"personalPackage": "Individual Plans",
 		"personalPointsQuota": "Personal Available Limit",
 		"personalPointsQuotaNote": "Note: If quota is depleted, contact your team admin to adjust personal quota.",
 		"personalPointsResetDescription": "Auto-resets on the 1st of each month",
 		"personalUsedPointsQuota": "Personal Used Limit",
-		"personalPackage": "Individual Plans",
 		"personalVersion": "Personal Edition",
 		"personalVersionTip": "Suitable for individual users",
+		"platformTransactionId": "Platform transaction ID",
 		"pleaseSelectPointsToPay": "Please select the top-up points before proceeding to payment.",
 		"pointsChange": "Points Change",
 		"pointsDetail": "Points Details",
@@ -532,6 +531,8 @@
 		"rechargePointsTip2": "first before recharging.",
 		"recordId": "Record ID",
 		"redirecting": "Redirecting...",
+		"refundTime": "Refund time",
+		"refundedTag": "Refunded",
 		"registerToEarnPointsLabel": "Free on Sign-up",
 		"remainingPoints": "Points Balance",
 		"renew": "Renew",
@@ -1938,6 +1939,11 @@
 			"uploadLimit": "Select up to {{count}} files"
 		}
 	},
+	"microApp": {
+		"loadErrorDescription": "This app cannot be opened right now. The network may be unavailable or the app service may be down. Click retry to load it again.",
+		"loadErrorTitle": "App failed to load",
+		"retry": "Retry"
+	},
 	"monthPicker": {
 		"april": "Apr",
 		"august": "Aug",
@@ -1972,11 +1978,6 @@
 		"title": "Unauthorized Access"
 	},
 	"noData": "no data",
-	"microApp": {
-		"loadErrorDescription": "This app cannot be opened right now. The network may be unavailable or the app service may be down. Click retry to load it again.",
-		"loadErrorTitle": "App failed to load",
-		"retry": "Retry"
-	},
 	"oauth": {
 		"address": "",
 		"email": "",
@@ -2089,8 +2090,8 @@
 		"accountSecurityPhone": {
 			"bindDescription": "This account has not linked a phone number yet. The binding flow will be connected after the account API is confirmed.",
 			"bindTitle": "Link phone number",
-			"changeTitle": "Change phone number",
 			"changeDescription": "We will send a verification code to your current phone number to verify your identity.",
+			"changeTitle": "Change phone number",
 			"codeHint": "Verification code sent to",
 			"codeInvalid": "Invalid verification code. Please try again.",
 			"codePlaceholder": "Enter verification code",

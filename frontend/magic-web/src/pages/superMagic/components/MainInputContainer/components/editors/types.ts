@@ -17,7 +17,12 @@ import type {
 	MessageEditorSize,
 } from "@/pages/superMagic/components/MessageEditor/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import type { CreatedProject, ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type {
+	CreatedProject,
+	ProjectListItem,
+	Topic,
+	Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
@@ -29,6 +34,7 @@ export interface QueueMessageInput {
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 }
 
 export interface SceneEditorQueueContext {
@@ -121,6 +127,8 @@ export interface SceneEditorContext {
 	showModeToggle?: boolean
 	allowChangeMode?: boolean
 	mobileModeSelectorVariant?: "default" | "claw"
+	/** Topic-page fallback when selected topic mode is invalid */
+	invalidModeFallback?: ComponentType<InvalidModeFallbackProps>
 }
 
 export interface SceneEditorNodes {

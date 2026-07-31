@@ -37,6 +37,11 @@ class SuperMagicTopicModelStore {
 		makeAutoObservable(this, {}, { autoBind: true })
 	}
 
+	/** Whether the language model for the current context is ready for use */
+	get isLanguageModelReady() {
+		return !this.isLoading && Boolean(this.selectedLanguageModel?.model_id)
+	}
+
 	/**
 	 * Set selected language model
 	 * @param model - Model to set
@@ -82,10 +87,30 @@ class SuperMagicTopicModelStore {
 		topicMode: TopicMode,
 		agentCode?: string | null,
 	) {
-		this.currentTopicId = topicId || ""
-		this.currentProjectId = projectId || ""
+		const nextTopicId = topicId || ""
+		const nextProjectId = projectId || ""
+		const nextAgentCode = agentCode ?? ""
+		const contextChanged =
+			this.currentTopicId !== nextTopicId ||
+			this.currentProjectId !== nextProjectId ||
+			this.currentTopicMode !== topicMode ||
+			this.currentAgentCode !== nextAgentCode
+
+		this.currentTopicId = nextTopicId
+		this.currentProjectId = nextProjectId
 		this.currentTopicMode = topicMode
-		this.currentAgentCode = agentCode ?? ""
+		this.currentAgentCode = nextAgentCode
+
+		if (contextChanged) {
+			this.isLoading = true
+
+			const isWorkspaceHome = !nextTopicId && !nextProjectId
+			if (isWorkspaceHome) {
+				this.selectedLanguageModel = null
+				this.selectedImageModel = null
+				this.selectedVideoModel = null
+			}
+		}
 	}
 
 	/**

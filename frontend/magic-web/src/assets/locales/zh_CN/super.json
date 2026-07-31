@@ -2475,7 +2475,7 @@
 			"remainingTitle": "剩余 {{count}} 项",
 			"title": "提及列表"
 		},
-		"modeNotAvailableMessage": "当前模式暂不可用，请\"新建话题\" 并选择可用的模式后继续",
+		"modeNotAvailableMessage": "当前员工暂不可用，请\"新建话题\" 并选择可用的员工后继续",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
 			"collapseDescription": "收起模型描述",

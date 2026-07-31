@@ -170,6 +170,7 @@ describe("SuperMagicModeService", () => {
 			user_id: "test-user",
 		} as any
 		superMagicModeService._modeList = []
+		superMagicModeService._defaultAgentCode = undefined
 		superMagicModeService._modeMap = new Map([
 			[
 				"general",
@@ -388,6 +389,36 @@ describe("SuperMagicModeService", () => {
 		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(2)
 	})
 
+	it("stores default_agent_code returned by the featured endpoint", async () => {
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			...createCrewList("general"),
+			default_agent_code: "general",
+		})
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.defaultAgentCode).toBe("general")
+	})
+
+	it("uses featured is_visible when checking whether a mode can be selected", async () => {
+		const response = createCrewList("hidden-agent")
+		response.list[0].agent.is_visible = false
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(response)
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.isModeValid("hidden-agent")).toBe(true)
+		expect(superMagicModeService.isModeVisible("hidden-agent")).toBe(false)
+	})
+
 	it("reuses fresh mode list in the same user context", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [
@@ -496,6 +527,7 @@ describe("SuperMagicModeService", () => {
 	it("treats empty crew list as successful refresh and clears cached state", async () => {
 		const cachedResponse = createCrewList("stale-mode")
 		superMagicModeService._modeList = cachedResponse.list
+		superMagicModeService._defaultAgentCode = "stale-agent"
 		superMagicModeService._modeMap = new Map([
 			[cachedResponse.list[0].mode.identifier, cachedResponse.list[0]],
 		]) as unknown as typeof superMagicModeService._modeMap
@@ -511,6 +543,7 @@ describe("SuperMagicModeService", () => {
 
 		expect(result).toEqual([])
 		expect(superMagicModeService.modeList).toEqual([])
+		expect(superMagicModeService.defaultAgentCode).toBeUndefined()
 		expect(mockModeListStore.get(createModeListStorageKey("zh_CN"))).toEqual([])
 		expect(superMagicModeService._retryTimer).toBeNull()
 		expect(SuperMagicApi.getDefaultModeModelList).not.toHaveBeenCalled()
@@ -566,7 +599,10 @@ describe("SuperMagicModeService", () => {
 
 		vi.mocked(SuperMagicApi.getCrewList)
 			.mockReturnValueOnce(zhRequest.promise)
-			.mockResolvedValueOnce(createCrewList("en-mode"))
+			.mockResolvedValueOnce({
+				...createCrewList("en-mode"),
+				default_agent_code: "en-mode",
+			})
 		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
 			groups: [],
 			models: {},
@@ -575,7 +611,9 @@ describe("SuperMagicModeService", () => {
 		const firstFetchPromise = superMagicModeService.fetchModeList()
 		await flushPendingBootstrap()
 		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(1)
+		superMagicModeService._defaultAgentCode = "previous-agent"
 		;(configStore.i18n as any).displayLanguage = "en_US"
+		await flushPendingBootstrap()
 
 		const secondFetchPromise = superMagicModeService.fetchModeList()
 		await flushPendingBootstrap()
@@ -583,10 +621,14 @@ describe("SuperMagicModeService", () => {
 
 		await secondFetchPromise
 
-		zhRequest.resolve(createCrewList("zh-mode"))
+		zhRequest.resolve({
+			...createCrewList("zh-mode"),
+			default_agent_code: "zh-mode",
+		})
 		await firstFetchPromise
 
 		expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("en-mode")
+		expect(superMagicModeService.defaultAgentCode).toBe("en-mode")
 		expect(mockModeListStore.has(createModeListStorageKey("zh_CN"))).toBe(false)
 		expect(mockModeListStore.get(createModeListStorageKey("en_US"))?.[0]?.mode.identifier).toBe(
 			"en-mode",

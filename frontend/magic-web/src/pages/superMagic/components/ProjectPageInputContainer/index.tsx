@@ -24,6 +24,7 @@ import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/compon
 import DesktopInputContainer from "./DesktopInputContainer"
 import { MOBILE_LAYOUT_CONFIG } from "../MainInputContainer/components/editors/constant"
 import { createMessageEditorDraftKey } from "../MessageEditor/utils/draftKey"
+import { TopicInvalidModeFallback } from "../MessageEditor/components/TopicInvalidModeFallback"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
@@ -76,10 +77,13 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	const canInterruptTask =
 		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 	/**
-	 * 首页的话题模式选择Tab，用于创建新项目时指定项目的话题模式
+	 * 话题页优先使用当前项目模式展示示例，不修改首页的全局模式选择。
 	 */
-	const tabPattern = roleStore.currentRole
-	const setTabPattern = roleStore.setCurrentRole
+	const projectMode = selectedProject?.project_mode
+	const tabPattern =
+		projectMode && superMagicModeService.isModeValid(projectMode)
+			? projectMode
+			: roleStore.currentRole
 
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
@@ -130,13 +134,6 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		organizationCode,
 		userId,
 	])
-
-	useEffect(() => {
-		if (selectedProject?.project_mode) {
-			setTabPattern(selectedProject.project_mode)
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [selectedProject?.project_mode])
 
 	const editorSize = size as MessageEditorSize
 
@@ -239,6 +236,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			showTopicExamplesPortal: showTopicModeExamplePortal,
 			onSendSuccess,
 			createTopic,
+			invalidModeFallback: TopicInvalidModeFallback,
 		}
 	}, [
 		selectedTopic,

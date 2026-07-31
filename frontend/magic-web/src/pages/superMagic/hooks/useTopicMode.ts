@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { reaction } from "mobx"
 import { ProjectListItem, Topic } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
@@ -14,14 +15,14 @@ function useTopicMode({
 	selectedProject: ProjectListItem | undefined | null
 }) {
 	const isMobile = useIsMobile()
-	const [topicMode, setTopicMode] = useState<TopicMode>(
+	const resolveTopicMode = () =>
 		selectedTopic?.topic_mode ||
-			ProjectTopicService.getProjectDefaultTopicMode(
-				selectedProject?.workspace_id || "",
-				selectedProject?.id || "",
-			) ||
-			TopicMode.General,
-	)
+		ProjectTopicService.getProjectDefaultTopicMode(
+			selectedProject?.workspace_id || "",
+			selectedProject?.id || "",
+		) ||
+		TopicMode.General
+	const [topicMode, setTopicMode] = useState<TopicMode>(resolveTopicMode)
 
 	useEffect(() => {
 		/**
@@ -33,15 +34,21 @@ function useTopicMode({
 	}, [topicMode, isMobile])
 
 	useDeepCompareEffect(() => {
-		setTopicMode(
-			selectedTopic?.topic_mode ||
+		setTopicMode(resolveTopicMode())
+	}, [selectedTopic, selectedProject])
+
+	useEffect(() => {
+		if (selectedTopic?.topic_mode) return
+
+		return reaction(
+			() =>
 				ProjectTopicService.getProjectDefaultTopicMode(
 					selectedProject?.workspace_id || "",
 					selectedProject?.id || "",
-				) ||
-				TopicMode.General,
+				),
+			(mode) => setTopicMode(mode || TopicMode.General),
 		)
-	}, [selectedTopic, selectedProject])
+	}, [selectedProject?.id, selectedProject?.workspace_id, selectedTopic?.topic_mode])
 
 	const handleSetTopicMode = useMemoizedFn((mode: TopicMode) => {
 		setTopicMode(mode)

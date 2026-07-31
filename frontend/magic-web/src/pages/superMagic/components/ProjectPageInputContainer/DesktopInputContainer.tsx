@@ -16,6 +16,7 @@ import { observer } from "mobx-react-lite"
 import { getEditorSpanClass } from "../MessageEditor/constants/editor_span_map"
 import type { SceneItem } from "../../types/skill"
 import { shouldShowSelfMediaComposerConfigPanel } from "../MainInputContainer/utils/selfMediaComposerConfig"
+import { useInvalidTopicModeFallback } from "../MessageEditor/hooks/useInvalidTopicModeFallback"
 
 interface DesktopInputContainerProps {
 	sceneStateStore: SceneStateStore
@@ -50,6 +51,8 @@ function DesktopInputContainer({
 	editorContext,
 	editorNodes,
 }: DesktopInputContainerProps) {
+	const { isActive, InvalidModeFallback, onCreateTopic } =
+		useInvalidTopicModeFallback(editorContext)
 	const shouldShowModeToggle = editorContext.showModeToggle ?? true
 	const shouldShowHeaderControls = shouldShowModeToggle || shouldShowSceneControls
 	const shouldShowSelfMediaConfig = shouldShowSelfMediaComposerConfigPanel({
@@ -59,18 +62,53 @@ function DesktopInputContainer({
 		variant: ScenePanelVariant.TopicPage,
 	})
 
+	const containerClassName = cn(
+		"relative flex w-full flex-none flex-col items-start gap-2 self-stretch",
+		"rounded-2xl border border-border bg-sidebar p-2",
+		getEditorSpanClass(editorSize),
+		className,
+		classNames?.container,
+	)
+
+	if (isActive && InvalidModeFallback) {
+		return (
+			<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.TopicPage}>
+				<div
+					ref={containerRef}
+					id={GuideTourElementId.MessagePanel}
+					className={containerClassName}
+				>
+					<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
+						{editorNodes?.taskDataNode}
+						{editorNodes?.messageQueueNode}
+					</div>
+					<div className={cn("w-full", classNames?.editorWrapper)}>
+						<div
+							className={cn(
+								"z-[2] flex flex-col gap-2 overflow-hidden border border-transparent",
+								classNames?.editor,
+							)}
+							data-testid="message-panel-input-group"
+						>
+							<div
+								className="flex h-full items-center justify-center [&>div]:w-full"
+								style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.TopicPage }}
+							>
+								<InvalidModeFallback onCreateTopic={onCreateTopic} />
+							</div>
+						</div>
+					</div>
+				</div>
+			</SceneStateProvider>
+		)
+	}
+
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.TopicPage}>
 			<div
 				ref={containerRef}
 				id={GuideTourElementId.MessagePanel}
-				className={cn(
-					"relative flex w-full flex-none flex-col items-start gap-2 self-stretch",
-					"rounded-2xl border border-border bg-sidebar p-2",
-					getEditorSpanClass(editorSize),
-					className,
-					classNames?.container,
-				)}
+				className={containerClassName}
 			>
 				<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
 					{editorNodes?.taskDataNode}
@@ -78,7 +116,6 @@ function DesktopInputContainer({
 				</div>
 				{shouldShowHeaderControls ? (
 					<div className="flex w-full items-center gap-4 overflow-hidden">
-						{/* 话题模式切换器 */}
 						{shouldShowModeToggle ? (
 							<ModeToggle
 								size={editorSize}
@@ -98,8 +135,7 @@ function DesktopInputContainer({
 						{shouldShowModeToggle && shouldShowSceneControls ? (
 							<div className="h-[60%] w-[1px] bg-border"></div>
 						) : null}
-						{/* 场景切换器 */}
-						{shouldShowSceneControls && (
+						{shouldShowSceneControls ? (
 							<>
 								{shouldShowCurrentSceneBadge && currentScene ? (
 									<CurrentSceneBadge
@@ -114,7 +150,7 @@ function DesktopInputContainer({
 									></div>
 								)}
 							</>
-						)}
+						) : null}
 					</div>
 				) : null}
 				<div className={cn("w-full", classNames?.editorWrapper)}>
@@ -137,7 +173,6 @@ function DesktopInputContainer({
 								style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.TopicPage }}
 							></div>
 						</div>
-						{/* skill config container with smooth transition */}
 						<LazyScenePanel
 							scenes={scenes}
 							editorContext={editorContext}

@@ -28,6 +28,8 @@ interface GetModeParams {
 	fallbackMode: TopicMode
 }
 
+type GetStoredModeParams = Omit<GetModeParams, "fallbackMode">
+
 interface SetModeParams {
 	userKey: string
 	projectKey?: string
@@ -139,7 +141,7 @@ function readStore(): TopicModeStoreShape {
 	}
 }
 
-function getOrFallback({ userKey, projectKey, fallbackMode }: GetModeParams) {
+function getStoredMode({ userKey, projectKey }: GetStoredModeParams) {
 	const store = readStore()
 	const bucket = store.users[userKey]
 
@@ -149,7 +151,12 @@ function getOrFallback({ userKey, projectKey, fallbackMode }: GetModeParams) {
 	}
 
 	if (isModeValid(bucket?.global)) return bucket?.global as TopicMode
+	return undefined
+}
 
+function getOrFallback({ userKey, projectKey, fallbackMode }: GetModeParams) {
+	const storedMode = getStoredMode({ userKey, projectKey })
+	if (storedMode) return storedMode
 	// 未命中则使用调用方传入的默认值
 	return fallbackMode
 }
@@ -183,6 +190,7 @@ function setProjects(userKey: string, projects: Record<string, TopicMode>) {
 }
 
 const DefaultTopicModeStorageService = {
+	getStoredMode,
 	getOrFallback,
 	setMode,
 	getProjects,

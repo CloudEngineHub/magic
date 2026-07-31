@@ -32,8 +32,8 @@ import {
 	generateTextFromJSONContent,
 } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -209,6 +209,18 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			params.value,
 			sceneStateStore?.presetSuffixContent,
 		)
+		const sendSelection = resolveAgentSelection(effectiveTopicMode, editorContext?.agentCode)
+		const extra = { ...(params.extra ?? {}) }
+		delete extra.agent_code
+		const normalizedParams: HandleSendParams = {
+			...params,
+			topicMode: sendSelection.topicPattern,
+			extra: sendSelection.agentCode
+				? { ...extra, agent_code: sendSelection.agentCode }
+				: Object.keys(extra).length > 0
+					? extra
+					: undefined,
+		}
 
 		if (queueContext?.editingQueueItem) {
 			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
@@ -234,10 +246,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			const queueId = await queueContext.addToQueue({
 				content: nextValue ?? params.value,
 				mentionItems: params.mentionItems,
-				selectedModel: params.selectedModel,
-				selectedImageModel: params.selectedImageModel,
-				selectedVideoModel: params.selectedVideoModel,
-				topicMode: params.topicMode,
+				selectedModel: normalizedParams.selectedModel,
+				selectedImageModel: normalizedParams.selectedImageModel,
+				selectedVideoModel: normalizedParams.selectedVideoModel,
+				topicMode: normalizedParams.topicMode,
+				agentCode: sendSelection.agentCode ?? null,
 			})
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
@@ -266,15 +279,8 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 
 		try {
 			const defaultParams: HandleSendParams = {
-				...params,
+				...normalizedParams,
 				value: nextValue ?? params.value,
-				extra:
-					effectiveTopicMode === TopicMode.CustomAgent && editorContext?.agentCode
-						? {
-								...params.extra,
-								agent_code: editorContext.agentCode,
-							}
-						: params.extra,
 			}
 			const customParamsPatch = editorContext?.mergeSendParams?.({
 				defaultParams,

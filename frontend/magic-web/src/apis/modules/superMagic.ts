@@ -2318,18 +2318,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 模式列表
 	 */
 	getCrewList() {
-		return fetch.get<WithPage<CrewItemResponse> & { models: Record<string, ModelItem> }>(
-			`/api/v1/super-agents/featured`,
-			{
-				enableRequestUnion: true,
-				headers: {
-					"X-Magic-Image-Process": buildImageProcessQuery({
-						resize: { h: 512, w: 512 },
-						format: "webp",
-					}),
-				},
+		return fetch.get<
+			WithPage<CrewItemResponse> & {
+				models: Record<string, ModelItem>
+				default_agent_code?: string | null
+			}
+		>(`/api/v1/super-agents/featured`, {
+			enableRequestUnion: true,
+			headers: {
+				"X-Magic-Image-Process": buildImageProcessQuery({
+					resize: { h: 512, w: 512 },
+					format: "webp",
+				}),
 			},
-		)
+		})
 	},
 
 	/**

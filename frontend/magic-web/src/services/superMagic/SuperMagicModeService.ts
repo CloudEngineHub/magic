@@ -15,7 +15,7 @@ import superMagicModeListRepository, {
 import { logger as Logger } from "@/utils/log"
 import { platformKey } from "@/utils/storage"
 import { TFunction } from "i18next"
-import { makeAutoObservable, reaction } from "mobx"
+import { makeAutoObservable, reaction, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
 import { configStore } from "@/models/config"
 import { interfaceStore } from "@/stores/interface"
@@ -148,6 +148,8 @@ class SuperMagicModeService {
 
 	_modeMap: Map<string, ModeItem> = new Map()
 
+	_defaultAgentCode?: string
+
 	_isModeListLoading = false
 
 	_retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -184,6 +186,9 @@ class SuperMagicModeService {
 				userStore.user.userInfo?.user_id,
 			],
 			([displayLanguage, organizationCode, userId]) => {
+				runInAction(() => {
+					this._defaultAgentCode = undefined
+				})
 				if (!organizationCode || !userId) {
 					this.resetModeList()
 					return
@@ -300,8 +305,7 @@ class SuperMagicModeService {
 		try {
 			const data = await superMagicModeListRepository.getByKey(storageKey)
 			if (Array.isArray(data)) {
-				this._modeList = data
-				this._modeMap = buildModeMapFromModeList(data)
+				this.applyModeListSnapshot(data)
 				this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
 					source: "indexedDB",
 					...getModeListPayloadShape(data),
@@ -341,8 +345,7 @@ class SuperMagicModeService {
 			}
 			const parsed = JSON.parse(raw)
 			if (Array.isArray(parsed)) {
-				this._modeList = parsed
-				this._modeMap = buildModeMapFromModeList(parsed)
+				this.applyModeListSnapshot(parsed)
 				logger.log("Loaded mode list from localStorage fallback")
 			} else {
 				logger.warn("Invalid mode list data in localStorage fallback")
@@ -504,9 +507,19 @@ class SuperMagicModeService {
 		}
 	}
 
+	private applyModeListSnapshot(modeList: ModeItem[]) {
+		runInAction(() => {
+			this._modeList = modeList
+			this._modeMap = buildModeMapFromModeList(modeList)
+		})
+	}
+
 	private resetModeList() {
-		this._modeList = []
-		this._modeMap = new Map()
+		runInAction(() => {
+			this._modeList = []
+			this._modeMap = new Map()
+			this._defaultAgentCode = undefined
+		})
 	}
 
 	/**
@@ -523,6 +536,10 @@ class SuperMagicModeService {
 	 */
 	get modeList() {
 		return this._modeList
+	}
+
+	get defaultAgentCode() {
+		return this._defaultAgentCode
 	}
 
 	get isModeListLoading() {
@@ -772,7 +789,9 @@ class SuperMagicModeService {
 	 * @param modeList 模式列表
 	 */
 	setModeList(modeList: ModeItem[]) {
-		this._modeList = modeList
+		runInAction(() => {
+			this._modeList = modeList
+		})
 	}
 
 	/**
@@ -802,6 +821,16 @@ class SuperMagicModeService {
 			return isValid && mode !== TopicMode.Chat
 		}
 		return isValid
+	}
+
+	/**
+	 * 判断 featured 模式是否对当前用户可见。
+	 * 兼容旧缓存未包含 is_visible 的数据，字段缺失时按可见处理。
+	 */
+	isModeVisible(mode: string, agentCode?: string | null) {
+		const key = resolveModeMapKey(mode, agentCode)
+		const modeItem = this._modeMap.get(key)
+		return Boolean(modeItem && modeItem.agent.is_visible !== false)
 	}
 
 	/**
@@ -835,7 +864,9 @@ class SuperMagicModeService {
 	}: { retryCount?: number; force?: boolean } = {}): Promise<ModeItem[]> {
 		if (shouldSkipModeBootstrap()) {
 			this.cleanup()
-			this._isModeListLoading = false
+			runInAction(() => {
+				this._isModeListLoading = false
+			})
 			this.logTemporaryDiagnostic("mode-fetch:featured-skip", {
 				reason: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap,
 				retryCount,
@@ -847,7 +878,9 @@ class SuperMagicModeService {
 		const requestContext = this.resolveCurrentModeListContext()
 		if (!requestContext) {
 			this.resetModeList()
-			this._isModeListLoading = false
+			runInAction(() => {
+				this._isModeListLoading = false
+			})
 			return Promise.resolve(this._modeList)
 		}
 
@@ -903,7 +936,7 @@ class SuperMagicModeService {
 					return this._modeList
 				}
 
-				this._modeList = res.list.map((item) => ({
+				const nextModeList = res.list.map((item) => ({
 					...item,
 					groups: item.groups.map((group) => {
 						const modelIds = group.model_ids ?? []
@@ -929,18 +962,25 @@ class SuperMagicModeService {
 				// across featured-list rebuilds to avoid a window where the UI reads
 				// an empty list while the cached Default data is still valid.
 				const preservedDefaultEntry = this._modeMap.get(TopicMode.Default) ?? null
-				this._modeMap = buildModeMapFromModeList(this._modeList)
-				if (preservedDefaultEntry) {
-					this._modeMap.set(TopicMode.Default, preservedDefaultEntry)
-				}
+				runInAction(() => {
+					this._modeList = nextModeList
+					this._modeMap = buildModeMapFromModeList(nextModeList)
+					if (preservedDefaultEntry) {
+						this._modeMap.set(TopicMode.Default, preservedDefaultEntry)
+					}
+					this._defaultAgentCode = res.default_agent_code?.trim() || undefined
+					this._modeListFreshnessState = this.markFreshForContext(
+						requestContext.contextKey,
+					)
+				})
 				this.logTemporaryDiagnostic("mode-fetch:featured-end", {
 					contextKey: requestContext.contextKey,
-					...getModeListPayloadShape(this._modeList, res.models),
+					...getModeListPayloadShape(nextModeList, res.models),
 				})
 
-				if (this._modeList.length > 0 && !shouldSkipDefaultModeModel()) {
+				if (nextModeList.length > 0 && !shouldSkipDefaultModeModel()) {
 					void this.fetchDefaultModeModelList()
-				} else if (this._modeList.length > 0) {
+				} else if (nextModeList.length > 0) {
 					this.logTemporaryDiagnostic("mode-fetch:default-skip", {
 						reason: shouldSkipModeBootstrap()
 							? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
@@ -948,11 +988,10 @@ class SuperMagicModeService {
 					})
 				}
 
-				void this.persistToStorage(this._modeList, requestContext.storageKey)
-				this._modeListFreshnessState = this.markFreshForContext(requestContext.contextKey)
+				void this.persistToStorage(nextModeList, requestContext.storageKey)
 				// Clear retry timer on success
 				this.cleanup()
-				return this._modeList
+				return nextModeList
 			})
 			.catch((err) => {
 				logger.error("fetchModeList error", err)
@@ -979,15 +1018,21 @@ class SuperMagicModeService {
 						RETRY_DELAY_BASE * (retryCount + 1),
 					)
 				}
-				if (!shouldRetry) this._isModeListLoading = false
+				if (!shouldRetry) {
+					runInAction(() => {
+						this._isModeListLoading = false
+					})
+				}
 				// Fall back to cached data for this attempt.
 				return this._modeList
 			})
 			.finally(() => {
 				if (this._modeListRequestState.promise !== fetchPromise) return
-				// Clear the promise reference after completion
-				this._modeListRequestState = createEmptyRequestState<ModeItem[]>()
-				if (!this._retryTimer) this._isModeListLoading = false
+				runInAction(() => {
+					// Clear the promise reference after completion
+					this._modeListRequestState = createEmptyRequestState<ModeItem[]>()
+					if (!this._retryTimer) this._isModeListLoading = false
+				})
 			})
 
 		this._modeListRequestState = {
@@ -1084,11 +1129,14 @@ class SuperMagicModeService {
 						.filter(Boolean),
 				}))
 
-				this._defaultModeModelList = groups
-				this._defaultModeModelFreshnessState = this.markFreshForContext(requestContextKey)
-				this._modeMap.set(TopicMode.Default, {
-					...res,
-					groups,
+				runInAction(() => {
+					this._defaultModeModelList = groups
+					this._defaultModeModelFreshnessState =
+						this.markFreshForContext(requestContextKey)
+					this._modeMap.set(TopicMode.Default, {
+						...res,
+						groups,
+					})
 				})
 				this.logTemporaryDiagnostic("mode-fetch:default-end", {
 					contextKey: requestContextKey,
@@ -1097,7 +1145,9 @@ class SuperMagicModeService {
 			})
 			.finally(() => {
 				if (this._defaultModeModelRequestState.promise !== fetchPromise) return
-				this._defaultModeModelRequestState = createEmptyRequestState<void>()
+				runInAction(() => {
+					this._defaultModeModelRequestState = createEmptyRequestState<void>()
+				})
 			})
 
 		this._defaultModeModelRequestState = {

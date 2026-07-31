@@ -564,37 +564,63 @@ function ModeToggle({
 	])
 
 	const currentModeItem = useMemo(() => {
-		if (!currentMode) return null
+		const triggerClassName = cn(MODE_TOGGLE_TRIGGER_CLASS, TRIGGER_SIZE_MAP[size])
+		const chevronIcon = (
+			<ChevronsUpDown
+				className={cn("shrink-0 text-foreground", size === "small" ? "size-3" : "size-4")}
+			/>
+		)
+
+		if (currentMode) {
+			return (
+				<button
+					type="button"
+					className={triggerClassName}
+					aria-expanded={open}
+					aria-haspopup="dialog"
+					data-testid="mode-toggle-button"
+					data-mode={topicMode}
+					data-disabled={!allowChangeMode}
+					data-mode-name={resolveModeText(currentMode.mode.name)}
+				>
+					{renderModeIcon(currentMode.mode, size === "small" ? 16 : 24)}
+					<div
+						className={cn(
+							"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-foreground",
+							size === "small" ? "text-xs" : "text-sm",
+						)}
+					>
+						{resolveModeText(currentMode.mode.name)}
+					</div>
+					{chevronIcon}
+				</button>
+			)
+		}
+
+		if (!allowChangeMode || !topicMode) return null
 
 		return (
 			<button
 				type="button"
-				className={cn(MODE_TOGGLE_TRIGGER_CLASS, TRIGGER_SIZE_MAP[size])}
+				className={triggerClassName}
 				aria-expanded={open}
 				aria-haspopup="dialog"
 				data-testid="mode-toggle-button"
 				data-mode={topicMode}
-				data-disabled={!allowChangeMode}
-				data-mode-name={resolveModeText(currentMode.mode.name)}
+				data-mode-unavailable="true"
 			>
-				{renderModeIcon(currentMode.mode, size === "small" ? 16 : 24)}
 				<div
 					className={cn(
-						"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-foreground",
+						"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-muted-foreground",
 						size === "small" ? "text-xs" : "text-sm",
 					)}
 				>
-					{resolveModeText(currentMode.mode.name)}
+					{t("modeToggle.selectCrew")}
 				</div>
-				<ChevronsUpDown
-					className={cn(
-						"shrink-0 text-foreground",
-						size === "small" ? "size-3" : "size-4",
-					)}
-				/>
+				{chevronIcon}
 			</button>
 		)
-	}, [allowChangeMode, currentMode, open, renderModeIcon, resolveModeText, size, topicMode])
+	}, [allowChangeMode, currentMode, open, renderModeIcon, resolveModeText, size, t, topicMode])
 
 	if (!topicMode && !isString(topicMode)) {
 		return null

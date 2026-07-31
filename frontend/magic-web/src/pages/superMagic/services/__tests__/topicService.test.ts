@@ -8,6 +8,14 @@ import { interfaceStore } from "@/stores/interface"
 import { platformKey } from "@/utils/storage"
 import TopicService from "../topicService"
 
+const defaultSelectionState = vi.hoisted(() => ({
+	selection: {
+		modeIdentifier: "general" as TopicMode,
+		topicPattern: "general" as TopicMode,
+		agentCode: undefined as string | undefined,
+	},
+}))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createTopic: vi.fn(),
@@ -32,6 +40,10 @@ vi.mock("@/stores/interface", () => ({
 	interfaceStore: {
 		isMobile: false,
 	},
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	resolveDefaultAgentSelection: () => defaultSelectionState.selection,
 }))
 
 function createTopic(overrides: Partial<Topic> = {}): Topic {
@@ -87,6 +99,11 @@ describe("TopicService interface-aware topic source", () => {
 		topicStore = new TopicStore()
 		topicService = new TopicService({ store: topicStore })
 		interfaceStore.isMobile = false
+		defaultSelectionState.selection = {
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		}
 	})
 
 	it("uses sidebar-topics for mobile fetchTopics", async () => {
@@ -167,6 +184,11 @@ describe("TopicService frontend mode patch", () => {
 		vi.useRealTimers()
 		window.sessionStorage.clear()
 		interfaceStore.isMobile = false
+		defaultSelectionState.selection = {
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		}
 	})
 
 	it("creates an empty backend topic and keeps the previous employee selection in frontend state", async () => {
@@ -487,6 +509,39 @@ describe("TopicService frontend mode patch", () => {
 			...newTopic,
 			topic_mode: TopicMode.CustomAgent,
 			agent_code: "SMA-employee-code-2",
+		})
+	})
+
+	it("updates the frontend patch for a configured non-SMA default employee", async () => {
+		defaultSelectionState.selection = {
+			modeIdentifier: "configured-agent",
+			topicPattern: TopicMode.CustomAgent,
+			agentCode: "configured-agent",
+		}
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		service.syncTopicFrontendModePatch({
+			topic: newTopic,
+			mode: "configured-agent" as TopicMode,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "configured-agent",
+		})
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "configured-agent",
 		})
 	})
 

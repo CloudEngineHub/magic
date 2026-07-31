@@ -4,6 +4,7 @@ import ProjectTopicService from "@/services/superMagic/ProjectTopicService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { interfaceStore } from "@/stores/interface"
 import { userStore } from "@/models/user"
+import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 /**
  * Role Store
@@ -25,23 +26,17 @@ class RoleStore {
 		// Initialize from storage
 		this.loadFromStorage()
 
-		// Reload role preference when organization/user context changes
+		// 用户、组织、平台默认员工或可用员工列表变化时重新解析默认选择。
 		reaction(
-			() => [userStore.user.organizationCode, userStore.user.userInfo?.user_id],
+			() => [
+				userStore.user.organizationCode,
+				userStore.user.userInfo?.user_id,
+				superMagicModeService.defaultAgentCode,
+				superMagicModeService.modeList.map((item) => item.mode.identifier).join(","),
+			],
 			([organizationCode, userId]) => {
 				if (organizationCode && userId) {
 					this.loadFromStorage()
-				}
-			},
-		)
-
-		// Auto-select first crew when mode list loads and current role is invalid
-		reaction(
-			() => superMagicModeService.modeList,
-			(modeList) => {
-				if (modeList.length > 0 && !superMagicModeService.isModeValid(this.currentRole)) {
-					const firstMode = superMagicModeService.firstModeIdentifier
-					if (firstMode) this.setCurrentRole(firstMode)
 				}
 			},
 		)
@@ -66,7 +61,7 @@ class RoleStore {
 		if (mode) {
 			this.currentRole = mode
 		} else {
-			this.currentRole = superMagicModeService.firstModeIdentifier || TopicMode.General
+			this.currentRole = resolveDefaultAgentSelection().modeIdentifier as TopicMode
 		}
 	}
 
@@ -79,7 +74,7 @@ class RoleStore {
 
 		// Validate mode
 		if (!superMagicModeService.isModeValid(mode)) {
-			validMode = superMagicModeService.firstModeIdentifier
+			validMode = resolveDefaultAgentSelection().modeIdentifier as TopicMode
 		}
 
 		// Check mobile compatibility
