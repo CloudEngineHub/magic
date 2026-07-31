@@ -108,7 +108,7 @@ class MemoryCoreContextService:
             escaped_project_id = html.escape(project_id, quote=True)
             lines.extend(
                 (
-                    f'<project_memory project_id="{escaped_project_id}" path="{cls._escape_path_attribute(project_path)}">',
+                    f'<project_memory current_project_id="{escaped_project_id}" path="{cls._escape_path_attribute(project_path)}">',
                     cls._escape_memory_content(project_memory),
                     "</project_memory>",
                 )

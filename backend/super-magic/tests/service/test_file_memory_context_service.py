@@ -126,7 +126,7 @@ async def test_file_memory_context_loads_global_and_current_project(monkeypatch)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
     assert f'<global_memory path="{global_file}">\nglobal &lt;preference&gt;\n</global_memory>' in memory_context
-    assert f'<project_memory project_id="project-1" path="{project_file}">' in memory_context
+    assert f'<project_memory current_project_id="project-1" path="{project_file}">' in memory_context
     assert "project decision" in memory_context
 
 
@@ -160,7 +160,9 @@ async def test_file_memory_context_builds_empty_snapshot_when_files_are_missing(
     global_file = MEMORY_ROOT / "global" / "MEMORY.md"
     project_file = MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md"
     assert f'<global_memory path="{global_file}">\n\n</global_memory>' in memory_context
-    assert f'<project_memory project_id="project-1" path="{project_file}">\n\n</project_memory>' in memory_context
+    assert (
+        f'<project_memory current_project_id="project-1" path="{project_file}">\n\n</project_memory>' in memory_context
+    )
     read_bytes.assert_not_awaited()
 
 
@@ -177,11 +179,11 @@ async def test_file_memory_context_refreshes_project_scope_for_each_load(monkeyp
 
     first_context = agent_context.horizon.set_memory.await_args_list[0].args[0]
     second_context = agent_context.horizon.set_memory.await_args_list[1].args[0]
-    assert 'project_id="project-1"' in first_context
+    assert 'current_project_id="project-1"' in first_context
     assert "projects/p_project-1/MEMORY.md" in first_context
-    assert 'project_id="project-1"' not in second_context
+    assert 'current_project_id="project-1"' not in second_context
     assert "projects/p_project-1/MEMORY.md" not in second_context
-    assert 'project_id="project-2"' in second_context
+    assert 'current_project_id="project-2"' in second_context
     assert "projects/p_project-2/MEMORY.md" in second_context
 
 
@@ -228,7 +230,7 @@ async def test_file_memory_context_limits_xml_escaped_payload(monkeypatch):
         "\n</global_memory>", maxsplit=1
     )[0]
     project_memory = memory_context.split(
-        f'<project_memory project_id="project-1" path="{project_file}">\n', maxsplit=1
+        f'<project_memory current_project_id="project-1" path="{project_file}">\n', maxsplit=1
     )[1].split("\n</project_memory>", maxsplit=1)[0]
     assert len(global_memory) <= MEMORY_FILE_MAX_CHARS
     assert len(project_memory) <= MEMORY_FILE_MAX_CHARS

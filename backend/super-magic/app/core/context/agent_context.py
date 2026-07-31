@@ -600,12 +600,23 @@ class AgentContext(BaseAgentContext):
         return self.shared_context.get_field("chat_client_message")
 
     def get_project_id(self) -> Optional[str]:
-        """从当前聊天消息中获取项目 ID。"""
+        """优先从当前聊天消息获取项目 ID，缺失时回退到初始化消息。"""
         chat_client_message = self.get_chat_client_message()
-        if chat_client_message is None or chat_client_message.metadata is None:
+        if chat_client_message is not None and chat_client_message.metadata is not None:
+            project_id = str(chat_client_message.metadata.project_id or "").strip()
+            if project_id:
+                return project_id
+
+        try:
+            init_metadata = self.get_init_client_message_metadata()
+        except Exception as error:
+            logger.debug(f"从初始化消息读取项目 ID 失败: {error}")
             return None
 
-        project_id = str(chat_client_message.metadata.project_id or "").strip()
+        if init_metadata is None:
+            return None
+
+        project_id = str(init_metadata.project_id or "").strip()
         return project_id or None
 
     def has_stream(self, stream: Stream) -> bool:

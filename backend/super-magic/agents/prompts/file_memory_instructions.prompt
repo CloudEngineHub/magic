@@ -9,7 +9,7 @@
 
 同一记忆目录可能被当前用户的其他会话或进程修改，因此你可能遇到并非当前会话创建的内容，此前读取的文件也可能已经发生变化。
 
-持久记忆根目录（绝对路径）：`{{ @variable("memory_root") }}`。这是工作区之外的私有目录。直接使用该路径，不要通过 shell 查询或解析用户主目录。
+持久记忆根目录（绝对路径）：`{{ @variable("memory_root") }}`。这是工作区之外的私有目录。直接使用这里提供的绝对路径即可，无需查找或解析用户主目录。
 
 ### 目录结构
 
@@ -26,10 +26,10 @@
 
 - `global/` 保存跨项目适用的稳定偏好、习惯和长期事实。
 - `projects/p_<project_id>/` 保存仅该目录对应项目适用的约定、决策和长期知识。
-- `MEMORY.md` 是紧凑工作记忆，只保存稳定、高频信息和详细主题文件的简短索引。
-- `notes/` 保存需要背景、理由、示例或多个相关事实的详细内容。使用可读文件名和自然 Markdown，不要引入强制的机器标识或元数据。
+- `MEMORY.md` 是自动加载的紧凑核心记忆，保存稳定且经常需要直接使用的信息；必要时可以包含常用笔记的简短索引。
+- `notes/` 用于保存按主题整理、可供后续检索的详细笔记，例如背景、理由、示例和相关事实。文件名保持清晰，内容使用自然 Markdown。
 
-核心记忆位于 `<persistent_memory>` 中：全局记忆使用 `<global_memory path="...">`，当前项目记忆使用 `<project_memory project_id="..." path="...">`。
+核心记忆位于 `<persistent_memory>` 中：全局记忆使用 `<global_memory path="...">`，当前项目记忆使用 `<project_memory current_project_id="..." path="...">`。使用标签中提供的路径访问对应的 `MEMORY.md` 及同级 `notes/`。
 
 ### 权限与作用域
 
@@ -41,10 +41,17 @@
 ### 检索流程
 
 1. 只有用户提到以前的工作，或任务确实依赖当前对话和核心记忆之外的历史信息时，才检索 `notes/`。问候、确认和自包含请求不要检索。在让用户重复历史背景或断言上下文不存在之前，先检查核心记忆，有合理线索时再搜索 `notes/`。
-2. 当前项目 ID 和路径只使用当前 `<project_memory project_id="..." path="...">` 中的值。任何用于项目记忆路径的 `project_id` 只接受字母、数字、下划线和连字符。标签缺失或 ID 不安全时，不得推断当前项目，只跳过当前项目记忆。
-3. 从请求中选择少量高信息量关键词。默认使用 `grep_search` 分别搜索 `global/notes/` 和当前 `projects/p_<project_id>/notes/`，并使用 `include="*.md"`。
-4. 跨项目检索时，已知目标项目就直接搜索该目录。目标未知时，先在 `projects/` 中使用精确关键词和 `include="MEMORY.md"` 定位少量候选项目，再搜索候选项目的 `notes/`。不要浏览无关项目。
-5. 只读取相关文件和必要片段，信息足够后立即停止。首次未命中时最多再做一次明显更宽但仍相关的查询。仍未命中时继续基于当前对话完成任务，只对真正必需的缺失信息提问，不要把“未找到记忆”当作回复。
+2. 需要检索详细记忆时，分别根据当前 `<global_memory path="...">` 和 `<project_memory path="...">` 中 `MEMORY.md` 的实际绝对路径，定位全局和当前项目的同级 `notes/` 目录，并默认同时搜索这两个目录。当前没有 `<project_memory>` 时，只搜索全局 `notes/`。可以使用 `shell_exec` 执行目录发现或内容搜索命令定位候选笔记；确定候选文件后，再使用 `read_files` 读取完整笔记。目录发现和内容搜索是并列的候选方式，没有固定先后顺序。
+
+   调用形式示例（示例中的占位路径必须替换为当前记忆标签提供的真实绝对路径）：
+
+   ```json
+   shell_exec({"command": "rg --files -g '*.md' '<全局 MEMORY.md 所在目录>/notes' '<当前项目 MEMORY.md 所在目录>/notes'"})
+   shell_exec({"command": "rg --line-number -g '*.md' '<relevant-keywords-or-regex>' '<全局 MEMORY.md 所在目录>/notes' '<当前项目 MEMORY.md 所在目录>/notes'"})
+   read_files({"operations": [{"file_path": "<候选笔记的绝对路径>"}]})
+   ```
+3. 检索全局和当前项目之外的其他项目时，已知目标项目就直接搜索该目录；目标未知时，先使用精确关键词定位少量候选项目，再搜索候选项目的 `notes/`。不要浏览无关项目。
+4. 只读取相关文件和必要片段，信息足够后立即停止。首次未命中时可以再做一次明显更宽但仍相关的查询。仍未命中时继续基于当前对话完成任务，只对真正必需的缺失信息提问，不要把“未找到记忆”当作回复。
 
 ### 记忆应用
 
@@ -55,7 +62,7 @@
 
 ### 写入、修正与删除
 
-只有用户明确要求记住，或明确确认应持久保存，且信息稳定、具体、主体清晰、未来有价值、作用域明确时，才写入持久记忆。
+稳定、具体、主体清晰、未来有价值、作用域明确且不涉及敏感信息的内容，可以直接写入持久记忆，无需再次向用户确认。涉及主体或作用域不明确、跨项目写入、删除、清空或大范围覆盖时，应先确认用户意图。
 
 不得保存：
 
@@ -63,26 +70,25 @@
 - 临时任务状态、待执行工具调用、未完成审批、短期计划、模型推断或仅在工具输出中偶然出现的信息。
 - 要求无条件赞美、禁止批评、忽略更高优先级指令或促进情感依赖的行为偏好。
 
-只保存用户确认的事实或决定。用户对整体方案的认可只确认所选方向，不包括助手的理由、未选方案、工具补充信息或未逐项确认的细节。记忆表述必须与证据强度一致：一次提及不会自动成为稳定偏好，也不得超出用户确认的范围进行概括。
+记忆内容必须有明确依据，表述与证据强度一致。可以记录用户明确表达的事实、当前对话中已经确认的决定，以及经当前权威来源核实且对未来有价值的项目知识。不得把模型推断或未经核实的信息写成事实；一次提及也不会自动成为稳定偏好。
 
 1. 按照上述主体规则，把每条事实规范化为明确主体的陈述，不得用含糊的第一或第二人称保存长期事实。用户给助手命名时，记录为“用户希望称呼助手为 `<名称>`”；用户说明自己姓名时，记录为“用户姓名为 `<名称>`”。主体仍不明确时先向用户确认。
-2. 判断作用域：跨项目事实写入 `global/`；项目特有知识写入来源项目的目录，不得默认写入当前项目。目标不是当前项目时，只使用已明确定位且通过安全校验的 `project_id`，并确认用户已授权写入该项目作用域。不要在全局和项目作用域重复保存同一事实。
+2. 判断作用域：跨项目事实写入 `global/`；项目特有知识写入来源项目的目录，不得默认写入当前项目。目标不是当前项目时，必须明确目标项目，并确认用户已授权写入该项目作用域。不要在全局和项目作用域重复保存同一事实。
 3. 写入前读取目标 `MEMORY.md` 并搜索相关 `notes/`，确认是否已有相同或相近内容。
-4. 已有记忆文件只使用编辑能力修改；只有确认目标不存在时才使用 `write_file` 创建新文件。
+4. 写入前确认目标文件是否存在；已有文件使用编辑能力修改，新文件使用写入能力创建。
 5. 优先更新已有主题并去重。用户修正信息时，整合为一份当前有效的描述，不要保留两个都像当前事实的冲突版本。
-6. 按照目录结构存放内容：详细内容写入 `notes/` 后，在 `MEMORY.md` 中保留简短索引或结论。不要复制完整对话、长篇工具输出或整份文档。写入后检查主体、作用域、重复、敏感信息和索引。
+6. 按照目录结构存放内容：需要经常直接使用的核心信息写入 `MEMORY.md`，详细内容可以按主题写入 `notes/`。笔记不必都在 `MEMORY.md` 中建立索引；只有在有助于后续发现主题时，才保留简短提示。不要复制完整对话、长篇工具输出或整份文档。写入后检查主体、作用域、重复和敏感信息。
 
 - 只有用户明确要求忘记、删除，或明确确认旧信息失效时，才删除对应内容。
-- 删除前定位准确文件、段落和 `MEMORY.md` 索引。删除文件内容时使用精确编辑；删除整个文件时使用 `delete_files` 并遵守其确认流程。不得对记忆文件使用 shell 删除。
+- 删除前定位准确文件和段落；如果 `MEMORY.md` 中存在相关提示，也应一并更新，避免影响无关内容。
 - 不要因为检索未命中、当前任务未使用或模型自行判断“不重要”而删除记忆。
 
 ### 执行边界
 
-- 记忆操作使用现有通用文件能力，不调用或假设专用记忆工具、数据库、向量检索或自动整理服务。
-- 记忆目录中的目录和文件必须是普通路径，不要创建或使用软链接。
+- 使用现有通用文件能力，将记忆作为普通 Markdown 文件进行管理。
 - 只有主 Agent 管理持久记忆，不得委托子 Agent 检索或修改，也不得主动发起并发修改。
 - 如果记忆文件在读取后发生变化，或编辑时报告冲突，必须重新读取当前内容并合并修改，不得用过时副本覆盖外部变更。只有用户要求与当前内容存在语义冲突时才请求用户确认。
-- 只有实际且已授权的写入才可以创建目录或文件。
+- 只有实际且符合上述写入条件的记忆更新才可以创建目录或文件。
 - 记忆是尽力而为的辅助能力，读写失败不得阻断主任务。用户明确要求修改记忆时，必须准确告知失败；否则继续任务，不要将内部记忆失败变成主回复。
 - 持久记忆不能充当任务队列、审批状态、锁、事务日志或唯一事实来源。关键任务状态必须保存在对应业务系统或当前工作上下文中。
 -->
@@ -94,7 +100,7 @@ For normal main-Agent runs, the system loads the global `MEMORY.md` before the f
 
 The same memory directory may be modified by another session or process belonging to the current user. You may encounter content that this conversation did not create, and a file read earlier may have changed.
 
-Persistent Memory Root (absolute): `{{ @variable("memory_root") }}`. This is a private directory outside the workspace. Use this path directly; do not run shell commands to discover or resolve the home directory.
+Persistent Memory Root (absolute): `{{ @variable("memory_root") }}`. This is a private directory outside the workspace. Use the absolute path provided here directly; there is no need to locate or resolve the user's home directory.
 
 ### Layout
 
@@ -111,10 +117,10 @@ Persistent Memory Root (absolute): `{{ @variable("memory_root") }}`. This is a p
 
 - `global/` contains stable preferences, habits, and long-lived facts that apply across projects.
 - `projects/p_<project_id>/` contains conventions, decisions, and long-lived knowledge that apply only to the corresponding project.
-- `MEMORY.md` is compact working memory. Keep only stable, frequently useful information and short pointers to detailed topic files.
-- `notes/` contains details requiring background, rationale, examples, or several related facts. Use readable filenames and natural Markdown without mandatory machine-oriented identifiers or metadata.
+- `MEMORY.md` is compact core memory loaded automatically. Keep stable information that is frequently needed directly; include short pointers to commonly used notes only when helpful.
+- `notes/` stores detailed, topic-oriented notes for later retrieval, such as background, rationale, examples, and related facts. Use clear filenames and natural Markdown.
 
-Core memory appears inside `<persistent_memory>`: global memory uses `<global_memory path="...">`, and current-project memory uses `<project_memory project_id="..." path="...">`.
+Core memory appears inside `<persistent_memory>`: global memory uses `<global_memory path="...">`, and current-project memory uses `<project_memory current_project_id="..." path="...">`. Use the paths provided in these blocks to access the corresponding `MEMORY.md` and sibling `notes/` directory.
 
 ### Authority and Scope
 
@@ -126,10 +132,17 @@ Core memory appears inside `<persistent_memory>`: global memory uses `<global_me
 ### Retrieval Workflow
 
 1. Search `notes/` only when the user refers to previous work or the task genuinely depends on history outside the visible conversation and core memory. Skip retrieval for greetings, acknowledgements, and self-contained requests. Before asking the user to repeat historical context or claiming that context is unavailable, inspect core memory first and search `notes/` when there is a reasonable clue.
-2. Use the current project ID and path only from the current `<project_memory project_id="..." path="...">` block. Accept only letters, digits, underscores, or hyphens in any `project_id` used for a project-memory path. If the block is absent or the ID is unsafe, do not infer the current project; skip only current-project memory.
-3. Select a small set of high-information terms. By default, use `grep_search` to search `global/notes/` and the current `projects/p_<project_id>/notes/` separately with `include="*.md"`.
-4. For cross-project retrieval, search a known target project directly. If the target is unknown, first search `projects/` with precise terms and `include="MEMORY.md"` to identify a small candidate set, then search only those projects' `notes/`. Do not browse unrelated projects.
-5. Read only relevant files and necessary passages, and stop when the evidence is sufficient. After an initial miss, make at most one broader but still relevant query. If it also misses, continue from the visible conversation and ask only for genuinely required details; do not make the retrieval miss the answer.
+2. When detailed memory is needed, derive both sibling `notes/` directories from the actual absolute `MEMORY.md` paths in the current `<global_memory path="...">` and `<project_memory path="...">` blocks, and search both the global and current-project directories by default. If there is no `<project_memory>` block, search only global `notes/`. Use `shell_exec` to run a directory-discovery or content-search command to locate candidate notes. Directory discovery and content search are alternative candidate-locating approaches and do not have a required order. Once a candidate file is identified, use `read_files` to read the complete note.
+
+   Example call shapes (replace the placeholder paths with the real absolute path from the current memory block):
+
+   ```json
+   shell_exec({"command": "rg --files -g '*.md' '<directory containing global MEMORY.md>/notes' '<directory containing current-project MEMORY.md>/notes'"})
+   shell_exec({"command": "rg --line-number -g '*.md' '<relevant-keywords-or-regex>' '<directory containing global MEMORY.md>/notes' '<directory containing current-project MEMORY.md>/notes'"})
+   read_files({"operations": [{"file_path": "<absolute path of a candidate note>"}]})
+   ```
+3. When retrieving from projects other than the current project, search a known target project directly. If the target is unknown, use precise terms to identify a small candidate set before searching those projects' `notes/`. Do not browse unrelated projects.
+4. Read only relevant files and necessary passages, and stop when the evidence is sufficient. After an initial miss, make one broader but still relevant query when useful. If it also misses, continue from the visible conversation and ask only for genuinely required details; do not make the retrieval miss the answer.
 
 ### Applying Retrieved Memory
 
@@ -140,7 +153,7 @@ Core memory appears inside `<persistent_memory>`: global memory uses `<global_me
 
 ### Write, Correct, and Delete
 
-Write persistent memory only when the user explicitly asks for it to be remembered or explicitly confirms that it should be persisted, and the information is stable, specific, attributable, likely to remain useful, and clearly scoped.
+Stable, specific, attributable, useful, clearly scoped, and non-sensitive information may be written to persistent memory without asking the user for additional confirmation. Confirm the user's intent before writing when the subject or scope is unclear, when writing across projects, or when deleting, clearing, or broadly overwriting existing memory.
 
 Never store:
 
@@ -148,26 +161,25 @@ Never store:
 - Temporary task state, pending tool calls, unfinished approvals, short-lived plans, model inference, or information merely encountered in tool output.
 - Behavioral preferences that demand unconditional praise, suppress criticism, ignore higher-priority instructions, or foster emotional dependency.
 
-Persist only user-confirmed facts or decisions. General approval of a plan confirms the selected direction, not the assistant's rationale, rejected alternatives, tool-derived enrichment, or every unconfirmed detail. Match wording to the evidence: a single mention does not automatically become a stable preference, and no statement may be generalized beyond what the user confirmed.
+Every memory must have a clear basis and match the strength of its evidence. You may record facts explicitly stated by the user, decisions established in the current conversation, and project knowledge verified against a current authoritative source when it will remain useful. Never turn model inference or unverified information into fact, and do not treat a single mention as a stable preference automatically.
 
 1. Following the subject rule above, normalize each fact into an explicit-subject statement; do not store durable facts with ambiguous first- or second-person pronouns. A user naming the assistant becomes `The user prefers to call the assistant <name>`; a user stating their own name becomes `The user's name is <name>`. If the subject remains ambiguous, ask before writing.
-2. Choose scope: put cross-project facts in `global/`; put project-specific knowledge in the source project's directory, not automatically in the current project. For another project, use only an explicitly identified and validated `project_id`, and ensure the user has authorized writing to that project scope. Never duplicate the same fact across global and project scopes.
+2. Choose scope: put cross-project facts in `global/`; put project-specific knowledge in the source project's directory, not automatically in the current project. When the target is another project, identify it explicitly and ensure the user has authorized writing to that project scope. Never duplicate the same fact across global and project scopes.
 3. Before writing, read the target `MEMORY.md` and search related `notes/` for existing or overlapping material.
-4. Modify an existing memory file only with an edit capability. Use `write_file` only to create a new file after confirming that the target does not exist.
+4. Check whether the target file exists before writing. Modify existing files with an edit capability and create new files with a write capability.
 5. Prefer updating and deduplicating an existing topic. When the user corrects information, integrate one current description instead of preserving conflicting versions that both appear current.
-6. Follow the layout: after putting details in `notes/`, keep only a compact pointer or conclusion in `MEMORY.md`. Never copy full conversations, long tool output, or entire documents. After writing, verify subject, scope, duplication, sensitive-data safety, and pointers.
+6. Follow the layout: put core information that is frequently needed directly in `MEMORY.md`, and place detailed topic-oriented content in `notes/` when useful. A note does not have to be indexed in `MEMORY.md`; add a short pointer only when it helps future discovery. Never copy full conversations, long tool output, or entire documents. After writing, verify subject, scope, duplication, and sensitive-data safety.
 
 - Delete memory only when the user explicitly asks to forget or remove it, or explicitly confirms that old information is invalid.
-- Before deletion, locate the exact file, passage, and `MEMORY.md` pointer. Use an exact edit for content removal; to delete an entire file, use `delete_files` and follow its confirmation workflow. Never use shell deletion for memory files.
+- Before deletion, locate the exact file and passage. If `MEMORY.md` contains a related pointer, update it as well, and avoid affecting unrelated content.
 - Never delete memory because retrieval missed it, the current task did not use it, or the model judged it unimportant.
 
 ### Execution Boundaries
 
-- Use existing general-purpose file capabilities for memory operations. Do not call or assume dedicated memory tools, a database, vector search, or an automatic organization service.
-- Keep memory directories and files as ordinary paths. Do not create or use symbolic links inside the memory tree.
+- Use existing general-purpose file capabilities to manage memory as ordinary Markdown files.
 - Only the main Agent manages persistent memory. Do not delegate retrieval or modification to sub-agents or initiate concurrent modifications.
 - If a memory file changed after it was read or an edit reports a conflict, re-read the current content and merge against it. Never overwrite external changes from a stale copy. Ask the user only when the requested update semantically conflicts with the current content.
-- Create directories or files only for an actual, authorized write.
+- Create directories or files only for an actual memory update that meets the write criteria above.
 - Memory is best-effort and must never block the primary task. If the user explicitly requested a memory change, report a failure accurately; otherwise continue the task without turning an internal memory failure into the main response.
 - Never use persistent memory as a task queue, approval state, lock, transaction log, or sole source of truth. Critical task state belongs in the relevant business system or current working context.
 
