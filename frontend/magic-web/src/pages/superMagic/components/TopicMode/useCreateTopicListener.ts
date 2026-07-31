@@ -7,7 +7,6 @@ import { projectStore, topicStore as globalTopicStore } from "../../stores/core"
 import type { ProjectListItem, Topic } from "../../pages/Workspace/types"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import type { TopicStore } from "../../stores/core/topic"
-import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 interface UseCreateTopicListenerOptions {
 	enabled?: boolean
@@ -50,23 +49,17 @@ function resolveRequestedModeSourceTopic({
 	const projectId = sourceTopic?.project_id || selectedProject?.id
 	if (!projectId) return sourceTopic
 
-	const defaultSelection = resolveDefaultAgentSelection()
-	const isConfiguredDefaultAgent =
-		defaultSelection.agentCode && modeIdentifier === defaultSelection.modeIdentifier
-	const modeSource =
-		isConfiguredDefaultAgent || modeIdentifier.startsWith("SMA")
-			? {
-					project_id: projectId,
-					topic_mode: TopicMode.CustomAgent,
-					agent_code: isConfiguredDefaultAgent
-						? defaultSelection.agentCode
-						: modeIdentifier,
-				}
-			: {
-					project_id: projectId,
-					topic_mode: topicMode,
-					agent_code: undefined,
-				}
+	const modeSource = modeIdentifier.startsWith("SMA")
+		? {
+				project_id: projectId,
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: modeIdentifier,
+			}
+		: {
+				project_id: projectId,
+				topic_mode: topicMode,
+				agent_code: undefined,
+			}
 
 	return sourceTopic ? { ...sourceTopic, ...modeSource } : modeSource
 }

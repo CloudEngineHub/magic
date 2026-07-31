@@ -34,14 +34,13 @@ describe("DefaultAgentSelectionService", () => {
 		isModeVisibleMock.mockReturnValue(true)
 	})
 
-	it("resolves an available configured employee as custom_agent", () => {
+	it("resolves an available configured non-SMA employee as plain topic_mode", () => {
 		modeServiceMock.defaultAgentCode = "agent-default"
 		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
 
 		expect(resolveDefaultAgentSelection()).toEqual({
 			modeIdentifier: "agent-default",
-			topicPattern: TopicMode.CustomAgent,
-			agentCode: "agent-default",
+			topicPattern: "agent-default",
 		})
 	})
 
@@ -115,14 +114,13 @@ describe("DefaultAgentSelectionService", () => {
 		})
 	})
 
-	it("maps a non-SMA configured default directly without prefix inference", () => {
+	it("maps a non-SMA configured default as plain topic_mode", () => {
 		modeServiceMock.defaultAgentCode = "agent-default"
 		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
 
 		expect(resolveAgentSelection("agent-default")).toEqual({
 			modeIdentifier: "agent-default",
-			topicPattern: TopicMode.CustomAgent,
-			agentCode: "agent-default",
+			topicPattern: "agent-default",
 		})
 	})
 

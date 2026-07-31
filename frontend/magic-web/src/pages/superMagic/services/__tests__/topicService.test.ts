@@ -515,8 +515,8 @@ describe("TopicService frontend mode patch", () => {
 	it("updates the frontend patch for a configured non-SMA default employee", async () => {
 		defaultSelectionState.selection = {
 			modeIdentifier: "configured-agent",
-			topicPattern: TopicMode.CustomAgent,
-			agentCode: "configured-agent",
+			topicPattern: "configured-agent" as TopicMode,
+			agentCode: undefined,
 		}
 		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
 		const mergeTopic = vi.fn()
@@ -536,12 +536,12 @@ describe("TopicService frontend mode patch", () => {
 
 		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
 			...newTopic,
-			topic_mode: TopicMode.CustomAgent,
-			agent_code: "configured-agent",
+			topic_mode: "configured-agent",
+			agent_code: undefined,
 		})
 		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
-			topic_mode: TopicMode.CustomAgent,
-			agent_code: "configured-agent",
+			topic_mode: "configured-agent",
+			agent_code: undefined,
 		})
 	})
 

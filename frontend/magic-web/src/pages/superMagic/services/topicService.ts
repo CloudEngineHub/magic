@@ -8,7 +8,6 @@ import { TopicMode } from "../pages/Workspace/TopicMode"
 import { RequestConfig } from "@/apis/core/HttpClient"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
-import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -303,17 +302,13 @@ class TopicService {
 		mode: TopicMode,
 	): Pick<Topic, "project_id" | "topic_mode" | "agent_code"> {
 		const modeIdentifier = String(mode).trim()
-		const defaultSelection = resolveDefaultAgentSelection()
-		const isConfiguredDefaultAgent =
-			defaultSelection.agentCode && modeIdentifier === defaultSelection.modeIdentifier
 
-		// ModeToggle 选择自定义员工时传出的是 agent_code。只有 SMA 前缀才按员工归一化；
-		// 平台配置的默认员工由配置直接确定；其他 identifier 仍是普通 topic_mode。
-		if (isConfiguredDefaultAgent || modeIdentifier.startsWith("SMA")) {
+		// Only legacy SMA crews use custom_agent; other identifiers are plain topic_mode.
+		if (modeIdentifier.startsWith("SMA")) {
 			return {
 				project_id: topic.project_id,
 				topic_mode: TopicMode.CustomAgent,
-				agent_code: isConfiguredDefaultAgent ? defaultSelection.agentCode : modeIdentifier,
+				agent_code: modeIdentifier,
 			}
 		}
 

@@ -82,7 +82,7 @@ describe("messageSendPreparation", () => {
 		isModeVisibleMock.mockReturnValue(true)
 	})
 
-	it("normalizes the configured default employee for topic state and send params", async () => {
+	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {
 		modeServiceMock.defaultAgentCode = "agent-default"
 		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
 		const setSelectedTopic = vi.fn()
@@ -118,14 +118,14 @@ describe("messageSendPreparation", () => {
 
 		expect(result?.currentTopic).toEqual(
 			expect.objectContaining({
-				topic_mode: TopicMode.CustomAgent,
-				agent_code: "agent-default",
+				topic_mode: "agent-default",
+				agent_code: undefined,
 			}),
 		)
 		expect(result?.params).toEqual(
 			expect.objectContaining({
-				topicMode: TopicMode.CustomAgent,
-				extra: expect.objectContaining({ agent_code: "agent-default" }),
+				topicMode: "agent-default",
+				extra: undefined,
 			}),
 		)
 	})
@@ -142,8 +142,7 @@ describe("messageSendPreparation", () => {
 			project_id: "project-1",
 			chat_topic_id: "chat-topic-1",
 			chat_conversation_id: "conversation-1",
-			topic_mode: TopicMode.CustomAgent,
-			agent_code: "agent-default",
+			topic_mode: "agent-default" as TopicMode,
 		} as Topic
 
 		const result = await preparePanelSend({
@@ -229,8 +228,8 @@ describe("messageSendPreparation", () => {
 		)
 		expect(result?.currentTopic).toEqual(
 			expect.objectContaining({
-				topic_mode: TopicMode.CustomAgent,
-				agent_code: "agent-default",
+				topic_mode: "agent-default",
+				agent_code: undefined,
 			}),
 		)
 	})

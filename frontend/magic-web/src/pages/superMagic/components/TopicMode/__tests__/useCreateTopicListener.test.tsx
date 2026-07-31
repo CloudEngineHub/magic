@@ -150,11 +150,11 @@ describe("useCreateTopicListener", () => {
 		})
 	})
 
-	it("uses a configured non-SMA default employee as the custom-agent source", () => {
+	it("uses a configured non-SMA default employee as plain topic_mode", () => {
 		defaultSelectionState.selection = {
 			modeIdentifier: "configured-agent",
-			topicPattern: TopicMode.CustomAgent,
-			agentCode: "configured-agent",
+			topicPattern: "configured-agent" as TopicMode,
+			agentCode: undefined,
 		}
 		topicStoreMock.selectedTopic = latestTopic
 		renderHook(() => useCreateTopicListener())
@@ -167,8 +167,8 @@ describe("useCreateTopicListener", () => {
 			selectedProject: { id: "project-1" },
 			sourceTopic: {
 				...latestTopic,
-				topic_mode: TopicMode.CustomAgent,
-				agent_code: "configured-agent",
+				topic_mode: "configured-agent",
+				agent_code: undefined,
 			},
 			onNavigated: undefined,
 		})
