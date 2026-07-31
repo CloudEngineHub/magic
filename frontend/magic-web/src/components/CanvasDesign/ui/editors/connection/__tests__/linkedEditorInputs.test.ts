@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest"
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import {
+	type CanvasConnection,
 	ElementTypeEnum,
 	type FrameElement,
 	type LayerElement,
 } from "../../../../runtime/document/types"
 import {
 	collectLinkedFrameSourceElements,
+	collectLinkedEditorSourceElements,
 	createLinkedFrameSourceId,
+	createLinkedUpstreamSourceId,
 	dedupeLinkedMediaItemsByPath,
 	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaPaths,
@@ -37,6 +40,19 @@ function imageElement(id: string, src: string, zIndex = 0): LayerElement {
 
 function videoElement(id: string, src: string, zIndex = 0): LayerElement {
 	return { id, type: ElementTypeEnum.Video, zIndex, src }
+}
+
+function createCanvasStub(elements: LayerElement[], connections: CanvasConnection[]): Canvas {
+	const elementById = new Map(elements.map((element) => [element.id, element]))
+	return {
+		connectionManager: {
+			getUpstreamConnections: (elementId: string) =>
+				connections.filter((connection) => connection.targetElementId === elementId),
+		},
+		elementManager: {
+			getElementData: (elementId: string) => elementById.get(elementId),
+		},
+	} as unknown as Canvas
 }
 
 describe("linked frame source collection", () => {
@@ -85,29 +101,21 @@ describe("linked frame source collection", () => {
 				videoElement("target", "/videos/target.mp4", 2),
 			],
 		}
-		const elements = new Map<string, LayerElement>([
-			[frame.id, frame],
-			[sharedImage.id, sharedImage],
-		])
-		const canvas = {
-			connectionManager: {
-				getUpstreamConnections: () => [
-					{
-						id: "frame-connection",
-						sourceElementId: frame.id,
-						targetElementId: "target",
-					},
-					{
-						id: "direct-image-connection",
-						sourceElementId: sharedImage.id,
-						targetElementId: "target",
-					},
-				],
-			},
-			elementManager: {
-				getElementData: (elementId: string) => elements.get(elementId),
-			},
-		} as unknown as Canvas
+		const canvas = createCanvasStub(
+			[frame, sharedImage],
+			[
+				{
+					id: "frame-connection",
+					sourceElementId: frame.id,
+					targetElementId: "target",
+				},
+				{
+					id: "direct-image-connection",
+					sourceElementId: sharedImage.id,
+					targetElementId: "target",
+				},
+			],
+		)
 
 		const result = resolveLinkedEditorInputs({
 			canvas,
@@ -130,6 +138,146 @@ describe("linked frame source collection", () => {
 				path: "/images/shared.png",
 			}),
 		])
+	})
+})
+
+describe("linked upstream source collection", () => {
+	it("keeps the current direct-only behavior when the static mode is direct", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "direct",
+				maxDepth: 2,
+			}).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([{ connectionId: "B-C", sourceElementId: "B" }])
+	})
+
+	it("collects upstream elements breadth-first up to the configured depth", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 2,
+			}).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([
+			{ connectionId: "B-C", sourceElementId: "B" },
+			{
+				connectionId: createLinkedUpstreamSourceId("C", "A"),
+				sourceElementId: "A",
+			},
+		])
+	})
+
+	it("continues through non-consumable graph nodes", () => {
+		const elementA = textElement("A", "A")
+		const elementB: LayerElement = { id: "B", type: ElementTypeEnum.Rectangle }
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 2,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["A"])
+	})
+
+	it("deduplicates diamond paths and stops when a cycle reaches the target again", () => {
+		const elementA = textElement("A", "A")
+		const elementB1 = textElement("B1", "B1")
+		const elementB2 = textElement("B2", "B2")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB1, elementB2, elementC],
+			[
+				{ id: "A-B1", sourceElementId: "A", targetElementId: "B1" },
+				{ id: "A-B2", sourceElementId: "A", targetElementId: "B2" },
+				{ id: "B1-C", sourceElementId: "B1", targetElementId: "C" },
+				{ id: "B2-C", sourceElementId: "B2", targetElementId: "C" },
+				{ id: "C-A", sourceElementId: "C", targetElementId: "A" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 4,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["B1", "B2", "A"])
+	})
+
+	it("supports unlimited upstream depth without looping through a cycle", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+				{ id: "C-A", sourceElementId: "C", targetElementId: "A" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: Number.POSITIVE_INFINITY,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["B", "A"])
+	})
+
+	it("uses the static unlimited mode in the editor input resolver", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			resolveLinkedEditorInputs({
+				canvas,
+				targetElementId: "C",
+				targetKind: "video",
+			}).textConnections.map((connection) => connection.sourceElementId),
+		).toEqual(["B", "A"])
 	})
 })
 

@@ -23,11 +23,7 @@ export type LinkedEditorTargetKind = "image" | "video"
 export type LinkedEditorMediaKind = "image" | "video" | "audio"
 export type LinkedEditorMediaStatus = "active" | "inactive"
 export type LinkedEditorMediaInactiveReason =
-	| "unsupported-type"
-	| "unsupported-mode"
-	| "over-limit"
-	| "missing-resource"
-	| "duplicate"
+	"unsupported-type" | "unsupported-mode" | "over-limit" | "missing-resource" | "duplicate"
 
 export interface LinkedEditorMediaReference {
 	kind: LinkedEditorMediaKind
@@ -66,7 +62,7 @@ export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
 
 export interface LinkedEditorMediaCandidate {
 	/**
-	 * 关联输入的稳定 ID。直接元素等于真实连线 ID；画框子元素由连线 ID 与子元素 ID 派生。
+	 * 关联输入的稳定 ID。一级直接元素等于真实连线 ID；多级元素与画框子元素使用派生 ID。
 	 * 选择、排序和首尾帧绑定均以此 ID 为准。
 	 */
 	connectionId: string
@@ -166,9 +162,33 @@ export interface LinkedEditorSourceElement {
 }
 
 const LINKED_FRAME_SOURCE_ID_PREFIX = "frame-source"
+const LINKED_UPSTREAM_SOURCE_ID_PREFIX = "upstream-source"
+
+export interface LinkedEditorSourceCollectionConfig {
+	/** direct 保持现有一级上游行为；upstream 按 maxDepth 向上遍历。 */
+	mode: "direct" | "upstream"
+	/** 从当前编辑元素开始计算的最大连接边深度，仅 upstream 模式生效。 */
+	maxDepth: number
+}
+
+/**
+ * 关联输入上游收集行为的静态开关。
+ * 切回现有行为时将 mode 改为 direct；多级模式通过 maxDepth 控制向上收集层数。
+ */
+const LINKED_EDITOR_SOURCE_COLLECTION_CONFIG: LinkedEditorSourceCollectionConfig = {
+	mode: "upstream",
+	maxDepth: Number.POSITIVE_INFINITY,
+}
 
 export function createLinkedFrameSourceId(connectionId: string, sourceElementId: string): string {
 	return `${LINKED_FRAME_SOURCE_ID_PREFIX}:${connectionId}:${sourceElementId}`
+}
+
+export function createLinkedUpstreamSourceId(
+	targetElementId: string,
+	sourceElementId: string,
+): string {
+	return `${LINKED_UPSTREAM_SOURCE_ID_PREFIX}:${targetElementId}:${sourceElementId}`
 }
 
 function isLinkedEditorConsumableElement(element: LayerElement): boolean {
@@ -221,7 +241,7 @@ export function collectLinkedFrameSourceElements(
 	return result
 }
 
-function collectLinkedEditorSourceElements(
+function collectDirectLinkedEditorSourceElements(
 	canvas: Canvas,
 	targetElementId: string,
 ): LinkedEditorSourceElement[] {
@@ -270,6 +290,124 @@ function collectLinkedEditorSourceElements(
 	}
 
 	return result
+}
+
+interface CollectedLinkedEditorSourceElement {
+	item: LinkedEditorSourceElement
+	depth: number
+	origin: "connected-element" | "frame-descendant"
+	order: number
+}
+
+function shouldReplaceCollectedSource(
+	current: CollectedLinkedEditorSourceElement,
+	next: CollectedLinkedEditorSourceElement,
+): boolean {
+	if (next.depth !== current.depth) return next.depth < current.depth
+	if (next.origin !== current.origin) return next.origin === "connected-element"
+	return false
+}
+
+/**
+ * 按连接方向从目标元素向上进行广度优先遍历，并收集最大深度内可消费的元素。
+ * Frame 仍只在到达该图节点时展开内容，不会把 Frame 子元素当作新的连接图节点继续遍历。
+ */
+export function collectLinkedEditorUpstreamSourceElements(
+	canvas: Canvas,
+	targetElementId: string,
+	maxDepth: number,
+): LinkedEditorSourceElement[] {
+	const normalizedMaxDepth =
+		maxDepth === Number.POSITIVE_INFINITY
+			? Number.POSITIVE_INFINITY
+			: Number.isFinite(maxDepth)
+				? Math.max(1, Math.floor(maxDepth))
+				: 1
+	const queue: Array<{ elementId: string; depth: number }> = [
+		{ elementId: targetElementId, depth: 0 },
+	]
+	const visitedGraphElementIds = new Set<string>([targetElementId])
+	const collectedBySourceElementId = new Map<string, CollectedLinkedEditorSourceElement>()
+	let queueIndex = 0
+	let encounterOrder = 0
+
+	const collectCandidate = (
+		item: LinkedEditorSourceElement,
+		depth: number,
+		origin: CollectedLinkedEditorSourceElement["origin"],
+	): void => {
+		const next: CollectedLinkedEditorSourceElement = {
+			item,
+			depth,
+			origin,
+			order: encounterOrder,
+		}
+		encounterOrder += 1
+		const current = collectedBySourceElementId.get(item.sourceElementId)
+		if (!current || shouldReplaceCollectedSource(current, next)) {
+			collectedBySourceElementId.set(item.sourceElementId, next)
+		}
+	}
+
+	while (queueIndex < queue.length) {
+		const current = queue[queueIndex]
+		queueIndex += 1
+		if (!current || current.depth >= normalizedMaxDepth) continue
+
+		const upstreamConnections = canvas.connectionManager.getUpstreamConnections(
+			current.elementId,
+		)
+		for (const connection of upstreamConnections) {
+			const sourceElement = canvas.elementManager.getElementData(connection.sourceElementId)
+			if (!sourceElement || visitedGraphElementIds.has(sourceElement.id)) continue
+
+			const sourceDepth = current.depth + 1
+			visitedGraphElementIds.add(sourceElement.id)
+			const sourceCandidateId =
+				sourceDepth === 1
+					? connection.id
+					: createLinkedUpstreamSourceId(targetElementId, sourceElement.id)
+
+			if (isLinkedEditorConsumableElement(sourceElement)) {
+				collectCandidate(
+					{
+						connectionId: sourceCandidateId,
+						sourceElementId: sourceElement.id,
+						element: sourceElement,
+					},
+					sourceDepth,
+					"connected-element",
+				)
+			} else if (sourceElement.type === ElementTypeEnum.Frame) {
+				for (const frameSource of collectLinkedFrameSourceElements(
+					sourceCandidateId,
+					sourceElement,
+					{ excludedElementIds: [targetElementId] },
+				)) {
+					collectCandidate(frameSource, sourceDepth, "frame-descendant")
+				}
+			}
+
+			if (sourceDepth < normalizedMaxDepth) {
+				queue.push({ elementId: sourceElement.id, depth: sourceDepth })
+			}
+		}
+	}
+
+	return Array.from(collectedBySourceElementId.values())
+		.sort((left, right) => left.depth - right.depth || left.order - right.order)
+		.map(({ item }) => item)
+}
+
+export function collectLinkedEditorSourceElements(
+	canvas: Canvas,
+	targetElementId: string,
+	config: LinkedEditorSourceCollectionConfig = LINKED_EDITOR_SOURCE_COLLECTION_CONFIG,
+): LinkedEditorSourceElement[] {
+	if (config.mode === "direct") {
+		return collectDirectLinkedEditorSourceElements(canvas, targetElementId)
+	}
+	return collectLinkedEditorUpstreamSourceElements(canvas, targetElementId, config.maxDepth)
 }
 
 function getFileName(path: string): string {
@@ -463,16 +601,14 @@ export function resolveLinkedMediaPolicySelection(
 		mediaPolicy?: LinkedEditorMediaPolicy
 	},
 ): LinkedEditorMediaSelectionResolution {
-	const normalizedCandidates = candidates.map(
-		(candidate): LinkedEditorMediaCandidate => ({
-			connectionId: candidate.connectionId,
-			sourceElementId: candidate.sourceElementId,
-			kind: candidate.kind,
-			path: candidate.path,
-			fileName: candidate.fileName,
-			sourceCrop: candidate.sourceCrop,
-		}),
-	)
+	const normalizedCandidates = candidates.map((candidate): LinkedEditorMediaCandidate => ({
+		connectionId: candidate.connectionId,
+		sourceElementId: candidate.sourceElementId,
+		kind: candidate.kind,
+		path: candidate.path,
+		fileName: candidate.fileName,
+		sourceCrop: candidate.sourceCrop,
+	}))
 	const selectedConnectionIdSet = new Set(mentionedConnectionIds)
 	const selectedCandidates = normalizedCandidates.filter((candidate) =>
 		selectedConnectionIdSet.has(candidate.connectionId),
