@@ -58,7 +58,6 @@ export function resolveDefaultAgentSelection(): DefaultAgentSelection {
 	}
 	if (defaultAgentCode === TopicMode.General) return createGeneralSelection()
 	if (!superMagicModeService.isModeValid(defaultAgentCode)) return createGeneralSelection()
-	if (!superMagicModeService.isModeVisible(defaultAgentCode)) return createGeneralSelection()
 
 	if (builtInTopicModes.has(defaultAgentCode) || !defaultAgentCode.startsWith("SMA")) {
 		return {

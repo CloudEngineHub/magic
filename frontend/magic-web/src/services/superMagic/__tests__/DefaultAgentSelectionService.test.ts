@@ -86,15 +86,17 @@ describe("DefaultAgentSelectionService", () => {
 		})
 	})
 
-	it("falls back to general when the configured employee is hidden for the current user", () => {
-		modeServiceMock.defaultAgentCode = "agent-hidden"
-		isModeValidMock.mockReturnValue(true)
+	it("keeps a hidden configured employee when it is still in the mode list", () => {
+		modeServiceMock.defaultAgentCode = "SMA-agent-hidden"
+		isModeValidMock.mockImplementation((mode) => mode === "SMA-agent-hidden")
 		isModeVisibleMock.mockReturnValue(false)
 
 		expect(resolveDefaultAgentSelection()).toEqual({
-			modeIdentifier: TopicMode.General,
-			topicPattern: TopicMode.General,
+			modeIdentifier: "SMA-agent-hidden",
+			topicPattern: TopicMode.CustomAgent,
+			agentCode: "SMA-agent-hidden",
 		})
+		expect(isModeVisibleMock).not.toHaveBeenCalled()
 	})
 
 	it("keeps an explicit topic custom_agent even when it is no longer in the list", () => {
