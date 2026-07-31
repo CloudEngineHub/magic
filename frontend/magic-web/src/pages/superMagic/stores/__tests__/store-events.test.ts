@@ -360,6 +360,10 @@ describe("SuperMagic Store typed events", () => {
 			"message.committed",
 			"message.completed",
 		])
+		expect((events[0] as MessageCommittedEvent).payload.message).toMatchObject({
+			imStatus: ConversationMessageStatus.Read,
+			superStatus: "finished",
+		})
 		expect((events[1] as MessageCompletedEvent).payload.status).toBe("finished")
 	})
 
@@ -458,7 +462,9 @@ describe("SuperMagic Store typed events", () => {
 			appMessageId: FINISH_TASK_APP_MESSAGE_ID,
 			correlationId: FINISH_TASK_CORRELATION_ID,
 			role: "tool",
-			status: "finished",
+			status: ConversationMessageStatus.Read,
+			imStatus: ConversationMessageStatus.Read,
+			superStatus: "finished",
 		})
 		expect(completed).toEqual([])
 
@@ -610,9 +616,11 @@ describe("SuperMagic Store typed events", () => {
 		expect(committed[1].payload.changedFields).toContain("seqId")
 	})
 
-	it("treats revoked as a completed Assistant terminal transition", () => {
+	it("publishes revoked as an IM visibility change without fabricating execution completion", () => {
 		const store = new SuperMagicStore()
+		const committed: MessageCommittedEvent[] = []
 		const completed: MessageCompletedEvent[] = []
+		store.subscribe("message.committed", (event) => committed.push(event))
 		store.subscribe("message.completed", (event) => completed.push(event))
 
 		store.enqueueMessage(
@@ -623,8 +631,12 @@ describe("SuperMagic Store typed events", () => {
 			}),
 		)
 
-		expect(completed).toHaveLength(1)
-		expect(completed[0].payload.status).toBe("revoked")
+		expect(committed).toHaveLength(1)
+		expect(committed[0].payload.message).toMatchObject({
+			imStatus: ConversationMessageStatus.Revoked,
+			superStatus: "running",
+		})
+		expect(completed).toEqual([])
 	})
 
 	it("publishes a replaceable weak settlement before a late strong response", () => {

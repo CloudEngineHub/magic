@@ -1316,12 +1316,16 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(
 			getMessageRecords(store).find(
 				(message) => message.super_message_id === identity.superMessageId,
-			)?.status,
-		).toBe(ConversationMessageStatus.Revoked)
+			),
+		).toMatchObject({
+			status: ConversationMessageStatus.Revoked,
+			imStatus: ConversationMessageStatus.Revoked,
+			superStatus: "running",
+		})
 		expect(getNode(store, identity.superMessageId)?.content).toBe("same canonical content")
 	})
 
-	it("[REV-02] Assistant 同 seq 的 HTTP 外层状态可从 revoked 恢复为 read。", () => {
+	it("[REV-02] 普通 HTTP 快照不能恢复 revoked；显式授权后的下一次写入才可恢复为 read。", () => {
 		const store = createStore()
 		const identity = {
 			appMessageId: "same-seq-restore-app",
@@ -1348,11 +1352,125 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(
 			getMessageRecords(store).find(
 				(message) => message.super_message_id === identity.superMessageId,
-			)?.status,
-		).toBe(ConversationMessageStatus.Read)
+			),
+		).toMatchObject({
+			status: ConversationMessageStatus.Revoked,
+			imStatus: ConversationMessageStatus.Revoked,
+			superStatus: "finished",
+		})
+
+		store.authorizeImStatusRestore(TOPIC_A)
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+
+		expect(
+			getMessageRecords(store).find(
+				(message) => message.super_message_id === identity.superMessageId,
+			),
+		).toMatchObject({
+			status: ConversationMessageStatus.Read,
+			imStatus: ConversationMessageStatus.Read,
+			superStatus: "finished",
+		})
 		expect(getNode(store, identity.superMessageId)?.content).toBe(
 			"restorable canonical content",
 		)
+
+		// Authorization is one-shot; a later ordinary snapshot cannot reuse the
+		// previous cancel-undo permission to restore the same IM message again.
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...identity,
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+		expect(
+			getMessageRecords(store).find(
+				(message) => message.super_message_id === identity.superMessageId,
+			),
+		).toMatchObject({
+			imStatus: ConversationMessageStatus.Revoked,
+			status: ConversationMessageStatus.Revoked,
+		})
+	})
+
+	it("[REV-02B] 同一 SuperMessage 的 IM 状态只归属于具体 app_message_id。", () => {
+		const store = createStore()
+		const sharedIdentity = {
+			correlationId: "per-app-status-correlation",
+			superMessageId: "per-app-status-super-message",
+			content: "latest logical card",
+			nodeStatus: "finished",
+		} as const
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...sharedIdentity,
+				appMessageId: "per-app-status-old",
+				seqId: "100",
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+			createEnvelope({
+				...sharedIdentity,
+				appMessageId: "per-app-status-current",
+				seqId: "200",
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+
+		expect(getMessageRecords(store)).toMatchObject([
+			{
+				app_message_id: "per-app-status-current",
+				seq_id: "200",
+				imStatus: ConversationMessageStatus.Read,
+				superStatus: "finished",
+			},
+		])
+	})
+
+	it("[REV-02C] 旧 Assistant revision 的 revoked 不得传播到同 SuperMessage 的当前 app_message_id。", () => {
+		const store = createStore()
+		const sharedIdentity = {
+			correlationId: "per-app-status-stale-correlation",
+			superMessageId: "per-app-status-stale-super-message",
+			content: "current logical card",
+			nodeStatus: "finished",
+		} as const
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...sharedIdentity,
+				appMessageId: "per-app-status-stale-current",
+				seqId: "200",
+				outerStatus: ConversationMessageStatus.Read,
+			}),
+		])
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				...sharedIdentity,
+				appMessageId: "per-app-status-stale-old",
+				seqId: "100",
+				outerStatus: ConversationMessageStatus.Revoked,
+			}),
+		])
+
+		const currentMessage = getMessageRecords(store).find(
+			(message) => message.app_message_id === "per-app-status-stale-current",
+		)
+		expect(currentMessage).toMatchObject({
+			imStatus: ConversationMessageStatus.Read,
+			status: ConversationMessageStatus.Read,
+		})
 	})
 
 	it("[REV-03] 低 seq HTTP 撤回状态生效，但不得回退 Assistant canonical 内容。", () => {
@@ -1387,6 +1505,8 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toMatchObject({
 			seq_id: "200",
 			status: ConversationMessageStatus.Revoked,
+			imStatus: ConversationMessageStatus.Revoked,
+			superStatus: "finished",
 		})
 		expect(getNode(store, identity.superMessageId)?.content).toBe("latest canonical content")
 	})

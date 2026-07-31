@@ -284,7 +284,7 @@ class MessageSendService {
 		// 仅当前可见分支仍以 revoked 尾段结束时确认撤回；历史撤回事实不应阻塞新消息。
 		const hasRevokedMessages = projectVisibleMessagesByRevokedTail(
 			this.getMessageList(currentTopic),
-		).some((message) => message?.status === MessageStatus.REVOKED)
+		).some((message) => (message?.imStatus ?? message?.status) === MessageStatus.REVOKED)
 		if (hasRevokedMessages) {
 			const isConfirmed = await this.confirmRevokedMessagesBeforeSend(currentTopic)
 			if (!isConfirmed) return false

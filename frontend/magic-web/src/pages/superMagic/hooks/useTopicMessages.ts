@@ -54,10 +54,13 @@ interface PullMessageParams {
 interface PullMessageResult {
 	didPullSucceed: boolean
 	pulledItems: any[]
+	/** 成功 HTTP 查询实际返回的全部 envelope；失败时为空，禁止部分提交。 */
+	statusItems?: any[]
 	response?: any
 }
 
 interface AuthoritativeTailPullResult extends PullMessageResult {
+	statusItems: any[]
 	writeOptions?:
 		| { mode: "replace"; preserveStreamSuperMessageIds: string[] }
 		| {
@@ -329,6 +332,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				return {
 					didPullSucceed: true,
 					pulledItems,
+					statusItems: pulledItems,
 					response,
 				}
 			} catch (error) {
@@ -343,6 +347,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				return {
 					didPullSucceed: false,
 					pulledItems: [],
+					statusItems: [],
 				}
 			}
 		},
@@ -395,6 +400,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			const visitedPageTokens = new Set<string>()
 			let nextPageToken = page_token
 			let aggregatedPulledItems: any[] = []
+			let aggregatedStatusItems: any[] = []
 			let lastResponse: any
 			const getConcurrentStreamSuperMessageIds = () => {
 				const currentContent = superMagicStore.topicMeta.get(chat_topic_id)?.content
@@ -406,7 +412,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 			for (let pageIndex = 0; pageIndex < AUTHORITATIVE_TAIL_MAX_PAGE_COUNT; pageIndex += 1) {
 				if (visitedPageTokens.has(nextPageToken)) {
-					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 				}
 				visitedPageTokens.add(nextPageToken)
 
@@ -420,16 +426,20 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					callback,
 				})
 				if (!pageResult.didPullSucceed) {
-					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 				}
 				lastResponse = pageResult.response
+				aggregatedStatusItems = dedupePulledItemsByAppMessageId([
+					...aggregatedStatusItems,
+					...(pageResult.statusItems || pageResult.pulledItems),
+				])
 				aggregatedPulledItems = dedupePulledItemsBySuperMessageId([
 					...aggregatedPulledItems,
 					...pageResult.pulledItems.filter(shouldIncludeFetchedMessage),
 				])
 
 				if (pageIndex === 0 && requiredSeqId) {
-					const latestHttpSeqId = aggregatedPulledItems.reduce((latestSeqId, item) => {
+					const latestHttpSeqId = aggregatedStatusItems.reduce((latestSeqId, item) => {
 						const seqId = String(item?.seq?.seq_id || "")
 						if (
 							!seqId ||
@@ -444,7 +454,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 						!latestHttpSeqId ||
 						compareMessageSeqId(latestHttpSeqId, requiredSeqId) < 0
 					) {
-						return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+						return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 					}
 				}
 
@@ -458,6 +468,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					return {
 						didPullSucceed: true,
 						pulledItems: aggregatedPulledItems.slice(0, anchorIndex + 1),
+						statusItems: aggregatedStatusItems,
 						response: lastResponse,
 						writeOptions: {
 							mode: "replace_tail",
@@ -471,6 +482,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					return {
 						didPullSucceed: true,
 						pulledItems: aggregatedPulledItems,
+						statusItems: aggregatedStatusItems,
 						response: lastResponse,
 						writeOptions: {
 							mode: "replace",
@@ -481,14 +493,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 				const responsePageToken = String(lastResponse?.page_token || "")
 				if (!responsePageToken || visitedPageTokens.has(responsePageToken)) {
-					return { didPullSucceed: false, pulledItems: aggregatedPulledItems }
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 				}
 				nextPageToken = responsePageToken
 			}
 
 			return {
 				didPullSucceed: false,
-				pulledItems: aggregatedPulledItems,
+				pulledItems: [],
+				statusItems: [],
 				response: lastResponse,
 			}
 		},
@@ -520,7 +533,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				console.log("没有更多消息")
 				if (selectedTopicRef.current?.chat_topic_id === chat_topic_id)
 					setIsSelectedTopicMessagesReady(true)
-				return { didPullSucceed: true, pulledItems: [] }
+				return { didPullSucceed: true, pulledItems: [], statusItems: [] }
 			}
 			const pullResult =
 				writeIntent === "authoritative_tail"
@@ -548,23 +561,25 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (!authoritativeTailResult.writeOptions) {
 					return { ...pullResult, didPullSucceed: false }
 				}
-				superMagicStore.initializeMessages(
-					chat_topic_id,
-					authoritativeTailResult.pulledItems,
-					authoritativeTailResult.writeOptions,
-				)
+				superMagicStore.reconcileAuthoritativeMessages(chat_topic_id, {
+					statusItems: authoritativeTailResult.statusItems,
+					membershipItems: authoritativeTailResult.pulledItems,
+					writeOptions: authoritativeTailResult.writeOptions,
+				})
 			} else if (writeIntent === "incremental") {
 				// 增量模式保留现有 messages/buffer 状态，只把最新节点逐条灌进 store，
 				// 同时先合并响应中已有身份的外层状态；有限窗口的缺席不具备删除语义。
 				const orderedItems = pullResult.pulledItems.slice().reverse()
-				superMagicStore.reconcileHttpMessageStatuses(chat_topic_id, orderedItems)
-				orderedItems.forEach((item: any) => {
-					superMagicStore.enqueueMessage(chat_topic_id, item)
+				superMagicStore.reconcileAuthoritativeMessages(chat_topic_id, {
+					statusItems: pullResult.statusItems || pullResult.pulledItems,
+					membershipItems: orderedItems,
+					writeOptions: { mode: "incremental" },
 				})
 			} else {
-				superMagicStore.initializeMessages(chat_topic_id, pullResult.pulledItems, {
-					mode: writeIntent,
-					syncGeneration,
+				superMagicStore.reconcileAuthoritativeMessages(chat_topic_id, {
+					statusItems: pullResult.statusItems || pullResult.pulledItems,
+					membershipItems: pullResult.pulledItems,
+					writeOptions: { mode: writeIntent, syncGeneration },
 				})
 			}
 			if (allowRemoteRevokedAnchorCleanup) {
@@ -581,7 +596,9 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							: undefined
 				reconcileActiveRevokedAnchorFromHttp(
 					chat_topic_id,
-					pullResult.pulledItems,
+					writeIntent === "authoritative_tail"
+						? (pullResult as AuthoritativeTailPullResult).statusItems
+						: pullResult.statusItems || pullResult.pulledItems,
 					cleanupWriteOptions,
 				)
 			}
@@ -614,6 +631,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			limit?: number
 		}): Promise<PullMessageResult> => {
 			const pulledItems: any[] = []
+			const statusItems: any[] = []
 			const visitedPageTokens = new Set<string>()
 			let pageToken = ""
 			let latestResponse: any
@@ -631,28 +649,31 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (!pageResult.didPullSucceed) return pageResult
 
 				pulledItems.push(...pageResult.pulledItems)
+				statusItems.push(...(pageResult.statusItems || pageResult.pulledItems))
 				latestResponse = pageResult.response
 				if (!latestResponse?.has_more) break
 
 				const nextPageToken = String(latestResponse?.page_token || "")
 				if (!nextPageToken || visitedPageTokens.has(nextPageToken)) {
-					return { didPullSucceed: false, pulledItems: [] }
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 				}
 				visitedPageTokens.add(nextPageToken)
 				pageToken = nextPageToken
 			}
 
-			superMagicStore.initializeMessages(topicId, pulledItems, {
-				mode: "replace",
-				syncGeneration,
+			superMagicStore.reconcileAuthoritativeMessages(topicId, {
+				statusItems: dedupePulledItemsByAppMessageId(statusItems),
+				membershipItems: pulledItems,
+				writeOptions: { mode: "replace", syncGeneration },
 			})
-			reconcileActiveRevokedAnchorFromHttp(topicId, pulledItems, {
+			reconcileActiveRevokedAnchorFromHttp(topicId, statusItems, {
 				mode: "replace",
 				preserveStreamSuperMessageIds: [],
 			})
 			return {
 				didPullSucceed: true,
 				pulledItems,
+				statusItems,
 				response: latestResponse,
 			}
 		},
@@ -780,6 +801,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(topicId)
 		try {
 			let aggregatedPulledItems: any[] = []
+			let aggregatedStatusItems: any[] = []
 			let isAuthoritativeQueryComplete = false
 			const firstPageResult = await fetchMessagesPage({
 				conversation_id: currentSelectedTopic.chat_conversation_id,
@@ -789,13 +811,16 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				limit: FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT,
 				updatePageToken: true,
 			})
-			aggregatedPulledItems = dedupePulledItemsByAppMessageId([
-				...firstPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
-			])
 			if (!firstPageResult.didPullSucceed) {
 				completeFailedSync()
 				return
 			}
+			aggregatedStatusItems = dedupePulledItemsByAppMessageId([
+				...(firstPageResult.statusItems || firstPageResult.pulledItems),
+			])
+			aggregatedPulledItems = dedupePulledItemsByAppMessageId([
+				...firstPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
+			])
 
 			const didReachAnchorOnFirstPage = Boolean(
 				recoveryAnchorAppMessageId &&
@@ -825,6 +850,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					completeFailedSync()
 					return
 				}
+				aggregatedStatusItems = dedupePulledItemsByAppMessageId([
+					...aggregatedStatusItems,
+					...(secondPageResult.statusItems || secondPageResult.pulledItems),
+				])
 				aggregatedPulledItems = dedupePulledItemsByAppMessageId([
 					...aggregatedPulledItems,
 					...secondPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
@@ -846,13 +875,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 			// 前台恢复是“权威快照重建”场景，因此把两段分页结果先聚合后一次性写回。
 			// 旧 generation 的 payload 仍进入 Store 做消息版本裁决，但无权替换 membership。
-			superMagicStore.initializeMessages(topicId, aggregatedPulledItems, {
-				mode: "replace",
-				syncGeneration,
+			superMagicStore.reconcileAuthoritativeMessages(topicId, {
+				statusItems: aggregatedStatusItems,
+				membershipItems: aggregatedPulledItems,
+				writeOptions: { mode: "replace", syncGeneration },
 			})
 			reconcileActiveRevokedAnchorFromHttp(
 				topicId,
-				aggregatedPulledItems,
+				aggregatedStatusItems,
 				isAuthoritativeQueryComplete
 					? { mode: "replace", preserveStreamSuperMessageIds: [] }
 					: undefined,

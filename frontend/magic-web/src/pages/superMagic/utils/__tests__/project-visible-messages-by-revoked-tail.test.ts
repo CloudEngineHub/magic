@@ -5,6 +5,7 @@ import { projectVisibleMessagesByRevokedTail } from "../project-visible-messages
 interface MessageFixture {
 	id: string
 	status?: string
+	imStatus?: string
 	role?: "user" | "assistant" | "tool"
 	correlation_id?: string
 	parent_correlation_id?: string
@@ -138,6 +139,18 @@ describe("projectVisibleMessagesByRevokedTail", () => {
 			"b-assistant",
 			"b-tool-1",
 			"b-tool-2",
+		])
+	})
+
+	it("[STATUS-UI-01] UI 撤回投影只读取 Canonical imStatus，不把兼容 status 当执行状态。", () => {
+		const messages: MessageFixture[] = [
+			{ id: "revoked-user", role: "user", status: "read", imStatus: MessageStatus.REVOKED },
+			{ id: "revoked-assistant", role: "assistant", status: "read", imStatus: "read" },
+			{ id: "active-user", role: "user", status: "read", imStatus: "read" },
+		]
+
+		expect(projectVisibleMessagesByRevokedTail(messages).map((message) => message.id)).toEqual([
+			"active-user",
 		])
 	})
 })

@@ -5,16 +5,30 @@ import { withAssistantCard } from "../AssistantCard"
 
 const testState = vi.hoisted(() => {
 	const messages = [
-		{ app_message_id: "user-1", role: "user", seq_id: "1", debug: { stale: true } },
+		{
+			app_message_id: "user-1",
+			super_message_id: "user-1",
+			role: "user",
+			seq_id: "1",
+			debug: { stale: true },
+		},
 		{
 			app_message_id: "assistant-1",
+			super_message_id: "assistant-1",
 			role: "assistant",
 			seq_id: "2",
 			debug: { stale: true },
 		},
-		{ app_message_id: "tool-1", role: "tool", seq_id: "3", debug: { stale: true } },
+		{
+			app_message_id: "tool-1",
+			super_message_id: "tool-1",
+			role: "tool",
+			seq_id: "3",
+			debug: { stale: true },
+		},
 		{
 			app_message_id: "assistant-2",
+			super_message_id: "assistant-2",
 			role: "assistant",
 			seq_id: "4",
 			debug: { stale: true },
@@ -161,7 +175,13 @@ describe("AssistantCard", () => {
 	it("reports the complete clicked conversation round through the global logger", () => {
 		render(
 			<AssistantCard
-				node={{ app_message_id: "assistant-2" }}
+				node={{
+					app_message_id: "assistant-2",
+					super_message_id: "assistant-2",
+					status: "read",
+					imStatus: "read",
+					superStatus: "finished",
+				}}
 				selectedTopic={{ id: "topic-1", chat_topic_id: "chat-topic-1" }}
 			/>,
 		)
@@ -169,7 +189,7 @@ describe("AssistantCard", () => {
 		expect(screen.getByTestId("assistant-card-dropdown-trigger")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("assistant-round-log-report-menu-item"))
 
-		expect(testState.report).toHaveBeenCalledWith("用户主动上报本轮对话日志", {
+		expect(testState.report).toHaveBeenCalledWith("messages", {
 			topic_id: "topic-1",
 			chat_topic_id: "chat-topic-1",
 			message_id: "assistant-2",

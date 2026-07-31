@@ -25,11 +25,38 @@ const mockState = vi.hoisted(() => ({
 		completeTopicSync: vi.fn(() => true),
 		cancelTopicSync: vi.fn(),
 		getLatestMessageSeqId: vi.fn(() => "assistant-seq-1"),
-		initializeMessages: vi.fn((topicId: string, items: unknown[]) => {
-			mockState.superMagicStoreMock.messages.set(topicId, items)
-		}),
+		initializeMessages: vi.fn(
+			(topicId: string, items: unknown[], options?: Record<string, unknown>) => {
+				mockState.superMagicStoreMock.messages.set(topicId, items)
+				void options
+			},
+		),
 		reconcileHttpMessageStatuses: vi.fn(),
 		enqueueMessage: vi.fn(),
+		reconcileAuthoritativeMessages: vi.fn(
+			(
+				topicId: string,
+				input: {
+					statusItems: unknown[]
+					membershipItems: unknown[]
+					writeOptions: { mode?: string; syncGeneration?: number }
+				},
+			) => {
+				if (input.writeOptions.mode === "incremental") {
+					mockState.superMagicStoreMock.reconcileHttpMessageStatuses(
+						topicId,
+						input.statusItems,
+					)
+					input.membershipItems.forEach((item) =>
+						mockState.superMagicStoreMock.enqueueMessage(topicId, item),
+					)
+					return
+				}
+				mockState.superMagicStoreMock.initializeMessages(topicId, input.membershipItems, {
+					...input.writeOptions,
+				})
+			},
+		),
 		setActiveTopicId: vi.fn(),
 		isTopicStreaming: vi.fn(() => false),
 	},

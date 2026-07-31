@@ -77,7 +77,7 @@ export function resolveTopicConversationLoadingState<TStatus = unknown>({
 	}
 
 	// An active revoked tail is an edit state, not an assistant generation state.
-	if (lastMessage?.status === MessageStatus.REVOKED) {
+	if ((lastMessage?.imStatus ?? lastMessage?.status) === MessageStatus.REVOKED) {
 		return {
 			isLoading: false,
 			lastMessage,

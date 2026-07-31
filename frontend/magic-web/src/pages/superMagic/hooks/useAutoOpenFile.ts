@@ -49,8 +49,7 @@ function getPrevMessageFilePathAttachments(
 
 	const prevMessage = topicMessages[detailIndex - 1]
 	const prevNode = superMagicStore.getMessageNode(prevMessage.super_message_id) as
-		| Record<string, unknown>
-		| undefined
+		Record<string, unknown> | undefined
 	const prevContent = prevNode && typeof prevNode?.content === "string" ? prevNode.content : ""
 
 	return buildFilePathAttachments(prevContent)
@@ -202,7 +201,7 @@ export function useAutoOpenFile() {
 
 			const lastDetailMessageWithAttachments = topicMessages.findLast((m) => {
 				const node = superMagicStore.getMessageNode(m?.super_message_id)
-				return filterMessagesWithAttachments(node) && node?.attachments?.length > 0
+				return filterMessagesWithAttachments(node, m) && node?.attachments?.length > 0
 			})
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
 				lastDetailMessageWithAttachments?.super_message_id,

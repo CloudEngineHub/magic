@@ -448,7 +448,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					app_message_id: message.appMessageId,
 				})
 				handleArrivedTopicStatusChange({
-					nextStatus: message.status as TaskStatus | undefined,
+					nextStatus: message.superStatus as TaskStatus | undefined,
 					topicId: selectedTopic.id,
 					lastReadAt: readProgressPayload.lastReadAt,
 					lastReadMessageId: readProgressPayload.lastReadMessageId,
@@ -476,7 +476,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 			const lastDetailMessage = topicMessages.findLast((message) => {
 				const node = superMagicStore.getMessageNode(message?.super_message_id)
-				return filterClickableMessageWithoutRevoked(node)
+				return filterClickableMessageWithoutRevoked(node, message)
 			})
 
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
@@ -490,7 +490,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						}
 				  }
 				| undefined
-			if (filterClickableMessageWithoutRevoked(lastDetailMessageNode)) {
+			if (filterClickableMessageWithoutRevoked(lastDetailMessageNode, lastDetailMessage)) {
 				updateDetail({
 					latestMessageDetail: lastDetailMessageNode?.tool?.detail,
 					isLoading,
@@ -501,7 +501,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					checkAndOpenFileByMessages({
 						lastMessageNode,
 						lastDetailMessageNode,
-						lastDetailMessage,
+						lastDetailMessage: lastDetailMessage?.app_message_id
+							? {
+									...lastDetailMessage,
+									app_message_id: lastDetailMessage.app_message_id,
+								}
+							: undefined,
 						hasStatusChanged,
 						activeFileId,
 						getActiveFileId: () => activeFileIdRef.current,

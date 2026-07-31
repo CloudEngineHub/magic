@@ -2329,3 +2329,33 @@ corepack pnpm exec vitest run \
 - 最终快速覆盖时一次性渲染超大参数导致 UI 卡顿。
 
 - 工具调用没有响应，下一条消息到来后，工具直接永久 loading
+
+## IM Message / SuperMessage 双状态域契约（2026-07-31）
+
+本节是当前撤回、恢复、执行状态和事件编排的最高优先级决策，取代此前把外层 IM `status` 与内层 SuperMessage `status` 合并为单一 canonical 状态的实现假设。
+
+| 决策 | 当前有效规则 |
+| --- | --- |
+| N-ST-01 | IM 状态与 SuperMessage 状态互不覆盖，只在 UI 投影层组合。Canonical `MessageItem` 必须保留 `imStatus` 与 `superStatus`；旧 `status` 仅兼容表示 IM 状态。 |
+| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态负责 Agent 执行与流生命周期。 |
+| N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。 |
+| N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。 |
+| N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。 |
+| N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。 |
+| N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。 |
+| N-ST-08 | Assistant 使用节点执行状态；Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。 |
+
+实施约束：
+
+- `message.committed` 同时携带 `imStatus`、`superStatus`，并保留 `status=imStatus` 兼容别名。
+- `message.completed` 只由 Assistant 的 `superStatus` 为 `finished/error/suspended` 触发；IM `revoked` 只发布 `message.committed` 和必要的 stream ended，不伪造执行完成。
+- 所有撤回投影、分享许可和分支选择读取 `imStatus ?? status`；任务状态消费者读取 `superStatus`，Tool 展示读取 `toolResponseMap`。
+
+#### 决策实施验证（2026-07-31）
+
+- N-ST 聚焦状态、HTTP、事件、分享和 selector 套件：`8 files / 133 tests passed`。
+- 相关 MessageList/Topic loading/分享入口 UI 回归：`4 files / 13 tests passed`。
+- Store 全目录与 event emitter：`18 files / 541 tests`，`533 passed / 8 RED`。8 个 RED 仍全部属于既有多 choice 协议实施缺口（`chunk-transport-ordering` 7 个、`persistence-replay` 1 个），不属于 IM/SuperMessage 双状态改动。
+- 新增/更新用例覆盖：IM 与 SuperMessage 状态转换、普通 HTTP 禁止隐式恢复、显式恢复授权一次性消费、同 SuperMessage 不同 app message 的状态归属、committed/completed 事件边界、分享转换、撤回 selector、工具/附件点击过滤和 AssistantCard 双状态 fixture。
+- 本节更新的是状态域行为覆盖矩阵，不以全仓历史覆盖率百分比作为验收依据；本次相关 ESLint 为 `0 errors`，仅保留既有 warnings。
+- 同一 `super_message_id` 的不同 `app_message_id`/`correlation_id` 按真实 `seq_id` 归并；同一 `app_message_id` 的 correlation 变化不得再被当作拒绝性 identity conflict。

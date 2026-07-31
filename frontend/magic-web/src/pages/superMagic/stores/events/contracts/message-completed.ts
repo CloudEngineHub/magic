@@ -1,7 +1,7 @@
 import type { SuperMagicEventMessageRef, SuperMagicEventMeta } from "../common"
 
 /** Assistant 消息可对外观察的终态。 */
-export type MessageCompletedStatus = "finished" | "error" | "suspended" | "revoked"
+export type MessageCompletedStatus = "finished" | "error" | "suspended"
 
 /** Assistant canonical 消息进入新的终态后发布的事件契约。 */
 export interface MessageCompletedEvent {

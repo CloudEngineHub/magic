@@ -28,6 +28,8 @@ export function transformRawMessage(message: RawSuperMagicMessageSequence): Mess
 	const appMessageId = String(imMessage?.app_message_id || "")
 	const superMessageId =
 		msg?.role === "user" ? appMessageId : String(msg?.super_message_id || appMessageId)
+	const imStatus = String(imMessage?.status || "")
+	const superStatus = msg?.role === "user" ? undefined : String(msg?.status || "") || undefined
 	if (appMessageId) msg.app_message_id = appMessageId
 	if (superMessageId) msg.super_message_id = superMessageId
 	return {
@@ -38,7 +40,11 @@ export function transformRawMessage(message: RawSuperMagicMessageSequence): Mess
 		app_message_id: appMessageId,
 		super_message_id: superMessageId,
 		send_time: imMessage?.send_time as number,
-		status: imMessage?.status as string,
+		// Keep `status` as a compatibility alias for the IM envelope only. The node
+		// execution state is carried independently as `superStatus`.
+		status: imStatus,
+		imStatus,
+		superStatus,
 		event: msg?.event as string,
 		parent_correlation_id: msg?.parent_correlation_id || "",
 		correlation_id: (msg?.correlation_id || msg?.tool?.id) as string,
@@ -117,7 +123,8 @@ export function shouldNotifyMessageUpdate({
 
 	return (
 		previousMessage.seq_id !== nextMessage.seq_id ||
-		previousMessage.status !== nextMessage.status ||
+		previousMessage.imStatus !== nextMessage.imStatus ||
+		previousMessage.superStatus !== nextMessage.superStatus ||
 		previousMessage.event !== nextMessage.event ||
 		previousMessage.role !== nextMessage.role ||
 		previousNode?.status !== nextNode?.status ||

@@ -246,19 +246,26 @@ export function withUserNode<
 
 		/** 是否显示撤销按钮
 		 * 显示条件：
-		 * 1. 消息未被撤销 (node?.status !== MessageStatus.REVOKED)
+		 * 1. 消息未被撤销 (IM imStatus !== MessageStatus.REVOKED)
 		 * 2. 允许撤回 (allowRevoke，由 MessageListProvider 设置)
 		 * 3. 消息没有引用其他消息 (isEmpty(node?.refer_message_id))
 		 */
 		const showUndo = useMemo(() => {
 			return (
 				!optimisticStatus &&
-				node?.status !== MessageStatus.REVOKED &&
+				(node?.imStatus ?? node?.status) !== MessageStatus.REVOKED &&
 				allowRevoke &&
 				!exportModeActive &&
 				isEmpty(node?.refer_message_id)
 			)
-		}, [allowRevoke, exportModeActive, node?.refer_message_id, node?.status, optimisticStatus])
+		}, [
+			allowRevoke,
+			exportModeActive,
+			node?.refer_message_id,
+			node?.imStatus,
+			node?.status,
+			optimisticStatus,
+		])
 
 		/** 获取消息附件列表 - 从 mentions 中过滤 project_file 和 upload_file 类型 */
 		const attachments = useMemo(() => {

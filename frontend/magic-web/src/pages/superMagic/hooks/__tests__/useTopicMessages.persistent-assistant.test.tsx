@@ -6,6 +6,7 @@ import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
+import { projectRevokedMessageBranches } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
 import {
 	ConversationMessageStatus,
 	ConversationMessageType,
@@ -357,8 +358,7 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		expect(
 			(
 				superMagicStore.buffer.get(runningTopic.chat_topic_id) as
-					| { isProcessing?: boolean }
-					| undefined
+					{ isProcessing?: boolean } | undefined
 			)?.isProcessing ?? false,
 		).toBe(false)
 	})
@@ -539,6 +539,66 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		).toBeUndefined()
 	})
 
+	it("HTTP tail 对账必须更新公共锚点之前的 User 撤回状态。", async () => {
+		const topic = createTopic("authoritative-tail-status-before-anchor", TaskStatus.FINISHED)
+		await renderInitializedTopic(topic)
+		const prefix = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "stable-prefix",
+			seqId: "100",
+		})
+		const revokedUser = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-c-user",
+			seqId: "200",
+			outerStatus: ConversationMessageStatus.Read,
+		})
+		const assistant = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-d-assistant",
+			correlationId: "message-d-correlation",
+			seqId: "201",
+			content: "message D assistant",
+		})
+		superMagicStore.initializeMessages(topic.chat_topic_id, [prefix, revokedUser, assistant])
+
+		const httpRevokedUser = createUserEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-c-user",
+			seqId: "200",
+			outerStatus: ConversationMessageStatus.Revoked,
+		})
+		const httpAssistant = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "message-d-assistant",
+			correlationId: "message-d-correlation",
+			seqId: "201",
+			content: "message D assistant",
+			outerStatus: ConversationMessageStatus.Read,
+		})
+		mockState.getMessagesByConversationId.mockResolvedValueOnce({
+			items: [httpAssistant, httpRevokedUser, prefix],
+			has_more: true,
+			page_token: "older-page",
+		})
+
+		await triggerPersistentMessageEvent(topic)
+
+		const canonicalMessages = superMagicStore.messages.get(topic.chat_topic_id) ?? []
+		const canonicalUser = canonicalMessages.find(
+			(message) => message.app_message_id === "message-c-user",
+		)
+		const projection = projectRevokedMessageBranches(canonicalMessages)
+		expect(canonicalUser).toMatchObject({
+			imStatus: ConversationMessageStatus.Revoked,
+			status: ConversationMessageStatus.Revoked,
+		})
+		expect(projection.revokedBranchMessages.map((message) => message.app_message_id)).toEqual([
+			"message-c-user",
+			"message-d-assistant",
+		])
+	})
+
 	it("权威尾部请求期间新产生的流保留，但请求开始前缺席的旧分支被移除。", async () => {
 		const topic = createTopic("authoritative-tail-concurrent-stream")
 		await renderInitializedTopic(topic)
@@ -562,8 +622,6 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		)
 		const response = createDeferred<ReturnType<typeof createResponse>>()
 		mockState.getMessagesByConversationId.mockImplementationOnce(() => response.promise)
-		const initializeSpy = vi.spyOn(superMagicStore, "initializeMessages")
-
 		const handler = mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")
 		if (!handler) throw new Error("persistent message handler was not registered")
 		act(() => {
@@ -602,14 +660,14 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 			await flushPromises()
 		})
 
-		expect(initializeSpy).toHaveBeenLastCalledWith(
-			topic.chat_topic_id,
-			[messageB, prefix],
-			expect.objectContaining({
-				mode: "replace_tail",
-				preserveStreamSuperMessageIds: [toSuperMessageId("new-stream")],
-			}),
-		)
+		// The HTTP tail is committed through the coordinated status/membership entry;
+		// assert its observable membership result instead of coupling the test to the
+		// internal Store method used to apply that atomic write.
+		expect(
+			(superMagicStore.messages.get(topic.chat_topic_id) || []).map(
+				(message) => message.app_message_id,
+			),
+		).toEqual(["stable-prefix", "super-new-stream", "message-b"])
 		expect(
 			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("old-stream")),
 		).toBeUndefined()
@@ -716,13 +774,31 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 				}),
 				expect.objectContaining({
 					app_message_id: "assistant-http-status-target",
-					status: ConversationMessageStatus.Read,
+					status: ConversationMessageStatus.Revoked,
+					imStatus: ConversationMessageStatus.Revoked,
+					superStatus: "finished",
 				}),
 			]),
 		)
 		expect(getNode(toSuperMessageId(targetCorrelationId))?.content).toBe(
 			"target canonical content",
 		)
+
+		superMagicStore.authorizeImStatusRestore(topic.chat_topic_id)
+		mockState.getMessagesByConversationId.mockResolvedValueOnce(
+			createResponse([targetRestored]),
+		)
+		await triggerPersistentMessageEvent(topic)
+
+		expect(
+			(superMagicStore.messages.get(topic.chat_topic_id) ?? []).find(
+				(message) => message.app_message_id === "assistant-http-status-target",
+			),
+		).toMatchObject({
+			status: ConversationMessageStatus.Read,
+			imStatus: ConversationMessageStatus.Read,
+			superStatus: "finished",
+		})
 	})
 })
 
@@ -894,10 +970,12 @@ function createUserEnvelope({
 	topicId,
 	appMessageId,
 	seqId,
+	outerStatus = ConversationMessageStatus.Read,
 }: {
 	topicId: string
 	appMessageId: string
 	seqId: string
+	outerStatus?: ConversationMessageStatus
 }): RawSuperMagicMessageEnvelope {
 	const node: SuperMagicNode = {
 		role: "user",
@@ -910,7 +988,7 @@ function createUserEnvelope({
 		status: "finished",
 		send_timestamp: Number(seqId),
 	}
-	return createNodeEnvelope({ topicId, appMessageId, seqId, node })
+	return createNodeEnvelope({ topicId, appMessageId, seqId, node, outerStatus })
 }
 
 function createToolEnvelope({
@@ -950,11 +1028,13 @@ function createNodeEnvelope({
 	appMessageId,
 	seqId,
 	node,
+	outerStatus = ConversationMessageStatus.Read,
 }: {
 	topicId: string
 	appMessageId: string
 	seqId: string
 	node: SuperMagicNode
+	outerStatus?: ConversationMessageStatus
 }): RawSuperMagicMessageEnvelope {
 	const envelope = {
 		type: SeqRecordType.seq,
@@ -972,7 +1052,7 @@ function createNodeEnvelope({
 				sender_id:
 					node.role === "user" ? "user-hook-integration" : "assistant-hook-integration",
 				send_time: Number(seqId),
-				status: ConversationMessageStatus.Read,
+				status: outerStatus,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,

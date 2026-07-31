@@ -24,11 +24,21 @@ export interface PendingUserMessageEnvelope {
 
 export interface InitializeMessagesOptions {
 	mode?: "replace" | "merge" | "replace_tail"
+	/** HTTP 返回的完整 IM 状态观察集；可包含不参与本次 membership 替换的消息。 */
+	statusMessages?: RawSuperMagicMessageEnvelope[]
 	/** `replace_tail` 保留该 SuperMessage 及其之前的本地前缀，并权威替换其后的 membership。 */
 	anchorSuperMessageId?: string
 	/** HTTP 请求期间新产生的流不属于请求开始时的权威覆盖范围，提交时必须保留。 */
 	preserveStreamSuperMessageIds?: string[]
 	syncGeneration?: number
+}
+
+export interface ReconcileAuthoritativeMessagesInput {
+	/** 成功 HTTP 查询实际返回的全部 envelope，按 app_message_id 归属 IM 状态。 */
+	statusItems: RawSuperMagicMessageEnvelope[]
+	/** 本次 HTTP 写入要采用的 membership 快照；允许按 SuperMessage 锚点截断。 */
+	membershipItems: RawSuperMagicMessageEnvelope[]
+	writeOptions: InitializeMessagesOptions | { mode: "incremental" }
 }
 
 export interface ServerMessagesConfirmedPayload {
@@ -87,7 +97,12 @@ export interface MessageItem {
 	/** 唯一id */
 	seq_id: string
 	/** IM 的消息状态（消息是否已读） */
+	/** @deprecated 兼容字段；仅表示 IM 状态，不能作为 SuperMessage 执行状态使用。 */
 	status: string
+	/** IM message envelope 的状态；负责撤回/可见性语义。 */
+	imStatus: string
+	/** SuperMessage node 的状态；Assistant/Tool 执行与流生命周期语义。 */
+	superStatus?: string
 	/** IM 的话题id */
 	topic_id: string
 	/** 消息类型 */

@@ -540,6 +540,11 @@ const MessageList = observer(
 			try {
 				setIsCancelRevokedLoading(true)
 				await SuperMagicApi.cancelUndoMessage({ topic_id: selectedTopic.id })
+				// The server action is the only explicit authorization for revoked -> read;
+				// the following HTTP refresh consumes this one-shot Store permission.
+				if (selectedTopic.chat_topic_id) {
+					superMagicStore.authorizeImStatusRestore(selectedTopic.chat_topic_id)
+				}
 				if (selectedTopic.chat_topic_id) {
 					optimisticMessageStore.clearActiveRevokedAnchor(selectedTopic.chat_topic_id)
 					optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(

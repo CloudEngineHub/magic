@@ -25,7 +25,7 @@ export function messagesConverter(
 
 		// 快速跳过：已撤回消息 或 before_llm_request 事件
 		if (
-			(isRevoked && item.status === MessageStatus.REVOKED) ||
+			(isRevoked && (item.imStatus ?? item.status) === MessageStatus.REVOKED) ||
 			item.event === "before_llm_request"
 		) {
 			continue

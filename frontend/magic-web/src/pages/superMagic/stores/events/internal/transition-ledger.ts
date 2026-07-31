@@ -5,6 +5,8 @@ interface StreamTransitionState {
 
 interface MessageTransitionSnapshot {
 	[key: string]: unknown
+	imStatus?: string
+	superStatus?: string
 	status?: string
 }
 
@@ -76,7 +78,7 @@ export class SuperMagicEventTransitionLedger {
 		return {
 			operation: previous ? ("update" as const) : ("insert" as const),
 			changedFields,
-			previousStatus: previous?.status,
+			previousStatus: previous?.superStatus,
 		}
 	}
 

@@ -46,6 +46,7 @@ export type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
 export type {
@@ -109,6 +110,7 @@ import type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
 
@@ -234,6 +236,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private toolCallOwners = new Map<string, Map<string, string>>()
 	/** 分享消息会被整批、逐条和旧前缀重复回放；该 sidecar 只记录单 topic 的顺序与待结算工具。 */
 	private sharedReplayStates = new Map<string, SharedReplayState>()
+	/** 取消撤回后的单次 HTTP 恢复授权；普通快照不得自行把 revoked 改回 read。 */
+	private imStatusRestoreAuthorizations = new Set<string>()
 	/** 持久化是诊断旁路；按 Store 实例隔离，避免不同会话共享未 flush 的 chunk。 */
 	private persistenceQueues = new Map<string, PersistenceQueue>()
 	/** 单 Topic 单 timer 下的轮转游标，避免多个 SuperMessage 流互相饿死或递归 ping-pong。 */
@@ -287,6 +291,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| "latestToolResponseSeqIds"
 			| "toolCallOwners"
 			| "sharedReplayStates"
+			| "imStatusRestoreAuthorizations"
 			| "persistenceQueues"
 			| "streamRenderStarted"
 			| "streamCorrelationIds"
@@ -306,6 +311,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				latestToolResponseSeqIds: false,
 				toolCallOwners: false,
 				sharedReplayStates: false,
+				imStatusRestoreAuthorizations: false,
 				persistenceQueues: false,
 				streamRenderStarted: false,
 				streamCorrelationIds: false,
@@ -349,9 +355,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		appMessageId = message.app_message_id,
 	): MessageItem {
 		const superMessageId = this.normalizeAssistantSuperMessageId(messageNode, appMessageId)
-		if (!superMessageId) return message
+		const normalizedMessage = this.normalizeMessageStatuses(message, messageNode)
+		if (!superMessageId) return normalizedMessage
 		return {
-			...message,
+			...normalizedMessage,
 			super_message_id: superMessageId,
 			debug: messageNode as RawSuperMagicMessageNode,
 			content: messageNode?.content,
@@ -360,10 +367,41 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
+	/**
+	 * IM envelope 与 SuperMessage node 是两个独立状态域。`status` 只保留为
+	 * 旧消费者兼容别名，任何执行/流生命周期逻辑必须读取 `superStatus` 或 node。
+	 */
+	private normalizeMessageStatuses(
+		message: MessageItem,
+		messageNode?: RawSuperMagicMessageNode,
+	): MessageItem {
+		const imStatus = String(message.imStatus ?? message.status ?? "")
+		const superStatus =
+			message.role === "user"
+				? undefined
+				: String(message.superStatus ?? messageNode?.status ?? "") || undefined
+		return {
+			...message,
+			status: imStatus,
+			imStatus,
+			superStatus,
+		}
+	}
+
+	/** 由明确的取消撤回动作授权下一次 HTTP 写入恢复 IM 状态。 */
+	authorizeImStatusRestore(topicId: string) {
+		if (topicId) this.imStatusRestoreAuthorizations.add(topicId)
+	}
+
+	private consumeImStatusRestoreAuthorization(topicId: string, hasIncomingMessages: boolean) {
+		if (!hasIncomingMessages || !this.imStatusRestoreAuthorizations.has(topicId)) return false
+		this.imStatusRestoreAuthorizations.delete(topicId)
+		return true
+	}
+
 	private getAssistantMessageNode(_topicId: string, superMessageId: string) {
 		const messageNode = this.messageMap.get(superMessageId) as
-			| RawSuperMagicMessageNode
-			| undefined
+			RawSuperMagicMessageNode | undefined
 		return messageNode?.role === "assistant" ? messageNode : undefined
 	}
 
@@ -623,10 +661,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const correlationId =
 			String(message.correlation_id || messageNode?.correlation_id || "") || undefined
 		const role = message.role
-		const canonicalStatus =
-			message.status === "revoked"
-				? "revoked"
-				: String(messageNode?.status || message.status || "")
+		const imStatus = String(message.imStatus ?? message.status ?? "")
+		const superStatus =
+			role === "user"
+				? undefined
+				: String(message.superStatus ?? messageNode?.status ?? "") || undefined
 		return {
 			logicalMessageId:
 				role === "assistant"
@@ -637,7 +676,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			seqId: String(message.seq_id || "") || undefined,
 			role,
 			type: String(message.type || ""),
-			status: canonicalStatus,
+			imStatus,
+			superStatus,
+			status: imStatus,
 			sendTime: Number(message.send_time || 0),
 		}
 	}
@@ -675,7 +716,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 		this.publishTaskCompleted(topicId, message, messageNode, source)
 
-		const terminalStatus = this.resolveCompletedStatus(messageRef.status)
+		const terminalStatus = this.resolveCompletedStatus(messageRef.superStatus)
 		if (messageRef.role !== "assistant" || !terminalStatus) return
 		const completion = this.eventTransitions.recordCompleted(messageKey, terminalStatus)
 		if (!completion) return
@@ -700,6 +741,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			seqId: messageRef.seqId,
 			role: messageRef.role,
 			type: messageRef.type,
+			imStatus: messageRef.imStatus,
+			superStatus: messageRef.superStatus,
 			status: messageRef.status,
 			sendTime: messageRef.sendTime,
 			event: messageNode?.event,
@@ -717,19 +760,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageKey,
 			this.getMessageTransitionSnapshot(messageRef, messageNode),
 		)
-		const terminalStatus = this.resolveCompletedStatus(messageRef.status)
+		const terminalStatus = this.resolveCompletedStatus(messageRef.superStatus)
 		if (messageRef.role === "assistant" && terminalStatus) {
 			this.eventTransitions.recordCompleted(messageKey, terminalStatus)
 		}
 	}
 
-	private resolveCompletedStatus(status: string): MessageCompletedStatus | undefined {
-		if (
-			status === "finished" ||
-			status === "error" ||
-			status === "suspended" ||
-			status === "revoked"
-		) {
+	private resolveCompletedStatus(status?: string): MessageCompletedStatus | undefined {
+		if (status === "finished" || status === "error" || status === "suspended") {
 			return status
 		}
 		return undefined
@@ -995,8 +1033,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private getTopicBufferedAssistantCorrelationIds(topicId: string) {
 		const buffer = this.buffer.get(topicId) as
-			| { messages: RawSuperMagicMessageEnvelope[] }
-			| undefined
+			{ messages: RawSuperMagicMessageEnvelope[] } | undefined
 		if (!buffer) return []
 		return buffer.messages.flatMap((envelope) => {
 			const imMessage = envelope?.seq?.message
@@ -1492,7 +1529,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}, undefined)
 	}
 
-	private upsertAuthoritativeMessage(messages: MessageItem[], incoming: MessageItem) {
+	private upsertAuthoritativeMessage(
+		messages: MessageItem[],
+		incoming: MessageItem,
+		options?: { allowImStatusRestore?: boolean },
+	) {
 		const existingIndex = messages.findIndex(
 			(message) =>
 				message.app_message_id === incoming.app_message_id ||
@@ -1503,10 +1544,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						this.getMessageSuperMessageId(incoming)),
 		)
 		if (existingIndex < 0) {
-			messages.push(incoming)
+			messages.push(this.normalizeMessageStatuses(incoming, incoming.debug))
 			return
 		}
-		messages[existingIndex] = incoming
+		messages[existingIndex] = this.mergeAuthoritativeMessageCard(
+			messages[existingIndex],
+			incoming,
+			options?.allowImStatusRestore === true,
+		)
 	}
 
 	/** Final/HTTP revisions share one Assistant card by SuperMessage ID; retain the highest real seq. */
@@ -1528,18 +1573,91 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 			const current = deduped[existingIndex]
 			if (compareMessageSeqId(incoming.seq_id, current.seq_id) >= 0) {
-				deduped[existingIndex] = incoming
+				deduped[existingIndex] = this.mergeAuthoritativeMessageCard(current, incoming)
 			}
 		})
 		return deduped
 	}
 
-	private mergeAuthoritativeMessageStatus(current: MessageItem, incoming: MessageItem) {
+	private mergeAuthoritativeMessageCard(
+		current: MessageItem,
+		incoming: MessageItem,
+		allowImStatusRestore = false,
+	) {
+		const normalizedIncoming = this.normalizeMessageStatuses(incoming, incoming.debug)
+		const currentImStatus = String(current.imStatus ?? current.status ?? "")
+		const incomingImStatus = normalizedIncoming.imStatus
+		const sameImMessage =
+			Boolean(current.app_message_id) &&
+			Boolean(normalizedIncoming.app_message_id) &&
+			current.app_message_id === normalizedIncoming.app_message_id
+		if (
+			sameImMessage &&
+			currentImStatus === "revoked" &&
+			incomingImStatus &&
+			incomingImStatus !== "revoked" &&
+			!allowImStatusRestore
+		) {
+			return {
+				...normalizedIncoming,
+				status: currentImStatus,
+				imStatus: currentImStatus,
+			}
+		}
+		if (!incomingImStatus) {
+			return {
+				...normalizedIncoming,
+				status: currentImStatus,
+				imStatus: currentImStatus,
+			}
+		}
+		return normalizedIncoming
+	}
+
+	private mergeAuthoritativeMessageStatus(
+		current: MessageItem,
+		incoming: MessageItem,
+		allowImStatusRestore = false,
+	) {
 		// IM 可见性状态与 Assistant 内容 revision 是两个独立状态域。
-		// HTTP 快照即使没有提升 seq，也必须能够确认撤回或恢复；内容和 identity
-		// 仍保留当前已裁决出的最高 revision，避免状态更新导致 canonical 回退。
-		if (!incoming.status || current.status === incoming.status) return current
-		return { ...current, status: incoming.status }
+		// 普通 HTTP 快照不能把已经撤回的 IM 消息隐式恢复；只有显式取消撤回
+		// 消费一次授权后，下一次 HTTP 写入才允许 revoked -> read/seen。
+		const currentImStatus = String(current.imStatus ?? current.status ?? "")
+		const incomingImStatus = String(incoming.imStatus ?? incoming.status ?? "")
+		const hasIncomingSuperStatus = incoming.superStatus !== undefined
+		const hasSuperStatusChange =
+			hasIncomingSuperStatus && current.superStatus !== incoming.superStatus
+		const sameImMessage =
+			Boolean(current.app_message_id) &&
+			Boolean(incoming.app_message_id) &&
+			current.app_message_id === incoming.app_message_id
+		if (!sameImMessage) {
+			// `super_message_id` only identifies the logical Assistant card. It must
+			// never transfer an older revision's IM status to the current app message.
+			return hasSuperStatusChange
+				? { ...current, superStatus: incoming.superStatus }
+				: current
+		}
+		if (!incomingImStatus || currentImStatus === incomingImStatus) {
+			return hasSuperStatusChange
+				? { ...current, superStatus: incoming.superStatus }
+				: current
+		}
+		if (
+			sameImMessage &&
+			currentImStatus === "revoked" &&
+			incomingImStatus !== "revoked" &&
+			!allowImStatusRestore
+		)
+			return hasSuperStatusChange
+				? { ...current, superStatus: incoming.superStatus }
+				: current
+		return {
+			...current,
+			status: incomingImStatus,
+			imStatus: incomingImStatus,
+			...(hasSuperStatusChange ? { superStatus: incoming.superStatus } : {}),
+		}
 	}
 
 	private hasAssistantPayloadConflict(
@@ -1684,16 +1802,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const retainedToolIds = new Set(
 			nextMessages.flatMap((message) => {
 				const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-					| RawSuperMagicMessageNode
-					| undefined
+					RawSuperMagicMessageNode | undefined
 				return this.getMessageNodeToolIds(node)
 			}),
 		)
 		const removedToolIds = new Set(
 			removedMessages.flatMap((message) => {
 				const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-					| RawSuperMagicMessageNode
-					| undefined
+					RawSuperMagicMessageNode | undefined
 				return this.getMessageNodeToolIds(node)
 			}),
 		)
@@ -1876,14 +1992,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
-	/**
-	 * HTTP 增量窗口只对“响应中明确返回的消息”更新外层状态，不拥有窗口外 membership。
-	 * 新消息和正文 revision 仍交给 enqueueMessage，避免实时 Final 绕过既有流式追平策略。
-	 */
-	reconcileHttpMessageStatuses(topicId: string, messages: RawSuperMagicMessageEnvelope[]) {
-		const currentMessages = this.messages.get(topicId) || []
-		if (currentMessages.length === 0 || messages.length === 0) return
-
+	private applyHttpMessageStatusesInAction(
+		topicId: string,
+		currentMessages: MessageItem[],
+		statusMessages: RawSuperMagicMessageEnvelope[],
+		allowImStatusRestore: boolean,
+	) {
 		const nextMessages = currentMessages.slice()
 		const committedUpdates: Array<{
 			message: MessageItem
@@ -1892,120 +2006,202 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		let didChange = false
 		let settledStream = false
 
-		runInAction(() => {
-			messages.forEach((envelope) => {
-				const imMessage = envelope?.seq?.message
-				const rawNode = getRawMessageNode(imMessage)
-				const appMessageId = String(imMessage?.app_message_id || "")
-				const superMessageId = this.normalizeAssistantSuperMessageId(rawNode, appMessageId)
-				const incomingMessage = this.normalizeAssistantMessageItem(
-					transformRawMessage(envelope?.seq as RawSuperMagicMessageSequence),
-					rawNode,
-					appMessageId,
-				)
-				const incomingStatus = String(incomingMessage.status || "")
-				if (!incomingStatus) return
+		statusMessages.forEach((envelope) => {
+			const imMessage = envelope?.seq?.message
+			const rawNode = getRawMessageNode(imMessage)
+			const appMessageId = String(imMessage?.app_message_id || "")
+			const superMessageId = this.normalizeAssistantSuperMessageId(rawNode, appMessageId)
+			const incomingMessage = this.normalizeAssistantMessageItem(
+				transformRawMessage(envelope?.seq as RawSuperMagicMessageSequence),
+				rawNode,
+				appMessageId,
+			)
+			const incomingStatus = String(incomingMessage.imStatus || incomingMessage.status || "")
+			if (!appMessageId || !incomingStatus) return
 
-				const existingIndex = nextMessages.findIndex(
-					(message) =>
-						message.app_message_id === appMessageId ||
-						(rawNode?.role === "assistant" &&
-							message.role === "assistant" &&
-							Boolean(superMessageId) &&
-							this.getMessageSuperMessageId(message) === superMessageId),
-				)
-				if (existingIndex < 0) return
+			// IM 状态只能由同一 topic 下同一 app_message_id 的消息写入。
+			// 唯一例外是仍在活动流中的 Assistant 占位卡：先用 SuperMessage
+			// 找到占位卡，再由真实 app_message_id 收敛其持久身份。
+			let existingIndex = nextMessages.findIndex(
+				(message) => message.app_message_id === appMessageId,
+			)
+			const streamKey =
+				rawNode?.role === "assistant" && superMessageId
+					? this.getEventEntityKey("stream", topicId, superMessageId)
+					: ""
+			const superMessageIndex =
+				existingIndex < 0 && rawNode?.role === "assistant" && superMessageId
+					? nextMessages.findIndex(
+							(message) =>
+								message.role === "assistant" &&
+								this.getMessageSuperMessageId(message) === superMessageId,
+						)
+					: -1
+			const isActiveStreamPlaceholder =
+				existingIndex < 0 &&
+				superMessageIndex >= 0 &&
+				Boolean(streamKey) &&
+				this.eventTransitions.isStreamActive(streamKey)
+			if (isActiveStreamPlaceholder) existingIndex = superMessageIndex
+			if (existingIndex < 0) return
 
-				const currentMessage = nextMessages[existingIndex]
-				const streamKey =
-					rawNode?.role === "assistant" && superMessageId
-						? this.getEventEntityKey("stream", topicId, superMessageId)
-						: ""
-				const isActiveStreamPlaceholder =
-					rawNode?.role === "assistant" &&
-					currentMessage.role === "assistant" &&
-					currentMessage.app_message_id !== appMessageId &&
-					Boolean(streamKey) &&
-					this.eventTransitions.isStreamActive(streamKey)
-				// 非撤回 Final 由 enqueueMessage 一次性完成真实身份、状态和正文结算，
-				// 避免先更新仅按 super_message_id 命中的流式占位卡而重复发布 committed。
-				if (isActiveStreamPlaceholder && incomingStatus !== "revoked") return
+			const currentMessage = nextMessages[existingIndex]
+			// 非撤回 Final 仍由 membership/enqueue 一次性完成真实身份和正文结算，
+			// 避免状态观察阶段先发布一个仅按占位卡命中的重复 committed 事件。
+			if (isActiveStreamPlaceholder && incomingStatus !== "revoked" && !allowImStatusRestore)
+				return
 
-				// revoked 是立即生效的终态；在发布状态事件前同时收敛真实持久身份，
-				// 让紧随其后的 enqueueMessage 将同 seq Final 判定为重复而不再次提交。
-				const reconciledCurrentMessage = isActiveStreamPlaceholder
-					? this.mergeFinalCardMetadata(currentMessage, incomingMessage)
-					: currentMessage
-				if (
-					reconciledCurrentMessage !== currentMessage ||
-					reconciledCurrentMessage.status !== incomingStatus
-				) {
-					const updatedMessage =
-						reconciledCurrentMessage.status === incomingStatus
-							? reconciledCurrentMessage
-							: { ...reconciledCurrentMessage, status: incomingStatus }
-					nextMessages[existingIndex] = updatedMessage
+			// 只先收敛真实 app_message_id，不复制 Final 的 seq/content 元数据；
+			// membership 阶段仍需把这条消息视为高于本地占位 revision，才能让
+			// authoritative Assistant node 进入 terminal merge，而不是被误判为 same。
+			const reconciledCurrentMessage = isActiveStreamPlaceholder
+				? { ...currentMessage, app_message_id: appMessageId }
+				: currentMessage
+			const currentImStatus = String(
+				reconciledCurrentMessage.imStatus ?? reconciledCurrentMessage.status ?? "",
+			)
+			if (
+				currentImStatus === "revoked" &&
+				incomingStatus !== "revoked" &&
+				!allowImStatusRestore
+			)
+				return
+
+			const hasImStatusChange = currentImStatus !== incomingStatus
+			const updatedMessage = hasImStatusChange
+				? {
+						...reconciledCurrentMessage,
+						status: incomingStatus,
+						imStatus: incomingStatus,
+					}
+				: reconciledCurrentMessage
+			if (updatedMessage !== currentMessage) {
+				nextMessages[existingIndex] = updatedMessage
+				didChange = true
+				if (hasImStatusChange) {
 					committedUpdates.push({
 						message: updatedMessage,
 						node:
 							currentMessage.role === "assistant"
 								? this.getAssistantMessageNode(topicId, superMessageId)
 								: (this.messageMap.get(
-										this.getMessageSuperMessageId(currentMessage),
+										this.getMessageSuperMessageId(updatedMessage),
 									) as RawSuperMagicMessageNode | undefined),
 					})
-					didChange = true
 				}
+			}
 
-				if (
-					rawNode?.role === "assistant" &&
-					incomingStatus === "revoked" &&
-					superMessageId
-				) {
-					const correlationId = String(
-						rawNode.correlation_id || currentMessage.correlation_id || "",
-					)
-					const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-					const wasStreamActive = this.eventTransitions.isStreamActive(streamKey)
-					const didSettleCurrentStream = this.reconcileServerAssistantSnapshot(
+			if (rawNode?.role === "assistant" && incomingStatus === "revoked" && superMessageId) {
+				const correlationId = String(
+					rawNode.correlation_id || currentMessage.correlation_id || "",
+				)
+				const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
+				const wasStreamActive = this.eventTransitions.isStreamActive(streamKey)
+				const didSettleCurrentStream = this.reconcileServerAssistantSnapshot(
+					topicId,
+					appMessageId,
+					superMessageId,
+					correlationId,
+					currentNode || rawNode,
+					"terminal",
+				)
+				settledStream = didSettleCurrentStream || settledStream
+				if (wasStreamActive) {
+					this.publishStreamEnded(
 						topicId,
-						appMessageId,
 						superMessageId,
+						"revoked",
+						{ awaitingCanonicalMessage: false },
+						"http",
 						correlationId,
-						currentNode || rawNode,
-						"terminal",
 					)
-					settledStream = didSettleCurrentStream || settledStream
-					if (wasStreamActive) {
-						this.publishStreamEnded(
-							topicId,
-							superMessageId,
-							"revoked",
-							{ awaitingCanonicalMessage: false },
-							"http",
-							correlationId,
-						)
-					}
-				}
-			})
-
-			if (didChange) this.messages.set(topicId, sortMessages(nextMessages))
-			if (settledStream) {
-				const buffer = this.getTopicBuffer(topicId)
-				buffer.isProcessing = false
-				this.processMessageBuffer(topicId)
-				const topicMeta = this.getTopicMetadata(topicId)
-				if (
-					topicId === this.activeTopicId &&
-					topicMeta.content.size > 0 &&
-					!topicMeta.timer
-				) {
-					const nextSuperMessageId = topicMeta.content.keys().next().value
-					if (nextSuperMessageId) this.startStreamRendering(topicId, nextSuperMessageId)
 				}
 			}
 		})
 
+		return { nextMessages, committedUpdates, didChange, settledStream }
+	}
+
+	private resumeAfterHttpStatusReconciliation(topicId: string, settledStream: boolean) {
+		if (!settledStream) return
+		const buffer = this.getTopicBuffer(topicId)
+		buffer.isProcessing = false
+		this.processMessageBuffer(topicId)
+		const topicMeta = this.getTopicMetadata(topicId)
+		if (topicId === this.activeTopicId && topicMeta.content.size > 0 && !topicMeta.timer) {
+			const nextSuperMessageId = topicMeta.content.keys().next().value
+			if (nextSuperMessageId) this.startStreamRendering(topicId, nextSuperMessageId)
+		}
+	}
+
+	/**
+	 * HTTP 增量窗口只对“响应中明确返回的消息”更新外层状态，不拥有窗口外 membership。
+	 */
+	reconcileHttpMessageStatuses(topicId: string, messages: RawSuperMagicMessageEnvelope[]) {
+		const currentMessages = this.messages.get(topicId) || []
+		if (currentMessages.length === 0 || messages.length === 0) return
+		const allowImStatusRestore = this.consumeImStatusRestoreAuthorization(topicId, true)
+		let committedUpdates: Array<{
+			message: MessageItem
+			node?: RawSuperMagicMessageNode
+		}> = []
+		let settledStream = false
+		runInAction(() => {
+			const result = this.applyHttpMessageStatusesInAction(
+				topicId,
+				currentMessages,
+				messages,
+				allowImStatusRestore,
+			)
+			if (result.didChange) this.messages.set(topicId, sortMessages(result.nextMessages))
+			committedUpdates = result.committedUpdates
+			settledStream = result.settledStream
+			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
+		})
+		committedUpdates.forEach(({ message, node }) => {
+			this.publishMessageCommitted(topicId, message, node, "http")
+		})
+	}
+
+	/**
+	 * 统一 HTTP 写入入口：状态观察集与 membership 快照来自同一次成功查询，
+	 * 并在同一 MobX action 内提交。普通增量仍保留 enqueueMessage 的流式语义。
+	 */
+	reconcileAuthoritativeMessages(
+		topicId: string,
+		{ statusItems, membershipItems, writeOptions }: ReconcileAuthoritativeMessagesInput,
+	) {
+		if (writeOptions.mode !== "incremental") {
+			this.initializeMessages(topicId, membershipItems, {
+				...writeOptions,
+				statusMessages: statusItems,
+			})
+			return
+		}
+
+		const allowImStatusRestore = this.consumeImStatusRestoreAuthorization(
+			topicId,
+			statusItems.length > 0 || membershipItems.length > 0,
+		)
+		let committedUpdates: Array<{
+			message: MessageItem
+			node?: RawSuperMagicMessageNode
+		}> = []
+		let settledStream = false
+		runInAction(() => {
+			const currentMessages = this.messages.get(topicId) || []
+			const result = this.applyHttpMessageStatusesInAction(
+				topicId,
+				currentMessages,
+				statusItems,
+				allowImStatusRestore,
+			)
+			if (result.didChange) this.messages.set(topicId, sortMessages(result.nextMessages))
+			committedUpdates = result.committedUpdates
+			settledStream = result.settledStream
+			membershipItems.forEach((item) => this.enqueueMessage(topicId, item))
+			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
+		})
 		committedUpdates.forEach(({ message, node }) => {
 			this.publishMessageCommitted(topicId, message, node, "http")
 		})
@@ -2021,12 +2217,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		messages: RawSuperMagicMessageEnvelope[],
 		{
 			mode = "replace",
+			statusMessages,
 			anchorSuperMessageId,
 			preserveStreamSuperMessageIds,
 			syncGeneration,
 		}: InitializeMessagesOptions = {},
 	) {
-		const previousMessages = (this.messages.get(topicId) || []).slice()
+		const allowImStatusRestore = this.consumeImStatusRestoreAuthorization(
+			topicId,
+			(statusMessages?.length || messages.length) > 0,
+		)
+		let previousMessages = (this.messages.get(topicId) || []).slice()
+		const statusCommittedUpdates: Array<{
+			message: MessageItem
+			node?: RawSuperMagicMessageNode
+		}> = []
 		const tailAnchorIndex =
 			mode === "replace_tail" && anchorSuperMessageId
 				? previousMessages.findIndex(
@@ -2101,6 +2306,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			topicBuffer.messages.map((item) => item?.seq?.message?.app_message_id),
 		)
 		runInAction(() => {
+			const statusResult = this.applyHttpMessageStatusesInAction(
+				topicId,
+				previousMessages,
+				statusMessages || messages,
+				allowImStatusRestore,
+			)
+			previousMessages = statusResult.nextMessages
+			statusCommittedUpdates.push(...statusResult.committedUpdates)
 			const snapshotMessages = (messages || []).slice()
 			const snapshotLatestSeqId = snapshotMessages.reduce((latestSeqId, envelope) => {
 				const currentSeqId = String(envelope?.seq?.seq_id || "")
@@ -2117,7 +2330,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						? previousMessages.slice(0, tailAnchorIndex + 1)
 						: []
 			const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
-			let settledStream = false
+			let settledStream = statusResult.settledStream
 			snapshotMessages.forEach((envelope) => {
 				const imMessage = envelope?.seq?.message
 				const normalizedRawNode = getRawMessageNode(imMessage)
@@ -2156,17 +2369,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						existingAppMessage?.correlation_id &&
 						existingAppMessage.correlation_id !== correlationId
 					) {
-						authoritativeSyncContext?.authoritativeCorrelationIds.add(
-							this.getMessageSuperMessageId(existingAppMessage),
-						)
-						this.upsertAuthoritativeMessage(authoritativeMessages, existingAppMessage)
+						// app_message_id owns the IM state, while super_message_id owns the
+						// logical Assistant card. A correlation change is therefore a revision,
+						// not an identity conflict that can reject the incoming snapshot.
 						this.warnAssistantAppIdentityConflict(
 							topicId,
 							appMessageId,
 							existingAppMessage.correlation_id,
 							correlationId,
 						)
-						return
 					}
 					authoritativeSyncContext?.authoritativeCorrelationIds.add(superMessageId)
 
@@ -2191,12 +2402,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 								this.mergeAuthoritativeMessageStatus(
 									currentMessage,
 									incomingMessage,
+									allowImStatusRestore,
 								),
+								{ allowImStatusRestore },
 							)
 						}
 						const currentNode = this.messageMap.get(superMessageId) as
-							| RawSuperMagicMessageNode
-							| undefined
+							RawSuperMagicMessageNode | undefined
 						if (revisionDecision === "same") {
 							if (this.hasAssistantPayloadConflict(currentNode, rawNode)) {
 								this.warnAssistantSeqConflict(
@@ -2208,7 +2420,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							}
 						}
 						if (
-							incomingMessage.status === "revoked" &&
+							incomingMessage.imStatus === "revoked" &&
 							currentNode?.role === "assistant"
 						) {
 							// 撤回是旧 generation 的终止屏障，即使 Agent 内层状态仍为 running。
@@ -2232,7 +2444,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					(!bufferedMessageIds.has(appMessageId) || rawNode?.role === "assistant") &&
 					rawNode?.event !== "before_llm_request"
 				) {
-					this.upsertAuthoritativeMessage(authoritativeMessages, incomingMessage)
+					this.upsertAuthoritativeMessage(authoritativeMessages, incomingMessage, {
+						allowImStatusRestore,
+					})
 				}
 				if (messageType === "super_magic_message") {
 					this.recordToolResponse(
@@ -2251,7 +2465,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)
 				}
 				if (rawNode?.role === "assistant" && appMessageId && superMessageId) {
-					const isRevokedAssistant = incomingMessage.status === "revoked"
+					const isRevokedAssistant = incomingMessage.imStatus === "revoked"
 					const didSettleStream = this.reconcileServerAssistantSnapshot(
 						topicId,
 						appMessageId,
@@ -2278,8 +2492,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 					if (rawNode.status === "finished") {
 						const canonicalNode = this.messageMap.get(superMessageId) as
-							| RawSuperMagicMessageNode
-							| undefined
+							RawSuperMagicMessageNode | undefined
 						// Finalization must retain the already-reconciled nested tool fields;
 						// storing the raw HTTP payload here would erase inherited arguments later.
 						const topicCanonicalNode =
@@ -2447,7 +2660,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.publishStreamEnded(
 					topicId,
 					superMessageId,
-					currentMessage.status === "revoked" ? "revoked" : "recovery_replaced",
+					currentMessage.imStatus === "revoked" ? "revoked" : "recovery_replaced",
 					{ awaitingCanonicalMessage: false },
 					"http",
 					correlationId,
@@ -2473,6 +2686,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					this.publishToolCallSettled(topicId, toolId, response, rawNode, "http")
 				}
 			}
+		})
+
+		// 状态观察集可能包含被 SuperMessage 公共锚点截断的 User/Tool；
+		// 这些消息不在本次 membership loop 中，但其 IM 状态仍已进入 canonical。
+		const membershipAppMessageIds = new Set(
+			(messages || []).map((envelope) =>
+				String(envelope?.seq?.message?.app_message_id || ""),
+			),
+		)
+		statusCommittedUpdates.forEach(({ message, node }) => {
+			if (membershipAppMessageIds.has(message.app_message_id)) return
+			const currentMessage = (this.messages.get(topicId) || []).find(
+				(item) => item.app_message_id === message.app_message_id,
+			)
+			if (currentMessage) this.publishMessageCommitted(topicId, currentMessage, node, "http")
 		})
 	}
 
@@ -3977,7 +4205,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			// 与迟到 chunk 一样属于旧分支，不能重新写入 buffer、工具状态或持久化队列。
 			return
 		}
-		if (currentAssistantMessage?.status === "revoked" && nextMessage.status !== "revoked") {
+		if (currentAssistantMessage?.imStatus === "revoked" && nextMessage.imStatus !== "revoked") {
 			// A successful revoke is the authority barrier for its old Assistant generation.
 			// Reject late IM/WS revisions before persistence, tool-state updates, or listeners;
 			// HTTP initializeMessages remains able to restore the message after cancelUndoMessage.
@@ -4098,7 +4326,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					topicId,
 					superMessageId,
 					this.resolveAuthoritativeStreamEndReason(
-						committedMessage.status === "revoked" ? "revoked" : committedNode.status,
+						committedMessage.imStatus === "revoked" ? "revoked" : committedNode.status,
 					),
 					{ awaitingCanonicalMessage: false },
 					"im",
@@ -4294,6 +4522,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			"send_time",
 			"seq_id",
 			"status",
+			"imStatus",
+			"superStatus",
 			"event",
 			"refer_message_id",
 			"parent_correlation_id",
@@ -4381,7 +4611,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			topicId,
 			superMessageId,
 			this.resolveAuthoritativeStreamEndReason(
-				finalCard.status === "revoked" ? "revoked" : authoritativeNode.status,
+				finalCard.imStatus === "revoked" ? "revoked" : authoritativeNode.status,
 			),
 			{ awaitingCanonicalMessage: false },
 			"im",
@@ -4597,7 +4827,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					topicId,
 					superMessageId,
 					this.resolveAuthoritativeStreamEndReason(
-						committedMessage.status === "revoked" ? "revoked" : committedNode.status,
+						committedMessage.imStatus === "revoked" ? "revoked" : committedNode.status,
 					),
 					{ awaitingCanonicalMessage: false },
 					"im",
@@ -4886,8 +5116,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		if (superMessageId) {
 			const completedNode = this.getAssistantMessageNode(topicId, superMessageId) as
-				| RawSuperMagicMessageNode
-				| undefined
+				RawSuperMagicMessageNode | undefined
 			if (completedNode?.role === "assistant" && completedNode.status === "finished") {
 				// finished assistant 是逐工具完成屏障。已有 canonical 或 buffer response
 				// 会按 tool.id 被跳过，只为同轮真正缺失的工具生成弱终态。
@@ -5041,8 +5270,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		;(this.messages.get(topicId) || []).forEach((message) => {
 			if (message.role !== "assistant") return
 			const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-				| RawSuperMagicMessageNode
-				| undefined
+				RawSuperMagicMessageNode | undefined
 			if (!node) return
 			if (
 				excludedAssistantIds.has(this.getMessageSuperMessageId(message)) ||
@@ -5084,8 +5312,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (msg.role !== "assistant") continue
 
 			const node = this.messageMap.get(this.getMessageSuperMessageId(msg)) as
-				| RawSuperMagicMessageNode
-				| undefined
+				RawSuperMagicMessageNode | undefined
 			const toolCalls = (node?.tool_calls as ToolCall[]) || []
 			if (toolCalls.length === 0) continue
 
@@ -5781,12 +6008,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	private getDefaultMessage(node: Record<string, string>) {
+		const role = node.role || "assistant"
 		return {
 			type: "super_magic_message",
 			unread_count: 0,
 			sender_id: "sender_id",
 			send_time: dayjs().unix(),
 			status: "unread",
+			imStatus: "unread",
+			superStatus: role === "user" ? undefined : "running",
 			event: null,
 			parent_correlation_id: "",
 			role: "assistant",
@@ -5816,6 +6046,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				sender_id: "usi_5f2de55e890e1df920df700e569bc64f",
 				send_time: dayjs().unix(),
 				status: "read",
+				imStatus: "read",
 				parent_correlation_id: "",
 				role: "user",
 				seq_id: "876836510905307136",
