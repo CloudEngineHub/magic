@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { observer } from "mobx-react-lite"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 
 // Define the Detail component props interface
 interface DetailProps {
@@ -38,6 +39,12 @@ interface DetailProps {
 	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	// Fullscreen change callback
 	onFullscreenChange?: (isFullscreen: boolean) => void
+	/** Selects split, fullscreen, or switchable preview presentation. */
+	previewMode?: MagicWidget.PreviewMode
+	/** Changes whenever the parent starts a new preview session after dismissing the previous one. */
+	previewSessionKey?: number
+	/** Hides the preview surface while preserving cached tabs and renderer state. */
+	onPreviewDismiss?: () => void
 	// Topic name for share scenario
 	topicName?: string
 	projectId?: string
@@ -77,6 +84,10 @@ export interface DetailRef {
 		knowledgeBaseName?: string
 		fileExtension?: string
 	}) => void
+	/** Promotes the active preview without reopening its tab. */
+	enterPreviewFullscreen: () => void
+	/** Restores the active preview without dismissing its cached content. */
+	exitPreviewFullscreen: () => void
 }
 
 const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
@@ -100,6 +111,9 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		onActiveFileChange,
 		onActiveTabChange,
 		onFullscreenChange,
+		previewMode,
+		previewSessionKey,
+		onPreviewDismiss,
 		topicName,
 		projectId,
 		allowDownload,
@@ -172,6 +186,12 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				filesViewerRef.current.openKnowledgeBaseTab(data)
 			}
 		},
+		enterPreviewFullscreen: () => {
+			filesViewerRef.current?.enterPreviewFullscreen()
+		},
+		exitPreviewFullscreen: () => {
+			filesViewerRef.current?.exitPreviewFullscreen()
+		},
 	}))
 
 	// Return unified files mode with playback tab
@@ -200,6 +220,9 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				selectedProject={selectedProject}
 				onActiveFileChange={onActiveFileChange}
 				onFullscreenChange={onFullscreenChange}
+				previewMode={previewMode}
+				previewSessionKey={previewSessionKey}
+				onPreviewDismiss={onPreviewDismiss}
 				openFileTab={openNewTab}
 				activeFileId={activeFileId}
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}

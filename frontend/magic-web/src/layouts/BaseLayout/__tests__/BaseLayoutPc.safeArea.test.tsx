@@ -213,5 +213,9 @@ describe("BaseLayoutPc safe area", () => {
 		)
 		expect(screen.getByTestId("mock-resize-handle")).toHaveAttribute("data-disabled", "true")
 		expect(screen.getByTestId("mock-keep-alive-content")).toBeInTheDocument()
+		const mainFrameClassName = screen.getByTestId("base-layout-pc-main-frame").className
+		expect(mainFrameClassName).not.toContain("py-2")
+		expect(mainFrameClassName).not.toContain("pl-0")
+		expect(mainFrameClassName).not.toContain("pr-2")
 	})
 })

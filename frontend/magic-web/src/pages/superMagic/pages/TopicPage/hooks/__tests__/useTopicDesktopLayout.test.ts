@@ -167,6 +167,17 @@ describe("useTopicDesktopLayout", () => {
 		expect(result.current.isConversationPanelCollapsed).toBe(false)
 	})
 
+	it("should collapse expanded conversation panel when requested globally", () => {
+		const { result, rerender } = renderHook(() => useTopicDesktopLayout({ isReadOnly: false }))
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Collapse_Topic_Conversation_Panel)
+		})
+		rerender()
+
+		expect(result.current.isConversationPanelCollapsed).toBe(true)
+	})
+
 	it("should ignore message panel percentage values from storage", () => {
 		localStorage.setItem(MESSAGE_PANEL_WIDTH_STORAGE_KEY, "60")
 

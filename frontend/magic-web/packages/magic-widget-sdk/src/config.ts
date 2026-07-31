@@ -2,7 +2,8 @@ import type { MagicWidget } from "./types"
 
 const CONFIG_KEYS = new Set(["layout", "shell", "conversation"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
-const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory"])
+const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+const PREVIEW_MODES = new Set<MagicWidget.PreviewMode>(["split", "fullscreen", "switchable"])
 
 /** Creates a public configuration error without coupling validation to iframe transport. */
 function createInvalidConfigError(message: string): MagicWidget.CommandError {
@@ -45,6 +46,22 @@ function readOptionalBoolean(
 	return field
 }
 
+/** Copies the optional preview strategy after validating its public enum value. */
+function readOptionalPreviewMode(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+): MagicWidget.PreviewMode | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (typeof field !== "string" || !PREVIEW_MODES.has(field as MagicWidget.PreviewMode)) {
+		throw createInvalidConfigError(
+			`Magic widget ${label}.${key} must be split, fullscreen, or switchable`,
+		)
+	}
+	return field as MagicWidget.PreviewMode
+}
+
 /** Normalizes the shell section into an immutable SDK-owned snapshot. */
 function normalizeShellConfig(value: unknown): MagicWidget.ShellConfig | undefined {
 	if (value === undefined) return undefined
@@ -61,9 +78,11 @@ function normalizeConversationConfig(value: unknown): MagicWidget.ConversationCo
 	assertKnownKeys(record, CONVERSATION_CONFIG_KEYS, "config.conversation")
 	const projectFiles = readOptionalBoolean(record, "projectFiles", "config.conversation")
 	const topicHistory = readOptionalBoolean(record, "topicHistory", "config.conversation")
+	const previewMode = readOptionalPreviewMode(record, "previewMode", "config.conversation")
 	return {
 		...(projectFiles === undefined ? {} : { projectFiles }),
 		...(topicHistory === undefined ? {} : { topicHistory }),
+		...(previewMode === undefined ? {} : { previewMode }),
 	}
 }
 

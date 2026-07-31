@@ -128,6 +128,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 展开话题对话面板：无参数。 */
 	[PubSubEvents.Expand_Topic_Conversation_Panel]: []
+	/** Collapse the topic conversation panel without changing the active preview. */
+	[PubSubEvents.Collapse_Topic_Conversation_Panel]: []
 	/** 消息队列消费完成：传入可选消息数据。 */
 	[PubSubEvents.SuperMagicMessageQueueConsumed]: SuperMagicQueueConsumedArgs
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */

@@ -56,6 +56,29 @@ function respondToConfig(frameWindow: Window, origin: string, message: Record<st
 	)
 }
 
+/** Sends a validated fictional preview state from the currently mounted iframe. */
+function dispatchPreviewFullscreen(
+	iframe: HTMLIFrameElement,
+	frameWindow: Window,
+	origin: string,
+	isFullscreen: boolean,
+) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "ui_state",
+				state: { previewFullscreen: isFullscreen },
+			},
+		}),
+	)
+}
+
 describe("createMagicWidgetController", () => {
 	beforeEach(() => {
 		setViewport(1024, 768)
@@ -745,6 +768,41 @@ describe("createMagicWidgetController", () => {
 			.querySelector("[data-magic-widget-root]")
 			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
 		expect(iframe.getAttribute("src")).toBeNull()
+		widget.destroy()
+	})
+
+	it("publishes preview fullscreen state without changing host layout", async () => {
+		const origin = "https://widget-preview.example.invalid"
+		const widget = createMagicWidgetController()
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-fullscreen-preview" },
+			target,
+		})
+		const root = document.querySelector("[data-magic-widget-root]") as HTMLElement
+		const iframe = root.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const previewStates: boolean[] = []
+		widget.on("preview_fullscreen", (isFullscreen) => previewStates.push(isFullscreen))
+
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, true)
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, true)
+
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, false)
+
+		expect(previewStates).toEqual([false, true, false])
+		expect(root.shadowRoot?.querySelector("iframe")).toBe(iframe)
+		expect(document.querySelectorAll("dialog")).toHaveLength(0)
+		expect(document.documentElement.style.overflow).toBe("")
+		expect(document.body.style.overflow).toBe("")
 		widget.destroy()
 	})
 })

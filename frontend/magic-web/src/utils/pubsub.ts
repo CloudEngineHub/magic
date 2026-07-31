@@ -143,6 +143,8 @@ export const PubSubEvents = {
 	Open_Playback_Tab: "super_magic_open_playback_tab",
 	/** 超级麦吉 - 展开话题对话面板 */
 	Expand_Topic_Conversation_Panel: "super_magic_expand_topic_conversation_panel",
+	/** Super Magic - collapse the topic conversation panel. */
+	Collapse_Topic_Conversation_Panel: "super_magic_collapse_topic_conversation_panel",
 	/** 订阅超麦消息队列更新 */
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */

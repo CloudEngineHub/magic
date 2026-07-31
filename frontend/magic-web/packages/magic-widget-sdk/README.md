@@ -37,6 +37,7 @@ Call `mount` after `document.body` is available:
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
+				previewMode: "switchable",
 			},
 		},
 		modal: {
@@ -71,20 +72,20 @@ The UMD script exposes one global object:
 window.MagicWidget
 ```
 
-| Method            | Signature                                                      | Description                                                                                                       | Boundary                                                                             |
-| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `mount`           | `(options: MagicWidget.MountOptions) => void`                  | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists.                   |
-| `open`            | `() => void`                                                   | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.                          |
-| `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                                       |
-| `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                                              |
-| `on`              | `("agent_ready", listener) => () => void`                      | Subscribes to the event indicating that the Agent can accept messages and returns an unsubscribe function.        | Fires after editor subscriptions are active and the current draft phase has settled. |
-| `setInput`        | `(content: string) => Promise<void>`                           | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response.                 |
-| `appendInput`     | `(content: string) => Promise<void>`                           | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response.                 |
-| `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                                              |
-| `getInput`        | `() => Promise<string>`                                        | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                                              |
-| `sendMessage`     | `(content: string) => Promise<void>`                           | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.                     |
-| `newConversation` | `() => Promise<void>`                                          | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.                   |
-| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | Incrementally updates the current embedded-page configuration.                                                    | Does not change the URL, replace `iframe.src`, or reload the iframe.                 |
+| Method            | Signature                                                      | Description                                                                                                       | Boundary                                                             |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `mount`           | `(options: MagicWidget.MountOptions) => void`                  | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists.   |
+| `open`            | `() => void`                                                   | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.          |
+| `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
+| `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
+| `on`              | `("agent_ready"                                                | "preview_fullscreen", listener) => () => void`                                                                    | Subscribes to Agent readiness or preview fullscreen state events.    | `preview_fullscreen` only reports state; the host decides how to style or resize its container. |
+| `setInput`        | `(content: string) => Promise<void>`                           | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response. |
+| `appendInput`     | `(content: string) => Promise<void>`                           | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response. |
+| `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
+| `getInput`        | `() => Promise<string>`                                        | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                              |
+| `sendMessage`     | `(content: string) => Promise<void>`                           | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.     |
+| `newConversation` | `() => Promise<void>`                                          | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.   |
+| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | Incrementally updates the current embedded-page configuration.                                                    | Does not change the URL, replace `iframe.src`, or reload the iframe. |
 
 The object also exposes `window.MagicWidget.version` for diagnostics.
 
@@ -120,6 +121,8 @@ window.MagicWidget.sendMessage("Process this fictional content now")
 ### Agent readiness and input maintenance
 
 `agent_ready` means that page initialization and editor command subscriptions are complete, and that the current topic's draft phase has settled through restoration, an intentional skip, or failure fallback. It is an informational state notification, not an execution prerequisite enforced by the SDK or iframe bridge. Ordinary commands are sent after the iframe document loads and are not queued for `agent_ready`.
+
+`preview_fullscreen` receives a boolean state whenever Agent preview enters or exits its configured fullscreen presentation. The SDK does not resize, portal, or restyle the Widget container for this event; the host application owns that layout decision.
 
 If the first host action must run after the existing topic draft has been handled, wait for one `agent_ready` event in host business logic. Subscribe before `mount` so the first event cannot be missed:
 
@@ -176,6 +179,7 @@ namespace MagicWidget {
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
+			previewMode?: "split" | "fullscreen" | "switchable"
 		}
 	}
 }
@@ -187,6 +191,9 @@ namespace MagicWidget {
 | `shell.appSidebar`          | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                      |
 | `conversation.projectFiles` | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                        |
 | `conversation.topicHistory` | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                        |
+| `conversation.previewMode`  | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                       |
+
+`split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
 
 `updateConfig` validates the partial object and merges declared fields into the current configuration. After the iframe has loaded, the SDK sends the resulting complete snapshot through the protected message channel. The Promise resolves after Magic Web accepts the snapshot. Runtime updates do not modify the URL, replace `iframe.src`, or reload the iframe:
 
@@ -195,6 +202,7 @@ await window.MagicWidget.updateConfig({
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
+		previewMode: "split",
 	},
 })
 ```

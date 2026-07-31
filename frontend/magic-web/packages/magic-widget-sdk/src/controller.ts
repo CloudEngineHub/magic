@@ -190,8 +190,10 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let currentConfig: MagicWidget.WidgetConfig = {}
 	let confirmedConfig: MagicWidget.WidgetConfig = {}
 	let configUpdateQueue: Promise<void> = Promise.resolve()
+	let previewFullscreen = false
 	let lifecycleId = 0
-	const agentReadyListeners = new Set<MagicWidget.EventListener>()
+	const agentReadyListeners = new Set<MagicWidget.AgentReadyEventListener>()
+	const previewFullscreenListeners = new Set<MagicWidget.PreviewFullscreenEventListener>()
 
 	/** Notifies host subscribers whenever the current iframe editor becomes usable. */
 	const notifyAgentReady = () => {
@@ -412,8 +414,32 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		closeTimer = null
 	}
 
+	/** Publishes the validated iframe preview state for the embedding host to style. */
+	const setPreviewFullscreen = (isFullscreen: boolean) => {
+		if (previewFullscreen === isFullscreen) return
+		previewFullscreen = isFullscreen
+		previewFullscreenListeners.forEach((listener) => listener(isFullscreen))
+	}
+
+	/** Requests the iframe to dismiss its preview before the host shell restores. */
+	const requestPreviewDismiss = () => {
+		if (!previewFullscreen || !iframe?.contentWindow || !instanceId || !appOrigin) return
+		iframe.contentWindow.postMessage(
+			{
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "ui_command",
+				command: "dismiss_preview",
+			},
+			appOrigin,
+		)
+	}
+
 	const close = () => {
 		if (!modal) return
+		requestPreviewDismiss()
+		setPreviewFullscreen(false)
 		if (inlineMode) {
 			modal.hidden = true
 			modal.setAttribute("data-state", "closed")
@@ -532,6 +558,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 
 	const destroy = () => {
 		lifecycleId += 1
+		setPreviewFullscreen(false)
 		clearOpenTimer()
 		clearCloseTimer()
 		stopDragging()
@@ -591,17 +618,25 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		return bridge.send(command)
 	}
 
-	/** Subscribes to the only public lifecycle event and replays readiness for late listeners. */
-	const on = (event: MagicWidget.EventName, listener: MagicWidget.EventListener) => {
-		if (event !== "agent_ready") {
-			throw new Error(`Unsupported Magic widget event: ${event}`)
-		}
+	/** Subscribes to public lifecycle and preview state events. */
+	const on = (
+		event: "agent_ready" | "preview_fullscreen",
+		listener: MagicWidget.AgentReadyEventListener | MagicWidget.PreviewFullscreenEventListener,
+	) => {
 		if (typeof listener !== "function") {
 			throw new TypeError("Magic widget event listener must be a function")
 		}
-		agentReadyListeners.add(listener)
-		if (bridge?.isReady()) window.queueMicrotask(listener)
-		return () => agentReadyListeners.delete(listener)
+		if (event === "agent_ready") {
+			agentReadyListeners.add(listener as MagicWidget.AgentReadyEventListener)
+			if (bridge?.isReady())
+				window.queueMicrotask(listener as MagicWidget.AgentReadyEventListener)
+			return () => agentReadyListeners.delete(listener as MagicWidget.AgentReadyEventListener)
+		}
+		const previewListener = listener as MagicWidget.PreviewFullscreenEventListener
+		previewFullscreenListeners.add(previewListener)
+		// Replay the current preview state synchronously so hosts can apply layout before the next paint.
+		previewListener(previewFullscreen)
+		return () => previewFullscreenListeners.delete(previewListener)
 	}
 
 	/** Applies one serialized configuration update while preserving iframe and conversation state. */
@@ -771,10 +806,11 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		else modal.append(mask, panel)
 		if (trigger) shadowRoot.append(style, trigger, modal)
 		else shadowRoot.append(style, modal)
+		// Mount the widget root directly into the host target; fullscreen layout is controlled by the host.
 		;(nextOptions.target ?? document.body).append(root)
-
 		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
 		bridge.onAgentReady(notifyAgentReady)
+		bridge.onPreviewFullscreenChange(setPreviewFullscreen)
 		bridge.onConfigReady(() => {
 			if (!bridge || !options) return
 			const loadLifecycleId = lifecycleId

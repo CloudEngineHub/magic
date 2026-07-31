@@ -36,6 +36,7 @@ interface TopicDesktopPanelsProps {
 	showProjectSidebar?: boolean
 	showProjectResizeHandle?: boolean
 	keepDetailMountedWhenHidden?: boolean
+	autoExpandConversationWhenDetailVisible?: boolean
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
 	renderMessagePanel: (params: {
@@ -59,6 +60,7 @@ function TopicDesktopPanels({
 	showProjectSidebar = true,
 	showProjectResizeHandle = !isReadOnly,
 	keepDetailMountedWhenHidden = false,
+	autoExpandConversationWhenDetailVisible = true,
 	historyLayout,
 	shouldShowDetailPanel,
 	renderMessagePanel,
@@ -112,7 +114,9 @@ function TopicDesktopPanels({
 		isConversationPanelCollapsed,
 		isDraggingProjectSider,
 		isDraggingMessagePanel,
-		ensureExpandedWhenDetailVisible,
+		ensureExpandedWhenDetailVisible: autoExpandConversationWhenDetailVisible
+			? ensureExpandedWhenDetailVisible
+			: () => undefined,
 	})
 	const visibleConversationPanelCollapsed = shouldShowDetailPanel
 		? isConversationPanelCollapsed

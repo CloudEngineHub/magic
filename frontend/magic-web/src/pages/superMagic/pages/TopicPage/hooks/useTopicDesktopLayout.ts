@@ -21,6 +21,7 @@ interface UseTopicDesktopLayoutReturn {
 	startDragMessagePanel: (clientX: number) => void
 	toggleConversationPanel: () => void
 	expandConversationPanel: () => void
+	collapseConversationPanel: () => void
 	ensureExpandedWhenDetailVisible: (shouldShowDetailPanel: boolean) => void
 }
 
@@ -54,19 +55,29 @@ export function useTopicDesktopLayout({
 		store.expandConversationPanel()
 	})
 
+	/** Collapses the conversation panel while preserving its last expanded width. */
+	const collapseConversationPanel = useMemoizedFn(() => {
+		store.collapseConversationPanel()
+	})
+
 	const ensureExpandedWhenDetailVisible = useMemoizedFn((shouldShowDetailPanel: boolean) => {
 		store.ensureExpandedWhenDetailVisible(shouldShowDetailPanel)
 	})
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Expand_Topic_Conversation_Panel, expandConversationPanel)
+		pubsub.subscribe(PubSubEvents.Collapse_Topic_Conversation_Panel, collapseConversationPanel)
 		return () => {
 			pubsub.unsubscribe(
 				PubSubEvents.Expand_Topic_Conversation_Panel,
 				expandConversationPanel,
 			)
+			pubsub.unsubscribe(
+				PubSubEvents.Collapse_Topic_Conversation_Panel,
+				collapseConversationPanel,
+			)
 		}
-	}, [expandConversationPanel])
+	}, [collapseConversationPanel, expandConversationPanel])
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -157,6 +168,7 @@ export function useTopicDesktopLayout({
 		startDragMessagePanel,
 		toggleConversationPanel,
 		expandConversationPanel,
+		collapseConversationPanel,
 		ensureExpandedWhenDetailVisible,
 	}
 }

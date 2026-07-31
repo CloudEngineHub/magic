@@ -53,6 +53,27 @@ function dispatchConfigReady(iframe: HTMLIFrameElement) {
 	)
 }
 
+/** Delivers one fictional preview state from the bound iframe window. */
+function dispatchPreviewFullscreen(
+	iframe: HTMLIFrameElement,
+	isFullscreen: unknown,
+	origin = TEST_ORIGIN,
+) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: iframe.contentWindow,
+			data: {
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: TEST_INSTANCE_ID,
+				type: "ui_state",
+				state: { previewFullscreen: isFullscreen },
+			},
+		}),
+	)
+}
+
 describe("WidgetBridge", () => {
 	beforeEach(() => {
 		document.body.innerHTML = ""
@@ -274,5 +295,32 @@ describe("WidgetBridge", () => {
 		bridge.destroy()
 
 		await expect(promise).rejects.toMatchObject({ code: "DESTROYED" })
+	})
+
+	it("forwards only validated preview fullscreen snapshots from the bound iframe", () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const listener = vi.fn()
+		bridge.onPreviewFullscreenChange(listener)
+
+		dispatchPreviewFullscreen(iframe, true)
+		dispatchPreviewFullscreen(iframe, "true")
+		dispatchPreviewFullscreen(iframe, false, "https://untrusted-widget.example.invalid")
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		expect(listener).toHaveBeenCalledWith(true)
+	})
+
+	it("restores the host preview state when the iframe document reloads", () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const listener = vi.fn()
+		bridge.onPreviewFullscreenChange(listener)
+
+		dispatchPreviewFullscreen(iframe, true)
+		iframe.dispatchEvent(new Event("load"))
+
+		expect(listener).toHaveBeenNthCalledWith(1, true)
+		expect(listener).toHaveBeenNthCalledWith(2, false)
 	})
 })

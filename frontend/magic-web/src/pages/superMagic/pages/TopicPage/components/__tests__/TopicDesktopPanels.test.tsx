@@ -40,6 +40,7 @@ function createLayoutState(overrides?: Partial<ReturnType<typeof createLayoutSta
 		startDragMessagePanel: vi.fn(),
 		toggleConversationPanel: vi.fn(),
 		expandConversationPanel: vi.fn(),
+		collapseConversationPanel: vi.fn(),
 		ensureExpandedWhenDetailVisible: vi.fn(),
 		...overrides,
 	}
@@ -146,6 +147,15 @@ describe("TopicDesktopPanels", () => {
 				showProjectResizeHandle: false,
 			}),
 		)
+	})
+
+	it("switchable layout can disable automatic conversation expansion", () => {
+		renderComponent({ autoExpandConversationWhenDetailVisible: false })
+
+		const motionOptions = mockUseTopicDesktopPanelMotion.mock.calls[0][0]
+		motionOptions.ensureExpandedWhenDetailVisible(true)
+
+		expect(layoutState.ensureExpandedWhenDetailVisible).not.toHaveBeenCalled()
 	})
 
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {

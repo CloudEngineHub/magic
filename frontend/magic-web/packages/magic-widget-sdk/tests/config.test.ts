@@ -7,12 +7,20 @@ describe("Widget config", () => {
 			normalizeWidgetConfig({
 				layout: "desktop",
 				shell: { appSidebar: false },
-				conversation: { projectFiles: false, topicHistory: true },
+				conversation: {
+					projectFiles: false,
+					topicHistory: true,
+					previewMode: "fullscreen",
+				},
 			}),
 		).toEqual({
 			layout: "desktop",
 			shell: { appSidebar: false },
-			conversation: { projectFiles: false, topicHistory: true },
+			conversation: {
+				projectFiles: false,
+				topicHistory: true,
+				previewMode: "fullscreen",
+			},
 		})
 	})
 
@@ -24,12 +32,16 @@ describe("Widget config", () => {
 					shell: { appSidebar: false },
 					conversation: { projectFiles: false },
 				},
-				{ conversation: { topicHistory: true } },
+				{ conversation: { topicHistory: true, previewMode: "switchable" } },
 			),
 		).toEqual({
 			layout: "desktop",
 			shell: { appSidebar: false },
-			conversation: { projectFiles: false, topicHistory: true },
+			conversation: {
+				projectFiles: false,
+				topicHistory: true,
+				previewMode: "switchable",
+			},
 		})
 	})
 
@@ -40,6 +52,12 @@ describe("Widget config", () => {
 		)
 		expect(() => normalizeWidgetConfig({ conversation: { projectFiles: "no" } })).toThrow(
 			/projectFiles/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { previewMode: "overlay" } })).toThrow(
+			/previewMode/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { previewMode: true } })).toThrow(
+			/previewMode/,
 		)
 	})
 })

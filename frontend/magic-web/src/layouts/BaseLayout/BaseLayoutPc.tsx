@@ -201,9 +201,9 @@ const BaseLayoutPc = observer(() => {
 
 				{/* Main Content Panel - "被包裹"效果 */}
 				<ResizablePanel id="main-content-panel">
-					{/* The root shell already applies safe area, so this frame keeps the original desktop 8px floating gap. */}
+					{/* Keep the desktop floating gap only when the page is not embedded by Widget SDK. */}
 					<div
-						className="flex h-full flex-col py-2 pl-0 pr-2"
+						className={cn("flex h-full flex-col", !embedContext && "py-2 pl-0 pr-2")}
 						data-testid="base-layout-pc-main-frame"
 					>
 						{/* 白色容器，带圆角、边框、阴影 */}

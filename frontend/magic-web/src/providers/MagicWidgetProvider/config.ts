@@ -3,6 +3,7 @@ import type { MagicWidgetConfig, MagicWidgetEmbedContext, MagicWidgetLayout } fr
 export const MAGIC_WIDGET_PROTOCOL = "magic-widget"
 export const MAGIC_WIDGET_PROTOCOL_VERSION = 1
 export const MAGIC_WIDGET_QUERY_CONFIG = "magicWidgetConfig"
+export const MAGIC_WIDGET_DISMISS_PREVIEW_EVENT = "magic-widget:dismiss-preview"
 const MAGIC_WIDGET_QUERY_EMBED = "magicWidgetEmbed"
 const MAGIC_WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 const MAGIC_WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
@@ -10,7 +11,11 @@ const MAGIC_WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
 const MAX_INITIAL_CONFIG_LENGTH = 4_096
 const CONFIG_KEYS = new Set(["layout", "shell", "conversation"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
-const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory"])
+const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+type MagicWidgetPreviewMode = NonNullable<
+	NonNullable<MagicWidgetConfig["conversation"]>["previewMode"]
+>
+const PREVIEW_MODES = new Set<MagicWidgetPreviewMode>(["split", "fullscreen", "switchable"])
 
 /** Narrows untrusted Widget configuration values to plain records. */
 function requirePlainObject(value: unknown, label: string): Record<string, unknown> {
@@ -40,6 +45,20 @@ function readOptionalBoolean(
 	if (field === undefined) return undefined
 	if (typeof field !== "boolean") throw new Error(`${label}.${key} must be a boolean`)
 	return field
+}
+
+/** Reads one optional preview strategy from an untrusted configuration section. */
+function readOptionalPreviewMode(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+): MagicWidgetPreviewMode | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (typeof field !== "string" || !PREVIEW_MODES.has(field as MagicWidgetPreviewMode)) {
+		throw new Error(`${label}.${key} must be split, fullscreen, or switchable`)
+	}
+	return field as MagicWidgetPreviewMode
 }
 
 /** Validates and clones the complete configuration snapshot sent by the SDK. */
@@ -73,9 +92,15 @@ export function normalizeMagicWidgetConfig(value: unknown): MagicWidgetConfig {
 			"topicHistory",
 			"config.conversation",
 		)
+		const previewMode = readOptionalPreviewMode(
+			conversationRecord,
+			"previewMode",
+			"config.conversation",
+		)
 		conversation = {
 			...(projectFiles === undefined ? {} : { projectFiles }),
 			...(topicHistory === undefined ? {} : { topicHistory }),
+			...(previewMode === undefined ? {} : { previewMode }),
 		}
 	}
 

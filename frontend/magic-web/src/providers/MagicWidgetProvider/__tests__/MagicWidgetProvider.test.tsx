@@ -187,12 +187,13 @@ describe("MagicWidgetProvider", () => {
 			createWidgetSearch({
 				layout: "desktop",
 				shell: { appSidebar: false },
-				conversation: { projectFiles: false },
+				conversation: { projectFiles: false, previewMode: "switchable" },
 			}),
 		)
 
 		expect(screen.getByTestId("widget-context")).toHaveTextContent(INSTANCE_ID)
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"projectFiles":false')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"switchable"')
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "config_ready",
@@ -214,7 +215,7 @@ describe("MagicWidgetProvider", () => {
 						type: "config",
 						config: {
 							layout: "mobile",
-							conversation: { topicHistory: false },
+							conversation: { topicHistory: false, previewMode: "fullscreen" },
 						},
 					},
 				}),
@@ -223,6 +224,7 @@ describe("MagicWidgetProvider", () => {
 
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"layout":"mobile"')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"topicHistory":false')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"fullscreen"')
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				requestId: "request-mock-provider-update",
@@ -304,5 +306,47 @@ describe("MagicWidgetProvider", () => {
 		)
 
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('{"layout":"mobile"}')
+	})
+
+	it("forwards only the bound host dismiss command to iframe preview consumers", () => {
+		Object.defineProperty(window, "parent", {
+			configurable: true,
+			value: parentWindow,
+		})
+		const listener = vi.fn()
+		window.addEventListener("magic-widget:dismiss-preview", listener)
+		renderProvider(createWidgetSearch({ layout: "desktop" }))
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						type: "ui_command",
+						command: "dismiss_preview",
+					},
+				}),
+			)
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: "https://untrusted-widget.example.invalid",
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						type: "ui_command",
+						command: "dismiss_preview",
+					},
+				}),
+			)
+		})
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		window.removeEventListener("magic-widget:dismiss-preview", listener)
 	})
 })

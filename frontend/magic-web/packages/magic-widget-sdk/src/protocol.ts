@@ -10,12 +10,7 @@ export const WIDGET_QUERY_DEPLOYMENT_CODE = "magicWidgetDeploymentCode"
 export const WIDGET_QUERY_CONFIG = "magicWidgetConfig"
 
 export type WidgetCommandName =
-	| "setInput"
-	| "appendInput"
-	| "clearInput"
-	| "getInput"
-	| "sendMessage"
-	| "newConversation"
+	"setInput" | "appendInput" | "clearInput" | "getInput" | "sendMessage" | "newConversation"
 
 export interface WidgetReadyMessage {
 	protocol: typeof WIDGET_PROTOCOL
@@ -62,11 +57,31 @@ export interface WidgetConfigReadyMessage {
 	type: "config_ready"
 }
 
+export interface WidgetUiStateMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	type: "ui_state"
+	state: {
+		previewFullscreen: boolean
+	}
+}
+
+export interface WidgetUiCommandMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	type: "ui_command"
+	command: "dismiss_preview"
+}
+
 export type WidgetProtocolMessage =
 	| WidgetReadyMessage
 	| WidgetCommandMessage
 	| WidgetConfigMessage
 	| WidgetConfigReadyMessage
+	| WidgetUiStateMessage
+	| WidgetUiCommandMessage
 	| WidgetResponseMessage
 
 /** Checks the stable envelope before either side consumes a cross-window message. */
@@ -81,6 +96,8 @@ export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocol
 			message.type === "command" ||
 			message.type === "config" ||
 			message.type === "config_ready" ||
+			message.type === "ui_state" ||
+			message.type === "ui_command" ||
 			message.type === "response")
 	)
 }

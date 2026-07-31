@@ -45,9 +45,14 @@ export declare namespace MagicWidget {
 		appSidebar?: boolean
 	}
 
+	/** Controls how Agent previews share the desktop viewport with the conversation. */
+	export type PreviewMode = "split" | "fullscreen" | "switchable"
+
 	export interface ConversationConfig {
 		projectFiles?: boolean
 		topicHistory?: boolean
+		/** Selects split, host-container fullscreen, or user-switchable preview presentation. */
+		previewMode?: PreviewMode
 	}
 
 	export interface WidgetConfig {
@@ -64,15 +69,7 @@ export declare namespace MagicWidget {
 	export type PageOptions = CrewPageOptions
 
 	export type ModalSlot =
-		| "root"
-		| "layer"
-		| "mask"
-		| "container"
-		| "header"
-		| "title"
-		| "close"
-		| "body"
-		| "iframe"
+		"root" | "layer" | "mask" | "container" | "header" | "title" | "close" | "body" | "iframe"
 
 	export type ModalClassNames = Partial<Record<ModalSlot, string>>
 
@@ -109,15 +106,17 @@ export declare namespace MagicWidget {
 		code: CommandErrorCode
 	}
 
-	export type EventName = "agent_ready"
-	export type EventListener = () => void
+	export type EventName = "agent_ready" | "preview_fullscreen"
+	export type AgentReadyEventListener = () => void
+	export type PreviewFullscreenEventListener = (isFullscreen: boolean) => void
 
 	export interface Controller {
 		mount(options: MountOptions): void
 		open(): void
 		close(): void
 		destroy(): void
-		on(event: EventName, listener: EventListener): () => void
+		on(event: "agent_ready", listener: AgentReadyEventListener): () => void
+		on(event: "preview_fullscreen", listener: PreviewFullscreenEventListener): () => void
 		setInput(content: string): Promise<void>
 		appendInput(content: string): Promise<void>
 		clearInput(): Promise<void>

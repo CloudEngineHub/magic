@@ -37,6 +37,7 @@ SDK 不提供独立的 `appOrigin` 配置。脚本地址决定 Magic Web Origin�
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
+				previewMode: "switchable",
 			},
 		},
 		modal: {
@@ -77,7 +78,7 @@ window.MagicWidget
 | `open`            | `() => void`                                                   | 主动打开面板。面板打开时，悬浮按钮会隐藏。                                              | 必须在 `mount` 后调用；未挂载时调用会抛错。                   |
 | `close`           | `() => void`                                                   | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
 | `destroy`         | `() => void`                                                   | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
-| `on`              | `("agent_ready", listener) => () => void`                      | 订阅 Agent 已可接收消息事件，并返回取消订阅函数。                                       | 事件发生在编辑器订阅生效且当前草稿阶段结束之后。              |
+| `on`              | `("agent_ready"                                                | "preview_fullscreen", listener) => () => void`                                          | 订阅 Agent 就绪或预览全屏状态事件，并返回取消订阅函数。       | `preview_fullscreen` 只通知状态，容器样式和尺寸由宿主业务决定。 |
 | `setInput`        | `(content: string) => Promise<void>`                           | 将文本写入 Agent 输入框并聚焦，但不发送。                                               | 仅接受非空字符串；以 iframe response 为准。                   |
 | `appendInput`     | `(content: string) => Promise<void>`                           | 将文本追加到当前输入末尾并聚焦，但不发送。                                              | 仅接受非空字符串；以 iframe response 为准。                   |
 | `clearInput`      | `() => Promise<void>`                                          | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
@@ -120,6 +121,8 @@ window.MagicWidget.sendMessage("请立即处理这段虚构内容")
 ### Agent 就绪与输入维护
 
 `agent_ready` 表示当前 iframe 已完成页面初始化和编辑器事件订阅，并且当前话题的草稿阶段已经通过成功恢复、主动跳过或失败降级结束。它只是状态通知，SDK 和 iframe bridge 都不会把它作为普通命令的执行前置条件。iframe 文档完成加载后，普通命令会直接发送，不会在 bridge 内等待或排队到 `agent_ready`。
+
+`preview_fullscreen` 会在 Agent 预览进入或退出配置的全屏呈现状态时传递布尔值。SDK 不会为该事件调整、Portal 或重设 Widget 容器样式，具体布局由宿主业务自行处理。
 
 如果宿主首次操作必须发生在已有话题草稿处理完成之后，应由宿主业务逻辑自行等待一次 `agent_ready`。建议在 `mount` 前订阅，避免错过首次事件：
 
@@ -176,17 +179,21 @@ namespace MagicWidget {
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
+			previewMode?: "split" | "fullscreen" | "switchable"
 		}
 	}
 }
 ```
 
-| 字段                        | 作用                                   | 边界限制                                                                     |
-| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
-| `layout`                    | 选择 Crew 对话内容使用桌面版或移动版。 | 不替换外围应用外壳；未传时继续使用现有视口和旧移动端 query 判断。            |
-| `shell.appSidebar`          | 显示或隐藏应用侧边栏。                 | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。 |
-| `conversation.projectFiles` | 显示或隐藏桌面版项目文件面板。         | 仅由桌面版 Crew 对话布局消费。                                               |
-| `conversation.topicHistory` | 启用或关闭桌面版历史话题入口和面板。   | 仅由桌面版 Crew 对话布局消费。                                               |
+| 字段                        | 作用                                                  | 边界限制                                                                     |
+| --------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `layout`                    | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；未传时继续使用现有视口和旧移动端 query 判断。            |
+| `shell.appSidebar`          | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。 |
+| `conversation.projectFiles` | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                               |
+| `conversation.topicHistory` | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                               |
+| `conversation.previewMode`  | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。    |
+
+`split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 
 `updateConfig` 会校验传入的增量对象，并将声明字段合并到当前配置。iframe 已加载后，SDK 会通过受保护的消息通道发送合并后的完整快照；Magic Web 接受配置后 Promise 才会完成。运行时更新不会修改 URL、替换 `iframe.src` 或刷新 iframe：
 
@@ -195,6 +202,7 @@ await window.MagicWidget.updateConfig({
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
+		previewMode: "split",
 	},
 })
 ```

@@ -11,6 +11,7 @@ import { flushSync } from "react-dom"
 import {
 	getMagicWidgetEmbedContext,
 	getMagicWidgetInitialConfig,
+	MAGIC_WIDGET_DISMISS_PREVIEW_EVENT,
 	MAGIC_WIDGET_PROTOCOL,
 	MAGIC_WIDGET_PROTOCOL_VERSION,
 	normalizeMagicWidgetConfig,
@@ -56,7 +57,7 @@ export function MagicWidgetProvider({ children }: PropsWithChildren) {
 			)
 		}
 
-		/** Accepts configuration only from the parent window bound by the initial embed metadata. */
+		/** Accepts internal commands and configuration only from the bound parent SDK instance. */
 		const handleMessage = (event: MessageEvent) => {
 			if (
 				event.origin !== targetOrigin ||
@@ -64,12 +65,17 @@ export function MagicWidgetProvider({ children }: PropsWithChildren) {
 				!event.data ||
 				event.data.protocol !== MAGIC_WIDGET_PROTOCOL ||
 				event.data.version !== MAGIC_WIDGET_PROTOCOL_VERSION ||
-				event.data.instanceId !== embedContext.instanceId ||
-				event.data.type !== "config" ||
-				typeof event.data.requestId !== "string"
+				event.data.instanceId !== embedContext.instanceId
 			) {
 				return
 			}
+
+			if (event.data.type === "ui_command" && event.data.command === "dismiss_preview") {
+				window.dispatchEvent(new Event(MAGIC_WIDGET_DISMISS_PREVIEW_EVENT))
+				return
+			}
+
+			if (event.data.type !== "config" || typeof event.data.requestId !== "string") return
 
 			try {
 				const nextConfig = normalizeMagicWidgetConfig(event.data.config)

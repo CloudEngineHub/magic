@@ -55,6 +55,7 @@ export class WidgetBridge {
 	private pendingRequests = new Map<string, PendingRequest>()
 	private agentReadyListeners = new Set<() => void>()
 	private configReadyListeners = new Set<() => void>()
+	private previewFullscreenListeners = new Set<(isFullscreen: boolean) => void>()
 
 	constructor(
 		private readonly iframe: HTMLIFrameElement,
@@ -80,6 +81,12 @@ export class WidgetBridge {
 	onConfigReady(listener: () => void): () => void {
 		this.configReadyListeners.add(listener)
 		return () => this.configReadyListeners.delete(listener)
+	}
+
+	/** Registers an internal listener for validated preview fullscreen state snapshots. */
+	onPreviewFullscreenChange(listener: (isFullscreen: boolean) => void): () => void {
+		this.previewFullscreenListeners.add(listener)
+		return () => this.previewFullscreenListeners.delete(listener)
 	}
 
 	/** Reports whether the current iframe document can receive protocol requests. */
@@ -114,6 +121,8 @@ export class WidgetBridge {
 
 	/** Releases transport waiters once the iframe document can receive commands. */
 	private handleIframeLoad = (): void => {
+		// A new iframe document cannot still own the previous document's fullscreen preview.
+		this.notifyPreviewFullscreen(false)
 		this.iframeLoaded = true
 		// The embedded React effect can announce config_ready before the parent observes iframe load.
 		// Preserve that handshake so the later load event cannot discard a valid listener signal.
@@ -123,6 +132,17 @@ export class WidgetBridge {
 			waiter.resolve()
 		})
 		this.loadWaiters.clear()
+	}
+
+	/** Delivers a complete fullscreen state snapshot to host layout controllers. */
+	private notifyPreviewFullscreen(isFullscreen: boolean): void {
+		this.previewFullscreenListeners.forEach((listener) => {
+			try {
+				listener(isFullscreen)
+			} catch (error) {
+				console.error("Magic widget preview fullscreen listener failed", error)
+			}
+		})
 	}
 
 	/** Marks the configuration listener ready and releases queued configuration updates. */
@@ -278,6 +298,16 @@ export class WidgetBridge {
 			this.markConfigReady()
 			return
 		}
+		if (event.data.type === "ui_state") {
+			if (
+				event.data.state &&
+				typeof event.data.state === "object" &&
+				typeof event.data.state.previewFullscreen === "boolean"
+			) {
+				this.notifyPreviewFullscreen(event.data.state.previewFullscreen)
+			}
+			return
+		}
 
 		if (event.data.type !== "response") return
 		const pending = this.pendingRequests.get(event.data.requestId)
@@ -323,5 +353,6 @@ export class WidgetBridge {
 		this.pendingRequests.clear()
 		this.agentReadyListeners.clear()
 		this.configReadyListeners.clear()
+		this.previewFullscreenListeners.clear()
 	}
 }
