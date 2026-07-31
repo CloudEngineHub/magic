@@ -128,9 +128,9 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
     protected string $gcsBucket = '';
 
     /**
-     * Google 参考图传输策略，默认使用url，避免 Google 回源国内 OSS。
+     * Google 参考图传输策略，默认优先使用 URL，失败后改用图片内容。
      */
-    protected string $referenceImageTransport = self::REFERENCE_IMAGE_TRANSPORT_URL;
+    protected string $referenceImageTransport = self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64;
 
     public function __construct(?array $data = null)
     {
@@ -369,7 +369,7 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
             self::REFERENCE_IMAGE_TRANSPORT_BASE64,
             self::REFERENCE_IMAGE_TRANSPORT_URL,
             self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64,
-        ], true) ? $transport : self::REFERENCE_IMAGE_TRANSPORT_BASE64;
+        ], true) ? $transport : self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64;
     }
 
     /**
