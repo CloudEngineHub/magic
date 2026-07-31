@@ -158,6 +158,12 @@ class GoogleGeminiModel extends AbstractImageGenerate
     )]
     protected function requestImageGeneration(GoogleGeminiRequest $imageGenerateRequest): array
     {
+        return $this->requestImageGenerationOnce($imageGenerateRequest);
+    }
+
+    /** 执行一次 Google 生图请求，不包含重试。 */
+    private function requestImageGenerationOnce(GoogleGeminiRequest $imageGenerateRequest): array
+    {
         $prompt = $imageGenerateRequest->getPrompt();
         $modelId = $imageGenerateRequest->getModel();
         $referImages = array_slice($imageGenerateRequest->getReferImages(), 0, 14);
@@ -255,20 +261,21 @@ class GoogleGeminiModel extends AbstractImageGenerate
     /** URL 请求失败时，下载参考图并以 Base64 重试一次。 */
     private function requestImageGenerationWithFallback(GoogleGeminiRequest $request): array
     {
-        try {
+        $shouldFallback = $this->referenceImageTransport === GoogleProviderConfigItem::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64
+            && ! empty($request->getReferImages());
+        if (! $shouldFallback) {
             return $this->requestImageGeneration($request);
-        } catch (Exception $e) {
-            if ($this->referenceImageTransport !== GoogleProviderConfigItem::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64
-                || empty($request->getReferImages())) {
-                throw $e;
-            }
+        }
 
+        try {
+            return $this->requestImageGenerationOnce($request);
+        } catch (Exception $e) {
             $this->logger->warning('Google Gemini 生图：URL 传输失败，改用 Base64 重试', [
                 'error' => $e->getMessage(),
             ]);
             $request->setReferImages($this->referenceImagePreparer->prepare($request->getReferImages()));
 
-            return $this->requestImageGeneration($request);
+            return $this->requestImageGenerationOnce($request);
         }
     }
 

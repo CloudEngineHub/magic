@@ -9,32 +9,28 @@ namespace HyperfTest\Cases\Infrastructure\ExternalAPI\ImageGenerate;
 
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use HyperfTest\HttpTestCase;
-use RuntimeException;
 
 /** @internal */
 class OpenAIFormatResponseFailureTest extends HttpTestCase
 {
-    public function testProviderThrowableIsAvailableInternallyButNotSerialized(): void
+    public function testProviderErrorCanBeSerialized(): void
     {
-        $throwable = new RuntimeException('specific provider failure', 500);
-        $response = (new OpenAIFormatResponse())->setProviderError($throwable);
+        $response = (new OpenAIFormatResponse())
+            ->setProviderErrorCode(500)
+            ->setProviderErrorMessage('specific provider failure');
 
-        $this->assertSame($throwable, $response->getProviderThrowable());
         $this->assertSame(500, $response->getProviderErrorCode());
         $this->assertSame('specific provider failure', $response->getProviderErrorMessage());
-        $this->assertArrayNotHasKey('providerThrowable', $response->toArray());
-        $this->assertArrayNotHasKey('provider_throwable', $response->toArray());
+        $this->assertSame(500, $response->toArray()['provider_error_code']);
+        $this->assertSame('specific provider failure', $response->toArray()['provider_error_message']);
     }
 
-    public function testBuildErrorKeepsThrowableOutOfSerializedPayload(): void
+    public function testBuildErrorKeepsErrorFieldsInSerializedPayload(): void
     {
-        $throwable = new RuntimeException('internal failure', 500);
-        $response = OpenAIFormatResponse::buildError(44000, '文生图服务异常', $throwable);
+        $response = OpenAIFormatResponse::buildError(44000, '文生图服务异常');
 
-        $this->assertSame($throwable, $response->getProviderThrowable());
         $this->assertSame('文生图服务异常', $response->toArray()['provider_error_message']);
         $this->assertSame(44000, $response->getProviderErrorCode());
-        $this->assertArrayNotHasKey('providerThrowable', $response->toArray());
-        $this->assertArrayNotHasKey('provider_throwable', $response->toArray());
+        $this->assertSame(44000, $response->toArray()['provider_error_code']);
     }
 }

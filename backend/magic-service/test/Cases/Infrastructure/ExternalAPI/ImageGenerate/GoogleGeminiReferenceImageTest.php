@@ -88,7 +88,7 @@ final class GoogleGeminiReferenceImageTest extends TestCase
             {
                 ++$this->calls;
                 $this->images[] = $images;
-                if ($this->calls <= 3) {
+                if ($this->calls === 1) {
                     throw new LogicException('url failed');
                 }
 
@@ -133,9 +133,9 @@ final class GoogleGeminiReferenceImageTest extends TestCase
 
         $result = $method->invoke($model, $request);
 
-        $this->assertSame(4, $api->calls);
+        $this->assertSame(2, $api->calls);
         $this->assertSame('fileData', $api->images[0][0]['type']);
-        $this->assertSame('base64', $api->images[3][0]['type']);
+        $this->assertSame('base64', $api->images[1][0]['type']);
         $this->assertSame('generated-image', $result['candidates'][0]['content']['parts'][0]['inlineData']['data']);
     }
 }
