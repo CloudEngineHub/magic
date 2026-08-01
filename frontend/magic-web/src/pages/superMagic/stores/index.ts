@@ -165,9 +165,39 @@ const TASK_SUSPENDED_EVENT = "agent_suspended"
 
 type StreamChunkPayload = SuperMagicChunkMessage["super_magic_chunk"]
 
+type StreamChunkChoice = StreamChunkPayload["choices"][number] & { index?: unknown }
+
+type StreamChunkChoiceWarning =
+	| {
+			code: "chunk-multiple-choices"
+			choiceCount: number
+			choiceIndexes: unknown[]
+	  }
+	| {
+			code: "chunk-choice-index-invalid"
+			choiceIndex: unknown
+	  }
+	| {
+			code: "chunk-choice-index-missing"
+	  }
+
+type StreamChunkChoiceSelection =
+	| { kind: "heartbeat" }
+	| {
+			kind: "accepted"
+			choice: StreamChunkChoice
+			warning?: StreamChunkChoiceWarning
+	  }
+	| {
+			kind: "rejected"
+			warning: StreamChunkChoiceWarning
+			shouldRecover: boolean
+	  }
+
 interface StreamChunkLedger {
 	nextChunkIndex: number
 	pendingChunks: Map<number, StreamChunkPayload>
+	reportedChoiceWarnings: Map<string, Set<StreamChunkChoiceWarning["code"]>>
 }
 
 interface InternalStreamRecoveryState extends StreamRecoveryState {
@@ -1395,7 +1425,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const key = `${topicId}\u0000${correlationId}`
 		let ledger = this.streamChunkLedgers.get(key)
 		if (!ledger) {
-			ledger = { nextChunkIndex: 0, pendingChunks: new Map() }
+			ledger = {
+				nextChunkIndex: 0,
+				pendingChunks: new Map(),
+				reportedChoiceWarnings: new Map(),
+			}
 			this.streamChunkLedgers.set(key, ledger)
 		}
 		return ledger
@@ -1403,6 +1437,119 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private clearStreamChunkLedger(topicId: string, correlationId: string) {
 		this.streamChunkLedgers.delete(`${topicId}\u0000${correlationId}`)
+	}
+
+	/**
+	 * SuperMagic 只支持候选 0。选择规则在进入正文、工具、终态和事件编排前统一执行，
+	 * 避免任一分支重新退化为按数组位置读取 choices[0]。
+	 */
+	private selectStreamChunkChoice(messageChunk: StreamChunkPayload): StreamChunkChoiceSelection {
+		const choices = Array.isArray(messageChunk?.choices)
+			? (messageChunk.choices as StreamChunkChoice[])
+			: []
+		if (choices.length === 0) return { kind: "heartbeat" }
+
+		if (choices.length > 1) {
+			const choiceIndexes = choices.map((choice) => choice.index)
+			const validPrimaryChoiceCount = choiceIndexes.filter((index) => index === 0).length
+			return {
+				kind: "rejected",
+				warning: {
+					code: "chunk-multiple-choices",
+					choiceCount: choices.length,
+					choiceIndexes,
+				},
+				shouldRecover: validPrimaryChoiceCount !== 1,
+			}
+		}
+
+		const choice = choices[0]
+		if (!choice) return { kind: "heartbeat" }
+		if (choice.index === undefined) {
+			return {
+				kind: "accepted",
+				choice,
+				warning: { code: "chunk-choice-index-missing" },
+			}
+		}
+		if (choice.index === 0) return { kind: "accepted", choice }
+
+		return {
+			kind: "rejected",
+			warning: {
+				code: "chunk-choice-index-invalid",
+				choiceIndex: choice.index,
+			},
+			shouldRecover: true,
+		}
+	}
+
+	/** 同一 Topic/SuperMessage/correlation 的同类协议异常只报告一次。 */
+	private reportStreamChunkChoiceWarning(
+		topicId: string,
+		superMessageId: string,
+		correlationId: string,
+		ledger: StreamChunkLedger,
+		selection: StreamChunkChoiceSelection,
+	) {
+		const warning = selection.kind === "heartbeat" ? undefined : selection.warning
+		if (!warning) return
+
+		const reportedCodes = ledger.reportedChoiceWarnings.get(correlationId) || new Set()
+		if (reportedCodes.has(warning.code)) return
+		reportedCodes.add(warning.code)
+		ledger.reportedChoiceWarnings.set(correlationId, reportedCodes)
+
+		switch (warning.code) {
+			case "chunk-multiple-choices":
+				console.warn("[SuperMagicStore] multiple choices ignored", {
+					code: warning.code,
+					topicId,
+					superMessageId,
+					correlationId,
+					choiceCount: warning.choiceCount,
+					choiceIndexes: warning.choiceIndexes,
+					resolution: "ignore-choice-payload",
+				})
+				break
+			case "chunk-choice-index-invalid":
+				console.warn("[SuperMagicStore] invalid choice index", {
+					code: warning.code,
+					topicId,
+					superMessageId,
+					correlationId,
+					choiceIndex: warning.choiceIndex,
+					expectedChoiceIndex: 0,
+					resolution: "ignore-choice-payload-and-recover",
+				})
+				break
+			case "chunk-choice-index-missing":
+				console.warn("[SuperMagicStore] missing choice index", {
+					code: warning.code,
+					topicId,
+					superMessageId,
+					correlationId,
+					fallbackChoiceIndex: 0,
+					resolution: "fallback-single-choice",
+				})
+				break
+		}
+	}
+
+	/** 协议身份无法确定时复用既有恢复预算与去重状态，不直接绕过状态机发布事件。 */
+	private requestInvalidChoiceRecovery(
+		topicId: string,
+		superMessageId: string,
+		topicMeta: TopicMeta,
+	) {
+		if (topicId !== this.activeTopicId || topicMeta.syncState === "syncing") return
+		this.clearStreamRecoveryTimer(topicId, superMessageId)
+		this.requestStreamRecovery(
+			topicId,
+			superMessageId,
+			this.ensureStreamRecoveryState(topicId, superMessageId),
+			this.getStreamState(topicId, superMessageId),
+		)
 	}
 
 	private requestStreamRecovery(
@@ -3059,7 +3206,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			return
 		}
 
-		const choice = messageChunk?.choices?.[0]
+		const choiceSelection = this.selectStreamChunkChoice(messageChunk)
+		const choice = choiceSelection.kind === "accepted" ? choiceSelection.choice : undefined
 		const delta = choice?.delta
 		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
 		const hasTextDelta = Boolean(
@@ -3088,6 +3236,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			(pendingChunkIndex) => pendingChunkIndex > 0,
 		)
 		if (
+			choiceSelection.kind === "accepted" &&
 			chunkIndex === 0 &&
 			(ledger.nextChunkIndex > 1 || (ledger.nextChunkIndex > 0 && hasBufferedLaterChunk)) &&
 			!topicMeta.finalizedCorrelationIds.has(superMessageId)
@@ -3150,7 +3299,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				ledger.nextChunkIndex += 1
 				if (!orderedChunk) continue
 
-				const orderedChoice = orderedChunk.choices?.[0]
+				const orderedChoiceSelection = this.selectStreamChunkChoice(orderedChunk)
+				this.reportStreamChunkChoiceWarning(
+					topicId,
+					superMessageId,
+					correlationId,
+					ledger,
+					orderedChoiceSelection,
+				)
+				if (orderedChoiceSelection.kind === "rejected") {
+					if (orderedChoiceSelection.shouldRecover) {
+						this.requestInvalidChoiceRecovery(topicId, superMessageId, topicMeta)
+					}
+					// transport i 仍已被 ledger 消费，但异常候选不得进入 canonical/UI/事件状态。
+					continue
+				}
+
+				const orderedChoice =
+					orderedChoiceSelection.kind === "accepted"
+						? orderedChoiceSelection.choice
+						: undefined
 				const orderedDelta = orderedChoice?.delta
 				const orderedToolCalls = Array.isArray(orderedDelta?.tool_calls)
 					? orderedDelta.tool_calls
@@ -3175,6 +3343,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)
 					continue
 				}
+				if (!orderedChoice) continue
 
 				const existingStreamState = this.getStreamState(topicId, superMessageId)
 				if (!existingStreamState && orderedIsFinal && !orderedHasCanonicalDelta) {
@@ -3225,6 +3394,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						topicMeta,
 						streamState,
 						orderedChunk,
+						orderedChoice,
 					) || appliedChunk
 				if (streamState.isFinalMessageReceived) {
 					this.clearStreamChunkLedger(topicId, superMessageId)
@@ -3258,9 +3428,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicMeta: TopicMeta,
 		streamState: StreamState,
 		messageChunk: SuperMagicChunkMessage["super_magic_chunk"],
+		choice: StreamChunkChoice,
 	): boolean {
 		if (streamState.isFinalMessageReceived) return false
-		const choice = messageChunk?.choices?.[0]
 		const delta = choice?.delta
 		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
 		const previousContentLength = streamState.content.length
