@@ -230,7 +230,8 @@ class BrowserDetailBuilder:
     def _read_page_body(cls, result: ToolResult) -> str:
         markdown = cls._string(result.data.get("markdown")).strip()
         scope = cls._string(result.data.get("scope"))
-        lines = [cls._message("browser.detail.read_scope", scope=scope or "viewport")]
+        scope_key = "browser.detail.scope_full" if scope == "full" else "browser.detail.scope_viewport"
+        lines = [cls._message("browser.detail.read_scope", scope=cls._message(scope_key))]
         if not markdown:
             lines.append(cls._message("browser.detail.no_readable_content"))
             return "\n\n".join(lines)
@@ -277,18 +278,28 @@ class BrowserDetailBuilder:
     @classmethod
     def _wait_body(cls, arguments: Mapping[str, object]) -> str:
         condition = cls._string(arguments.get("condition"))
-        expected = next(
-            (
-                str(arguments[key])
-                for key in ("value", "state", "duration_ms")
-                if arguments.get(key) is not None
-            ),
-            "",
-        )
+        condition_key = {
+            "url": "browser.detail.condition_url",
+            "text": "browser.detail.condition_text",
+            "load_state": "browser.detail.condition_load_state",
+            "ref": "browser.detail.condition_ref",
+            "time": "browser.detail.condition_time",
+        }.get(condition, "browser.detail.condition_generic")
+        condition_label = cls._message(condition_key)
+        if condition == "load_state":
+            state = cls._string(arguments.get("state"))
+            state_key = "browser.detail.state_load" if state == "load" else "browser.detail.state_dom_content_loaded"
+            expected = cls._message(state_key)
+        elif condition == "time":
+            duration_ms = arguments.get("duration_ms")
+            expected = f"{duration_ms} ms" if duration_ms is not None else cls._message("browser.detail.wait_default")
+        else:
+            expected = cls._string(arguments.get("value")) or cls._string(arguments.get("state"))
+            expected = expected or cls._message("browser.detail.wait_default")
         return cls._message(
             "browser.detail.wait_condition",
-            condition=condition or "condition",
-            expected=expected or cls._message("browser.detail.wait_default"),
+            condition=condition_label,
+            expected=expected,
         )
 
     @classmethod

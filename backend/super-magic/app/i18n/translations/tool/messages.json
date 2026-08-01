@@ -1679,6 +1679,14 @@
         "zh_CN": "读取范围：{{scope}}",
         "en_US": "Read scope: {{scope}}"
     },
+    "browser.detail.scope_viewport": {
+        "zh_CN": "当前可见区域",
+        "en_US": "the visible area"
+    },
+    "browser.detail.scope_full": {
+        "zh_CN": "整个网页",
+        "en_US": "the full webpage"
+    },
     "browser.detail.no_readable_content": {
         "zh_CN": "当前范围内没有读取到可展示的网页正文。",
         "en_US": "No readable webpage content was found in the selected scope."
@@ -1696,8 +1704,40 @@
         "en_US": "No interactive element summary is available."
     },
     "browser.detail.wait_condition": {
-        "zh_CN": "等待条件：{{condition}}；目标：{{expected}}",
-        "en_US": "Wait condition: {{condition}}; expected: {{expected}}"
+        "zh_CN": "等待{{condition}}：{{expected}}",
+        "en_US": "Waiting for {{condition}}: {{expected}}"
+    },
+    "browser.detail.condition_url": {
+        "zh_CN": "页面地址变化",
+        "en_US": "the page address to change"
+    },
+    "browser.detail.condition_text": {
+        "zh_CN": "页面出现指定文字",
+        "en_US": "the page to show the specified text"
+    },
+    "browser.detail.condition_load_state": {
+        "zh_CN": "网页完成加载",
+        "en_US": "the webpage to finish loading"
+    },
+    "browser.detail.condition_ref": {
+        "zh_CN": "指定元素出现",
+        "en_US": "the specified element to appear"
+    },
+    "browser.detail.condition_time": {
+        "zh_CN": "指定时间",
+        "en_US": "the specified time"
+    },
+    "browser.detail.condition_generic": {
+        "zh_CN": "页面状态",
+        "en_US": "the page state"
+    },
+    "browser.detail.state_load": {
+        "zh_CN": "页面及资源加载完成",
+        "en_US": "the page and its resources to finish loading"
+    },
+    "browser.detail.state_dom_content_loaded": {
+        "zh_CN": "页面结构加载完成",
+        "en_US": "the page structure to finish loading"
     },
     "browser.detail.wait_default": {
         "zh_CN": "达到指定状态",

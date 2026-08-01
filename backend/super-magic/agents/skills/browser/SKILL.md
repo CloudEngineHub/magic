@@ -1,11 +1,19 @@
 ---
 name: browser
-description: Open and control rendered web pages, read page content, complete forms, inspect page state, capture screenshots, analyze visual layout, debug console or network activity, and operate an authorized user Chrome session.
+description: Use when a task requires interacting with a rendered webpage, such as clicking, typing, submitting forms, waiting for dynamic UI, inspecting controls, or operating an authorized user browser. Do not load for ordinary webpage reading or source/SEO analysis when another reading or HTTP path is sufficient.
 ---
 
 # Browser
 
 Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults.
+
+## When to use Browser
+
+Use Browser only when the task depends on rendered page state: interaction, JavaScript-generated content, visual layout, forms, dialogs, screenshots, or an authorized user browser session.
+
+For ordinary article reading, link extraction, source inspection, SEO, metadata, structured data, HTTP status, headers, or robots rules, prefer the project's dedicated webpage reader or HTTP/CLI tools. Markdown conversion is useful for text comprehension, but it is not a substitute for raw HTML or HTTP inspection when the task depends on SEO or document metadata.
+
+If both paths could work and the user has not specified one, choose the cheaper non-Browser path or ask which result they want. Browser sessions consume more time and server resources.
 
 ## Default path
 
@@ -137,7 +145,7 @@ For a quick post-action check, use `browser_snapshot(scope="changes")`. After na
 - Use `browser_snapshot` to find controls and inspect interaction state. Read its tree from `content`; use structured refs only for exact chaining or deterministic filtering.
 - Use `browser_visual_query(page_id=..., query=...)` for layout, images, charts, maps, canvas, or other visual questions. Its answer is in `content`.
 - Use `browser_find_visual(page_id=..., target=...)` only when a control cannot be identified from the snapshot.
-- Use `browser_screenshot` when the user should see an image but no visual analysis is needed.
+- Use `browser_screenshot` only when the user explicitly asks for a screenshot, asks to save an image, or a visual question cannot be answered by the automatic operation snapshot. State-changing Browser operations already publish a temporary Tool Detail snapshot; do not capture another screenshot merely to report that the task is finished.
 
 Visual model calls are expensive. Do not run multiple `browser_visual_query` or `browser_find_visual` calls concurrently, and do not call both for the same question. Put a required visual call in a dedicated snippet or set the snippet timeout to at least 120 seconds when it follows other Browser work.
 
@@ -175,7 +183,7 @@ if match.ok:
 
 Use the validated `data["ref"]` from `browser_find_visual` for the next interaction.
 
-Without `output_path`, screenshots are temporary UI snapshots displayed through the tool detail. They do not return `screenshot_data`, base64 bytes, or a reusable local path. Set `output_path` only when the user asks to save the screenshot or a later step needs a workspace file. The extension selects the format automatically: use `.webp` for the normal size-quality balance, `.jpg` or `.jpeg` when JPEG is required, and `.png` for lossless output. Omit `scale` and `quality` normally; the saved file then uses the same adaptive resolution and compression chosen for the Tool Detail snapshot. Set `scale` only when the user requests a specific output size. Lower it first when reducing file size. Increasing it enlarges captured pixels but does not create new page detail. Set `quality` only when the user explicitly requests a different WebP/JPEG compression level; it is invalid for PNG. Read the saved workspace path from `result.data["output_path"]`.
+Without `output_path`, screenshots are temporary UI snapshots displayed through the tool detail. They do not return `screenshot_data`, base64 bytes, or a reusable local path. Set `output_path` only when the user asks to save the screenshot or a later step needs a workspace file. The extension selects the format automatically: use `.webp` for the normal size-quality balance, `.jpg` or `.jpeg` when JPEG is required, and `.png` for lossless output. Omit `scale` and `quality` normally so the service uses the readable Tool Detail defaults. Set `scale` only when the user requests a specific output size; increasing it enlarges captured pixels but does not create new page detail. Set `quality` only when the user explicitly requests a different WebP/JPEG compression level; it is invalid for PNG. Read the saved workspace path from `result.data["output_path"]`.
 
 If visual analysis is unavailable, continue with reads and snapshots when text or structure is sufficient. If the task requires appearance or spatial judgment, report the real visual error instead of claiming the image was understood.
 

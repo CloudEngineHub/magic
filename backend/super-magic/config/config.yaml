@@ -42,12 +42,12 @@ browser:
     sweep_interval_seconds: ${BROWSER_LIFECYCLE_SWEEP_INTERVAL_SECONDS:-5}
 
   artifacts:
-    webp_quality: ${BROWSER_WEBP_QUALITY:-30}
-    webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-10}
+    webp_quality: ${BROWSER_WEBP_QUALITY:-35}
+    webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-15}
     webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-5}
-    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-32768}
-    resize_step: ${BROWSER_SNAPSHOT_RESIZE_STEP:-0.8}
-    min_dimension: ${BROWSER_SNAPSHOT_MIN_DIMENSION:-512}
+    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-102400}
+    resize_step: ${BROWSER_SNAPSHOT_RESIZE_STEP:-0.85}
+    min_dimension: ${BROWSER_SNAPSHOT_MIN_DIMENSION:-640}
 
   resources:
     soft_contexts: ${BROWSER_SOFT_CONTEXTS:-8}

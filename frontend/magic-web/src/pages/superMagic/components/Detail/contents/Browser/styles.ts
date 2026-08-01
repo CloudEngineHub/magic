@@ -121,8 +121,10 @@ export const useStyles = createStyles(({ token }) => ({
 		backgroundColor: token.colorFillQuaternary,
 		color: token.colorTextSecondary,
 		fontSize: token.fontSizeSM,
-		pointerEvents: "none",
-		cursor: "default",
+		pointerEvents: "auto",
+		cursor: "text",
+		userSelect: "text",
+		WebkitUserSelect: "text",
 		"> span": {
 			overflow: "hidden",
 			textOverflow: "ellipsis",

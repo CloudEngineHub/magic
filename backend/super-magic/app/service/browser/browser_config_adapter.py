@@ -142,12 +142,12 @@ class BrowserConfigAdapter:
     @classmethod
     def artifact_config(cls) -> BrowserArtifactConfig:
         return BrowserArtifactConfig(
-            webp_quality=cls._int("browser.artifacts.webp_quality", 30),
-            webp_min_quality=cls._int("browser.artifacts.webp_min_quality", 10),
+            webp_quality=cls._int("browser.artifacts.webp_quality", 35),
+            webp_min_quality=cls._int("browser.artifacts.webp_min_quality", 15),
             webp_quality_step=cls._int("browser.artifacts.webp_quality_step", 5),
-            max_bytes=cls._int("browser.artifacts.max_bytes", 32 * 1024),
-            resize_step=cls._float("browser.artifacts.resize_step", 0.8),
-            min_dimension=cls._int("browser.artifacts.min_dimension", 512),
+            max_bytes=cls._int("browser.artifacts.max_bytes", 100 * 1024),
+            resize_step=cls._float("browser.artifacts.resize_step", 0.85),
+            min_dimension=cls._int("browser.artifacts.min_dimension", 640),
         )
 
     @classmethod
