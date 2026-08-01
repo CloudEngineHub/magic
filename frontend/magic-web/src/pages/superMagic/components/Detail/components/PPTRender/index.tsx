@@ -11,7 +11,6 @@ import {
 	useFullscreen,
 	useSlideFileLocator,
 	useCheckBeforeNavigate,
-	useScrollActiveSlideIntoView,
 	usePPTEventBus,
 	usePPTStore,
 	useSyncActiveState,
@@ -248,9 +247,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleSidebarCollapsedChange,
 	} = useSlideHandlers({ store, setIsAnySlideEditing, setIsSidebarCollapsed })
 
-	// 在文件树中定位活动幻灯片，并将缩略图滚动到可见区域
+	// 在文件树中定位活动幻灯片；缩略图滚动由虚拟侧边栏自身负责。
 	useSlideFileLocator({ store })
-	useScrollActiveSlideIntoView({ store })
 
 	// 全屏功能 - 在 usePPTSidebar 之前调用以便后续使用 isFullscreen
 	const { isFullscreen, toggleFullscreen } = useFullscreen({ containerRef })
@@ -599,6 +597,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onAddToNewChat={handleAddToNewChat}
 								mainFileId={mainFileId}
 								isMobile={isMobile}
+								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}
 								isCollapsed={isSidebarCollapsed}
 								onCollapsedChange={handleSidebarCollapsedChange}

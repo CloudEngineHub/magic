@@ -2,7 +2,8 @@ import { makeAutoObservable, runInAction } from "mobx"
 import type { PPTLoggerService, SlideScreenshotService } from "../services"
 import type { SlideItem } from "../PPTSidebar/types"
 
-type ResolveSlideIndex = () => number
+type ResolveSlide = () => SlideItem | undefined
+type ResolveCurrentSlide = (slide: SlideItem, originalIndex: number) => SlideItem | undefined
 
 /**
  * PPTScreenshotManager - Manages screenshot operations
@@ -14,12 +15,36 @@ type ResolveSlideIndex = () => number
 export class PPTScreenshotManager {
 	private logger: PPTLoggerService
 	private screenshotService: SlideScreenshotService
+	private screenshotRequestVersions = new Map<string, number>()
 
 	constructor(logger: PPTLoggerService, screenshotService: SlideScreenshotService) {
 		this.logger = logger
 		this.screenshotService = screenshotService
 
 		makeAutoObservable(this, {}, { autoBind: true })
+	}
+
+	private getScreenshotRequestKey(slide: SlideItem): string {
+		// Incremental sync may recreate a slide object (and its transient id) while preserving
+		// the file path. Version requests by that stable path so old work cannot overwrite it.
+		return slide.path || slide.url || slide.id
+	}
+
+	private beginScreenshotRequest(requestKey: string): number {
+		const requestVersion = (this.screenshotRequestVersions.get(requestKey) ?? 0) + 1
+		this.screenshotRequestVersions.set(requestKey, requestVersion)
+		return requestVersion
+	}
+
+	private isLatestScreenshotRequest(requestKey: string, requestVersion: number): boolean {
+		return this.screenshotRequestVersions.get(requestKey) === requestVersion
+	}
+
+	private invalidateScreenshotRequest(requestKey: string): void {
+		this.screenshotRequestVersions.set(
+			requestKey,
+			(this.screenshotRequestVersions.get(requestKey) ?? 0) + 1,
+		)
 	}
 
 	/**
@@ -33,7 +58,7 @@ export class PPTScreenshotManager {
 		index: number,
 		slides: SlideItem[],
 		targetContent?: string,
-		resolveSlideIndex?: ResolveSlideIndex,
+		resolveSlide?: ResolveSlide,
 	): Promise<void> {
 		const contentForScreenshot = targetContent || slide?.content
 		if (!slide || !contentForScreenshot) {
@@ -44,13 +69,12 @@ export class PPTScreenshotManager {
 			return
 		}
 
-		const getTargetSlide = () => {
-			const resolvedIndex = resolveSlideIndex?.() ?? index
-			return {
-				index: resolvedIndex,
-				slide: resolvedIndex >= 0 ? slides[resolvedIndex] : undefined,
-			}
-		}
+		const requestKey = this.getScreenshotRequestKey(slide)
+		const requestVersion = this.beginScreenshotRequest(requestKey)
+		const isLatestRequest = () => this.isLatestScreenshotRequest(requestKey, requestVersion)
+
+		// Sorting replaces slide objects, so every async write must resolve the current object.
+		const getTargetSlide = () => (resolveSlide ? resolveSlide() : slides[index])
 
 		this.logger.logOperationStart("generateSlideScreenshot", {
 			slideIndex: index,
@@ -60,36 +84,14 @@ export class PPTScreenshotManager {
 			// Use URL as cache key if available
 			const cacheKey = slide.url || `slide-${index}`
 
-			// Use targetContent if provided, otherwise use slide.content for cache check
-			// Check cache first
-			const cachedUrl = this.screenshotService.getCachedScreenshot(cacheKey)
-			if (
-				cachedUrl &&
-				this.screenshotService.hasCachedScreenshot(cacheKey, contentForScreenshot)
-			) {
-				this.logger.debug("使用缓存的截图", {
-					operation: "generateSlideScreenshot",
-					slideIndex: index,
-				})
-
-				runInAction(() => {
-					const target = getTargetSlide()
-					if (target.slide) {
-						target.slide.thumbnailUrl = cachedUrl
-						if (target.slide.thumbnailLoading) {
-							target.slide.thumbnailLoading = false
-						}
-					}
-				})
-				return
-			}
-
-			// Mark as loading only when a new screenshot actually needs to be generated.
+			// Cache validation performs DOM parsing and full-content hashing, so it is
+			// intentionally delegated to generateScreenshot after its main-thread yield.
 			runInAction(() => {
+				if (!isLatestRequest()) return
 				const target = getTargetSlide()
-				if (target.slide) {
-					target.slide.thumbnailLoading = true
-					target.slide.thumbnailError = undefined
+				if (target) {
+					target.thumbnailLoading = true
+					target.thumbnailError = undefined
 				}
 			})
 
@@ -104,27 +106,50 @@ export class PPTScreenshotManager {
 				contentForScreenshot,
 			)
 
+			let accepted = false
 			runInAction(() => {
+				if (!isLatestRequest()) return
 				const target = getTargetSlide()
-				if (target.slide) {
-					target.slide.thumbnailUrl = thumbnailUrl
-					target.slide.thumbnailLoading = false
+				if (target) {
+					target.thumbnailUrl = thumbnailUrl
+					target.thumbnailLoading = false
+					target.thumbnailError = undefined
+					accepted = true
 				}
 			})
+
+			if (!accepted) {
+				this.screenshotService.releaseScreenshot(thumbnailUrl)
+				this.logger.debug("丢弃过期的截图结果", {
+					operation: "generateSlideScreenshot",
+					slideIndex: index,
+					metadata: { requestKey, requestVersion },
+				})
+				return
+			}
 
 			this.logger.logOperationSuccess("generateSlideScreenshot", {
 				slideIndex: index,
 			})
 		} catch (error) {
+			if (!isLatestRequest()) {
+				this.logger.debug("忽略过期截图请求的错误", {
+					operation: "generateSlideScreenshot",
+					slideIndex: index,
+					metadata: { requestKey, requestVersion },
+				})
+				return
+			}
+
 			this.logger.logOperationError("generateSlideScreenshot", error, {
 				slideIndex: index,
 			})
 
 			runInAction(() => {
 				const target = getTargetSlide()
-				if (target.slide) {
-					target.slide.thumbnailLoading = false
-					target.slide.thumbnailError =
+				if (target) {
+					target.thumbnailLoading = false
+					target.thumbnailError =
 						error instanceof Error ? error : new Error("Unknown error")
 				}
 			})
@@ -135,7 +160,10 @@ export class PPTScreenshotManager {
 	 * Generate screenshots for all loaded slides
 	 * @param slides - All slides array
 	 */
-	async generateAllScreenshots(slides: SlideItem[]): Promise<void> {
+	async generateAllScreenshots(
+		slides: SlideItem[],
+		resolveCurrentSlide?: ResolveCurrentSlide,
+	): Promise<void> {
 		const loadedSlides = slides.filter(
 			(slide) => slide.loadingState === "loaded" && slide.content,
 		)
@@ -152,8 +180,14 @@ export class PPTScreenshotManager {
 			await Promise.all(
 				slides.map((slide, index) => {
 					if (slide.loadingState === "loaded" && slide.content) {
-						return this.generateSlideScreenshot(slide, index, slides, undefined, () =>
-							slides.indexOf(slide),
+						return this.generateSlideScreenshot(
+							slide,
+							index,
+							slides,
+							undefined,
+							resolveCurrentSlide
+								? () => resolveCurrentSlide(slide, index)
+								: undefined,
 						)
 					}
 					// 跳过未加载或未处理的幻灯片
@@ -184,6 +218,7 @@ export class PPTScreenshotManager {
 		})
 
 		const cacheKey = slide.url || `slide-${index}`
+		this.invalidateScreenshotRequest(this.getScreenshotRequestKey(slide))
 
 		// Clear cache
 		this.screenshotService.clearCache(cacheKey)

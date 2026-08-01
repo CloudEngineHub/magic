@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { SlideScreenshotService } from "../SlideScreenshotService"
 import { snapdom } from "@zumer/snapdom"
 
+vi.mock("../../../../contents/HTML/utils/full-content", () => ({
+	decodeHTMLEntities: (content: string) => content,
+	fallbackImageBase64: "data:image/png;base64,",
+	getFullContent: (content: string) => content,
+}))
+
 const snapdomMocks = vi.hoisted(() => {
 	let counter = 0
 
@@ -104,6 +110,39 @@ describe("SlideScreenshotService", () => {
 			)
 		})
 
+		it("yields before parsing dimensions and hashing the full content", async () => {
+			let resumePreparation: () => void = () => undefined
+			const yieldForPreparation = vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						resumePreparation = resolve
+					}),
+			)
+			const hashContent = vi.fn(() => "prepared-hash")
+			const parseSpy = vi.spyOn(DOMParser.prototype, "parseFromString")
+			Object.assign(service, {
+				yieldForPreparation,
+				hashContent,
+				doGenerateScreenshot: vi.fn(async () => "blob:prepared"),
+			})
+
+			const generation = service.generateScreenshot(
+				"https://example.com/prepared.html",
+				"<div>Prepared content</div>",
+			)
+
+			expect(yieldForPreparation).toHaveBeenCalledTimes(1)
+			expect(parseSpy).not.toHaveBeenCalled()
+			expect(hashContent).not.toHaveBeenCalled()
+
+			resumePreparation()
+			await expect(generation).resolves.toBe("blob:prepared")
+
+			expect(parseSpy).toHaveBeenCalled()
+			expect(hashContent).toHaveBeenCalledTimes(1)
+			parseSpy.mockRestore()
+		})
+
 		it("should cache generated screenshots", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
@@ -130,6 +169,37 @@ describe("SlideScreenshotService", () => {
 			expect(url1).not.toBe(url2)
 		})
 
+		it("does not reuse a cached screenshot when different content has the same hash", async () => {
+			const firstContent = "<div>Aa</div>"
+			const secondContent = "<div>BB</div>"
+			const getContentHash = (
+				service as unknown as { getContentHash: (content: string) => string }
+			).getContentHash.bind(service)
+			expect(getContentHash(firstContent)).toBe(getContentHash(secondContent))
+
+			let generationCount = 0
+			const generate = vi.fn(async () => {
+				generationCount += 1
+				return `blob:collision-${generationCount}`
+			})
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+
+			const firstThumbnail = await service.generateScreenshot("collision-slide", firstContent)
+			const secondThumbnail = await service.generateScreenshot(
+				"collision-slide",
+				secondContent,
+			)
+
+			expect(firstThumbnail).toBe("blob:collision-1")
+			expect(secondThumbnail).toBe("blob:collision-2")
+			expect(generate).toHaveBeenCalledTimes(2)
+			expect(service.hasCachedScreenshot("collision-slide", firstContent)).toBe(false)
+			expect(service.hasCachedScreenshot("collision-slide", secondContent)).toBe(true)
+		})
+
 		it("should handle concurrent requests for same URL", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
@@ -146,6 +216,258 @@ describe("SlideScreenshotService", () => {
 			// All should return the same URL
 			expect(results[0]).toBe(results[1])
 			expect(results[1]).toBe(results[2])
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("deduplicates identical content when preparation completes out of order", async () => {
+			const preparationReleases: Array<() => void> = []
+			const generate = vi.fn(async () => "blob:shared")
+			Object.assign(service, {
+				yieldForPreparation: () =>
+					new Promise<void>((resolve) => preparationReleases.push(resolve)),
+				doGenerateScreenshot: generate,
+			})
+			const url = "https://example.com/shared.html"
+			const content = "<div>Shared content</div>"
+
+			const firstGeneration = service.generateScreenshot(url, content)
+			const secondGeneration = service.generateScreenshot(url, content)
+			expect(preparationReleases).toHaveLength(2)
+
+			preparationReleases[1]()
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1))
+			preparationReleases[0]()
+
+			await expect(Promise.all([firstGeneration, secondGeneration])).resolves.toEqual([
+				"blob:shared",
+				"blob:shared",
+			])
+			expect(generate).toHaveBeenCalledTimes(1)
+			expect(service.getCachedScreenshot(url)).toBe("blob:shared")
+		})
+
+		it("keeps concurrent revisions of the same URL separate", async () => {
+			const url = "https://example.com/slide1.html"
+			const oldContent = "<div>Old content</div>"
+			const newContent = "<div>New content</div>"
+			const preparationReleases: Array<() => void> = []
+			const resolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						resolvers.set(content, resolve)
+					}),
+			)
+			Object.assign(service, {
+				yieldForPreparation: () =>
+					new Promise<void>((resolve) => preparationReleases.push(resolve)),
+				doGenerateScreenshot: generate,
+			})
+
+			const oldGeneration = service.generateScreenshot(url, oldContent)
+			const newGeneration = service.generateScreenshot(url, newContent)
+
+			expect(preparationReleases).toHaveLength(2)
+			preparationReleases[1]()
+			await vi.waitFor(() =>
+				expect(generate).toHaveBeenCalledWith(
+					newContent,
+					expect.anything(),
+					expect.anything(),
+				),
+			)
+			preparationReleases[0]()
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			resolvers.get(newContent)?.("blob:new")
+			await expect(newGeneration).resolves.toBe("blob:new")
+			resolvers.get(oldContent)?.("blob:old")
+			await expect(oldGeneration).resolves.toBe("blob:old")
+
+			expect(service.getCachedScreenshot(url)).toBe("blob:new")
+			expect(service.hasCachedScreenshot(url, newContent)).toBe(true)
+			expect(service.hasCachedScreenshot(url, oldContent)).toBe(false)
+		})
+
+		it("keeps concurrent hash collisions in separate in-flight generations", async () => {
+			const firstContent = "<div>Aa</div>"
+			const secondContent = "<div>BB</div>"
+			const getContentHash = (
+				service as unknown as { getContentHash: (content: string) => string }
+			).getContentHash.bind(service)
+			expect(getContentHash(firstContent)).toBe(getContentHash(secondContent))
+
+			const resolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						resolvers.set(content, resolve)
+					}),
+			)
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+
+			const firstGeneration = service.generateScreenshot("collision-slide", firstContent)
+			const secondGeneration = service.generateScreenshot("collision-slide", secondContent)
+
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			resolvers.get(secondContent)?.("blob:second-collision")
+			await expect(secondGeneration).resolves.toBe("blob:second-collision")
+			resolvers.get(firstContent)?.("blob:first-collision")
+			await expect(firstGeneration).resolves.toBe("blob:first-collision")
+
+			expect(service.getCachedScreenshot("collision-slide")).toBe("blob:second-collision")
+			expect(service.hasCachedScreenshot("collision-slide", firstContent)).toBe(false)
+			expect(service.hasCachedScreenshot("collision-slide", secondContent)).toBe(true)
+		})
+
+		it("limits screenshot generation to two concurrent tasks across service instances", async () => {
+			const services = [service, new SlideScreenshotService(), new SlideScreenshotService()]
+			const releases: Array<() => void> = []
+			let activeCount = 0
+			let maxActiveCount = 0
+
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						activeCount += 1
+						maxActiveCount = Math.max(maxActiveCount, activeCount)
+						releases.push(() => {
+							activeCount -= 1
+							resolve(`blob:${content}`)
+						})
+					}),
+			)
+
+			services.forEach((targetService) => {
+				Object.assign(targetService, {
+					yieldForPreparation: () => Promise.resolve(),
+					doGenerateScreenshot: generate,
+				})
+			})
+
+			const generations = services.map((targetService, index) =>
+				targetService.generateScreenshot(`slide-${index}`, `<div>${index}</div>`),
+			)
+
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			expect(maxActiveCount).toBe(2)
+
+			releases.shift()?.()
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(3))
+			expect(maxActiveCount).toBe(2)
+
+			releases.splice(0).forEach((release) => release())
+			await expect(Promise.all(generations)).resolves.toEqual([
+				"blob:<div>0</div>",
+				"blob:<div>1</div>",
+				"blob:<div>2</div>",
+			])
+
+			services.slice(1).forEach((targetService) => targetService.dispose())
+		})
+
+		it("starts the newest queued request ahead of older background work", async () => {
+			const started: string[] = []
+			const releases = new Map<string, () => void>()
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						started.push(content)
+						releases.set(content, () => resolve(`blob:${content}`))
+					}),
+			)
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+			const release = (content: string) => {
+				const complete = releases.get(content)
+				expect(complete).toBeDefined()
+				releases.delete(content)
+				complete?.()
+			}
+
+			const blockerOne = service.generateScreenshot("blocker-1", "blocker-1")
+			const blockerTwo = service.generateScreenshot("blocker-2", "blocker-2")
+			await vi.waitFor(() => expect(started).toEqual(["blocker-1", "blocker-2"]))
+
+			const backgroundOne = service.generateScreenshot("background-1", "background-1")
+			const backgroundTwo = service.generateScreenshot("background-2", "background-2")
+			const current = service.generateScreenshot("current", "current")
+			await Promise.resolve()
+
+			release("blocker-1")
+			await vi.waitFor(() => expect(started).toHaveLength(3))
+			expect(started[2]).toBe("current")
+
+			while (started.length < 5) {
+				const previousStartedCount = started.length
+				Array.from(releases.keys()).forEach(release)
+				await vi.waitFor(() => expect(started.length).toBeGreaterThan(previousStartedCount))
+			}
+			Array.from(releases.keys()).forEach(release)
+
+			await Promise.all([blockerOne, blockerTwo, backgroundOne, backgroundTwo, current])
+		})
+
+		it("runs the oldest queued task after a bounded priority burst", async () => {
+			const started: string[] = []
+			const releases = new Map<string, () => void>()
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						started.push(content)
+						releases.set(content, () => resolve(`blob:${content}`))
+					}),
+			)
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+			const release = (content: string) => {
+				const complete = releases.get(content)
+				expect(complete).toBeDefined()
+				releases.delete(content)
+				complete?.()
+			}
+
+			const generations = [
+				service.generateScreenshot("blocker-1", "blocker-1"),
+				service.generateScreenshot("blocker-2", "blocker-2"),
+			]
+			await vi.waitFor(() => expect(started).toEqual(["blocker-1", "blocker-2"]))
+
+			generations.push(service.generateScreenshot("oldest", "oldest"))
+			for (let index = 0; index <= 4; index += 1) {
+				generations.push(service.generateScreenshot("priority-slide", `priority-${index}`))
+			}
+			await Promise.resolve()
+
+			release("blocker-1")
+			await vi.waitFor(() => expect(started).toHaveLength(3))
+			expect(started[2]).toBe("priority-4")
+
+			release("priority-4")
+			await vi.waitFor(() => expect(started).toHaveLength(4))
+			expect(started[3]).toBe("priority-3")
+
+			release("priority-3")
+			await vi.waitFor(() => expect(started).toHaveLength(5))
+			expect(started[4]).toBe("priority-2")
+
+			release("priority-2")
+			await vi.waitFor(() => expect(started).toHaveLength(6))
+			expect(started[5]).toBe("oldest")
+
+			while (started.length < generations.length) {
+				const previousStartedCount = started.length
+				Array.from(releases.keys()).forEach(release)
+				await vi.waitFor(() => expect(started.length).toBeGreaterThan(previousStartedCount))
+			}
+			Array.from(releases.keys()).forEach(release)
+			await Promise.all(generations)
 		})
 	})
 
@@ -189,6 +511,22 @@ describe("SlideScreenshotService", () => {
 			expect(global.URL.revokeObjectURL).toHaveBeenCalled()
 		})
 
+		it("releases discarded blob URLs without revoking cached thumbnails", async () => {
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: vi.fn(async () => "blob:cached"),
+			})
+			await service.generateScreenshot("cached-slide", "<div>cached</div>")
+			vi.mocked(global.URL.revokeObjectURL).mockClear()
+
+			service.releaseScreenshot("blob:cached")
+			expect(global.URL.revokeObjectURL).not.toHaveBeenCalled()
+
+			service.releaseScreenshot("blob:discarded")
+			expect(global.URL.revokeObjectURL).toHaveBeenCalledOnce()
+			expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:discarded")
+		})
+
 		it("should clear all cache", async () => {
 			const urls = [
 				"https://example.com/slide1.html",
@@ -218,8 +556,14 @@ describe("SlideScreenshotService", () => {
 			await service.generateScreenshot(url1, content)
 
 			// Mock timestamp to make it old
-			const cache = (service as any).cache
+			const cache = (
+				service as unknown as {
+					cache: Map<string, { timestamp: number }>
+				}
+			).cache
 			const entry1 = cache.get(url1)
+			expect(entry1).toBeDefined()
+			if (!entry1) throw new Error("Expected cached screenshot")
 			entry1.timestamp = Date.now() - 400000 // 6.67 minutes ago
 
 			// Generate second screenshot (recent)
@@ -258,6 +602,142 @@ describe("SlideScreenshotService", () => {
 
 			expect(service.getCacheStats().size).toBe(0)
 			expect(global.URL.revokeObjectURL).toHaveBeenCalled()
+		})
+
+		it("releases an exported thumbnail when dispose interrupts the cleanup delay", async () => {
+			const waitForCleanupDelay = vi.fn(
+				(_delayMs: number, signal: AbortSignal) =>
+					new Promise<void>((_resolve, reject) => {
+						const handleAbort = () => {
+							signal.removeEventListener("abort", handleAbort)
+							reject(signal.reason)
+						}
+						signal.addEventListener("abort", handleAbort, { once: true })
+					}),
+			)
+			snapdomMocks.toWebp.mockResolvedValueOnce({
+				src: "blob:exported-before-cleanup",
+			})
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				setupScreenshotIframe: vi.fn(async () => undefined),
+				waitForRenderingReady: vi.fn(async () => undefined),
+				waitForAbortableDelay: waitForCleanupDelay,
+			})
+
+			const generation = service.generateScreenshot(
+				"dispose-during-cleanup",
+				"<div>dispose during cleanup</div>",
+			)
+			await vi.waitFor(() => {
+				expect(waitForCleanupDelay).toHaveBeenCalledWith(100, expect.anything())
+			})
+			const rejection = expect(generation).rejects.toMatchObject({ name: "AbortError" })
+
+			service.dispose()
+
+			await rejection
+			await vi.waitFor(() => {
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith(
+					"blob:exported-before-cleanup",
+				)
+			})
+			expect(service.getCacheStats().size).toBe(0)
+		})
+
+		it("aborts active generations immediately, frees scheduler slots, and releases late results", async () => {
+			const queuedService = new SlideScreenshotService()
+			const activeResolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const activeSignals = new Map<string, AbortSignal>()
+			const generateActive = vi.fn(
+				(content: string, _dimensions: unknown, signal: AbortSignal) =>
+					new Promise<string>((resolve) => {
+						activeResolvers.set(content, resolve)
+						activeSignals.set(content, signal)
+					}),
+			)
+			const generateQueued = vi.fn(async () => "blob:queued-after-dispose")
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generateActive,
+			})
+			Object.assign(queuedService, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generateQueued,
+			})
+
+			const firstGeneration = service.generateScreenshot("dispose-1", "dispose-1")
+			const secondGeneration = service.generateScreenshot("dispose-2", "dispose-2")
+			const queuedGeneration = queuedService.generateScreenshot(
+				"queued-after-dispose",
+				"queued-after-dispose",
+			)
+			await vi.waitFor(() => expect(generateActive).toHaveBeenCalledTimes(2))
+			expect(generateQueued).not.toHaveBeenCalled()
+
+			const firstRejection = expect(firstGeneration).rejects.toMatchObject({
+				name: "AbortError",
+			})
+			const secondRejection = expect(secondGeneration).rejects.toMatchObject({
+				name: "AbortError",
+			})
+			const queuedResult = expect(queuedGeneration).resolves.toBe("blob:queued-after-dispose")
+			service.dispose()
+
+			expect(activeSignals.get("dispose-1")?.aborted).toBe(true)
+			expect(activeSignals.get("dispose-2")?.aborted).toBe(true)
+			await Promise.all([firstRejection, secondRejection])
+			await vi.waitFor(() => expect(generateQueued).toHaveBeenCalledTimes(1))
+			await queuedResult
+
+			// The underlying render promises deliberately ignore cancellation. Their
+			// eventual blob URLs still belong to the disposed service and must be released.
+			activeResolvers.get("dispose-1")?.("blob:disposed-1")
+			activeResolvers.get("dispose-2")?.("blob:disposed-2")
+			await vi.waitFor(() => {
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:disposed-1")
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:disposed-2")
+			})
+
+			expect(service.getCacheStats().size).toBe(0)
+			queuedService.dispose()
+		})
+
+		it("cancels its queued generations before active slots are released on dispose", async () => {
+			const generate = vi.fn(() => new Promise<string>(() => undefined))
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+
+			const firstGeneration = service.generateScreenshot(
+				"dispose-active-1",
+				"dispose-active-1",
+			)
+			const secondGeneration = service.generateScreenshot(
+				"dispose-active-2",
+				"dispose-active-2",
+			)
+			const queuedGeneration = service.generateScreenshot("dispose-queued", "dispose-queued")
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			expect(generate).not.toHaveBeenCalledWith(
+				"dispose-queued",
+				expect.anything(),
+				expect.anything(),
+			)
+
+			const rejections = [firstGeneration, secondGeneration, queuedGeneration].map(
+				(generation) => expect(generation).rejects.toMatchObject({ name: "AbortError" }),
+			)
+			service.dispose()
+			await Promise.all(rejections)
+
+			expect(generate).toHaveBeenCalledTimes(2)
+			expect(generate).not.toHaveBeenCalledWith(
+				"dispose-queued",
+				expect.anything(),
+				expect.anything(),
+			)
 		})
 	})
 

@@ -1476,7 +1476,7 @@ export class PPTStore {
 			this.slides,
 			targetContent,
 			() =>
-				this.slides.findIndex(
+				this.slides.find(
 					(candidate, candidateIndex) =>
 						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
 				),
@@ -1484,7 +1484,13 @@ export class PPTStore {
 	}
 
 	async generateAllScreenshots(): Promise<void> {
-		await this.screenshotManager.generateAllScreenshots(this.slides)
+		await this.screenshotManager.generateAllScreenshots(this.slides, (slide, originalIndex) => {
+			const generationKey = this.getSlideStableKey(slide, originalIndex)
+			return this.slides.find(
+				(candidate, candidateIndex) =>
+					this.getSlideStableKey(candidate, candidateIndex) === generationKey,
+			)
+		})
 	}
 
 	/**
