@@ -252,13 +252,12 @@ class TopicTaskAppService extends AbstractAppService
                 // Create new message
                 $messageEntity = $this->parseMessageContent($messageDTO);
                 $messageEntity->setTopicId($topicId);
-                // Special status handling: generate output content tool when task is finished
-                if ($messageEntity->getStatus() === TaskStatus::FINISHED->value) {
-                    $outputTool = ToolProcessor::generateOutputContentTool($messageEntity->getAttachments());
-                    if ($outputTool !== null) {
-                        $messageEntity->setTool($outputTool);
-                    }
-                }
+                // 消息持久化前登记附件，确保 Browser Snapshot 获得稳定的 file_id，
+                // 并将 file_id 回填到工具详情供前端按统一文件链路获取临时地址。
+                $this->processMessageAttachment($dataIsolation, $taskEntity, $messageEntity);
+                $tool = $messageEntity->getTool();
+                ToolProcessor::processToolAttachments($tool);
+                $messageEntity->setTool($tool);
                 $this->processToolContent($dataIsolation, $taskEntity, $messageEntity);
                 // Set usage if task is finished
                 if (! empty($usage)) {
