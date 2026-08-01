@@ -1615,6 +1615,18 @@
         "zh_CN": "{{action}}已完成，当前页面为「{{page}}」",
         "en_US": "{{action}} completed on {{page}}"
     },
+    "browser.detail.page_title": {
+        "zh_CN": "页面标题：{{title}}",
+        "en_US": "Page title: {{title}}"
+    },
+    "browser.detail.url": {
+        "zh_CN": "网址：{{url}}",
+        "en_US": "URL: {{url}}"
+    },
+    "browser.detail.target": {
+        "zh_CN": "操作对象：{{target}}",
+        "en_US": "Target: {{target}}"
+    },
     "browser.detail.failed": {
         "zh_CN": "{{action}}失败：{{error}}",
         "en_US": "{{action}} failed: {{error}}"

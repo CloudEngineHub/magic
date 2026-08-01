@@ -1,5 +1,6 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useState } from "react"
+import BrowserNavigate from "../../components/BrowserNavigate"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import type { DetailBrowserAttachment, DetailBrowserData } from "../../types"
 import { useStyles } from "./styles"
@@ -106,6 +107,7 @@ export default memo(function Browser(props: BrowserProps) {
 				onOpenUrl={onOpenUrl}
 				allowEdit={allowEdit}
 			/>
+			<BrowserNavigate url={url} />
 			<div className={styles.content}>
 				{imgSrc && (
 					<img

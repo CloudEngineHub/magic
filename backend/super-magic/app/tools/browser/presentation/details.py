@@ -6,7 +6,13 @@ from collections.abc import Mapping
 
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
-from app.core.entity.message.server_message import BrowserContent, BrowserDetailStatus, ToolDetail
+from app.core.entity.message.server_message import (
+    BrowserContent,
+    BrowserDetailStatus,
+    DisplayType,
+    FileContent,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.presentation.models import (
@@ -44,6 +50,14 @@ class BrowserDetailBuilder:
 
     @staticmethod
     def detail(presentation: BrowserOperationPresentation, *, file_key: str | None = None) -> ToolDetail:
+        if file_key is None:
+            return ToolDetail(
+                type=DisplayType.MD,
+                data=FileContent(
+                    file_name="browser-operation.md",
+                    content=BrowserDetailBuilder._text_content(presentation),
+                ),
+            )
         return ToolDetailFactory.create_browser_detail(
             BrowserContent(
                 url=presentation.url,
@@ -56,6 +70,17 @@ class BrowserDetailBuilder:
                 status=presentation.status,
             )
         )
+
+    @classmethod
+    def _text_content(cls, presentation: BrowserOperationPresentation) -> str:
+        lines = [presentation.summary]
+        if presentation.page_title:
+            lines.append(cls._message("browser.detail.page_title", title=presentation.page_title))
+        if presentation.url:
+            lines.append(cls._message("browser.detail.url", url=presentation.url))
+        if presentation.target:
+            lines.append(cls._message("browser.detail.target", target=presentation.target))
+        return "\n\n".join(lines)
 
     @classmethod
     def _summary(
