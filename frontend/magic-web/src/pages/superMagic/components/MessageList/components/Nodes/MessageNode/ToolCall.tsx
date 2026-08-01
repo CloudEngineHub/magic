@@ -21,6 +21,13 @@ interface ToolDetail {
 	[key: string]: unknown
 }
 
+interface ToolAttachment {
+	file_key?: string
+	file_url?: string
+	file_id?: string | null
+	[key: string]: unknown
+}
+
 interface ToolCallItem {
 	id: string
 	type: "function"
@@ -36,7 +43,7 @@ interface ToolCallItem {
 		status?: string
 		remark?: string
 		detail?: ToolDetail
-		attachments?: Array<any> | null
+		attachments?: ToolAttachment[] | null
 		[key: string]: unknown
 	}
 }
@@ -114,7 +121,11 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 
 	const onClick = useCallback(() => {
 		const toolInfo = pick(toolData, ["name", "url", "action", "remark", "id"])
-		const newDetail = { ...toolData?.detail, ...toolInfo }
+		const newDetail = {
+			...toolData?.detail,
+			...toolInfo,
+			attachments: toolData.attachments,
+		}
 
 		if (DisabledDetailToolTypes.includes(toolData?.name) || isEmpty(toolData?.detail)) return
 

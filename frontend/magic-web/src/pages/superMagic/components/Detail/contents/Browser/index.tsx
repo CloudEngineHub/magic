@@ -1,10 +1,12 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useState } from "react"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import type { DetailBrowserAttachment, DetailBrowserData } from "../../types"
 import { useStyles } from "./styles"
 
 interface BrowserProps {
-	data: any
+	data: DetailBrowserData
+	browserAttachments?: DetailBrowserAttachment[]
 	userSelectDetail: any
 	setUserSelectDetail?: (detail: any) => void
 	isFromNode?: boolean
@@ -44,6 +46,7 @@ interface BrowserProps {
 export default memo(function Browser(props: BrowserProps) {
 	const {
 		data,
+		browserAttachments = [],
 		isFromNode,
 		// Props from Render component
 		type,
@@ -61,20 +64,29 @@ export default memo(function Browser(props: BrowserProps) {
 		allowEdit,
 	} = props
 	const { styles, cx } = useStyles()
-	const { url, title, file_id } = data || {}
-	const [imgSrc, setImgSrc] = useState("")
+	const { url, title, file_id, file_key } = data || {}
+	const snapshotUrl = browserAttachments.find((attachment) => {
+		return attachment.file_key && attachment.file_key === file_key && attachment.file_url
+	})?.file_url
+	const [imgSrc, setImgSrc] = useState(snapshotUrl || "")
 
 	const onOpenUrl = () => {
 		window.open(data?.url, "_blank")
 	}
 
 	useEffect(() => {
+		if (snapshotUrl) {
+			setImgSrc(snapshotUrl)
+			return
+		}
+
+		setImgSrc("")
 		if (file_id) {
 			getTemporaryDownloadUrl({ file_ids: [file_id] }).then((res: any) => {
 				setImgSrc(res[0]?.url)
 			})
 		}
-	}, [file_id])
+	}, [file_id, snapshotUrl])
 
 	return (
 		<div className={cx(styles.browserContainer, className)}>
@@ -95,7 +107,14 @@ export default memo(function Browser(props: BrowserProps) {
 				allowEdit={allowEdit}
 			/>
 			<div className={styles.content}>
-				{imgSrc && <img className={styles.screenshot} src={imgSrc as any} alt={title}  data-testid="browser-image"/>}
+				{imgSrc && (
+					<img
+						className={styles.screenshot}
+						src={imgSrc}
+						alt={title}
+						data-testid="browser-image"
+					/>
+				)}
 			</div>
 		</div>
 	)

@@ -88,6 +88,7 @@ export default function Render(props: any) {
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
 		projectId,
+		browserAttachments,
 		allowDownload,
 		mdToolbarContainer,
 	} = props
@@ -738,6 +739,7 @@ export default function Render(props: any) {
 		isTabActive: props.isTabActive,
 		allowDownload,
 		projectId,
+		browserAttachments,
 	}
 
 	return (
