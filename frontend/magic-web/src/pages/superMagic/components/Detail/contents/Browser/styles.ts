@@ -15,6 +15,7 @@ export const useStyles = createStyles(({ token }) => ({
 		borderRadius: `${token.borderRadiusLG}px ${token.borderRadiusLG}px 0 0`,
 		overflow: "hidden",
 		backgroundColor: token.colorBgLayout,
+		userSelect: "none",
 	},
 	tabBar: {
 		display: "flex",
@@ -31,6 +32,8 @@ export const useStyles = createStyles(({ token }) => ({
 		gap: 6,
 		padding: "0 4px",
 		flex: "none",
+		pointerEvents: "none",
+		cursor: "default",
 		"> span": {
 			display: "block",
 			width: 8,
@@ -59,6 +62,8 @@ export const useStyles = createStyles(({ token }) => ({
 		backgroundColor: token.colorBgContainer,
 		color: token.colorText,
 		fontSize: token.fontSizeSM,
+		pointerEvents: "none",
+		cursor: "default",
 		"> span:nth-child(2)": {
 			overflow: "hidden",
 			textOverflow: "ellipsis",
@@ -75,9 +80,16 @@ export const useStyles = createStyles(({ token }) => ({
 		marginLeft: "auto",
 		flex: "none",
 		color: token.colorTextSecondary,
+		pointerEvents: "none",
 		"& [data-testid='detail-header']": {
 			width: "auto",
+			pointerEvents: "auto",
 		},
+	},
+	nonInteractiveControl: {
+		display: "inline-flex",
+		pointerEvents: "none",
+		cursor: "default",
 	},
 	toolbar: {
 		display: "flex",
@@ -94,6 +106,8 @@ export const useStyles = createStyles(({ token }) => ({
 		gap: 4,
 		height: 28,
 		color: token.colorTextTertiary,
+		pointerEvents: "none",
+		cursor: "default",
 	},
 	addressBar: {
 		display: "flex",
@@ -107,6 +121,8 @@ export const useStyles = createStyles(({ token }) => ({
 		backgroundColor: token.colorFillQuaternary,
 		color: token.colorTextSecondary,
 		fontSize: token.fontSizeSM,
+		pointerEvents: "none",
+		cursor: "default",
 		"> span": {
 			overflow: "hidden",
 			textOverflow: "ellipsis",

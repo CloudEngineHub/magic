@@ -133,12 +133,12 @@ class SnapshotConfig:
 
 @dataclass(frozen=True, slots=True)
 class BrowserArtifactConfig:
-    webp_quality: int = 35
-    webp_min_quality: int = 15
+    webp_quality: int = 30
+    webp_min_quality: int = 10
     webp_quality_step: int = 5
-    max_bytes: int = 100 * 1024
-    resize_step: float = 0.85
-    min_dimension: int = 640
+    max_bytes: int = 32 * 1024
+    resize_step: float = 0.8
+    min_dimension: int = 512
 
     def __post_init__(self) -> None:
         if not 0 <= self.webp_min_quality <= self.webp_quality <= 100:

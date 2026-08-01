@@ -128,7 +128,9 @@ export default memo(function Browser(props: BrowserProps) {
 						</span>
 					</div>
 					<Flex className={styles.tabActions} align="center" gap={4}>
-						<Plus size={16} strokeWidth={1.7} aria-hidden="true" />
+						<span className={styles.nonInteractiveControl} aria-hidden="true">
+							<Plus size={16} strokeWidth={1.7} />
+						</span>
 						<CommonHeaderV2
 							type={type}
 							renderMode="actions"
@@ -144,7 +146,9 @@ export default memo(function Browser(props: BrowserProps) {
 							onOpenUrl={onOpenUrl}
 							allowEdit={allowEdit}
 						/>
-						<Menu size={16} strokeWidth={1.7} aria-hidden="true" />
+						<span className={styles.nonInteractiveControl} aria-hidden="true">
+							<Menu size={16} strokeWidth={1.7} />
+						</span>
 					</Flex>
 				</div>
 				<div className={styles.toolbar}>
