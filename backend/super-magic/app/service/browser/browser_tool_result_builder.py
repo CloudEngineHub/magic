@@ -22,6 +22,7 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
+    PageReadiness,
     PageSnapshot,
     ScreenshotResult,
     SnapshotDiff,
@@ -58,9 +59,11 @@ class BrowserToolResultBuilder:
         lines = [f"Open pages in Browser session {session_id}:"]
         for page in pages:
             active = " active" if page.active else ""
+            readiness = f"; readiness={page.readiness.value}" if page.readiness is not PageReadiness.UNKNOWN else ""
             expires = cls._format_time(page.expires_at) if page.expires_at is not None else "not set"
             lines.append(
                 f"- {page.id}{active}: {page.title or '(untitled)'} — {cls.safe_url(page.url)}; expires={expires}"
+                f"{readiness}"
             )
             if page.resource_warning:
                 lines.append(f"  Warning: {page.resource_warning}")
@@ -73,6 +76,7 @@ class BrowserToolResultBuilder:
     def page(cls, page: BrowserPage, message: str) -> ToolResult:
         expires = cls._format_time(page.expires_at) if page.expires_at is not None else "not set"
         warning = f"\n- Warning: {page.resource_warning}" if page.resource_warning else ""
+        readiness = cls._readiness_content(page.readiness)
         return ToolResult(
             content=(
                 f"{message}\n"
@@ -80,10 +84,22 @@ class BrowserToolResultBuilder:
                 f"- Title: {page.title or '(untitled)'}\n"
                 f"- URL: {cls.safe_url(page.url)}\n"
                 f"- Document generation: {page.document_generation}\n"
-                f"- Expires: {expires}{warning}"
+                f"- Expires: {expires}\n"
+                f"- Readiness: {readiness}{warning}"
             ),
             data={"page_id": page.id, "session_id": page.session_id, "page": cls._structured(page)},
         )
+
+    @staticmethod
+    def _readiness_content(readiness: PageReadiness) -> str:
+        if readiness is PageReadiness.STABLE:
+            return "stable; the DOM and network were quiet within the configured readiness window"
+        if readiness is PageReadiness.LOADING:
+            return (
+                "still loading; the page is open and its page ID remains valid. "
+                "Reuse this page and read or wait instead of opening the same URL again"
+            )
+        return "not reported by this Browser backend"
 
     @classmethod
     def markdown(cls, page: BrowserPage, scope: str, markdown: str) -> ToolResult:

@@ -5,6 +5,8 @@ from datetime import datetime
 
 from playwright.async_api import CDPSession, Page
 
+from magic_use.models.common import PageReadiness
+
 
 @dataclass(slots=True)
 class PlaywrightPageHandle:
@@ -15,6 +17,7 @@ class PlaywrightPageHandle:
     opener_page_id: str | None
     expires_at: datetime
     resource_warning: str | None = None
+    readiness: PageReadiness = PageReadiness.LOADING
 
 
 @dataclass(frozen=True, slots=True)

@@ -1603,6 +1603,10 @@
         "zh_CN": "正在{{action}}：{{target}}",
         "en_US": "{{action}}: {{target}}"
     },
+    "browser.remark.recovering_navigation": {
+        "zh_CN": "页面暂时没有响应，AI 正在继续尝试",
+        "en_US": "The page is temporarily unresponsive; AI is continuing with another attempt"
+    },
     "browser.detail.succeeded": {
         "zh_CN": "{{action}}已完成",
         "en_US": "{{action}} completed"
@@ -1614,6 +1618,10 @@
     "browser.detail.succeeded_page": {
         "zh_CN": "{{action}}已完成，当前页面为「{{page}}」",
         "en_US": "{{action}} completed on {{page}}"
+    },
+    "browser.detail.succeeded_loading": {
+        "zh_CN": "{{action}}已完成，页面仍在加载",
+        "en_US": "{{action}} completed; the page is still loading"
     },
     "browser.detail.page_title": {
         "zh_CN": "页面标题：{{title}}",
@@ -1659,6 +1667,90 @@
         "zh_CN": "敏感内容（已隐藏）",
         "en_US": "Sensitive value (hidden)"
     },
+    "browser.detail.readiness_stable": {
+        "zh_CN": "页面状态：页面结构和网络请求已经稳定",
+        "en_US": "Page status: the DOM and network activity are stable"
+    },
+    "browser.detail.readiness_loading": {
+        "zh_CN": "页面状态：网页已经打开，但仍有内容正在加载",
+        "en_US": "Page status: the page is open, but some content is still loading"
+    },
+    "browser.detail.read_scope": {
+        "zh_CN": "读取范围：{{scope}}",
+        "en_US": "Read scope: {{scope}}"
+    },
+    "browser.detail.no_readable_content": {
+        "zh_CN": "当前范围内没有读取到可展示的网页正文。",
+        "en_US": "No readable webpage content was found in the selected scope."
+    },
+    "browser.detail.content_truncated": {
+        "zh_CN": "网页内容较长，这里仅展示前 {{limit}} 个字符。",
+        "en_US": "The webpage content is long; only the first {{limit}} characters are shown here."
+    },
+    "browser.detail.interactive_preview": {
+        "zh_CN": "主要可交互内容：\n{{items}}",
+        "en_US": "Main interactive content:\n{{items}}"
+    },
+    "browser.detail.no_interactive_preview": {
+        "zh_CN": "没有可展示的交互元素摘要。",
+        "en_US": "No interactive element summary is available."
+    },
+    "browser.detail.wait_condition": {
+        "zh_CN": "等待条件：{{condition}}；目标：{{expected}}",
+        "en_US": "Wait condition: {{condition}}; expected: {{expected}}"
+    },
+    "browser.detail.wait_default": {
+        "zh_CN": "达到指定状态",
+        "en_US": "the requested state"
+    },
+    "browser.detail.console_error_preview": {
+        "zh_CN": "主要控制台错误：\n{{items}}",
+        "en_US": "Main console errors:\n{{items}}"
+    },
+    "browser.detail.no_console_errors": {
+        "zh_CN": "本次返回的控制台记录中没有错误。",
+        "en_US": "No errors were found in the returned console entries."
+    },
+    "browser.detail.network_error_preview": {
+        "zh_CN": "主要失败请求：\n{{items}}",
+        "en_US": "Main failed requests:\n{{items}}"
+    },
+    "browser.detail.no_network_errors": {
+        "zh_CN": "本次返回的网络记录中没有失败请求。",
+        "en_US": "No failed requests were found in the returned network entries."
+    },
+    "browser.detail.network_failed": {
+        "zh_CN": "请求失败",
+        "en_US": "request failed"
+    },
+    "browser.detail.input_value": {
+        "zh_CN": "输入内容：{{value}}",
+        "en_US": "Input: {{value}}"
+    },
+    "browser.detail.pressed_key": {
+        "zh_CN": "按键：{{key}}",
+        "en_US": "Key: {{key}}"
+    },
+    "browser.detail.selected_value": {
+        "zh_CN": "选择内容：{{value}}",
+        "en_US": "Selected value: {{value}}"
+    },
+    "browser.detail.checked_state": {
+        "zh_CN": "设置状态：{{state}}",
+        "en_US": "State: {{state}}"
+    },
+    "browser.detail.checked": {
+        "zh_CN": "已选中",
+        "en_US": "checked"
+    },
+    "browser.detail.unchecked": {
+        "zh_CN": "未选中",
+        "en_US": "unchecked"
+    },
+    "browser.detail.uploaded_files": {
+        "zh_CN": "上传文件：{{count}} 个",
+        "en_US": "Uploaded files: {{count}}"
+    },
     "browser.attachment.snapshot": {
         "zh_CN": "网页操作截图",
         "en_US": "Browser snapshot"
@@ -1700,8 +1792,8 @@
         "en_US": "Browser resources reached the limit; close unused pages first"
     },
     "browser.error.navigation_failed": {
-        "zh_CN": "网页打开失败，请检查地址或页面状态",
-        "en_US": "The page could not be opened"
+        "zh_CN": "页面暂时没有响应或未能完成加载，当前浏览器页面会尽量保留",
+        "en_US": "The page did not respond or finish loading; the current browser page will be preserved when possible"
     },
     "browser.error.capability_unavailable": {
         "zh_CN": "当前浏览器不支持这项操作",

@@ -25,6 +25,11 @@ from app.tools.browser.presentation.models import (
 
 
 class BrowserDetailBuilder:
+    _MAX_MARKDOWN_PREVIEW_CHARS = 3_000
+    _MAX_SNAPSHOT_PREVIEW_ITEMS = 12
+    _MAX_DIAGNOSTIC_PREVIEW_ITEMS = 5
+    _MAX_DIAGNOSTIC_ENTRY_CHARS = 300
+
     @classmethod
     def presentation(
         cls,
@@ -35,7 +40,7 @@ class BrowserDetailBuilder:
         arguments: Mapping[str, object] | None = None,
     ) -> BrowserOperationPresentation:
         page = cls._page_data(result)
-        target = cls._argument_target(tool_name, arguments or {}, result) or cls._target_text(result)
+        target = cls._target_text(result) or cls._argument_target(tool_name, arguments or {}, result)
         stats = cls._stats(result)
         status = BrowserDetailStatus.SUCCEEDED if result.ok else BrowserDetailStatus.FAILED
         return BrowserOperationPresentation(
@@ -45,6 +50,7 @@ class BrowserDetailBuilder:
             url=BrowserToolResultBuilder.safe_url(cls._string(page.get("url"))),
             page_title=cls._string(page.get("title")),
             target=target,
+            body=cls._detail_body(tool_name, arguments or {}, result),
             stats=stats,
         )
 
@@ -64,12 +70,18 @@ class BrowserDetailBuilder:
                 title=presentation.page_title or presentation.action,
                 file_key=file_key,
                 action=presentation.action,
-                summary=presentation.summary,
+                summary=BrowserDetailBuilder._browser_summary(presentation),
                 page_title=presentation.page_title or None,
                 target=presentation.target or None,
                 status=presentation.status,
             )
         )
+
+    @staticmethod
+    def _browser_summary(presentation: BrowserOperationPresentation) -> str:
+        if not presentation.body or len(presentation.body) > 500:
+            return presentation.summary
+        return f"{presentation.summary}\n{presentation.body}"
 
     @classmethod
     def _text_content(cls, presentation: BrowserOperationPresentation) -> str:
@@ -80,6 +92,8 @@ class BrowserDetailBuilder:
             lines.append(cls._message("browser.detail.url", url=presentation.url))
         if presentation.target:
             lines.append(cls._message("browser.detail.target", target=presentation.target))
+        if presentation.body:
+            lines.append(presentation.body)
         return "\n\n".join(lines)
 
     @classmethod
@@ -101,6 +115,8 @@ class BrowserDetailBuilder:
                     error=cls._user_error(result),
                 )
             return cls._message("browser.detail.failed", action=action, error=cls._user_error(result))
+        if cls._string(page.get("readiness")) == "loading":
+            return cls._message("browser.detail.succeeded_loading", action=action)
         if isinstance(stats, BrowserPageListStats):
             return cls._message("browser.detail.pages", count=stats.total)
         if isinstance(stats, BrowserSnapshotStats):
@@ -179,6 +195,182 @@ class BrowserDetailBuilder:
         return None
 
     @classmethod
+    def _detail_body(
+        cls,
+        tool_name: str | None,
+        arguments: Mapping[str, object],
+        result: ToolResult,
+    ) -> str:
+        if tool_name == "browser_read_page":
+            return cls._read_page_body(result)
+        if tool_name == "browser_snapshot":
+            return cls._snapshot_body(result)
+        if tool_name == "browser_wait":
+            return cls._wait_body(arguments)
+        if tool_name == "browser_read_console":
+            return cls._console_body(result)
+        if tool_name == "browser_read_network":
+            return cls._network_body(result)
+        if tool_name in {
+            "browser_fill",
+            "browser_press",
+            "browser_select",
+            "browser_check",
+            "browser_upload_file",
+        }:
+            return cls._interaction_body(tool_name, arguments, result)
+        readiness = cls._string(cls._page_data(result).get("readiness"))
+        if readiness == "stable":
+            return cls._message("browser.detail.readiness_stable")
+        if readiness == "loading":
+            return cls._message("browser.detail.readiness_loading")
+        return ""
+
+    @classmethod
+    def _read_page_body(cls, result: ToolResult) -> str:
+        markdown = cls._string(result.data.get("markdown")).strip()
+        scope = cls._string(result.data.get("scope"))
+        lines = [cls._message("browser.detail.read_scope", scope=scope or "viewport")]
+        if not markdown:
+            lines.append(cls._message("browser.detail.no_readable_content"))
+            return "\n\n".join(lines)
+        truncated = len(markdown) > cls._MAX_MARKDOWN_PREVIEW_CHARS
+        preview = markdown[: cls._MAX_MARKDOWN_PREVIEW_CHARS].rstrip()
+        lines.append(preview)
+        if truncated:
+            lines.append(
+                cls._message(
+                    "browser.detail.content_truncated",
+                    limit=f"{cls._MAX_MARKDOWN_PREVIEW_CHARS:,}",
+                )
+            )
+        return "\n\n".join(lines)
+
+    @classmethod
+    def _snapshot_body(cls, result: ToolResult) -> str:
+        snapshot = result.data.get("snapshot")
+        if not isinstance(snapshot, Mapping):
+            return ""
+        items: list[str] = []
+        pending = list(snapshot.get("root_nodes", [])) if isinstance(snapshot.get("root_nodes"), list) else []
+        while pending and len(items) < cls._MAX_SNAPSHOT_PREVIEW_ITEMS:
+            node = pending.pop(0)
+            if not isinstance(node, Mapping):
+                continue
+            name = next(
+                (
+                    cls._string(node.get(key)).strip()
+                    for key in ("name", "text", "role")
+                    if cls._string(node.get(key)).strip()
+                ),
+                "",
+            )
+            if cls._string(node.get("ref")) and name:
+                items.append(name)
+            children = node.get("children")
+            if isinstance(children, list):
+                pending.extend(children)
+        if not items:
+            return cls._message("browser.detail.no_interactive_preview")
+        return cls._message("browser.detail.interactive_preview", items="\n".join(f"- {item}" for item in items))
+
+    @classmethod
+    def _wait_body(cls, arguments: Mapping[str, object]) -> str:
+        condition = cls._string(arguments.get("condition"))
+        expected = next(
+            (
+                str(arguments[key])
+                for key in ("value", "state", "duration_ms")
+                if arguments.get(key) is not None
+            ),
+            "",
+        )
+        return cls._message(
+            "browser.detail.wait_condition",
+            condition=condition or "condition",
+            expected=expected or cls._message("browser.detail.wait_default"),
+        )
+
+    @classmethod
+    def _console_body(cls, result: ToolResult) -> str:
+        entries = result.data.get("console_entries")
+        if not isinstance(entries, list):
+            return ""
+        errors = [
+            entry
+            for entry in entries
+            if isinstance(entry, Mapping)
+            and cls._string(entry.get("level")).lower() in {"error", "fatal", "assert"}
+        ][-cls._MAX_DIAGNOSTIC_PREVIEW_ITEMS :]
+        if not errors:
+            return cls._message("browser.detail.no_console_errors")
+        items = "\n".join(
+            f"- {cls._bounded_text(cls._string(entry.get('text')), cls._MAX_DIAGNOSTIC_ENTRY_CHARS)}"
+            for entry in errors
+        )
+        return cls._message("browser.detail.console_error_preview", items=items)
+
+    @classmethod
+    def _network_body(cls, result: ToolResult) -> str:
+        entries = result.data.get("network_entries")
+        if not isinstance(entries, list):
+            return ""
+        failed = [
+            entry
+            for entry in entries
+            if isinstance(entry, Mapping)
+            and (
+                entry.get("error")
+                or cls._string(entry.get("phase")) == "failed"
+                or isinstance(entry.get("status"), int)
+                and entry["status"] >= 400
+            )
+        ][-cls._MAX_DIAGNOSTIC_PREVIEW_ITEMS :]
+        if not failed:
+            return cls._message("browser.detail.no_network_errors")
+        lines = []
+        for entry in failed:
+            method = cls._string(entry.get("method")) or "GET"
+            url = BrowserToolResultBuilder.safe_url(cls._string(entry.get("url")))
+            status = entry.get("status")
+            status_text = str(status) if isinstance(status, int) else cls._message("browser.detail.network_failed")
+            lines.append(f"- {method} {url} — {status_text}")
+        return cls._message("browser.detail.network_error_preview", items="\n".join(lines))
+
+    @classmethod
+    def _interaction_body(
+        cls,
+        tool_name: str,
+        arguments: Mapping[str, object],
+        result: ToolResult,
+    ) -> str:
+        if tool_name == "browser_fill":
+            value = (
+                cls._message("browser.detail.sensitive_value")
+                if cls._is_sensitive_target(result)
+                else cls._string(arguments.get("value"))
+            )
+            return cls._message("browser.detail.input_value", value=value)
+        if tool_name == "browser_press":
+            return cls._message("browser.detail.pressed_key", key=cls._string(arguments.get("key")))
+        if tool_name == "browser_select":
+            return cls._message("browser.detail.selected_value", value=cls._string(arguments.get("value")))
+        if tool_name == "browser_check":
+            checked = arguments.get("checked") is True
+            return cls._message(
+                "browser.detail.checked_state",
+                state=cls._message("browser.detail.checked") if checked else cls._message("browser.detail.unchecked"),
+            )
+        file_paths = arguments.get("file_paths")
+        count = len(file_paths) if isinstance(file_paths, list) else 0
+        return cls._message("browser.detail.uploaded_files", count=count)
+
+    @staticmethod
+    def _bounded_text(value: str, limit: int) -> str:
+        normalized = " ".join(value.split())
+        return normalized if len(normalized) <= limit else normalized[:limit].rstrip() + "…"
+
+    @classmethod
     def _snapshot_counts(cls, nodes: object) -> tuple[int, int]:
         if not isinstance(nodes, list):
             return 0, 0
@@ -235,13 +427,8 @@ class BrowserDetailBuilder:
         arguments: Mapping[str, object],
         result: ToolResult,
     ) -> str:
-        if tool_name == "browser_fill":
-            if not result.ok:
-                return ""
-            if cls._is_sensitive_target(result):
-                return cls._message("browser.detail.sensitive_value")
-            return cls._string(arguments.get("value")).strip()
         key_by_tool = {
+            "browser_fill": "value",
             "browser_press": "key",
             "browser_select": "value",
             "browser_screenshot": "output_path",

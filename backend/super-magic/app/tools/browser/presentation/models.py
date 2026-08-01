@@ -48,4 +48,5 @@ class BrowserOperationPresentation:
     url: str = ""
     page_title: str = ""
     target: str = ""
+    body: str = ""
     stats: BrowserOperationStats | None = None

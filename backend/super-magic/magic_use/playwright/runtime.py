@@ -11,6 +11,7 @@ from playwright.async_api import (
     Browser,
     BrowserContext,
     Download,
+    Error as PlaywrightError,
     Frame,
     Page,
     Request,
@@ -18,7 +19,7 @@ from playwright.async_api import (
 
 from magic_use.config import BrowserRuntimeConfig
 from magic_use.errors import BrowserConnectionError, BrowserPageError
-from magic_use.models.common import BrowserEventType, BrowserName, JsonValue, PageState
+from magic_use.models.common import BrowserEventType, BrowserName, JsonValue, PageReadiness, PageState
 from magic_use.models.diagnostics import ConsoleEntry, DiagnosticBatch, NetworkEntry
 from magic_use.models.events import BrowserEvent
 from magic_use.models.page import BrowserPage
@@ -142,19 +143,31 @@ class PlaywrightRuntime:
         return await self.describe_page(handle)
 
     async def describe_page(self, handle: PlaywrightPageHandle) -> BrowserPage:
+        page_closed = handle.page.is_closed()
         return BrowserPage(
             id=handle.page_id,
             session_id=self.session_id,
             target_id=f"playwright:{handle.page_id}",
             url=handle.page.url,
-            title=await handle.page.title(),
-            state=PageState.OPEN if not handle.page.is_closed() else PageState.CLOSED,
+            title="" if page_closed else await self._read_page_title(handle),
+            state=PageState.CLOSED if page_closed else PageState.OPEN,
             active=handle.page_id == self.active_page_id,
             opener_page_id=handle.opener_page_id,
             document_generation=handle.document_generation,
             expires_at=handle.expires_at,
             resource_warning=handle.resource_warning or (self.context_lease.resource_warning if self.context_lease else None),
+            readiness=handle.readiness,
         )
+
+    async def _read_page_title(self, handle: PlaywrightPageHandle) -> str:
+        try:
+            return await handle.page.title()
+        except PlaywrightError as error:
+            if handle.page.is_closed():
+                raise BrowserPageError(f"Browser page is closed: {handle.page_id}", closed=True) from error
+            if _is_navigation_context_error(error):
+                return ""
+            raise
 
     async def list_pages(self) -> tuple[BrowserPage, ...]:
         result = []
@@ -235,6 +248,7 @@ class PlaywrightRuntime:
                     expires_at=datetime.now(timezone.utc)
                     + timedelta(seconds=self.config.lifecycle.page_idle_seconds),
                     resource_warning=resource_warning,
+                    readiness=PageReadiness.STABLE if page.url == "about:blank" else PageReadiness.LOADING,
                 )
             except BaseException:
                 self._require_lease().release_page()
@@ -326,6 +340,7 @@ class PlaywrightRuntime:
         )
         if main_frame:
             handle.document_generation += 1
+            handle.readiness = PageReadiness.LOADING
             self._emit(
                 BrowserEventType.NAVIGATION_COMMITTED,
                 handle.page_id,
@@ -377,7 +392,7 @@ class PlaywrightRuntime:
             """
         )
 
-    async def wait_for_stable(self, page_id: str, *, minimum_wait_ms: float = 0) -> None:
+    async def wait_for_stable(self, page_id: str, *, minimum_wait_ms: float = 0) -> bool:
         handle = self.require_page(page_id)
         timeout = self.config.timeouts
         loop = asyncio.get_running_loop()
@@ -386,7 +401,8 @@ class PlaywrightRuntime:
         while not handle.page.is_closed():
             now = loop.time()
             if now >= deadline:
-                return
+                handle.readiness = PageReadiness.LOADING
+                return False
             try:
                 mutation_quiet_ms = await handle.page.evaluate(
                     """
@@ -407,8 +423,13 @@ class PlaywrightRuntime:
                     }
                     """
                 )
-            except Exception:
-                return
+            except PlaywrightError as error:
+                if handle.page.is_closed():
+                    raise BrowserPageError(f"Browser page is closed: {page_id}", closed=True) from error
+                if _is_navigation_context_error(error):
+                    await asyncio.sleep(0.05)
+                    continue
+                raise
             network_quiet_ms = (now - self.last_network_activity.get(page_id, started)) * 1000
             active_requests = self.active_requests.get(page_id, set())
             elapsed_ms = (now - started) * 1000
@@ -419,8 +440,10 @@ class PlaywrightRuntime:
                 and isinstance(mutation_quiet_ms, (int, float))
                 and mutation_quiet_ms >= timeout.dom_quiet_ms
             ):
-                return
+                handle.readiness = PageReadiness.STABLE
+                return True
             await asyncio.sleep(0.05)
+        raise BrowserPageError(f"Browser page is closed: {page_id}", closed=True)
 
     def _finish_background_task(self, task: asyncio.Task[object]) -> None:
         self.background_tasks.discard(task)
@@ -596,3 +619,8 @@ class PlaywrightRuntime:
         if self.context_lease is None:
             raise BrowserConnectionError("Playwright context lease is not available")
         return self.context_lease
+
+
+def _is_navigation_context_error(error: PlaywrightError) -> bool:
+    message = str(error).lower()
+    return "execution context was destroyed" in message and "navigation" in message

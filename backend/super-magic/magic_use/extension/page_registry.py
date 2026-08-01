@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
-from magic_use.models import BrowserPage, PageState
+from magic_use.models import BrowserPage, PageReadiness, PageState
 from magic_use.models.common import JsonValue
 from magic_use.remote_protocol import PageDescriptor
 
@@ -39,6 +39,7 @@ class ExtensionPageRegistry:
             active=descriptor.active,
             opener_page_id=opener_page_id,
             document_generation=descriptor.document_generation,
+            readiness=PageReadiness.UNKNOWN,
         )
 
     def from_payload(self, value: JsonValue) -> tuple[BrowserPage, ...]:

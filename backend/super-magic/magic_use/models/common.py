@@ -33,6 +33,12 @@ class PageState(str, Enum):
     FAILED = "failed"
 
 
+class PageReadiness(str, Enum):
+    STABLE = "stable"
+    LOADING = "loading"
+    UNKNOWN = "unknown"
+
+
 class SnapshotScope(str, Enum):
     INTERACTIVE = "interactive"
     VIEWPORT = "viewport"

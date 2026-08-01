@@ -118,7 +118,6 @@ class BrowserService:
         page = await self._reuse_initial_playwright_page(entry, url)
         if page is None:
             page = await await_browser_operation(self._tool_context, entry.client.open_page(url))
-        await self._refresh(entry)
         return page
 
     async def close_page(self, page_id: str, session_id: str | None = None) -> None:

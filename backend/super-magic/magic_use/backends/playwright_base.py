@@ -4,6 +4,8 @@ import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from magic_use.config import BrowserRuntimeConfig
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
 from magic_use.interaction import RefRegistry, RefResolver
@@ -24,6 +26,7 @@ from magic_use.models import (
     ElementRefRecord,
     NavigationResult,
     NetworkEntry,
+    PageReadiness,
     PageSnapshot,
     ScreenshotResult,
     SessionState,
@@ -162,6 +165,8 @@ class PlaywrightBackend(ABC):
         referer: str | None = None,
     ) -> BrowserPage:
         handle = self._runtime.require_page(page_id)
+        generation_before = handle.document_generation
+        handle.readiness = PageReadiness.LOADING
         try:
             await handle.page.goto(
                 url,
@@ -169,10 +174,24 @@ class PlaywrightBackend(ABC):
                 timeout=self._config.timeouts.navigation_ms,
                 referer=referer,
             )
-            await self._observer.inject_document_scripts(handle.page)
+            stable = await self._runtime.wait_for_stable(page_id)
+            if stable:
+                await self._observer.inject_document_scripts(handle.page)
             return await self._runtime.describe_page(handle)
         except asyncio.CancelledError:
             raise
+        except PlaywrightTimeoutError as error:
+            if not handle.page.is_closed() and handle.document_generation > generation_before:
+                stable = await self._runtime.wait_for_stable(page_id)
+                if stable:
+                    await self._observer.inject_document_scripts(handle.page)
+                return await self._runtime.describe_page(handle)
+            self._runtime.emit(
+                BrowserEventType.NAVIGATION_FAILED,
+                page_id,
+                {"url": url, "error": str(error)},
+            )
+            raise BrowserSDKError(BrowserErrorCode.NAVIGATION_FAILED, f"Navigation timed out: {error}") from error
         except Exception as error:
             self._runtime.emit(
                 BrowserEventType.NAVIGATION_FAILED,
@@ -211,7 +230,6 @@ class PlaywrightBackend(ABC):
         return await handle.page.evaluate(expression, argument)
 
     async def read_page(self, page_id: str, scope: str = "viewport") -> str:
-        await self._runtime.prepare_stability(page_id)
         await self._runtime.wait_for_stable(page_id)
         return await self._observer.read_page(self._runtime.require_page(page_id), scope)
 
@@ -332,6 +350,7 @@ class PlaywrightBackend(ABC):
         full_page: bool = False,
         labels: bool = False,
     ) -> ScreenshotResult:
+        await self._runtime.wait_for_stable(page_id)
         return await self._observer.screenshot(
             session_id=self._runtime.session_id,
             handle=self._runtime.require_page(page_id),

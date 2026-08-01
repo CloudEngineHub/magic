@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
 from app.tools.browser.presentation.details import BrowserDetailBuilder
+from magic_use.errors import BrowserErrorCode
 from magic_use.models import ActionTarget
 
 
@@ -37,6 +38,12 @@ class BrowserRemarkBuilder:
         result: ToolResult,
         arguments: Mapping[str, object],
     ) -> dict[str, str]:
+        if not result.ok and result.data.get("error_code") == BrowserErrorCode.NAVIGATION_FAILED.value:
+            return {
+                "tool_name": tool_name,
+                "action": action,
+                "remark": cls._message("browser.remark.recovering_navigation"),
+            }
         presentation = BrowserDetailBuilder.presentation(
             action,
             result,

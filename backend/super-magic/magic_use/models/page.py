@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from magic_use.models.common import PageState
+from magic_use.models.common import PageReadiness, PageState
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,3 +19,4 @@ class BrowserPage:
     document_generation: int
     expires_at: datetime | None = None
     resource_warning: str | None = None
+    readiness: PageReadiness = PageReadiness.UNKNOWN
