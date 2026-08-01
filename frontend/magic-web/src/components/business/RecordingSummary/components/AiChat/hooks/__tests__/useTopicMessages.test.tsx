@@ -102,7 +102,11 @@ describe("RecordingSummary useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[...firstPageItems, ...secondPageItems],
-			{ mode: "replace", syncGeneration: 31 },
+			{
+				mode: "replace",
+				syncGeneration: 31,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 	})
 
@@ -187,7 +191,11 @@ describe("RecordingSummary useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[],
-			{ mode: "replace", syncGeneration: undefined },
+			{
+				mode: "replace",
+				syncGeneration: undefined,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 

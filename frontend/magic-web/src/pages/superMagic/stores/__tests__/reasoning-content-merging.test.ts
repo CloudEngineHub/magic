@@ -263,6 +263,7 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(getProjectedNode(store)?.reasoning_content ?? "").not.toContain("C")
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 
+		expect(recovery.events).toHaveLength(0)
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
 		recovery.unsubscribe()
@@ -499,19 +500,31 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
-	it("正文已经追平，但 final 长时间不到达。", () => {
+	it("开放流在未收到 finish_reason 时保持非终态，并在 inactivity 后请求 recovery。", () => {
 		const store = createStore()
 		const recovery = collectRecoveryRequests(store)
+		const streamedContent = "已经完整展示的正文"
 
-		store.receiveChunk(createChunk({ content: "已经完整展示的正文" }))
+		// This fixture deliberately has no finish_reason: a fully rendered draft is
+		// still an open stream until a terminal chunk or canonical Final arrives.
+		store.receiveChunk(createChunk({ content: streamedContent }))
 		advanceRendering(RENDER_SETTLE_MS)
 
-		expect(getProjectedNode(store)?.content).toBe("已经完整展示的正文")
-		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeDefined()
+		expect(getProjectedNode(store)?.content).toBe(streamedContent)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			content: streamedContent,
+			stage: "content",
+			isFinalMessageReceived: false,
+		})
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 
+		expect(recovery.events).toHaveLength(0)
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			isFinalMessageReceived: false,
+		})
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 		recovery.unsubscribe()
 	})
 })

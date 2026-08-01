@@ -433,20 +433,42 @@ function expectInvalidIndexIgnored(invalidChunk: SuperMagicChunkMessage): void {
 	const store = createStore()
 	const recovery = collectRecoveryRequests(store)
 	const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+	const committedEvents: unknown[] = []
+	const streamEvents: string[] = []
+	const unsubscribeCommitted = store.subscribe("message.committed", (event) =>
+		committedEvents.push(event),
+	)
+	const unsubscribeStreamEvents = [
+		store.subscribe("message.stream.started", (event) => streamEvents.push(event.type)),
+		store.subscribe("message.stream.delta", (event) => streamEvents.push(event.type)),
+		store.subscribe("message.stream.ended", (event) => streamEvents.push(event.type)),
+	]
 
 	try {
 		store.receiveChunk(invalidChunk)
 
+		// Invalid transport input must be isolated before it can create any observable
+		// stream, canonical node, message card, or recovery side effect. The logger is
+		// intentionally only a diagnostic shield here; its private wording is not a contract.
 		expect(consoleError).toHaveBeenCalledTimes(1)
-		expect(consoleError).toHaveBeenCalledWith("chunk error")
 		expect(getProjectedNode(store)).toBeUndefined()
+		expect(store.messages.get(TOPIC_ID) ?? []).toHaveLength(0)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		expect(committedEvents).toEqual([])
+		expect(streamEvents).toEqual([])
 		expect(recovery.events).toHaveLength(0)
 
 		store.receiveChunk(createChunk({ i: 0, content: "ok", finishReason: "stop" }))
 		expectSettledContent(store, "ok")
+		expect(streamEvents).toEqual([
+			"message.stream.started",
+			"message.stream.delta",
+			"message.stream.ended",
+		])
 	} finally {
+		unsubscribeCommitted()
+		unsubscribeStreamEvents.forEach((unsubscribe) => unsubscribe())
 		recovery.unsubscribe()
 		consoleError.mockRestore()
 	}

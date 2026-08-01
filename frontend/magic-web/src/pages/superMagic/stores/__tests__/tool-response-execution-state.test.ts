@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
+import type { MessageCommittedEvent, ToolCallSettledEvent } from "@/pages/superMagic/stores/events"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -450,6 +450,23 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		const store = createStore()
 
 		store.enqueueMessage(TOPIC_ID, createToolEnvelope())
+		expect(getToolNode(store, "tool-response-1")).toMatchObject({
+			role: "tool",
+			tool: {
+				id: "tool-1",
+				status: "finished",
+			},
+		})
+		expect(
+			(store.messages.get(TOPIC_ID) ?? []).filter((message) => message.role === "tool"),
+		).toEqual([
+			expect.objectContaining({
+				role: "tool",
+				app_message_id: "tool-response-1",
+				super_message_id: toToolSuperMessageId("tool-response-1"),
+			}),
+		])
+		expect(Array.from(store.toolResponseMap.get(TOPIC_ID)?.keys() ?? [])).toEqual([])
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope())
 		settleRendering()
 
@@ -464,7 +481,22 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			role: "assistant",
 			content: "assistant response",
 		})
-		expect.soft(getToolNode(store, "tool-response-1")).not.toBe(getAssistantNode(store))
+		const messages = store.messages.get(TOPIC_ID) ?? []
+		expect.soft(messages).toHaveLength(2)
+		expect.soft(messages.filter((message) => message.role === "tool")).toEqual([
+			expect.objectContaining({
+				role: "tool",
+				app_message_id: "tool-response-1",
+				super_message_id: toToolSuperMessageId("tool-response-1"),
+			}),
+		])
+		expect.soft(messages.filter((message) => message.role === "assistant")).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				app_message_id: "assistant-final-1",
+				super_message_id: toAssistantSuperMessageId(),
+			}),
+		])
 		expect.soft(getEmbeddedToolState(store)?.status).toBe("running")
 		expect.soft(getCanonicalToolState(store, "tool-1")).toMatchObject({
 			id: "tool-1",
@@ -635,6 +667,10 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 	it("同 seq 且内容等价的重复 response 不覆盖 canonical 状态。", () => {
 		const store = createStore()
+		const settled: ToolCallSettledEvent[] = []
+		store.subscribe("toolCall.settled", (event) => settled.push(event), {
+			scope: { topicId: TOPIC_ID, toolCallId: "tool-1" },
+		})
 
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ status: "running" }))
 		store.enqueueMessage(
@@ -645,7 +681,13 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 				detail: { type: "text", data: "same" },
 			}),
 		)
-		const firstCanonical = getCanonicalToolState(store, "tool-1")
+		expect(getCanonicalToolState(store, "tool-1")).toEqual(
+			expect.objectContaining({
+				id: "tool-1",
+				status: "finished",
+				detail: { type: "text", data: "same" },
+			}),
+		)
 		store.enqueueMessage(
 			TOPIC_ID,
 			cloneEnvelope(
@@ -657,10 +699,21 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			),
 		)
 
-		expect(getCanonicalToolState(store, "tool-1")).toBe(firstCanonical)
-		expect(getCanonicalToolState(store, "tool-1")?.detail).toEqual({
-			type: "text",
-			data: "same",
+		expect(getCanonicalToolState(store, "tool-1")).toEqual(
+			expect.objectContaining({
+				id: "tool-1",
+				status: "finished",
+				detail: { type: "text", data: "same" },
+			}),
+		)
+		expect(settled).toHaveLength(1)
+		expect(settled[0]).toMatchObject({
+			meta: { toolCallId: "tool-1" },
+			payload: {
+				response: { status: "finished", detail: { type: "text", data: "same" } },
+				strength: "strong",
+				replaceable: false,
+			},
 		})
 	})
 
@@ -763,6 +816,122 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			type: "text",
 			data: "latest",
 		})
+	})
+
+	it("HTTP 历史快照倒序返回 Tool 后 Assistant 时，仍先建立 owner 再恢复真实终态。", () => {
+		const store = createStore()
+
+		store.initializeMessages(
+			TOPIC_ID,
+			[
+				createToolEnvelope({ appMessageId: "historical-tool-desc", seqId: "101" }),
+				createAssistantEnvelope({
+					appMessageId: "historical-assistant-desc",
+					seqId: "100",
+					status: "running",
+				}),
+			],
+			{ mode: "merge" },
+		)
+
+		expect(getCanonicalToolState(store, "tool-1")).toMatchObject({
+			id: "tool-1",
+			status: "finished",
+		})
+		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
+	})
+
+	it("HTTP 历史分页跨页先到 Tool、后到 Assistant 时，后续 owner 建立后重放待关联响应。", () => {
+		const store = createStore()
+
+		store.initializeMessages(
+			TOPIC_ID,
+			[createToolEnvelope({ appMessageId: "historical-tool-page-1", seqId: "101" })],
+			{ mode: "merge" },
+		)
+		expect(getCanonicalToolState(store, "tool-1")).toBeUndefined()
+
+		store.initializeMessages(
+			TOPIC_ID,
+			[
+				createAssistantEnvelope({
+					appMessageId: "historical-assistant-page-2",
+					seqId: "100",
+					status: "running",
+				}),
+			],
+			{ mode: "merge" },
+		)
+
+		expect(getCanonicalToolState(store, "tool-1")).toMatchObject({
+			id: "tool-1",
+			status: "finished",
+		})
+		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("finished")
+	})
+
+	it.each([
+		{
+			name: "缺失",
+			tool: {
+				id: "tool-1",
+				name: "read_file",
+				detail: { type: "text", data: "partial result" },
+			},
+		},
+		{
+			name: "未知",
+			tool: {
+				id: "tool-1",
+				name: "read_file",
+				status: "unknown_status",
+				detail: { type: "text", data: "partial result" },
+			},
+		},
+	])("HTTP 历史 Tool status $name 时投影为 response_missing，并保留已有载荷。", ({ tool }) => {
+		const store = createStore()
+
+		store.initializeMessages(TOPIC_ID, [
+			createAssistantEnvelope({ status: "running" }),
+			createToolEnvelope({ tool }),
+		])
+
+		expect(getCanonicalToolState(store, "tool-1")).toMatchObject({
+			id: "tool-1",
+			status: "response_missing",
+			detail: { type: "text", data: "partial result" },
+		})
+		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("response_missing")
+	})
+
+	it("旧 HTTP 历史快照不得把同一 SuperMessage 的活跃本地流提前终态化。", () => {
+		const store = createStore()
+		const activeToolCall = createToolCall({ id: "active-local-tool", status: "running" })
+		store.receiveChunk(
+			createToolHeaderChunk({
+				correlationId: "active-local-correlation",
+				toolCall: activeToolCall,
+			}),
+		)
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
+
+		const historicalAssistant = createAssistantEnvelope({
+			appMessageId: "active-local-assistant",
+			correlationId: "active-local-correlation",
+			status: "running",
+			toolCalls: [activeToolCall],
+		})
+
+		store.initializeMessages(TOPIC_ID, [historicalAssistant], {
+			mode: "merge",
+			toolProjectionPolicy: "historical_terminal",
+		})
+
+		expect(getCanonicalToolState(store, "active-local-tool")).toBeUndefined()
+		expect(
+			getEffectiveToolState(store, "active-local-tool", "active-local-correlation")?.status,
+		).toBe("running")
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 	})
 
 	it("tool response 先是 `finished`，后又收到 `running`。", () => {
@@ -1924,7 +2093,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		})
 	})
 
-	it("页面刷新初始化完成且任务已结束时，缺少 role=tool 的工具调用进入 response_missing。", () => {
+	it("页面刷新载入 HTTP 历史快照时，缺少 role=tool 的工具调用立即进入 response_missing。", () => {
 		const store = createStore()
 		const generation = store.beginTopicSync(TOPIC_ID)
 		const assistant = createAssistantEnvelope({
@@ -1946,10 +2115,13 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		expect(getAssistantNode(store, "refresh-correlation")).toBeDefined()
 		expect(getAssistantTool(store, "lost-refresh-tool", "refresh-correlation")).toBeDefined()
-		expect(store.toolResponseMap.get(TOPIC_ID)?.has("lost-refresh-tool")).toBe(false)
+		expect(getCanonicalToolState(store, "lost-refresh-tool")).toMatchObject({
+			id: "lost-refresh-tool",
+			status: "response_missing",
+		})
 		expect(
 			getEffectiveToolState(store, "lost-refresh-tool", "refresh-correlation")?.status,
-		).toBe("running")
+		).toBe("response_missing")
 
 		expect(
 			store.completeTopicSync(TOPIC_ID, generation, {
@@ -2077,19 +2249,23 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		).toBe("response_missing")
 	})
 
-	it("任务仍在运行且没有后续消息时，不提前把缺少 role=tool 的工具标记为 response_missing。", () => {
+	it("live HTTP 投影策略下，任务仍在运行且没有后续消息时不提前生成 response_missing。", () => {
 		const store = createStore()
 		const generation = store.beginTopicSync(TOPIC_ID)
 
-		store.initializeMessages(TOPIC_ID, [
-			createAssistantEnvelope({
-				appMessageId: "running-assistant",
-				correlationId: "running-correlation",
-				seqId: "100",
-				status: "running",
-				toolCalls: [createToolCall({ id: "still-running-tool", status: "running" })],
-			}),
-		])
+		store.initializeMessages(
+			TOPIC_ID,
+			[
+				createAssistantEnvelope({
+					appMessageId: "running-assistant",
+					correlationId: "running-correlation",
+					seqId: "100",
+					status: "running",
+					toolCalls: [createToolCall({ id: "still-running-tool", status: "running" })],
+				}),
+			],
+			{ toolProjectionPolicy: "preserve_live" },
+		)
 		expect(
 			store.completeTopicSync(TOPIC_ID, generation, {
 				succeeded: true,

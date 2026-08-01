@@ -46,6 +46,7 @@ export type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	HttpToolProjectionPolicy,
 	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
@@ -110,6 +111,7 @@ import type {
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
 	InitializeMessagesOptions,
+	HttpToolProjectionPolicy,
 	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
@@ -196,6 +198,19 @@ interface SharedReplayState {
 	}
 }
 
+interface PendingHttpToolResponse {
+	node: RawSuperMagicMessageNode
+	seqId?: string
+	correlationId: string
+}
+
+type ToolResponseRecordResult =
+	| { kind: "recorded"; response: ToolResponseState }
+	| { kind: "unchanged" }
+	| { kind: "missing_owner" }
+	| { kind: "owner_conflict" }
+	| { kind: "invalid_tool_id" }
+
 interface PersistenceQueue {
 	messages: PersistableMessage[]
 	timer: ReturnType<typeof setTimeout> | null
@@ -234,6 +249,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * ingress paths share the same correlation guard.
 	 */
 	private toolCallOwners = new Map<string, Map<string, string>>()
+	/** HTTP 历史分页中先到且暂时没有 Assistant owner 的 Tool response。 */
+	private pendingHttpToolResponses = new Map<
+		string,
+		Map<string, Map<string, PendingHttpToolResponse>>
+	>()
 	/** 分享消息会被整批、逐条和旧前缀重复回放；该 sidecar 只记录单 topic 的顺序与待结算工具。 */
 	private sharedReplayStates = new Map<string, SharedReplayState>()
 	/** 取消撤回后的单次 HTTP 恢复授权；普通快照不得自行把 revoked 改回 read。 */
@@ -290,6 +310,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| "streamChunkLedgers"
 			| "latestToolResponseSeqIds"
 			| "toolCallOwners"
+			| "pendingHttpToolResponses"
 			| "sharedReplayStates"
 			| "imStatusRestoreAuthorizations"
 			| "persistenceQueues"
@@ -310,6 +331,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamChunkLedgers: false,
 				latestToolResponseSeqIds: false,
 				toolCallOwners: false,
+				pendingHttpToolResponses: false,
 				sharedReplayStates: false,
 				imStatusRestoreAuthorizations: false,
 				persistenceQueues: false,
@@ -539,6 +561,170 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageNode.tool?.name === "finish_task" &&
 			/^\d+$/.test(toolId) &&
 			String(messageNode.task_id || "").trim(),
+		)
+	}
+
+	private isHistoricalToolProjectionEnabled(policy?: HttpToolProjectionPolicy) {
+		return policy === "historical_terminal"
+	}
+
+	private primeHttpAssistantToolOwnership(
+		topicId: string,
+		envelopes: RawSuperMagicMessageEnvelope[],
+	) {
+		const assistants = envelopes
+			.map((envelope, sourceIndex) => {
+				const rawNode = getRawMessageNode(envelope?.seq?.message)
+				if (rawNode?.role !== "assistant") return undefined
+				const superMessageId = this.normalizeAssistantSuperMessageId(
+					rawNode,
+					String(envelope?.seq?.message?.app_message_id || ""),
+				)
+				if (!superMessageId) return undefined
+				return {
+					rawNode: { ...rawNode, super_message_id: superMessageId },
+					superMessageId,
+					correlationId: String(rawNode.correlation_id || ""),
+					seqId: String(envelope?.seq?.seq_id || ""),
+					sourceIndex,
+				}
+			})
+			.filter(Boolean)
+			.sort((left, right) => {
+				if (!left || !right) return 0
+				if (left.seqId && right.seqId) {
+					const order = compareMessageSeqId(left.seqId, right.seqId)
+					if (order !== 0) return order
+				}
+				return left.sourceIndex - right.sourceIndex
+			}) as Array<{
+			rawNode: RawSuperMagicMessageNode
+			superMessageId: string
+			correlationId: string
+			seqId: string
+			sourceIndex: number
+		}>
+
+		assistants.forEach(({ rawNode, superMessageId, correlationId }) => {
+			this.applyAssistantToolOwnership(topicId, rawNode)
+			this.setStreamCorrelationId(topicId, superMessageId, correlationId)
+		})
+	}
+
+	private queuePendingHttpToolResponse(
+		topicId: string,
+		messageNode: RawSuperMagicMessageNode,
+		seqId?: unknown,
+	) {
+		const toolId = String(messageNode.tool?.id || "").trim()
+		const correlationId = String(messageNode.correlation_id || "").trim()
+		if (!toolId || !correlationId) return
+		const topicPending = this.pendingHttpToolResponses.get(topicId) || new Map()
+		const toolPending = topicPending.get(toolId) || new Map()
+		const candidate: PendingHttpToolResponse = {
+			node: messageNode,
+			seqId: this.getValidToolResponseSeqId(seqId) || undefined,
+			correlationId,
+		}
+		const current = toolPending.get(correlationId)
+		if (
+			current?.seqId &&
+			candidate.seqId &&
+			compareMessageSeqId(candidate.seqId, current.seqId) < 0
+		)
+			return
+		toolPending.set(correlationId, candidate)
+		topicPending.set(toolId, toolPending)
+		this.pendingHttpToolResponses.set(topicId, topicPending)
+	}
+
+	private drainPendingHttpToolResponses(
+		topicId: string,
+		toolResponseMap: Map<string, ToolResponseState>,
+		settlements: Array<{ toolId: string; response: ToolResponseState }>,
+	) {
+		const topicPending = this.pendingHttpToolResponses.get(topicId)
+		if (!topicPending) return
+
+		topicPending.forEach((correlationPending, toolId) => {
+			correlationPending.forEach((candidate, correlationId) => {
+				const ownerIdentity = this.getToolCallOwner(topicId, toolId)
+				const ownerCorrelationId = ownerIdentity
+					? this.getStreamCorrelationId(topicId, ownerIdentity)
+					: ""
+				if (!ownerIdentity) return
+				if (ownerIdentity !== correlationId && ownerCorrelationId !== correlationId) {
+					correlationPending.delete(correlationId)
+					return
+				}
+
+				const result = this.recordToolResponse(
+					topicId,
+					candidate.node,
+					candidate.seqId,
+					toolResponseMap,
+					"http",
+				)
+				if (result.kind === "recorded")
+					settlements.push({ toolId, response: result.response })
+				if (result.kind !== "missing_owner") correlationPending.delete(correlationId)
+			})
+			if (correlationPending.size === 0) topicPending.delete(toolId)
+		})
+		if (topicPending.size === 0) this.pendingHttpToolResponses.delete(topicId)
+	}
+
+	private settleHistoricalToolCalls(
+		topicId: string,
+		envelopes: RawSuperMagicMessageEnvelope[],
+		toolResponseMap: Map<string, ToolResponseState>,
+		settlements: Array<{ toolId: string; response: ToolResponseState }>,
+	) {
+		const activeStreamIds = this.getTopicMetadata(topicId).content
+		const seenAssistantIds = new Set<string>()
+		envelopes.forEach((envelope) => {
+			const rawNode = getRawMessageNode(envelope?.seq?.message)
+			if (rawNode?.role !== "assistant") return
+			const superMessageId = this.normalizeAssistantSuperMessageId(
+				rawNode,
+				String(envelope?.seq?.message?.app_message_id || ""),
+			)
+			if (!superMessageId || seenAssistantIds.has(superMessageId)) return
+			seenAssistantIds.add(superMessageId)
+			if (activeStreamIds.has(superMessageId)) return
+
+			const canonicalNode = this.getAssistantMessageNode(topicId, superMessageId) || rawNode
+			const toolCalls = Array.isArray(canonicalNode.tool_calls)
+				? (canonicalNode.tool_calls as ToolCall[])
+				: []
+			toolCalls.forEach((toolCall) => {
+				const toolId = String(toolCall?.id || "").trim()
+				if (!toolId || this.isAskUserToolCall(toolCall)) return
+				const current = toolResponseMap.get(toolId)
+				if (this.isHistoricalTerminalToolResponse(current)) return
+
+				const nextState = {
+					...this.mergeToolResponseState(current, {
+						...(toolCall.tool || {}),
+						id: toolId,
+						name: toolCall.tool?.name || toolCall.function?.name || "",
+						status: "response_missing",
+					}),
+					status: "response_missing",
+				} satisfies ToolResponseState
+				if (isEqual(current, nextState)) return
+				toolResponseMap.set(toolId, nextState)
+				settlements.push({ toolId, response: nextState })
+			})
+		})
+	}
+
+	private isHistoricalTerminalToolResponse(response?: ToolResponseState) {
+		return (
+			response?.status === "finished" ||
+			response?.status === "error" ||
+			response?.status === "suspended" ||
+			response?.status === "response_missing"
 		)
 	}
 
@@ -1872,14 +2058,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		const toolResponseMap = this.toolResponseMap.get(topicId)
 		const toolSeqMap = this.latestToolResponseSeqIds.get(topicId)
+		const pendingHttpResponses = this.pendingHttpToolResponses.get(topicId)
 		removedToolIds.forEach((toolId) => {
 			toolResponseMap?.delete(toolId)
 			toolSeqMap?.delete(toolId)
 			topicOwners?.delete(toolId)
+			pendingHttpResponses?.delete(toolId)
 		})
 		if (toolResponseMap?.size === 0) this.toolResponseMap.delete(topicId)
 		if (toolSeqMap?.size === 0) this.latestToolResponseSeqIds.delete(topicId)
 		if (topicOwners?.size === 0) this.toolCallOwners.delete(topicId)
+		if (pendingHttpResponses?.size === 0) this.pendingHttpToolResponses.delete(topicId)
 
 		const persistenceQueue = this.persistenceQueues.get(topicId)
 		if (persistenceQueue) {
@@ -2217,6 +2406,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		messages: RawSuperMagicMessageEnvelope[],
 		{
 			mode = "replace",
+			toolProjectionPolicy = "historical_terminal",
 			statusMessages,
 			anchorSuperMessageId,
 			preserveStreamSuperMessageIds,
@@ -2231,6 +2421,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const statusCommittedUpdates: Array<{
 			message: MessageItem
 			node?: RawSuperMagicMessageNode
+		}> = []
+		const httpToolSettlements: Array<{
+			toolId: string
+			response: ToolResponseState
 		}> = []
 		const tailAnchorIndex =
 			mode === "replace_tail" && anchorSuperMessageId
@@ -2315,6 +2509,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			previousMessages = statusResult.nextMessages
 			statusCommittedUpdates.push(...statusResult.committedUpdates)
 			const snapshotMessages = (messages || []).slice()
+			if (this.isHistoricalToolProjectionEnabled(toolProjectionPolicy)) {
+				// HTTP order is a transport presentation detail. Prime ownership in
+				// chronological order before recording any Tool response from this batch.
+				this.primeHttpAssistantToolOwnership(topicId, snapshotMessages)
+			}
 			const snapshotLatestSeqId = snapshotMessages.reduce((latestSeqId, envelope) => {
 				const currentSeqId = String(envelope?.seq?.seq_id || "")
 				if (!currentSeqId) return latestSeqId
@@ -2449,12 +2648,24 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					})
 				}
 				if (messageType === "super_magic_message") {
-					this.recordToolResponse(
+					const toolResponseResult = this.recordToolResponse(
 						topicId,
 						rawNode,
 						envelope?.seq?.seq_id,
 						toolResponseMap,
+						"http",
 					)
+					if (toolResponseResult.kind === "recorded") {
+						httpToolSettlements.push({
+							toolId: String(rawNode?.tool?.id || ""),
+							response: toolResponseResult.response,
+						})
+					} else if (
+						toolProjectionPolicy === "historical_terminal" &&
+						toolResponseResult.kind === "missing_owner"
+					) {
+						this.queuePendingHttpToolResponse(topicId, rawNode, envelope?.seq?.seq_id)
+					}
 				}
 
 				if (rawNode && rawNode.role !== "assistant") {
@@ -2511,6 +2722,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					settledStream = didSettleStream || settledStream
 				}
 			})
+
+			if (toolProjectionPolicy === "historical_terminal") {
+				this.drainPendingHttpToolResponses(topicId, toolResponseMap, httpToolSettlements)
+				this.settleHistoricalToolCalls(
+					topicId,
+					snapshotMessages,
+					toolResponseMap,
+					httpToolSettlements,
+				)
+			}
 
 			// HTTP 快照不包含仍在本地流式生成、尚未具备服务端终态的占位卡时，
 			// 该临时卡作为本地 overlay 保留。WS/IM 已持久落地且 seq 高于本次快照
@@ -2615,6 +2836,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 				}
 			}
+		})
+		httpToolSettlements.forEach(({ toolId, response }) => {
+			if (toolId) this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
 		})
 
 		const previousAppMessageIds = new Set(
@@ -3632,10 +3856,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		seqId?: unknown,
 		targetMap?: Map<string, ToolResponseState>,
 		source: SuperMagicEventSource = "im",
-	) {
-		if (messageNode?.role !== "tool") return
+	): ToolResponseRecordResult {
+		if (messageNode?.role !== "tool") return { kind: "unchanged" }
 		const rawTool = messageNode.tool
-		if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) return
+		if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) {
+			return { kind: "unchanged" }
+		}
 
 		// 历史 tool_call_id 只保留在 raw message 中用于观测；canonical 身份只认 tool.id。
 		const toolId = typeof rawTool.id === "string" ? rawTool.id.trim() : ""
@@ -3648,7 +3874,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				toolCallId,
 				resolution: "ignore-canonical-association",
 			})
-			return
+			return { kind: "invalid_tool_id" }
 		}
 
 		const toolResponseMap = targetMap || this.toolResponseMap.get(topicId) || new Map()
@@ -3664,12 +3890,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			: ""
 		const isOrphanFinishTask =
 			!ownerIdentity && this.isOrphanFinishTaskResponse(messageNode, toolId)
+		if (!isOrphanFinishTask && !ownerIdentity) return { kind: "missing_owner" }
 		if (
 			!isOrphanFinishTask &&
 			ownerIdentity !== correlationId &&
 			ownerCorrelationId !== correlationId
 		)
-			return
+			return { kind: "owner_conflict" }
 
 		const current = toolResponseMap.get(toolId)
 		const normalizedSeqId = this.getValidToolResponseSeqId(seqId)
@@ -3730,7 +3957,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (normalizedSeqId) seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
 			publishSettlement(incoming)
-			return
+			return { kind: "recorded", response: incoming }
 		}
 		if (normalizedSeqId && !latestSeqId) {
 			// response_missing 等无版本占位被真实消息接管时，从这条消息开始建立 seq 基线。
@@ -3739,7 +3966,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
 			publishSettlement(nextState)
-			return
+			return { kind: "recorded", response: nextState }
 		}
 
 		if (normalizedSeqId && latestSeqId) {
@@ -3751,7 +3978,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					incomingSeqId: normalizedSeqId,
 					latestSeqId,
 				})
-				return
+				return { kind: "unchanged" }
 			}
 			if (sequenceOrder === 0) {
 				const sameSeqResult = this.classifySameSeqToolResponse(current, incoming)
@@ -3761,14 +3988,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						toolCallId: toolId,
 						seqId: normalizedSeqId,
 					})
-					return
+					return { kind: "unchanged" }
 				}
-				if (!sameSeqResult.hasSupplement) return
+				if (!sameSeqResult.hasSupplement) return { kind: "unchanged" }
 				const supplemented = this.mergeToolResponseState(current, incoming)
 				toolResponseMap.set(toolId, supplemented)
 				this.toolResponseMap.set(topicId, toolResponseMap)
 				publishSettlement(supplemented)
-				return
+				return { kind: "recorded", response: supplemented }
 			}
 
 			const nextState = this.mergeToolResponseState(current, incoming)
@@ -3776,17 +4003,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
 			publishSettlement(nextState)
-			return
+			return { kind: "recorded", response: nextState }
 		}
 
 		// 未知版本不能破坏已有强终态；其余情况保留原有状态合并语义。
 		const nextState = this.isStrongToolResponseStatus(current.status)
 			? this.mergeUnknownSeqToolResponseState(current, incoming)
 			: this.mergeToolResponseState(current, incoming)
-		if (nextState === current || isEqual(nextState, current)) return
+		if (nextState === current || isEqual(nextState, current)) return { kind: "unchanged" }
 		toolResponseMap.set(toolId, nextState)
 		this.toolResponseMap.set(topicId, toolResponseMap)
 		publishSettlement(nextState)
+		return { kind: "recorded", response: nextState }
 	}
 
 	private mergeUnknownSeqToolResponseState(

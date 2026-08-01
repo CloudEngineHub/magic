@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
+import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type {
@@ -251,13 +252,18 @@ function createStore(activeTopicId: string | null = TOPIC_A): SuperMagicStore {
 	return store
 }
 
-function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
-	const directNode = store.getMessageNode(superMessageId)
-	const projectedBySuperMessageId = Array.from(store.messages.values())
-		.flatMap((messages) => Array.from(messages))
-		.find((message) => message.super_message_id === superMessageId)
-	const node = directNode ?? projectedBySuperMessageId
+function getCanonicalNode(
+	store: SuperMagicStore,
+	superMessageId: string,
+): ProjectedNode | undefined {
+	// Canonical assertions must stay on the messageMap observation layer. Falling back to
+	// a topic-list projection would let a missing canonical write pass by accident.
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
+}
+
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	return getCanonicalNode(store, superMessageId)
 }
 
 function getTopicAssistantNode(
@@ -770,11 +776,24 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(createChunk({ i: 1, content: "second" }))
 		store.receiveChunk(createChunk({ i: 0, content: "restart" }))
 
-		expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
+		// Keep canonical tool state and the projected list as separate observations;
+		// the helper fallback would otherwise hide a missing messageMap write.
+		expect(store.getMessageNode(toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 			role: "tool",
 			content: "tool audit payload",
 			tool: { id: "tool-1", status: "finished" },
 		})
+		const topicMessages = store.messages.get(TOPIC_A) ?? []
+		expect(topicMessages.filter((message) => message.role === "tool")).toHaveLength(1)
+		expect(topicMessages).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					role: "tool",
+					app_message_id: CORRELATION_ID,
+					super_message_id: toToolSuperMessageId(CORRELATION_ID),
+				}),
+			]),
+		)
 	})
 
 	it.each(["tool", "user"] as const)(
@@ -1068,7 +1087,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getStreamState(TOPIC_A, "cross-topic-id")).toBeUndefined()
 	})
 
-	it("chunk 与 Final 使用不同 super_message_id 时保持为两条逻辑消息。", () => {
+	it("不同 correlation 与不同 super_message_id 的 chunk 与 Final 保持为两条逻辑消息。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ correlationId: "stream-correlation", content: "draft" }))
@@ -1082,12 +1101,41 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "super-final-correlation")).toMatchObject({
+		expect(store.getMessageNode("super-final-correlation")).toMatchObject({
 			app_message_id: "final-app",
 			super_message_id: "super-final-correlation",
 			content: "final",
 			correlation_id: "final-correlation",
 		})
+		const messages = store.messages.get(TOPIC_A) ?? []
+		expect(messages).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				super_message_id: toAssistantSuperMessageId(TOPIC_A, "stream-correlation"),
+				correlation_id: "stream-correlation",
+				content: "draft",
+			}),
+			expect.objectContaining({
+				role: "assistant",
+				app_message_id: "final-app",
+				super_message_id: "super-final-correlation",
+				correlation_id: "final-correlation",
+				content: "final",
+			}),
+		])
+		expect(messagesConverter(messages)).toEqual([
+			expect.objectContaining({
+				super_message_id: toAssistantSuperMessageId(TOPIC_A, "stream-correlation"),
+				correlation_id: "stream-correlation",
+				content: "draft",
+			}),
+			expect.objectContaining({
+				app_message_id: "final-app",
+				super_message_id: "super-final-correlation",
+				correlation_id: "final-correlation",
+				content: "final",
+			}),
+		])
 		expect(store.getStreamState(TOPIC_A, "stream-correlation")?.content).toBe("draft")
 	})
 
@@ -1452,9 +1500,30 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 
 		const topicASuperMessageId = toAssistantSuperMessageId(TOPIC_A, "correlation-a")
 		const topicBSuperMessageId = toAssistantSuperMessageId(TOPIC_B, "correlation-b")
-		expect(getNode(store, topicASuperMessageId)?.content).toBe("A")
-		expect(getNode(store, topicBSuperMessageId)?.content).toBe("B")
-		expect(getNode(store, topicASuperMessageId)).not.toBe(getNode(store, topicBSuperMessageId))
+		expect(store.getMessageNode(topicASuperMessageId)).toMatchObject({
+			app_message_id: "same-global-app",
+			super_message_id: topicASuperMessageId,
+			content: "A",
+		})
+		expect(store.getMessageNode(topicBSuperMessageId)).toMatchObject({
+			app_message_id: "same-global-app",
+			super_message_id: topicBSuperMessageId,
+			content: "B",
+		})
+		expect(store.messages.get(TOPIC_A)).toEqual([
+			expect.objectContaining({
+				app_message_id: "same-global-app",
+				super_message_id: topicASuperMessageId,
+				content: "A",
+			}),
+		])
+		expect(store.messages.get(TOPIC_B)).toEqual([
+			expect.objectContaining({
+				app_message_id: "same-global-app",
+				super_message_id: topicBSuperMessageId,
+				content: "B",
+			}),
+		])
 	})
 
 	it("`topicMap` 尚未建立时 chunk 已经到达。", () => {

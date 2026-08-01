@@ -250,7 +250,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			pollingResponse.items,
-			{ mode: "replace", preserveStreamSuperMessageIds: [] },
+			{
+				mode: "replace",
+				preserveStreamSuperMessageIds: [],
+				toolProjectionPolicy: "preserve_live",
+			},
 		)
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 
@@ -364,6 +368,7 @@ describe("useTopicMessages", () => {
 				mode: "replace_tail",
 				anchorSuperMessageId: "local-anchor",
 				preserveStreamSuperMessageIds: [],
+				toolProjectionPolicy: "preserve_live",
 			},
 		)
 		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
@@ -727,7 +732,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			olderItems,
-			{ mode: "merge" },
+			{
+				mode: "merge",
+				syncGeneration: undefined,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 	})
 
@@ -812,6 +821,7 @@ describe("useTopicMessages", () => {
 			await Promise.resolve()
 		})
 		mockState.getMessagesByConversationIdMock.mockClear()
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
 
 		act(() => {
 			const handleNewMessage = mockState.pubsubHandlers.get("Super_Magic_New_Message_V2")
@@ -835,7 +845,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[newerEnvelope, olderEnvelope],
-			{ mode: "replace" },
+			{
+				mode: "replace",
+				preserveStreamSuperMessageIds: [],
+				toolProjectionPolicy: "preserve_live",
+			},
 		)
 		expect(mockState.superMagicStoreMock.reconcileHttpMessageStatuses).not.toHaveBeenCalled()
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
@@ -1158,7 +1172,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			revokedBatch,
-			{ mode: "replace" },
+			{
+				mode: "replace",
+				syncGeneration: undefined,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 	})
@@ -1346,7 +1364,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[...firstPageItems, ...secondPageItems],
-			{ mode: "replace", syncGeneration: 23 },
+			{
+				mode: "replace",
+				syncGeneration: 23,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 	})
 
@@ -1454,7 +1476,11 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[...firstPageItems, ...secondPageItems],
-			{ mode: "replace", syncGeneration: generation },
+			{
+				mode: "replace",
+				syncGeneration: generation,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
 			"chat-topic-1",

@@ -728,6 +728,10 @@ corepack pnpm exec vitest run \
 - 同 seq 但内容冲突的 response 保留首次结果并记录冲突。
 - 同 seq 的 response 允许只补齐此前缺失的字段。
 - `initializeMessages()` 的低 seq tool response 不覆盖已有 canonical 状态。
+- HTTP 历史快照倒序返回 Tool、Assistant 时，先按 `seq_id` 建立 Assistant owner，再记录真实 Tool response。
+- HTTP 历史分页跨页先到 Tool、后到 Assistant 时，暂存候选并在 owner 建立后重放。
+- HTTP 历史 Tool status 缺失或未知时保留有效载荷，但 UI effective 状态投影为 `response_missing`。
+- 旧 HTTP 历史快照不得把同一 `super_message_id` 的活跃本地流提前终态化。
 - tool response 先是 `finished`，后又收到 `running`。
 - tool response 已是 `running`，后到的 `waiting` 只补载荷、不回滚状态。
 - tool response 先是 `error`，后又收到 `finished`。
@@ -760,10 +764,10 @@ corepack pnpm exec vitest run \
 - `show_in_ui=false` 不影响未结算工具的 canonical 结算。
 - 多工具 response 按 `tool.id` 绑定，不受数组 index 和 `tool_call_id` 干扰。
 - buffer 中错误的 `tool_call_id` 不得掩盖按 `tool.id` 判断的缺失响应。
-- 页面刷新初始化完成且任务已结束时，缺少 role=tool 的工具调用进入 `response_missing`。
+- 页面刷新载入 HTTP 历史快照时，缺少 role=tool 的工具调用立即进入 `response_missing`。
 - 页面常驻增量轮询没有新消息但任务已结束时，缺少 role=tool 的工具调用进入 `response_missing`。
 - 下一轮 running assistant 到达后，上一轮缺少 role=tool 的工具调用退出 loading。
-- 任务仍在运行且没有后续消息时，不提前把缺少 role=tool 的工具标记为 `response_missing`。
+- live HTTP 投影策略下，任务仍在运行且没有后续消息时，不提前把缺少 role=tool 的工具标记为 `response_missing`。
 - `response_missing` 弱终态生成后，迟到的真实 tool message 可以覆盖。
 - 多个工具调用中只有缺失响应的工具进入 `response_missing`。
 - finished 多工具轮次已有部分 response 时，仍逐 `tool.id` 结算剩余缺失项。
@@ -997,13 +1001,13 @@ npx vitest run \
 
 ##### 当前四层观察口径
 
-| 观察层                | 当前测试 helper / 来源                                          | 用途                                                            |
+| 观察层 | 当前测试 helper / 来源 | 用途 |
 | --------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --- | -------------------------------------------------- |
-| E：assistant embedded | `getEmbeddedToolState()`，test:308-314                          | 只验证 assistant 快照是否更新；不把它当成 canonical 执行状态    |
-| C：canonical          | `getCanonicalToolState()`，test:316-322；`toolResponseMap`      | 验证 role=tool 的权威状态、ID、detail、attachments 和状态格     |
-| U：UI effective       | `getEffectiveToolState()`，test:324-334                         | 按 `Map                                                         |     | embedded`复现`ToolCall.tsx:66-79` 的用户可见优先级 |
-| R/L：raw 与事件       | `getNode()`、`collectArrivals()`，test:286-355                  | 只验证 messageMap/messages/buffer/listener 到达和顺序           |
-| S：topic/lifecycle    | `isTopicStreaming()`、`beginTopicSync()`、`completeTopicSync()` | 验证 HTTP/task 屏障与主题终态，不用 raw 到达替代 canonical 结算 |
+| E：assistant embedded | `getEmbeddedToolState()`，test:308-314 | 只验证 assistant 快照是否更新；不把它当成 canonical 执行状态 |
+| C：canonical | `getCanonicalToolState()`，test:316-322；`toolResponseMap` | 验证 role=tool 的权威状态、ID、detail、attachments 和状态格 |
+| U：UI effective | `getEffectiveToolState()`，test:324-334 | 按 `Map                                                         |     | embedded`复现`ToolCall.tsx:66-79` 的用户可见优先级 |
+| R/L：raw 与事件 | `getNode()`、`collectArrivals()`，test:286-355 | 只验证 messageMap/messages/buffer/listener 到达和顺序 |
+| S：topic/lifecycle | `isTopicStreaming()`、`beginTopicSync()`、`completeTopicSync()` | 验证 HTTP/task 屏障与主题终态，不用 raw 到达替代 canonical 结算 |
 
 ##### 本轮测试脚本改动
 
@@ -1131,6 +1135,26 @@ corepack pnpm exec vitest run --silent \
 | UI effective                | 初始外层 `toolResponseMap` 尚无 topic，首次写入 canonical `response_missing` 后，真实 MobX observer 自动移除普通工具 spinner                                                                    | `5/5` GREEN   | UI 已正确消费 canonical 弱终态，不增加展示层兜底                                                        |
 
 本轮核心组合验证为 `101 tests / 101 passed`：Tool response `52`、Hook `6`、ToolCall UI `5`、最终 Assistant Message `38`。相邻 HTTP 权威同步套件当前为 `25 tests / 18 passed / 7 failed`；这 7 条是 Store/HTTP 章节既有 TDD RED，且该套件不经过本轮修改的 Hook 路径，不归因于常驻轮询修复。
+
+#### HTTP 历史 Tool 两阶段弱终态（2026-08-01）
+
+业务决策：只要普通 Tool 来自已持久化的 HTTP 历史快照、完整恢复或历史分页，UI effective 状态就不能停留在 `waiting/running`；Store 必须在同次提交内投影为真实强终态或可被迟到真实响应覆盖的 `response_missing`。`ask_user` 继续使用独立等待语义，不参与普通工具弱终态补偿。
+
+| 阶段 / 边界                | 已确认行为                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 第一阶段：owner / response | 先按 `seq_id` 升序扫描本批 Assistant 并声明 `topicId + tool.id` owner，再记录真实 Tool response；若历史分页先到 Tool、后到 Assistant，则以 `topicId + tool.id + correlationId` 暂存候选，owner 到达后按原 seq 规则重放。 |
+| 第二阶段：历史终态投影     | 第一阶段结束后逐 Assistant / `tool.id` 检查；已有 `finished/error/suspended/response_missing` 保持，`waiting/running`、缺失或未知状态投影为 `response_missing`，并保留 detail、attachments 等已定义载荷。                |
+| live 保护                  | `authoritative_tail` 明确使用 `preserve_live`；HTTP 快照命中同一 `super_message_id` 的活跃本地 StreamState 时也跳过历史弱终态，避免当前任务被旧快照提前结算。                                                            |
+| 历史入口                   | 初次 `replace`、历史 `merge`、完整 recovery、前台恢复和 RecordingSummary 历史写入显式使用 `historical_terminal`。                                                                                                        |
+| 单调性与事件               | `response_missing` 不覆盖真实 `finished/error`，迟到的更高版本真实响应可覆盖弱终态；HTTP 批量 action 完成后再发布 `toolCall.settled`，避免观察者读取到半提交状态。                                                       |
+| 状态域隔离                 | 本决策只作用于 `toolResponseMap` 的 Tool UI effective 投影，不修改 IM `imStatus`，也不把 SuperMessage `superStatus` 与 Tool response status 混用。                                                                       |
+
+当前黑盒验证：
+
+- `tool-response-execution-state.test.ts`：`65/65`，覆盖同页倒序、跨页候选、缺失/未知 status、活跃本地流保护、历史立即弱终态与 live 保留。
+- 主 SuperMagic `useTopicMessages.test.tsx`：`32/32`，覆盖历史 `historical_terminal` 与尾部 live `preserve_live` 的调用方策略。
+- RecordingSummary `useTopicMessages.test.tsx`：`3/3`，覆盖完整恢复和刷新历史写入的 `historical_terminal`。
+- 2026-08-01 三文件联合运行：`100/100`。
 
 #### 历史关联测试运行记录
 
@@ -1418,17 +1442,17 @@ npx --no-install vitest run \
 
 主归因汇总：`测试/契约问题 6 项`、`Store 业务问题 2 项`、`测试断言与 Store 标准化同时需处理 1 项`。
 
-|   # | 用例 / 失败行                                             | 本轮实际结果                                                                                | 主归因          | 精准判断与建议                                                                                                                                                                                            |
+| # | 用例 / 失败行 | 本轮实际结果 | 主归因 | 精准判断与建议 |
 | --: | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------- |
-|   1 | L332，失败 L343：chunk 完整但 final 长时间不来            | content 已稳定、stream state 已结束，5.1 秒后 recovery 仍为空                               | 测试 / 协议问题 | 现有 chunk-ordering 用例把完整 `finish_reason=stop` 视为已完成且不 recovery；本用例却要求 recovery，契约互相冲突。先明确“final assistant 是否必达”及恢复 SLA，再决定 Store 是否错误；不要直接归因 Store。 |
-|   2 | L387，失败 L397：最终 assistant 重复到达                  | topic listener 只有 1 次；两侧 content 均为 `canonical`，但 alias 不是同一对象引用          | 测试问题        | 去重核心行为已通过，失败来自 `toBe()`。改为断言一张逻辑卡片、最新语义字段和 listener 的 exactly-once 副作用；另行记录 alias shape 标准化，不要求引用相等。                                                |
-|   3 | L401，失败 L416：同 correlation 两个不同 final            | correlation 查询已是 `new`；旧 app id 仍保留旧节点                                          | 测试问题为主    | UI 会按 correlation 保留最新卡片；“所有历史 app id 永久重定向到最新对象”没有现成契约。改为验证一张卡片和最新内容；如产品确需历史 alias 收敛，应拆成独立标准化测试。                                       |
-|   4 | L505，失败 L517：HTTP 快照先到，更新 IM 后到              | seq=201 的 `new IM` 没有覆盖 seq=200 的 `snapshot`                                          | Store 业务问题  | 同一 app/correlation 的更高 seq 应成为最新 canonical 状态，反向旧 IM 不覆盖新快照的用例已经通过。保留红测，并补 `messages`、canonical node 和 latest seq 三层断言。                                       |
-|   5 | L536，失败 L556：embedded tool running，response finished | assistant embedded 仍为 `running`                                                           | 测试问题        | 生产 UI 使用 `toolResponseMap                                                                                                                                                                             |     | embedded`；应断言 canonical/effective status 为 `finished`，不要求旧 assistant 快照被回写。 |
-|   6 | L617，失败 L632：final 与流式占位卡合并                   | correlation 占位节点保持原引用且 content 已变为 `canonical`；真实 app id 查询为 `undefined` | 混合问题        | UI 合并核心已成功，`toBe()` 仍是错误 oracle；但真实 app id 无法寻址暴露潜在 alias/标准化缺口。应拆成“单卡/UI 合并”与“app id alias 规范”两个测试，后者再决定是否为 Store 缺陷。                            |
-|   7 | L653，失败 L662：correlation alias 与真实 app id          | 两个 key 都能读到 canonical content/status，但默认字段 shape 不同且引用不同                 | 测试问题为主    | 引用相等无依据；应先定义 normalized semantic projection，再比较 role/topic/correlation/message/content/status/tool/token 等必要字段。若语义字段仍分叉，才归 Store 标准化。                                |
-|   8 | L691，失败 L707：同 app id 的更新 final 被跳过            | seq=101 的 `new final` 没有覆盖 seq=100 的 `old snapshot`                                   | Store 业务问题  | 与第 4 项同根：更新消息被去重逻辑当作重复而不是新版本。测试输入和预期充分，应保留红测。                                                                                                                   |
-|   9 | L711，失败 L722：final 在 buffer 中重复入队               | listener 已正确去重为 1 次；失败只来自 app/correlation alias 的 `toBe()`                    | 测试问题        | buffer 幂等核心已经通过。改为断言 listener exactly-once、`messagesConverter()` 后一张卡片以及 normalized semantic state。                                                                                 |
+| 1 | L332，失败 L343：chunk 完整但 final 长时间不来 | content 已稳定、stream state 已结束，5.1 秒后 recovery 仍为空 | 测试 / 协议问题 | 现有 chunk-ordering 用例把完整 `finish_reason=stop` 视为已完成且不 recovery；本用例却要求 recovery，契约互相冲突。先明确“final assistant 是否必达”及恢复 SLA，再决定 Store 是否错误；不要直接归因 Store。 |
+| 2 | L387，失败 L397：最终 assistant 重复到达 | topic listener 只有 1 次；两侧 content 均为 `canonical`，但 alias 不是同一对象引用 | 测试问题 | 去重核心行为已通过，失败来自 `toBe()`。改为断言一张逻辑卡片、最新语义字段和 listener 的 exactly-once 副作用；另行记录 alias shape 标准化，不要求引用相等。 |
+| 3 | L401，失败 L416：同 correlation 两个不同 final | correlation 查询已是 `new`；旧 app id 仍保留旧节点 | 测试问题为主 | UI 会按 correlation 保留最新卡片；“所有历史 app id 永久重定向到最新对象”没有现成契约。改为验证一张卡片和最新内容；如产品确需历史 alias 收敛，应拆成独立标准化测试。 |
+| 4 | L505，失败 L517：HTTP 快照先到，更新 IM 后到 | seq=201 的 `new IM` 没有覆盖 seq=200 的 `snapshot` | Store 业务问题 | 同一 app/correlation 的更高 seq 应成为最新 canonical 状态，反向旧 IM 不覆盖新快照的用例已经通过。保留红测，并补 `messages`、canonical node 和 latest seq 三层断言。 |
+| 5 | L536，失败 L556：embedded tool running，response finished | assistant embedded 仍为 `running` | 测试问题 | 生产 UI 使用 `toolResponseMap                                                                                                                                                                             |     | embedded`；应断言 canonical/effective status 为 `finished`，不要求旧 assistant 快照被回写。 |
+| 6 | L617，失败 L632：final 与流式占位卡合并 | correlation 占位节点保持原引用且 content 已变为 `canonical`；真实 app id 查询为 `undefined` | 混合问题 | UI 合并核心已成功，`toBe()` 仍是错误 oracle；但真实 app id 无法寻址暴露潜在 alias/标准化缺口。应拆成“单卡/UI 合并”与“app id alias 规范”两个测试，后者再决定是否为 Store 缺陷。 |
+| 7 | L653，失败 L662：correlation alias 与真实 app id | 两个 key 都能读到 canonical content/status，但默认字段 shape 不同且引用不同 | 测试问题为主 | 引用相等无依据；应先定义 normalized semantic projection，再比较 role/topic/correlation/message/content/status/tool/token 等必要字段。若语义字段仍分叉，才归 Store 标准化。 |
+| 8 | L691，失败 L707：同 app id 的更新 final 被跳过 | seq=101 的 `new final` 没有覆盖 seq=100 的 `old snapshot` | Store 业务问题 | 与第 4 项同根：更新消息被去重逻辑当作重复而不是新版本。测试输入和预期充分，应保留红测。 |
+| 9 | L711，失败 L722：final 在 buffer 中重复入队 | listener 已正确去重为 1 次；失败只来自 app/correlation alias 的 `toBe()` | 测试问题 | buffer 幂等核心已经通过。改为断言 listener exactly-once、`messagesConverter()` 后一张卡片以及 normalized semantic state。 |
 
 #### 24 个用例逐条准确性审计
 
@@ -2334,16 +2358,16 @@ corepack pnpm exec vitest run \
 
 本节是当前撤回、恢复、执行状态和事件编排的最高优先级决策，取代此前把外层 IM `status` 与内层 SuperMessage `status` 合并为单一 canonical 状态的实现假设。
 
-| 决策 | 当前有效规则 |
-| --- | --- |
+| 决策    | 当前有效规则                                                                                                                                            |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | N-ST-01 | IM 状态与 SuperMessage 状态互不覆盖，只在 UI 投影层组合。Canonical `MessageItem` 必须保留 `imStatus` 与 `superStatus`；旧 `status` 仅兼容表示 IM 状态。 |
-| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态负责 Agent 执行与流生命周期。 |
-| N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。 |
-| N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。 |
-| N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。 |
-| N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。 |
-| N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。 |
-| N-ST-08 | Assistant 使用节点执行状态；Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。 |
+| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态负责 Agent 执行与流生命周期。                                                                       |
+| N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。                                                      |
+| N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。                                                                      |
+| N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。                       |
+| N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。                                                                  |
+| N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。                      |
+| N-ST-08 | Assistant 使用节点执行状态；Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。                                                        |
 
 实施约束：
 

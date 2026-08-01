@@ -22,8 +22,12 @@ export interface PendingUserMessageEnvelope {
 	conversation_id: string
 }
 
+export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
+
 export interface InitializeMessagesOptions {
 	mode?: "replace" | "merge" | "replace_tail"
+	/** 历史 HTTP 快照必须让普通 Tool 进入终态；live 增量则保留 waiting/running。 */
+	toolProjectionPolicy?: HttpToolProjectionPolicy
 	/** HTTP 返回的完整 IM 状态观察集；可包含不参与本次 membership 替换的消息。 */
 	statusMessages?: RawSuperMagicMessageEnvelope[]
 	/** `replace_tail` 保留该 SuperMessage 及其之前的本地前缀，并权威替换其后的 membership。 */

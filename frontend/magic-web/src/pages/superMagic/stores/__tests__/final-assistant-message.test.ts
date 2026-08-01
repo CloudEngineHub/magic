@@ -492,8 +492,51 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
-	it("最终 assistant message 只有 metadata。", () => {
+	it("最终 assistant message 只有 metadata 时也能冷启动落地。", () => {
 		const store = createStore()
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				includeContent: false,
+				includeToolCalls: false,
+				includeTokenUsage: false,
+				nodeExtra: { event: "task_finished", task_id: "task-1" },
+			}),
+		)
+		advanceRendering()
+
+		const metadataNode = getNode(store, SUPER_MESSAGE_ID)
+		expect(metadataNode).toMatchObject({
+			role: "assistant",
+			status: "finished",
+			event: "task_finished",
+		})
+		expect(metadataNode?.content ?? "").toBe("")
+		expect(metadataNode?.reasoning_content ?? "").toBe("")
+		expect(metadataNode?.tool_calls ?? []).toEqual([])
+		expect(metadataNode?.attachments ?? []).toEqual([])
+		expect(getMessageRecords(store)).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				event: "task_finished",
+				correlation_id: CORRELATION_ID,
+				super_message_id: SUPER_MESSAGE_ID,
+			}),
+		])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+	})
+
+	it("最终 assistant message 只有 metadata 时保留已有 streamed draft。", () => {
+		const store = createStore()
+		const streamedDraft = "streamed draft preserved by an absent Final content field"
+
+		store.receiveChunk(createChunk({ content: streamedDraft }))
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			content: streamedDraft,
+			isFinalMessageReceived: false,
+		})
 
 		store.enqueueMessage(
 			TOPIC_ID,
@@ -513,19 +556,20 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		})
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 		const metadataNode = getNode(store, SUPER_MESSAGE_ID)
-		// D13：Store 保留 metadata 事实；是否渲染由 UI 根据可见内容判断。
-		expect((metadataNode?.content ?? "").trim()).toBe("")
+		// Final 自身只有 metadata；缺失的 content 不能覆盖已经接受的 streamed draft。
+		expect(metadataNode?.content).toBe(streamedDraft)
 		expect((metadataNode?.reasoning_content ?? "").trim()).toBe("")
 		expect(metadataNode?.tool_calls ?? []).toHaveLength(0)
 		expect(metadataNode?.attachments ?? []).toHaveLength(0)
-		expect(
-			getMessageRecords(store).some(
-				(message) =>
-					message?.role === "assistant" &&
-					message?.event === "task_finished" &&
-					message?.correlation_id === CORRELATION_ID,
-			),
-		).toBe(true)
+		expect(getMessageRecords(store)).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				event: "task_finished",
+				correlation_id: CORRELATION_ID,
+				super_message_id: SUPER_MESSAGE_ID,
+				content: streamedDraft,
+			}),
+		])
 	})
 
 	it("最终 assistant message 缺少 tool_calls 时不把 absent 当成显式空数组。", () => {
@@ -1025,7 +1069,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 				appMessageId: "newer-message",
 				superMessageId: "newer-super-message",
 				correlationId: "newer-correlation",
-				seqId: "200",
+				seqId: "10",
 				content: "newer",
 			}),
 		)
@@ -1035,14 +1079,28 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 				appMessageId: "older-final",
 				superMessageId: "older-super-message",
 				correlationId: "older-correlation",
-				seqId: "100",
+				seqId: "2",
 				content: "older but valid",
 			}),
 		)
 		advanceRendering()
 
 		expect(getNode(store, "older-super-message")?.content).toBe("older but valid")
-		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("200")
+		const storedOrder = getMessageRecords(store).map((message) => ({
+			appMessageId: message.app_message_id,
+			seqId: message.seq_id,
+		}))
+		expect(storedOrder).toEqual([
+			{ appMessageId: "older-final", seqId: "2" },
+			{ appMessageId: "newer-message", seqId: "10" },
+		])
+		expect(
+			messagesConverter(getMessageRecords(store)).map((message) => ({
+				appMessageId: message.app_message_id,
+				seqId: message.seq_id,
+			})),
+		).toEqual(storedOrder)
+		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("10")
 	})
 
 	it("Final 保留真实 appMessageId，并以 super_message_id 接管流式占位 canonical。", () => {

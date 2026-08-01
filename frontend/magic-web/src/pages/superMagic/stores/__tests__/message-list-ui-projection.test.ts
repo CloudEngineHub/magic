@@ -222,10 +222,12 @@ function getEffectiveToolStatus(
 	store: SuperMagicStore,
 	toolId = "tool-1",
 	topicId = TOPIC_A,
+	superMessageId = SUPER_MESSAGE_ID,
 ): string | undefined {
 	// Match ToolCall.tsx: the canonical response map wins while the Assistant snapshot remains raw history.
-	const embeddedStatus = getNode(store)?.tool_calls?.find((tool) => tool.id === toolId)?.tool
-		?.status
+	const embeddedStatus = getNode(store, superMessageId)?.tool_calls?.find(
+		(tool) => tool.id === toolId,
+	)?.tool?.status
 	return store.toolResponseMap.get(topicId)?.get(toolId)?.status ?? embeddedStatus
 }
 
@@ -423,7 +425,15 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 
 	it("tool response 按错误 topicId 查询不到。", () => {
 		const store = createStore()
+		const topicBSuperMessageId = "super-message-topic-b"
 		enqueueAssistant(store, {
+			toolCalls: [createToolCall({ tool: { id: "tool-1", status: "running" } })],
+		})
+		enqueueAssistant(store, {
+			topicId: TOPIC_B,
+			appMessageId: "assistant-b",
+			correlationId: "correlation-b",
+			superMessageId: topicBSuperMessageId,
 			toolCalls: [createToolCall({ tool: { id: "tool-1", status: "running" } })],
 		})
 		store.enqueueMessage(
@@ -440,6 +450,15 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		settle()
 
 		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("running")
+		expect(getNode(store, topicBSuperMessageId)?.tool_calls?.[0]?.tool?.status).toBe("running")
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")?.status).toBe("response_missing")
+		expect(store.toolResponseMap.get(TOPIC_B)?.get("tool-1")?.status).toBe("finished")
+		expect(getEffectiveToolStatus(store, "tool-1", TOPIC_A, SUPER_MESSAGE_ID)).toBe(
+			"response_missing",
+		)
+		expect(getEffectiveToolStatus(store, "tool-1", TOPIC_B, topicBSuperMessageId)).toBe(
+			"finished",
+		)
 	})
 
 	it("MessageList 使用 super_message_id 读取 Assistant canonical。", () => {

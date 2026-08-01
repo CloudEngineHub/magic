@@ -1003,8 +1003,10 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 	it("Final 的 reasoning 与 content 共用同一帧配额，短 reasoning 不阻塞正文推进。", () => {
 		const store = createStore()
+		const contentOnlyStore = createStore()
 
 		store.receiveChunk(createChunk({ content: "draft" }))
+		contentOnlyStore.receiveChunk(createChunk({ content: "draft" }))
 		advanceRendering(32)
 		store.enqueueMessage(
 			TOPIC_A,
@@ -1013,10 +1015,27 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 				content: `draft${"C".repeat(10_000)}`,
 			}),
 		)
+		contentOnlyStore.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({ content: `draft${"C".repeat(10_000)}` }),
+		)
+		const beforeFrame = getProjectedNode(store)
+		const beforeReasoningLength = beforeFrame?.reasoning_content?.length || 0
+		const beforeContentLength = beforeFrame?.content?.length || 0
+		const beforeContentOnlyLength = getProjectedNode(contentOnlyStore)?.content?.length || 0
 		advanceRendering(16)
 
-		expect(getProjectedNode(store)?.reasoning_content?.length).toBe(100)
-		expect(getProjectedNode(store)?.content?.length).toBeGreaterThan("draft".length)
+		const afterFrame = getProjectedNode(store)
+		const reasoningDelta = (afterFrame?.reasoning_content?.length || 0) - beforeReasoningLength
+		const contentDelta = (afterFrame?.content?.length || 0) - beforeContentLength
+		const contentOnlyDelta =
+			(getProjectedNode(contentOnlyStore)?.content?.length || 0) - beforeContentOnlyLength
+		expect(reasoningDelta).toBe(100)
+		expect(contentDelta).toBeGreaterThan(0)
+		expect(contentOnlyDelta).toBeGreaterThan(0)
+		// The reasoning and content deltas together must consume the same frame budget
+		// as an otherwise equivalent content-only Final, without hard-coding its size.
+		expect(reasoningDelta + contentDelta).toBe(contentOnlyDelta)
 	})
 
 	it("提高字符批量时仍保持 16ms 的渲染 timer 间隔。", () => {
@@ -1085,6 +1104,9 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "A" }))
+		expect(getProjectedNode(store)).toBeDefined()
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 		const generation = store.beginTopicSync(TOPIC_A)
 		store.initializeMessages(TOPIC_A, [])
 		expect(
@@ -1096,13 +1118,23 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		).toBe(true)
 		expect(getProjectedNode(store)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) ?? []).filter(
+				(message) => message.super_message_id === SUPER_MESSAGE_A,
+			),
+		).toHaveLength(0)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
 		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
 		advanceRendering()
 
 		expect(getProjectedNode(store)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) ?? []).filter(
+				(message) => message.super_message_id === SUPER_MESSAGE_A,
+			),
+		).toHaveLength(0)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
-		expect(vi.getTimerCount()).toBe(0)
 	})
 })

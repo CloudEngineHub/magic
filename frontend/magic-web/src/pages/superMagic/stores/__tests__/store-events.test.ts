@@ -499,15 +499,20 @@ describe("SuperMagic Store typed events", () => {
 		})
 		expect(canonical?.has(FINISH_TASK_LEGACY_TOOL_CALL_ID)).toBe(false)
 
-		const conflictWarnings = warnSpy.mock.calls.filter(
-			([message]) => message === "[SuperMagicStore] tool response id conflict",
+		// Warning wording is intentionally unconstrained; only the structured conflict
+		// diagnostic needs to identify the raw and canonical IDs involved.
+		const conflictDiagnostics = warnSpy.mock.calls.filter((call) =>
+			call.some((argument) => {
+				if (!argument || typeof argument !== "object") return false
+				const diagnostic = argument as Record<string, unknown>
+				return (
+					diagnostic.topicId === TOPIC_ID &&
+					diagnostic.toolId === FINISH_TASK_TOOL_ID &&
+					diagnostic.toolCallId === FINISH_TASK_LEGACY_TOOL_CALL_ID
+				)
+			}),
 		)
-		expect(conflictWarnings).toHaveLength(1)
-		expect(conflictWarnings[0]?.[1]).toMatchObject({
-			topicId: TOPIC_ID,
-			toolId: FINISH_TASK_TOOL_ID,
-			toolCallId: FINISH_TASK_LEGACY_TOOL_CALL_ID,
-		})
+		expect(conflictDiagnostics).toHaveLength(1)
 	})
 
 	it("emits task.completed exactly once for an orphan finish_task result", () => {

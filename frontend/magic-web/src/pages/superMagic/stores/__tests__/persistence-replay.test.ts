@@ -235,8 +235,7 @@ describe("SuperMagicStore / 持久化和回放", () => {
 
 			expect(addManySpy).toHaveBeenCalledTimes(1)
 			const persistedEntries = addManySpy.mock.calls[0]?.[1] as
-				| Array<{ value?: SuperMagicChunkMessage }>
-				| undefined
+				Array<{ value?: SuperMagicChunkMessage }> | undefined
 			expect(persistedEntries?.[0]?.value?.super_magic_chunk.choices).toEqual(
 				chunk.super_magic_chunk.choices,
 			)
@@ -385,19 +384,46 @@ describe("SuperMagicStore / 持久化和回放", () => {
 
 	it("序列化时丢失 `undefined` 字段，匿名槽位形态发生变化。", () => {
 		const store = createStore()
-		const source = createToolCall({ arguments: "partial" }) as Partial<ToolCall>
-		delete source.id
-		if (source.function) delete source.function.name
-		const replayed = JSON.parse(JSON.stringify(source)) as ToolCall
-		store.receiveChunk(createChunk({ toolCalls: [replayed] }))
-		store.enqueueMessage(
-			TOPIC_ID,
-			createFinal({ toolCalls: [createToolCall({ arguments: "partial" })] }),
-		)
-		settle()
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
+		const source = createToolCall({ arguments: "partial" })
+		Reflect.set(source, "id", undefined)
+		if (source.function) Reflect.set(source.function, "name", undefined)
+		expect(source).toHaveProperty("id", undefined)
+		expect(source.function).toHaveProperty("name", undefined)
 
-		expect(node(store)?.tool_calls).toHaveLength(1)
-		expect(node(store)?.tool_calls?.[0]?.id).toBe("tool-1")
+		try {
+			store.receiveChunk(createChunk({ toolCalls: [source] }))
+			vi.advanceTimersByTime(201)
+
+			expect(addManySpy).toHaveBeenCalledTimes(1)
+			const persistedEntries = addManySpy.mock.calls[0]?.[1] as
+				Array<{ value?: SuperMagicChunkMessage }> | undefined
+			const replayedChunk = persistedEntries?.[0]?.value
+			expect(replayedChunk).toBeDefined()
+			const persistedToolCall =
+				replayedChunk?.super_magic_chunk.choices[0]?.delta.tool_calls[0]
+			expect(persistedToolCall).not.toHaveProperty("id")
+			expect(persistedToolCall?.function).not.toHaveProperty("name")
+
+			const replayStore = createStore()
+			replayStore.receiveChunk(replayedChunk as SuperMagicChunkMessage)
+			expect(node(replayStore)?.tool_calls ?? []).toHaveLength(0)
+			expect(
+				(replayStore.messages.get(TOPIC_ID) ?? []).flatMap(
+					(message) => message.tool_calls ?? [],
+				),
+			).toHaveLength(0)
+			replayStore.enqueueMessage(
+				TOPIC_ID,
+				createFinal({ toolCalls: [createToolCall({ arguments: "partial" })] }),
+			)
+			settle()
+
+			expect(node(replayStore)?.tool_calls).toHaveLength(1)
+			expect(node(replayStore)?.tool_calls?.[0]?.id).toBe("tool-1")
+		} finally {
+			addManySpy.mockRestore()
+		}
 	})
 
 	it("大型 HTML arguments 重复持久化造成存储膨胀。", () => {
@@ -418,20 +444,26 @@ describe("SuperMagicStore / 持久化和回放", () => {
 
 	it("IndexedDB 写入失败，但实时状态继续运行。", () => {
 		const store = createStore()
+		const addManySpy = vi
+			.spyOn(db, "addManyToTable")
+			.mockRejectedValue(new Error("IndexedDB write failed"))
 		const liveChunk = createChunk({ i: 0, content: "live" })
-		let persistenceFailed = true
-		try {
-			if (persistenceFailed) throw new Error("IndexedDB write failed")
-		} catch {
-			// Persistence failure must not prevent the live transport from reaching the store.
-		}
-		persistenceFailed = false
-		store.receiveChunk(liveChunk)
-		store.receiveChunk(createChunk({ i: 1, content: "-ok", finishReason: "stop" }))
-		settle()
 
-		expect(node(store)).toMatchObject({ content: "live-ok" })
-		expect(persistenceFailed).toBe(false)
+		try {
+			store.receiveChunk(liveChunk)
+			store.receiveChunk(createChunk({ i: 1, content: "-ok", finishReason: "stop" }))
+			settle()
+
+			expect(addManySpy).toHaveBeenCalledTimes(1)
+			expect(addManySpy).toHaveBeenCalledWith(
+				TOPIC_ID,
+				expect.arrayContaining([expect.objectContaining({ value: liveChunk })]),
+			)
+			expect(node(store)).toMatchObject({ content: "live-ok" })
+			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		} finally {
+			addManySpy.mockRestore()
+		}
 	})
 
 	it("IndexedDB 数据部分写入，形成不完整回放。", () => {

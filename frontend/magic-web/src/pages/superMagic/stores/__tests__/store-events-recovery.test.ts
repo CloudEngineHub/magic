@@ -57,10 +57,12 @@ function createChunk(): SuperMagicChunkMessage {
 function createAssistantEnvelope({
 	appMessageId,
 	seqId,
+	correlationId = CORRELATION_ID,
 	toolCallId,
 }: {
 	appMessageId: string
 	seqId: string
+	correlationId?: string
 	toolCallId?: string
 }): RawSuperMagicMessageEnvelope {
 	const envelope = {
@@ -87,7 +89,7 @@ function createAssistantEnvelope({
 					topic_id: TOPIC_ID,
 					message_id: `node-${appMessageId}`,
 					super_message_id: SUPER_MESSAGE_ID,
-					correlation_id: CORRELATION_ID,
+					correlation_id: correlationId,
 					content: `canonical-${seqId}`,
 					reasoning_content: "",
 					tool_calls: toolCallId
@@ -201,20 +203,51 @@ describe("SuperMagic Store recovery events", () => {
 		store.subscribe("message.completed", (event) => completed.push(event))
 
 		store.initializeMessages(TOPIC_ID, [
-			createAssistantEnvelope({ appMessageId: "assistant-http-101", seqId: "101" }),
+			createAssistantEnvelope({
+				appMessageId: "assistant-http-101",
+				seqId: "101",
+				correlationId: "correlation-events-recovery-revision",
+			}),
 		])
 
 		expect(committed).toHaveLength(1)
 		expect(committed[0]).toMatchObject({
-			meta: { source: "http", correlationId: CORRELATION_ID },
+			meta: { source: "http", correlationId: "correlation-events-recovery-revision" },
 			payload: {
 				operation: "update",
-				message: { appMessageId: "assistant-http-101", seqId: "101" },
+				message: {
+					appMessageId: "assistant-http-101",
+					correlationId: "correlation-events-recovery-revision",
+					seqId: "101",
+				},
 			},
 		})
+		expect(committed[0].payload.message.logicalMessageId).toBe(SUPER_MESSAGE_ID)
 		expect(committed[0].payload.changedFields).toEqual(
 			expect.arrayContaining(["appMessageId", "seqId"]),
 		)
+
+		// HTTP revisions must replace one canonical Assistant identity and one list card,
+		// rather than leaving the previous app_message_id as a second logical message.
+		expect(store.getMessageNode(SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "assistant-http-101",
+			super_message_id: SUPER_MESSAGE_ID,
+			correlation_id: "correlation-events-recovery-revision",
+			content: "canonical-101",
+		})
+		const messages = store.messages.get(TOPIC_ID) ?? []
+		expect(
+			messages.filter((message) => message.super_message_id === SUPER_MESSAGE_ID),
+		).toHaveLength(1)
+		expect(messages).toEqual([
+			expect.objectContaining({
+				app_message_id: "assistant-http-101",
+				super_message_id: SUPER_MESSAGE_ID,
+				correlation_id: "correlation-events-recovery-revision",
+				seq_id: "101",
+			}),
+		])
+		expect(store.getMessageNode("assistant-http-100")).toBeUndefined()
 		expect(completed).toEqual([])
 	})
 
@@ -246,6 +279,11 @@ describe("SuperMagic Store recovery events", () => {
 				strength: "strong",
 				replaceable: false,
 			},
+		})
+		expect(store.toolResponseMap.get(TOPIC_ID)?.get("tool-http-events")).toMatchObject({
+			id: "tool-http-events",
+			status: "finished",
+			detail: { type: "json", data: { seqId: "201" } },
 		})
 	})
 })

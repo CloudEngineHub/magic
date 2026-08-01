@@ -564,7 +564,12 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				superMagicStore.reconcileAuthoritativeMessages(chat_topic_id, {
 					statusItems: authoritativeTailResult.statusItems,
 					membershipItems: authoritativeTailResult.pulledItems,
-					writeOptions: authoritativeTailResult.writeOptions,
+					writeOptions: {
+						...authoritativeTailResult.writeOptions,
+						// 最近尾部对账可能包含仍在运行的当前任务，不能仅因来自 HTTP
+						// 就把 embedded waiting/running 提前投影成历史弱终态。
+						toolProjectionPolicy: "preserve_live",
+					},
 				})
 			} else if (writeIntent === "incremental") {
 				// 增量模式保留现有 messages/buffer 状态，只把最新节点逐条灌进 store，
@@ -579,7 +584,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				superMagicStore.reconcileAuthoritativeMessages(chat_topic_id, {
 					statusItems: pullResult.statusItems || pullResult.pulledItems,
 					membershipItems: pullResult.pulledItems,
-					writeOptions: { mode: writeIntent, syncGeneration },
+					writeOptions: {
+						mode: writeIntent,
+						syncGeneration,
+						// 初次快照、恢复和历史分页都是已持久化历史；普通 Tool
+						// 不允许继续以 waiting/running 形式进入 UI。
+						toolProjectionPolicy: "historical_terminal",
+					},
 				})
 			}
 			if (allowRemoteRevokedAnchorCleanup) {
@@ -664,7 +675,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			superMagicStore.reconcileAuthoritativeMessages(topicId, {
 				statusItems: dedupePulledItemsByAppMessageId(statusItems),
 				membershipItems: pulledItems,
-				writeOptions: { mode: "replace", syncGeneration },
+				writeOptions: {
+					mode: "replace",
+					syncGeneration,
+					toolProjectionPolicy: "historical_terminal",
+				},
 			})
 			reconcileActiveRevokedAnchorFromHttp(topicId, statusItems, {
 				mode: "replace",
@@ -878,7 +893,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			superMagicStore.reconcileAuthoritativeMessages(topicId, {
 				statusItems: aggregatedStatusItems,
 				membershipItems: aggregatedPulledItems,
-				writeOptions: { mode: "replace", syncGeneration },
+				writeOptions: {
+					mode: "replace",
+					syncGeneration,
+					toolProjectionPolicy: "historical_terminal",
+				},
 			})
 			reconcileActiveRevokedAnchorFromHttp(
 				topicId,

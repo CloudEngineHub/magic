@@ -333,7 +333,7 @@ describe("SuperMagicStore / SuperMessage ID 黑盒契约", () => {
 		).toEqual(["assistant-super-a", "assistant-super-b"])
 	})
 
-	it("原始跨轮次竞态：B 的迟到 Chunk 仍归属原 super_message_id，Final 后回到新 User 之前", () => {
+	it("原始跨轮次竞态：B 的迟到 Chunk 保持原 super_message_id，并按真实 seq 排在新 User 之前", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -462,13 +462,42 @@ describe("SuperMagicStore / SuperMessage ID 黑盒契约", () => {
 		)
 		settleRendering()
 
-		expect(getConversationOrder(store)).toEqual([
-			"user-a",
-			"assistant-a-final-app",
-			"assistant-b-final-app",
-			"user-b",
-			"assistant-c-final-app",
+		const messages = getMessages(store)
+		expect(
+			messages.map(({ role, app_message_id, super_message_id, seq_id }) => ({
+				role,
+				app_message_id,
+				super_message_id,
+				seq_id,
+			})),
+		).toEqual([
+			{ role: "user", app_message_id: "user-a", super_message_id: "user-a", seq_id: "100" },
+			{
+				role: "assistant",
+				app_message_id: "assistant-a-final-app",
+				super_message_id: "assistant-a-super",
+				seq_id: "120",
+			},
+			{
+				role: "assistant",
+				app_message_id: "assistant-b-final-app",
+				super_message_id: "assistant-b-super",
+				seq_id: "150",
+			},
+			{ role: "user", app_message_id: "user-b", super_message_id: "user-b", seq_id: "200" },
+			{
+				role: "assistant",
+				app_message_id: "assistant-c-final-app",
+				super_message_id: "assistant-c-super",
+				seq_id: "250",
+			},
 		])
+		const superMessageIds = messages.map((message) => message.super_message_id)
+		expect(new Set(superMessageIds).size).toBe(messages.length)
+		expect(messages.some((message) => message.app_message_id === "assistant-b-super")).toBe(
+			false,
+		)
+		expect(store.getMessageNode("assistant-b-final-app")).toBeUndefined()
 		expect(
 			getMessages(store).filter(
 				(message) => message.super_message_id === "assistant-b-super",
@@ -1012,7 +1041,7 @@ describe("SuperMagicStore / SuperMessage ID 黑盒契约", () => {
 		expect(store.getMessageNode("assistant-b-super")).toMatchObject({ content: "final B" })
 	})
 
-	it("D06：initializeMessages 仅按服务端真实 seq 恢复 B 的原轮次位置", () => {
+	it("D06：initializeMessages 仅按服务端真实 seq 恢复 B 的列表位置", () => {
 		const store = createStore()
 
 		store.initializeMessages(TOPIC_A, [
@@ -1048,17 +1077,37 @@ describe("SuperMagicStore / SuperMessage ID 黑盒契约", () => {
 			}),
 		])
 
-		expect(getConversationOrder(store)).toEqual([
-			"user-a",
-			"assistant-b-final-app",
-			"user-b",
-			"assistant-c-final-app",
+		const messages = getMessages(store)
+		expect(messages.map((message) => message.seq_id)).toEqual(["100", "150", "200", "250"])
+		expect(
+			messages.map(({ role, app_message_id, super_message_id, seq_id }) => ({
+				role,
+				app_message_id,
+				super_message_id,
+				seq_id,
+			})),
+		).toEqual([
+			{ role: "user", app_message_id: "user-a", super_message_id: "user-a", seq_id: "100" },
+			{
+				role: "assistant",
+				app_message_id: "assistant-b-final-app",
+				super_message_id: "assistant-b-super",
+				seq_id: "150",
+			},
+			{ role: "user", app_message_id: "user-b", super_message_id: "user-b", seq_id: "200" },
+			{
+				role: "assistant",
+				app_message_id: "assistant-c-final-app",
+				super_message_id: "assistant-c-super",
+				seq_id: "250",
+			},
 		])
-		expect(getMessages(store).map((message) => message.seq_id)).toEqual([
-			"100",
-			"150",
-			"200",
-			"250",
-		])
+		expect(new Set(messages.map((message) => message.super_message_id)).size).toBe(
+			messages.length,
+		)
+		expect(messages.some((message) => message.app_message_id === "assistant-b-super")).toBe(
+			false,
+		)
+		expect(store.getMessageNode("assistant-b-final-app")).toBeUndefined()
 	})
 })

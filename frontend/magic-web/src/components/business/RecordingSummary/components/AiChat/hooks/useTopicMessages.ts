@@ -173,6 +173,9 @@ export function useTopicMessages({
 				superMagicStore.initializeMessages(chat_topic_id, pullResult.pulledItems, {
 					mode: writeIntent,
 					syncGeneration,
+					// RecordingSummary 的 replace/merge 都来自已持久化 HTTP 历史，
+					// 普通工具不能把 waiting/running 带回只读消息列表。
+					toolProjectionPolicy: "historical_terminal",
 				})
 			}
 			return pullResult
@@ -194,6 +197,7 @@ export function useTopicMessages({
 			let pageToken = ""
 			let latestResponse: any
 
+			// eslint-disable-next-line no-constant-condition -- paginate until the server closes the snapshot or returns an invalid token.
 			while (true) {
 				const pageResult = await fetchMessagesPage({
 					conversation_id: conversationId,
@@ -220,6 +224,7 @@ export function useTopicMessages({
 			superMagicStore.initializeMessages(topicId, pulledItems, {
 				mode: "replace",
 				syncGeneration,
+				toolProjectionPolicy: "historical_terminal",
 			})
 			return { didPullSucceed: true, pulledItems, response: latestResponse }
 		},

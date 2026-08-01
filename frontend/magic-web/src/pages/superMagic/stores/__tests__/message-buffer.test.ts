@@ -540,6 +540,11 @@ describe("SuperMagicStore / Message Buffer", () => {
 		settleRendering(100)
 
 		expect(arrivalSeqIds(arrivals.events, ["blocking-assistant"])).toEqual(["2", "10", "11"])
+		expect(
+			(store.messages.get(TOPIC_A) || [])
+				.filter((message) => message.role === "tool")
+				.map((message) => message.seq_id),
+		).toEqual(["2", "10", "11"])
 		arrivals.unsubscribe()
 	})
 
