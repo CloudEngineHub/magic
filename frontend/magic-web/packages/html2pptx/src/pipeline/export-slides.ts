@@ -88,11 +88,13 @@ export async function runExport({
 	const activeDetectFontsFromNodes = runtime?.detectFontsFromNodes ?? detectFontsFromNodes
 	let incrementalPackager: IncrementalPresentationPackager | null = null
 	const canUseIncrementalPackager =
-		!runtime?.packagePresentationInWorker || Boolean(runtime.createIncrementalPresentationPackager)
+		!runtime?.packagePresentationInWorker ||
+		Boolean(runtime.createIncrementalPresentationPackager)
 	if (canUseIncrementalPackager) {
 		try {
 			const createPackager =
-				runtime?.createIncrementalPresentationPackager ?? createIncrementalPresentationPackager
+				runtime?.createIncrementalPresentationPackager ??
+				createIncrementalPresentationPackager
 			incrementalPackager = createPackager({
 				initialConfig: config,
 				allowLayoutChange: autoSize,
@@ -150,15 +152,16 @@ export async function runExport({
 		log(LogLevel.L2, `处理第 ${i + 1}/${htmlSlides.length} 页`)
 
 		try {
-			const { pptNodes, totalWidth, totalHeight, bodyBackground } = await activePrepareSlideNodes({
-				config,
-				html,
-				sandbox,
-				signal,
-				onResourceError,
-				textMergeMode,
-				runtime,
-			})
+			const { pptNodes, totalWidth, totalHeight, bodyBackground } =
+				await activePrepareSlideNodes({
+					config,
+					html,
+					sandbox,
+					signal,
+					onResourceError,
+					textMergeMode,
+					runtime,
+				})
 			if (autoSize) assertWithinPptWidthLimit(totalWidth, i)
 			renderedSlides.push({
 				pptNodes: serializePptNodes(pptNodes),
@@ -417,11 +420,7 @@ async function runIncrementalExport({
 			? buildFinalConfigFromMaxWidth(config, measuredMaxWidth)
 			: config
 		const embedFonts = fontResolver
-			? await resolveDetectedFonts(
-					mapUsedFonts(usedFonts),
-					fontResolver,
-					fontMissPolicy,
-				)
+			? await resolveDetectedFonts(mapUsedFonts(usedFonts), fontResolver, fontMissPolicy)
 			: []
 		ensurePipelineActive()
 
@@ -563,8 +562,12 @@ function prepareOutputPagesForIncrementalBatches({
 }
 
 function getNodeMediaBuffer(node: SerializablePPTNode): ArrayBuffer | undefined {
-	if (node.type === "image") return node.srcBytes?.data
-	if (node.type === "media") return node.coverBytes?.data
+	if (node.type === "image") {
+		return node.source?.kind === "bytes" ? node.source.data : node.srcBytes?.data
+	}
+	if (node.type === "media") {
+		return node.coverSource?.kind === "bytes" ? node.coverSource.data : node.coverBytes?.data
+	}
 	return undefined
 }
 

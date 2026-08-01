@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react"
+import { createElement, useState, useMemo } from "react"
 import type { AttachmentItem } from "./types"
-import { MenuProps } from "antd"
+import { Button } from "antd"
+import type { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
 import {
@@ -393,12 +394,32 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		setBatchLoading(true)
 		const toastId = createRandomUuidV4()
+		const exportController = format === "pptx" ? new AbortController() : null
+		const exportText =
+			convertType === "pdf"
+				? t("topicFiles.batchExportingPdf")
+				: t("topicFiles.batchExportingPpt")
+		const getExportToastContent = (progressText: string) =>
+			exportController
+				? createElement(
+						"div",
+						{ style: { display: "flex", alignItems: "center", gap: 8 } },
+						createElement("span", null, progressText),
+						createElement(
+							Button,
+							{
+								type: "default",
+								size: "small",
+								danger: true,
+								onClick: () => exportController.abort(),
+							},
+							t("topicFiles.exportCancel"),
+						),
+					)
+				: progressText
 		magicToast.loading({
 			key: toastId,
-			content:
-				convertType === "pdf"
-					? t("topicFiles.batchExportingPdf")
-					: t("topicFiles.batchExportingPpt"),
+			content: getExportToastContent(exportText),
 			duration: 0,
 		})
 
@@ -408,6 +429,14 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				targets,
 				attachments: sourceItems,
 				projectName: selectedProject?.project_name,
+				signal: exportController?.signal,
+				onProgress: (progress) => {
+					magicToast.loading({
+						key: toastId,
+						content: getExportToastContent(`${exportText} (${Math.round(progress)}%)`),
+						duration: 0,
+					})
+				},
 			})
 
 			if (result.cancelled) {
@@ -422,7 +451,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				})
 				return
 			}
-			if (!result.artifact || result.successCount === 0) {
+			if ((!result.artifact && !result.streamedToDisk) || result.successCount === 0) {
 				magicToast.error({
 					key: toastId,
 					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
@@ -431,15 +460,17 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				return
 			}
 
-			// Use the direct Blob downloader so a successful export does not open the
-			// manual retry/copy download modal used by source-file downloads.
-			const downloadResult = await downloadBlobFile(
-				result.artifact.blob,
-				result.artifact.fileName,
-				format,
-			)
-			if (!downloadResult.success) {
-				throw new Error(downloadResult.message || "Batch export download failed")
+			if (result.artifact) {
+				// PDF and compatibility paths still return one in-memory artifact. Streaming
+				// PPTX paths have already committed their files to the selected destination.
+				const downloadResult = await downloadBlobFile(
+					result.artifact.blob,
+					result.artifact.fileName,
+					format,
+				)
+				if (!downloadResult.success) {
+					throw new Error(downloadResult.message || "Batch export download failed")
+				}
 			}
 
 			if (result.failureCount > 0) {

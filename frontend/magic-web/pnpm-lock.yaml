@@ -61,11 +61,13 @@ overrides:
   katex: 0.16.21
   marked: 15.0.12
 
+packageExtensionsChecksum: sha256-/kocMmG7xdHA+JKNa7auEutv4KgaI5NEq4QiWBafbnM=
+
 patchedDependencies:
-  pptxgenjs:
-    hash: 7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228
-    path: patches/pptxgenjs.patch
-  tiptap-markdown:
+  pptxgenjs@4.0.1:
+    hash: 65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb
+    path: patches/pptxgenjs@4.0.1.patch
+  tiptap-markdown@0.9.0:
     hash: dff3f968e3e70a1e0f1d3b502ab6441e71149a5ca5125a8c10915c43448d90f5
     path: patches/tiptap-markdown.patch
 
@@ -660,7 +662,7 @@ importers:
         version: 1.0.7
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1(patch_hash=7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228)
+        version: 4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb)
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1177,7 +1179,7 @@ importers:
         version: 2.0.2
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1(patch_hash=7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228)
+        version: 4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb)
       puppeteer:
         specifier: 24.32.0
         version: 24.32.0(typescript@5.8.3)
@@ -6843,6 +6845,10 @@ packages:
 
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
+
+  '@zip.js/zip.js@2.8.34':
+    resolution: {integrity: sha512-+6a3lyqq69rpseLbvDPiVIWsZ/HdTGAAD6afFtug6ECPDGttb2dHnPC6cJgdPofYkzL9OvXizegq+DQVfL2rnA==}
+    engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   '@zumer/snapdom@2.0.2':
     resolution: {integrity: sha512-W6quT4lMcPu8Q9O/Q6witSfc6/+xuY8C8yDoHug/+o7zYKCNE/e0I3//XsWDkyq9C0mDE0TAWF/8bwCR7x3gHQ==}
@@ -24718,6 +24724,8 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
+  '@zip.js/zip.js@2.8.34': {}
+
   '@zumer/snapdom@2.0.2': {}
 
   JSONStream@1.3.5:
@@ -32185,9 +32193,10 @@ snapshots:
       tslib: 2.8.1
       uuid: 10.0.0
 
-  pptxgenjs@4.0.1(patch_hash=7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228):
+  pptxgenjs@4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb):
     dependencies:
       '@types/node': 22.16.4
+      '@zip.js/zip.js': 2.8.34
       https: 1.0.0
       image-size: 1.2.1
       jszip: 3.10.1

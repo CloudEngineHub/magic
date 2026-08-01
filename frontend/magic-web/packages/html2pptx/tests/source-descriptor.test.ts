@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest"
+import {
+	bytesMediaSourceDescriptor,
+	normalizeMediaSourceDescriptor,
+	withMediaSourceKey,
+} from "../src/media/source-descriptor"
+
+describe("streaming media source descriptors", () => {
+	it("marks URL/path MIME guesses as inferred", async () => {
+		await expect(
+			normalizeMediaSourceDescriptor("https://cdn.example.test/signed?token=one"),
+		).resolves.toMatchObject({
+			kind: "url",
+			contentType: "application/octet-stream",
+			extn: "bin",
+			metadataOrigin: "inferred",
+		})
+
+		await expect(
+			normalizeMediaSourceDescriptor("https://cdn.example.test/video.webm"),
+		).resolves.toMatchObject({
+			contentType: "video/webm",
+			extn: "webm",
+			metadataOrigin: "inferred",
+		})
+	})
+
+	it("lets callers distinguish explicit metadata from media guesses", async () => {
+		await expect(
+			normalizeMediaSourceDescriptor("https://cdn.example.test/cover", {
+				contentType: "image/png",
+				metadataOrigin: "inferred",
+			}),
+		).resolves.toMatchObject({
+			contentType: "image/png",
+			extn: "png",
+			metadataOrigin: "inferred",
+		})
+
+		await expect(
+			normalizeMediaSourceDescriptor("https://cdn.example.test/media", {
+				contentType: "video/mp4",
+			}),
+		).resolves.toMatchObject({
+			contentType: "video/mp4",
+			extn: "mp4",
+			metadataOrigin: "explicit",
+		})
+	})
+
+	it("marks in-memory bytes as explicit metadata", () => {
+		expect(
+			bytesMediaSourceDescriptor({
+				data: Uint8Array.of(1, 2, 3).buffer,
+				contentType: "image/webp",
+			}),
+		).toMatchObject({ extn: "webp", metadataOrigin: "explicit" })
+	})
+
+	it("keeps the signed URL as transport while rebinding its stable business key", async () => {
+		const source = await normalizeMediaSourceDescriptor(
+			"https://cdn.example.test/hero.png?token=one",
+		)
+		const rebound = withMediaSourceKey(source, "asset:image:assets/hero.png")
+
+		expect(rebound).toMatchObject({
+			kind: "url",
+			url: "https://cdn.example.test/hero.png?token=one",
+			key: "asset:image:assets/hero.png",
+		})
+		expect(source.key).toBe("url:https://cdn.example.test/hero.png?token=one")
+	})
+})

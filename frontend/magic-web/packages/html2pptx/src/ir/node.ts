@@ -9,6 +9,7 @@ import type {
 	PPTTableRow,
 } from "./style"
 import type { SlideConfig } from "../api/options"
+import type { MediaSourceDescriptor } from "../media/source-descriptor"
 
 /**
  * PPT intermediate representation (IR): the PPT node data shape passed between pipeline stages.
@@ -103,10 +104,13 @@ export interface PPTImageNode extends PPTNodeBase {
 	type: "image"
 	/** Image source (URL or base64) */
 	src: string
+	/** Stable business identity (for example data-original-path) used for media deduplication. */
+	assetKey?: string
+	/** Binary/streaming source used by new exports; preferred over `src`. */
+	source?: MediaSourceDescriptor
 	/**
-	 * Image bytes transferred after worker processing. When present, they take precedence over `src`:
-	 * the main thread no longer keeps large base64 strings; the packaging worker converts to a data URL right before writing,
-	 * and transfers them as transferable data to detach and release main-thread memory immediately.
+	 * Deprecated compatibility input. It is normalized to a bounded `bytes` descriptor
+	 * and is never converted back to base64 by the new packaging path.
 	 */
 	srcBytes?: { data: ArrayBuffer; mime: string }
 	/** Capture source */
@@ -236,17 +240,24 @@ export interface PPTMediaNode extends PPTNodeBase {
 	type: "media"
 	/** Media type */
 	mediaType: "video" | "audio" | "online"
+	/** Stable business identity used for media deduplication across signed URLs/pages. */
+	assetKey?: string
+	/** Optional stable identity for a video poster/cover resource. */
+	coverAssetKey?: string
 	/** Media path (URL) */
 	path?: string
+	/** Binary/streaming media source; preferred over path/data for new exports. */
+	source?: MediaSourceDescriptor
 	/** Media data (base64) */
 	data?: string
 	/** Online video link, such as YouTube */
 	link?: string
 	/** Cover: poster or materialized JPEG data URL */
 	cover?: string
+	/** Binary/streaming video poster source. */
+	coverSource?: MediaSourceDescriptor
 	/**
-	 * Cover bytes transferred after worker processing. When present, they take precedence over `cover`,
-	 * like image-node `srcBytes`: the packaging worker converts them to a data URL right before writing.
+	 * Deprecated compatibility input normalized to `coverSource` without base64 conversion.
 	 */
 	coverBytes?: { data: ArrayBuffer; mime: string }
 	/** Whether to autoplay */

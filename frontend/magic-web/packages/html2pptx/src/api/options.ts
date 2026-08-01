@@ -56,6 +56,159 @@ export interface ExportOptions {
 	fontMissPolicy?: FontMissPolicy
 }
 
+/** Output policy used by the forward-only large export entry point. */
+export type LargeExportOutputPolicy = "auto" | "memory" | "file-stream"
+
+/** Byte counts may exceed Number.MAX_SAFE_INTEGER on a multi-GB/ZIP64 path. */
+export type ByteCount = number | bigint
+
+export type CapacityConfidence = "exact" | "upper-bound" | "streaming-unknown"
+
+export type ZipMode = "classic" | "zip64"
+
+/** A preflight diagnostic that can be shown before a long export starts. */
+export interface PreflightIssue {
+	code: string
+	message: string
+	severity: "warning" | "error"
+	details?: Record<string, unknown>
+}
+
+/** Capability and capacity decision made before the first ZIP entry is written. */
+export interface ExportPreflightResult {
+	accepted: boolean
+	outputPolicy: Exclude<LargeExportOutputPolicy, "auto">
+	zipMode: ZipMode
+	capacityConfidence: CapacityConfidence
+	pageCount: number
+	knownMinimumOutputBytes: ByteCount
+	estimatedOutputBytes?: ByteCount
+	estimatedZipEntries?: bigint
+	estimatedCentralDirectoryBytes?: ByteCount
+	estimatedScratchBytes?: ByteCount
+	destinationCapacityKnown: boolean
+	destinationAvailableBytes?: ByteCount
+	destinationMaxFileBytes?: ByteCount
+	centralDirectoryMode: "memory" | "spill"
+	requiresOpfs: boolean
+	requiresSlidePlan: boolean
+	warnings: PreflightIssue[]
+	errors: PreflightIssue[]
+}
+
+/** Coarse-grained stages reported without retaining page HTML or media payloads. */
+export type ExportPhase =
+	| "preflight"
+	| "prepare-page"
+	| "render-page"
+	| "stage-media"
+	| "package-page"
+	| "finalize"
+	| "completed"
+
+/** Progress information safe to retain in application state or logs. */
+export interface ExportProgress {
+	phase: ExportPhase
+	pageIndex?: number
+	pageCount?: number
+	resourceIndex?: number
+	resourceCount?: number
+	bytesRead?: number
+	bytesWritten?: number
+	estimatedTotalBytes?: number
+}
+
+/** Writable destination used when the browser cannot transfer a WritableStream directly. */
+export interface PptxOutputSink {
+	write: (chunk: Uint8Array) => void | Promise<void>
+	close: () => void | Promise<void>
+	abort?: (reason?: unknown) => void | Promise<void>
+}
+
+/**
+ * Destination selected by the host while the original click activation is still valid.
+ * Wrapper variants are structured-clone friendly and can be forwarded to a packaging Worker.
+ */
+export type PptxDestination =
+	| WritableStream<Uint8Array>
+	| NodeJS.WritableStream
+	| PptxOutputSink
+	| { kind: "transferable-stream"; writable: WritableStream<Uint8Array> }
+	| { kind: "writable-stream"; writable: WritableStream<Uint8Array> }
+	| { kind: "node-writable"; writable: NodeJS.WritableStream }
+	| { kind: "sink-proxy"; sink: PptxOutputSink; ackWindow?: number }
+
+/**
+ * How media should be read or staged before it is committed to the package.
+ * In the two-pass SlideIR path, `auto` (the default) rolling-stages URL media
+ * while each page is collected so short-lived signed URLs do not expire before
+ * replay. Use `direct-stream` only when every URL is known to remain valid.
+ */
+export interface MediaPolicy {
+	mode?: "auto" | "direct-stream" | "rolling-stage" | "full-stage"
+	maxInlineBytes?: number
+	readConcurrency?: number
+	transformConcurrency?: number
+}
+
+/** Scratch-storage behavior for page IR and media transformations. */
+export interface StagingPolicy {
+	mode?: "auto" | "none" | "opfs"
+	cleanup?: "always" | "on-success" | "on-error" | "never"
+	directory?: string
+}
+
+/** A page yielded to the streaming export pipeline. */
+export interface StreamingHtmlPage {
+	index: number
+	html: string
+	/** Optional stable business identity used during planning and replay. */
+	key?: string
+}
+
+export type StreamingHtmlPageInput = string | StreamingHtmlPage
+
+/**
+ * A large export may migrate incrementally from arrays to a lazy page provider.
+ * AsyncIterable is the intended path for hundreds of pages.
+ */
+export type StreamingExportContent =
+	| string
+	| readonly string[]
+	| Iterable<StreamingHtmlPageInput>
+	| AsyncIterable<StreamingHtmlPageInput>
+
+/** Options for exportPPTXStreaming; page progress intentionally never contains HTML. */
+export interface LargeExportOptions extends Omit<ExportOptions, "onSlideProgress"> {
+	mode?: "large"
+	outputPolicy?: LargeExportOutputPolicy
+	destination?: PptxDestination
+	/** Known source page count when the AsyncIterable cannot expose it itself. */
+	pageCount?: number
+	onProgress?: (progress: ExportProgress) => void
+	mediaPolicy?: MediaPolicy
+	stagingPolicy?: StagingPolicy
+	compression?: boolean
+}
+
+/** Result returned after a forward-only export closes its destination. */
+export interface ExportSummary {
+	fileName: string
+	pageCount: number
+	mediaPartCount: number
+	bytesWritten: number
+	durationMs: number
+}
+
+/** Cancellable handle returned by exportPPTXStreaming. */
+export interface StreamingExportHandle {
+	promise: Promise<ExportSummary>
+	cancel: () => void
+}
+
+/** Compatibility alias for callers that name the handle after LargeExportOptions. */
+export type LargeExportHandle = StreamingExportHandle
+
 /** Resource load failure information */
 export interface ResourceLoadError {
 	/** Resource URL, possibly truncated */

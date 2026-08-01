@@ -1,8 +1,7 @@
 import type { PPTMediaNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
-import { throwIfAborted, withAbort } from "../sandbox/abort"
-import { fetchArrayBufferWithLimit } from "../shared/fetch"
-import { bytesToDataUrl } from "./data-url"
+import { throwIfAborted } from "../sandbox/abort"
+import { bytesMediaSourceDescriptor } from "../media/source-descriptor"
 
 interface MediaOptions {
 	x: number
@@ -12,8 +11,10 @@ interface MediaOptions {
 	type: "video" | "audio" | "online"
 	path?: string
 	data?: string
+	source?: PPTMediaNode["source"]
 	link?: string
 	cover?: string
+	coverSource?: PPTMediaNode["coverSource"]
 	extn?: string
 }
 
@@ -27,8 +28,8 @@ export async function drawMedia(
 	signal?: AbortSignal,
 ): Promise<void> {
 	throwIfAborted(signal)
-	const { x, y, w, h, mediaType, path, data, link, extn } = node
-	const cover = resolveCover(node)
+	const { x, y, w, h, mediaType, path, data, source, link, extn } = node
+	const coverSource = resolveCoverSource(node)
 
 	const options: MediaOptions = {
 		x,
@@ -50,32 +51,25 @@ export async function drawMedia(
 
 		case "video":
 		case "audio":
-			// cover: HTML poster, or the first-frame data URL written by materializeVideoCoverNodes (possibly converted here from transferred bytes)
-			if (cover && mediaType === "video" && cover.startsWith("data:")) options.cover = cover
+			if (mediaType === "video") {
+				if (coverSource) options.coverSource = coverSource
+				else if (node.cover?.startsWith("data:")) options.cover = node.cover
+			}
 			if (extn) options.extn = extn
 
-			if (data) {
+			if (source) {
+				options.source = source
+				slide.addMedia(options)
+			} else if (data) {
 				options.data = data
 				slide.addMedia(options)
 			} else if (path) {
 				if (path.startsWith("data:")) {
 					options.data = path
-					slide.addMedia(options)
 				} else {
-					try {
-						options.data = await withAbort({
-							task: fetchAsDataUrl(path, signal),
-							signal,
-						})
-					} catch (error) {
-						throwIfAborted(signal)
-						log(LogLevel.L3, "Failed to convert media to data URL, fallback to path", {
-							error: String(error),
-						})
-						options.path = path
-					}
-					slide.addMedia(options)
+					options.path = path
 				}
+				slide.addMedia(options)
 			} else {
 				log(LogLevel.L3, "Media requires path or data")
 			}
@@ -86,22 +80,12 @@ export async function drawMedia(
 	}
 }
 
-async function fetchAsDataUrl(url: string, signal?: AbortSignal): Promise<string> {
-	const { response, buffer } = await fetchArrayBufferWithLimit(url, signal)
-	if (!response.ok) throw new Error(`Failed to fetch media: ${url} (${response.status})`)
-
-	const mimeType = response.headers.get("content-type") ?? "application/octet-stream"
-	return bytesToDataUrl(buffer, mimeType)
-}
-
 /**
- * Resolve the video cover: prefer transferred binary bytes converted to a data URL inside the packaging worker,
- * otherwise fall back to `cover` (poster / first-frame screenshot data URL).
+ * Normalize the compatibility byte field without generating a base64 string.
  */
-function resolveCover(node: PPTMediaNode): string | undefined {
+function resolveCoverSource(node: PPTMediaNode): PPTMediaNode["coverSource"] {
+	if (node.coverSource) return node.coverSource
 	const bytes = node.coverBytes
-	if (bytes && bytes.data.byteLength > 0) {
-		return bytesToDataUrl(bytes.data, bytes.mime)
-	}
-	return node.cover
+	if (!bytes?.data.byteLength) return undefined
+	return bytesMediaSourceDescriptor({ data: bytes.data, contentType: bytes.mime })
 }

@@ -3,6 +3,7 @@ import type { PPTImageNode, PPTNodeBase } from "../ir/node"
 import type { SlideConfig } from "../api/options"
 import { computeEffectiveOpacity } from "../shared/color"
 import { pxToInch, resolveEffectiveRadius, getGlobalTransform } from "../shared/unit"
+import { createMediaAssetKey, getOriginalMediaPath } from "../media/asset-identity"
 
 /**
  * Parse an image from an IMG tag or background-image.
@@ -25,8 +26,8 @@ export function parseImage(
 	// Correct transform effects, including rotation and scale.
 	const { rotation, scaleX, scaleY } = getGlobalTransform(node)
 
-	let finalRect = { ...base }
-	let rotate = rotation !== 0 ? rotation : undefined
+	const finalRect = { ...base }
+	const rotate = rotation !== 0 ? rotation : undefined
 
 	// Apply correction whenever rotation or meaningful scale is present.
 	if (rotate || Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
@@ -59,17 +60,20 @@ export function parseImage(
 		const objectFit = (style.objectFit || "").trim().toLowerCase()
 		let sizing: "cover" | "contain" | "stretch" = "stretch"
 		if (objectFit === "cover") sizing = "cover"
-		else if (objectFit === "contain" || objectFit === "scale-down" || objectFit === "none") sizing = "contain"
+		else if (objectFit === "contain" || objectFit === "scale-down" || objectFit === "none")
+			sizing = "contain"
 		else if (objectFit === "fill" || !objectFit) sizing = "stretch"
 
-		const intrinsicSize = imgElement.naturalWidth > 0 && imgElement.naturalHeight > 0
-			? { width: imgElement.naturalWidth, height: imgElement.naturalHeight }
-			: undefined
+		const intrinsicSize =
+			imgElement.naturalWidth > 0 && imgElement.naturalHeight > 0
+				? { width: imgElement.naturalWidth, height: imgElement.naturalHeight }
+				: undefined
 
 		return {
 			...finalRect,
 			type: "image",
 			src,
+			assetKey: createMediaAssetKey("image", getOriginalMediaPath(imgElement)),
 			sizing,
 			intrinsicSize,
 			transparency,
@@ -90,6 +94,7 @@ export function parseImage(
 	if (!urlMatch || !urlMatch[1]) return null
 
 	const src = urlMatch[1]
+	const originalPath = getOriginalMediaPath(element)
 
 	// Parse background-size to determine the sizing mode.
 	const bgSize = style.backgroundSize
@@ -101,6 +106,7 @@ export function parseImage(
 		...finalRect,
 		type: "image",
 		src,
+		assetKey: createMediaAssetKey("image", originalPath),
 		sizing,
 		transparency,
 		radius, // Apply corner radius.

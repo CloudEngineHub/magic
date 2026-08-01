@@ -4,10 +4,8 @@ import type { ElementNode } from "./ir/dom"
 import type { PPTNode } from "./ir/node"
 import type { PackagePresentationInput, SerializablePPTNode } from "./ir/serialize"
 import type { IconBackup } from "./materialize/pseudo-icon"
-import type {
-	PrepareSlideNodesInput,
-	PrepareSlideNodesResult,
-} from "./pipeline/render-slide"
+import type { MediaSourceDescriptor } from "./media/source-descriptor"
+import type { PrepareSlideNodesInput, PrepareSlideNodesResult } from "./pipeline/render-slide"
 import type {
 	SandboxInstance,
 	SandboxReadyControllerConstructor,
@@ -15,8 +13,40 @@ import type {
 import type { TextMergeMode } from "./pipeline/text-merge-mode"
 import type {
 	CreateIncrementalPresentationPackagerInput,
+	CreateStreamingPresentationPackagerInput,
 	IncrementalPresentationPackager,
+	StreamingPresentationPackager,
 } from "./packaging/incremental-types"
+
+export interface StreamingStagingStore {
+	createSession(sessionId: string, options?: StreamingStagingOperationOptions): Promise<void>
+	stage(
+		source: MediaSourceDescriptor,
+		options?: {
+			signal?: AbortSignal
+			directory?: "media" | "transformed" | "scratch"
+			onProgress?: (loaded: number, total?: number) => void
+		},
+	): Promise<MediaSourceDescriptor>
+	putSlideIr(
+		slideIndex: number,
+		value: unknown,
+		options?: StreamingStagingOperationOptions,
+	): Promise<void>
+	getSlideIr<T>(slideIndex: number, options?: StreamingStagingOperationOptions): Promise<T>
+	deleteSlideIr?(slideIndex: number, options?: StreamingStagingOperationOptions): Promise<void>
+	cleanupSession(sessionId: string): Promise<void>
+}
+
+/** Cancellation context for operations that touch staged SlideIR records. */
+export interface StreamingStagingOperationOptions {
+	signal?: AbortSignal
+}
+
+export interface CreateStreamingStagingStoreInput {
+	config: SlideConfig
+	sessionId: string
+}
 
 export interface RenderSlideRuntime {
 	transformElements?: (
@@ -52,9 +82,7 @@ export interface RenderSlideRuntime {
 }
 
 export interface ExportPipelineRuntime extends RenderSlideRuntime {
-	prepareSlideNodes?: (
-		input: PrepareSlideNodesInput,
-	) => Promise<PrepareSlideNodesResult>
+	prepareSlideNodes?: (input: PrepareSlideNodesInput) => Promise<PrepareSlideNodesResult>
 	detectFontsFromNodes?: (slides: SerializablePPTNode[][]) => UsedFont[]
 	packagePresentationInWorker?: (
 		input: PackagePresentationInput & {
@@ -67,6 +95,17 @@ export interface ExportPipelineRuntime extends RenderSlideRuntime {
 	createIncrementalPresentationPackager?: (
 		input: CreateIncrementalPresentationPackagerInput,
 	) => IncrementalPresentationPackager | null
+	/**
+	 * Optional Phase 4 Packaging Worker hook. The host creates this only after a
+	 * complete PptxGenJS SlidePlan/CapacityPlan is available.
+	 */
+	createStreamingPresentationPackager?: (
+		input: CreateStreamingPresentationPackagerInput,
+	) => StreamingPresentationPackager
+	/** Optional OPFS/native staging implementation used by two-pass large exports. */
+	createStreamingStagingStore?: (
+		input: CreateStreamingStagingStoreInput,
+	) => StreamingStagingStore | Promise<StreamingStagingStore>
 }
 
 export interface Html2PptxRuntime {

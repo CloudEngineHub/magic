@@ -1,8 +1,11 @@
 import type { ResourceLoadError } from "../api/options"
 import type { PPTImageNode, PPTNode } from "../ir/node"
 import { log, LogLevel } from "../logger"
-import { withAbort } from "../sandbox/abort"
-import { imageToBase64 } from "./image-to-base64"
+import {
+	bytesMediaSourceDescriptor,
+	normalizeMediaSourceDescriptor,
+	withMediaSourceKey,
+} from "../media/source-descriptor"
 
 type ResourceErrorReporter = (error: ResourceLoadError) => void
 
@@ -24,16 +27,33 @@ async function materializePptImageNode(
 	onResourceError?: ResourceErrorReporter,
 ): Promise<void> {
 	const src = node.src
-	if (!src?.trim() || src.startsWith("data:")) {
+	if (node.source) {
+		node.source = withMediaSourceKey(node.source, node.assetKey)
+		node.captureElement = undefined
+		return
+	}
+	if (node.srcBytes?.data.byteLength) {
+		node.source = bytesMediaSourceDescriptor({
+			data: node.srcBytes.data,
+			contentType: node.srcBytes.mime,
+			key: node.assetKey,
+		})
+		node.srcBytes = undefined
+		node.src = ""
+		node.captureElement = undefined
+		return
+	}
+	if (!src?.trim()) {
 		node.captureElement = undefined
 		return
 	}
 
 	try {
-		node.src = await withAbort({
-			task: imageToBase64(src, signal),
-			signal,
-		})
+		if (signal?.aborted) throw signal.reason
+		node.source = await normalizeMediaSourceDescriptor(src, { key: node.assetKey })
+		// The descriptor is now authoritative. Clearing `src` prevents retaining a
+		// second (potentially base64) copy through render and package stages.
+		node.src = ""
 	} catch (error) {
 		if (signal?.aborted) throw error
 		log(LogLevel.L3, "image unreachable, dropping", {

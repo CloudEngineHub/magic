@@ -33,6 +33,13 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { iteratePreparedHtmlPages } from "@/utils/htmlExportPrepare"
+import {
+	formatPptxStreamingProgress,
+	openPptxDestination,
+	startPptxStreamingExportFromFactory,
+	supportsPptxFileStreaming,
+} from "@/pages/superMagic/services/pptxStreamingExport"
 
 interface EditToolbarProps {
 	style?: React.CSSProperties
@@ -392,7 +399,7 @@ function EditToolbar({
 			})
 	}
 
-	function exportEditablePptByPaths(input: { slidePaths?: string[] }) {
+	async function exportEditablePptByPaths(input: { slidePaths?: string[] }) {
 		if (!pptStore) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
@@ -417,7 +424,24 @@ function EditToolbar({
 			resolvePptScaleContentDimensions(targetSlides[0]?.content, targetSlides[0]?.rawContent),
 		)
 		const toastId = createRandomUuidV4()
+		const canStreamToFile = supportsPptxFileStreaming()
+		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
+		try {
+			destinationLease = canStreamToFile
+				? await openPptxDestination({ suggestedName: defaultName })
+				: null
+		} catch (error) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			reportPptxExportError(error, {
+				fileName: defaultName,
+				slideCount: htmlSlides.length,
+				source: "EditToolbar.destination",
+			})
+			return
+		}
+		if (canStreamToFile && !destinationLease) return
 		let exportHandle: ReturnType<typeof exportPPTX> | null = null
+		let cancelExport: (() => void) | null = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
 
 		function getExportToastContent(progressText: string) {
@@ -429,7 +453,7 @@ function EditToolbar({
 						variant="secondary"
 						size="sm"
 						className="h-6 bg-destructive-custom px-2 text-xs text-destructive hover:opacity-90"
-						onClick={() => exportHandle?.cancel()}
+						onClick={() => cancelExport?.()}
 					>
 						{t("topicFiles.exportCancel")}
 					</Button>
@@ -438,6 +462,75 @@ function EditToolbar({
 		}
 
 		const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+
+		if (destinationLease) {
+			const destination = destinationLease.destination
+			const streamingHandle = startPptxStreamingExportFromFactory(
+				(signal) =>
+					iteratePreparedHtmlPages({
+						pages: htmlSlides,
+						signal,
+					}),
+				{
+					fileName: defaultName,
+					destination,
+					outputPolicy: "file-stream",
+					pageCount: htmlSlides.length,
+					config: pptxConfig,
+					skipFailedPages: true,
+					fontResolver: pptFontResolver,
+					logger: pptxExternalLogger,
+					logLevel: "warn",
+					onResourceLoadError: resourceErrors.onResourceLoadError,
+					onProgress: (progress) => {
+						magicToast.loading({
+							key: toastId,
+							content: getExportToastContent(
+								formatPptxStreamingProgress(t("topicFiles.exporting"), progress),
+							),
+							duration: 0,
+						})
+					},
+				},
+			)
+			cancelExport = streamingHandle.cancel
+
+			setIsEditableExporting(true)
+			streamingHandle.promise
+				.then(() => {
+					magicToast.success({
+						key: toastId,
+						content: t("topicFiles.exportSuccess"),
+						duration: 1000,
+					})
+				})
+				.catch(async (error: unknown) => {
+					await destinationLease.abort(error).catch(() => undefined)
+					const isAbort = (error as { name?: string } | null)?.name === "AbortError"
+					if (isAbort) {
+						magicToast.info({
+							key: toastId,
+							content: t("topicFiles.exportCancel"),
+							duration: 1000,
+						})
+					} else {
+						magicToast.error({
+							key: toastId,
+							content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+							duration: 1000,
+						})
+						reportPptxExportError(error, {
+							fileName: defaultName,
+							slideCount: htmlSlides.length,
+							source: "EditToolbar.streaming",
+						})
+					}
+				})
+				.finally(() => {
+					setIsEditableExporting(false)
+				})
+			return
+		}
 
 		exportHandle = exportPPTX(htmlSlides, {
 			fileName: defaultName,
@@ -456,6 +549,7 @@ function EditToolbar({
 				})
 			},
 		})
+		cancelExport = exportHandle.cancel
 
 		setIsEditableExporting(true)
 

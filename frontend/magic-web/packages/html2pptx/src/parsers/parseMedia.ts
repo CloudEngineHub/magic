@@ -8,6 +8,11 @@ import type { PPTMediaNode, PPTNodeBase } from "../ir/node"
 import type { SlideConfig } from "../api/options"
 import { log, LogLevel } from "../logger"
 import { pxToInch } from "../shared/unit"
+import {
+	createMediaAssetKey,
+	getOriginalMediaCoverPath,
+	getOriginalMediaPath,
+} from "../media/asset-identity"
 
 /**
  * Parse a media element.
@@ -40,7 +45,8 @@ function parseVideoElement(
 	config: SlideConfig,
 ): PPTMediaNode | null {
 	const video = node.element as HTMLVideoElement
-	const src = video.src || video.querySelector("source")?.src
+	const sourceElement = video.querySelector("source")
+	const src = video.src || sourceElement?.src
 
 	if (!src) {
 		log(LogLevel.L3, "Video element has no src")
@@ -51,17 +57,22 @@ function parseVideoElement(
 	const cover = poster || undefined
 	const extn = getFileExtension(src)
 	const mediaBase = resolveVideoMediaBase(node, base, config, video)
+	const assetKey = createMediaAssetKey(
+		"video",
+		getOriginalMediaPath(video) ??
+			(sourceElement ? getOriginalMediaPath(sourceElement) : undefined),
+	)
+	const coverAssetKey = createMediaAssetKey("cover", getOriginalMediaCoverPath(video))
 
 	return {
 		...mediaBase,
 		type: "media",
 		mediaType: "video",
 		path: src,
+		assetKey,
+		coverAssetKey,
 		cover,
-		coverCaptureElement:
-			poster && poster.startsWith("data:")
-				? undefined
-				: video,
+		coverCaptureElement: poster && poster.startsWith("data:") ? undefined : video,
 		extn,
 	}
 }
@@ -73,7 +84,12 @@ function resolveVideoMediaBase(
 	video: HTMLVideoElement,
 ): PPTNodeBase {
 	const parentRect = node.parent?.rect
-	if (parentRect && parentRect.w > 0 && parentRect.h > 0 && (node.rect.w <= 0 || node.rect.h <= 0)) {
+	if (
+		parentRect &&
+		parentRect.w > 0 &&
+		parentRect.h > 0 &&
+		(node.rect.w <= 0 || node.rect.h <= 0)
+	) {
 		return {
 			...base,
 			x: pxToInch(parentRect.x, config),
@@ -103,11 +119,9 @@ function resolveVideoMediaBase(
 /**
  * Parse an audio element.
  */
-function parseAudioElement(
-	audio: HTMLAudioElement,
-	base: PPTNodeBase,
-): PPTMediaNode | null {
-	const src = audio.src || audio.querySelector("source")?.src
+function parseAudioElement(audio: HTMLAudioElement, base: PPTNodeBase): PPTMediaNode | null {
+	const sourceElement = audio.querySelector("source")
+	const src = audio.src || sourceElement?.src
 
 	if (!src) {
 		log(LogLevel.L3, "Audio element has no src")
@@ -121,10 +135,14 @@ function parseAudioElement(
 		type: "media",
 		mediaType: "audio",
 		path: src,
+		assetKey: createMediaAssetKey(
+			"audio",
+			getOriginalMediaPath(audio) ??
+				(sourceElement ? getOriginalMediaPath(sourceElement) : undefined),
+		),
 		extn,
 	}
 }
-
 
 /**
  * Get the file extension from a media URL.

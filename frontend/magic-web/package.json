@@ -442,6 +442,19 @@
 	"engines": {
 		"node": "^20.19.0 || >=22.12.0"
 	},
+	"pnpm": {
+		"patchedDependencies": {
+			"pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch",
+			"tiptap-markdown@0.9.0": "patches/tiptap-markdown.patch"
+		},
+		"packageExtensions": {
+			"pptxgenjs@4.0.1": {
+				"dependencies": {
+					"@zip.js/zip.js": "2.8.34"
+				}
+			}
+		}
+	},
 	"msw": {
 		"workerDirectory": [
 			"public"

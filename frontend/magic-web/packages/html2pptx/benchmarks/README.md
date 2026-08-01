@@ -15,6 +15,30 @@ pnpm run benchmark:smoke
 `benchmark:smoke` runs every scenario with one slide and one measured iteration. It verifies the
 harness wiring; it is not a performance baseline.
 
+The Phase 4 forward-only smoke uses the real Vite Packaging Worker and writes to a real Origin
+Private File System (OPFS) file. It also reopens the completed file and verifies the expected
+`ppt/slides/slideN.xml` entries:
+
+```bash
+pnpm exec tsx benchmarks/browser/streaming-smoke.ts \
+  --slides 300 \
+  --cpu-throttle 4 \
+  --timeout-ms 900000 \
+  --output benchmarks/results/streaming-smoke-300.json
+```
+
+The smoke intentionally uses a test-only zero-wait readiness controller. Chromium does not
+currently structured-clone `FileSystemWritableFileStream` into a Worker, so the script keeps the
+real OPFS writable on the main thread and exercises the production sink-proxy backpressure path
+for Worker-generated ZIP chunks. This still avoids an in-memory final Blob.
+
+Add `--media` to place one reused deterministic PNG on every page and exercise Worker-side media
+fetching and deduplication without making the smoke fixture multi-GB:
+
+```bash
+pnpm exec tsx benchmarks/browser/streaming-smoke.ts --slides 300 --media
+```
+
 ## Scope
 
 Two independent benchmark layers are provided:

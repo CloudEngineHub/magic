@@ -1,0 +1,753 @@
+import { describe, expect, it, vi } from "vitest"
+import { createSinkProxyWritable, createStreamingPackagingWorkerHandler } from "../src/packaging"
+import { createStreamingPresentationPackager } from "../src/packaging/streaming-package-presentation"
+import type {
+	StreamingPackagingWorkerRequest,
+	StreamingPackagingWorkerResponse,
+	StreamingPresentationPlan,
+	StreamingWorkerLike,
+} from "../src/packaging/incremental-types"
+
+const config = {
+	htmlWidth: 1280,
+	htmlHeight: 720,
+	slideWidth: 13.333,
+	slideHeight: 7.5,
+}
+
+const plan: StreamingPresentationPlan = {
+	finalSlideCount: 2,
+	slidePlan: {
+		slides: [
+			{
+				key: "first",
+				ordinal: 1,
+				slideId: 256,
+				presentationRelId: 2,
+				partName: "ppt/slides/slide1.xml",
+			},
+			{
+				key: "second",
+				ordinal: 2,
+				slideId: 257,
+				presentationRelId: 3,
+				partName: "ppt/slides/slide2.xml",
+			},
+		],
+	},
+}
+
+describe("packaging sink proxy", () => {
+	it("bounds outstanding transferable chunks and waits for close ACKs", async () => {
+		const messages: StreamingPackagingWorkerResponse[] = []
+		const proxy = createSinkProxyWritable({
+			ackWindow: 2,
+			transport: {
+				postMessage(message) {
+					messages.push(message)
+				},
+			},
+		})
+		const writer = proxy.writable.getWriter()
+
+		const first = writer.write(new Uint8Array([1]))
+		const second = writer.write(new Uint8Array([2]))
+		const third = writer.write(new Uint8Array([3]))
+		await Promise.all([first, second])
+		await Promise.resolve()
+		expect(messages.filter((message) => message.type === "sink-chunk")).toHaveLength(2)
+
+		const firstChunk = messages.find(
+			(message) => message.type === "sink-chunk" && new Uint8Array(message.data)[0] === 1,
+		)
+		expect(firstChunk?.type).toBe("sink-chunk")
+		if (firstChunk?.type === "sink-chunk") proxy.acknowledge(firstChunk.chunkId)
+		await third
+		const chunks = messages.filter((message) => message.type === "sink-chunk")
+		expect(chunks).toHaveLength(3)
+
+		const close = writer.close()
+		for (const chunk of chunks) proxy.acknowledge(chunk.chunkId)
+		await close
+	})
+
+	it("rejects pending writes when aborted", async () => {
+		const proxy = createSinkProxyWritable({
+			ackWindow: 1,
+			transport: { postMessage: vi.fn() },
+		})
+		const writer = proxy.writable.getWriter()
+		void writer.closed.catch(() => undefined)
+		await writer.write(new Uint8Array([1]))
+		const blocked = writer.write(new Uint8Array([2]))
+		await proxy.abort(new Error("disk full"))
+		await expect(blocked).rejects.toThrow("disk full")
+	})
+})
+
+describe("packaging Worker protocol", () => {
+	it("keeps ACK out of the serialized queue and commits a slide", async () => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		let writer: WritableStreamDefaultWriter<Uint8Array> | undefined
+		const session = {
+			addSlide: vi.fn(() => ({})),
+			commitSlide: vi.fn(async () => {
+				await writer?.write(new Uint8Array([42]))
+				return { bytesWritten: 1, manifest: { slideKey: "first" } }
+			}),
+			finalize: vi.fn(async () => {
+				await writer?.close()
+				return { slideCount: 1, mediaPartCount: 0, bytesWritten: 1 }
+			}),
+			abort: vi.fn(async () => {
+				await writer?.abort()
+			}),
+		}
+		const presentation = {
+			beginStreaming: vi.fn(
+				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
+					writer = destination.getWriter()
+					return session
+				},
+			),
+		}
+		const handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: (message) => responses.push(message),
+		})
+
+		handler.handle({
+			type: "start",
+			payload: {
+				config,
+				plan: { finalSlideCount: 1 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+			},
+		})
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "ready")).toBe(true),
+		)
+
+		handler.handle({
+			type: "commit-slide",
+			requestId: 1,
+			payload: { nodes: [], background: "FFFFFF" },
+		})
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "sink-chunk")).toBe(true),
+		)
+		const chunk = responses.find((message) => message.type === "sink-chunk")
+		expect(chunk?.type).toBe("sink-chunk")
+		if (chunk?.type === "sink-chunk")
+			handler.handle({ type: "sink-ack", chunkId: chunk.chunkId })
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "slide-committed")).toBe(true),
+		)
+		handler.handle({ type: "finalize", requestId: 2 })
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "completed")).toBe(true),
+		)
+		expect(session.addSlide).toHaveBeenCalledWith(undefined)
+		expect(session.commitSlide).toHaveBeenCalledOnce()
+		expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
+	})
+})
+
+describe("streaming packager client", () => {
+	it("uses planned slide keys and closes the destination after finalize", async () => {
+		const sinkChunks: number[] = []
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const sessionWriter = {
+			current: undefined as WritableStreamDefaultWriter<Uint8Array> | undefined,
+		}
+		const session = {
+			addSlide: vi.fn(() => ({})),
+			commitSlide: vi.fn(async () => {
+				await sessionWriter.current?.write(
+					new Uint8Array([session.addSlide.mock.calls.length]),
+				)
+				return { bytesWritten: 1, manifest: {} }
+			}),
+			finalize: vi.fn(async () => {
+				await sessionWriter.current?.close()
+				return { slideCount: 2, mediaPartCount: 0, bytesWritten: 2 }
+			}),
+			abort: vi.fn(async () => sessionWriter.current?.abort()),
+		}
+		const presentation = {
+			beginStreaming: vi.fn(
+				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
+					sessionWriter.current = destination.getWriter()
+					return session
+				},
+			),
+		}
+		const worker = new LoopbackWorker((message) => responses.push(message))
+		worker.handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: worker.emit,
+		})
+
+		let closed = false
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan,
+			destination: {
+				kind: "sink-proxy",
+				sink: {
+					write: (chunk) => sinkChunks.push(...chunk),
+					close: () => {
+						closed = true
+					},
+					abort: vi.fn(),
+				},
+			},
+			workerFactory: () => worker,
+		})
+		await packager.ready
+		await packager.commitSlide({ nodes: [] })
+		await packager.commitSlide({ nodes: [] })
+		await expect(packager.finalize()).resolves.toMatchObject({
+			slideCount: 2,
+			mediaPartCount: 0,
+		})
+		expect(session.addSlide).toHaveBeenNthCalledWith(1, { slideKey: "first" })
+		expect(session.addSlide).toHaveBeenNthCalledWith(2, { slideKey: "second" })
+		expect(sinkChunks).toEqual([1, 2])
+		expect(closed).toBe(true)
+		expect(responses.filter((message) => message.type === "slide-committed")).toHaveLength(2)
+		packager.dispose()
+	})
+
+	it("rejects finalize when a sink write fails as the Worker reports completion", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") {
+					worker.emit({ type: "ready" })
+					return
+				}
+				if (request.type === "finalize") {
+					worker.emit({
+						type: "sink-chunk",
+						chunkId: 1,
+						data: Uint8Array.of(7).buffer,
+					})
+					worker.emit({
+						type: "completed",
+						requestId: request.requestId,
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 1 },
+					})
+				}
+			},
+		}
+
+		let rejectWrite!: (error: Error) => void
+		let markWriteStarted!: () => void
+		const writeStarted = new Promise<void>((resolve) => {
+			markWriteStarted = resolve
+		})
+		const close = vi.fn()
+		const abortSink = vi.fn(async () => undefined)
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: {
+					write: vi.fn(
+						() =>
+							new Promise<void>((_resolve, reject) => {
+								rejectWrite = reject
+								markWriteStarted()
+							}),
+					),
+					close,
+					abort: abortSink,
+				},
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		const finalize = packager.finalize()
+		await writeStarted
+		rejectWrite(new Error("disk full"))
+
+		await expect(finalize).rejects.toThrow("disk full")
+		await eventually(() => expect(packager.state).toBe("failed"))
+		expect(close).not.toHaveBeenCalled()
+		expect(abortSink).toHaveBeenCalledWith(expect.objectContaining({ message: "disk full" }))
+		expect(requests).toContainEqual(
+			expect.objectContaining({ type: "abort", reason: "disk full" }),
+		)
+		packager.dispose()
+	})
+
+	it("does not complete after abort races a deferred sink close", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") {
+					worker.emit({ type: "ready" })
+					return
+				}
+				if (request.type === "finalize") {
+					worker.emit({
+						type: "completed",
+						requestId: request.requestId,
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
+					})
+					return
+				}
+				if (request.type === "abort") {
+					worker.emit({ type: "aborted", requestId: request.requestId })
+				}
+			},
+		}
+
+		let resolveClose!: () => void
+		let markCloseStarted!: () => void
+		const closeStarted = new Promise<void>((resolve) => {
+			markCloseStarted = resolve
+		})
+		const close = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveClose = resolve
+					markCloseStarted()
+				}),
+		)
+		const abortSink = vi.fn(async () => undefined)
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: {
+					write: vi.fn(),
+					close,
+					abort: abortSink,
+				},
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		const finalize = packager.finalize()
+		await closeStarted
+		const abort = packager.abort(new Error("cancelled"))
+		await expect(finalize).rejects.toThrow("cancelled")
+		await abort
+		resolveClose()
+		expect(packager.state).toBe("aborted")
+		expect(close).toHaveBeenCalledOnce()
+		expect(abortSink).toHaveBeenCalledWith(expect.objectContaining({ message: "cancelled" }))
+		expect(requests).toContainEqual(
+			expect.objectContaining({ type: "abort", reason: "cancelled" }),
+		)
+		packager.dispose()
+	})
+
+	it("waits for the Worker aborted acknowledgement before terminating", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		packager.dispose()
+		expect(worker.terminate).not.toHaveBeenCalled()
+		const abortRequest = requests.find((request) => request.type === "abort")
+		expect(abortRequest?.type).toBe("abort")
+		if (abortRequest?.type === "abort") {
+			worker.emit({ type: "aborted", requestId: abortRequest.requestId })
+		}
+		await eventually(() => expect(worker.terminate).toHaveBeenCalledOnce())
+	})
+
+	it("terminates after the abort cleanup timeout when the Worker never acknowledges", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		vi.useFakeTimers()
+		try {
+			const abort = packager.abort(new Error("cancelled"))
+			await vi.advanceTimersByTimeAsync(2_000)
+			await abort
+
+			expect(requests).toContainEqual(expect.objectContaining({ type: "abort" }))
+			expect(worker.terminate).toHaveBeenCalledOnce()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("makes abort idempotent and sends one Worker cleanup request", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const sinkAbort = vi.fn(async () => undefined)
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: sinkAbort },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		const first = packager.abort(new Error("cancelled"))
+		const second = packager.abort(new Error("different reason"))
+		expect(second).toBe(first)
+		await eventually(() =>
+			expect(requests.filter((request) => request.type === "abort")).toHaveLength(1),
+		)
+		const abortRequest = requests.find((request) => request.type === "abort")
+		if (abortRequest?.type === "abort") {
+			worker.emit({ type: "aborted", requestId: abortRequest.requestId })
+		}
+		await Promise.all([first, second])
+		expect(sinkAbort).toHaveBeenCalledOnce()
+		packager.dispose()
+	})
+
+	it.each([
+		{
+			label: "missing error payload",
+			response: { type: "error" },
+		},
+		{
+			label: "missing sink chunk data",
+			response: { type: "sink-chunk", chunkId: 1 },
+		},
+		{
+			label: "invalid completed request id",
+			response: {
+				type: "completed",
+				requestId: 0,
+				summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
+			},
+		},
+	])("fails instead of hanging on a malformed Worker response ($label)", async ({ response }) => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "finalize") worker.emit(response as never)
+				if (request.type === "abort")
+					worker.emit({ type: "aborted", requestId: request.requestId })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		const finalize = packager.finalize()
+		await expect(finalize).rejects.toThrow()
+		expect(packager.state).toBe("failed")
+		await eventually(() =>
+			expect(requests.filter((request) => request.type === "abort")).toHaveLength(1),
+		)
+		packager.dispose()
+	})
+
+	it("rejects a response whose type does not match the pending request", async () => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "commit-slide") {
+					worker.emit({
+						type: "completed",
+						requestId: request.requestId,
+						summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0 },
+					})
+				}
+				if (request.type === "abort")
+					worker.emit({ type: "aborted", requestId: request.requestId })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 1 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		await expect(packager.commitSlide({ nodes: [] })).rejects.toThrow(
+			"does not match pending commit-slide",
+		)
+		expect(packager.state).toBe("failed")
+		packager.dispose()
+	})
+
+	it("rejects a terminal response with an unknown request id", async () => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "finalize") {
+					worker.emit({
+						type: "completed",
+						requestId: request.requestId + 1,
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
+					})
+				}
+				if (request.type === "abort")
+					worker.emit({ type: "aborted", requestId: request.requestId })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		await expect(packager.finalize()).rejects.toThrow("referenced unknown request")
+		expect(packager.state).toBe("failed")
+		packager.dispose()
+	})
+
+	it("fails and cleans up when onProgress throws", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const sinkAbort = vi.fn(async () => undefined)
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "commit-slide") {
+					worker.emit({
+						type: "progress",
+						progress: { phase: "package-page", pageIndex: 0, pageCount: 1 },
+					})
+				}
+				if (request.type === "abort")
+					worker.emit({ type: "aborted", requestId: request.requestId })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 1 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: sinkAbort },
+			},
+			workerFactory: () => worker,
+			onProgress: () => {
+				throw new Error("progress callback failed")
+			},
+		})
+
+		await packager.ready
+		await expect(packager.commitSlide({ nodes: [] })).rejects.toThrow(
+			"progress callback failed",
+		)
+		await eventually(() => expect(packager.state).toBe("failed"))
+		expect(sinkAbort).toHaveBeenCalledWith(
+			expect.objectContaining({ message: "progress callback failed" }),
+		)
+		await eventually(() =>
+			expect(requests.filter((request) => request.type === "abort")).toHaveLength(1),
+		)
+		packager.dispose()
+	})
+
+	it("accepts a raw WritableStream and transfers byte media descriptors", async () => {
+		const output: number[] = []
+		const sessionWriter = {
+			current: undefined as WritableStreamDefaultWriter<Uint8Array> | undefined,
+		}
+		const session = {
+			addSlide: vi.fn(() => ({ addImage: vi.fn(), addMedia: vi.fn() })),
+			commitSlide: vi.fn(async () => {
+				await sessionWriter.current?.write(new Uint8Array([9]))
+				return { bytesWritten: 1, manifest: {} }
+			}),
+			finalize: vi.fn(async () => {
+				await sessionWriter.current?.close()
+				return { slideCount: 1, mediaPartCount: 2, bytesWritten: 1 }
+			}),
+			abort: vi.fn(async () => sessionWriter.current?.abort()),
+		}
+		const presentation = {
+			beginStreaming: vi.fn(
+				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
+					sessionWriter.current = destination.getWriter()
+					return session
+				},
+			),
+		}
+		const worker = new LoopbackWorker()
+		worker.handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: worker.emit,
+		})
+		const writable = new WritableStream<Uint8Array>({
+			write: (chunk) => output.push(...chunk),
+		})
+		const imageBytes = new ArrayBuffer(4)
+		const mediaBytes = new ArrayBuffer(5)
+		const coverBytes = new ArrayBuffer(6)
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 1 },
+			destination: writable,
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		await packager.commitSlide({
+			nodes: [
+				{
+					type: "image",
+					x: 0,
+					y: 0,
+					w: 1,
+					h: 1,
+					zOrder: 0,
+					src: "",
+					sizing: "stretch",
+					source: {
+						kind: "bytes",
+						data: imageBytes,
+						key: "image",
+						contentType: "image/png",
+						extn: "png",
+					},
+				},
+				{
+					type: "media",
+					x: 0,
+					y: 0,
+					w: 1,
+					h: 1,
+					zOrder: 1,
+					mediaType: "video",
+					source: {
+						kind: "bytes",
+						data: mediaBytes,
+						key: "video",
+						contentType: "video/mp4",
+						extn: "mp4",
+					},
+					coverSource: {
+						kind: "bytes",
+						data: coverBytes,
+						key: "cover",
+						contentType: "image/jpeg",
+						extn: "jpg",
+					},
+				},
+			],
+		})
+		await packager.finalize()
+		expect(output).toEqual([9])
+		expect(worker.transfers[0]).toContain(writable)
+		expect(worker.transfers[1]).toEqual(
+			expect.arrayContaining([imageBytes, mediaBytes, coverBytes]),
+		)
+		packager.dispose()
+	})
+})
+
+class LoopbackWorker implements StreamingWorkerLike {
+	handler!: { handle(request: StreamingPackagingWorkerRequest): void }
+	readonly transfers: Transferable[][] = []
+	readonly terminate = vi.fn()
+	private listener?: (event: MessageEvent) => void
+
+	constructor(
+		private readonly emitResponse: (message: StreamingPackagingWorkerResponse) => void = () =>
+			undefined,
+	) {}
+
+	postMessage(message: unknown, transfer: Transferable[] = []): void {
+		this.transfers.push(transfer)
+		this.handler.handle(message as StreamingPackagingWorkerRequest)
+	}
+
+	emit = (message: StreamingPackagingWorkerResponse): void => {
+		this.emitResponse(message)
+		queueMicrotask(() => this.listener?.({ data: message } as MessageEvent))
+	}
+
+	addEventListener(type: "message", listener: (event: MessageEvent) => void): void {
+		if (type === "message") this.listener = listener
+	}
+
+	removeEventListener(): void {
+		this.listener = undefined
+	}
+}
+
+async function eventually(assertion: () => void): Promise<void> {
+	for (let attempt = 0; attempt < 100; attempt += 1) {
+		try {
+			assertion()
+			return
+		} catch (error) {
+			if (attempt === 99) throw error
+			await new Promise((resolve) => setTimeout(resolve, 0))
+		}
+	}
+}
