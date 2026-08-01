@@ -253,6 +253,32 @@ describe("PPTSidebar virtualization", () => {
 		expect(options.estimateSize()).toBe(238)
 	})
 
+	it("keeps fixed square rows aligned with the desktop estimate", () => {
+		mockState.store.slides = makeSlides(2)
+		mockState.store.slides[0] = {
+			...mockState.store.slides[0],
+			content: '<main class="slide-container" data-width="1000" data-height="1000"></main>',
+		}
+		mockState.values.virtualItems = [makeVirtualItem(0, 8, 200), makeVirtualItem(1, 8, 200)]
+		mockState.values.totalSize = 416
+
+		render(<PPTSidebar sidebarWidth={200} onSlideClick={vi.fn()} />)
+
+		const options = mockState.options
+		if (!options) throw new Error("useVirtualizer options were not captured")
+		expect(options.estimateSize()).toBe(200)
+
+		const virtualContent = screen.getByTestId("ppt-sidebar-virtual-content")
+		expect(virtualContent).not.toHaveClass("px-2")
+		const rows = virtualContent.querySelectorAll<HTMLElement>("[data-index]")
+		expect(rows).toHaveLength(2)
+		rows.forEach((row) => {
+			expect(row).toHaveClass("left-2", "right-2", "py-1")
+			expect(row).not.toHaveClass("w-full")
+		})
+		expect(mockState.virtualizer.measureElement).not.toHaveBeenCalled()
+	})
+
 	it("keeps the native drag source in the extracted range after it scrolls offscreen", async () => {
 		const { rerender } = render(<PPTSidebar allowEdit onSlideClick={vi.fn()} />)
 		const draggedSlide = screen.getByTestId("ppt-sidebar-slide-item-slide-1")

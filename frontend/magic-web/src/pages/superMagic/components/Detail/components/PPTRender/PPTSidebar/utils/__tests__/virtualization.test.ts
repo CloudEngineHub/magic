@@ -10,6 +10,10 @@ describe("estimateDesktopSlideRowSize", () => {
 		expect(estimateDesktopSlideRowSize(400, { width: 1920, height: 1080 })).toBe(238)
 	})
 
+	it("matches the fixed row layout for square slides", () => {
+		expect(estimateDesktopSlideRowSize(200, { width: 1000, height: 1000 })).toBe(200)
+	})
+
 	it("uses the shared deck aspect ratio for portrait slides", () => {
 		expect(estimateDesktopSlideRowSize(300, { width: 1080, height: 1920 })).toBe(512)
 	})

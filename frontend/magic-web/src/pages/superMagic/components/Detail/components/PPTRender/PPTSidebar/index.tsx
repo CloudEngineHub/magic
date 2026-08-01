@@ -177,7 +177,8 @@ function PPTSidebar({
 	const virtualItems = rowVirtualizer.getVirtualItems()
 
 	useEffect(() => {
-		// Sidebar resize can change every row height. Debounce the O(N) cache reset until it settles.
+		// Desktop rows have a deterministic size derived from sidebar width. Rebuild the fixed-size
+		// layout after resizing settles so off-screen rows use the new estimate as well.
 		const timer = window.setTimeout(() => {
 			rowVirtualizer.measure()
 			const currentActiveIndex = activeIndexRef.current
@@ -528,7 +529,7 @@ function PPTSidebar({
 					) : (
 						<div
 							data-testid="ppt-sidebar-virtual-content"
-							className={cn("relative", isMobile ? "h-full" : "w-full px-2")}
+							className={cn("relative", isMobile ? "h-full" : "w-full")}
 							style={
 								isMobile
 									? { width: rowVirtualizer.getTotalSize(), height: "100%" }
@@ -543,10 +544,11 @@ function PPTSidebar({
 									<div
 										key={virtualItem.key}
 										data-index={virtualItem.index}
-										ref={rowVirtualizer.measureElement}
 										className={cn(
-											"absolute left-0 top-0",
-											isMobile ? "h-full w-[140px]" : "w-full py-1",
+											"absolute top-0",
+											isMobile
+												? "left-0 h-full w-[140px]"
+												: "left-2 right-2 py-1",
 										)}
 										style={{
 											transform: isMobile
@@ -608,8 +610,8 @@ function PPTSidebar({
 									data-drop-target={dropTarget.gapIndex}
 									data-gap-index={dropTarget.gapIndex}
 									className={cn(
-										"pointer-events-none absolute left-0 top-0 z-20",
-										isMobile ? "h-full w-3" : "w-full",
+										"pointer-events-none absolute top-0 z-20",
+										isMobile ? "left-0 h-full w-3" : "left-2 right-2",
 									)}
 									style={{
 										transform: isMobile
