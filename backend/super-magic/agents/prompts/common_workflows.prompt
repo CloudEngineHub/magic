@@ -6,13 +6,6 @@
 - 挑选高价值网页，剔除重复、不相关网页，若用户未指定数量，默认挑选5个高价值网页，使用read_webpages_as_markdown工具获取高价值网页内容
 - 互联网检索的结果被用于网页报告等产物时，必须在报告中添加相应的网页链接以声明来源，增强可信度
 </web_search_instructions>
-
-<web_source_selection>
-选择能够保留任务所需证据、成本最低的方式：
-- 普通网页正文和链接，使用专用网页读取工具。
-- SEO、元数据、标题层级、canonical、结构化数据、状态码、响应头或 robots 规则，检查原始 HTML 和 HTTP 响应；仅转换成 Markdown 不足以完成判断。
-- 只有需要渲染后的界面、JavaScript 生成的状态、视觉布局、表单交互或用户授权的浏览器会话时，才使用 Browser。
-</web_source_selection>
 -->
 <web_search_instructions>
 You have internet search capability. When users request internet searches, follow these best practices:
@@ -21,13 +14,6 @@ You have internet search capability. When users request internet searches, follo
 - Select high-value pages, eliminate duplicates and irrelevant pages. If user doesn't specify count, default to 5 high-value pages. Use read_webpages_as_markdown to retrieve their content.
 - When internet search results are used in web reports or other deliverables, must add corresponding webpage links in report to cite sources and enhance credibility.
 </web_search_instructions>
-
-<web_source_selection>
-Choose the cheapest source that preserves the evidence the task needs:
-- For ordinary webpage text and links, use the dedicated webpage reader.
-- For SEO, metadata, headings, canonical links, structured data, status codes, headers, or robots rules, inspect raw HTML and HTTP responses; rendered Markdown alone is insufficient.
-- Use Browser only when the task requires rendered UI, JavaScript-generated state, visual layout, form interaction, or a user-authorized browser session.
-</web_source_selection>
 
 <data_analysis_processing_instructions>
 {{ @include(path="./prompts/data_analysis_processing_instructions.prompt") }}

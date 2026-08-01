@@ -1,15 +1,11 @@
 ---
 name: browser
-description: Rendered web browser automation and authorized Chrome control, including navigation, page interaction, waits, page inspection, visual analysis, screenshots, and console/network diagnostics.
+description: Open and operate webpages in a real browser: navigate, read rendered content, inspect interactive elements, click, type, submit forms, press keys, select options, check boxes, hover, scroll, upload files, wait for page changes, manage pages, take and save screenshots, analyze visual layout, and inspect page errors and network activity.
 ---
 
 # Browser
 
 Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults.
-
-## Choose the observation path
-
-Choose the least expensive source that preserves the evidence the task needs. Use the project's dedicated webpage reader for ordinary article text and links. For SEO, metadata, headings, canonical links, structured data, status codes, headers, or robots rules, inspect raw HTML and HTTP responses because rendered Markdown alone is insufficient. Use Browser for rendered UI, JavaScript-generated state, visual layout, form interaction, screenshots, or an authorized user browser session.
 
 ## Default path
 
