@@ -1,19 +1,15 @@
 ---
 name: browser
-description: Use when a task requires interacting with a rendered webpage, such as clicking, typing, submitting forms, waiting for dynamic UI, inspecting controls, or operating an authorized user browser. Do not load for ordinary webpage reading or source/SEO analysis when another reading or HTTP path is sufficient.
+description: Rendered web browser automation and authorized Chrome control, including navigation, page interaction, waits, page inspection, visual analysis, screenshots, and console/network diagnostics.
 ---
 
 # Browser
 
 Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults.
 
-## When to use Browser
+## Choose the observation path
 
-Use Browser only when the task depends on rendered page state: interaction, JavaScript-generated content, visual layout, forms, dialogs, screenshots, or an authorized user browser session.
-
-For ordinary article reading, link extraction, source inspection, SEO, metadata, structured data, HTTP status, headers, or robots rules, prefer the project's dedicated webpage reader or HTTP/CLI tools. Markdown conversion is useful for text comprehension, but it is not a substitute for raw HTML or HTTP inspection when the task depends on SEO or document metadata.
-
-If both paths could work and the user has not specified one, choose the cheaper non-Browser path or ask which result they want. Browser sessions consume more time and server resources.
+Choose the least expensive source that preserves the evidence the task needs. Use the project's dedicated webpage reader for ordinary article text and links. For SEO, metadata, headings, canonical links, structured data, status codes, headers, or robots rules, inspect raw HTML and HTTP responses because rendered Markdown alone is insufficient. Use Browser for rendered UI, JavaScript-generated state, visual layout, form interaction, screenshots, or an authorized user browser session.
 
 ## Default path
 
