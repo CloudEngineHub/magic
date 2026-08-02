@@ -1,9 +1,14 @@
 import { makeAutoObservable, runInAction, toJS } from "mobx"
-import pubsub from "@/utils/pubsub"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
-import { persistMessagesToStorage, type PersistableMessage } from "./persistence"
+import {
+	persistMessagesToStorage,
+	WEBSOCKET_RECORD_METADATA_KEY,
+	type PersistableMessage,
+	type WebSocketRecordSource,
+} from "./persistence"
 import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
 import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
 import {
@@ -1157,7 +1162,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			: monotonicElapsedMs
 	}
 
-	private queueMessagePersistence(
+	private enqueuePersistenceRecord(
 		topicId: string,
 		message: PersistableMessage,
 		flushImmediately = false,
@@ -1176,6 +1181,52 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			queue.timer = null
 			this.flushMessagePersistence(topicId)
 		}, STREAM_PERSISTENCE_FLUSH_MS)
+	}
+
+	private queueMessagePersistence(
+		topicId: string,
+		message: PersistableMessage,
+		flushImmediately = false,
+	) {
+		this.enqueuePersistenceRecord(topicId, message, flushImmediately)
+	}
+
+	/**
+	 * WebSocket 原始广播必须在任何 Store 去重、revision 或 HTTP reconciliation 之前记录。
+	 * 记录保留原始 payload，并用本地到达序号还原 Chunk 与完整消息的真实交错顺序。
+	 */
+	recordWebSocketMessage(
+		topicId: string,
+		message: PersistableMessage,
+		source: WebSocketRecordSource,
+		flushImmediately = false,
+	) {
+		if (!topicId || !message || typeof message !== "object") return
+
+		const rawMessage = message as unknown as {
+			send_time?: unknown
+			message?: {
+				send_time?: unknown
+				super_magic_message?: { send_timestamp?: unknown }
+			}
+			super_magic_chunk?: { created?: unknown }
+			[key: string]: unknown
+		}
+		const sentAt =
+			rawMessage.send_time ??
+			rawMessage.message?.send_time ??
+			rawMessage.super_magic_chunk?.created ??
+			rawMessage.message?.super_magic_message?.send_timestamp
+		const recordedMessage = {
+			...rawMessage,
+			[WEBSOCKET_RECORD_METADATA_KEY]: {
+				source,
+				received_at: Date.now(),
+				...(typeof sentAt === "number" ? { sent_at: sentAt } : {}),
+			},
+		} as PersistableMessage
+
+		this.enqueuePersistenceRecord(topicId, recordedMessage, flushImmediately)
 	}
 
 	private flushMessagePersistence(topicId: string) {
@@ -2750,7 +2801,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (result.didChange) this.messages.set(topicId, sortMessages(result.nextMessages))
 			committedUpdates = result.committedUpdates
 			settledStream = result.settledStream
-			membershipItems.forEach((item) => this.enqueueMessage(topicId, item))
+			// HTTP authoritative sync 只更新 Store；WebSocket 入口已经完成原始消息记录。
+			membershipItems.forEach((item) =>
+				this.enqueueMessage(topicId, item, { persist: false }),
+			)
 			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
 		})
 		committedUpdates.forEach(({ message, node }) => {
@@ -3456,7 +3510,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	// ======================================
 	// 方法 1：外部接收真实 chunk（前期正常流）
 	// ======================================
-	receiveChunk(message: SuperMagicChunkMessage) {
+	receiveChunk(message: SuperMagicChunkMessage, { persist = true }: { persist?: boolean } = {}) {
 		const topicId = message?.topic_id
 		const messageChunk = message?.[message?.type]
 		const superMessageId = String(messageChunk?.super_message_id || "").trim()
@@ -3569,7 +3623,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (chunkIndex < ledger.nextChunkIndex || ledger.pendingChunks.has(chunkIndex)) {
 			return
 		}
-		this.queueMessagePersistence(topicId, message, Boolean(choice?.finish_reason))
+		if (persist) this.queueMessagePersistence(topicId, message, Boolean(choice?.finish_reason))
 
 		runInAction(() => {
 			ledger.pendingChunks.set(chunkIndex, messageChunk)
@@ -4904,7 +4958,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
-	enqueueMessage(topicId: string, baseMessage: RawSuperMagicMessageEnvelope) {
+	enqueueMessage(
+		topicId: string,
+		baseMessage: RawSuperMagicMessageEnvelope,
+		{ persist = true }: { persist?: boolean } = {},
+	) {
 		const message = baseMessage?.seq as RawSuperMagicMessageSequence
 		const msgCache = this.messages.get(topicId) || []
 
@@ -4995,7 +5053,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		// 针对客户端的工具调用消息直接过滤
 		if (nextMessage?.type === "user_tool_call") {
-			this.queueMessagePersistence(topicId, message, true)
+			if (persist) this.queueMessagePersistence(topicId, message, true)
 			return
 		}
 
@@ -5088,12 +5146,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					correlationId,
 				)
 				this.publishMessageCommitted(topicId, committedMessage, committedNode, "im")
-				this.queueMessagePersistence(topicId, message, true)
+				if (persist) this.queueMessagePersistence(topicId, message, true)
 			}
 			return
 		}
 
-		this.queueMessagePersistence(topicId, message, true)
+		if (persist) this.queueMessagePersistence(topicId, message, true)
 
 		if (nextMessage?.type === "rich_text") {
 			const topicId = nextMessage?.topic_id || ""
@@ -6860,5 +6918,23 @@ window.superMagicStore = superMagicStore
 
 // @ts-ignore
 pubsub.subscribe("super_magic_chunk_message", (message: SuperMagicChunkMessage) => {
-	superMagicStore.receiveChunk(message)
+	const hasFinishReason = message.super_magic_chunk?.choices?.some((choice) =>
+		Boolean(choice?.finish_reason),
+	)
+	superMagicStore.recordWebSocketMessage(
+		message.topic_id,
+		message,
+		"super_magic_chunk",
+		hasFinishReason,
+	)
+	superMagicStore.receiveChunk(message, { persist: false })
+})
+
+pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (payload) => {
+	const message = payload as unknown as RawSuperMagicMessageSequence
+	if (message?.message?.type !== "super_magic_message") return
+	const topicId = String(
+		message.message.topic_id || message.message.super_magic_message?.topic_id || "",
+	)
+	superMagicStore.recordWebSocketMessage(topicId, message, "super_magic_message", true)
 })

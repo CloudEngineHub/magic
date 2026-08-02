@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
-import { SuperMagicStore } from "@/pages/superMagic/stores"
+import { SuperMagicStore, superMagicStore } from "@/pages/superMagic/stores"
 import { db } from "@/pages/superMagic/stores/storage"
 import type { RawSuperMagicMessageEnvelope, ToolCall } from "@/pages/superMagic/stores/types"
 import {
@@ -12,6 +12,7 @@ import {
 	IntermediateMessageType,
 	type SuperMagicChunkMessage,
 } from "@/types/chat/intermediate_message"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const TOPIC_ID = "topic-persistence"
 const CORRELATION_ID = "correlation-persistence"
@@ -28,6 +29,21 @@ interface ProjectedNode {
 		id?: string
 		function?: { name?: string; arguments?: string }
 	}>
+}
+
+interface PersistedWebSocketTestRecord {
+	type?: string
+	seq_id?: string
+	message?: {
+		type?: string
+		super_magic_message?: { content?: string }
+	}
+	super_magic_chunk?: { correlation_id?: string }
+	__websocket_record__: {
+		source: string
+		received_at: number
+		sent_at?: number
+	}
 }
 
 function clone<T>(value: T): T {
@@ -57,6 +73,7 @@ function createChunk({
 	i = 0,
 	content = "",
 	correlationId = CORRELATION_ID,
+	topicId = TOPIC_ID,
 	finishReason = null,
 	toolCalls = [],
 	choices,
@@ -64,6 +81,7 @@ function createChunk({
 	i?: number
 	content?: string
 	correlationId?: string
+	topicId?: string
 	finishReason?: "stop" | "tool_calls" | "length" | null
 	toolCalls?: ToolCall[]
 	choices?: IndexedChunkChoice[]
@@ -73,8 +91,8 @@ function createChunk({
 		app_message_id: `app-${correlationId}-${i}`,
 		type: IntermediateMessageType.SuperMagicChunk,
 		project_id: "project-1",
-		topic_id: TOPIC_ID,
-		chat_topic_id: TOPIC_ID,
+		topic_id: topicId,
+		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
 			super_message_id:
@@ -125,6 +143,7 @@ function createChoice({
 function createFinal({
 	appMessageId = "final-app",
 	correlationId = CORRELATION_ID,
+	topicId = TOPIC_ID,
 	seqId = "100",
 	content = "canonical",
 	status = "finished",
@@ -133,6 +152,7 @@ function createFinal({
 }: {
 	appMessageId?: string
 	correlationId?: string
+	topicId?: string
 	seqId?: string
 	content?: string
 	status?: "waiting" | "running" | "finished"
@@ -156,11 +176,11 @@ function createFinal({
 				send_time: 1,
 				status: ConversationMessageStatus.Read,
 				unread_count: 0,
-				topic_id: TOPIC_ID,
+				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
 				super_magic_message: {
 					role: "assistant",
-					topic_id: TOPIC_ID,
+					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
 					super_message_id:
 						correlationId === CORRELATION_ID
@@ -216,6 +236,63 @@ describe("SuperMagicStore / 持久化和回放", () => {
 
 		settle()
 		expect(node(store)).toMatchObject({ content: "AB" })
+	})
+
+	it("WebSocket 广播按客户端到达顺序完整记录 Chunk 与 Super Magic Message。", () => {
+		const topicId = "topic-websocket-recording"
+		const correlationId = "correlation-websocket-recording"
+		const chunk = {
+			...createChunk({ topicId, correlationId, content: "draft" }),
+			send_time: 101,
+		} as SuperMagicChunkMessage
+		const finalEnvelope = createFinal({
+			topicId,
+			correlationId,
+			appMessageId: "final-websocket-recording",
+			seqId: "200",
+			content: "canonical-final",
+		})
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
+
+		try {
+			pubsub.publish("super_magic_chunk_message", chunk)
+			pubsub.publish(PubSubEvents.Super_Magic_New_Message_V2, finalEnvelope.seq)
+			// HTTP authoritative sync 只更新 Store，不能再次产生 WebSocket 诊断记录。
+			superMagicStore.enqueueMessage(topicId, finalEnvelope, { persist: false })
+			vi.advanceTimersByTime(201)
+
+			const persistedEntries = addManySpy.mock.calls.flatMap(
+				([, entries]) => entries as Array<{ value: PersistedWebSocketTestRecord }>,
+			)
+			expect(persistedEntries).toHaveLength(2)
+			const [persistedChunk, persistedFinal] = persistedEntries.map((entry) => entry.value)
+			expect(persistedChunk).toMatchObject({
+				type: IntermediateMessageType.SuperMagicChunk,
+				super_magic_chunk: { correlation_id: correlationId },
+				__websocket_record__: {
+					source: "super_magic_chunk",
+					sent_at: 101,
+				},
+			})
+			expect(persistedFinal).toMatchObject({
+				seq_id: "200",
+				message: {
+					type: ConversationMessageType.SuperMagicMessage,
+					super_magic_message: { content: "canonical-final" },
+				},
+				__websocket_record__: {
+					source: "super_magic_message",
+					sent_at: 1,
+				},
+			})
+			expect(persistedChunk.__websocket_record__.received_at).toEqual(expect.any(Number))
+			expect(persistedFinal.__websocket_record__.received_at).toEqual(expect.any(Number))
+			expect(persistedChunk.__websocket_record__.received_at).toBeLessThanOrEqual(
+				persistedFinal.__websocket_record__.received_at,
+			)
+		} finally {
+			addManySpy.mockRestore()
+		}
 	})
 
 	it("多 choice 协议异常保留原始持久化记录，fresh Store 回放时仍不得投影隐藏候选。", () => {
