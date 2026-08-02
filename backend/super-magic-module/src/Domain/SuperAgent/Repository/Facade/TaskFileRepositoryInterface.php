@@ -289,10 +289,9 @@ interface TaskFileRepositoryInterface
      * @param int $projectId Project ID
      * @param int $parentId Parent directory ID
      * @param int $limit Maximum number of files to return
-     * @param null|string $storageType Optional storage type filter
      * @return TaskFileEntity[] File entity list
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array;
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500): array;
 
     /**
      * Get children files by multiple parent_ids and project_id (batch query).

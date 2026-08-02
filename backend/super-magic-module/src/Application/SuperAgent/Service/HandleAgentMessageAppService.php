@@ -761,21 +761,6 @@ class HandleAgentMessageAppService extends AbstractAppService
                 return ['attachment' => $attachment, 'taskFileEntity' => null];
             }
 
-            $storageType = null;
-            if (! empty($attachment['storage_type'])) {
-                $storageType = StorageType::tryFrom((string) $attachment['storage_type']);
-                if ($storageType === null) {
-                    $this->logger->warning(sprintf(
-                        'Unsupported attachment storage type, falling back to path inference, task_id: %s, storage_type: %s, attachment_type: %s',
-                        $task->getTaskId(),
-                        (string) $attachment['storage_type'],
-                        $type
-                    ));
-                }
-            }
-            $storageType ??= WorkFileUtil::isSnapshotFile($fileKey)
-                ? StorageType::SNAPSHOT
-                : StorageType::WORKSPACE;
             $savedEntity = $this->taskFileDomainService->getByFileKey($fileKey);
             if ($savedEntity === null) {
                 $this->logger->error(sprintf(
@@ -784,27 +769,21 @@ class HandleAgentMessageAppService extends AbstractAppService
                     $type,
                     $fileKey
                 ));
+                $storageType = WorkFileUtil::isSnapshotFile($fileKey)
+                    ? StorageType::SNAPSHOT->value
+                    : StorageType::WORKSPACE->value;
                 $taskFileEntity = $this->convertAttachmentToTaskFileEntity($attachment, $task, $dataIsolation, $type);
-                if ($storageType === StorageType::SNAPSHOT) {
-                    $taskFileEntity->setUserId($dataIsolation->getCurrentUserId());
-                    $taskFileEntity->setOrganizationCode($projectEntity->getUserOrganizationCode());
-                    $taskFileEntity->setStorageType(StorageType::SNAPSHOT);
-                    $taskFileEntity->setIsHidden(true);
-                    $taskFileEntity->setParentId(null);
-                    $savedEntity = $this->taskFileDomainService->insertOrUpdate($taskFileEntity);
-                } else {
-                    $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(
-                        new UpsertProjectFileNodeDTO(
-                            projectId: $projectEntity->getId(),
-                            projectWorkDir: $projectEntity->getWorkDir(),
-                            projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
-                            operatorUserId: $dataIsolation->getCurrentUserId(),
-                            operatorOrganizationCode: $dataIsolation->getCurrentOrganizationCode(),
-                            taskFileEntity: $taskFileEntity,
-                            storageTypeOverride: $storageType->value
-                        )
-                    );
-                }
+                $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(
+                    new UpsertProjectFileNodeDTO(
+                        projectId: $projectEntity->getId(),
+                        projectWorkDir: $projectEntity->getWorkDir(),
+                        projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+                        operatorUserId: $dataIsolation->getCurrentUserId(),
+                        operatorOrganizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                        taskFileEntity: $taskFileEntity,
+                        storageTypeOverride: $storageType
+                    )
+                );
                 // Dispatch AttachmentsProcessedEvent if a metadata file was upserted
                 if (ProjectFileConstant::isSetMetadataFile($savedEntity->getFileName())) {
                     event_dispatch(new AttachmentsProcessedEvent(
