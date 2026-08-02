@@ -50,7 +50,15 @@ export class RequestRouter {
   }
 
   async openPage(params, signal, owner) {
-    return { page: await this.controller.openPage(params.url || "about:blank", owner, signal) };
+    return {
+      page: await this.controller.openPage(
+        params.url || "about:blank",
+        owner,
+        Number.isFinite(params.navigation_timeout_ms) ? params.navigation_timeout_ms : 30000,
+        Number.isFinite(params.load_timeout_ms) ? params.load_timeout_ms : 3000,
+        signal,
+      ),
+    };
   }
 
   async closePage(params, signal, owner) {
@@ -70,6 +78,7 @@ export class RequestRouter {
         requireString(params, "url"),
         typeof params.wait_until === "string" ? params.wait_until : "domcontentloaded",
         Number.isFinite(params.timeout_ms) ? params.timeout_ms : 30000,
+        Number.isFinite(params.load_timeout_ms) ? params.load_timeout_ms : 3000,
         typeof params.referer === "string" ? params.referer : null,
         signal,
       ),
@@ -133,21 +142,32 @@ export class RequestRouter {
     const pageBefore = await this.controller.describe(pageToken, owner);
     const before = new Set((await this.controller.listPages(owner)).map((page) => page.page_token));
     const signalCursor = this.controller.actionSignalCursor();
-    await this.controller.prepareStability(pageToken, owner, signal);
     const actionResult = await this.controller.dispatchAction(pageToken, params, owner, signal);
     const settleMs = Number.isFinite(params.settle_ms) && params.settle_ms >= 0 ? params.settle_ms : 150;
-    await this.controller.waitForStable(pageToken, {
-      minimum_wait_ms: settleMs,
-      timeout_ms: Number.isFinite(params.stability_timeout_ms) ? params.stability_timeout_ms : 3000,
-      network_quiet_ms: Number.isFinite(params.network_quiet_ms) ? params.network_quiet_ms : 500,
-      dom_quiet_ms: Number.isFinite(params.dom_quiet_ms) ? params.dom_quiet_ms : 300,
-    }, owner, signal);
+    await abortableDelay(settleMs, signal);
+    let pageAfter = this.controller.hasPage(pageToken)
+      ? await this.controller.describe(pageToken, owner)
+      : null;
+    if (pageAfter && pageAfter.document_generation > pageBefore.document_generation) {
+      await this.controller.waitFor(
+        pageToken,
+        {
+          condition: "load_state",
+          state: "load",
+          timeout_ms: Number.isFinite(params.load_timeout_ms) ? params.load_timeout_ms : 3000,
+          soft_timeout: true,
+        },
+        owner,
+        signal,
+      );
+      pageAfter = await this.controller.describe(pageToken, owner);
+    }
     await this.controller.waitForPendingPages(signal);
     signal?.throwIfAborted();
     const after = await this.controller.listPages(owner);
     const signals = this.controller.actionSignalsSince(pageToken, signalCursor);
     return {
-      page: actionResult.page || pageBefore,
+      page: pageAfter || actionResult.page || pageBefore,
       state: actionResult.state,
       opened_pages: after.filter((candidate) => !before.has(candidate.page_token)),
       downloads: signals.downloads,

@@ -174,16 +174,16 @@ class PlaywrightBackend(ABC):
                 timeout=self._config.timeouts.navigation_ms,
                 referer=referer,
             )
-            stable = await self._runtime.wait_for_stable(page_id)
-            if stable:
+            loaded = await self._finish_navigation(page_id, wait_until)
+            if loaded:
                 await self._observer.inject_document_scripts(handle.page)
             return await self._runtime.describe_page(handle)
         except asyncio.CancelledError:
             raise
         except PlaywrightTimeoutError as error:
             if not handle.page.is_closed() and handle.document_generation > generation_before:
-                stable = await self._runtime.wait_for_stable(page_id)
-                if stable:
+                loaded = await self._runtime.wait_for_load(page_id)
+                if loaded:
                     await self._observer.inject_document_scripts(handle.page)
                 return await self._runtime.describe_page(handle)
             self._runtime.emit(
@@ -213,6 +213,8 @@ class PlaywrightBackend(ABC):
             return
         if request.condition is WaitConditionKind.LOAD_STATE:
             await handle.page.wait_for_load_state(request.state or "load", timeout=request.timeout_ms)
+            if request.state in {None, "load", "networkidle"}:
+                handle.readiness = PageReadiness.STABLE
             return
         if request.condition is WaitConditionKind.TEXT:
             await handle.page.get_by_text(request.value or "", exact=False).first.wait_for(
@@ -230,7 +232,6 @@ class PlaywrightBackend(ABC):
         return await handle.page.evaluate(expression, argument)
 
     async def read_page(self, page_id: str, scope: str = "viewport") -> str:
-        await self._runtime.wait_for_stable(page_id)
         return await self._observer.read_page(self._runtime.require_page(page_id), scope)
 
     async def snapshot(
@@ -286,7 +287,6 @@ class PlaywrightBackend(ABC):
                 BrowserErrorCode.CAPABILITY_UNAVAILABLE,
                 "Browser actions require a Chromium CDP session",
             )
-        await self._runtime.prepare_stability(page_id)
         post_action_state = await self._actions.dispatch(
             page=handle.page,
             cdp=handle.cdp,
@@ -294,10 +294,17 @@ class PlaywrightBackend(ABC):
             record=record,
             backend_node_id=backend_node_id,
         )
-        await self._runtime.wait_for_stable(
-            page_id,
-            minimum_wait_ms=self._config.timeouts.action_settle_ms,
-        )
+        await asyncio.sleep(self._config.timeouts.action_settle_ms / 1000)
+        if not handle.page.is_closed() and handle.document_generation > generation_before:
+            try:
+                await handle.page.wait_for_load_state(
+                    "domcontentloaded",
+                    timeout=self._config.timeouts.navigation_ms,
+                )
+            except PlaywrightTimeoutError:
+                handle.readiness = PageReadiness.LOADING
+            else:
+                await self._runtime.wait_for_load(page_id)
         await self._runtime.wait_for_pending_pages()
         action_events = self._runtime.events[event_offset:]
         opened_pages: list[BrowserPage] = []
@@ -350,13 +357,22 @@ class PlaywrightBackend(ABC):
         full_page: bool = False,
         labels: bool = False,
     ) -> ScreenshotResult:
-        await self._runtime.wait_for_stable(page_id)
         return await self._observer.screenshot(
             session_id=self._runtime.session_id,
             handle=self._runtime.require_page(page_id),
             full_page=full_page,
             labels=labels,
         )
+
+    async def _finish_navigation(self, page_id: str, wait_until: str) -> bool:
+        handle = self._runtime.require_page(page_id)
+        if wait_until == "commit":
+            handle.readiness = PageReadiness.LOADING
+            return False
+        if wait_until in {"load", "networkidle"}:
+            handle.readiness = PageReadiness.STABLE
+            return True
+        return await self._runtime.wait_for_load(page_id)
 
     async def read_console(
         self,

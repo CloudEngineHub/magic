@@ -115,8 +115,6 @@ class BrowserDetailBuilder:
                     error=cls._user_error(result),
                 )
             return cls._message("browser.detail.failed", action=action, error=cls._user_error(result))
-        if cls._string(page.get("readiness")) == "loading":
-            return cls._message("browser.detail.succeeded_loading", action=action)
         if isinstance(stats, BrowserPageListStats):
             return cls._message("browser.detail.pages", count=stats.total)
         if isinstance(stats, BrowserSnapshotStats):
@@ -219,11 +217,6 @@ class BrowserDetailBuilder:
             "browser_upload_file",
         }:
             return cls._interaction_body(tool_name, arguments, result)
-        readiness = cls._string(cls._page_data(result).get("readiness"))
-        if readiness == "stable":
-            return cls._message("browser.detail.readiness_stable")
-        if readiness == "loading":
-            return cls._message("browser.detail.readiness_loading")
         return ""
 
     @classmethod

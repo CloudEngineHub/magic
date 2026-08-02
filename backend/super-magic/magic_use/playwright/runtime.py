@@ -15,6 +15,7 @@ from playwright.async_api import (
     Frame,
     Page,
     Request,
+    TimeoutError as PlaywrightTimeoutError,
 )
 
 from magic_use.config import BrowserRuntimeConfig
@@ -45,7 +46,6 @@ class PlaywrightRuntime:
         self.console_entries: list[ConsoleEntry] = []
         self.network_entries: list[NetworkEntry] = []
         self.active_requests: dict[str, set[Request]] = {}
-        self.last_network_activity: dict[str, float] = {}
         self.background_tasks: set[asyncio.Task[object]] = set()
         self.page_registration_tasks: set[asyncio.Task[object]] = set()
         self._page_registration_lock = asyncio.Lock()
@@ -255,7 +255,6 @@ class PlaywrightRuntime:
                 raise
             self.pages[page_id] = handle
             self.active_requests[page_id] = set()
-            self.last_network_activity[page_id] = asyncio.get_running_loop().time()
             self._empty_since = None
             self.active_page_id = page_id
             page.on("close", lambda: self._schedule(self._unregister_page(page_id)))
@@ -305,7 +304,6 @@ class PlaywrightRuntime:
             except Exception:
                 pass
         self.active_requests.pop(page_id, None)
-        self.last_network_activity.pop(page_id, None)
         if self.active_page_id == page_id:
             self.active_page_id = next(iter(self.pages), None)
         if self.context_lease is not None:
@@ -372,78 +370,19 @@ class PlaywrightRuntime:
         if tasks:
             await asyncio.gather(*tasks)
 
-    async def prepare_stability(self, page_id: str) -> None:
+    async def wait_for_load(self, page_id: str, *, timeout_ms: float | None = None) -> bool:
+        """软等待标准 load；超时表示页面仍可使用，不是导航失败。"""
         handle = self.require_page(page_id)
-        await handle.page.evaluate(
-            """
-            () => {
-              if (globalThis.__magicUseStabilityObserver) return;
-              globalThis.__magicUseLastMutationAt = performance.now();
-              globalThis.__magicUseStabilityObserver = new MutationObserver(() => {
-                globalThis.__magicUseLastMutationAt = performance.now();
-              });
-              globalThis.__magicUseStabilityObserver.observe(document, {
-                subtree: true,
-                childList: true,
-                attributes: true,
-                characterData: true,
-              });
-            }
-            """
-        )
-
-    async def wait_for_stable(self, page_id: str, *, minimum_wait_ms: float = 0) -> bool:
-        handle = self.require_page(page_id)
-        timeout = self.config.timeouts
-        loop = asyncio.get_running_loop()
-        started = loop.time()
-        deadline = started + timeout.stability_timeout_ms / 1000
-        while not handle.page.is_closed():
-            now = loop.time()
-            if now >= deadline:
-                handle.readiness = PageReadiness.LOADING
-                return False
-            try:
-                mutation_quiet_ms = await handle.page.evaluate(
-                    """
-                    () => {
-                      if (!globalThis.__magicUseStabilityObserver) {
-                        globalThis.__magicUseLastMutationAt = performance.now();
-                        globalThis.__magicUseStabilityObserver = new MutationObserver(() => {
-                          globalThis.__magicUseLastMutationAt = performance.now();
-                        });
-                        globalThis.__magicUseStabilityObserver.observe(document, {
-                          subtree: true,
-                          childList: true,
-                          attributes: true,
-                          characterData: true,
-                        });
-                      }
-                      return performance.now() - globalThis.__magicUseLastMutationAt;
-                    }
-                    """
-                )
-            except PlaywrightError as error:
-                if handle.page.is_closed():
-                    raise BrowserPageError(f"Browser page is closed: {page_id}", closed=True) from error
-                if _is_navigation_context_error(error):
-                    await asyncio.sleep(0.05)
-                    continue
-                raise
-            network_quiet_ms = (now - self.last_network_activity.get(page_id, started)) * 1000
-            active_requests = self.active_requests.get(page_id, set())
-            elapsed_ms = (now - started) * 1000
-            if (
-                elapsed_ms >= minimum_wait_ms
-                and not active_requests
-                and network_quiet_ms >= timeout.network_quiet_ms
-                and isinstance(mutation_quiet_ms, (int, float))
-                and mutation_quiet_ms >= timeout.dom_quiet_ms
-            ):
-                handle.readiness = PageReadiness.STABLE
-                return True
-            await asyncio.sleep(0.05)
-        raise BrowserPageError(f"Browser page is closed: {page_id}", closed=True)
+        try:
+            await handle.page.wait_for_load_state(
+                "load",
+                timeout=timeout_ms or self.config.timeouts.load_timeout_ms,
+            )
+        except PlaywrightTimeoutError:
+            handle.readiness = PageReadiness.LOADING
+            return False
+        handle.readiness = PageReadiness.STABLE
+        return True
 
     def _finish_background_task(self, task: asyncio.Task[object]) -> None:
         self.background_tasks.discard(task)
@@ -463,6 +402,7 @@ class PlaywrightRuntime:
         self.background_tasks.difference_update(tasks)
 
     def _on_document_ready(self, handle: PlaywrightPageHandle) -> None:
+        handle.readiness = PageReadiness.STABLE
         self._emit(
             BrowserEventType.NAVIGATION_COMPLETED,
             handle.page_id,
@@ -489,7 +429,6 @@ class PlaywrightRuntime:
         method = request.method
         url = request.url
         self.active_requests.setdefault(page_id, set()).add(request)
-        self.last_network_activity[page_id] = asyncio.get_running_loop().time()
         if request.is_navigation_request() and request.frame == handle.page.main_frame:
             self._emit(BrowserEventType.NAVIGATION_STARTED, page_id, {"url": url})
         self.network_entries.append(
@@ -507,7 +446,6 @@ class PlaywrightRuntime:
         self._emit(BrowserEventType.NETWORK_REQUEST, page_id, {"url": url, "method": method})
 
     def _on_response(self, page_id: str, method: str, url: str, status: int) -> None:
-        self.last_network_activity[page_id] = asyncio.get_running_loop().time()
         self.network_entries.append(
             NetworkEntry(
                 page_id=page_id,
@@ -527,7 +465,6 @@ class PlaywrightRuntime:
         url = request.url
         error = request.failure
         self.active_requests.get(page_id, set()).discard(request)
-        self.last_network_activity[page_id] = asyncio.get_running_loop().time()
         self.network_entries.append(
             NetworkEntry(
                 page_id=page_id,
@@ -544,7 +481,6 @@ class PlaywrightRuntime:
 
     def _on_request_finished(self, page_id: str, request: Request) -> None:
         self.active_requests.get(page_id, set()).discard(request)
-        self.last_network_activity[page_id] = asyncio.get_running_loop().time()
 
     async def _track_download(self, page_id: str, download: Download) -> None:
         data = {"url": download.url, "filename": download.suggested_filename}

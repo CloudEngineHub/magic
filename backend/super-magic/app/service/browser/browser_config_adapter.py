@@ -115,9 +115,7 @@ class BrowserConfigAdapter:
                 navigation_ms=cls._float("browser.navigation_timeout", 30_000),
                 script_ms=cls._float("browser.script_timeout", 10_000),
                 action_settle_ms=cls._float("browser.action_settle_timeout", 150),
-                stability_timeout_ms=cls._float("browser.stability_timeout", 3_000),
-                network_quiet_ms=cls._float("browser.network_quiet_timeout", 500),
-                dom_quiet_ms=cls._float("browser.dom_quiet_timeout", 300),
+                load_timeout_ms=cls._float("browser.load_timeout", 3_000),
             ),
             lifecycle=BrowserLifecycleConfig(
                 page_idle_seconds=cls._float("browser.lifecycle.page_idle_seconds", 600),
@@ -145,7 +143,8 @@ class BrowserConfigAdapter:
             webp_quality=cls._int("browser.artifacts.webp_quality", 35),
             webp_min_quality=cls._int("browser.artifacts.webp_min_quality", 15),
             webp_quality_step=cls._int("browser.artifacts.webp_quality_step", 5),
-            max_bytes=cls._int("browser.artifacts.max_bytes", 100 * 1024),
+            max_bytes=cls._int("browser.artifacts.max_bytes", 128 * 1024),
+            max_width=cls._int("browser.artifacts.max_width", 1_600),
             resize_step=cls._float("browser.artifacts.resize_step", 0.85),
             min_dimension=cls._int("browser.artifacts.min_dimension", 640),
         )

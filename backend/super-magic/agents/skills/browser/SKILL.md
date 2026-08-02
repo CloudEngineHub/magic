@@ -14,7 +14,7 @@ For most tasks, use this four-step path:
 1. Open a new URL with `browser_open_page`.
 2. Read with `browser_read_page`, or take one `browser_snapshot` when interaction is needed.
 3. Find the exact ref, perform the action, and keep using the same `page_id`.
-4. Verify the result with a read, an explicit wait, or a changes snapshot.
+4. If the next step depends on a specific result, wait for that text, URL, ref, or download; otherwise verify once with a read or changes snapshot.
 
 Do not list sessions before opening a normal sandbox page. Do not navigate to a URL that `browser_open_page` already opened.
 
@@ -71,7 +71,7 @@ When a same-snippet pipeline must select from many refs, inspect `snapshot.data[
 
 After `browser_fill`, omit `ref` from `browser_press` when Enter should go to the current focus. Pass a fresh ref only when focus may have moved or a specific autocomplete/menu control must receive the key.
 
-After a submit, search, sign-in, or checkout action, read the current page once before waiting for a final URL. The read may already prove success and also exposes CAPTCHA, consent, redirect, or error pages immediately. Use `browser_wait` only when the required result is still pending.
+Do not add a generic wait after opening a page. After a submit, search, sign-in, or checkout action, read the current page once. If the required result is still pending, wait for the exact text, URL, ref, load state, or download that the next step needs.
 
 ## Common actions
 

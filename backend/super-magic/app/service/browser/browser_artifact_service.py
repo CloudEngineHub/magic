@@ -188,15 +188,22 @@ class BrowserArtifactService:
     @staticmethod
     def _encode_webp(image: bytes, config: BrowserArtifactConfig) -> _EncodedWebP:
         with Image.open(io.BytesIO(image)) as source:
-            rendered = source.convert("RGB")
+            original = source.convert("RGB")
         quality_values = list(
             range(config.webp_quality, config.webp_min_quality - 1, -config.webp_quality_step)
         )
         if quality_values[-1] != config.webp_min_quality:
             quality_values.append(config.webp_min_quality)
 
-        last = _EncodedWebP(content=b"", width=rendered.width, height=rendered.height, quality=config.webp_min_quality)
+        width = min(original.width, config.max_width)
+        height = max(1, round(original.height * width / original.width))
+        last = _EncodedWebP(content=b"", width=width, height=height, quality=config.webp_min_quality)
         while True:
+            rendered = (
+                original
+                if (width, height) == original.size
+                else original.resize((width, height), Image.Resampling.LANCZOS)
+            )
             for quality in quality_values:
                 output = io.BytesIO()
                 rendered.save(output, format="WEBP", quality=quality, method=6)
@@ -209,12 +216,14 @@ class BrowserArtifactService:
                 if len(last.content) <= config.max_bytes:
                     return last
 
-            if min(rendered.width, rendered.height) <= config.min_dimension:
+            shortest_dimension = min(width, height)
+            if shortest_dimension <= config.min_dimension:
                 return last
+            next_scale = max(config.resize_step, config.min_dimension / shortest_dimension)
             next_size = (
-                max(config.min_dimension, int(rendered.width * config.resize_step)),
-                max(config.min_dimension, int(rendered.height * config.resize_step)),
+                max(1, round(width * next_scale)),
+                max(1, round(height * next_scale)),
             )
-            if next_size == rendered.size:
+            if next_size == (width, height):
                 return last
-            rendered = rendered.resize(next_size, Image.Resampling.LANCZOS)
+            width, height = next_size

@@ -20,7 +20,6 @@ export class DebuggerController {
     this.downloadPageByGuid = new Map();
     this.actionSignalSequence = 0;
     this.activeNetworkRequests = new Map();
-    this.lastNetworkActivity = new Map();
     this.actionDispatcher = new ActionDispatcher(this);
     this.started = false;
   }
@@ -111,7 +110,6 @@ export class DebuggerController {
     this.dialogEntries.set(pageToken, []);
     this.downloadEntries.set(pageToken, []);
     this.activeNetworkRequests.set(pageToken, new Set());
-    this.lastNetworkActivity.set(pageToken, Date.now());
     try {
       await Promise.all([
         this.send(pageToken, ownerSessionId, "Page.enable"),
@@ -195,7 +193,7 @@ export class DebuggerController {
     };
   }
 
-  async openPage(url, ownerSessionId, signal) {
+  async openPage(url, ownerSessionId, navigationTimeoutMs, loadTimeoutMs, signal) {
     this.requireSession(ownerSessionId);
     signal?.throwIfAborted();
     if (!isInspectableUrl(url)) throw new Error("This URL cannot be controlled");
@@ -203,7 +201,27 @@ export class DebuggerController {
     if (!tab.id) throw new Error("Chrome did not create a tab");
     try {
       signal?.throwIfAborted();
-      return await this.authorizeTab(tab.id, ownerSessionId);
+      const page = await this.authorizeTab(tab.id, ownerSessionId);
+      if (url !== "about:blank") {
+        await this.waitFor(
+          page.page_token,
+          {
+            condition: "load_state",
+            state: "domcontentloaded",
+            timeout_ms: navigationTimeoutMs,
+            soft_timeout: true,
+          },
+          ownerSessionId,
+          signal,
+        );
+        await this.waitFor(
+          page.page_token,
+          { condition: "load_state", state: "load", timeout_ms: loadTimeoutMs, soft_timeout: true },
+          ownerSessionId,
+          signal,
+        );
+      }
+      return this.describe(page.page_token, ownerSessionId);
     } catch (error) {
       await chrome.tabs.remove(tab.id).catch(() => {});
       throw error;
@@ -218,7 +236,7 @@ export class DebuggerController {
     return this.describe(pageToken, ownerSessionId);
   }
 
-  async navigate(pageToken, ownerSessionId, url, waitUntil, timeoutMs, referer, signal) {
+  async navigate(pageToken, ownerSessionId, url, waitUntil, timeoutMs, loadTimeoutMs, referer, signal) {
     const navigationParams = { url };
     if (referer) navigationParams.referrer = referer;
     const navigation = await this.send(pageToken, ownerSessionId, "Page.navigate", navigationParams, signal);
@@ -226,10 +244,18 @@ export class DebuggerController {
     if (waitUntil === "commit") return this.describe(pageToken, ownerSessionId);
     await this.waitFor(
       pageToken,
-      { condition: "load_state", state: waitUntil, timeout_ms: timeoutMs },
+      { condition: "load_state", state: waitUntil, timeout_ms: timeoutMs, soft_timeout: true },
       ownerSessionId,
       signal,
     );
+    if (waitUntil === "domcontentloaded") {
+      await this.waitFor(
+        pageToken,
+        { condition: "load_state", state: "load", timeout_ms: loadTimeoutMs, soft_timeout: true },
+        ownerSessionId,
+        signal,
+      );
+    }
     return this.describe(pageToken, ownerSessionId);
   }
 
@@ -261,17 +287,7 @@ export class DebuggerController {
     return result.data;
   }
 
-  async waitFor(pageToken, { condition, value, state, timeout_ms: timeoutMs, network_quiet_ms: networkQuietMs, dom_quiet_ms: domQuietMs }, ownerSessionId, signal) {
-    if (condition === "stable") {
-      await this.prepareStability(pageToken, ownerSessionId, signal);
-      await this.waitForStable(pageToken, {
-        minimum_wait_ms: 0,
-        timeout_ms: timeoutMs,
-        network_quiet_ms: Number.isFinite(networkQuietMs) ? networkQuietMs : 500,
-        dom_quiet_ms: Number.isFinite(domQuietMs) ? domQuietMs : 300,
-      }, ownerSessionId, signal);
-      return;
-    }
+  async waitFor(pageToken, { condition, value, state, timeout_ms: timeoutMs, soft_timeout: softTimeout = false }, ownerSessionId, signal) {
     const deadline = Date.now() + timeoutMs;
     let networkIdleSince = null;
     const downloadCursor = condition === "download" ? this.actionSignalSequence : null;
@@ -279,21 +295,26 @@ export class DebuggerController {
       if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
       if (condition === "url") {
         const page = await this.describe(pageToken, ownerSessionId);
-        if (matchesUrl(page.url, value || "")) return;
+        if (matchesUrl(page.url, value || "")) return true;
       } else if (condition === "load_state") {
         if (state === "networkidle") {
           const activeRequests = this.activeNetworkRequests.get(pageToken)?.size || 0;
           if (activeRequests === 0) {
             networkIdleSince ??= Date.now();
-            if (Date.now() - networkIdleSince >= 500) return;
+            if (Date.now() - networkIdleSince >= 500) return true;
           } else {
             networkIdleSince = null;
           }
         } else {
-          const readyState = await this.evaluate(pageToken, ownerSessionId, "() => document.readyState", null);
-          if (state === "commit") return;
-          if (state === "load" && readyState === "complete") return;
-          if (state === "domcontentloaded" && ["interactive", "complete"].includes(readyState)) return;
+          let readyState = null;
+          try {
+            readyState = await this.evaluate(pageToken, ownerSessionId, "() => document.readyState", null);
+          } catch (error) {
+            if (!isTransientNavigationError(error)) throw error;
+          }
+          if (state === "commit") return true;
+          if (state === "load" && readyState === "complete") return true;
+          if (state === "domcontentloaded" && ["interactive", "complete"].includes(readyState)) return true;
           if (!["commit", "domcontentloaded", "load"].includes(state)) {
             throw new Error(`Unsupported load state: ${state}`);
           }
@@ -305,71 +326,24 @@ export class DebuggerController {
           "text => document.body?.innerText?.includes(text) === true",
           value || "",
         );
-        if (found) return;
+        if (found) return true;
       } else if (condition === "download") {
         if (
           this.downloadEntries.get(pageToken)?.some((entry) => entry.sequence > downloadCursor)
-        ) return;
+        ) return true;
       } else {
         throw new Error(`Unsupported wait condition: ${condition}`);
       }
-      if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${condition}`);
+      if (Date.now() >= deadline) {
+        if (softTimeout) return false;
+        throw new Error(`Timed out waiting for ${condition}`);
+      }
       await abortableDelay(100, signal);
     }
   }
 
   async dispatchAction(pageToken, params, ownerSessionId, signal) {
     return this.actionDispatcher.dispatch(pageToken, params, ownerSessionId, signal);
-  }
-
-  async prepareStability(pageToken, ownerSessionId, signal) {
-    await this.evaluate(pageToken, ownerSessionId, `() => {
-      if (globalThis.__magicUseStabilityObserver) return;
-      globalThis.__magicUseLastMutationAt = performance.now();
-      globalThis.__magicUseStabilityObserver = new MutationObserver(() => {
-        globalThis.__magicUseLastMutationAt = performance.now();
-      });
-      globalThis.__magicUseStabilityObserver.observe(document, {
-        subtree: true, childList: true, attributes: true, characterData: true,
-      });
-    }`, null, signal);
-  }
-
-  async waitForStable(pageToken, options, ownerSessionId, signal) {
-    const started = Date.now();
-    const deadline = started + options.timeout_ms;
-    while (this.hasPage(pageToken) && Date.now() < deadline) {
-      signal?.throwIfAborted();
-      const mutationQuietMs = await this.evaluate(
-        pageToken,
-        ownerSessionId,
-        `() => {
-          if (!globalThis.__magicUseStabilityObserver) {
-            globalThis.__magicUseLastMutationAt = performance.now();
-            globalThis.__magicUseStabilityObserver = new MutationObserver(() => {
-              globalThis.__magicUseLastMutationAt = performance.now();
-            });
-            globalThis.__magicUseStabilityObserver.observe(document, {
-              subtree: true, childList: true, attributes: true, characterData: true,
-            });
-          }
-          return performance.now() - globalThis.__magicUseLastMutationAt;
-        }`,
-        null,
-        signal,
-      );
-      const activeRequests = this.activeNetworkRequests.get(pageToken)?.size || 0;
-      const elapsed = Date.now() - started;
-      const networkQuiet = Date.now() - (this.lastNetworkActivity.get(pageToken) || started);
-      if (
-        elapsed >= options.minimum_wait_ms
-        && activeRequests === 0
-        && networkQuiet >= options.network_quiet_ms
-        && Number.isFinite(mutationQuietMs)
-        && mutationQuietMs >= options.dom_quiet_ms
-      ) return;
-      await abortableDelay(50, signal);
-    }
   }
 
   async registerDocumentScript(config, signal) {
@@ -483,27 +457,23 @@ export class DebuggerController {
       this.onEvent("console", { page_token: pageToken, ...entry });
     } else if (method === "Network.requestWillBeSent") {
       if (params.requestId) this.activeNetworkRequests.get(pageToken)?.add(params.requestId);
-      this.lastNetworkActivity.set(pageToken, Date.now());
       const entry = { phase: "request", method: params.request?.method || "", url: params.request?.url || "", status: null, error: null, occurred_at: now };
       this.networkEntries.get(pageToken)?.push(entry);
       trimEntries(this.networkEntries.get(pageToken), MAX_DIAGNOSTIC_ENTRIES);
       this.onEvent("network.request", { page_token: pageToken, ...entry });
     } else if (method === "Network.responseReceived") {
-      this.lastNetworkActivity.set(pageToken, Date.now());
       const entry = { phase: "response", method: "", url: params.response?.url || "", status: params.response?.status || null, error: null, occurred_at: now };
       this.networkEntries.get(pageToken)?.push(entry);
       trimEntries(this.networkEntries.get(pageToken), MAX_DIAGNOSTIC_ENTRIES);
       this.onEvent("network.response", { page_token: pageToken, ...entry });
     } else if (method === "Network.loadingFailed") {
       if (params.requestId) this.activeNetworkRequests.get(pageToken)?.delete(params.requestId);
-      this.lastNetworkActivity.set(pageToken, Date.now());
       const entry = { phase: "failed", method: "", url: "", status: null, error: params.errorText || "Network request failed", occurred_at: now };
       this.networkEntries.get(pageToken)?.push(entry);
       trimEntries(this.networkEntries.get(pageToken), MAX_DIAGNOSTIC_ENTRIES);
       this.onEvent("network.failed", { page_token: pageToken, ...entry });
     } else if (method === "Network.loadingFinished") {
       if (params.requestId) this.activeNetworkRequests.get(pageToken)?.delete(params.requestId);
-      this.lastNetworkActivity.set(pageToken, Date.now());
     } else if (method === "Page.frameAttached") {
       this.onEvent("frame.attached", { page_token: pageToken });
     } else if (method === "Page.frameDetached") {
@@ -597,7 +567,6 @@ export class DebuggerController {
       if (downloadPageToken === pageToken) this.downloadPageByGuid.delete(guid);
     }
     this.activeNetworkRequests.delete(pageToken);
-    this.lastNetworkActivity.delete(pageToken);
     this.documentStartScriptIds.delete(pageToken);
   }
 
@@ -634,6 +603,15 @@ function matchesUrl(url, pattern) {
 
 function safeHostname(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+}
+
+function isTransientNavigationError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("context") && (
+    message.includes("destroyed")
+    || message.includes("not found")
+    || message.includes("navigat")
+  );
 }
 
 function isScriptEnabled(script, hostname, url = "") {

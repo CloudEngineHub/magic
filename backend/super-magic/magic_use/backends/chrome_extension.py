@@ -192,7 +192,20 @@ class ChromeExtensionBackend:
 
     async def open_page(self, url: str = "about:blank") -> BrowserPage:
         peer = await self._prepare_peer()
-        result = await self._request(peer, RemoteMethod.PAGE_OPEN, {"url": url})
+        result = await self._request(
+            peer,
+            RemoteMethod.PAGE_OPEN,
+            {
+                "url": url,
+                "navigation_timeout_ms": self._config.timeouts.navigation_ms,
+                "load_timeout_ms": self._config.timeouts.load_timeout_ms,
+            },
+            timeout_seconds=(
+                self._config.timeouts.navigation_ms + self._config.timeouts.load_timeout_ms
+            )
+            / 1000
+            + 1,
+        )
         return self._pages.from_descriptor(PageDescriptor.from_payload(result.get("page")))
 
     async def close_page(self, page_id: str) -> None:
@@ -238,9 +251,14 @@ class ChromeExtensionBackend:
                     "url": url,
                     "wait_until": wait_until,
                     "timeout_ms": self._config.timeouts.navigation_ms,
+                    "load_timeout_ms": self._config.timeouts.load_timeout_ms,
                     "referer": referer,
                 },
-                timeout_seconds=self._config.timeouts.navigation_ms / 1000,
+                timeout_seconds=(
+                    self._config.timeouts.navigation_ms + self._config.timeouts.load_timeout_ms
+                )
+                / 1000
+                + 1,
             )
             page = self._pages.from_descriptor(PageDescriptor.from_payload(result.get("page")))
             return page
@@ -276,19 +294,7 @@ class ChromeExtensionBackend:
         return await self._observer.evaluate(page_id, expression, argument)
 
     async def read_page(self, page_id: str, scope: str = "viewport") -> str:
-        peer = await self._prepare_peer()
-        await self._request(
-            peer,
-            RemoteMethod.PAGE_WAIT,
-            {
-                "page_token": self._pages.require_token(page_id),
-                "condition": "stable",
-                "timeout_ms": self._config.timeouts.stability_timeout_ms,
-                "network_quiet_ms": self._config.timeouts.network_quiet_ms,
-                "dom_quiet_ms": self._config.timeouts.dom_quiet_ms,
-            },
-            timeout_seconds=self._config.timeouts.stability_timeout_ms / 1000 + 1,
-        )
+        await self._prepare_peer()
         return await self._observer.read_page(page_id, scope)
 
     async def snapshot(
@@ -336,11 +342,13 @@ class ChromeExtensionBackend:
                 "delta_x": request.delta_x,
                 "delta_y": request.delta_y,
                 "settle_ms": self._config.timeouts.action_settle_ms,
-                "stability_timeout_ms": self._config.timeouts.stability_timeout_ms,
-                "network_quiet_ms": self._config.timeouts.network_quiet_ms,
-                "dom_quiet_ms": self._config.timeouts.dom_quiet_ms,
+                "load_timeout_ms": self._config.timeouts.load_timeout_ms,
             },
-            timeout_seconds=self._config.timeouts.stability_timeout_ms / 1000 + 1,
+            timeout_seconds=(
+                self._config.timeouts.default_ms + self._config.timeouts.load_timeout_ms
+            )
+            / 1000
+            + 1,
         )
         page_after = self._pages.from_descriptor(PageDescriptor.from_payload(result.get("page")))
         opened_pages = self._pages.from_payload(result.get("opened_pages"))

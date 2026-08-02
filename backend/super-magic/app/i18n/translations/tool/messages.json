@@ -1619,10 +1619,6 @@
         "zh_CN": "{{action}}已完成，当前页面为「{{page}}」",
         "en_US": "{{action}} completed on {{page}}"
     },
-    "browser.detail.succeeded_loading": {
-        "zh_CN": "{{action}}已完成，页面仍在加载",
-        "en_US": "{{action}} completed; the page is still loading"
-    },
     "browser.detail.page_title": {
         "zh_CN": "页面标题：{{title}}",
         "en_US": "Page title: {{title}}"
@@ -1666,14 +1662,6 @@
     "browser.detail.sensitive_value": {
         "zh_CN": "敏感内容（已隐藏）",
         "en_US": "Sensitive value (hidden)"
-    },
-    "browser.detail.readiness_stable": {
-        "zh_CN": "页面状态：页面结构和网络请求已经稳定",
-        "en_US": "Page status: the DOM and network activity are stable"
-    },
-    "browser.detail.readiness_loading": {
-        "zh_CN": "页面状态：网页已经打开，但仍有内容正在加载",
-        "en_US": "Page status: the page is open, but some content is still loading"
     },
     "browser.detail.read_scope": {
         "zh_CN": "读取范围：{{scope}}",

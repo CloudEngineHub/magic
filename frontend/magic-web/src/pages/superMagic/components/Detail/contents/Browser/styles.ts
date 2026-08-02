@@ -141,8 +141,10 @@ export const useStyles = createStyles(({ token }) => ({
 	},
 	screenshot: {
 		display: "block",
-		width: "100%",
+		width: "auto",
+		maxWidth: "100%",
 		height: "auto",
+		margin: "0 auto",
 		objectFit: "contain",
 		objectPosition: "top center",
 	},

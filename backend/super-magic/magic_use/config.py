@@ -133,18 +133,21 @@ class SnapshotConfig:
 
 @dataclass(frozen=True, slots=True)
 class BrowserArtifactConfig:
-    webp_quality: int = 30
-    webp_min_quality: int = 10
+    webp_quality: int = 35
+    webp_min_quality: int = 15
     webp_quality_step: int = 5
-    max_bytes: int = 32 * 1024
-    resize_step: float = 0.8
-    min_dimension: int = 512
+    max_bytes: int = 128 * 1024
+    max_width: int = 1600
+    resize_step: float = 0.85
+    min_dimension: int = 640
 
     def __post_init__(self) -> None:
         if not 0 <= self.webp_min_quality <= self.webp_quality <= 100:
             raise BrowserConfigError("Browser WebP quality range is invalid")
-        if self.webp_quality_step < 1 or self.max_bytes < 1 or self.min_dimension < 1:
+        if self.webp_quality_step < 1 or min(self.max_bytes, self.max_width, self.min_dimension) < 1:
             raise BrowserConfigError("Browser artifact limits must be positive")
+        if self.max_width < self.min_dimension:
+            raise BrowserConfigError("Browser artifact max width cannot be smaller than its minimum dimension")
         if not 0 < self.resize_step < 1:
             raise BrowserConfigError("Browser artifact resize step must be between zero and one")
 
@@ -155,18 +158,14 @@ class BrowserTimeouts:
     navigation_ms: float = 30_000
     script_ms: float = 10_000
     action_settle_ms: float = 150
-    stability_timeout_ms: float = 3_000
-    network_quiet_ms: float = 500
-    dom_quiet_ms: float = 300
+    load_timeout_ms: float = 3_000
 
     def __post_init__(self) -> None:
         if min(
             self.default_ms,
             self.navigation_ms,
             self.script_ms,
-            self.stability_timeout_ms,
-            self.network_quiet_ms,
-            self.dom_quiet_ms,
+            self.load_timeout_ms,
         ) <= 0 or self.action_settle_ms < 0:
             raise BrowserConfigError("Browser timeouts must be positive and action_settle_ms cannot be negative")
 

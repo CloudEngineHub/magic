@@ -22,7 +22,6 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
-    PageReadiness,
     PageSnapshot,
     ScreenshotResult,
     SnapshotDiff,
@@ -59,11 +58,9 @@ class BrowserToolResultBuilder:
         lines = [f"Open pages in Browser session {session_id}:"]
         for page in pages:
             active = " active" if page.active else ""
-            readiness = f"; readiness={page.readiness.value}" if page.readiness is not PageReadiness.UNKNOWN else ""
             expires = cls._format_time(page.expires_at) if page.expires_at is not None else "not set"
             lines.append(
                 f"- {page.id}{active}: {page.title or '(untitled)'} — {cls.safe_url(page.url)}; expires={expires}"
-                f"{readiness}"
             )
             if page.resource_warning:
                 lines.append(f"  Warning: {page.resource_warning}")
@@ -76,7 +73,6 @@ class BrowserToolResultBuilder:
     def page(cls, page: BrowserPage, message: str) -> ToolResult:
         expires = cls._format_time(page.expires_at) if page.expires_at is not None else "not set"
         warning = f"\n- Warning: {page.resource_warning}" if page.resource_warning else ""
-        readiness = cls._readiness_content(page.readiness)
         return ToolResult(
             content=(
                 f"{message}\n"
@@ -85,27 +81,17 @@ class BrowserToolResultBuilder:
                 f"- URL: {cls.safe_url(page.url)}\n"
                 f"- Document generation: {page.document_generation}\n"
                 f"- Expires: {expires}\n"
-                f"- Readiness: {readiness}{warning}"
+                f"- Status: open and available for further Browser calls{warning}"
             ),
             data={"page_id": page.id, "session_id": page.session_id, "page": cls._structured(page)},
         )
-
-    @staticmethod
-    def _readiness_content(readiness: PageReadiness) -> str:
-        if readiness is PageReadiness.STABLE:
-            return "stable; the DOM and network were quiet within the configured readiness window"
-        if readiness is PageReadiness.LOADING:
-            return (
-                "still loading; the page is open and its page ID remains valid. "
-                "Reuse this page and read or wait instead of opening the same URL again"
-            )
-        return "not reported by this Browser backend"
 
     @classmethod
     def markdown(cls, page: BrowserPage, scope: str, markdown: str) -> ToolResult:
         content = (
             f"Page content from {page.title or cls.safe_url(page.url)}\n"
             f"Page ID: {page.id}\n"
+            f"URL: {cls.safe_url(page.url)}\n"
             f"Scope: {scope}\n\n"
             f"{markdown}"
         )
@@ -125,6 +111,7 @@ class BrowserToolResultBuilder:
         lines = [
             f"Page snapshot for {snapshot.title or cls.safe_url(snapshot.url)}",
             f"Page ID: {snapshot.page_id}",
+            f"URL: {cls.safe_url(snapshot.url)}",
             f"Snapshot ID: {snapshot.id}",
             f"Scope: {snapshot.scope.value}",
         ]
@@ -200,6 +187,8 @@ class BrowserToolResultBuilder:
         lines = [
             "Browser screenshot captured.",
             f"- Page ID: {result.page_id}",
+            f"- Title: {page.title or '(untitled)'}",
+            f"- URL: {cls.safe_url(page.url)}",
             f"- Full page: {'yes' if result.full_page else 'no'}",
             "- To answer a visual question about this page, use browser_visual_query with the page ID.",
         ]
@@ -258,7 +247,8 @@ class BrowserToolResultBuilder:
         artifact: BrowserScreenshotArtifact,
     ) -> ToolResult:
         screenshot_result = cls.screenshot(page, result, artifact)
-        tool_result.data.update(screenshot_result.data)
+        tool_result.data["screenshot"] = screenshot_result.data["screenshot"]
+        tool_result.data["label_to_ref"] = screenshot_result.data["label_to_ref"]
         tool_result.extra_info.update(screenshot_result.extra_info)
         return tool_result
 

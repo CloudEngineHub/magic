@@ -25,9 +25,7 @@ browser:
   navigation_timeout: ${BROWSER_NAVIGATION_TIMEOUT:-30000}
   script_timeout: ${BROWSER_SCRIPT_TIMEOUT:-10000}
   action_settle_timeout: ${BROWSER_ACTION_SETTLE_TIMEOUT:-150}
-  stability_timeout: ${BROWSER_STABILITY_TIMEOUT:-3000}
-  network_quiet_timeout: ${BROWSER_NETWORK_QUIET_TIMEOUT:-500}
-  dom_quiet_timeout: ${BROWSER_DOM_QUIET_TIMEOUT:-300}
+  load_timeout: ${BROWSER_LOAD_TIMEOUT:-3000}
   event_buffer_size: ${BROWSER_EVENT_BUFFER_SIZE:-1000}
   diagnostic_buffer_size: ${BROWSER_DIAGNOSTIC_BUFFER_SIZE:-1000}
   bypass_csp: ${BROWSER_BYPASS_CSP:-true}
@@ -45,7 +43,8 @@ browser:
     webp_quality: ${BROWSER_WEBP_QUALITY:-35}
     webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-15}
     webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-5}
-    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-102400}
+    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-131072}
+    max_width: ${BROWSER_SNAPSHOT_MAX_WIDTH:-1600}
     resize_step: ${BROWSER_SNAPSHOT_RESIZE_STEP:-0.85}
     min_dimension: ${BROWSER_SNAPSHOT_MIN_DIMENSION:-640}
 
