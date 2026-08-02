@@ -21,9 +21,15 @@ interface SceneEditPanelProps {
 	playbookId: string
 	onBack: () => void
 	onClose: () => void
+	readOnly?: boolean
 }
 
-export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelProps) {
+export function SceneEditPanel({
+	playbookId,
+	onBack,
+	onClose,
+	readOnly = false,
+}: SceneEditPanelProps) {
 	const { t, i18n } = useTranslation("crew/create")
 	const { playbook } = useCrewEditStore()
 	const [activeTab, setActiveTab] = useState<NavTab>("basicInfo")
@@ -45,17 +51,22 @@ export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelPr
 	const store = useMemo(
 		() =>
 			scene
-				? new SceneEditStore(scene, async (s) => {
-						try {
-							await playbook.updateScene(s)
-							toast.success(t("playbook.edit.saveSuccess"))
-						} catch {
-							toast.error(t("playbook.edit.saveFailed"))
-						}
-					})
+				? new SceneEditStore(
+						scene,
+						async (s) => {
+							try {
+								if (readOnly) return
+								await playbook.updateScene(s)
+								toast.success(t("playbook.edit.saveSuccess"))
+							} catch {
+								toast.error(t("playbook.edit.saveFailed"))
+							}
+						},
+						readOnly,
+					)
 				: null,
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[scene],
+		[readOnly, scene],
 	)
 
 	const navItems: { id: NavTab; label: string }[] = [

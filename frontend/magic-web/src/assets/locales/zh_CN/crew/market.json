@@ -41,6 +41,7 @@
 		},
 		"buttons": {
 			"cancel": "取消",
+			"close": "关闭",
 			"confirm": "保存"
 		},
 		"done": "员工更新成功！",
@@ -50,7 +51,8 @@
 		"fields": {
 			"avatar": "头像"
 		},
-		"title": "编辑员工"
+		"title": "编辑员工",
+		"viewTitle": "员工详情"
 	},
 	"editSkill": {
 		"buttons": {
@@ -279,7 +281,8 @@
 		"subtitle": "管理您的专属数字员工。",
 		"teamSharedCreatedBy": "由 {{name}} 创建",
 		"title": "我的员工",
-		"upgradeAvailable": "有新版本可用，点击更新。"
+		"upgradeAvailable": "有新版本可用，点击更新。",
+		"view": "查看"
 	},
 	"mySkills": {
 		"badges": {
