@@ -1,4 +1,4 @@
-"""Browser Snapshot 编码、上传、去重与附件发布。"""
+"""Browser Snapshot 编码、上传与去重。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import asyncio
 import base64
 import hashlib
 import io
-import time
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -15,9 +14,6 @@ from PIL import Image
 from agentlang.context.tool_context import ToolContext
 from agentlang.environment import Environment
 from app.core.context.agent_context import AgentContext
-from app.core.entity.attachment import Attachment, AttachmentStorageType, AttachmentTag
-from app.core.entity.event.event_context import EventContext
-from app.i18n import i18n
 from app.infrastructure.storage.factory import StorageFactory
 from app.service.browser.browser_config_adapter import BrowserConfigAdapter
 from app.utils.path_utils import get_workspace_dir
@@ -34,6 +30,7 @@ class BrowserScreenshotArtifact:
     height: int
     quality: int
     reused: bool
+    # 仅本地进程内调试回退时使用，不参与任何消息或持久化数据序列化。
     file_url: str | None
 
 
@@ -65,7 +62,8 @@ class BrowserArtifactService:
             if not Environment.is_local():
                 raise
             artifact = self._create_local_artifact(content_hash, encoded)
-        self._add_attachment(artifact)
+        # Browser Tool Detail 截图是短期展示资源，不能加入 EventContext attachments；
+        # 普通附件链路会把它登记为 MagicFS 项目文件，使 Agent 能通过工作区文件系统看到它。
         return artifact
 
     async def _publish_remote(
@@ -89,13 +87,14 @@ class BrowserArtifactService:
             await storage.upload(file=encoded.content, key=file_key)
 
         file_url = None
-        try:
-            file_url = await storage.get_download_url(key=file_key, expires_in=3600)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # file_key 是正式展示契约；预签名 URL 仅用于本地调试器即时展示。
-            file_url = None
+        if Environment.is_local():
+            try:
+                file_url = await storage.get_download_url(key=file_key, expires_in=3600)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # 本地即时预览地址获取失败时，仍保留 file_key 继续完成工具调用。
+                file_url = None
 
         return BrowserScreenshotArtifact(
             content_hash=content_hash,
@@ -105,6 +104,7 @@ class BrowserArtifactService:
             height=encoded.height,
             quality=encoded.quality,
             reused=reused,
+            # 线上通过 file_id 动态获取临时地址；本地调试器没有 PHP 文件登记链路，直接使用即时地址。
             file_url=file_url,
         )
 
@@ -161,29 +161,6 @@ class BrowserArtifactService:
             "snapshots",
             f"{content_hash}.webp",
         ).as_posix()
-
-    def _add_attachment(self, artifact: BrowserScreenshotArtifact) -> None:
-        event_context = self._tool_context.get_extension_typed("event_context", EventContext)
-        if event_context is None:
-            raise BrowserSDKError(BrowserErrorCode.INVALID_CONFIG, "Event context is unavailable")
-        filename = f"{artifact.content_hash}.webp"
-        event_context.add_attachment(
-            Attachment(
-                file_key=artifact.file_key,
-                file_tag=AttachmentTag.BROWSER,
-                file_extension="webp",
-                filepath="",
-                filename=filename,
-                display_filename=i18n.translate(
-                    "browser.attachment.snapshot",
-                    category="tool.messages",
-                ),
-                file_size=artifact.file_size,
-                file_url=artifact.file_url,
-                timestamp=int(time.time()),
-                storage_type=AttachmentStorageType.SNAPSHOT,
-            )
-        )
 
     @staticmethod
     def _encode_webp(image: bytes, config: BrowserArtifactConfig) -> _EncodedWebP:

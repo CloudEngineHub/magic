@@ -5282,7 +5282,10 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
 function renderBrowserToolDetail(toolState, data, tool) {
     const attachments = Array.isArray(tool.attachments) ? tool.attachments : [];
     const attachment = attachments.find(item => item && item.file_key === data.file_key);
-    const imageUrl = attachment && typeof attachment.file_url === 'string' ? attachment.file_url : '';
+    let imageUrl = typeof data.file_url === 'string' ? data.file_url : '';
+    if (!imageUrl && attachment && typeof attachment.file_url === 'string') {
+        imageUrl = attachment.file_url;
+    }
     const action = data.action || '网页操作';
     const pageTitle = data.page_title || '';
     const title = pageTitle || data.title || action;

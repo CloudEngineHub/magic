@@ -9,7 +9,6 @@ from typing import Generic, TypeVar
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.event.event_context import EventContext
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.service.browser import BrowserArtifactService, BrowserService
@@ -148,20 +147,12 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
             tool_name=self.name,
             arguments=arguments or {},
         )
-        event_context = tool_context.get_extension_typed("event_context", EventContext)
-        if event_context is not None and event_context.attachments:
-            screenshot_file_key = self._screenshot_file_key(result)
-            attachment = next(
-                (
-                    item
-                    for item in reversed(event_context.attachments)
-                    if screenshot_file_key is not None and item.file_key == screenshot_file_key
-                ),
-                None,
-            )
-            if attachment is not None:
-                return BrowserDetailBuilder.detail(presentation, file_key=attachment.file_key)
-        return BrowserDetailBuilder.detail(presentation)
+        return BrowserDetailBuilder.detail(
+            presentation,
+            file_key=self._screenshot_file_key(result),
+            file_size=self._screenshot_file_size(result),
+            file_url=self._screenshot_file_url(result),
+        )
 
     def _operation_name(self) -> str:
         return self._message(self.operation_key)
@@ -214,3 +205,13 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
     def _screenshot_file_key(result: ToolResult) -> str | None:
         file_key = result.extra_info.get("browser_snapshot_file_key")
         return file_key if isinstance(file_key, str) and file_key else None
+
+    @staticmethod
+    def _screenshot_file_size(result: ToolResult) -> int:
+        file_size = result.extra_info.get("browser_snapshot_file_size")
+        return file_size if isinstance(file_size, int) and file_size >= 0 else 0
+
+    @staticmethod
+    def _screenshot_file_url(result: ToolResult) -> str | None:
+        file_url = result.extra_info.get("browser_snapshot_file_url")
+        return file_url if isinstance(file_url, str) and file_url else None

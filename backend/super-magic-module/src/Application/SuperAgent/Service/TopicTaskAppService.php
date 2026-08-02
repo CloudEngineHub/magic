@@ -252,6 +252,9 @@ class TopicTaskAppService extends AbstractAppService
                 // Create new message
                 $messageEntity = $this->parseMessageContent($messageDTO);
                 $messageEntity->setTopicId($topicId);
+                $tool = $messageEntity->getTool();
+                $this->fileProcessAppService->processToolDetailFileReference($tool, $taskEntity, $dataIsolation);
+                $messageEntity->setTool($tool);
                 // Special status handling: generate output content tool when task is finished
                 if ($messageEntity->getStatus() === TaskStatus::FINISHED->value) {
                     $outputTool = ToolProcessor::generateOutputContentTool($messageEntity->getAttachments());

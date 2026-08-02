@@ -306,7 +306,12 @@ class MagicFSFileAppService extends AbstractAppService
         $this->assertFileAccessible($fileId, $authorization, MemberRole::VIEWER);
 
         // 1. 调用领域服务获取文件树数据
-        $treeData = $this->magicFSFileDomainService->getFileTree($fileId, $requestDTO->depth);
+        $treeData = $this->magicFSFileDomainService->getFileTree(
+            $fileId,
+            $requestDTO->depth,
+            0,
+            StorageType::WORKSPACE->value
+        );
 
         // 2. 获取根文件和子节点列表
         $rootFile = $treeData['root'];
@@ -406,6 +411,7 @@ class MagicFSFileAppService extends AbstractAppService
     protected function assertFileAccessible(string $fileId, MagicUserAuthorization $authorization, MemberRole $requiredRole): TaskFileEntity
     {
         $fileEntity = $this->magicFSFileDomainService->getFileById($fileId);
+        $this->assertWorkspaceFile($fileEntity);
         if ($fileEntity->getProjectId() <= 0) {
             $this->assertUserSpaceFileAccessible($fileEntity, $authorization);
             return $fileEntity;
@@ -431,6 +437,7 @@ class MagicFSFileAppService extends AbstractAppService
         $checkedUserScopes = [];
         foreach (array_unique($fileIds) as $fileId) {
             $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
+            $this->assertWorkspaceFile($fileEntity);
             $projectId = $fileEntity->getProjectId();
             if ($projectId <= 0) {
                 $scopeKey = $fileEntity->getOrganizationCode() . '|' . $fileEntity->getUserId();
@@ -464,12 +471,27 @@ class MagicFSFileAppService extends AbstractAppService
         }
 
         $parentEntity = $this->magicFSFileDomainService->getFileById($parentId);
+        $this->assertWorkspaceFile($parentEntity);
         if ($parentEntity->getProjectId() <= 0) {
             $this->assertUserSpaceFileAccessible($parentEntity, $authorization);
             return $parentEntity;
         }
         $this->assertProjectAccessible($parentEntity->getProjectId(), $authorization, $requiredRole);
         return $parentEntity;
+    }
+
+    /**
+     * MagicFS 只承载工作区文件；消息内容、快照等内部资源不属于文件系统命名空间。
+     */
+    protected function assertWorkspaceFile(TaskFileEntity $fileEntity): void
+    {
+        if ($fileEntity->getStorageType() !== StorageType::WORKSPACE) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_NOT_FOUND,
+                'magicfs.file_not_found',
+                ['file_id' => (string) $fileEntity->getFileId()]
+            );
+        }
     }
 
     /**

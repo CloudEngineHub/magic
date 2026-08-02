@@ -58,7 +58,8 @@ class MagicFSFileDomainService
         return $this->taskFileRepository->getChildrenByParentAndProject(
             $projectId,
             $parentIdInt,
-            10000  // 设置一个较大的限制值，避免意外的无限查询
+            10000,  // 设置一个较大的限制值，避免意外的无限查询
+            $storageType
         );
     }
 
@@ -101,6 +102,14 @@ class MagicFSFileDomainService
                 ['project_id' => $projectId]
             );
         }
+        if ($rootDir->getStorageType() !== StorageType::WORKSPACE) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_NOT_FOUND,
+                'magicfs.project_not_found',
+                ['project_id' => $projectId]
+            );
+        }
+
         return $rootDir->getFileId();
     }
 

@@ -55,7 +55,13 @@ class BrowserDetailBuilder:
         )
 
     @staticmethod
-    def detail(presentation: BrowserOperationPresentation, *, file_key: str | None = None) -> ToolDetail:
+    def detail(
+        presentation: BrowserOperationPresentation,
+        *,
+        file_key: str | None = None,
+        file_size: int = 0,
+        file_url: str | None = None,
+    ) -> ToolDetail:
         if file_key is None:
             return ToolDetail(
                 type=DisplayType.MD,
@@ -69,6 +75,8 @@ class BrowserDetailBuilder:
                 url=presentation.url,
                 title=presentation.page_title or presentation.action,
                 file_key=file_key,
+                file_size=file_size,
+                file_url=file_url,
                 action=presentation.action,
                 summary=BrowserDetailBuilder._browser_summary(presentation),
                 page_title=presentation.page_title or None,

@@ -234,7 +234,9 @@ class BrowserToolResultBuilder:
             },
             extra_info={
                 "browser_snapshot_file_key": artifact.file_key,
+                "browser_snapshot_file_size": artifact.file_size,
                 "browser_snapshot_content_hash": artifact.content_hash,
+                **({"browser_snapshot_file_url": artifact.file_url} if artifact.file_url is not None else {}),
             },
         )
 

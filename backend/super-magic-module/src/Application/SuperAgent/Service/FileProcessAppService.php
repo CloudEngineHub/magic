@@ -114,7 +114,89 @@ class FileProcessAppService extends AbstractAppService
             source: $source,
             parentId: $parentId,
         );
+
         return [$taskFileEntity->getFileId(), $taskFileEntity];
+    }
+
+    /**
+     * 登记 Tool Detail 引用的内部文件，不经过普通消息附件链路。
+     *
+     * 当前仅 Snapshot 需要由 Tool Detail 独立登记；其他文件类型继续使用已有附件流程。
+     * 未声明存储类型或路径不属于当前项目话题时直接跳过，避免污染 Workspace。
+     */
+    public function processToolDetailFileReference(?array &$tool, TaskEntity $task, DataIsolation $dataIsolation): void
+    {
+        if (! is_array($tool['detail']['data'] ?? null)) {
+            return;
+        }
+
+        $detailData = &$tool['detail']['data'];
+        if (! empty($detailData['file_id'])) {
+            return;
+        }
+
+        $fileKey = trim((string) ($detailData['file_key'] ?? ''));
+        $storageType = StorageType::tryFrom((string) ($detailData['storage_type'] ?? ''));
+        if ($fileKey === '' || $storageType !== StorageType::SNAPSHOT) {
+            return;
+        }
+        try {
+            $fileType = FileType::tryFrom((string) ($detailData['file_tag'] ?? '')) ?? FileType::PROCESS;
+            $projectEntity = $this->projectDomainService->getProjectNotUserId($task->getProjectId());
+            $fullPrefix = $this->taskFileDomainService->getFullPrefix($projectEntity->getUserOrganizationCode());
+            $snapshotDir = WorkDirectoryUtil::getTopicRootDir(
+                $task->getUserId(),
+                $task->getProjectId(),
+                $task->getTopicId()
+            ) . '/snapshots';
+            $fullSnapshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $snapshotDir);
+            if (! WorkDirectoryUtil::checkEffectiveFileKey($fullSnapshotDir, $fileKey)) {
+                $this->logger->warning('Tool Detail snapshot path does not belong to the current topic', [
+                    'task_id' => $task->getTaskId(),
+                    'file_key' => $fileKey,
+                ]);
+                return;
+            }
+
+            $taskFileEntity = $this->taskFileDomainService->getByFileKey($fileKey);
+            if ($taskFileEntity === null) {
+                $fileName = basename($fileKey);
+                if ($fileName === '') {
+                    return;
+                }
+
+                $taskFileEntity = $this->taskDomainService->saveTaskFileByFileKey(
+                    dataIsolation: $dataIsolation,
+                    fileKey: $fileKey,
+                    fileData: [
+                        'filename' => $fileName,
+                        'display_filename' => $fileName,
+                        'file_extension' => pathinfo($fileName, PATHINFO_EXTENSION),
+                        'file_size' => max(0, (int) ($detailData['file_size'] ?? 0)),
+                    ],
+                    projectId: $task->getProjectId(),
+                    topicId: $task->getTopicId(),
+                    taskId: (int) $task->getId(),
+                    fileType: $fileType->value,
+                    storageType: StorageType::SNAPSHOT->value,
+                );
+            }
+
+            $taskFileEntity->setStorageType(StorageType::SNAPSHOT);
+            $taskFileEntity->setIsHidden(true);
+            $taskFileEntity->setParentId(null);
+            $taskFileEntity->setOrganizationCode($projectEntity->getUserOrganizationCode());
+            $this->taskFileDomainService->updateById($taskFileEntity);
+
+            $detailData['file_id'] = (string) $taskFileEntity->getFileId();
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to register Tool Detail file reference', [
+                'task_id' => $task->getTaskId(),
+                'file_key' => $fileKey,
+                'storage_type' => $storageType->value,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
