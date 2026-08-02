@@ -223,23 +223,43 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			return false
 		}
 
+		// 队列发送和直接发送必须使用同一份业务参数。微应用、Skill、员工等场景会通过
+		// mergeSendParams 修正 topicMode / extra；如果在加入队列后才合并，队列消息会退回默认模式。
+		const defaultParams: HandleSendParams = {
+			...params,
+			value: nextValue ?? params.value,
+			extra:
+				effectiveTopicMode === TopicMode.CustomAgent && editorContext?.agentCode
+					? {
+							...params.extra,
+							agent_code: editorContext.agentCode,
+						}
+					: params.extra,
+		}
+		const customParamsPatch = editorContext?.mergeSendParams?.({
+			defaultParams,
+		})
+		const finalParams = customParamsPatch
+			? { ...defaultParams, ...customParamsPatch }
+			: defaultParams
+
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
 		if (shouldQueue) {
 			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
 			tiptapEditorRef.current?.clearContentAfterSend()
 			const queueId = await queueContext.addToQueue({
-				content: nextValue ?? params.value,
-				mentionItems: params.mentionItems,
-				selectedModel: params.selectedModel,
-				selectedImageModel: params.selectedImageModel,
-				selectedVideoModel: params.selectedVideoModel,
-				topicMode: params.topicMode,
+				content: finalParams.value ?? params.value,
+				mentionItems: finalParams.mentionItems,
+				selectedModel: finalParams.selectedModel,
+				selectedImageModel: finalParams.selectedImageModel,
+				selectedVideoModel: finalParams.selectedVideoModel,
+				topicMode: finalParams.topicMode,
 			})
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
-				if (nextValue ?? params.value) {
-					tiptapEditorRef.current?.setContent?.(nextValue ?? params.value)
+				if (finalParams.value ?? params.value) {
+					tiptapEditorRef.current?.setContent?.(finalParams.value ?? params.value)
 				}
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
 				return false
@@ -262,24 +282,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 
 		try {
-			const defaultParams: HandleSendParams = {
-				...params,
-				value: nextValue ?? params.value,
-				extra:
-					effectiveTopicMode === TopicMode.CustomAgent && editorContext?.agentCode
-						? {
-								...params.extra,
-								agent_code: editorContext.agentCode,
-							}
-						: params.extra,
-			}
-			const customParamsPatch = editorContext?.mergeSendParams?.({
-				defaultParams,
-			})
-
-			const finalParams = customParamsPatch
-				? { ...defaultParams, ...customParamsPatch }
-				: defaultParams
 			shouldShowHomeSendLoading = !selectedTopic?.id && !params.isFromQueue
 			hasStartedSend = true
 			isPreparingSendRef.current = true
