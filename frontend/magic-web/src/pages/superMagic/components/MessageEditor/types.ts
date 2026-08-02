@@ -155,6 +155,8 @@ export interface MessageEditorProps {
 	draftKey?: DraftKey
 	/** Topic mode */
 	topicMode?: TopicMode
+	/** Model catalog mode. Defaults to topicMode when not specified. */
+	modelTopicMode?: TopicMode
 	/** Component size */
 	size?: MessageEditorSize
 	/** Module capability configuration */

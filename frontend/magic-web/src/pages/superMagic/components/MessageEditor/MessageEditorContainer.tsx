@@ -49,6 +49,7 @@ import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
 import useEditorPromptCarousel from "./hooks/useEditorPromptCarousel"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
+import { resolveModelTopicMode } from "./utils/modelTopicMode"
 import type { Topic } from "../../pages/Workspace/types"
 import useSharedDataFromApp from "./hooks/useSharedDataFromApp"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
@@ -99,6 +100,7 @@ export const MessageEditorContainer = observer(
 				isSending = false,
 				sendButtonLoading = false,
 				topicMode,
+				modelTopicMode,
 				onFocus,
 				onBlur,
 				onMentionInsertItems,
@@ -770,7 +772,7 @@ export const MessageEditorContainer = observer(
 				isEditingQueueItem: isEditingQueueItem ?? false,
 				selectedTopic,
 				selectedProject,
-				topicMode,
+				topicMode: resolveModelTopicMode(topicMode, modelTopicMode),
 				mentionPanelStore,
 				mcpButtonConfig,
 				handleSelectMentionItem,
