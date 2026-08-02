@@ -58,7 +58,6 @@ from app.tools.manage_cron import ManageCron
 from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.append_to_file import AppendToFile
-from app.tools.convert_pdf import ConvertPdf
 from app.tools.pptx_to_slide_template.tool import ConvertPptxToSlideTemplate
 from app.tools.document_parse import (
     BuildDocumentIndex,
@@ -209,7 +208,6 @@ __all__ = [
     "ConnectWechatBot",
     "WaitWechatLogin",
     "CompactChatHistory",
-    "ConvertPdf",
     "ConvertPptxToSlideTemplate",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",

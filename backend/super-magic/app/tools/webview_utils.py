@@ -7,7 +7,6 @@
 - 智能文件名生成
 """
 
-import asyncio
 import os
 import datetime
 import re
@@ -24,18 +23,12 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.utils.file import generate_safe_filename_with_timestamp
 from agentlang.llms.factory import LLMFactory
-from app.path_manager import PathManager
 
 logger = get_logger(__name__)
 
 # ====================
 # 常量定义
 # ====================
-
-# NOTE: The following directory constants are preserved for potential future use.
-# Currently, webpage content is no longer saved to .webview-reports directory.
-MARKDOWN_RECORDS_DIR_NAME = ".webview-reports"
-MARKDOWN_RECORDS_DIR = PathManager.get_workspace_dir() / MARKDOWN_RECORDS_DIR_NAME
 
 # 搜索引擎 Referer 配置（用于人类行为模拟）
 SEARCH_ENGINE_REFERERS = [
@@ -290,23 +283,6 @@ async def goto_external_website_with_referer(browser, url: str, page_id: Optiona
         logger.warning(f"设置人类行为模拟失败，回退到普通导航: {e}")
         # 如果设置referer失败，回退到普通导航
         return await browser.goto(page_id, url, wait_until)
-
-# ====================
-# 文件管理（保留用于未来可能的其他用途）
-# ====================
-# NOTE: The following file management functions are preserved for potential future use.
-# Currently, webpage content is no longer saved to disk (removed to improve performance
-# as 99.9% of saved files were never used in practice).
-
-async def get_or_create_markdown_records_dir() -> Path:
-    """确保markdown记录目录存在并返回该目录路径
-
-    Returns:
-        Path: markdown记录目录的路径
-    """
-    # 使用异步方式创建目录
-    await asyncio.to_thread(MARKDOWN_RECORDS_DIR.mkdir, exist_ok=True)
-    return MARKDOWN_RECORDS_DIR
 
 async def async_write_file(file_path: Path, content: str, encoding: str = "utf-8") -> None:
     """异步写入文件内容

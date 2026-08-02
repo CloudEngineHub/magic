@@ -6,11 +6,12 @@
 """
 
 import os
-import aiohttp
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from app.path_manager import PathManager
+import aiohttp
+
 from agentlang.config.config import config
 from agentlang.logger import get_logger
 
@@ -147,7 +148,7 @@ class MagicBrowserConfig:
         """初始化后处理"""
         # 设置默认下载路径
         if not self.download_path:
-            self.download_path = str(PathManager.get_workspace_dir() / ".webview-reports")
+            self.download_path = os.path.join(tempfile.gettempdir(), "super-magic", "browser-downloads")
 
         # 确保浏览器参数是列表
         if not isinstance(self.browser_args, list):

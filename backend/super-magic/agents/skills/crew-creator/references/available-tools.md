@@ -125,12 +125,6 @@ skills:
 
 `run_python_snippet` and `run_sdk_snippet` are automatically available when `code_execution` is enabled. They are not TOOLS.md entries.
 
-### Content Processing
-
-| Tool | Description |
-|------|-------------|
-| `convert_pdf` | Convert files to/from PDF format |
-
 ### Memory Management
 
 | Tool | Description |
