@@ -24,6 +24,7 @@ from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from agentlang.utils.annotation_remover import remove_developer_annotations
 from app.tools.core import BaseTool
+from app.tools.core.tool_decorator import AutoMount
 from app.tools.core.tool_definition import tool_definition_manager, ToolDefinition
 from app.tools.remote.remote_tool_manager import remote_tool_manager
 
@@ -52,6 +53,8 @@ class ToolInfo:
     lazy_load: bool = False
     # 是否仅允许 Code Mode 调用
     code_mode_only: bool = False
+    # 运行时自动挂载条件；None 表示仅按 Agent 显式配置挂载
+    auto_mount: Optional[AutoMount] = None
 
     def __post_init__(self):
         """验证创建的工具信息对象"""
@@ -90,6 +93,12 @@ class ToolFactory:
     def _get_registered_code_mode_only(tool_class: Type[BaseTool]) -> bool:
         """读取 @tool 写入的注册元数据，不信任工具类体的公开属性。"""
         return bool(getattr(tool_class, "_tool_code_mode_only", False))
+
+    @staticmethod
+    def _get_registered_auto_mount(tool_class: Type[BaseTool]) -> Optional[AutoMount]:
+        """读取 @tool 写入的自动挂载元数据。"""
+        auto_mount = getattr(tool_class, "_tool_auto_mount", None)
+        return auto_mount if isinstance(auto_mount, AutoMount) else None
 
     async def ensure_definitions_initialized(self) -> None:
         """工具定义初始化的唯一公开入口；幂等、防并发，失败时保留运行时扫描能力。"""
@@ -161,6 +170,7 @@ class ToolFactory:
                 description=tool_class._tool_description,
                 params_class=params_class,
                 code_mode_only=self._get_registered_code_mode_only(tool_class),
+                auto_mount=self._get_registered_auto_mount(tool_class),
             )
 
             # 存储工具信息
@@ -182,6 +192,7 @@ class ToolFactory:
                 params_class=None,
                 error=str(e),
                 code_mode_only=self._get_registered_code_mode_only(tool_class),
+                auto_mount=self._get_registered_auto_mount(tool_class),
             )
 
     def register_tool_instance(self, tool_name: str, tool_instance: BaseTool) -> None:
@@ -199,6 +210,7 @@ class ToolFactory:
                 description=tool_instance.get_effective_description(),
                 params_class=getattr(tool_instance, 'get_params_class', lambda: None)(),
                 code_mode_only=self._get_registered_code_mode_only(tool_instance.__class__),
+                auto_mount=self._get_registered_auto_mount(tool_instance.__class__),
             )
 
             # 存储工具信息
@@ -305,6 +317,7 @@ class ToolFactory:
                         description=definition.description,
                         params_class=None,  # 从 schema 中获取
                         code_mode_only=definition.code_mode_only,
+                        auto_mount=definition.auto_mount,
                     )
 
                     # 保存额外的元数据用于按需加载
@@ -594,6 +607,7 @@ class ToolFactory:
                         created_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                         version="1.0",
                         code_mode_only=tool_info.code_mode_only,
+                        auto_mount=tool_info.auto_mount,
                     )
 
                     # 添加到工具定义管理器
@@ -867,6 +881,14 @@ class ToolFactory:
 
         return bool(tool_info.code_mode_only)
 
+    def get_auto_mount_tool_names(self, auto_mount: AutoMount) -> tuple[str, ...]:
+        """返回声明了指定自动挂载条件的本地工具名称。"""
+        return tuple(
+            tool_name
+            for tool_name, tool_info in self.get_all_tools().items()
+            if tool_info.auto_mount == auto_mount
+        )
+
     def get_all_tools(self) -> Dict[str, ToolInfo]:
         """获取所有工具信息
 
@@ -893,6 +915,7 @@ class ToolFactory:
                     definition=None,
                     lazy_load=False,
                     code_mode_only=self._get_registered_code_mode_only(remote_tool.__class__),
+                    auto_mount=None,
                 )
                 all_tools[tool_name] = tool_info
             except Exception as e:
@@ -907,6 +930,7 @@ class ToolFactory:
                     definition=None,
                     lazy_load=False,
                     code_mode_only=False,
+                    auto_mount=None,
                 )
 
         return all_tools

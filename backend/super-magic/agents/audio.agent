@@ -11,7 +11,6 @@ tools:
   - delete_files
   - shell_exec
   - shell_await
-  - run_python_snippet
   - audio_understanding
   - split_audio
   - setup_audio_project
@@ -20,11 +19,11 @@ tools:
   - video_understanding
   - web_search
   - read_webpages_as_markdown
-  - download_from_url
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
   workspace_skills: "*"
 ---

@@ -28,8 +28,8 @@ class FindAgentsParams(BaseToolParams):
     keywords: list[_SearchKeyword] = Field(
         default_factory=list,
         description=(
-            "Search keywords or short capability phrases in the user's language. "
-            "Each list item remains one search phrase. Pass [] to list all available marketplace custom Agents."
+            "Recall words or short phrases submitted together for one search. "
+            "Pass [] to list all available marketplace custom Agents."
         ),
         max_length=10,
     )

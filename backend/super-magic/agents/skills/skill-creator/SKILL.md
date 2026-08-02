@@ -25,7 +25,7 @@ Assess where the user is and jump in from there.
 
 Tools in SKILL.md fall into two categories with different formats:
 
-1. **Tools listed in `references/super-magic-tools.md`**: These run inside Python code snippets (via `run_sdk_snippet`) and must be shown as Python code:
+1. **Tools listed in `references/system-tools.md`**: These run inside Python code snippets (via `run_sdk_snippet`) and must be shown as Python code:
 
 ```python
 from sdk.tool import tool
@@ -45,10 +45,10 @@ if result.ok and result.data:
 read_files(files=[{"file_path": "path/to/file.md"}])
 ```
 
-Before specifying tools in the skill, read the reference file `references/super-magic-tools.md` for the full list of available tools and usage examples.
+Before specifying tools in the skill, read the reference file `references/system-tools.md` for the full list of available tools and usage examples.
 
-Common tool categories — quick reference (see `references/super-magic-tools.md` for details and examples):
-- Web search & fetch: `web_search`, `read_webpages_as_markdown`, `download_from_url`, `download_from_urls`
+Common tool categories — quick reference (see `references/system-tools.md` for details and examples):
+- Web search & fetch: `web_search`, `read_webpages_as_markdown`; external file downloads use the `download` skill with `run_sdk_snippet`
 - Vision: `visual_understanding`, `visual_understanding_webpage`, `video_understanding`
 - Code execution: `shell_exec`, `run_python_snippet`
 - Image generation & search: `generate_images`, `image_search`
@@ -276,7 +276,7 @@ This project uses the `using-llm` skill for description evaluation:
 3. Test different description versions, compare trigger rates
 4. Update SKILL.md frontmatter with the best-performing description
 
-See `references/super-magic-tools.md` for the detailed procedure.
+See `references/system-tools.md` for the detailed procedure.
 
 ---
 
@@ -347,5 +347,5 @@ Optional: `python scripts/upload_skill.py <path> --name-zh "..." --name-en "..."
 
 ## Reference Files
 
-- `references/super-magic-tools.md` — Detailed descriptions and Python call examples for all available project tools
+- `references/system-tools.md` — Detailed descriptions and Python call examples for all available project tools
 - `references/schemas.md` — JSON schemas for evals.json, grading.json, etc.

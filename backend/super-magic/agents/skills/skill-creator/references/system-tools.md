@@ -1,4 +1,4 @@
-# Super Magic Tools Reference
+# System Tools
 
 This document lists the tools available to AI in super-magic skills, with descriptions, parameter schemas, and Python call examples.
 
@@ -75,37 +75,22 @@ result = tool.call('read_webpages_as_markdown', {
 })
 ```
 
-### download_from_url
-
-Download a file from a URL to a local path. Supports redirects and auto-creates directories.
-
-**Schema:**
-
-```json
-{
-  "url": "string (required) — File URL, supports HTTP/HTTPS",
-  "file_path": "string (required) — Local save path (including filename); directories are auto-created"
-}
-```
-
-```python
-from sdk.tool import tool
-
-result = tool.call('download_from_url', {
-    "url": "https://example.com/data.csv",
-    "file_path": ".workspace/data/data.csv"
-})
-```
-
 ### download_from_urls
 
-Batch download files from multiple URLs. Existing target files are automatically overwritten.
+Code Mode-only tool for reliable single or batch downloads. Use the built-in `download` skill for the complete workflow. Do not add this tool or the internal `download_from_url` tool to an Agent `tools:` list.
 
 **Schema:**
 
 ```json
 {
-  "downloads_xml": "string (required) — XML-formatted batch download configuration, see example below"
+  "downloads": [
+    {
+      "url": "string (required)",
+      "file_path": "string (required)",
+      "headers": "object (optional)",
+      "overwrite": "boolean (optional, default true)"
+    }
+  ]
 }
 ```
 
@@ -113,17 +98,12 @@ Batch download files from multiple URLs. Existing target files are automatically
 from sdk.tool import tool
 
 result = tool.call('download_from_urls', {
-    "downloads_xml": """<downloads>
-    <download>
-        <url>https://example.com/a.csv</url>
-        <file_path>.workspace/data/a.csv</file_path>
-    </download>
-    <download>
-        <url>https://example.com/b.csv</url>
-        <file_path>.workspace/data/b.csv</file_path>
-    </download>
-</downloads>"""
+    "downloads": [
+        {"url": "https://example.com/a.csv", "file_path": "data/a.csv"},
+        {"url": "https://example.com/b.csv", "file_path": "data/b.csv"},
+    ]
 })
+print(result.content)
 ```
 
 ---

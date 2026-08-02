@@ -39,7 +39,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\InitializationMetadataD
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageMetadata;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicContext;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicProductContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\UserInfoValueObject;
 use Dtyq\SuperMagic\Domain\SuperAgent\Exception\WorkspaceReadyTimeoutException;
@@ -115,8 +115,12 @@ class AgentDomainService
         }
         $authToken = $dataIsolation->getUserAuthorizationToken() ?? '';
         // todo 初始化数据, 后续有些参数需要精简去掉
-        $superMagicContext = $this->buildSuperMagicContext($projectEntity, $topicEntity, $sandboxId);
-        $agentInitContext = AgentInitContext::createDefault($superMagicContext);
+        $superMagicProductContext = $this->buildSuperMagicProductContext(
+            $projectEntity,
+            $topicEntity,
+            $sandboxId
+        );
+        $agentInitContext = AgentInitContext::createDefault($superMagicProductContext);
         $agentInitContext->setMessageId((string) IdGenerator::getSnowId());
         $agentInitContext->setUserId($dataIsolation->getCurrentUserId()); // 待废弃
         $agentInitContext->setProjectId((string) $projectEntity->getId()); // 待废弃
@@ -704,7 +708,7 @@ class AgentDomainService
         $constraintText = $this->getPromptConstraint($taskContext);
         $prompt = $userRequest . $constraintText;
 
-        $superMagicContext = $this->buildCurrentSuperMagicContext($taskContext);
+        $superMagicProductContext = $this->buildCurrentSuperMagicProductContext($taskContext);
 
         // 构建 metadata（使用公共方法）
         $initMetadata = new InitializationMetadataDTO();
@@ -730,7 +734,7 @@ class AgentDomainService
             dynamicConfig: $taskDynamicConfig,
             metadata: $messageMetadata->toArray(),
             agent: ! empty($agentProfile) ? $agentProfile : null,
-            superMagicContext: $superMagicContext,
+            superMagicProductContext: $superMagicProductContext,
         );
 
         $result = $this->agent->sendChatMessage($dataIsolation, $taskContext->getSandboxId(), $chatMessage);
@@ -1418,12 +1422,12 @@ class AgentDomainService
         $metadata['sandbox_id'] = $sandboxId;
         $initContext->setMetadata($metadata);
 
-        $initContext->setSuperMagicContext(
-            $initContext->getSuperMagicContext()->withSandboxId($sandboxId)
+        $initContext->setSuperMagicProductContext(
+            $initContext->getSuperMagicProductContext()->withSandboxId($sandboxId)
         );
     }
 
-    private function buildCurrentSuperMagicContext(TaskContext $taskContext): SuperMagicContext
+    private function buildCurrentSuperMagicProductContext(TaskContext $taskContext): SuperMagicProductContext
     {
         $topicEntity = $this->topicRepository->getTopicById($taskContext->getTopicId());
         if ($topicEntity === null) {
@@ -1439,18 +1443,18 @@ class AgentDomainService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
         }
 
-        return $this->buildSuperMagicContext(
+        return $this->buildSuperMagicProductContext(
             projectEntity: $projectEntity,
             topicEntity: $topicEntity,
             sandboxId: $taskContext->getSandboxId(),
         );
     }
 
-    private function buildSuperMagicContext(
+    private function buildSuperMagicProductContext(
         ProjectEntity $projectEntity,
         TopicEntity $topicEntity,
         string $sandboxId,
-    ): SuperMagicContext {
+    ): SuperMagicProductContext {
         if ($topicEntity->getProjectId() !== $projectEntity->getId()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
         }
@@ -1468,7 +1472,7 @@ class AgentDomainService
             }
         }
 
-        return SuperMagicContext::fromEntities(
+        return SuperMagicProductContext::fromEntities(
             projectEntity: $projectEntity,
             topicEntity: $topicEntity,
             workspaceEntity: $workspaceEntity,

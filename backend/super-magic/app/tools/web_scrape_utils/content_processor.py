@@ -57,7 +57,7 @@ def clean_noise_content(content: str, url: str) -> str:
             replacement = f"\n\n---\n\n⚠️ **检测到大型 PDF 文件内容** (约 {size_kb:.1f} KB)\n\n"
             replacement += "此 URL 指向一个 PDF 文件，但返回了 base64 编码的原始数据。\n\n"
             replacement += "**建议操作**：\n"
-            replacement += "1. 先使用 `download_from_url` 工具下载 PDF 文件到本地\n"
+            replacement += "1. Load the `download` skill and download the PDF through its Code Mode workflow.\n"
             replacement += "2. 然后先探测文档结构，再按范围提取 Markdown chunks：\n"
             replacement += "   ```\n"
             replacement += "   {\n"
@@ -71,7 +71,7 @@ def clean_noise_content(content: str, url: str) -> str:
             replacement = f"\n\n---\n\n⚠️ **检测到 Base64 编码内容** (约 {size_kb:.1f} KB)\n\n"
             replacement += "此内容包含大量 base64 编码数据（可能是嵌入的图片或其他二进制文件）。\n\n"
             replacement += "为避免传输大量无意义数据，已省略显示。如需处理此文件，请考虑：\n"
-            replacement += "1. 使用 `download_from_url` 工具先下载文件到本地\n"
+            replacement += "1. Load the `download` skill and download the file through its Code Mode workflow.\n"
             replacement += "2. 先探测文档结构，再使用结构化提取工具处理已下载的文件\n\n---\n\n"
 
         logger.info(f"检测到并替换了 base64 内容: URL={url}, 大小={size_kb:.1f}KB, 类型={'PDF' if is_pdf else '未知'}")

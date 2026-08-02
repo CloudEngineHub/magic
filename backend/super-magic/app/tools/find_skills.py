@@ -28,7 +28,7 @@ from app.core.skill_utils.search_service import (
     SearchSelectionMode,
 )
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 logger = get_logger(__name__)
@@ -53,12 +53,16 @@ class FindSkillsParams(BaseToolParams):
     keywords: list[_SearchKeyword] = Field(
         default_factory=list,
         max_length=_MAX_KEYWORDS,
-        description=(
-            "<!--zh: 搜索关键词或能力短语；每个关键词用于独立召回并归并候选。"
-            "完整需求必须写入 query。-->\n"
-            "Search keywords or capability phrases. Each keyword is used for recall and "
-            "the candidates are merged. Put the complete requirement in query."
-        ),
+        description="""<!--zh
+首轮一次提交 2 至 4 个高信息量召回短词或短语，以用户请求使用的语言为主。
+只有候选名称、常用行业术语或目标来源可能使用其它语言时才补充；英文请求通常只使用英文，日文、韩文及其它语言同理优先使用用户语言。
+短名称或缩写可能存在大小写差异时加入常见形式，但不要枚举普通长短语或堆叠重叠近义词。完整需求必须写入 query。
+-->
+On the first search, submit two to four high-information recall words or phrases together.
+Use the user's request language by default. Add another language only when candidate names, common industry terminology, or the target source is likely to use it.
+English requests normally stay English-only; Japanese, Korean, and other requests should likewise use the user's language first.
+Include common case forms when a short name or acronym may vary, but do not enumerate ordinary phrases or add overlapping synonyms.
+Put the complete requirement in query.""",
     )
     query: str = Field(
         min_length=1,
@@ -117,7 +121,7 @@ class FindSkillsParams(BaseToolParams):
         return []
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class FindSkillsTool(BaseTool[FindSkillsParams]):
     """<!--zh
     按搜索范围查找可用 Skill Candidate。local 只查本机已可直接读取的 Skill；

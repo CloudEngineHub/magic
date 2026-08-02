@@ -10,7 +10,6 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
-  - run_python_snippet
   - write_file
   - edit_file
   - edit_file_range
@@ -19,11 +18,11 @@ tools:
   - delete_files
   - generate_images
   - read_webpages_as_markdown
-  - download_from_urls
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
   workspace_skills: "*"
 ---

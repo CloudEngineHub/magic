@@ -5,13 +5,11 @@ tools:
   - visual_understanding
   - video_understanding
   - image_search
-  - download_from_urls
   - generate_images
   - list_dir
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - shell_await
   - write_file
@@ -25,6 +23,7 @@ skills:
   system_skills:
     - name: subagents
     - name: browser
+    - name: download
     - name: share
     - name: skill-vetter
     - name: using-mcp

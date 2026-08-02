@@ -34,7 +34,7 @@ from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.sdk_call_registry import SdkCallRegistry, SdkCallStatus, SdkCallSummary
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.core import BaseToolParams, tool
+from app.tools.core import AutoMount, BaseToolParams, tool
 from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
@@ -77,7 +77,7 @@ Script working directory. Defaults to the current workspace. Relative paths reso
     )
 
 
-@tool()
+@tool(auto_mount=AutoMount.CODE_EXECUTION)
 class RunSdkSnippet(AbstractFileTool[RunSdkSnippetParams]):
     """<!--zh: 执行通过 SDK 调用工具或 MCP 的 Code Mode Python 脚本，普通 Python 请使用 run_python_snippet。-->
     Run a Code Mode Python script that calls tools or MCP via SDK. Use run_python_snippet for plain Python.

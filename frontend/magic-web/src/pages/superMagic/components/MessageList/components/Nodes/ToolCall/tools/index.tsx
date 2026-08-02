@@ -21,6 +21,11 @@ export const ToolsMap: Record<string, ComponentType<any>> = {
 			default: module.ToolProgress,
 		})),
 	),
+	download_from_urls: lazy(() =>
+		import("./ToolProgress").then((module) => ({
+			default: module.ToolProgress,
+		})),
+	),
 	video_generation_progress: lazy(() =>
 		import("./ToolProgress").then((module) => ({
 			default: module.ToolProgress,

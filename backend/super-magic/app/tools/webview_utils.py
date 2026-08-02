@@ -7,7 +7,6 @@
 - 智能文件名生成
 """
 
-import asyncio
 import os
 import datetime
 import re
@@ -24,18 +23,12 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.utils.file import generate_safe_filename_with_timestamp
 from agentlang.llms.factory import LLMFactory
-from app.path_manager import PathManager
 
 logger = get_logger(__name__)
 
 # ====================
 # 常量定义
 # ====================
-
-# NOTE: The following directory constants are preserved for potential future use.
-# Currently, webpage content is no longer saved to .webview-reports directory.
-MARKDOWN_RECORDS_DIR_NAME = ".webview-reports"
-MARKDOWN_RECORDS_DIR = PathManager.get_workspace_dir() / MARKDOWN_RECORDS_DIR_NAME
 
 # 搜索引擎 Referer 配置（用于人类行为模拟）
 SEARCH_ENGINE_REFERERS = [
@@ -251,22 +244,45 @@ def generate_search_engine_referer(target_url: str) -> str:
         logger.warning(f"生成referer时发生错误: {e}, 使用默认Google搜索")
         return _generate_google_url("search")
 
-# ====================
-# 文件管理（保留用于未来可能的其他用途）
-# ====================
-# NOTE: The following file management functions are preserved for potential future use.
-# Currently, webpage content is no longer saved to disk (removed to improve performance
-# as 99.9% of saved files were never used in practice).
+async def goto_external_website_with_referer(browser, url: str, page_id: Optional[str] = None, wait_until: str = "domcontentloaded"):
+    """访问外部网站并设置搜索引擎 referer，模拟人类浏览行为
 
-async def get_or_create_markdown_records_dir() -> Path:
-    """确保markdown记录目录存在并返回该目录路径
+    Args:
+        browser: MagicBrowser 实例
+        url: 目标网站URL
+        page_id: 页面ID，如果为None则创建新页面
+        wait_until: 等待页面加载状态
 
     Returns:
-        Path: markdown记录目录的路径
+        MagicBrowserResult: 导航结果
     """
-    # 使用异步方式创建目录
-    await asyncio.to_thread(MARKDOWN_RECORDS_DIR.mkdir, exist_ok=True)
-    return MARKDOWN_RECORDS_DIR
+    try:
+        # 生成智能 referer
+        referer = generate_search_engine_referer(url)
+
+        # 获取或创建页面
+        if page_id is None:
+            # 创建新页面
+            page_id = await browser.new_page()
+
+        # 获取页面对象
+        page = await browser.get_page_by_id(page_id)
+        if not page:
+            logger.error(f"无法获取页面: {page_id}")
+            return await browser.goto(page_id, url, wait_until)
+
+        # 设置 referer 头
+        await page.set_extra_http_headers({"Referer": referer})
+        logger.info(f"已为页面 {page_id} 设置referer: {referer}")
+
+        # 执行导航
+        result = await browser.goto(page_id, url, wait_until)
+        return result
+
+    except Exception as e:
+        logger.warning(f"设置人类行为模拟失败，回退到普通导航: {e}")
+        # 如果设置referer失败，回退到普通导航
+        return await browser.goto(page_id, url, wait_until)
 
 async def async_write_file(file_path: Path, content: str, encoding: str = "utf-8") -> None:
     """异步写入文件内容

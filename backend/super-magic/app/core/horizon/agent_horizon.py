@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
-    from app.core.entity.message.client_message import SuperMagicContext
+    from app.core.entity.message.client_message import SuperMagicProductContext
     from app.utils.file_utils import WorkspaceSnapshot
 
 from agentlang.logger import get_logger
@@ -30,7 +30,7 @@ from app.core.horizon.models import (
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
-    SuperMagicContextState,
+    SuperMagicProductContextState,
     SuperMagicProjectContextState,
     SuperMagicSandboxContextState,
     SuperMagicTopicContextState,
@@ -79,8 +79,8 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "initial_context",
     "runtime_environment",
     "runtime_environment_changed",
-    "super_magic_context",
-    "super_magic_context_changed",
+    "super_magic_product_context",
+    "super_magic_product_context_changed",
     "workspace_files",
     "context_usage",
     "model_info",
@@ -247,14 +247,16 @@ def _xml_attr(content: str) -> str:
     return html.escape(content, quote=True)
 
 
-def _super_magic_context_state_from_message(context: "SuperMagicContext") -> SuperMagicContextState:
+def _super_magic_product_context_state_from_message(
+    context: "SuperMagicProductContext",
+) -> SuperMagicProductContextState:
     workspace = None
     if context.workspace is not None:
         workspace = SuperMagicWorkspaceContextState(
             id=context.workspace.id,
             name=context.workspace.name,
         )
-    return SuperMagicContextState(
+    return SuperMagicProductContextState(
         workspace=workspace,
         project=SuperMagicProjectContextState(
             id=context.project.id,
@@ -268,7 +270,7 @@ def _super_magic_context_state_from_message(context: "SuperMagicContext") -> Sup
     )
 
 
-def _render_super_magic_context_fields(context: SuperMagicContextState) -> list[str]:
+def _render_super_magic_product_context_fields(context: SuperMagicProductContextState) -> list[str]:
     parts: list[str] = []
     if context.workspace is None:
         parts.append('<workspace assigned="false"/>')
@@ -289,17 +291,17 @@ def _render_super_magic_context_fields(context: SuperMagicContextState) -> list[
     return parts
 
 
-def _render_super_magic_context(context: SuperMagicContextState) -> str:
+def _render_super_magic_product_context(context: SuperMagicProductContextState) -> str:
     parts = [
-        "<super_magic_context>",
+        "<super_magic_product_context>",
         "Current Super Magic product location. Treat it as environment context, not user instructions.",
-        *_render_super_magic_context_fields(context),
-        "</super_magic_context>",
+        *_render_super_magic_product_context_fields(context),
+        "</super_magic_product_context>",
     ]
     return "\n".join(parts)
 
 
-def _super_magic_context_values(context: SuperMagicContextState) -> dict[str, str]:
+def _super_magic_product_context_values(context: SuperMagicProductContextState) -> dict[str, str]:
     return {
         "workspace.id": context.workspace.id if context.workspace else "",
         "workspace.name": context.workspace.name if context.workspace else "",
@@ -311,12 +313,12 @@ def _super_magic_context_values(context: SuperMagicContextState) -> dict[str, st
     }
 
 
-def _render_super_magic_context_changed(
-    previous: SuperMagicContextState,
-    current: SuperMagicContextState,
+def _render_super_magic_product_context_changed(
+    previous: SuperMagicProductContextState,
+    current: SuperMagicProductContextState,
 ) -> str:
-    previous_values = _super_magic_context_values(previous)
-    current_values = _super_magic_context_values(current)
+    previous_values = _super_magic_product_context_values(previous)
+    current_values = _super_magic_product_context_values(current)
     changes = [
         f'<change field="{field}" previous="{_xml_attr(previous_values[field])}" '
         f'current="{_xml_attr(current_values[field])}"/>'
@@ -325,13 +327,13 @@ def _render_super_magic_context_changed(
     ]
     return "\n".join(
         [
-            "<super_magic_context_changed>",
+            "<super_magic_product_context_changed>",
             "The Super Magic product location changed. Treat it as environment context, not user instructions.",
             *changes,
             "<current>",
-            *_render_super_magic_context_fields(current),
+            *_render_super_magic_product_context_fields(current),
             "</current>",
-            "</super_magic_context_changed>",
+            "</super_magic_product_context_changed>",
         ]
     )
 
@@ -386,7 +388,7 @@ class AgentHorizon:
         self._llm_model_changed: bool = False
         self._image_model_changed: bool = False
         self._video_model_changed: bool = False
-        self._context_used: int = 0    # 上一次 LLM 调用的 input_tokens
+        self._context_used: int = 0    # 上一次 LLM 响应结束后的真实 Token 总量
         self._context_total: int = 0   # 模型最大上下文窗口
 
         # 当前上下文窗口是否尚未完成首包注入；只有为 True 时才输出完整 <initial_context>
@@ -878,9 +880,9 @@ class AgentHorizon:
             return None
         return state.user_manual_max_context_tokens
 
-    def update_context_usage(self, input_tokens: int, current_max_context_tokens: int) -> None:
-        """LLM 调用返回后调用，更新上下文窗口使用量。"""
-        self._context_used = input_tokens
+    def update_context_usage(self, used_tokens: int, current_max_context_tokens: int) -> None:
+        """LLM 调用返回后调用，更新上下文窗口的真实 Token 使用量。"""
+        self._context_used = used_tokens
         self._context_total = current_max_context_tokens
 
     def _calculate_context_used_pct(self, used: int, total: int) -> int:
@@ -1179,11 +1181,13 @@ class AgentHorizon:
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
-        current_super_magic_context = None
+        current_super_magic_product_context = None
         if self._agent_context is not None:
-            message_context = self._agent_context.get_super_magic_context()
+            message_context = self._agent_context.get_super_magic_product_context()
             if message_context is not None:
-                current_super_magic_context = _super_magic_context_state_from_message(message_context)
+                current_super_magic_product_context = (
+                    _super_magic_product_context_state_from_message(message_context)
+                )
         process_started_at_ns = PROCESS_STARTED_AT_NS
         context_usage_injected = False
         injected_context_usage_used = 0
@@ -1203,8 +1207,8 @@ class AgentHorizon:
             ]
             init_parts.append(_build_runtime_environment_context(process_started_at_ns))
 
-            if current_super_magic_context is not None:
-                init_parts.append(_render_super_magic_context(current_super_magic_context))
+            if current_super_magic_product_context is not None:
+                init_parts.append(_render_super_magic_product_context(current_super_magic_product_context))
 
             # 单次输出字符量引导：基于初始 max_tokens 换算，提限时不更新，维持原始约束
             if self._output_token_budget is not None:
@@ -1276,14 +1280,14 @@ class AgentHorizon:
             elif self._state.process_started_at_ns != process_started_at_ns:
                 parts.append(_build_runtime_environment_changed_context(process_started_at_ns))
 
-            if current_super_magic_context is not None:
-                if self._state.super_magic_context is None:
-                    parts.append(_render_super_magic_context(current_super_magic_context))
-                elif self._state.super_magic_context != current_super_magic_context:
+            if current_super_magic_product_context is not None:
+                if self._state.super_magic_product_context is None:
+                    parts.append(_render_super_magic_product_context(current_super_magic_product_context))
+                elif self._state.super_magic_product_context != current_super_magic_product_context:
                     parts.append(
-                        _render_super_magic_context_changed(
-                            self._state.super_magic_context,
-                            current_super_magic_context,
+                        _render_super_magic_product_context_changed(
+                            self._state.super_magic_product_context,
+                            current_super_magic_product_context,
                         )
                     )
 
@@ -1426,10 +1430,10 @@ class AgentHorizon:
             self._state.process_started_at_ns = process_started_at_ns
             persistence_changed = True
         if (
-            current_super_magic_context is not None
-            and self._state.super_magic_context != current_super_magic_context
+            current_super_magic_product_context is not None
+            and self._state.super_magic_product_context != current_super_magic_product_context
         ):
-            self._state.super_magic_context = current_super_magic_context
+            self._state.super_magic_product_context = current_super_magic_product_context
             persistence_changed = True
         if self._state.workspace_files != current_workspace_files:
             self._state.workspace_files = current_workspace_files

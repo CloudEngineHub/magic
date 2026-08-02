@@ -5,7 +5,6 @@ tools:
   - image_search
   - visual_understanding
   - video_understanding
-  - convert_pdf
   - list_dir
   - read_files
   - write_file
@@ -18,12 +17,11 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
-  - download_from_urls
-  - run_python_snippet
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
     - name: user-info
     - name: develop-data-analysis-dashboard

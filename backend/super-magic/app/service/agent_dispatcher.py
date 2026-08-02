@@ -189,7 +189,7 @@ class AgentDispatcher(Base):
         from app.utils.init_client_message_util import InitClientMessageUtil
         await InitClientMessageUtil.save_init_client_message(init_message)
 
-        self.agent_context.set_super_magic_context(init_message.super_magic_context)
+        self.agent_context.set_super_magic_product_context(init_message.super_magic_product_context)
 
         # 阶段二：init_client_message.json 已就绪，触发 magic-service 模型列表加载
         try:

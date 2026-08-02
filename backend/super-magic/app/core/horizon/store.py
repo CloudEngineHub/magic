@@ -28,7 +28,7 @@ from app.core.horizon.models import (
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
-    SuperMagicContextState,
+    SuperMagicProductContextState,
     VideoModelState,
 )
 from app.utils.async_file_utils import (
@@ -156,7 +156,11 @@ def _encode_state(state: HorizonState) -> dict:
         "llm_model_id": state.llm_model_id,
         "llm_model_name": state.llm_model_name,
         "process_started_at_ns": state.process_started_at_ns,
-        "super_magic_context": state.super_magic_context.to_dict() if state.super_magic_context else None,
+        "super_magic_product_context": (
+            state.super_magic_product_context.to_dict()
+            if state.super_magic_product_context
+            else None
+        ),
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
         "workspace_entries": state.workspace_entries,
@@ -191,7 +195,7 @@ def _decode_state(data: dict) -> HorizonState:
         "llm_model_id",
         "llm_model_name",
         "process_started_at_ns",
-        "super_magic_context",
+        "super_magic_product_context",
         "user_preferred_language",
         "workspace_files",
         "workspace_entries",
@@ -232,7 +236,9 @@ def _decode_state(data: dict) -> HorizonState:
     state.llm_model_id = data.get("llm_model_id", "")
     state.llm_model_name = data.get("llm_model_name", "")
     state.process_started_at_ns = int(data.get("process_started_at_ns", 0) or 0)
-    state.super_magic_context = SuperMagicContextState.from_dict(data.get("super_magic_context"))
+    state.super_magic_product_context = SuperMagicProductContextState.from_dict(
+        data.get("super_magic_product_context")
+    )
     state.user_preferred_language = data.get("user_preferred_language", "")
     state.workspace_files = data.get("workspace_files", "")
     state.workspace_entries = data.get("workspace_entries", [])

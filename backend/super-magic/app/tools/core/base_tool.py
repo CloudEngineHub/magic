@@ -138,6 +138,11 @@ class BaseTool(Generic[T], ABC):
                 f"{cls.__name__} declares 'code_mode_only' in the class body. "
                 "Use @tool(code_mode_only=True) instead."
             )
+        if "auto_mount" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'auto_mount' in the class body. "
+                "Use @tool(auto_mount=AutoMount.<TYPE>) instead."
+            )
 
         logger = get_logger(__name__)
 

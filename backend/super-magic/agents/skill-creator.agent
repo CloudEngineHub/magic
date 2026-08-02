@@ -8,7 +8,6 @@ tools:
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - shell_await
   - write_file

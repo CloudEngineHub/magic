@@ -47,10 +47,6 @@
         "zh_CN": "删除文件",
         "en_US": "Delete file"
     },
-    "convert_pdf": {
-        "zh_CN": "转换PDF",
-        "en_US": "Convert PDF"
-    },
     "inspect_document": {
         "zh_CN": "探测文档",
         "en_US": "Inspect document"

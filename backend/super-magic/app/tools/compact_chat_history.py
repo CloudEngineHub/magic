@@ -9,7 +9,7 @@ from app.magic.compact_user_input_references import (
     format_user_input_reference_block,
     restore_preserved_user_inputs,
 )
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.tools.read_skills_hooks import (
     SkillLoadedHookContext,
     register_skill_loaded_hook,
@@ -42,7 +42,7 @@ class CompactChatHistoryParams(BaseToolParams):
     )
 
 
-@tool()
+@tool(auto_mount=AutoMount.ALWAYS)
 class CompactChatHistory(BaseTool[CompactChatHistoryParams]):
     """<!--zh: 当对话变得过长时压缩当前聊天历史，在用户告知你之前不要使用此工具-->
 Compress the current chat history when the conversation becomes too long, DO NOT use this tool before user tell you to do so."""

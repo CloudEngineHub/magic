@@ -37,18 +37,30 @@ Do not delegate when:
 from sdk.tool import tool
 
 result = tool.call("find_agents", {
-    "keywords": ["<short capability phrases in the user's language>"],
+    "keywords": [
+        "<core term in the user's language>",
+        "<distinct variant in the user's language>",
+        "<optional common term from another relevant language>",
+    ],
     "query": "<the user's complete requirement in the user's language>",
     "limit": 5,
 })
 print(result.content)
 ```
 
-- `keywords`: short capability words or phrases in the user's language. Do not put the complete requirement in an item or split it mechanically on spaces.
+- `keywords`: build the complete recall list before the first call and submit it once.
+  - Infer the user's language from the request and use that language for the main terms.
+  - Usually use two to four high-information words or phrases with distinct recall value.
+  - Add a term from another language only when candidate names, common industry terminology, or the target search source is likely to use it. English is often useful for product names and technical acronyms, but it is not mandatory.
+  - English requests normally use English terms only. Japanese requests should use Japanese terms first, Korean requests should use Korean terms first, and the same rule applies to every other language. Preserve relevant terms when the user mixes languages.
+  - Prefer short terms that may appear directly in candidate names.
+  - For short names or acronyms, include common case forms when search sources may treat them differently.
+  - Do not enumerate case forms for ordinary phrases, add overlapping synonyms only to increase the count, put the complete requirement in an item, or call `find_agents` once per keyword.
 - `query`: the user's complete requirement in the user's language, used to select more relevant candidates.
 - `limit`: choose based on the task. The default is `5`; valid values are `1` through `20`.
 
-Read `result.content`, choose by `code`, `name`, and `description`, then pass the selected `SMA-...` code directly as `call_subagent.agent_name`. If no candidates are returned, retry with shorter, broader capability phrases. To browse all currently available marketplace Agents, explicitly pass `keywords=[]`.
+Read `result.content`, choose by `code`, `name`, and `description`, then pass the selected `SMA-...` code directly as `call_subagent.agent_name`.
+Do not automatically split or retry the same search intent when no candidates are returned. Use `keywords=[]` only when the user explicitly asks to browse all currently available marketplace Agents.
 
 ## Tool: call_subagent
 

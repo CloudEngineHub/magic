@@ -1,478 +1,591 @@
-"""
-批量URL文件下载工具
-
-该工具支持通过XML配置批量下载多个文件，内部复用 DownloadFromUrl 工具的下载逻辑。
-"""
-
-from app.i18n import i18n
 import asyncio
-import json
-import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+import os
+import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
-from agentlang.tools.tool_result import ToolResult
+from agentlang.event import EventPairType, get_correlation_manager
+from agentlang.event.data import PendingToolCallEventData
 from agentlang.event.event import EventType
 from agentlang.logger import get_logger
+from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
-from app.tools.core import BaseToolParams, BaseTool, tool
+from app.i18n import i18n
+from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.tools.download_from_url import DownloadFromUrl, DownloadFromUrlParams
+from app.tools.download_utils.drivers.base import DownloadPhase, DownloadProgress
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 
 logger = get_logger(__name__)
 
+MAX_CONCURRENT_DOWNLOADS = 3
+PROGRESS_REPORT_INTERVAL_SECONDS = 0.5
+DOWNLOAD_CODE_MODE_MIN_TIMEOUT_SECONDS = 24 * 60 * 60
+TRANSPORT_MANAGED_HEADERS = {"range", "if-range"}
 
-class DownloadFromUrlsParams(BaseToolParams):
-    downloads_xml: str = Field(
-        ...,
-        description="""<!--zh
-批量下载任务XML配置，示例：
-<downloads>
-    <download>
-        <url>https://example.com/company-logo.png</url>
-        <file_path>项目资料/品牌素材/公司logo.png</file_path>
-    </download>
-    <download>
-        <url>https://api.data.gov/statistics/2025/q1.json</url>
-        <file_path>数据分析/政府统计/2025年第一季度数据.json</file_path>
-    </download>
-    <download>
-        <url>https://arxiv.org/pdf/2401.12345.pdf</url>
-        <file_path>研究论文/机器学习/transformer优化技术.pdf</file_path>
-    </download>
-</downloads>
+SdkSnippetTimeoutRegistry.register(
+    "download_from_urls",
+    min_timeout=DOWNLOAD_CODE_MODE_MIN_TIMEOUT_SECONDS,
+)
 
-字段说明：
-- url: 要下载的文件URL地址
-- file_path: 保存路径，建议使用有意义的文件夹结构和文件名
-  * 根据用户偏好语言命名（中文/英文/日文等）
-  * 避免将文件直接放在根目录
-  * 使用清晰的分类文件夹
-  * 文件名应描述内容而非使用原始URL文件名
--->
-Batch download tasks XML configuration, example:
-<downloads>
-    <download>
-        <url>https://example.com/company-logo.png</url>
-        <file_path>project-materials/brand-assets/company-logo.png</file_path>
-    </download>
-    <download>
-        <url>https://api.data.gov/statistics/2025/q1.json</url>
-        <file_path>data-analysis/government-stats/2025-q1-data.json</file_path>
-    </download>
-    <download>
-        <url>https://arxiv.org/pdf/2401.12345.pdf</url>
-        <file_path>research-papers/machine-learning/transformer-optimization.pdf</file_path>
-    </download>
-</downloads>
 
-Fields:
-- url: File URL to download
-- file_path: Save path, recommend using meaningful folder structure and filenames
-  * Name according to user preferred language (Chinese/English/Japanese etc.)
-  * Avoid placing files directly in root directory
-  * Use clear categorization folders
-  * Filenames should describe content rather than using original URL filename"""
+class DownloadTask(BaseModel):
+    url: str = Field(..., description="HTTP or HTTPS file URL.")
+    file_path: str = Field(..., description="Workspace-relative destination path including the file name.")
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional request header overrides. Usually omit this field.",
+    )
+    overwrite: bool = Field(
+        default=True,
+        description="Replace an existing complete target file. Usually omit this field.",
     )
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        normalized = value.strip()
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("url must be a valid HTTP or HTTPS URL")
+        return normalized
 
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("file_path must not be empty")
+        return normalized
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for raw_name, raw_value in headers.items():
+            name = raw_name.strip()
+            if not name:
+                raise ValueError("header names must not be empty")
+            if "\r" in name or "\n" in name or "\r" in raw_value or "\n" in raw_value:
+                raise ValueError("header names and values must not contain line breaks")
+            if name.lower() in TRANSPORT_MANAGED_HEADERS:
+                raise ValueError(f"{name} is managed by the download engine and must not be provided")
+            normalized[name] = raw_value
+        return normalized
+
+
+class DownloadFromUrlsParams(BaseToolParams):
+    downloads: list[DownloadTask] = Field(
+        ...,
+        min_length=1,
+        description="Files to download. Use one item per destination path.",
+    )
+
+    @model_validator(mode="after")
+    def validate_declared_destinations(self) -> "DownloadFromUrlsParams":
+        normalized_paths = [str(Path(item.file_path)) for item in self.downloads]
+        if len(set(normalized_paths)) != len(normalized_paths):
+            raise ValueError("downloads must not contain duplicate destination paths")
+        return self
+
+
+@dataclass
+class BatchItemProgress:
+    downloaded_bytes: int = 0
+    total_bytes: int | None = None
+    resumed: bool = False
+    retry_count: int = 0
+    status: str = "pending"
+
+
+@dataclass
+class BatchProgressState:
+    total_files: int
+    items: dict[int, BatchItemProgress] = field(default_factory=dict)
+    completed_files: int = 0
+    last_report_time: float = 0.0
+    last_reported_progress: int | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@dataclass(frozen=True)
 class BatchDownloadResult:
-    """批量下载结果"""
-    def __init__(self):
-        self.results = []  # 存储每个下载任务的结果
-        self.total = 0
-        self.success = 0
-        self.failed = 0
-        self.total_size_bytes = 0
-        self.cache_hits = 0
-        self.cache_misses = 0
+    items: list[dict[str, object]]
+    success: int
+    failed: int
+    skipped: int
+    total_size_bytes: int
 
 
-def _parse_download_requirements_xml(xml_string: str) -> List[Dict[str, Any]]:
-    """解析下载需求XML字符串
-
-    Args:
-        xml_string: XML格式的需求字符串
-
-    Returns:
-        List of download task dictionaries
-
-    Raises:
-        ValueError: XML格式错误或缺少必要字段
-    """
-    try:
-        # 解析XML
-        root = ET.fromstring(xml_string.strip())
-
-        if root.tag != 'downloads':
-            raise ValueError("XML根节点必须是 <downloads>")
-
-        downloads = []
-
-        for download_element in root.findall('download'):
-            # 提取必要字段
-            url_element = download_element.find('url')
-            file_path_element = download_element.find('file_path')
-
-            # 检查必要字段
-            if url_element is None or not url_element.text or not url_element.text.strip():
-                raise ValueError("每个 <download> 必须包含非空的 <url> 字段")
-
-            if file_path_element is None or not file_path_element.text or not file_path_element.text.strip():
-                raise ValueError("每个 <download> 必须包含非空的 <file_path> 字段")
-
-            # 构造下载任务对象
-            download_task = {
-                'url': url_element.text.strip(),
-                'file_path': file_path_element.text.strip(),
-            }
-
-            downloads.append(download_task)
-
-        if not downloads:
-            raise ValueError("至少需要一个 <download> 元素")
-
-        return downloads
-
-    except ET.ParseError as e:
-        raise ValueError(f"XML解析错误: {e}")
-
-
-@tool()
+# Full model-facing usage guidance: agents/skills/download/SKILL.md
+@tool(code_mode_only=True)
 class DownloadFromUrls(BaseTool[DownloadFromUrlsParams]):
-    """<!--zh
-    URL文件下载工具，支持批量下载
-    注意：如果目标文件已存在，将自动覆盖
-    -->
-    URL file download tool with batch download support
-    Note: Will automatically override existing target files
-    """
-
-    def get_prompt_hint(self) -> str:
-        return """<!--zh: 请优先使用本工具下载文件而非优先使用wget或curl，能一次性调用批量下载的就不要重复多次调用本工具，以此实现高效下载-->
-Prioritize using this tool for file downloads over wget or curl. Use batch download in single call rather than multiple calls for efficiency"""
+    """Download one or more external HTTP or HTTPS resources into the workspace."""
 
     async def execute(self, tool_context: ToolContext, params: DownloadFromUrlsParams) -> ToolResult:
-        """
-        执行批量文件下载操作
-
-        Args:
-            tool_context: 工具上下文
-            params: 参数对象，包含批量下载XML配置
-
-        Returns:
-            ToolResult: 包含批量下载结果
-        """
+        downloader = DownloadFromUrl()
         try:
-            # 解析XML配置
-            try:
-                download_tasks = _parse_download_requirements_xml(params.downloads_xml)
-            except ValueError as e:
-                return ToolResult.error(f"XML解析失败: {e}")
-
-            if not download_tasks:
-                return ToolResult.error("下载任务列表为空")
-
-            logger.info(f"开始批量下载: 任务数量={len(download_tasks)}")
-
-            # 创建 DownloadFromUrl 实例用于下载
-            downloader = DownloadFromUrl()
-
-            # 执行批量下载
-            batch_result = await self._execute_batch_downloads(downloader, download_tasks, tool_context)
-
-            # 构建输出结果
-            content_dict = self._build_result_summary(batch_result)
-
-            # 构建详细的技术信息
-            extra_info = {
-                "detailed_results": batch_result.results,
-                "total_size_bytes": batch_result.total_size_bytes,
-                "cache_hits": batch_result.cache_hits,
-                "cache_misses": batch_result.cache_misses
-            }
-
-            content = json.dumps(content_dict, ensure_ascii=False, indent=2)
-            if batch_result.success == 0 and batch_result.failed > 0:
-                return ToolResult.error(content, extra_info=extra_info)
-
-            return ToolResult(
-                content=content,
-                extra_info=extra_info
+            resolved_paths = self._resolve_unique_paths(downloader, params.downloads)
+        except ValueError as exc:
+            return ToolResult.error(
+                f"Invalid download request: {exc}",
+                extra_info={"status": "failed", "detailed_results": []},
             )
 
-        except Exception as e:
-            logger.exception(f"批量下载操作失败: {e}")
-            return ToolResult.error("Batch download operation failed")
+        agent_context = tool_context.get_extension("agent_context")
+        interruption_event = (
+            agent_context.get_interruption_event() if agent_context is not None else None
+        )
+        correlation_id = self._resolve_correlation_id(tool_context, agent_context)
+        progress_state = BatchProgressState(
+            total_files=len(params.downloads),
+            items={index: BatchItemProgress() for index in range(len(params.downloads))},
+        )
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+        keep_alive_task = start_tool_keep_alive(tool_context)
 
-    async def _execute_batch_downloads(self, downloader: DownloadFromUrl, download_tasks: List[Dict[str, Any]], tool_context: ToolContext) -> BatchDownloadResult:
-        """
-        执行批量下载任务
-
-        Args:
-            downloader: DownloadFromUrl 实例
-            download_tasks: 下载任务列表
-            tool_context: 工具上下文，用于事件分发
-
-        Returns:
-            BatchDownloadResult: 批量下载结果
-        """
-        batch_result = BatchDownloadResult()
-        batch_result.total = len(download_tasks)
-
-        # 创建并发任务列表
-        tasks = []
-        for task in download_tasks:
-            # 为每个任务创建参数对象
-            single_params = DownloadFromUrlParams(
-                url=task['url'],
-                file_path=task['file_path']
-            )
-            # 调用 execute_purely 方法
-            tasks.append(self._download_single_with_result(downloader, single_params, task, tool_context))
-
-        # 并发执行所有下载任务
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 处理结果
-        for result in results:
-            if isinstance(result, dict):
-                # 正常结果
-                if result.get("status") == "success":
-                    batch_result.success += 1
-                    batch_result.total_size_bytes += result.get('file_size_bytes', 0)
-
-                    # 统计缓存命中情况
-                    if result.get('from_cache'):
-                        batch_result.cache_hits += 1
-                    else:
-                        batch_result.cache_misses += 1
-                else:
-                    batch_result.failed += 1
-
-                batch_result.results.append(result)
-            else:
-                # 异常情况
-                batch_result.failed += 1
-                error_result = {
-                    "status": "failed",
-                    "error": str(result) if result else "未知错误"
-                }
-                batch_result.results.append(error_result)
-
-        return batch_result
-
-    async def _download_single_with_result(self, downloader: DownloadFromUrl, params: DownloadFromUrlParams, task: Dict[str, Any], tool_context: ToolContext) -> Dict[str, Any]:
-        """
-        下载单个文件并格式化结果
-
-        Args:
-            downloader: DownloadFromUrl 实例
-            params: 下载参数
-            task: 原始任务信息
-            tool_context: 工具上下文，用于事件分发
-
-        Returns:
-            Dict: 格式化的下载结果
-        """
         try:
-            # 调用 DownloadFromUrl 的 execute_purely 方法
-            result = await downloader.execute_purely(params, tool_context=tool_context)
+            await self._dispatch_progress_event(
+                tool_context,
+                correlation_id,
+                progress_state,
+                current_file="",
+                current_progress=None,
+                status="starting",
+                force=True,
+            )
+            results = await asyncio.gather(
+                *(
+                    self._download_one(
+                        downloader=downloader,
+                        task_index=index,
+                        task=task,
+                        resolved_path=resolved_paths[index],
+                        tool_context=tool_context,
+                        interruption_event=interruption_event,
+                        semaphore=semaphore,
+                        progress_state=progress_state,
+                        correlation_id=correlation_id,
+                    )
+                    for index, task in enumerate(params.downloads)
+                )
+            )
+        except asyncio.CancelledError:
+            await self._dispatch_progress_event(
+                tool_context,
+                correlation_id,
+                progress_state,
+                current_file="",
+                current_progress=None,
+                status="cancelled",
+                force=True,
+            )
+            raise
+        finally:
+            stop_tool_keep_alive(keep_alive_task)
+
+        batch_result = self._summarize_results(results)
+        final_status = "completed" if batch_result.failed == 0 else "partial_failed"
+        await self._dispatch_progress_event(
+            tool_context,
+            correlation_id,
+            progress_state,
+            current_file="",
+            current_progress=None,
+            status=final_status,
+            force=True,
+        )
+
+        content = self._build_model_summary(batch_result)
+        extra_info = {
+            "status": final_status,
+            "detailed_results": batch_result.items,
+            "total": len(batch_result.items),
+            "success": batch_result.success,
+            "failed": batch_result.failed,
+            "skipped": batch_result.skipped,
+            "total_size_bytes": batch_result.total_size_bytes,
+        }
+        if batch_result.success == 0 and batch_result.skipped == 0:
+            return ToolResult.error(content, extra_info=extra_info)
+        return ToolResult(content=content, extra_info=extra_info)
+
+    def _resolve_unique_paths(
+        self,
+        downloader: DownloadFromUrl,
+        downloads: list[DownloadTask],
+    ) -> list[Path]:
+        resolved_paths = [
+            downloader.resolve_download_path(task.file_path, task.url) for task in downloads
+        ]
+        normalized = [os.path.normcase(os.path.normpath(str(path))) for path in resolved_paths]
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("multiple downloads resolve to the same destination path")
+        return resolved_paths
+
+    async def _download_one(
+        self,
+        *,
+        downloader: DownloadFromUrl,
+        task_index: int,
+        task: DownloadTask,
+        resolved_path: Path,
+        tool_context: ToolContext,
+        interruption_event: asyncio.Event | None,
+        semaphore: asyncio.Semaphore,
+        progress_state: BatchProgressState,
+        correlation_id: str,
+    ) -> dict[str, object]:
+        async with semaphore:
+            self._raise_if_interrupted(interruption_event)
+
+            async def report(progress: DownloadProgress) -> None:
+                item = progress_state.items[task_index]
+                item.downloaded_bytes = progress.downloaded_bytes
+                item.total_bytes = progress.total_bytes
+                item.resumed = progress.resumed
+                item.retry_count = progress.retry_count
+                item.status = progress.phase.value
+                # 驱动的 COMPLETED 只表示单个文件传输完成；由下方结果处理统一更新
+                # 已处理数量并发送文件级完成事件，避免被误判为整个批次完成。
+                if progress.phase == DownloadPhase.COMPLETED:
+                    return
+                await self._dispatch_progress_event(
+                    tool_context,
+                    correlation_id,
+                    progress_state,
+                    current_file=resolved_path.name,
+                    current_progress=item,
+                    status=progress.phase.value,
+                )
+
+            result = await downloader.execute_purely(
+                DownloadFromUrlParams(url=task.url, file_path=task.file_path),
+                tool_context=tool_context,
+                headers=task.headers,
+                overwrite=task.overwrite,
+                progress_callback=report,
+                interruption_event=interruption_event,
+            )
+
+            extra = result.extra_info or {}
+            status = str(extra.get("status") or ("completed" if result.ok else "failed"))
+            item_progress = progress_state.items[task_index]
+            item_progress.status = status
+            if isinstance(extra.get("file_size"), int):
+                item_progress.downloaded_bytes = int(extra["file_size"])
+                item_progress.total_bytes = int(extra["file_size"])
+            progress_state.completed_files += 1
+            progress_event_status = self._item_result_progress_status(status)
+
+            await self._dispatch_progress_event(
+                tool_context,
+                correlation_id,
+                progress_state,
+                current_file=resolved_path.name,
+                current_progress=item_progress,
+                status=progress_event_status,
+                force=True,
+            )
 
             if result.ok:
-                # 成功
-                extra_info = result.extra_info or {}
                 return {
-                    "url": task['url'],
-                    "file_path": extra_info.get('file_path', task['file_path']),
-                    "status": "success",
-                    "file_size_bytes": extra_info.get('file_size', 0),
-                    "content_type": extra_info.get('content_type', 'unknown'),
-                    "file_exists": extra_info.get('file_exists', False),
-                    "from_cache": extra_info.get('from_cache', False),
-                    "final_url": extra_info.get('url', task['url'])
-                }
-            else:
-                # 失败
-                return {
-                    "url": task['url'],
-                    "file_path": task['file_path'],
-                    "status": "failed",
-                    "error": result.content
+                    "url": task.url,
+                    "file_path": str(extra.get("file_path") or resolved_path),
+                    "status": status,
+                    "file_size_bytes": int(extra.get("file_size") or 0),
+                    "content_type": str(extra.get("content_type") or "application/octet-stream"),
+                    "final_url": str(extra.get("url") or task.url),
+                    "from_cache": bool(extra.get("from_cache", False)),
+                    "resumed": bool(extra.get("resumed", False)),
+                    "retry_count": int(extra.get("retry_count") or 0),
+                    "request_strategy": str(extra.get("request_strategy") or "unknown"),
                 }
 
-        except Exception as e:
-            logger.error(f"下载文件失败 {task['url']}: {e}")
             return {
-                "url": task['url'],
-                "file_path": task['file_path'],
+                "url": task.url,
+                "file_path": str(resolved_path),
                 "status": "failed",
-                "error": str(e)
+                "error": result.content,
+                "retryable": bool(extra.get("retryable", False)),
+                "resume_available": bool(extra.get("resume_available", False)),
+                "downloaded_bytes": int(extra.get("downloaded_bytes") or 0),
+                "total_bytes": extra.get("total_bytes"),
+                "next_action": str(extra.get("next_action") or "review_request"),
+                "request_strategy": str(extra.get("request_strategy") or "unknown"),
             }
 
-    def _build_result_summary(self, batch_result: BatchDownloadResult) -> Dict[str, Any]:
-        """
-        构建结果摘要
+    async def _dispatch_progress_event(
+        self,
+        tool_context: ToolContext,
+        correlation_id: str,
+        progress_state: BatchProgressState,
+        *,
+        current_file: str,
+        current_progress: BatchItemProgress | None,
+        status: str,
+        force: bool = False,
+    ) -> None:
+        agent_context = tool_context.get_extension("agent_context")
+        if agent_context is None:
+            return
 
-        Args:
-            batch_result: 批量下载结果
+        try:
+            async with progress_state.lock:
+                progress, indeterminate = self._calculate_batch_progress(progress_state)
+                if status in {"completed", "partial_failed"}:
+                    progress = 100
+                    indeterminate = False
+                now = time.monotonic()
+                percentage_changed = progress != progress_state.last_reported_progress
+                interval_elapsed = (
+                    now - progress_state.last_report_time >= PROGRESS_REPORT_INTERVAL_SECONDS
+                )
+                if not force and not interval_elapsed and not percentage_changed:
+                    return
 
-        Returns:
-            Dict: 格式化的结果摘要
-        """
-        content_dict = {
-            "message": f"批量下载完成：{batch_result.success}个成功，{batch_result.failed}个失败",
-            "summary": {
-                "total": batch_result.total,
-                "success": batch_result.success,
-                "failed": batch_result.failed,
-                "total_size": self._format_size(batch_result.total_size_bytes),
-                "cache_hits": batch_result.cache_hits,
-                "cache_misses": batch_result.cache_misses
-            },
-            "results": []
-        }
-
-        # 添加每个任务的简洁结果
-        for result_item in batch_result.results:
-            simple_result = {
-                "file_path": result_item.get("file_path", "未知"),
-                "status": "成功" if result_item.get("status") == "success" else "失败"
-            }
-
-            if result_item.get("status") == "success":
-                simple_result["size"] = self._format_size(result_item.get("file_size_bytes", 0))
-                if result_item.get("from_cache"):
-                    simple_result["from_cache"] = True
-            else:
-                simple_result["error"] = result_item.get("error", "未知错误")
-
-            content_dict["results"].append(simple_result)
-
-        return content_dict
-
-    def _format_size(self, size_bytes: int) -> str:
-        """格式化文件大小显示"""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_bytes < 1024.0 or unit == 'TB':
-                return f"{size_bytes:.2f} {unit}" if unit != 'B' else f"{size_bytes} {unit}"
-            size_bytes /= 1024.0
-        return f"{size_bytes} B"
-
-    def _build_markdown_detail(self, batch_result: 'BatchDownloadResult') -> str:
-        """将批量下载结果渲染为 Markdown（英文、紧凑风格）"""
-        lines: List[str] = []
-        lines.append("# Batch Download Result")
-        lines.append("")
-        lines.append(
-                f"Total: {batch_result.total} · "
-                f"Success: {batch_result.success} · "
-                f"Failed: {batch_result.failed} · "
-                f"Size: {self._format_size(batch_result.total_size_bytes)} · "
-                f"Cache: {batch_result.cache_hits} hit / {batch_result.cache_misses} miss"
-        )
-        lines.append("")
-
-        if not batch_result.results:
-            lines.append("_No download tasks._")
-            return "\n".join(lines)
-
-        # Success list
-        success_items = [r for r in batch_result.results if r.get("status") == "success"]
-        if success_items:
-            lines.append("## Success")
-            for item in success_items:
-                file_path = str(item.get("file_path", "-"))
-                size = self._format_size(item.get("file_size_bytes", 0))
-                cache_tag = " (cached)" if item.get("from_cache") else ""
-                lines.append(f"- `{file_path}` — {size}{cache_tag}")
-            lines.append("")
-
-        # Failed list
-        failed_items = [r for r in batch_result.results if r.get("status") != "success"]
-        if failed_items:
-            lines.append("## Failed")
-            for item in failed_items:
-                file_path = str(item.get("file_path", "-"))
-                error = self._truncate(str(item.get("error", "unknown error")), 200)
-                lines.append(f"- `{file_path}` — {error}")
-            lines.append("")
-
-        return "\n".join(lines)
+                progress_state.last_report_time = now
+                progress_state.last_reported_progress = progress
+                current = current_progress or BatchItemProgress()
+                message_key = self._progress_message_key(status)
+                message = i18n.translate(
+                    message_key,
+                    category="tool.messages",
+                    file=current_file or "-",
+                    progress=progress,
+                    completed=progress_state.completed_files,
+                    total=progress_state.total_files,
+                    retry_count=current.retry_count,
+                )
+                arguments = {
+                    "name": "download_from_urls",
+                    "correlation_id": correlation_id,
+                    "action": i18n.translate("download_from_urls", category="tool.actions"),
+                    "detail": {
+                        "type": "text",
+                        "data": {
+                            "progress": progress,
+                            "downloaded_bytes": current.downloaded_bytes,
+                            "total_bytes": current.total_bytes,
+                            "current_file": current_file,
+                            "completed_files": progress_state.completed_files,
+                            "total_files": progress_state.total_files,
+                            "resumed": current.resumed,
+                            "retry_count": current.retry_count,
+                            "status": status,
+                            "indeterminate": indeterminate,
+                            "message": message,
+                        },
+                    },
+                    "status": status,
+                }
+                event_data = PendingToolCallEventData(
+                    tool_context=tool_context,
+                    tool_name="download_from_urls",
+                    arguments=arguments,
+                    tool_instance=self,
+                    correlation_id=correlation_id,
+                )
+                agent_context.update_activity_time()
+                await agent_context.dispatch_event(EventType.PENDING_TOOL_CALL, event_data)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("发送下载进度事件失败: %s", exc)
 
     @staticmethod
-    def _truncate(text: str, max_len: int) -> str:
-        """超长文本截断"""
-        if len(text) <= max_len:
-            return text
-        return text[: max_len - 1] + "…"
+    def _calculate_batch_progress(progress_state: BatchProgressState) -> tuple[int, bool]:
+        items = list(progress_state.items.values())
+        all_totals_known = all(item.total_bytes is not None and item.total_bytes > 0 for item in items)
+        if all_totals_known:
+            total_bytes = sum(int(item.total_bytes or 0) for item in items)
+            downloaded_bytes = sum(min(item.downloaded_bytes, int(item.total_bytes or 0)) for item in items)
+            return min(100, int(downloaded_bytes * 100 / total_bytes)), False
+
+        if progress_state.total_files <= 0:
+            return 0, True
+        return min(100, int(progress_state.completed_files * 100 / progress_state.total_files)), True
+
+    @staticmethod
+    def _progress_message_key(status: str) -> str:
+        if status == DownloadPhase.RETRYING.value:
+            return "download_from_urls.progress_retrying"
+        if status == "item_completed":
+            return "download_from_urls.progress_file_completed"
+        if status == "item_skipped":
+            return "download_from_urls.progress_file_skipped"
+        if status == "cancelled":
+            return "download_from_urls.progress_cancelled"
+        if status in {"completed", "partial_failed"}:
+            return "download_from_urls.progress_completed"
+        if status == "failed":
+            return "download_from_urls.progress_failed"
+        return "download_from_urls.progress_downloading"
+
+    @staticmethod
+    def _item_result_progress_status(status: str) -> str:
+        """将单文件结果转换为批量任务的中间进度状态。"""
+        if status == DownloadPhase.COMPLETED.value:
+            return "item_completed"
+        if status == "skipped":
+            return "item_skipped"
+        return status
+
+    @staticmethod
+    def _resolve_correlation_id(tool_context: ToolContext, agent_context: object | None) -> str:
+        scope_id = getattr(agent_context, "context_id", None)
+        correlation_id = get_correlation_manager().get_active_correlation_id(
+            EventPairType.TOOL_CALL,
+            scope_id,
+        )
+        return correlation_id or tool_context.tool_call_id or str(uuid.uuid4())
+
+    @staticmethod
+    def _raise_if_interrupted(interruption_event: asyncio.Event | None) -> None:
+        if interruption_event is not None and interruption_event.is_set():
+            raise asyncio.CancelledError
+
+    @staticmethod
+    def _summarize_results(results: list[dict[str, object]]) -> BatchDownloadResult:
+        success = sum(1 for item in results if item.get("status") == "completed")
+        skipped = sum(1 for item in results if item.get("status") == "skipped")
+        failed = len(results) - success - skipped
+        total_size_bytes = sum(
+            int(item.get("file_size_bytes") or 0)
+            for item in results
+            if item.get("status") in {"completed", "skipped"}
+        )
+        return BatchDownloadResult(
+            items=results,
+            success=success,
+            failed=failed,
+            skipped=skipped,
+            total_size_bytes=total_size_bytes,
+        )
+
+    def _build_model_summary(self, result: BatchDownloadResult) -> str:
+        lines = [
+            (
+                f"Batch download finished: {result.success} completed, "
+                f"{result.skipped} skipped, {result.failed} failed."
+            )
+        ]
+        for item in result.items:
+            file_path = str(item.get("file_path") or "unknown")
+            status = str(item.get("status") or "failed")
+            if status == "completed":
+                lines.append(
+                    f"- completed: {file_path} ({self._format_size(int(item.get('file_size_bytes') or 0))})"
+                )
+            elif status == "skipped":
+                lines.append(f"- skipped: {file_path} (the target already exists)")
+            else:
+                resume_available = "yes" if item.get("resume_available") else "no"
+                next_action = str(item.get("next_action") or "review_request")
+                error = self._truncate(str(item.get("error") or "unknown error"), 240)
+                lines.append(
+                    f"- failed: {file_path}; {error}; resume available: {resume_available}; "
+                    f"next action: {next_action}"
+                )
+        return "\n".join(lines)
 
     async def get_tool_detail(
         self,
         tool_context: ToolContext,
         result: ToolResult,
-        arguments: Dict[str, Any] = None,
-    ) -> Optional[ToolDetail]:
-        """以 Markdown 形式展示批量下载详情"""
-        if not result or not result.extra_info:
-            return None
-
-        detailed_results = result.extra_info.get("detailed_results") or []
+        arguments: dict[str, object] | None = None,
+    ) -> ToolDetail | None:
+        detailed_results = list((result.extra_info or {}).get("detailed_results") or [])
         if not detailed_results:
-            return None
+            return ToolDetail(
+                type=DisplayType.TEXT,
+                data={"message": self._truncate(result.content, 300)},
+            )
 
-        # 重建一个轻量 BatchDownloadResult 以复用渲染逻辑
-        batch_result = BatchDownloadResult()
-        batch_result.results = detailed_results
-        batch_result.total = len(detailed_results)
-        batch_result.success = sum(1 for r in detailed_results if r.get("status") == "success")
-        batch_result.failed = batch_result.total - batch_result.success
-        batch_result.total_size_bytes = result.extra_info.get("total_size_bytes", 0)
-        batch_result.cache_hits = result.extra_info.get("cache_hits", 0)
-        batch_result.cache_misses = result.extra_info.get("cache_misses", 0)
-
-        markdown = self._build_markdown_detail(batch_result)
-
-        file_name = (
-                f"Batch download (success {batch_result.success} / failed {batch_result.failed})"
-        )
-        return ToolDetail(
-                type=DisplayType.MD,
-                data=FileContent(file_name=file_name, content=markdown),
-        )
-
-    async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: Dict[str, Any] = None) -> Dict:
-        """
-        获取工具调用后的友好动作和备注
-        """
-        # 无论成功还是失败，都使用本工具自定义的 remark，避免被通用错误提示覆盖
-        result.use_custom_remark = True
-
-        # 尝试从结果中获取成功/失败统计
-        try:
-            if result.extra_info:
-                detailed_results = result.extra_info.get("detailed_results", [])
-                success_count = sum(1 for r in detailed_results if r.get("status") == "success")
-                failed_count = len(detailed_results) - success_count
-
-                if success_count > 0 and failed_count == 0:
-                    remark = i18n.translate("download_from_urls.success_count", category="tool.messages", count=success_count)
-                elif success_count > 0 and failed_count > 0:
-                    remark = i18n.translate("download_from_urls.partial_success", category="tool.messages", success=success_count, failed=failed_count)
-                elif failed_count > 0:
-                    remark = i18n.translate("download_from_urls.failed_count", category="tool.messages", count=failed_count)
-                else:
-                    remark = i18n.translate("download_from_url.completed", category="tool.messages")
-            elif not result.ok:
-                remark = i18n.translate("download_from_url.error", category="tool.messages", error=result.content)
+        success = sum(1 for item in detailed_results if item.get("status") == "completed")
+        skipped = sum(1 for item in detailed_results if item.get("status") == "skipped")
+        failed = len(detailed_results) - success - skipped
+        lines = [
+            "# Batch Download Result",
+            "",
+            f"Completed: {success} · Skipped: {skipped} · Failed: {failed}",
+            "",
+        ]
+        for item in detailed_results:
+            file_path = str(item.get("file_path") or "unknown")
+            status = str(item.get("status") or "failed")
+            if status in {"completed", "skipped"}:
+                size = self._format_size(int(item.get("file_size_bytes") or 0))
+                lines.append(f"- {status}: `{file_path}` — {size}")
             else:
-                remark = i18n.translate("download_from_url.completed", category="tool.messages")
-        except Exception:
-            remark = i18n.translate("download_from_url.completed", category="tool.messages")
+                error = self._truncate(str(item.get("error") or "Download failed"), 200)
+                lines.append(f"- failed: `{file_path}` — {error}")
 
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(
+                file_name=f"Batch download ({success} completed, {failed} failed)",
+                content="\n".join(lines),
+            ),
+        )
+
+    async def get_after_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        result: ToolResult,
+        execution_time: float,
+        arguments: dict[str, object] | None = None,
+    ) -> dict[str, str]:
+        result.use_custom_remark = True
+        extra = result.extra_info or {}
+        success = int(extra.get("success") or 0)
+        failed = int(extra.get("failed") or 0)
+        skipped = int(extra.get("skipped") or 0)
+        if success > 0 and failed == 0:
+            remark = i18n.translate(
+                "download_from_urls.success_count",
+                category="tool.messages",
+                count=success,
+                skipped=skipped,
+            )
+        elif success > 0 or skipped > 0:
+            remark = i18n.translate(
+                "download_from_urls.partial_success",
+                category="tool.messages",
+                success=success,
+                failed=failed,
+                skipped=skipped,
+            )
+        else:
+            remark = i18n.translate(
+                "download_from_urls.failed_count",
+                category="tool.messages",
+                count=failed,
+            )
         return {
             "action": i18n.translate("download_from_urls", category="tool.actions"),
-            "remark": remark
+            "remark": remark,
         }
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        size = float(size_bytes)
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if size < 1024 or unit == "TB":
+                return f"{int(size)} {unit}" if unit == "B" else f"{size:.2f} {unit}"
+            size /= 1024
+        return f"{size_bytes} B"
+
+    @staticmethod
+    def _truncate(text: str, max_length: int) -> str:
+        return text if len(text) <= max_length else f"{text[: max_length - 1]}…"
+
+
+__all__ = ["DownloadFromUrls", "DownloadFromUrlsParams", "DownloadTask"]

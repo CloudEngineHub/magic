@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 
 MAX_LOG_CHARS = 2000
@@ -23,6 +24,13 @@ def redact_headers(headers: dict[str, Any] | None) -> dict[str, Any]:
         else:
             redacted[key] = value
     return redacted
+
+
+def redact_url(url: str) -> str:
+    """保留 URL 定位信息，但不把查询参数值和 fragment 写入日志。"""
+    parsed = urlsplit(url)
+    query = "<redacted>" if parsed.query else ""
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, ""))
 
 
 def truncate_value(value: Any, max_chars: int = MAX_LOG_CHARS) -> Any:
