@@ -1907,15 +1907,18 @@ class Agent(BaseAgent):
             # 更新 horizon：实际生效的 LM 模型 + 当前上下文窗口使用量
             try:
                 horizon_model_info = self._build_horizon_llm_model_info(text_model_state)
-                context_window_total = text_model_state.max_context_tokens
+                current_max_context_tokens = self._resolve_current_max_context_tokens(text_model_state)
                 self.agent_context.horizon.update_llm_model(
                     horizon_model_info.model_id,
                     horizon_model_info.model_name,
                     horizon_model_info.description,
                 )
-                self.agent_context.horizon.update_context_usage(token_usage.input_tokens, context_window_total)
+                self.agent_context.horizon.update_context_usage(
+                    token_usage.total_tokens,
+                    current_max_context_tokens,
+                )
                 # 记录当前模型的最大上下文 token 数，供前端实时展示
-                token_usage.max_context_tokens = context_window_total or None
+                token_usage.max_context_tokens = current_max_context_tokens or None
             except Exception as _horizon_err:
                 logger.warning(f"[AgentHorizon] 更新模型/上下文用量失败: {_horizon_err}")
 
@@ -1962,6 +1965,20 @@ class Agent(BaseAgent):
     def _resolve_current_text_model(self) -> TextModelState:
         """解析当前运行时文本模型。"""
         return self.agent_context.model_context.resolve_text_model()
+
+    def _resolve_current_max_context_tokens(self, text_model_state: TextModelState) -> int:
+        """返回当前用于展示、压缩判断和 Horizon 入参的 Soft 上下文上限。"""
+        from agentlang.chat_history.chat_history_models import resolve_user_facing_max_context_tokens
+
+        # text_model_state.max_context_tokens 是模型配置的 Hard 上限，可能达到 1M；
+        # 它只表示模型最多能接收多少 Token，不表示 Super Magic 应该一直使用到这个数量。
+        # 产品默认采用 200K，命中阶梯计费规则时可以采用 256K 等档位，
+        # 避免进入费用明显升高的区间后才开始压缩。
+        # 例如 Hard=1,048,576 且未命中专属档位时，这里返回 200,000，而不是返回 1,048,576。
+        # 同一个 current_max_context_tokens 会同时用于前端展示、Horizon 和压缩阈值计算，避免
+        # 页面显示 200K、模型上下文提示和压缩逻辑却按照 1M 计算。
+        current_max_context_tokens = resolve_user_facing_max_context_tokens(text_model_state.model_id)
+        return current_max_context_tokens or text_model_state.max_context_tokens
 
     def _build_horizon_llm_model_info(
         self,

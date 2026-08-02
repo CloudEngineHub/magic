@@ -19,6 +19,7 @@ class LLMErrorClassifier:
         "messages prompt is too long",
         "prompt is too long",
         "maximum context length",
+        "model context limit",
         "context length exceeded",
         "context window",
         "context_length_exceeded",

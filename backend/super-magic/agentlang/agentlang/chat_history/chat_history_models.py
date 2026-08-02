@@ -173,35 +173,34 @@ class CompactionConfig:
         try:
             # 获取模型信息
             threshold = self.default_token_threshold  # 默认阈值
-            dynamic_max_threshold = self.max_token_threshold  # 默认使用配置的上限
 
             if self.agent_model_id:
                 # 使用统一的模型配置工具获取上下文 tokens
-                max_context_tokens = model_config_utils.get_max_context_tokens(
+                model_max_context_tokens = model_config_utils.get_max_context_tokens(
                     self.agent_model_id,
                     default=0
                 )
 
-                if max_context_tokens > 0:
-                    # 优先命中定价分区固定规则；未命中时回退到比例计算
-                    match_texts = self._get_model_match_texts()
-                    matched_rule = self._match_pricing_tier_rule(match_texts)
-                    if matched_rule is not None:
-                        # 命中规则时，同时更新触发阈值与最终上限钳制
-                        threshold = matched_rule.token_threshold
-                        dynamic_max_threshold = matched_rule.token_threshold
-                        logger.info(
-                            f"模型 {self.agent_model_id} 命中定价规则后更新上限钳制: "
-                            f"dynamic_max_threshold={dynamic_max_threshold:,}"
-                        )
-                    else:
-                        threshold = int(max_context_tokens * self.context_usage_ratio)
-                        # 非命中规则模型使用比例阈值，避免被默认上限过早钳制
-                        dynamic_max_threshold = max(dynamic_max_threshold, threshold)
+                if model_max_context_tokens > 0:
+                    # Hard 是模型配置允许的物理最大上下文，Soft 是 Super Magic 基于费用控制
+                    # 和阶梯计费规则采用的产品上下文。压缩阈值按 Soft 的比例计算，
+                    # 但最终不能超过 Hard。
+                    #
+                    # 例如：
+                    # - Hard=1,048,576，普通模型 Soft=200,000，最终在 180,000（200K × 90%）触发压缩。
+                    # - Hard=1,048,576，命中 256K 档位时 Soft=256,000，
+                    #   最终在 230,400（256K × 90%）触发压缩。
+                    # - Hard 小于计算结果时，最后的 min 会把阈值限制在模型真实可用范围内。
+                    current_max_context_tokens = (
+                        resolve_user_facing_max_context_tokens(self.agent_model_id)
+                        or model_max_context_tokens
+                    )
+                    threshold = int(current_max_context_tokens * self.context_usage_ratio)
 
-            # 应用最小和最大限制（使用动态计算的上限）
-            threshold = max(threshold, self.min_token_threshold)
-            threshold = min(threshold, dynamic_max_threshold)
+                    if model_max_context_tokens >= self.min_token_threshold:
+                        threshold = max(threshold, self.min_token_threshold)
+                    threshold = min(threshold, model_max_context_tokens)
+
             return threshold
 
         except Exception as e:
