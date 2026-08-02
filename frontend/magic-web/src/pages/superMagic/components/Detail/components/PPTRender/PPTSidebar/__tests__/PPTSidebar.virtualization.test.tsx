@@ -67,9 +67,13 @@ vi.mock("../SortableSlideItem", () => ({
 		allowEdit,
 		isMobile,
 		onSlideDragStart,
+		slideDimensions,
 	}: SortableSlideItemProps) => (
 		<div
 			data-testid={`ppt-sidebar-slide-item-${item.id}`}
+			data-slide-aspect-ratio={
+				slideDimensions ? `${slideDimensions.width}/${slideDimensions.height}` : undefined
+			}
 			className={className}
 			draggable={allowEdit && !isMobile}
 			onDragStart={(event) => onSlideDragStart?.(event, item.id)}
@@ -243,6 +247,10 @@ describe("PPTSidebar virtualization", () => {
 			"draggable",
 			false,
 		)
+		expect(screen.getByTestId("ppt-sidebar-slide-item-slide-1")).toHaveAttribute(
+			"data-slide-aspect-ratio",
+			"16/9",
+		)
 	})
 
 	it("estimates desktop rows from the live sidebar width", () => {
@@ -253,20 +261,35 @@ describe("PPTSidebar virtualization", () => {
 		expect(options.estimateSize()).toBe(238)
 	})
 
-	it("keeps fixed square rows aligned with the desktop estimate", () => {
+	it("keeps a fixed 16:9 thumbnail row after square slide content loads", () => {
 		mockState.store.slides = makeSlides(2)
-		mockState.store.slides[0] = {
-			...mockState.store.slides[0],
-			content: '<main class="slide-container" data-width="1000" data-height="1000"></main>',
-		}
-		mockState.values.virtualItems = [makeVirtualItem(0, 8, 200), makeVirtualItem(1, 8, 200)]
-		mockState.values.totalSize = 416
+		mockState.values.virtualItems = [makeVirtualItem(0), makeVirtualItem(1)]
+		mockState.values.totalSize = 272
 
-		render(<PPTSidebar sidebarWidth={200} onSlideClick={vi.fn()} />)
+		const { rerender } = render(<PPTSidebar sidebarWidth={200} onSlideClick={vi.fn()} />)
 
-		const options = mockState.options
-		if (!options) throw new Error("useVirtualizer options were not captured")
-		expect(options.estimateSize()).toBe(200)
+		expect(mockState.options?.estimateSize()).toBe(128)
+		expect(screen.getByTestId("ppt-sidebar-slide-item-slide-1")).toHaveAttribute(
+			"data-slide-aspect-ratio",
+			"16/9",
+		)
+
+		mockState.store.slides = mockState.store.slides.map((slide, index) =>
+			index === 0
+				? {
+						...slide,
+						content:
+							'<main class="slide-container" data-width="1000" data-height="1000"></main>',
+					}
+				: slide,
+		)
+		rerender(<PPTSidebar sidebarWidth={200} onSlideClick={vi.fn()} />)
+
+		expect(mockState.options?.estimateSize()).toBe(128)
+		expect(screen.getByTestId("ppt-sidebar-slide-item-slide-1")).toHaveAttribute(
+			"data-slide-aspect-ratio",
+			"16/9",
+		)
 
 		const virtualContent = screen.getByTestId("ppt-sidebar-virtual-content")
 		expect(virtualContent).not.toHaveClass("px-2")

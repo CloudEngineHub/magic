@@ -12,7 +12,10 @@ import {
 	resolveSlideGapTarget,
 	type SlideGapTarget,
 } from "./utils/dragSort"
-import { estimateDesktopSlideRowSize } from "./utils/virtualization"
+import {
+	estimateDesktopSlideRowSize,
+	PPT_SIDEBAR_THUMBNAIL_DIMENSIONS,
+} from "./utils/virtualization"
 import { observer } from "mobx-react-lite"
 import {
 	TooltipProvider,
@@ -27,11 +30,6 @@ import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { usePPTStore } from "../hooks"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
-import {
-	DEFAULT_PPT_CONTENT_DIMENSIONS,
-	extractSlideContainerDimensionsFromHtml,
-	type CanonicalContentDimensions,
-} from "../../../contents/HTML/utils/slide-dimensions"
 
 const VIRTUAL_OVERSCAN = 6
 const MOBILE_ROW_ESTIMATE = 140
@@ -98,47 +96,9 @@ function PPTSidebar({
 		setItems(slides)
 	}, [draggedId, slides])
 
-	const activeDimensionSlide = slides[activeIndex]
-	const firstDimensionSlide = slides[0]
-	const activeDimensionContent = activeDimensionSlide?.content
-	const activeDimensionRawContent = activeDimensionSlide?.rawContent
-	const firstDimensionContent = firstDimensionSlide?.content
-	const firstDimensionRawContent = firstDimensionSlide?.rawContent
-	const cachedSlideDimensionsRef = useRef<{
-		fileId: string | undefined
-		dimensions: CanonicalContentDimensions
-	} | null>(null)
-	const slideDimensions = useMemo(() => {
-		const cachedDimensions = cachedSlideDimensionsRef.current
-		if (cachedDimensions && cachedDimensions.fileId === mainFileId) {
-			return cachedDimensions.dimensions
-		}
-
-		const dimensionSources = [
-			[activeDimensionContent, activeDimensionRawContent],
-			[firstDimensionContent, firstDimensionRawContent],
-		] as const
-		for (const [content, rawContent] of dimensionSources) {
-			const dimensions =
-				extractSlideContainerDimensionsFromHtml(content) ??
-				extractSlideContainerDimensionsFromHtml(rawContent)
-			if (dimensions) {
-				cachedSlideDimensionsRef.current = { fileId: mainFileId, dimensions }
-				return dimensions
-			}
-		}
-
-		return DEFAULT_PPT_CONTENT_DIMENSIONS
-	}, [
-		activeDimensionContent,
-		activeDimensionRawContent,
-		firstDimensionContent,
-		firstDimensionRawContent,
-		mainFileId,
-	])
 	const desktopRowEstimate = useMemo(
-		() => estimateDesktopSlideRowSize(sidebarWidth, slideDimensions),
-		[sidebarWidth, slideDimensions],
+		() => estimateDesktopSlideRowSize(sidebarWidth),
+		[sidebarWidth],
 	)
 
 	const draggedIndex = useMemo(
@@ -566,7 +526,7 @@ function PPTSidebar({
 											slideFullRelativePath={store.getFullRelativePath(
 												item.path,
 											)}
-											slideDimensions={slideDimensions}
+											slideDimensions={PPT_SIDEBAR_THUMBNAIL_DIMENSIONS}
 											onInsertAbove={() =>
 												handleInsertSlide(item.index, "before")
 											}
