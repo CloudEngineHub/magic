@@ -251,6 +251,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			pollingResponse.items,
 			{
+				eventPolicy: "live_arrival",
 				mode: "replace",
 				preserveStreamSuperMessageIds: [],
 				toolProjectionPolicy: "preserve_live",
@@ -367,6 +368,7 @@ describe("useTopicMessages", () => {
 			{
 				mode: "replace_tail",
 				anchorSuperMessageId: "local-anchor",
+				eventPolicy: "live_arrival",
 				preserveStreamSuperMessageIds: [],
 				toolProjectionPolicy: "preserve_live",
 			},
@@ -846,6 +848,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[newerEnvelope, olderEnvelope],
 			{
+				eventPolicy: "live_arrival",
 				mode: "replace",
 				preserveStreamSuperMessageIds: [],
 				toolProjectionPolicy: "preserve_live",

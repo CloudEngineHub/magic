@@ -2769,6 +2769,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		{
 			mode = "replace",
 			toolProjectionPolicy = "historical_terminal",
+			eventPolicy = "silent_hydration",
 			statusMessages,
 			anchorSuperMessageId,
 			preserveStreamSuperMessageIds,
@@ -3300,7 +3301,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					correlationId,
 				)
 			}
-			if (settledActiveStream || updatedExistingMessage) {
+			if (eventPolicy === "live_arrival" || settledActiveStream || updatedExistingMessage) {
 				this.publishMessageCommitted(topicId, currentMessage, canonicalNode, "http")
 			} else {
 				this.seedMessageEventState(topicId, currentMessage, canonicalNode)

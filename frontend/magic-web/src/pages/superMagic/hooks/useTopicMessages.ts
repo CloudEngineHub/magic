@@ -566,6 +566,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					membershipItems: authoritativeTailResult.pulledItems,
 					writeOptions: {
 						...authoritativeTailResult.writeOptions,
+						eventPolicy: "live_arrival",
 						// 最近尾部对账可能包含仍在运行的当前任务，不能仅因来自 HTTP
 						// 就把 embedded waiting/running 提前投影成历史弱终态。
 						toolProjectionPolicy: "preserve_live",

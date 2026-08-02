@@ -584,6 +584,45 @@ describe("SuperMagic Store typed events", () => {
 		expect(completed).toEqual([])
 	})
 
+	it("publishes a live HTTP finish_task arrival exactly once", () => {
+		const store = new SuperMagicStore()
+		const committed: MessageCommittedEvent[] = []
+		const taskCompleted: TaskCompletedEvent[] = []
+		const runningAssistant = createAssistantEnvelope({ status: "running" })
+		const finishTask = createFinishTaskEnvelope()
+
+		store.subscribe("message.committed", (event) => committed.push(event))
+		store.subscribe("task.completed", (event) => taskCompleted.push(event))
+		store.initializeMessages(TOPIC_ID, [runningAssistant])
+
+		const reconcileLiveTail = () =>
+			store.reconcileAuthoritativeMessages(TOPIC_ID, {
+				statusItems: [runningAssistant, finishTask],
+				membershipItems: [runningAssistant, finishTask],
+				writeOptions: {
+					mode: "replace",
+					eventPolicy: "live_arrival",
+					toolProjectionPolicy: "preserve_live",
+				},
+			})
+
+		reconcileLiveTail()
+		reconcileLiveTail()
+
+		expect(committed).toHaveLength(1)
+		expect(committed[0].payload.message).toMatchObject({
+			appMessageId: FINISH_TASK_APP_MESSAGE_ID,
+			role: "tool",
+			superStatus: "finished",
+		})
+		expect(taskCompleted).toHaveLength(1)
+		expect(taskCompleted[0].meta).toMatchObject({
+			topicId: TOPIC_ID,
+			appMessageId: FINISH_TASK_APP_MESSAGE_ID,
+			taskId: FINISH_TASK_TASK_ID,
+		})
+	})
+
 	it("publishes HTTP reconciliation when it settles an active stream", () => {
 		const store = new SuperMagicStore()
 		store.setActiveTopicId(TOPIC_ID)
