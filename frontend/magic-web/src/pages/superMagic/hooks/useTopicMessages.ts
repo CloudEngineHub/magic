@@ -1082,6 +1082,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (data.conversation_id && data.conversation_id !== currentTopic.chat_conversation_id)
 				return
 			const incomingSeqId = String(data.seq_id || data.message?.seq_id || "")
+			console.info(
+				"[SM-ReasoningTrace] ws:persistent-message",
+				JSON.stringify({
+					timestamp: new Date().toISOString(),
+					topicId: chat_topic_id,
+					conversationId: String(data.conversation_id || ""),
+					incomingSeqId,
+				}),
+			)
 			if (
 				incomingSeqId &&
 				(!pendingRequiredSeqId ||

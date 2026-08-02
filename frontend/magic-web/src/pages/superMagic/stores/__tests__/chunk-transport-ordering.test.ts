@@ -315,6 +315,7 @@ function createFinalEnvelope({
 	seqId = "100",
 	reasoningContent = "",
 	toolCalls = [],
+	status = "finished",
 }: {
 	content: string
 	correlationId?: string
@@ -322,6 +323,7 @@ function createFinalEnvelope({
 	seqId?: string
 	reasoningContent?: string
 	toolCalls?: ProjectedToolCall[]
+	status?: "finished" | "running"
 }): RawSuperMagicMessageEnvelope {
 	const envelope = {
 		type: SeqRecordType.seq,
@@ -351,7 +353,7 @@ function createFinalEnvelope({
 					content,
 					reasoning_content: reasoningContent,
 					tool_calls: toolCalls,
-					status: "finished",
+					status,
 					send_timestamp: 1,
 				},
 			},
@@ -584,6 +586,171 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 		expect(recovery.events).toHaveLength(1)
 		recovery.unsubscribe()
+	})
+
+	it("刷新后从非零 chunk 接入时，Gap Final 通过后置 HTTP 快照结束 reasoning loading。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+
+		// 刷新先恢复到服务端 running 快照，随后 WebSocket 只能从流中段继续投递。
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+
+		// Final 已证明 transport 结束，不应继续等待普通 watchdog 才开始权威恢复。
+		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)?.stage).toBe("reasoning_content")
+
+		const generation = store.beginTopicSync(TOPIC_ID)
+		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
+			mode: "replace",
+			syncGeneration: generation,
+		})
+		expect(
+			store.completeTopicSync(TOPIC_ID, generation, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "100",
+			}),
+		).toBe(true)
+
+		expect(getProjectedNode(store)).toMatchObject({
+			content: "canonical answer",
+			reasoning_content: "canonical reasoning",
+		})
+		expect(JSON.stringify(getProjectedNode(store))).not.toContain("untrusted tail")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		recovery.unsubscribe()
+	})
+
+	it("Gap Final 到达时已有同步在途，旧 generation 完成后再请求后置权威快照。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		const staleGeneration = store.beginTopicSync(TOPIC_ID)
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+		expect(recovery.events).toHaveLength(0)
+
+		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
+			mode: "replace",
+			syncGeneration: staleGeneration,
+		})
+		store.completeTopicSync(TOPIC_ID, staleGeneration, {
+			succeeded: true,
+			taskStatus: "running",
+			latestSeqId: "100",
+		})
+
+		// 避免在 coordinator 尚未释放旧 in-flight generation 时同步发布并丢失恢复请求。
+		expect(recovery.events).toHaveLength(0)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeDefined()
+		vi.advanceTimersByTime(0)
+		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+
+		const postFinalGeneration = store.beginTopicSync(TOPIC_ID)
+		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
+			mode: "replace",
+			syncGeneration: postFinalGeneration,
+		})
+		store.completeTopicSync(TOPIC_ID, postFinalGeneration, {
+			succeeded: true,
+			taskStatus: "running",
+			latestSeqId: "100",
+		})
+
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		recovery.unsubscribe()
+	})
+
+	it("Gap Final 的权威恢复耗尽后结束视觉 loading，并保留最后 canonical 快照。", () => {
+		const store = createStore()
+		const recoveryEvents: StreamRecoveryRequestPayload[] = []
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			recoveryEvents.push(payload)
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, {
+				succeeded: false,
+				taskStatus: "running",
+			})
+		})
+
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+		vi.advanceTimersByTime(30_000)
+
+		expect(recoveryEvents.length).toBeGreaterThan(0)
+		expect(recoveryEvents.length).toBeLessThanOrEqual(3)
+		expect(store.getStreamRecoveryState(TOPIC_ID, SUPER_MESSAGE_ID)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		expect(getProjectedNode(store)).toMatchObject({
+			content: "canonical answer",
+			reasoning_content: "canonical reasoning",
+		})
+		expect(JSON.stringify(getProjectedNode(store))).not.toContain("untrusted tail")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		unsubscribe()
+	})
+
+	it("Gap Final 恢复失败只关闭当前流，不阻塞同 Topic 的其他流继续渲染。", () => {
+		const store = createStore()
+		const siblingCorrelationId = "correlation-2"
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, {
+				succeeded: false,
+				taskStatus: "running",
+			})
+		})
+
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.receiveChunk(createChunk({ i: 0, reasoningContent: "local reasoning" }))
+		// 第二条流先进入 Store，但当前 Topic 的单一渲染 timer 仍由第一条流持有。
+		store.receiveChunk(
+			createChunk({ i: 0, correlationId: siblingCorrelationId, content: "sibling answer" }),
+		)
+		store.receiveChunk(createChunk({ i: 2, finishReason: "stop" }))
+		vi.advanceTimersByTime(30_000)
+
+		expect(store.getStreamRecoveryState(TOPIC_ID, SUPER_MESSAGE_ID)).toMatchObject({
+			status: "failed",
+			reason: "recovery_failed",
+		})
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_ID, siblingCorrelationId)).toBeDefined()
+
+		advanceRendering()
+		expect(getProjectedNode(store, toSuperMessageId(siblingCorrelationId))).toMatchObject({
+			content: "sibling answer",
+		})
+		unsubscribe()
 	})
 
 	it("工具头 chunk 丢失，但 arguments chunk 正常到达。", () => {
