@@ -136,6 +136,33 @@ function assertSmokeResult(
 			`Summary bytes (${result.summary.bytesWritten}) differ from OPFS file bytes (${result.fileBytes})`,
 		)
 	}
+	if (result.totalChunkBytes !== result.fileBytes || result.hashBytesRead !== result.fileBytes) {
+		throw new Error(
+			`Bounded validation byte counts differ from OPFS file bytes: sink=${result.totalChunkBytes}, hash=${result.hashBytesRead}, file=${result.fileBytes}`,
+		)
+	}
+	if (!/^[0-9a-f]{64}$/.test(result.artifactSha256)) {
+		throw new Error(`Artifact SHA-256 is invalid: ${result.artifactSha256}`)
+	}
+	if (
+		result.chunkCount <= 0 ||
+		result.maxChunkBytes <= 0 ||
+		result.maxInFlightBytes < result.maxChunkBytes ||
+		result.maxInFlightChunks <= 0
+	) {
+		throw new Error("Streaming sink telemetry did not observe a valid output chunk")
+	}
+	if (
+		result.writeWaitCount !== result.chunkCount ||
+		result.ackWaitCount !== result.chunkCount ||
+		result.sinkFailedWriteCount !== 0 ||
+		result.sinkCloseCount !== 1 ||
+		result.sinkAbortCount !== 0
+	) {
+		throw new Error(
+			`Streaming sink terminal telemetry is invalid: chunks=${result.chunkCount}, writeWaits=${result.writeWaitCount}, ACKs=${result.ackWaitCount}, failures=${result.sinkFailedWriteCount}, closes=${result.sinkCloseCount}, aborts=${result.sinkAbortCount}`,
+		)
+	}
 }
 
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {

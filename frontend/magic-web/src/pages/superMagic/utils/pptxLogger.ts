@@ -1,5 +1,5 @@
 import { logger } from "@/utils/log"
-import type { ExternalLogger } from "@magic/html2pptx"
+import { getPptxExportDiagnostic, type ExternalLogger } from "@magic/html2pptx"
 
 const pptLogger = logger.createLogger("html2pptx")
 
@@ -39,6 +39,11 @@ export const pptxExternalLogger: ExternalLogger = {
  * 统一提取 error 的 message 和 stack，附带业务上下文。
  */
 export function reportPptxExportError(error: unknown, context?: Record<string, unknown>) {
+	const diagnostic = getPptxExportDiagnostic(error)
+	const strategyDecision =
+		error && typeof error === "object" && "decision" in error
+			? (error as { decision?: unknown }).decision
+			: undefined
 	if (import.meta.env.DEV) {
 		console.error("[html2pptx] Export editable PPT failed:", error, context)
 	}
@@ -49,6 +54,16 @@ export function reportPptxExportError(error: unknown, context?: Record<string, u
 				tag: "html2pptx",
 				error: error instanceof Error ? error.message : String(error),
 				stack: error instanceof Error ? error.stack : undefined,
+				failurePhase: diagnostic?.phase,
+				errorCode: diagnostic?.code,
+				cancelled: diagnostic?.cancelled,
+				pageIndex: diagnostic?.pageIndex,
+				pageCount: diagnostic?.pageCount,
+				bytesWritten: diagnostic?.bytesWritten,
+				outputPolicy: diagnostic?.outputPolicy,
+				mediaPolicyMode: diagnostic?.mediaPolicyMode,
+				zipMode: diagnostic?.zipMode,
+				strategyDecision,
 				...context,
 			},
 		],
@@ -97,7 +112,9 @@ class PptxDebugger {
 	enable(): void {
 		this._enabled = true
 		// keep-console
-		console.info("[pptx-debug] 已开启 PPTX 导出调试模式，下次导出时将输出完整日志（刷新页面即关闭）。")
+		console.info(
+			"[pptx-debug] 已开启 PPTX 导出调试模式，下次导出时将输出完整日志（刷新页面即关闭）。",
+		)
 	}
 
 	disable(): void {
@@ -224,11 +241,7 @@ class PptxDebugger {
 		this.patched = false
 	}
 
-	private captureHtml2pptx(
-		session: InternalSession,
-		level: PptxLogLevel,
-		args: unknown[],
-	): void {
+	private captureHtml2pptx(session: InternalSession, level: PptxLogLevel, args: unknown[]): void {
 		const [message, context] = args
 		session.collected.push({
 			level,

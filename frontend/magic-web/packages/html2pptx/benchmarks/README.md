@@ -32,6 +32,49 @@ currently structured-clone `FileSystemWritableFileStream` into a Worker, so the 
 real OPFS writable on the main thread and exercises the production sink-proxy backpressure path
 for Worker-generated ZIP chunks. This still avoids an in-memory final Blob.
 
+### GB-scale validation semantics
+
+The completed OPFS file is never loaded with `file.arrayBuffer()`. The smoke validates it in
+bounded pieces:
+
+- ZIP metadata is read from the file tail only. Classic ZIP uses the EOCD record; ZIP64 uses the
+  ZIP64 EOCD and locator as well.
+- Only the central-directory range is read to count entries and verify
+  `ppt/slides/slideN.xml`. Central-directory parsing is chunked and does not read local-file data,
+  image payloads, video payloads, or other media bytes into one JavaScript allocation.
+- SHA-256 reads fixed-size `Blob.slice()` ranges incrementally with a small pure-TypeScript
+	SHA-256 state. Chunks are discarded after each update; the final digest is a 64-character
+	hexadecimal string, and the hash read working set has an explicit chunk-size bound.
+
+The result keeps the original archive fields and adds bounded-validation and sink telemetry:
+
+| Field                                                                    | Meaning                                                                                                                    |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `archiveType`                                                            | `classic` or `zip64` selected from the tail metadata.                                                                      |
+| `centralDirectoryOffset`, `centralDirectorySize`                         | Parsed ZIP directory range.                                                                                                |
+| `archiveMetadataBytesRead`, `centralDirectoryBytesRead`                  | Bytes read for ZIP validation; media payloads are excluded.                                                                |
+| `maxArchiveValidationBufferBytes`                                        | Largest temporary buffer used while reading ZIP metadata/directory.                                                        |
+| `hashBytesRead`, `hashChunkCount`, `maxHashChunkBytes`, `hashDurationMs` | Streaming SHA-256 read statistics.                                                                                         |
+| `chunkCount`, `totalChunkBytes`, `maxChunkBytes`                         | Main-thread sink-proxy output chunks.                                                                                      |
+| `maxInFlightBytes`, `maxInFlightChunks`                                  | Outstanding writes observed by the sink wrapper.                                                                           |
+| `writeWait*`                                                             | Time from calling `sink.write()` until the destination write completes.                                                    |
+| `ackWait*`                                                               | The same completion gate from the sink-proxy perspective: the Worker ACK is posted only after that write promise resolves. |
+
+`maxInFlightBytes` is a main-thread sink-proxy observation. It is not a Worker/native process
+peak and does not include browser file-system cache, OPFS reservation, or the media bytes already
+written to disk. Heap fields have the same limitation and still do not include Worker/native
+memory. GB-scale runs therefore require sufficient local OPFS/disk quota; the smoke provides a
+bounded-memory validation path, not an unlimited-storage guarantee. It also does not replace
+opening the resulting PPTX in PowerPoint on Windows and macOS.
+
+The pure benchmark helpers have focused small-file coverage for classic ZIP, ZIP64 tails,
+cross-chunk central-directory entries, malformed tails, incremental SHA-256, sink backpressure,
+and write failure cleanup:
+
+```bash
+pnpm exec vitest run --config packages/html2pptx/benchmarks/vitest.config.ts
+```
+
 Add `--media` to place one reused deterministic PNG on every page and exercise Worker-side media
 fetching and deduplication without making the smoke fixture multi-GB:
 
@@ -176,7 +219,9 @@ including worker/assets files.
 The browser runner also reports:
 
 - total wall time;
-- sampled main-renderer JS heap using Chrome's `--enable-precise-memory-info`;
+- sampled main-renderer JS heap using Chrome's `--enable-precise-memory-info` (including the
+  separate `sampledValidationPeakJsHeapBytes` value after export while ZIP metadata and the
+  streamed digest are checked);
 - Long Task count, total duration, and maximum duration;
 - artifact hash duration separately from export duration.
 

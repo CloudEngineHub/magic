@@ -199,7 +199,18 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 		.slice(1)
 		.some((part) => part.toLowerCase() === "base64")
 
-	if (!isBase64) return new Blob([decodeURIComponent(payload)], { type: contentType })
+	if (!isBase64) {
+		// Decoding a percent-encoded data URL creates a full temporary string before Blob can
+		// report its byte size. Reject an over-sized encoded payload first so a low-memory device
+		// never materializes an obviously invalid inline source. This is intentionally conservative:
+		// callers that need larger media should pass a Blob, URL, or OPFS descriptor.
+		if (payload.length > MAX_INLINE_MEDIA_BYTES) {
+			throw new RangeError(
+				`Inline media payload is ${payload.length} encoded characters; use a Blob, URL, or OPFS descriptor above ${MAX_INLINE_MEDIA_BYTES} bytes.`,
+			)
+		}
+		return new Blob([decodeURIComponent(payload)], { type: contentType })
+	}
 	const estimatedBytes = Math.floor((payload.replace(/\s+/g, "").length * 3) / 4)
 	if (estimatedBytes > MAX_INLINE_MEDIA_BYTES) {
 		throw new RangeError(

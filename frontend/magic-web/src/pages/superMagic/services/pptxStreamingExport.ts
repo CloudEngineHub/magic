@@ -1,4 +1,4 @@
-import { exportPPTXStreaming } from "@magic/html2pptx"
+import { exportPPTXStreaming, imagePolicyRequiresReplay } from "@magic/html2pptx"
 import type {
 	ExportProgress,
 	LargeExportOptions,
@@ -10,6 +10,30 @@ import type {
 	StreamingHtmlPageInput,
 } from "@magic/html2pptx"
 import { prepareHtmlForExport } from "@/utils/htmlExportPrepare"
+import {
+	resolvePptxExportStrategy,
+	resolvePptxMediaPolicyMode,
+	type PptxExportStrategyDecision,
+	type PptxExportStrategyInput,
+} from "./pptxExportStrategy"
+
+export {
+	DEFAULT_PPTX_EXPORT_FEATURE_FLAGS,
+	PPTX_EXPORT_FLAGS_STORAGE_KEY,
+	PPTX_EXPORT_ROUTING_LIMITS,
+	resolvePptxExportFeatureFlags,
+	resolvePptxExportStrategy,
+	resolvePptxMediaPolicyMode,
+} from "./pptxExportStrategy"
+export type {
+	PptxExportFeatureFlags,
+	PptxExportRoute,
+	PptxExportStrategyDecision,
+	PptxExportStrategyInput,
+	PptxExportStrategyReasonCode,
+	PptxMediaSourceReliability,
+	ResolvedPptxMediaPolicyMode,
+} from "./pptxExportStrategy"
 
 /** File System Access picker options kept local because lib.dom does not expose the picker yet. */
 interface SaveFilePickerOptions {
@@ -34,6 +58,17 @@ type WritablePptxFile = Pick<FileSystemWritableFileStream, "write" | "close" | "
 
 export interface OpenPptxDestinationOptions {
 	suggestedName: string
+}
+
+/** Structured application-level failure returned before expensive export work starts. */
+export class PptxExportUnavailableError extends Error {
+	readonly name = "PptxExportUnavailableError"
+	readonly code: PptxExportStrategyDecision["reasonCode"]
+
+	constructor(readonly decision: PptxExportStrategyDecision) {
+		super(decision.reason)
+		this.code = decision.reasonCode
+	}
 }
 
 type HtmlExportPreparationOptions = Omit<Parameters<typeof prepareHtmlForExport>[0], "content">
@@ -69,8 +104,27 @@ export function ensurePptxFileName(fileName: string): string {
  * This check is intentionally capability based. User-agent checks are not sufficient for
  * Chromium desktop shells and can incorrectly advertise a path that cannot be written.
  */
-export function supportsPptxFileStreaming(): boolean {
-	return typeof (globalThis as SaveFilePickerGlobal).showSaveFilePicker === "function"
+export function supportsPptxFileStreaming(input: PptxExportStrategyInput = {}): boolean {
+	return getPptxExportStrategy(input).route === "streaming"
+}
+
+/** Resolve the current route once so callers can log the reason and avoid unsafe Blob fallback. */
+export function getPptxExportStrategy(
+	input: PptxExportStrategyInput = {},
+): PptxExportStrategyDecision {
+	return resolvePptxExportStrategy({
+		...input,
+		fileStreamingAvailable: input.fileStreamingAvailable ?? hasFileStreamingCapability(),
+	})
+}
+
+/** Throw a structured error when a known large export has no safe client-side route. */
+export function assertPptxExportAvailable(
+	input: PptxExportStrategyInput = {},
+): PptxExportStrategyDecision {
+	const decision = getPptxExportStrategy(input)
+	if (decision.route === "unavailable") throw new PptxExportUnavailableError(decision)
+	return decision
 }
 
 /**
@@ -181,7 +235,7 @@ export function startPptxStreamingExport(
 	content: StreamingExportContent,
 	options: LargeExportOptions,
 ): StreamingExportHandle {
-	return exportPPTXStreaming(content, options)
+	return exportPPTXStreaming(content, withResolvedMediaPolicy(options))
 }
 
 /**
@@ -227,7 +281,7 @@ export function startPptxStreamingExportFromFactory(
 			// Do not retain a second business-layer reference for the remainder of the export.
 			throwIfAborted(sourceController.signal)
 
-			activeHandle = exportPPTXStreaming(pages, options)
+			activeHandle = exportPPTXStreaming(pages, withResolvedMediaPolicy(options))
 			if (sourceController.signal.aborted) activeHandle.cancel()
 			return await activeHandle.promise
 		} finally {
@@ -459,4 +513,28 @@ function createPptxAbortError(reason?: unknown): Error {
 	const error = new Error(reason === undefined ? "Export aborted" : String(reason))
 	error.name = "AbortError"
 	return error
+}
+
+function withResolvedMediaPolicy(options: LargeExportOptions): LargeExportOptions {
+	const requiresReplay =
+		options.autoSize === true ||
+		Boolean(options.fontResolver) ||
+		options.stagingPolicy?.mode === "opfs" ||
+		imagePolicyRequiresReplay(options.imagePolicy)
+	const mode = resolvePptxMediaPolicyMode({
+		requested: options.mediaPolicy?.mode,
+		mediaSource: requiresReplay ? "signed-url" : undefined,
+		requiresReplay,
+	})
+	return {
+		...options,
+		mediaPolicy: {
+			...options.mediaPolicy,
+			mode,
+		},
+	}
+}
+
+function hasFileStreamingCapability(): boolean {
+	return typeof (globalThis as SaveFilePickerGlobal).showSaveFilePicker === "function"
 }

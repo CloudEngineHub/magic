@@ -45,7 +45,11 @@ function createShapeNode(): PPTNode {
 	} as PPTNode
 }
 
-function createImageNode(source: MediaSourceDescriptor, assetKey?: string): PPTNode {
+function createImageNode(
+	source: MediaSourceDescriptor,
+	assetKey?: string,
+	intrinsicSize?: { width: number; height: number },
+): PPTNode {
 	return {
 		type: "image",
 		x: 0,
@@ -57,6 +61,7 @@ function createImageNode(source: MediaSourceDescriptor, assetKey?: string): PPTN
 		sizing: "stretch",
 		source,
 		assetKey,
+		intrinsicSize,
 	} as PPTNode
 }
 
@@ -266,6 +271,16 @@ describe("runStreamingExport", () => {
 		expect(committedKinds).toEqual(["opfs", "opfs", "opfs"])
 		expect(store.cleanupCalls).toHaveLength(1)
 		expect(packager.dispose).toHaveBeenCalledOnce()
+		const capacityPlan = (
+			factory.mock.calls[0]?.[0] as {
+				plan?: { capacityPlan?: Record<string, unknown> }
+			}
+		)?.plan?.capacityPlan
+		expect(capacityPlan).toMatchObject({
+			hasUnknownLengthSource: false,
+			maxEntryBytesMayReachZip32Limit: false,
+			archiveBytesMayReachZip32Limit: false,
+		})
 	})
 
 	it("keeps URL media direct only when direct-stream is explicitly requested", async () => {
@@ -793,5 +808,233 @@ describe("runStreamingExport", () => {
 		expect(retainedArrays).toHaveLength(300)
 		expect(retainedArrays.every((array) => array.length === 0)).toBe(true)
 		expect(packager.dispose).toHaveBeenCalledOnce()
+	})
+
+	it("keeps an explicitly passthrough image policy on the direct path without reading payloads", async () => {
+		const source: MediaSourceDescriptor = {
+			kind: "opfs",
+			sessionId: "image-session",
+			path: "media/one-gib.png",
+			size: 1024 * 1024 * 1024,
+			key: "one-gib-image",
+			contentType: "image/png",
+			extn: "png",
+		}
+		const committedSources: MediaSourceDescriptor[] = []
+		const { factory } = createPackagerFactory({
+			commit: (nodes) => {
+				const image = nodes.find((node) => node.type === "image")
+				if (image?.type === "image" && image.source) committedSources.push(image.source)
+			},
+		})
+		const input = createBaseInput({
+			imagePolicy: {
+				unknownDimensionsAction: "passthrough",
+				unsupportedFormatAction: "passthrough",
+				oversizedAction: "passthrough",
+			},
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [createImageNode(source, undefined, { width: 4096, height: 2160 })],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		expect(factory).toHaveBeenCalledOnce()
+		expect(committedSources).toEqual([source])
+	})
+
+	it("fails before creating a packager when transform is required without a runtime hook", async () => {
+		const store = new FakeStagingStore()
+		const destination = createSinkDestination()
+		const factory = vi.fn()
+		const input = createBaseInput({
+			destination,
+			imagePolicy: { maxPixels: 100, oversizedAction: "transform" },
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [
+						createImageNode(
+							{
+								kind: "url",
+								url: "https://example.test/large.png",
+								key: "large-image",
+								contentType: "image/png",
+								extn: "png",
+							},
+							undefined,
+							{ width: 1000, height: 1000 },
+						),
+					],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+				createStreamingStagingStore: () => store,
+			},
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			diagnostic: {
+				phase: "transform-media",
+				code: "media-transform-failed",
+			},
+		})
+		expect(factory).not.toHaveBeenCalled()
+		expect(store.stageCalls).toEqual([])
+		expect(destination.sink.abort).toHaveBeenCalledOnce()
+	})
+
+	it("uses transformImageDescriptor only after metadata preflight and stages the replacement", async () => {
+		const store = new FakeStagingStore()
+		const transformedSource: MediaSourceDescriptor = {
+			kind: "opfs",
+			sessionId: "transformed-session",
+			path: "transformed/small.png",
+			size: 10,
+			key: "transformed-image",
+			contentType: "image/png",
+			extn: "png",
+		}
+		const transform = vi.fn(async () => ({
+			source: transformedSource,
+			intrinsicSize: { width: 10, height: 10 },
+		}))
+		const committedSources: MediaSourceDescriptor[] = []
+		const { factory } = createPackagerFactory({
+			commit: (nodes) => {
+				const image = nodes.find((node) => node.type === "image")
+				if (image?.type === "image" && image.source) committedSources.push(image.source)
+			},
+		})
+		const input = createBaseInput({
+			imagePolicy: { maxPixels: 100, oversizedAction: "transform" },
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [
+						createImageNode(
+							{
+								kind: "url",
+								url: "https://example.test/large.png",
+								key: "large-image",
+								contentType: "image/png",
+								extn: "png",
+							},
+							"business-image",
+							{ width: 1000, height: 1000 },
+						),
+					],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				transformImageDescriptor: transform,
+				createStreamingPresentationPackager: factory,
+				createStreamingStagingStore: () => store,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		expect(transform).toHaveBeenCalledOnce()
+		expect(transform.mock.calls[0]?.[0]).toMatchObject({
+			assetKey: "business-image",
+			decision: { action: "transform", reason: "pixel-limit-exceeded" },
+		})
+		expect(store.stageCalls).toEqual([])
+		expect(committedSources).toEqual([{ ...transformedSource, key: "business-image" }])
+	})
+
+	it("omits rejected images when rejectAction is explicitly omit", async () => {
+		const store = new FakeStagingStore()
+		const committedImageCounts: number[] = []
+		const { factory } = createPackagerFactory({
+			commit: (nodes) =>
+				committedImageCounts.push(nodes.filter((node) => node.type === "image").length),
+		})
+		const input = createBaseInput({
+			imagePolicy: {
+				maxPixels: 100,
+				oversizedAction: "reject",
+				rejectAction: "omit",
+			},
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [
+						createImageNode(
+							{
+								kind: "url",
+								url: "https://example.test/large.png",
+								key: "large-image",
+								contentType: "image/png",
+								extn: "png",
+							},
+							undefined,
+							{ width: 1000, height: 1000 },
+						),
+					],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+				createStreamingStagingStore: () => store,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		expect(committedImageCounts).toEqual([0])
+		expect(store.stageCalls).toEqual([])
+	})
+
+	it("fails with a structured diagnostic when rejectAction is explicitly error", async () => {
+		const store = new FakeStagingStore()
+		const factory = vi.fn()
+		const input = createBaseInput({
+			imagePolicy: {
+				maxPixels: 100,
+				oversizedAction: "reject",
+				rejectAction: "error",
+			},
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [
+						createImageNode(
+							{
+								kind: "url",
+								url: "https://example.test/large.png",
+								key: "large-image",
+								contentType: "image/png",
+								extn: "png",
+							},
+							undefined,
+							{ width: 1000, height: 1000 },
+						),
+					],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+				createStreamingStagingStore: () => store,
+			},
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			diagnostic: {
+				phase: "preflight",
+				code: "preflight-rejected",
+				details: { action: "reject", reason: "pixel-limit-exceeded" },
+			},
+		})
+		expect(factory).not.toHaveBeenCalled()
+		expect(store.stageCalls).toEqual([])
 	})
 })

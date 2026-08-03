@@ -1,6 +1,16 @@
 import type { EmbedFontInput, UsedFont } from "../api/font"
 import { preflightPptxExport } from "../api/preflight"
-import type { MediaPolicy, PptxDestination, SlideConfig, StagingPolicy } from "../api/options"
+import type {
+	ExportFailurePhase,
+	ExportProgress,
+	ExportSummary,
+	MediaPolicy,
+	PptxDestination,
+	SlideConfig,
+	StagingPolicy,
+	StreamingHtmlPage,
+} from "../api/options"
+import { resolveStreamingMediaPolicyMode } from "../api/strategy"
 import type { StreamingExportTaskInput } from "../index"
 import type { PPTNode } from "../ir/node"
 import { serializePptNodes, type SerializablePPTNode } from "../ir/serialize"
@@ -18,7 +28,19 @@ import {
 	type StreamingWorkerDestination,
 } from "../packaging"
 import { createPresentation, ensureFileName } from "../packaging/pptx-document"
-import { isExportFidelityError } from "../errors"
+import {
+	isExportFidelityError,
+	isPptxExportError,
+	PptxExportError,
+	normalizePptxExportError,
+	type PptxExportErrorContext,
+} from "../errors"
+import {
+	preflightPptImage,
+	imagePolicyRequiresReplay,
+	type ImagePreflightDecision,
+	type ImageTransformDescriptorResult,
+} from "../media/image-preflight"
 import {
 	createAbortError,
 	throwIfAborted as throwIfSandboxAborted,
@@ -42,46 +64,139 @@ interface StreamingPptxWithStaging {
 	createOpfsStagingStore?: (options?: { sessionId?: string }) => StreamingStagingStore
 }
 
+interface ExportDiagnosticState {
+	phase: ExportFailurePhase
+	pageIndex?: number
+	pageCount?: number
+	bytesWritten?: number
+}
+
 /** Default Phase 4 HTML -> IR -> Packaging Worker streaming runner. */
-export async function runStreamingExport(input: StreamingExportTaskInput): Promise<{
-	fileName: string
-	pageCount: number
-	mediaPartCount: number
-	bytesWritten: number
-	durationMs: number
-}> {
+export async function runStreamingExport(input: StreamingExportTaskInput): Promise<ExportSummary> {
 	const startedAt = now()
-	const requiresStaging =
+	const requiresReplay =
 		input.autoSize ||
 		Boolean(input.fontResolver) ||
 		input.stagingPolicy?.mode === "opfs" ||
-		input.mediaPolicy?.mode === "rolling-stage" ||
-		input.mediaPolicy?.mode === "full-stage"
+		imagePolicyRequiresReplay(input.imagePolicy)
+	const mediaPolicyMode = resolveStreamingMediaPolicyMode(input.mediaPolicy, {
+		requiresReplay,
+	})
+	const requiresStaging =
+		requiresReplay || mediaPolicyMode === "rolling-stage" || mediaPolicyMode === "full-stage"
+	const diagnostic: ExportDiagnosticState = {
+		phase: "preflight",
+		pageCount: input.pageCount,
+	}
+	const trackedInput = createTrackedStreamingInput(input, diagnostic, mediaPolicyMode)
 	const createPackager =
 		input.pipeline?.createStreamingPresentationPackager ?? createStreamingPresentationPackager
-	const preflight = preflightPptxExport({
-		destination: input.destination,
-		outputPolicy: input.outputPolicy,
+	let errorContext: PptxExportErrorContext = {
+		phase: "preflight",
+		fileName: input.fileName,
 		pageCount: input.pageCount,
-		requiresOpfs: requiresStaging,
-		requiresSlidePlan: requiresStaging,
-		mediaPolicy: input.mediaPolicy,
-		stagingPolicy: input.stagingPolicy,
-		hasInjectedPackager: Boolean(input.pipeline?.createStreamingPresentationPackager),
-		hasInjectedStagingStore: Boolean(input.pipeline?.createStreamingStagingStore),
-	})
-	if (!preflight.accepted) {
-		const error = new Error(
-			`[exportPPTXStreaming] Preflight failed: ${preflight.errors.map((issue) => issue.message).join("; ")}`,
-		)
-		await abortDestination(input.destination, error)
-		throw error
+		mediaPolicyMode,
+		zipMode: "zip64",
 	}
-	if (!input.destination) throw new Error("[exportPPTXStreaming] A destination is required")
+	try {
+		const preflight = preflightPptxExport({
+			destination: input.destination,
+			outputPolicy: input.outputPolicy,
+			pageCount: input.pageCount,
+			requiresOpfs: requiresStaging,
+			requiresSlidePlan: requiresStaging,
+			mediaPolicy: trackedInput.mediaPolicy,
+			stagingPolicy: input.stagingPolicy,
+			hasInjectedPackager: Boolean(input.pipeline?.createStreamingPresentationPackager),
+			hasInjectedStagingStore: Boolean(input.pipeline?.createStreamingStagingStore),
+		})
+		errorContext = {
+			...errorContext,
+			outputPolicy: preflight.outputPolicy,
+			zipMode: preflight.zipMode,
+		}
+		if (!preflight.accepted) {
+			const cause = new Error(
+				`[exportPPTXStreaming] Preflight failed: ${preflight.errors.map((issue) => issue.message).join("; ")}`,
+			)
+			const error = normalizePptxExportError(cause, {
+				...errorContext,
+				code: "preflight-rejected",
+				details: {
+					issues: preflight.errors.map((issue) => ({
+						code: issue.code,
+						severity: issue.severity,
+					})),
+				},
+			})
+			await abortDestination(input.destination, error)
+			throw error
+		}
+		if (!input.destination) throw new Error("[exportPPTXStreaming] A destination is required")
 
-	return requiresStaging
-		? runStagedStreamingExport(input, createPackager, startedAt)
-		: runDirectStreamingExport(input, createPackager, startedAt)
+		diagnostic.phase = "worker"
+		const summary = requiresStaging
+			? await runStagedStreamingExport(trackedInput, createPackager, startedAt)
+			: await runDirectStreamingExport(trackedInput, createPackager, startedAt)
+		return {
+			...summary,
+			execution: {
+				outputPolicy: preflight.outputPolicy,
+				mediaPolicyMode,
+				zipMode: preflight.zipMode,
+				pipeline: requiresStaging ? "staged" : "direct",
+			},
+		}
+	} catch (error) {
+		throw normalizePptxExportError(error, {
+			...errorContext,
+			phase: diagnostic.phase,
+			pageIndex: diagnostic.pageIndex,
+			pageCount: diagnostic.pageCount,
+			bytesWritten: diagnostic.bytesWritten,
+			code: isExportFidelityError(error) ? "fidelity-failed" : undefined,
+		})
+	}
+}
+
+function createTrackedStreamingInput(
+	input: StreamingExportTaskInput,
+	diagnostic: ExportDiagnosticState,
+	mediaPolicyMode: Exclude<NonNullable<MediaPolicy["mode"]>, "auto">,
+): StreamingExportTaskInput {
+	return {
+		...input,
+		pages: trackPageSource(input.pages, diagnostic),
+		mediaPolicy: { ...input.mediaPolicy, mode: mediaPolicyMode },
+		onProgress: (progress) => {
+			trackExportProgress(diagnostic, progress)
+			input.onProgress?.(progress)
+		},
+	}
+}
+
+async function* trackPageSource(
+	pages: AsyncIterable<StreamingHtmlPage>,
+	diagnostic: ExportDiagnosticState,
+): AsyncIterable<StreamingHtmlPage> {
+	const iterator = pages[Symbol.asyncIterator]()
+	try {
+		while (true) {
+			diagnostic.phase = "source"
+			const next = await iterator.next()
+			if (next.done) return
+			yield next.value
+		}
+	} finally {
+		await iterator.return?.()
+	}
+}
+
+function trackExportProgress(diagnostic: ExportDiagnosticState, progress: ExportProgress): void {
+	diagnostic.phase = progress.phase
+	if (progress.pageIndex !== undefined) diagnostic.pageIndex = progress.pageIndex
+	if (progress.pageCount !== undefined) diagnostic.pageCount = progress.pageCount
+	if (progress.bytesWritten !== undefined) diagnostic.bytesWritten = progress.bytesWritten
 }
 
 async function runDirectStreamingExport(
@@ -117,6 +232,7 @@ async function runDirectStreamingExport(
 				const result = await prepareStreamingPage(input, page.html)
 				const nodes = serializePptNodes(result.pptNodes)
 				await normalizeNodeMediaSources(nodes)
+				await applyImagePreflight(nodes, input)
 				input.onProgress?.({
 					phase: "render-page",
 					pageIndex: page.index,
@@ -141,7 +257,12 @@ async function runDirectStreamingExport(
 				successCount += 1
 			} catch (error) {
 				if (input.signal.aborted) throw createAbortError()
-				if (isExportFidelityError(error) || !input.skipFailedPages) throw error
+				if (
+					isPptxExportError(error) ||
+					isExportFidelityError(error) ||
+					!input.skipFailedPages
+				)
+					throw error
 			}
 		}
 
@@ -206,6 +327,7 @@ async function runStagedStreamingExport(
 				measuredMaxWidth = Math.max(measuredMaxWidth, result.totalWidth)
 				const serialized = serializePptNodes(result.pptNodes)
 				await normalizeNodeMediaSources(serialized)
+				await applyImagePreflight(serialized, input)
 				const outputPages = input.autoSize
 					? sliceByPageHeight({
 							nodes: serialized,
@@ -252,7 +374,12 @@ async function runStagedStreamingExport(
 				})
 			} catch (error) {
 				if (input.signal.aborted) throw createAbortError()
-				if (isExportFidelityError(error) || !input.skipFailedPages) throw error
+				if (
+					isPptxExportError(error) ||
+					isExportFidelityError(error) ||
+					!input.skipFailedPages
+				)
+					throw error
 			}
 		}
 
@@ -334,6 +461,175 @@ async function prepareStreamingPage(input: StreamingExportTaskInput, html: strin
 		textMergeMode: DEFAULT_TEXT_MERGE_MODE,
 		runtime: input.pipeline,
 	})
+}
+
+/**
+ * Decide whether an explicit image policy may require a second pass.
+ *
+ * A policy that only explicitly forwards every class of image remains on the direct path. Any
+ * configured budget or action that can transform/reject an image is staged first, so a missing
+ * transform hook or an error policy is reported before the packaging writer is created.
+ */
+/**
+ * Apply the image policy after source normalization and before any media is staged or committed.
+ * This path only inspects descriptor metadata and intrinsic DOM dimensions. In particular,
+ * `passthrough` never calls Blob.arrayBuffer(), fetch(), or an image decoder.
+ */
+async function applyImagePreflight(
+	nodes: SerializablePPTNode[],
+	input: StreamingExportTaskInput,
+): Promise<void> {
+	const policy = input.imagePolicy
+	if (!policy) return
+
+	const transformImageDescriptor = input.pipeline?.transformImageDescriptor
+	const kept: SerializablePPTNode[] = []
+	for (const node of nodes) {
+		if (node.type !== "image" || !node.source) {
+			kept.push(node)
+			continue
+		}
+
+		const decision = preflightPptImage(node, policy)
+		if (decision.action === "passthrough") {
+			kept.push(node)
+			continue
+		}
+
+		if (decision.action === "reject") {
+			if ((policy.rejectAction ?? "error") === "omit") continue
+			throw createImagePreflightError(
+				"preflight",
+				"preflight-rejected",
+				"Image rejected by imagePolicy",
+				node,
+				decision,
+			)
+		}
+
+		if (!transformImageDescriptor) {
+			throw createImagePreflightError(
+				"transform-media",
+				"media-transform-failed",
+				"Image policy requires a transformImageDescriptor runtime hook",
+				node,
+				decision,
+			)
+		}
+
+		let transformed: ImageTransformDescriptorResult
+		try {
+			transformed = await transformImageDescriptor({
+				source: node.source,
+				intrinsicSize: node.intrinsicSize,
+				decision,
+				assetKey: node.assetKey,
+				sizing: node.sizing,
+				signal: input.signal,
+			})
+		} catch (error) {
+			throw normalizePptxExportError(error, {
+				phase: "transform-media",
+				code: "media-transform-failed",
+				details: imageDecisionDetails(node.assetKey, decision),
+			})
+		}
+
+		const result = unpackImageTransformResult(transformed)
+		if (!result) {
+			throw createImagePreflightError(
+				"transform-media",
+				"media-transform-failed",
+				"transformImageDescriptor returned an invalid media descriptor",
+				node,
+				decision,
+			)
+		}
+		node.source = withMediaSourceKey(result.source, node.assetKey)
+		node.src = ""
+		node.srcBytes = undefined
+		if (result.intrinsicSize) node.intrinsicSize = result.intrinsicSize
+		kept.push(node)
+	}
+
+	if (kept.length !== nodes.length) {
+		nodes.splice(0, nodes.length, ...kept)
+	}
+}
+
+function unpackImageTransformResult(
+	result: ImageTransformDescriptorResult,
+):
+	| { source: MediaSourceDescriptor; intrinsicSize?: { width: number; height: number } }
+	| undefined {
+	if (isMediaSourceDescriptor(result)) return { source: result }
+	if (!result || typeof result !== "object" || !("source" in result)) return undefined
+	const source = (result as { source?: unknown }).source
+	if (!isMediaSourceDescriptor(source)) return undefined
+	const intrinsicSize = (result as { intrinsicSize?: unknown }).intrinsicSize
+	if (
+		intrinsicSize !== undefined &&
+		(!intrinsicSize ||
+			typeof intrinsicSize !== "object" ||
+			!Number.isFinite((intrinsicSize as { width?: unknown }).width) ||
+			!Number.isFinite((intrinsicSize as { height?: unknown }).height))
+	) {
+		return undefined
+	}
+	return {
+		source,
+		...(intrinsicSize === undefined
+			? {}
+			: { intrinsicSize: intrinsicSize as { width: number; height: number } }),
+	}
+}
+
+function isMediaSourceDescriptor(value: unknown): value is MediaSourceDescriptor {
+	if (!value || typeof value !== "object") return false
+	const source = value as { kind?: unknown; key?: unknown; contentType?: unknown; extn?: unknown }
+	return (
+		(source.kind === "opfs" ||
+			source.kind === "blob" ||
+			source.kind === "url" ||
+			source.kind === "bytes" ||
+			source.kind === "path") &&
+		typeof source.key === "string" &&
+		typeof source.contentType === "string" &&
+		typeof source.extn === "string"
+	)
+}
+
+function createImagePreflightError(
+	phase: "preflight" | "transform-media",
+	code: "preflight-rejected" | "media-transform-failed",
+	message: string,
+	node: SerializablePPTNode & { type: "image" },
+	decision: ImagePreflightDecision,
+): PptxExportError {
+	return new PptxExportError({
+		phase,
+		code,
+		message,
+		recoverable: false,
+		cancelled: false,
+		details: imageDecisionDetails(node.assetKey, decision),
+	})
+}
+
+function imageDecisionDetails(
+	assetKey: string | undefined,
+	decision: ImagePreflightDecision,
+): Record<string, unknown> {
+	return {
+		assetKey,
+		action: decision.action,
+		reason: decision.reason,
+		contentType: decision.contentType,
+		...(decision.encodedBytes === undefined ? {} : { encodedBytes: decision.encodedBytes }),
+		...(decision.width === undefined ? {} : { width: decision.width }),
+		...(decision.height === undefined ? {} : { height: decision.height }),
+		...(decision.pixelCount === undefined ? {} : { pixelCount: decision.pixelCount }),
+	}
 }
 
 async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<void> {
@@ -588,20 +884,35 @@ function createFrozenPlan(
 	return {
 		finalSlideCount: slides.length,
 		slidePlan: { slides },
-		capacityPlan: createCapacityPlan(slides.length, media),
+		capacityPlan: createCapacityPlan(slides.length, media, { mediaScanComplete: true }),
 	}
 }
 
 function createCapacityOnlyPlan(pageCount?: number): StreamingPresentationPlan {
 	return {
-		capacityPlan: createCapacityPlan(pageCount ?? 0, new Map()),
+		// The direct path starts packaging before pages and media are observed. An
+		// empty map here means "not scanned yet", rather than "this export has no
+		// media", so capacity telemetry must remain conservative.
+		capacityPlan: createCapacityPlan(pageCount ?? 0, new Map(), { mediaScanComplete: false }),
 	}
 }
 
-function createCapacityPlan(slideCount: number, media: ReadonlyMap<string, MediaSourceDescriptor>) {
+interface CapacityPlanOptions {
+	/** Whether the supplied media map represents the complete export. */
+	readonly mediaScanComplete?: boolean
+}
+
+const ZIP32_SIZE_SENTINEL = BigInt("4294967295")
+const ZIP32_ENTRY_COUNT_SENTINEL = BigInt("65535")
+
+function createCapacityPlan(
+	slideCount: number,
+	media: ReadonlyMap<string, MediaSourceDescriptor>,
+	options: CapacityPlanOptions = {},
+) {
 	let knownInputBytes = BigInt(0)
 	let maxKnownEntryBytes: bigint | undefined
-	let hasUnknownLengthSource = media.size === 0
+	let hasUnknownLengthSource = options.mediaScanComplete !== true
 	for (const source of media.values()) {
 		const size = descriptorSize(source)
 		if (size === undefined) {
@@ -618,10 +929,13 @@ function createCapacityPlan(slideCount: number, media: ReadonlyMap<string, Media
 	return {
 		confidence: hasUnknownLengthSource ? "streaming-unknown" : "upper-bound",
 		zipMode: "zip64",
-		hasUnknownLengthSource: true,
-		maxEntryBytesMayReachZip32Limit: true,
-		archiveBytesMayReachZip32Limit: true,
-		entryCountMayReachZip32Limit: estimatedEntryCount >= BigInt(65535),
+		hasUnknownLengthSource,
+		maxEntryBytesMayReachZip32Limit:
+			hasUnknownLengthSource ||
+			(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL),
+		archiveBytesMayReachZip32Limit:
+			hasUnknownLengthSource || knownInputBytes >= ZIP32_SIZE_SENTINEL,
+		entryCountMayReachZip32Limit: estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL,
 		knownInputBytes,
 		maxKnownEntryBytes,
 		estimatedEntryCount,

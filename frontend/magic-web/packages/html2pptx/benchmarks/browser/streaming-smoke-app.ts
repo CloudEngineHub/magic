@@ -1,6 +1,7 @@
 // Vite resolves this benchmark-only alias to either the source tree or an explicit dist build.
 // eslint-disable-next-line import/no-unresolved
 import { createPptxStreamingExporter, type ExportProgress } from "@html2pptx-benchmark-target"
+import { createInstrumentedSink, inspectZipArchive, sha256Blob } from "./streaming-smoke-support"
 
 interface StreamingSmokeInput {
 	slides: number
@@ -16,9 +17,34 @@ export interface StreamingSmokeResult {
 	}
 	fileBytes: number
 	artifactSha256: string
+	archiveType: "classic" | "zip64"
 	centralDirectoryEntryCount: number
+	centralDirectoryOffset: number
+	centralDirectorySize: number
 	slideXmlCount: number
 	missingSlideNumbers: number[]
+	archiveMetadataBytesRead: number
+	centralDirectoryBytesRead: number
+	maxArchiveValidationBufferBytes: number
+	hashDurationMs: number
+	hashBytesRead: number
+	hashChunkCount: number
+	maxHashChunkBytes: number
+	validationDurationMs: number
+	chunkCount: number
+	totalChunkBytes: number
+	maxChunkBytes: number
+	maxInFlightBytes: number
+	maxInFlightChunks: number
+	writeWaitCount: number
+	writeWaitTotalMs: number
+	writeWaitMaxMs: number
+	ackWaitCount: number
+	ackWaitTotalMs: number
+	ackWaitMaxMs: number
+	sinkFailedWriteCount: number
+	sinkCloseCount: number
+	sinkAbortCount: number
 	destinationConstructor: string
 	destinationTag: string
 	destinationMode: "sink-proxy"
@@ -26,6 +52,7 @@ export interface StreamingSmokeResult {
 	progressCounts: Record<string, number>
 	sampledBaselineJsHeapBytes: number | null
 	sampledExportPeakJsHeapBytes: number | null
+	sampledValidationPeakJsHeapBytes: number | null
 	heapSampleIntervalMs: number
 	longTaskCount: number
 	longTaskTotalMs: number
@@ -82,6 +109,11 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 	const fileName = `html2pptx-streaming-smoke-${crypto.randomUUID()}.pptx`
 	const fileHandle = await root.getFileHandle(fileName, { create: true })
 	const writable = await fileHandle.createWritable({ keepExistingData: false })
+	const instrumentedSink = createInstrumentedSink({
+		write: (chunk) => writable.write(chunk),
+		close: () => writable.close(),
+		abort: (reason) => writable.abort(reason),
+	})
 	const destinationConstructor = writable.constructor.name
 	const destinationTag = Object.prototype.toString.call(writable)
 	const progressCounts: Record<string, number> = {}
@@ -98,11 +130,7 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 			// worker's output through the production sink-proxy protocol.
 			destination: {
 				kind: "sink-proxy",
-				sink: {
-					write: (chunk) => writable.write(chunk),
-					close: () => writable.close(),
-					abort: (reason) => writable.abort(reason),
-				},
+				sink: instrumentedSink.sink,
 			},
 			compression: false,
 			logLevel: "error",
@@ -111,11 +139,16 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 		const summary = await handle.promise
 		const sampledExportPeakJsHeapBytes = heap.currentPeak()
 		const longTaskSummary = longTasks.stop()
-		const heapSummary = heap.stop()
 		const file = await fileHandle.getFile()
-		const bytes = new Uint8Array(await file.arrayBuffer())
-		const archive = inspectArchive(bytes, input.slides)
-		const artifactSha256 = await sha256(bytes)
+		const validationStartedAt = performance.now()
+		const archive = await inspectZipArchive(file, input.slides)
+		const hash = await sha256Blob(file)
+		const validationDurationMs = performance.now() - validationStartedAt
+		const heapSummary = heap.stop()
+		const sinkTelemetry = instrumentedSink.snapshot()
+		if (sinkTelemetry.currentInFlightBytes !== 0 || sinkTelemetry.currentInFlightChunks !== 0) {
+			throw new Error("Streaming sink retained in-flight chunks after export completion")
+		}
 
 		return {
 			summary: {
@@ -125,10 +158,35 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 				durationMs: summary.durationMs,
 			},
 			fileBytes: file.size,
-			artifactSha256,
+			artifactSha256: hash.sha256,
+			archiveType: archive.archiveType,
 			centralDirectoryEntryCount: archive.centralDirectoryEntryCount,
+			centralDirectoryOffset: archive.centralDirectoryOffset,
+			centralDirectorySize: archive.centralDirectorySize,
 			slideXmlCount: archive.slideXmlCount,
 			missingSlideNumbers: archive.missingSlideNumbers,
+			archiveMetadataBytesRead: archive.archiveMetadataBytesRead,
+			centralDirectoryBytesRead: archive.centralDirectoryBytesRead,
+			maxArchiveValidationBufferBytes: archive.maxArchiveValidationBufferBytes,
+			hashDurationMs: hash.durationMs,
+			hashBytesRead: hash.bytesRead,
+			hashChunkCount: hash.chunkCount,
+			maxHashChunkBytes: hash.maxChunkBytes,
+			validationDurationMs,
+			chunkCount: sinkTelemetry.chunkCount,
+			totalChunkBytes: sinkTelemetry.totalChunkBytes,
+			maxChunkBytes: sinkTelemetry.maxChunkBytes,
+			maxInFlightBytes: sinkTelemetry.maxInFlightBytes,
+			maxInFlightChunks: sinkTelemetry.maxInFlightChunks,
+			writeWaitCount: sinkTelemetry.writeWaitCount,
+			writeWaitTotalMs: sinkTelemetry.writeWaitTotalMs,
+			writeWaitMaxMs: sinkTelemetry.writeWaitMaxMs,
+			ackWaitCount: sinkTelemetry.ackWaitCount,
+			ackWaitTotalMs: sinkTelemetry.ackWaitTotalMs,
+			ackWaitMaxMs: sinkTelemetry.ackWaitMaxMs,
+			sinkFailedWriteCount: sinkTelemetry.failedWriteCount,
+			sinkCloseCount: sinkTelemetry.closeCount,
+			sinkAbortCount: sinkTelemetry.abortCount,
 			destinationConstructor,
 			destinationTag,
 			destinationMode: "sink-proxy",
@@ -136,6 +194,7 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 			progressCounts,
 			sampledBaselineJsHeapBytes: heapSummary.baseline,
 			sampledExportPeakJsHeapBytes,
+			sampledValidationPeakJsHeapBytes: heapSummary.peak,
 			heapSampleIntervalMs: heapSummary.sampleIntervalMs,
 			longTaskCount: longTaskSummary.count,
 			longTaskTotalMs: longTaskSummary.totalMs,
@@ -177,50 +236,6 @@ function createSlideHtml(index: number, includeMedia: boolean): string {
 
 function incrementProgress(counts: Record<string, number>, progress: ExportProgress): void {
 	counts[progress.phase] = (counts[progress.phase] ?? 0) + 1
-}
-
-function inspectArchive(
-	bytes: Uint8Array,
-	expectedSlides: number,
-): {
-	centralDirectoryEntryCount: number
-	slideXmlCount: number
-	missingSlideNumbers: number[]
-} {
-	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-	const decoder = new TextDecoder()
-	const slideNumbers = new Set<number>()
-	let centralDirectoryEntryCount = 0
-
-	for (let offset = 0; offset + 46 <= bytes.byteLength; ) {
-		if (view.getUint32(offset, true) !== 0x02014b50) {
-			offset += 1
-			continue
-		}
-		const fileNameLength = view.getUint16(offset + 28, true)
-		const extraLength = view.getUint16(offset + 30, true)
-		const commentLength = view.getUint16(offset + 32, true)
-		const entryLength = 46 + fileNameLength + extraLength + commentLength
-		if (offset + entryLength > bytes.byteLength) {
-			offset += 1
-			continue
-		}
-		const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + fileNameLength))
-		centralDirectoryEntryCount += 1
-		const slideMatch = name.match(/^ppt\/slides\/slide(\d+)\.xml$/)
-		if (slideMatch) slideNumbers.add(Number(slideMatch[1]))
-		offset += entryLength
-	}
-
-	const missingSlideNumbers: number[] = []
-	for (let index = 1; index <= expectedSlides; index += 1) {
-		if (!slideNumbers.has(index)) missingSlideNumbers.push(index)
-	}
-	return {
-		centralDirectoryEntryCount,
-		slideXmlCount: slideNumbers.size,
-		missingSlideNumbers,
-	}
 }
 
 function startHeapSampler(): {
@@ -279,11 +294,6 @@ function startLongTaskObserver(): {
 			}
 		},
 	}
-}
-
-async function sha256(bytes: Uint8Array): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", bytes)
-	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
 function createAbortError(): DOMException {

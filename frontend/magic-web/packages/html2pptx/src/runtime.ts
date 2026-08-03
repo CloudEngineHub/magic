@@ -5,6 +5,7 @@ import type { PPTNode } from "./ir/node"
 import type { PackagePresentationInput, SerializablePPTNode } from "./ir/serialize"
 import type { IconBackup } from "./materialize/pseudo-icon"
 import type { MediaSourceDescriptor } from "./media/source-descriptor"
+import type { ImageTransformDescriptor } from "./media/image-preflight"
 import type { PrepareSlideNodesInput, PrepareSlideNodesResult } from "./pipeline/render-slide"
 import type {
 	SandboxInstance,
@@ -82,6 +83,8 @@ export interface RenderSlideRuntime {
 }
 
 export interface ExportPipelineRuntime extends RenderSlideRuntime {
+	/** Optional descriptor-only image conversion hook used when imagePolicy requests transform. */
+	transformImageDescriptor?: ImageTransformDescriptor
 	prepareSlideNodes?: (input: PrepareSlideNodesInput) => Promise<PrepareSlideNodesResult>
 	detectFontsFromNodes?: (slides: SerializablePPTNode[][]) => UsedFont[]
 	packagePresentationInWorker?: (

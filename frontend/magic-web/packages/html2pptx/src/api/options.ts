@@ -1,5 +1,8 @@
 import type { ExternalLogger, LogLevelLabel } from "../logger"
 import type { FontMissPolicy, FontResolver } from "./font"
+import type { ImagePolicy } from "../media/image-preflight"
+
+export type { ImagePolicy } from "../media/image-preflight"
 
 /** Slide configuration */
 export interface SlideConfig {
@@ -106,6 +109,64 @@ export type ExportPhase =
 	| "finalize"
 	| "completed"
 
+/**
+ * The last externally observable operation before an export failed.
+ *
+ * This is intentionally separate from ExportPhase: failure diagnostics also need to describe
+ * picker/source/worker/sink failures that are not progress phases shown to users.
+ */
+export type ExportFailurePhase =
+	| ExportPhase
+	| "picker"
+	| "source"
+	| "media-fetch"
+	| "transform-media"
+	| "worker"
+	| "sink-write"
+	| "cleanup"
+	| "unknown"
+
+export type ExportFailureCode =
+	| "cancelled"
+	| "preflight-rejected"
+	| "source-failed"
+	| "prepare-page-failed"
+	| "render-page-failed"
+	| "media-fetch-failed"
+	| "media-transform-failed"
+	| "package-page-failed"
+	| "worker-failed"
+	| "sink-write-failed"
+	| "finalize-failed"
+	| "cleanup-failed"
+	| "fidelity-failed"
+	| "unknown"
+
+/** Structured information attached to a failed export for metrics and support diagnostics. */
+export interface ExportFailureDiagnostic {
+	phase: ExportFailurePhase
+	code: ExportFailureCode
+	message: string
+	recoverable: boolean
+	cancelled: boolean
+	fileName?: string
+	pageIndex?: number
+	pageCount?: number
+	bytesWritten?: number
+	outputPolicy?: Exclude<LargeExportOutputPolicy, "auto">
+	mediaPolicyMode?: Exclude<NonNullable<MediaPolicy["mode"]>, "auto">
+	zipMode?: ZipMode
+	details?: Record<string, unknown>
+}
+
+/** Metadata describing the actual large-export execution path. */
+export interface ExportExecutionInfo {
+	outputPolicy: Exclude<LargeExportOutputPolicy, "auto">
+	mediaPolicyMode: Exclude<NonNullable<MediaPolicy["mode"]>, "auto">
+	zipMode: ZipMode
+	pipeline: "direct" | "staged"
+}
+
 /** Progress information safe to retain in application state or logs. */
 export interface ExportProgress {
 	phase: ExportPhase
@@ -187,6 +248,8 @@ export interface LargeExportOptions extends Omit<ExportOptions, "onSlideProgress
 	pageCount?: number
 	onProgress?: (progress: ExportProgress) => void
 	mediaPolicy?: MediaPolicy
+	/** Descriptor-only image safety policy for large exports. */
+	imagePolicy?: ImagePolicy
 	stagingPolicy?: StagingPolicy
 	compression?: boolean
 }
@@ -198,6 +261,8 @@ export interface ExportSummary {
 	mediaPartCount: number
 	bytesWritten: number
 	durationMs: number
+	/** Present for the built-in streaming runner; optional for injected legacy runners. */
+	execution?: ExportExecutionInfo
 }
 
 /** Cancellable handle returned by exportPPTXStreaming. */

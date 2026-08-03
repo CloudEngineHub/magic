@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
 	exportPPTXStreaming: vi.fn(),
+	imagePolicyRequiresReplay: vi.fn(
+		(policy: { maxPixels?: number } | undefined) => policy?.maxPixels !== undefined,
+	),
 }))
 
 vi.mock("@magic/html2pptx", () => ({
 	exportPPTXStreaming: mocks.exportPPTXStreaming,
+	imagePolicyRequiresReplay: mocks.imagePolicyRequiresReplay,
 }))
 
 import {
@@ -220,6 +224,7 @@ describe("pptxStreamingExport", () => {
 		expect(mocks.exportPPTXStreaming).toHaveBeenCalledOnce()
 		expect(mocks.exportPPTXStreaming.mock.calls[0][1]).toEqual(
 			expect.objectContaining({
+				mediaPolicy: expect.objectContaining({ mode: "direct-stream" }),
 				config: {
 					htmlWidth: 1080,
 					htmlHeight: 1920,
@@ -232,6 +237,31 @@ describe("pptxStreamingExport", () => {
 			{ index: 0, html: portraitHtml },
 			{ index: 1, html: "<main>second</main>" },
 		])
+	})
+
+	it("keeps image-policy replay on rolling-stage media mode", async () => {
+		mocks.exportPPTXStreaming.mockImplementation(
+			(_pages: AsyncIterable<unknown>, options: Record<string, unknown>) => ({
+				cancel: vi.fn(),
+				promise: Promise.resolve({ pageCount: 1, bytesWritten: 0, options }),
+			}),
+		)
+
+		const handle = startPptxStreamingExportFromFactory(
+			async function* () {
+				yield "<main>image</main>"
+			},
+			{
+				imagePolicy: { maxPixels: 100 },
+			},
+		)
+		await handle.promise
+
+		expect(mocks.exportPPTXStreaming.mock.calls[0][1]).toEqual(
+			expect.objectContaining({
+				mediaPolicy: expect.objectContaining({ mode: "rolling-stage" }),
+			}),
+		)
 	})
 
 	it("rejects an empty page source before starting html2pptx", async () => {

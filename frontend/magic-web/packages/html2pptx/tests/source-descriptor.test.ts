@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	MAX_INLINE_MEDIA_BYTES,
 	bytesMediaSourceDescriptor,
 	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,
@@ -55,6 +56,14 @@ describe("streaming media source descriptors", () => {
 				contentType: "image/webp",
 			}),
 		).toMatchObject({ extn: "webp", metadataOrigin: "explicit" })
+	})
+
+	it("rejects an oversized percent-encoded data URL before decoding it", async () => {
+		const payload = "a".repeat(MAX_INLINE_MEDIA_BYTES + 1)
+
+		await expect(normalizeMediaSourceDescriptor(`data:image/png,${payload}`)).rejects.toThrow(
+			/use a Blob, URL, or OPFS descriptor/,
+		)
 	})
 
 	it("keeps the signed URL as transport while rebinding its stable business key", async () => {

@@ -38,6 +38,7 @@ export interface StreamingExportTaskInput {
 	outputPolicy?: LargeExportOptions["outputPolicy"]
 	destination?: PptxDestination
 	mediaPolicy?: LargeExportOptions["mediaPolicy"]
+	imagePolicy?: LargeExportOptions["imagePolicy"]
 	stagingPolicy?: LargeExportOptions["stagingPolicy"]
 	compression?: boolean
 	pipeline?: Html2PptxRuntime["pipeline"]
@@ -187,6 +188,7 @@ async function runStreamingExportPipeline(
 			outputPolicy: options?.outputPolicy,
 			destination: options?.destination,
 			mediaPolicy: options?.mediaPolicy,
+			imagePolicy: options?.imagePolicy,
 			stagingPolicy: options?.stagingPolicy,
 			compression: options?.compression,
 			pipeline: runtime.pipeline,
@@ -351,6 +353,10 @@ export type {
 	ExportPreflightResult,
 	ExportProgress,
 	ExportSummary,
+	ExportExecutionInfo,
+	ExportFailureCode,
+	ExportFailureDiagnostic,
+	ExportFailurePhase,
 	ByteCount,
 	CapacityConfidence,
 	LargeExportHandle,
@@ -367,11 +373,35 @@ export type {
 	StreamingHtmlPageInput,
 	ZipMode,
 } from "./api/options"
+export type {
+	ImagePolicy,
+	ImagePreflightAction,
+	ImagePreflightDecision,
+	ImagePreflightPolicy,
+	ImagePreflightReason,
+	ImagePreflightRejectAction,
+	ImageTransformDescriptor,
+	ImageTransformDescriptorInput,
+	ImageTransformDescriptorResult,
+} from "./media/image-preflight"
+export { imagePolicyRequiresReplay, preflightPptImage } from "./media/image-preflight"
 export { preflightPptxExport, type PreflightOptions } from "./api/preflight"
+export {
+	resolveStreamingMediaPolicyMode,
+	type ResolveMediaPolicyModeOptions,
+	type ResolvedMediaPolicyMode,
+} from "./api/strategy"
 export type { EmbedFontInput, FontMissPolicy, FontResolver, UsedFont } from "./api/font"
 export { DEFAULT_CONFIG } from "./shared/unit"
-export { ExportFidelityError, isExportFidelityError } from "./errors"
-export type { ExportFidelityFailureKind } from "./errors"
+export {
+	ExportFidelityError,
+	isExportFidelityError,
+	PptxExportError,
+	isPptxExportError,
+	getPptxExportDiagnostic,
+	normalizePptxExportError,
+} from "./errors"
+export type { ExportFidelityFailureKind, PptxExportErrorContext } from "./errors"
 export { LogLevel } from "./logger"
 export type { ExternalLogger } from "./logger"
 export {
