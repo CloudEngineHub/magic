@@ -1828,6 +1828,10 @@
 			"editorRenderError": "Markdown渲染错误"
 		}
 	},
+	"export": {
+		"generatedBy": "由{{platformName}}生成",
+		"platformFallback": "平台"
+	},
 	"fileTree": {
 		"collapseAll": "一键折叠",
 		"empty": "暂无文件",
