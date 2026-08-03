@@ -394,7 +394,7 @@ export function DevConsolePanel({
 						onValueChange={(v) => onTabChange(v as DevConsoleTab)}
 						className="flex h-full w-max min-w-full items-center"
 					>
-						<TabsList className="h-7 w-max flex-nowrap whitespace-nowrap bg-transparent p-0">
+						<TabsList className="mr-auto h-8 w-max flex-nowrap whitespace-nowrap bg-transparent p-0">
 							{visibleTabs.map((tabId, index) => {
 								const isDropTarget =
 									dragOverIdx === index &&

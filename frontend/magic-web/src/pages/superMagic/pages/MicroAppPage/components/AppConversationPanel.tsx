@@ -262,9 +262,9 @@ function AppConversationPanel({
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
 				<div className="flex flex-col gap-1.5">
-					<div className="flex px-1">
+					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />
-					</div>
+					</div> */}
 					<DefaultMessageEditorContainer editorContext={editorContext} />
 				</div>
 			}
