@@ -139,6 +139,8 @@ interface HTMLProps {
 	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
+	/** Live tab state, excluded from cached renderProps. */
+	isTabActive?: boolean
 	showFooter?: boolean
 	onRefreshFile?: () => void
 	isPlaybackMode?: boolean
@@ -231,6 +233,7 @@ export default memo(function HTML(props: HTMLProps) {
 		selectedProject,
 		showFileHeader = true,
 		activeFileId,
+		isTabActive,
 		showFooter,
 		onRefreshFile,
 		isPlaybackMode = false,
@@ -327,7 +330,12 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 头部刷新：拉取 HTML / data.js 版本列表；若最新版本号变新则切到最新并加载 */
 	const handleDetailHeaderRefresh = useMemoizedFn(async () => {
-		if (!displayData?.file_id || activeFileId !== displayData.file_id) return
+		if (!displayData?.file_id) return
+
+		// Use live tab state because cached activeFileId may be stale.
+		const isCurrentTabActive =
+			isTabActive === undefined ? activeFileId === displayData.file_id : isTabActive
+		if (!isCurrentTabActive) return
 
 		const htmlFileId = displayData.file_id
 		const prevHtmlNewest = htmlFileVersionsList[0]?.version
