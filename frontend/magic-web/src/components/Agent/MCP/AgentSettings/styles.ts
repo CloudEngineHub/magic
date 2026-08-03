@@ -79,8 +79,12 @@ export const useStyles = createStyles(({ css, token }) => {
 		mobileLayout: css`
 			width: 100%;
 			height: 76vh;
+			min-height: 0;
 			display: flex;
 			flex-direction: column;
+		`,
+		compactLayout: css`
+			height: 100%;
 		`,
 		mobileHeader: css`
 			width: 100%;
