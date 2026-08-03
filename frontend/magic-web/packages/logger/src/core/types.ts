@@ -84,6 +84,21 @@ export interface IErrorInfo {
 	extra?: Record<string, any>
 }
 
+/** 应用 Logger 与具体 APM Provider 之间的内部异常协议。 */
+export interface ProviderErrorInput {
+	kind: "provider-error-input"
+	value: unknown
+	fallbackMessage: string
+	attributes: {
+		namespace: string
+		eventId: string
+		release: string
+		captureSource: "manual" | "global"
+		eventKey?: string
+		errorKind?: string
+	}
+}
+
 /**
  * Provider 基类接口
  */
@@ -97,7 +112,7 @@ export interface IProvider {
 	/** 设置实例信息（应用版本、用户ID、设备ID） */
 	setConfig(config: Record<string, string | null | undefined>): void
 	/** 异常上报 */
-	error(...error: any[]): void
+	error(...error: unknown[]): void
 	/** 自定义上报方法 */
 	report(event: ICustomEvent): void
 	// /** 捕获错误 */
@@ -131,7 +146,7 @@ export interface ILogger {
 	/** 停止 */
 	stop(): void
 	/** 异常上报 */
-	error(...error: any[]): void
+	error(...error: unknown[]): void
 	/** 上报埋点方法 */
 	report(value: any): void
 	/** 追踪事件 */

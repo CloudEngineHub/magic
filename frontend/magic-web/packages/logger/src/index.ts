@@ -17,6 +17,7 @@ export type {
 	IUserInfo,
 	ICustomEvent,
 	IErrorInfo,
+	ProviderErrorInput,
 	ProviderType,
 	LogLevel,
 } from "./core/types"
