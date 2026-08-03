@@ -1,4 +1,4 @@
-import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react"
+import { type ComponentProps, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
 import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
@@ -7,7 +7,11 @@ import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HT
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { resolveDefaultHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	ProjectStatus,
+	type ProjectListItem,
+	TopicMode,
+} from "@/pages/superMagic/pages/Workspace/types"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import UserAvatarRender from "@/components/business/UserAvatarRender"
 import OrganizationList from "@/layouts/BaseLayout/components/Sider/components/OrganizationSwitch/OrganizationList"
@@ -23,6 +27,23 @@ import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
+
+function createShareProject(projectId: string, projectName: string): ProjectListItem {
+	return {
+		id: projectId,
+		project_name: projectName || projectId,
+		project_status: ProjectStatus.WAITING,
+		project_mode: TopicMode.General,
+		workspace_id: "",
+		work_dir: "",
+		workspace_name: "",
+		current_topic_id: "",
+		current_topic_status: "",
+		created_at: "",
+		updated_at: "",
+		tag: "",
+	}
+}
 
 const transparentDropdownOverlayClassName =
 	"!rounded-none !border-0 !bg-transparent !p-0 !shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
@@ -129,7 +150,11 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 		setUserMenuOpen(false)
 	}, [])
 
-	const renderOrganizationList = () => <OrganizationList onClose={handleOrganizationListClose} />
+	const renderOrganizationList = () => (
+		<Suspense fallback={null}>
+			<OrganizationList onClose={handleOrganizationListClose} />
+		</Suspense>
+	)
 
 	const renderUserMenu = () => (
 		<div
@@ -288,11 +313,7 @@ export default function MicroAppSharePage() {
 	const selectedProject = useMemo<ProjectListItem | null>(
 		() =>
 			shareMeta.projectId
-				? ({
-						id: shareMeta.projectId,
-						project_name: shareMeta.projectName,
-						name: shareMeta.projectName,
-					} as ProjectListItem)
+				? createShareProject(shareMeta.projectId, shareMeta.projectName)
 				: null,
 		[shareMeta.projectId, shareMeta.projectName],
 	)
