@@ -82,7 +82,7 @@ export default function MicroAppEditDialog({
 			setCoverFileKey(null)
 			setCoverUrl("")
 			try {
-				const detail = await SuperMagicApi.getMicroAppProject(appId)
+				const detail = await SuperMagicApi.getMicroAppProject(appId!)
 				if (ignore) return
 
 				const nextCoverFileKey = detail.publish?.cover_file_key ?? null
