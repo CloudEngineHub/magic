@@ -24,6 +24,7 @@ const mockState = vi.hoisted(() => {
 			slides: [] as SlideItem[],
 			activeIndex: 0,
 			ensureSlideScreenshot: vi.fn(),
+			updateVisibleSlidePreviews: vi.fn(),
 			getFileIdByPath: vi.fn((path: string) => `file-${path}`),
 			getFullRelativePath: vi.fn((path: string) => `/ppt/${path}`),
 		},

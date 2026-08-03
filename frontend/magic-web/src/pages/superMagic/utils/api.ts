@@ -301,11 +301,15 @@ export const getFileContentById = async (
 // 从URL下载文件内容并返回指定格式的数据
 export const downloadFileContent = async (
 	url: string,
-	options: { responseType?: "text" | "arrayBuffer" | "blob" } = {},
+	options: {
+		responseType?: "text" | "arrayBuffer" | "blob"
+		signal?: AbortSignal
+	} = {},
 ): Promise<string | ArrayBuffer | Blob> => {
 	try {
 		const response = await fetch(url, {
 			method: "GET",
+			signal: options.signal,
 		})
 
 		if (!response.ok) {

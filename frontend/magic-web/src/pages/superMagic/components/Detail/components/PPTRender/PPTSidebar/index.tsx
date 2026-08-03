@@ -161,10 +161,13 @@ function PPTSidebar({
 
 	// The virtual range is the single source of truth for thumbnail preloading.
 	useEffect(() => {
-		rowVirtualizer.getVirtualItems().forEach(({ index }) => {
-			const item = itemsRef.current[index]
-			if (item) void store.ensureSlideScreenshot(item.index)
-		})
+		const visibleIndices = rowVirtualizer
+			.getVirtualItems()
+			.map(({ index }) => itemsRef.current[index]?.index)
+			.filter((index): index is number => index !== undefined)
+		store.updateVisibleSlidePreviews(visibleIndices)
+
+		return () => store.updateVisibleSlidePreviews([])
 	}, [rowVirtualizer, store, visibleScreenshotKey])
 
 	useEffect(() => {

@@ -18,3 +18,4 @@ export {
 	type IncrementalUpdateContext,
 } from "./PPTIncrementalUpdateService"
 export { PPTSyncManager } from "./PPTSyncManager"
+export { PPTSlideContentScheduler, type PPTSlideContentPriority } from "./PPTSlideContentScheduler"

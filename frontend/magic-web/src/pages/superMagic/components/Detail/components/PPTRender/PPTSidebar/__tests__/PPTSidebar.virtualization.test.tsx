@@ -34,6 +34,7 @@ const mockState = vi.hoisted(() => {
 			slides: [] as SlideItem[],
 			activeIndex: 0,
 			ensureSlideScreenshot: vi.fn(),
+			updateVisibleSlidePreviews: vi.fn(),
 			getFileIdByPath: vi.fn((path: string) => `file-${path}`),
 			getFullRelativePath: vi.fn((path: string) => `/ppt/${path}`),
 		},
@@ -221,10 +222,25 @@ describe("PPTSidebar virtualization", () => {
 				.querySelector('[data-slot="scroll-area-viewport"]'),
 		)
 
-		await waitFor(() => expect(mockState.store.ensureSlideScreenshot).toHaveBeenCalledTimes(10))
-		expect(mockState.store.ensureSlideScreenshot.mock.calls.map(([index]) => index)).toEqual([
-			0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-		])
+		await waitFor(() =>
+			expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenCalledWith([
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+			]),
+		)
+		expect(mockState.store.ensureSlideScreenshot).not.toHaveBeenCalled()
+	})
+
+	it("clears queued preview demand when the sidebar unmounts", async () => {
+		const { unmount } = render(<PPTSidebar onSlideClick={vi.fn()} />)
+
+		await waitFor(() =>
+			expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenCalledWith([
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+			]),
+		)
+		unmount()
+
+		expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenLastCalledWith([])
 	})
 
 	it("uses horizontal virtualization and a horizontal Radix scrollbar on mobile", () => {
