@@ -136,12 +136,40 @@ class AbstractApi(ABC):
         'x-magic-authorization',
     })
 
+    # 请求体中不应进入日志的敏感字段（不区分大小写，按完整字段名匹配）
+    _SENSITIVE_BODY_FIELDS = frozenset({
+        'password',
+        'passwd',
+        'authorization',
+        'token',
+        'access_token',
+        'refresh_token',
+        'api_key',
+        'client_secret',
+        'secret',
+    })
+
     def _mask_headers(self, headers: Dict[str, Any]) -> Dict[str, Any]:
         """将敏感 header 的值替换为 ***"""
         return {
             k: '***' if k.lower() in self._SENSITIVE_HEADERS else v
             for k, v in headers.items()
         }
+
+    def _mask_sensitive_value(self, value: object) -> object:
+        """递归脱敏请求日志中的敏感字段，不修改实际请求对象。"""
+        if isinstance(value, dict):
+            return {
+                key: '***'
+                if str(key).lower() in self._SENSITIVE_BODY_FIELDS
+                else self._mask_sensitive_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._mask_sensitive_value(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._mask_sensitive_value(item) for item in value)
+        return value
 
     def _log_request(self, method: str, url: str, options: Dict[str, Any], request_id: str) -> None:
         """记录请求的 method、URL、headers（脱敏）和 body 到 info 日志"""
@@ -155,9 +183,9 @@ class AbstractApi(ABC):
         logger.info(
             f"SDK request [{request_id}]: {method} {url} | "
             f"headers={self._mask_headers(raw_headers)} | "
-            f"params={params} | "
-            f"json={json_body} | "
-            f"data={data}"
+            f"params={self._mask_sensitive_value(params)} | "
+            f"json={self._mask_sensitive_value(json_body)} | "
+            f"data={self._mask_sensitive_value(data)}"
         )
 
     def _inject_request_id(self, options: Dict[str, Any]) -> str:
