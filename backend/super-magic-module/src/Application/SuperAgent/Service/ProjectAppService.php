@@ -460,7 +460,7 @@ class ProjectAppService extends AbstractAppService
         $projectId = (int) $requestDTO->getId();
 
         // 获取项目信息，项目所有者和协作管理者均可更新项目基础信息
-        $projectEntity = $this->getAccessibleProjectWithManager(
+        $projectEntity = $this->getAccessibleProjectWithEditor(
             $projectId,
             $dataIsolation->getCurrentUserId(),
             $dataIsolation->getCurrentOrganizationCode()
