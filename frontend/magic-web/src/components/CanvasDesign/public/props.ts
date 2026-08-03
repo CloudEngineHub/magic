@@ -478,7 +478,11 @@ export interface CanvasDesignProps {
 }
 
 export type CanvasDesignDataChangeSource =
-	"element:change" | "canvas:clear" | "element:temporary:converted" | "connection:change"
+	| "element:change"
+	| "canvas:clear"
+	| "element:temporary:converted"
+	| "connection:change"
+	| "document:restored"
 
 export interface CanvasDesignDataChangeMeta {
 	source: CanvasDesignDataChangeSource

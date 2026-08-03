@@ -340,8 +340,9 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			"canvas:clear",
 			"element:temporary:converted",
 			"connection:change",
+			"document:restored",
 		] as const,
-		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent) => {
+		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent, restoredEvent) => {
 			if (changeEvent) {
 				if (changeEvent.data?.phase === "transient") return
 				const changedElementIds = filterRuntimeOnlyGenerationElementIds(
@@ -378,6 +379,10 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 					changedConnectionIds: connectionEvent.data.changedConnectionIds,
 					deletedConnectionIds: connectionEvent.data.deletedConnectionIds,
 				})
+				return
+			}
+			if (restoredEvent) {
+				scheduleCanvasDesignDataChange("document:restored")
 			}
 		},
 		[filterRuntimeOnlyGenerationElementIds, scheduleCanvasDesignDataChange],

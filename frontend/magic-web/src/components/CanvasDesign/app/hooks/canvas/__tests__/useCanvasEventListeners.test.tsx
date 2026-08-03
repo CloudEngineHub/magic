@@ -5,7 +5,7 @@ import { CanvasProvider, useCanvas } from "../../../providers/CanvasProvider"
 import { useCanvasEventListeners } from "../useCanvasEventListeners"
 import { EventEmitter } from "../../../../runtime/core/EventEmitter"
 import type { Canvas } from "../../../../runtime/core/Canvas"
-import type { CanvasConnection } from "../../../../runtime/document/types"
+import type { CanvasConnection, CanvasDocument } from "../../../../runtime/document/types"
 import type { CanvasDesignDataPatch } from "../../../../public/props"
 
 const connection: CanvasConnection = {
@@ -54,9 +54,11 @@ function createCanvasStub() {
 function TestListener({
 	canvas,
 	onPatch,
+	onChange,
 }: {
 	canvas: Canvas
 	onPatch: (patch: CanvasDesignDataPatch) => void
+	onChange?: (canvasData: CanvasDocument) => void
 }) {
 	const { setCanvas } = useCanvas()
 
@@ -67,6 +69,7 @@ function TestListener({
 
 	useCanvasEventListeners({
 		onCanvasDesignDataPatchChange: onPatch,
+		onCanvasDesignDataChange: onChange,
 	})
 
 	return null
@@ -201,5 +204,31 @@ describe("useCanvasEventListeners connection changes", () => {
 
 		expect(elementManager.exportDocumentPatch).not.toHaveBeenCalled()
 		expect(onPatch).not.toHaveBeenCalled()
+	})
+
+	it("exports the full document when a history restore changes connections", async () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		const onChange = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={vi.fn()} onChange={onChange} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("document:restored")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({ type: "document:restored", data: undefined })
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(onChange).toHaveBeenCalledWith(
+			{ elements: [], connections: [connection] },
+			expect.objectContaining({ source: "document:restored" }),
+		)
 	})
 })
