@@ -45,6 +45,9 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
     /** Google 生图参考图传输策略：URL 请求失败后改用 Base64。 */
     public const REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64 = 'url_fallback_base64';
 
+    /** Google 生图参考图传输策略：Base64 请求失败后改用 URL。 */
+    public const REFERENCE_IMAGE_TRANSPORT_BASE64_FALLBACK_URL = 'base64_fallback_url';
+
     /** Google 服务认证方式：使用 API Key 认证。 */
     public const AUTH_TYPE_API_KEY = 'api_key';
 
@@ -369,6 +372,7 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
             self::REFERENCE_IMAGE_TRANSPORT_BASE64,
             self::REFERENCE_IMAGE_TRANSPORT_URL,
             self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64,
+            self::REFERENCE_IMAGE_TRANSPORT_BASE64_FALLBACK_URL,
         ], true) ? $transport : self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64;
     }
 

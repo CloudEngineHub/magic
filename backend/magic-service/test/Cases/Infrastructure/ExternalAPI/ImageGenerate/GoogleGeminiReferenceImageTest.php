@@ -131,11 +131,130 @@ final class GoogleGeminiReferenceImageTest extends TestCase
         $request = new GoogleGeminiRequest('1024', '1024', '编辑图片', '', 'gemini-image');
         $request->setReferImages(['https://oss.example.com/reference.png']);
 
-        $result = $method->invoke($model, $request);
+        $result = $method->invoke($model, $request, $request->getReferImages());
 
         $this->assertSame(2, $api->calls);
         $this->assertSame('fileData', $api->images[0][0]['type']);
         $this->assertSame('base64', $api->images[1][0]['type']);
         $this->assertSame('generated-image', $result['candidates'][0]['content']['parts'][0]['inlineData']['data']);
+    }
+
+    public function testBase64FailureFallsBackToUrl(): void
+    {
+        $api = new class implements GoogleGeminiInterface {
+            public int $calls = 0;
+
+            /** @var list<array> */
+            public array $images = [];
+
+            public function setModelId(string $modelId): void
+            {
+            }
+
+            public function generateContent(string $prompt, array $images = [], array $config = []): array
+            {
+                ++$this->calls;
+                $this->images[] = $images;
+                if ($this->calls === 1) {
+                    throw new LogicException('base64 failed');
+                }
+
+                return ['candidates' => [[
+                    'content' => ['parts' => [[
+                        'inlineData' => ['data' => 'generated-image'],
+                    ]]],
+                ]]];
+            }
+
+            public function uploadFile(string $filePath, string $mimeType): string
+            {
+                return '';
+            }
+        };
+
+        $path = tempnam(sys_get_temp_dir(), 'google-reference-');
+        file_put_contents($path, 'reference-image');
+        $downloader = new class($path) extends SafeRemoteFileDownloader {
+            public function __construct(private readonly string $path)
+            {
+            }
+
+            public function download(string $source): DownloadedRemoteFile
+            {
+                return new DownloadedRemoteFile($this->path, 'reference.png', 'image/png', 15);
+            }
+        };
+
+        $model = new GoogleGeminiModel([
+            'api_key' => 'test-key',
+            'model_version' => 'gemini-image',
+            'reference_image_transport' => 'base64_fallback_url',
+        ]);
+        $reflection = new ReflectionClass($model);
+        $reflection->getProperty('api')->setValue($model, $api);
+        $reflection->getProperty('referenceImagePreparer')->setValue($model, new GoogleReferenceImagePreparer($downloader));
+
+        $request = new GoogleGeminiRequest('1024', '1024', '编辑图片', '', 'gemini-image');
+        $request->setReferImages(['https://oss.example.com/reference.png']);
+
+        $result = $model->generateImageRaw($request);
+
+        $this->assertSame(2, $api->calls);
+        $this->assertSame('base64', $api->images[0][0]['type']);
+        $this->assertSame('fileData', $api->images[1][0]['type']);
+        $this->assertSame('https://oss.example.com/reference.png', $api->images[1][0]['fileUri']);
+        $this->assertSame('generated-image', $result[0]['imageData']);
+    }
+
+    public function testBase64PreparationFailureFallsBackToUrl(): void
+    {
+        $api = new class implements GoogleGeminiInterface {
+            /** @var list<array> */
+            public array $images = [];
+
+            public function setModelId(string $modelId): void
+            {
+            }
+
+            public function generateContent(string $prompt, array $images = [], array $config = []): array
+            {
+                $this->images[] = $images;
+
+                return ['candidates' => [[
+                    'content' => ['parts' => [[
+                        'inlineData' => ['data' => 'generated-image'],
+                    ]]],
+                ]]];
+            }
+
+            public function uploadFile(string $filePath, string $mimeType): string
+            {
+                return '';
+            }
+        };
+
+        $model = new GoogleGeminiModel([
+            'api_key' => 'test-key',
+            'model_version' => 'gemini-image',
+            'reference_image_transport' => 'base64_fallback_url',
+        ]);
+        $reflection = new ReflectionClass($model);
+        $reflection->getProperty('api')->setValue($model, $api);
+        $reflection->getProperty('referenceImagePreparer')->setValue($model, new GoogleReferenceImagePreparer(new class extends SafeRemoteFileDownloader {
+            public function download(string $source): DownloadedRemoteFile
+            {
+                throw new LogicException('download failed');
+            }
+        }));
+
+        $request = new GoogleGeminiRequest('1024', '1024', '编辑图片', '', 'gemini-image');
+        $request->setReferImages(['https://oss.example.com/reference.png']);
+
+        $result = $model->generateImageRaw($request);
+
+        $this->assertCount(1, $api->images);
+        $this->assertSame('fileData', $api->images[0][0]['type']);
+        $this->assertSame('https://oss.example.com/reference.png', $api->images[0][0]['fileUri']);
+        $this->assertSame('generated-image', $result[0]['imageData']);
     }
 }
