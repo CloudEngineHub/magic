@@ -64,7 +64,7 @@ function NormalModeHeader({
 				{title || t("topicFiles.title")}
 			</p>
 			<div className="flex items-center gap-1">
-				{allowEdit && onSearch && (
+				{onSearch && (
 					<MagicTooltip title={t("topicFiles.search")}>
 						<button
 							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"

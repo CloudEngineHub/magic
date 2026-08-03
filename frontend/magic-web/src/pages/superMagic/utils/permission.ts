@@ -30,6 +30,25 @@ export function isReadOnlyProject(role?: CollaboratorPermission) {
 }
 
 /**
+ * 是否可以修改项目内容
+ */
+export function canEditProject(role?: CollaboratorPermission) {
+	if (!role) return false
+	return (
+		role === CollaboratorPermissionEnum.OWNER ||
+		role === CollaboratorPermissionEnum.MANAGE ||
+		role === CollaboratorPermissionEnum.EDITABLE
+	)
+}
+
+/**
+ * 是否可以管理项目协作者
+ */
+export function canManageCollaborators(role?: CollaboratorPermission) {
+	return canManageProject(role)
+}
+
+/**
  * 是否是所有者
  * @param role CollaboratorPermission
  * @returns boolean

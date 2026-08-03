@@ -147,7 +147,7 @@ export function RecallTestView({ knowledgeCode, onClose }: RecallTestViewProps) 
 					</div>
 
 					{/* 结果内容区域 */}
-					<div className="min-h-0 flex-1 overflow-y-auto rounded-lg border bg-muted/20">
+					<div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-lg border bg-muted/20">
 						{recallLoading ? (
 							<div className="flex h-full flex-col items-center justify-center gap-3">
 								<Loader2 className="size-8 animate-spin text-primary" />
@@ -156,15 +156,15 @@ export function RecallTestView({ knowledgeCode, onClose }: RecallTestViewProps) 
 								</p>
 							</div>
 						) : (
-							<div className="space-y-3 p-4">
+							<div className="min-w-0 space-y-3 p-4">
 								{results.list.length > 0 ? (
 									results.list.map((item) => (
 										<div
 											key={item.id}
-											className="rounded-lg border bg-background p-4 shadow-sm transition-shadow hover:shadow-md"
+											className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-background p-4 shadow-sm transition-shadow hover:shadow-md"
 										>
 											{/* 片段头部信息 */}
-											<div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+											<div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
 												<LayoutList className="size-4" />
 												<span>{t("recallTest.segment")}</span>
 												<span>/</span>
@@ -183,14 +183,14 @@ export function RecallTestView({ knowledgeCode, onClose }: RecallTestViewProps) 
 											</div>
 
 											{/* 片段内容 */}
-											<div className="mb-3 text-sm leading-relaxed text-foreground">
+											<div className="mb-3 min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
 												{item.content}
 											</div>
 
 											{/* 文档信息 */}
-											<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<div className="flex min-w-0 max-w-full items-center gap-1.5 text-xs text-muted-foreground">
 												{getExternalFileIconByType(item.document_type, 16)}
-												<span className="truncate">
+												<span className="min-w-0 truncate">
 													{item.document_name}
 												</span>
 											</div>
