@@ -360,6 +360,35 @@ export class PPTStore {
 		)
 	}
 
+	private async settlePendingInitialization(configUpdateVersion: number): Promise<void> {
+		if (
+			!this.loadingManager.isInitializing ||
+			!this.isConfigUpdateCurrent(configUpdateVersion)
+		) {
+			return
+		}
+
+		const generation = this.contentGeneration
+		const activeIndex = this.activeIndex
+		const activeSlide = this.slides[activeIndex]
+		const activeSlideSettled =
+			activeSlide?.loadingState === "loaded" || activeSlide?.loadingState === "error"
+
+		// A newer same-deck config update adopts readiness from the stale initializer. Wait for the
+		// current active page to settle so the loading overlay cannot remain stuck or close too early.
+		if (this.config.autoLoadAndGenerate !== false && activeSlide && !activeSlideSettled) {
+			await this.ensureSlideContent(activeIndex, "active")
+		}
+
+		if (
+			this.isContentLoadCurrent({ generation }) &&
+			this.isConfigUpdateCurrent(configUpdateVersion) &&
+			this.loadingManager.isInitializing
+		) {
+			this.loadingManager.setInitializing(false)
+		}
+	}
+
 	private createIncrementalUpdateContext(version: number): IncrementalUpdateContext {
 		const isCurrent = () => this.isConfigUpdateCurrent(version)
 
@@ -2001,6 +2030,9 @@ export class PPTStore {
 				mainFileId: config.mainFileId ?? this.config.mainFileId,
 			})
 		}
+
+		await this.settlePendingInitialization(configUpdateVersion)
+		if (!this.isConfigUpdateCurrent(configUpdateVersion)) return
 
 		this.logger.info("配置更新成功", {
 			operation: "updateConfig",

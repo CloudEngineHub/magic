@@ -137,6 +137,148 @@ describe("PPTStore content lazy loading", () => {
 		expect(store.loadingProgress).toBe(100)
 	})
 
+	it("finishes initialization when a same-deck config update supersedes the active-page load", async () => {
+		const { store, paths, attachmentList } = createStore(200)
+		stores.push(store)
+		let resolveActiveDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent.mockImplementationOnce(
+			() =>
+				new Promise<string>((resolve) => {
+					resolveActiveDownload = resolve
+				}),
+		)
+
+		const initialUpdate = store.updateConfig({
+			displayConfig: { slides: paths },
+			attachmentList,
+		})
+		await vi.waitFor(() => expect(store.slides).toHaveLength(200))
+		await vi.waitFor(() => expect(mockState.downloadFileContent).toHaveBeenCalledTimes(1))
+
+		// A refreshed config object with the same slide paths must adopt the pending initialization.
+		const latestUpdate = store.updateConfig({
+			displayConfig: { slides: [...paths] },
+			attachmentList,
+		})
+
+		resolveActiveDownload("<main>active slide</main>")
+		await Promise.all([initialUpdate, latestUpdate])
+
+		expect(store.slides[store.activeIndex]?.loadingState).toBe("loaded")
+		expect(store.isInitializing).toBe(false)
+		expect(store.loadingProgress).toBe(100)
+	})
+
+	it("waits for the replacement active-page load after a non-active attachment update", async () => {
+		const { store, paths, attachmentList } = createStore(2)
+		stores.push(store)
+		let initialSignal: AbortSignal | undefined
+		let resolveReplacementDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent
+			.mockImplementationOnce(
+				(_url: string, options: { signal?: AbortSignal }) =>
+					new Promise<string>((_resolve, reject) => {
+						initialSignal = options.signal
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise<string>((resolve) => {
+						resolveReplacementDownload = resolve
+					}),
+			)
+
+		const initialUpdate = store.updateConfig({
+			displayConfig: { slides: paths },
+			attachmentList,
+		})
+		await vi.waitFor(() => expect(initialSignal).toBeDefined())
+
+		const latestUpdate = store.updateConfig({
+			displayConfig: { slides: [...paths] },
+			attachmentList: attachmentList.map((item) =>
+				item.file_id === "file-1" ? { ...item, updated_at: "2026-08-03T00:00:00Z" } : item,
+			),
+		})
+
+		await vi.waitFor(() => expect(initialSignal?.aborted).toBe(true))
+		await vi.waitFor(() =>
+			expect(mockState.downloadFileContent.mock.calls.length).toBeGreaterThan(1),
+		)
+		expect(store.isInitializing).toBe(true)
+
+		resolveReplacementDownload("<main>replacement active slide</main>")
+		await Promise.all([initialUpdate, latestUpdate])
+
+		expect(store.slides[store.activeIndex]?.loadingState).toBe("loaded")
+		expect(store.isInitializing).toBe(false)
+		expect(store.loadingProgress).toBe(100)
+	})
+
+	it("does not let a stale config update close a newer deck initialization", async () => {
+		const { store, paths, attachmentList } = createStore(1)
+		stores.push(store)
+		let staleSignal: AbortSignal | undefined
+		let resolveNewDeckDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent
+			.mockImplementationOnce(
+				(_url: string, options: { signal?: AbortSignal }) =>
+					new Promise<string>((_resolve, reject) => {
+						staleSignal = options.signal
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise<string>((resolve) => {
+						resolveNewDeckDownload = resolve
+					}),
+			)
+
+		const staleUpdate = store.updateConfig({
+			displayConfig: { slides: paths },
+			attachmentList,
+		})
+		await vi.waitFor(() => expect(staleSignal).toBeDefined())
+
+		const latestUpdate = store.updateConfig({
+			mainFileId: "new-main-file",
+			mainFileName: "index.html",
+			displayConfig: { slides: ["new-slide.html"] },
+			attachmentList: [
+				{
+					file_id: "new-main-file",
+					file_name: "index.html",
+					relative_file_path: "new-deck/index.html",
+				},
+				{
+					file_id: "new-slide-file",
+					file_name: "new-slide.html",
+					relative_file_path: "new-deck/new-slide.html",
+				},
+			],
+		})
+
+		await vi.waitFor(() => expect(staleSignal?.aborted).toBe(true))
+		await vi.waitFor(() =>
+			expect(mockState.downloadFileContent.mock.calls.length).toBeGreaterThan(1),
+		)
+		expect(store.isInitializing).toBe(true)
+
+		resolveNewDeckDownload("<main>new deck active slide</main>")
+		await Promise.all([staleUpdate, latestUpdate])
+
+		expect(store.slides.map((slide) => slide.path)).toEqual(["new-slide.html"])
+		expect(store.slides[0]?.loadingState).toBe("loaded")
+		expect(store.isInitializing).toBe(false)
+		expect(store.loadingProgress).toBe(100)
+	})
+
 	it("loads the configured initial page before page zero", async () => {
 		const { store, paths } = createStore(200, { initialActiveIndex: 100 })
 		stores.push(store)
