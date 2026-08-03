@@ -263,8 +263,8 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(getProjectedNode(store)?.reasoning_content ?? "").not.toContain("C")
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 
-		expect(recovery.events).toHaveLength(0)
-		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
+		// Gap Final 已结束 transport，但缺失片段使本地结果不完整；应立即请求
+		// canonical Final 对账，而不是再等待普通 inactivity watchdog。
 		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
 		recovery.unsubscribe()
 	})

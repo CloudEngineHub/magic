@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MessageStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { MessageStatus, TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { useTopicConversationLoading } from "../useTopicConversationLoading"
 
 const mockState = vi.hoisted(() => ({
@@ -63,5 +63,65 @@ describe("useTopicConversationLoading visible projection", () => {
 		expect(result.current.messages.map((message) => message.app_message_id)).toEqual([
 			"normal-message",
 		])
+	})
+
+	it("ends global Topic loading when the Topic is waiting_for_user", async () => {
+		mockState.messages.set("chat-topic-id", [
+			{
+				type: "rich_text",
+				role: "user",
+				app_message_id: "waiting-user-message",
+				status: "read",
+			},
+			{
+				type: "super_magic_message",
+				role: "assistant",
+				app_message_id: "waiting-user-assistant",
+				super_message_id: "waiting-user-assistant",
+				status: "running",
+			},
+		])
+		mockState.getMessageNode.mockReturnValue({ status: "running" })
+		const onTopicMessagesChange = vi.fn()
+		const runningTopic = {
+			...selectedTopic,
+			task_status: TaskStatus.RUNNING,
+		} as Topic
+		const waitingForAgentTopic = {
+			...runningTopic,
+			task_status: TaskStatus.WAITING,
+		} as Topic
+		const waitingTopic = {
+			...runningTopic,
+			task_status: TaskStatus.WAITING_FOR_USER,
+		} as Topic
+
+		const { result, rerender } = renderHook(
+			({ topic }: { topic: Topic }) =>
+				useTopicConversationLoading({
+					selectedTopic: topic,
+					onTopicMessagesChange,
+				}),
+			{ initialProps: { topic: runningTopic } },
+		)
+		await act(async () => {
+			await Promise.resolve()
+		})
+
+		rerender({ topic: waitingForAgentTopic })
+		await act(async () => {
+			await Promise.resolve()
+		})
+		expect(result.current.showLoading).toBe(true)
+
+		rerender({ topic: waitingTopic })
+		await act(async () => {
+			await Promise.resolve()
+		})
+
+		expect(result.current.showLoading).toBe(false)
+		expect(onTopicMessagesChange).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isLoading: false, selectedTopic: waitingTopic }),
+		)
 	})
 })

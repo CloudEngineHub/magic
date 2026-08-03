@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { MessageStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { MessageStatus, TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import MessageList from "../index"
 import type { SuperMagicMessageItem } from "../type"
 
@@ -388,6 +388,19 @@ describe("MessageList bottom loading", () => {
 		storeState.activeStreamsByTopic.set(topicA.chat_topic_id, ["stream-topic-a"])
 
 		render(<MessageList data={[userMessage]} selectedTopic={topicB} showLoading={false} />)
+
+		expect(screen.queryByTestId("super-magic-message-list-loading")).not.toBeInTheDocument()
+	})
+
+	it("Topic waiting_for_user 时不显示 MessageList 底部 Loading。", () => {
+		render(
+			<MessageList
+				data={[userMessage]}
+				selectedTopic={topicA}
+				showLoading
+				currentTopicStatus={TaskStatus.WAITING_FOR_USER}
+			/>,
+		)
 
 		expect(screen.queryByTestId("super-magic-message-list-loading")).not.toBeInTheDocument()
 	})

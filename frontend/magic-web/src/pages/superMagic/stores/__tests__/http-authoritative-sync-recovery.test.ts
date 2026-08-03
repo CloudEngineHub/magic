@@ -2206,7 +2206,27 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("nonterminal HTTP snapshot 的 tool_calls 必须与本地流式 slot 合并。", () => {
+	it("HTTP Final 即使 Topic status=running 也必须结束对应 StreamState。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ reasoningContent: "local reasoning" }))
+
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				seqId: "200",
+				nodeStatus: "running",
+				content: "canonical answer",
+			}),
+		])
+
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			status: "running",
+			content: "canonical answer",
+		})
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("HTTP Final 的 tool_calls 使用 Final 权威数组，不保留已删除的本地 slot。", () => {
 		const store = createStore()
 		const superMessageId = "super-nonterminal-tool-merge"
 
@@ -2236,28 +2256,22 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(node).toBeDefined()
 		const tools = node?.tool_calls ?? []
 		const toolIds = tools.map((tool) => tool.id)
-		expect(tools).toHaveLength(2)
-		expect(toolIds).toEqual(expect.arrayContaining(["local-tool", "http-tool"]))
-		expect(tools.find((tool) => tool.id === "local-tool")?.function?.arguments).toBe(
-			'{"local":true}',
-		)
+		expect(tools).toHaveLength(1)
+		expect(toolIds).toEqual(["http-tool"])
 		const httpTool = tools.find((tool) => tool.id === "http-tool")
 		expect(httpTool?.function?.arguments).toBe('{"http":true}')
 		expect(httpTool?.tool?.status).toBe("running")
 		expect(getRecordsForSuperMessage(store, superMessageId)).toEqual([
 			expect.objectContaining({
 				super_message_id: superMessageId,
-				tool_calls: expect.arrayContaining([
-					expect.objectContaining({ id: "local-tool" }),
-					expect.objectContaining({ id: "http-tool" }),
-				]),
+				tool_calls: [expect.objectContaining({ id: "http-tool" })],
 			}),
 		])
 		expect(
 			getEffectiveToolState(store, "http-tool", CORRELATION_ID, TOPIC_A, superMessageId)
 				?.status,
-		).toBe("running")
-		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		).toBe("response_missing")
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
 	it.each([
@@ -2265,7 +2279,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		["显式 null", { toolCalls: null }, "super-nonterminal-tool-null"],
 		["显式空数组", { toolCalls: [] }, "super-nonterminal-tool-empty"],
 	] as const)(
-		"nonterminal tool_calls %s 时保留有效本地 slot。",
+		"Final tool_calls %s 时按字段存在性处理。",
 		(_label, envelopeOptions, superMessageId) => {
 			const store = createStore()
 			store.receiveChunk(
@@ -2288,15 +2302,15 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			const node = store.getMessageNode(superMessageId) as ProjectedNode | undefined
 			expect(node).toBeDefined()
 			const tools = node?.tool_calls ?? []
-			expect(tools.map((tool) => tool.id)).toEqual(["local-tool"])
-			expect(tools[0]?.function?.arguments).toBe('{"local":true}')
+			const expectedTools = envelopeOptions.omitToolCalls ? ["local-tool"] : []
+			expect(tools.map((tool) => tool.id)).toEqual(expectedTools)
+			if (envelopeOptions.omitToolCalls) {
+				expect(tools[0]?.function?.arguments).toBe('{"local":true}')
+			}
 			expect(getRecordsForSuperMessage(store, superMessageId)).toEqual([
-				expect.objectContaining({
-					super_message_id: superMessageId,
-					tool_calls: [expect.objectContaining({ id: "local-tool" })],
-				}),
+				expect.objectContaining({ super_message_id: superMessageId }),
 			])
-			expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+			expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		},
 	)
 
@@ -2305,7 +2319,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		["显式 null", { content: null }, "super-nonterminal-content-null"],
 		["显式空字符串", { content: "" }, "super-nonterminal-content-empty"],
 	] as const)(
-		"nonterminal content %s 时不删除不可比较版本的本地内容。",
+		"Final content %s 时按字段存在性处理。",
 		(_label, envelopeOptions, superMessageId) => {
 			const store = createStore()
 			store.receiveChunk(createChunk({ superMessageId, content: "local draft" }))
@@ -2320,18 +2334,19 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			])
 			advanceRendering()
 
-			expect(store.getMessageNode(superMessageId)?.content).toBe("local draft")
+			const expectedContent = envelopeOptions.omitContent ? "local draft" : ""
+			expect(store.getMessageNode(superMessageId)?.content).toBe(expectedContent)
 			expect(getRecordsForSuperMessage(store, superMessageId)).toEqual([
 				expect.objectContaining({
 					super_message_id: superMessageId,
-					content: "local draft",
+					content: expectedContent,
 				}),
 			])
-			expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+			expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		},
 	)
 
-	it("nonterminal snapshot 与本地相同 tool.id 时按字段合并且不覆盖不可比较 arguments。", () => {
+	it("Final snapshot 与本地相同 tool.id 时以 Final arguments 为权威。", () => {
 		const store = createStore()
 		const superMessageId = "super-nonterminal-tool-shared"
 		store.receiveChunk(
@@ -2362,7 +2377,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		const tools = node?.tool_calls ?? []
 		expect(tools).toHaveLength(1)
 		expect(tools[0]?.id).toBe("shared-tool")
-		expect(tools[0]?.function?.arguments).toBe('{"local":true}')
+		expect(tools[0]?.function?.arguments).toBe('{"http":true}')
 		expect(tools[0]?.tool?.status).toBe("running")
 		expect(getRecordsForSuperMessage(store, superMessageId)).toEqual([
 			expect.objectContaining({
@@ -2373,8 +2388,8 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(
 			getEffectiveToolState(store, "shared-tool", CORRELATION_ID, TOPIC_A, superMessageId)
 				?.status,
-		).toBe("running")
-		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		).toBe("response_missing")
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
 	it("轻量 finished completion barrier 不依赖 authoritative snapshot，且不得删除窗口外消息。", () => {
@@ -2469,6 +2484,32 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			{ app_message_id: "same-response", correlation_id: CORRELATION_ID, seq_id: "200" },
 		])
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("200")
+	})
+
+	it("HTTP 更高 revision Final 已立即结算，低 seq stale Final 不得回退。", () => {
+		const store = createStore()
+
+		store.receiveChunk(createChunk({ content: "active draft" }))
+		store.enqueueMessage(
+			TOPIC_A,
+			createEnvelope({
+				appMessageId: "higher-final",
+				seqId: "200",
+				content: "higher canonical",
+			}),
+		)
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({
+				appMessageId: "stale-final",
+				seqId: "199",
+				content: "stale canonical",
+			}),
+		])
+
+		// Final 结算不等待 Buffer/render timer；stale HTTP 只能被 revision arbitration 拒绝。
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("higher canonical")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 	})
 
 	it("旧 generation 的 replace 响应不得清空当前 generation 的 snapshot membership。", () => {

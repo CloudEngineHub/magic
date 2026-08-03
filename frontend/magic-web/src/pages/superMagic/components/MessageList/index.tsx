@@ -372,21 +372,23 @@ const MessageList = observer(
 			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
 		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
 		// projected node 尚未形成可见内容时需要保留底部兜底 Loading。
-		const shouldShowBottomLoading = resolveBottomLoadingVisibility({
-			showLoading: Boolean(showLoading),
-			activeStreamSuperMessageIds,
-			visibleMessages: effectiveVisibleMessages,
-			resolveMessageNode: (superMessageId) =>
-				superMagicStore.getMessageNode(superMessageId) as
-					| {
-							reasoning_content?: unknown
-							content?: unknown
-							tool_calls?: unknown
-					  }
-					| undefined,
-			resolveStreamStage: (superMessageId) =>
-				superMagicStore.getStreamState(currentTopicKey, superMessageId)?.stage,
-		})
+		const shouldShowBottomLoading =
+			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
+			resolveBottomLoadingVisibility({
+				showLoading: Boolean(showLoading),
+				activeStreamSuperMessageIds,
+				visibleMessages: effectiveVisibleMessages,
+				resolveMessageNode: (superMessageId) =>
+					superMagicStore.getMessageNode(superMessageId) as
+						| {
+								reasoning_content?: unknown
+								content?: unknown
+								tool_calls?: unknown
+						  }
+						| undefined,
+				resolveStreamStage: (superMessageId) =>
+					superMagicStore.getStreamState(currentTopicKey, superMessageId)?.stage,
+			})
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||

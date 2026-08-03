@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction, toJS } from "mobx"
+import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
@@ -27,7 +27,6 @@ import {
 } from "./message-transforms"
 import { bindSuperMagicStoreCollaborators, superMagicStoreCollaborators } from "./collaborators"
 import type {
-	MessageCompletedStatus,
 	MessageStreamEndReason,
 	SuperMagicEventMap,
 	SuperMagicEventMessageRef,
@@ -38,6 +37,8 @@ import type {
 	SuperMagicToolCallDelta,
 	ToolCallSettledStatus,
 	TaskCompletedEvent,
+	TopicExecutionEndedEvent,
+	TopicExecutionEndedStatus,
 } from "./events"
 import { createSuperMagicEventEmitter } from "./events/internal/emitter"
 import { SuperMagicEventTransitionLedger } from "./events/internal/transition-ledger"
@@ -57,8 +58,6 @@ export type {
 } from "./types"
 export type {
 	MessageCommittedEvent,
-	MessageCompletedEvent,
-	MessageCompletedStatus,
 	MessageStreamDeltaEvent,
 	MessageStreamEndedEvent,
 	MessageStreamEndReason,
@@ -78,6 +77,8 @@ export type {
 	ToolCallSettledEvent,
 	ToolCallSettledStatus,
 	TaskCompletedEvent,
+	TopicExecutionEndedEvent,
+	TopicExecutionEndedStatus,
 } from "./events"
 
 // Re-export value exports
@@ -221,8 +222,6 @@ interface AuthoritativeAssistantSnapshot {
 	node: RawSuperMagicMessageNode
 }
 
-type AssistantSnapshotMode = "terminal" | "nonterminal"
-
 interface TopicSyncContext {
 	generation: number
 	correlationIds: Set<string>
@@ -256,6 +255,50 @@ interface PersistenceQueue {
 	timer: ReturnType<typeof setTimeout> | null
 }
 
+type CanonicalFinalSource = "im" | "http"
+
+interface CanonicalFinalBarrier {
+	seqId: string
+	appMessageId: string
+	correlationId: string
+}
+
+interface StreamTransportBarrier {
+	correlationId: string
+	chunkIndex: number
+}
+
+interface CanonicalFinalSettlementInput {
+	source: CanonicalFinalSource
+	topicId: string
+	appMessageId: string
+	superMessageId: string
+	correlationId: string
+	seqId?: string
+	finalNode: RawSuperMagicMessageNode
+	finalMessage?: MessageItem
+	revisionDecision?: "new" | "same" | "higher" | "stale"
+	emitEvents?: boolean
+}
+
+interface CanonicalFinalSettlementResult {
+	accepted: boolean
+	streamWasActive: boolean
+	canonicalNode: RawSuperMagicMessageNode
+	canonicalMessage?: MessageItem
+	seqId: string
+}
+
+interface FinalRenderState {
+	topicId: string
+	superMessageId: string
+	visibleNode: RawSuperMagicMessageNode
+	targetNode: RawSuperMagicMessageNode
+	startedAt: number
+	catchupDeadlineAt: number | null
+	timer: ReturnType<typeof setTimeout> | null
+}
+
 function compareMessageSeqId(left: string, right: string): number {
 	if (left === right) return 0
 	const normalizedLeft = left.replace(/^0+(?=\d)/, "")
@@ -272,6 +315,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private collaborators: SuperMagicStoreCollaborators
 	private eventEmitter = createSuperMagicEventEmitter()
 	private eventTransitions = new SuperMagicEventTransitionLedger()
+	/** Revision-aware Final barrier; Set<superMessageId> alone cannot admit later generations. */
+	private canonicalFinalBarriers = new Map<string, CanonicalFinalBarrier>()
+	/** Finish-reason barrier; blocks late chunks of one transport generation without implying Final. */
+	private streamTransportBarriers = new Map<string, StreamTransportBarrier>()
+	/** Final-only visual projection; never participates in Topic streaming or lifecycle events. */
+	private finalRenderStates = new Map<string, FinalRenderState>()
 	private topicSyncGenerationCounter = 0
 	/** HTTP 同步中的 finished assistant 先按代次暂存，只有同步成功且任务 finished 才提升为终态。 */
 	private pendingTopicSyncFinalizations = new Map<
@@ -341,6 +390,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this,
 			| "eventEmitter"
 			| "eventTransitions"
+			| "canonicalFinalBarriers"
+			| "streamTransportBarriers"
+			| "finalRenderStates"
 			| "onServerMessagesConfirmedCallbacks"
 			| "onStreamRecoveryRequestedCallbacks"
 			| "onStreamRecoveryFailedCallbacks"
@@ -362,6 +414,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			{
 				eventEmitter: false,
 				eventTransitions: false,
+				canonicalFinalBarriers: false,
+				streamTransportBarriers: false,
+				// Keep render-state values referentially stable for timer ownership while
+				// making Map replacements observable to MessageNode.
+				finalRenderStates: observable.shallow,
 				onServerMessagesConfirmedCallbacks: false,
 				onStreamRecoveryRequestedCallbacks: false,
 				onStreamRecoveryFailedCallbacks: false,
@@ -777,7 +834,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	private getEventEntityKey(
-		kind: "message" | "stream" | "tool" | "task",
+		kind: "message" | "stream" | "tool" | "task" | "topic",
 		topicId: string,
 		identity: string,
 	) {
@@ -838,7 +895,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		correlationId = streamIdentity,
 	) {
 		const streamKey = this.getEventEntityKey("stream", topicId, streamIdentity)
-		const generation = this.eventTransitions.endStream(streamKey)
+		const generation = this.eventTransitions.endStream(streamKey, reason)
 		if (!generation) return
 		this.eventEmitter.emit({
 			type: "message.stream.ended",
@@ -852,6 +909,44 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamGeneration: generation,
 			},
 			payload: { reason, ...options },
+		})
+	}
+
+	/**
+	 * Canonical Final is an independent close barrier. It must still publish the
+	 * `awaitingCanonicalMessage=false` edge when finish_reason already closed the
+	 * transport stream, so it cannot reuse publishStreamEnded's active-stream guard.
+	 */
+	private publishCanonicalFinalStreamEnded(
+		topicId: string,
+		superMessageId: string,
+		seqId: string,
+		reason: MessageStreamEndReason,
+		source: CanonicalFinalSource,
+		correlationId: string,
+	) {
+		const streamKey = this.getEventEntityKey("stream", topicId, superMessageId)
+		const finalKey = `${streamKey}\u0000final\u0000${seqId || "unknown"}`
+		if (!this.eventTransitions.recordCanonicalFinal(finalKey)) return
+		if (
+			!this.eventTransitions.isStreamActive(streamKey) &&
+			this.eventTransitions.getLastStreamEndReason(streamKey) === reason
+		) {
+			return
+		}
+		const generation = this.eventTransitions.ensureStreamGeneration(streamKey)
+		this.eventEmitter.emit({
+			type: "message.stream.ended",
+			meta: {
+				...this.createEventMeta(source, streamKey, {
+					topicId,
+					correlationId,
+					streamGeneration: generation,
+				}),
+				correlationId,
+				streamGeneration: generation,
+			},
+			payload: { reason, awaitingCanonicalMessage: false },
 		})
 	}
 
@@ -942,19 +1037,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 		this.publishTaskCompleted(topicId, message, messageNode, source)
 
-		const terminalStatus = this.resolveCompletedStatus(messageRef.superStatus)
-		if (messageRef.role !== "assistant" || !terminalStatus) return
-		const completion = this.eventTransitions.recordCompleted(messageKey, terminalStatus)
-		if (!completion) return
-		this.eventEmitter.emit({
-			type: "message.completed",
-			meta: this.createEventMeta(source, messageKey, identity, revision),
-			payload: {
-				message: { ...messageRef, role: "assistant" },
-				status: terminalStatus,
-				...(completion.previousStatus ? { previousStatus: completion.previousStatus } : {}),
-			},
-		})
+		if (messageRef.role === "assistant") {
+			this.observeTopicExecutionStatus(
+				topicId,
+				messageRef.superStatus || "",
+				source,
+				messageRef,
+			)
+		}
 	}
 
 	private getMessageTransitionSnapshot(
@@ -986,17 +1076,47 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageKey,
 			this.getMessageTransitionSnapshot(messageRef, messageNode),
 		)
-		const terminalStatus = this.resolveCompletedStatus(messageRef.superStatus)
-		if (messageRef.role === "assistant" && terminalStatus) {
-			this.eventTransitions.recordCompleted(messageKey, terminalStatus)
+		if (messageRef.role === "assistant") {
+			const status = String(messageRef.superStatus || "")
+			this.eventTransitions.seedTopicExecution(
+				this.getEventEntityKey("topic", topicId, "execution"),
+				status,
+				this.isTopicTerminalStatus(status),
+			)
 		}
 	}
 
-	private resolveCompletedStatus(status?: string): MessageCompletedStatus | undefined {
-		if (status === "finished" || status === "error" || status === "suspended") {
-			return status
-		}
-		return undefined
+	private isTopicTerminalStatus(status?: string): status is TopicExecutionEndedStatus {
+		return Boolean(status && TERMINAL_TOPIC_TASK_STATUSES.has(status))
+	}
+
+	private observeTopicExecutionStatus(
+		topicId: string,
+		status: string,
+		source: SuperMagicEventSource,
+		message?: SuperMagicEventMessageRef,
+	) {
+		const transition = this.eventTransitions.recordTopicExecutionStatus(
+			this.getEventEntityKey("topic", topicId, "execution"),
+			status,
+			this.isTopicTerminalStatus(status),
+		)
+		if (!transition || !this.isTopicTerminalStatus(status)) return
+
+		const topicKey = this.getEventEntityKey("topic", topicId, "execution")
+		this.eventEmitter.emit({
+			type: "topic.execution.ended",
+			meta: this.createEventMeta(source, topicKey, {
+				topicId,
+				...(message?.correlationId ? { correlationId: message.correlationId } : {}),
+				...(message?.appMessageId ? { appMessageId: message.appMessageId } : {}),
+				...(message?.seqId ? { messageSeqId: message.seqId } : {}),
+			}),
+			payload: {
+				status,
+				...(message ? { triggerMessage: { ...message, role: "assistant" } } : {}),
+			},
+		} satisfies TopicExecutionEndedEvent)
 	}
 
 	private resolveAuthoritativeStreamEndReason(status?: string): MessageStreamEndReason {
@@ -1256,8 +1376,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 				this.clearStreamRecoveryTimer(prevTopicId)
 			}
+			// Render-only Final projections may continue while the Topic is hidden;
+			// project their canonical target immediately instead of retaining a hidden timer.
+			Array.from(this.finalRenderStates.values())
+				.filter((state) => state.topicId === prevTopicId)
+				.forEach((state) => this.clearFinalRenderState(prevTopicId, state.superMessageId))
 		}
 		this.activeTopicId = topicId
+		// 切换可见 Topic 会取消旧 Topic 的 render timer；若旧 Topic 的
+		// authoritative Final 已经排在 buffer 中，必须立即释放这个渲染屏障，
+		// 否则后台 Final 永远无法收敛 StreamState，也不会发布 Topic 终态事件。
+		if (prevTopicId && prevTopicId !== topicId) {
+			this.processMessageBufferAfterRenderRelease(prevTopicId)
+		}
 		if (topicId && topicId !== prevTopicId) {
 			const topicMeta = this.getTopicMetadata(topicId)
 			const inactiveElapsedMs = this.getTopicInactiveElapsedMs(topicMeta)
@@ -1594,12 +1725,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			"recovery",
 			correlationId,
 		)
-		this.traceReasoningLifecycle("stream:gap-final-closed", {
-			topicId,
-			streamIdentity,
+		const gapFinalChunkIndex =
+			this.getExistingStreamChunkLedger(topicId, streamIdentity)?.pendingGapFinal
+				?.chunkIndex ?? 0
+		this.setStreamTransportBarrier(topicId, streamIdentity, {
 			correlationId,
-			finishReason,
-			hasCanonicalNode: Boolean(this.getAssistantMessageNode(topicId, streamIdentity)),
+			chunkIndex: gapFinalChunkIndex,
 		})
 
 		const buffer = this.getTopicBuffer(topicId)
@@ -2000,12 +2131,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			compareMessageSeqId(latestSeqId, previousSyncedSeqId) > 0,
 		)
 		const isFinishedSync = taskStatus === "finished"
-		const isSuccessfulFinishedSync = Boolean(succeeded && isFinishedSync)
 		const isSuccessfulSuspendedSync = Boolean(succeeded && taskStatus === "suspended")
 		const isTerminalTopic = Boolean(taskStatus && TERMINAL_TOPIC_TASK_STATUSES.has(taskStatus))
 		if (isTerminalTopic) this.flushMessagePersistence(topicId)
 		const hasCurrentFinalizationSnapshot = Boolean(
-			isSuccessfulFinishedSync && pendingFinalizations?.generation === generation,
+			succeeded && pendingFinalizations?.generation === generation,
 		)
 
 		if (renderStrategy === "foreground-instant") {
@@ -2084,6 +2214,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					? syncContext.correlationIds
 					: new Set(topicMeta.content.keys()),
 			)
+		}
+		if (taskStatus) {
+			// Publish Topic terminal state only after the sync has settled the tracked
+			// message streams; subscribers must never observe a Topic-ended event while
+			// an authoritative terminal sync still exposes active StreamState entries.
+			this.observeTopicExecutionStatus(topicId, taskStatus, "http")
 		}
 		if (!isTerminalTopic) this.requestPendingGapFinalRecoveries(topicId)
 		return true
@@ -2278,17 +2414,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
-	/**
-	 * 临时诊断 reasoning 卡片未结束的问题。仅记录身份、版本与状态等原始事实，
-	 * 避免打印完整消息正文影响控制台性能或泄露会话内容。
-	 */
-	private traceReasoningLifecycle(event: string, details: Record<string, unknown>) {
-		console.info(
-			`[SM-ReasoningTrace] ${event}`,
-			JSON.stringify({ timestamp: new Date().toISOString(), ...details }),
-		)
-	}
-
 	private warnAssistantAppIdentityConflict(
 		topicId: string,
 		appMessageId: string,
@@ -2452,6 +2577,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.clearStreamRecoveryState(topicId, superMessageId)
 			this.clearStreamChunkLedger(topicId, superMessageId)
 			this.clearStreamCorrelationId(topicId, superMessageId)
+			this.setCanonicalFinalBarrier(topicId, superMessageId, {
+				seqId: "",
+				appMessageId: "",
+				correlationId,
+			})
 			this.streamRenderStarted.get(topicId)?.delete(superMessageId)
 			this.pendingTopicSyncFinalizations.get(topicId)?.snapshots.delete(superMessageId)
 			this.topicSyncContexts.get(topicId)?.correlationIds.delete(superMessageId)
@@ -2577,6 +2707,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.clearStreamRecoveryState(topicId, streamIdentity)
 			this.clearStreamChunkLedger(topicId, streamIdentity)
 			this.clearStreamCorrelationId(topicId, streamIdentity)
+			this.setStreamTransportBarrier(topicId, streamIdentity, {
+				correlationId,
+				chunkIndex: 0,
+			})
 		})
 
 		topicMeta.isStream = topicMeta.content.size > 0
@@ -2705,15 +2839,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					superMessageId,
 					correlationId,
 					currentNode || rawNode,
-					"terminal",
+					{
+						seqId: String(envelope?.seq?.seq_id || ""),
+						finalMessage: updatedMessage,
+						revisionDecision: "same",
+						source: "http",
+					},
 				)
 				settledStream = didSettleCurrentStream || settledStream
 				if (wasStreamActive) {
-					this.publishStreamEnded(
+					this.publishCanonicalFinalStreamEnded(
 						topicId,
 						superMessageId,
+						String(envelope?.seq?.seq_id || ""),
 						"revoked",
-						{ awaitingCanonicalMessage: false },
 						"http",
 						correlationId,
 					)
@@ -2781,34 +2920,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			return
 		}
 
-		const allowImStatusRestore = this.consumeImStatusRestoreAuthorization(
-			topicId,
-			statusItems.length > 0 || membershipItems.length > 0,
-		)
-		let committedUpdates: Array<{
-			message: MessageItem
-			node?: RawSuperMagicMessageNode
-		}> = []
-		let settledStream = false
-		runInAction(() => {
-			const currentMessages = this.messages.get(topicId) || []
-			const result = this.applyHttpMessageStatusesInAction(
-				topicId,
-				currentMessages,
-				statusItems,
-				allowImStatusRestore,
-			)
-			if (result.didChange) this.messages.set(topicId, sortMessages(result.nextMessages))
-			committedUpdates = result.committedUpdates
-			settledStream = result.settledStream
-			// HTTP authoritative sync 只更新 Store；WebSocket 入口已经完成原始消息记录。
-			membershipItems.forEach((item) =>
-				this.enqueueMessage(topicId, item, { persist: false }),
-			)
-			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
-		})
-		committedUpdates.forEach(({ message, node }) => {
-			this.publishMessageCommitted(topicId, message, node, "http")
+		// Incremental HTTP is still authoritative for the returned tail. It must use the
+		// HTTP reconcile path directly; routing those envelopes through enqueueMessage would
+		// reintroduce IM buffering and make Final settlement depend on render timers.
+		this.initializeMessages(topicId, membershipItems, {
+			mode: "merge",
+			statusMessages: statusItems,
+			eventPolicy: "live_arrival",
+			toolProjectionPolicy: "preserve_live",
 		})
 	}
 
@@ -2998,13 +3117,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					authoritativeSyncContext?.authoritativeCorrelationIds.add(superMessageId)
 
 					const revisionMessages = [...previousMessages, ...authoritativeMessages]
-					const currentSeqId = this.getAssistantRevisionSeqId(
-						topicId,
-						appMessageId,
-						superMessageId,
-						true,
-						revisionMessages,
-					)
 					const revisionDecision = this.getAssistantRevisionDecision(
 						topicId,
 						appMessageId,
@@ -3014,33 +3126,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)
 					const currentNode = this.messageMap.get(superMessageId) as
 						RawSuperMagicMessageNode | undefined
-					const streamStateBeforeRevision = this.getStreamState(topicId, superMessageId)
-					const shouldTraceReasoningRevision =
-						Boolean(streamStateBeforeRevision) || rawNode.status === "running"
-					if (shouldTraceReasoningRevision) {
-						this.traceReasoningLifecycle("http:assistant-revision", {
-							topicId,
-							requestedMode: mode,
-							appliedMode,
-							appMessageId,
-							superMessageId,
-							correlationId,
-							incomingSeqId: String(envelope?.seq?.seq_id || ""),
-							currentSeqId: currentSeqId || "",
-							revisionDecision,
-							incomingSuperStatus: String(rawNode.status || ""),
-							currentSuperStatus: String(currentNode?.status || ""),
-							incomingImStatus: incomingMessage.imStatus,
-							hasPayloadConflict: this.hasAssistantPayloadConflict(
-								currentNode,
-								rawNode,
-							),
-							hasStreamState: Boolean(streamStateBeforeRevision),
-							streamStage: streamStateBeforeRevision?.stage,
-							isFinalMessageReceived:
-								streamStateBeforeRevision?.isFinalMessageReceived,
-						})
-					}
+					const isAuthoritativeAssistantFinal =
+						rawNode.role === "assistant" && messageType === "super_magic_message"
 					if (revisionDecision === "same" || revisionDecision === "stale") {
 						if (appMessageId) incomingAppMessageIds.push(appMessageId)
 						const currentMessage = this.getLatestAssistantMessageForIdentity(
@@ -3069,26 +3156,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 								)
 							}
 						}
-						if (shouldTraceReasoningRevision) {
-							this.traceReasoningLifecycle("http:revision-short-circuit", {
-								topicId,
-								appMessageId,
-								superMessageId,
-								correlationId,
-								incomingSeqId: String(envelope?.seq?.seq_id || ""),
-								currentSeqId: currentSeqId || "",
-								revisionDecision,
-								incomingSuperStatus: String(rawNode.status || ""),
-								willSettleStream: incomingMessage.imStatus === "revoked",
-								streamStageBeforeReturn: streamStateBeforeRevision?.stage,
-							})
-						}
 						if (
-							incomingMessage.imStatus === "revoked" &&
+							revisionDecision === "same" &&
+							isAuthoritativeAssistantFinal &&
 							currentNode?.role === "assistant"
 						) {
-							// 撤回是旧 generation 的终止屏障，即使 Agent 内层状态仍为 running。
-							// stale/same 只影响内容采用哪个 revision，不影响 HTTP 外层撤回的权威性。
+							const wasStreamActive = this.eventTransitions.isStreamActive(
+								this.getEventEntityKey("stream", topicId, superMessageId),
+							)
+							// Same-revision Final owns this stream generation. A stale Final may
+							// update its own IM status, but cannot close a higher revision already known locally.
 							settledStream =
 								this.reconcileServerAssistantSnapshot(
 									topicId,
@@ -3096,8 +3173,30 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 									superMessageId,
 									correlationId,
 									currentNode,
-									"terminal",
+									{
+										seqId: String(envelope?.seq?.seq_id || ""),
+										finalMessage: incomingMessage,
+										revisionDecision: this.getAssistantRevisionDecision(
+											topicId,
+											appMessageId,
+											superMessageId,
+											envelope?.seq?.seq_id,
+										),
+										source: "http",
+									},
 								) || settledStream
+							if (wasStreamActive) {
+								this.publishCanonicalFinalStreamEnded(
+									topicId,
+									superMessageId,
+									String(envelope?.seq?.seq_id || ""),
+									"revoked" === incomingMessage.imStatus
+										? "revoked"
+										: "authoritative_final",
+									"http",
+									correlationId,
+								)
+							}
 						}
 						return
 					}
@@ -3148,9 +3247,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						superMessageId,
 						correlationId,
 						rawNode,
-						rawNode.status === "finished" || isRevokedAssistant
-							? "terminal"
-							: "nonterminal",
+						{
+							seqId: String(envelope?.seq?.seq_id || ""),
+							finalMessage: incomingMessage,
+							revisionDecision: this.getAssistantRevisionDecision(
+								topicId,
+								appMessageId,
+								superMessageId,
+								envelope?.seq?.seq_id,
+							),
+							source: "http",
+						},
 					)
 					const canonicalAssistantNode = this.getAssistantMessageNode(
 						topicId,
@@ -3166,7 +3273,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							),
 						)
 					}
-					if (rawNode.status === "finished") {
+					if (!isRevokedAssistant) {
 						const canonicalNode = this.messageMap.get(superMessageId) as
 							RawSuperMagicMessageNode | undefined
 						// Finalization must retain the already-reconciled nested tool fields;
@@ -3345,12 +3452,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)),
 			)
 
-			if (settledActiveStream) {
-				this.publishStreamEnded(
+			if (
+				rawNode?.role === "assistant" &&
+				(eventPolicy === "live_arrival" || settledActiveStream)
+			) {
+				this.publishCanonicalFinalStreamEnded(
 					topicId,
 					superMessageId,
-					currentMessage.imStatus === "revoked" ? "revoked" : "recovery_replaced",
-					{ awaitingCanonicalMessage: false },
+					String(envelope?.seq?.seq_id || ""),
+					currentMessage.imStatus === "revoked"
+						? "revoked"
+						: canonicalNode?.status === "suspended"
+							? "suspended"
+							: "authoritative_final",
 					"http",
 					correlationId,
 				)
@@ -3519,7 +3633,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!topicId || !superMessageId || !correlationId) return
 		this.setStreamCorrelationId(topicId, superMessageId, correlationId)
 		const topicMeta = this.getTopicMetadata(topicId)
-		if (topicMeta.finalizedCorrelationIds.has(superMessageId)) {
+		const chunkIndex =
+			Number.isInteger(messageChunk?.i) && Number(messageChunk.i) >= 0
+				? Number(messageChunk.i)
+				: null
+		const transportBarrier = this.getStreamTransportBarrier(topicId, superMessageId)
+		if (transportBarrier) {
+			const startsNewGeneration =
+				chunkIndex === 0 &&
+				transportBarrier.correlationId &&
+				transportBarrier.correlationId !== correlationId
+			if (!startsNewGeneration) {
+				this.clearStreamChunkLedger(topicId, superMessageId)
+				return
+			}
+			// A different correlation starting at i=0 is explicit transport evidence for
+			// a successor generation; finish_reason must not become a permanent tombstone.
+			this.clearStreamTransportBarrier(topicId, superMessageId)
+		}
+		const finalBarrier = this.getCanonicalFinalBarrier(topicId, superMessageId)
+		if (finalBarrier) {
+			// Chunk transport carries no persistent revision. A changed correlation alone
+			// cannot prove a higher canonical revision, so only a later IM/HTTP Final with
+			// a higher seq_id may advance this logical Assistant message.
 			this.clearStreamChunkLedger(topicId, superMessageId)
 			return
 		}
@@ -3535,27 +3671,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// Tool arguments remain canonical even when the tool header is missing. They must
 		// reach the indexed provisional slot, but only a stable tool id is projectable.
 		const hasCanonicalDelta = hasTextDelta || toolCalls.length > 0
-		const chunkIndex =
-			Number.isInteger(messageChunk?.i) && Number(messageChunk.i) >= 0
-				? Number(messageChunk.i)
-				: null
 		const streamStateBeforeChunk = this.getStreamState(topicId, superMessageId)
-		if (hasCanonicalDelta || choice?.finish_reason) {
-			this.traceReasoningLifecycle("chunk:received", {
-				topicId,
-				superMessageId,
-				correlationId,
-				chunkIndex,
-				finishReason: String(choice?.finish_reason || ""),
-				reasoningDeltaLength:
-					typeof delta?.reasoning_content === "string"
-						? delta.reasoning_content.length
-						: 0,
-				contentDeltaLength: typeof delta?.content === "string" ? delta.content.length : 0,
-				hadStreamState: Boolean(streamStateBeforeChunk),
-				streamStageBeforeChunk: streamStateBeforeChunk?.stage,
-			})
-		}
 
 		if (chunkIndex === null) {
 			// 缺失或非法序号无法安全排序和去重；丢弃当前包，等待后续完整消息兜底收敛。
@@ -3984,6 +4100,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				"stream",
 				messageChunk.correlation_id,
 			)
+			this.setStreamTransportBarrier(topicId, superMessageId, {
+				correlationId: messageChunk.correlation_id,
+				chunkIndex: Number(messageChunk.i),
+			})
 		}
 
 		if (!isFinalChunk && hasEffectiveProgress) {
@@ -4095,153 +4215,358 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return authoritativeNode
 	}
 
-	private mergeNonterminalToolCalls(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
-		const merged = current.map((toolCall) =>
-			toolCall
-				? {
-						...toolCall,
-						function: { ...toolCall.function },
-						...(toolCall.tool ? { tool: { ...toolCall.tool } } : {}),
-					}
-				: toolCall,
-		)
-
-		incoming.forEach((incomingTool) => {
-			const incomingId = String(incomingTool?.id || "")
-			if (!incomingId) return
-			const existingIndex = merged.findIndex((toolCall) => toolCall?.id === incomingId)
-			const requestedIndex =
-				Number.isInteger(incomingTool.index) && Number(incomingTool.index) >= 0
-					? Number(incomingTool.index)
-					: undefined
-			const targetIndex =
-				existingIndex >= 0
-					? existingIndex
-					: requestedIndex !== undefined && !merged[requestedIndex]
-						? requestedIndex
-						: merged.length
-			const existingTool = merged[targetIndex]
-			const existingArguments =
-				typeof existingTool?.function?.arguments === "string"
-					? existingTool.function.arguments
-					: ""
-			const incomingArguments =
-				typeof incomingTool.function?.arguments === "string"
-					? incomingTool.function.arguments
-					: ""
-			const mergedToolResponse = incomingTool.tool
-				? this.mergeToolResponseState(existingTool?.tool, incomingTool.tool)
-				: existingTool?.tool
-
-			merged[targetIndex] = {
-				...(existingTool || {}),
-				...incomingTool,
-				id: incomingId,
-				type: incomingTool.type || existingTool?.type || "function",
-				index: targetIndex,
-				function: {
-					...(existingTool?.function || {}),
-					...(incomingTool.function || {}),
-					name: incomingTool.function?.name || existingTool?.function?.name || "",
-					arguments: existingArguments || incomingArguments,
-				},
-				...(mergedToolResponse ? { tool: mergedToolResponse } : {}),
-			} as ToolCall
-		})
-
-		return merged
+	private getCanonicalFinalBarrier(topicId: string, superMessageId: string) {
+		return this.canonicalFinalBarriers.get(`${topicId}\u0000${superMessageId}`)
 	}
 
-	private mergeNonterminalAssistantSnapshot(
-		currentNode: RawSuperMagicMessageNode | undefined,
-		serverNode: RawSuperMagicMessageNode,
-		streamState?: StreamState,
-	): RawSuperMagicMessageNode {
-		const currentAssistantNode = currentNode?.role === "assistant" ? currentNode : undefined
-		const localContent = streamState?.content ?? currentAssistantNode?.content
-		const localReasoning =
-			streamState?.reasoning_content ?? currentAssistantNode?.reasoning_content
-		const incomingContent = typeof serverNode.content === "string" ? serverNode.content : ""
-		const incomingReasoning =
-			typeof serverNode.reasoning_content === "string" ? serverNode.reasoning_content : ""
-		const currentToolCalls = streamState
-			? streamState.tool_calls
-			: Array.isArray(currentAssistantNode?.tool_calls)
-				? (currentAssistantNode.tool_calls as ToolCall[])
-				: []
-		const incomingToolCalls = Array.isArray(serverNode.tool_calls)
-			? (serverNode.tool_calls as ToolCall[])
-			: []
-		const mergedToolCalls =
-			incomingToolCalls.length > 0
-				? this.mergeNonterminalToolCalls(currentToolCalls, incomingToolCalls)
-				: this.mergeNonterminalToolCalls(currentToolCalls, [])
-		const reconciledNode = {
-			...(currentAssistantNode
-				? this.cloneAuthoritativeAssistantSnapshot(currentAssistantNode)
-				: {}),
-			...serverNode,
-			content:
-				typeof localContent === "string" && localContent.length > 0
-					? localContent
-					: incomingContent,
-			reasoning_content:
-				typeof localReasoning === "string" && localReasoning.length > 0
-					? localReasoning
-					: incomingReasoning,
-			tool_calls: this.cloneToolCallsForRendering(mergedToolCalls),
-		} as RawSuperMagicMessageNode
+	private getStreamTransportBarrier(topicId: string, superMessageId: string) {
+		return this.streamTransportBarriers.get(`${topicId}\u0000${superMessageId}`)
+	}
 
-		if (streamState) {
-			streamState.content = String(reconciledNode.content || "")
-			streamState.reasoning_content = String(reconciledNode.reasoning_content || "")
-			streamState.tool_calls = mergedToolCalls
-		}
+	private setStreamTransportBarrier(
+		topicId: string,
+		superMessageId: string,
+		barrier: StreamTransportBarrier,
+	) {
+		this.streamTransportBarriers.set(`${topicId}\u0000${superMessageId}`, barrier)
+	}
 
-		return reconciledNode
+	private clearStreamTransportBarrier(topicId: string, superMessageId: string) {
+		this.streamTransportBarriers.delete(`${topicId}\u0000${superMessageId}`)
+	}
+
+	private setCanonicalFinalBarrier(
+		topicId: string,
+		superMessageId: string,
+		barrier: CanonicalFinalBarrier,
+	) {
+		this.canonicalFinalBarriers.set(`${topicId}\u0000${superMessageId}`, barrier)
+	}
+
+	private clearFinalRenderState(topicId: string, superMessageId: string) {
+		const key = `${topicId}\u0000${superMessageId}`
+		const state = this.finalRenderStates.get(key)
+		if (!state) return
+		if (state.timer) clearTimeout(state.timer)
+		this.finalRenderStates.delete(key)
 	}
 
 	/**
-	 * HTTP finished 快照只静默结算本代明确确认的 SuperMessage。丢弃同步窗口内重建的
-	 * StreamState，并重新写回权威节点，避免 stale chunk 覆盖最终内容或误伤同 topic 其他流。
+	 * Final 后的补齐只更新 render-only projection。Canonical messageMap 已经在
+	 * settleCanonicalAssistantFinal 中写入权威完整值，因此该状态绝不会重新成为
+	 * MessageNode 的业务 StreamState/loading 来源。
+	 */
+	private captureFinalRenderProjection(
+		topicId: string,
+		superMessageId: string,
+		visibleNode: RawSuperMagicMessageNode | undefined,
+		targetNode: RawSuperMagicMessageNode,
+	) {
+		if (!visibleNode || visibleNode.role !== "assistant" || targetNode.role !== "assistant")
+			return
+		const visibleReasoning = String(visibleNode.reasoning_content || "")
+		const visibleContent = String(visibleNode.content || "")
+		const targetReasoning = String(targetNode.reasoning_content || "")
+		const targetContent = String(targetNode.content || "")
+		const canAnimateReasoning = targetReasoning.startsWith(visibleReasoning)
+		const canAnimateContent = targetContent.startsWith(visibleContent)
+		if (
+			(!canAnimateReasoning || visibleReasoning.length >= targetReasoning.length) &&
+			(!canAnimateContent || visibleContent.length >= targetContent.length)
+		)
+			return
+
+		const key = `${topicId}\u0000${superMessageId}`
+		this.clearFinalRenderState(topicId, superMessageId)
+		const state: FinalRenderState = {
+			topicId,
+			superMessageId,
+			visibleNode: {
+				...visibleNode,
+				...targetNode,
+				content: canAnimateContent ? visibleContent : targetContent,
+				reasoning_content: canAnimateReasoning ? visibleReasoning : targetReasoning,
+				tool_calls: this.cloneToolCallsForRendering(
+					(Array.isArray(visibleNode.tool_calls)
+						? visibleNode.tool_calls
+						: targetNode.tool_calls || []) as ToolCall[],
+				),
+			},
+			targetNode: this.cloneAuthoritativeAssistantSnapshot(targetNode),
+			startedAt: getMonotonicNow(),
+			catchupDeadlineAt: null,
+			timer: null,
+		}
+		this.finalRenderStates.set(key, state)
+		this.scheduleFinalRenderFrame(state)
+	}
+
+	private scheduleFinalRenderFrame(state: FinalRenderState) {
+		if (state.timer) return
+		state.timer = setTimeout(() => {
+			runInAction(() => {
+				state.timer = null
+				const key = `${state.topicId}\u0000${state.superMessageId}`
+				const current = this.finalRenderStates.get(key)
+				if (current !== state) return
+				const visibleReasoning = String(state.visibleNode.reasoning_content || "")
+				const visibleContent = String(state.visibleNode.content || "")
+				const targetReasoning = String(state.targetNode.reasoning_content || "")
+				const targetContent = String(state.targetNode.content || "")
+				const remainingReasoning = Math.max(
+					targetReasoning.length - visibleReasoning.length,
+					0,
+				)
+				const remainingContent = Math.max(targetContent.length - visibleContent.length, 0)
+				const remaining = remainingReasoning + remainingContent
+				if (remaining <= 0) {
+					this.clearFinalRenderState(state.topicId, state.superMessageId)
+					return
+				}
+				const now = getMonotonicNow()
+				let catchupDeadlineAt = state.catchupDeadlineAt
+				if (
+					catchupDeadlineAt === null &&
+					now - state.startedAt >= FINAL_STREAM_SETTLING_MAX_MS
+				) {
+					catchupDeadlineAt = now + FINAL_STREAM_SAFETY_CATCHUP_BUDGET_MS
+				}
+				const remainingFrames =
+					catchupDeadlineAt === null
+						? Number.POSITIVE_INFINITY
+						: Math.max(
+								Math.ceil(
+									Math.max(catchupDeadlineAt - now, 0) / STREAM_RENDER_FRAME_MS,
+								),
+								1,
+							)
+				let frameBudget = Math.max(
+					getCharsPerTick(remaining),
+					Number.isFinite(remainingFrames) ? Math.ceil(remaining / remainingFrames) : 1,
+				)
+				const visibleNode = { ...state.visibleNode }
+				if (remainingReasoning > 0) {
+					const reasoningStep = Math.min(frameBudget, remainingReasoning)
+					visibleNode.reasoning_content = targetReasoning.slice(
+						0,
+						visibleReasoning.length + reasoningStep,
+					)
+					frameBudget -= reasoningStep
+				}
+				if (frameBudget > 0 && remainingContent > 0) {
+					visibleNode.content = targetContent.slice(
+						0,
+						visibleContent.length + Math.min(frameBudget, remainingContent),
+					)
+				}
+				const nextState: FinalRenderState = {
+					...state,
+					visibleNode,
+					catchupDeadlineAt,
+					timer: null,
+				}
+				this.finalRenderStates.set(key, nextState)
+				this.scheduleFinalRenderFrame(nextState)
+			})
+		}, STREAM_RENDER_FRAME_MS)
+	}
+
+	getRenderedMessageNode(superMessageId?: string, topicId?: string) {
+		const canonical = this.messageMap.get(superMessageId || "") as
+			RawSuperMagicMessageNode | undefined
+		if (!superMessageId) return canonical
+		const renderState = Array.from(this.finalRenderStates.values()).find(
+			(state) =>
+				state.superMessageId === superMessageId && (!topicId || state.topicId === topicId),
+		)
+		return renderState?.visibleNode || canonical
+	}
+
+	/**
+	 * Single business settlement core shared by IM Final and HTTP authoritative Final.
+	 * Callers may keep their own membership/anchor policy, but once this method accepts
+	 * the revision all canonical, stream, barrier, and optional lifecycle effects converge.
+	 */
+	private settleCanonicalAssistantFinal({
+		source,
+		topicId,
+		appMessageId,
+		superMessageId,
+		correlationId,
+		seqId,
+		finalNode,
+		finalMessage,
+		revisionDecision = "new",
+		emitEvents = false,
+	}: CanonicalFinalSettlementInput): CanonicalFinalSettlementResult {
+		const normalizedSeqId = String(seqId || "")
+		const existingBarrier = this.getCanonicalFinalBarrier(topicId, superMessageId)
+		const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
+		if (revisionDecision === "stale") {
+			return {
+				accepted: false,
+				streamWasActive: false,
+				canonicalNode: currentNode || finalNode,
+				seqId: normalizedSeqId,
+			}
+		}
+		if (
+			revisionDecision === "same" &&
+			existingBarrier &&
+			existingBarrier.seqId === normalizedSeqId &&
+			currentNode?.role === "assistant"
+		) {
+			// Same revision is idempotent. Keep the first canonical payload on conflict,
+			// while still allowing this call to repair any residual StreamState.
+			if (this.hasAssistantPayloadConflict(currentNode, finalNode)) {
+				this.warnAssistantSeqConflict(topicId, appMessageId, correlationId, normalizedSeqId)
+			}
+			finalNode = currentNode
+		}
+
+		const streamState = this.getStreamState(topicId, superMessageId)
+		const streamWasActive = Boolean(streamState)
+		const visibleNode = currentNode
+		const reconciliationBase = streamState
+			? ({
+					...(currentNode || {}),
+					role: "assistant",
+					correlation_id: correlationId || streamState.correlation_id,
+					super_message_id: superMessageId,
+					content: streamState.content,
+					reasoning_content: streamState.reasoning_content,
+					tool_calls: this.cloneToolCallsForRendering(streamState.tool_calls),
+				} as RawSuperMagicMessageNode)
+			: currentNode
+		const canonicalNode = {
+			...this.mergeAuthoritativeAssistantSnapshot(reconciliationBase, {
+				...finalNode,
+				role: "assistant",
+				correlation_id:
+					correlationId ||
+					String(finalNode.correlation_id || streamState?.correlation_id || ""),
+				super_message_id: superMessageId,
+			} as RawSuperMagicMessageNode),
+			correlation_id:
+				correlationId ||
+				String(finalNode.correlation_id || streamState?.correlation_id || ""),
+			super_message_id: superMessageId,
+		} as RawSuperMagicMessageNode
+
+		// Capture the old visual projection before replacing the canonical payload.
+		this.captureFinalRenderProjection(topicId, superMessageId, visibleNode, canonicalNode)
+		this.setAssistantMessageNode(topicId, superMessageId, canonicalNode, appMessageId)
+
+		const messages = this.messages.get(topicId) || []
+		const cardIndex = messages.findIndex(
+			(message) =>
+				message.app_message_id === appMessageId ||
+				(message.role === "assistant" &&
+					this.getMessageSuperMessageId(message) === superMessageId),
+		)
+		const canonicalMessage = finalMessage
+			? ({
+					...(cardIndex >= 0 ? messages[cardIndex] : {}),
+					...finalMessage,
+					topic_id: topicId,
+					app_message_id: appMessageId || finalMessage.app_message_id,
+					super_message_id: superMessageId,
+					correlation_id: String(canonicalNode.correlation_id || correlationId || ""),
+					content: canonicalNode.content,
+					reasoning_content: canonicalNode.reasoning_content,
+					tool_calls: canonicalNode.tool_calls,
+					debug: canonicalNode,
+				} as MessageItem)
+			: cardIndex >= 0
+				? ({
+						...messages[cardIndex],
+						topic_id: topicId,
+						app_message_id: appMessageId || messages[cardIndex].app_message_id,
+						super_message_id: superMessageId,
+						correlation_id: String(canonicalNode.correlation_id || correlationId || ""),
+						content: canonicalNode.content,
+						reasoning_content: canonicalNode.reasoning_content,
+						tool_calls: canonicalNode.tool_calls,
+						debug: canonicalNode,
+					} as MessageItem)
+				: undefined
+		if (canonicalMessage) {
+			const nextMessages = messages.slice()
+			if (cardIndex >= 0) nextMessages[cardIndex] = canonicalMessage
+			else nextMessages.push(canonicalMessage)
+			this.messages.set(topicId, sortMessages(this.dedupeAuthoritativeMessages(nextMessages)))
+		}
+
+		const topicMeta = this.getTopicMetadata(topicId)
+		const ownsRenderTimer = topicMeta.activeRenderSuperMessageId === superMessageId
+		if (ownsRenderTimer && topicMeta.timer) clearTimeout(topicMeta.timer)
+		if (ownsRenderTimer) topicMeta.activeRenderSuperMessageId = null
+		if (ownsRenderTimer) topicMeta.timer = null
+		this.clearStreamRecoveryState(topicId, superMessageId)
+		this.clearStreamChunkLedger(topicId, superMessageId)
+		topicMeta.content.delete(superMessageId)
+		topicMeta.streamSnapshots.delete(superMessageId)
+		topicMeta.finalizedCorrelationIds.add(superMessageId)
+		topicMeta.isStream = topicMeta.content.size > 0
+		topicMeta.isStreamLoading = topicMeta.content.size > 0
+		this.topicMeta.set(topicId, topicMeta)
+		this.clearStreamCorrelationId(topicId, superMessageId)
+		this.streamRenderStarted.get(topicId)?.delete(superMessageId)
+		if (this.streamRenderStarted.get(topicId)?.size === 0)
+			this.streamRenderStarted.delete(topicId)
+		this.setCanonicalFinalBarrier(topicId, superMessageId, {
+			seqId: normalizedSeqId,
+			appMessageId: appMessageId || String(canonicalNode.app_message_id || ""),
+			correlationId: String(canonicalNode.correlation_id || correlationId || ""),
+		})
+
+		if (emitEvents && canonicalMessage) {
+			this.publishCanonicalFinalStreamEnded(
+				topicId,
+				superMessageId,
+				normalizedSeqId,
+				this.resolveAuthoritativeStreamEndReason(
+					canonicalMessage.imStatus === "revoked" ? "revoked" : canonicalNode.status,
+				),
+				source,
+				String(canonicalNode.correlation_id || correlationId || ""),
+			)
+			this.publishMessageCommitted(topicId, canonicalMessage, canonicalNode, source)
+		}
+
+		return {
+			accepted: true,
+			streamWasActive,
+			canonicalNode,
+			canonicalMessage,
+			seqId: normalizedSeqId,
+		}
+	}
+
+	/**
+	 * HTTP authoritative Final 快照静默结算本代明确确认的 SuperMessage。丢弃同步窗口内
+	 * 重建的 StreamState，并重新写回权威节点；Topic 是否仍 running 不影响消息级封口。
 	 */
 	private finalizeSynchronizedAssistantSnapshots(
 		topicId: string,
 		snapshots: Map<string, AuthoritativeAssistantSnapshot>,
 	) {
 		if (snapshots.size === 0) return
-		const topicMeta = this.getTopicMetadata(topicId)
-		if (topicMeta.timer) {
-			clearTimeout(topicMeta.timer)
-			topicMeta.timer = null
-			topicMeta.activeRenderSuperMessageId = null
-		}
-
 		snapshots.forEach(({ appMessageId, node }, superMessageId) => {
 			const correlationId = String(node.correlation_id || "")
-			this.clearStreamRecoveryState(topicId, superMessageId)
-			this.clearStreamChunkLedger(topicId, superMessageId)
-			topicMeta.content.delete(superMessageId)
-			topicMeta.streamSnapshots.delete(superMessageId)
-			topicMeta.finalizedCorrelationIds.add(superMessageId)
-
-			const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-			// HTTP Final 的 absent 字段不具备覆盖语义；先继承当前 canonical，
-			// 再让显式 null / 空值经规范化后覆盖对应字段。
-			const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(currentNode, node)
-			this.setAssistantMessageNode(
+			this.settleCanonicalAssistantFinal({
+				source: "http",
 				topicId,
-				superMessageId,
-				{
-					...authoritativeNode,
-					correlation_id: correlationId,
-					super_message_id: superMessageId,
-				} as RawSuperMagicMessageNode,
 				appMessageId,
-			)
-			this.clearStreamCorrelationId(topicId, superMessageId)
+				superMessageId,
+				correlationId,
+				seqId: String(node.seq_id || ""),
+				finalNode: node,
+				revisionDecision: "same",
+				emitEvents: false,
+			})
 		})
-
+		const topicMeta = this.getTopicMetadata(topicId)
 		topicMeta.isStream = topicMeta.content.size > 0
 		topicMeta.isStreamLoading = topicMeta.content.size > 0
 		this.topicMeta.set(topicId, topicMeta)
@@ -4262,91 +4587,27 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		superMessageId: string,
 		correlationId: string,
 		serverNode: RawSuperMagicMessageNode,
-		mode: AssistantSnapshotMode,
+		options: {
+			seqId?: string
+			finalMessage?: MessageItem
+			revisionDecision?: "new" | "same" | "higher" | "stale"
+			emitEvents?: boolean
+			source?: CanonicalFinalSource
+		} = {},
 	) {
-		if (mode === "terminal") {
-			this.clearStreamRecoveryState(topicId, superMessageId)
-			this.clearStreamChunkLedger(topicId, superMessageId)
-			// Message-level terminal authority is independent from both StreamState existence
-			// and the enclosing request lifecycle. A later cancel cannot reopen this SuperMessage.
-			this.getTopicMetadata(topicId).finalizedCorrelationIds.add(superMessageId)
-		}
-		const streamState = this.getStreamState(topicId, superMessageId)
-		if (streamState) {
-			this.traceReasoningLifecycle("stream:reconcile-start", {
-				topicId,
-				appMessageId,
-				superMessageId,
-				correlationId,
-				mode,
-				incomingSuperStatus: String(serverNode.status || ""),
-				streamStage: streamState.stage,
-				isFinalMessageReceived: streamState.isFinalMessageReceived,
-			})
-		}
-		const currentAssistantNode = this.getAssistantMessageNode(topicId, superMessageId)
-		const reconciliationBase = streamState
-			? ({
-					...(currentAssistantNode || {}),
-					role: "assistant",
-					correlation_id: correlationId,
-					super_message_id: superMessageId,
-					content: streamState.content,
-					reasoning_content: streamState.reasoning_content,
-					tool_calls: this.cloneToolCallsForRendering(streamState.tool_calls),
-				} as RawSuperMagicMessageNode)
-			: currentAssistantNode
-		const reconciledNode =
-			mode === "terminal"
-				? this.mergeAuthoritativeAssistantSnapshot(reconciliationBase, serverNode)
-				: this.mergeNonterminalAssistantSnapshot(
-						reconciliationBase,
-						serverNode,
-						streamState,
-					)
-
-		this.setAssistantMessageNode(
+		const result = this.settleCanonicalAssistantFinal({
+			source: options.source || "http",
 			topicId,
-			superMessageId,
-			{
-				...reconciledNode,
-				correlation_id: correlationId,
-				super_message_id: superMessageId,
-			} as RawSuperMagicMessageNode,
 			appMessageId,
-		)
-
-		if (!streamState || mode === "nonterminal") {
-			if (streamState) {
-				this.traceReasoningLifecycle("stream:reconcile-retained", {
-					topicId,
-					superMessageId,
-					mode,
-					streamStage: streamState.stage,
-				})
-			}
-			return false
-		}
-		const topicMeta = this.getTopicMetadata(topicId)
-		if (topicMeta.timer) {
-			clearTimeout(topicMeta.timer)
-			topicMeta.timer = null
-			topicMeta.activeRenderSuperMessageId = null
-		}
-		topicMeta.content.delete(superMessageId)
-		topicMeta.streamSnapshots.delete(superMessageId)
-		topicMeta.isStream = topicMeta.content.size > 0
-		topicMeta.isStreamLoading = topicMeta.content.size > 0
-		this.topicMeta.set(topicId, topicMeta)
-		this.clearStreamCorrelationId(topicId, superMessageId)
-		this.traceReasoningLifecycle("stream:reconcile-removed", {
-			topicId,
 			superMessageId,
-			mode,
-			incomingSuperStatus: String(serverNode.status || ""),
-			hasStreamStateAfter: Boolean(this.getStreamState(topicId, superMessageId)),
+			correlationId,
+			seqId: options.seqId,
+			finalNode: serverNode,
+			finalMessage: options.finalMessage,
+			revisionDecision: options.revisionDecision,
+			emitEvents: options.emitEvents,
 		})
-		return true
+		return result.streamWasActive
 	}
 
 	private getTopicBuffer(topicId: string) {
@@ -4984,11 +5245,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			messageNode?.role === "assistant"
 				? this.getLatestAssistantMessageForIdentity(msgCache, appMessageId, superMessageId)
 				: undefined
+		const canonicalFinalBarrier = superMessageId
+			? this.getCanonicalFinalBarrier(topicId, superMessageId)
+			: undefined
 		if (
 			messageNode?.role === "assistant" &&
 			superMessageId &&
-			this.getTopicMetadata(topicId).finalizedCorrelationIds.has(superMessageId) &&
-			!currentAssistantMessage
+			canonicalFinalBarrier &&
+			!currentAssistantMessage &&
+			(!message?.seq_id ||
+				!canonicalFinalBarrier.seqId ||
+				compareMessageSeqId(String(message.seq_id), canonicalFinalBarrier.seqId) <= 0)
 		) {
 			// 权威 membership 已删除该逻辑卡；没有 canonical 高版本可比较时，迟到 Final
 			// 与迟到 chunk 一样属于旧分支，不能重新写入 buffer、工具状态或持久化队列。
@@ -5013,24 +5280,40 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const skippedStreamState = superMessageId
 				? this.getStreamState(topicId, superMessageId)
 				: undefined
-			if (messageNode?.status === "finished" || skippedStreamState) {
-				this.traceReasoningLifecycle("im:revision-short-circuit", {
-					topicId,
-					appMessageId,
-					superMessageId,
-					correlationId,
-					incomingSeqId: String(message?.seq_id || ""),
-					currentSeqId:
-						this.getAssistantRevisionSeqId(
+			if (messageNode?.role === "assistant" && superMessageId && skippedStreamState) {
+				if (revisionDecision === "same") {
+					const wasStreamActive = this.eventTransitions.isStreamActive(
+						this.getEventEntityKey("stream", topicId, superMessageId),
+					)
+					this.reconcileServerAssistantSnapshot(
+						topicId,
+						appMessageId,
+						superMessageId,
+						correlationId,
+						this.getAssistantMessageNode(topicId, superMessageId) || messageNode,
+						{
+							seqId: String(message?.seq_id || ""),
+							finalMessage: nextMessage,
+							revisionDecision: this.getAssistantRevisionDecision(
+								topicId,
+								appMessageId,
+								superMessageId,
+								message?.seq_id,
+							),
+							source: "im",
+						},
+					)
+					if (wasStreamActive) {
+						this.publishCanonicalFinalStreamEnded(
 							topicId,
-							appMessageId,
 							superMessageId,
-							true,
-						) || "",
-					revisionDecision,
-					incomingSuperStatus: String(messageNode?.status || ""),
-					streamStageBeforeReturn: skippedStreamState?.stage,
-				})
+							String(message?.seq_id || ""),
+							nextMessage.imStatus === "revoked" ? "revoked" : "authoritative_final",
+							"im",
+							correlationId,
+						)
+					}
+				}
 			}
 			return
 		}
@@ -5073,79 +5356,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			(hasMessage || hasSuperMessageIdMessage || hasBufferMessage)
 		) {
 			if (hasSuperMessageIdMessage && superMessageId && messageNode?.role === "assistant") {
-				// 真消息到达时，把非流式字段（status / task_id / event /
-				// attachments / usage 等元信息）同步到 chunk 阶段创建的 mock 节点与卡片，
-				// content / reasoning_content / tool_calls 仍走流式 catch-up，
-				// 避免一次性刷新打断打字机渲染。
-				// ⚠️ 必须放在 `if (streamState)` 之外：当 chunks 自带 finish_reason
-				// 且 catch-up 已完成时，completeStreamRendering 会提前把 streamState
-				// 从 topicMeta.content 中删掉；此时 IM 层真消息才到达，mock 节点/卡片
-				// 仍然存在，元信息同步必须继续执行，否则 task_id / status / event 等
-				// 非流式字段将永远停留在 getDefaultNode / getDefaultMessage 的默认值。
-				this.syncFinalNodeMetadata(topicId, superMessageId, messageNode)
-				this.syncFinalCardMetadata(topicId, superMessageId, nextMessage)
-
-				const streamState = this.getStreamState(topicId, superMessageId)
-				if (streamState) {
-					this.beginFinalSettling(this.getTopicMetadata(topicId), streamState)
-					if (this.hasDefinedFinalField(messageNode, "content")) {
-						streamState.content =
-							typeof messageNode.content === "string" ? messageNode.content : ""
-					}
-					if (this.hasDefinedFinalField(messageNode, "reasoning_content")) {
-						streamState.reasoning_content =
-							typeof messageNode.reasoning_content === "string"
-								? messageNode.reasoning_content
-								: ""
-					}
-
-					const finalToolState = this.getFinalToolCalls(messageNode)
-					if (finalToolState.present) {
-						streamState.tool_calls = this.reconcileFinalToolCalls(
-							streamState.tool_calls,
-							finalToolState.toolCalls,
-						)
-
-						const cache = this.getAssistantMessageNode(topicId, superMessageId)
-						if (cache && finalToolState.toolCalls.length === 0) {
-							cache.tool_calls = []
-							this.setAssistantMessageNode(topicId, superMessageId, cache)
-						}
-					}
-
-					// IM 消息到达时立即同步 tool 字段到 messageMap，
-					// 避免 content 流式阶段工具状态无法更新
-					this.syncToolCallsToolField(topicId, superMessageId, messageNode)
-
-					this.startStreamRendering(topicId, superMessageId)
-				} else {
-					this.syncFinalAssistantStreamFields(topicId, superMessageId, messageNode)
-					this.syncToolCallsToolField(topicId, superMessageId, messageNode)
-				}
-				const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-				if (appMessageId && currentNode)
-					this.setAssistantMessageNode(topicId, superMessageId, currentNode, appMessageId)
-				const committedMessage =
-					(this.messages.get(topicId) || []).find(
-						(item) =>
-							item.app_message_id === appMessageId ||
-							(item.role === "assistant" &&
-								this.getMessageSuperMessageId(item) === superMessageId),
-					) || nextMessage
-				const committedNode = (currentNode || messageNode) as RawSuperMagicMessageNode
-				// 该分支接受的是命中流式占位卡的首个持久 Assistant；先完成 canonical
-				// 身份和终态映射，再发布一次标准事件，后续打字机投影不得重复发布。
-				this.publishStreamEnded(
+				const settlement = this.settleCanonicalAssistantFinal({
+					source: "im",
 					topicId,
+					appMessageId,
 					superMessageId,
-					this.resolveAuthoritativeStreamEndReason(
-						committedMessage.imStatus === "revoked" ? "revoked" : committedNode.status,
-					),
-					{ awaitingCanonicalMessage: false },
-					"im",
 					correlationId,
-				)
-				this.publishMessageCommitted(topicId, committedMessage, committedNode, "im")
+					seqId: String(message?.seq_id || ""),
+					finalNode: messageNode,
+					finalMessage: nextMessage,
+					revisionDecision,
+					emitEvents: true,
+				})
+				if (settlement.canonicalNode.status === "finished")
+					this.fillMissingToolResponses(topicId)
 				if (persist) this.queueMessagePersistence(topicId, message, true)
 			}
 			return
@@ -5369,69 +5593,25 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		message: MessageItem,
 		messageNode: RawSuperMagicMessageNode,
 	) {
-		const topicMeta = this.getTopicMetadata(topicId)
-		const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-		const routedFinalNode = {
-			...messageNode,
-			// Store bucket/card ownership comes from enqueueMessage(topicId), while the
-			// canonical Agent node retains its inner business topic when the server sent one.
-			topic_id: messageNode.topic_id || topicId,
-			correlation_id: correlationId,
-			super_message_id: superMessageId,
-		} as RawSuperMagicMessageNode
-		const authoritativeNode = this.mergeAuthoritativeAssistantSnapshot(
-			currentNode,
-			routedFinalNode,
-		)
-
-		this.setAssistantMessageNode(topicId, superMessageId, authoritativeNode, rawAppMessageId)
-
-		const messages = this.messages.get(topicId) || []
-		const existingCardIndex = messages.findIndex(
-			(item) =>
-				item.app_message_id === rawAppMessageId ||
-				(item.role === "assistant" &&
-					this.getMessageSuperMessageId(item) === superMessageId),
-		)
-		const existingCard = existingCardIndex >= 0 ? messages[existingCardIndex] : undefined
-		const finalCard = {
-			...(existingCard || {}),
-			...message,
-			topic_id: topicId,
-			super_message_id: superMessageId,
-			correlation_id: correlationId,
-			content: authoritativeNode.content,
-			reasoning_content: authoritativeNode.reasoning_content,
-			tool_calls: authoritativeNode.tool_calls,
-			debug: authoritativeNode,
-			...(rawAppMessageId ? { app_message_id: rawAppMessageId } : {}),
-		} as MessageItem
-		const nextMessages = messages.slice()
-		if (existingCardIndex >= 0) nextMessages[existingCardIndex] = finalCard
-		else nextMessages.push(finalCard)
-		this.messages.set(topicId, sortMessages(nextMessages))
-
-		topicMeta.content.delete(superMessageId)
-		topicMeta.streamSnapshots.delete(superMessageId)
-		topicMeta.finalizedCorrelationIds.add(superMessageId)
-		this.clearStreamRecoveryState(topicId, superMessageId)
-		this.clearStreamChunkLedger(topicId, superMessageId)
-		topicMeta.isStream = topicMeta.content.size > 0
-		topicMeta.isStreamLoading = topicMeta.content.size > 0
-		this.topicMeta.set(topicId, topicMeta)
-
-		this.publishStreamEnded(
+		const result = this.settleCanonicalAssistantFinal({
+			source: "im",
 			topicId,
+			appMessageId: rawAppMessageId,
 			superMessageId,
-			this.resolveAuthoritativeStreamEndReason(
-				finalCard.imStatus === "revoked" ? "revoked" : authoritativeNode.status,
-			),
-			{ awaitingCanonicalMessage: false },
-			"im",
 			correlationId,
-		)
-		this.publishMessageCommitted(topicId, finalCard, authoritativeNode, "im")
-		if (authoritativeNode.status === "finished") {
+			seqId: String(message.seq_id || ""),
+			finalNode: {
+				...messageNode,
+				// Store bucket/card ownership comes from enqueueMessage(topicId), while the
+				// canonical Agent node retains its inner business topic when the server sent one.
+				topic_id: messageNode.topic_id || topicId,
+				correlation_id: correlationId,
+				super_message_id: superMessageId,
+			} as RawSuperMagicMessageNode,
+			finalMessage: message,
+			emitEvents: true,
+		})
+		if (result.canonicalNode.status === "finished") {
 			this.fillMissingToolResponses(topicId)
 		}
 
@@ -5531,11 +5711,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					this.processMessageBuffer(topicId)
 					return
 				}
-				if (superMessageId && topicMeta.finalizedCorrelationIds.has(superMessageId)) {
+				const bufferedFinalBarrier = superMessageId
+					? this.getCanonicalFinalBarrier(topicId, superMessageId)
+					: undefined
+				if (superMessageId && bufferedFinalBarrier) {
 					const isHigherRevision =
-						typeof currentSeqId === "string" &&
 						typeof incomingSeqId === "string" &&
-						compareMessageSeqId(incomingSeqId, currentSeqId) > 0
+						Boolean(bufferedFinalBarrier.seqId) &&
+						compareMessageSeqId(incomingSeqId, bufferedFinalBarrier.seqId) > 0
 					if (!isHigherRevision) {
 						// 已结算的同版本或旧版本仍是重复副本；保留 tombstone，阻止迟到 chunk 重开流。
 						buffer.isProcessing = false
@@ -5569,86 +5752,42 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)
 					return
 				}
-				const streamState = existingStreamState
-
-				this.beginFinalSettling(topicMeta, streamState)
-				if (topicMeta.timer) {
-					console.log(
-						"%c 【DEBUG】 消费队列 - 流式（等待流式完成）",
-						"background-color: orange;color: white;padding:0 4px",
-						JSON.parse(JSON.stringify(buffer)),
-					)
-					buffer.messages.unshift(nextMessage!)
-					buffer.isProcessing = false
-					return
-				}
-
-				console.log(
-					"%c 【DEBUG】 消费队列 - 流式",
-					"background-color: pink;color: white;padding:0 4px",
-					JSON.parse(JSON.stringify(nextMessage)),
-				)
-				if (this.hasDefinedFinalField(messageNode, "content")) {
-					streamState.content =
-						typeof messageNode?.content === "string" ? messageNode.content : ""
-				}
-				if (this.hasDefinedFinalField(messageNode, "reasoning_content")) {
-					streamState.reasoning_content =
-						typeof messageNode?.reasoning_content === "string"
-							? messageNode.reasoning_content
-							: ""
-				}
-				const finalToolState = this.getFinalToolCalls(messageNode)
-				if (finalToolState.present) {
-					streamState.tool_calls = this.reconcileFinalToolCalls(
-						streamState.tool_calls,
-						finalToolState.toolCalls,
-					)
-				}
-				this.startStreamRendering(topicId, superMessageId)
-
-				// 首次真消息（无 chunk 前置）场景：startStreamRendering 只会用
-				// getDefaultNode / getDefaultMessage 创建空壳 mock，真消息里的
-				// status / task_id / event / attachments / usage 等非流式字段不会被自动写入。
-				// 这里与路径 A 保持一致，补一次元信息同步，避免下游读到默认占位值。
-				if (superMessageId) {
-					this.syncFinalNodeMetadata(
-						topicId,
-						superMessageId,
-						messageNode as RawSuperMagicMessageNode,
-					)
-					this.syncFinalCardMetadata(topicId, superMessageId, message)
-					const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-					if (rawAppMessageId && currentNode)
-						this.setAssistantMessageNode(
-							topicId,
-							superMessageId,
-							currentNode,
-							rawAppMessageId,
-						)
-				}
-				const committedMessage =
-					(this.messages.get(topicId) || []).find(
-						(item) =>
-							item.app_message_id === rawAppMessageId ||
-							(item.role === "assistant" &&
-								this.getMessageSuperMessageId(item) === superMessageId),
-					) || message
-				const committedNode = (this.messageMap.get(superMessageId) ||
-					messageNode) as RawSuperMagicMessageNode
-				this.publishStreamEnded(
+				const settlement = this.settleCanonicalAssistantFinal({
+					source: "im",
 					topicId,
+					appMessageId: rawAppMessageId,
 					superMessageId,
-					this.resolveAuthoritativeStreamEndReason(
-						committedMessage.imStatus === "revoked" ? "revoked" : committedNode.status,
-					),
-					{ awaitingCanonicalMessage: false },
-					"im",
 					correlationId,
-				)
-				this.publishMessageCommitted(topicId, committedMessage, committedNode, "im")
+					seqId: String(incomingSeqId || ""),
+					finalNode: messageNode as RawSuperMagicMessageNode,
+					finalMessage: message,
+					revisionDecision: "new",
+					emitEvents: true,
+				})
+				if (settlement.canonicalNode.status === "finished")
+					this.fillMissingToolResponses(topicId)
 			}
 		}
+	}
+
+	/**
+	 * 渲染 timer 是 Topic 级别的单一执行权。timer 释放后，之前因该执行权被
+	 * 拒绝的 Assistant Final 必须重新尝试消费；否则 buffer 会永久停在“有消息但
+	 * 没有后续事件”的状态。复用 buffer.isProcessing 作为 per-topic single-flight
+	 * 门闩，避免 timer 回调、完成回调和其他入口在同一同步栈内重复消费。
+	 */
+	private processMessageBufferAfterRenderRelease(topicId: string) {
+		const topicMeta = this.getTopicMetadata(topicId)
+		const buffer = this.getTopicBuffer(topicId)
+		if (
+			topicMeta.syncState === "syncing" ||
+			topicMeta.timer ||
+			buffer.isProcessing ||
+			buffer.messages.length === 0
+		)
+			return
+
+		this.processMessageBuffer(topicId)
 	}
 
 	private startStreamRendering(topicId: string, superMessageId: string) {
@@ -5774,6 +5913,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				topicMeta.timer = null
 				topicMeta.activeRenderSuperMessageId = null
 				this.startStreamRendering(topicId, superMessageId)
+				// The previous frame may have caught up without reaching a terminal
+				// state. Once its timer releases, retry any canonical Final that was
+				// held behind that render barrier.
+				this.processMessageBufferAfterRenderRelease(topicId)
 			})
 		}, STREAM_RENDER_FRAME_MS)
 	}
@@ -6779,13 +6922,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				superMessageId,
 				createStreamState({ superMessageId, correlationId: resolvedCorrelationId, taskId }),
 			)
-			this.traceReasoningLifecycle("stream:created", {
-				topicId,
-				superMessageId,
-				correlationId: resolvedCorrelationId,
-				taskId,
-				stage: "reasoning_content",
-			})
 		}
 
 		const streamState = topicMeta.content?.get(superMessageId)

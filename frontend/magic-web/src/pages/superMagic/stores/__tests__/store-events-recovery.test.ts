@@ -3,8 +3,8 @@ import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type {
 	MessageCommittedEvent,
-	MessageCompletedEvent,
 	MessageStreamEndedEvent,
+	TopicExecutionEndedEvent,
 	ToolCallSettledEvent,
 } from "@/pages/superMagic/stores/events"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
@@ -194,13 +194,13 @@ describe("SuperMagic Store recovery events", () => {
 	it("publishes an HTTP revision of an existing Assistant logical message", () => {
 		const store = new SuperMagicStore()
 		const committed: MessageCommittedEvent[] = []
-		const completed: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 
 		store.initializeMessages(TOPIC_ID, [
 			createAssistantEnvelope({ appMessageId: "assistant-http-100", seqId: "100" }),
 		])
 		store.subscribe("message.committed", (event) => committed.push(event))
-		store.subscribe("message.completed", (event) => completed.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		store.initializeMessages(TOPIC_ID, [
 			createAssistantEnvelope({
@@ -248,7 +248,45 @@ describe("SuperMagic Store recovery events", () => {
 			}),
 		])
 		expect(store.getMessageNode("assistant-http-100")).toBeUndefined()
-		expect(completed).toEqual([])
+		expect(topicEnded).toEqual([])
+	})
+
+	it("publishes HTTP Topic terminal transitions exactly once per execution generation", () => {
+		const store = new SuperMagicStore()
+		const topicEnded: TopicExecutionEndedEvent[] = []
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
+
+		const completeWithStatus = (taskStatus: string) => {
+			const generation = store.beginTopicSync(TOPIC_ID)
+			store.completeTopicSync(TOPIC_ID, generation, { succeeded: true, taskStatus })
+		}
+
+		completeWithStatus("running")
+		completeWithStatus("finished")
+		completeWithStatus("finished")
+		completeWithStatus("waiting_for_user")
+		completeWithStatus("error")
+
+		expect(topicEnded.map((event) => event.payload.status)).toEqual(["finished", "error"])
+	})
+
+	it("publishes an HTTP Topic terminal event only after tracked streams are settled", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId(TOPIC_ID)
+		store.receiveChunk(createChunk())
+		const observedStreaming: boolean[] = []
+		store.subscribe("topic.execution.ended", () => {
+			observedStreaming.push(store.isTopicStreaming(TOPIC_ID))
+		})
+
+		const generation = store.beginTopicSync(TOPIC_ID)
+		store.completeTopicSync(TOPIC_ID, generation, {
+			succeeded: true,
+			taskStatus: "finished",
+		})
+
+		expect(observedStreaming).toEqual([false])
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
 	it("publishes a terminal tool settlement when HTTP updates existing canonical tool state", () => {

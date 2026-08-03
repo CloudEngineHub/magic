@@ -402,6 +402,54 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
 	})
 
+	it("HTTP 首轮未追平 requiredSeqId 时，无第二条 WS 也会继续重试并收敛 Final。", async () => {
+		const topic = createTopic("ws-watermark-retry")
+		await renderInitializedTopic(topic)
+		const correlationId = "correlation-ws-watermark-retry"
+		const staleEnvelope = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-watermark-stale",
+			correlationId,
+			seqId: "99",
+			content: "stale tail",
+		})
+		const finalEnvelope = createAssistantEnvelope({
+			topicId: topic.chat_topic_id,
+			appMessageId: "assistant-watermark-final",
+			correlationId,
+			seqId: "100",
+			content: "final after retry",
+		})
+
+		superMagicStore.receiveChunk(
+			createChunk({
+				topicId: topic.chat_topic_id,
+				correlationId,
+				content: "draft before watermark retry",
+			}),
+		)
+		mockState.getMessagesByConversationId.mockResolvedValueOnce(createResponse([staleEnvelope]))
+		await triggerPersistentMessageEvent(topic, 1, "100")
+
+		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeDefined()
+		expect(getNode(toSuperMessageId(correlationId))?.content).toBe(
+			"draft before watermark retry",
+		)
+
+		mockState.getMessagesByConversationId.mockResolvedValueOnce(createResponse([finalEnvelope]))
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(600)
+			await flushPromises()
+		})
+
+		expect(getNode(toSuperMessageId(correlationId))).toMatchObject({
+			app_message_id: "assistant-watermark-final",
+			content: "final after retry",
+		})
+		expect(superMagicStore.getStreamState(topic.chat_topic_id, correlationId)).toBeUndefined()
+		expect(superMagicStore.isTopicStreaming(topic.chat_topic_id)).toBe(false)
+	})
+
 	it("WS 以外层 chat_topic_id 路由，同时保留 Assistant 内层 Agent topic。", async () => {
 		const topic = createTopic("outer-route")
 		await renderInitializedTopic(topic)

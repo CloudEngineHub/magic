@@ -3,12 +3,12 @@ import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type {
 	MessageCommittedEvent,
-	MessageCompletedEvent,
 	MessageStreamDeltaEvent,
 	MessageStreamEndedEvent,
 	MessageStreamStartedEvent,
 	TaskCompletedEvent,
 	ToolCallSettledEvent,
+	TopicExecutionEndedEvent,
 } from "@/pages/superMagic/stores/events"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
@@ -348,23 +348,106 @@ describe("SuperMagic Store typed events", () => {
 		})
 	})
 
-	it("publishes committed before completed for an Assistant terminal message", () => {
+	it("publishes committed before the Topic terminal event for a terminal Assistant Final", () => {
 		const store = new SuperMagicStore()
-		const events: Array<MessageCommittedEvent | MessageCompletedEvent> = []
+		const events: Array<MessageCommittedEvent | TopicExecutionEndedEvent> = []
 		store.subscribe("message.committed", (event) => events.push(event))
-		store.subscribe("message.completed", (event) => events.push(event))
+		store.subscribe("topic.execution.ended", (event) => events.push(event))
 
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope())
 
 		expect(events.map((event) => event.type)).toEqual([
 			"message.committed",
-			"message.completed",
+			"topic.execution.ended",
 		])
 		expect((events[0] as MessageCommittedEvent).payload.message).toMatchObject({
 			imStatus: ConversationMessageStatus.Read,
 			superStatus: "finished",
 		})
-		expect((events[1] as MessageCompletedEvent).payload.status).toBe("finished")
+		expect((events[1] as TopicExecutionEndedEvent).payload.status).toBe("finished")
+	})
+
+	it("publishes a Topic-level terminal event only when the authoritative Final stops the Topic", () => {
+		const store = new SuperMagicStore()
+		const topicEvents: TopicExecutionEndedEvent[] = []
+		store.subscribe("topic.execution.ended", (event) => topicEvents.push(event))
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "assistant-running",
+				seqId: "100",
+				status: "running",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "assistant-finished",
+				seqId: "101",
+				status: "finished",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "assistant-finished",
+				seqId: "101",
+				status: "finished",
+			}),
+		)
+
+		expect(topicEvents).toEqual([
+			expect.objectContaining({
+				type: "topic.execution.ended",
+				payload: expect.objectContaining({ status: "finished" }),
+			}),
+		])
+	})
+
+	it.each(["running", "waiting", "waiting_for_user", "future_status"])(
+		"does not publish a Topic terminal event for nonterminal status %s",
+		(status) => {
+			const store = new SuperMagicStore()
+			const topicEvents: TopicExecutionEndedEvent[] = []
+			store.subscribe("topic.execution.ended", (event) => topicEvents.push(event))
+
+			store.enqueueMessage(
+				TOPIC_ID,
+				createAssistantEnvelope({ status, appMessageId: `assistant-${status}` }),
+			)
+
+			expect(topicEvents).toEqual([])
+		},
+	)
+
+	it("allows one Topic terminal event again after a new nonterminal execution generation", () => {
+		const store = new SuperMagicStore()
+		const topicEvents: TopicExecutionEndedEvent[] = []
+		store.subscribe("topic.execution.ended", (event) => topicEvents.push(event))
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({ appMessageId: "assistant-finished-1", seqId: "100" }),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "assistant-running-2",
+				seqId: "101",
+				status: "running",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "assistant-error-2",
+				seqId: "102",
+				status: "error",
+			}),
+		)
+
+		expect(topicEvents.map((event) => event.payload.status)).toEqual(["finished", "error"])
 	})
 
 	it("publishes a strong tool settlement when the protocol ids match", () => {
@@ -438,7 +521,7 @@ describe("SuperMagic Store typed events", () => {
 		const settled: ToolCallSettledEvent[] = []
 		const legacyScopedEvents: ToolCallSettledEvent[] = []
 		const committed: MessageCommittedEvent[] = []
-		const completed: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
 		store.subscribe("toolCall.settled", (event) => settled.push(event))
@@ -446,7 +529,7 @@ describe("SuperMagic Store typed events", () => {
 			scope: { toolCallId: FINISH_TASK_LEGACY_TOOL_CALL_ID },
 		})
 		store.subscribe("message.committed", (event) => committed.push(event))
-		store.subscribe("message.completed", (event) => completed.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		// The numeric tool.id remains a low-level response identity only. It does not
 		// create an Assistant tool call or make the legacy tool_call_id an event alias.
@@ -466,7 +549,7 @@ describe("SuperMagic Store typed events", () => {
 			imStatus: ConversationMessageStatus.Read,
 			superStatus: "finished",
 		})
-		expect(completed).toEqual([])
+		expect(topicEnded).toEqual([])
 
 		const rawNode = store.getMessageNode(FINISH_TASK_SUPER_MESSAGE_ID)
 		expect(rawNode).toMatchObject({
@@ -518,18 +601,18 @@ describe("SuperMagic Store typed events", () => {
 	it("emits task.completed exactly once for an orphan finish_task result", () => {
 		const store = new SuperMagicStore()
 		const taskCompleted: TaskCompletedEvent[] = []
-		const assistantCompleted: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 		vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
 		store.subscribe("task.completed", (event) => taskCompleted.push(event))
-		store.subscribe("message.completed", (event) => assistantCompleted.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		const finishTaskEnvelope = createFinishTaskEnvelope()
 		const replayEnvelope = cloneEnvelope(finishTaskEnvelope)
 		store.enqueueMessage(TOPIC_ID, finishTaskEnvelope)
 		store.enqueueMessage(TOPIC_ID, replayEnvelope)
 
-		expect(assistantCompleted).toEqual([])
+		expect(topicEnded).toEqual([])
 		expect(taskCompleted).toHaveLength(1)
 		expect(taskCompleted[0]).toMatchObject({
 			type: "task.completed",
@@ -574,14 +657,14 @@ describe("SuperMagic Store typed events", () => {
 	it("keeps cold HTTP hydration silent", () => {
 		const store = new SuperMagicStore()
 		const committed: MessageCommittedEvent[] = []
-		const completed: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 		store.subscribe("message.committed", (event) => committed.push(event))
-		store.subscribe("message.completed", (event) => completed.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		store.initializeMessages(TOPIC_ID, [createAssistantEnvelope()])
 
 		expect(committed).toEqual([])
-		expect(completed).toEqual([])
+		expect(topicEnded).toEqual([])
 	})
 
 	it("publishes a live HTTP finish_task arrival exactly once", () => {
@@ -628,34 +711,34 @@ describe("SuperMagic Store typed events", () => {
 		store.setActiveTopicId(TOPIC_ID)
 		store.receiveChunk(createChunk({ content: "draft" }))
 		const events: Array<
-			MessageStreamEndedEvent | MessageCommittedEvent | MessageCompletedEvent
+			MessageStreamEndedEvent | MessageCommittedEvent | TopicExecutionEndedEvent
 		> = []
 		store.subscribe("message.stream.ended", (event) => events.push(event))
 		store.subscribe("message.committed", (event) => events.push(event))
-		store.subscribe("message.completed", (event) => events.push(event))
+		store.subscribe("topic.execution.ended", (event) => events.push(event))
 
 		store.initializeMessages(TOPIC_ID, [createAssistantEnvelope()])
 
 		expect(events.map((event) => event.type)).toEqual([
 			"message.stream.ended",
 			"message.committed",
-			"message.completed",
+			"topic.execution.ended",
 		])
-		expect((events[0] as MessageStreamEndedEvent).payload.reason).toBe("recovery_replaced")
+		expect((events[0] as MessageStreamEndedEvent).payload.reason).toBe("authoritative_final")
 	})
 
-	it("emits committed but not completed for a higher seq with the same terminal status", () => {
+	it("emits committed but not a duplicate Topic terminal event for a higher seq", () => {
 		const store = new SuperMagicStore()
 		const committed: MessageCommittedEvent[] = []
-		const completed: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 		store.subscribe("message.committed", (event) => committed.push(event))
-		store.subscribe("message.completed", (event) => completed.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ seqId: "100" }))
 		store.enqueueMessage(TOPIC_ID, createAssistantEnvelope({ seqId: "101" }))
 
 		expect(committed).toHaveLength(2)
-		expect(completed).toHaveLength(1)
+		expect(topicEnded).toHaveLength(1)
 		expect(committed[1].payload.operation).toBe("update")
 		expect(committed[1].payload.changedFields).toContain("seqId")
 	})
@@ -663,9 +746,9 @@ describe("SuperMagic Store typed events", () => {
 	it("publishes revoked as an IM visibility change without fabricating execution completion", () => {
 		const store = new SuperMagicStore()
 		const committed: MessageCommittedEvent[] = []
-		const completed: MessageCompletedEvent[] = []
+		const topicEnded: TopicExecutionEndedEvent[] = []
 		store.subscribe("message.committed", (event) => committed.push(event))
-		store.subscribe("message.completed", (event) => completed.push(event))
+		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
 
 		store.enqueueMessage(
 			TOPIC_ID,
@@ -680,7 +763,7 @@ describe("SuperMagic Store typed events", () => {
 			imStatus: ConversationMessageStatus.Revoked,
 			superStatus: "running",
 		})
-		expect(completed).toEqual([])
+		expect(topicEnded).toEqual([])
 	})
 
 	it("publishes a replaceable weak settlement before a late strong response", () => {
@@ -739,11 +822,11 @@ describe("SuperMagic Store typed events", () => {
 		const store = new SuperMagicStore()
 		store.setActiveTopicId(TOPIC_ID)
 		const events: Array<
-			MessageStreamEndedEvent | ToolCallSettledEvent | MessageCompletedEvent
+			MessageStreamEndedEvent | ToolCallSettledEvent | TopicExecutionEndedEvent
 		> = []
 		store.subscribe("message.stream.ended", (event) => events.push(event))
 		store.subscribe("toolCall.settled", (event) => events.push(event))
-		store.subscribe("message.completed", (event) => events.push(event))
+		store.subscribe("topic.execution.ended", (event) => events.push(event))
 
 		store.receiveChunk(
 			createChunk({
@@ -770,7 +853,7 @@ describe("SuperMagic Store typed events", () => {
 		expect(events.map((event) => event.type)).toEqual([
 			"message.stream.ended",
 			"toolCall.settled",
-			"message.completed",
+			"topic.execution.ended",
 		])
 		expect(events[0]).toMatchObject({
 			type: "message.stream.ended",

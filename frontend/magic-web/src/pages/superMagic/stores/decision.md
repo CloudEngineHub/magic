@@ -1178,9 +1178,11 @@ corepack pnpm exec vitest run --silent \
 - 新增状态时必须同时更新合法枚举、状态迁移矩阵、未知状态回退测试和文档，不允许用 last-write-wins 绕过单调性。
 - task-level suspended 的新协议入口必须有明确事件或权威 topic 状态证据；不得从单个 tool 节点状态推导全局中断。
 
-## 2026-07-28 Agent Tool 身份与任务结果契约
+## 2026-07-28 Agent Tool 身份与任务结果契约（历史审计，STALE）
 
 本节记录 2026-07-28 新确认的三项业务决策，并取代前文关于“同 id 可跨 correlation 复用”、detail-only response 可无 canonical status，以及 orphan `finish_task` 只作为普通工具响应处理的旧结论。此次只补测试与文档，不修改生产 Store；当前实现不满足契约的用例保留为 RED。
+
+> **STALE 说明（2026-08-03）**：本节的契约文字、RED 统计和“`message.completed` 不触发”的测试状态仅用于保留当时的审计快照，不是当前验收标准。关于 Final、StreamState、Topic 终态事件和 `task.completed` 的现行规则，以本文 2026-08-03 `RATIFIED` 节为准。
 
 ### 确认契约
 
@@ -1309,7 +1311,7 @@ corepack pnpm exec vitest run --config ./vitest.config.ts \
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | D1=B        | `finish_reason` 只结束当前流式动画，不是 canonical Final。                                                                                                                                                                                                                                       |
 | D2=A        | Final 缺失时 Store 不设置本地 watchdog recovery；下一次消息获取或轮询触发 HTTP 拉取兜底。                                                                                                                                                                                                        |
-| D3=B        | Final transport 可以结束文本/推理流，但保留消息或任务的 `status=running/waiting`。                                                                                                                                                                                                               |
+| D3=B        | Final transport 必须结束当前消息的文本/推理流，但保留其携带的 Topic `status=running/waiting/waiting_for_user/未知值`。                                                                                                                                                                           |
 | D4=A        | `isTopicStreaming()` 只表示 Assistant 文本/推理流，不表示整个任务生命周期。                                                                                                                                                                                                                      |
 | D5（修订）  | 身份规则统一引用 SMID-D01～SMID-D05：流式、IM Final 与 HTTP snapshot 以归一化 `super_message_id` 收敛；真实 `appMessageId`、correlation 与 task 字段保留为协议事实，但不建立 Assistant canonical alias。不同 `super_message_id` 不得因 correlation/task 相同而合并；历史缺字段按 SMID-D04 回退。 |
 | D6（修订）  | UI 逻辑消息卡 key 使用 `super_message_id`，不随 Final 的 appMessageId、correlation 或 seq revision 改变。                                                                                                                                                                                        |
@@ -1884,7 +1886,7 @@ corepack pnpm exec vitest run \
 | HTTP-D3（已废止） | 历史规则曾把同一 `app_message_id`、不同 `correlation_id` 视为非法 identity 冲突。当前不得据此拒绝消息；同一逻辑消息由 `super_message_id` 判断，并按 SMID-D02 的 `seq_id` 规则裁决。                      | 历史用例 11     |
 | HTTP-D4           | `taskStatus="finished"` 是独立 terminal barrier；即使 HTTP 失败也停止原 stream/loading，保留 draft，retry 走独立生命周期。                                                                               | 22              |
 | HTTP-D5           | `toolResponseMap` 是工具执行态 canonical；UI Map-first、assistant embedded fallback，embedded 可滞后且不要求回写；只有未来协议明确要求回写时，才另立 normalization 断言。                                | 10、13          |
-| HTTP-D6           | terminal/final snapshot 的 `tool_calls` 完整替换；nonterminal snapshot 只能合并，不删除未出现在快照中的有效流式 slot。                                                                                   | 14、15          |
+| HTTP-D6（已修订） | `super_magic_message` 本身就是 canonical Final，不能再由内层 Topic status 切分 terminal/nonterminal 分支。Final `tool_calls` 字段存在时使用权威数组；字段 absent 保留，显式 `null`/`[]` 清空。 | 14、15          |
 | HTTP-D7           | HTTP、IM、chunk 无来源优先级；同一逻辑 identity 统一 higher-seq-wins，低 seq 不得回退 canonical。                                                                                                        | 3、7、17、25    |
 | HTTP-D8           | outer topic 是 transport scope，inner node topic 是 Agent 业务域；验证映射关系，不要求字面相等。                                                                                                         | 4、12           |
 | HTTP-D9           | `initializeMessages()` 自己负责版本裁决；stale HTTP 仍进入该方法但不能回退 canonical/messages/latest seq；generation 只管 complete/cancel/lifecycle。                                                    | 3、17           |
@@ -2361,19 +2363,70 @@ corepack pnpm exec vitest run \
 | 决策    | 当前有效规则                                                                                                                                            |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | N-ST-01 | IM 状态与 SuperMessage 状态互不覆盖，只在 UI 投影层组合。Canonical `MessageItem` 必须保留 `imStatus` 与 `superStatus`；旧 `status` 仅兼容表示 IM 状态。 |
-| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态负责 Agent 执行与流生命周期。                                                                       |
+| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态描述 Agent Topic 执行状态，不描述该条消息自身是否仍在流式生成。                                   |
 | N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。                                                      |
 | N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。                                                                      |
 | N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。                       |
 | N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。                                                                  |
 | N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。                      |
-| N-ST-08 | Assistant 使用节点执行状态；Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。                                                        |
+| N-ST-08 | Assistant 的 Topic loading 可读取节点 Topic 状态；单条消息的 reasoning/content loading 只读取 `StreamState`。Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。 |
 
 实施约束：
 
 - `message.committed` 同时携带 `imStatus`、`superStatus`，并保留 `status=imStatus` 兼容别名。
-- `message.completed` 只由 Assistant 的 `superStatus` 为 `finished/error/suspended` 触发；IM `revoked` 只发布 `message.committed` 和必要的 stream ended，不伪造执行完成。
+- `message.completed` 消息级事件已废止；Assistant Final 统一发布 `message.committed`，并独立结束对应 `message.stream.ended`。
+- `topic.execution.ended` 只在 Topic 从非终态进入 `finished/error/suspended` 时发布；IM `revoked` 只发布 `message.committed` 和必要的 stream ended，不伪造 Topic 执行完成。
 - 所有撤回投影、分享许可和分支选择读取 `imStatus ?? status`；任务状态消费者读取 `superStatus`，Tool 展示读取 `toolResponseMap`。
+
+### Final、StreamState 与 Topic 终态事件契约（2026-08-03，RATIFIED）
+
+本节覆盖本文更早出现的“`superStatus=running` 代表该条消息未完成”“running HTTP snapshot 属于 nonterminal merge”以及“Topic 状态决定是否发布 `message.completed`”等旧判断。那些记录只保留为历史审计背景，状态统一标记为 `STALE`。
+
+| 决策 | 当前有效规则 |
+| ---- | ------------ |
+| LF-01 | `finish_reason` 是流式过程结束屏障：结束当前 stream generation，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=true`；它不能证明 canonical Final 已到达，也不能写入 message-finalized 封口状态。 |
+| LF-02 | canonical Final Message 是消息权威纠正与最终封口屏障：必须清理对应 `StreamState`、阻断同 revision 晚到 chunk，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=false`。Final 到达可证明 stream 已结束；stream 已结束不能反向证明 Final 已到达。 |
+| LF-03 | Assistant Final 携带的 `super_magic_message.status` 描述 Topic 状态，而不是该条消息自身状态。`running`、`waiting`、`waiting_for_user` 和未知状态均只完成当前消息 Final/stream 封口，不发布 Topic 终态事件。 |
+| LF-04 | `finished`、`error`、`suspended` 表示 Topic 停止。对应 Final 除完成消息封口外，还发布 `topic.execution.ended`；HTTP Topic status 对账也可独立确认该事件。 |
+| LF-05 | `topic.execution.ended` 的 exactly-once 作用域是 `topic + execution generation`：连续重复终态和同终态 higher-seq revision 不重复发布；观察到任一非终态后开启下一代，下一次终态可再次发布。冷历史 hydration 只 seed ledger，不重放历史事件。 |
+| LF-06 | `task.completed` 只由专用 `finish_task` 结果产生，与 `topic.execution.ended` 并列；两者不互相合成、替代或去重。 |
+| LF-07 | `waiting_for_user` 表示 Topic 已把控制权交还用户：全局 Topic conversation loading 必须为 false，MessageList 底部 Loading 必须隐藏。`running`/`waiting` 仍可维持 Topic loading；未知状态不视为 Topic 终态，也不能单独推断出终态 UI。 |
+| LF-08 | `isTopicStreaming()` 与 MessageNode 的 reasoning/content loading 只观察消息级 `StreamState`；`useTopicConversationLoading` 可继续用节点 `running/waiting` 表达 Topic 仍工作，但不能据此重建已由 Final 清理的 StreamState。 |
+| LF-09 | 可见 Topic 切换会取消旧 Topic 的 render timer；取消后必须重新唤醒旧 Topic buffer，使已排队 Final 在后台完成消息封口和 Topic 事件发布，不能因 UI 可见性丢失生命周期事件。 |
+| LF-10 | `Super_Magic_New_Message_V2` 是同步通知，不是 canonical 内容；只使用 topic/conversation 路由与最高 `requiredSeqId` 水位，不能直接写 Store、合并正文或发布领域事件。 |
+| LF-11 | IM Final 与 HTTP authoritative Final 的前置校验不同，但都必须进入唯一的 `settleCanonicalAssistantFinal()` 内核；HTTP 保留 authoritative-tail、replace_tail、anchor、membership、分页和水位语义，不能重新调用 `enqueueMessage()` 进入 IM Buffer。 |
+| LF-12 | Final 结算顺序固定为：identity/revision 裁决 → canonical merge/store commit → 精确清理 StreamState/recovery/ledger/alias → revision barrier → `message.stream.ended(awaitingCanonicalMessage=false)` 与 `message.committed` → Topic 终态 exactly-once；任何事件不得先于 canonical commit 或 StreamState 清理。 |
+| LF-13 | `finish_reason` 记录独立 transport generation barrier，拒绝同 correlation 的迟到 Chunk；它不是 canonical Final。canonical Final 后，Chunk 不得仅凭新 correlation + `i=0` 重新打开逻辑消息；真正 higher revision 必须由带更高 `seq_id` 的 IM/HTTP canonical Final 进入。 |
+| LF-14 | Final 后继续显示前缀补齐只能使用 render-only `FinalRenderState`/snapshot；它不参与 `getStreamState()`、`isTopicStreaming()`、reasoning loading 或任何生命周期事件。render-only 状态采用可观察的 shallow Map replacement，并保留安全追平预算，timer 完成只删除该状态。 |
+| LF-15 | WS watermark 是 pending obligation。首轮 HTTP 未达到 `requiredSeqId`、分页/anchor 不成立或请求失败时不得提交、伪造 Final 或清空水位；必须以 single-flight + 有界退避自动重试，即使没有第二条 WS 也继续收敛，只有 authoritative-tail 成功提交后才清空水位。 |
+
+事件编排固定为：
+
+1. `finish_reason`：只结束当前 stream generation，等待 canonical Final。
+2. Final：先完成 canonical 合并和 `StreamState` 封口，再发布 `message.stream.ended` 与 `message.committed`。
+3. Final/HTTP Topic status 为终态：在上述消息级处理之外，按 Topic execution generation exactly-once 发布 `topic.execution.ended`。
+4. 独立 `finish_task`：按 task identity exactly-once 发布 `task.completed`，不与 Topic 事件合并。
+
+状态矩阵：
+
+| 输入/状态 | 结束 StreamState | message-finalized | `topic.execution.ended` | Topic conversation loading | MessageList 底部 Loading |
+| --------- | --------------- | ----------------- | ------------------------- | -------------------------- | ------------------------- |
+| `finish_reason`，Final 未到 | 是 | 否 | 否 | 由 Topic 状态决定 | 由 Topic 状态与可见投影决定 |
+| Final + `running` | 是 | 是 | 否 | 是 | 可按可见投影显示 |
+| Final + `waiting` | 是 | 是 | 否 | 是 | 可按可见投影显示 |
+| Final + `waiting_for_user` | 是 | 是 | 否 | 否 | 否 |
+| Final + 未知状态 | 是 | 是 | 否 | 由既有 loading 事实决定，不推断为终态 | 由既有可见投影决定，不因未知状态单独显示 |
+| Final/HTTP Topic status + `finished/error/suspended` | 是；若没有对应活动流则幂等 no-op | 是 | 是，按 generation exactly-once | 否 | 否 |
+
+#### 当前实施验证（2026-08-03）
+
+- Final + `status=running` 的 HTTP 权威快照结束 `StreamState`，同时保留 canonical Topic status。
+- Final 字段存在性保持：`tool_calls` absent 继承，显式 `null/[]` 清空；`content` absent 继承，显式 `null/""` 清空。
+- `topic.execution.ended` 覆盖 IM Final、HTTP Topic status、重复终态、下一 execution generation、冷 hydration 静默和后台 Topic buffer 场景。
+- `waiting_for_user` 同时覆盖 Hook 全局 `showLoading=false` 与 MessageList 底部 Loading 隐藏。
+- 当前聚焦验证：`15 files / 462 tests passed`；Store 全目录验证为 `17 files / 561 tests passed`。这些数字只代表本次聚焦 dirty-worktree 快照，不替代浏览器双端联调证据。
+- `resource-performance.test.ts` 的小 chunk 批量持久化断言同时验证诊断日志不做热路径 JSON 序列化；结构化 reasoning trace 只传递受限元数据，不打印正文、附件或工具参数。
+- 旧结论“Final 等动画完成后才删除 StreamState”标记为 `STALE`；动画补齐不再拥有消息级结算权。
 
 #### 决策实施验证（2026-07-31）
 

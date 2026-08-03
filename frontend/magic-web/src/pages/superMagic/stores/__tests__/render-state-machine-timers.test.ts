@@ -210,7 +210,7 @@ function getProjectedNode(
 	store: SuperMagicStore,
 	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(superMessageId)
+	const node = store.getRenderedMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -841,7 +841,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 	})
 
-	it("Final 单独到达时温和结算，不强制在 1.5 秒内追平整段正文。", () => {
+	it("Final 单独到达时立即结束 StreamState，并由 render-only 状态温和补齐正文。", () => {
 		const store = createStore()
 		const finalContent = `draft${"F".repeat(100_000)}`
 
@@ -853,16 +853,15 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		const projectedLength = getProjectedNode(store)?.content?.length || 0
 		expect(projectedLength).toBeGreaterThan("draft".length)
 		expect(projectedLength).toBeLessThan(finalContent.length)
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "settling",
-		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
 		advanceRendering(FINAL_SETTLING_SAFETY_MS)
 		expect(getProjectedNode(store)?.content).toBe(finalContent)
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 	})
 
-	it("不同 super_message_id 的后继 Chunk 到达后，当前 Final 才升级为快速追平。", () => {
+	it("不同 super_message_id 的后继 Chunk 不会把已 Final 的 render-only 状态重建为 StreamState。", () => {
 		const store = createStore()
 		const finalContent = `draft-a${"A".repeat(100_000)}`
 
@@ -873,10 +872,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
 
 		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "next-stream" }))
-		const catchupDeadline = store.getStreamState(TOPIC_A, CORRELATION_A)?.finalCatchupDeadlineAt
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "catchup",
-		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toMatchObject({
 			renderPace: "live",
 		})
@@ -885,17 +881,15 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		store.receiveChunk(
 			createChunk({ correlationId: CORRELATION_B, i: 1, content: " continues" }),
 		)
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.finalCatchupDeadlineAt).toBe(
-			catchupDeadline,
-		)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
-		advanceRendering(1_600)
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
 
 		expect(getProjectedNode(store)?.content).toBe(finalContent)
 		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next-stream continues")
 	})
 
-	it("不同 super_message_id 的后继 Final 即使没有 Chunk，也会提升当前消息的追平速度。", () => {
+	it("不同 super_message_id 的后继 Final 不会恢复前一条消息的 StreamState。", () => {
 		const store = createStore()
 		const finalContent = `draft-a${"A".repeat(100_000)}`
 
@@ -914,15 +908,13 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 			}),
 		)
 
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "catchup",
-		})
-		advanceRendering(1_600)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
 		expect(getProjectedNode(store)?.content).toBe(finalContent)
 		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next final")
 	})
 
-	it("Final 后只有 User 消息时保持温和结算，不升级为强制追平。", () => {
+	it("Final 后只有 User 消息时 render-only 补齐不影响消息级流状态。", () => {
 		const store = createStore()
 		const finalContent = `draft-a${"A".repeat(100_000)}`
 
@@ -940,14 +932,12 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 			}),
 		)
 
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "settling",
-		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
 		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
 	})
 
-	it("相同 super_message_id 的迟到 Chunk 不构成后继压力。", () => {
+	it("相同 super_message_id 的迟到 Chunk 被 Final barrier 拒绝。", () => {
 		const store = createStore()
 		const finalContent = `draft-a${"A".repeat(100_000)}`
 
@@ -956,12 +946,11 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
 		store.receiveChunk(createChunk({ i: 1, content: " late" }))
 
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "settling",
-		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("其他 Topic 的 Chunk 不得提升当前 Topic 的 Final 追平速度。", () => {
+	it("其他 Topic 的 Chunk 不得恢复当前 Topic 已 Final 的 StreamState。", () => {
 		const store = createStore()
 		const finalContent = `draft-a${"A".repeat(100_000)}`
 
@@ -976,9 +965,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 			}),
 		)
 
-		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toMatchObject({
-			renderPace: "settling",
-		})
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
 	})
 
 	it("后继压力晚到时从压力发生时重新计算预算，不能因旧 deadline 过期而单帧写完。", () => {
@@ -1001,7 +989,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(afterFirstCatchupFrameLength).toBeLessThan(finalContent.length)
 	})
 
-	it("Final 的 reasoning 与 content 共用同一帧配额，短 reasoning 不阻塞正文推进。", () => {
+	it("Final 的 render-only 状态让 reasoning 与 content 共享同一帧预算。", () => {
 		const store = createStore()
 		const contentOnlyStore = createStore()
 
@@ -1033,9 +1021,10 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(reasoningDelta).toBe(100)
 		expect(contentDelta).toBeGreaterThan(0)
 		expect(contentOnlyDelta).toBeGreaterThan(0)
-		// The reasoning and content deltas together must consume the same frame budget
-		// as an otherwise equivalent content-only Final, without hard-coding its size.
 		expect(reasoningDelta + contentDelta).toBe(contentOnlyDelta)
+		advanceRendering(16)
+		expect(getProjectedNode(store)?.content?.length || 0).toBeGreaterThan(beforeContentLength)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 	})
 
 	it("提高字符批量时仍保持 16ms 的渲染 timer 间隔。", () => {
@@ -1051,6 +1040,35 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(getProjectedNode(store)?.content?.length).toBe(firstFrameLength)
 		advanceRendering(1)
 		expect(getProjectedNode(store)?.content?.length).toBeGreaterThan(firstFrameLength)
+	})
+
+	it("Final 控制面结算不等待 timer，buffer 立即排空且视觉补齐独立推进。", () => {
+		const store = createStore()
+
+		for (let index = 0; index < 5; index += 1) {
+			store.receiveChunk(createChunk({ i: index, content: String(index + 1) }))
+		}
+		advanceRendering(32)
+		expect(getProjectedNode(store)?.content).toBe("12345")
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				appMessageId: "higher-final",
+				correlationId: CORRELATION_A,
+				seqId: "100",
+				content: "123456789",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
+		expect(store.getMessageNode(SUPER_MESSAGE_A)).toMatchObject({ content: "123456789" })
+		advanceRendering(200)
+
+		expect(getProjectedNode(store)?.content).toBe("123456789")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
 	})
 
 	it("`renderPolicy` 在 live、catchup、instant 间错误切换。", () => {

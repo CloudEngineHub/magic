@@ -5288,6 +5288,7 @@
 		"preview": "Preview",
 		"processing": "Processing...",
 		"quickStart": "Quick Start",
+		"reportConversationRound": "Report Conversation",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "Hire $t(common:platform.name) to",

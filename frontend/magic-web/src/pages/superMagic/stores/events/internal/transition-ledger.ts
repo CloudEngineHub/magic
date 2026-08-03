@@ -1,6 +1,7 @@
 interface StreamTransitionState {
 	active: boolean
 	generation: number
+	lastEndReason?: string
 }
 
 interface MessageTransitionSnapshot {
@@ -15,6 +16,11 @@ interface ToolSettlementSnapshot {
 	strength: "strong" | "weak"
 }
 
+interface TopicExecutionState {
+	isTerminal: boolean
+	status?: string
+}
+
 /**
  * 保存事件层所需的最小过渡状态，不复制消息正文、附件或累计工具参数。
  * 该 ledger 只负责版本与去重，canonical 事实仍由 SuperMagicStore 持有。
@@ -24,7 +30,9 @@ export class SuperMagicEventTransitionLedger {
 	private entityRevisions = new Map<string, number>()
 	private streamStates = new Map<string, StreamTransitionState>()
 	private messageSnapshots = new Map<string, MessageTransitionSnapshot>()
-	private completedStatuses = new Map<string, string>()
+	private topicExecutionStates = new Map<string, TopicExecutionState>()
+	/** Canonical Final is a second, independent close barrier after finish_reason. */
+	private canonicalFinals = new Set<string>()
 	private toolSettlements = new Map<string, ToolSettlementSnapshot>()
 	private completedTasks = new Set<string>()
 
@@ -47,10 +55,11 @@ export class SuperMagicEventTransitionLedger {
 		return { generation, started: true }
 	}
 
-	endStream(streamKey: string) {
+	endStream(streamKey: string, reason?: string) {
 		const current = this.streamStates.get(streamKey)
 		if (!current?.active) return undefined
 		current.active = false
+		current.lastEndReason = reason
 		return current.generation
 	}
 
@@ -58,8 +67,25 @@ export class SuperMagicEventTransitionLedger {
 		return this.streamStates.get(streamKey)?.generation
 	}
 
+	ensureStreamGeneration(streamKey: string) {
+		const current = this.streamStates.get(streamKey)
+		if (current) return current.generation
+		this.streamStates.set(streamKey, { active: false, generation: 1 })
+		return 1
+	}
+
+	recordCanonicalFinal(finalKey: string) {
+		if (this.canonicalFinals.has(finalKey)) return false
+		this.canonicalFinals.add(finalKey)
+		return true
+	}
+
 	isStreamActive(streamKey: string) {
 		return this.streamStates.get(streamKey)?.active === true
+	}
+
+	getLastStreamEndReason(streamKey: string) {
+		return this.streamStates.get(streamKey)?.lastEndReason
 	}
 
 	seedMessage(messageKey: string, snapshot: MessageTransitionSnapshot) {
@@ -82,11 +108,19 @@ export class SuperMagicEventTransitionLedger {
 		}
 	}
 
-	recordCompleted(messageKey: string, status: string) {
-		const previousStatus = this.completedStatuses.get(messageKey)
-		if (previousStatus === status) return undefined
-		this.completedStatuses.set(messageKey, status)
-		return { previousStatus }
+	seedTopicExecution(topicKey: string, status: string, isTerminal: boolean) {
+		this.topicExecutionStates.set(topicKey, { isTerminal, status })
+	}
+
+	recordTopicExecutionStatus(topicKey: string, status: string, isTerminal: boolean) {
+		const previous = this.topicExecutionStates.get(topicKey)
+		if (!isTerminal) {
+			this.topicExecutionStates.set(topicKey, { isTerminal: false, status })
+			return undefined
+		}
+		if (previous?.isTerminal) return undefined
+		this.topicExecutionStates.set(topicKey, { isTerminal: true, status })
+		return { previousStatus: previous?.status }
 	}
 
 	recordToolSettlement(

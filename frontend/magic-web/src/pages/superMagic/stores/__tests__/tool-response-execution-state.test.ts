@@ -904,7 +904,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getEffectiveToolState(store, "tool-1")?.status).toBe("response_missing")
 	})
 
-	it("旧 HTTP 历史快照不得把同一 SuperMessage 的活跃本地流提前终态化。", () => {
+	it("HTTP canonical Final 即使 status=running 也结束同一 SuperMessage 的活跃本地流。", () => {
 		const store = createStore()
 		const activeToolCall = createToolCall({ id: "active-local-tool", status: "running" })
 		store.receiveChunk(
@@ -927,11 +927,14 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 			toolProjectionPolicy: "historical_terminal",
 		})
 
-		expect(getCanonicalToolState(store, "active-local-tool")).toBeUndefined()
+		expect(getCanonicalToolState(store, "active-local-tool")).toMatchObject({
+			id: "active-local-tool",
+			status: "response_missing",
+		})
 		expect(
 			getEffectiveToolState(store, "active-local-tool", "active-local-correlation")?.status,
-		).toBe("running")
-		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
+		).toBe("response_missing")
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
 	it("tool response 先是 `finished`，后又收到 `running`。", () => {

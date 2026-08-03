@@ -32,6 +32,11 @@ const FOREGROUND_SYNC_DEDUPE_MS = 1000
 // 合并同一轮持久消息事件，避免用户消息和 Agent 最终消息各自触发一次相同的小窗口回拉。
 const LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS = 200
 
+// A WS watermark is a durable pending obligation, not a one-shot hint. Retry only
+// the authoritative tail with bounded backoff so a stale first HTTP page cannot leave
+// a refreshed browser waiting forever for another broadcast.
+const LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS = [500, 1_500, 3_000] as const
+
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
 	checkNowDebounced?: () => void
@@ -1025,11 +1030,31 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	useEffect(() => {
 		let disposed = false
 		let liveSyncTimer: number | null = null
+		let liveSyncRetryTimer: number | null = null
 		let liveSyncInFlight = false
 		let liveSyncPending = false
 		let pendingRequiredSeqId = ""
+		let liveSyncRetryAttempt = 0
 
-		const scheduleLiveIncrementalSync = () => {
+		const scheduleLiveIncrementalRetry = () => {
+			if (
+				disposed ||
+				!pendingRequiredSeqId ||
+				liveSyncRetryTimer !== null ||
+				liveSyncRetryAttempt >= LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS.length
+			)
+				return
+			const delay = LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS[liveSyncRetryAttempt]
+			liveSyncRetryAttempt += 1
+			liveSyncRetryTimer = window.setTimeout(() => {
+				liveSyncRetryTimer = null
+				// Retry is already governed by backoff; applying the WS debounce again
+				// would add an unrelated 200ms delay to every recovery attempt.
+				scheduleLiveIncrementalSync(0)
+			}, delay)
+		}
+
+		const scheduleLiveIncrementalSync = (delay = LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS) => {
 			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
 			liveSyncTimer = window.setTimeout(async () => {
 				liveSyncTimer = null
@@ -1044,8 +1069,9 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				liveSyncInFlight = true
 				liveSyncPending = false
 				const requiredSeqId = pendingRequiredSeqId
+				let pullResult: PullMessageResult | undefined
 				try {
-					const pullResult = await pullMessage({
+					pullResult = await pullMessage({
 						conversation_id: currentTopic.chat_conversation_id,
 						chat_topic_id: currentTopic.chat_topic_id,
 						page_token: "",
@@ -1062,12 +1088,24 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							compareMessageSeqId(pendingRequiredSeqId, requiredSeqId) <= 0)
 					) {
 						pendingRequiredSeqId = ""
+						liveSyncRetryAttempt = 0
 					}
 				} finally {
 					liveSyncInFlight = false
-					if (!disposed && liveSyncPending) scheduleLiveIncrementalSync()
+					if (!disposed && liveSyncPending) {
+						liveSyncPending = false
+						scheduleLiveIncrementalSync()
+					} else if (
+						!disposed &&
+						pendingRequiredSeqId &&
+						pullResult &&
+						!pullResult.didPullSucceed
+					) {
+						// Keep the highest watermark until a later authoritative response accepts it.
+						scheduleLiveIncrementalRetry()
+					}
 				}
-			}, LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS)
+			}, delay)
 		}
 
 		/**
@@ -1099,6 +1137,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			) {
 				// 同一防抖窗口只需等待最高 WS 水位，较低 HTTP 快照不得执行缺席删除。
 				pendingRequiredSeqId = incomingSeqId
+				liveSyncRetryAttempt = 0
+				if (liveSyncRetryTimer !== null) {
+					window.clearTimeout(liveSyncRetryTimer)
+					liveSyncRetryTimer = null
+				}
 			}
 			scheduleLiveIncrementalSync()
 		}
@@ -1106,6 +1149,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		return () => {
 			disposed = true
 			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
+			if (liveSyncRetryTimer !== null) window.clearTimeout(liveSyncRetryTimer)
 			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps

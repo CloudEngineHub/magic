@@ -5,7 +5,10 @@ import {
 	messagesConverter,
 } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
+import type {
+	MessageCommittedEvent,
+	MessageStreamEndedEvent,
+} from "@/pages/superMagic/stores/events"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
@@ -70,6 +73,7 @@ interface ProjectedNode {
 interface ChunkOptions {
 	i?: number
 	content?: string
+	reasoningContent?: string
 	correlationId?: string
 	superMessageId?: string
 	finishReason?: ChunkChoice["finish_reason"]
@@ -118,6 +122,7 @@ function createTokenUsage(totalTokens: number): TokenUsage {
 function createChunk({
 	i = 0,
 	content = "",
+	reasoningContent = "",
 	correlationId = CORRELATION_ID,
 	superMessageId = SUPER_MESSAGE_ID,
 	finishReason = null,
@@ -147,7 +152,7 @@ function createChunk({
 						content,
 						role: "assistant",
 						tool_calls: toolCalls,
-						reasoning_content: "",
+						reasoning_content: reasoningContent,
 						index: 0,
 					},
 				},
@@ -1199,6 +1204,56 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
+	it("IM Final 在 reasoning timer 活跃时立即提交 canonical 并移除 StreamState。", () => {
+		const store = createStore()
+		const ended: MessageStreamEndedEvent[] = []
+		store.subscribe("message.stream.ended", (event) => ended.push(event))
+		store.receiveChunk(
+			createChunk({
+				reasoningContent: "reasoning draft",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_ID, SUPER_MESSAGE_ID)?.stage).toBe("reasoning_content")
+		expect(store.topicMeta.get(TOPIC_ID)?.timer).not.toBeNull()
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				content: "canonical answer after reasoning",
+				nodeStatus: "running",
+				nodeExtra: { reasoning_content: "canonical reasoning after draft" },
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_ID, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.topicMeta.get(TOPIC_ID)?.timer).toBeNull()
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			content: "canonical answer after reasoning",
+			reasoning_content: "canonical reasoning after draft",
+			status: "running",
+		})
+		expect(store.getRenderedMessageNode(SUPER_MESSAGE_ID, TOPIC_ID)).toBeDefined()
+		expect(ended).toHaveLength(1)
+		expect(ended[0].payload).toMatchObject({
+			reason: "authoritative_final",
+			awaitingCanonicalMessage: false,
+		})
+	})
+
+	it("finish_reason 的 awaiting=true 不会吞掉后续 canonical Final 的 awaiting=false。", () => {
+		const store = createStore()
+		const ended: MessageStreamEndedEvent[] = []
+		store.subscribe("message.stream.ended", (event) => ended.push(event))
+
+		store.receiveChunk(createChunk({ content: "draft", finishReason: "stop" }))
+		advanceRendering()
+		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "canonical" }))
+
+		expect(ended.map((event) => event.payload.awaitingCanonicalMessage)).toEqual([true, false])
+		expect(ended[1].payload.reason).toBe("authoritative_final")
+	})
+
 	it("Final 后迟到 chunk 不得重新打开流或污染 canonical。", () => {
 		const store = createStore()
 
@@ -1266,6 +1321,33 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 		expectDurableCanonical()
+	})
+
+	it("更高 revision Final 已接受后立即关闭 StreamState，后续低 seq Final 不得回退。", () => {
+		const store = createStore()
+
+		store.receiveChunk(createChunk({ content: "active draft" }))
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				appMessageId: "higher-final",
+				seqId: "200",
+				content: "higher canonical",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				appMessageId: "stale-final",
+				seqId: "199",
+				content: "stale canonical",
+			}),
+		)
+
+		// Canonical Final 的业务结算不再等待 Buffer/render timer；低版本只需保持幂等拒绝。
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("higher canonical")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
 	it("同一 super_message_id 的更高 seq Final 不得被重复判断跳过。", () => {

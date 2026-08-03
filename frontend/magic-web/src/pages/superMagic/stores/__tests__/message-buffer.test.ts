@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type { MessageCommittedEvent, MessageCompletedEvent } from "@/pages/superMagic/stores/events"
+import type {
+	MessageCommittedEvent,
+	TopicExecutionEndedEvent,
+} from "@/pages/superMagic/stores/events"
 import type { RawSuperMagicMessageEnvelope } from "@/pages/superMagic/stores/types"
 import {
 	ConversationMessageStatus,
@@ -162,11 +165,11 @@ function collectArrivals(
 }
 
 function collectDomainEvents(store: SuperMagicStore): {
-	events: MessageCompletedEvent[]
+	events: TopicExecutionEndedEvent[]
 	unsubscribe: () => void
 } {
-	const events: MessageCompletedEvent[] = []
-	const unsubscribe = store.subscribe("message.completed", (event) => events.push(event))
+	const events: TopicExecutionEndedEvent[] = []
+	const unsubscribe = store.subscribe("topic.execution.ended", (event) => events.push(event))
 	return { events, unsubscribe }
 }
 
@@ -921,7 +924,8 @@ describe("SuperMagicStore / Message Buffer", () => {
 		)
 		settleRendering()
 
-		expect(domainEvents.events.some((event) => event.meta.topicId === TOPIC_A)).toBe(false)
+		expect(domainEvents.events.some((event) => event.meta.topicId === TOPIC_A)).toBe(true)
+		expect(domainEvents.events.some((event) => event.meta.topicId === TOPIC_B)).toBe(true)
 		expect(getNode(store, "super-active-topic-message")?.content).toBe("active")
 		domainEvents.unsubscribe()
 	})

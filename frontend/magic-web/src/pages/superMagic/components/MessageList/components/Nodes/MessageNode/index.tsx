@@ -88,7 +88,10 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 
 	const { t } = useTranslation("super")
 
-	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
+	const node = (superMagicStore.getRenderedMessageNode?.(
+		props?.node?.super_message_id,
+		props?.node?.topic_id,
+	) ?? superMagicStore.getMessageNode(props?.node?.super_message_id)) as
 		Record<string, unknown> | undefined
 	const topicId = props?.node?.topic_id || ""
 	const correlationId = props?.node?.correlation_id || ""
