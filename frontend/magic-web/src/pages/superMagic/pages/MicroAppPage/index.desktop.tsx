@@ -205,10 +205,15 @@ function MicroAppPageInner({
 	}, [projectId, setIsMessagePanelCollapsed])
 
 	useEffect(() => {
-		if (defaultEntryFile && !previewEntryFile?.file_id) {
-			setPreviewEntryFile(defaultEntryFile)
+		const currentPreviewFileId = previewEntryFile ? getAttachmentId(previewEntryFile) : null
+		const nextPreviewEntryFile =
+			(currentPreviewFileId
+				? previewHtmlFiles.find((file) => getAttachmentId(file) === currentPreviewFileId)
+				: defaultEntryFile) || null
+		if (nextPreviewEntryFile && nextPreviewEntryFile !== previewEntryFile) {
+			setPreviewEntryFile(nextPreviewEntryFile)
 		}
-	}, [defaultEntryFile, previewEntryFile?.file_id])
+	}, [defaultEntryFile, previewEntryFile, previewHtmlFiles])
 
 	useEffect(() => {
 		if (activeView === "files" && defaultEntryFile) {

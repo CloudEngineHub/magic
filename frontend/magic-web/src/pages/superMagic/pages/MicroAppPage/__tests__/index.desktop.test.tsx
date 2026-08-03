@@ -37,6 +37,8 @@ const controllerMocks = vi.hoisted(() => ({
 	defaultEntryFile: { file_id: "entry-1", file_name: "index.html" } as {
 		file_id: string
 		file_name: string
+		relative_file_path?: string
+		updated_at?: string
 	} | null,
 }))
 
@@ -206,7 +208,7 @@ vi.mock("../components/MicroAppHeader", () => ({
 
 vi.mock("../components/MicroAppEntryPreview", () => ({
 	default: function MockMicroAppEntryPreview(props: {
-		entryFile?: { file_id?: string; file_name?: string } | null
+		entryFile?: { file_id?: string; file_name?: string; updated_at?: string } | null
 		viewMode: "desktop" | "phone"
 		refreshKey: number
 		onRegisterAIEdit?: (handler: (() => void) | null) => void
@@ -420,6 +422,47 @@ describe("MicroAppPageDesktop", () => {
 				}),
 			)
 			expect(screen.getByTestId("micro-app-preview-more")).toBeEnabled()
+		})
+	})
+
+	it("refreshes the current preview when the same entry file content changes", async () => {
+		const initialEntry = {
+			file_id: "entry-1",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+			updated_at: "2026-08-03T05:30:00Z",
+		}
+		controllerMocks.attachmentList = [initialEntry]
+		controllerMocks.defaultEntryFile = initialEntry
+		const { rerender } = render(<MicroAppPageDesktop />)
+
+		expect(previewMocks.render).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				entryFile: expect.objectContaining({
+					file_id: "entry-1",
+					updated_at: "2026-08-03T05:30:00Z",
+				}),
+			}),
+		)
+
+		const updatedEntry = {
+			...initialEntry,
+			updated_at: "2026-08-03T05:31:00Z",
+		}
+		controllerMocks.attachmentList = [updatedEntry]
+		controllerMocks.defaultEntryFile = updatedEntry
+		resolverMocks.result = { ...resolverMocks.result, isPublished: false }
+		rerender(<MicroAppPageDesktop />)
+
+		await waitFor(() => {
+			expect(previewMocks.render).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					entryFile: expect.objectContaining({
+						file_id: "entry-1",
+						updated_at: "2026-08-03T05:31:00Z",
+					}),
+				}),
+			)
 		})
 	})
 
