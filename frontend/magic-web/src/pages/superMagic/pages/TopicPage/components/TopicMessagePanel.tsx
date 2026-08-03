@@ -74,8 +74,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -299,11 +298,12 @@ function TopicMessagePanel({
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={trailingActions}
 			/>
+			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			{selectedTopic && (
 				<div
 					className={cn(
 						"flex h-full w-full flex-col",
-						isConversationPanelCollapsed && "hidden",
+						isConversationPanelCollapsed && "invisible",
 					)}
 				>
 					<MessageListProvider value={value}>

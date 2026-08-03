@@ -291,10 +291,11 @@ function ConversationPanelScaffold({
 			data-testid={rootTestId || `${scope}-panel`}
 		>
 			{header}
+			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			<div
 				className={cn(
 					"relative min-h-0 w-full flex-1 overflow-hidden",
-					isConversationPanelCollapsed && "hidden",
+					isConversationPanelCollapsed && "invisible",
 				)}
 				ref={bodyRef}
 				data-testid={`${scope}-body`}
