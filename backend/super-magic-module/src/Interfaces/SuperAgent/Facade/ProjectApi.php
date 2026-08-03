@@ -289,6 +289,14 @@ class ProjectApi extends AbstractApi
      */
     public function getProjectAttachmentsCount(RequestContext $requestContext, string $id): array
     {
+        $scope = trim((string) $this->request->input('scope', ''));
+        if ($scope !== '') {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($scope)
+                ->countProjectAttachments($authorization);
+        }
+
         $token = (string) $this->request->input('token', '');
 
         if ($token !== '') {

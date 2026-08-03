@@ -90,19 +90,14 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
         GetProjectAttachmentsRequestDTO $requestDTO,
     ): array {
         $root = $this->resolveTraversalRoot($authorization, $requestDTO->getParentId());
-        $fileTree = $this->magicFSFileDomainService->getFileTree(
-            (string) $root->getFileId(),
-            -1,
-            0,
-            StorageType::WORKSPACE->value,
-        );
-
-        $entities = array_merge([$root], $fileTree['children'] ?? []);
+        $entities = $this->getMemoryTreeEntities($authorization, $root);
         $entities = array_values(array_filter(
             $entities,
-            fn (TaskFileEntity $entity): bool => $this->fileMemoryAccessService
-                ->belongsToCurrentUserSpace($entity, $authorization)
-                && $this->matchesFileType($entity, $requestDTO->getFileType(), $root->getFileId()),
+            fn (TaskFileEntity $entity): bool => $this->matchesFileType(
+                $entity,
+                $requestDTO->getFileType(),
+                $root->getFileId(),
+            ),
         ));
 
         $fileMap = RelativeFilePathUtil::indexByFileId($entities);
@@ -200,6 +195,41 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
             'next_parent_ids' => array_values($queue),
             'has_more' => $queue !== [],
         ];
+    }
+
+    /**
+     * 统计当前用户记忆目录及其全部后代节点数量。
+     */
+    public function countProjectAttachments(MagicUserAuthorization $authorization): array
+    {
+        $root = $this->fileMemoryAccessService->getOrCreateMemoryRoot($authorization);
+
+        return [
+            'total' => count($this->getMemoryTreeEntities($authorization, $root)),
+        ];
+    }
+
+    /**
+     * 获取当前用户记忆目录树中的全部可访问节点。
+     *
+     * @return array<TaskFileEntity>
+     */
+    private function getMemoryTreeEntities(
+        MagicUserAuthorization $authorization,
+        TaskFileEntity $root,
+    ): array {
+        $fileTree = $this->magicFSFileDomainService->getFileTree(
+            (string) $root->getFileId(),
+            -1,
+            0,
+            StorageType::WORKSPACE->value,
+        );
+
+        return array_values(array_filter(
+            array_merge([$root], $fileTree['children'] ?? []),
+            fn (TaskFileEntity $entity): bool => $this->fileMemoryAccessService
+                ->belongsToCurrentUserSpace($entity, $authorization),
+        ));
     }
 
     /**

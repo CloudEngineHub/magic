@@ -41,4 +41,9 @@ interface FileScopeHandlerInterface
         MagicUserAuthorization $authorization,
         GetProjectAttachmentsV2RequestDTO $requestDTO,
     ): array;
+
+    /**
+     * 统计指定作用域下的项目附件数量。
+     */
+    public function countProjectAttachments(MagicUserAuthorization $authorization): array;
 }
