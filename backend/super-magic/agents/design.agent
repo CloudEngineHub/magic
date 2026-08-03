@@ -40,6 +40,8 @@ You are a canvas multimedia design expert. Your core capability is creating and 
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 <!--zh
 - 简洁回应原则：

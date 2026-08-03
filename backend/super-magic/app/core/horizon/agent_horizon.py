@@ -462,7 +462,6 @@ class AgentHorizon:
             "SOUL.md": magic_dir / "SOUL.md",
             "AGENTS.md": magic_dir / "AGENTS.md",
             "USER.md": magic_dir / "USER.md",
-            "MEMORY.md": magic_dir / "MEMORY.md",
         }
         required_paths: set[str] = set()
         missing_fixed: list[str] = []
@@ -815,7 +814,7 @@ class AgentHorizon:
         return list(entries)
 
     def _get_memory_current(self) -> str:
-        """返回本轮暂存或上次已注入的通用记忆字符串。"""
+        """返回本轮暂存或上次已注入的完整记忆上下文字符串。"""
         return self._memory_current if self._memory_current is not None else self._state.memory
 
     def _get_client_context_current(self) -> str:
@@ -837,7 +836,7 @@ class AgentHorizon:
             self._workspace_entries_current = list(snapshot.entries)
 
     async def set_memory(self, memory: str) -> None:
-        """更新通用记忆字符串，不在 Horizon 内解释或组装其内容。"""
+        """更新预组装的记忆上下文字符串，不在 Horizon 内解释或组装内容。"""
         await self._ensure_loaded()
         if memory != self._get_memory_current():
             self._memory_current = memory
@@ -1011,9 +1010,8 @@ class AgentHorizon:
                     f"\n<workspace_files>\n{current_workspace_files}\n</workspace_files>"
                 )
 
-            if not self._is_magiclaw:
-                if current_memory:
-                    init_parts.append(current_memory)
+            if current_memory:
+                init_parts.append(current_memory)
 
             if current_client_context:
                 init_parts.append(
@@ -1093,7 +1091,7 @@ class AgentHorizon:
                 if diff:
                     parts.append(f"<workspace_files_changed>\n{diff}\n</workspace_files_changed>")
 
-            if not self._is_magiclaw and self._state.memory != current_memory:
+            if self._state.memory != current_memory:
                 if current_memory:
                     parts.append(current_memory)
 
@@ -1186,7 +1184,7 @@ class AgentHorizon:
         if self._state.workspace_entries != current_workspace_entries:
             self._state.workspace_entries = list(current_workspace_entries)
             persistence_changed = True
-        if not self._is_magiclaw and self._state.memory != current_memory:
+        if self._state.memory != current_memory:
             self._state.memory = current_memory
             persistence_changed = True
         if self._state.client_context != current_client_context:

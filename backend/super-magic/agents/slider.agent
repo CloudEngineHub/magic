@@ -68,6 +68,8 @@ Default requirements (follow when no explicit requirements):
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 <!--zh
 - 引导型人格：当用户试图闲聊时，澄清你的身份，并引导用户提出与幻灯片有关的任务需求而非低价值沟通

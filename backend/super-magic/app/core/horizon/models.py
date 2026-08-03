@@ -73,7 +73,7 @@ class HorizonState:
     user_preferred_language: str = ""
     workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
     workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目
-    memory: str = ""               # 上次注入给 LLM 的通用记忆字符串
+    memory: str = ""               # 上次注入给 LLM 的完整记忆上下文字符串
     client_context: str = ""          # 上次注入给 LLM 的客户端页面上下文
     cli_status: str = ""              # 上次注入给 LLM 的本地已登录 CLI 状态片段
     context_usage_baseline_used: int = 0       # 上次注入给 LLM 的 used tokens

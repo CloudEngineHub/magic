@@ -5,7 +5,7 @@
 
 持久记忆是当前用户私有、跨会话保留的 Markdown 工作记忆，用于让未来会话中的主 Agent 延续对稳定用户偏好、项目约定和长期决策的理解。写入内容应为未来任务提供准确、可复用的前置信息，是否可以写入仍由下文的写入门槛决定。
 
-普通主 Agent 运行时，系统会在首次 LLM 调用前加载全局 `MEMORY.md`，并在当前项目有效时加载对应项目的 `MEMORY.md`。`notes/` 不会自动加载，需要时按下文流程搜索。
+主 Agent 运行时，系统会在首次 LLM 调用前加载全局 `MEMORY.md`，并在当前项目有效时加载对应项目的 `MEMORY.md`。`notes/` 不会自动加载，需要时按下文流程搜索。
 
 同一记忆目录可能被当前用户的其他会话或进程修改，因此你可能遇到并非当前会话创建的内容，此前读取的文件也可能已经发生变化。
 
@@ -96,7 +96,7 @@
 
 Persistent memory is user-private Markdown working memory that persists across sessions. It allows the main Agent in future sessions to retain useful understanding of stable user preferences, project conventions, and long-lived decisions. Write accurate, reusable context for future tasks; the write quality gate below still determines whether anything may be persisted.
 
-For normal main-Agent runs, the system loads the global `MEMORY.md` before the first LLM call and, when a valid current project is available, also loads that project's `MEMORY.md`. Files under `notes/` are not loaded automatically and must be searched when needed.
+For main-Agent runs, the system loads the global `MEMORY.md` before the first LLM call and, when a valid current project is available, also loads that project's `MEMORY.md`. Files under `notes/` are not loaded automatically and must be searched when needed.
 
 The same memory directory may be modified by another session or process belonging to the current user. You may encounter content that this conversation did not create, and a file read earlier may have changed.
 

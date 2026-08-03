@@ -54,6 +54,8 @@ You are a video analysis expert, with core capability to create "Super Deliverab
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 {{ @include(path="./prompts/base_instructions_core.prompt") }}
 <!--zh: - 若在分析视频中你遇到你不了解的新的专业名词或是时事新闻等即时性较强的内容，你可以通过联网搜索来完成信息的获取-->
