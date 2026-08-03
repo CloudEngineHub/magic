@@ -65,11 +65,12 @@ class MemoryCoreContextService:
         claw_path: Path | None = None
         content_max_chars = MEMORY_FILE_MAX_CHARS
         try:
-            project_id = self.resolve_project_id(agent_context)
-            project_path = self._memory_root / "projects" / f"p_{project_id}" / "MEMORY.md" if project_id else None
             claw_path = self.resolve_claw_memory_path(agent_context)
             if claw_path is not None:
                 content_max_chars = CLAW_MEMORY_FILE_MAX_CHARS
+            else:
+                project_id = self.resolve_project_id(agent_context)
+                project_path = self._memory_root / "projects" / f"p_{project_id}" / "MEMORY.md" if project_id else None
 
             global_task = self._read_memory_file(global_path, max_chars=content_max_chars)
             project_task = (
@@ -157,7 +158,7 @@ class MemoryCoreContextService:
                 closing_tag="</global_memory>",
             )
         )
-        if project_id and project_path is not None:
+        if claw_path is None and project_id and project_path is not None:
             escaped_project_id = html.escape(project_id, quote=True)
             blocks.append(
                 _MemoryContextBlock(

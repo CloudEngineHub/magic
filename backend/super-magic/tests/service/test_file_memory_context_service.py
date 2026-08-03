@@ -145,8 +145,8 @@ async def test_file_memory_context_loads_global_and_current_project(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_file_memory_context_loads_claw_and_general_memory(monkeypatch):
-    """Claw 模式应同时注入工作区、全局和当前项目核心记忆。"""
+async def test_file_memory_context_loads_claw_and_global_memory(monkeypatch):
+    """Claw 模式应只注入工作区和全局核心记忆。"""
     global_file = MEMORY_ROOT / "global" / "MEMORY.md"
     project_file = MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md"
     _, read_bytes = _mock_memory_io(
@@ -158,17 +158,19 @@ async def test_file_memory_context_loads_claw_and_general_memory(monkeypatch):
         },
     )
     agent_context = FakeAgentContext(project_id="project-1", is_magiclaw=True)
+    agent_context.get_project_id = Mock(side_effect=AssertionError("Claw 不应读取当前项目 ID"))
 
     await MemoryCoreContextService(MEMORY_ROOT).load(agent_context)
 
     memory_context = agent_context.horizon.set_memory.await_args.args[0]
     assert f'<claw_memory path="{CLAW_MEMORY_FILE}">\nclaw continuity\n</claw_memory>' in memory_context
     assert "global preference" in memory_context
-    assert "project decision" in memory_context
+    assert "project decision" not in memory_context
+    assert "<project_memory" not in memory_context
+    agent_context.get_project_id.assert_not_called()
     assert {Path(call.args[0]) for call in read_bytes.await_args_list} == {
         CLAW_MEMORY_FILE,
         global_file,
-        project_file,
     }
 
 
@@ -255,11 +257,11 @@ async def test_file_memory_context_truncates_oversized_core_file(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_file_memory_context_limits_xml_escaped_payload(monkeypatch):
-    """三类核心记忆经 XML 转义放大后仍应保持在安全预算内。"""
+    """Claw 和全局核心记忆经 XML 转义放大后仍应保持在安全预算内。"""
     global_file = MEMORY_ROOT / "global" / "MEMORY.md"
     project_file = MEMORY_ROOT / "projects" / "p_project-1" / "MEMORY.md"
     amplified_content = "&" * (MEMORY_FILE_MAX_CHARS + 100)
-    _mock_memory_io(
+    _, read_bytes = _mock_memory_io(
         monkeypatch,
         {
             CLAW_MEMORY_FILE: amplified_content,
@@ -275,47 +277,42 @@ async def test_file_memory_context_limits_xml_escaped_payload(monkeypatch):
     global_memory = memory_context.split(f'<global_memory path="{global_file}">\n', maxsplit=1)[1].split(
         "\n</global_memory>", maxsplit=1
     )[0]
-    project_memory = memory_context.split(
-        f'<project_memory current_project_id="project-1" path="{project_file}">\n', maxsplit=1
-    )[1].split("\n</project_memory>", maxsplit=1)[0]
     claw_memory = memory_context.split(f'<claw_memory path="{CLAW_MEMORY_FILE}">\n', maxsplit=1)[1].split(
         "\n</claw_memory>", maxsplit=1
     )[0]
     assert len(global_memory) <= CLAW_MEMORY_FILE_MAX_CHARS
-    assert len(project_memory) <= CLAW_MEMORY_FILE_MAX_CHARS
     assert len(claw_memory) <= CLAW_MEMORY_FILE_MAX_CHARS
     assert len(memory_context) <= MEMORY_CONTEXT_MAX_CHARS
-    assert memory_context.count("This memory content was truncated for startup injection.") == 3
+    assert "<project_memory" not in memory_context
+    assert memory_context.count("This memory content was truncated for startup injection.") == 2
+    assert {Path(call.args[0]) for call in read_bytes.await_args_list} == {
+        CLAW_MEMORY_FILE,
+        global_file,
+    }
 
 
 def test_file_memory_context_truncates_each_scope_to_total_budget():
     """固定路径开销增大时应截断各作用域正文，而不是丢弃整个记忆快照。"""
     long_memory_root = Path("/mock")
-    long_workspace_root = Path("/mock")
-    for index in range(8):
+    for index in range(9):
         long_memory_root /= f"memory-{index}-" + "m" * 90
-        long_workspace_root /= f"workspace-{index}-" + "w" * 87
 
     global_file = long_memory_root / "global" / "MEMORY.md"
     project_file = long_memory_root / "projects" / "p_project-1" / "MEMORY.md"
-    claw_file = long_workspace_root / ".magic" / "MEMORY.md"
     memory_context = MemoryCoreContextService._build_memory_context(
-        global_memory="g" * CLAW_MEMORY_FILE_MAX_CHARS,
+        global_memory="g" * MEMORY_FILE_MAX_CHARS,
         global_path=global_file,
-        project_memory="p" * CLAW_MEMORY_FILE_MAX_CHARS,
+        project_memory="p" * MEMORY_FILE_MAX_CHARS,
         project_path=project_file,
         project_id="project-1",
-        claw_memory="c" * CLAW_MEMORY_FILE_MAX_CHARS,
-        claw_path=claw_file,
-        content_max_chars=CLAW_MEMORY_FILE_MAX_CHARS,
     )
 
     assert memory_context
     assert len(memory_context) <= MEMORY_CONTEXT_MAX_CHARS
     assert str(global_file) in memory_context
     assert str(project_file) in memory_context
-    assert str(claw_file) in memory_context
-    assert memory_context.count("This memory content was truncated for startup injection.") == 3
+    assert "<claw_memory" not in memory_context
+    assert memory_context.count("This memory content was truncated for startup injection.") == 2
     ET.fromstring(memory_context)
 
 
@@ -553,7 +550,7 @@ async def test_horizon_injects_prebuilt_memory_in_initial_context():
 
 @pytest.mark.asyncio
 async def test_horizon_injects_memory_for_magiclaw_context():
-    """Claw 上下文应通过 Horizon 注入工作区、全局和项目核心记忆。"""
+    """Claw 上下文应通过 Horizon 只注入工作区和全局核心记忆。"""
     horizon, _ = _create_mock_horizon()
     horizon._is_magiclaw = True
     memory_context = MemoryCoreContextService._build_memory_context(
@@ -572,6 +569,9 @@ async def test_horizon_injects_memory_for_magiclaw_context():
     assert context is not None
     assert memory_context in context
     assert "<claw_memory" in context
+    assert "global preference" in context
+    assert "project decision" not in context
+    assert "<project_memory" not in context
 
 
 @pytest.mark.asyncio
