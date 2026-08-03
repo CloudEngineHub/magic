@@ -159,6 +159,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 			id: "project-1",
 			project_name: "Micro App",
 			workspace_id: "workspace-1",
+			workspace_name: "Workspace",
 		},
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
 		hasRunningTopic: true,
@@ -248,16 +249,20 @@ vi.mock("../components/MicroAppDatabasePanel", () => ({
 	),
 }))
 
-vi.mock("@/pages/superMagic/components/SiderTask", () => ({
+vi.mock("../components/MicroAppScheduledTasksPanel/MicroAppScheduledTasksPanel", () => ({
 	default: ({
 		selectWorkspaceId,
 		selectProjectId,
 		selectTopicId,
+		workspaceName,
+		projectName,
 		className,
 	}: {
 		selectWorkspaceId?: string
 		selectProjectId?: string
 		selectTopicId?: string
+		workspaceName?: string
+		projectName?: string
 		className?: string
 	}) => (
 		<div
@@ -265,6 +270,8 @@ vi.mock("@/pages/superMagic/components/SiderTask", () => ({
 			data-workspace-id={selectWorkspaceId}
 			data-project-id={selectProjectId}
 			data-topic-id={selectTopicId}
+			data-workspace-name={workspaceName}
+			data-project-name={projectName}
 			data-class-name={className}
 		/>
 	),
@@ -550,6 +557,14 @@ describe("MicroAppPageDesktop", () => {
 		expect(screen.getByTestId("desktop-scheduled-tasks-panel")).toHaveAttribute(
 			"data-topic-id",
 			"topic-1",
+		)
+		expect(screen.getByTestId("desktop-scheduled-tasks-panel")).toHaveAttribute(
+			"data-workspace-name",
+			"Workspace",
+		)
+		expect(screen.getByTestId("desktop-scheduled-tasks-panel")).toHaveAttribute(
+			"data-project-name",
+			"Micro App",
 		)
 		const projectPanelClassName = screen
 			.getByTestId("desktop-scheduled-tasks-panel")

@@ -7,7 +7,9 @@ import type { CollaboratorPermission } from "@/pages/superMagic/types/collaborat
 import type { MicroAppWorkspaceView } from "./MicroAppWorkspaceNav"
 
 const MicroAppDatabasePanel = lazy(() => import("./MicroAppDatabasePanel"))
-const SiderTask = lazy(() => import("@/pages/superMagic/components/SiderTask"))
+const MicroAppScheduledTasksPanel = lazy(
+	() => import("./MicroAppScheduledTasksPanel/MicroAppScheduledTasksPanel"),
+)
 const ShareManagementPanel = lazy(
 	() => import("@/pages/superMagic/components/ShareManagement/ShareManagementPanel"),
 )
@@ -22,6 +24,8 @@ interface MicroAppProjectPanelsProps {
 	projectId?: string
 	projectRole?: CollaboratorPermission
 	workspaceId?: string
+	workspaceName?: string
+	projectName?: string
 	topicId?: string
 }
 
@@ -73,6 +77,8 @@ export default function MicroAppProjectPanels({
 	projectId,
 	projectRole,
 	workspaceId,
+	workspaceName,
+	projectName,
 	topicId,
 }: MicroAppProjectPanelsProps) {
 	const isProjectPanelActive = PROJECT_PANEL_VIEWS.includes(activeView)
@@ -103,11 +109,13 @@ export default function MicroAppProjectPanels({
 				>
 					<Suspense fallback={<PanelLoading />}>
 						{activeView === "scheduledTasks" ? (
-							<SiderTask
+							<MicroAppScheduledTasksPanel
 								className={PROJECT_PANEL_CLASS_NAME}
 								selectWorkspaceId={workspaceId}
 								selectProjectId={projectId}
 								selectTopicId={topicId}
+								workspaceName={workspaceName}
+								projectName={projectName}
 							/>
 						) : null}
 						{activeView === "shareManagement" ? (

@@ -36,6 +36,7 @@
 			"intervalLoop": "间隔循环",
 			"intervalLoopDescription": "间隔循环：按照固定时间频率重复执行，直到任务结束。",
 			"loading": "数据加载中",
+			"microAppContextMismatch": "该定时任务不属于当前微应用，无法编辑",
 			"minutesLabel": "分钟",
 			"monthly": "每月",
 			"monthlyJson": "每月的{{day}}号 {{time}}",
@@ -405,10 +406,6 @@
 		"organizationPointsUsageNote": "注：若团队总积分耗尽，个人剩余额度将无法使用。",
 		"organizationUsedPoints": "团队已用积分",
 		"organizationUsedPointsUsageDescription": "整个团队所有用户共同使用团队已用积分",
-		"paymentPlatformLabel": "支付平台",
-		"platformTransactionId": "平台流水号",
-		"refundTime": "退款时间",
-		"refundedTag": "已退款",
 		"originalPrice": "原价",
 		"package": "套餐",
 		"packageRights": "套餐权益",
@@ -469,6 +466,7 @@
 		"paymentLoading": "正在发起支付，请稍候",
 		"paymentOrderId": "支付单号",
 		"paymentPlatform": "支付方式",
+		"paymentPlatformLabel": "支付平台",
 		"paymentPlatformOptions": {
 			"ALIPAY": " 支付宝 (AliPay)",
 			"APPLE_PAY": "Apple Pay",
@@ -481,13 +479,14 @@
 		"pendingSubscriptions": "待生效套餐：",
 		"pendingValidated": "已购买待生效",
 		"personal": "仅自己",
+		"personalPackage": "个人套餐",
 		"personalPointsQuota": "个人可用额度",
 		"personalPointsQuotaNote": "注：额度耗尽后，可联系团队管理员调整个人额度。",
 		"personalPointsResetDescription": "每月 1 日自动重置",
 		"personalUsedPointsQuota": "个人已用额度",
-		"personalPackage": "个人套餐",
 		"personalVersion": "个人版",
 		"personalVersionTip": "适合个人用户使用",
+		"platformTransactionId": "平台流水号",
 		"pleaseSelectPointsToPay": "请选择充值的积分后进行支付",
 		"pointsChange": "积分变更",
 		"pointsDetail": "积分明细",
@@ -534,6 +533,8 @@
 		"rechargePointsTip2": "后再充值",
 		"recordId": "记录 ID",
 		"redirecting": "正在跳转...",
+		"refundTime": "退款时间",
+		"refundedTag": "已退款",
 		"registerToEarnPointsLabel": "注册即赠送",
 		"remainingPoints": "积分余量",
 		"renew": "续费",
@@ -1940,6 +1941,11 @@
 			"uploadLimit": " 最多选择 {{count}} 个文件"
 		}
 	},
+	"microApp": {
+		"loadErrorDescription": "当前应用暂时无法打开，可能是网络异常或应用服务不可用。您可以点击重试再次加载。",
+		"loadErrorTitle": "应用加载失败",
+		"retry": "重试"
+	},
 	"monthPicker": {
 		"april": "四月",
 		"august": "八月",
@@ -1974,11 +1980,6 @@
 		"title": "未授权访问"
 	},
 	"noData": "无数据",
-	"microApp": {
-		"loadErrorDescription": "当前应用暂时无法打开，可能是网络异常或应用服务不可用。您可以点击重试再次加载。",
-		"loadErrorTitle": "应用加载失败",
-		"retry": "重试"
-	},
 	"oauth": {
 		"address": "",
 		"email": "",
@@ -2091,8 +2092,8 @@
 		"accountSecurityPhone": {
 			"bindDescription": "当前账号尚未绑定手机号。绑定能力待账号接口确认后接入。",
 			"bindTitle": "绑定手机号",
-			"changeTitle": "更换手机号",
 			"changeDescription": "我们将向您当前的手机号发送验证码以验证身份。",
+			"changeTitle": "更换手机号",
 			"codeHint": "验证码已发送至",
 			"codeInvalid": "验证码错误，请重新输入",
 			"codePlaceholder": "请输入验证码",

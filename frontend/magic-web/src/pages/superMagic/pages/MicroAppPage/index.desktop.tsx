@@ -393,6 +393,8 @@ function MicroAppPageInner({
 							projectId={selectedProject?.id}
 							projectRole={selectedProject?.user_role}
 							workspaceId={selectedProject?.workspace_id}
+							workspaceName={selectedProject?.workspace_name}
+							projectName={selectedProject?.project_name}
 							topicId={selectedTopic?.id}
 						/>
 					</main>
