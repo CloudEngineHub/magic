@@ -290,6 +290,13 @@ class TopicService {
 
 		const patchSource = this.resolveManualFrontendModeSource(topic, mode)
 		this.rememberFrontendModePatch(topic.id, patchSource)
+		const currentAgentCode = topic.agent_code?.trim() || undefined
+		if (
+			topic.topic_mode === patchSource.topic_mode &&
+			currentAgentCode === patchSource.agent_code
+		) {
+			return
+		}
 		runInAction(() => {
 			this.topicStore.mergeTopic(topic.id, {
 				topic_mode: patchSource.topic_mode,

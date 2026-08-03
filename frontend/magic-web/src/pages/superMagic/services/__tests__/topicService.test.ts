@@ -621,6 +621,42 @@ describe("TopicService frontend mode patch", () => {
 		})
 	})
 
+	it("does not publish the same recovered mode to the topic store twice", () => {
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+		const invalidTopic = createTopic({
+			id: "topic-2",
+			topic_name: "New Topic",
+			topic_mode: "ip-manager" as TopicMode,
+			agent_code: "",
+		})
+
+		service.syncTopicFrontendModePatch({
+			topic: invalidTopic,
+			mode: TopicMode.General,
+		})
+		service.syncTopicFrontendModePatch({
+			topic: {
+				...invalidTopic,
+				topic_mode: TopicMode.General,
+				agent_code: undefined,
+			},
+			mode: TopicMode.General,
+		})
+
+		expect(mergeTopic).toHaveBeenCalledTimes(1)
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: TopicMode.General,
+			agent_code: undefined,
+		})
+	})
+
 	it("drops the frontend patch after backend updates the topic without an agent code", async () => {
 		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
 		const sourceTopic = createTopic({
