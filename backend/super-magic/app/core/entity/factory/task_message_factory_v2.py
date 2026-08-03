@@ -961,7 +961,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             role="tool",
             correlation_id=event.data.correlation_id,
             tool_call_id=tool_call_id,
-            content="",
+            content=content if status in {TaskStatus.ERROR, TaskStatus.SUSPENDED} else "",
             status=status.value,
             tool=tool_obj,
         )
@@ -994,7 +994,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             agent_context,
             role="tool",
             tool_call_id=tool_call_id,
-            content="",
+            content=content,
             status=status.value,
             tool=cls._build_tool_object(
                 tool_id=tool_call_id,
