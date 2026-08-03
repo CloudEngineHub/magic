@@ -1,7 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import { getSuperIdState } from "@/pages/superMagic/utils/query"
 import projectFilesStore from "@/stores/projectFiles"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import MagicModal from "@/components/base/MagicModal"
@@ -37,17 +36,21 @@ export function useMicroAppScheduledTasksModifyModal(
 	const { styles } = useModalStyles({ runningRecord: false })
 	const modifyRef = useRef<ScheduledTasksModifyRef>(null)
 	const rawProjectRef = useRef<ProjectListItem | null>(null)
-	const superIdState = getSuperIdState()
+	const hasCapturedProjectRef = useRef(false)
 	const [state, setState] = useState<ModalState>({ visible: false, mode: "create" })
 
-	useEffect(() => {
-		if (state.visible) rawProjectRef.current = mentionPanelStore.currentSelectedProject
-	}, [state.visible])
+	function captureCurrentProject() {
+		// 表单会临时切换项目；同步保存首次打开前的上下文，避免 effect 时序采集到临时项目。
+		if (hasCapturedProjectRef.current) return
+		rawProjectRef.current = mentionPanelStore.currentSelectedProject
+		hasCapturedProjectRef.current = true
+	}
 
 	function openCreateModal(
 		onSubmit: (task: ScheduledTask.UpdateTask) => void,
 		initialValues?: Partial<ScheduledTask.UpdateTask>,
 	) {
+		captureCurrentProject()
 		setState({ visible: true, mode: "create", createTask: initialValues, onSubmit })
 	}
 
@@ -59,15 +62,19 @@ export function useMicroAppScheduledTasksModifyModal(
 			magicToast.error(t("accountPanel.timedTasks.microAppContextMismatch"))
 			return
 		}
+		captureCurrentProject()
 		setState({ visible: true, mode: "edit", editingTask: task, onSubmit })
 	}
 
 	async function restoreProject() {
 		mcpTempStorage.saveMCP([])
-		if (superIdState.projectId && superIdState.topicId && rawProjectRef.current) {
-			projectFilesStore.setSelectedProject(rawProjectRef.current)
-			await modifyRef.current?.updateAttachments(rawProjectRef.current.id)
-		}
+		if (!hasCapturedProjectRef.current) return
+
+		const rawProject = rawProjectRef.current
+		hasCapturedProjectRef.current = false
+		rawProjectRef.current = null
+		projectFilesStore.setSelectedProject(rawProject)
+		if (rawProject) await modifyRef.current?.updateAttachments(rawProject.id)
 	}
 
 	async function closeModal() {
