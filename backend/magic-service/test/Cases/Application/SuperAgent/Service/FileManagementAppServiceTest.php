@@ -234,7 +234,14 @@ class FileManagementAppServiceTest extends TestCase
             ->willReturn($targetParent);
 
         $statusManager = $this->createMock(FileBatchOperationStatusManager::class);
-        $statusManager->method('generateBatchKey')->willReturn('batch-copy');
+        $statusManager->expects($this->once())
+            ->method('generateBatchKey')
+            ->with(
+                FileBatchOperationStatusManager::OPERATION_COPY,
+                'U1',
+                md5('900:901:700:501')
+            )
+            ->willReturn('batch-copy');
         $statusManager->method('initializeTask')->willReturn(true);
 
         $producer = $this->createMock(Producer::class);
@@ -265,6 +272,71 @@ class FileManagementAppServiceTest extends TestCase
         ]);
 
         $service->batchCopyFile($requestContext, $requestDTO);
+    }
+
+    public function testBatchCopyAuthorizedFilesUsesAuthorizedScopeAndTargetContextInBatchKey(): void
+    {
+        $sourceProject = new ProjectEntity([
+            'id' => 900,
+            'user_id' => 'OWNER',
+            'user_organization_code' => 'SOURCE_ORG',
+        ]);
+        $targetProject = new ProjectEntity([
+            'id' => 901,
+            'user_id' => 'U1',
+            'user_organization_code' => 'ORG1',
+        ]);
+        $targetParent = $this->createTaskFileEntity(700, '/workspace/b', true);
+        $targetParent->setProjectId(901);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(700)
+            ->willReturn($targetParent);
+
+        $statusManager = $this->createMock(FileBatchOperationStatusManager::class);
+        $statusManager->expects($this->once())
+            ->method('generateBatchKey')
+            ->with(
+                FileBatchOperationStatusManager::OPERATION_COPY,
+                'U1',
+                md5('900:901:700:501,502')
+            )
+            ->willReturn('shared-batch-copy');
+        $statusManager->method('initializeTask')->willReturn(true);
+
+        $producer = $this->createMock(Producer::class);
+        $producer->expects($this->once())
+            ->method('produce')
+            ->with($this->callback(static function (object $publisher): bool {
+                if (! $publisher instanceof FileBatchCopyPublisher) {
+                    return false;
+                }
+                $property = new ReflectionProperty(ProducerMessage::class, 'payload');
+                $payload = $property->getValue($publisher);
+                return ($payload['file_ids'] ?? []) === [501, 502]
+                    && ($payload['source_project_id'] ?? null) === 900
+                    && ($payload['target_project_id'] ?? null) === 901;
+            }));
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setPrivateProperty($service, 'batchOperationStatusManager', $statusManager);
+        $this->setPrivateProperty($service, 'producer', $producer);
+
+        $result = $service->batchCopyAuthorizedFiles(
+            $this->createAuthorization('U1', 'ORG1'),
+            $sourceProject,
+            $targetProject,
+            [502, 501, 502],
+            '700',
+            '',
+            [],
+            true
+        );
+
+        self::assertSame('shared-batch-copy', $result['batch_key']);
     }
 
     public function testBuildRelativeFilePathUsesParentChain(): void

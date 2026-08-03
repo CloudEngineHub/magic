@@ -1566,7 +1566,6 @@ class FileManagementAppService extends AbstractAppService
     public function batchCopyFile(RequestContext $requestContext, BatchCopyFileRequestDTO $requestDTO): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
         $sourceProject = null;
         $targetProject = null;
 
@@ -1588,16 +1587,6 @@ class FileManagementAppService extends AbstractAppService
                 : $sourceProject;
             $preserveParentPath = $sourceProject->getId() !== $targetProject->getId()
                 && $requestDTO->shouldPreserveParentPath();
-
-            // Generate batch key for tracking
-            $fileIds = $requestDTO->getFileIds();
-            sort($fileIds); // Ensure consistent hash for same file IDs
-            $fileIdsHash = md5(implode(',', $fileIds));
-            $batchKey = $this->batchOperationStatusManager->generateBatchKey(
-                FileBatchOperationStatusManager::OPERATION_COPY,
-                $dataIsolation->getCurrentUserId(),
-                $fileIdsHash
-            );
 
             // Expand directory file IDs to include all nested files
             $expandedFileIds = $this->expandDirectoryFileIds(
@@ -1623,78 +1612,22 @@ class FileManagementAppService extends AbstractAppService
             }
 
             $this->logger->info('Expanded directory file IDs for batch copy', [
-                'batch_key' => $batchKey,
                 'original_file_ids' => $requestDTO->getFileIds(),
                 'expanded_file_ids' => $expandedFileIds,
                 'original_count' => count($requestDTO->getFileIds()),
                 'expanded_count' => count($expandedFileIds),
             ]);
 
-            // Initialize task status with expanded file count
-            $this->batchOperationStatusManager->initializeTask(
-                $batchKey,
-                FileBatchOperationStatusManager::OPERATION_COPY,
-                $dataIsolation->getCurrentUserId(),
-                count($expandedFileIds)
-            );
-
-            // Print request data
-            $this->logger->info(sprintf('Batch copy file request data, batchKey: %s', $batchKey), [
-                'file_ids' => $requestDTO->getFileIds(),
-                'expanded_file_ids' => $expandedFileIds,
-                'source_project_id' => $sourceProject->getId(),
-                'target_project_id' => $targetProject->getId(),
-                'target_parent_id' => $requestDTO->getTargetParentId(),
-                'pre_file_id' => $requestDTO->getPreFileId(),
-                'keep_both_file_ids' => $requestDTO->getKeepBothFileIds(),
-                'preserve_parent_path' => $preserveParentPath,
-            ]);
-
-            // Create and publish batch copy event
-            $preFileId = ! empty($requestDTO->getPreFileId()) ? (int) $requestDTO->getPreFileId() : null;
-            if (empty($requestDTO->getTargetParentId())) {
-                $targetParentId = $this->taskFileDomainService->findOrCreateProjectRootDirectory(
-                    projectId: $targetProject->getId(),
-                    workDir: $targetProject->getWorkDir(),
-                    userId: $dataIsolation->getCurrentUserId(),
-                    organizationCode: $dataIsolation->getCurrentOrganizationCode(),
-                    projectOrganizationCode: $targetProject->getUserOrganizationCode()
-                );
-            } else {
-                $targetParentId = (int) $requestDTO->getTargetParentId();
-            }
-
-            $targetParentEntity = $this->taskFileDomainService->getById($targetParentId);
-            if ($targetParentEntity === null || ! $targetParentEntity->getIsDirectory()) {
-                ExceptionBuilder::throw(
-                    GenericErrorCode::ParameterValidationFailed,
-                    trans('file.target_parent_not_directory')
-                );
-            }
-            if ($targetParentEntity->getProjectId() !== $targetProject->getId()) {
-                ExceptionBuilder::throw(
-                    SuperAgentErrorCode::FILE_PERMISSION_DENIED,
-                    trans('file.target_parent_not_in_target_project')
-                );
-            }
-
-            $event = FileBatchCopyEvent::fromDTO(
-                $batchKey,
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode(),
+            return $this->batchCopyAuthorizedFiles(
+                $userAuthorization,
+                $sourceProject,
+                $targetProject,
                 $expandedFileIds,
-                $targetProject->getId(),
-                $sourceProject->getId(),
-                $preFileId,
-                $targetParentId,
+                $requestDTO->getTargetParentId(),
+                $requestDTO->getPreFileId(),
                 $requestDTO->getKeepBothFileIds(),
                 $preserveParentPath
             );
-            $publisher = new FileBatchCopyPublisher($event);
-            $this->producer->produce($publisher);
-
-            // Return asynchronous response
-            return FileBatchOperationResponseDTO::createAsyncProcessing($batchKey)->toArray();
         } catch (BusinessException $e) {
             $this->logger->warning('Business logic error in batch copy file', [
                 'file_ids' => $requestDTO->getFileIds(),
@@ -1715,6 +1648,93 @@ class FileManagementAppService extends AbstractAppService
             ]);
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_COPY_FAILED, trans('file.batch_copy_failed'));
         }
+    }
+
+    /**
+     * Execute a batch copy for files whose source access has already been authorized.
+     *
+     * The caller remains responsible for authorizing the source project and every
+     * file ID. Target project and directory authorization must be completed before
+     * calling this method.
+     */
+    public function batchCopyAuthorizedFiles(
+        MagicUserAuthorization $userAuthorization,
+        ProjectEntity $sourceProject,
+        ProjectEntity $targetProject,
+        array $authorizedFileIds,
+        string $targetParentId = '',
+        string $preFileId = '',
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
+    ): array {
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+        $expandedFileIds = array_values(array_unique(array_map('intval', $authorizedFileIds)));
+        sort($expandedFileIds);
+
+        if (empty($expandedFileIds)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+
+        if (empty($targetParentId)) {
+            $resolvedTargetParentId = $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                projectId: $targetProject->getId(),
+                workDir: $targetProject->getWorkDir(),
+                userId: $dataIsolation->getCurrentUserId(),
+                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                projectOrganizationCode: $targetProject->getUserOrganizationCode()
+            );
+        } else {
+            $resolvedTargetParentId = (int) $targetParentId;
+        }
+
+        $targetParentEntity = $this->taskFileDomainService->getById($resolvedTargetParentId);
+        if ($targetParentEntity === null || ! $targetParentEntity->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                trans('file.target_parent_not_directory')
+            );
+        }
+        if ($targetParentEntity->getProjectId() !== $targetProject->getId()) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::FILE_PERMISSION_DENIED,
+                trans('file.target_parent_not_in_target_project')
+            );
+        }
+
+        $batchResourceId = sprintf(
+            '%d:%d:%d:%s',
+            $sourceProject->getId(),
+            $targetProject->getId(),
+            $resolvedTargetParentId,
+            implode(',', $expandedFileIds)
+        );
+        $batchKey = $this->batchOperationStatusManager->generateBatchKey(
+            FileBatchOperationStatusManager::OPERATION_COPY,
+            $dataIsolation->getCurrentUserId(),
+            md5($batchResourceId)
+        );
+        $this->batchOperationStatusManager->initializeTask(
+            $batchKey,
+            FileBatchOperationStatusManager::OPERATION_COPY,
+            $dataIsolation->getCurrentUserId(),
+            count($expandedFileIds)
+        );
+
+        $event = FileBatchCopyEvent::fromDTO(
+            $batchKey,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $expandedFileIds,
+            $targetProject->getId(),
+            $sourceProject->getId(),
+            ! empty($preFileId) ? (int) $preFileId : null,
+            $resolvedTargetParentId,
+            $keepBothFileIds,
+            $sourceProject->getId() !== $targetProject->getId() && $preserveParentPath
+        );
+        $this->producer->produce(new FileBatchCopyPublisher($event));
+
+        return FileBatchOperationResponseDTO::createAsyncProcessing($batchKey)->toArray();
     }
 
     /**
