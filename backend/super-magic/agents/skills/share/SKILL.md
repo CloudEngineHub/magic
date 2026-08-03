@@ -10,6 +10,7 @@ Use these Code Mode tools from a Python snippet executed with `run_sdk_snippet`.
 ## Choose the Target
 
 - For workspace files, continue with this document. This is the most common workflow.
+- When a file may reference local assets, first read [references/file-dependencies.md](references/file-dependencies.md).
 - For the entire current project, first read [references/project-share.md](references/project-share.md).
 - For the current topic or conversation, first read [references/topic-share.md](references/topic-share.md).
 - To inspect or change an existing share, first read [references/edit-share.md](references/edit-share.md).
@@ -17,20 +18,24 @@ Use these Code Mode tools from a Python snippet executed with `run_sdk_snippet`.
 
 ## File Share Workflow
 
-1. Confirm which files the user wants to share. Do not add unrequested files.
-2. Call `list_file_shares` with the exact `file_paths` before creating anything.
-3. Handle the result:
+1. Confirm which files the user wants to share. Do not add additional files without the user’s approval.
+2. Call `list_file_shares` with the original exact `file_paths` before creating anything.
+3. If the entry is HTML, HTM, or another page with local references, call `inspect_file_share` before creating or updating the share. If local dependencies are found, explain that leaving them out may cause missing images, styles, fonts, video, or interactions. Ask whether to include the page’s actual local dependencies. A clear request such as “include the related files” is already approval; do not ask the same question again.
+4. Read the entry and the files that will actually be shared when content review is needed. Stop for clearly prohibited content. For possible personal data, credentials, internal material, or an apparently wrong file, explain the concrete risk and ask the user whether to exclude it or cancel.
+5. Handle the result:
    - One active share and no requested setting change: return its existing URL and password. Do not call `create_file_share`.
    - Multiple active shares: show the candidates and ask which share to reuse, update, or delete.
-   - No active share: continue to entry-file and access selection.
-4. Select the required entry file:
+   - No active share: continue to entry-file and access selection. If dependencies changed the final file set, call `list_file_shares` again with that final set before creating.
+6. Select the required entry file:
    - One file: use that file as `entry_file_path`.
    - Multiple files: use the file explicitly named by the user. Ask which file should open first when it is not uniquely clear.
-5. If the user did not choose an access method, explain the three choices and ask before creating:
+7. If the user did not choose an access method, explain the three choices and ask before creating:
    - Team access is safest because only organization members can open it, but it is less convenient for external recipients.
    - Password access is the recommended balance of safety and convenience. Anyone with both the link and password can open it. Password-protected file and project shares require VIP.
    - Public access is highest risk because anyone with the link can open it. Use it only after the user explicitly chooses public access.
-6. Never change a failed password share to public automatically. Explain the VIP restriction and ask the user to choose team access or explicitly approve public access.
+8. Never change a failed password share to public automatically. Explain the VIP restriction and ask the user to choose team access or explicitly approve public access.
+
+When the original file set already has an active share and the user approves adding dependencies, read that share and call `update_file_share` with the complete final `file_paths` and the existing `entry_file_path`. Do not call `create_file_share` for this repair; preserve the original resource ID and settings.
 
 Use the user's language when asking about access. A concise question is:
 
@@ -166,7 +171,7 @@ Always check `result.ok`.
 - When you need an exact value for the next step or for the user, read it from `result.data`:
   - list tools return their shares in `result.data["items"]`;
   - create and reuse tools return `share_url`, `password`, `resource_id`, and `operation`.
-- Only show or pass on a `share_url` that is present in `result.data`. Never invent or rewrite a link.
+- Only show or pass on a `share_url` that is present in `result.data`. Password-share URLs returned by the tools already include the password query parameter when the password is known; pass them through unchanged. Never invent or rewrite a link.
 - If a required value is missing, tell the user what is missing and keep the reported operation state. Do not repeat a mutating call just to obtain a complete response.
 - When the requested access method cannot be used, explain why and ask the user to choose another method. Do not switch to a different or less secure method automatically.
 
@@ -180,3 +185,5 @@ Always check `result.ok`.
 - Do not update an existing share without an explicit change request.
 - Do not set `delete_share.confirmed=True` without explicit user authorization.
 - Do not describe watermark hiding as removing all Super Magic branding.
+- Do not add files merely because they are in the same directory. Add only files confirmed as page dependencies and approved by the user.
+- When the user asks to add files to an existing share, update that share with the complete final file set; do not create a second share.

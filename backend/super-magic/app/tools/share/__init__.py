@@ -5,6 +5,7 @@ from .create_project import CreateProjectShare, CreateProjectShareParams
 from .create_topic import CreateTopicShare, CreateTopicShareParams
 from .delete import DeleteShare, DeleteShareParams
 from .get import GetShare, GetShareParams
+from .inspect_file import InspectFileShare, InspectFileShareParams
 from .list_file import ListFileShares, ListFileSharesParams
 from .list_project import ListProjectShares, ListProjectSharesParams
 from .list_topic import ListTopicShares, ListTopicSharesParams
@@ -23,6 +24,8 @@ __all__ = [
     "DeleteShareParams",
     "GetShare",
     "GetShareParams",
+    "InspectFileShare",
+    "InspectFileShareParams",
     "ListFileShares",
     "ListFileSharesParams",
     "ListProjectShares",

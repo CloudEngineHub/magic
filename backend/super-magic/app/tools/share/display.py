@@ -18,6 +18,7 @@ from .models import (
     ShareErrorInfo,
     ShareTarget,
 )
+from .share_url import build_share_access_url
 
 
 def translate_action(tool_name: str) -> str:
@@ -88,9 +89,10 @@ def build_confirmation_error(share_ref: str) -> ToolResult:
 
 
 def creation_payload(result: ShareCreationResult) -> dict[str, object]:
+    access_url = build_share_access_url(result.share_url, result.access_type, result.password)
     payload: dict[str, object] = {
         "operation": result.operation,
-        "share_url": result.share_url,
+        "share_url": access_url,
         "resource_id": result.resource_id,
         "resource_type": result.resource_type,
         "resource_name": result.resource_name,
@@ -105,12 +107,13 @@ def creation_payload(result: ShareCreationResult) -> dict[str, object]:
 
 
 def creation_content(result: ShareCreationResult) -> str:
+    access_url = build_share_access_url(result.share_url, result.access_type, result.password)
     lines = [
         "Share is ready.",
         f"Operation: {result.operation}.",
         f"Target: {result.target}.",
         f"Access: {result.access_type}.",
-        f"URL: {result.share_url}",
+        f"URL: {access_url}",
         f"Resource ID: {result.resource_id}",
     ]
     if result.password is not None:

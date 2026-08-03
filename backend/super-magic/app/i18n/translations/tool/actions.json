@@ -611,6 +611,10 @@
         "zh_CN": "创建文件分享",
         "en_US": "Create file share"
     },
+    "inspect_file_share": {
+        "zh_CN": "检查分享文件",
+        "en_US": "Inspect share files"
+    },
     "create_project_share": {
         "zh_CN": "创建项目分享",
         "en_US": "Create project share"

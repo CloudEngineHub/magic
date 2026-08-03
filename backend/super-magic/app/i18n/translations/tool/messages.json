@@ -2855,6 +2855,74 @@
         "zh_CN": "正在为{{target}}创建或更新分享：{{subject}}",
         "en_US": "Creating or updating a share for {{target}}: {{subject}}"
     },
+    "share.inspect.before": {
+        "zh_CN": "正在检查{{file_name}}需要的分享文件",
+        "en_US": "Inspecting files required by {{file_name}}"
+    },
+    "share.inspect.after_success": {
+        "zh_CN": "分享文件检查完成",
+        "en_US": "Share file inspection completed"
+    },
+    "share.inspect.after_failed": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "Share file inspection failed"
+    },
+    "share.inspect.detail.inspect_success_title": {
+        "zh_CN": "分享文件检查结果",
+        "en_US": "Share File Inspection"
+    },
+    "share.inspect.detail.inspect_failed_title": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "Share File Inspection Failed"
+    },
+    "share.inspect.detail.entry_file": {
+        "zh_CN": "首页文件",
+        "en_US": "Entry File"
+    },
+    "share.inspect.detail.file_count": {
+        "zh_CN": "文件数量",
+        "en_US": "File Count"
+    },
+    "share.inspect.detail.total_bytes": {
+        "zh_CN": "总大小（字节）",
+        "en_US": "Total Bytes"
+    },
+    "share.inspect.detail.scan_complete": {
+        "zh_CN": "扫描完整",
+        "en_US": "Scan Complete"
+    },
+    "share.inspect.detail.dependency_paths": {
+        "zh_CN": "本地依赖",
+        "en_US": "Local Dependencies"
+    },
+    "share.inspect.detail.missing_paths": {
+        "zh_CN": "缺失引用",
+        "en_US": "Missing References"
+    },
+    "share.inspect.detail.unsynced_paths": {
+        "zh_CN": "未同步文件",
+        "en_US": "Unsynchronized Files"
+    },
+    "share.inspect.detail.dynamic_references": {
+        "zh_CN": "动态或不确定引用",
+        "en_US": "Dynamic or Uncertain References"
+    },
+    "share.inspect.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "share.inspect.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "share.inspect.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "share.inspect.error.unknown": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "The share file inspection failed"
+    },
     "share.create.after_success": {
         "zh_CN": "{{target}}分享已{{operation}}",
         "en_US": "The {{target}} share was {{operation}}"

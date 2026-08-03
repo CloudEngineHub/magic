@@ -20,6 +20,7 @@ from .display import (
     translate_target,
 )
 from .models import ShareDetail, ShareErrorInfo, ShareTarget
+from .share_url import build_share_access_url
 
 
 def build_management_result(detail: ShareDetail, operation: str) -> ToolResult:
@@ -48,13 +49,14 @@ def build_management_error(operation: str, target: ShareTarget, info: ShareError
 
 
 def detail_payload(detail: ShareDetail, operation: str) -> dict[str, object]:
+    access_url = build_share_access_url(detail.share_url, detail.access_type, detail.password)
     payload: dict[str, object] = {
         "operation": operation,
         "target": detail.target,
         "status": detail.status,
         "resource_id": detail.resource_id,
         "resource_type": detail.resource_type,
-        "share_url": detail.share_url,
+        "share_url": access_url,
         "share_name": detail.share_name,
         "access": detail.access_type,
         "password": detail.password,
@@ -82,6 +84,7 @@ def detail_payload(detail: ShareDetail, operation: str) -> dict[str, object]:
 
 
 def detail_content(detail: ShareDetail, operation: str) -> str:
+    access_url = build_share_access_url(detail.share_url, detail.access_type, detail.password)
     heading = "Share updated." if operation == "updated" else "Active share details."
     lines = [
         heading,
@@ -90,7 +93,7 @@ def detail_content(detail: ShareDetail, operation: str) -> str:
         f"Resource ID: {detail.resource_id}",
         f"Name: {detail.share_name or 'unnamed share'}",
         f"Access: {detail.access_type}.",
-        f"URL: {detail.share_url}",
+        f"URL: {access_url}",
     ]
     if detail.password is not None:
         lines.append(f"Password: {detail.password}")

@@ -11,6 +11,7 @@ from app.tools.utils.time_display import format_tool_time
 
 from .display import translate_error
 from .models import ShareListItem, ShareListResult, ShareTarget
+from .share_url import build_share_access_url
 
 
 def _message(key: str, **kwargs: object) -> str:
@@ -94,11 +95,12 @@ def build_list_detail(result: ToolResult, target: ShareTarget) -> ToolDetail:
 
 
 def list_item_payload(item: ShareListItem) -> dict[str, object]:
+    access_url = build_share_access_url(item.share_url or "", item.access_type, item.password)
     payload: dict[str, object] = {
         "resource_id": item.resource_id,
         "resource_name": item.resource_name,
         "resource_type": item.resource_type,
-        "share_url": item.share_url,
+        "share_url": access_url or None,
         "access": item.access_type,
         "status": item.status,
         "has_password": item.has_password,
@@ -124,13 +126,14 @@ def list_content(result: ShareListResult) -> str:
         f"Page: {result.page}; page size: {result.page_size}.",
     ]
     for item in result.items:
+        access_url = build_share_access_url(item.share_url or "", item.access_type, item.password)
         lines.extend(
             [
                 f"- Resource ID: {item.resource_id}",
                 f"  Name: {item.resource_name or 'unnamed share'}",
                 f"  Status: {item.status}",
                 f"  Access: {item.access_type}",
-                f"  URL: {item.share_url or 'unavailable'}",
+                f"  URL: {access_url or 'unavailable'}",
             ]
         )
         if item.password is not None:
@@ -160,9 +163,10 @@ def list_detail(result: ShareListResult) -> str:
         ]
     )
     for item in result.items:
+        access_url = build_share_access_url(item.share_url or "", item.access_type, item.password)
         lines.append(
             f"| `{item.resource_id}` | {_table_value(item.resource_name)} | "
-            f"{_table_value(_status_label(item.status))} | {_table_value(item.share_url)} |"
+            f"{_table_value(_status_label(item.status))} | {_table_value(access_url)} |"
         )
     return "\n".join(lines)
 

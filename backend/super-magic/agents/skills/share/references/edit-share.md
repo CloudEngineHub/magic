@@ -73,6 +73,7 @@ update_file_share(
 ```
 
 - `file_paths` replaces the complete shared file set; it is not an add-only list. When passing it, also pass `entry_file_path`, and include the entry file in the replacement set.
+- `file_paths` is the complete final file set. When adding files to an existing share, include the files that were already shared and the newly approved files, and keep `entry_file_path` in that complete list.
 - To change only the entry file, omit `file_paths` and pass an `entry_file_path` that already belongs to the shared file set.
 - `allow_copy=False` prevents viewers from copying the shared files into their workspace.
 
