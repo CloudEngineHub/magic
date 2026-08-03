@@ -33,6 +33,7 @@ function createCanvasStub(
 	boundsById?: Map<string, { x: number; y: number; width: number; height: number }>,
 ) {
 	const visibleSet = new Set(visibleIds)
+	const documentOwnedIds = new Set(["source", "target", "other"])
 	const elementData = new Map<string, LayerElement>(
 		["source", "target", "other"].map((id) => [
 			id,
@@ -52,6 +53,7 @@ function createCanvasStub(
 		elementManager: {
 			getElementData: vi.fn((id: string) => elementData.get(id)),
 			isElementVisibleInDataTree: vi.fn((id: string) => visibleSet.has(id)),
+			canParticipateInDocumentRelations: vi.fn((id: string) => documentOwnedIds.has(id)),
 		},
 		connectionGroup,
 		ensureConnectionGroup: vi.fn(() => connectionGroup),
@@ -78,7 +80,14 @@ function createCanvasStub(
 		},
 	} as unknown as Canvas
 
-	return { canvas, elementData, connectionGroup, requestLayerDraw, selectionManager }
+	return {
+		canvas,
+		elementData,
+		documentOwnedIds,
+		connectionGroup,
+		requestLayerDraw,
+		selectionManager,
+	}
 }
 
 function getLastRenderedConnectionGroup(connectionGroup: {
@@ -861,5 +870,40 @@ describe("ConnectionManager", () => {
 		).toEqual({ status: "invalid", reason: "missing-element" })
 		expect(manager.exportConnections()).toEqual([])
 		expect(onConnectionChange).not.toHaveBeenCalled()
+	})
+
+	it("rejects connections whose endpoint is still runtime-only", () => {
+		const { canvas, documentOwnedIds } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		const onConnectionChange = vi.fn()
+		canvas.eventEmitter.on("connection:change", onConnectionChange)
+		documentOwnedIds.delete("target")
+
+		expect(
+			manager.connectElements({ sourceElementId: "source", targetElementId: "target" }),
+		).toEqual({ status: "invalid", reason: "temporary-element" })
+		expect(
+			manager.addConnection({ sourceElementId: "source", targetElementId: "target" }),
+		).toBeNull()
+		expect(onConnectionChange).not.toHaveBeenCalled()
+	})
+
+	it("filters a connection defensively when an endpoint becomes runtime-only", () => {
+		const { canvas, documentOwnedIds } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		const created = manager.connectElements({
+			sourceElementId: "source",
+			targetElementId: "target",
+		})
+		expect(created.status).toBe("created")
+		if (created.status !== "created") throw new Error("Expected connection to be created")
+
+		documentOwnedIds.delete("target")
+
+		expect(manager.getConnections()).toHaveLength(1)
+		expect(manager.exportConnections()).toEqual([])
+		expect(
+			manager.exportDocumentPatch({ changedConnectionIds: [created.connectionId] }),
+		).toMatchObject({ connectionUpserts: [], changedConnectionIds: [] })
 	})
 })

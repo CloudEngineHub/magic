@@ -1,9 +1,10 @@
 import { Button, Checkbox, Flex, Modal } from "antd"
-import { createStyles, useResponsive } from "antd-style"
+import { createStyles } from "antd-style"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import IconInfo from "./icons/IconInfo"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export interface FolderConflictModalProps {
 	visible: boolean
@@ -173,7 +174,7 @@ export function FolderConflictModal({
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const [applyToAll, setApplyToAll] = useState(false)
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 	const showApplyToAll = (totalConflicts || 0) > 1
 
 	const resetApplyToAll = () => setApplyToAll(false)

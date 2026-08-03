@@ -168,6 +168,15 @@ describe("ProjectShareLinkDetailView", () => {
 		expect(screen.getByTestId("project-share-sheet-detail-link-card")).toHaveTextContent(
 			"https://example.com/share-1?password=abc123",
 		)
+		expect(screen.getByTestId("project-share-sheet-detail-link-card")).toHaveClass("min-h-12")
+		expect(screen.getByTestId("project-share-sheet-detail-link-value")).toHaveClass(
+			"select-text",
+			"break-all",
+			"whitespace-normal",
+		)
+		expect(screen.getByTestId("project-share-sheet-detail-link-value")).not.toHaveClass(
+			"truncate",
+		)
 		expect(screen.getByTestId("project-share-sheet-detail-type-card")).toHaveTextContent(
 			"永久有效 · formatted:2026-05-05T00:00:00.000Z",
 		)

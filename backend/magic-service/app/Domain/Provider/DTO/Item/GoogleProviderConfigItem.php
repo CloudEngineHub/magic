@@ -36,8 +36,22 @@ namespace App\Domain\Provider\DTO\Item;
  */
 class GoogleProviderConfigItem extends AbstractProviderConfigItem
 {
+    /** Google 生图参考图传输策略：服务端将参考图转换为 Base64 后内联传输。 */
+    public const REFERENCE_IMAGE_TRANSPORT_BASE64 = 'base64';
+
+    /** Google 生图参考图传输策略：将参考图 URL 直接传递给 Google。 */
+    public const REFERENCE_IMAGE_TRANSPORT_URL = 'url';
+
+    /** Google 生图参考图传输策略：URL 请求失败后改用 Base64。 */
+    public const REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64 = 'url_fallback_base64';
+
+    /** Google 生图参考图传输策略：Base64 请求失败后改用 URL。 */
+    public const REFERENCE_IMAGE_TRANSPORT_BASE64_FALLBACK_URL = 'base64_fallback_url';
+
+    /** Google 服务认证方式：使用 API Key 认证。 */
     public const AUTH_TYPE_API_KEY = 'api_key';
 
+    /** Google 服务认证方式：使用 Service Account 认证。 */
     public const AUTH_TYPE_SERVICE_ACCOUNT = 'service_account';
 
     /**
@@ -115,6 +129,11 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
      * Google Cloud Storage Bucket 名称 (Vertex AI 模式下上传文件必填).
      */
     protected string $gcsBucket = '';
+
+    /**
+     * Google 参考图传输策略，默认优先使用 URL，失败后改用图片内容。
+     */
+    protected string $referenceImageTransport = self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64;
 
     public function __construct(?array $data = null)
     {
@@ -333,6 +352,28 @@ class GoogleProviderConfigItem extends AbstractProviderConfigItem
         } else {
             $this->gcsBucket = (string) $gcsBucket;
         }
+    }
+
+    public function getReferenceImageTransport(): string
+    {
+        return $this->referenceImageTransport;
+    }
+
+    public function setReferenceImageTransport(null|int|string $referenceImageTransport): void
+    {
+        $this->referenceImageTransport = self::normalizeReferenceImageTransport($referenceImageTransport);
+    }
+
+    public static function normalizeReferenceImageTransport(mixed $transport): string
+    {
+        $transport = strtolower(trim((string) ($transport ?? '')));
+
+        return in_array($transport, [
+            self::REFERENCE_IMAGE_TRANSPORT_BASE64,
+            self::REFERENCE_IMAGE_TRANSPORT_URL,
+            self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64,
+            self::REFERENCE_IMAGE_TRANSPORT_BASE64_FALLBACK_URL,
+        ], true) ? $transport : self::REFERENCE_IMAGE_TRANSPORT_URL_FALLBACK_BASE64;
     }
 
     /**

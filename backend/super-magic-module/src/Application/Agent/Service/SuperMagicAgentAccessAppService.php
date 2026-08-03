@@ -12,41 +12,9 @@ use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\TargetType;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
-use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\BuiltinSkill;
 
 class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
 {
-    /** @return array{0: bool, 1: string} */
-    public function checkAgentAccess(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        string $topicPattern,
-        string $agentCode
-    ): array {
-        $errorMessage = 'super_magic.agent.agent_not_available';
-
-        if (in_array($topicPattern, [BuiltinSkill::CrewCreator->value, BuiltinSkill::SkillCreator->value], true)) {
-            if ($agentCode === '') {
-                return [true, ''];
-            }
-
-            $operation = $this->resourceAccessPolicyService->getCurrentOperation(
-                $dataIsolation,
-                ResourceType::CustomAgent,
-                $agentCode
-            );
-            $allowed = $operation?->canEdit() ?? false;
-
-            return [$allowed, $allowed ? '' : $errorMessage];
-        }
-
-        if (str_starts_with($topicPattern, 'SMA-')) {
-            $allowed = in_array($topicPattern, $this->getUsableAgentCodes($dataIsolation)['codes'], true);
-            return [$allowed, $allowed ? '' : $errorMessage];
-        }
-
-        return [true, ''];
-    }
-
     /**
      * @param array<string> $agentCodes
      * @return array{usable_codes: array<string>, missing_codes: array<string>}

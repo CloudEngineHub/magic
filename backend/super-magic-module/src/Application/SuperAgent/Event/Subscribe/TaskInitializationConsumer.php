@@ -165,7 +165,8 @@ class TaskInitializationConsumer extends ConsumerMessage
                 taskId: (string) $messageDTO->getTaskId(),
                 chatTopicId: $messageDTO->getChatTopicId(),
                 chatConversationId: $agentConversationId,
-                errorMessage: trans('task.initialize_error') // @phpstan-ignore-line function.notFound
+                errorMessage: trans('task.initialize_error'), // @phpstan-ignore-line function.notFound
+                dynamicParams: $messageDTO->getUserMessage()['dynamic_params'] ?? null,
             );
 
             $this->logger->info('Error notification sent to client', [

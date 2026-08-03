@@ -1,7 +1,6 @@
 import { memo, useState, useCallback } from "react"
 import { IconDots, IconLock, IconLockOpen } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { Dropdown } from "antd"
 import { Button } from "@/components/shadcn-ui/button"
 import ModeTag from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/components/ModeTag"
@@ -14,6 +13,7 @@ import TopicSharePopover from "../../TopicSharePopover"
 import { convertTopicShareItemToShareItem } from "../utils/shareTypeHelpers"
 import { useShareItemActions } from "../hooks/useShareItemActions"
 import { useTopicSharePopover } from "../hooks/useTopicSharePopover"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface MobileTopicShareItemProps {
 	item: TopicShareItem
@@ -31,8 +31,7 @@ function MobileTopicShareItem({
 	showProjectBadge = true,
 }: MobileTopicShareItemProps) {
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const [showActions, setShowActions] = useState(false)
 
 	// 使用 TopicSharePopover hook

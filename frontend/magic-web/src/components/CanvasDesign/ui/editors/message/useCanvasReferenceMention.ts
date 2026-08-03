@@ -23,6 +23,7 @@ import {
 import { useCanvasReferenceMentionRuntime } from "./reference-assets/useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./reference-assets/canvasReferenceMention.constants"
 import { MentionPanelViewMode } from "@/components/business/MentionPanel/types"
+import { getCanvasResourceIdentity } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -103,12 +104,13 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	// 合并项目文件与当前元素参考文件（去重，外部优先）
 	const matchableItems = useMemo(() => {
 		const result: MatchableMentionItem[] = []
-		const seenPaths = new Set<string>()
+		const seenPathIdentities = new Set<string>()
 
 		const pushItem = (item: MatchableMentionItem) => {
 			if (item.path) {
-				if (seenPaths.has(item.path)) return
-				seenPaths.add(item.path)
+				const identity = getCanvasResourceIdentity(item.path)
+				if (seenPathIdentities.has(identity)) return
+				seenPathIdentities.add(identity)
 			}
 			result.push(item)
 		}

@@ -1,8 +1,8 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { clipboard } from "@/utils/clipboard-helpers"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -592,8 +592,7 @@ function TopicSharePopover({
 	children,
 	onSaveSuccess,
 }: TopicSharePopoverProps) {
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const hasDataChangedRef = useRef(false)
 
 	// 处理数据变更标记

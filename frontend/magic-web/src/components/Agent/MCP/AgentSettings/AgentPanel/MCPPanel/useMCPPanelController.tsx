@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { useCreation, useDebounceEffect, useMemoizedFn, useRequest, useResponsive } from "ahooks"
+import { useCreation, useDebounceEffect, useMemoizedFn, useRequest } from "ahooks"
 import { useImmer } from "use-immer"
 import type { IMCPItem } from "../../../types"
 import {
@@ -12,6 +12,7 @@ import { openAgentCommonModal } from "../../../../AgentCommonModal"
 import MCPForm from "../../../MCPForm"
 import { checkMCPOAuth, MCPOAuthType } from "./helpers"
 import { getMCPAccess } from "../../../store/mcp-access"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export const enum MCPUserGroup {
 	Official = "official",
@@ -53,8 +54,7 @@ export interface MCPPanelController {
 export function useMCPPanelController(props: UseMCPPanelControllerProps): MCPPanelController {
 	const { onSuccessCallback, storageKey, useTempStorage = false } = props
 
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
 
 	const mcpAccess = useCreation(
 		() =>

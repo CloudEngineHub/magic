@@ -1102,6 +1102,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(8, $event->getDurationSeconds());
         $this->assertSame('720p', $event->getResolution());
         $this->assertSame('1280x720', $event->getSize());
+        $this->assertNull($event->getGeneratedFileKey());
     }
 
     public function testEnqueueAndGetOperationDispatchesCloudswaySeedanceGeneratedEventWithDefaultBillingDetails(): void
@@ -1898,6 +1899,13 @@ class VideoOperationAppServiceTest extends TestCase
         );
         $this->assertSame('org-test/open/' . $privateStorageHash . '/open/video-generation', $operationRepository->operations['op-3']->getFileDir());
         $this->assertSame('op-3.mp4', $operationRepository->operations['op-3']->getFileName());
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $event = $this->eventDispatcher->events[0];
+        $this->assertInstanceOf(VideoGeneratedEvent::class, $event);
+        $this->assertSame(
+            'org-test/open/' . $privateStorageHash . '/open/video-generation/op-3.mp4',
+            $event->getGeneratedFileKey()
+        );
     }
 
     public function testGetOperationResignsStoredPrivateVideoUrlForSucceededOperation(): void

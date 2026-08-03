@@ -11,6 +11,7 @@ import {
 } from "../../resources/image/imageCropUtils"
 import { CropRenderer } from "./CropRenderer"
 import { calculateNodesRect } from "../../shared/ids"
+import { ImageEditingSession } from "../image-editing/ImageEditingSession"
 
 const FULL_CROP_EPSILON = 1e-6
 
@@ -38,11 +39,9 @@ export class CropManager {
 		| Pick<ImageElement, "x" | "y" | "width" | "height" | "crop">
 		| undefined = undefined
 
-	// 进入裁剪前的原始节点索引(用于退出时还原节点位置)
-	private originalNodeIndex: number | undefined = undefined
-
 	// 裁剪渲染器(由裁剪器绘制，与 ImageElement 解耦)
 	private cropRenderer: CropRenderer | null = null
+	private editingSession: ImageEditingSession | null = null
 
 	// 事件监听器引用(用于销毁时移除)
 	private escapeHandler?: () => void
@@ -52,7 +51,6 @@ export class CropManager {
 	private viewportPanHandler?: () => void
 	private elementUpdatedHandler?: (event: { data: { elementId: string } }) => void
 	private elementRerenderedHandler?: (event: { data: { elementId: string } }) => void
-	private cropEnterRerenderedHandler?: (event: { data: { elementId: string } }) => void
 
 	private getSourceDimensions(
 		elementInstance: ImageElementClass | null,
@@ -161,10 +159,6 @@ export class CropManager {
 			this.canvas.eventEmitter.off("element:rerendered", this.elementRerenderedHandler)
 			this.elementRerenderedHandler = undefined
 		}
-		if (this.cropEnterRerenderedHandler) {
-			this.canvas.eventEmitter.off("element:rerendered", this.cropEnterRerenderedHandler)
-			this.cropEnterRerenderedHandler = undefined
-		}
 	}
 
 	/**
@@ -172,6 +166,15 @@ export class CropManager {
 	 */
 	private emitCropPosition(): void {
 		if (!this.croppingElementId) return
+
+		const sessionBounds = this.editingSession?.getContentBounds()
+		if (sessionBounds) {
+			this.canvas.eventEmitter.emit({
+				type: "crop:position",
+				data: { elementId: this.croppingElementId, boundingRect: sessionBounds },
+			})
+			return
+		}
 
 		const adapter = this.canvas.elementManager.getNodeAdapter()
 		const nodes = adapter.getNodesForTransform([this.croppingElementId])
@@ -218,20 +221,19 @@ export class CropManager {
 	 * 进入裁剪模式
 	 */
 	public enterCropMode(elementId: string): void {
-		if (this.canvas.eraserManager.getErasingElementId()) {
-			this.canvas.eraserManager.cancelEraser()
-		}
-
-		// 如果已有元素在裁剪,先退出
-		if (this.croppingElementId && this.croppingElementId !== elementId) {
-			this.exitCropMode(true)
-		}
+		if (this.croppingElementId === elementId) return
 
 		// 获取元素数据
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!elementData || elementData.type !== ElementTypeEnum.Image) {
 			return
 		}
+
+		this.canvas.imageEditingCoordinator.activate({
+			mode: "crop",
+			elementId,
+			cancel: () => this.cancelCrop(),
+		})
 
 		const imageElement = elementData as ImageElement
 		const elementInstance = this.canvas.elementManager.getElementInstance(
@@ -290,44 +292,18 @@ export class CropManager {
 		// 设置当前裁剪元素ID
 		this.croppingElementId = elementId
 
-		// 保存原始节点位置并立即提升（在 rerender 之前）
-		const node = elementInstance?.getNode()
-		if (node) {
-			const parent = node.getParent()
-			if (parent) {
-				// 保存节点在父容器中的原始索引位置
-				this.originalNodeIndex = parent.children?.indexOf(node) ?? -1
-				// 立即提升节点至顶层（如果节点已存在）
-				node.moveToTop()
-			}
-		}
-
-		// 监听元素重新渲染事件，在 rerender 完成后再次提升节点至顶层
-		// 因为 crop:enter 会触发 ImageElement 的 rerender，重新创建节点
-		this.cropEnterRerenderedHandler = ({ data }) => {
-			if (data.elementId === elementId) {
-				// rerender 完成后，提升节点至顶层
-				const rerenderedNode = elementInstance?.getNode()
-				if (rerenderedNode) {
-					rerenderedNode.moveToTop()
-					// 移除监听器（只执行一次）
-					if (this.cropEnterRerenderedHandler) {
-						this.canvas.eventEmitter.off(
-							"element:rerendered",
-							this.cropEnterRerenderedHandler,
-						)
-						this.cropEnterRerenderedHandler = undefined
-					}
-				}
-			}
-		}
-		this.canvas.eventEmitter.on("element:rerendered", this.cropEnterRerenderedHandler)
-
 		// 触发进入裁剪模式(更新 UI 等，会触发 ImageElement 的 rerender)
 		this.canvas.eventEmitter.emit({
 			type: "crop:enter",
 			data: { elementId },
 		})
+
+		this.editingSession = new ImageEditingSession({ canvas: this.canvas, elementId })
+		if (!this.editingSession.mount()) {
+			this.editingSession = null
+			this.exitCropMode(true)
+			return
+		}
 
 		// 聚焦到裁剪元素
 		this.canvas.viewportController.focusOnElements([elementId], {
@@ -348,12 +324,20 @@ export class CropManager {
 		this.canvas.container.focus()
 
 		// 创建裁剪渲染器并绘制 overlay
-		this.cropRenderer = new CropRenderer({ canvas: this.canvas, elementId })
-		this.cropRenderer.render()
+		try {
+			this.cropRenderer = new CropRenderer({ canvas: this.canvas, elementId })
+			if (this.cropRenderer.render()) {
+				// 设置裁剪模式下的位置更新监听，并发出首次 crop:position
+				this.setupCropPositionListeners()
+				this.emitCropPosition()
+				return
+			}
+		} catch (error) {
+			this.exitCropMode(true)
+			throw error
+		}
 
-		// 设置裁剪模式下的位置更新监听，并发出首次 crop:position
-		this.setupCropPositionListeners()
-		this.emitCropPosition()
+		this.exitCropMode(true)
 	}
 
 	/**
@@ -392,28 +376,16 @@ export class CropManager {
 		}
 		this.canvas.markerManager.clearCropPreview(elementId)
 
-		// 还原原始节点位置（仅改变渲染顺序，不更新数据）
-		// 通过重新排序同级节点来恢复正确的顺序（基于 zIndex 数据）
-		if (this.originalNodeIndex !== undefined) {
-			const parentId = this.canvas.elementManager.findParentIdForElement(elementId)
-			if (parentId) {
-				// 子元素（在画框内），重新排列父容器内的子元素顺序
-				this.canvas.elementManager.reorderChildrenInParentPublic(parentId)
-			} else {
-				// 顶层元素，重新排列顶层元素顺序
-				this.canvas.elementManager.reorderTopLevelElementsPublic()
-			}
-			this.originalNodeIndex = undefined
-		}
-
-		// 先清空裁剪状态，再恢复该元素的选中与 Transformer，最后通知退出裁剪
+		// 先清空裁剪状态并触发最终 rerender；会话监听会保持新节点隐藏，直到代理清理完成。
 		this.croppingElementId = null
-		this.canvas.selectionManager.select(elementId, false)
-
 		this.canvas.eventEmitter.emit({
 			type: "crop:exit",
 			data: { elementId, restored: shouldRestore },
 		})
+		this.editingSession?.destroy()
+		this.editingSession = null
+		this.canvas.imageEditingCoordinator.deactivate("crop", elementId)
+		this.canvas.selectionManager.select(elementId, false)
 		this.tempCrop = null
 		this.originalVisibleCrop = null
 		this.originalImageState = undefined
