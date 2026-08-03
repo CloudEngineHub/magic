@@ -64,6 +64,7 @@ interface AuthoritativeTailPullResult extends PullMessageResult {
 	statusItems: any[]
 	writeOptions?:
 		| { mode: "replace"; preserveStreamSuperMessageIds: string[] }
+		| { mode: "merge" }
 		| {
 				mode: "replace_tail"
 				anchorSuperMessageId: string
@@ -251,6 +252,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			// 未返回锚点只有在 HTTP 已证明覆盖该 seq 区间时才具备删除语义。
 			// replace 覆盖完整查询范围；replace_tail 仅覆盖公共锚点之后的后缀。
 			if (!writeOptions) return
+			if (writeOptions.mode === "merge") return
 			if (writeOptions.mode === "replace_tail") {
 				const commonAnchor = pulledItems.find(
 					(item) =>
@@ -498,8 +500,9 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 						statusItems: aggregatedStatusItems,
 						response: lastResponse,
 						writeOptions: {
-							mode: "replace",
-							preserveStreamSuperMessageIds: getConcurrentStreamSuperMessageIds(),
+							// has_more 只描述分页结束，无法证明服务端返回了完整 Topic membership。
+							// 没有公共锚点时只能合并已持久化的 Final，禁止删除本地历史前缀。
+							mode: "merge",
 						},
 					}
 				}
@@ -687,6 +690,12 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				}
 				visitedPageTokens.add(nextPageToken)
 				pageToken = nextPageToken
+			}
+
+			// has_more=false 只表示 Topic mapping 已到末页；只有后端确认所有 mapping
+			// 都成功物化时，当前聚合结果才具备完整快照的缺席删除语义。
+			if (latestResponse?.snapshot_complete !== true) {
+				return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 			}
 
 			superMagicStore.reconcileAuthoritativeMessages(topicId, {
@@ -1067,15 +1076,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (data.conversation_id && data.conversation_id !== currentTopic.chat_conversation_id)
 				return
 			const incomingSeqId = String(data.seq_id || data.message?.seq_id || "")
-			console.info(
-				"[SM-ReasoningTrace] ws:persistent-message",
-				JSON.stringify({
-					timestamp: new Date().toISOString(),
-					topicId: chat_topic_id,
-					conversationId: String(data.conversation_id || ""),
-					incomingSeqId,
-				}),
-			)
 			requestTopicRecovery({
 				topicId: chat_topic_id,
 				correlationId: `ws:${incomingSeqId || Date.now()}`,

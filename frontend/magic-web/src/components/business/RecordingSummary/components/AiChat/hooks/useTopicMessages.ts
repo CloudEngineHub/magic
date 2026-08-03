@@ -221,6 +221,11 @@ export function useTopicMessages({
 				pageToken = nextPageToken
 			}
 
+			// 完整 Topic replace 必须由服务端显式确认 mapping 与 sequence 已完整物化。
+			if (latestResponse?.snapshot_complete !== true) {
+				return { didPullSucceed: false, pulledItems: [] }
+			}
+
 			superMagicStore.initializeMessages(topicId, pulledItems, {
 				mode: "replace",
 				syncGeneration,

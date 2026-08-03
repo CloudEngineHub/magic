@@ -797,6 +797,30 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		])
 	})
 
+	it("实时 HTTP 对账误传 replace 时降级为 merge，不得删除快照外历史。", () => {
+		const store = createStore()
+		store.initializeMessages(TOPIC_A, [
+			createEnvelope({ appMessageId: "stable-prefix", seqId: "100", role: "user" }),
+			createEnvelope({ appMessageId: "keep-local", seqId: "200", role: "user" }),
+		])
+
+		store.initializeMessages(
+			TOPIC_A,
+			[createEnvelope({ appMessageId: "message-b", seqId: "300", role: "assistant" })],
+			{
+				mode: "replace",
+				eventPolicy: "live_arrival",
+				toolProjectionPolicy: "preserve_live",
+			},
+		)
+
+		expect(getMessageRecords(store).map((message) => message.app_message_id)).toEqual([
+			"stable-prefix",
+			"keep-local",
+			"message-b",
+		])
+	})
+
 	it("HTTP 外层 transport topic 负责路由，内层 Agent topic 保留业务映射。", () => {
 		const store = createStore()
 		const generationB = store.beginTopicSync(TOPIC_B)

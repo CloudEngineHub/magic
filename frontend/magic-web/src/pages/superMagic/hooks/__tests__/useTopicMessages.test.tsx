@@ -230,7 +230,7 @@ describe("useTopicMessages", () => {
 		)
 	})
 
-	it("uses one complete recent page as the finished resident-poll completion barrier", async () => {
+	it("uses one recent page as the finished resident-poll barrier without replacing history", async () => {
 		vi.useFakeTimers()
 		const initialResponse = { items: [], has_more: false, page_token: "" }
 		const pollingResponse = {
@@ -305,16 +305,15 @@ describe("useTopicMessages", () => {
 			await Promise.resolve()
 			await Promise.resolve()
 		})
-		// No local anchor exists and the server declares the query complete, so one atomic
-		// replacement owns the current topic membership.
+		// has_more=false only ends this pagination window. Without a common anchor the
+		// resident poll may merge the Final, but it cannot delete older local membership.
 		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			pollingResponse.items,
 			{
 				eventPolicy: "live_arrival",
-				mode: "replace",
-				preserveStreamSuperMessageIds: [],
+				mode: "merge",
 				toolProjectionPolicy: "preserve_live",
 			},
 		)
@@ -869,7 +868,7 @@ describe("useTopicMessages", () => {
 		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
 	})
 
-	it("commits non-empty WS reconciliation as one authoritative membership write", async () => {
+	it("merges a non-empty WS reconciliation when HTTP cannot prove a common anchor", async () => {
 		vi.useFakeTimers()
 		const newerEnvelope = createMessageEnvelope("newer", "2")
 		const olderEnvelope = createMessageEnvelope("older", "1")
@@ -910,8 +909,7 @@ describe("useTopicMessages", () => {
 			[newerEnvelope, olderEnvelope],
 			{
 				eventPolicy: "live_arrival",
-				mode: "replace",
-				preserveStreamSuperMessageIds: [],
+				mode: "merge",
 				syncGeneration: expect.any(Number),
 				toolProjectionPolicy: "preserve_live",
 			},
@@ -1039,7 +1037,7 @@ describe("useTopicMessages", () => {
 		)
 	})
 
-	it("clears a local revoke anchor that is absent from a complete authoritative query", async () => {
+	it("keeps a local revoke anchor absent from an unanchored terminal page", async () => {
 		vi.useFakeTimers()
 		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
 			items: [],
@@ -1074,10 +1072,8 @@ describe("useTopicMessages", () => {
 			await vi.advanceTimersByTimeAsync(300)
 		})
 
-		expect(mockState.clearActiveRevokedAnchor).toHaveBeenCalledWith("chat-topic-1")
-		expect(mockState.clearHiddenRevokedOptimisticMessageIds).toHaveBeenCalledWith(
-			"chat-topic-1",
-		)
+		expect(mockState.clearActiveRevokedAnchor).not.toHaveBeenCalled()
+		expect(mockState.clearHiddenRevokedOptimisticMessageIds).not.toHaveBeenCalled()
 	})
 
 	it("does not clear a local revoke anchor outside an incomplete authoritative tail", async () => {
@@ -1395,7 +1391,12 @@ describe("useTopicMessages", () => {
 		const secondPageItems = [createMessageEnvelope("older", "1")]
 		mockState.getMessagesByConversationIdMock
 			.mockResolvedValueOnce({ items: firstPageItems, has_more: true, page_token: "page-2" })
-			.mockResolvedValueOnce({ items: secondPageItems, has_more: false, page_token: "" })
+			.mockResolvedValueOnce({
+				items: secondPageItems,
+				has_more: false,
+				page_token: "",
+				snapshot_complete: true,
+			})
 		let recoveryResult: { didPullSucceed: boolean } | undefined
 		await act(async () => {
 			recoveryResult = await registration.recover({
@@ -1435,6 +1436,49 @@ describe("useTopicMessages", () => {
 				toolProjectionPolicy: "historical_terminal",
 			},
 		)
+	})
+
+	it("does not replace when the terminal recovery page reports an incomplete snapshot", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		const registration = mockState.registerStreamRecoveryOwnerMock.mock.calls[0]?.[0] as {
+			recover: (context: {
+				topicId: string
+				conversationId: string
+				correlationId: string
+				syncGeneration: number
+			}) => Promise<{ didPullSucceed: boolean }>
+		}
+
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createMessageEnvelope("message-b", "2")],
+			has_more: false,
+			page_token: "",
+			snapshot_complete: false,
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		let recoveryResult: { didPullSucceed: boolean } | undefined
+		await act(async () => {
+			recoveryResult = await registration.recover({
+				topicId: "chat-topic-1",
+				conversationId: "conversation-1",
+				correlationId: "correlation-1",
+				syncGeneration: 24,
+			})
+		})
+
+		expect(recoveryResult).toEqual(expect.objectContaining({ didPullSucceed: false }))
+		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
 	})
 
 	it("does not replace with a partial recovery snapshot when a later page fails", async () => {

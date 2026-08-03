@@ -1128,7 +1128,10 @@ class MagicChatMessageAppService extends MagicSeqAppService
             $seqId = $clientSeq->getSeq()->getSeqId();
             $data[$seqId] = $clientSeq->toArray();
         }
-        $hasMore = (count($clientSeqList) === $conversationMessagesQueryDTO->getLimit());
+        // Topic pagination metadata is computed from membership rows before sequence hydration.
+        // Fall back to the legacy count rule for non-Topic conversation queries.
+        $hasMore = $conversationMessagesQueryDTO->getResultHasMore()
+            ?? (count($clientSeqList) === $conversationMessagesQueryDTO->getLimit());
         // 按照 $order 在数据库中查询，但是对返回的结果集降序排列了。
         $order = $conversationMessagesQueryDTO->getOrder();
         if ($order === Order::Desc) {
@@ -1138,8 +1141,14 @@ class MagicChatMessageAppService extends MagicSeqAppService
             // 对 $data 升序排列
             ksort($data);
         }
-        $pageToken = (string) array_key_last($data);
-        return PageListAssembler::pageByElasticSearch(array_values($data), $pageToken, $hasMore);
+        $pageToken = $conversationMessagesQueryDTO->getResultPageToken()
+            ?? (string) array_key_last($data);
+        $result = PageListAssembler::pageByElasticSearch(array_values($data), $pageToken, $hasMore);
+        $snapshotComplete = $conversationMessagesQueryDTO->getResultSnapshotComplete();
+        if ($snapshotComplete !== null) {
+            $result['snapshot_complete'] = $snapshotComplete;
+        }
+        return $result;
     }
 
     private function getAgentAuth(MagicUserEntity $aiUserEntity): MagicUserAuthorization

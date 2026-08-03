@@ -3299,7 +3299,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				: undefined
 		// A stale response still participates in per-message version arbitration, but it no
 		// longer owns replacement/deletion or the current generation's snapshot membership.
-		const requestedMode = mode === "replace_tail" && tailAnchorIndex < 0 ? "merge" : mode
+		// live_arrival 只证明本次 HTTP 返回的节点已经持久化，不证明它覆盖完整 Topic。
+		// 即使调用方误传 replace，也必须保留快照外历史；完整恢复继续使用 silent_hydration。
+		const requestedMode =
+			(mode === "replace_tail" && tailAnchorIndex < 0) ||
+			(mode === "replace" && eventPolicy === "live_arrival")
+				? "merge"
+				: mode
 		const appliedMode =
 			requestedMode === "replace" && syncGeneration !== undefined && !authoritativeSyncContext
 				? "merge"
@@ -7481,4 +7487,12 @@ pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (payload) => {
 		message.message.topic_id || message.message.super_magic_message?.topic_id || "",
 	)
 	superMagicStore.recordWebSocketMessage(topicId, message, source, true)
+})
+
+superMagicStore.subscribe("task.completed", (payload: TaskCompletedPayload) => {
+	console.log("%c task.completed", "background: red; color: white;padding:0 4px", payload)
+})
+
+superMagicStore.subscribe("topic.execution.ended", (payload: TopicExecutionEndedPayload) => {
+	console.log("%c topic.execution.ended", "background: red; color: white;padding:0 4px", payload)
 })
