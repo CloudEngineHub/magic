@@ -383,11 +383,12 @@ def _needs_review(path: Path) -> bool:
 
 def _content(data: Mapping[str, object]) -> str:
     lines = [
-        "Share entry inspection completed.",
+        "Static share-entry inspection completed. This is an assisting check, not a complete dependency manifest.",
         f"Entry file: {data['entry_file_path']}",
         f"Files available for sharing: {data['total_file_count']}",
         f"Total size: {data['total_bytes']} bytes",
-        f"Scan complete: {data['scan_complete']}",
+        f"Scan complete within the configured static limits: {data['scan_complete']}",
+        "Review the entry and relevant files before choosing the final share file set. Non-standard references, runtime-computed paths, conditional loading, and external resources may be missed.",
     ]
     for key, label in (
         ("dependency_paths", "Local dependencies"),
@@ -401,7 +402,8 @@ def _content(data: Mapping[str, object]) -> str:
             lines.extend(f"- {item}" for item in values[:20])
     external_count = data.get("external_reference_count", 0)
     if external_count:
-        lines.append(f"External references excluded: {external_count}")
+        lines.append(f"External references excluded from local candidates: {external_count}")
+    lines.append("A true scan_complete value only means the static scan finished within its limits; it does not prove that no other runtime dependencies exist.")
     return "\n".join(lines)
 
 

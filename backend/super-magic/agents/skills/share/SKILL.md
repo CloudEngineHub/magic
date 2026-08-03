@@ -20,7 +20,7 @@ Use these Code Mode tools from a Python snippet executed with `run_sdk_snippet`.
 
 1. Confirm which files the user wants to share. Do not add additional files without the user’s approval.
 2. Call `list_file_shares` with the original exact `file_paths` before creating anything.
-3. If the entry is HTML, HTM, or another page with local references, call `inspect_file_share` before creating or updating the share. If local dependencies are found, explain that leaving them out may cause missing images, styles, fonts, video, or interactions. Ask whether to include the page’s actual local dependencies. A clear request such as “include the related files” is already approval; do not ask the same question again.
+3. Read the entry and understand its actual local references first. Decide yourself whether `inspect_file_share` would reduce uncertainty; it is optional assistance, not a mandatory step. Treat its output as static candidates only, then verify candidates against the entry and relevant files. If confirmed local dependencies are omitted, explain that images, styles, fonts, video, or interactions may be missing. Ask whether to include them unless the user already clearly requested the related files. Do not add unrequested files.
 4. Read the entry and the files that will actually be shared when content review is needed. Stop for clearly prohibited content. For possible personal data, credentials, internal material, or an apparently wrong file, explain the concrete risk and ask the user whether to exclude it or cancel.
 5. Handle the result:
    - One active share and no requested setting change: return its existing URL and password. Do not call `create_file_share`.
@@ -35,7 +35,7 @@ Use these Code Mode tools from a Python snippet executed with `run_sdk_snippet`.
    - Public access is highest risk because anyone with the link can open it. Use it only after the user explicitly chooses public access.
 8. Never change a failed password share to public automatically. Explain the VIP restriction and ask the user to choose team access or explicitly approve public access.
 
-When the original file set already has an active share and the user approves adding dependencies, read that share and call `update_file_share` with the complete final `file_paths` and the existing `entry_file_path`. Do not call `create_file_share` for this repair; preserve the original resource ID and settings.
+When the original file set already has an active share and the user approves adding dependencies, read that share and call `update_file_share` with the complete final `file_paths` and the existing `entry_file_path`. Do not call `create_file_share` for this repair; preserve the original resource ID and settings. The file list is a complete replacement, so retain every existing file that should remain shared.
 
 Use the user's language when asking about access. A concise question is:
 

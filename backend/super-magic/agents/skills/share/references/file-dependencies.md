@@ -2,7 +2,9 @@
 
 Use this reference when the user wants to share an HTML page, preview a rendered artifact, or the entry file may load local assets.
 
-## Inspect the entry
+## Decide whether inspection is useful
+
+First read the entry file and use its actual content to understand what the page needs. Call `inspect_file_share` only when static assistance would reduce uncertainty; do not treat it as a required step for every page.
 
 Call the read-only Code Mode tool with the one required flat argument:
 
@@ -15,7 +17,7 @@ print(inspection.content)
 
 Read `inspection.content` first. Use `inspection.data` only for exact paths needed by the next step. The result distinguishes local dependencies, missing paths, files not synchronized with MagicFS, external references, and dynamic references.
 
-The inspection is static. It does not fetch external URLs, execute JavaScript, or guess runtime-generated paths. A partial scan means the page may still be incomplete.
+The inspection is static. It does not fetch external URLs, execute JavaScript, or guess runtime-generated paths. Its local dependency list is a candidate list, not the final share set. Verify candidates against the entry and relevant files; when inspection and file contents disagree, use the file contents and page semantics as the deciding evidence. A partial scan means the page may still be incomplete.
 
 ## Ask before adding files
 
@@ -36,7 +38,7 @@ Before a mutating share call, read the entry and relevant text or configuration 
 ## Reuse, update, or create
 
 1. Check the original requested file set with `list_file_shares`.
-2. Inspect the entry and obtain the approved final file set.
+2. Read the entry, optionally inspect it, and obtain the approved final file set.
 3. If the original set has one active share and the user approved new dependencies, call `get_share` and then update that same resource:
 
 ```python
@@ -57,4 +59,4 @@ Do not call `create_file_share` for this case. The original resource ID, access 
 
 4. If no original share exists, check the final complete file set with `list_file_shares` once more. Reuse one unambiguous match; ask the user when there are multiple matches; create only when there is no match.
 
-Only include files confirmed by the Agent and approved by the user. Return the tool-provided URL unchanged; password-share URLs include the password query parameter when available.
+Only include files confirmed by the Agent and approved by the user. Return the tool-provided URL unchanged; password-share URLs include the password query parameter when available. Do not use browser runtime inspection to discover more files.
