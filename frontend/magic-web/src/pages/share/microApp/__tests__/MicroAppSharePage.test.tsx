@@ -172,8 +172,8 @@ describe("MicroAppSharePage", () => {
 		mocks.userInfo.current = {
 			user_id: "usi_1",
 			magic_id: "magic_1",
-			nickname: "黎增权",
-			real_name: "黎增权",
+			nickname: "测试用户",
+			real_name: "测试用户",
 			avatar: "",
 			status: 1,
 			organization_code: "magic-org-1",
@@ -182,13 +182,13 @@ describe("MicroAppSharePage", () => {
 			organizations: [
 				{
 					organization_code: "team-org-1",
-					organization_name: "Teamshare 研发部",
+					organization_name: "测试团队研发部",
 				},
 			],
 			organizationCode: "magic-org-1",
 			magicOrganizationMap: {
 				"magic-org-1": {
-					organization_name: "Magic 研发部",
+					organization_name: "测试组织研发部",
 				},
 			},
 			teamshareOrganizationCode: "team-org-1",
@@ -198,8 +198,8 @@ describe("MicroAppSharePage", () => {
 		renderPage()
 
 		expect(await confirmSafetyNotice()).toBeInTheDocument()
-		expect(screen.getByTestId("micro-app-share-user")).toHaveTextContent("黎增权")
-		expect(screen.getAllByText("Teamshare 研发部").length).toBeGreaterThan(0)
+		expect(screen.getByTestId("micro-app-share-user")).toHaveTextContent("测试用户")
+		expect(screen.getAllByText("测试团队研发部").length).toBeGreaterThan(0)
 		expect(screen.queryByTestId("micro-app-share-login")).not.toBeInTheDocument()
 	})
 
@@ -208,8 +208,8 @@ describe("MicroAppSharePage", () => {
 		mocks.userInfo.current = {
 			user_id: "usi_1",
 			magic_id: "magic_1",
-			nickname: "黎增权",
-			real_name: "黎增权",
+			nickname: "测试用户",
+			real_name: "测试用户",
 			avatar: "",
 			status: 1,
 			organization_code: "magic-org-1",
@@ -227,8 +227,8 @@ describe("MicroAppSharePage", () => {
 		mocks.userInfo.current = {
 			user_id: "usi_1",
 			magic_id: "magic_1",
-			nickname: "黎增权",
-			real_name: "黎增权",
+			nickname: "测试用户",
+			real_name: "测试用户",
 			avatar: "",
 			status: 1,
 			organization_code: "magic-org-1",
@@ -237,7 +237,7 @@ describe("MicroAppSharePage", () => {
 			organizations: [
 				{
 					organization_code: "team-org-1",
-					organization_name: "Teamshare 研发部",
+					organization_name: "测试团队研发部",
 				},
 			],
 			organizationCode: "magic-org-1",
@@ -253,7 +253,7 @@ describe("MicroAppSharePage", () => {
 
 		expect(await screen.findByTestId("micro-app-share-user-menu")).toBeInTheDocument()
 		expect(screen.getByTestId("micro-app-share-organization-trigger")).toHaveTextContent(
-			"Teamshare 研发部",
+			"测试团队研发部",
 		)
 		expect(screen.getByTestId("micro-app-share-logout")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-organization-list")).not.toBeInTheDocument()
@@ -278,8 +278,8 @@ describe("MicroAppSharePage", () => {
 		mocks.userInfo.current = {
 			user_id: "usi_1",
 			magic_id: "magic_1",
-			nickname: "黎增权",
-			real_name: "黎增权",
+			nickname: "测试用户",
+			real_name: "测试用户",
 			avatar: "",
 			status: 1,
 			organization_code: "magic-org-1",
