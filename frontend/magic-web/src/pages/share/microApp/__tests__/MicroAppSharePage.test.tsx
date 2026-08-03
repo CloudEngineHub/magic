@@ -272,6 +272,29 @@ describe("MicroAppSharePage", () => {
 		expect(screen.getByTestId("mock-organization-list")).toBeInTheDocument()
 	})
 
+	it("opens the mobile organization switch instead of the desktop account menu", async () => {
+		mocks.isMobile.current = true
+		mocks.authorization.current = "token-1"
+		mocks.userInfo.current = {
+			user_id: "usi_1",
+			magic_id: "magic_1",
+			nickname: "黎增权",
+			real_name: "黎增权",
+			avatar: "",
+			status: 1,
+			organization_code: "magic-org-1",
+		}
+
+		renderPage()
+
+		await screen.findByTestId("micro-app-share-safety-notice")
+		fireEvent.click(screen.getByTestId("micro-app-share-user-trigger"))
+
+		expect(mocks.openOrganizationSwitch).toHaveBeenCalledTimes(1)
+		expect(screen.getByTestId("mock-mobile-organization-switch")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-user-menu")).not.toBeInTheDocument()
+	})
+
 	it("shows empty state when published files do not contain a root html entry", async () => {
 		mocks.getShareResourceFiles.mockResolvedValue({
 			tree: [

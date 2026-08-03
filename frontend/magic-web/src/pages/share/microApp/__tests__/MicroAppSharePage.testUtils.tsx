@@ -53,6 +53,8 @@ const mocks = vi.hoisted(() => ({
 	getShareResourceFiles: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
 	historyReplace: vi.fn(),
+	openOrganizationSwitch: vi.fn(),
+	isMobile: { current: false },
 	authorization: { current: "" },
 	userInfo: { current: null as TestUserInfo | null },
 	organizationMeta: {
@@ -131,6 +133,20 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 
 vi.mock("@/hooks/account/useSwitchOrganization", () => ({
 	useSwitchOrganization: () => vi.fn(),
+}))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => mocks.isMobile.current,
+}))
+
+vi.mock("@/stores/display/GlobalSidebarStore", () => ({
+	default: {
+		openOrganizationSwitch: mocks.openOrganizationSwitch,
+	},
+}))
+
+vi.mock("@/layouts/BaseLayoutMobile/components/OrganizationSwitch", () => ({
+	OrganizationSwitchPanel: () => <div data-testid="mock-mobile-organization-switch" />,
 }))
 
 vi.mock("@/layouts/BaseLayout/components/Header/components/Logo", () => ({
@@ -251,6 +267,7 @@ export function renderPage(path = "/micro-app/app-1") {
 export function resetMicroAppSharePageMocks() {
 	vi.clearAllMocks()
 	mocks.authorization.current = ""
+	mocks.isMobile.current = false
 	mocks.userInfo.current = null
 	mocks.organizationMeta.current = {
 		organizations: [],
