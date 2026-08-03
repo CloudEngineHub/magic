@@ -1,10 +1,10 @@
 import {
+	Crosshair,
 	Globe2,
 	Monitor,
 	MoreHorizontal,
 	RefreshCw,
 	Smartphone,
-	Sparkles,
 	Terminal,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -154,19 +154,24 @@ export default function MicroAppPreviewToolbar({
 					</TooltipContent>
 				</Tooltip>
 
-				<Button
-					type="button"
-					variant={aiEditActive ? "secondary" : "outline"}
-					size="sm"
-					className="h-8 shrink-0 gap-1.5 px-3 text-sm shadow-none"
-					disabled={!allowEdit}
-					aria-pressed={aiEditActive}
-					onClick={onAIEdit}
-					data-testid="micro-app-preview-ai-edit"
-				>
-					<Sparkles size={15} />
-					{t("microAppPage.previewToolbar.aiEdit")}
-				</Button>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant={aiEditActive ? "secondary" : "outline"}
+							size="sm"
+							className="h-8 shrink-0 gap-1.5 px-3 text-sm shadow-none"
+							disabled={!allowEdit}
+							aria-pressed={aiEditActive}
+							onClick={onAIEdit}
+							data-testid="micro-app-preview-ai-edit"
+						>
+							<Crosshair size={15} />
+							{t("topicFiles.aiPick")}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">{t("topicFiles.aiPickTooltip")}</TooltipContent>
+				</Tooltip>
 
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
