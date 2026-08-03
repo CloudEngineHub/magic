@@ -1,6 +1,42 @@
 # Snapshots and Refs
 
-Read [SKILL.md](../SKILL.md) first. This reference explains how structured page observation and visual labels share one element identity system.
+Read [SKILL.md](../SKILL.md) first. This reference contains the exact signatures for page observation and visual tools, and explains how structured observations and visual labels share one element identity system.
+
+## Tool Signatures
+
+```python
+browser_read_page(
+    page_id: str,
+    scope: "viewport" | "full" = "viewport",
+    session_id: str | None = None,
+)
+browser_snapshot(
+    page_id: str,
+    scope: "interactive" | "viewport" | "subtree" | "full" | "changes" = "interactive",
+    ref: str | None = None,
+    session_id: str | None = None,
+)
+browser_screenshot(
+    page_id: str,
+    labels: bool = False,
+    full_page: bool = False,
+    output_path: str | None = None,
+    scale: float | None = None,
+    quality: int | None = None,
+    session_id: str | None = None,
+)
+browser_visual_query(
+    page_id: str,
+    query: str,
+    full_page: bool = False,
+    session_id: str | None = None,
+)
+browser_find_visual(page_id: str, target: str, session_id: str | None = None)
+```
+
+`browser_read_page` returns rendered content, not raw HTML or a DOM snapshot. `browser_visual_query` captures and analyzes the page in one call. `browser_find_visual` returns one validated visual match and fails instead of guessing when the target is missing or ambiguous.
+
+Screenshot format is inferred from `.webp`, `.jpg`, `.jpeg`, or `.png`. Omit `scale` and `quality` normally. `scale` accepts 0.5-3.0; WebP and JPEG `quality` accepts 1-100; PNG rejects `quality`.
 
 ## Snapshot Scopes
 

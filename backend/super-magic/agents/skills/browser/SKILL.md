@@ -5,7 +5,7 @@ description: Open and operate webpages in a real browser: navigate, read rendere
 
 # Browser
 
-Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults.
+Use Browser tools through `run_sdk_snippet`. Pass only fields required by the task and let optional fields use their defaults. Use the common tools documented below directly. Before calling a capability documented only in a reference, read that reference and use its exact tool and parameter names; do not abbreviate or infer them.
 
 ## Default path
 
@@ -99,6 +99,8 @@ tool.call("browser_upload_file", {
     "file_paths": ["path/inside/workspace.txt"],
 })
 ```
+
+`browser_upload_file` accepts relative or absolute paths inside the current workspace. Paths outside the workspace are rejected.
 
 Only use an action listed in that ref's `allowed_actions`. The model-readable snapshot also shows actions inline, for example:
 
@@ -208,8 +210,7 @@ Do not wait only for the final URL on sites that may insert verification. After 
 
 ## References
 
-- Tool signatures and low-frequency tools: [references/tools.md](references/tools.md)
-- Snapshot scopes, ref lifetime, and labeled screenshots: [references/snapshots.md](references/snapshots.md)
-- Sessions, pages, lifecycle, and capabilities: [references/sessions.md](references/sessions.md)
+- Sessions, pages, navigation, waiting, lifecycle, and capabilities: [references/sessions.md](references/sessions.md)
+- Snapshot scopes, ref lifetime, screenshots, and visual tools: [references/snapshots.md](references/snapshots.md)
 - Console, network, JavaScript, and troubleshooting: [references/debugging.md](references/debugging.md)
 - Authorized user Chrome sessions: [references/remote-chrome.md](references/remote-chrome.md)

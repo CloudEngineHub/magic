@@ -1,6 +1,29 @@
 # Browser Debugging
 
-Read [SKILL.md](../SKILL.md) first. Use diagnostic tools only when page behavior, JavaScript, console output, or network activity is relevant to the user's task.
+Read [SKILL.md](../SKILL.md) first. Use diagnostic tools only when page behavior, JavaScript, console output, or network activity is relevant to the user's task. This reference contains their exact signatures.
+
+## Tool Signatures
+
+```python
+browser_evaluate(
+    page_id: str,
+    expression: str,
+    argument: JSON | None = None,
+    session_id: str | None = None,
+)
+browser_read_console(
+    page_id: str,
+    clear: bool = True,
+    limit: int = 100,
+    session_id: str | None = None,
+)
+browser_read_network(
+    page_id: str,
+    clear: bool = True,
+    limit: int = 100,
+    session_id: str | None = None,
+)
+```
 
 ## JavaScript Evaluation
 
