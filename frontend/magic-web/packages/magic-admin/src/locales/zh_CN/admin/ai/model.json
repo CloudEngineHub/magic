@@ -166,6 +166,7 @@
 		"recommendedTemperature": "推荐温度",
 		"referenceImageTransport": "参考图传输方式",
 		"referenceImageTransportBase64": "Base64",
+		"referenceImageTransportBase64FallbackUrl": "优先使用图片 Base64，失败后使用图片链接",
 		"referenceImageTransportUrl": "图片链接",
 		"referenceImageTransportUrlFallbackBase64": "优先使用图片链接，失败后使用 Base64",
 		"searchAndImport": "搜索并导入",

@@ -112,6 +112,10 @@ const ConfigForm = memo(({ category, code, name, descPosition = "left" }: Config
 				label: t("form.referenceImageTransportUrlFallbackBase64"),
 				value: AiManage.ReferenceImageTransport.URL_FALLBACK_BASE64,
 			},
+			{
+				label: t("form.referenceImageTransportBase64FallbackUrl"),
+				value: AiManage.ReferenceImageTransport.BASE64_FALLBACK_URL,
+			},
 		],
 		[t],
 	)

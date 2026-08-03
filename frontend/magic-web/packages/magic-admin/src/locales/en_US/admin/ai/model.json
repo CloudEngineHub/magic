@@ -168,6 +168,7 @@
 		"recommendedTemperature": "Recommended Temperature",
 		"referenceImageTransport": "Reference Image Transport",
 		"referenceImageTransportBase64": "Base64",
+		"referenceImageTransportBase64FallbackUrl": "Use image Base64 first, then fall back to image URL",
 		"referenceImageTransportUrl": "Image URL",
 		"referenceImageTransportUrlFallbackBase64": "Use image URL first, then fall back to Base64",
 		"searchAndImport": "Search and Import",
