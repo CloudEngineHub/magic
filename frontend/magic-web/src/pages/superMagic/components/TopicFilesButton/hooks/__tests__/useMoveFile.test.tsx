@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useMoveFile } from "../useMoveFile"
 import type { AttachmentItem } from "../types"
 import { SuperMagicApi } from "@/apis"
-import { resolveSingleHtmlStaticDependencies } from "@/pages/superMagic/utils/htmlStaticDependencies"
+import { resolveSingleDocumentStaticDependencies } from "@/pages/superMagic/utils/staticDependencies"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -42,9 +42,9 @@ vi.mock("../../utils/checkDuplicateFileName", () => ({
 	checkDuplicateFileName: vi.fn(() => false),
 }))
 
-vi.mock("@/pages/superMagic/utils/htmlStaticDependencies", () => ({
-	resolveSingleHtmlStaticDependencies: vi.fn(),
-	mergeHtmlStaticDependencyFileIds: (
+vi.mock("@/pages/superMagic/utils/staticDependencies", () => ({
+	resolveSingleDocumentStaticDependencies: vi.fn(),
+	mergeStaticDependencyFileIds: (
 		fileIds: string[],
 		dependencyFileIds: string[],
 		includeDependencies: boolean,
@@ -57,10 +57,11 @@ vi.mock("@/pages/superMagic/utils/htmlStaticDependencies", () => ({
 describe("useMoveFile", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		vi.mocked(resolveSingleHtmlStaticDependencies).mockResolvedValue({
-			isHtml: false,
+		vi.mocked(resolveSingleDocumentStaticDependencies).mockResolvedValue({
+			fileType: null,
 			dependencyFileIds: [],
 			dependencyTransferFileIds: [],
+			missingResourcePaths: [],
 		})
 	})
 

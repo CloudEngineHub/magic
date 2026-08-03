@@ -57,6 +57,7 @@ interface UseContextMenuOptions {
 	handleShareItem: (item: AttachmentItem) => void
 	handleDeleteItem: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
+	handleDownloadWithDependencies?: (item: AttachmentItem) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
@@ -276,6 +277,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleShareItem,
 		handleDeleteItem,
 		handleDownloadOriginal,
+		handleDownloadWithDependencies,
 		handleDownloadNoWaterMark,
 		preloadWaterMarkFreeModal,
 		handleDownloadPdf,
@@ -444,6 +446,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		const downloadIcon = <MagicIcon component={IconDownload} stroke={2} size={18} />
 		const downloadHandlers: SingleFileDownloadHandlers = {
 			handleDownloadOriginal,
+			handleDownloadWithDependencies,
 			handleDownloadPdf,
 			handleDownloadPpt,
 			handleDownloadPptx,

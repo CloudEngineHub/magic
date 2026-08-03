@@ -6,31 +6,30 @@ import {
 	type Dispatch,
 	type SetStateAction,
 } from "react"
-import { useSingleHtmlStaticDependencies } from "@/pages/superMagic/hooks/useSingleHtmlStaticDependencies"
+import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 import {
-	mergeHtmlStaticDependencyFileIds,
-	type HtmlStaticDependencyAttachment,
-} from "@/pages/superMagic/utils/htmlStaticDependencies"
+	mergeStaticDependencyFileIds,
+	type StaticDependencyAttachment,
+} from "@/pages/superMagic/utils/staticDependencies"
 
-interface UseFileShareHtmlDependenciesParams {
+interface UseFileShareDocumentDependenciesParams {
 	selectedFileIds: string[]
 	setSelectedFileIds: Dispatch<SetStateAction<string[]>>
-	attachments: HtmlStaticDependencyAttachment[]
+	attachments: StaticDependencyAttachment[]
 	shareProject: boolean
 }
 
 /**
- * Owns the distinction between a user's file choices and dependencies automatically selected for
- * one HTML file. Keeping this state outside FileShareModal makes the tree, checkbox, and submit
- * payload follow one source of truth.
+ * Keeps user-selected files separate from dependencies selected automatically for one document.
+ * The file tree, dependency option, and final share payload all consume this single state owner.
  */
-export function useFileShareHtmlDependencies({
+export function useFileShareDocumentDependencies({
 	selectedFileIds,
 	setSelectedFileIds,
 	attachments,
 	shareProject,
-}: UseFileShareHtmlDependenciesParams) {
-	const [includeHtmlDependencies, setIncludeHtmlDependencies] = useState(true)
+}: UseFileShareDocumentDependenciesParams) {
+	const [includeDocumentDependencies, setIncludeDocumentDependencies] = useState(true)
 	const [autoSelectedFileIds, setAutoSelectedFileIds] = useState<string[]>([])
 	const [dependencyOwnerFileId, setDependencyOwnerFileId] = useState<string | null>(null)
 
@@ -44,7 +43,7 @@ export function useFileShareHtmlDependencies({
 		dependencyOwnerFileId !== null && selectedFileIdSet.has(dependencyOwnerFileId)
 	const needsAutoSelectionCleanup =
 		autoSelectedFileIds.length > 0 &&
-		(!includeHtmlDependencies || !isDependencyOwnerSelected || shareProject)
+		(!includeDocumentDependencies || !isDependencyOwnerSelected || shareProject)
 	const analysisFileId =
 		!shareProject && !needsAutoSelectionCleanup
 			? isDependencyOwnerSelected
@@ -53,7 +52,7 @@ export function useFileShareHtmlDependencies({
 					? manuallySelectedFileIds[0]
 					: ""
 			: ""
-	const staticDependencies = useSingleHtmlStaticDependencies({
+	const staticDependencies = useSingleDocumentStaticDependencies({
 		active: Boolean(analysisFileId),
 		fileIds: analysisFileId ? [analysisFileId] : [],
 		attachments,
@@ -61,16 +60,16 @@ export function useFileShareHtmlDependencies({
 	const hasCurrentAnalysisResult = staticDependencies.fileId === analysisFileId
 	const hasResolvedDependencies =
 		hasCurrentAnalysisResult &&
-		staticDependencies.isHtml &&
+		staticDependencies.fileType !== null &&
 		staticDependencies.dependencyFileIds.length > 0
 	const isPendingDependencyOwner = dependencyOwnerFileId === null && Boolean(analysisFileId)
 	const shouldIncludeDependencies =
 		(isDependencyOwnerSelected || isPendingDependencyOwner) &&
-		includeHtmlDependencies &&
+		includeDocumentDependencies &&
 		(autoSelectedFileIds.length > 0 || hasResolvedDependencies)
 
 	useEffect(() => {
-		if (!includeHtmlDependencies || !hasResolvedDependencies || !analysisFileId) return
+		if (!includeDocumentDependencies || !hasResolvedDependencies || !analysisFileId) return
 
 		const newlyAutoSelectedIds = staticDependencies.dependencyFileIds.filter(
 			(fileId) => !selectedFileIds.includes(fileId) && !autoSelectedFileIdSet.has(fileId),
@@ -88,7 +87,7 @@ export function useFileShareHtmlDependencies({
 		analysisFileId,
 		autoSelectedFileIdSet,
 		hasResolvedDependencies,
-		includeHtmlDependencies,
+		includeDocumentDependencies,
 		selectedFileIds,
 		setSelectedFileIds,
 		staticDependencies.dependencyFileIds,
@@ -98,7 +97,7 @@ export function useFileShareHtmlDependencies({
 		if (!dependencyOwnerFileId || isDependencyOwnerSelected) return
 
 		setDependencyOwnerFileId(null)
-		setIncludeHtmlDependencies(true)
+		setIncludeDocumentDependencies(true)
 	}, [dependencyOwnerFileId, isDependencyOwnerSelected])
 
 	useEffect(() => {
@@ -118,12 +117,12 @@ export function useFileShareHtmlDependencies({
 				(fileId) => !nextSelectedFileIdSet.has(fileId),
 			)
 
-			// Only removing an automatically selected dependency opts out. Changes to unrelated files
-			// must keep the existing HTML bundle intact.
-			if (removedAutoDependency) setIncludeHtmlDependencies(false)
+			// Removing an automatically selected dependency opts out. Unrelated tree changes keep
+			// the current document bundle intact.
+			if (removedAutoDependency) setIncludeDocumentDependencies(false)
 			if (dependencyOwnerFileId && !nextSelectedFileIdSet.has(dependencyOwnerFileId)) {
 				setDependencyOwnerFileId(null)
-				setIncludeHtmlDependencies(true)
+				setIncludeDocumentDependencies(true)
 			}
 			setSelectedFileIds(fileIds)
 		},
@@ -135,7 +134,7 @@ export function useFileShareHtmlDependencies({
 		: selectedFileIds.filter((fileId) => !autoSelectedFileIdSet.has(fileId))
 	const fileIdsForSubmission = useMemo(
 		() =>
-			mergeHtmlStaticDependencyFileIds(
+			mergeStaticDependencyFileIds(
 				selectedFileIdsForSubmission,
 				staticDependencies.dependencyFileIds,
 				shouldIncludeDependencies,
@@ -150,11 +149,12 @@ export function useFileShareHtmlDependencies({
 	return {
 		analysisError: analysisFileId && hasCurrentAnalysisResult ? staticDependencies.error : null,
 		dependencyFileCount: staticDependencies.dependencyFileIds.length,
+		dependencyFileType: staticDependencies.fileType,
 		fileIdsForSubmission,
 		handleFileIdsChange,
-		includeHtmlDependencies,
+		includeDocumentDependencies,
 		isAnalyzing: Boolean(analysisFileId) && staticDependencies.isLoading,
 		showDependencyOption: Boolean(analysisFileId) && hasResolvedDependencies,
-		setIncludeHtmlDependencies,
+		setIncludeDocumentDependencies,
 	}
 }

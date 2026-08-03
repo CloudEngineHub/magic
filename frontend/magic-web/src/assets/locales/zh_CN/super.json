@@ -4065,6 +4065,7 @@
 		"disableShare": "禁止分享",
 		"disableShareDescription": "关闭话题回放分享功能",
 		"disableTopicShareConfirm": "关闭当前话题分享后，已分享的回放链接将即时失效",
+		"documentDependenciesAnalysisFailed": "关联静态资源分析失败，将仅处理当前文件。",
 		"done": "完成",
 		"download": {
 			"copyLink": "复制链接",
@@ -4118,9 +4119,8 @@
 		"hideCreatorInfo": "隐藏\"由$t(common:platform.name)创造\"字样",
 		"hideCreatorInfoDescription": "开启后，将隐藏页面右下角悬浮水印",
 		"hidePassword": "隐藏密码",
-		"htmlDependenciesAnalysisFailed": "关联静态资源分析失败，将仅处理 HTML 文件",
-		"includeHtmlDependencies": "同时处理关联静态资源（{{count}} 个）",
-		"includeHtmlDependenciesDescription": "取消后，目标 HTML 中的图片、样式或脚本可能无法正常加载。",
+		"includeDocumentDependencies": "同时处理关联静态资源（{{count}} 个）",
+		"includeDocumentDependenciesDescription": "取消后，目标 {{type}} 中的关联资源可能无法正常加载。",
 		"includedFiles": "包含文件",
 		"internetFileShare": "互联网可访问",
 		"internetFileShareDescription": "任何获得链接的人可访问文件",
@@ -4900,6 +4900,7 @@
 			"downloadPdfRaster": "下载 PDF 格式（截图版）",
 			"downloadPpt": "下载 PPT 格式",
 			"downloadPptx": "下载 PPTX 格式（可编辑）",
+			"downloadWithDependencies": "下载并携带关联资源",
 			"fileExport": {
 				"checkStatusFailed": "检查导出状态失败",
 				"emptyFileId": "文件ID不能为空",

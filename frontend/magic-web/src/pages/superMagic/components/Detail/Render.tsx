@@ -37,6 +37,11 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
+import {
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
 
 export default function Render(props: any) {
 	const {
@@ -92,6 +97,7 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
+	const downloadProgress = useDownloadProgress()
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
 		(type === DetailType.Html &&
@@ -283,6 +289,34 @@ export default function Render(props: any) {
 	}
 
 	const exportFile = async (fileId: string, fileVersion?: number) => {
+		try {
+			const dependencyResult = await resolveSingleDocumentStaticDependencies({
+				fileIds: [fileId],
+				attachments: attachmentList || attachments || [],
+			})
+			const effectiveFileIds = mergeStaticDependencyFileIds(
+				[fileId],
+				dependencyResult.dependencyFileIds,
+				true,
+			)
+
+			if (effectiveFileIds.length > 1) {
+				await downloadProgress.startDownload({
+					projectId: selectedProject?.id || projectId,
+					fileIds: effectiveFileIds,
+					token: (window as unknown as { temporary_token?: string }).temporary_token,
+					label: t("topicFiles.downloading"),
+					onSuccess: () => magicToast.success(t("topicFiles.downloadSuccess")),
+					onError: () => magicToast.error(t("topicFiles.downloadFailed")),
+					onCancel: () => magicToast.info(t("topicFiles.downloadAbort")),
+				})
+				return
+			}
+		} catch (error) {
+			console.error("Failed to resolve document dependencies before export:", error)
+			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
+		}
+
 		getTemporaryDownloadUrl({
 			file_ids: [fileId],
 			file_versions: fileVersion ? { [fileId]: fileVersion } : undefined,
