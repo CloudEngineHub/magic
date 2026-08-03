@@ -56,6 +56,7 @@ use Dtyq\SuperMagic\Infrastructure\Utils\FileMetadataUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\PasswordCrypt;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\Share\Assembler\ShareAssembler;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCancelShareRequestDTO;
@@ -122,6 +123,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
         private readonly ProjectForkRepositoryInterface $projectForkRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
+        private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -4015,10 +4017,7 @@ class ResourceShareAppService extends AbstractShareAppService
         ResourceShareEntity $savedEntity,
         CreateShareRequestDTO $dto
     ): ?string {
-        $shareUrl = $this->buildShareBaseUrl($resourceType, $resourceId);
-        if ($shareUrl === null) {
-            return null;
-        }
+        $plainPassword = null;
 
         if (! empty($savedEntity->getPassword())) {
             // Prefer the plain-text password supplied in the current request to avoid an extra DB round-trip.
@@ -4039,12 +4038,10 @@ class ResourceShareAppService extends AbstractShareAppService
                 }
             }
 
-            if ($plainPassword !== '') {
-                $shareUrl .= '?password=' . rawurlencode($plainPassword);
-            }
+            $plainPassword = $plainPassword !== '' ? $plainPassword : null;
         }
 
-        return $shareUrl;
+        return $this->shareUrlBuilder->buildResourceShareUrl($resourceType, $resourceId, $plainPassword);
     }
 
     /**
@@ -4073,17 +4070,6 @@ class ResourceShareAppService extends AbstractShareAppService
      */
     private function buildShareBaseUrl(ResourceType $resourceType, string $resourceId): ?string
     {
-        $magicWebUrl = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
-        if ($magicWebUrl === '') {
-            return null;
-        }
-
-        $uri = match ($resourceType) {
-            ResourceType::Topic => '/share/topic/' . $resourceId,
-            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
-            default => null,
-        };
-
-        return $uri === null ? null : $magicWebUrl . $uri;
+        return $this->shareUrlBuilder->buildResourceShareUrl($resourceType, $resourceId);
     }
 }

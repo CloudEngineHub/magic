@@ -162,11 +162,13 @@ print(result.content)
 
 Always check `result.ok`.
 
-- List results: read `result.data["items"]`; use `resource_id`, `share_url`, `access`, `status`, and optional `password` directly.
-- Create or reuse results: read `share_url`, `password`, `resource_id`, and `operation` from `result.data`.
-- `operation` is `created`, `updated`, or `reused`.
-- Do not extract URLs from `result.content` with regular expressions.
-- On failure, read `result.content` and `result.data.get("error_code")`. Never turn a permission or VIP failure into public access without asking.
+- Read `result.content` first to understand what happened.
+- When you need an exact value for the next step or for the user, read it from `result.data`:
+  - list tools return their shares in `result.data["items"]`;
+  - create and reuse tools return `share_url`, `password`, `resource_id`, and `operation`.
+- Only show or pass on a `share_url` that is present in `result.data`. Never invent or rewrite a link.
+- If a required value is missing, tell the user what is missing and keep the reported operation state. Do not repeat a mutating call just to obtain a complete response.
+- When the requested access method cannot be used, explain why and ask the user to choose another method. Do not switch to a different or less secure method automatically.
 
 ## Required Rules
 

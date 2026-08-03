@@ -58,7 +58,7 @@ def build_share_detail(result: ShareResult) -> ShareDetail:
         raise ShareServiceError(
             ShareErrorInfo(
                 code="share_url_missing",
-                message="The active share was found, but Magic Service did not return share_url.",
+                message="The active share was found without the required share URL. Do not guess or construct a URL.",
                 target=target,
                 resource_id=resource_id,
             )

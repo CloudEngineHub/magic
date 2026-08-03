@@ -255,7 +255,7 @@ def _build_reused_result(result: ShareResult, target: ShareTarget) -> ShareCreat
         raise ShareServiceError(
             ShareErrorInfo(
                 code="share_url_missing",
-                message="The existing share was found, but Magic Service did not return share_url. Check MAGIC_WEB_URL.",
+                message="The existing share was found without the required share URL. Do not guess or construct a URL.",
                 target=target,
                 resource_id=resource_id,
             )
