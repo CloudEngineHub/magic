@@ -53,6 +53,7 @@ export type {
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
+	ToolResponseRecoveryState,
 	InitializeMessagesOptions,
 	HttpToolProjectionPolicy,
 	ReconcileAuthoritativeMessagesInput,
@@ -118,8 +119,8 @@ import type {
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
+	ToolResponseRecoveryState,
 	InitializeMessagesOptions,
-	HttpToolProjectionPolicy,
 	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
@@ -340,6 +341,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * ingress paths share the same correlation guard.
 	 */
 	private toolCallOwners = new Map<string, Map<string, string>>()
+	/** Message 级缺失 Tool Response 索引；只描述恢复需求，不伪造服务端 role=tool。 */
+	private toolResponseRecoveryStates = new Map<string, Map<string, ToolResponseRecoveryState>>()
+	/** O(1) 找到最近一个仍有待恢复普通工具的 Assistant，供后继首个 Chunk 使用。 */
+	private latestRecoverableAssistantByTopic = new Map<string, string>()
 	/** HTTP 历史分页中先到且暂时没有 Assistant owner 的 Tool response。 */
 	private pendingHttpToolResponses = new Map<
 		string,
@@ -404,6 +409,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| "streamChunkLedgers"
 			| "latestToolResponseSeqIds"
 			| "toolCallOwners"
+			| "toolResponseRecoveryStates"
+			| "latestRecoverableAssistantByTopic"
 			| "pendingHttpToolResponses"
 			| "sharedReplayStates"
 			| "imStatusRestoreAuthorizations"
@@ -430,6 +437,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamChunkLedgers: false,
 				latestToolResponseSeqIds: false,
 				toolCallOwners: false,
+				toolResponseRecoveryStates: false,
+				latestRecoverableAssistantByTopic: false,
 				pendingHttpToolResponses: false,
 				sharedReplayStates: false,
 				imStatusRestoreAuthorizations: false,
@@ -654,6 +663,255 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
+	private getToolResponseRecoveryKey(ownerSuperMessageId: string, toolId: string) {
+		return `${ownerSuperMessageId}\u0000${toolId}`
+	}
+
+	private getTopicToolResponseRecoveryMap(topicId: string) {
+		let recoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		if (!recoveryMap) {
+			recoveryMap = new Map()
+			this.toolResponseRecoveryStates.set(topicId, recoveryMap)
+		}
+		return recoveryMap
+	}
+
+	private refreshLatestRecoverableAssistant(topicId: string) {
+		const recoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		if (!recoveryMap || recoveryMap.size === 0) {
+			this.toolResponseRecoveryStates.delete(topicId)
+			this.latestRecoverableAssistantByTopic.delete(topicId)
+			return
+		}
+		const latest = Array.from(recoveryMap.values()).sort((left, right) =>
+			compareMessageSeqId(left.anchorSeqId, right.anchorSeqId),
+		)
+		this.latestRecoverableAssistantByTopic.set(
+			topicId,
+			latest[latest.length - 1].ownerSuperMessageId,
+		)
+	}
+
+	private isStrongToolResponseStatus(status?: string) {
+		return status === "finished" || status === "error" || status === "suspended"
+	}
+
+	private isOrdinaryRecoverableToolCall(toolCall: ToolCall | undefined) {
+		const toolId = String(toolCall?.id || "").trim()
+		return Boolean(toolId && toolCall?.function?.name && !this.isAskUserToolCall(toolCall))
+	}
+
+	/** 当前 Tool Response 是否仍需要服务端权威恢复；UI loading 不参与该判断。 */
+	private needsCanonicalToolRecovery(
+		topicId: string,
+		ownerSuperMessageId: string,
+		toolId: string,
+	) {
+		const recovery = this.toolResponseRecoveryStates
+			.get(topicId)
+			?.get(this.getToolResponseRecoveryKey(ownerSuperMessageId, toolId))
+		if (!recovery || recovery.phase === "dormant") return false
+		const response = this.toolResponseMap.get(topicId)?.get(toolId)
+		return !this.isStrongToolResponseStatus(response?.status)
+	}
+
+	/**
+	 * Canonical Assistant Final 建立 Message 级缺失索引。该索引只在身份、owner、
+	 * tool.id 都合法时创建，并允许后续真实 role=tool 覆盖 response_missing。
+	 */
+	private registerAssistantToolRecoveries(
+		topicId: string,
+		ownerSuperMessageId: string,
+		ownerAppMessageId: string,
+		anchorSeqId: string,
+		toolCalls: ToolCall[],
+	) {
+		const recoveryMap = this.getTopicToolResponseRecoveryMap(topicId)
+		const currentToolIds = new Set<string>()
+		toolCalls.forEach((toolCall) => {
+			if (!this.isOrdinaryRecoverableToolCall(toolCall)) return
+			const toolId = String(toolCall.id).trim()
+			if (this.claimToolCallOwner(topicId, ownerSuperMessageId, toolId) === "conflict") return
+			currentToolIds.add(toolId)
+			const response = this.toolResponseMap.get(topicId)?.get(toolId)
+			if (this.isStrongToolResponseStatus(response?.status)) {
+				recoveryMap.delete(this.getToolResponseRecoveryKey(ownerSuperMessageId, toolId))
+				return
+			}
+
+			const key = this.getToolResponseRecoveryKey(ownerSuperMessageId, toolId)
+			const existing = recoveryMap.get(key)
+			recoveryMap.set(key, {
+				topicId,
+				ownerSuperMessageId,
+				ownerAppMessageId,
+				toolId,
+				anchorSeqId,
+				phase: existing?.phase || "awaiting_response",
+				attempt: existing?.attempt || 0,
+				nextRetryAt: existing?.nextRetryAt || null,
+				...(existing?.lastTrigger ? { lastTrigger: existing.lastTrigger } : {}),
+			})
+		})
+
+		// Final 删除的 streamed Tool 不得继续进入 recovery；这是 Final 的权威集合。
+		Array.from(recoveryMap.entries()).forEach(([key, recovery]) => {
+			if (
+				recovery.ownerSuperMessageId === ownerSuperMessageId &&
+				!currentToolIds.has(recovery.toolId)
+			)
+				recoveryMap.delete(key)
+		})
+
+		this.refreshLatestRecoverableAssistant(topicId)
+	}
+
+	/** 后继 Assistant 的首个有效 Chunk 是执行完成屏障，但不是具体结果屏障。 */
+	private settlePreviousAssistantToolResponses(topicId: string, nextSuperMessageId: string) {
+		const previousSuperMessageId = this.latestRecoverableAssistantByTopic.get(topicId)
+		if (!previousSuperMessageId || previousSuperMessageId === nextSuperMessageId) return
+		const recoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		if (!recoveryMap) return
+
+		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
+		const settlements: Array<{ toolId: string; response: ToolResponseState }> = []
+		let hasPendingRecovery = false
+		recoveryMap.forEach((recovery) => {
+			if (recovery.ownerSuperMessageId !== previousSuperMessageId) return
+			recovery.phase = "execution_settled_pending_response"
+			recovery.lastTrigger = "tool_response"
+			const current = toolResponseMap.get(recovery.toolId)
+			if (this.isStrongToolResponseStatus(current?.status)) return
+			const ownerToolCalls = this.getAssistantMessageNode(
+				topicId,
+				previousSuperMessageId,
+			)?.tool_calls
+			const toolCall = (Array.isArray(ownerToolCalls) ? ownerToolCalls : []).find(
+				(candidate) => candidate?.id === recovery.toolId,
+			) as ToolCall | undefined
+			if (current?.status !== "response_missing" && toolCall) {
+				const nextState = this.mergeToolResponseState(current, {
+					...(toolCall.tool || {}),
+					id: recovery.toolId,
+					name: toolCall.tool?.name || toolCall.function?.name || "",
+					status: "response_missing",
+				})
+				toolResponseMap.set(recovery.toolId, nextState)
+				settlements.push({ toolId: recovery.toolId, response: nextState })
+			}
+			hasPendingRecovery = true
+		})
+		if (!hasPendingRecovery) return
+		this.toolResponseMap.set(topicId, toolResponseMap)
+		settlements.forEach(({ toolId, response }) =>
+			this.publishToolCallSettled(topicId, toolId, response, undefined, "stream"),
+		)
+
+		const first = Array.from(recoveryMap.values()).find(
+			(recovery) => recovery.ownerSuperMessageId === previousSuperMessageId,
+		)
+		const correlationId = this.getStreamCorrelationId(topicId, previousSuperMessageId)
+		this.emitStreamRecoveryRequested({
+			topicId,
+			correlationId,
+			reason: "tool_response",
+			anchorAppMessageId: first?.ownerAppMessageId,
+			anchorSeqId: first?.anchorSeqId,
+		})
+	}
+
+	getToolResponseRecoveryState(topicId: string, ownerSuperMessageId: string, toolId: string) {
+		const state = this.toolResponseRecoveryStates
+			.get(topicId)
+			?.get(this.getToolResponseRecoveryKey(ownerSuperMessageId, toolId))
+		return state ? { ...state } : undefined
+	}
+
+	getToolResponseRecoveryRequest(topicId: string): StreamRecoveryRequestPayload | undefined {
+		const candidates = Array.from(this.toolResponseRecoveryStates.get(topicId)?.values() || [])
+			.filter((recovery) =>
+				this.needsCanonicalToolRecovery(
+					topicId,
+					recovery.ownerSuperMessageId,
+					recovery.toolId,
+				),
+			)
+			.sort((left, right) => compareMessageSeqId(left.anchorSeqId, right.anchorSeqId))
+		const first = candidates[0]
+		if (!first) return undefined
+		return {
+			topicId,
+			correlationId: this.getStreamCorrelationId(topicId, first.ownerSuperMessageId),
+			reason: "tool_response",
+			anchorAppMessageId: first.ownerAppMessageId,
+			anchorSeqId: first.anchorSeqId,
+		}
+	}
+
+	private clearToolResponseRecovery(topicId: string, toolId: string) {
+		const recoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		if (!recoveryMap) return
+		Array.from(recoveryMap.entries()).forEach(([key, recovery]) => {
+			if (recovery.toolId === toolId) recoveryMap.delete(key)
+		})
+		this.refreshLatestRecoverableAssistant(topicId)
+	}
+
+	/** Coordinator 发请求前的二次校验，避免 UI 门控或迟到 IM 已解决时仍打 HTTP。 */
+	resolveStreamRecoveryRequest(payload: StreamRecoveryRequestPayload) {
+		this.wakeDormantToolRecoveries(payload.topicId, payload.reason)
+		if (payload.reason !== "tool_response") return payload
+		return this.getToolResponseRecoveryRequest(payload.topicId)
+	}
+
+	private wakeDormantToolRecoveries(
+		topicId: string,
+		trigger?: StreamRecoveryRequestPayload["reason"],
+	) {
+		if (!trigger || trigger === "tool_response") return
+		this.toolResponseRecoveryStates.get(topicId)?.forEach((recovery) => {
+			if (recovery.phase === "dormant") {
+				recovery.phase = "awaiting_response"
+				recovery.attempt = 0
+				recovery.nextRetryAt = null
+			}
+		})
+	}
+
+	markToolResponseRecoveryDormant(topicId: string, anchorAppMessageId?: string) {
+		this.toolResponseRecoveryStates.get(topicId)?.forEach((recovery) => {
+			if (!anchorAppMessageId || recovery.ownerAppMessageId === anchorAppMessageId) {
+				recovery.phase = "dormant"
+				recovery.nextRetryAt = null
+			}
+		})
+	}
+
+	/** Coordinator 的 sidecar 生命周期只描述调度，不改变 canonical Tool 状态。 */
+	markToolResponseRecoveryScheduled(topicId: string, anchorAppMessageId?: string) {
+		this.toolResponseRecoveryStates.get(topicId)?.forEach((recovery) => {
+			if (!anchorAppMessageId || recovery.ownerAppMessageId === anchorAppMessageId) {
+				recovery.phase = "scheduled"
+			}
+		})
+	}
+
+	markToolResponseRecoveryInFlight(topicId: string, anchorAppMessageId?: string) {
+		this.toolResponseRecoveryStates.get(topicId)?.forEach((recovery) => {
+			if (!anchorAppMessageId || recovery.ownerAppMessageId === anchorAppMessageId) {
+				recovery.phase = "in_flight"
+			}
+		})
+	}
+
+	markToolResponseRecoveryAwaitingResponse(topicId: string, anchorAppMessageId?: string) {
+		this.toolResponseRecoveryStates.get(topicId)?.forEach((recovery) => {
+			if (!anchorAppMessageId || recovery.ownerAppMessageId === anchorAppMessageId) {
+				if (recovery.phase !== "dormant") recovery.phase = "awaiting_response"
+			}
+		})
+	}
+
 	private isOrphanFinishTaskResponse(messageNode: RawSuperMagicMessageNode, toolId: string) {
 		return Boolean(
 			messageNode.role === "tool" &&
@@ -661,10 +919,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			/^\d+$/.test(toolId) &&
 			String(messageNode.task_id || "").trim(),
 		)
-	}
-
-	private isHistoricalToolProjectionEnabled(policy?: HttpToolProjectionPolicy) {
-		return policy === "historical_terminal"
 	}
 
 	private primeHttpAssistantToolOwnership(
@@ -868,6 +1122,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const streamKey = this.getEventEntityKey("stream", topicId, streamIdentity)
 		const transition = this.eventTransitions.startStream(streamKey)
 		if (!transition.started) return transition.generation
+		// 只有新的 Assistant 首个有效正文/推理/工具 Chunk 才能作为上一条工具的
+		// 执行完成屏障；heartbeat/usage metadata 不具备该业务语义。
+		if (startsWith !== "metadata") {
+			this.settlePreviousAssistantToolResponses(topicId, streamIdentity)
+		}
 		this.eventEmitter.emit({
 			type: "message.stream.started",
 			meta: {
@@ -2577,6 +2836,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		removedStreamSuperMessageIds.forEach((superMessageId) => {
 			const correlationId = this.getStreamCorrelationId(topicId, superMessageId)
 			removedCorrelations.add(correlationId)
+			this.clearFinalRenderState(topicId, superMessageId)
 			topicMeta.content.delete(superMessageId)
 			topicMeta.streamSnapshots.delete(superMessageId)
 			// Tombstone 同时阻断晚到 chunk，以及在 canonical 卡已被删除时到达的旧 Final。
@@ -2619,6 +2879,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (toolSeqMap?.size === 0) this.latestToolResponseSeqIds.delete(topicId)
 		if (topicOwners?.size === 0) this.toolCallOwners.delete(topicId)
 		if (pendingHttpResponses?.size === 0) this.pendingHttpToolResponses.delete(topicId)
+
+		const toolRecoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		toolRecoveryMap?.forEach((recovery, key) => {
+			if (
+				removedStreamSuperMessageIds.has(recovery.ownerSuperMessageId) ||
+				removedToolIds.has(recovery.toolId)
+			) {
+				toolRecoveryMap.delete(key)
+			}
+		})
+		this.refreshLatestRecoverableAssistant(topicId)
 
 		const persistenceQueue = this.persistenceQueues.get(topicId)
 		if (persistenceQueue) {
@@ -3052,11 +3323,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			previousMessages = statusResult.nextMessages
 			statusCommittedUpdates.push(...statusResult.committedUpdates)
 			const snapshotMessages = (messages || []).slice()
-			if (this.isHistoricalToolProjectionEnabled(toolProjectionPolicy)) {
-				// HTTP order is a transport presentation detail. Prime ownership in
-				// chronological order before recording any Tool response from this batch.
-				this.primeHttpAssistantToolOwnership(topicId, snapshotMessages)
-			}
+			// HTTP order is a transport presentation detail. Prime ownership before recording
+			// any Tool response, including preserve_live authoritative-tail batches; a live
+			// projection must not lose a real response merely because Tool precedes Assistant.
+			this.primeHttpAssistantToolOwnership(topicId, snapshotMessages)
 			const snapshotLatestSeqId = snapshotMessages.reduce((latestSeqId, envelope) => {
 				const currentSeqId = String(envelope?.seq?.seq_id || "")
 				if (!currentSeqId) return latestSeqId
@@ -3231,10 +3501,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 							toolId: String(rawNode?.tool?.id || ""),
 							response: toolResponseResult.response,
 						})
-					} else if (
-						toolProjectionPolicy === "historical_terminal" &&
-						toolResponseResult.kind === "missing_owner"
-					) {
+					} else if (toolResponseResult.kind === "missing_owner" && rawNode) {
 						this.queuePendingHttpToolResponse(topicId, rawNode, envelope?.seq?.seq_id)
 					}
 				}
@@ -3302,8 +3569,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 			})
 
+			this.drainPendingHttpToolResponses(topicId, toolResponseMap, httpToolSettlements)
 			if (toolProjectionPolicy === "historical_terminal") {
-				this.drainPendingHttpToolResponses(topicId, toolResponseMap, httpToolSettlements)
 				this.settleHistoricalToolCalls(
 					topicId,
 					snapshotMessages,
@@ -3419,6 +3686,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		httpToolSettlements.forEach(({ toolId, response }) => {
 			if (toolId) this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
 		})
+		if (toolProjectionPolicy === "historical_terminal") {
+			// Refresh/history hydration can be the only signal after a missed Tool WS event;
+			// re-enter the same Topic coordinator without inventing a stronger Tool result.
+			const pendingToolRecovery = this.getToolResponseRecoveryRequest(topicId)
+			if (pendingToolRecovery) this.emitStreamRecoveryRequested(pendingToolRecovery)
+		}
 
 		const previousAppMessageIds = new Set(
 			previousMessages.map((message) => message.app_message_id).filter(Boolean),
@@ -4275,11 +4548,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const visibleContent = String(visibleNode.content || "")
 		const targetReasoning = String(targetNode.reasoning_content || "")
 		const targetContent = String(targetNode.content || "")
+		const visibleToolCalls = Array.isArray(visibleNode.tool_calls)
+			? this.cloneToolCallsForRendering(visibleNode.tool_calls as ToolCall[])
+			: []
+		const targetToolCalls = Array.isArray(targetNode.tool_calls)
+			? this.cloneToolCallsForRendering(targetNode.tool_calls as ToolCall[])
+			: []
 		const canAnimateReasoning = targetReasoning.startsWith(visibleReasoning)
 		const canAnimateContent = targetContent.startsWith(visibleContent)
+		const hasToolCallDelta = !isToolCallsEqual(visibleToolCalls, targetToolCalls)
 		if (
 			(!canAnimateReasoning || visibleReasoning.length >= targetReasoning.length) &&
-			(!canAnimateContent || visibleContent.length >= targetContent.length)
+			(!canAnimateContent || visibleContent.length >= targetContent.length) &&
+			!hasToolCallDelta
 		)
 			return
 
@@ -4293,11 +4574,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				...targetNode,
 				content: canAnimateContent ? visibleContent : targetContent,
 				reasoning_content: canAnimateReasoning ? visibleReasoning : targetReasoning,
-				tool_calls: this.cloneToolCallsForRendering(
-					(Array.isArray(visibleNode.tool_calls)
-						? visibleNode.tool_calls
-						: targetNode.tool_calls || []) as ToolCall[],
-				),
+				// A newly introduced Final ToolCall must not carry canonical detail/status into
+				// the render-only projection before its declaration/arguments are visible.
+				tool_calls: visibleToolCalls,
 			},
 			targetNode: this.cloneAuthoritativeAssistantSnapshot(targetNode),
 			startedAt: getMonotonicNow(),
@@ -4325,7 +4604,23 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					0,
 				)
 				const remainingContent = Math.max(targetContent.length - visibleContent.length, 0)
-				const remaining = remainingReasoning + remainingContent
+				const visibleToolCalls = Array.isArray(state.visibleNode.tool_calls)
+					? (state.visibleNode.tool_calls as ToolCall[])
+					: []
+				const targetToolCalls = Array.isArray(state.targetNode.tool_calls)
+					? (state.targetNode.tool_calls as ToolCall[])
+					: []
+				const toolCallsEqual = isToolCallsEqual(visibleToolCalls, targetToolCalls)
+				const remainingToolArguments = targetToolCalls.reduce((total, toolCall, index) => {
+					const currentArguments = visibleToolCalls[index]?.function?.arguments || ""
+					const targetArguments = toolCall?.function?.arguments || ""
+					return total + Math.max(targetArguments.length - currentArguments.length, 0)
+				}, 0)
+				const remaining =
+					remainingReasoning +
+					remainingContent +
+					remainingToolArguments +
+					(toolCallsEqual ? 0 : 1)
 				if (remaining <= 0) {
 					this.clearFinalRenderState(state.topicId, state.superMessageId)
 					return
@@ -4366,6 +4661,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						visibleContent.length + Math.min(frameBudget, remainingContent),
 					)
 				}
+				if (frameBudget > 0 && !toolCallsEqual) {
+					visibleNode.tool_calls = this.advanceFinalRenderToolCalls(
+						visibleToolCalls,
+						targetToolCalls,
+						frameBudget,
+					)
+				}
 				const nextState: FinalRenderState = {
 					...state,
 					visibleNode,
@@ -4387,6 +4689,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				state.superMessageId === superMessageId && (!topicId || state.topicId === topicId),
 		)
 		return renderState?.visibleNode || canonical
+	}
+
+	/**
+	 * Tool Response 的 canonical 入账与视觉展示分离：所属 Assistant 仍处于
+	 * StreamState/FinalRenderState 时，继续投影调用声明中的 running/waiting；
+	 * RenderSession 完成后才开放 toolResponseMap 的真实 status/detail。
+	 */
+	getToolResponseForRendering(
+		topicId: string,
+		ownerSuperMessageId: string,
+		toolCall: { id?: string; tool?: unknown },
+	) {
+		const embeddedResponse = toolCall?.tool as ToolResponseState | undefined
+		const hasActiveRenderSession =
+			Boolean(this.getStreamState(topicId, ownerSuperMessageId)) ||
+			this.finalRenderStates.has(`${topicId}\u0000${ownerSuperMessageId}`)
+		if (hasActiveRenderSession) return embeddedResponse
+		return (
+			this.toolResponseMap.get(topicId)?.get(String(toolCall?.id || "")) || embeddedResponse
+		)
 	}
 
 	/**
@@ -4460,8 +4782,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			super_message_id: superMessageId,
 		} as RawSuperMagicMessageNode
 
-		// Capture the old visual projection before replacing the canonical payload.
-		this.captureFinalRenderProjection(topicId, superMessageId, visibleNode, canonicalNode)
+		// Only a live StreamState provides a resumable visual prefix. Historical/refresh
+		// hydration projects the canonical Final immediately instead of replaying animation.
+		this.captureFinalRenderProjection(
+			topicId,
+			superMessageId,
+			streamState ? visibleNode : undefined,
+			canonicalNode,
+		)
 		this.setAssistantMessageNode(topicId, superMessageId, canonicalNode, appMessageId)
 
 		const messages = this.messages.get(topicId) || []
@@ -4526,6 +4854,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			appMessageId: appMessageId || String(canonicalNode.app_message_id || ""),
 			correlationId: String(canonicalNode.correlation_id || correlationId || ""),
 		})
+		this.registerAssistantToolRecoveries(
+			topicId,
+			superMessageId,
+			appMessageId || String(canonicalNode.app_message_id || ""),
+			normalizedSeqId,
+			(Array.isArray(canonicalNode.tool_calls) ? canonicalNode.tool_calls : []) as ToolCall[],
+		)
 
 		if (emitEvents && canonicalMessage) {
 			this.publishCanonicalFinalStreamEnded(
@@ -4649,10 +4984,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return seqMap
 	}
 
-	private isStrongToolResponseStatus(status?: string) {
-		return status === "finished" || status === "error"
-	}
-
 	private isValidToolResponseStatus(status: unknown): status is string {
 		return typeof status === "string" && VALID_TOOL_RESPONSE_STATUSES.has(status)
 	}
@@ -4743,6 +5074,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			id: toolId,
 		}
 		const publishSettlement = (response: ToolResponseState) => {
+			if (this.isStrongToolResponseStatus(response.status)) {
+				this.clearToolResponseRecovery(topicId, toolId)
+			}
 			// HTTP snapshot 使用 targetMap 批量构建 canonical 状态；是否对外发布由同步边界统一裁决。
 			if (!targetMap && !isOrphanFinishTask)
 				this.publishToolCallSettled(topicId, toolId, response, messageNode, source)
@@ -5926,6 +6260,66 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.processMessageBufferAfterRenderRelease(topicId)
 			})
 		}, STREAM_RENDER_FRAME_MS)
+	}
+
+	/** Final 后工具声明也必须通过 render-only projection 逐步开放，不能重新使用 StreamState。 */
+	private advanceFinalRenderToolCalls(
+		visibleToolCalls: ToolCall[],
+		targetToolCalls: ToolCall[],
+		frameBudget: number,
+	) {
+		if (isToolCallsEqual(visibleToolCalls, targetToolCalls)) return visibleToolCalls
+		const nextToolCalls = visibleToolCalls.map((toolCall) => ({
+			...toolCall,
+			function: { ...toolCall.function },
+		}))
+		const firstChangedIndex = targetToolCalls.findIndex((targetToolCall, index) => {
+			const visibleToolCall = visibleToolCalls[index]
+			const targetArguments = String(targetToolCall.function?.arguments || "")
+			const visibleArguments = String(visibleToolCall?.function?.arguments || "")
+			return (
+				!visibleToolCall ||
+				visibleToolCall.id !== targetToolCall.id ||
+				visibleToolCall.function?.name !== targetToolCall.function?.name ||
+				targetArguments !== visibleArguments
+			)
+		})
+		if (firstChangedIndex < 0) return this.cloneToolCallsForRendering(targetToolCalls)
+
+		const targetToolCall = targetToolCalls[firstChangedIndex]
+		const visibleToolCall = visibleToolCalls[firstChangedIndex]
+		const targetArguments = String(targetToolCall.function?.arguments || "")
+		const visibleArguments = String(visibleToolCall?.function?.arguments || "")
+		const nextArguments = targetArguments.startsWith(visibleArguments)
+			? targetArguments.slice(
+					0,
+					Math.min(
+						targetArguments.length,
+						visibleArguments.length + Math.max(frameBudget, 1),
+					),
+				)
+			: targetArguments
+		const renderOnlyToolCall: ToolCall = {
+			...targetToolCall,
+			index: firstChangedIndex,
+			function: {
+				...targetToolCall.function,
+				arguments: nextArguments,
+			},
+			// Keep the embedded response in the visual state at executing. Canonical detail
+			// remains in toolResponseMap and is opened only after FinalRenderState completes.
+			tool: visibleToolCall?.tool
+				? { ...visibleToolCall.tool, status: "running" }
+				: targetToolCall.tool
+					? {
+							id: targetToolCall.id,
+							name: targetToolCall.tool.name || targetToolCall.function?.name || "",
+							status: "running",
+						}
+					: undefined,
+		}
+		nextToolCalls[firstChangedIndex] = renderOnlyToolCall
+		return nextToolCalls.slice(0, firstChangedIndex + 1)
 	}
 
 	/**

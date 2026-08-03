@@ -2,7 +2,10 @@ import { useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
-import { registerStreamRecoveryOwner } from "@/pages/superMagic/services/streamRecoveryCoordinator"
+import {
+	registerStreamRecoveryOwner,
+	requestTopicRecovery,
+} from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -29,14 +32,6 @@ const FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT = 400
 // 前台恢复防抖时间（毫秒），避免重复触发同步
 const FOREGROUND_SYNC_DEDUPE_MS = 1000
 
-// 合并同一轮持久消息事件，避免用户消息和 Agent 最终消息各自触发一次相同的小窗口回拉。
-const LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS = 200
-
-// A WS watermark is a durable pending obligation, not a one-shot hint. Retry only
-// the authoritative tail with bounded backoff so a stale first HTTP page cannot leave
-// a refreshed browser waiting forever for another broadcast.
-const LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS = [500, 1_500, 3_000] as const
-
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
 	checkNowDebounced?: () => void
@@ -52,6 +47,7 @@ interface PullMessageParams {
 	writeIntent: "replace" | "merge" | "incremental" | "authoritative_tail"
 	syncGeneration?: number
 	requiredSeqId?: string
+	recoveryAnchorAppMessageId?: string
 	allowRemoteRevokedAnchorCleanup?: boolean
 	callback?: () => void
 }
@@ -370,6 +366,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			order,
 			limit = POLLING_SYNC_MESSAGE_COUNT,
 			requiredSeqId,
+			recoveryAnchorAppMessageId,
 			callback,
 		}: Pick<
 			PullMessageParams,
@@ -379,6 +376,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			| "order"
 			| "limit"
 			| "requiredSeqId"
+			| "recoveryAnchorAppMessageId"
 			| "callback"
 		>): Promise<AuthoritativeTailPullResult> => {
 			const activeStreamIdsAtRequestStart = new Set<string>()
@@ -463,9 +461,19 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					}
 				}
 
-				const anchorIndex = aggregatedPulledItems.findIndex((item) =>
-					localStableIdentities.has(getFetchedMessageSuperMessageId(item)),
-				)
+				const requestedAnchorIndex = recoveryAnchorAppMessageId
+					? aggregatedPulledItems.findIndex(
+							(item) =>
+								String(item?.seq?.message?.app_message_id || "") ===
+								recoveryAnchorAppMessageId,
+						)
+					: -1
+				const anchorIndex =
+					requestedAnchorIndex >= 0
+						? requestedAnchorIndex
+						: aggregatedPulledItems.findIndex((item) =>
+								localStableIdentities.has(getFetchedMessageSuperMessageId(item)),
+							)
 				if (anchorIndex >= 0) {
 					const anchorSuperMessageId = getFetchedMessageSuperMessageId(
 						aggregatedPulledItems[anchorIndex],
@@ -527,6 +535,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			writeIntent,
 			syncGeneration,
 			requiredSeqId,
+			recoveryAnchorAppMessageId,
 			allowRemoteRevokedAnchorCleanup = true,
 			callback,
 		}: PullMessageParams): Promise<PullMessageResult> => {
@@ -549,6 +558,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							order,
 							limit,
 							requiredSeqId,
+							recoveryAnchorAppMessageId,
 							callback,
 						})
 					: await fetchMessagesPage({
@@ -571,6 +581,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					membershipItems: authoritativeTailResult.pulledItems,
 					writeOptions: {
 						...authoritativeTailResult.writeOptions,
+						...(syncGeneration !== undefined ? { syncGeneration } : {}),
 						eventPolicy: "live_arrival",
 						// 最近尾部对账可能包含仍在运行的当前任务，不能仅因来自 HTTP
 						// 就把 embedded waiting/running 提前投影成历史弱终态。
@@ -1016,10 +1027,24 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (currentTopic?.chat_topic_id !== topicId) return undefined
 				return currentTopic.task_status || currentTopic.status
 			},
-			recover: ({ syncGeneration }) =>
-				recoverTopicMessages({ conversationId, topicId, syncGeneration }),
+			recover: ({ syncGeneration, reason, requiredSeqId, anchorAppMessageId }) =>
+				reason === "tool_response" || reason === "persistent_message"
+					? pullMessage({
+							conversation_id: conversationId,
+							chat_topic_id: topicId,
+							page_token: "",
+							order: "desc",
+							limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
+							updatePageToken: false,
+							writeIntent: "authoritative_tail",
+							syncGeneration,
+							requiredSeqId,
+							recoveryAnchorAppMessageId: anchorAppMessageId,
+						})
+					: recoverTopicMessages({ conversationId, topicId, syncGeneration }),
 		})
 	}, [
+		pullMessage,
 		recoverTopicMessages,
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
@@ -1028,89 +1053,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Subscribe to WebSocket new message events
 	useEffect(() => {
-		let disposed = false
-		let liveSyncTimer: number | null = null
-		let liveSyncRetryTimer: number | null = null
-		let liveSyncInFlight = false
-		let liveSyncPending = false
-		let pendingRequiredSeqId = ""
-		let liveSyncRetryAttempt = 0
-
-		const scheduleLiveIncrementalRetry = () => {
-			if (
-				disposed ||
-				!pendingRequiredSeqId ||
-				liveSyncRetryTimer !== null ||
-				liveSyncRetryAttempt >= LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS.length
-			)
-				return
-			const delay = LIVE_INCREMENTAL_SYNC_RETRY_DELAYS_MS[liveSyncRetryAttempt]
-			liveSyncRetryAttempt += 1
-			liveSyncRetryTimer = window.setTimeout(() => {
-				liveSyncRetryTimer = null
-				// Retry is already governed by backoff; applying the WS debounce again
-				// would add an unrelated 200ms delay to every recovery attempt.
-				scheduleLiveIncrementalSync(0)
-			}, delay)
-		}
-
-		const scheduleLiveIncrementalSync = (delay = LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS) => {
-			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
-			liveSyncTimer = window.setTimeout(async () => {
-				liveSyncTimer = null
-				if (disposed) return
-				if (liveSyncInFlight) {
-					liveSyncPending = true
-					return
-				}
-
-				const currentTopic = selectedTopicRef.current
-				if (!currentTopic?.chat_conversation_id || !currentTopic.chat_topic_id) return
-				liveSyncInFlight = true
-				liveSyncPending = false
-				const requiredSeqId = pendingRequiredSeqId
-				let pullResult: PullMessageResult | undefined
-				try {
-					pullResult = await pullMessage({
-						conversation_id: currentTopic.chat_conversation_id,
-						chat_topic_id: currentTopic.chat_topic_id,
-						page_token: "",
-						order: "desc",
-						limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
-						updatePageToken: false,
-						writeIntent: "authoritative_tail",
-						requiredSeqId: requiredSeqId || undefined,
-					})
-					if (
-						pullResult.didPullSucceed &&
-						requiredSeqId &&
-						(!pendingRequiredSeqId ||
-							compareMessageSeqId(pendingRequiredSeqId, requiredSeqId) <= 0)
-					) {
-						pendingRequiredSeqId = ""
-						liveSyncRetryAttempt = 0
-					}
-				} finally {
-					liveSyncInFlight = false
-					if (!disposed && liveSyncPending) {
-						liveSyncPending = false
-						scheduleLiveIncrementalSync()
-					} else if (
-						!disposed &&
-						pendingRequiredSeqId &&
-						pullResult &&
-						!pullResult.didPullSucceed
-					) {
-						// Keep the highest watermark until a later authoritative response accepts it.
-						scheduleLiveIncrementalRetry()
-					}
-				}
-			}, delay)
-		}
-
 		/**
 		 * 处理 WS 新消息事件。
-		 * 同一 Topic 的短时持久消息事件合并为一次小窗口增量回拉。
+		 * WS 只提供路由和 requiredSeqId，所有 debounce、single-flight 与重试
+		 * 统一交给 TopicRecoveryCoordinator，避免与 Tool recovery 形成两套请求状态机。
 		 */
 		const handleNewMessage = (data: any) => {
 			console.log("我接受到的 ws 消息", data)
@@ -1130,26 +1076,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					incomingSeqId,
 				}),
 			)
-			if (
-				incomingSeqId &&
-				(!pendingRequiredSeqId ||
-					compareMessageSeqId(incomingSeqId, pendingRequiredSeqId) > 0)
-			) {
-				// 同一防抖窗口只需等待最高 WS 水位，较低 HTTP 快照不得执行缺席删除。
-				pendingRequiredSeqId = incomingSeqId
-				liveSyncRetryAttempt = 0
-				if (liveSyncRetryTimer !== null) {
-					window.clearTimeout(liveSyncRetryTimer)
-					liveSyncRetryTimer = null
-				}
-			}
-			scheduleLiveIncrementalSync()
+			requestTopicRecovery({
+				topicId: chat_topic_id,
+				correlationId: `ws:${incomingSeqId || Date.now()}`,
+				reason: "persistent_message",
+				...(incomingSeqId ? { requiredSeqId: incomingSeqId } : {}),
+			})
 		}
 		pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		return () => {
-			disposed = true
-			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
-			if (liveSyncRetryTimer !== null) window.clearTimeout(liveSyncRetryTimer)
 			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps

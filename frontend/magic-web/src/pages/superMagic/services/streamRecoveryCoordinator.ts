@@ -12,6 +12,13 @@ export interface StreamRecoveryContext extends StreamRecoveryRequestPayload {
 	syncGeneration: number
 }
 
+export interface StreamRecoveryCoordinatorOptions {
+	/** 非 watchdog 触发器的短窗口合并延迟；watchdog 默认立即进入既有恢复预算。 */
+	debounceMs?: number
+	/** HTTP 未找到真实 Tool Response 时使用的有界重试间隔。 */
+	retryDelaysMs?: number[]
+}
+
 export interface StreamRecoveryOwnerRegistration {
 	ownerToken: StreamRecoveryOwnerToken
 	topicId: string
@@ -33,6 +40,16 @@ interface StreamRecoveryStore {
 	) => boolean
 	cancelTopicSync: (topicId: string, generation: number) => void
 	getLatestMessageSeqId: (topicId: string) => string
+	resolveStreamRecoveryRequest?: (
+		payload: StreamRecoveryRequestPayload,
+	) => StreamRecoveryRequestPayload | undefined
+	markToolResponseRecoveryScheduled?: (topicId: string, anchorAppMessageId?: string) => void
+	markToolResponseRecoveryInFlight?: (topicId: string, anchorAppMessageId?: string) => void
+	markToolResponseRecoveryAwaitingResponse?: (
+		topicId: string,
+		anchorAppMessageId?: string,
+	) => void
+	markToolResponseRecoveryDormant?: (topicId: string, anchorAppMessageId?: string) => void
 }
 
 interface RegisteredRecoveryOwner extends StreamRecoveryOwnerRegistration {
@@ -43,6 +60,15 @@ interface InFlightRecovery {
 	topicId: string
 	generation: number
 	owner: RegisteredRecoveryOwner
+	payload: StreamRecoveryRequestPayload
+}
+
+interface ScheduledRecovery {
+	topicId: string
+	payload: StreamRecoveryRequestPayload
+	timer: ReturnType<typeof setTimeout> | null
+	attempt: number
+	rerunNeeded: boolean
 }
 
 /**
@@ -56,8 +82,17 @@ export class StreamRecoveryCoordinator {
 	private registrationOrder = 0
 	private readonly owners = new Map<StreamRecoveryOwnerToken, RegisteredRecoveryOwner>()
 	private readonly inFlightRecoveries = new Map<string, InFlightRecovery>()
+	private readonly scheduledRecoveries = new Map<string, ScheduledRecovery>()
+	private readonly debounceMs: number
+	private readonly retryDelaysMs: number[]
 
-	constructor(private readonly store: StreamRecoveryStore) {}
+	constructor(
+		private readonly store: StreamRecoveryStore,
+		options: StreamRecoveryCoordinatorOptions = {},
+	) {
+		this.debounceMs = options.debounceMs ?? 200
+		this.retryDelaysMs = options.retryDelaysMs ?? [500, 1_500, 5_000]
+	}
 
 	registerOwner(registration: StreamRecoveryOwnerRegistration): () => void {
 		this.ensureStoreListenerRegistered()
@@ -70,6 +105,10 @@ export class StreamRecoveryCoordinator {
 			registrationOrder: ++this.registrationOrder,
 		}
 		this.owners.set(registration.ownerToken, registeredOwner)
+		const scheduled = this.scheduledRecoveries.get(registration.topicId)
+		if (scheduled && !this.inFlightRecoveries.has(registration.topicId)) {
+			this.scheduleRecovery(scheduled, 0)
+		}
 		const inFlightRecovery = this.inFlightRecoveries.get(registration.topicId)
 		if (inFlightRecovery && inFlightRecovery.owner !== registeredOwner) {
 			this.inFlightRecoveries.delete(registration.topicId)
@@ -96,27 +135,106 @@ export class StreamRecoveryCoordinator {
 		}
 
 		const inFlightRecovery = this.inFlightRecoveries.get(owner.topicId)
-		if (inFlightRecovery?.owner !== owner) return
-		this.inFlightRecoveries.delete(owner.topicId)
-		this.store.cancelTopicSync(owner.topicId, inFlightRecovery.generation)
+		if (inFlightRecovery?.owner === owner) {
+			this.inFlightRecoveries.delete(owner.topicId)
+			this.store.cancelTopicSync(owner.topicId, inFlightRecovery.generation)
+		}
+		this.clearScheduledRecovery(owner.topicId)
 	}
 
 	private handleRecoveryRequested(payload: StreamRecoveryRequestPayload) {
-		if (this.inFlightRecoveries.has(payload.topicId)) return
+		this.requestRecovery(payload)
+	}
 
-		const owner = this.selectCurrentOwner(payload.topicId)
+	/** 所有恢复来源先登记，再由 Topic 级 single-flight 统一发送 HTTP。 */
+	requestRecovery(payload: StreamRecoveryRequestPayload) {
+		const hasInFlightRecovery = this.inFlightRecoveries.has(payload.topicId)
+		if (!hasInFlightRecovery) {
+			this.store.markToolResponseRecoveryScheduled?.(payload.topicId)
+		}
+		const current = this.scheduledRecoveries.get(payload.topicId)
+		if (current) {
+			current.payload = mergeRecoveryPayload(current.payload, payload)
+			if (this.inFlightRecoveries.has(payload.topicId)) {
+				current.rerunNeeded = true
+				return
+			}
+			if (current.timer) clearTimeout(current.timer)
+			current.timer = null
+			this.scheduleRecovery(
+				current,
+				!payload.reason || payload.reason === "stream_watchdog" ? 0 : this.debounceMs,
+			)
+			return
+		}
+
+		const scheduled: ScheduledRecovery = {
+			topicId: payload.topicId,
+			payload,
+			timer: null,
+			attempt: 0,
+			rerunNeeded: false,
+		}
+		this.scheduledRecoveries.set(payload.topicId, scheduled)
+		this.scheduleRecovery(
+			scheduled,
+			!payload.reason || payload.reason === "stream_watchdog" ? 0 : this.debounceMs,
+		)
+	}
+
+	private scheduleRecovery(scheduled: ScheduledRecovery, delay: number) {
+		if (scheduled.timer || (this.inFlightRecoveries.has(scheduled.topicId) && delay <= 0))
+			return
+		if (delay <= 0) {
+			void this.startRecovery(scheduled.topicId)
+			return
+		}
+		scheduled.timer = setTimeout(() => {
+			scheduled.timer = null
+			void this.startRecovery(scheduled.topicId)
+		}, delay)
+	}
+
+	private clearScheduledRecovery(topicId: string) {
+		const scheduled = this.scheduledRecoveries.get(topicId)
+		if (!scheduled) return
+		if (scheduled.timer) clearTimeout(scheduled.timer)
+		this.scheduledRecoveries.delete(topicId)
+	}
+
+	private async startRecovery(topicId: string) {
+		if (this.inFlightRecoveries.has(topicId)) return
+		const scheduled = this.scheduledRecoveries.get(topicId)
+		if (!scheduled) return
+		const resolvedPayload = this.store.resolveStreamRecoveryRequest
+			? this.store.resolveStreamRecoveryRequest(scheduled.payload)
+			: scheduled.payload
+		if (!resolvedPayload) {
+			this.clearScheduledRecovery(topicId)
+			return
+		}
+		// The resolver may narrow a broad WS watermark to the Tool anchor that
+		// still needs recovery. Keep both pieces of information: the resolved
+		// reason/anchor drives the request, while the scheduled payload's higher
+		// requiredSeqId remains the authoritative-tail completion barrier.
+		const mergedPayload = mergeRecoveryPayload(scheduled.payload, resolvedPayload)
+		scheduled.payload = mergedPayload
+
+		const owner = this.selectCurrentOwner(topicId)
 		if (!owner) return
 
 		// Must happen before recover() reaches its first await so Store can merge later watchdogs.
-		const generation = this.store.beginTopicSync(payload.topicId)
+		const generation = this.store.beginTopicSync(topicId)
 		const inFlightRecovery: InFlightRecovery = {
-			topicId: payload.topicId,
+			topicId,
 			generation,
 			owner,
+			payload: mergedPayload,
 		}
-		this.inFlightRecoveries.set(payload.topicId, inFlightRecovery)
+		this.inFlightRecoveries.set(topicId, inFlightRecovery)
+		this.store.markToolResponseRecoveryInFlight?.(topicId)
 
-		void this.executeRecovery(inFlightRecovery, payload)
+		void this.executeRecovery(inFlightRecovery)
 	}
 
 	private selectCurrentOwner(topicId: string): RegisteredRecoveryOwner | undefined {
@@ -138,13 +256,11 @@ export class StreamRecoveryCoordinator {
 		)
 	}
 
-	private async executeRecovery(
-		recovery: InFlightRecovery,
-		payload: StreamRecoveryRequestPayload,
-	) {
+	private async executeRecovery(recovery: InFlightRecovery) {
+		const scheduled = this.scheduledRecoveries.get(recovery.topicId)
 		try {
 			const pullResult = await recovery.owner.recover({
-				...payload,
+				...recovery.payload,
 				conversationId: recovery.owner.conversationId,
 				syncGeneration: recovery.generation,
 			})
@@ -157,6 +273,9 @@ export class StreamRecoveryCoordinator {
 					succeeded: false,
 					taskStatus,
 				})
+				if (this.isRetryableRecovery(recovery.payload)) {
+					this.scheduleRetry(recovery, scheduled)
+				}
 				return
 			}
 
@@ -165,15 +284,94 @@ export class StreamRecoveryCoordinator {
 				taskStatus,
 				latestSeqId: this.store.getLatestMessageSeqId(recovery.topicId),
 			})
+			// Any successful authoritative pull can race role=tool persistence. Re-check the
+			// canonical Tool sidecar even when the original trigger was a WS watermark, then
+			// continue through the same bounded Tool recovery budget if the response is absent.
+			const pendingToolRecovery = this.store.resolveStreamRecoveryRequest?.({
+				...recovery.payload,
+				reason: "tool_response",
+			})
+			if (pendingToolRecovery && scheduled) {
+				scheduled.payload = mergeRecoveryPayload(recovery.payload, pendingToolRecovery)
+				this.store.markToolResponseRecoveryAwaitingResponse?.(recovery.topicId)
+				this.scheduleRetry(recovery, scheduled)
+			} else if (!scheduled?.rerunNeeded) {
+				this.clearScheduledRecovery(recovery.topicId)
+			}
 		} catch {
 			if (this.isRecoveryCurrent(recovery)) {
 				this.store.cancelTopicSync(recovery.topicId, recovery.generation)
 			}
+			this.store.markToolResponseRecoveryAwaitingResponse?.(recovery.topicId)
+			if (this.isRetryableRecovery(recovery.payload)) this.scheduleRetry(recovery, scheduled)
 		} finally {
 			if (this.inFlightRecoveries.get(recovery.topicId) === recovery) {
 				this.inFlightRecoveries.delete(recovery.topicId)
 			}
+			if (scheduled?.rerunNeeded) {
+				if (scheduled.timer) clearTimeout(scheduled.timer)
+				scheduled.timer = null
+				scheduled.rerunNeeded = false
+				this.scheduleRecovery(scheduled, 0)
+			}
 		}
+	}
+
+	private scheduleRetry(recovery: InFlightRecovery, scheduled?: ScheduledRecovery) {
+		if (!scheduled || this.scheduledRecoveries.get(recovery.topicId) !== scheduled) return
+		const nextAttempt = scheduled.attempt + 1
+		if (nextAttempt > this.retryDelaysMs.length) {
+			this.store.markToolResponseRecoveryDormant?.(recovery.topicId)
+			this.clearScheduledRecovery(recovery.topicId)
+			return
+		}
+		scheduled.attempt = nextAttempt
+		this.scheduleRecovery(scheduled, this.retryDelaysMs[nextAttempt - 1])
+	}
+
+	private isRetryableRecovery(payload: StreamRecoveryRequestPayload) {
+		return payload.reason === "tool_response" || payload.reason === "persistent_message"
+	}
+}
+
+function compareRecoverySeqId(left?: string, right?: string) {
+	if (!left) return right ? -1 : 0
+	if (!right) return 1
+	const leftDigits = left.replace(/^0+(?=\d)/, "")
+	const rightDigits = right.replace(/^0+(?=\d)/, "")
+	if (/^\d+$/.test(leftDigits) && /^\d+$/.test(rightDigits)) {
+		if (leftDigits.length !== rightDigits.length) return leftDigits.length - rightDigits.length
+	}
+	return leftDigits.localeCompare(rightDigits)
+}
+
+function mergeRecoveryPayload(
+	current: StreamRecoveryRequestPayload,
+	incoming: StreamRecoveryRequestPayload,
+): StreamRecoveryRequestPayload {
+	const incomingHasAnchor = Boolean(incoming.anchorSeqId || incoming.anchorAppMessageId)
+	const currentHasAnchor = Boolean(current.anchorSeqId || current.anchorAppMessageId)
+	const anchorIsEarlier =
+		incomingHasAnchor &&
+		(!currentHasAnchor || compareRecoverySeqId(incoming.anchorSeqId, current.anchorSeqId) < 0)
+	return {
+		...current,
+		...incoming,
+		...(current.correlationId && !incoming.correlationId
+			? { correlationId: current.correlationId }
+			: {}),
+		...(anchorIsEarlier
+			? {
+					anchorAppMessageId: incoming.anchorAppMessageId,
+					anchorSeqId: incoming.anchorSeqId,
+				}
+			: {
+					anchorAppMessageId: current.anchorAppMessageId || incoming.anchorAppMessageId,
+					anchorSeqId: current.anchorSeqId || incoming.anchorSeqId,
+				}),
+		...(compareRecoverySeqId(incoming.requiredSeqId, current.requiredSeqId) > 0
+			? { requiredSeqId: incoming.requiredSeqId }
+			: {}),
 	}
 }
 
@@ -181,4 +379,8 @@ const streamRecoveryCoordinator = new StreamRecoveryCoordinator(superMagicStore)
 
 export function registerStreamRecoveryOwner(registration: StreamRecoveryOwnerRegistration) {
 	return streamRecoveryCoordinator.registerOwner(registration)
+}
+
+export function requestTopicRecovery(payload: StreamRecoveryRequestPayload) {
+	streamRecoveryCoordinator.requestRecovery(payload)
 }

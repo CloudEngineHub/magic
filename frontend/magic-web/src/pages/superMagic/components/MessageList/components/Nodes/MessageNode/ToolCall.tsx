@@ -44,6 +44,8 @@ interface ToolCallItem {
 interface ToolCallProps {
 	topicId: string
 	correlationId: string
+	/** 所属 Assistant 的逻辑身份，用于 RenderSession 完成前屏蔽 canonical Tool Response。 */
+	ownerSuperMessageId?: string
 	classNames?: string
 	toolCall: ToolCallItem
 	selectedTopic?: Topic | null
@@ -57,6 +59,7 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 	const {
 		topicId,
 		correlationId,
+		ownerSuperMessageId,
 		toolCall,
 		classNames,
 		onMouseEnter,
@@ -65,7 +68,10 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 		selectedTopic,
 		isShare,
 	} = props
-	const toolResponse = superMagicStore.toolResponseMap.get(topicId)?.get(toolCall?.id)
+	const toolResponse = ownerSuperMessageId
+		? (superMagicStore.getToolResponseForRendering?.(topicId, ownerSuperMessageId, toolCall) ??
+			superMagicStore.toolResponseMap.get(topicId)?.get(toolCall?.id))
+		: superMagicStore.toolResponseMap.get(topicId)?.get(toolCall?.id)
 	const effectiveResponse = toolResponse || toolCall?.tool
 	const effectiveDetail = useMemo(
 		() =>

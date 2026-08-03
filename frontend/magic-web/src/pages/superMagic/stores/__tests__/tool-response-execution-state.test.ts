@@ -327,6 +327,48 @@ function createToolHeaderChunk({
 	}
 }
 
+function createAssistantContentChunk({
+	correlationId,
+	superMessageId = toAssistantSuperMessageId(correlationId),
+	i = 0,
+	content = "next assistant",
+}: {
+	correlationId: string
+	superMessageId?: string
+	i?: number
+	content?: string
+}): SuperMagicChunkMessage {
+	return {
+		magic_message_id: `magic-${correlationId}-${i}`,
+		app_message_id: `app-${correlationId}-${i}`,
+		type: IntermediateMessageType.SuperMagicChunk,
+		project_id: "project-1",
+		topic_id: TOPIC_ID,
+		chat_topic_id: TOPIC_ID,
+		message_id: `completion-${correlationId}`,
+		super_magic_chunk: {
+			super_message_id: superMessageId,
+			task_id: `task-${correlationId}`,
+			i,
+			usage: null,
+			correlation_id: correlationId,
+			choices: [
+				{
+					...({ index: 0 } as const),
+					finish_reason: null,
+					delta: {
+						content,
+						role: "assistant",
+						tool_calls: [],
+						reasoning_content: "",
+						index: 0,
+					},
+				},
+			],
+		},
+	}
+}
+
 function createStore(): SuperMagicStore {
 	const store = new SuperMagicStore()
 	store.setActiveTopicId(TOPIC_ID)
@@ -2252,6 +2294,199 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		).toBe("response_missing")
 	})
 
+	it("下一逻辑 Assistant 的首个有效 Chunk 只触发一次上一条工具恢复屏障。", () => {
+		const store = createStore()
+		const recoveryRequests: Array<{
+			topicId: string
+			correlationId: string
+			reason?: string
+			anchorAppMessageId?: string
+		}> = []
+		store.registerOnStreamRecoveryRequested((payload) => recoveryRequests.push(payload))
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "previous-assistant",
+				correlationId: "previous-correlation",
+				seqId: "100",
+				status: "running",
+				toolCalls: [createToolCall({ id: "previous-tool", status: "running" })],
+			}),
+		)
+		settleRendering()
+
+		store.receiveChunk(
+			createAssistantContentChunk({ correlationId: "following-correlation", i: 0 }),
+		)
+		for (let i = 1; i <= 500; i += 1) {
+			store.receiveChunk(
+				createAssistantContentChunk({
+					correlationId: "following-correlation",
+					i,
+					content: "x",
+				}),
+			)
+		}
+
+		expect(getCanonicalToolState(store, "previous-tool")).toMatchObject({
+			id: "previous-tool",
+			status: "response_missing",
+		})
+		expect(
+			store.getToolResponseRecoveryState(
+				TOPIC_ID,
+				toAssistantSuperMessageId("previous-correlation"),
+				"previous-tool",
+			),
+		).toMatchObject({
+			phase: "execution_settled_pending_response",
+			ownerAppMessageId: "previous-assistant",
+			anchorSeqId: "100",
+		})
+		expect(recoveryRequests).toEqual([
+			expect.objectContaining({
+				topicId: TOPIC_ID,
+				correlationId: "previous-correlation",
+				reason: "tool_response",
+				anchorAppMessageId: "previous-assistant",
+			}),
+		])
+	})
+
+	it("canonical Tool Response 已入账时仍受所属 Assistant FinalRenderState 展示门控。", () => {
+		const store = createStore()
+		const correlationId = "render-gated-correlation"
+		const superMessageId = toAssistantSuperMessageId(correlationId)
+		const toolCall = createToolCall({ id: "render-gated-tool", status: "running" })
+
+		store.receiveChunk(
+			createAssistantContentChunk({
+				correlationId,
+				content: "visible prefix",
+			}),
+		)
+		vi.advanceTimersByTime(RENDER_FRAME_MS)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "render-gated-final",
+				correlationId,
+				seqId: "100",
+				content: `visible prefix ${"canonical tail ".repeat(80)}`,
+				status: "running",
+				toolCalls: [toolCall],
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createToolEnvelope({
+				appMessageId: "render-gated-tool-response",
+				correlationId,
+				seqId: "101",
+				toolId: "render-gated-tool",
+				status: "finished",
+			}),
+		)
+
+		expect(getCanonicalToolState(store, "render-gated-tool")?.status).toBe("finished")
+		expect(store.getToolResponseForRendering(TOPIC_ID, superMessageId, toolCall)?.status).toBe(
+			"running",
+		)
+
+		advanceUntil(
+			() =>
+				store.getToolResponseForRendering(TOPIC_ID, superMessageId, toolCall)?.status ===
+				"finished",
+			"FinalRenderState opens the canonical Tool Response gate",
+		)
+		expect(store.getToolResponseForRendering(TOPIC_ID, superMessageId, toolCall)).toMatchObject(
+			{
+				id: "render-gated-tool",
+				status: "finished",
+				detail: { type: "json", data: { ok: true } },
+			},
+		)
+	})
+
+	it("Final 仅补齐 ToolCall arguments 时仍保持 Tool Response 展示门控。", () => {
+		const store = createStore()
+		const correlationId = "tool-only-render-gated-correlation"
+		const superMessageId = toAssistantSuperMessageId(correlationId)
+		const toolId = "tool-only-render-gated-tool"
+		const streamedToolCall = createToolCall({
+			id: toolId,
+			arguments: '{"value":"prefix',
+			status: "running",
+		})
+		const finalToolCall = createToolCall({
+			id: toolId,
+			arguments: `{"value":"${"canonical-tail-".repeat(300)}"}`,
+			status: "running",
+		})
+
+		store.receiveChunk(createToolHeaderChunk({ correlationId, toolCall: streamedToolCall }))
+		vi.advanceTimersByTime(RENDER_FRAME_MS)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "tool-only-render-gated-final",
+				correlationId,
+				seqId: "100",
+				content: "",
+				status: "running",
+				toolCalls: [finalToolCall],
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createToolEnvelope({
+				appMessageId: "tool-only-render-gated-response",
+				correlationId,
+				seqId: "101",
+				toolId,
+				status: "finished",
+			}),
+		)
+
+		expect(getCanonicalToolState(store, toolId)?.status).toBe("finished")
+		expect(
+			store.getToolResponseForRendering(TOPIC_ID, superMessageId, streamedToolCall)?.status,
+		).toBe("running")
+
+		advanceUntil(
+			() =>
+				store.getToolResponseForRendering(TOPIC_ID, superMessageId, finalToolCall)
+					?.status === "finished",
+			"ToolCall-only FinalRenderState opens the canonical Tool Response gate",
+		)
+	})
+
+	it("权威 membership 删除 Assistant 时同步清理其 Tool recovery sidecar。", () => {
+		const store = createStore()
+		const correlationId = "removed-recovery-correlation"
+		const superMessageId = toAssistantSuperMessageId(correlationId)
+		const toolId = "removed-recovery-tool"
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "removed-recovery-assistant",
+				correlationId,
+				seqId: "100",
+				status: "running",
+				toolCalls: [createToolCall({ id: toolId, status: "running" })],
+			}),
+		)
+		settleRendering()
+		expect(store.getToolResponseRecoveryState(TOPIC_ID, superMessageId, toolId)).toBeDefined()
+
+		store.initializeMessages(TOPIC_ID, [], { mode: "replace" })
+
+		expect(store.getToolResponseRecoveryState(TOPIC_ID, superMessageId, toolId)).toBeUndefined()
+		expect(store.getToolResponseRecoveryRequest(TOPIC_ID)).toBeUndefined()
+	})
+
 	it("live HTTP 投影策略下，任务仍在运行且没有后续消息时不提前生成 response_missing。", () => {
 		const store = createStore()
 		const generation = store.beginTopicSync(TOPIC_ID)
@@ -2285,6 +2520,36 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(
 			getEffectiveToolState(store, "still-running-tool", "running-correlation")?.status,
 		).not.toBe("response_missing")
+	})
+
+	it("HTTP preserve_live 同批倒序包含 Tool 与 Assistant 时，真实 Tool Response 先入 canonical。", () => {
+		const store = createStore()
+		const assistant = createAssistantEnvelope({
+			appMessageId: "preserve-live-assistant",
+			correlationId: "preserve-live-correlation",
+			seqId: "100",
+			status: "running",
+			toolCalls: [createToolCall({ id: "preserve-live-tool", status: "running" })],
+		})
+		const tool = createToolEnvelope({
+			appMessageId: "preserve-live-tool-response",
+			correlationId: "preserve-live-correlation",
+			seqId: "101",
+			toolId: "preserve-live-tool",
+			status: "finished",
+		})
+
+		store.initializeMessages(TOPIC_ID, [tool, assistant], {
+			mode: "merge",
+			toolProjectionPolicy: "preserve_live",
+		})
+
+		expect(getCanonicalToolState(store, "preserve-live-tool")).toMatchObject({
+			id: "preserve-live-tool",
+			status: "finished",
+			detail: { type: "json", data: { ok: true } },
+		})
+		expect(getAssistantNode(store, "preserve-live-correlation")?.tool_calls).toHaveLength(1)
 	})
 
 	it("response_missing 弱终态生成后，迟到的真实 tool message 可以覆盖。", () => {

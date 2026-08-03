@@ -188,9 +188,21 @@ export interface StreamState {
 	finalMessage?: StreamMessage
 }
 
+export type StreamRecoveryTriggerReason =
+	| "stream_watchdog"
+	| "tool_response"
+	| "persistent_message"
+	| "topic_terminal"
+	| "topic_activation"
+	| "network_recovered"
+
 export interface StreamRecoveryRequestPayload {
 	topicId: string
 	correlationId: string
+	reason?: StreamRecoveryTriggerReason
+	requiredSeqId?: string
+	anchorAppMessageId?: string
+	anchorSeqId?: string
 }
 
 export interface StreamRecoveryState {
@@ -231,6 +243,29 @@ export interface ToolResponseState {
 	remark?: string
 	status?: string
 	[key: string]: unknown
+}
+
+/**
+ * Message 级 Tool Response 恢复 sidecar。它描述“是否需要继续找真实 role=tool”，
+ * 不是服务端消息，也不能替代 toolResponseMap 的 canonical 状态。
+ */
+export type ToolResponseRecoveryPhase =
+	| "awaiting_response"
+	| "execution_settled_pending_response"
+	| "scheduled"
+	| "in_flight"
+	| "dormant"
+
+export interface ToolResponseRecoveryState {
+	topicId: string
+	ownerSuperMessageId: string
+	ownerAppMessageId: string
+	toolId: string
+	anchorSeqId: string
+	phase: ToolResponseRecoveryPhase
+	attempt: number
+	nextRetryAt: number | null
+	lastTrigger?: StreamRecoveryTriggerReason
 }
 
 export interface TopicMetaContentEntry {

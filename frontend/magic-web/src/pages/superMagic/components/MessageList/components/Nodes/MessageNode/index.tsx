@@ -96,6 +96,9 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	const topicId = props?.node?.topic_id || ""
 	const correlationId = props?.node?.correlation_id || ""
 	const messageId = props?.node?.app_message_id || ""
+	const ownerSuperMessageId = String(
+		node?.super_message_id || props?.node?.super_message_id || "",
+	)
 
 	const reasoningContent =
 		typeof node?.reasoning_content === "string" ? node.reasoning_content : ""
@@ -291,6 +294,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 							<ToolCall
 								toolCall={o}
 								topicId={topicId}
+								ownerSuperMessageId={ownerSuperMessageId}
 								selectedTopic={selectedTopic}
 								isShare={props.isShare}
 								correlationId={correlationId || messageId}

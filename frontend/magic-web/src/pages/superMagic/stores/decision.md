@@ -2436,3 +2436,35 @@ corepack pnpm exec vitest run \
 - 新增/更新用例覆盖：IM 与 SuperMessage 状态转换、普通 HTTP 禁止隐式恢复、显式恢复授权一次性消费、同 SuperMessage 不同 app message 的状态归属、committed/completed 事件边界、分享转换、撤回 selector、工具/附件点击过滤和 AssistantCard 双状态 fixture。
 - 本节更新的是状态域行为覆盖矩阵，不以全仓历史覆盖率百分比作为验收依据；本次相关 ESLint 为 `0 errors`，仅保留既有 warnings。
 - 同一 `super_message_id` 的不同 `app_message_id`/`correlation_id` 按真实 `seq_id` 归并；同一 `app_message_id` 的 correlation 变化不得再被当作拒绝性 identity conflict。
+
+## Tool Response Canonical / Recovery / Render 契约（2026-08-03，RATIFIED）
+
+本节补充工具调用响应的最终边界。此前“工具 loading 等待 Assistant 动画结束后再入账”只保留为历史背景，状态标记为 `STALE`。
+
+| 决策 | 当前有效规则 |
+| ---- | ------------ |
+| TR-01 | Assistant Final 的 `tool_calls` 只声明工具调用，不代表工具结果已经完成；真实结果只来自后续 `role=tool` canonical 消息。 |
+| TR-02 | Tool canonical、Tool recovery sidecar、Tool render gate 三层独立：canonical 入账不得等待 Buffer、动画或 UI；recovery sidecar 不伪造 `role=tool`；render gate 只决定何时向用户投影真实结果。 |
+| TR-03 | 普通 Tool 的恢复 identity 为 `topicId + ownerSuperMessageId + toolId`；`toolResponseMap` 仍以 `topicId + toolId` 为 canonical 索引。`tool_call_id` 只能观察和告警，不能作为 canonical key。 |
+| TR-04 | Final 注册缺少真实 Tool Response 的合法普通 Tool；`ask_user`、Final 权威删除的 Tool、非法 ID、owner 冲突和 orphan 普通 Tool 不进入普通恢复任务。 |
+| TR-05 | 同 Topic 新 Assistant 的首个有效 Chunk（正文、推理或 ToolCall）是上一 Assistant 普通 Tool 的 execution-settled barrier。它只能把 sidecar 置为 `execution_settled_pending_response` 并允许生成弱 `response_missing`，不能推导 `finished/error/suspended`。Heartbeat、metadata、usage、`before_llm_request`、重复 Chunk、同消息 higher revision 和 Final 不触发该屏障。 |
+| TR-06 | `response_missing` 是可被真实 `role=tool` 覆盖的弱终态；真实 `finished/error/suspended` 清理对应 recovery sidecar，并发布 `toolCall.settled`。强终态不能被弱终态回退。 |
+| TR-07 | 所有恢复来源统一进入 Topic 级 `StreamRecoveryCoordinator`，同 Topic single-flight、debounce/coalescing、in-flight `rerunNeeded`、请求前二次校验和有界退避；不得由 Tool UI 的 `isToolLoading` 决定是否请求 HTTP。 |
+| TR-08 | HTTP authoritative-tail 以待恢复 Tool 所属 Assistant 的最早 `anchorSeqId` 拉取，保留 required watermark、anchor、分页、membership、replace_tail 语义；同批先建立 Assistant owner，再登记 `role=tool`，真实结果优先，不先生成 `response_missing`。HTTP 不重新进入 IM Buffer。 |
+| TR-09 | canonical Tool Response 即时写入 `toolResponseMap`，但所属 Assistant 的 `StreamState` 或 `FinalRenderState` 尚未完成时，ToolCall 仍显示调用声明中的 running/waiting，不提前展示真实 status/detail/attachments/remark。RenderSession 完成后原子开放 canonical 投影；刷新或无可续播前缀时直接展示 canonical。 |
+| TR-10 | 恢复 sidecar phase 仅表示调度生命周期：`awaiting_response → scheduled → in_flight → awaiting_response/dormant`。它不改变 Tool execution state，也不参与 Message reasoning loading、Topic loading 或生命周期事件。 |
+| TR-11 | 所有 Tool 已强/弱收敛或 Topic dispose/authoritative removal 后清理 recovery timer、pending、in-flight 标记和 Message 级索引；切换 Topic 不删除 canonical，但可停止非活跃调度。 |
+
+### Tool 事件顺序
+
+1. Assistant Final：提交 canonical Assistant，登记缺失 Tool recovery，立即结束 Assistant `StreamState`。
+2. 真实 `role=tool`：校验 `tool.id + owner + seq`，原子写入 `toolResponseMap`，再发布 `toolCall.settled`；不等待动画。
+3. RenderSession：只负责 ToolCall/arguments 与 reasoning/content 的可见追平；完成时删除 RenderState，不重复发布 canonical 事件。
+4. 下一 Assistant 首个有效 Chunk、WS persistent-message、Topic terminal、页面激活、网络恢复和 watchdog 都只调度同一个 Topic coordinator。
+
+### STALE 结论
+
+- “Tool UI 仍 loading，所以 canonical Tool Response 尚未到达”：`STALE`。
+- “收到 Assistant Final 即可把普通 Tool 推导为 finished”：`STALE`。
+- “每个 Tool 独立轮询或由每个 Chunk 扫描全量消息”：`STALE`。
+- “为了动画保留 StreamState 或让 Tool Response 入账等待动画”：`STALE`。

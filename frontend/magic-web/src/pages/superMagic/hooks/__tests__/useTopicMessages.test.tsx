@@ -7,6 +7,15 @@ const mockState = vi.hoisted(() => ({
 	nextSyncGeneration: 1,
 	getMessagesByConversationIdMock: vi.fn(),
 	registerStreamRecoveryOwnerMock: vi.fn(),
+	requestTopicRecoveryMock: vi.fn(),
+	recoveryOwner: undefined as
+		| {
+				conversationId: string
+				recover: (context: Record<string, unknown>) => Promise<{ didPullSucceed: boolean }>
+		  }
+		| undefined,
+	recoveryTimers: new Map<string, ReturnType<typeof setTimeout>>(),
+	recoveryPayloads: new Map<string, Record<string, unknown>>(),
 	pubsubHandlers: new Map<string, (data: any) => void>(),
 	superMagicStoreMock: {
 		messages: new Map<string, unknown[]>(),
@@ -20,9 +29,15 @@ const mockState = vi.hoisted(() => ({
 				syncGeneration?: number
 			}
 		>(),
-		beginTopicSync: vi.fn(() => mockState.nextSyncGeneration++),
+		beginTopicSync: vi.fn((_topicId: string) => mockState.nextSyncGeneration++),
 		isTopicSyncCurrent: vi.fn(() => true),
-		completeTopicSync: vi.fn(() => true),
+		completeTopicSync: vi.fn(
+			(
+				_topicId: string,
+				_generation: number,
+				_result: { succeeded: boolean; taskStatus?: string },
+			) => true,
+		),
 		cancelTopicSync: vi.fn(),
 		getLatestMessageSeqId: vi.fn(() => "assistant-seq-1"),
 		initializeMessages: vi.fn(
@@ -88,6 +103,7 @@ vi.mock("@/pages/superMagic/stores/optimisticMessageStore", () => ({
 
 vi.mock("@/pages/superMagic/services/streamRecoveryCoordinator", () => ({
 	registerStreamRecoveryOwner: mockState.registerStreamRecoveryOwnerMock,
+	requestTopicRecovery: mockState.requestTopicRecoveryMock,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -112,6 +128,7 @@ describe("useTopicMessages", () => {
 		vi.clearAllMocks()
 		mockState.getMessagesByConversationIdMock.mockReset()
 		mockState.registerStreamRecoveryOwnerMock.mockReset()
+		mockState.requestTopicRecoveryMock.mockReset()
 		mockState.nextSyncGeneration = 1
 		mockState.superMagicStoreMock.beginTopicSync.mockImplementation(
 			() => mockState.nextSyncGeneration++,
@@ -127,7 +144,51 @@ describe("useTopicMessages", () => {
 		mockState.clearActiveRevokedAnchor.mockReset()
 		mockState.clearHiddenRevokedOptimisticMessageIds.mockReset()
 		mockState.pubsubHandlers.clear()
-		mockState.registerStreamRecoveryOwnerMock.mockReturnValue(vi.fn())
+		mockState.recoveryOwner = undefined
+		mockState.recoveryTimers.forEach((timer) => clearTimeout(timer))
+		mockState.recoveryTimers.clear()
+		mockState.recoveryPayloads.clear()
+		mockState.registerStreamRecoveryOwnerMock.mockImplementation((registration) => {
+			mockState.recoveryOwner = registration
+			return vi.fn(() => {
+				if (mockState.recoveryOwner === registration) mockState.recoveryOwner = undefined
+			})
+		})
+		mockState.requestTopicRecoveryMock.mockImplementation((payload) => {
+			const topicId = payload.topicId
+			const current = mockState.recoveryPayloads.get(topicId) || {}
+			const requiredSeqId = String(payload.requiredSeqId || current.requiredSeqId || "")
+			const currentRequiredSeqId = String(current.requiredSeqId || "")
+			mockState.recoveryPayloads.set(topicId, {
+				...current,
+				...payload,
+				...(requiredSeqId &&
+				(!currentRequiredSeqId || Number(requiredSeqId) > Number(currentRequiredSeqId))
+					? { requiredSeqId }
+					: currentRequiredSeqId
+						? { requiredSeqId: currentRequiredSeqId }
+						: {}),
+			})
+			if (mockState.recoveryTimers.has(topicId)) return
+			const timer = setTimeout(async () => {
+				mockState.recoveryTimers.delete(topicId)
+				const recoveryOwner = mockState.recoveryOwner
+				const recoveryPayload = mockState.recoveryPayloads.get(topicId)
+				mockState.recoveryPayloads.delete(topicId)
+				if (!recoveryOwner || !recoveryPayload) return
+				const generation = mockState.superMagicStoreMock.beginTopicSync(topicId)
+				const result = await recoveryOwner.recover({
+					...recoveryPayload,
+					conversationId: recoveryOwner.conversationId,
+					syncGeneration: generation,
+				})
+				mockState.superMagicStoreMock.completeTopicSync(topicId, generation, {
+					succeeded: result.didPullSucceed,
+					taskStatus: undefined,
+				})
+			}, 200)
+			mockState.recoveryTimers.set(topicId, timer)
+		})
 		mockState.getMessagesByConversationIdMock.mockImplementation(
 			() => new Promise(() => undefined),
 		)
@@ -851,6 +912,7 @@ describe("useTopicMessages", () => {
 				eventPolicy: "live_arrival",
 				mode: "replace",
 				preserveStreamSuperMessageIds: [],
+				syncGeneration: expect.any(Number),
 				toolProjectionPolicy: "preserve_live",
 			},
 		)
