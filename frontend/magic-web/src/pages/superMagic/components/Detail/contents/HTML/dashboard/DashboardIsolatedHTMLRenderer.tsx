@@ -333,8 +333,8 @@ function IsolatedHTMLRenderer({
 				className={styles.iframe}
 				title="HTML Content"
 				src={htmlSandboxShellUrl}
-				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock pointer-lock"
-				allow="fullscreen"
+				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock"
+				allow="fullscreen pointer-lock"
 				allowFullScreen
 				data-testid="html-content-iframe"
 			/>
