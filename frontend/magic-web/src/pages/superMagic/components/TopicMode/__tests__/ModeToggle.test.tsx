@@ -298,9 +298,13 @@ describe("ModeToggle", () => {
 			expect(screen.getByTestId("super-message-editor-mode-toggle-content")).toHaveClass(
 				"min-h-0",
 			)
+			expect(
+				screen.getByTestId("super-message-editor-mode-toggle-list-container"),
+			).toHaveClass("min-h-0", "flex-1", "overflow-hidden")
 			expect(screen.getByTestId("super-message-editor-mode-toggle-list")).toHaveClass(
 				"min-h-0",
 				"flex-1",
+				"overflow-y-auto",
 			)
 		},
 	)
@@ -332,6 +336,38 @@ describe("ModeToggle", () => {
 
 		expect(hiddenTrigger).toHaveAttribute("aria-expanded", "true")
 		expect(screen.getByText("Hidden Mode")).toBeInTheDocument()
+	})
+
+	it("keeps visible and hidden modes in independent scroll areas", () => {
+		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		const visibleList = screen.getByTestId("super-message-editor-mode-toggle-list")
+		const hiddenSection = screen.getByTestId("super-message-editor-mode-toggle-hidden-section")
+
+		expect(visibleList).not.toContainElement(hiddenSection)
+		expect(visibleList).toHaveClass("overflow-y-auto")
+
+		fireEvent.click(screen.getByTestId("super-message-editor-mode-toggle-hidden-trigger"))
+
+		expect(screen.getByTestId("super-message-editor-mode-toggle-hidden-list")).toHaveClass(
+			"overflow-y-auto",
+			"scrollbar-y-thin",
+		)
+	})
+
+	it("does not render the hidden section when no hidden mode matches", () => {
+		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+		fireEvent.change(screen.getByTestId("super-message-editor-mode-toggle-search-input"), {
+			target: { value: "Mode A" },
+		})
+
+		expect(
+			screen.queryByTestId("super-message-editor-mode-toggle-hidden-section"),
+		).not.toBeInTheDocument()
 	})
 
 	it("keeps the list scroll position when manually expanding hidden modes", () => {
