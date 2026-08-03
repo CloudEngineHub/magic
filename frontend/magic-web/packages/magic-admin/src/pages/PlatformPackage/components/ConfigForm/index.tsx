@@ -1,6 +1,6 @@
 /* eslint-disable react/no-array-index-key */
 import { memo, useMemo } from "react"
-import { Flex, Form, Radio, Upload, message } from "antd"
+import { Flex, Form, Upload, message } from "antd"
 import { IconUpload } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { MagicButton, MagicSelect } from "@admin-components"
@@ -375,37 +375,6 @@ const ConfigForm = memo(({ category, code, name, descPosition = "left" }: Config
 				</Flex>
 			)}
 
-			{/* Google 生图参考图传输方式 */}
-			{showReferenceImageTransport && (
-				<Flex
-					justify="space-between"
-					gap={isMobile ? 12 : isLeftDesc ? 50 : 0}
-					align={isMobile ? "stretch" : "flex-start"}
-					vertical={isMobile}
-				>
-					<div className={cx(styles.label, styles.labelText, styles.required)}>
-						{t("form.referenceImageTransport")}
-					</div>
-					<Flex flex={60}>
-						<Form.Item
-							name={["config", "reference_image_transport"]}
-							noStyle
-							initialValue={AiManage.ReferenceImageTransport.URL_FALLBACK_BASE64}
-						>
-							<Radio.Group>
-								<Flex gap={8} wrap vertical={isMobile}>
-									{referenceImageTransportOptions.map((option) => (
-										<Radio key={option.value} value={option.value}>
-											{option.label}
-										</Radio>
-									))}
-								</Flex>
-							</Radio.Group>
-						</Form.Item>
-					</Flex>
-				</Flex>
-			)}
-
 			{/* 根据认证方式显示不同的表单 */}
 			<Form.Item noStyle dependencies={["config", "auth_type"]}>
 				{({ getFieldValue }) => {
@@ -447,6 +416,32 @@ const ConfigForm = memo(({ category, code, name, descPosition = "left" }: Config
 						))
 				}}
 			</Form.Item>
+
+			{/* Google 生图参考图传输方式 */}
+			{showReferenceImageTransport && (
+				<Flex
+					justify="space-between"
+					gap={isMobile ? 12 : isLeftDesc ? 50 : 0}
+					align={isMobile ? "stretch" : "flex-start"}
+					vertical={isMobile}
+				>
+					<div className={cx(styles.label, styles.labelText, styles.required)}>
+						{t("form.referenceImageTransport")}
+					</div>
+					<Flex flex={60}>
+						<Form.Item
+							name={["config", "reference_image_transport"]}
+							noStyle
+							initialValue={AiManage.ReferenceImageTransport.URL_FALLBACK_BASE64}
+						>
+							<MagicSelect
+								options={referenceImageTransportOptions}
+								placeholder={t("form.referenceImageTransport")}
+							/>
+						</Form.Item>
+					</Flex>
+				</Flex>
+			)}
 		</>
 	)
 })
