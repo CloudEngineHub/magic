@@ -83,6 +83,7 @@ export namespace AiManage {
 		BASE64 = "base64",
 		URL = "url",
 		URL_FALLBACK_BASE64 = "url_fallback_base64",
+		BASE64_FALLBACK_URL = "base64_fallback_url",
 	}
 
 	/* API key 配置信息 */
