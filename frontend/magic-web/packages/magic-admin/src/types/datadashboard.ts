@@ -14,6 +14,9 @@ export namespace DataDashboard {
 	/** 成员 Tabs 类型 */
 	export type MemberTabType = "member_usage" | "member_call" | "member_agent" | "member_silent"
 
+	/** 组织 Tabs 类型 */
+	export type OrganizationTabType = "department_usage" | "department_low_activation"
+
 	/** 数据看板公共查询参数 */
 	export interface BaseQuery {
 		/** 开始日期，格式 Y-m-d；必须和 end_date 同时传入 */
@@ -59,6 +62,22 @@ export namespace DataDashboard {
 		/** 每页条数，最小值 1，最大值 100，默认 20 */
 		page_size?: number
 	}
+
+	/** 组织 Summary 查询参数；组织页面不得传入 user_id 和 source_type */
+	export type OrganizationSummaryQuery = Omit<BaseQuery, "user_id">
+
+	/** 组织 Tabs 查询参数 */
+	export interface OrganizationTabsQuery extends OrganizationSummaryQuery {
+		/** Tab 类型；默认 department_usage */
+		tab_type: OrganizationTabType
+		/** 当前页码，最小值 1，默认 1 */
+		page: number
+		/** 每页条数，最小值 1，最大值 100，默认 20 */
+		page_size: number
+	}
+
+	/** 消耗分析 Summary 查询参数；不支持成员和来源筛选 */
+	export type ConsumptionAnalysisQuery = Omit<BaseQuery, "user_id">
 
 	/** 数字员工筛选选项行 */
 	export interface AgentOption {
@@ -357,4 +376,119 @@ export namespace DataDashboard {
 
 	/** 成员 Tabs 行类型 */
 	export type MemberTabRow = MemberUsageRow | MemberCallRow | MemberAgentRow | MemberSilentRow
+
+	/** 部门层级 */
+	export type DepartmentLevel = 1 | 2 | 3
+
+	/** 组织部门使用分层 */
+	export type DepartmentUsageType = "high" | "medium" | "low" | "unused"
+
+	/** 组织 Summary 中的部门统计行 */
+	export interface DepartmentStatistic {
+		/** 当前部门 ID */
+		department_id: string
+		/** 当前部门名称 */
+		department_name: string
+		/** 当前部门真实层级 */
+		department_level: DepartmentLevel
+		/** 上级部门完整路径；一级部门为空 */
+		parent_department_path?: string | null
+		/** 当前部门及全部下级的当前在职人类成员去重数 */
+		employed_member_count: number
+		/** 当前筛选周期内产生调用的在职成员去重数 */
+		active_member_count: number
+		/** 当前部门及全部下级的调用次数 */
+		call_count: number
+		/** 当前部门及全部下级的积分消耗 */
+		points: number
+	}
+
+	/** 组织部门使用分布行 */
+	export interface UsageDistributionItem {
+		/** 使用分层编码 */
+		usage_type: DepartmentUsageType
+		/** 当前分层的部门数量 */
+		department_count: number
+	}
+
+	/** 组织 Summary 响应数据 */
+	export interface OrganizationSummary {
+		/** 当前组织实际一级部门数量 */
+		level_1_department_count: number
+		/** 当前组织实际二级部门数量 */
+		level_2_department_count: number
+		/** 当前组织实际三级部门数量；不代表全部部门数量 */
+		level_3_department_count: number
+		/** 当前筛选范围内产生调用、且能够归属到统计部门的成员去重数 */
+		calling_member_count: number
+		/** 当前筛选范围内调用总次数 */
+		total_call_count: number
+		/** 当前筛选范围内积分总消耗 */
+		total_points: number
+		/** 当前筛选范围内 Token 总消耗 */
+		total_tokens: number
+		/** 当前部门范围内全部有效一级、二级、三级部门 */
+		department_statistics: DepartmentStatistic[]
+		/** 部门使用分层 */
+		usage_distribution: UsageDistributionItem[]
+	}
+
+	/** 组织 Tabs 部门行 */
+	export interface OrganizationDepartmentRow {
+		/** 当前行部门 ID */
+		department_id: string
+		/** 当前部门真实层级 */
+		department_level: DepartmentLevel
+		/** 一级部门名称 */
+		level_1_department_name: string | null
+		/** 二级部门名称 */
+		level_2_department_name: string | null
+		/** 三级部门名称 */
+		level_3_department_name: string | null
+		/** 当前部门及全部下级的当前在职人类成员去重数 */
+		employed_member_count: number
+		/** 当前筛选周期内产生调用的在职成员去重数 */
+		active_member_count: number
+		/** 当前部门及全部下级的调用次数 */
+		call_count: number
+		/** 当前部门及全部下级的积分消耗 */
+		points: number
+		/** 当前部门及全部下级的 Token 消耗 */
+		tokens: number
+		/** 当前部门及全部下级最近一次调用时间 */
+		last_called_at: string | null
+	}
+
+	/** 组织 Tabs 行类型 */
+	export type OrganizationTabRow = OrganizationDepartmentRow
+
+	/** 消耗分析趋势点 */
+	export interface ConsumptionTrendItem {
+		/** 日期，格式 Y-m-d */
+		date: string
+		/** 当日调用次数 */
+		call_count: number
+		/** 当日积分消耗 */
+		points: number
+		/** 当日 Token 消耗 */
+		tokens: number
+	}
+
+	/** 消耗分析 Summary 响应数据 */
+	export interface ConsumptionAnalysisSummary {
+		/** 当前筛选范围内调用总次数 */
+		total_call_count: number
+		/** 当前筛选范围内产生调用的成员去重数 */
+		calling_member_count: number
+		/** 当前筛选范围内产生调用的部门去重数 */
+		department_count: number
+		/** 当前筛选范围内产生调用的数字员工去重数 */
+		active_agent_count: number
+		/** 当前筛选范围内积分总消耗 */
+		total_points: number
+		/** 当前筛选范围内 Token 总消耗 */
+		total_tokens: number
+		/** 按自然日聚合的消耗趋势 */
+		usage_trend: ConsumptionTrendItem[]
+	}
 }

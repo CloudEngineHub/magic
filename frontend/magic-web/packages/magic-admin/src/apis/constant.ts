@@ -124,6 +124,13 @@ export const RequestUrl = {
 	getDataDashboardMemberSummary: "/api/v1/admin/data-dashboard/member-analysis/summary",
 	/** 数据看板 - 成员分析 Tabs */
 	getDataDashboardMemberTabs: "/api/v1/admin/data-dashboard/member-analysis/tabs",
+	/** 数据看板 - 组织分析 Summary */
+	getDataDashboardOrganizationSummary:
+		"/api/v1/admin/data-dashboard/organization-analysis/summary",
+	/** 数据看板 - 组织分析 Tabs */
+	getDataDashboardOrganizationTabs: "/api/v1/admin/data-dashboard/organization-analysis/tabs",
+	/** 数据看板 - 消耗分析 Summary */
+	getDataDashboardConsumptionSummary: "/api/v1/admin/data-dashboard/consumption-analysis/summary",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */

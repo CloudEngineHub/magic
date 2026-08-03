@@ -20,7 +20,7 @@ import type { DataDashboardView } from "./consts"
 import { useDataDashboardActions } from "./hooks/useDataDashboardActions"
 import { useDataDashboardRequests } from "./hooks/useDataDashboardRequests"
 import { useStyles } from "./styles"
-import { displayText, formatNumber } from "./utils"
+import { displayText, formatNumber, getStatisticsDayCount } from "./utils"
 
 interface DataDashboardPageProps {
 	view: DataDashboardView
@@ -44,6 +44,9 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		currentTab,
 		agentQuery,
 		memberQuery,
+		organizationQuery,
+		consumptionQuery,
+		metricSkeletonCount,
 		handleReset,
 		handleTimeRangeChange,
 		handleDepartmentChange,
@@ -60,8 +63,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 	const {
 		agentOptions,
 		agentOptionsLoading,
-		agentSummary,
-		memberSummary,
+		summaryData,
 		summaryLoading,
 		tableLoading,
 		tabData,
@@ -71,6 +73,8 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		currentTab,
 		agentQuery,
 		memberQuery,
+		organizationQuery,
+		consumptionQuery,
 		page,
 		pageSize,
 	})
@@ -115,16 +119,11 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		[agentOptions?.list, t],
 	)
 
+	const statisticsDayCount = getStatisticsDayCount(consumptionQuery)
 	const metrics = useMemo(
-		() =>
-			buildMetrics(
-				stateView,
-				stateView === VIEW.DigitalEmployeeAnalysis ? agentSummary : memberSummary,
-				t,
-			),
-		[agentSummary, memberSummary, t, stateView],
+		() => buildMetrics(stateView, summaryData, t, statisticsDayCount),
+		[statisticsDayCount, summaryData, t, stateView],
 	)
-	const metricSkeletonCount = stateView === VIEW.DigitalEmployeeAnalysis ? 10 : 8
 
 	return (
 		<div className={styles.page}>
@@ -153,22 +152,25 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 								/>
 							</div>
 						</div>
-						<div className={styles.filterItem}>
-							<div className={styles.filterLabel}>{t("filters.memberId")}</div>
-							<UserSelect
-								selected={members}
-								setSelected={handleMemberChange}
-								placeholder={t("filters.memberIdPlaceholder")}
-								maxTagCount="responsive"
-								departmentSelectorProps={{
-									onFetchData: fetchMagicDepartmentUser,
-									searchUser,
-									maxCount: 1,
-									organization: organizationInfo,
-								}}
-								formItemProps={{ style: { marginBottom: 0 } }}
-							/>
-						</div>
+						{stateView !== VIEW.OrganizationAnalysis &&
+						stateView !== VIEW.ConsumptionAnalysis ? (
+							<div className={styles.filterItem}>
+								<div className={styles.filterLabel}>{t("filters.memberId")}</div>
+								<UserSelect
+									selected={members}
+									setSelected={handleMemberChange}
+									placeholder={t("filters.memberIdPlaceholder")}
+									maxTagCount="responsive"
+									departmentSelectorProps={{
+										onFetchData: fetchMagicDepartmentUser,
+										searchUser,
+										maxCount: 1,
+										organization: organizationInfo,
+									}}
+									formItemProps={{ style: { marginBottom: 0 } }}
+								/>
+							</div>
+						) : null}
 						<div className={styles.filterItem}>
 							<div className={styles.filterLabel}>{t("filters.department")}</div>
 							<UserSelect
@@ -252,22 +254,24 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 				/>
 				<Visualization
 					view={stateView}
-					agentSummary={agentSummary}
-					memberSummary={memberSummary}
+					summary={summaryData}
 					loading={summaryLoading}
 					styles={styles}
 					t={t}
+					dateQuery={consumptionQuery}
 				/>
-				<DetailSection
-					view={stateView}
-					activeTab={currentTab}
-					tabData={tabData}
-					timeRange={timeRange}
-					pageSize={pageSize}
-					loading={tableLoading}
-					onTabChange={handleTabChange}
-					onPageChange={handlePageChange}
-				/>
+				{stateView !== VIEW.ConsumptionAnalysis ? (
+					<DetailSection
+						view={stateView}
+						activeTab={currentTab}
+						tabData={tabData}
+						timeRange={timeRange}
+						pageSize={pageSize}
+						loading={tableLoading}
+						onTabChange={handleTabChange}
+						onPageChange={handlePageChange}
+					/>
+				) : null}
 			</div>
 		</div>
 	)

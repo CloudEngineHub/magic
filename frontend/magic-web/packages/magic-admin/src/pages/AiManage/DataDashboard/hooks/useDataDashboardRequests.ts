@@ -1,25 +1,13 @@
-import { useEffect, useMemo, useRef } from "react"
-import { useMount, useRequest } from "ahooks"
+import { useEffect, useMemo } from "react"
+import { useRequest } from "ahooks"
 import { useApis } from "@admin/apis"
 import type { DataDashboard } from "@admin/types/datadashboard"
 import { VIEW, type DataDashboardView } from "../consts"
-import { type DashboardTabType } from "../utils"
-
-type DashboardRequest =
-	| {
-			view: typeof VIEW.DigitalEmployeeAnalysis
-			summaryKey: string
-			tabsKey: string
-			summaryQuery: DataDashboard.AgentSummaryQuery
-			tabsQuery: DataDashboard.AgentTabsQuery
-	  }
-	| {
-			view: typeof VIEW.MemberAnalysis
-			summaryKey: string
-			tabsKey: string
-			summaryQuery: DataDashboard.MemberSummaryQuery
-			tabsQuery: DataDashboard.MemberTabsQuery
-	  }
+import {
+	type DashboardSummaryRequest,
+	type DashboardTabsRequest,
+	type DashboardTabType,
+} from "../types"
 
 interface UseDataDashboardRequestsOptions {
 	view: DataDashboardView
@@ -27,50 +15,11 @@ interface UseDataDashboardRequestsOptions {
 	currentTab: DashboardTabType
 	agentQuery: DataDashboard.AgentSummaryQuery
 	memberQuery: DataDashboard.MemberSummaryQuery
+	organizationQuery: DataDashboard.OrganizationSummaryQuery
+	consumptionQuery: DataDashboard.ConsumptionAnalysisQuery
 	page: number
 	pageSize: number
 }
-
-const shouldSerializeQueryValue = (value: unknown) =>
-	value !== undefined && value !== null && value !== ""
-
-const normalizeQueryValue = (value: unknown): unknown => {
-	if (Array.isArray(value)) {
-		return value.map(normalizeQueryValue)
-	}
-
-	if (typeof value === "object" && value !== null) {
-		return Object.fromEntries(
-			Object.entries(value as Record<string, unknown>)
-				.filter(([, childValue]) => shouldSerializeQueryValue(childValue))
-				.sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-				.map(([childKey, childValue]) => [childKey, normalizeQueryValue(childValue)]),
-		)
-	}
-
-	return value
-}
-
-const serializeRequestQuery = (query: Record<string, unknown>) =>
-	JSON.stringify(
-		Object.fromEntries(
-			Object.entries(query)
-				.filter(([, value]) => shouldSerializeQueryValue(value))
-				.sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-				.map(([key, value]) => [key, normalizeQueryValue(value)]),
-		),
-	)
-
-const buildSummaryKey = (
-	view: DataDashboardView,
-	query: DataDashboard.AgentSummaryQuery | DataDashboard.MemberSummaryQuery,
-	tabType: DashboardTabType,
-) => serializeRequestQuery({ view, scope: "summary", tab_type: tabType, ...query })
-
-const buildTabsKey = (
-	view: DataDashboardView,
-	query: DataDashboard.AgentTabsQuery | DataDashboard.MemberTabsQuery,
-) => serializeRequestQuery({ view, scope: "tabs", ...query })
 
 export function useDataDashboardRequests({
 	view,
@@ -78,53 +27,88 @@ export function useDataDashboardRequests({
 	currentTab,
 	agentQuery,
 	memberQuery,
+	organizationQuery,
+	consumptionQuery,
 	page,
 	pageSize,
 }: UseDataDashboardRequestsOptions) {
 	const { AIManageApi } = useApis()
-	const previousSummaryKeyRef = useRef("")
-	const previousTabsKeyRef = useRef("")
 
-	const dashboardRequest = useMemo<DashboardRequest | null>(() => {
+	const summaryRequest = useMemo<DashboardSummaryRequest | null>(() => {
 		if (stateView !== view) return null
 
 		if (stateView === VIEW.DigitalEmployeeAnalysis) {
-			const tabsQuery: DataDashboard.AgentTabsQuery = {
-				...agentQuery,
-				tab_type: currentTab as DataDashboard.AgentTabType,
-				page,
-				page_size: pageSize,
-			}
-			const summaryKey = buildSummaryKey(stateView, agentQuery, currentTab)
 			return {
 				view: stateView,
-				summaryKey,
-				tabsKey: buildTabsKey(stateView, tabsQuery),
-				summaryQuery: agentQuery,
-				tabsQuery,
+				query: agentQuery,
+			}
+		}
+
+		if (stateView === VIEW.OrganizationAnalysis) {
+			return {
+				view: stateView,
+				query: organizationQuery,
 			}
 		}
 
 		if (stateView === VIEW.MemberAnalysis) {
-			const tabsQuery: DataDashboard.MemberTabsQuery = {
-				...memberQuery,
-				tab_type: currentTab as DataDashboard.MemberTabType,
-				page,
-				page_size: pageSize,
-			}
-			const summaryKey = buildSummaryKey(stateView, memberQuery, currentTab)
-
 			return {
 				view: stateView,
-				summaryKey,
-				tabsKey: buildTabsKey(stateView, tabsQuery),
-				summaryQuery: memberQuery,
-				tabsQuery,
+				query: memberQuery,
+			}
+		}
+
+		if (stateView === VIEW.ConsumptionAnalysis) {
+			return {
+				view: stateView,
+				query: consumptionQuery,
 			}
 		}
 
 		return null
-	}, [agentQuery, currentTab, memberQuery, page, pageSize, stateView, view])
+	}, [agentQuery, consumptionQuery, memberQuery, organizationQuery, stateView, view])
+
+	const tabsRequest = useMemo<DashboardTabsRequest | null>(() => {
+		if (stateView !== view) return null
+
+		if (stateView === VIEW.DigitalEmployeeAnalysis) {
+			return {
+				view: stateView,
+				query: {
+					...agentQuery,
+					tab_type: currentTab as DataDashboard.AgentTabType,
+					page,
+					page_size: pageSize,
+				},
+			}
+		}
+
+		if (stateView === VIEW.OrganizationAnalysis) {
+			return {
+				view: stateView,
+				query: {
+					...organizationQuery,
+					tab_type: currentTab as DataDashboard.OrganizationTabType,
+					page,
+					page_size: pageSize,
+				},
+			}
+		}
+
+		if (stateView === VIEW.MemberAnalysis) {
+			return {
+				view: stateView,
+				query: {
+					...memberQuery,
+					tab_type: currentTab as DataDashboard.MemberTabType,
+					page,
+					page_size: pageSize,
+				},
+			}
+		}
+
+		return null
+	}, [agentQuery, currentTab, memberQuery, organizationQuery, page, pageSize, stateView, view])
 
 	const {
 		data: agentOptions,
@@ -149,6 +133,24 @@ export function useDataDashboardRequests({
 		{ manual: true },
 	)
 	const {
+		data: organizationSummary = null,
+		loading: organizationSummaryLoading,
+		run: runOrganizationSummary,
+	} = useRequest(
+		(query: DataDashboard.OrganizationSummaryQuery) =>
+			AIManageApi.getDataDashboardOrganizationSummary(query),
+		{ manual: true },
+	)
+	const {
+		data: consumptionSummary = null,
+		loading: consumptionSummaryLoading,
+		run: runConsumptionSummary,
+	} = useRequest(
+		(query: DataDashboard.ConsumptionAnalysisQuery) =>
+			AIManageApi.getDataDashboardConsumptionSummary(query),
+		{ manual: true },
+	)
+	const {
 		data: agentTabs,
 		loading: agentTabsLoading,
 		run: runAgentTabs,
@@ -164,48 +166,91 @@ export function useDataDashboardRequests({
 		(query: DataDashboard.MemberTabsQuery) => AIManageApi.getDataDashboardMemberTabs(query),
 		{ manual: true },
 	)
-
-	useMount(() => {
-		runAgentOptions()
-	})
+	const {
+		data: organizationTabs,
+		loading: organizationTabsLoading,
+		run: runOrganizationTabs,
+	} = useRequest(
+		(query: DataDashboard.OrganizationTabsQuery) =>
+			AIManageApi.getDataDashboardOrganizationTabs(query),
+		{ manual: true },
+	)
 
 	useEffect(() => {
-		if (!dashboardRequest) return
+		runAgentOptions()
+	}, [runAgentOptions, view])
 
-		if (previousSummaryKeyRef.current !== dashboardRequest.summaryKey) {
-			previousSummaryKeyRef.current = dashboardRequest.summaryKey
-			if (dashboardRequest.view === VIEW.DigitalEmployeeAnalysis) {
-				runAgentSummary(dashboardRequest.summaryQuery)
-			} else {
-				runMemberSummary(dashboardRequest.summaryQuery)
-			}
-		}
+	useEffect(() => {
+		if (!summaryRequest) return
 
-		if (previousTabsKeyRef.current !== dashboardRequest.tabsKey) {
-			previousTabsKeyRef.current = dashboardRequest.tabsKey
-			if (dashboardRequest.view === VIEW.DigitalEmployeeAnalysis) {
-				runAgentTabs(dashboardRequest.tabsQuery)
-			} else {
-				runMemberTabs(dashboardRequest.tabsQuery)
-			}
+		// StrictMode 会重放首次 effect；每次都交给 useRequest 启动有效请求，避免保留已取消请求的 key。
+		if (summaryRequest.view === VIEW.DigitalEmployeeAnalysis) {
+			runAgentSummary(summaryRequest.query)
+		} else if (summaryRequest.view === VIEW.OrganizationAnalysis) {
+			runOrganizationSummary(summaryRequest.query)
+		} else if (summaryRequest.view === VIEW.ConsumptionAnalysis) {
+			runConsumptionSummary(summaryRequest.query)
+		} else {
+			runMemberSummary(summaryRequest.query)
 		}
-	}, [dashboardRequest, runAgentSummary, runAgentTabs, runMemberSummary, runMemberTabs])
+	}, [
+		summaryRequest,
+		runAgentSummary,
+		runConsumptionSummary,
+		runMemberSummary,
+		runOrganizationSummary,
+	])
+
+	useEffect(() => {
+		if (!tabsRequest) return
+
+		if (tabsRequest.view === VIEW.DigitalEmployeeAnalysis) {
+			runAgentTabs(tabsRequest.query)
+		} else if (tabsRequest.view === VIEW.OrganizationAnalysis) {
+			runOrganizationTabs(tabsRequest.query)
+		} else {
+			runMemberTabs(tabsRequest.query)
+		}
+	}, [runAgentTabs, runMemberTabs, runOrganizationTabs, tabsRequest])
 
 	const summaryLoading =
-		stateView === VIEW.DigitalEmployeeAnalysis ? agentSummaryLoading : memberSummaryLoading
+		stateView === VIEW.DigitalEmployeeAnalysis
+			? agentSummaryLoading
+			: stateView === VIEW.OrganizationAnalysis
+				? organizationSummaryLoading
+				: stateView === VIEW.ConsumptionAnalysis
+					? consumptionSummaryLoading
+					: memberSummaryLoading
 	const tableLoading =
-		stateView === VIEW.DigitalEmployeeAnalysis ? agentTabsLoading : memberTabsLoading
-	const tabData = !tableLoading
-		? stateView === VIEW.DigitalEmployeeAnalysis
-			? agentTabs
-			: memberTabs
-		: undefined
+		stateView === VIEW.ConsumptionAnalysis
+			? false
+			: stateView === VIEW.DigitalEmployeeAnalysis
+				? agentTabsLoading
+				: stateView === VIEW.OrganizationAnalysis
+					? organizationTabsLoading
+					: memberTabsLoading
+	const tabData =
+		stateView !== VIEW.ConsumptionAnalysis && !tableLoading
+			? stateView === VIEW.DigitalEmployeeAnalysis
+				? agentTabs
+				: stateView === VIEW.OrganizationAnalysis
+					? organizationTabs
+					: memberTabs
+			: undefined
+
+	const summaryData =
+		stateView === VIEW.DigitalEmployeeAnalysis
+			? agentSummary
+			: stateView === VIEW.OrganizationAnalysis
+				? organizationSummary
+				: stateView === VIEW.ConsumptionAnalysis
+					? consumptionSummary
+					: memberSummary
 
 	return {
 		agentOptions,
 		agentOptionsLoading,
-		agentSummary,
-		memberSummary,
+		summaryData,
 		summaryLoading,
 		tableLoading,
 		tabData,

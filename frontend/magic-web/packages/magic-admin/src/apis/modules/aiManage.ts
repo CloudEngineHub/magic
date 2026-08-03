@@ -303,6 +303,27 @@ export const generateAIManageApi = (client: HttpClient) => {
 			)
 		},
 
+		/** 数据看板 - 组织分析 Summary */
+		getDataDashboardOrganizationSummary(data: DataDashboard.OrganizationSummaryQuery) {
+			return client.get<DataDashboard.OrganizationSummary>(
+				genRequestUrl(RequestUrl.getDataDashboardOrganizationSummary, {}, data),
+			)
+		},
+
+		/** 数据看板 - 组织分析 Tabs */
+		getDataDashboardOrganizationTabs(data: DataDashboard.OrganizationTabsQuery) {
+			return client.get<DataDashboard.PagedResponse<DataDashboard.OrganizationTabRow>>(
+				genRequestUrl(RequestUrl.getDataDashboardOrganizationTabs, {}, data),
+			)
+		},
+
+		/** 数据看板 - 消耗分析 Summary */
+		getDataDashboardConsumptionSummary(data: DataDashboard.ConsumptionAnalysisQuery) {
+			return client.get<DataDashboard.ConsumptionAnalysisSummary>(
+				genRequestUrl(RequestUrl.getDataDashboardConsumptionSummary, {}, data),
+			)
+		},
+
 		/* -------- 功能配置API -------- */
 
 		/** 获取企业内部助理列表 */

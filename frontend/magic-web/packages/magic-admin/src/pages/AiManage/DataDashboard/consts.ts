@@ -105,14 +105,21 @@ export const MEMBER_TAB_TYPE = {
 	Silent: "member_silent",
 } as const
 
+export const ORGANIZATION_TAB_TYPE = {
+	Usage: "department_usage",
+	LowActivation: "department_low_activation",
+} as const
+
 export const DEFAULT_TAB_BY_VIEW = {
 	[VIEW.MemberAnalysis]: MEMBER_TAB_TYPE.Usage,
+	[VIEW.OrganizationAnalysis]: ORGANIZATION_TAB_TYPE.Usage,
 	[VIEW.DigitalEmployeeAnalysis]: AGENT_TAB_TYPE.Usage,
 } as const
 
 export const TABLE_SCROLL_X = {
 	SilentMembers: 900,
 	Department: 1290,
+	OrganizationDepartment: 1680,
 	Member: 1750,
 	Agent: 1350,
 	MemberAgent: 1400,
@@ -122,8 +129,13 @@ export const TABLE_SCROLL_X = {
 
 export const RATIO_BASE = 100
 export const MAX_PROGRESS_PERCENT = 100
-export const RANKING_DISPLAY_LIMIT = 6
 export const CHART_MAX_BAR_SIZE = 78
+
+export const DEPARTMENT_LEVEL_TAG_MAP = {
+	1: "levels.level1Tag",
+	2: "levels.level2Tag",
+	3: "levels.level3Tag",
+}
 
 export const BUCKET_TONE = {
 	High: "#059669",

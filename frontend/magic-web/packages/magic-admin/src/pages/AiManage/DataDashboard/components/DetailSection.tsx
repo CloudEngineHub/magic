@@ -11,17 +11,16 @@ import {
 	AGENT_TAB_TYPE,
 	CSV_TITLE_BY_VIEW,
 	MEMBER_TAB_TYPE,
+	ORGANIZATION_TAB_TYPE,
 	TABLE_PAGE_SIZE,
 	TABLE_SCROLL_X,
 	VIEW,
 } from "../consts"
 import type { DataDashboardView } from "../consts"
-import type { DashboardT } from "../types"
-import { displayText, EMPTY_TEXT, formatNumber, safeDivide, type DashboardTabType } from "../utils"
+import type { DashboardT, DashboardTabType, DashboardRow } from "../types"
+import { displayText, EMPTY_TEXT, formatNumber, formatPercent, safeDivide } from "../utils"
 import { useTranslation } from "react-i18next"
 import { useStyles } from "../styles"
-
-type DashboardRow = DataDashboard.AgentTabRow | DataDashboard.MemberTabRow
 
 const BUSINESS_TYPE_NAMES: Record<string, string> = {
 	super_magic_task_consume: "businessTypes.superMagicTaskConsume",
@@ -31,6 +30,12 @@ const BUSINESS_TYPE_NAMES: Record<string, string> = {
 	tool_consume: "businessTypes.toolConsume",
 	flow_consume: "businessTypes.flowConsume",
 	knowledge_vector_consume: "businessTypes.knowledgeVectorConsume",
+}
+
+const DEPARTMENT_LEVEL_LABEL_MAP: Record<DataDashboard.DepartmentLevel, string> = {
+	1: "levels.level1Short",
+	2: "levels.level2Short",
+	3: "levels.level3Short",
 }
 
 interface DetailTimeRange {
@@ -214,6 +219,43 @@ function getDetailTabs({
 		]
 	}
 
+	if (view === VIEW.OrganizationAnalysis) {
+		return [
+			createTabItem({
+				tabType: ORGANIZATION_TAB_TYPE.Usage,
+				label: t("detail.departmentUsage"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize,
+				loading,
+				columns: organizationDepartmentColumns(styles, t, isMobile),
+				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.departmentUsage")}`,
+				styles,
+				t,
+				onPageChange,
+			}),
+			createTabItem({
+				tabType: ORGANIZATION_TAB_TYPE.LowActivation,
+				label: t("detail.lowDepartments"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize,
+				loading,
+				columns: organizationDepartmentColumns(styles, t, isMobile),
+				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.lowDepartments")}`,
+				styles,
+				t,
+				onPageChange,
+			}),
+		]
+	}
+
 	return [
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Usage,
@@ -340,7 +382,7 @@ function createTabItem({
 					<div className={styles.detailTableWrap}>
 						<Table<DashboardRow>
 							rowKey={(row) => getRowKey(tabType, row)}
-							scroll={{ x: scrollX }}
+							scroll={{ x: scrollX, scrollToFirstRowOnChange: false }}
 							columns={columns}
 							dataSource={rows}
 							loading={loading}
@@ -660,6 +702,87 @@ function agentDepartmentColumns(
 	]
 }
 
+function organizationDepartmentColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	isMobile: boolean,
+): ColumnsType<DashboardRow> {
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "departmentLevel",
+			dataIndex: "department_level",
+			width: 120,
+			fixed: isMobile ? undefined : "left",
+			render: (value) => renderDepartmentLevel(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "department",
+			helperKey: "organizationDepartment",
+			dataIndex: "level_1_department_name",
+			width: 180,
+			fixed: isMobile ? undefined : "left",
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "level2Department",
+			dataIndex: "level_2_department_name",
+			width: 180,
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "level3Department",
+			dataIndex: "level_3_department_name",
+			width: 200,
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "employeeCount",
+			dataIndex: "employed_member_count",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "activeMembers",
+			dataIndex: "active_member_count",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "activationRate",
+			width: 140,
+			render: (_, row) => renderDepartmentActivationRate(row),
+			sortValue: (row) => getDepartmentActivationRate(row),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "calls",
+			dataIndex: "call_count",
+			width: 120,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "amount",
+			dataIndex: "points",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "tokens",
+			dataIndex: "tokens",
+			width: 140,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "lastUsedAt",
+			dataIndex: "last_called_at",
+			width: 180,
+			render: displayText,
+		}),
+	]
+}
+
 function memberUsageColumns(
 	styles: Record<string, string>,
 	t: DashboardT,
@@ -937,6 +1060,16 @@ function renderNumber(value: unknown) {
 	return formatNumber(Number(value))
 }
 
+function renderDepartmentLevel(value: unknown, t: DashboardT) {
+	const level = Number(value) as DataDashboard.DepartmentLevel
+	const labelKey = DEPARTMENT_LEVEL_LABEL_MAP[level]
+	return labelKey ? t(labelKey) : displayText(value)
+}
+
+function renderDepartmentActivationRate(row: DashboardRow) {
+	return formatPercent(getDepartmentActivationRate(row))
+}
+
 function renderAverageNumber(row: DashboardRow, field: "points" | "tokens") {
 	return formatNumber(getAverageValue(row, field))
 }
@@ -955,6 +1088,14 @@ interface RowWithAverageFields {
 function getAverageValue(row: DashboardRow, field: "points" | "tokens") {
 	const item = row as RowWithAverageFields
 	return safeDivide(Number(item[field] ?? 0), Number(item.call_count ?? 0))
+}
+
+function getDepartmentActivationRate(row: DashboardRow) {
+	const item = row as Partial<DataDashboard.OrganizationDepartmentRow>
+	return safeDivide(
+		Number(item.active_member_count ?? 0),
+		Number(item.employed_member_count ?? 0),
+	)
 }
 
 function getSilentDays(row: DashboardRow, timeRange?: DetailTimeRange | null) {
@@ -1007,6 +1148,12 @@ function getRowKey(tabType: DashboardTabType, row: DashboardRow) {
 	if (tabType === MEMBER_TAB_TYPE.Agent) {
 		const item = row as DataDashboard.MemberAgentRow
 		return `${item.user_id}-${item.agent_code}`
+	}
+	if (
+		tabType === ORGANIZATION_TAB_TYPE.Usage ||
+		tabType === ORGANIZATION_TAB_TYPE.LowActivation
+	) {
+		return (row as DataDashboard.OrganizationDepartmentRow).department_id
 	}
 	return (row as DataDashboard.MemberUsageRow).user_id
 }
