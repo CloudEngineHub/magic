@@ -324,6 +324,41 @@ export const generateAIManageApi = (client: HttpClient) => {
 			)
 		},
 
+		/** 数据看板 - 创建组织分析导出任务 */
+		createDataDashboardOrganizationExport(data: DataDashboard.DashboardExportRequest) {
+			return client.post<DataDashboard.DashboardExportCreated>(
+				RequestUrl.createDataDashboardOrganizationExport,
+				data,
+				{ enableErrorMessagePrompt: false },
+			)
+		},
+
+		/** 数据看板 - 创建数字员工分析导出任务 */
+		createDataDashboardAgentExport(data: DataDashboard.DashboardExportRequest) {
+			return client.post<DataDashboard.DashboardExportCreated>(
+				RequestUrl.createDataDashboardAgentExport,
+				data,
+				{ enableErrorMessagePrompt: false },
+			)
+		},
+
+		/** 数据看板 - 创建成员分析导出任务 */
+		createDataDashboardMemberExport(data: DataDashboard.DashboardExportRequest) {
+			return client.post<DataDashboard.DashboardExportCreated>(
+				RequestUrl.createDataDashboardMemberExport,
+				data,
+				{ enableErrorMessagePrompt: false },
+			)
+		},
+
+		/** 数据看板 - 查询导出任务 */
+		getDataDashboardExportTask(exportId: string) {
+			return client.get<DataDashboard.DashboardExportTask>(
+				genRequestUrl(RequestUrl.getDataDashboardExportTask, { export_id: exportId }),
+				{ enableErrorMessagePrompt: false },
+			)
+		},
+
 		/* -------- 功能配置API -------- */
 
 		/** 获取企业内部助理列表 */

@@ -234,6 +234,21 @@ export const useStyles = createStyles(
 			font-size: 13px;
 			line-height: 18px;
 		`,
+		chartMetricSelector: css`
+			display: flex;
+			flex-shrink: 0;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			gap: 8px 16px;
+
+			.ant-checkbox-wrapper + .ant-checkbox-wrapper {
+				margin-inline-start: 0;
+			}
+
+			@media (max-width: 640px) {
+				justify-content: flex-start;
+			}
+		`,
 		chartBox: css`
 			height: ${isMobile ? "248px" : "240px"};
 		`,

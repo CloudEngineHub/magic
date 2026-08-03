@@ -18,6 +18,7 @@ import { Visualization } from "./components/Visualization"
 import { AGENT_SOURCE_OPTIONS, ALL_OPTION_VALUE, PAGE_TEXT_KEY_BY_VIEW, VIEW } from "./consts"
 import type { DataDashboardView } from "./consts"
 import { useDataDashboardActions } from "./hooks/useDataDashboardActions"
+import { useDataDashboardExport } from "./hooks/useDataDashboardExport"
 import { useDataDashboardRequests } from "./hooks/useDataDashboardRequests"
 import { useStyles } from "./styles"
 import { displayText, formatNumber, getStatisticsDayCount } from "./utils"
@@ -77,6 +78,13 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		consumptionQuery,
 		page,
 		pageSize,
+	})
+	const { exportingTab, exportCurrentTab } = useDataDashboardExport({
+		view: stateView,
+		currentTab,
+		agentQuery,
+		memberQuery,
+		organizationQuery,
 	})
 
 	const pageText = useMemo(() => {
@@ -268,8 +276,10 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						timeRange={timeRange}
 						pageSize={pageSize}
 						loading={tableLoading}
+						exportingTab={exportingTab}
 						onTabChange={handleTabChange}
 						onPageChange={handlePageChange}
+						onExport={exportCurrentTab}
 					/>
 				) : null}
 			</div>

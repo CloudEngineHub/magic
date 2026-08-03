@@ -30,6 +30,7 @@ vi.mock("@admin/hooks/useIsMobile", () => ({
 
 vi.mock("@admin-components", () => ({
 	MagicAvatar: () => null,
+	MagicButton: ({ children }: { children: ReactNode }) => <button>{children}</button>,
 }))
 
 vi.mock("../../styles", () => ({
@@ -50,8 +51,10 @@ describe("DetailSection", () => {
 				activeTab={ORGANIZATION_TAB_TYPE.Usage}
 				pageSize={10}
 				loading={false}
+				exportingTab={null}
 				onTabChange={vi.fn()}
 				onPageChange={vi.fn()}
+				onExport={vi.fn()}
 			/>,
 		)
 

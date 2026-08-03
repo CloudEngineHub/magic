@@ -131,6 +131,15 @@ export const RequestUrl = {
 	getDataDashboardOrganizationTabs: "/api/v1/admin/data-dashboard/organization-analysis/tabs",
 	/** 数据看板 - 消耗分析 Summary */
 	getDataDashboardConsumptionSummary: "/api/v1/admin/data-dashboard/consumption-analysis/summary",
+	/** 数据看板 - 创建数字员工分析导出任务 */
+	createDataDashboardAgentExport: "/api/v1/admin/data-dashboard/agent-analysis/export",
+	/** 数据看板 - 创建组织分析导出任务 */
+	createDataDashboardOrganizationExport:
+		"/api/v1/admin/data-dashboard/organization-analysis/export",
+	/** 数据看板 - 创建成员分析导出任务 */
+	createDataDashboardMemberExport: "/api/v1/admin/data-dashboard/member-analysis/export",
+	/** 数据看板 - 查询导出任务 */
+	getDataDashboardExportTask: "/api/v1/admin/export-tasks/${export_id}",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */

@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import dayjs from "dayjs"
-import { CircleHelp } from "lucide-react"
-import { MagicAvatar } from "@admin-components"
+import { CircleHelp, Download } from "lucide-react"
+import { MagicAvatar, MagicButton } from "@admin-components"
 import { Table, Tabs, Tooltip } from "antd"
 import type { ColumnType, ColumnsType } from "antd/es/table"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
@@ -50,8 +50,10 @@ interface DetailSectionProps {
 	timeRange?: DetailTimeRange | null
 	pageSize: number
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	onTabChange: (tab: DashboardTabType) => void
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }
 
 export function DetailSection({
@@ -61,8 +63,10 @@ export function DetailSection({
 	timeRange,
 	pageSize,
 	loading,
+	exportingTab,
 	onTabChange,
 	onPageChange,
+	onExport,
 }: DetailSectionProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("admin/ai/dataDashboard")
@@ -82,16 +86,20 @@ export function DetailSection({
 				pageSize,
 				timeRange,
 				loading,
+				exportingTab,
 				styles,
 				t,
 				isMobile,
 				onPageChange,
+				onExport,
 			}),
 		[
 			activeTab,
 			isMobile,
 			loading,
+			exportingTab,
 			onPageChange,
+			onExport,
 			page,
 			pageSize,
 			rows,
@@ -127,10 +135,12 @@ interface getDetailTabsProps {
 	pageSize: number
 	timeRange?: DetailTimeRange | null
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	styles: Record<string, string>
 	t: DashboardT
 	isMobile: boolean
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }
 
 function getDetailTabs({
@@ -142,10 +152,12 @@ function getDetailTabs({
 	pageSize,
 	timeRange,
 	loading,
+	exportingTab,
 	styles,
 	t,
 	isMobile,
 	onPageChange,
+	onExport,
 }: getDetailTabsProps) {
 	if (view === VIEW.DigitalEmployeeAnalysis) {
 		return [
@@ -158,12 +170,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentUsageColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.Agent,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentUsage")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Call,
@@ -174,6 +188,7 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: callColumns(styles, t, isMobile, {
 					showDigitalEmployee: true,
 					showSource: true,
@@ -183,6 +198,7 @@ function getDetailTabs({
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Member,
@@ -193,12 +209,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentMemberColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.MemberAgent,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentMembers")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Department,
@@ -209,12 +227,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentDepartmentColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.Department,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentDepartments")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 		]
 	}
@@ -230,12 +250,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: organizationDepartmentColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.departmentUsage")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: ORGANIZATION_TAB_TYPE.LowActivation,
@@ -246,12 +268,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: organizationDepartmentColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.lowDepartments")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 		]
 	}
@@ -266,12 +290,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: memberUsageColumns(styles, t, isMobile),
 			scrollX: TABLE_SCROLL_X.Member,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.memberUsage")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Call,
@@ -282,6 +308,7 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: callColumns(styles, t, isMobile, {
 				showBusinessFields: true,
 				showDigitalEmployee: false,
@@ -292,6 +319,7 @@ function getDetailTabs({
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Agent,
@@ -302,12 +330,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: memberAgentColumns(styles, t, isMobile),
 			scrollX: TABLE_SCROLL_X.MemberAgent,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.memberAgent")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Silent,
@@ -318,12 +348,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: silentMemberColumns(styles, t, isMobile, timeRange),
 			scrollX: TABLE_SCROLL_X.SilentMembers,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.silentMembers")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 	]
 }
@@ -337,12 +369,14 @@ function createTabItem({
 	page,
 	pageSize,
 	loading,
+	exportingTab,
 	columns,
 	scrollX,
 	exportTitle,
 	styles,
 	t,
 	onPageChange,
+	onExport,
 }: {
 	tabType: DashboardTabType
 	label: string
@@ -352,13 +386,18 @@ function createTabItem({
 	page: number
 	pageSize: number
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	columns: ColumnsType<DashboardRow>
 	scrollX: number
 	exportTitle: string
 	styles: Record<string, string>
 	t: DashboardT
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }) {
+	const isExporting = exportingTab === tabType
+	const exportDisabled = exportingTab !== null && !isExporting
+
 	return {
 		key: tabType,
 		label,
@@ -367,17 +406,15 @@ function createTabItem({
 				<div className={styles.detailTabContent}>
 					<div className={styles.detailTableTop}>
 						<h3 className={styles.detailSubtitle}>{label}</h3>
-						{/* <MagicButton
+						<MagicButton
+							aria-label={`${t("actions.export")} ${exportTitle}`}
 							icon={<Download size={16} />}
-							onClick={() =>
-								exportCsv(
-									exportTitle,
-									rows as unknown as Array<Record<string, unknown>>,
-								)
-							}
+							loading={isExporting}
+							disabled={exportDisabled}
+							onClick={onExport}
 						>
 							{t("actions.export")}
-						</MagicButton> */}
+						</MagicButton>
 					</div>
 					<div className={styles.detailTableWrap}>
 						<Table<DashboardRow>

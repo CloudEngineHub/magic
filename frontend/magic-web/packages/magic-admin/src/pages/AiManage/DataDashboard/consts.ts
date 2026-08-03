@@ -24,6 +24,30 @@ export const CHART_SERIES = {
 
 export type ChartSeries = (typeof CHART_SERIES)[keyof typeof CHART_SERIES]
 
+export const CHART_AXIS = {
+	Left: "left",
+	Right: "right",
+} as const
+
+export type ChartAxisId = (typeof CHART_AXIS)[keyof typeof CHART_AXIS]
+
+export const CHART_AXIS_IDS = [CHART_AXIS.Left, CHART_AXIS.Right] as const
+
+export const CHART_METRIC_TYPE = {
+	Line: "line",
+	Bar: "bar",
+} as const
+
+export type ChartMetricType = (typeof CHART_METRIC_TYPE)[keyof typeof CHART_METRIC_TYPE]
+
+export const EMPTY_CHART_AXIS_LABELS = {}
+
+/** 数据看板导出任务轮询间隔 */
+export const DATA_DASHBOARD_EXPORT_POLL_INTERVAL = 2000
+
+/** 数据看板导出任务最大等待时间：5 分钟 */
+export const DATA_DASHBOARD_EXPORT_MAX_WAIT_TIME = 5 * 60 * 1000
+
 export const TREND_DATA_KEY = {
 	Period: "period",
 	Calls: "calls",

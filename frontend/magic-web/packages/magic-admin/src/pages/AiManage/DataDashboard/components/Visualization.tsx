@@ -1,5 +1,5 @@
 import { type CSSProperties, useMemo, useState } from "react"
-import { Empty, Progress, Segmented, Spin } from "antd"
+import { Checkbox, Empty, Progress, Segmented, Spin } from "antd"
 import {
 	Bar,
 	CartesianGrid,
@@ -14,16 +14,20 @@ import {
 import type { DataDashboard } from "@admin/types/datadashboard"
 import {
 	BUCKET_TONE,
+	CHART_AXIS,
+	CHART_AXIS_IDS,
 	CHART_COLORS,
 	CHART_MAX_BAR_SIZE,
-	CHART_SERIES,
+	CHART_METRIC_TYPE,
 	DEPARTMENT_LEVEL_TAG_MAP,
+	EMPTY_CHART_AXIS_LABELS,
 	MAX_PROGRESS_PERCENT,
 	RATIO_BASE,
 	TREND_DATA_KEY,
 	USAGE_THRESHOLD,
 	VIEW,
-	type ChartSeries,
+	type ChartAxisId,
+	type ChartMetricType,
 	type DataDashboardView,
 } from "../consts"
 import type { DashboardT } from "../types"
@@ -51,6 +55,23 @@ interface BucketItem {
 	tone: string
 }
 
+type TrendMetricKey = Exclude<keyof TrendPoint, "period">
+
+interface ChartMetricConfig {
+	/** 数据字段 */
+	dataKey: TrendMetricKey
+	/** 指标标签 */
+	label: string
+	/** 图表类型 */
+	chartType: ChartMetricType
+	/** 坐标轴ID */
+	yAxisId: ChartAxisId
+	/* 颜色 */
+	color: string
+}
+
+type ChartAxisLabels = Partial<Record<ChartAxisId, string>>
+
 const DEPARTMENT_RANK_TONES = [
 	{ color: "#d97706", background: "#fff3d6" },
 	{ color: "#52677f", background: "#edf3f8" },
@@ -65,6 +86,20 @@ type VisualizationSummary =
 	| DataDashboard.ConsumptionAnalysisSummary
 	| null
 
+interface VisualizationProps {
+	/** 当前展示的数据看板视图 */
+	view: DataDashboardView
+	/** 当前视图对应的汇总数据 */
+	summary: VisualizationSummary
+	/** 汇总数据是否正在加载 */
+	loading: boolean
+	/** 数据看板样式类名集合 */
+	styles: Record<string, string>
+	/** 数据看板国际化函数 */
+	t: DashboardT
+	/** 当前筛选的开始和结束日期 */
+	dateQuery: Pick<DataDashboard.BaseQuery, "start_date" | "end_date">
+}
 export function Visualization({
 	view,
 	summary,
@@ -72,27 +107,24 @@ export function Visualization({
 	styles,
 	t,
 	dateQuery,
-}: {
-	view: DataDashboardView
-	summary: VisualizationSummary
-	loading: boolean
-	styles: Record<string, string>
-	t: DashboardT
-	dateQuery: Pick<DataDashboard.BaseQuery, "start_date" | "end_date">
-}) {
+}: VisualizationProps) {
 	if (view === VIEW.DigitalEmployeeAnalysis) {
 		const agentSummary = summary as DataDashboard.AgentSummary | null
 		const trend = buildAgentTrend(agentSummary)
 		return (
 			<div className={styles.analysisGrid}>
 				<ChartPanel
+					key={VIEW.DigitalEmployeeAnalysis}
 					title={t("charts.agentTrend")}
 					desc={t("charts.agentTrendDesc")}
 					data={trend}
-					series={CHART_SERIES.Agent}
+					metrics={getAgentTrendMetrics(t)}
+					axisLabels={{
+						left: t("charts.callsAxis"),
+						right: t("charts.activeAxis"),
+					}}
 					loading={loading}
 					styles={styles}
-					t={t}
 				/>
 				<BucketPanel
 					title={t("charts.agentBucket")}
@@ -111,13 +143,14 @@ export function Visualization({
 		return (
 			<div className={styles.analysisGrid}>
 				<ChartPanel
+					key={VIEW.MemberAnalysis}
 					title={t("charts.memberTrend")}
 					desc={t("charts.memberTrendDesc")}
 					data={trend}
-					series={CHART_SERIES.Member}
+					metrics={getMemberTrendMetrics(t)}
+					axisLabels={{ left: t("charts.quantityAxis") }}
 					loading={loading}
 					styles={styles}
-					t={t}
 				/>
 				<BucketPanel
 					title={t("charts.memberBucket")}
@@ -156,12 +189,17 @@ export function Visualization({
 		return (
 			<div className={styles.analysisGrid}>
 				<ChartPanel
+					key={VIEW.ConsumptionAnalysis}
 					title={t("charts.consumptionTrend")}
 					data={buildConsumptionTrend(consumptionSummary, dateQuery)}
-					series={CHART_SERIES.Consumption}
+					metrics={getConsumptionTrendMetrics(t)}
+					axisLabels={{
+						left: t("charts.consumptionAxis"),
+						right: t("charts.callsAxis"),
+					}}
+					fullWidth
 					loading={loading}
 					styles={styles}
-					t={t}
 				/>
 			</div>
 		)
@@ -181,6 +219,70 @@ function buildAgentTrend(summary: DataDashboard.AgentSummary | null): TrendPoint
 			activeMembers: 0,
 		})) ?? []
 	)
+}
+
+function getAgentTrendMetrics(t: DashboardT): ChartMetricConfig[] {
+	return [
+		{
+			dataKey: TREND_DATA_KEY.Calls,
+			label: t("columns.calls"),
+			chartType: CHART_METRIC_TYPE.Bar,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.calls,
+		},
+		{
+			dataKey: TREND_DATA_KEY.ActiveAgents,
+			label: t("columns.activeAgents"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Right,
+			color: CHART_COLORS.activeAgents,
+		},
+	]
+}
+
+function getMemberTrendMetrics(t: DashboardT): ChartMetricConfig[] {
+	return [
+		{
+			dataKey: TREND_DATA_KEY.Calls,
+			label: t("columns.calls"),
+			chartType: CHART_METRIC_TYPE.Bar,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.calls,
+		},
+		{
+			dataKey: TREND_DATA_KEY.ActiveMembers,
+			label: t("columns.activeMembers"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Right,
+			color: CHART_COLORS.activeMembers,
+		},
+	]
+}
+
+function getConsumptionTrendMetrics(t: DashboardT): ChartMetricConfig[] {
+	return [
+		{
+			dataKey: TREND_DATA_KEY.Tokens,
+			label: t("columns.tokens"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.tokens,
+		},
+		{
+			dataKey: TREND_DATA_KEY.Amount,
+			label: t("columns.amount"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.amount,
+		},
+		{
+			dataKey: TREND_DATA_KEY.Calls,
+			label: t("columns.calls"),
+			chartType: CHART_METRIC_TYPE.Bar,
+			yAxisId: CHART_AXIS.Right,
+			color: CHART_COLORS.calls,
+		},
+	]
 }
 
 function buildMemberTrend(summary: DataDashboard.MemberSummary | null): TrendPoint[] {
@@ -381,17 +483,23 @@ function sumMemberDistribution(
 	)
 }
 
+interface DepartmentPenetrationPanelProps {
+	/** 组织分析汇总数据 */
+	summary: DataDashboard.OrganizationSummary | null
+	/** 组织分析数据是否正在加载 */
+	loading: boolean
+	/** 数据看板样式类名集合 */
+	styles: Record<string, string>
+	/** 数据看板国际化函数 */
+	t: DashboardT
+}
+
 function DepartmentPenetrationPanel({
 	summary,
 	loading,
 	styles,
 	t,
-}: {
-	summary: DataDashboard.OrganizationSummary | null
-	loading: boolean
-	styles: Record<string, string>
-	t: DashboardT
-}) {
+}: DepartmentPenetrationPanelProps) {
 	const [selectedLevel, setSelectedLevel] = useState<DataDashboard.DepartmentLevel>(1)
 	const rows = useMemo(() => {
 		const levelRows =
@@ -515,52 +623,69 @@ function DepartmentPenetrationPanel({
 	)
 }
 
+interface ChartPanelProps {
+	/** 图表标题 */
+	title: string
+	/** 图表辅助说明 */
+	desc?: string
+	/** 图表趋势数据 */
+	data: TrendPoint[]
+	/** 指标的数据字段、图形类型、坐标轴和颜色配置 */
+	metrics: ChartMetricConfig[]
+	/** 左右纵轴的标题配置 */
+	axisLabels?: ChartAxisLabels
+	/** 是否横跨分析区域的全部列 */
+	fullWidth?: boolean
+	/** 图表数据是否正在加载 */
+	loading: boolean
+	/** 数据看板样式类名集合 */
+	styles: Record<string, string>
+}
+
 function ChartPanel({
 	title,
 	desc,
 	data,
-	series,
+	metrics,
+	axisLabels = EMPTY_CHART_AXIS_LABELS,
+	fullWidth = false,
 	loading,
 	styles,
-	t,
-}: {
-	title: string
-	desc?: string
-	data: TrendPoint[]
-	series: ChartSeries
-	loading: boolean
-	styles: Record<string, string>
-	t: DashboardT
-}) {
-	const isConsumptionSeries = series === CHART_SERIES.Consumption
-	const leftAxisLabel = isConsumptionSeries
-		? t("charts.consumptionAxis")
-		: series === CHART_SERIES.Agent
-			? t("charts.callsAxis")
-			: t("charts.quantityAxis")
-	const rightAxisLabel = isConsumptionSeries
-		? t("charts.callsAxis")
-		: series === CHART_SERIES.Agent
-			? t("charts.activeAxis")
-			: undefined
-	const activeDataKey =
-		series === CHART_SERIES.Agent ? TREND_DATA_KEY.ActiveAgents : TREND_DATA_KEY.ActiveMembers
-	const hasData = data.some(
-		(item) =>
-			item.calls > 0 ||
-			item.amount > 0 ||
-			item.tokens > 0 ||
-			item.activeAgents > 0 ||
-			item.activeMembers > 0,
+}: ChartPanelProps) {
+	const [visibleMetricKeys, setVisibleMetricKeys] = useState<TrendMetricKey[]>(() =>
+		metrics.map((metric) => metric.dataKey),
 	)
+	const visibleMetricKeySet = new Set(visibleMetricKeys)
+	const visibleMetrics = metrics.filter((metric) => visibleMetricKeySet.has(metric.dataKey))
+	const visibleAxisIds = new Set(visibleMetrics.map((metric) => metric.yAxisId))
+	const onlyVisibleMetricKey = visibleMetricKeys.length === 1 ? visibleMetricKeys[0] : null
+	const hasData = data.some((item) => metrics.some((metric) => item[metric.dataKey] > 0))
 
 	return (
-		<section className={`${styles.panel} ${isConsumptionSeries ? styles.fullPanel : ""}`}>
+		<section className={`${styles.panel} ${fullWidth ? styles.fullPanel : ""}`}>
 			<div className={styles.cardHeader}>
 				<div>
 					<h2 className={styles.cardTitle}>{title}</h2>
 					{desc ? <div className={styles.cardDesc}>{desc}</div> : null}
 				</div>
+				<Checkbox.Group
+					className={styles.chartMetricSelector}
+					value={visibleMetricKeys}
+					onChange={(values) => {
+						if (values.length === 0) return
+						setVisibleMetricKeys(values as TrendMetricKey[])
+					}}
+				>
+					{metrics.map((metric) => (
+						<Checkbox
+							key={metric.dataKey}
+							value={metric.dataKey}
+							disabled={onlyVisibleMetricKey === metric.dataKey}
+						>
+							{metric.label}
+						</Checkbox>
+					))}
+				</Checkbox.Group>
 			</div>
 			<Spin spinning={loading}>
 				<div className={`${styles.chartBox} ${!hasData && !loading && styles.empty}`}>
@@ -574,33 +699,35 @@ function ChartPanel({
 									tickLine={false}
 									axisLine={false}
 								/>
-								<YAxis
-									yAxisId="left"
-									tick={{ fontSize: 12, fill: "#8c8c8c" }}
-									tickLine={false}
-									axisLine={false}
-									label={{
-										value: leftAxisLabel,
-										position: "top",
-										offset: 12,
-										fill: "#8c8c8c",
-										fontSize: 12,
-									}}
-								/>
-								<YAxis
-									yAxisId="right"
-									orientation="right"
-									tick={{ fontSize: 12, fill: "#8c8c8c" }}
-									tickLine={false}
-									axisLine={false}
-									label={{
-										value: rightAxisLabel,
-										position: "top",
-										offset: 12,
-										fill: "#8c8c8c",
-										fontSize: 12,
-									}}
-								/>
+								{CHART_AXIS_IDS.map((axisId) => {
+									if (!visibleAxisIds.has(axisId)) return null
+									const axisLabel = axisLabels[axisId]
+									return (
+										<YAxis
+											key={axisId}
+											yAxisId={axisId}
+											orientation={
+												axisId === CHART_AXIS.Right
+													? CHART_AXIS.Right
+													: CHART_AXIS.Left
+											}
+											tick={{ fontSize: 12, fill: "#8c8c8c" }}
+											tickLine={false}
+											axisLine={false}
+											label={
+												axisLabel
+													? {
+															value: axisLabel,
+															position: "top",
+															offset: 12,
+															fill: "#8c8c8c",
+															fontSize: 12,
+														}
+													: undefined
+											}
+										/>
+									)
+								})}
 								<RechartsTooltip
 									contentStyle={{
 										background: "rgba(17, 24, 39, 0.92)",
@@ -615,63 +742,29 @@ function ChartPanel({
 									iconSize={10}
 									wrapperStyle={{ color: "#8c8c8c", fontSize: 13 }}
 								/>
-								{isConsumptionSeries ? (
-									<>
+								{visibleMetrics.map((metric) =>
+									metric.chartType === CHART_METRIC_TYPE.Line ? (
 										<Line
-											yAxisId="left"
+											key={metric.dataKey}
+											yAxisId={metric.yAxisId}
 											type="monotone"
-											dataKey={TREND_DATA_KEY.Tokens}
-											name={t("columns.tokens")}
-											stroke={CHART_COLORS.tokens}
+											dataKey={metric.dataKey}
+											name={metric.label}
+											stroke={metric.color}
 											strokeWidth={2}
 											dot={{ r: 3, strokeWidth: 2 }}
 										/>
-										<Line
-											yAxisId="left"
-											type="monotone"
-											dataKey={TREND_DATA_KEY.Amount}
-											name={t("columns.amount")}
-											stroke={CHART_COLORS.amount}
-											strokeWidth={2}
-											dot={{ r: 3, strokeWidth: 2 }}
-										/>
+									) : (
 										<Bar
-											yAxisId="right"
-											dataKey={TREND_DATA_KEY.Calls}
-											name={t("columns.calls")}
-											fill={CHART_COLORS.calls}
+											key={metric.dataKey}
+											yAxisId={metric.yAxisId}
+											dataKey={metric.dataKey}
+											name={metric.label}
+											fill={metric.color}
 											maxBarSize={CHART_MAX_BAR_SIZE}
 											radius={[4, 4, 0, 0]}
 										/>
-									</>
-								) : (
-									<>
-										<Line
-											yAxisId="right"
-											type="monotone"
-											dataKey={activeDataKey}
-											name={
-												series === CHART_SERIES.Agent
-													? t("columns.activeAgents")
-													: t("columns.activeMembers")
-											}
-											stroke={
-												series === CHART_SERIES.Agent
-													? CHART_COLORS.activeAgents
-													: CHART_COLORS.activeMembers
-											}
-											strokeWidth={2}
-											dot={{ r: 3, strokeWidth: 2 }}
-										/>
-										<Bar
-											yAxisId="left"
-											dataKey={TREND_DATA_KEY.Calls}
-											name={t("columns.calls")}
-											fill={CHART_COLORS.calls}
-											maxBarSize={CHART_MAX_BAR_SIZE}
-											radius={[4, 4, 0, 0]}
-										/>
-									</>
+									),
 								)}
 							</ComposedChart>
 						</ResponsiveContainer>
@@ -684,19 +777,20 @@ function ChartPanel({
 	)
 }
 
-function BucketPanel({
-	title,
-	items,
-	total,
-	loading,
-	styles,
-}: {
+interface BucketPanelProps {
+	/** 分层面板标题 */
 	title: string
+	/** 各分层的名称、说明、数量和色彩配置 */
 	items: BucketItem[]
+	/** 计算各分层占比时使用的总数 */
 	total: number
+	/** 分层数据是否正在加载 */
 	loading: boolean
+	/** 数据看板样式类名集合 */
 	styles: Record<string, string>
-}) {
+}
+
+function BucketPanel({ title, items, total, loading, styles }: BucketPanelProps) {
 	return (
 		<section className={styles.panel}>
 			<div className={styles.cardHeader}>

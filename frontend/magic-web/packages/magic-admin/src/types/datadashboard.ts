@@ -491,4 +491,36 @@ export namespace DataDashboard {
 		/** 按自然日聚合的消耗趋势 */
 		usage_trend: ConsumptionTrendItem[]
 	}
+
+	/** 数据看板导出任务状态 */
+	export type DashboardExportStatus =
+		| "pending"
+		| "processing"
+		| "completed"
+		| "failed"
+		| "expired"
+
+	/** 数据看板导出请求；不携带分页和表格排序参数 */
+	export interface DashboardExportRequest extends BaseQuery {
+		/** 数字员工来源；仅数字员工分析发送 */
+		source_type?: AgentSourceType
+		/** 当前导出的明细 Tab */
+		tab_type: AgentTabType | MemberTabType | OrganizationTabType
+	}
+
+	/** 创建导出任务响应 */
+	export interface DashboardExportCreated {
+		export_id: string
+		status: "pending"
+	}
+
+	/** 导出任务详情 */
+	export interface DashboardExportTask {
+		export_id: string
+		status: DashboardExportStatus
+		row_count: number
+		file_name: string | null
+		download_url: string | null
+		error_message: string | null
+	}
 }

@@ -201,6 +201,12 @@
 		"trendChart": "Trend chart",
 		"unifiedRules": "Unified Rules"
 	},
+	"export": {
+		"completed": "Export completed. Downloading now.",
+		"expired": "The export file has expired. Please export it again.",
+		"failed": "Export failed. Please try again.",
+		"timeout": "The export timed out. Please try again later."
+	},
 	"filters": {
 		"agentCodePlaceholder": "Enter digital employee code",
 		"agentOptionsCount": "{{formattedCount}} items",

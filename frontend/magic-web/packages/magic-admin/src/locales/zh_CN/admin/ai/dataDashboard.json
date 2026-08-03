@@ -204,6 +204,12 @@
 		"trendChart": "趋势图",
 		"unifiedRules": "统一统计规则"
 	},
+	"export": {
+		"completed": "导出完成，正在下载",
+		"expired": "导出文件已过期，请重新发起导出",
+		"failed": "导出失败，请重新发起",
+		"timeout": "导出等待超时，请稍后重新发起"
+	},
 	"filters": {
 		"agentCodePlaceholder": "请输入数字员工编码",
 		"agentOptionsCount": "共 {{formattedCount}} 项",
