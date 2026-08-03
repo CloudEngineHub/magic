@@ -1022,7 +1022,12 @@ export default memo(function HTML(props: HTMLProps) {
 	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
 	useEffect(() => {
 		setIsPreviewRenderReady(false)
-		if (!processedContent) return
+		// 空文件没有可写入 iframe 的内容，也不会触发 onRenderReady。
+		// 此时预览本身已经完成（展示空白区域），应立即收起 loading。
+		if (!processedContent) {
+			setIsPreviewRenderReady(true)
+			return
+		}
 		const fallbackTimer = window.setTimeout(() => {
 			setIsPreviewRenderReady(true)
 		}, 4000)
