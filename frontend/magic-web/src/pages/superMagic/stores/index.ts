@@ -4,7 +4,9 @@ import { unionBy, get, set, merge, isEqual } from "lodash-es"
 import dayjs from "@/lib/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
+	createWebSocketRecordMetadata,
 	persistMessagesToStorage,
+	waitForMessagePersistence,
 	WEBSOCKET_RECORD_METADATA_KEY,
 	type PersistableMessage,
 	type WebSocketRecordSource,
@@ -1313,7 +1315,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	/**
 	 * WebSocket 原始广播必须在任何 Store 去重、revision 或 HTTP reconciliation 之前记录。
-	 * 记录保留原始 payload，并用本地到达序号还原 Chunk 与完整消息的真实交错顺序。
+	 * 记录保留原始 payload，并用当前 Tab 的 writer sequence 还原真实交错顺序。
 	 */
 	recordWebSocketMessage(
 		topicId: string,
@@ -1339,11 +1341,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			rawMessage.message?.super_magic_message?.send_timestamp
 		const recordedMessage = {
 			...rawMessage,
-			[WEBSOCKET_RECORD_METADATA_KEY]: {
+			[WEBSOCKET_RECORD_METADATA_KEY]: createWebSocketRecordMetadata(
 				source,
-				received_at: Date.now(),
-				...(typeof sentAt === "number" ? { sent_at: sentAt } : {}),
-			},
+				typeof sentAt === "number" ? sentAt : undefined,
+			),
 		} as PersistableMessage
 
 		this.enqueuePersistenceRecord(topicId, recordedMessage, flushImmediately)
@@ -1355,6 +1356,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (queue.timer) clearTimeout(queue.timer)
 		this.persistenceQueues.delete(topicId)
 		persistMessagesToStorage(topicId, queue.messages)
+	}
+
+	/** 报告查询前冲刷 Store 批次，并等待当前页面已提交的 IndexedDB 写入完成。 */
+	async flushMessagePersistenceForReport(topicId: string): Promise<void> {
+		this.flushMessagePersistence(topicId)
+		await waitForMessagePersistence()
 	}
 
 	/**
@@ -7068,9 +7075,16 @@ pubsub.subscribe("super_magic_chunk_message", (message: SuperMagicChunkMessage) 
 
 pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (payload) => {
 	const message = payload as unknown as RawSuperMagicMessageSequence
-	if (message?.message?.type !== "super_magic_message") return
+	const messageType = message?.message?.type
+	const source =
+		messageType === "super_magic_message"
+			? "super_magic_message"
+			: messageType === "text" || messageType === "rich_text"
+				? "conversation_message"
+				: undefined
+	if (!source) return
 	const topicId = String(
 		message.message.topic_id || message.message.super_magic_message?.topic_id || "",
 	)
-	superMagicStore.recordWebSocketMessage(topicId, message, "super_magic_message", true)
+	superMagicStore.recordWebSocketMessage(topicId, message, source, true)
 })

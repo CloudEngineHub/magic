@@ -106,8 +106,7 @@ export function withAssistantCard<
 
 			const resolveModel = (
 				modelData:
-					| { model_id?: string; model_name?: string; model_icon?: string }
-					| undefined,
+					{ model_id?: string; model_name?: string; model_icon?: string } | undefined,
 				getModelList: () => ModelItem[],
 			) => {
 				if (!modelData?.model_id) return
@@ -234,7 +233,7 @@ export function withAssistantCard<
 			}
 		})
 
-		const reportConversationRound = useMemoizedFn(() => {
+		const reportConversationRound = useMemoizedFn(async () => {
 			const topicId = selectedTopic?.chat_topic_id
 			const currentMessageId = node?.app_message_id
 			if (!topicId || !currentMessageId) return
@@ -243,26 +242,35 @@ export function withAssistantCard<
 			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
 			if (roundMessages.length === 0) return
 
-			// Use the latest message-map nodes while retaining the topic sequence fields;
-			// this keeps streamed/final metadata in the report instead of stale list snapshots.
-			const messages = toJS(roundMessages).map((message: any) => ({
-				...message,
-				debug: toJS(
-					superMagicStore.getMessageNode(message.super_message_id) || message.debug,
-				),
-			}))
+			try {
+				await superMagicStore.flushMessagePersistenceForReport(topicId)
+				// IndexedDB/report codec stays outside the MessageList bundle until the user reports.
+				const {
+					queryConversationRoundLogs,
+					compressConversationRoundLogs,
+					getConversationRoundReportWriterId,
+				} = await import("@/pages/superMagic/stores/conversation-round-report")
+				const records = await queryConversationRoundLogs(topicId)
+				const messages = compressConversationRoundLogs({
+					records,
+					roundMessages: toJS(roundMessages),
+					preferredWriterId: getConversationRoundReportWriterId(),
+				})
 
-			logger.report("messages", {
-				topic_id: selectedTopic?.id,
-				chat_topic_id: topicId,
-				message_id: currentMessageId,
-				messages,
-			})
+				logger.report("messages", {
+					topic_id: selectedTopic?.id,
+					chat_topic_id: topicId,
+					message_id: currentMessageId,
+					messages,
+				})
+			} catch (error) {
+				logger.error("Failed to prepare conversation round report", error)
+			}
 		})
 
 		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
 			if (key === MenuKey.ReportConversationRound) {
-				reportConversationRound()
+				void reportConversationRound()
 			}
 		})
 

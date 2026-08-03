@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentType, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { withAssistantCard } from "../AssistantCard"
@@ -51,6 +51,12 @@ const testState = vi.hoisted(() => {
 	return {
 		messages,
 		messageNodes,
+		flushMessagePersistenceForReport: vi.fn().mockResolvedValue(undefined),
+		queryConversationRoundLogs: vi.fn().mockResolvedValue([{ storageId: "record-1" }]),
+		compressConversationRoundLogs: vi
+			.fn()
+			.mockReturnValue([{ seq_id: "1", message: { type: "rich_text" } }]),
+		getConversationRoundReportWriterId: vi.fn().mockReturnValue("tab-a"),
 		report: vi.fn(),
 	}
 })
@@ -80,14 +86,21 @@ vi.mock("@/apis", () => ({
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
 		messages: new Map([["chat-topic-1", testState.messages]]),
+		flushMessagePersistenceForReport: testState.flushMessagePersistenceForReport,
 		getMessageNode: (messageId?: string) =>
 			testState.messageNodes[messageId as keyof typeof testState.messageNodes],
 	},
 }))
 
+vi.mock("@/pages/superMagic/stores/conversation-round-report", () => ({
+	queryConversationRoundLogs: testState.queryConversationRoundLogs,
+	compressConversationRoundLogs: testState.compressConversationRoundLogs,
+	getConversationRoundReportWriterId: testState.getConversationRoundReportWriterId,
+}))
+
 vi.mock("@/utils/log", () => ({
 	logger: {
-		createLogger: () => ({ report: testState.report }),
+		createLogger: () => ({ report: testState.report, error: vi.fn() }),
 	},
 }))
 
@@ -172,7 +185,7 @@ function Wrapper() {
 const AssistantCard = withAssistantCard(Wrapper as ComponentType<any>)
 
 describe("AssistantCard", () => {
-	it("reports the complete clicked conversation round through the global logger", () => {
+	it("reports the cleaned persisted conversation round through the global logger", async () => {
 		render(
 			<AssistantCard
 				node={{
@@ -189,16 +202,20 @@ describe("AssistantCard", () => {
 		expect(screen.getByTestId("assistant-card-dropdown-trigger")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("assistant-round-log-report-menu-item"))
 
-		expect(testState.report).toHaveBeenCalledWith("messages", {
-			topic_id: "topic-1",
-			chat_topic_id: "chat-topic-1",
-			message_id: "assistant-2",
-			messages: testState.messages.slice(0, 4).map((message) => ({
-				...message,
-				debug: testState.messageNodes[
-					message.app_message_id as keyof typeof testState.messageNodes
-				],
-			})),
+		await waitFor(() => {
+			expect(testState.report).toHaveBeenCalledWith("messages", {
+				topic_id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				message_id: "assistant-2",
+				messages: [{ seq_id: "1", message: { type: "rich_text" } }],
+			})
+		})
+		expect(testState.flushMessagePersistenceForReport).toHaveBeenCalledWith("chat-topic-1")
+		expect(testState.queryConversationRoundLogs).toHaveBeenCalledWith("chat-topic-1")
+		expect(testState.compressConversationRoundLogs).toHaveBeenCalledWith({
+			records: [{ storageId: "record-1" }],
+			roundMessages: testState.messages.slice(0, 4),
+			preferredWriterId: "tab-a",
 		})
 	})
 })

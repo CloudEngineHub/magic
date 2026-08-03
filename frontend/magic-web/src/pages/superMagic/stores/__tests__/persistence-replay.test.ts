@@ -13,6 +13,10 @@ import {
 	type SuperMagicChunkMessage,
 } from "@/types/chat/intermediate_message"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	persistMessagesToStorage,
+	waitForMessagePersistence,
+} from "@/pages/superMagic/stores/persistence"
 
 const TOPIC_ID = "topic-persistence"
 const CORRELATION_ID = "correlation-persistence"
@@ -41,6 +45,8 @@ interface PersistedWebSocketTestRecord {
 	super_magic_chunk?: { correlation_id?: string }
 	__websocket_record__: {
 		source: string
+		writer_id: string
+		writer_sequence: number
 		received_at: number
 		sent_at?: number
 	}
@@ -202,6 +208,37 @@ function createFinal({
 	return envelope as unknown as RawSuperMagicMessageEnvelope
 }
 
+function createUserSequence({
+	appMessageId = "user-websocket-recording",
+	topicId = TOPIC_ID,
+	seqId = "50",
+}: {
+	appMessageId?: string
+	topicId?: string
+	seqId?: string
+} = {}) {
+	return {
+		magic_id: "magic-user",
+		seq_id: seqId,
+		message_id: `server-${seqId}`,
+		refer_message_id: "",
+		sender_message_id: "",
+		conversation_id: "conversation-1",
+		organization_code: "organization-1",
+		message: {
+			magic_message_id: `magic-${appMessageId}`,
+			app_message_id: appMessageId,
+			sender_id: "user-1",
+			send_time: 1,
+			status: ConversationMessageStatus.Read,
+			unread_count: 0,
+			topic_id: topicId,
+			type: ConversationMessageType.RichText,
+			rich_text: { content: "question" },
+		},
+	}
+}
+
 function createStore(): SuperMagicStore {
 	const store = new SuperMagicStore()
 	store.setActiveTopicId(TOPIC_ID)
@@ -228,17 +265,22 @@ describe("SuperMagicStore / 持久化和回放", () => {
 	})
 
 	it("chunk 已实时消费，又从 IndexedDB 回放一次。", () => {
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
 		const store = createStore()
-		const live = createChunk({ i: 0, content: "A" })
-		store.receiveChunk(live)
-		store.receiveChunk(clone(live))
-		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
+		try {
+			const live = createChunk({ i: 0, content: "A" })
+			store.receiveChunk(live)
+			store.receiveChunk(clone(live))
+			store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
 
-		settle()
-		expect(node(store)).toMatchObject({ content: "AB" })
+			settle()
+			expect(node(store)).toMatchObject({ content: "AB" })
+		} finally {
+			addManySpy.mockRestore()
+		}
 	})
 
-	it("WebSocket 广播按客户端到达顺序完整记录 Chunk 与 Super Magic Message。", () => {
+	it("WebSocket 广播按当前 Tab 顺序完整记录 User、Chunk 与 Super Magic Message。", () => {
 		const topicId = "topic-websocket-recording"
 		const correlationId = "correlation-websocket-recording"
 		const chunk = {
@@ -255,6 +297,7 @@ describe("SuperMagicStore / 持久化和回放", () => {
 		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
 
 		try {
+			pubsub.publish(PubSubEvents.Super_Magic_New_Message_V2, createUserSequence({ topicId }))
 			pubsub.publish("super_magic_chunk_message", chunk)
 			pubsub.publish(PubSubEvents.Super_Magic_New_Message_V2, finalEnvelope.seq)
 			// HTTP authoritative sync 只更新 Store，不能再次产生 WebSocket 诊断记录。
@@ -264,8 +307,18 @@ describe("SuperMagicStore / 持久化和回放", () => {
 			const persistedEntries = addManySpy.mock.calls.flatMap(
 				([, entries]) => entries as Array<{ value: PersistedWebSocketTestRecord }>,
 			)
-			expect(persistedEntries).toHaveLength(2)
-			const [persistedChunk, persistedFinal] = persistedEntries.map((entry) => entry.value)
+			expect(persistedEntries).toHaveLength(3)
+			const [persistedUser, persistedChunk, persistedFinal] = persistedEntries.map(
+				(entry) => entry.value,
+			)
+			expect(persistedUser).toMatchObject({
+				seq_id: "50",
+				message: { type: ConversationMessageType.RichText },
+				__websocket_record__: {
+					source: "conversation_message",
+					sent_at: 1,
+				},
+			})
 			expect(persistedChunk).toMatchObject({
 				type: IntermediateMessageType.SuperMagicChunk,
 				super_magic_chunk: { correlation_id: correlationId },
@@ -287,12 +340,51 @@ describe("SuperMagicStore / 持久化和回放", () => {
 			})
 			expect(persistedChunk.__websocket_record__.received_at).toEqual(expect.any(Number))
 			expect(persistedFinal.__websocket_record__.received_at).toEqual(expect.any(Number))
+			expect(persistedUser.__websocket_record__.writer_id).toEqual(expect.any(String))
+			expect(persistedChunk.__websocket_record__.writer_id).toBe(
+				persistedUser.__websocket_record__.writer_id,
+			)
+			expect(persistedFinal.__websocket_record__.writer_id).toBe(
+				persistedUser.__websocket_record__.writer_id,
+			)
+			expect([
+				persistedUser.__websocket_record__.writer_sequence,
+				persistedChunk.__websocket_record__.writer_sequence,
+				persistedFinal.__websocket_record__.writer_sequence,
+			]).toEqual([
+				persistedUser.__websocket_record__.writer_sequence,
+				persistedUser.__websocket_record__.writer_sequence + 1,
+				persistedUser.__websocket_record__.writer_sequence + 2,
+			])
 			expect(persistedChunk.__websocket_record__.received_at).toBeLessThanOrEqual(
 				persistedFinal.__websocket_record__.received_at,
 			)
 		} finally {
 			addManySpy.mockRestore()
 		}
+	})
+
+	it("等待当前页面已提交的 IndexedDB 写入后再查询流水。", async () => {
+		let resolveWrite: (() => void) | undefined
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveWrite = resolve
+				}),
+		)
+		let waitCompleted = false
+
+		persistMessagesToStorage(TOPIC_ID, [createChunk()])
+		const waiting = waitForMessagePersistence().then(() => {
+			waitCompleted = true
+		})
+		await Promise.resolve()
+
+		expect(waitCompleted).toBe(false)
+		resolveWrite?.()
+		await waiting
+		expect(waitCompleted).toBe(true)
+		addManySpy.mockRestore()
 	})
 
 	it("多 choice 协议异常保留原始持久化记录，fresh Store 回放时仍不得投影隐藏候选。", () => {
