@@ -11,6 +11,7 @@ import type {
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { sendUserToolCallReply } from "@/pages/superMagic/services/askUserToolReplyService"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { logger as Logger } from "@/utils/log"
 import { IconLoader2 } from "@tabler/icons-react"
 import { CheckCircle2, ChevronDown, ClipboardList, PencilLine, XCircle } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -20,6 +21,8 @@ import { useTranslation } from "react-i18next"
 import PlanDataModelFields from "./PlanDataModelFields"
 import { MICRO_APP_PLAN_TOOL_NAME, PLAN_STATUS, resolvePlan, resolveTaskId } from "./model"
 import type { PlanActionDetail, PlanResponseStatus } from "./model"
+
+const logger = Logger.createLogger("MicroAppPlanToolCall")
 
 function PlanList({ items }: { items: string[] }) {
 	if (items.length === 0) return null
@@ -63,8 +66,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const [pendingAction, setPendingAction] = useState<PlanResponseStatus | null>(null)
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const deferredRawArguments = useDeferredValue(tool?.rawArguments)
 	const plan = resolvePlan(
@@ -162,7 +164,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.approved)
 			await submitReply(PLAN_STATUS.approved)
 		} catch (error) {
-			console.error(error)
+			logger.error("Failed to approve micro app plan", error)
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}
@@ -174,7 +176,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.cancelled)
 			await submitReply(PLAN_STATUS.cancelled)
 		} catch (error) {
-			console.error(error)
+			logger.error("Failed to cancel micro app plan", error)
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}
@@ -191,7 +193,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.revisionRequested)
 			await submitReply(PLAN_STATUS.revisionRequested, comment)
 		} catch (error) {
-			console.error(error)
+			logger.error("Failed to request micro app plan revision", error)
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}
