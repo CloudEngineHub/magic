@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { PanelRightOpen } from "lucide-react"
@@ -32,8 +32,8 @@ import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
 import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
+import { useMicroAppPreviewFiles } from "./hooks/useMicroAppPreviewFiles"
 import * as layout from "./layoutConstants"
-import { collectHtmlFiles, getAttachmentId, getMicroAppPreviewPath } from "./utils/microAppFiles"
 
 function MicroAppPageInner({
 	appId,
@@ -98,17 +98,14 @@ function MicroAppPageInner({
 		handleCaptureCover,
 		handleEditMicroApp,
 	} = controller
-	const [previewEntryFile, setPreviewEntryFile] = useState(defaultEntryFile)
-	const previewHtmlFiles = useMemo(() => collectHtmlFiles(attachmentList), [attachmentList])
-	const previewFileOptions = useMemo(
-		() =>
-			previewHtmlFiles.map((file) => ({
-				id: getAttachmentId(file),
-				path: getMicroAppPreviewPath(file),
-			})),
-		[previewHtmlFiles],
-	)
-	const activePreviewFileId = previewEntryFile ? getAttachmentId(previewEntryFile) : undefined
+	const {
+		previewEntryFile,
+		setPreviewEntryFile,
+		previewFileOptions,
+		activePreviewFileId,
+		handlePreviewFileChange,
+		handlePreviewOpenFile,
+	} = useMicroAppPreviewFiles({ attachmentList, defaultEntryFile })
 
 	const topicActions = useScopedMessageHeaderTopicActions({
 		selectedProject,
@@ -158,18 +155,6 @@ function MicroAppPageInner({
 			detailRef.current?.openFileTab(defaultEntryFile)
 		}
 	})
-	const handlePreviewFileChange = useMemoizedFn((fileId: string) => {
-		const nextFile = previewHtmlFiles.find((item) => getAttachmentId(item) === fileId)
-		if (nextFile) setPreviewEntryFile(nextFile)
-	})
-	const handlePreviewOpenFile = useMemoizedFn((fileItem?: unknown) => {
-		const nextFile = fileItem as typeof defaultEntryFile
-		if (!nextFile) return
-
-		const nextFileId = getAttachmentId(nextFile)
-		const matchedFile = previewHtmlFiles.find((item) => getAttachmentId(item) === nextFileId)
-		setPreviewEntryFile(matchedFile || nextFile)
-	})
 	const handleRegisterAIEdit = useMemoizedFn((handler: (() => void) | null) => {
 		aiEditHandlerRef.current = handler
 	})
@@ -202,18 +187,7 @@ function MicroAppPageInner({
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-	}, [projectId, setIsMessagePanelCollapsed])
-
-	useEffect(() => {
-		const currentPreviewFileId = previewEntryFile ? getAttachmentId(previewEntryFile) : null
-		const nextPreviewEntryFile =
-			(currentPreviewFileId
-				? previewHtmlFiles.find((file) => getAttachmentId(file) === currentPreviewFileId)
-				: defaultEntryFile) || null
-		if (nextPreviewEntryFile && nextPreviewEntryFile !== previewEntryFile) {
-			setPreviewEntryFile(nextPreviewEntryFile)
-		}
-	}, [defaultEntryFile, previewEntryFile, previewHtmlFiles])
+	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
 
 	useEffect(() => {
 		if (activeView === "files" && defaultEntryFile) {

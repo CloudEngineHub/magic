@@ -3,6 +3,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import {
 	collectHtmlFiles,
 	collectRootHtmlFiles,
+	isSamePreviewEntryFile,
 	resolveDefaultHtmlEntry,
 	resolveSelectedHtmlEntry,
 } from "../microAppFiles"
@@ -94,5 +95,20 @@ describe("microAppFiles", () => {
 		})
 
 		expect(selected?.file_id).toBe("second")
+	})
+
+	it("compares preview entries by file id and update time", () => {
+		expect(
+			isSamePreviewEntryFile(
+				file({ file_id: "entry", updated_at: "2026-08-03T05:30:00Z" }),
+				file({ file_id: "entry", updated_at: "2026-08-03T05:30:00Z" }),
+			),
+		).toBe(true)
+		expect(
+			isSamePreviewEntryFile(
+				file({ file_id: "entry", updated_at: "2026-08-03T05:30:00Z" }),
+				file({ file_id: "entry", updated_at: "2026-08-03T05:31:00Z" }),
+			),
+		).toBe(false)
 	})
 })

@@ -29,6 +29,19 @@ export function getAttachmentId(item: AttachmentItem): string {
 	)
 }
 
+export function isSamePreviewEntryFile(
+	currentFile: AttachmentItem | null,
+	nextFile: AttachmentItem | null,
+): boolean {
+	if (currentFile === nextFile) return true
+	if (!currentFile || !nextFile) return false
+
+	return (
+		getAttachmentId(currentFile) === getAttachmentId(nextFile) &&
+		currentFile.updated_at === nextFile.updated_at
+	)
+}
+
 export function getMicroAppPreviewPath(item: AttachmentItem | null): string {
 	if (!item) return "/"
 
