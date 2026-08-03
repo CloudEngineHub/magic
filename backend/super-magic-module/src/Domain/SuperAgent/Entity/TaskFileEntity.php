@@ -109,6 +109,22 @@ class TaskFileEntity extends AbstractEntity
         $this->projectId = $projectId;
     }
 
+    /**
+     * 判断当前文件是否为项目文件.
+     */
+    public function isProjectFile(): bool
+    {
+        return $this->projectId > 0;
+    }
+
+    /**
+     * 判断当前文件是否需要创建版本副本.
+     */
+    public function shouldCreateVersionCopy(): bool
+    {
+        return $this->isProjectFile();
+    }
+
     public function getTopicId(): int
     {
         return $this->topicId;

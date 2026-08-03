@@ -26,6 +26,7 @@ use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileType;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WorkspaceVersionEntity;
@@ -930,12 +931,12 @@ class FileProcessAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, 'file.not_found');
         }
 
-        // Validate project access permission
+        // 校验项目访问权限，用户空间文件改走 owner 权限。
         $userAuthorization = $requestContext->getUserAuthorization();
-        $projectEntity = $this->getAccessibleProject(
-            $taskFileEntity->getProjectId(),
-            $userAuthorization->getId(),
-            $userAuthorization->getOrganizationCode()
+        $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $userAuthorization,
+            MemberRole::VIEWER,
         );
 
         // Get current version (latest version number) - optimized for performance
@@ -946,7 +947,7 @@ class FileProcessAppService extends AbstractAppService
             $taskFileEntity->getFileName(),
             $currentVersion,
             $taskFileEntity->getOrganizationCode(),
-            $this->buildRelativeFilePathForEntity($taskFileEntity, $projectEntity->getId())
+            $this->buildRelativeFilePathForEntity($taskFileEntity, $taskFileEntity->getProjectId())
         );
         return $responseDTO->toArray();
     }
@@ -972,10 +973,15 @@ class FileProcessAppService extends AbstractAppService
      */
     private function performFileSave(SaveFileContentRequestDTO $requestDTO, MagicUserAuthorization $authorization): array
     {
-        // 1. Validate file permission
+        // 1. 校验文件权限，用户空间文件使用 owner 权限。
         $taskFileEntity = $this->validateFilePermission((int) $requestDTO->getFileId(), $authorization);
-
-        $projectEntity = $this->getAccessibleProjectWithEditor($taskFileEntity->getProjectId(), $authorization->getId(), $authorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $authorization,
+            MemberRole::EDITOR,
+        );
+        $storageOrganizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $taskFileEntity->getOrganizationCode();
 
         // 2. Process content (decode shadow if enabled)
         $content = $requestDTO->getContent();
@@ -995,7 +1001,7 @@ class FileProcessAppService extends AbstractAppService
             $taskFileEntity->getFileKey(),
             $taskFileEntity->getFileName(),
             $taskFileEntity->getFileExtension(),
-            $projectEntity->getUserOrganizationCode(),
+            $storageOrganizationCode,
             $taskFileEntity->getFileId()
         );
 
@@ -1003,7 +1009,7 @@ class FileProcessAppService extends AbstractAppService
         $this->updateFileMetadata($taskFileEntity, $result, $authorization);
 
         // 5. 创建文件版本
-        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($projectEntity->getUserOrganizationCode(), $taskFileEntity);
+        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($storageOrganizationCode, $taskFileEntity);
 
         return [
             'file_id' => $requestDTO->getFileId(),
@@ -1015,27 +1021,22 @@ class FileProcessAppService extends AbstractAppService
     }
 
     /**
-     * Validate file permission.
+     * 校验文件读取权限。
      *
-     * @param int $fileId File ID
-     * @param MagicUserAuthorization $authorization User authorization
-     * @return TaskFileEntity Task file entity
+     * 项目文件沿用项目权限，用户空间文件使用 task_files 中的 owner 信息。
      */
     private function validateFilePermission(int $fileId, MagicUserAuthorization $authorization): TaskFileEntity
     {
-        // Get TaskFileEntity by file_id
         $taskFileEntity = $this->taskDomainService->getTaskFile($fileId);
-
         if (empty($taskFileEntity)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TASK_NOT_FOUND, 'file.not_found');
         }
 
-        /*// Check if current user is the file owner
-        if ($taskFileEntity->getUserId() !== $authorization->getId()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
-        }*/
-
-        $this->getAccessibleProject($taskFileEntity->getProjectId(), $authorization->getId(), $authorization->getOrganizationCode());
+        $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $authorization,
+            MemberRole::VIEWER,
+        );
 
         return $taskFileEntity;
     }
@@ -1149,6 +1150,10 @@ class FileProcessAppService extends AbstractAppService
             (string) $taskFileEntity->getFileId(),
             ['size' => $result['size']]
         );
+
+        if (! $taskFileEntity->isProjectFile()) {
+            return;
+        }
 
         // Dispatch file content saved event for WebSocket notification
         $event = new FileContentSavedEvent(

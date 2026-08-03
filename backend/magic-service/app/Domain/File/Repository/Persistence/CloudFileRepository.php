@@ -680,6 +680,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
 
             // Prepare options for creation
             $createOptions = $options;
+            $createOptions['internal_endpoint'] = (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
 
             // Set default content for folders
             if ($isFolder && ! isset($createOptions['content'])) {

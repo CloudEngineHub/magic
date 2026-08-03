@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Infrastructure\Util\Context\RequestContext;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\FileEditingDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
@@ -31,7 +32,14 @@ class FileEditingAppService extends AbstractAppService
 
         // 权限检查
         $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProjectWithEditor($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::EDITOR,
+        );
+        if ($projectEntity === null) {
+            return;
+        }
 
         // 委托Domain层处理业务逻辑
         $this->fileEditingDomainService->joinEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
@@ -46,7 +54,14 @@ class FileEditingAppService extends AbstractAppService
 
         // 权限检查
         $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProjectWithEditor($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::EDITOR,
+        );
+        if ($projectEntity === null) {
+            return;
+        }
 
         // 委托Domain层处理业务逻辑
         $this->fileEditingDomainService->leaveEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
@@ -61,7 +76,14 @@ class FileEditingAppService extends AbstractAppService
 
         // 权限检查
         $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProject($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::VIEWER,
+        );
+        if ($projectEntity === null) {
+            return 0;
+        }
 
         // 委托Domain层查询编辑用户数量
         return $this->fileEditingDomainService->getEditingUsersCount($fileId, $projectEntity->getUserOrganizationCode());

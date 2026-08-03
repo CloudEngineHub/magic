@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Interfaces\MagicFS\Facade;
 
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Dtyq\SuperMagic\Application\MagicFS\FileScope\FileScopeHandlerResolver;
 use Dtyq\SuperMagic\Application\MagicFS\Service\MagicFSFileAppService;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Request\CreateFileRequestDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Request\GetFileTreeRequestDTO;
@@ -21,9 +22,13 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 #[ApiResponse('low_code')]
 class MagicFSApi extends AbstractApi
 {
+    /**
+     * 注入 MagicFS 接口所需的应用服务。
+     */
     public function __construct(
         protected RequestInterface $request,
         protected MagicFSFileAppService $magicFSFileAppService,
+        protected FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -36,6 +41,14 @@ class MagicFSApi extends AbstractApi
     {
         $authorization = $this->getCurrentUser();
         $requestDTO = ListFilesRequestDTO::fromRequest($this->request);
+
+        if ($requestDTO->hasScope()) {
+            $responseDTO = $this->fileScopeHandlerResolver
+                ->resolve($requestDTO->scope)
+                ->listFiles($authorization, $requestDTO);
+
+            return $responseDTO->toArray();
+        }
 
         $responseDTO = $this->magicFSFileAppService->listFiles($authorization, $requestDTO);
 

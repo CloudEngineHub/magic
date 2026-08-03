@@ -30,6 +30,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Constant\ProjectFileConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileType;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\AttachmentsProcessedEvent;
@@ -587,17 +588,16 @@ class FileManagementAppService extends AbstractAppService
     public function deleteFile(RequestContext $requestContext, int $fileId): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
 
         try {
             // 1. Fetch the file entity through MagicFS (covers both files and directories).
             $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
 
-            // 2. Verify project access (EDITOR role required).
-            $this->getAccessibleProjectWithEditor(
-                $fileEntity->getProjectId(),
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+            // 2. 校验编辑权限，用户空间文件使用 task_files owner 权限。
+            $this->getAccessibleProjectForTaskFile(
+                $fileEntity,
+                $userAuthorization,
+                MemberRole::EDITOR,
             );
 
             // 3. Soft-delete the entry itself only.
@@ -605,15 +605,17 @@ class FileManagementAppService extends AbstractAppService
             //    is a single-node deletion and does not propagate to children.
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
-            // 4. Dispatch the matching event so notification / asset subscribers can react.
-            if ($fileEntity->getIsDirectory()) {
-                $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
-            } else {
-                $this->eventDispatcher->dispatch(new FileDeletedEvent(
-                    $fileEntity,
-                    $userAuthorization->getId(),
-                    $userAuthorization->getOrganizationCode()
-                ));
+            if ($fileEntity->isProjectFile()) {
+                // 4. Dispatch the matching event so notification / asset subscribers can react.
+                if ($fileEntity->getIsDirectory()) {
+                    $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
+                } else {
+                    $this->eventDispatcher->dispatch(new FileDeletedEvent(
+                        $fileEntity,
+                        $userAuthorization->getId(),
+                        $userAuthorization->getOrganizationCode()
+                    ));
+                }
             }
 
             return ['file_id' => $fileId];
@@ -640,7 +642,6 @@ class FileManagementAppService extends AbstractAppService
     public function deleteDirectory(RequestContext $requestContext, DeleteDirectoryRequestDTO $requestDTO): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
 
         try {
             $fileId = (int) $requestDTO->getFileId();
@@ -648,21 +649,23 @@ class FileManagementAppService extends AbstractAppService
             // 1. 使用 MagicFS 获取文件实体（目录也是文件）
             $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
 
-            // 2. 检查项目权限（需要 EDITOR 角色）
-            $this->getAccessibleProjectWithEditor(
-                $fileEntity->getProjectId(),
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+            // 2. 校验编辑权限，用户空间文件使用 task_files owner 权限。
+            $this->getAccessibleProjectForTaskFile(
+                $fileEntity,
+                $userAuthorization,
+                MemberRole::EDITOR,
             );
 
             // 3. 调用 MagicFS 删除目录
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
-            // Dispatch directory deleted event
-            $dirUserAuth = new MagicUserAuthorization();
-            $dirUserAuth->setId($userAuthorization->getId());
-            $dirUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());
-            $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $dirUserAuth));
+            if ($fileEntity->isProjectFile()) {
+                // Dispatch directory deleted event
+                $dirUserAuth = new MagicUserAuthorization();
+                $dirUserAuth->setId($userAuthorization->getId());
+                $dirUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());
+                $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $dirUserAuth));
+            }
 
             return [
                 'file_id' => $fileId,
@@ -691,17 +694,37 @@ class FileManagementAppService extends AbstractAppService
     public function batchDeleteFiles(RequestContext $requestContext, BatchDeleteFilesRequestDTO $requestDTO): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
 
         try {
             $projectId = (int) $requestDTO->getProjectId();
             $fileIds = $requestDTO->getFileIds();
 
-            // Validate project ownership
-            $this->getAccessibleProjectWithEditor($projectId, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
-
-            // Fetch file entities before deletion so the event carries complete data
-            $fileEntities = $this->taskFileDomainService->getProjectFilesByIds($projectId, $fileIds);
+            if ($projectId > 0) {
+                $this->getAccessibleProjectWithEditor(
+                    $projectId,
+                    $userAuthorization->getId(),
+                    $userAuthorization->getOrganizationCode(),
+                );
+                $fileEntities = $this->taskFileDomainService->getProjectFilesByIds($projectId, $fileIds);
+            } else {
+                // 用户空间没有项目权限，批量加载后逐文件校验 owner，避免逐文件查询。
+                $fileEntities = $this->taskFileDomainService->getFilesByIds($fileIds);
+                $fileEntityMap = [];
+                foreach ($fileEntities as $fileEntity) {
+                    $fileEntityMap[(string) $fileEntity->getFileId()] = $fileEntity;
+                }
+                foreach ($fileIds as $fileId) {
+                    $fileEntity = $fileEntityMap[(string) $fileId] ?? null;
+                    if ($fileEntity === null || $fileEntity->getProjectId() !== $projectId) {
+                        ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+                    }
+                    $this->getAccessibleProjectForTaskFile(
+                        $fileEntity,
+                        $userAuthorization,
+                        MemberRole::EDITOR,
+                    );
+                }
+            }
 
             // 调用 MagicFS 统一的批量删除方法（软删除）
             $this->magicFSFileDomainService->deleteFiles($fileIds);
@@ -745,17 +768,16 @@ class FileManagementAppService extends AbstractAppService
     public function renameFile(RequestContext $requestContext, int $fileId, string $targetName): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
 
         try {
             // 1. 使用 MagicFS 获取文件实体
             $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
 
-            // 2. 检查项目权限（需要 EDITOR 角色）
-            $projectEntity = $this->getAccessibleProjectWithEditor(
-                $fileEntity->getProjectId(),
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+            // 2. 校验编辑权限，用户空间文件使用 task_files owner 权限。
+            $projectEntity = $this->getAccessibleProjectForTaskFile(
+                $fileEntity,
+                $userAuthorization,
+                MemberRole::EDITOR,
             );
 
             // 3. 调用 TaskFileDomainService 重命名（浏览器语义：同名冲突则拒绝）
@@ -764,14 +786,16 @@ class FileManagementAppService extends AbstractAppService
                 $targetName
             );
 
-            // Dispatch file renamed event
-            $renamedUserAuth = new MagicUserAuthorization();
-            $renamedUserAuth->setId($userAuthorization->getId());
-            $renamedUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());
-            $this->eventDispatcher->dispatch(new FileRenamedEvent($newFileEntity, $renamedUserAuth));
+            if ($newFileEntity->isProjectFile()) {
+                // Dispatch file renamed event
+                $renamedUserAuth = new MagicUserAuthorization();
+                $renamedUserAuth->setId($userAuthorization->getId());
+                $renamedUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());
+                $this->eventDispatcher->dispatch(new FileRenamedEvent($newFileEntity, $renamedUserAuth));
+            }
 
             // 4. 返回重命名后的文件信息
-            return TaskFileItemDTO::fromEntity($newFileEntity, $projectEntity->getWorkDir())->toArray();
+            return TaskFileItemDTO::fromEntity($newFileEntity, $projectEntity?->getWorkDir() ?? '')->toArray();
         } catch (BusinessException $e) {
             // 捕获业务异常（ExceptionBuilder::throw 抛出的异常）
             $this->logger->warning(sprintf(
@@ -1171,9 +1195,8 @@ class FileManagementAppService extends AbstractAppService
     {
         try {
             $userAuthorization = $requestContext->getUserAuthorization();
-            $dataIsolation = $this->createDataIsolation($userAuthorization);
 
-            return $this->getFileUrlsGroupedByProject($dataIsolation, $fileIds, $downloadMode, $options, $fileVersions);
+            return $this->getFileUrlsGroupedByProject($userAuthorization, $fileIds, $downloadMode, $options, $fileVersions);
         } catch (BusinessException $e) {
             $this->logger->warning(sprintf(
                 'Business logic error in get file URLs: %s, File IDs: %s, Download Mode: %s, Error Code: %d',
@@ -2220,7 +2243,7 @@ class FileManagementAppService extends AbstractAppService
 
     protected function dispatchFileUploadedEvent(?TaskFileEntity $fileEntity, MagicUserAuthorization $userAuthorization): void
     {
-        if ($fileEntity === null) {
+        if ($fileEntity === null || ! $fileEntity->isProjectFile()) {
             return;
         }
 
@@ -2256,7 +2279,8 @@ class FileManagementAppService extends AbstractAppService
             }
         }
 
-        if ($files === [] && $directories === []) {
+        $firstEntity = $files[0] ?? $directories[0] ?? null;
+        if ($firstEntity === null || ! $firstEntity->isProjectFile()) {
             return;
         }
 
@@ -2570,30 +2594,48 @@ class FileManagementAppService extends AbstractAppService
     /**
      * 通过 file_ids 批量查询文件实体，按 project_id 分组分别做权限校验和 URL 生成，合并结果返回.
      */
-    private function getFileUrlsGroupedByProject(DataIsolation $dataIsolation, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
+    private function getFileUrlsGroupedByProject(MagicUserAuthorization $authorization, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
     {
         $fileEntities = $this->taskFileDomainService->getFilesByIds($fileIds);
         if (empty($fileEntities)) {
             return [];
         }
 
-        // 按 project_id 分组收集 file_id 列表
-        $fileIdsByProject = [];
+        // 按 project_id 分组保留文件实体，避免重复查询项目权限。
+        $fileEntitiesByProject = [];
         foreach ($fileEntities as $fileEntity) {
-            $fileIdsByProject[$fileEntity->getProjectId()][] = (string) $fileEntity->getFileId();
+            $fileEntitiesByProject[$fileEntity->getProjectId()][] = $fileEntity;
         }
 
         $result = [];
-        foreach ($fileIdsByProject as $groupProjectId => $groupFileIds) {
-            $projectEntity = $this->getAccessibleProject(
-                $groupProjectId,
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+        foreach ($fileEntitiesByProject as $groupProjectId => $groupFileEntities) {
+            $groupFileIds = array_map(
+                static fn (TaskFileEntity $fileEntity): string => (string) $fileEntity->getFileId(),
+                $groupFileEntities
             );
 
+            $projectEntity = $this->getAccessibleProjectForTaskFile(
+                $groupFileEntities[0],
+                $authorization,
+                MemberRole::VIEWER,
+            );
+            if ($projectEntity === null) {
+                // 用户空间没有项目权限，逐文件校验 task_files owner 信息。
+                foreach ($groupFileEntities as $groupFileEntity) {
+                    $this->getAccessibleProjectForTaskFile(
+                        $groupFileEntity,
+                        $authorization,
+                        MemberRole::VIEWER,
+                    );
+                }
+                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
+            } else {
+                $organizationCode = $projectEntity->getUserOrganizationCode();
+            }
+
             $urls = $this->taskFileDomainService->getFileUrls(
-                $projectEntity->getUserOrganizationCode(),
-                $projectEntity->getId(),
+                $organizationCode,
+                $groupProjectId,
                 $groupFileIds,
                 $downloadMode,
                 $options,
