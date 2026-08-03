@@ -210,7 +210,11 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         ]);
 
         try {
-            $filesystem->downloadByChunks($filePath, $localPath, $config, $this->getInternalEndpointOptions($organizationCode));
+            $endpointOptions = ['internal_endpoint' => ($options['internal_endpoint'] ?? true) === true];
+            $downloadOptions = $endpointOptions['internal_endpoint']
+                ? $this->getInternalEndpointOptions($organizationCode, $endpointOptions)
+                : $this->getOptions($organizationCode, $endpointOptions);
+            $filesystem->downloadByChunks($filePath, $localPath, $config, $downloadOptions);
 
             $this->logger->info('chunk_download_repository_success', [
                 'organization_code' => $organizationCode,

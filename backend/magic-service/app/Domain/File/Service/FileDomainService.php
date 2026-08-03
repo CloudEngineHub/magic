@@ -150,6 +150,7 @@ readonly class FileDomainService
      */
     public function downloadByChunks(string $organizationCode, string $filePath, string $localPath, ?StorageBucketType $bucketType = null, array $options = []): void
     {
+        $options['internal_endpoint'] = (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
         $this->cloudFileRepository->downloadByChunks($organizationCode, $filePath, $localPath, $bucketType, $options);
     }
 

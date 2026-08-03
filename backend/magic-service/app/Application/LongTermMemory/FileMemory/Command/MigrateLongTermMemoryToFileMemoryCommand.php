@@ -40,6 +40,13 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
     private const string MEMORY_HEADING = '## 长期记忆';
 
     /**
+     * 缓存迁移过程中已经解析的用户空间文件节点，避免重复查询相同路径.
+     *
+     * @var array<string, null|TaskFileEntity>
+     */
+    private array $userPathNodeCache = [];
+
+    /**
      * 注入用户空间文件迁移所需的领域服务.
      */
     public function __construct(
@@ -478,7 +485,7 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
      */
     private function readUserTextFile(string $organizationCode, string $userId, string $relativePath): ?string
     {
-        $root = $this->taskFileRepository->findUserSpaceRootDirectory($userId, $organizationCode);
+        $root = $this->getUserSpaceRoot($organizationCode, $userId, false);
         if ($root === null) {
             return null;
         }
@@ -507,13 +514,20 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
             throw new InvalidArgumentException('目标记忆文件名不能为空');
         }
 
-        $rootId = $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode);
-        $parent = $this->taskFileDomainService->getById($rootId);
+        $parent = $this->getUserSpaceRoot($organizationCode, $userId, true);
         if ($parent === null) {
             throw new RuntimeException('用户空间根目录不存在');
         }
+        $currentPath = '';
         foreach ($segments as $segment) {
-            $child = $this->taskFileDomainService->getByProjectParentAndName(0, $parent->getFileId(), $segment);
+            $currentPath = $currentPath === '' ? $segment : $currentPath . '/' . $segment;
+            $child = $this->getUserPathNode(
+                $parent,
+                $organizationCode,
+                $userId,
+                $currentPath,
+                $segment,
+            );
             if ($child === null) {
                 $child = $this->magicFSFileDomainService->createFile(
                     name: $segment,
@@ -522,6 +536,7 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
                     source: TaskFileSource::AGENT,
                     spaceType: 'user',
                 );
+                $this->cacheUserPathNode($organizationCode, $userId, $currentPath, $child);
             }
             if (! $child->getIsDirectory() || ! $this->belongsToUserSpace($child, $organizationCode, $userId)) {
                 throw new RuntimeException('目标记忆目录路径被文件占用: ' . $relativePath);
@@ -529,7 +544,14 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
             $parent = $child;
         }
 
-        $file = $this->taskFileDomainService->getByProjectParentAndName(0, $parent->getFileId(), $fileName);
+        $filePath = $currentPath === '' ? $fileName : $currentPath . '/' . $fileName;
+        $file = $this->getUserPathNode(
+            $parent,
+            $organizationCode,
+            $userId,
+            $filePath,
+            $fileName,
+        );
         if ($file === null) {
             $file = $this->magicFSFileDomainService->createFile(
                 name: $fileName,
@@ -538,6 +560,7 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
                 source: TaskFileSource::AGENT,
                 spaceType: 'user',
             );
+            $this->cacheUserPathNode($organizationCode, $userId, $filePath, $file);
         }
         if ($file->getIsDirectory() || ! $this->belongsToUserSpace($file, $organizationCode, $userId)) {
             throw new RuntimeException('目标记忆文件路径被目录占用: ' . $relativePath);
@@ -564,8 +587,16 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
         string $relativePath,
     ): ?TaskFileEntity {
         $current = $root;
+        $currentPath = '';
         foreach ($this->pathSegments($relativePath) as $segment) {
-            $current = $this->taskFileDomainService->getByProjectParentAndName(0, $current->getFileId(), $segment);
+            $currentPath = $currentPath === '' ? $segment : $currentPath . '/' . $segment;
+            $current = $this->getUserPathNode(
+                $current,
+                $organizationCode,
+                $userId,
+                $currentPath,
+                $segment,
+            );
             if ($current === null || ! $this->belongsToUserSpace($current, $organizationCode, $userId)) {
                 return null;
             }
@@ -588,7 +619,6 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
                 $fileKey,
                 $temporaryPath,
                 StorageBucketType::SandBox,
-                ['internal_endpoint' => true],
             );
             $content = file_get_contents($temporaryPath);
             if ($content === false) {
@@ -666,6 +696,80 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
             && $entity->getOrganizationCode() === $organizationCode
             && $entity->getUserId() === $userId
             && $entity->getSpaceType() === 'user';
+    }
+
+    /**
+     * 获取用户空间根目录，并按需创建后写入命令级缓存.
+     */
+    private function getUserSpaceRoot(
+        string $organizationCode,
+        string $userId,
+        bool $create,
+    ): ?TaskFileEntity {
+        $cacheKey = $this->userPathCacheKey($organizationCode, $userId, '');
+        if (array_key_exists($cacheKey, $this->userPathNodeCache)) {
+            $root = $this->userPathNodeCache[$cacheKey];
+            if ($root !== null || ! $create) {
+                return $root;
+            }
+        }
+
+        if ($create) {
+            $rootId = $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode);
+            $root = $this->taskFileDomainService->getById($rootId);
+            if ($root === null) {
+                throw new RuntimeException('用户空间根目录不存在');
+            }
+        } else {
+            $root = $this->taskFileRepository->findUserSpaceRootDirectory($userId, $organizationCode);
+        }
+
+        if ($root !== null && ! $this->belongsToUserSpace($root, $organizationCode, $userId)) {
+            throw new RuntimeException('用户空间根目录归属不正确');
+        }
+        $this->userPathNodeCache[$cacheKey] = $root;
+        return $root;
+    }
+
+    /**
+     * 查询并缓存用户空间指定父目录下的文件节点.
+     */
+    private function getUserPathNode(
+        TaskFileEntity $parent,
+        string $organizationCode,
+        string $userId,
+        string $relativePath,
+        string $fileName,
+    ): ?TaskFileEntity {
+        $cacheKey = $this->userPathCacheKey($organizationCode, $userId, $relativePath);
+        if (array_key_exists($cacheKey, $this->userPathNodeCache)) {
+            return $this->userPathNodeCache[$cacheKey];
+        }
+
+        $node = $this->taskFileDomainService->getByProjectParentAndName(0, $parent->getFileId(), $fileName);
+        $this->userPathNodeCache[$cacheKey] = $node;
+        return $node;
+    }
+
+    /**
+     * 将新创建的用户空间文件节点写入命令级缓存.
+     */
+    private function cacheUserPathNode(
+        string $organizationCode,
+        string $userId,
+        string $relativePath,
+        TaskFileEntity $entity,
+    ): void {
+        $cacheKey = $this->userPathCacheKey($organizationCode, $userId, $relativePath);
+        $this->userPathNodeCache[$cacheKey] = $entity;
+    }
+
+    /**
+     * 生成用户空间路径缓存键.
+     */
+    private function userPathCacheKey(string $organizationCode, string $userId, string $relativePath): string
+    {
+        return implode("\0", [$organizationCode, $userId, $relativePath]);
     }
 
     /**
