@@ -381,6 +381,10 @@ class TopicAppService extends AbstractAppService
 
     public function renameTopic(MagicUserAuthorization $authorization, int $topicId, string $userQuestion, string $language = 'zh_CN'): array
     {
+        if (trim($userQuestion) === '') {
+            return ['topic_name' => ''];
+        }
+
         // 获取话题内容
         $topicEntity = $this->workspaceDomainService->getTopicById($topicId);
         if (! $topicEntity) {
