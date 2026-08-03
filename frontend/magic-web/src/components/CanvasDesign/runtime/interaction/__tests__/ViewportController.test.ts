@@ -408,25 +408,27 @@ describe("ViewportController external wheel input", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("keeps the minimap canvas point fixed while applying wheel zoom", () => {
+	it("keeps the current viewport center fixed while applying wheel zoom", () => {
 		const { canvas, controller, stage } = createController({
 			touch: false,
+			width: 1000,
+			height: 800,
 			scale: 1,
 			position: { x: 10, y: 20 },
 		})
-		const canvasPoint = { x: 30, y: 40 }
-		const initialScreenPoint = {
-			x: stage.position().x + canvasPoint.x * stage.scaleX(),
-			y: stage.position().y + canvasPoint.y * stage.scaleY(),
+		const viewportCenter = { x: 500, y: 400 }
+		const initialCanvasPoint = {
+			x: (viewportCenter.x - stage.position().x) / stage.scaleX(),
+			y: (viewportCenter.y - stage.position().y) / stage.scaleY(),
 		}
 
-		controller.zoomByWheelDeltaAtCanvasPoint(canvasPoint, -120, "minimap")
+		controller.zoomByWheelDeltaAtViewportCenter(-120, "minimap")
 
 		const nextScale = stage.scaleX()
 		const nextPosition = stage.position()
 		expect(nextScale).toBeGreaterThan(1)
-		expect(nextPosition.x + canvasPoint.x * nextScale).toBeCloseTo(initialScreenPoint.x)
-		expect(nextPosition.y + canvasPoint.y * nextScale).toBeCloseTo(initialScreenPoint.y)
+		expect((viewportCenter.x - nextPosition.x) / nextScale).toBeCloseTo(initialCanvasPoint.x)
+		expect((viewportCenter.y - nextPosition.y) / nextScale).toBeCloseTo(initialCanvasPoint.y)
 		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
 			type: "viewport:changed",
 			data: expect.objectContaining({

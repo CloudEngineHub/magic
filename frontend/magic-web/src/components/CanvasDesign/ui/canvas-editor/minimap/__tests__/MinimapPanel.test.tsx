@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 			getScale: () => number
 			panByWheelDelta: ReturnType<typeof vi.fn>
 			setPosition: ReturnType<typeof vi.fn>
-			zoomByWheelDeltaAtCanvasPoint: ReturnType<typeof vi.fn>
+			zoomByWheelDeltaAtViewportCenter: ReturnType<typeof vi.fn>
 		}
 	} | null,
 	collectMinimapScene: vi.fn(),
@@ -105,7 +105,7 @@ function createCanvasMock() {
 		stagePosition = position
 	})
 	const panByWheelDelta = vi.fn()
-	const zoomByWheelDeltaAtCanvasPoint = vi.fn()
+	const zoomByWheelDeltaAtViewportCenter = vi.fn()
 	const canvasEventEmit = vi.fn((event: { type: string; data: unknown }) => {
 		listeners.get(event.type)?.forEach((callback) => callback({ data: event.data }))
 	})
@@ -143,13 +143,13 @@ function createCanvasMock() {
 				getScale: () => 2,
 				panByWheelDelta,
 				setPosition,
-				zoomByWheelDeltaAtCanvasPoint,
+				zoomByWheelDeltaAtViewportCenter,
 			},
 		},
 		canvasEventEmit,
 		panByWheelDelta,
 		setPosition,
-		zoomByWheelDeltaAtCanvasPoint,
+		zoomByWheelDeltaAtViewportCenter,
 		setStagePosition: (position: { x: number; y: number }) => {
 			stagePosition = position
 		},
@@ -423,9 +423,9 @@ describe("MinimapPanel", () => {
 		expect(panel).toHaveClass("cursor-pointer")
 	})
 
-	it("pans without Mod and reverses anchored zoom with Mod", () => {
+	it("pans without Mod and reverses in-place zoom with Mod", () => {
 		vi.useFakeTimers()
-		const { canvas, canvasEventEmit, panByWheelDelta, zoomByWheelDeltaAtCanvasPoint } =
+		const { canvas, canvasEventEmit, panByWheelDelta, zoomByWheelDeltaAtViewportCenter } =
 			createCanvasMock()
 		mocks.canvas = canvas
 		const parentWheel = vi.fn()
@@ -466,18 +466,8 @@ describe("MinimapPanel", () => {
 		expect(firstWheelHandled).toBe(false)
 		expect(parentWheel).not.toHaveBeenCalled()
 		expect(panByWheelDelta).toHaveBeenCalledWith(12, 24, "minimap")
-		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
-			1,
-			{ x: 80, y: 60 },
-			120,
-			"minimap",
-		)
-		expect(zoomByWheelDeltaAtCanvasPoint).toHaveBeenNthCalledWith(
-			2,
-			{ x: 80, y: 60 },
-			40,
-			"minimap",
-		)
+		expect(zoomByWheelDeltaAtViewportCenter).toHaveBeenNthCalledWith(1, 120, "minimap")
+		expect(zoomByWheelDeltaAtViewportCenter).toHaveBeenNthCalledWith(2, 40, "minimap")
 		expect(canvasEventEmit).toHaveBeenCalledTimes(1)
 		expect(canvasEventEmit).toHaveBeenLastCalledWith({
 			type: "viewport:gesture",

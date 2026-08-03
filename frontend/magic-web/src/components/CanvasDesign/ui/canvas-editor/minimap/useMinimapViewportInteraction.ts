@@ -32,7 +32,6 @@ interface MinimapViewportDragState {
 
 interface MinimapWheelGestureState {
 	canvas: Canvas
-	zoomCanvasPoint: MinimapPoint | null
 	endTimeoutId: number | null
 }
 
@@ -122,7 +121,7 @@ export function useMinimapViewportInteraction({
 	}, [])
 
 	const keepWheelGestureActive = useCallback(
-		(nextCanvas: Canvas, zoomCanvasPoint?: MinimapPoint): MinimapWheelGestureState => {
+		(nextCanvas: Canvas): void => {
 			let wheelGestureState = wheelGestureStateRef.current
 			if (wheelGestureState && wheelGestureState.canvas !== nextCanvas) {
 				finishWheelGesture()
@@ -132,13 +131,10 @@ export function useMinimapViewportInteraction({
 			if (!wheelGestureState) {
 				wheelGestureState = {
 					canvas: nextCanvas,
-					zoomCanvasPoint: zoomCanvasPoint ?? null,
 					endTimeoutId: null,
 				}
 				wheelGestureStateRef.current = wheelGestureState
 				emitMinimapViewportGesture(nextCanvas, true)
-			} else if (!wheelGestureState.zoomCanvasPoint && zoomCanvasPoint) {
-				wheelGestureState.zoomCanvasPoint = zoomCanvasPoint
 			}
 
 			if (wheelGestureState.endTimeoutId !== null) {
@@ -150,8 +146,6 @@ export function useMinimapViewportInteraction({
 				wheelGestureState.endTimeoutId = null
 				emitMinimapViewportGesture(wheelGestureState.canvas, false)
 			}, MINIMAP_WHEEL_GESTURE_END_DELAY)
-
-			return wheelGestureState
 		},
 		[finishWheelGesture],
 	)
@@ -304,30 +298,10 @@ export function useMinimapViewportInteraction({
 			}
 
 			if (!Number.isFinite(event.deltaY) || event.deltaY === 0) return
-			const layout = renderLayoutRef.current
-			const panel = panelRef.current
-			if (!layout || !panel) return
-
-			const point = getMinimapPointerPoint(
-				panel,
-				panelSizeRef.current,
-				event.clientX,
-				event.clientY,
-			)
-			if (!point) return
-			const canvasPoint = unprojectMinimapPoint(point, layout.transform)
-			if (!canvasPoint) return
-
-			const wheelGestureState = keepWheelGestureActive(canvas, canvasPoint)
-			const wheelAnchor = wheelGestureState.zoomCanvasPoint
-			if (!wheelAnchor) return
-			canvas.viewportController.zoomByWheelDeltaAtCanvasPoint(
-				wheelAnchor,
-				-event.deltaY,
-				"minimap",
-			)
+			keepWheelGestureActive(canvas)
+			canvas.viewportController.zoomByWheelDeltaAtViewportCenter(-event.deltaY, "minimap")
 		},
-		[canvas, keepWheelGestureActive, panelRef, panelSizeRef, renderLayoutRef],
+		[canvas, keepWheelGestureActive],
 	)
 
 	useEffect(() => {

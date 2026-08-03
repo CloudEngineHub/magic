@@ -1047,28 +1047,19 @@ export class ViewportController {
 		)
 	}
 
-	/**
-	 * 按画布世界坐标锚定滚轮缩放，供小地图等画布外部视口组件使用。
-	 */
-	public zoomByWheelDeltaAtCanvasPoint(
-		canvasPoint: ViewportPoint,
+	/** 按当前视口中心缩放，供小地图等画布外部视口组件实现原地缩放。 */
+	public zoomByWheelDeltaAtViewportCenter(
 		deltaY: number,
 		source: ViewportChangeSource = "wheel",
 	): void {
-		if (
-			this.isPanZoomDisabled ||
-			!Number.isFinite(canvasPoint.x) ||
-			!Number.isFinite(canvasPoint.y) ||
-			!Number.isFinite(deltaY) ||
-			deltaY === 0
-		) {
+		if (this.isPanZoomDisabled || !Number.isFinite(deltaY) || deltaY === 0) {
 			return
 		}
 
 		const viewport = this.getZoomViewportSnapshot()
 		const anchor = {
-			x: viewport.position.x + canvasPoint.x * viewport.scale,
-			y: viewport.position.y + canvasPoint.y * viewport.scale,
+			x: this.canvas.stage.width() / 2,
+			y: this.canvas.stage.height() / 2,
 		}
 		this.queueZoomUpdate(
 			zoomByWheelDeltaAtAnchor(
