@@ -2,8 +2,15 @@ import type { AddressInfo } from "node:net"
 import { performance } from "node:perf_hooks"
 import puppeteer, { type Page } from "puppeteer"
 import { createServer, type ViteDevServer } from "vite"
-import { assertKnownArgs, parseArgs, readPositiveInteger, readPositiveNumber } from "../shared/cli"
+import {
+	assertKnownArgs,
+	parseArgs,
+	readPositiveInteger,
+	readPositiveNumber,
+	readTarget,
+} from "../shared/cli"
 import { emitJson } from "../shared/output"
+import type { BenchmarkTarget } from "../shared/types"
 import type { StreamingSmokeResult } from "./streaming-smoke-app"
 import { resolveChromeExecutable } from "./executable"
 import { createBenchmarkViteConfig } from "./vite.config"
@@ -11,9 +18,10 @@ import { createBenchmarkViteConfig } from "./vite.config"
 async function main(): Promise<void> {
 	const args = parseArgs(process.argv.slice(2))
 	assertKnownArgs(args, {
-		values: ["slides", "cpu-throttle", "timeout-ms", "chrome-path", "output"],
+		values: ["target", "slides", "cpu-throttle", "timeout-ms", "chrome-path", "output"],
 		flags: ["headful", "media"],
 	})
+	const target = readTarget(args)
 	const slides = readPositiveInteger(args, "slides", 300)
 	const cpuThrottle = readPositiveNumber(args, "cpu-throttle", 4)
 	const timeoutMs = readPositiveInteger(args, "timeout-ms", 900_000)
@@ -23,7 +31,7 @@ async function main(): Promise<void> {
 	let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null
 
 	try {
-		viteServer = await createServer(createBenchmarkViteConfig("source"))
+		viteServer = await createServer(createBenchmarkViteConfig(target))
 		await viteServer.listen()
 		const address = viteServer.httpServer?.address() as AddressInfo | null
 		if (!address) throw new Error("Vite streaming smoke server did not expose an address")
@@ -55,13 +63,14 @@ async function main(): Promise<void> {
 					timeoutMs,
 				)
 				const wallDurationMs = performance.now() - startedAt
-				assertSmokeResult(result, slides, workerUrls)
+				assertSmokeResult(result, slides, workerUrls, target)
 				emitJson(
 					{
 						benchmark: "html2pptx-streaming-opfs-smoke",
 						generatedAt: new Date().toISOString(),
 						browserVersion: await browser.version(),
 						chromeExecutable,
+						target,
 						slides,
 						cpuThrottle,
 						wallDurationMs,
@@ -104,11 +113,13 @@ function assertSmokeResult(
 	result: StreamingSmokeResult,
 	expectedSlides: number,
 	workerUrls: string[],
+	target: BenchmarkTarget,
 ): void {
-	if (
-		workerUrls.length === 0 ||
-		!workerUrls.some((url) => /(?:^|\/)workers\/packaging-worker\.ts(?:\?|$)/.test(url))
-	) {
+	const expectedWorkerUrl =
+		target === "dist"
+			? /(?:^|\/)assets\/packaging-worker-[^/?]+\.js(?:\?|$)/
+			: /(?:^|\/)workers\/packaging-worker\.ts(?:\?|$)/
+	if (workerUrls.length === 0 || !workerUrls.some((url) => expectedWorkerUrl.test(url))) {
 		throw new Error(`No real html2pptx Packaging Worker was created: ${workerUrls.join(", ")}`)
 	}
 	if (!result.opfsAvailable) throw new Error("OPFS was not available")

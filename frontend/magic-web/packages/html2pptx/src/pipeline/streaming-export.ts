@@ -218,6 +218,7 @@ async function runDirectStreamingExport(
 			destination: normalizeWorkerDestination(input.destination as PptxDestination),
 			compression: input.compression,
 			signal: input.signal,
+			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 		})
 		await packager.ready
@@ -399,6 +400,7 @@ async function runStagedStreamingExport(
 			destination: normalizeWorkerDestination(input.destination as PptxDestination),
 			compression: input.compression,
 			signal: input.signal,
+			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 		})
 		await packager.ready

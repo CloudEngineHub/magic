@@ -4,10 +4,14 @@ import { defineConfig, type UserConfig } from "vite"
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url))
 
-function getBaseViteConfig({ mode }: { mode: string }): UserConfig {
+export function getBaseViteConfig({ mode }: { mode: string }): UserConfig {
 	const isProd = mode === "production"
 
 	return {
+		// Keep package-owned worker chunks relative to the published entry. A
+		// root-absolute `/assets/...` URL breaks when the package is deployed
+		// below a sub-path or behind a CDN. Hosts can still override workerUrl.
+		base: "./",
 		resolve: {
 			alias: {
 				"@": resolve(projectRoot, "src"),

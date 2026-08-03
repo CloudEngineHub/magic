@@ -244,6 +244,17 @@ export interface LargeExportOptions extends Omit<ExportOptions, "onSlideProgress
 	mode?: "large"
 	outputPolicy?: LargeExportOutputPolicy
 	destination?: PptxDestination
+	/**
+	 * URL for the browser Packaging Worker module.
+	 *
+	 * The ESM build produced by this package can resolve its generated worker
+	 * asset when `dist/assets/` remains beside `dist/index.js`. For CJS browser
+	 * consumers, non-Vite bundlers, direct script loading, CDN deployments, or
+	 * any deployment that relocates assets, automatic resolution is not a
+	 * contract: pass an absolute URL (or a host-owned Worker via `workerFactory`)
+	 * instead. A relative string is resolved against the document URL.
+	 */
+	workerUrl?: string | URL
 	/** Known source page count when the AsyncIterable cannot expose it itself. */
 	pageCount?: number
 	onProgress?: (progress: ExportProgress) => void

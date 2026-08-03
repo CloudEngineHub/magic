@@ -20,6 +20,7 @@ describe("streaming export API", () => {
 	it("normalizes compatibility inputs lazily for the injected streaming runtime", async () => {
 		const sandbox = createSandboxStub()
 		const progress: ExportProgress[] = []
+		const workerUrl = new URL("https://cdn.example.test/html2pptx/packaging-worker.js")
 		let task: StreamingExportTaskInput | undefined
 		const exportStreaming = vi.fn(async (input: StreamingExportTaskInput) => {
 			task = input
@@ -45,6 +46,7 @@ describe("streaming export API", () => {
 		const handle = exporter(["first", { index: 7, html: "second", key: "business-page" }], {
 			fileName: "large.pptx",
 			outputPolicy: "file-stream",
+			workerUrl,
 			onProgress: (value) => progress.push(value),
 		})
 
@@ -58,6 +60,7 @@ describe("streaming export API", () => {
 		expect(exportStreaming).toHaveBeenCalledOnce()
 		expect(task?.pageCount).toBe(2)
 		expect(task?.outputPolicy).toBe("file-stream")
+		expect(task?.workerUrl).toBe(workerUrl)
 		expect(progress).toEqual([
 			{ phase: "preflight", pageCount: 2 },
 			{ phase: "completed", pageCount: 2, bytesWritten: 4096 },
@@ -67,6 +70,7 @@ describe("streaming export API", () => {
 
 	it("uses the default streaming runner when only the packager is injected", async () => {
 		const sandbox = createSandboxStub()
+		const workerUrl = new URL("https://cdn.example.test/html2pptx/packaging-worker.js")
 		const packager = {
 			state: "accepting-slides" as const,
 			ready: Promise.resolve(),
@@ -76,6 +80,7 @@ describe("streaming export API", () => {
 			abort: vi.fn(async () => undefined),
 			dispose: vi.fn(),
 		}
+		const createPackager = vi.fn(() => packager)
 		const exporter = createPptxStreamingExporter({
 			createSandbox: () => sandbox,
 			pipeline: {
@@ -85,17 +90,19 @@ describe("streaming export API", () => {
 					totalHeight: 720,
 					bodyBackground: null,
 				})),
-				createStreamingPresentationPackager: vi.fn(() => packager),
+				createStreamingPresentationPackager: createPackager,
 			},
 		})
 
 		const handle = exporter(["page"], {
+			workerUrl,
 			destination: {
 				kind: "sink-proxy",
 				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
 			},
 		})
 		await expect(handle.promise).resolves.toMatchObject({ pageCount: 1, bytesWritten: 1 })
+		expect(createPackager).toHaveBeenCalledWith(expect.objectContaining({ workerUrl }))
 		expect(packager.commitSlide).toHaveBeenCalledOnce()
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
 	})

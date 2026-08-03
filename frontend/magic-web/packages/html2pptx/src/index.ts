@@ -37,6 +37,7 @@ export interface StreamingExportTaskInput {
 	fontMissPolicy?: LargeExportOptions["fontMissPolicy"]
 	outputPolicy?: LargeExportOptions["outputPolicy"]
 	destination?: PptxDestination
+	workerUrl?: LargeExportOptions["workerUrl"]
 	mediaPolicy?: LargeExportOptions["mediaPolicy"]
 	imagePolicy?: LargeExportOptions["imagePolicy"]
 	stagingPolicy?: LargeExportOptions["stagingPolicy"]
@@ -187,6 +188,7 @@ async function runStreamingExportPipeline(
 			fontMissPolicy: options?.fontMissPolicy,
 			outputPolicy: options?.outputPolicy,
 			destination: options?.destination,
+			workerUrl: options?.workerUrl,
 			mediaPolicy: options?.mediaPolicy,
 			imagePolicy: options?.imagePolicy,
 			stagingPolicy: options?.stagingPolicy,

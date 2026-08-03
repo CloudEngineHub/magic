@@ -12,6 +12,7 @@ import type {
 	StreamingWorkerLike,
 } from "./incremental-types"
 import { descriptorTransferables } from "../media/source-descriptor"
+import defaultPackagingWorkerUrl from "../workers/packaging-worker.ts?worker&url"
 
 type PendingRequest = {
 	type: "commit-slide" | "finalize"
@@ -40,7 +41,9 @@ const ABORT_CLEANUP_TIMEOUT_MS = 2_000
 export function createStreamingPresentationPackager(
 	input: CreateStreamingPresentationPackagerInput,
 ): StreamingPresentationPackager {
-	const worker = (input.workerFactory ?? createDefaultPackagingWorker)()
+	const worker = input.workerFactory
+		? input.workerFactory()
+		: createDefaultPackagingWorker(input.workerUrl)
 	const destination = normalizeDestination(input.destination)
 	const sink = destination.kind === "sink-proxy" ? destination.sink : null
 	let state: PackagerState = "starting"
@@ -484,13 +487,14 @@ export function createStreamingPresentationPackager(
 	}
 }
 
-function createDefaultPackagingWorker(): StreamingWorkerLike {
+function createDefaultPackagingWorker(workerUrl?: string | URL): StreamingWorkerLike {
 	if (typeof Worker === "undefined") {
 		throw new Error(
 			"Packaging Worker is unavailable; provide workerFactory in this environment",
 		)
 	}
-	return new Worker(new URL("../workers/packaging-worker.ts", import.meta.url), {
+	if (workerUrl) return new Worker(workerUrl, { type: "module" })
+	return new Worker(defaultPackagingWorkerUrl, {
 		type: "module",
 	})
 }

@@ -46,39 +46,16 @@ PptxGenJS version, timings, output size, and memory samples. Results from differ
 artifact hashes must not be compared as the same baseline. See [benchmarks/README.md](./benchmarks/README.md)
 for scenarios, profiles, and CLI options.
 
-## Layered Overlay Architecture
+## Package layout
 
-The package derives its active edition from the folders present in the repository:
+This repository contains the self-contained open-source package. The public entry point is
+`src/index.ts`; `vite.config.ts` builds it as ESM and CommonJS output under `dist/`, while
+`tsconfig.json` emits the declaration files. The package does not depend on an `enterprise/`,
+`customer/`, or Overlay source tree.
 
-```text
-src/ -> enterprise/src/ -> customer/src/
-base    enterprise          customer
-```
-
-Later layers override files with the same logical relative path. Relative imports and `@/`
-imports continue to resolve through the complete active layer stack. Worker bundles receive the
-same source overlay through their isolated Vite plugin container.
-
-The Vite architecture follows the same filesystem-driven composition model as Magic Web:
-
-- `vite.config.ts` merges shared package configuration with the active Overlay contribution.
-- `vite/config.ts` is the baseline layer's Vite configuration contribution.
-- `vite/layers.ts` is the generic layer resolver and configuration composer.
-- `vite/overlay.ts` is the single source of truth for the layer stack.
-- `plugins/vite-plugin-overlay/` contains the generic source and Worker Overlay adapters used by
-  the central composer.
-- `customer/vite/config.ts` may contribute additional customer-specific Vite config when needed.
-
-The generic source resolver stays in the open-source infrastructure but is only registered when
-more than one source layer exists. With only `src/`, there is nothing to override and the resolver
-remains inactive. Omitting `enterprise/` and `customer/` therefore produces the open-source build
-without an active source or Worker Overlay. No `EDITION` environment variable or
-business-application Vite config is involved.
-
-This library has no HTML entry or `public/` asset contribution. Worker Overlay is part of the
-generic source Overlay infrastructure and remains dormant when only the baseline `src/` exists.
-Enterprise-only dependencies should be added under an `enterprise/` install root if such
-dependencies are introduced in the future.
+The repository-only benchmark harness lives under `benchmarks/` and is not included in the
+published package. Its Node and Chromium runners can be type-checked with
+`pnpm run typecheck` and are documented in [benchmarks/README.md](./benchmarks/README.md).
 
 Application code consumes the package only through its public package name:
 
@@ -86,5 +63,37 @@ Application code consumes the package only through its public package name:
 import { exportPPTX } from "@magic/html2pptx"
 ```
 
-Consumers must not register the package Overlay plugin or alias the package name to `src`. The
-package must be built before a workspace consumer resolves its `dist` exports.
+The package must be built before a workspace consumer resolves its `dist` exports. Commercial
+applications may compose their own integration around these public exports, but no commercial
+source or build configuration is part of this open-source package.
+
+## Large-export runtime requirements
+
+`exportPPTXStreaming` is the forward-only large-export API. Its built-in packaging path requires
+the patched PptxGenJS streaming runtime to provide `beginStreaming()`, `writeTo()`, and
+`createOpfsStagingStore()`. The current package metadata still declares `pptxgenjs: ^4.0.1` for
+compatibility; the stock npm `pptxgenjs@4.0.1` does not provide this complete runtime. Until a
+compatible PptxGenJS release and peer range are published, applications must install/use the
+matching patched PptxGenJS build or inject an equivalent runtime through the package runtime
+hooks. This README intentionally does not change the version or peer dependency.
+
+### Packaging Worker URL
+
+The ESM/Vite build emits the Packaging Worker under `dist/assets/` and resolves it when that
+directory stays beside `dist/index.js`. Do not rely on that default for CJS browser consumers,
+non-Vite bundlers, direct script loading, CDN/sub-path deployments, or copied/renamed assets.
+Those integrations must pass an absolute `workerUrl` (or inject a host-owned `workerFactory` at
+the lower-level packaging hook):
+
+```ts
+const workerUrl = new URL("https://static.example.com/html2pptx/packaging-worker.js")
+
+const handle = exportPPTXStreaming(pages, {
+	workerUrl,
+	destination,
+})
+await handle.promise
+```
+
+The CJS build test covers this explicit override path. The browser smoke benchmark also accepts
+`--target dist` to verify the generated ESM asset path after a package build.

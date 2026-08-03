@@ -114,6 +114,11 @@ export interface CreateStreamingPresentationPackagerInput {
 	destination: StreamingWorkerDestination
 	compression?: boolean
 	signal?: AbortSignal
+	/**
+	 * Host-provided Packaging Worker module URL. Required for CJS/non-Vite
+	 * browser consumers or when the generated `dist/assets` file is relocated.
+	 */
+	workerUrl?: string | URL
 	workerFactory?: StreamingWorkerFactory
 	onProgress?: (progress: ExportProgress) => void
 }

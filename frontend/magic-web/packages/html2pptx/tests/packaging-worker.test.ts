@@ -154,6 +154,41 @@ describe("packaging Worker protocol", () => {
 })
 
 describe("streaming packager client", () => {
+	it("uses an explicit module URL when constructing the default Packaging Worker", async () => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "abort") {
+					worker.emit({ type: "aborted", requestId: request.requestId })
+				}
+			},
+		}
+		const WorkerMock = vi.fn(function () {
+			return worker
+		})
+		vi.stubGlobal("Worker", WorkerMock)
+		const workerUrl = new URL("https://cdn.example.test/html2pptx/packaging-worker.js")
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerUrl,
+		})
+
+		try {
+			await packager.ready
+			expect(WorkerMock).toHaveBeenCalledWith(workerUrl, { type: "module" })
+			await packager.abort(new Error("test complete"))
+		} finally {
+			packager.dispose()
+			vi.unstubAllGlobals()
+		}
+	})
+
 	it("uses planned slide keys and closes the destination after finalize", async () => {
 		const sinkChunks: number[] = []
 		const responses: StreamingPackagingWorkerResponse[] = []
