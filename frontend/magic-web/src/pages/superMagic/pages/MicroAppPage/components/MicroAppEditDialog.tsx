@@ -340,7 +340,7 @@ export default function MicroAppEditDialog({
 							onChange={handleCoverChange}
 						/>
 						<div className="flex flex-wrap gap-2">
-							<Button
+							{/* <Button
 								type="button"
 								variant="outline"
 								className="gap-2"
@@ -362,7 +362,7 @@ export default function MicroAppEditDialog({
 								{capturing
 									? t("microAppPage.edit.capturing")
 									: t("microAppPage.edit.captureCover")}
-							</Button>
+							</Button> */}
 							<Button
 								type="button"
 								variant="outline"
