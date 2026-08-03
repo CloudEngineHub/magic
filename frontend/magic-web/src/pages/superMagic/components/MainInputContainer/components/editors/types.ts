@@ -39,7 +39,7 @@ export interface QueueMessageInput {
 
 export interface SceneEditorQueueContext {
 	editingQueueItem: QueuedMessage | null
-	addToQueue: (params: QueueMessageInput) => void
+	addToQueue: (params: QueueMessageInput) => Promise<string | undefined>
 	finishEditQueueItem: (value: JSONContent | undefined, mentionItems: MentionListItem[]) => void
 }
 

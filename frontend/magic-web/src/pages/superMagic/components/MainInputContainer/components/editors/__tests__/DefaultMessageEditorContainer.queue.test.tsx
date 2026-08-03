@@ -141,4 +141,54 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 			expect.objectContaining({ topicMode: mergedTopicMode }),
 		)
 	})
+
+	it("only passes queue-supported fields after merging send params", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1" } as never,
+					topicMode: TopicMode.Default,
+					showLoading: true,
+					mergeSendParams: ({ defaultParams }) => ({
+						...defaultParams,
+						topicMode: TopicMode.MicroApp,
+						extra: { micro_app_id: "app-1" },
+						queueId: "send-only-queue-id",
+						throwOnError: true,
+					}),
+					queueContext: {
+						editingQueueItem: null,
+						addToQueue: mocks.addToQueue,
+						finishEditQueueItem: vi.fn(),
+					},
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		const value: JSONContent = {
+			type: "doc",
+			content: [{ type: "paragraph", content: [{ type: "text", text: "你好" }] }],
+		}
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value,
+				mentionItems: [],
+				topicMode: TopicMode.Default,
+			})
+		})
+
+		expect(mocks.addToQueue).toHaveBeenCalledWith({
+			content: value,
+			mentionItems: [],
+			selectedModel: undefined,
+			selectedImageModel: undefined,
+			selectedVideoModel: undefined,
+			topicMode: TopicMode.MicroApp,
+		})
+	})
 })

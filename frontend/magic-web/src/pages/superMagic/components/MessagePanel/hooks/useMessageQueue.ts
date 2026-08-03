@@ -406,7 +406,7 @@ function useMessageQueue({
 			const queueData =
 				response?.list?.map(
 					(item: {
-						queue_id: number
+						queue_id: string
 						message_content: string
 						status: number
 						execute_time?: string | null
@@ -425,7 +425,7 @@ function useMessageQueue({
 							clientSyncId,
 						} = deserializeMessageContent(item.message_content)
 						return {
-							id: item.queue_id.toString(),
+							id: item.queue_id,
 							content,
 							mentionItems,
 							selectedModel,

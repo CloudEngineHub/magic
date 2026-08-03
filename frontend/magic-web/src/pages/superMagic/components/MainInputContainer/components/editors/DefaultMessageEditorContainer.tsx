@@ -31,6 +31,7 @@ import { generateTextFromJSONContent } from "@/pages/superMagic/components/Messa
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
+import { buildQueueMessageInput } from "./messageParams"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -248,14 +249,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		if (shouldQueue) {
 			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
 			tiptapEditorRef.current?.clearContentAfterSend()
-			const queueId = await queueContext.addToQueue({
-				content: finalParams.value ?? params.value,
-				mentionItems: finalParams.mentionItems,
-				selectedModel: finalParams.selectedModel,
-				selectedImageModel: finalParams.selectedImageModel,
-				selectedVideoModel: finalParams.selectedVideoModel,
-				topicMode: finalParams.topicMode,
-			})
+			const queueId = await queueContext.addToQueue(
+				buildQueueMessageInput(finalParams, params.value),
+			)
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
 				if (finalParams.value ?? params.value) {
