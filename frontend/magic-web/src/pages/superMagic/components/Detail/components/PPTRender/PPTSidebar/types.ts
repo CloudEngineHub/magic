@@ -18,6 +18,7 @@ export interface PPTSidebarProps {
 	sidebarWidth?: number
 	allowEdit?: boolean
 	isCollapsed?: boolean // External control of collapsed state
+	isPreviewLoadingEnabled?: boolean // Whether the sidebar may request HTML and thumbnails
 	onCollapsedChange?: (collapsed: boolean) => void // Callback when collapsed state changes
 }
 

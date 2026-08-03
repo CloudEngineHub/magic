@@ -15,6 +15,7 @@ import {
 import {
 	estimateDesktopSlideRowSize,
 	PPT_SIDEBAR_THUMBNAIL_DIMENSIONS,
+	prioritizeVirtualItems,
 } from "./utils/virtualization"
 import { observer } from "mobx-react-lite"
 import {
@@ -31,7 +32,9 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { usePPTStore } from "../hooks"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
 
-const VIRTUAL_OVERSCAN = 6
+// Keep a bounded ten-page buffer on both sides of the visible range. The same virtual range
+// drives DOM mounting, slide HTML loading, and thumbnail generation.
+const VIRTUAL_OVERSCAN = 10
 const MOBILE_ROW_ESTIMATE = 140
 const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
 const DRAG_AUTO_SCROLL_MAX_SPEED = 20
@@ -51,6 +54,7 @@ function PPTSidebar({
 	isMobile = false,
 	sidebarWidth = 200,
 	isCollapsed: externalIsCollapsed,
+	isPreviewLoadingEnabled = true,
 	onCollapsedChange,
 }: PPTSidebarProps) {
 	const { t } = useTranslation("super")
@@ -142,13 +146,13 @@ function PPTSidebar({
 		const timer = window.setTimeout(() => {
 			rowVirtualizer.measure()
 			const currentActiveIndex = activeIndexRef.current
-			if (!draggedIdRef.current && currentActiveIndex >= 0) {
+			if (isPreviewLoadingEnabled && !draggedIdRef.current && currentActiveIndex >= 0) {
 				rowVirtualizer.scrollToIndex(currentActiveIndex, { align: "auto" })
 			}
 		}, 80)
 
 		return () => window.clearTimeout(timer)
-	}, [desktopRowEstimate, isMobile, rowVirtualizer])
+	}, [desktopRowEstimate, isMobile, isPreviewLoadingEnabled, rowVirtualizer])
 
 	const visibleScreenshotKey = virtualItems
 		.map(({ index }) => {
@@ -161,19 +165,26 @@ function PPTSidebar({
 
 	// The virtual range is the single source of truth for thumbnail preloading.
 	useEffect(() => {
-		const visibleIndices = rowVirtualizer
-			.getVirtualItems()
+		if (!isPreviewLoadingEnabled) {
+			store.updateVisibleSlidePreviews([])
+			return
+		}
+
+		const visibleIndices = prioritizeVirtualItems(
+			rowVirtualizer.getVirtualItems(),
+			rowVirtualizer.range,
+		)
 			.map(({ index }) => itemsRef.current[index]?.index)
 			.filter((index): index is number => index !== undefined)
 		store.updateVisibleSlidePreviews(visibleIndices)
 
 		return () => store.updateVisibleSlidePreviews([])
-	}, [rowVirtualizer, store, visibleScreenshotKey])
+	}, [isPreviewLoadingEnabled, rowVirtualizer, store, visibleScreenshotKey])
 
 	useEffect(() => {
-		if (draggedId || hasNoSlides || activeIndex < 0) return
+		if (!isPreviewLoadingEnabled || draggedId || hasNoSlides || activeIndex < 0) return
 		rowVirtualizer.scrollToIndex(activeIndex, { align: "auto" })
-	}, [activeIndex, draggedId, hasNoSlides, isMobile, rowVirtualizer])
+	}, [activeIndex, draggedId, hasNoSlides, isMobile, isPreviewLoadingEnabled, rowVirtualizer])
 
 	const updateDropTarget = useCallback((target: SlideGapTarget | null) => {
 		const currentTarget = dropTargetRef.current

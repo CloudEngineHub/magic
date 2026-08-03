@@ -43,6 +43,7 @@ const mockState = vi.hoisted(() => {
 		virtualizer: {
 			getVirtualItems: vi.fn(() => values.virtualItems),
 			getTotalSize: vi.fn(() => values.totalSize),
+			range: { startIndex: 0, endIndex: 9 },
 			measureElement: vi.fn(),
 			measure: vi.fn(),
 			scrollToIndex: vi.fn(),
@@ -212,7 +213,7 @@ describe("PPTSidebar virtualization", () => {
 		const options = mockState.options
 		if (!options) throw new Error("useVirtualizer options were not captured")
 		expect(options.count).toBe(500)
-		expect(options.overscan).toBe(6)
+		expect(options.overscan).toBe(10)
 		expect(options.horizontal).toBe(false)
 		expect(options.estimateSize()).toBe(128)
 		expect(options.getItemKey(499)).toBe("slide-500")
@@ -241,6 +242,28 @@ describe("PPTSidebar virtualization", () => {
 		unmount()
 
 		expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenLastCalledWith([])
+	})
+
+	it("pauses preview demand while the sidebar is hidden and resumes it when shown", async () => {
+		const { rerender } = render(<PPTSidebar isPreviewLoadingEnabled onSlideClick={vi.fn()} />)
+
+		await waitFor(() =>
+			expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenCalledWith([
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+			]),
+		)
+
+		rerender(<PPTSidebar isPreviewLoadingEnabled={false} onSlideClick={vi.fn()} />)
+		expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenLastCalledWith([])
+
+		mockState.store.updateVisibleSlidePreviews.mockClear()
+		rerender(<PPTSidebar isPreviewLoadingEnabled onSlideClick={vi.fn()} />)
+
+		await waitFor(() =>
+			expect(mockState.store.updateVisibleSlidePreviews).toHaveBeenCalledWith([
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+			]),
+		)
 	})
 
 	it("uses horizontal virtualization and a horizontal Radix scrollbar on mobile", () => {

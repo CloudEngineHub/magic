@@ -114,6 +114,7 @@ export class PPTStore {
 	private configUpdateVersion = 0
 	private readonly contentLoadConcurrency: number
 	private visiblePreviewKeys: Set<string> = new Set()
+	private activeContentKey: string | null = null
 	private activeIndexAutoSaveDisposer: (() => void) | null = null
 	private disposed = false
 	/**
@@ -126,13 +127,6 @@ export class PPTStore {
 	 * 追踪手动保存的幻灯片（通过 fileId），用于跳过加载指示器
 	 */
 	private manuallySavedSlides: Set<string> = new Set()
-	/**
-	 * Screenshot window size - number of slides to preload screenshots before/after active slide
-	 * 截图窗口大小 - 在当前幻灯片前后预加载截图的幻灯片数量
-	 */
-	private screenshotWindowSize = 3
-	/** Only the closest slides fetch HTML proactively; the sidebar owns wider preview demand. */
-	private adjacentContentWindowSize = 1
 	/**
 	 * Track slides that have screenshot generation in progress
 	 * 追踪正在生成截图的幻灯片索引
@@ -221,6 +215,7 @@ export class PPTStore {
 				configUpdateVersion: false,
 				contentLoadConcurrency: false,
 				visiblePreviewKeys: false,
+				activeContentKey: false,
 				activeIndexAutoSaveDisposer: false,
 				disposed: false,
 			} as Record<string, false>,
@@ -335,6 +330,7 @@ export class PPTStore {
 		this.contentScheduler.dispose()
 		this.contentScheduler = new PPTSlideContentScheduler(this.contentLoadConcurrency)
 		this.visiblePreviewKeys.clear()
+		this.activeContentKey = null
 		return this.contentGeneration
 	}
 
@@ -360,6 +356,26 @@ export class PPTStore {
 		)
 	}
 
+	/** Follow active-page changes during initialization until the latest page has settled. */
+	private async waitForCurrentActiveSlideToSettle(
+		generation: number,
+		configUpdateVersion: number | undefined,
+	): Promise<void> {
+		while (this.isInitializationCurrent(generation, configUpdateVersion)) {
+			const activeIndex = this.activeIndex
+			const activeSlide = this.slides[activeIndex]
+			if (
+				!activeSlide ||
+				activeSlide.loadingState === "loaded" ||
+				activeSlide.loadingState === "error"
+			) {
+				return
+			}
+
+			await this.ensureSlideContent(activeIndex, "active")
+		}
+	}
+
 	private async settlePendingInitialization(configUpdateVersion: number): Promise<void> {
 		if (
 			!this.loadingManager.isInitializing ||
@@ -369,15 +385,10 @@ export class PPTStore {
 		}
 
 		const generation = this.contentGeneration
-		const activeIndex = this.activeIndex
-		const activeSlide = this.slides[activeIndex]
-		const activeSlideSettled =
-			activeSlide?.loadingState === "loaded" || activeSlide?.loadingState === "error"
-
 		// A newer same-deck config update adopts readiness from the stale initializer. Wait for the
 		// current active page to settle so the loading overlay cannot remain stuck or close too early.
-		if (this.config.autoLoadAndGenerate !== false && activeSlide && !activeSlideSettled) {
-			await this.ensureSlideContent(activeIndex, "active")
+		if (this.config.autoLoadAndGenerate !== false) {
+			await this.waitForCurrentActiveSlideToSettle(generation, configUpdateVersion)
 		}
 
 		if (
@@ -711,7 +722,10 @@ export class PPTStore {
 				this.slideManager.setActiveIndex(initialActiveIndex)
 
 				if (this.config.autoLoadAndGenerate !== false) {
-					await this.ensureSlideContent(initialActiveIndex, "active")
+					await this.waitForCurrentActiveSlideToSettle(
+						generation,
+						options.configUpdateVersion,
+					)
 				}
 				if (!this.isInitializationCurrent(generation, options.configUpdateVersion)) return
 
@@ -726,9 +740,9 @@ export class PPTStore {
 					},
 				})
 
-				// Keep only a small navigation window warm. Sidebar previews are scheduled separately.
+				// The active page is always highest priority; the sidebar virtual range owns all preloading.
 				if (this.config.autoLoadAndGenerate !== false) {
-					void this.ensureVisibleScreenshots()
+					void this.ensureActiveSlidePreview()
 				}
 			} catch (error) {
 				if (this.isInitializationCurrent(generation, options.configUpdateVersion)) {
@@ -820,8 +834,35 @@ export class PPTStore {
 	}
 
 	/**
-	 * Load one slide through the shared priority queue. Active navigation, sidebar previews and
-	 * adjacent prefetching all converge here, so the same slide has one in-flight pipeline.
+	 * Only the latest current page may retain active priority. If the previous page is still inside
+	 * the sidebar window, resume it as ordinary preview work after the new active task is queued.
+	 */
+	private claimActiveContentDemand(key: string): number | null {
+		const previousKey = this.activeContentKey
+		this.activeContentKey = key
+		if (!previousKey || previousKey === key) return null
+
+		const previousIndex = this.findSlideIndexByStableKey(previousKey)
+		this.contentScheduler.cancel(previousKey)
+
+		if (previousIndex !== -1) {
+			runInAction(() => {
+				const previousSlide = this.slides[previousIndex]
+				if (previousSlide?.loadingState === "loading" && !previousSlide.content) {
+					previousSlide.loadingState = "idle"
+					previousSlide.loadingError = undefined
+				}
+			})
+		}
+
+		return previousIndex !== -1 && this.visiblePreviewKeys.has(previousKey)
+			? previousIndex
+			: null
+	}
+
+	/**
+	 * Load one slide through the shared priority queue. Active navigation and sidebar previews
+	 * converge here, so the same slide has one in-flight pipeline.
 	 */
 	async ensureSlideContent(
 		index: number,
@@ -829,9 +870,17 @@ export class PPTStore {
 	): Promise<boolean> {
 		const slide = this.slides[index]
 		if (!slide || this.disposed) return false
-		if (slide.loadingState === "loaded") return true
 
 		const key = this.getSlideStableKey(slide, index)
+		const previousPreviewIndex =
+			priority === "active" ? this.claimActiveContentDemand(key) : null
+		if (slide.loadingState === "loaded") {
+			if (previousPreviewIndex !== null) {
+				void this.ensureSlidePreview(previousPreviewIndex, "preview")
+			}
+			return true
+		}
+
 		const generation = this.contentGeneration
 		const target = {
 			indexHint: index,
@@ -839,7 +888,7 @@ export class PPTStore {
 			fileId: this.getSlideFileId(slide),
 		}
 
-		return this.contentScheduler.schedule(key, priority, async (signal) => {
+		const loadPromise = this.contentScheduler.schedule(key, priority, async (signal) => {
 			const options = { signal, generation }
 			if (!this.isContentLoadCurrent(options)) return false
 
@@ -873,6 +922,12 @@ export class PPTStore {
 			)
 			return Boolean(content)
 		})
+
+		if (previousPreviewIndex !== null) {
+			void this.ensureSlidePreview(previousPreviewIndex, "preview")
+		}
+
+		return loadPromise
 	}
 
 	/** Load content first, then generate its thumbnail using the slide's stable identity. */
@@ -888,13 +943,17 @@ export class PPTStore {
 
 		const currentIndex = this.findSlideIndexByStableKey(key)
 		if (currentIndex === -1) return false
+		const isStillRequested =
+			(priority === "active" && currentIndex === this.activeIndex) ||
+			this.visiblePreviewKeys.has(key)
+		if (!isStillRequested) return false
 		await this.ensureSlideScreenshot(currentIndex)
 		return true
 	}
 
 	/**
 	 * Synchronize sidebar demand with the virtual range. Queued previews that have already scrolled
-	 * away are dropped, while active/adjacent work is preserved even if it shares the same key.
+	 * away are dropped, while active work is preserved even if it shares the same key.
 	 */
 	updateVisibleSlidePreviews(indices: number[]): void {
 		const nextPreviewKeys = new Set<string>()
@@ -1148,9 +1207,9 @@ export class PPTStore {
 					},
 				})
 
-				// Generate screenshots for visible slides only (lazy loading)
+				// Keep the active page ready; sidebar previews remain owned by its virtual range.
 				if (this.config.autoLoadAndGenerate !== false) {
-					this.ensureVisibleScreenshots()
+					void this.ensureActiveSlidePreview()
 				}
 			})
 		} catch (error) {
@@ -1534,7 +1593,7 @@ export class PPTStore {
 		}
 	}
 
-	private scheduleActiveSlideWindow(): void {
+	private scheduleActiveSlide(): void {
 		const activeIndex = this.activeIndex
 		const slide = this.slides[activeIndex]
 		if (!slide) return
@@ -1546,31 +1605,31 @@ export class PPTStore {
 		}
 
 		if (this.config.autoLoadAndGenerate !== false) {
-			void this.ensureVisibleScreenshots()
+			void this.ensureActiveSlidePreview()
 		}
 	}
 
 	setActiveIndex(index: number): void {
 		this.slideManager.setActiveIndex(index)
-		if (this.activeIndex === index) this.scheduleActiveSlideWindow()
+		if (this.activeIndex === index) this.scheduleActiveSlide()
 	}
 
 	nextSlide(): void {
 		const previousIndex = this.activeIndex
 		this.slideManager.nextSlide()
-		if (this.activeIndex !== previousIndex) this.scheduleActiveSlideWindow()
+		if (this.activeIndex !== previousIndex) this.scheduleActiveSlide()
 	}
 
 	prevSlide(): void {
 		const previousIndex = this.activeIndex
 		this.slideManager.prevSlide()
-		if (this.activeIndex !== previousIndex) this.scheduleActiveSlideWindow()
+		if (this.activeIndex !== previousIndex) this.scheduleActiveSlide()
 	}
 
 	goToFirstSlide(): void {
 		const previousIndex = this.activeIndex
 		this.slideManager.goToFirstSlide()
-		if (this.activeIndex !== previousIndex) this.scheduleActiveSlideWindow()
+		if (this.activeIndex !== previousIndex) this.scheduleActiveSlide()
 	}
 
 	setIsTransitioning(isTransitioning: boolean): void {
@@ -1691,7 +1750,7 @@ export class PPTStore {
 
 			// 3. Keep inserted slides idle. Active navigation and the virtual sidebar now own demand.
 			if (this.config.autoLoadAndGenerate !== false) {
-				this.scheduleActiveSlideWindow()
+				this.scheduleActiveSlide()
 			}
 
 			this.logger.logOperationSuccess("handleNewSlideInsertion", {
@@ -1765,9 +1824,9 @@ export class PPTStore {
 			},
 		)
 
-		// Generate screenshots for visible slides (lazy loading)
+		// Keep the inserted active page ready; the sidebar owns the wider preview window.
 		if (this.config.autoLoadAndGenerate !== false) {
-			await this.ensureVisibleScreenshots()
+			await this.ensureActiveSlidePreview()
 		}
 
 		return newIndex
@@ -1906,49 +1965,10 @@ export class PPTStore {
 		}
 	}
 
-	/**
-	 * Ensure screenshots are generated for visible slides (lazy loading)
-	 * 确保为可见幻灯片生成截图（懒加载）
-	 * - Generates screenshots for current slide and nearby slides within window
-	 * - 为当前幻灯片及窗口范围内的相邻幻灯片生成截图
-	 */
-	async ensureVisibleScreenshots(): Promise<void> {
+	/** Ensure the current page wins scheduling without creating a second preload window. */
+	private async ensureActiveSlidePreview(): Promise<void> {
 		if (this.slides.length === 0) return
-
-		const currentIndex = this.activeIndex
-		const startIndex = Math.max(0, currentIndex - this.screenshotWindowSize)
-		const endIndex = Math.min(this.slides.length - 1, currentIndex + this.screenshotWindowSize)
-
-		this.logger.debug("开始懒加载可见截图", {
-			operation: "ensureVisibleScreenshots",
-			metadata: {
-				currentIndex,
-				startIndex,
-				endIndex,
-				windowSize: this.screenshotWindowSize,
-			},
-		})
-
-		// Generate screenshots in priority order: current, then neighbors
-		const indices: number[] = []
-		indices.push(currentIndex)
-		for (let i = 1; i <= this.screenshotWindowSize; i++) {
-			if (currentIndex - i >= startIndex) indices.push(currentIndex - i)
-			if (currentIndex + i <= endIndex) indices.push(currentIndex + i)
-		}
-
-		await Promise.all(
-			indices.map((index) => {
-				const distance = Math.abs(index - currentIndex)
-				if (distance <= this.adjacentContentWindowSize) {
-					return this.ensureSlidePreview(
-						index,
-						index === currentIndex ? "active" : "adjacent",
-					)
-				}
-				return this.ensureSlideScreenshot(index)
-			}),
-		)
+		await this.ensureSlidePreview(this.activeIndex, "active")
 	}
 
 	clearSlideScreenshot(index: number): void {
@@ -2129,7 +2149,7 @@ export class PPTStore {
 					if (!this.isConfigUpdateCurrent(configUpdateVersion)) return
 				}
 			}
-			if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlideWindow()
+			if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlide()
 
 			return
 		}
@@ -2148,7 +2168,7 @@ export class PPTStore {
 				newSlidePaths,
 				context,
 			)
-			if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlideWindow()
+			if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlide()
 		}
 	}
 
@@ -2216,7 +2236,7 @@ export class PPTStore {
 		}
 
 		// URL recovery is metadata-only; content retries remain demand-driven.
-		if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlideWindow()
+		if (this.isConfigUpdateCurrent(configUpdateVersion)) this.scheduleActiveSlide()
 
 		return recoveredCount
 	}
@@ -2424,6 +2444,7 @@ export class PPTStore {
 		this.contentGenerationController.abort()
 		this.contentScheduler.dispose()
 		this.visiblePreviewKeys.clear()
+		this.activeContentKey = null
 		this.activeIndexAutoSaveDisposer?.()
 		this.activeIndexAutoSaveDisposer = null
 		this.cacheManager.dispose()

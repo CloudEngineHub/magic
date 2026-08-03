@@ -603,6 +603,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}
 								isCollapsed={isSidebarCollapsed}
+								isPreviewLoadingEnabled={!isSidebarCollapsed && !isFullscreen}
 								onCollapsedChange={handleSidebarCollapsedChange}
 							/>
 						</div>

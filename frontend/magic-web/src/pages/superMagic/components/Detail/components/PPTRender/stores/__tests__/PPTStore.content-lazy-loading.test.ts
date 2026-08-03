@@ -69,7 +69,11 @@ function createDeck(count: number) {
 
 function createStore(
 	count: number,
-	config: { contentLoadConcurrency?: number; initialActiveIndex?: number } = {},
+	config: {
+		contentLoadConcurrency?: number
+		initialActiveIndex?: number
+		autoLoadAndGenerate?: boolean
+	} = {},
 ) {
 	const deck = createDeck(count)
 	const store = new PPTStore({
@@ -127,14 +131,94 @@ describe("PPTStore content lazy loading", () => {
 		stores.push(store)
 
 		await store.initializeSlides(paths)
-		await vi.waitFor(() => expect(store.slides[1]?.loadingState).toBe("loaded"))
 
-		expect(mockState.downloadFileContent).toHaveBeenCalledTimes(2)
+		expect(mockState.downloadFileContent).toHaveBeenCalledTimes(1)
 		expect(store.slides[0]?.loadingState).toBe("loaded")
-		expect(store.slides[1]?.loadingState).toBe("loaded")
+		expect(store.slides[1]?.loadingState).toBe("idle")
 		expect(store.slides[199]?.loadingState).toBe("idle")
 		expect(store.isInitializing).toBe(false)
 		expect(store.loadingProgress).toBe(100)
+	})
+
+	it("loads only the active page until the sidebar reports its virtual window", async () => {
+		const { store } = createStore(5)
+		stores.push(store)
+		setIdleSlides(store, 5)
+
+		store.setActiveIndex(2)
+
+		await vi.waitFor(() => expect(store.slides[2]?.loadingState).toBe("loaded"))
+		expect(mockState.downloadFileContent.mock.calls.map(([url]) => url)).toEqual([
+			"https://example.com/file-2.html",
+		])
+		expect(store.slides[1]?.loadingState).toBe("idle")
+		expect(store.slides[3]?.loadingState).toBe("idle")
+	})
+
+	it("keeps direct navigation demand-driven when automatic preview generation is disabled", async () => {
+		const { store } = createStore(2, { autoLoadAndGenerate: false })
+		stores.push(store)
+		setIdleSlides(store, 2)
+
+		store.setActiveIndex(1)
+
+		await vi.waitFor(() => expect(store.slides[1]?.loadingState).toBe("loaded"))
+		expect(mockState.downloadFileContent).toHaveBeenCalledTimes(1)
+		expect(mockState.screenshotService.generateScreenshot).not.toHaveBeenCalled()
+	})
+
+	it("cancels stale active loads so the latest navigation starts immediately", async () => {
+		const { store } = createStore(3, { contentLoadConcurrency: 1 })
+		stores.push(store)
+		setIdleSlides(store, 3)
+		const requestSignals = new Map<string, AbortSignal | undefined>()
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				requestSignals.set(url, options.signal)
+				if (url.endsWith("file-2.html")) return Promise.resolve("<main>latest</main>")
+				return new Promise<string>((_resolve, reject) => {
+					options.signal?.addEventListener("abort", () => {
+						reject(new DOMException("The operation was aborted", "AbortError"))
+					})
+				})
+			},
+		)
+
+		store.setActiveIndex(0)
+		await vi.waitFor(() => expect(requestSignals.size).toBe(1))
+		store.setActiveIndex(1)
+		await vi.waitFor(() => expect(requestSignals.size).toBe(2))
+		store.setActiveIndex(2)
+
+		await vi.waitFor(() => expect(store.slides[2]?.loadingState).toBe("loaded"))
+		expect(requestSignals.get("https://example.com/file-0.html")?.aborted).toBe(true)
+		expect(requestSignals.get("https://example.com/file-1.html")?.aborted).toBe(true)
+		expect(store.slides[0]?.loadingState).toBe("idle")
+		expect(store.slides[1]?.loadingState).toBe("idle")
+	})
+
+	it("skips thumbnail generation when a running preview leaves the sidebar window", async () => {
+		const { store } = createStore(2)
+		stores.push(store)
+		setIdleSlides(store, 2)
+		let resolveFirstDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent.mockImplementation((url: string) => {
+			if (url.endsWith("file-0.html")) {
+				return new Promise<string>((resolve) => {
+					resolveFirstDownload = resolve
+				})
+			}
+			return Promise.resolve("<main>visible</main>")
+		})
+
+		store.updateVisibleSlidePreviews([0])
+		await vi.waitFor(() => expect(mockState.downloadFileContent).toHaveBeenCalledTimes(1))
+		store.updateVisibleSlidePreviews([1])
+		resolveFirstDownload("<main>stale preview</main>")
+
+		await vi.waitFor(() => expect(store.slides[1]?.thumbnailUrl).toBeDefined())
+		expect(store.slides[0]?.loadingState).toBe("loaded")
+		expect(store.slides[0]?.thumbnailUrl).toBeUndefined()
 	})
 
 	it("finishes initialization when a same-deck config update supersedes the active-page load", async () => {
@@ -291,6 +375,45 @@ describe("PPTStore content lazy loading", () => {
 			"https://example.com/file-100.html",
 			{ signal: expect.any(AbortSignal) },
 		)
+	})
+
+	it("keeps initialization pending until the latest restored active page settles", async () => {
+		const { store, paths } = createStore(3)
+		stores.push(store)
+		let initialSignal: AbortSignal | undefined
+		let resolveLatestDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent
+			.mockImplementationOnce(
+				(_url: string, options: { signal?: AbortSignal }) =>
+					new Promise<string>((_resolve, reject) => {
+						initialSignal = options.signal
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise<string>((resolve) => {
+						resolveLatestDownload = resolve
+					}),
+			)
+
+		const initialization = store.initializeSlides(paths)
+		await vi.waitFor(() => expect(initialSignal).toBeDefined())
+
+		store.setActiveIndex(2)
+
+		await vi.waitFor(() => expect(initialSignal?.aborted).toBe(true))
+		await vi.waitFor(() => expect(mockState.downloadFileContent).toHaveBeenCalledTimes(2))
+		expect(store.isInitializing).toBe(true)
+
+		resolveLatestDownload("<main>restored active slide</main>")
+		await initialization
+
+		expect(store.activeIndex).toBe(2)
+		expect(store.slides[2]?.loadingState).toBe("loaded")
+		expect(store.isInitializing).toBe(false)
 	})
 
 	it("keeps sidebar content work within the configured concurrency limit", async () => {

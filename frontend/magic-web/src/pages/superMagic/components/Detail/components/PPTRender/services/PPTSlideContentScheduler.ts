@@ -1,10 +1,8 @@
-export type PPTSlideContentPriority = "active" | "adjacent" | "preview" | "background"
+export type PPTSlideContentPriority = "active" | "preview"
 
 const PRIORITY_VALUES: Record<PPTSlideContentPriority, number> = {
 	active: 0,
-	adjacent: 1,
-	preview: 2,
-	background: 3,
+	preview: 1,
 }
 
 interface ScheduledContentTask {

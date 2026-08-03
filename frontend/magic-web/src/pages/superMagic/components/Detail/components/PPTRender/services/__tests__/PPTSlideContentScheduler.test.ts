@@ -48,11 +48,11 @@ describe("PPTSlideContentScheduler", () => {
 		const runTarget = vi.fn(async () => target.promise)
 
 		const blockerPromise = scheduler.schedule("blocker", "preview", async () => blocker.promise)
-		const firstTargetPromise = scheduler.schedule("target", "background", runTarget)
 		const competitorPromise = scheduler.schedule("competitor", "preview", async () => {
 			executionOrder.push("competitor")
 			return competitor.promise
 		})
+		const firstTargetPromise = scheduler.schedule("target", "preview", runTarget)
 		const duplicateTargetPromise = scheduler.schedule("target", "active", runTarget)
 
 		expect(duplicateTargetPromise).toBe(firstTargetPromise)
@@ -97,35 +97,6 @@ describe("PPTSlideContentScheduler", () => {
 		await Promise.all([activePromise, firstPromise])
 		await Promise.resolve()
 		secondPreview.resolve(true)
-		await secondPromise
-	})
-
-	it("keeps adjacent work out of the active slide lane", async () => {
-		const scheduler = new PPTSlideContentScheduler(2)
-		const firstAdjacent = createDeferred()
-		const secondAdjacent = createDeferred()
-		const active = createDeferred()
-		const secondAdjacentRun = vi.fn(async () => secondAdjacent.promise)
-		const activeRun = vi.fn(async () => active.promise)
-
-		const firstPromise = scheduler.schedule(
-			"adjacent-1",
-			"adjacent",
-			async () => firstAdjacent.promise,
-		)
-		const secondPromise = scheduler.schedule("adjacent-2", "adjacent", secondAdjacentRun)
-		const activePromise = scheduler.schedule("active", "active", activeRun)
-
-		expect(secondAdjacentRun).not.toHaveBeenCalled()
-		expect(activeRun).toHaveBeenCalledTimes(1)
-		expect(scheduler.getStats()).toEqual({ active: 2, queued: 1, total: 3 })
-
-		active.resolve(true)
-		firstAdjacent.resolve(true)
-		await Promise.all([activePromise, firstPromise])
-		await Promise.resolve()
-		expect(secondAdjacentRun).toHaveBeenCalledTimes(1)
-		secondAdjacent.resolve(true)
 		await secondPromise
 	})
 
