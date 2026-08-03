@@ -21,13 +21,13 @@ The inspection is static. It does not fetch external URLs, execute JavaScript, o
 
 ## Ask before adding files
 
-If the user only asked to share the entry file and local dependencies were found, explain the practical effect and ask for approval:
+If the user only asked to share the entry file and local dependencies were found, explain the practical effect and ask whether to include them. Prefer an interactive question when available:
 
 ```text
 This page uses local files for its styles, images, fonts, video, or interactions. If I share only the entry file, the page may open with missing or broken content. Should I include the page’s referenced local files?
 ```
 
-Do not add additional files without approval. A direct request to include the related files is approval for those confirmed dependencies; do not ask again. Do not include an entire directory when the page uses only a subset.
+Do not add additional files without approval. A direct request to include the related files is approval for those confirmed dependencies; do not ask again. Do not include an entire directory when the page uses only a subset. If interactive questions are unavailable, ask clearly in the conversation and wait for the user’s answer before changing the share.
 
 If a dependency is missing, not synchronized, or dynamically referenced, tell the user which part may not work. Do not invent a replacement path. The user may explicitly accept sharing the currently available set, but clearly state that the result may be incomplete.
 
