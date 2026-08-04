@@ -241,14 +241,19 @@ class MagicBaseRowFilterDomainServiceTest extends TestCase
         ], ['starts_at' => 'datetime']);
     }
 
-    public function testRejectsTimezoneDatetimeExpressionsForLocalDatetimeFields(): void
+    public function testNormalizesTimezoneDatetimeExpressionsForLocalDatetimeFields(): void
     {
-        $this->expectException(MagicBaseInvalidFilterException::class);
-        $this->expectExceptionMessage('日期筛选值格式不正确');
-
-        $this->service->parse([
-            'starts_at' => ['eq' => '2026-07-25T02:00:00Z'],
+        $filter = $this->service->parse([
+            'starts_at' => ['eq' => '2026-08-04T03:12:18.582Z'],
         ], ['starts_at' => 'datetime']);
+
+        $this->assertCondition(
+            $filter->getItems()[0],
+            'starts_at',
+            'eq',
+            '2026-08-04 11:12:18',
+            'datetime',
+        );
     }
 
     public function testRejectsRawMongoFieldExpressions(): void

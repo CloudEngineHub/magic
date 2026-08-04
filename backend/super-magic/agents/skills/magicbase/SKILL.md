@@ -28,10 +28,11 @@ For `datetime` columns, MagicBase accepts only these input formats:
 - `YYYY-MM-DD HH:mm:ss`.
 - `YYYY-MM-DDTHH:mm`.
 - `YYYY-MM-DDTHH:mm:ss`.
+- ISO 8601 values with a UTC or numeric timezone, with optional fractional seconds, such as `2026-08-04T03:12:18.582Z` or `2026-08-04T11:12:18.582+08:00`.
 
-Use the raw value from `<input type="date">` or `<input type="datetime-local">` when it matches one of these formats. MagicBase normalizes accepted values to `YYYY-MM-DD HH:mm:ss` for storage and responses. Date and datetime filter values follow the same format rules.
+Use the raw value from `<input type="date">` or `<input type="datetime-local">` when it matches one of these formats. `Date.prototype.toISOString()` output is also accepted. MagicBase converts timezone-aware values to the service timezone and normalizes all accepted values to `YYYY-MM-DD HH:mm:ss` for storage and responses. Fractional seconds are discarded because MagicBase currently stores datetime values with second precision. Date and datetime filter values follow the same format rules.
 
-Do not submit `Date.prototype.toISOString()` output directly. Values such as `2026-08-02T08:35:00.000Z`, values with milliseconds, and values with timezone suffixes or offsets are not accepted. Convert them to one of the supported formats before calling `createRow`, `batchCreateRows`, `updateRow`, or a query filter. Preserve the intended local date and time when converting; do not silently remove a timezone marker if that would change the represented time.
+Do not manually remove `Z` or a numeric timezone offset before calling `createRow`, `batchCreateRows`, `updateRow`, or a query filter. Removing timezone information changes the represented instant instead of converting it correctly.
 
 Model UI choices with MySQL-like columns:
 

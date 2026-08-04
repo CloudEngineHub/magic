@@ -56,6 +56,21 @@ class MagicBaseRowDomainServiceTest extends TestCase
         $this->assertSame('2026-07-25 10:30:00', $normalized['starts_at']);
     }
 
+    public function testNormalizesIso8601DatetimeValuesBeforeTheyReachRowStorage(): void
+    {
+        $column = $this->createMock(MagicBaseColumnEntity::class);
+        $column->method('getColumnKey')->willReturn('starts_at');
+        $column->method('getDataType')->willReturn('datetime');
+        $column->method('getIsRequired')->willReturn(false);
+        $service = new MagicBaseRowDomainService();
+
+        $normalized = $service->normalizeRowPayload([
+            'starts_at' => '2026-08-04T03:12:18.582Z',
+        ], new MagicBaseColumnIndex(['starts_at' => $column]), true);
+
+        $this->assertSame('2026-08-04 11:12:18', $normalized['starts_at']);
+    }
+
     public function testNormalizesDatetimeDefaultValuesBeforeTheyReachRowStorage(): void
     {
         $column = $this->createMock(MagicBaseColumnEntity::class);
