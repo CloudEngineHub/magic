@@ -1,7 +1,8 @@
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { lazy, Suspense, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { useStyles } from "@/pages/superMagic/styles"
 import { workspaceStore, projectStore } from "../../stores/core"
 import projectFilesStore from "@/stores/projectFiles"
@@ -41,8 +42,7 @@ function MainLayout() {
 	const { t } = useTranslation("super")
 	const { projectId, topicId } = useParams()
 	const navigate = useNavigate()
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 
 	// Initialize routeManageService with navigate function
 	useEffect(() => {

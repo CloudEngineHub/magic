@@ -1,10 +1,7 @@
 import type { Canvas } from "./Canvas"
 import { ElementTypeEnum, type ElementType, type LayerElement } from "../document/types"
 
-const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([
-	ElementTypeEnum.Frame,
-	ElementTypeEnum.Group,
-])
+const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([ElementTypeEnum.Group])
 
 /**
  * 权限管理器 - 统一管理元素的交互权限
@@ -106,12 +103,13 @@ export class PermissionManager {
 	/**
 	 * 判断元素是否可以作为连接线起点/终点。
 	 *
-	 * Frame、Group 是容器语义，默认不展示连接 handle，也不能作为新连接目标。
+	 * Frame 可作为一组画布输入的连接起点/终点；Group 仅用于局部编组，不暴露连接语义。
 	 * 普通元素可通过 interactionConfig.connectable=false 显式关闭连接能力。
 	 */
 	public canConnect(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (!this.canHover(element)) return false
+		if (!this.canvas.elementManager.canParticipateInDocumentRelations(element.id)) return false
 		if (NON_CONNECTABLE_ELEMENT_TYPES.has(element.type)) return false
 		if (element.interactionConfig?.connectable === false) return false
 		return true
@@ -120,12 +118,10 @@ export class PermissionManager {
 	/**
 	 * 判断当前是否允许展示元素级临时交互反馈（hover、控件显隐、装饰器 affordance）。
 	 *
-	 * 裁剪和橡皮模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
+	 * 图片特殊编辑模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
 	 */
 	public canShowTransientElementAffordance(): boolean {
-		if (this.canvas.cropManager.getCroppingElementId()) return false
-		if (this.canvas.eraserManager.getErasingElementId()) return false
-		return true
+		return !this.canvas.imageEditingCoordinator.isActive()
 	}
 
 	/**

@@ -5,7 +5,7 @@ import type { Box } from "konva/lib/shapes/Transformer"
 import { getKeepRatioAspectRatio, isEdgeAnchor, applyAspectRatioToBoundBox } from "./anchorUtils"
 import { STANDARD_TRANSFORMER_STYLE } from "../frame/FrameEditorShared"
 import type { Rect } from "../../shared/ids"
-import { pickSelectedElementIdAtStagePointer } from "./elementNodeUtils"
+import { pickContentElementIdAtStagePointer } from "./elementNodeUtils"
 import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
 
 type TransformElementInstance = NonNullable<
@@ -95,8 +95,16 @@ export class TransformManager {
 			return
 		}
 
-		const elementId = pickSelectedElementIdAtStagePointer(this.canvas, pos)
+		const elementId = pickContentElementIdAtStagePointer(this.canvas, pos)
 		if (!elementId) {
+			return
+		}
+
+		const elementData = this.canvas.elementManager.getElementData(elementId)
+		const canToggle =
+			this.canvas.selectionManager.isSelected(elementId) ||
+			this.canvas.permissionManager.canSelect(elementData)
+		if (!canToggle) {
 			return
 		}
 

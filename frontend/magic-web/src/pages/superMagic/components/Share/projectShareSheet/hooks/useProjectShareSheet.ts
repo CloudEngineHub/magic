@@ -466,7 +466,11 @@ export function useProjectShareSheet({
 	const [selectedMemberNodes, setSelectedMemberNodes] = useState<TreeNode[]>([])
 	const [detailMemberNodes, setDetailMemberNodes] = useState<TreeNode[]>([])
 	const [detailMemberLoading, setDetailMemberLoading] = useState(false)
-	const [selectedShareMessageText, setSelectedShareMessageText] = useState("")
+	// Keep the prefetched text tied to its share so a rapid selection change cannot reuse stale content.
+	const [selectedShareMessage, setSelectedShareMessage] = useState<{
+		resourceId: string
+		text: string
+	} | null>(null)
 	const [canNativeShare] = useState(() => canUseNativeShare())
 	const [formState, setFormState] = useState<ProjectShareFormState>(() =>
 		createInitialFormState(isAudioRecordingScene),
@@ -591,7 +595,7 @@ export function useProjectShareSheet({
 		setSelectedMemberNodes([])
 		setDetailMemberNodes([])
 		setDetailMemberLoading(false)
-		setSelectedShareMessageText("")
+		setSelectedShareMessage(null)
 		setUserDefaultOpenFileId(undefined)
 		setDefaultOpenFilePickerOpen(false)
 		setFormState({
@@ -642,6 +646,11 @@ export function useProjectShareSheet({
 		if (localSelectedShare?.resource_id === selectedShareId) return localSelectedShare
 		return null
 	}, [filteredShareItems, localSelectedShare, selectedShareId])
+	// Expose text only when it belongs to the currently selected share.
+	const selectedShareMessageText =
+		selectedShareMessage && selectedShareMessage.resourceId === selectedShare?.resource_id
+			? selectedShareMessage.text
+			: ""
 	const displayedSelectedFileIds = useMemo(() => {
 		// Whole-project share detail: do not use list selection or share.file_ids, to avoid showing the selected-files block incorrectly.
 		if (selectedShare && isWholeProjectShare(selectedShare)) {
@@ -727,15 +736,16 @@ export function useProjectShareSheet({
 	])
 
 	useEffect(() => {
-		if (!canNativeShare || !open || view !== "linkDetail" || !selectedShare?.resource_id) {
-			setSelectedShareMessageText("")
+		if (!open || view !== "linkDetail" || !selectedShare?.resource_id) {
+			setSelectedShareMessage(null)
 			return
 		}
 
 		let isCancelled = false
-		setSelectedShareMessageText("")
+		setSelectedShareMessage(null)
+		const resourceId = selectedShare.resource_id
 
-		// Prebuild native-share text while the detail view is visible, so the click handler can call Web Share immediately.
+		// Prebuild the shared payload before any user action so iOS clipboard and Web Share calls stay inside the click gesture.
 		void buildShareClipboardText({
 			share: selectedShare,
 			projectName,
@@ -743,13 +753,13 @@ export function useProjectShareSheet({
 		})
 			.then((shareMessageText) => {
 				if (!isCancelled) {
-					setSelectedShareMessageText(shareMessageText)
+					setSelectedShareMessage({ resourceId, text: shareMessageText })
 				}
 			})
 			.catch((error) => {
 				if (!isCancelled) {
-					console.error("Failed to build native share message:", error)
-					setSelectedShareMessageText("")
+					console.error("Failed to build share message:", error)
+					setSelectedShareMessage(null)
 				}
 			})
 
@@ -758,7 +768,7 @@ export function useProjectShareSheet({
 		}
 		// The selected share is the real rebuild signal; keeping `t` out avoids repeated async rebuilds in tests with unstable mocks.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [canNativeShare, open, projectName, selectedShare, view])
+	}, [open, projectName, selectedShare, view])
 
 	const goTo = useMemoizedFn((nextView: ProjectShareSheetView) => {
 		setViewStack((prev) => [...prev, view])
@@ -826,15 +836,11 @@ export function useProjectShareSheet({
 	})
 
 	const copySelectedShareUrl = useMemoizedFn(async () => {
-		if (!selectedShare?.resource_id) return
+		if (!selectedShare?.resource_id || !selectedShareMessageText) return
 
 		try {
-			const shareMessageText = await buildShareClipboardText({
-				share: selectedShare,
-				projectName,
-				t,
-			})
-			await clipboard.writeText(shareMessageText)
+			// Keep the clipboard write as the first asynchronous operation in the click handler for iOS WebKit.
+			await clipboard.writeText(selectedShareMessageText)
 			magicToast.success(t("share.copySuccess"))
 		} catch {
 			magicToast.error(t("common.copyFailed"))

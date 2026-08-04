@@ -3,6 +3,10 @@ import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { isEqual } from "lodash-es"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
+import {
+	buildInlineElementDetailsProvenance,
+	type ElementDetailsProvenance,
+} from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
 import { isV2Version } from "./magicProjectCompression"
 import {
 	ELEMENT_DETAILS_FILENAME,
@@ -17,6 +21,28 @@ import {
 interface SiblingFileLookup {
 	fileItem: FileItem | null
 	parentId: string | null
+}
+
+const hydratedElementDetailsProvenance = new WeakMap<object, ElementDetailsProvenance>()
+
+export function getHydratedElementDetailsProvenance(
+	designData: DesignData | null | undefined,
+): ElementDetailsProvenance | undefined {
+	return designData ? hydratedElementDetailsProvenance.get(designData) : undefined
+}
+
+export function setHydratedElementDetailsProvenance(
+	designData: DesignData,
+	provenance: ElementDetailsProvenance,
+): void {
+	hydratedElementDetailsProvenance.set(designData, provenance)
+}
+
+export function transferHydratedElementDetailsProvenance(from: DesignData, to: DesignData): void {
+	const provenance = getHydratedElementDetailsProvenance(from)
+	if (provenance) {
+		setHydratedElementDetailsProvenance(to, provenance)
+	}
 }
 
 function flattenFileItems(files: FileItem[] | undefined): FileItem[] {
@@ -101,10 +127,18 @@ export interface ElementDetailsContext {
 export async function hydrateDesignDataDetails(
 	designData: DesignData | null,
 	ctx: ElementDetailsContext,
-): Promise<void> {
-	if (!designData || !isDesignDataV2(designData)) return
+): Promise<ElementDetailsProvenance> {
+	if (!designData) return {}
 	const elements = designData.canvas?.elements
-	if (!elements?.length) return
+	if (!elements?.length) {
+		setHydratedElementDetailsProvenance(designData, {})
+		return {}
+	}
+	if (!isDesignDataV2(designData)) {
+		const inlineProvenance = buildInlineElementDetailsProvenance(elements)
+		setHydratedElementDetailsProvenance(designData, inlineProvenance)
+		return inlineProvenance
+	}
 
 	const agentLookup = findSiblingFile(
 		ctx.attachments,
@@ -124,7 +158,9 @@ export async function hydrateDesignDataDetails(
 		readElementDetailsByFile(userLookup.fileItem),
 	])
 
-	rehydrateHeavyFields(elements, userDoc, agentDoc)
+	const provenance = rehydrateHeavyFields(elements, userDoc, agentDoc)
+	setHydratedElementDetailsProvenance(designData, provenance)
+	return provenance
 }
 
 /**

@@ -20,17 +20,18 @@
 		"useRemote": "使用新的"
 	},
 	"connectionEditor": {
-		"linkedMediaActive": "已关联",
+		"includeLinkedMedia": "参与参考媒体",
+		"includeLinkedText": "参与生成",
 		"linkedMediaDuplicate": "已添加",
+		"linkedMediaMentionLocked": "该资源已在提示词中引用，请先移除 @ 再取消勾选",
 		"linkedMediaMissingResource": "资源缺失",
 		"linkedMediaOverLimit": "数量超限",
-		"linkedMediaUnavailable": "不可用",
 		"linkedMediaUnsupportedMode": "当前模式不支持",
 		"linkedMediaUnsupportedType": "类型不支持",
 		"mediaKindAudio": "音频",
 		"mediaKindImage": "图片",
 		"mediaKindVideo": "视频",
-		"removeConnection": "删除连线"
+		"reorderLinkedText": "调整关联文本顺序"
 	},
 	"dropOverlay": {
 		"loading": "加载中",
@@ -504,6 +505,7 @@
 		"aspectRatio": "比例",
 		"duration": "时长",
 		"firstFrame": "首帧",
+		"frameResourceAlreadyUsed": "该资源已用于其他帧",
 		"frames": "首尾帧",
 		"generateAgain": "再次生成",
 		"generationSettings": "生成设置",
@@ -538,11 +540,14 @@
 		"slotLabelReferenceImage": "参考图",
 		"slotLabelReferenceMedia": "素材",
 		"standard": "文生视频",
+		"useAsEndFrame": "设为尾帧",
+		"useAsStartFrame": "设为首帧",
 		"videoEdit": "视频编辑",
 		"videoEditRequiresOneVideo": "视频编辑模式需上传 1 个参考视频"
 	},
 	"zoom": {
 		"fitToScreen": "适配屏幕",
+		"minimap": "小地图",
 		"zoomIn": "放大",
 		"zoomOut": "缩小",
 		"zoomTo": "缩放至{{percent}}%"

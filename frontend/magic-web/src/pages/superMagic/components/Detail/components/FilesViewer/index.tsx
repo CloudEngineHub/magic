@@ -15,6 +15,7 @@ import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/lib/utils"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
+import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -89,6 +90,7 @@ const FilesViewer = memo(
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
 			const { t } = useTranslation("super")
+			const { isShareRoute } = useShareRoute()
 			const isUrlFullscreenMode = useFullscreenMode()
 			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
 			const [expandPanelVisible, setExpandPanelVisible] = useState(false)
@@ -140,7 +142,7 @@ const FilesViewer = memo(
 				cachedTabIds,
 			} = useTabCache({
 				maxCacheSize: 10,
-				enableCache: true,
+				enableCache: !isShareRoute,
 				cacheOfficeFiles: true,
 			})
 

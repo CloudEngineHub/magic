@@ -79,7 +79,7 @@ class VertexAIClient extends AbstractGoogleGeminiClient
 
         $headers = array_merge($this->getAuthHeaders(), [
             'Content-Type' => $mimeType,
-            'Content-Length' => filesize($filePath),
+            'Content-Length' => (string) filesize($filePath),
         ]);
 
         $client = GuzzleClientFactory::createProxyClient(['timeout' => self::REQUEST_TIMEOUT], $this->proxyUrl);

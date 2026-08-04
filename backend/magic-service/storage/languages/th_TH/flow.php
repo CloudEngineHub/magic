@@ -214,6 +214,19 @@ return [
         'max_record_error' => 'จำนวนบันทึกสูงสุดต้องเป็นจำนวนเต็มระหว่าง 0 และ 500',
         'temperature_error' => 'อุณหภูมิต้องเป็นเลขทศนิยมระหว่าง 0 และ 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL ไฟล์แนบภายนอกต้องเป็น URL HTTP หรือ HTTPS ที่มีโฮสต์',
+        'blocked' => 'URL ไฟล์แนบภายนอกถูกบล็อกโดยนโยบายความปลอดภัย SSRF: :reason',
+        'block_reason' => [
+            'invalid_url' => 'รูปแบบ URL ไม่ถูกต้อง',
+            'blacklisted' => 'ที่อยู่เป้าหมายอยู่ในบัญชีดำ',
+            'protocol_not_allowed' => 'ไม่อนุญาตให้ใช้โปรโตคอล URL นี้',
+            'non_public_ip' => 'ที่อยู่เป้าหมายไม่ใช่ IP สาธารณะ',
+            'redirect_not_allowed' => 'URL เป้าหมายมีการเปลี่ยนเส้นทางที่ไม่ได้รับอนุญาต',
+            'resolve_failed' => 'ไม่สามารถแปลงชื่อโฮสต์เป้าหมายได้',
+            'unknown' => 'ที่อยู่เป้าหมายไม่เป็นไปตามนโยบายความปลอดภัย',
+        ],
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] ประเภทโหนดไม่รองรับ',
         'has_circular_dependencies' => '[:label] มีการพึ่งพาเป็นวงกลม',

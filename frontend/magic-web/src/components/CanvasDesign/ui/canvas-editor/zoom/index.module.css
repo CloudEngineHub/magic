@@ -1,9 +1,4 @@
-/* Zoom - 最上层 z-index: 3 */
 .zoom {
-	position: absolute;
-	right: 8px;
-	bottom: 8px;
-	z-index: 3;
 	display: flex;
 	gap: var(--spacing-1, 4px);
 	align-items: center;
@@ -15,17 +10,6 @@
 	box-shadow: var(--shadow-xs-offset-x, 0) var(--shadow-xs-offset-y, 1px)
 		var(--shadow-xs-blur-radius, 2px) var(--shadow-xs-spread-radius, 0)
 		var(--shadow-xs-color, rgb(0 0 0 / 5%));
-}
-
-/* shareHostBottomChrome：宿主底部 fixed 徽标等，移动端抬高更多，PC 略低 */
-.zoomShareHost {
-	bottom: 46px;
-}
-
-@media (min-width: 768px) {
-	.zoomShareHost {
-		bottom: 34px;
-	}
 }
 
 .zoom-in,
@@ -75,7 +59,6 @@
 	justify-content: space-between;
 }
 
-/* Select Trigger - 隐藏默认样式 */
 .select-trigger {
 	width: auto !important;
 	height: auto !important;
@@ -95,7 +78,6 @@
 	background: transparent !important;
 }
 
-/* 隐藏下拉箭头 */
 .select-trigger svg {
 	display: none !important;
 }

@@ -142,6 +142,8 @@ interface HTMLProps {
 	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
+	/** Live tab state, excluded from cached renderProps. */
+	isTabActive?: boolean
 	showFooter?: boolean
 	onRefreshFile?: () => void
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
@@ -240,6 +242,7 @@ export default memo(function HTML(props: HTMLProps) {
 		selectedProject,
 		showFileHeader = true,
 		activeFileId,
+		isTabActive,
 		showFooter,
 		onRefreshFile,
 		onRegisterAIEdit,
@@ -342,7 +345,12 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 头部刷新：拉取 HTML / data.js 版本列表；若最新版本号变新则切到最新并加载 */
 	const handleDetailHeaderRefresh = useMemoizedFn(async () => {
-		if (!displayData?.file_id || activeFileId !== displayData.file_id) return
+		if (!displayData?.file_id) return
+
+		// Use live tab state because cached activeFileId may be stale.
+		const isCurrentTabActive =
+			isTabActive === undefined ? activeFileId === displayData.file_id : isTabActive
+		if (!isCurrentTabActive) return
 
 		const htmlFileId = displayData.file_id
 		const prevHtmlNewest = htmlFileVersionsList[0]?.version
@@ -1063,7 +1071,12 @@ export default memo(function HTML(props: HTMLProps) {
 	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
 	useEffect(() => {
 		setIsPreviewRenderReady(false)
-		if (!processedContent) return
+		// 空文件没有可写入 iframe 的内容，也不会触发 onRenderReady。
+		// 此时预览本身已经完成（展示空白区域），应立即收起 loading。
+		if (!processedContent) {
+			setIsPreviewRenderReady(true)
+			return
+		}
 		const fallbackTimer = window.setTimeout(() => {
 			setIsPreviewRenderReady(true)
 		}, 4000)

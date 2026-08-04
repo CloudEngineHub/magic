@@ -186,7 +186,7 @@ function normalizeFieldRange(raw?: { min?: number; max?: number }): VideoModeFie
 	}
 }
 
-function countReferenceAssets(assets: VideoReferenceAssetInfo[]): {
+export function countVideoReferenceAssetInfosByKind(assets: VideoReferenceAssetInfo[]): {
 	images: number
 	videos: number
 	audios: number
@@ -282,7 +282,7 @@ export function resolveReferenceAssetLimits(
 	modeConfig: VideoInputModeConfig | undefined,
 	assets: VideoReferenceAssetInfo[] = [],
 ): VideoReferenceAssetLimits {
-	const counts = countReferenceAssets(assets)
+	const counts = countVideoReferenceAssetInfosByKind(assets)
 	const hasAnyReferenceAsset = assets.length > 0
 
 	const defaultImages = modeConfig?.supported_fields?.includes("reference_images")
@@ -414,7 +414,7 @@ export function validateReferenceAssetsByLimits(
 	assets: VideoReferenceAssetInfo[] = [],
 ): VideoReferenceAssetValidationIssue[] {
 	const limits = resolveReferenceAssetLimits(modeConfig, assets)
-	const counts = countReferenceAssets(assets)
+	const counts = countVideoReferenceAssetInfosByKind(assets)
 	const totalCount = assets.length
 	const issues: VideoReferenceAssetValidationIssue[] = []
 
