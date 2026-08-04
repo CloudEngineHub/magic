@@ -15,10 +15,27 @@ describe("EditorPromptCarousel", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		mocks.reduceMotion = false
+		vi.spyOn(Math, "random").mockReturnValue(0)
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it("starts from a random prompt on mount", () => {
+		vi.mocked(Math.random).mockReturnValue(0.6)
+
+		render(
+			<EditorPromptCarousel
+				config={{ examples: ["甲", "乙", "丙"], typingIntervalMs: 10 }}
+				enabled
+				onAccept={() => true}
+			/>,
+		)
+
+		act(() => vi.advanceTimersByTime(10))
+		expect(screen.getByText("乙")).toBeInTheDocument()
 	})
 
 	it("types a prompt, then exposes the clickable Tab action", () => {

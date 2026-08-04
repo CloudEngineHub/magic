@@ -27,6 +27,11 @@ function getPageVisibility() {
 	return typeof document === "undefined" || document.visibilityState !== "hidden"
 }
 
+function getRandomPromptIndex(length: number) {
+	if (length <= 1) return 0
+	return Math.floor(Math.random() * length)
+}
+
 const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPromptCarouselProps>(
 	function EditorPromptCarousel(
 		{ config, enabled, visible = true, isFocused = false, onAccept },
@@ -39,7 +44,7 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 		const [restartVersion, setRestartVersion] = useState(0)
 		const timeoutRef = useRef<number | null>(null)
 		const generationRef = useRef(0)
-		const currentIndexRef = useRef(0)
+		const currentIndexRef = useRef<number | null>(null)
 		const currentPromptRef = useRef("")
 		const visibleLengthRef = useRef(0)
 		const phaseRef = useRef<PromptPhase>("idle")
@@ -57,8 +62,10 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 				const examples = config.examples.filter(Boolean)
 				if (!enabled || examples.length === 0) return false
 
+				const currentIndex =
+					currentIndexRef.current ?? getRandomPromptIndex(examples.length)
 				currentIndexRef.current =
-					(currentIndexRef.current + offset + examples.length) % examples.length
+					(currentIndex + offset + examples.length) % examples.length
 				readyRef.current = false
 				currentPromptRef.current = ""
 				visibleLengthRef.current = 0
@@ -86,6 +93,9 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 		useEffect(() => {
 			const examples = config.examples.filter(Boolean)
 			const generation = ++generationRef.current
+			const advancePromptIndex = () => {
+				currentIndexRef.current = ((currentIndexRef.current ?? 0) + 1) % examples.length
+			}
 
 			const clearTimer = () => {
 				if (timeoutRef.current !== null) {
@@ -120,16 +130,21 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 
 			if (!pageVisible) return clearTimer
 
+			if (currentIndexRef.current === null) {
+				currentIndexRef.current = getRandomPromptIndex(examples.length)
+			}
+
 			if (!wasEnabledRef.current) {
 				if (advanceOnNextEnableRef.current) {
-					currentIndexRef.current = (currentIndexRef.current + 1) % examples.length
+					advancePromptIndex()
 					advanceOnNextEnableRef.current = false
 				}
 				wasEnabledRef.current = true
 			}
 
 			const startPrompt = () => {
-				const prompt = examples[currentIndexRef.current % examples.length]
+				const currentIndex = currentIndexRef.current ?? 0
+				const prompt = examples[currentIndex % examples.length]
 				currentPromptRef.current = prompt
 				readyRef.current = false
 
@@ -167,14 +182,14 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 			function showNextPrompt() {
 				readyRef.current = false
 				if (reduceMotion) {
-					currentIndexRef.current = (currentIndexRef.current + 1) % examples.length
+					advancePromptIndex()
 					startPrompt()
 					return
 				}
 
 				updatePhase("fading")
 				schedule(() => {
-					currentIndexRef.current = (currentIndexRef.current + 1) % examples.length
+					advancePromptIndex()
 					startPrompt()
 				}, fadeDurationMs)
 			}
@@ -186,7 +201,7 @@ const EditorPromptCarousel = forwardRef<EditorPromptCarouselHandle, EditorPrompt
 				schedule(showNextPrompt, holdDurationMs)
 			} else if (phaseRef.current === "fading" && currentPromptRef.current) {
 				schedule(() => {
-					currentIndexRef.current = (currentIndexRef.current + 1) % examples.length
+					advancePromptIndex()
 					startPrompt()
 				}, fadeDurationMs)
 			} else {
