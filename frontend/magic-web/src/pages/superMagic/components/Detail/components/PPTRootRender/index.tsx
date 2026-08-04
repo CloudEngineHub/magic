@@ -436,6 +436,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					selectedProject={selectedProject}
 					displayConfig={displayConfig}
 					isPlaybackMode={isPlaybackMode}
+					isFullscreen={isFullscreen}
 					allowEdit={allowEdit}
 					saveEditContent={saveEditContent}
 					onSortSave={handleSortSave}

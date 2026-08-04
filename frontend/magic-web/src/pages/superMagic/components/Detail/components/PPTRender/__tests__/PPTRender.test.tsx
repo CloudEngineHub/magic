@@ -51,6 +51,8 @@ const mockState = vi.hoisted(() => ({
 	lastStoreConfig: null as null | Record<string, any>,
 	pptControlBarProps: vi.fn(),
 	pptSlideProps: vi.fn(),
+	sidebarPreviewEffect: vi.fn(),
+	nativeIsFullscreen: false,
 	isSlideEditing: true,
 }))
 
@@ -111,9 +113,18 @@ vi.mock("../contexts/PPTContext", () => ({
 	},
 }))
 
-vi.mock("../PPTSidebar/index", () => ({
-	default: () => <div data-testid="ppt-sidebar" />,
-}))
+vi.mock("../PPTSidebar/index", async () => {
+	const React = await import("react")
+	function MockPPTSidebar({ isPreviewLoadingEnabled }: { isPreviewLoadingEnabled?: boolean }) {
+		React.useEffect(() => {
+			mockState.sidebarPreviewEffect(isPreviewLoadingEnabled)
+		}, [isPreviewLoadingEnabled])
+		return <div data-testid="ppt-sidebar" />
+	}
+	return {
+		default: MockPPTSidebar,
+	}
+})
 
 vi.mock("../PPTControlBar", () => ({
 	PPTControlBar: ({
@@ -225,7 +236,7 @@ vi.mock("../hooks", () => ({
 		isDeleteModalOpen: false,
 	}),
 	useFullscreen: () => ({
-		isFullscreen: false,
+		isFullscreen: mockState.nativeIsFullscreen,
 		toggleFullscreen: vi.fn(),
 	}),
 	useSlideFileLocator: () => undefined,
@@ -322,6 +333,7 @@ vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	isFullscreen?: boolean
 }) {
 	return render(
 		<PPTRender
@@ -330,6 +342,7 @@ function renderPPTRender(input?: {
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
 			allowEdit={true}
+			isFullscreen={input?.isFullscreen}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
 		/>,
@@ -352,6 +365,8 @@ describe("PPTRender", () => {
 		mockState.store.markSlideAsManuallySaved.mockReset()
 		mockState.pptControlBarProps.mockReset()
 		mockState.pptSlideProps.mockReset()
+		mockState.sidebarPreviewEffect.mockReset()
+		mockState.nativeIsFullscreen = false
 		mockState.isSlideEditing = true
 		mockState.navigateSaveHandler.mockReset()
 		mockState.navigateSaveHandler.mockResolvedValue(true)
@@ -359,6 +374,36 @@ describe("PPTRender", () => {
 		mockState.closeSaveHandler.mockResolvedValue(true)
 		mockState.discardHandler.mockReset()
 		mockState.discardHandler.mockResolvedValue(true)
+	})
+
+	it("syncs controlled fullscreen before the sidebar restores preview demand", async () => {
+		const { rerender } = renderPPTRender({ isFullscreen: true })
+
+		await waitFor(() => {
+			expect(mockState.store.setFullscreen).toHaveBeenCalledWith(true)
+			expect(mockState.sidebarPreviewEffect).toHaveBeenCalledWith(false)
+		})
+
+		mockState.store.setFullscreen.mockClear()
+		mockState.sidebarPreviewEffect.mockClear()
+		rerender(
+			<PPTRender
+				slidePaths={["slide-1.html"]}
+				filePathMapping={new Map()}
+				mainFileId="ppt-root-file"
+				mainFileName="Deck.html"
+				allowEdit={true}
+				isFullscreen={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.store.setFullscreen).toHaveBeenCalledWith(false)
+			expect(mockState.sidebarPreviewEffect).toHaveBeenCalledWith(true)
+		})
+		expect(mockState.store.setFullscreen.mock.invocationCallOrder[0]).toBeLessThan(
+			mockState.sidebarPreviewEffect.mock.invocationCallOrder[0],
+		)
 	})
 
 	it("registers a before-close confirmation callback for the PPT file", async () => {

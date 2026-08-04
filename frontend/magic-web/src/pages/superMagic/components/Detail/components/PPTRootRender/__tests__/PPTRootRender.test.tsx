@@ -51,12 +51,14 @@ vi.mock("../../PPTRender", () => ({
 		slidePaths,
 		attachments,
 		mainFileId,
+		isFullscreen,
 		onSortSave,
 		openNewTab,
 	}: {
 		slidePaths?: string[]
 		attachments?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
+		isFullscreen?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
 	}) => (
@@ -66,6 +68,7 @@ vi.mock("../../PPTRender", () => ({
 			data-main-relative-path={
 				attachments?.find((item) => item.file_id === mainFileId)?.relative_file_path
 			}
+			data-is-fullscreen={String(Boolean(isFullscreen))}
 		>
 			<button
 				type="button"
@@ -105,7 +108,11 @@ function createDeckFiles(magicUpdatedAt: string) {
 	]
 }
 
-function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
+function renderRoot(
+	magicUpdatedAt: string,
+	slides = ["slides/slide-1.html"],
+	options: { isFullscreen?: boolean } = {},
+) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
 	return render(
@@ -120,6 +127,7 @@ function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
 				type: "slide",
 				slides,
 			}}
+			isFullscreen={options.isFullscreen}
 			activeFileId="index-file"
 		/>,
 	)
@@ -136,6 +144,17 @@ describe("PPTRootRender", () => {
 			originalSlidesPaths: ["slides/slide-1.html"],
 		})
 		mockState.getFileContentById.mockReset()
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
+		)
+	})
+
+	it("forwards controlled fullscreen state to PPTRender", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "true")
+		})
 	})
 
 	it("keeps PPTRender mounted while magic.project.js reloads in the background", async () => {

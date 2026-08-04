@@ -44,9 +44,38 @@ describe("PPTScreenshotManager", () => {
 		expect(screenshotService.generateScreenshot).toHaveBeenCalledWith(
 			"https://example.com/01",
 			"<div>cached</div>",
+			"required",
 		)
 		expect(slide.thumbnailUrl).toBe("blob:cached")
 		expect(slide.thumbnailLoading).toBe(false)
+	})
+
+	it("treats cancelled preview generation as a normal loading stop", async () => {
+		const abortError = Object.assign(new Error("cancelled"), { name: "AbortError" })
+		const screenshotService = {
+			generateScreenshot: vi.fn(async () => Promise.reject(abortError)),
+			releaseScreenshot: vi.fn(),
+			clearCache: vi.fn(),
+			getCacheStats: vi.fn(() => ({})),
+		}
+		const manager = new PPTScreenshotManager(
+			createLogger() as never,
+			screenshotService as never,
+		)
+		const slide: SlideItem = {
+			id: "preview-slide",
+			path: "preview.html",
+			url: "https://example.com/preview",
+			index: 0,
+			content: "<div>preview</div>",
+			loadingState: "loaded",
+		}
+
+		await manager.generateSlideScreenshot(slide, 0, [slide], undefined, undefined, "preview")
+
+		expect(slide.thumbnailLoading).toBe(false)
+		expect(slide.thumbnailError).toBeUndefined()
+		expect(slide.thumbnailUrl).toBeUndefined()
 	})
 
 	it("writes a generated thumbnail back to the same slide after indices shift", async () => {
@@ -365,5 +394,96 @@ describe("PPTScreenshotManager", () => {
 		expect(slide.thumbnailLoading).toBe(false)
 		expect(slide.thumbnailError).toBeUndefined()
 		expect(screenshotService.releaseScreenshot).toHaveBeenCalledWith("blob:cleared")
+	})
+
+	it("invalidates late results on reset and remains reusable for the next deck", async () => {
+		const pending: Array<{ resolve: (thumbnailUrl: string) => void }> = []
+		const screenshotService = {
+			generateScreenshot: vi.fn(
+				() =>
+					new Promise<string>((resolve) => {
+						pending.push({ resolve })
+					}),
+			),
+			releaseScreenshot: vi.fn(),
+			clearCache: vi.fn(),
+			getCacheStats: vi.fn(() => ({ size: 0, urls: [] })),
+		}
+		const manager = new PPTScreenshotManager(
+			createLogger() as never,
+			screenshotService as never,
+		)
+		const oldSlide: SlideItem = {
+			id: "old-slide",
+			path: "01.html",
+			url: "https://example.com/old-01",
+			index: 0,
+			content: "<div>old</div>",
+			loadingState: "loaded",
+		}
+
+		const oldGeneration = manager.generateSlideScreenshot(oldSlide, 0, [oldSlide])
+		expect(oldSlide.thumbnailLoading).toBe(true)
+
+		manager.reset([oldSlide])
+		pending[0].resolve("blob:late-old-deck")
+		await oldGeneration
+
+		expect(oldSlide.thumbnailUrl).toBeUndefined()
+		expect(oldSlide.thumbnailLoading).toBe(false)
+		expect(oldSlide.thumbnailError).toBeUndefined()
+		expect(screenshotService.releaseScreenshot).toHaveBeenCalledWith("blob:late-old-deck")
+
+		const newSlide: SlideItem = {
+			...oldSlide,
+			id: "new-slide",
+			url: "https://example.com/new-01",
+			content: "<div>new</div>",
+		}
+		const newGeneration = manager.generateSlideScreenshot(newSlide, 0, [newSlide])
+		pending[1].resolve("blob:new-deck")
+		await newGeneration
+
+		expect(newSlide.thumbnailUrl).toBe("blob:new-deck")
+		expect(newSlide.thumbnailLoading).toBe(false)
+	})
+
+	it("ignores late errors after dispose and permanently blocks new screenshot work", async () => {
+		let rejectScreenshot: (error: Error) => void = () => undefined
+		const screenshotService = {
+			generateScreenshot: vi.fn(
+				() =>
+					new Promise<string>((_resolve, reject) => {
+						rejectScreenshot = reject
+					}),
+			),
+			releaseScreenshot: vi.fn(),
+			clearCache: vi.fn(),
+			getCacheStats: vi.fn(() => ({ size: 0, urls: [] })),
+		}
+		const logger = createLogger()
+		const manager = new PPTScreenshotManager(logger as never, screenshotService as never)
+		const slide: SlideItem = {
+			id: "slide-1",
+			path: "01.html",
+			url: "https://example.com/01",
+			index: 0,
+			content: "<div>slide</div>",
+			loadingState: "loaded",
+		}
+
+		const generation = manager.generateSlideScreenshot(slide, 0, [slide])
+		manager.dispose([slide])
+		manager.dispose([slide])
+		rejectScreenshot(new Error("late failure"))
+		await generation
+
+		expect(slide.thumbnailLoading).toBe(false)
+		expect(slide.thumbnailError).toBeUndefined()
+		expect(logger.logOperationError).not.toHaveBeenCalled()
+
+		await manager.generateSlideScreenshot(slide, 0, [slide])
+		await manager.generateAllScreenshots([slide])
+		expect(screenshotService.generateScreenshot).toHaveBeenCalledTimes(1)
 	})
 })

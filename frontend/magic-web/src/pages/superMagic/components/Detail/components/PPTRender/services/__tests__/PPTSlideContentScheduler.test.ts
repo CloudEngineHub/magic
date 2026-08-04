@@ -70,6 +70,103 @@ describe("PPTSlideContentScheduler", () => {
 		await competitorPromise
 	})
 
+	it("runs fullscreen neighbors before far pages and sidebar previews", async () => {
+		const scheduler = new PPTSlideContentScheduler(1)
+		const blocker = createDeferred()
+		const executionOrder: string[] = []
+
+		const blockerPromise = scheduler.schedule("active", "active", async () => blocker.promise)
+		const previewPromise = scheduler.schedule("preview", "preview", async () => {
+			executionOrder.push("preview")
+			return true
+		})
+		const farPromise = scheduler.schedule("far", "fullscreen-far", async () => {
+			executionOrder.push("far")
+			return true
+		})
+		const nearPromise = scheduler.schedule("near", "fullscreen-near", async () => {
+			executionOrder.push("near")
+			return true
+		})
+
+		blocker.resolve(true)
+		await blockerPromise
+		await expect(Promise.all([nearPromise, farPromise, previewPromise])).resolves.toEqual([
+			true,
+			true,
+			true,
+		])
+		expect(executionOrder).toEqual(["near", "far", "preview"])
+	})
+
+	it("reorders queued fullscreen tasks when the sliding window changes their distance", async () => {
+		const scheduler = new PPTSlideContentScheduler(1)
+		const blocker = createDeferred()
+		const executionOrder: string[] = []
+
+		const blockerPromise = scheduler.schedule("active", "active", async () => blocker.promise)
+		const oldNearPromise = scheduler.schedule("old-near", "fullscreen-near", async () => {
+			executionOrder.push("old-now-far")
+			return true
+		})
+		const oldFarPromise = scheduler.schedule("old-far", "fullscreen-far", async () => {
+			executionOrder.push("new-now-near")
+			return true
+		})
+
+		// Moving the active page changes both queued requests without creating duplicate work.
+		scheduler.reprioritize("old-near", "fullscreen-far")
+		scheduler.reprioritize("old-far", "fullscreen-near")
+
+		blocker.resolve(true)
+		await blockerPromise
+		await expect(Promise.all([oldNearPromise, oldFarPromise])).resolves.toEqual([true, true])
+		expect(executionOrder).toEqual(["new-now-near", "old-now-far"])
+	})
+
+	it("does not demote active demand when the sidebar requests the same slide", async () => {
+		const scheduler = new PPTSlideContentScheduler(1)
+		const active = createDeferred()
+		const activeAbort = vi.fn()
+
+		const activePromise = scheduler.schedule("slide", "active", async (signal) => {
+			signal.addEventListener("abort", activeAbort)
+			return active.promise
+		})
+		const duplicatePreviewPromise = scheduler.schedule("slide", "preview", async () => true)
+		const nextActivePromise = scheduler.schedule("next", "active", async () => true)
+
+		expect(duplicatePreviewPromise).toBe(activePromise)
+		expect(activeAbort).not.toHaveBeenCalled()
+
+		active.resolve(true)
+		await expect(activePromise).resolves.toBe(true)
+		await expect(nextActivePromise).resolves.toBe(true)
+	})
+
+	it("promotes a running preload before active preemption is evaluated", async () => {
+		const scheduler = new PPTSlideContentScheduler(1)
+		const target = createDeferred()
+		const targetAbort = vi.fn()
+		const otherActiveRun = vi.fn(async () => true)
+
+		const targetPromise = scheduler.schedule("target", "preview", async (signal) => {
+			signal.addEventListener("abort", targetAbort)
+			return target.promise
+		})
+		const promotedPromise = scheduler.schedule("target", "active", async () => true)
+		const otherActivePromise = scheduler.schedule("other-active", "active", otherActiveRun)
+
+		expect(promotedPromise).toBe(targetPromise)
+		expect(otherActiveRun).not.toHaveBeenCalled()
+		expect(targetAbort).not.toHaveBeenCalled()
+
+		target.resolve(true)
+		await expect(targetPromise).resolves.toBe(true)
+		await expect(otherActivePromise).resolves.toBe(true)
+		expect(otherActiveRun).toHaveBeenCalledTimes(1)
+	})
+
 	it("keeps one lane available for an active slide while previews are queued", async () => {
 		const scheduler = new PPTSlideContentScheduler(2)
 		const firstPreview = createDeferred()

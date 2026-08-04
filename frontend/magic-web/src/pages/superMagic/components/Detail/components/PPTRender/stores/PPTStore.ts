@@ -2,7 +2,7 @@ import { makeAutoObservable, reaction, runInAction } from "mobx"
 import {
 	SlideLoaderService,
 	SlideProcessorService,
-	getScreenshotService,
+	createScreenshotService,
 	createPPTLogger,
 	PPTPathMappingService,
 	PPTIncrementalUpdateService,
@@ -13,9 +13,12 @@ import type {
 	PPTLoggerConfig,
 	IncrementalUpdateContext,
 	PPTSlideContentPriority,
+	SlideScreenshotRequestKind,
+	SlideScreenshotService,
 } from "../services"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { SlideItem } from "../PPTSidebar/types"
+import { getPPTPreviewOverscan } from "../PPTSidebar/utils/devicePerformance"
 import { PPTSlideManager } from "./PPTSlideManager"
 import { PPTLoadingManager } from "./PPTLoadingManager"
 import { PPTViewStateManager } from "./PPTViewStateManager"
@@ -43,6 +46,11 @@ export interface PPTStoreConfig {
 	 * @default 4
 	 */
 	contentLoadConcurrency?: number
+	/**
+	 * Number of slide HTML files to preload on each side while fullscreen.
+	 * Defaults to the adaptive 5/10/15-page device tier window.
+	 */
+	fullscreenContentPreloadRadius?: number
 	/**
 	 * Preferred initial slide before the first HTML request is scheduled.
 	 * Cached restoration may still override it after initialization.
@@ -83,6 +91,17 @@ interface InitializeSlidesOptions {
 	configUpdateVersion?: number
 }
 
+type FullscreenContentPriority = Extract<
+	PPTSlideContentPriority,
+	"fullscreen-near" | "fullscreen-far"
+>
+
+interface FullscreenContentDemand {
+	index: number
+	key: string
+	priority: FullscreenContentPriority
+}
+
 /**
  * PPTStore - Main store that coordinates all managers
  * Provides a unified API for PPT operations
@@ -99,6 +118,7 @@ export class PPTStore {
 	private config: PPTStoreConfig
 	private loaderService: SlideLoaderService
 	private processorService: SlideProcessorService
+	private readonly screenshotService: SlideScreenshotService
 	private logger: ReturnType<typeof createPPTLogger>
 	/** Path mapping service - public for optimistic updates */
 	pathMappingService: PPTPathMappingService
@@ -114,6 +134,7 @@ export class PPTStore {
 	private configUpdateVersion = 0
 	private readonly contentLoadConcurrency: number
 	private visiblePreviewKeys: Set<string> = new Set()
+	private fullscreenContentPriorities = new Map<string, FullscreenContentPriority>()
 	private activeContentKey: string | null = null
 	private activeIndexAutoSaveDisposer: (() => void) | null = null
 	private disposed = false
@@ -122,6 +143,8 @@ export class PPTStore {
 	 * 渲染窗口大小 - 在当前幻灯片前后渲染的幻灯片数量
 	 */
 	private renderWindowSize = 2
+	/** HTML is prefetched farther than the iframe render window so fullscreen navigation stays warm. */
+	private readonly fullscreenContentPreloadRadius: number
 	/**
 	 * Track manually saved slides by fileId to skip loading indicator
 	 * 追踪手动保存的幻灯片（通过 fileId），用于跳过加载指示器
@@ -129,9 +152,11 @@ export class PPTStore {
 	private manuallySavedSlides: Set<string> = new Set()
 	/**
 	 * Track slides that have screenshot generation in progress
-	 * 追踪正在生成截图的幻灯片索引
+	 * Tokens prevent an old deck's finally block from clearing a newer request with the same key.
 	 */
-	private generatingScreenshots: Set<string> = new Set()
+	private generatingScreenshots: Map<string, symbol> = new Map()
+	/** Automatic sidebar screenshots can be cancelled independently when fullscreen takes over. */
+	private previewScreenshotKeys: Set<string> = new Set()
 	/**
 	 * Track slide editing states by fileId
 	 * 追踪每个幻灯片的编辑状态（通过 fileId）
@@ -152,6 +177,17 @@ export class PPTStore {
 		this.config = config
 		this.attachmentListSnapshot = this.snapshotAttachmentList(config.attachmentList)
 		this.contentLoadConcurrency = Math.max(1, Math.floor(config.contentLoadConcurrency ?? 4))
+		const configuredFullscreenRadius = config.fullscreenContentPreloadRadius
+		const adaptiveFullscreenRadius = getPPTPreviewOverscan()
+		this.fullscreenContentPreloadRadius = Math.max(
+			this.renderWindowSize,
+			Math.floor(
+				typeof configuredFullscreenRadius === "number" &&
+					Number.isFinite(configuredFullscreenRadius)
+					? configuredFullscreenRadius
+					: adaptiveFullscreenRadius,
+			),
+		)
 		this.contentScheduler = new PPTSlideContentScheduler(this.contentLoadConcurrency)
 
 		// Initialize services
@@ -163,12 +199,12 @@ export class PPTStore {
 			mainFileName: config.mainFileName,
 			displayConfig: config.displayConfig,
 		})
-		const screenshotService = getScreenshotService()
+		this.screenshotService = createScreenshotService()
 		this.logger = createPPTLogger(config.logger)
 		this.pathMappingService = new PPTPathMappingService(config, this.logger)
 		this.incrementalUpdateService = new PPTIncrementalUpdateService(
 			this.pathMappingService,
-			screenshotService,
+			this.screenshotService,
 			this.logger,
 		)
 
@@ -176,12 +212,12 @@ export class PPTStore {
 		this.slideManager = new PPTSlideManager(
 			this.logger,
 			this.pathMappingService,
-			screenshotService,
+			this.screenshotService,
 			config.autoLoadAndGenerate !== false,
 		)
 		this.loadingManager = new PPTLoadingManager(this.logger)
 		this.viewStateManager = new PPTViewStateManager(this.logger)
-		this.screenshotManager = new PPTScreenshotManager(this.logger, screenshotService)
+		this.screenshotManager = new PPTScreenshotManager(this.logger, this.screenshotService)
 		this.cacheManager = new PPTActiveIndexCacheManager(this.logger, {
 			organizationCode: config.organizationCode,
 			selectedProjectId: config.selectedProjectId,
@@ -199,8 +235,8 @@ export class PPTStore {
 			},
 		})
 
-		// @ts-ignore
-		window.pptStore = this
+		const pptWindow = window as typeof window & { pptStore?: PPTStore }
+		pptWindow.pptStore = this
 
 		makeAutoObservable(
 			this,
@@ -210,12 +246,16 @@ export class PPTStore {
 				initializingPromise: false,
 				initializingKey: false,
 				contentScheduler: false,
+				screenshotService: false,
 				contentGeneration: false,
 				contentGenerationController: false,
 				configUpdateVersion: false,
 				contentLoadConcurrency: false,
 				visiblePreviewKeys: false,
+				fullscreenContentPriorities: false,
 				activeContentKey: false,
+				fullscreenContentPreloadRadius: false,
+				previewScreenshotKeys: false,
 				activeIndexAutoSaveDisposer: false,
 				disposed: false,
 			} as Record<string, false>,
@@ -294,6 +334,121 @@ export class PPTStore {
 		return this.getSlideFileId(slide) || slide.path || slide.url || `slide-${fallbackIndex}`
 	}
 
+	private isFullscreenContentPriority(
+		priority: PPTSlideContentPriority,
+	): priority is FullscreenContentPriority {
+		return priority === "fullscreen-near" || priority === "fullscreen-far"
+	}
+
+	/** Cancel obsolete work and restore an unfinished slide to a schedulable state. */
+	private cancelContentTask(key: string): number | null {
+		const index = this.findSlideIndexByStableKey(key)
+		this.contentScheduler.cancel(key)
+
+		if (index !== -1) {
+			runInAction(() => {
+				const slide = this.slides[index]
+				if (slide?.loadingState === "loading" && !slide.content) {
+					slide.loadingState = "idle"
+					slide.loadingError = undefined
+				}
+			})
+		}
+
+		return index === -1 ? null : index
+	}
+
+	/** Resume whichever non-active demand still owns a task after active navigation preempts it. */
+	private resumeContentDemand(index: number): void {
+		const slide = this.slides[index]
+		if (!slide) return
+
+		const key = this.getSlideStableKey(slide, index)
+		const fullscreenPriority = this.fullscreenContentPriorities.get(key)
+		if (fullscreenPriority) {
+			void this.ensureSlideContent(index, fullscreenPriority)
+		}
+		if (this.visiblePreviewKeys.has(key)) {
+			void this.ensureSlidePreview(index, "preview")
+		}
+	}
+
+	/**
+	 * Replace fullscreen HTML demand before scheduling the active page. The content window is wider
+	 * than the iframe render window, but it never generates thumbnails or mounts extra iframes.
+	 */
+	private prepareFullscreenContentDemand(): FullscreenContentDemand[] {
+		const previousPriorities = this.fullscreenContentPriorities
+		const nextPriorities = new Map<string, FullscreenContentPriority>()
+		const demands: FullscreenContentDemand[] = []
+
+		if (
+			this.isFullscreen &&
+			this.config.autoLoadAndGenerate !== false &&
+			this.slides.length > 0
+		) {
+			for (let distance = 1; distance <= this.fullscreenContentPreloadRadius; distance++) {
+				// Prefer the next page at equal distance because fullscreen playback usually moves forward.
+				const candidateIndices = [this.activeIndex + distance, this.activeIndex - distance]
+				candidateIndices.forEach((index) => {
+					const slide = this.slides[index]
+					if (!slide) return
+					const key = this.getSlideStableKey(slide, index)
+					if (nextPriorities.has(key)) return
+					const priority: FullscreenContentPriority =
+						distance <= this.renderWindowSize ? "fullscreen-near" : "fullscreen-far"
+					nextPriorities.set(key, priority)
+					demands.push({ index, key, priority })
+				})
+			}
+		}
+
+		this.fullscreenContentPriorities = nextPriorities
+		// Retained fullscreen work may move from the near band to the far band (or vice versa).
+		// Reorder that shared task explicitly; ordinary duplicate demand is upgrade-only.
+		nextPriorities.forEach((priority, key) => {
+			if (previousPriorities.has(key)) this.contentScheduler.reprioritize(key, priority)
+		})
+		const activeSlide = this.slides[this.activeIndex]
+		const activeKey = activeSlide ? this.getSlideStableKey(activeSlide, this.activeIndex) : null
+		// Remove the entire obsolete queue before aborting running tasks. Cancelling one key at a time
+		// would pump the next stale item between cancellations and briefly start the whole old window.
+		this.contentScheduler.cancelQueued(
+			({ key, priority }) =>
+				this.isFullscreenContentPriority(priority) &&
+				key !== activeKey &&
+				!nextPriorities.has(key),
+		)
+
+		previousPriorities.forEach((_priority, key) => {
+			if (key === activeKey || nextPriorities.has(key)) return
+			const index = this.cancelContentTask(key)
+			if (index !== null && this.visiblePreviewKeys.has(key)) {
+				void this.ensureSlidePreview(index, "preview")
+			}
+		})
+
+		return demands
+	}
+
+	/** Fullscreen hides the sidebar, so keep only overlapping HTML work and drop screenshot demand. */
+	private pauseSidebarPreviewDemand(): void {
+		const previousPreviewKeys = this.visiblePreviewKeys
+		this.visiblePreviewKeys = new Set()
+		this.contentScheduler.cancelQueued(
+			({ key, priority }) =>
+				priority === "preview" &&
+				key !== this.activeContentKey &&
+				!this.fullscreenContentPriorities.has(key),
+		)
+
+		previousPreviewKeys.forEach((key) => {
+			if (key === this.activeContentKey || this.fullscreenContentPriorities.has(key)) return
+			this.cancelContentTask(key)
+		})
+		this.screenshotService.cancelPreviewGenerations()
+	}
+
 	private findSlideIndexByLoadTarget(target: Omit<SlideLoadTarget, "url">): number {
 		if (target.fileId) {
 			const index = this.slides.findIndex(
@@ -330,8 +485,20 @@ export class PPTStore {
 		this.contentScheduler.dispose()
 		this.contentScheduler = new PPTSlideContentScheduler(this.contentLoadConcurrency)
 		this.visiblePreviewKeys.clear()
+		this.fullscreenContentPriorities.clear()
 		this.activeContentKey = null
 		return this.contentGeneration
+	}
+
+	/**
+	 * Replace all deck-scoped work. Screenshot invalidation stays separate from
+	 * beginContentGeneration because same-deck file updates must preserve unaffected thumbnails.
+	 */
+	private beginDeckGeneration(): number {
+		this.screenshotManager.reset(this.slides)
+		this.screenshotService.reset()
+		this.generatingScreenshots.clear()
+		return this.beginContentGeneration()
 	}
 
 	private isContentLoadCurrent(options: SlideContentLoadOptions): boolean {
@@ -620,6 +787,7 @@ export class PPTStore {
 		slidePaths: string[],
 		options: InitializeSlidesOptions = {},
 	): Promise<void> {
+		if (this.disposed) return
 		const normalizedPaths = slidePaths || []
 		const initializingKey = `${this.config.mainFileId || ""}:${normalizedPaths.join(
 			"\u0000",
@@ -630,7 +798,7 @@ export class PPTStore {
 			this.logger.warn("initializeSlides already in progress, returning existing promise")
 			return this.initializingPromise
 		}
-		const generation = this.beginContentGeneration()
+		const generation = this.beginDeckGeneration()
 
 		this.logger.logOperationStart("initializeSlides", {
 			metadata: { slideCount: normalizedPaths.length },
@@ -740,9 +908,10 @@ export class PPTStore {
 					},
 				})
 
-				// The active page is always highest priority; the sidebar virtual range owns all preloading.
+				// Reconcile the active demand source after initialization. In fullscreen this also warms
+				// the adaptive HTML window; otherwise the sidebar remains the wider preload owner.
 				if (this.config.autoLoadAndGenerate !== false) {
-					void this.ensureActiveSlidePreview()
+					this.scheduleActiveSlide()
 				}
 			} catch (error) {
 				if (this.isInitializationCurrent(generation, options.configUpdateVersion)) {
@@ -833,31 +1002,13 @@ export class PPTStore {
 		})
 	}
 
-	/**
-	 * Only the latest current page may retain active priority. If the previous page is still inside
-	 * the sidebar window, resume it as ordinary preview work after the new active task is queued.
-	 */
+	/** Only the latest current page retains active priority; remaining demand is resumed afterward. */
 	private claimActiveContentDemand(key: string): number | null {
 		const previousKey = this.activeContentKey
 		this.activeContentKey = key
 		if (!previousKey || previousKey === key) return null
 
-		const previousIndex = this.findSlideIndexByStableKey(previousKey)
-		this.contentScheduler.cancel(previousKey)
-
-		if (previousIndex !== -1) {
-			runInAction(() => {
-				const previousSlide = this.slides[previousIndex]
-				if (previousSlide?.loadingState === "loading" && !previousSlide.content) {
-					previousSlide.loadingState = "idle"
-					previousSlide.loadingError = undefined
-				}
-			})
-		}
-
-		return previousIndex !== -1 && this.visiblePreviewKeys.has(previousKey)
-			? previousIndex
-			: null
+		return this.cancelContentTask(previousKey)
 	}
 
 	/**
@@ -872,12 +1023,10 @@ export class PPTStore {
 		if (!slide || this.disposed) return false
 
 		const key = this.getSlideStableKey(slide, index)
-		const previousPreviewIndex =
+		const previousDemandIndex =
 			priority === "active" ? this.claimActiveContentDemand(key) : null
 		if (slide.loadingState === "loaded") {
-			if (previousPreviewIndex !== null) {
-				void this.ensureSlidePreview(previousPreviewIndex, "preview")
-			}
+			if (previousDemandIndex !== null) this.resumeContentDemand(previousDemandIndex)
 			return true
 		}
 
@@ -923,9 +1072,7 @@ export class PPTStore {
 			return Boolean(content)
 		})
 
-		if (previousPreviewIndex !== null) {
-			void this.ensureSlidePreview(previousPreviewIndex, "preview")
-		}
+		if (previousDemandIndex !== null) this.resumeContentDemand(previousDemandIndex)
 
 		return loadPromise
 	}
@@ -944,10 +1091,11 @@ export class PPTStore {
 		const currentIndex = this.findSlideIndexByStableKey(key)
 		if (currentIndex === -1) return false
 		const isStillRequested =
-			(priority === "active" && currentIndex === this.activeIndex) ||
-			this.visiblePreviewKeys.has(key)
+			!this.isFullscreen &&
+			((priority === "active" && currentIndex === this.activeIndex) ||
+				this.visiblePreviewKeys.has(key))
 		if (!isStillRequested) return false
-		await this.ensureSlideScreenshot(currentIndex)
+		await this.ensureSlideScreenshot(currentIndex, "preview")
 		return true
 	}
 
@@ -958,8 +1106,9 @@ export class PPTStore {
 	updateVisibleSlidePreviews(indices: number[]): void {
 		const nextPreviewKeys = new Set<string>()
 		const uniqueIndices: number[] = []
+		const requestedIndices = this.isFullscreen ? [] : indices
 
-		indices.forEach((index) => {
+		requestedIndices.forEach((index) => {
 			const slide = this.slides[index]
 			if (!slide) return
 			const key = this.getSlideStableKey(slide, index)
@@ -970,7 +1119,10 @@ export class PPTStore {
 
 		this.visiblePreviewKeys = nextPreviewKeys
 		this.contentScheduler.cancelQueued(
-			({ key, priority }) => priority === "preview" && !nextPreviewKeys.has(key),
+			({ key, priority }) =>
+				priority === "preview" &&
+				!nextPreviewKeys.has(key) &&
+				!this.fullscreenContentPriorities.has(key),
 		)
 
 		uniqueIndices.forEach((index) => {
@@ -1207,9 +1359,9 @@ export class PPTStore {
 					},
 				})
 
-				// Keep the active page ready; sidebar previews remain owned by its virtual range.
+				// Reconcile fullscreen/sidebar demand after an explicit all-slide refresh completes.
 				if (this.config.autoLoadAndGenerate !== false) {
-					void this.ensureActiveSlidePreview()
+					this.scheduleActiveSlide()
 				}
 			})
 		} catch (error) {
@@ -1594,17 +1746,23 @@ export class PPTStore {
 	}
 
 	private scheduleActiveSlide(): void {
+		const fullscreenDemands = this.prepareFullscreenContentDemand()
 		const activeIndex = this.activeIndex
 		const slide = this.slides[activeIndex]
 		if (!slide) return
 
 		if (slide.loadingState === "loaded") {
 			void this.checkAndRefreshExpiredSlide(activeIndex)
-		} else {
-			void this.ensureSlideContent(activeIndex, "active")
 		}
+		// Always claim active priority, even when content is cached, so rapid navigation can safely
+		// demote/cancel the previous active request before the fullscreen window is refilled.
+		void this.ensureSlideContent(activeIndex, "active")
 
-		if (this.config.autoLoadAndGenerate !== false) {
+		fullscreenDemands.forEach(({ index, priority }) => {
+			void this.ensureSlideContent(index, priority)
+		})
+
+		if (this.config.autoLoadAndGenerate !== false && !this.isFullscreen) {
 			void this.ensureActiveSlidePreview()
 		}
 	}
@@ -1824,9 +1982,10 @@ export class PPTStore {
 			},
 		)
 
-		// Keep the inserted active page ready; the sidebar owns the wider preview window.
+		// Reconcile active/fullscreen demand after insertion shifts nearby indices.
 		if (this.config.autoLoadAndGenerate !== false) {
-			await this.ensureActiveSlidePreview()
+			if (this.isFullscreen) this.scheduleActiveSlide()
+			else await this.ensureActiveSlidePreview()
 		}
 
 		return newIndex
@@ -1868,7 +2027,12 @@ export class PPTStore {
 	}
 
 	setFullscreen(isFullscreen: boolean): void {
+		if (this.disposed || this.isFullscreen === isFullscreen) return
 		this.viewStateManager.setFullscreen(isFullscreen)
+		// Schedule the new demand source first so overlapping sidebar tasks are promoted instead of
+		// being cancelled and downloaded again during the fullscreen transition.
+		this.scheduleActiveSlide()
+		if (isFullscreen) this.pauseSidebarPreviewDemand()
 	}
 
 	// ==================== File Version (Delegated to LoadingManager) ====================
@@ -1881,7 +2045,12 @@ export class PPTStore {
 	}
 
 	// ==================== Screenshot Management (Delegated to ScreenshotManager) ====================
-	async generateSlideScreenshot(index: number, targetContent?: string): Promise<void> {
+	async generateSlideScreenshot(
+		index: number,
+		targetContent?: string,
+		requestKind: SlideScreenshotRequestKind = "required",
+	): Promise<void> {
+		if (this.disposed) return
 		const slide = this.slides[index]
 		if (!slide) return
 		const generationKey = this.getSlideStableKey(slide, index)
@@ -1895,10 +2064,12 @@ export class PPTStore {
 					(candidate, candidateIndex) =>
 						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
 				),
+			requestKind,
 		)
 	}
 
 	async generateAllScreenshots(): Promise<void> {
+		if (this.disposed) return
 		await this.screenshotManager.generateAllScreenshots(this.slides, (slide, originalIndex) => {
 			const generationKey = this.getSlideStableKey(slide, originalIndex)
 			return this.slides.find(
@@ -1914,7 +2085,11 @@ export class PPTStore {
 	 * - Skips if screenshot already exists or is being generated
 	 * - 如果截图已存在或正在生成则跳过
 	 */
-	async ensureSlideScreenshot(index: number): Promise<void> {
+	async ensureSlideScreenshot(
+		index: number,
+		requestKind: SlideScreenshotRequestKind = "required",
+	): Promise<void> {
+		if (this.disposed) return
 		const slide = this.slides[index]
 		if (!slide) return
 		const generationKey = this.getSlideStableKey(slide, index)
@@ -1928,8 +2103,26 @@ export class PPTStore {
 			return
 		}
 
-		// Skip if already generating (check both tracking set and slide state)
+		// Required work may join a preview generation and protect the shared service task from
+		// fullscreen cancellation. Duplicate requests of the same kind still remain deduplicated.
 		if (this.generatingScreenshots.has(generationKey) || slide.thumbnailLoading) {
+			if (
+				requestKind === "required" &&
+				this.generatingScreenshots.has(generationKey) &&
+				this.previewScreenshotKeys.has(generationKey)
+			) {
+				const requestToken = Symbol(generationKey)
+				this.generatingScreenshots.set(generationKey, requestToken)
+				this.previewScreenshotKeys.delete(generationKey)
+				try {
+					await this.generateSlideScreenshot(index, undefined, "required")
+				} finally {
+					if (this.generatingScreenshots.get(generationKey) === requestToken) {
+						this.generatingScreenshots.delete(generationKey)
+					}
+				}
+				return
+			}
 			this.logger.debug("截图正在生成中，跳过", {
 				operation: "ensureSlideScreenshot",
 				slideIndex: index,
@@ -1952,16 +2145,22 @@ export class PPTStore {
 			return
 		}
 
+		const requestToken = Symbol(generationKey)
+		this.generatingScreenshots.set(generationKey, requestToken)
+		if (requestKind === "preview") this.previewScreenshotKeys.add(generationKey)
 		try {
-			this.generatingScreenshots.add(generationKey)
 			this.logger.debug("开始懒加载截图", {
 				operation: "ensureSlideScreenshot",
 				slideIndex: index,
 				metadata: { generationKey },
 			})
-			await this.generateSlideScreenshot(index)
+			await this.generateSlideScreenshot(index, undefined, requestKind)
 		} finally {
-			this.generatingScreenshots.delete(generationKey)
+			// A late request from the previous deck must not clear a newer task's marker.
+			if (this.generatingScreenshots.get(generationKey) === requestToken) {
+				this.generatingScreenshots.delete(generationKey)
+				this.previewScreenshotKeys.delete(generationKey)
+			}
 		}
 	}
 
@@ -1972,12 +2171,14 @@ export class PPTStore {
 	}
 
 	clearSlideScreenshot(index: number): void {
+		if (this.disposed) return
 		const slide = this.slides[index]
 		if (!slide) return
 		this.screenshotManager.clearSlideScreenshot(slide, index, this.slides)
 	}
 
 	clearAllScreenshots(): void {
+		if (this.disposed) return
 		this.screenshotManager.clearAllScreenshots(this.slides)
 	}
 
@@ -2416,11 +2617,12 @@ export class PPTStore {
 	 * Reset store to initial state
 	 */
 	reset(): void {
+		if (this.disposed) return
 		this.logger.info("重置 Store 到初始状态", {
 			operation: "reset",
 		})
 
-		this.beginContentGeneration()
+		this.beginDeckGeneration()
 		this.configUpdateVersion++
 		this.initializingPromise = null
 		this.initializingKey = null
@@ -2430,6 +2632,7 @@ export class PPTStore {
 		this.pathMappingService.clear()
 		this.manuallySavedSlides.clear()
 		this.generatingScreenshots.clear()
+		this.previewScreenshotKeys.clear()
 		this.slideEditingStates.clear()
 		this.slideServerUpdates.clear()
 		this.cacheManager.dispose()
@@ -2440,15 +2643,23 @@ export class PPTStore {
 		if (this.disposed) return
 		this.disposed = true
 		this.configUpdateVersion++
+		this.screenshotManager.dispose(this.slides)
+		this.screenshotService.dispose()
+		this.generatingScreenshots.clear()
+		this.previewScreenshotKeys.clear()
 		this.contentGeneration++
 		this.contentGenerationController.abort()
 		this.contentScheduler.dispose()
 		this.visiblePreviewKeys.clear()
+		this.fullscreenContentPriorities.clear()
 		this.activeContentKey = null
 		this.activeIndexAutoSaveDisposer?.()
 		this.activeIndexAutoSaveDisposer = null
 		this.cacheManager.dispose()
 		this.logger.clearTimings()
+
+		const pptWindow = window as typeof window & { pptStore?: PPTStore }
+		if (pptWindow.pptStore === this) delete pptWindow.pptStore
 	}
 }
 

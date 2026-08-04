@@ -143,6 +143,98 @@ describe("SlideScreenshotService", () => {
 			parseSpy.mockRestore()
 		})
 
+		it("cancels a preview while it is still waiting for preparation", async () => {
+			let resumePreparation: () => void = () => undefined
+			const generate = vi.fn(async () => "blob:should-not-start")
+			Object.assign(service, {
+				yieldForPreparation: () =>
+					new Promise<void>((resolve) => {
+						resumePreparation = resolve
+					}),
+				doGenerateScreenshot: generate,
+			})
+
+			const generation = service.generateScreenshot(
+				"preview-before-preparation",
+				"<div>preview</div>",
+				"preview",
+			)
+			const rejection = expect(generation).rejects.toMatchObject({ name: "AbortError" })
+
+			service.cancelPreviewGenerations()
+			resumePreparation()
+
+			await rejection
+			expect(generate).not.toHaveBeenCalled()
+		})
+
+		it("cancels queued and active previews but protects a required consumer", async () => {
+			const signals = new Map<string, AbortSignal>()
+			const resolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const generate = vi.fn(
+				(content: string, _dimensions: unknown, signal: AbortSignal) =>
+					new Promise<string>((resolve) => {
+						signals.set(content, signal)
+						resolvers.set(content, resolve)
+					}),
+			)
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+
+			const protectedPreview = service.generateScreenshot("protected", "protected", "preview")
+			const activePreview = service.generateScreenshot("active", "active", "preview")
+			const queuedPreview = service.generateScreenshot("queued", "queued", "preview")
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+
+			const required = service.generateScreenshot("protected", "protected", "required")
+			await Promise.resolve()
+			const activeRejection = expect(activePreview).rejects.toMatchObject({
+				name: "AbortError",
+			})
+			const queuedRejection = expect(queuedPreview).rejects.toMatchObject({
+				name: "AbortError",
+			})
+
+			service.cancelPreviewGenerations()
+
+			expect(signals.get("protected")?.aborted).toBe(false)
+			expect(signals.get("active")?.aborted).toBe(true)
+			await Promise.all([activeRejection, queuedRejection])
+			expect(generate).not.toHaveBeenCalledWith(
+				"queued",
+				expect.anything(),
+				expect.anything(),
+			)
+
+			resolvers.get("protected")?.("blob:protected")
+			await expect(Promise.all([protectedPreview, required])).resolves.toEqual([
+				"blob:protected",
+				"blob:protected",
+			])
+			expect(generate).toHaveBeenCalledTimes(2)
+
+			resolvers.get("active")?.("blob:late-preview")
+			await vi.waitFor(() => {
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:late-preview")
+			})
+		})
+
+		it("keeps cached thumbnails when preview generations are cancelled", async () => {
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: vi.fn(async () => "blob:cached-preview"),
+			})
+			await service.generateScreenshot("cached-preview", "<div>cached</div>")
+			vi.mocked(global.URL.revokeObjectURL).mockClear()
+
+			service.cancelPreviewGenerations()
+
+			expect(service.getCachedScreenshot("cached-preview")).toBe("blob:cached-preview")
+			expect(global.URL.revokeObjectURL).not.toHaveBeenCalled()
+		})
+
 		it("should cache generated screenshots", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
@@ -592,6 +684,53 @@ describe("SlideScreenshotService", () => {
 	})
 
 	describe("dispose", () => {
+		it("aborts current work on reset and remains reusable for a new deck", async () => {
+			const activeSignals = new Map<string, AbortSignal>()
+			const activeResolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const generate = vi.fn((content: string, _dimensions: unknown, signal: AbortSignal) => {
+				if (content === "new-content") return Promise.resolve("blob:new-content")
+				return new Promise<string>((resolve) => {
+					activeSignals.set(content, signal)
+					activeResolvers.set(content, resolve)
+				})
+			})
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: generate,
+			})
+
+			const firstGeneration = service.generateScreenshot("old-1", "old-1")
+			const secondGeneration = service.generateScreenshot("old-2", "old-2")
+			const queuedGeneration = service.generateScreenshot("old-queued", "old-queued")
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			const rejections = [firstGeneration, secondGeneration, queuedGeneration].map(
+				(generation) => expect(generation).rejects.toMatchObject({ name: "AbortError" }),
+			)
+			service.reset()
+
+			expect(activeSignals.get("old-1")?.aborted).toBe(true)
+			expect(activeSignals.get("old-2")?.aborted).toBe(true)
+			await Promise.all(rejections)
+			expect(generate).not.toHaveBeenCalledWith(
+				"old-queued",
+				expect.anything(),
+				expect.anything(),
+			)
+			expect(service.getCacheStats().size).toBe(0)
+
+			await expect(service.generateScreenshot("new-slide", "new-content")).resolves.toBe(
+				"blob:new-content",
+			)
+
+			activeResolvers.get("old-1")?.("blob:late-old-1")
+			activeResolvers.get("old-2")?.("blob:late-old-2")
+			await vi.waitFor(() => {
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:late-old-1")
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:late-old-2")
+			})
+			expect(generate).toHaveBeenCalledTimes(3)
+		})
+
 		it("should cleanup all resources on dispose", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
@@ -602,6 +741,22 @@ describe("SlideScreenshotService", () => {
 
 			expect(service.getCacheStats().size).toBe(0)
 			expect(global.URL.revokeObjectURL).toHaveBeenCalled()
+		})
+
+		it("is idempotent and rejects screenshot work after disposal", async () => {
+			Object.assign(service, {
+				yieldForPreparation: () => Promise.resolve(),
+				doGenerateScreenshot: vi.fn(async () => "blob:before-dispose"),
+			})
+
+			await service.generateScreenshot("before-dispose", "before-dispose")
+			service.dispose()
+			service.dispose()
+
+			expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1)
+			await expect(
+				service.generateScreenshot("after-dispose", "after-dispose"),
+			).rejects.toMatchObject({ name: "AbortError" })
 		})
 
 		it("releases an exported thumbnail when dispose interrupts the cleanup delay", async () => {

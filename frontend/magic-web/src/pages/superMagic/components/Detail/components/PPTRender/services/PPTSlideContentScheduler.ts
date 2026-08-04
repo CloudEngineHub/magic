@@ -1,8 +1,10 @@
-export type PPTSlideContentPriority = "active" | "preview"
+export type PPTSlideContentPriority = "active" | "fullscreen-near" | "fullscreen-far" | "preview"
 
 const PRIORITY_VALUES: Record<PPTSlideContentPriority, number> = {
 	active: 0,
-	preview: 1,
+	"fullscreen-near": 1,
+	"fullscreen-far": 2,
+	preview: 3,
 }
 
 interface ScheduledContentTask {
@@ -58,11 +60,10 @@ export class PPTSlideContentScheduler {
 		const existingTask = this.tasks.get(key)
 		if (existingTask) {
 			const nextPriorityValue = PRIORITY_VALUES[priority]
-			if (existingTask.state === "queued" && nextPriorityValue < existingTask.priorityValue) {
-				existingTask.priority = priority
-				existingTask.priorityValue = nextPriorityValue
-				this.sortQueue()
-				this.pump()
+			if (nextPriorityValue < existingTask.priorityValue) {
+				// A sidebar/fullscreen request may already be running when it becomes the active page.
+				// Promote its metadata in place so active preemption never mistakes it for stale work.
+				this.setTaskPriority(existingTask, priority)
 			}
 			return existingTask.promise
 		}
@@ -92,6 +93,16 @@ export class PPTSlideContentScheduler {
 		this.pump()
 
 		return promise
+	}
+
+	/**
+	 * Reconcile priority owned by the fullscreen sliding window. Unlike schedule(), this may
+	 * demote a retained task after it moves farther from the active page.
+	 */
+	reprioritize(key: string, priority: PPTSlideContentPriority): void {
+		const task = this.tasks.get(key)
+		if (!task || task.priority === priority) return
+		this.setTaskPriority(task, priority)
 	}
 
 	cancelQueued(
@@ -147,6 +158,13 @@ export class PPTSlideContentScheduler {
 
 	private sortQueue(): void {
 		this.queue.sort((a, b) => a.priorityValue - b.priorityValue || a.sequence - b.sequence)
+	}
+
+	private setTaskPriority(task: ScheduledContentTask, priority: PPTSlideContentPriority): void {
+		task.priority = priority
+		task.priorityValue = PRIORITY_VALUES[priority]
+		if (task.state === "queued") this.sortQueue()
+		this.pump()
 	}
 
 	private pump(): void {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -77,6 +77,8 @@ interface PPTRenderProps {
 
 	// ========== 模式标志 ==========
 	isPlaybackMode?: boolean
+	/** 外层文件查看器/播放页控制的全屏状态 */
+	isFullscreen?: boolean
 	allowEdit?: boolean
 
 	// ========== 业务回调 ==========
@@ -182,6 +184,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	initialActiveIndex,
 	onActiveIndexChange,
 	isPlaybackMode,
+	isFullscreen: externalIsFullscreen,
 	allowEdit = false,
 	saveEditContent,
 	onSortSave,
@@ -253,11 +256,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// 在文件树中定位活动幻灯片；缩略图滚动由虚拟侧边栏自身负责。
 	useSlideFileLocator({ store })
 
-	// 全屏功能 - 在 usePPTSidebar 之前调用以便后续使用 isFullscreen
-	const { isFullscreen, toggleFullscreen } = useFullscreen({ containerRef })
+	// 业务容器全屏与浏览器原生全屏都需要驱动同一套渲染和预加载策略。
+	const { isFullscreen: nativeIsFullscreen, toggleFullscreen } = useFullscreen({ containerRef })
+	const isFullscreen = Boolean(externalIsFullscreen || nativeIsFullscreen)
 
-	// 同步全屏状态到 store 以计算 visibleSlides
-	useEffect(() => {
+	// 先于子组件的被动 effect 同步，避免退出全屏时侧栏恢复请求仍被旧状态丢弃。
+	useLayoutEffect(() => {
 		store.setFullscreen(isFullscreen)
 	}, [isFullscreen, store])
 
@@ -539,7 +543,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						: "relative h-full w-full overflow-hidden"
 				}
 			>
-				{isSidebarCollapsed && (
+				{isSidebarCollapsed && !isFullscreen && (
 					<MagicTooltip title={t("fileViewer.expandSidebar")}>
 						<Button
 							variant="ghost"

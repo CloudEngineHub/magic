@@ -1,5 +1,9 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import type { PPTLoggerService, SlideScreenshotService } from "../services"
+import type {
+	PPTLoggerService,
+	SlideScreenshotRequestKind,
+	SlideScreenshotService,
+} from "../services"
 import type { SlideItem } from "../PPTSidebar/types"
 
 type ResolveSlide = () => SlideItem | undefined
@@ -16,12 +20,24 @@ export class PPTScreenshotManager {
 	private logger: PPTLoggerService
 	private screenshotService: SlideScreenshotService
 	private screenshotRequestVersions = new Map<string, number>()
+	private lifecycleGeneration = 0
+	private disposed = false
 
 	constructor(logger: PPTLoggerService, screenshotService: SlideScreenshotService) {
 		this.logger = logger
 		this.screenshotService = screenshotService
 
-		makeAutoObservable(this, {}, { autoBind: true })
+		makeAutoObservable(
+			this,
+			{
+				logger: false,
+				screenshotService: false,
+				screenshotRequestVersions: false,
+				lifecycleGeneration: false,
+				disposed: false,
+			} as Record<string, false>,
+			{ autoBind: true },
+		)
 	}
 
 	private getScreenshotRequestKey(slide: SlideItem): string {
@@ -36,8 +52,16 @@ export class PPTScreenshotManager {
 		return requestVersion
 	}
 
-	private isLatestScreenshotRequest(requestKey: string, requestVersion: number): boolean {
-		return this.screenshotRequestVersions.get(requestKey) === requestVersion
+	private isLatestScreenshotRequest(
+		requestKey: string,
+		requestVersion: number,
+		lifecycleGeneration: number,
+	): boolean {
+		return (
+			!this.disposed &&
+			this.lifecycleGeneration === lifecycleGeneration &&
+			this.screenshotRequestVersions.get(requestKey) === requestVersion
+		)
 	}
 
 	private invalidateScreenshotRequest(requestKey: string): void {
@@ -59,7 +83,10 @@ export class PPTScreenshotManager {
 		slides: SlideItem[],
 		targetContent?: string,
 		resolveSlide?: ResolveSlide,
+		requestKind: SlideScreenshotRequestKind = "required",
 	): Promise<void> {
+		if (this.disposed) return
+
 		const contentForScreenshot = targetContent || slide?.content
 		if (!slide || !contentForScreenshot) {
 			this.logger.debug("跳过截图生成：幻灯片或内容不存在", {
@@ -71,7 +98,9 @@ export class PPTScreenshotManager {
 
 		const requestKey = this.getScreenshotRequestKey(slide)
 		const requestVersion = this.beginScreenshotRequest(requestKey)
-		const isLatestRequest = () => this.isLatestScreenshotRequest(requestKey, requestVersion)
+		const lifecycleGeneration = this.lifecycleGeneration
+		const isLatestRequest = () =>
+			this.isLatestScreenshotRequest(requestKey, requestVersion, lifecycleGeneration)
 
 		// Sorting replaces slide objects, so every async write must resolve the current object.
 		const getTargetSlide = () => (resolveSlide ? resolveSlide() : slides[index])
@@ -104,6 +133,7 @@ export class PPTScreenshotManager {
 			const thumbnailUrl = await this.screenshotService.generateScreenshot(
 				cacheKey,
 				contentForScreenshot,
+				requestKind,
 			)
 
 			let accepted = false
@@ -140,6 +170,16 @@ export class PPTScreenshotManager {
 				})
 				return
 			}
+			if (error instanceof Error && error.name === "AbortError") {
+				runInAction(() => {
+					const target = getTargetSlide()
+					if (target) {
+						target.thumbnailLoading = false
+						target.thumbnailError = undefined
+					}
+				})
+				return
+			}
 
 			this.logger.logOperationError("generateSlideScreenshot", error, {
 				slideIndex: index,
@@ -164,6 +204,8 @@ export class PPTScreenshotManager {
 		slides: SlideItem[],
 		resolveCurrentSlide?: ResolveCurrentSlide,
 	): Promise<void> {
+		if (this.disposed) return
+		const lifecycleGeneration = this.lifecycleGeneration
 		const loadedSlides = slides.filter(
 			(slide) => slide.loadingState === "loaded" && slide.content,
 		)
@@ -195,6 +237,8 @@ export class PPTScreenshotManager {
 				}),
 			)
 
+			if (this.disposed || lifecycleGeneration !== this.lifecycleGeneration) return
+
 			this.logger.logOperationSuccess("generateAllScreenshots", {
 				metadata: { generatedCount: loadedSlides.length },
 			})
@@ -212,6 +256,8 @@ export class PPTScreenshotManager {
 	 * @param slides - All slides array (for updating state)
 	 */
 	clearSlideScreenshot(slide: SlideItem, index: number, slides: SlideItem[]): void {
+		if (this.disposed) return
+
 		this.logger.debug("清除幻灯片截图", {
 			operation: "clearSlideScreenshot",
 			slideIndex: index,
@@ -238,6 +284,8 @@ export class PPTScreenshotManager {
 	 * @param slides - All slides array
 	 */
 	clearAllScreenshots(slides: SlideItem[]): void {
+		if (this.disposed) return
+
 		this.logger.info("清除所有截图缓存", {
 			operation: "clearAllScreenshots",
 			metadata: { slideCount: slides.length },
@@ -253,5 +301,36 @@ export class PPTScreenshotManager {
 	 */
 	getCacheStats() {
 		return this.screenshotService.getCacheStats()
+	}
+
+	/**
+	 * Invalidate every request from the previous deck while keeping the manager reusable.
+	 * The owning PPTStore resets the screenshot service immediately afterwards so queued
+	 * and active browser work is cancelled as well.
+	 */
+	reset(slides: SlideItem[] = []): void {
+		if (this.disposed) return
+		this.lifecycleGeneration += 1
+		this.screenshotRequestVersions.clear()
+		this.clearSlideScreenshotState(slides)
+	}
+
+	/** Permanently stop accepting screenshot results after the owning Store is destroyed. */
+	dispose(slides: SlideItem[] = []): void {
+		if (this.disposed) return
+		this.lifecycleGeneration += 1
+		this.screenshotRequestVersions.clear()
+		this.disposed = true
+		this.clearSlideScreenshotState(slides)
+	}
+
+	private clearSlideScreenshotState(slides: SlideItem[]): void {
+		runInAction(() => {
+			slides.forEach((slide) => {
+				slide.thumbnailUrl = undefined
+				slide.thumbnailLoading = false
+				slide.thumbnailError = undefined
+			})
+		})
 	}
 }

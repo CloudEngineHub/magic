@@ -32,17 +32,22 @@ interface PendingScreenshotGeneration {
 interface LatestScreenshotRequest {
 	requestId: number
 	content: string
+	requestKind: SlideScreenshotRequestKind
 	contentHash?: string
 	dimensions?: CanonicalContentDimensions
 }
 
 interface InFlightScreenshotGeneration {
+	url: string
 	content: string
 	contentHash: string
 	dimensions: CanonicalContentDimensions
 	epoch: number
+	hasRequiredConsumer: boolean
 	scheduledGeneration: ScheduledScreenshotGeneration<string>
 }
+
+export type SlideScreenshotRequestKind = "preview" | "required"
 
 /**
  * Limits the expensive DOM/iframe screenshot work across all service instances.
@@ -176,6 +181,8 @@ export class SlideScreenshotService {
 	private latestRequestsByUrl: Map<string, LatestScreenshotRequest> = new Map()
 	private nextRequestId = 0
 	private generationEpoch = 0
+	private previewGenerationEpoch = 0
+	private disposed = false
 
 	/**
 	 * Generate simple hash from content string
@@ -203,23 +210,40 @@ export class SlideScreenshotService {
 	 * @param content - HTML content to render
 	 * @returns Object URL of the generated thumbnail
 	 */
-	async generateScreenshot(url: string, content: string): Promise<string> {
+	async generateScreenshot(
+		url: string,
+		content: string,
+		requestKind: SlideScreenshotRequestKind = "required",
+	): Promise<string> {
+		if (this.disposed) {
+			throw new ScreenshotGenerationCancelledError()
+		}
 		if (!content) {
 			throw new Error("Content is required")
 		}
 
 		const requestEpoch = this.generationEpoch
+		const requestPreviewEpoch = this.previewGenerationEpoch
 		const requestId = ++this.nextRequestId
-		this.latestRequestsByUrl.set(url, { requestId, content })
+		this.latestRequestsByUrl.set(url, { requestId, content, requestKind })
 
 		await this.yieldForPreparation()
 		this.throwIfGenerationCancelled(requestEpoch)
+		if (requestKind === "preview" && requestPreviewEpoch !== this.previewGenerationEpoch) {
+			throw new ScreenshotGenerationCancelledError()
+		}
 
 		const dimensions = resolvePptScaleContentDimensions(content)
 		const contentHash = this.getContentHash(content, dimensions)
 		const generationKey = `${url}\u0000${contentHash}`
 		if (this.latestRequestsByUrl.get(url)?.requestId === requestId) {
-			this.latestRequestsByUrl.set(url, { requestId, content, contentHash, dimensions })
+			this.latestRequestsByUrl.set(url, {
+				requestId,
+				content,
+				requestKind,
+				contentHash,
+				dimensions,
+			})
 		}
 
 		// Check cache first
@@ -235,6 +259,7 @@ export class SlideScreenshotService {
 				this.matchesPreparedContent(generation, content, contentHash, dimensions),
 			)
 		if (inFlightGeneration) {
+			if (requestKind === "required") inFlightGeneration.hasRequiredConsumer = true
 			return this.waitForGeneration(
 				inFlightGeneration.scheduledGeneration.promise,
 				requestEpoch,
@@ -276,10 +301,12 @@ export class SlideScreenshotService {
 		})
 
 		const inFlightEntry: InFlightScreenshotGeneration = {
+			url,
 			content,
 			contentHash,
 			dimensions,
 			epoch: requestEpoch,
+			hasRequiredConsumer: requestKind === "required",
 			scheduledGeneration,
 		}
 		const generationBucket = this.inFlightGenerations.get(generationKey) ?? []
@@ -291,6 +318,55 @@ export class SlideScreenshotService {
 		)
 
 		return this.waitForGeneration(scheduledGeneration.promise, requestEpoch)
+	}
+
+	/**
+	 * Cancel only automatic sidebar screenshots when fullscreen takes over. Required work such as
+	 * editor saves or manual refreshes remains protected, and existing cached thumbnails stay valid.
+	 */
+	cancelPreviewGenerations(): void {
+		if (this.disposed) return
+		this.previewGenerationEpoch += 1
+		const cancellationError = new ScreenshotGenerationCancelledError()
+		const queuedGenerations: Array<{
+			key: string
+			entry: InFlightScreenshotGeneration
+		}> = []
+		const activeGenerations: Array<{
+			key: string
+			entry: InFlightScreenshotGeneration
+		}> = []
+
+		this.inFlightGenerations.forEach((generationBucket, key) => {
+			generationBucket.forEach((entry) => {
+				const latestRequest = this.latestRequestsByUrl.get(entry.url)
+				if (
+					latestRequest?.requestKind === "required" &&
+					latestRequest.content === entry.content
+				) {
+					entry.hasRequiredConsumer = true
+				}
+				if (entry.hasRequiredConsumer) return
+
+				const target = entry.scheduledGeneration.hasStarted()
+					? activeGenerations
+					: queuedGenerations
+				target.push({ key, entry })
+			})
+		})
+
+		const cancelGeneration = ({ key, entry }: (typeof queuedGenerations)[number]) => {
+			entry.scheduledGeneration.cancel(cancellationError)
+			// Remove synchronously so a required request cannot reuse the rejected promise.
+			this.clearInFlightGeneration(key, entry)
+		}
+		// Prevent a freed active slot from briefly starting another preview from this service.
+		queuedGenerations.forEach(cancelGeneration)
+		activeGenerations.forEach(cancelGeneration)
+
+		this.latestRequestsByUrl.forEach((request, url) => {
+			if (request.requestKind === "preview") this.latestRequestsByUrl.delete(url)
+		})
 	}
 
 	private yieldForPreparation(): Promise<void> {
@@ -1203,10 +1279,24 @@ export class SlideScreenshotService {
 	}
 
 	/**
-	 * Cleanup all resources
+	 * Cancel this deck's queued and active work, then release all cached Blob URLs.
+	 * Unlike dispose, reset keeps the service available for the next deck in the same Store.
 	 */
+	reset(): void {
+		if (this.disposed) return
+		this.releaseAllResources()
+	}
+
+	/** Permanently cleanup all resources owned by this service instance. */
 	dispose(): void {
+		if (this.disposed) return
+		this.disposed = true
+		this.releaseAllResources()
+	}
+
+	private releaseAllResources(): void {
 		this.generationEpoch += 1
+		this.previewGenerationEpoch += 1
 		const cancellationError = new ScreenshotGenerationCancelledError()
 		const queuedGenerations: ScheduledScreenshotGeneration<string>[] = []
 		const activeGenerations: ScheduledScreenshotGeneration<string>[] = []
@@ -1220,7 +1310,7 @@ export class SlideScreenshotService {
 		})
 		// Remove this service's queued work before active cancellation drains the
 		// global scheduler; otherwise a just-freed slot could briefly start work
-		// that this same dispose call is about to cancel.
+		// that this same cleanup pass is about to cancel.
 		queuedGenerations.forEach((generation) => generation.cancel(cancellationError))
 		activeGenerations.forEach((generation) => generation.cancel(cancellationError))
 		this.clearAllCache()

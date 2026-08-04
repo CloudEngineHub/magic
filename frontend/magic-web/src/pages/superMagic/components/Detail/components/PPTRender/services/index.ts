@@ -4,6 +4,7 @@ export {
 	SlideScreenshotService,
 	getScreenshotService,
 	createScreenshotService,
+	type SlideScreenshotRequestKind,
 } from "./SlideScreenshotService"
 export {
 	PPTLoggerService,

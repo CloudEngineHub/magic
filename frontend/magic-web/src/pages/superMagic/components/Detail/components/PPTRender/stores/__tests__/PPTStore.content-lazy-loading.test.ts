@@ -8,9 +8,12 @@ const mockState = vi.hoisted(() => ({
 	processHtmlContent: vi.fn(),
 	screenshotService: {
 		generateScreenshot: vi.fn(async (key: string) => `blob:${key}`),
+		cancelPreviewGenerations: vi.fn(),
 		releaseScreenshot: vi.fn(),
 		clearCache: vi.fn(),
-		getCacheStats: vi.fn(() => ({ size: 0 })),
+		getCacheStats: vi.fn(() => ({ size: 0, urls: [] })),
+		reset: vi.fn(),
+		dispose: vi.fn(),
 	},
 }))
 
@@ -31,6 +34,7 @@ vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 }))
 
 vi.mock("../../services/SlideScreenshotService", () => ({
+	createScreenshotService: () => mockState.screenshotService,
 	getScreenshotService: () => mockState.screenshotService,
 }))
 
@@ -71,6 +75,7 @@ function createStore(
 	count: number,
 	config: {
 		contentLoadConcurrency?: number
+		fullscreenContentPreloadRadius?: number
 		initialActiveIndex?: number
 		autoLoadAndGenerate?: boolean
 	} = {},
@@ -101,6 +106,13 @@ function setIdleSlides(store: PPTStore, count: number): SlideItem[] {
 	})
 	store.setSlides(slides, true)
 	return slides
+}
+
+function getDownloadedSlideIndices(): number[] {
+	return mockState.downloadFileContent.mock.calls
+		.map(([url]) => /file-(\d+)\.html/.exec(String(url))?.[1])
+		.filter((index): index is string => index !== undefined)
+		.map(Number)
 }
 
 describe("PPTStore content lazy loading", () => {
@@ -153,6 +165,267 @@ describe("PPTStore content lazy loading", () => {
 		])
 		expect(store.slides[1]?.loadingState).toBe("idle")
 		expect(store.slides[3]?.loadingState).toBe("idle")
+	})
+
+	it("preloads only fullscreen HTML while keeping the iframe render window bounded", async () => {
+		const { store } = createStore(30, { fullscreenContentPreloadRadius: 4 })
+		stores.push(store)
+		setIdleSlides(store, 30)
+
+		store.setActiveIndex(15)
+		await vi.waitFor(() => expect(store.slides[15]?.thumbnailUrl).toBeDefined())
+		mockState.downloadFileContent.mockClear()
+		mockState.screenshotService.generateScreenshot.mockClear()
+
+		store.setFullscreen(true)
+
+		await vi.waitFor(() =>
+			expect(
+				Array.from({ length: 9 }, (_, offset) => store.slides[11 + offset]?.loadingState),
+			).toEqual(Array.from({ length: 9 }, () => "loaded")),
+		)
+		expect(new Set(getDownloadedSlideIndices())).toEqual(
+			new Set([11, 12, 13, 14, 16, 17, 18, 19]),
+		)
+		expect(store.slides[10]?.loadingState).toBe("idle")
+		expect(store.slides[20]?.loadingState).toBe("idle")
+		expect(store.visibleSlides.map(({ index }) => index)).toEqual([13, 14, 15, 16, 17])
+		expect(mockState.screenshotService.generateScreenshot).not.toHaveBeenCalled()
+		expect(mockState.screenshotService.cancelPreviewGenerations).toHaveBeenCalledTimes(1)
+	})
+
+	it("slides the fullscreen HTML window by downloading only the new edge page", async () => {
+		const { store } = createStore(30, { fullscreenContentPreloadRadius: 3 })
+		stores.push(store)
+		setIdleSlides(store, 30)
+
+		store.setActiveIndex(10)
+		await vi.waitFor(() => expect(store.slides[10]?.loadingState).toBe("loaded"))
+		store.setFullscreen(true)
+		await vi.waitFor(() =>
+			expect(
+				Array.from({ length: 7 }, (_, offset) => store.slides[7 + offset]?.loadingState),
+			).toEqual(Array.from({ length: 7 }, () => "loaded")),
+		)
+		mockState.downloadFileContent.mockClear()
+
+		store.nextSlide()
+
+		await vi.waitFor(() => expect(store.slides[14]?.loadingState).toBe("loaded"))
+		expect(getDownloadedSlideIndices()).toEqual([14])
+		expect(store.slides[7]?.loadingState).toBe("loaded")
+	})
+
+	it("reprioritizes retained fullscreen work while the sliding window is still loading", async () => {
+		const { store } = createStore(30, {
+			contentLoadConcurrency: 2,
+			fullscreenContentPreloadRadius: 4,
+		})
+		stores.push(store)
+		setIdleSlides(store, 30)
+
+		store.setActiveIndex(10)
+		await vi.waitFor(() => expect(store.slides[10]?.loadingState).toBe("loaded"))
+
+		const started: number[] = []
+		const resolvers = new Map<number, (content: string) => void>()
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				const index = Number(/file-(\d+)\.html/.exec(url)?.[1])
+				started.push(index)
+				if (index === 12) return Promise.resolve(`<main>${url}</main>`)
+				return new Promise<string>((resolve, reject) => {
+					resolvers.set(index, resolve)
+					options.signal?.addEventListener("abort", () => {
+						reject(new DOMException("The operation was aborted", "AbortError"))
+					})
+				})
+			},
+		)
+
+		store.setFullscreen(true)
+		await vi.waitFor(() => expect(started).toEqual([11]))
+
+		store.setActiveIndex(12)
+		await vi.waitFor(() => expect(started).toEqual([11, 12]))
+		resolvers.get(11)?.("<main>slide 11</main>")
+
+		await vi.waitFor(() => expect(started.slice(0, 3)).toEqual([11, 12, 13]))
+		expect(started).not.toContain(8)
+		expect(started).not.toContain(9)
+	})
+
+	it("reuses overlapping sidebar work and cancels previews outside the fullscreen window", async () => {
+		const { store } = createStore(9, {
+			contentLoadConcurrency: 2,
+			fullscreenContentPreloadRadius: 2,
+		})
+		stores.push(store)
+		setIdleSlides(store, 9)
+
+		store.setActiveIndex(4)
+		await vi.waitFor(() => expect(store.slides[4]?.loadingState).toBe("loaded"))
+		mockState.downloadFileContent.mockClear()
+		let overlappingSignal: AbortSignal | undefined
+		let resolveOverlapping: (content: string) => void = () => undefined
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				if (url.endsWith("file-5.html")) {
+					overlappingSignal = options.signal
+					return new Promise<string>((resolve, reject) => {
+						resolveOverlapping = resolve
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					})
+				}
+				return Promise.resolve(`<main>${url}</main>`)
+			},
+		)
+
+		store.updateVisibleSlidePreviews([5, 8])
+		await vi.waitFor(() => expect(overlappingSignal).toBeDefined())
+
+		store.setFullscreen(true)
+		store.updateVisibleSlidePreviews([])
+		expect(overlappingSignal?.aborted).toBe(false)
+		expect(getDownloadedSlideIndices()).not.toContain(8)
+		resolveOverlapping("<main>slide 5</main>")
+
+		await vi.waitFor(() =>
+			expect([2, 3, 4, 5, 6].map((index) => store.slides[index]?.loadingState)).toEqual(
+				Array.from({ length: 5 }, () => "loaded"),
+			),
+		)
+		expect(getDownloadedSlideIndices().sort((a, b) => a - b)).toEqual([2, 3, 5, 6])
+		expect(getDownloadedSlideIndices().filter((index) => index === 5)).toHaveLength(1)
+		expect(store.slides[8]?.loadingState).toBe("idle")
+	})
+
+	it("clamps the fullscreen HTML window at the beginning of the deck", async () => {
+		const { store } = createStore(12, { fullscreenContentPreloadRadius: 3 })
+		stores.push(store)
+		setIdleSlides(store, 12)
+
+		store.setActiveIndex(0)
+		await vi.waitFor(() => expect(store.slides[0]?.loadingState).toBe("loaded"))
+		mockState.downloadFileContent.mockClear()
+		store.setFullscreen(true)
+
+		await vi.waitFor(() =>
+			expect([0, 1, 2, 3].map((index) => store.slides[index]?.loadingState)).toEqual(
+				Array.from({ length: 4 }, () => "loaded"),
+			),
+		)
+		expect(new Set(getDownloadedSlideIndices())).toEqual(new Set([1, 2, 3]))
+		expect(store.slides[4]?.loadingState).toBe("idle")
+	})
+
+	it("warms the fullscreen HTML window when fullscreen starts before deck initialization", async () => {
+		const { store, paths } = createStore(12, { fullscreenContentPreloadRadius: 2 })
+		stores.push(store)
+
+		store.setFullscreen(true)
+		await store.initializeSlides(paths)
+
+		await vi.waitFor(() =>
+			expect([0, 1, 2].map((index) => store.slides[index]?.loadingState)).toEqual(
+				Array.from({ length: 3 }, () => "loaded"),
+			),
+		)
+		expect(new Set(getDownloadedSlideIndices())).toEqual(new Set([0, 1, 2]))
+		expect(store.slides[3]?.loadingState).toBe("idle")
+	})
+
+	it("cancels fullscreen-only work when fullscreen exits", async () => {
+		const { store } = createStore(9, {
+			contentLoadConcurrency: 2,
+			fullscreenContentPreloadRadius: 2,
+		})
+		stores.push(store)
+		setIdleSlides(store, 9)
+		let fullscreenSignal: AbortSignal | undefined
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				if (url.endsWith("file-5.html")) {
+					fullscreenSignal = options.signal
+					return new Promise<string>((_resolve, reject) => {
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					})
+				}
+				return Promise.resolve(`<main>${url}</main>`)
+			},
+		)
+
+		store.setActiveIndex(4)
+		await vi.waitFor(() => expect(store.slides[4]?.loadingState).toBe("loaded"))
+		store.setFullscreen(true)
+		await vi.waitFor(() => expect(fullscreenSignal).toBeDefined())
+
+		store.setFullscreen(false)
+
+		expect(fullscreenSignal?.aborted).toBe(true)
+		await vi.waitFor(() => expect(store.slides[5]?.loadingState).toBe("idle"))
+		expect(store.visibleSlides.map(({ index }) => index)).toEqual([4])
+	})
+
+	it("cancels obsolete fullscreen work after a far jump and starts the new active page", async () => {
+		const { store } = createStore(30, {
+			contentLoadConcurrency: 2,
+			fullscreenContentPreloadRadius: 3,
+		})
+		stores.push(store)
+		setIdleSlides(store, 30)
+		let staleSignal: AbortSignal | undefined
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				if (url.endsWith("file-11.html")) {
+					staleSignal = options.signal
+					return new Promise<string>((_resolve, reject) => {
+						options.signal?.addEventListener("abort", () => {
+							reject(new DOMException("The operation was aborted", "AbortError"))
+						})
+					})
+				}
+				return Promise.resolve(`<main>${url}</main>`)
+			},
+		)
+
+		store.setActiveIndex(10)
+		await vi.waitFor(() => expect(store.slides[10]?.loadingState).toBe("loaded"))
+		mockState.downloadFileContent.mockClear()
+		store.setFullscreen(true)
+		await vi.waitFor(() => expect(staleSignal).toBeDefined())
+
+		store.setActiveIndex(20)
+
+		await vi.waitFor(() => expect(store.slides[20]?.loadingState).toBe("loaded"))
+		expect(staleSignal?.aborted).toBe(true)
+		expect(getDownloadedSlideIndices()).not.toContain(9)
+		expect(getDownloadedSlideIndices()).not.toContain(12)
+	})
+
+	it("stops automatic neighbor preloading in fullscreen when auto loading is disabled", async () => {
+		const { store } = createStore(9, {
+			autoLoadAndGenerate: false,
+			fullscreenContentPreloadRadius: 3,
+		})
+		stores.push(store)
+		setIdleSlides(store, 9)
+
+		store.setActiveIndex(4)
+		await vi.waitFor(() => expect(store.slides[4]?.loadingState).toBe("loaded"))
+		mockState.downloadFileContent.mockClear()
+
+		store.setFullscreen(true)
+		await new Promise((resolve) => window.setTimeout(resolve, 0))
+
+		expect(mockState.downloadFileContent).not.toHaveBeenCalled()
+		expect(store.slides[3]?.loadingState).toBe("idle")
+		expect(store.slides[5]?.loadingState).toBe("idle")
+		expect(store.visibleSlides.map(({ index }) => index)).toEqual([2, 3, 4, 5, 6])
 	})
 
 	it("keeps direct navigation demand-driven when automatic preview generation is disabled", async () => {
