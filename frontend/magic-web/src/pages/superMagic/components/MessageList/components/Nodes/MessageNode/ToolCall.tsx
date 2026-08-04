@@ -207,7 +207,7 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 			<Suspense fallback={null}>
 				<MicroAppPlanToolCall
 					toolData={toolData}
-					loading={!toolResponse}
+					loading={isToolLoading}
 					classNames={classNames}
 					selectedTopic={selectedTopic}
 					isShare={isShare}
