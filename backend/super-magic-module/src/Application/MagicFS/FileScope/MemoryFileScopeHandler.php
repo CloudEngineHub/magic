@@ -7,7 +7,9 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\MagicFS\FileScope;
 
+use App\Application\File\Service\FileAppService;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Application\MagicFS\Service\FileMemoryAccessService;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
@@ -17,11 +19,13 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\ErrorCode\MagicFSErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeBuilder;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Request\ListFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\ListFilesResponseDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\MagicFSFileDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsV2RequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\ProjectUploadTokenRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\TaskFileItemDTO;
 
 /**
@@ -41,6 +45,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
         private readonly MagicFSFileDomainService $magicFSFileDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly FileTreeBuilder $fileTreeBuilder,
+        private readonly FileAppService $fileAppService,
     ) {
     }
 
@@ -207,6 +212,24 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
         return [
             'total' => count($this->getMemoryTreeEntities($authorization, $root)),
         ];
+    }
+
+    /**
+     * 获取记忆空间上传凭证。
+     */
+    public function getUploadToken(
+        MagicUserAuthorization $authorization,
+        ProjectUploadTokenRequestDTO $requestDTO,
+    ): array {
+        $this->fileMemoryAccessService->getOrCreateMemoryRoot($authorization);
+
+        return $this->fileAppService->getStsTemporaryCredentialV2(
+            $authorization->getOrganizationCode(),
+            StorageBucketType::SandBox->value,
+            WorkDirectoryUtil::getUserWorkDir($authorization->getId()),
+            $requestDTO->getExpires(),
+            false,
+        );
     }
 
     /**

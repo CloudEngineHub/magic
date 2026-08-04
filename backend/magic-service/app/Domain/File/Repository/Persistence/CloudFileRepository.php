@@ -417,6 +417,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): void {
         try {
+            // 未显式指定时，按环境变量选择对象存储访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             $prefix = $this->formatPrefix($prefix, $organizationCode);
             // Security check: validate if file path starts with organization code
             if (! Str::startsWith($objectKey, $organizationCode)) {
@@ -541,6 +544,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): array {
         try {
+            // 未显式指定时，按环境变量选择对象存储访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             // Security check: validate if object key belongs to organization code
             if (! Str::startsWith($objectKey, $organizationCode)) {
                 $this->logger->warning('Get object metadata failed: object key does not belong to specified organization', [
@@ -930,6 +936,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): void {
         try {
+            // 重命名包含复制、校验和删除，三个阶段必须使用相同的访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             // Security check: validate if both keys belong to organization code
             if (! Str::startsWith($sourceKey, $organizationCode)) {
                 $this->logger->warning('Object rename failed: source key does not belong to specified organization', [
@@ -970,7 +979,8 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 $destinationMetadata = $this->getHeadObjectByCredential(
                     $organizationCode,
                     $destinationKey,
-                    $bucketType
+                    $bucketType,
+                    $options,
                 );
 
                 $this->logger->info('rename_destination_verified', [
@@ -997,7 +1007,8 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 $prefix, // use the same prefix as the rename operation
                 $organizationCode,
                 $sourceKey,
-                $bucketType
+                $bucketType,
+                $options,
             );
 
             $this->logger->info('rename_object_by_credential_success', [

@@ -3393,6 +3393,7 @@ class TaskFileDomainService
             $fileEntity->setProjectId($dto->getProjectId());
             $fileEntity->setUserId($dto->getOperatorUserId());
             $fileEntity->setOrganizationCode($dto->getOperatorOrganizationCode());
+            $fileEntity->setSpaceType($taskFileEntity->getSpaceType());
             $fileEntity->setFileKey($fileKey);
             $fileEntity->setFileName($fileName);
 
@@ -3490,12 +3491,15 @@ class TaskFileDomainService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_UPLOAD_FAILED, 'Cannot replace directory');
         }
 
-        $project = $this->projectRepository->findById($originalFile->getProjectId());
-        if ($project === null) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+        if ($originalFile->isProjectFile()) {
+            $project = $this->projectRepository->findById($originalFile->getProjectId());
+            if ($project === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+            }
+            $workDir = $project->getWorkDir();
+        } else {
+            $workDir = WorkDirectoryUtil::getUserWorkDir($originalFile->getUserId());
         }
-
-        $workDir = $project->getWorkDir();
         $organizationCode = $originalFile->getOrganizationCode();
         $fullPrefix = $this->cloudFileRepository->getFullPrefix($organizationCode);
 

@@ -37,12 +37,11 @@ class FileEditingAppService extends AbstractAppService
             $userAuthorization,
             MemberRole::EDITOR,
         );
-        if ($projectEntity === null) {
-            return;
-        }
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层处理业务逻辑
-        $this->fileEditingDomainService->joinEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
+        $this->fileEditingDomainService->joinEditing($fileId, $userAuthorization->getId(), $organizationCode);
     }
 
     /**
@@ -59,12 +58,11 @@ class FileEditingAppService extends AbstractAppService
             $userAuthorization,
             MemberRole::EDITOR,
         );
-        if ($projectEntity === null) {
-            return;
-        }
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层处理业务逻辑
-        $this->fileEditingDomainService->leaveEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
+        $this->fileEditingDomainService->leaveEditing($fileId, $userAuthorization->getId(), $organizationCode);
     }
 
     /**
@@ -81,11 +79,10 @@ class FileEditingAppService extends AbstractAppService
             $userAuthorization,
             MemberRole::VIEWER,
         );
-        if ($projectEntity === null) {
-            return 0;
-        }
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层查询编辑用户数量
-        return $this->fileEditingDomainService->getEditingUsersCount($fileId, $projectEntity->getUserOrganizationCode());
+        return $this->fileEditingDomainService->getEditingUsersCount($fileId, $organizationCode);
     }
 }
