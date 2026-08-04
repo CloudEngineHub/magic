@@ -215,6 +215,7 @@ export default function MicroAppScheduledTasksPanel({
 						<MicroAppScheduledTaskItem
 							key={task.id}
 							data={task}
+							onClick={() => onTaskEdit(task)}
 							onSwitchChange={(enabled) => onStatusChange(task, enabled)}
 							{...delegateProps}
 						/>

@@ -12,11 +12,13 @@ import { formatTaskSchedule } from "./utils"
 interface MicroAppScheduledTaskItemProps extends DropdownDelegateProps<ScheduledTask.Task> {
 	data: ScheduledTask.Task
 	onSwitchChange: (enabled: boolean) => void
+	onClick: () => void
 }
 
 export default function MicroAppScheduledTaskItem({
 	data,
 	onSwitchChange,
+	onClick,
 	onDropdownActionClick,
 	onDropdownContextMenuClick,
 }: MicroAppScheduledTaskItemProps) {
@@ -25,7 +27,16 @@ export default function MicroAppScheduledTaskItem({
 
 	return (
 		<div
-			className="group w-full rounded-xl border border-border bg-background p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-lg"
+			className="group w-full cursor-pointer rounded-xl border border-border bg-background p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-lg"
+			onClick={onClick}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault()
+					onClick()
+				}
+			}}
+			role="button"
+			tabIndex={0}
 			onContextMenu={(event) => onDropdownContextMenuClick?.(event, data)}
 			data-testid="micro-app-scheduled-task-item"
 		>
@@ -48,7 +59,11 @@ export default function MicroAppScheduledTaskItem({
 				<div className="inline-flex shrink-0" title={t("scheduleTask.moreActions")}>
 					<ActionButton
 						size={28}
-						onClick={(event) => onDropdownActionClick?.(event, data)}
+						onClick={(event) => {
+							event.stopPropagation()
+							onDropdownActionClick?.(event, data)
+						}}
+						onKeyDown={(event) => event.stopPropagation()}
 					>
 						<MagicIcon size={18} component={IconDots} stroke={2} />
 					</ActionButton>
@@ -64,12 +79,17 @@ export default function MicroAppScheduledTaskItem({
 				<span className="min-w-0 truncate">
 					{data.topic_name || t("scheduleTask.projectScope")}
 				</span>
-				<Switch
-					size="small"
-					checked={data.enabled === 1}
-					onChange={onSwitchChange}
-					aria-label={t("scheduleTask.toggleTask", { name: data.task_name || "-" })}
-				/>
+				<div
+					onClick={(event) => event.stopPropagation()}
+					onKeyDown={(event) => event.stopPropagation()}
+				>
+					<Switch
+						size="small"
+						checked={data.enabled === 1}
+						onChange={onSwitchChange}
+						aria-label={t("scheduleTask.toggleTask", { name: data.task_name || "-" })}
+					/>
+				</div>
 			</div>
 		</div>
 	)
