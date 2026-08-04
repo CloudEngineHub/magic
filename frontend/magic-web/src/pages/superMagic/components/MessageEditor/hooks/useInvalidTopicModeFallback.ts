@@ -5,7 +5,10 @@ import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAge
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { SceneEditorContext } from "../../MainInputContainer/components/editors/types"
-import { shouldShowInvalidTopicModeFallback } from "../utils/shouldShowInvalidTopicModeFallback"
+import {
+	hasSavedTopicMode,
+	shouldShowInvalidTopicModeFallback,
+} from "../utils/shouldShowInvalidTopicModeFallback"
 
 export function useInvalidTopicModeFallback(editorContext: SceneEditorContext) {
 	const InvalidModeFallback = editorContext.invalidModeFallback
@@ -13,6 +16,8 @@ export function useInvalidTopicModeFallback(editorContext: SceneEditorContext) {
 	const selectedTopic = editorContext.selectedTopic
 	const topicMode = editorContext.topicMode
 	const recoverTopicMode = editorContext.recoverTopicMode
+	const hasSavedMode = hasSavedTopicMode(selectedTopic)
+	const isModeAvailabilityResolved = superMagicModeService.isModeAvailabilityResolved
 	const isModeValid = superMagicModeService.isModeValid(
 		topicMode as TopicMode,
 		selectedTopic?.agent_code,
@@ -27,13 +32,22 @@ export function useInvalidTopicModeFallback(editorContext: SceneEditorContext) {
 
 	useEffect(() => {
 		if (!selectedTopic || !recoverTopicMode) return
-		if (messagesLength > 0 || isModeValid) return
+		// 已保存的模式失效时保留服务端状态，让输入区展示明确的不可用提示。
+		if (!isModeAvailabilityResolved || hasSavedMode || messagesLength > 0 || isModeValid) return
 
 		const fallbackMode = getFallbackTopicModeIdentifier()
 		if (fallbackMode === topicMode) return
 
 		recoverTopicMode(fallbackMode)
-	}, [isModeValid, messagesLength, recoverTopicMode, selectedTopic, topicMode])
+	}, [
+		hasSavedMode,
+		isModeAvailabilityResolved,
+		isModeValid,
+		messagesLength,
+		recoverTopicMode,
+		selectedTopic,
+		topicMode,
+	])
 
 	const onCreateTopic = useMemoizedFn(async () => {
 		if (editorContext.createTopic) {
