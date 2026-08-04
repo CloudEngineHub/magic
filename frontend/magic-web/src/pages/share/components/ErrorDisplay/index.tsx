@@ -35,13 +35,13 @@ export default function ErrorDisplay({
 					<img src={icon} alt="" />
 				</div>
 				<div
-					className="text-center text-[32px] font-semibold text-muted-foreground"
+					className="text-center text-lg font-semibold leading-6 text-foreground/80"
 					data-testid="error-display-message"
 				>
 					{errorMessage || t("share.noPermissionToView")}
 				</div>
 				<span
-					className="mb-5 mt-1 text-center text-sm font-normal text-muted-foreground"
+					className="mb-5 mt-2.5 text-center text-sm font-normal leading-5 text-muted-foreground"
 					data-testid="error-display-description"
 				>
 					{description}
@@ -51,6 +51,7 @@ export default function ErrorDisplay({
 						type="button"
 						variant="default"
 						size="sm"
+						className="rounded-lg px-6 py-1.5"
 						onClick={() => {
 							window.location.href = window.location.origin
 						}}
