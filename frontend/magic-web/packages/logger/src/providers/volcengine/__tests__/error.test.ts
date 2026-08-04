@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ErrorCaptureSource } from "../../../core/types"
 import { normalizeVolcengineError, toVolcengineExtra } from "../error"
 
 describe("normalizeVolcengineError", () => {
@@ -13,7 +14,7 @@ describe("normalizeVolcengineError", () => {
 					namespace: "repository",
 					eventId: "event-1",
 					release: "3.10.7",
-					captureSource: "manual",
+					captureSource: ErrorCaptureSource.MANUAL,
 				},
 			},
 		])
@@ -43,7 +44,7 @@ describe("normalizeVolcengineError", () => {
 					namespace: "websocket",
 					eventId: "event-2",
 					release: "sha-1",
-					captureSource: "manual",
+					captureSource: ErrorCaptureSource.MANUAL,
 				},
 			},
 		])

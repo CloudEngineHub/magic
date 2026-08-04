@@ -84,6 +84,13 @@ export interface IErrorInfo {
 	extra?: Record<string, any>
 }
 
+export const ErrorCaptureSource = {
+	MANUAL: "manual",
+	GLOBAL: "global",
+} as const
+
+export type ErrorCaptureSource = (typeof ErrorCaptureSource)[keyof typeof ErrorCaptureSource]
+
 /** 应用 Logger 与具体 APM Provider 之间的内部异常协议。 */
 export interface ProviderErrorInput {
 	kind: "provider-error-input"
@@ -93,7 +100,7 @@ export interface ProviderErrorInput {
 		namespace: string
 		eventId: string
 		release: string
-		captureSource: "manual" | "global"
+		captureSource: ErrorCaptureSource
 		eventKey?: string
 		errorKind?: string
 	}

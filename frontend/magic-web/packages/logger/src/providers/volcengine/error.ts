@@ -1,4 +1,4 @@
-import type { ProviderErrorInput } from "../../core/types"
+import { ErrorCaptureSource, type ProviderErrorInput } from "../../core/types"
 
 export interface NormalizedVolcengineError {
 	error: Error
@@ -51,7 +51,7 @@ export function normalizeVolcengineError(args: unknown[]): NormalizedVolcengineE
 			namespace: internalInput?.attributes.namespace ?? "global",
 			eventId: internalInput?.attributes.eventId ?? "",
 			release: internalInput?.attributes.release ?? "",
-			captureSource: internalInput?.attributes.captureSource ?? "manual",
+			captureSource: internalInput?.attributes.captureSource ?? ErrorCaptureSource.MANUAL,
 			eventKey: internalInput?.attributes.eventKey,
 			errorKind: internalInput?.attributes.errorKind,
 			// 合成堆栈只代表 Provider 调用位置，必须显式标记，不能冒充业务异常堆栈。

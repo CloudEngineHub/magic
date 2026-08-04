@@ -22,7 +22,7 @@ The Logger adds:
 namespace      from createLogger(namespace)
 eventId        generated once per logger.error call
 release        MAGIC_APP_VERSION || MAGIC_APP_SHA || ""
-captureSource  "manual"
+captureSource  "manual" for business calls; "global" for ErrorMonitorPlugin
 ```
 
 The same `eventId` and `release` are used for the Provider and self-hosted paths.
@@ -84,12 +84,14 @@ ReporterPlugin flattens the ErrorReport with runtime fields:
 	error,
 	message,
 	context,
-	captureSource: "manual",
+	captureSource: "manual" | "global",
 	eventId,
 }
 ```
 
 Structured records do not include legacy `data`, Logger `metadata`, or Provider-only `originalError`.
+
+`ErrorMonitorPlugin` sends `window.error` and `unhandledrejection` through the structured Logger pipeline with `captureSource: "global"`. The same call produces self-hosted `logType: "error"` data and a Volcengine custom `captureException` event. The Volcengine JS plugin's own `onerror` and `onunhandledrejection` listeners are disabled to prevent duplicate collection.
 
 ReporterPlugin sends an array to the existing `POST /log-report` endpoint. Defaults are batch size 30, interval 5 seconds, two retries, and reporting disabled in development. Supported browsers normally send gzip bytes with `Content-Encoding: gzip`; the logical decompressed body is still the JSON array.
 
@@ -137,7 +139,7 @@ Do not apply speculative deletion to all URLs, filenames, raw data, or business 
 
 ## Provider Availability
 
-- `MAGIC_APM.strategy = "Volcengine"`: structured manual errors call `captureException` after Provider initialization.
+- `MAGIC_APM.strategy = "Volcengine"`: structured manual and global-captured errors call `captureException` after Provider initialization; the SDK's own global error listeners are disabled.
 - `MAGIC_APM.strategy = "Aliyun"`: the SDK initializes, but the current manual `AliyunProvider.error()` remains a no-op.
 - missing/unknown strategy: `MagicProvider` is a no-op.
 - self-hosted reporting is independent of `MAGIC_APM` and is disabled in development by default.

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { createErrorReport, createProviderErrorInput, parseErrorCall } from "../errorReport"
+import {
+	createErrorReport,
+	createProviderErrorInput,
+	ErrorCaptureSource,
+	parseErrorCall,
+} from "../errorReport"
 
 describe("errorReport protocol", () => {
 	it("keeps legacy strings, objects, errors, and multi-argument calls compatible", () => {
@@ -59,5 +64,34 @@ describe("errorReport protocol", () => {
 
 		const providerInput = createProviderErrorInput(parsed, "websocket", "event-2", "sha-1")
 		expect(providerInput.fallbackMessage).toBe("connection_failed")
+	})
+
+	it("marks internally captured global errors without changing manual defaults", () => {
+		const parsed = parseErrorCall([
+			{ eventKey: "global_javascript_error", errorKind: "unknown", message: "failed" },
+		])
+
+		expect(parsed.kind).toBe("structured")
+		if (parsed.kind !== "structured") return
+
+		const manualReport = createErrorReport(parsed.input, "globalError", "event-3", "sha-2")
+		const providerInput = createProviderErrorInput(
+			parsed,
+			"globalError",
+			"event-3",
+			"sha-2",
+			ErrorCaptureSource.GLOBAL,
+		)
+		const report = createErrorReport(
+			parsed.input,
+			"globalError",
+			"event-3",
+			"sha-2",
+			ErrorCaptureSource.GLOBAL,
+		)
+
+		expect(manualReport.captureSource).toBe("manual")
+		expect(providerInput.attributes.captureSource).toBe("global")
+		expect(report.captureSource).toBe("global")
 	})
 })

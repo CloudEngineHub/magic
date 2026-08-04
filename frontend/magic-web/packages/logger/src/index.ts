@@ -6,6 +6,7 @@
 // 核心导出
 export { createLogger, getLogger } from "./core/logger"
 export { BaseProvider } from "./core/base-provider"
+export { ErrorCaptureSource } from "./core/types"
 
 // 类型导出
 export type {

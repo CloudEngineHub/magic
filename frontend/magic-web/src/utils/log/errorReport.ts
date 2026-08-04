@@ -1,5 +1,7 @@
 import { isPlainObject } from "lodash-es"
-import type { ProviderErrorInput } from "../../../packages/logger/src"
+import { ErrorCaptureSource, type ProviderErrorInput } from "../../../packages/logger/src"
+
+export { ErrorCaptureSource }
 
 export interface StructuredErrorInput {
 	eventKey: string
@@ -22,7 +24,7 @@ export interface ErrorReport {
 	error?: unknown
 	message?: string
 	context?: Record<string, unknown>
-	captureSource: "manual"
+	captureSource: ErrorCaptureSource
 	eventId: string
 	release: string
 }
@@ -76,6 +78,7 @@ export function createErrorReport(
 	namespace: string,
 	eventId: string,
 	release: string,
+	captureSource: ErrorCaptureSource = ErrorCaptureSource.MANUAL,
 ): ErrorReport {
 	return {
 		namespace,
@@ -84,7 +87,7 @@ export function createErrorReport(
 		error: serializeError(input.error),
 		message: input.message,
 		context: input.context,
-		captureSource: "manual",
+		captureSource,
 		eventId,
 		release,
 	}
@@ -101,6 +104,7 @@ export function createProviderErrorInput(
 	namespace: string,
 	eventId: string,
 	release: string,
+	captureSource: ErrorCaptureSource = ErrorCaptureSource.MANUAL,
 ): ProviderErrorInput {
 	if (parsed.kind === "structured") {
 		return {
@@ -113,7 +117,7 @@ export function createProviderErrorInput(
 				eventKey: parsed.input.eventKey,
 				errorKind: parsed.input.errorKind,
 				release,
-				captureSource: "manual",
+				captureSource,
 			},
 		}
 	}
@@ -126,6 +130,6 @@ export function createProviderErrorInput(
 		kind: "provider-error-input",
 		value,
 		fallbackMessage: toSafeMessage(value, "Unknown error"),
-		attributes: { namespace, eventId, release, captureSource: "manual" },
+		attributes: { namespace, eventId, release, captureSource },
 	}
 }

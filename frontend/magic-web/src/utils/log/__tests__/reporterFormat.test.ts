@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ErrorCaptureSource } from "../errorReport"
 import { formatLogData } from "../plugins/builtin/ReporterPlugin/ReporterPlugin"
 import { LogType, type LogContext } from "../plugins"
 
@@ -36,7 +37,7 @@ describe("ReporterPlugin formatLogData", () => {
 				eventKey: "operation_failed",
 				errorKind: "quota",
 				error: { name: "Error", message: "quota exceeded" },
-				captureSource: "manual",
+				captureSource: ErrorCaptureSource.MANUAL,
 				eventId: "event-1",
 				release: "3.10.7",
 			},
