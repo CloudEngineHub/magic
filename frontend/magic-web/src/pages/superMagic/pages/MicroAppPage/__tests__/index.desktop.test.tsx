@@ -544,6 +544,24 @@ describe("MicroAppPageDesktop", () => {
 			"microAppPage.previewToolbar.refresh",
 		)
 
+		const previewWorkspace = screen.getByTestId("micro-app-preview-workspace")
+		fireEvent.click(screen.getByTestId("micro-app-preview-fullscreen"))
+		expect(previewWorkspace).toHaveAttribute("data-fullscreen", "true")
+		expect(previewWorkspace).toHaveClass("fixed", "z-detail-fullscreen")
+		expect(screen.getByTestId("micro-app-preview-fullscreen")).toHaveAttribute(
+			"aria-label",
+			"microAppPage.previewToolbar.exitFullscreen",
+		)
+
+		fireEvent.click(screen.getByTestId("micro-app-preview-fullscreen"))
+		expect(previewWorkspace).toHaveAttribute("data-fullscreen", "false")
+		expect(previewWorkspace).toHaveClass("absolute")
+
+		fireEvent.click(screen.getByTestId("micro-app-preview-fullscreen"))
+		fireEvent.keyDown(document, { key: "Escape" })
+		expect(previewWorkspace).toHaveAttribute("data-fullscreen", "false")
+		expect(previewWorkspace).toHaveClass("absolute")
+
 		fireEvent.click(screen.getByTestId("micro-app-nav-files"))
 		expect(screen.getByTestId("micro-app-file-sidebar")).toBeInTheDocument()
 		expect(screen.getByTestId("desktop-file-list")).toBeInTheDocument()

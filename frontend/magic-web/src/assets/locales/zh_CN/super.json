@@ -3410,6 +3410,8 @@
 			"desktop": "电脑端预览",
 			"disableDebug": "关闭调试",
 			"enableDebug": "开启调试",
+			"exitFullscreen": "退出全屏",
+			"fullscreen": "全屏预览",
 			"more": "更多",
 			"noHtml": "暂无可预览的 HTML 文件",
 			"phone": "手机端预览",

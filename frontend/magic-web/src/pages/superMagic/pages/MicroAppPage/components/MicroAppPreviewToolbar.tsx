@@ -1,10 +1,12 @@
 import {
 	Crosshair,
+	Expand,
 	Globe2,
 	Monitor,
 	MoreHorizontal,
 	RefreshCw,
 	Smartphone,
+	Shrink,
 	Terminal,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -39,11 +41,13 @@ interface MicroAppPreviewToolbarProps {
 	aiEditActive?: boolean
 	devConsoleActive?: boolean
 	devConsoleAvailable?: boolean
+	isFullscreen?: boolean
 	onViewModeChange: (mode: MicroAppEntryPreviewMode) => void
 	onFileChange: (fileId: string) => void
 	onRefresh: () => void
 	onAIEdit: () => void
 	onDevConsoleToggle: () => void
+	onFullscreenToggle: () => void
 }
 
 export default function MicroAppPreviewToolbar({
@@ -54,11 +58,13 @@ export default function MicroAppPreviewToolbar({
 	aiEditActive = false,
 	devConsoleActive = false,
 	devConsoleAvailable = false,
+	isFullscreen = false,
 	onViewModeChange,
 	onFileChange,
 	onRefresh,
 	onAIEdit,
 	onDevConsoleToggle,
+	onFullscreenToggle,
 }: MicroAppPreviewToolbarProps) {
 	const { t } = useTranslation("super")
 
@@ -135,6 +141,34 @@ export default function MicroAppPreviewToolbar({
 			</Select>
 
 			<div className="flex items-center gap-2 justify-self-end">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="size-8 shrink-0"
+							aria-label={t(
+								isFullscreen
+									? "microAppPage.previewToolbar.exitFullscreen"
+									: "microAppPage.previewToolbar.fullscreen",
+							)}
+							aria-pressed={isFullscreen}
+							onClick={onFullscreenToggle}
+							data-testid="micro-app-preview-fullscreen"
+						>
+							{isFullscreen ? <Shrink size={16} /> : <Expand size={16} />}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{t(
+							isFullscreen
+								? "microAppPage.previewToolbar.exitFullscreen"
+								: "microAppPage.previewToolbar.fullscreen",
+						)}
+					</TooltipContent>
+				</Tooltip>
+
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

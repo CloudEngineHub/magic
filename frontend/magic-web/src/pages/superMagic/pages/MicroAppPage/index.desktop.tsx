@@ -51,6 +51,7 @@ function MicroAppPageInner({
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
+	const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
 	const [isAIEditActive, setIsAIEditActive] = useState(false)
 	const [isDevConsoleActive, setIsDevConsoleActive] = useState(false)
 	const [isDevConsoleAvailable, setIsDevConsoleAvailable] = useState(false)
@@ -133,6 +134,8 @@ function MicroAppPageInner({
 		toggleMessagePanelCollapse()
 	})
 	const handleWorkspaceViewChange = useMemoizedFn((nextView: MicroAppWorkspaceView) => {
+		if (nextView !== "preview") setIsPreviewFullscreen(false)
+
 		if (activeView === "database" && nextView !== "database") {
 			if (databaseAutoCollapsedRef.current) {
 				setIsMessagePanelCollapsed(messagePanelCollapsedBeforeDatabaseRef.current)
@@ -184,10 +187,22 @@ function MicroAppPageInner({
 		setPreviewEntryFile(null)
 		setPreviewMode("desktop")
 		setPreviewRefreshKey(0)
+		setIsPreviewFullscreen(false)
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
 	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
+
+	useEffect(() => {
+		if (!isPreviewFullscreen) return undefined
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setIsPreviewFullscreen(false)
+		}
+
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	}, [isPreviewFullscreen])
 
 	useEffect(() => {
 		if (activeView === "files" && defaultEntryFile) {
@@ -240,7 +255,10 @@ function MicroAppPageInner({
 	return (
 		<FileActionVisibilityProvider>
 			<div
-				className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-background"
+				className={cn(
+					"flex h-full w-full flex-col rounded-lg border border-border bg-background",
+					isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
+				)}
 				data-testid="micro-app-page"
 			>
 				<MicroAppHeader
@@ -255,7 +273,13 @@ function MicroAppPageInner({
 					onManageCollaborators={handleManageCollaborators}
 				/>
 
-				<div ref={workspacePanelsRef} className="flex min-h-0 flex-1 overflow-hidden">
+				<div
+					ref={workspacePanelsRef}
+					className={cn(
+						"flex min-h-0 flex-1",
+						isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
+					)}
+				>
 					<MicroAppWorkspaceNav
 						activeView={activeView}
 						databaseDisabled={!selectedProject?.id}
@@ -264,16 +288,25 @@ function MicroAppPageInner({
 						onViewChange={handleWorkspaceViewChange}
 					/>
 
-					<main className="relative h-full min-w-0 flex-1 overflow-hidden">
+					<main
+						className={cn(
+							"relative h-full min-w-0 flex-1",
+							isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
+						)}
+					>
 						{/* Use display:none for the inactive view: FilesViewer can set visibility on descendants. */}
 						<div
 							className={cn(
-								"absolute inset-0 min-w-0 overflow-hidden",
+								"inset-0 min-w-0 overflow-hidden",
+								isPreviewFullscreen
+									? "fixed z-detail-fullscreen h-dvh w-screen bg-background"
+									: "absolute",
 								activeView === "preview" || activeView === "files"
 									? "flex"
 									: "hidden",
 							)}
 							aria-hidden={activeView !== "preview" && activeView !== "files"}
+							data-fullscreen={isPreviewFullscreen ? "true" : "false"}
 							data-testid="micro-app-preview-workspace"
 						>
 							{activeView === "files" ? (
@@ -310,12 +343,16 @@ function MicroAppPageInner({
 											aiEditActive={isAIEditActive}
 											devConsoleActive={isDevConsoleActive}
 											devConsoleAvailable={isDevConsoleAvailable}
+											isFullscreen={isPreviewFullscreen}
 											onViewModeChange={setPreviewMode}
 											onFileChange={handlePreviewFileChange}
 											onRefresh={() => setPreviewRefreshKey((key) => key + 1)}
 											onAIEdit={() => aiEditHandlerRef.current?.()}
 											onDevConsoleToggle={() =>
 												devConsoleToggleHandlerRef.current?.()
+											}
+											onFullscreenToggle={() =>
+												setIsPreviewFullscreen((previous) => !previous)
 											}
 										/>
 										<div className="min-h-0 flex-1 overflow-hidden">

@@ -3410,6 +3410,8 @@
 			"desktop": "Desktop preview",
 			"disableDebug": "Disable debugging",
 			"enableDebug": "Enable debugging",
+			"exitFullscreen": "Exit fullscreen",
+			"fullscreen": "Fullscreen preview",
 			"more": "More",
 			"noHtml": "No previewable HTML files",
 			"phone": "Mobile preview",
