@@ -54,6 +54,11 @@ const conversationPanelMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
+const topicHistoryMocks = vi.hoisted(() => ({
+	isOpen: false,
+	render: vi.fn(),
+}))
+
 const previewPopupMocks = vi.hoisted(() => ({
 	open: vi.fn(),
 }))
@@ -141,14 +146,17 @@ vi.mock("@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions", () => ({
 vi.mock("@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState", () => ({
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS: { microApp: "micro-app" },
 	useTopicHistoryLayoutState: () => ({
-		isTopicHistoryPanelOpen: false,
+		isTopicHistoryPanelOpen: topicHistoryMocks.isOpen,
 		closeTopicHistoryPanel: vi.fn(),
 		toggleTopicHistoryPanel: vi.fn(),
 	}),
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
-	MessageHeaderTopicHistoryPanel: () => null,
+	MessageHeaderTopicHistoryPanel: (props: Record<string, unknown>) => {
+		topicHistoryMocks.render(props)
+		return null
+	},
 }))
 
 vi.mock("../context", () => ({
@@ -341,6 +349,8 @@ describe("MicroAppPageDesktop", () => {
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
 		conversationPanelMocks.render.mockClear()
+		topicHistoryMocks.isOpen = false
+		topicHistoryMocks.render.mockClear()
 		previewPopupMocks.open.mockClear()
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
 	})
@@ -434,6 +444,16 @@ describe("MicroAppPageDesktop", () => {
 			expect.objectContaining({
 				onTerminalTopicStatusChange: controllerMocks.checkAttachmentsNowDebounced,
 			}),
+		)
+	})
+
+	it("hides the topic mode icon in the micro-app history panel", () => {
+		topicHistoryMocks.isOpen = true
+
+		render(<MicroAppPageDesktop />)
+
+		expect(topicHistoryMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({ hideTopicListModeIcon: true }),
 		)
 	})
 

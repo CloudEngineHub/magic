@@ -93,6 +93,7 @@ export default function MicroAppDesktopConversationPanels({
 						topicActions={topicActions}
 						isConversationPanelCollapsed={isMessagePanelCollapsed}
 						onExpandConversationPanel={onExpandConversationPanel}
+						hideTopicListModeIcon
 						onClose={onCloseHistoryPanel}
 					/>
 				</aside>
