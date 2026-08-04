@@ -27,7 +27,7 @@ test("uses the micro app project name for Node-rendered metadata", async () => {
 		)
 		return {
 			async json() {
-				return { data: { app_name: "测试微应用" } }
+				return { data: { project_name: "测试微应用" } }
 			},
 		}
 	}
@@ -44,7 +44,23 @@ test("uses the micro app project name for Node-rendered metadata", async () => {
 test("falls back to the localized micro app name when the project has no name", async () => {
 	global.fetch = async () => ({
 		async json() {
-			return { data: { app_name: "  " } }
+			return { data: { project_name: "  " } }
+		},
+	})
+
+	const result = await new SEO().microApp(createRequest())
+
+	assert.deepEqual(result, {
+		title: "微应用",
+		description: "微应用",
+		keywords: "微应用",
+	})
+})
+
+test("falls back to the localized micro app name when the micro app is unpublished", async () => {
+	global.fetch = async () => ({
+		async json() {
+			return { data: { project_name: "" } }
 		},
 	})
 

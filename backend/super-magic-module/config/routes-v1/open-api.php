@@ -14,11 +14,11 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\AiAbilityApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\FileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\TaskApi as InternalTaskApi;
-use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MicroAppProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayPublicApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenFileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMessageScheduleApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMicroAppApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenTaskApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenWorkspaceApi;
@@ -220,4 +220,4 @@ Router::addGroup(
 Router::get('/api/v1/open-api/super-magic/projects/{id}', [OpenProjectApi::class, 'show']);
 
 // 获取已发布微应用的项目名称（公开接口，仅用于 Web Node 服务生成页面标题）
-Router::get('/api/v1/open-api/super-magic/micro-apps/{appId}/title', [MicroAppProjectApi::class, 'getProjectTitle']);
+Router::get('/api/v1/open-api/super-magic/micro-apps/{appId}/title', [OpenMicroAppApi::class, 'showTitle']);

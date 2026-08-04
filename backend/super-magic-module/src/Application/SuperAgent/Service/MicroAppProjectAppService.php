@@ -55,6 +55,7 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly PackageFilterInterface $packageFilterService,
         private readonly FileDomainService $fileDomainService,
         private readonly EventDispatcherInterface $eventDispatcher,
+        private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
     ) {
     }
 
@@ -256,15 +257,12 @@ class MicroAppProjectAppService extends AbstractAppService
 
     public function resolvePublished(int $appId): array
     {
-        $record = $this->microAppRepository->findById($appId);
-        if ($record === null || $record->getPublishStatus() !== MicroAppPublishStatus::Published->value) {
+        $publishedMicroApp = $this->publishedMicroAppResolver->findPublished($appId);
+        if ($publishedMicroApp === null) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
         }
 
-        $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
-        if ($shareEntity === null) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
-        }
+        [$record, $shareEntity] = $publishedMicroApp;
 
         $coverKey = trim((string) ($record->getCoverFileKey() ?? ''));
         $coverRow = [
@@ -279,26 +277,6 @@ class MicroAppProjectAppService extends AbstractAppService
             'share_code' => $shareEntity->getShareCode(),
             'cover_url' => $coverUrls[$this->coverUrlMapKey($coverRow, $coverKey)] ?? '',
         ];
-    }
-
-    public function getProjectTitle(int $appId): array
-    {
-        $record = $this->microAppRepository->findById($appId);
-        if ($record === null || $record->getPublishStatus() !== MicroAppPublishStatus::Published->value) {
-            return ['app_name' => ''];
-        }
-
-        $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
-        if ($shareEntity === null) {
-            return ['app_name' => ''];
-        }
-
-        $project = $this->projectRepository->findById($record->getProjectId());
-        if ($project === null || $project->getDeletedAt() !== null) {
-            return ['app_name' => ''];
-        }
-
-        return ['app_name' => trim($project->getProjectName())];
     }
 
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
