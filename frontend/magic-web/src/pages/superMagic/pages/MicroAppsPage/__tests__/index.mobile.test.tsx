@@ -1,4 +1,3 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, PropsWithChildren, ReactNode } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RouteName } from "@/routes/constants"
@@ -6,16 +5,17 @@ import MicroAppsPageMobile from "../index.mobile"
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
-	setScope: vi.fn(),
-	setKeyword: vi.fn(),
-	refresh: vi.fn(),
-	loadMore: vi.fn(),
-	useMicroAppsPage: vi.fn(),
-	t: (key: string) => key,
+	useMicroAppWorkspace: vi.fn(),
 }))
 
+interface MockCreatePromptProps {
+	onCreated: (appId: string) => void
+	onFocusChange?: (focused: boolean) => void
+	mobile?: boolean
+}
+
 vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ t: mocks.t }),
+	useTranslation: () => ({ t: (key: string) => key }),
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
@@ -23,14 +23,15 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 }))
 
 vi.mock("../hooks/useMicroAppsPage", () => ({
-	useMicroAppsPage: mocks.useMicroAppsPage,
+	useMicroAppWorkspace: mocks.useMicroAppWorkspace,
 }))
 
 vi.mock("../components/MicroAppCreatePrompt", () => ({
-	default: ({ onCreated, onFocusChange }: any) => (
+	default: ({ onCreated, onFocusChange, mobile }: MockCreatePromptProps) => (
 		<button
 			type="button"
 			data-testid="mock-mobile-create-prompt"
+			data-mobile={mobile}
 			onClick={() => onCreated("app-new")}
 			onFocus={() => onFocusChange?.(true)}
 			onBlur={() => onFocusChange?.(false)}
@@ -40,131 +41,39 @@ vi.mock("../components/MicroAppCreatePrompt", () => ({
 	),
 }))
 
-vi.mock("../components/MicroAppFloatingBackdrop", () => ({
-	default: ({ active }: { active?: boolean }) => (
-		<div data-testid="mock-mobile-floating-backdrop" data-active={active} />
-	),
-}))
-
-vi.mock("../components/MicroAppCard", () => ({
-	default: ({ title, description, meta, coverUrl, statusLabel, onClick, testId }: any) => (
-		<button type="button" data-testid={testId} data-cover-url={coverUrl} onClick={onClick}>
-			{title}
-			<span>{description}</span>
-			<span>{meta}</span>
-			<span>{statusLabel}</span>
-		</button>
-	),
+vi.mock("../components/MicroAppHeroTitle", () => ({
+	default: () => <h1>hero</h1>,
 }))
 
 vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 	MobileShellSidebarToggleButton: () => <button type="button">menu</button>,
 }))
 
-vi.mock("@/components/shadcn-ui/tabs", async () => {
-	const React = await import("react")
-	const TabsContext = React.createContext<{ onValueChange?: (value: string) => void }>({})
-	return {
-		Tabs: ({
-			children,
-			onValueChange,
-			...props
-		}: PropsWithChildren<
-			HTMLAttributes<HTMLDivElement> & { onValueChange?: (value: string) => void }
-		>) => (
-			<TabsContext.Provider value={{ onValueChange }}>
-				<div {...props}>{children}</div>
-			</TabsContext.Provider>
-		),
-		TabsList: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) => (
-			<div {...props}>{children}</div>
-		),
-		TabsTrigger: ({
-			children,
-			value,
-			...props
-		}: PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement> & { value: string }>) => {
-			const context = React.useContext(TabsContext)
-			return (
-				<button type="button" {...props} onClick={() => context.onValueChange?.(value)}>
-					{children}
-				</button>
-			)
-		},
-	}
-})
-
-vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
-	ScrollEdgeFadeContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-
 describe("MicroAppsPageMobile", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		mocks.useMicroAppsPage.mockReturnValue({
-			workspace: { id: "workspace-1", name: "Micro Apps" },
-			apps: [
-				{
-					app_id: "app-1",
-					app_name: "客户跟进助手",
-					app_description: "客户跟进与提醒工具",
-					creator_id: "user-1",
-					cover_url: "",
-					publish_status: "unpublished",
-					updated_at: null,
-				},
-			],
-			scope: "all",
-			setScope: mocks.setScope,
-			keyword: "",
-			setKeyword: mocks.setKeyword,
-			loading: false,
-			loadingMore: false,
-			hasMore: true,
-			error: null,
-			refresh: mocks.refresh,
-			loadMore: mocks.loadMore,
-		})
+		mocks.useMicroAppWorkspace.mockReturnValue({ id: "workspace-1", name: "Micro Apps" })
 	})
 
-	it("opens an app directly by app_id", async () => {
+	it("keeps the creation composer at the bottom and opens the list from the header", () => {
 		render(<MicroAppsPageMobile />)
 
-		expect(screen.getByTestId("micro-apps-page-mobile")).toHaveAttribute(
-			"data-slot",
-			"scroll-area",
+		expect(screen.getByTestId("micro-apps-mobile-create-dock")).toContainElement(
+			screen.getByTestId("mock-mobile-create-prompt"),
 		)
-		expect(
-			screen
-				.getByTestId("micro-apps-page-mobile")
-				.querySelector('[data-slot="scroll-area-viewport"]'),
-		).toBeInTheDocument()
-		const appCard = screen.getByTestId("micro-apps-mobile-app-app-1")
-		expect(screen.getByText("客户跟进与提醒工具")).toBeInTheDocument()
-		expect(screen.getByText("microAppsPage.statusUnpublished")).toBeInTheDocument()
-		fireEvent.click(appCard)
+		expect(screen.getByTestId("mock-mobile-create-prompt")).toHaveAttribute(
+			"data-mobile",
+			"true",
+		)
+		expect(screen.queryByTestId("micro-apps-mobile-search")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-mosaic")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-mobile-open-list")).toHaveClass(
+			"mobile-page-header-btn",
+		)
 
-		await waitFor(() => {
-			expect(mocks.navigate).toHaveBeenCalledWith({
-				name: RouteName.MicroApp,
-				params: { appId: "app-1" },
-				viewTransition: false,
-			})
-		})
-	})
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-open-list"))
 
-	it("changes scope, searches, and loads more", () => {
-		render(<MicroAppsPageMobile />)
-
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-scope-collaborated"))
-		fireEvent.change(screen.getByTestId("micro-apps-mobile-search"), {
-			target: { value: "客户" },
-		})
-		fireEvent.click(screen.getByTestId("micro-apps-mobile-load-more"))
-
-		expect(mocks.setScope).toHaveBeenCalledWith("collaborated")
-		expect(mocks.setKeyword).toHaveBeenCalledWith("客户")
-		expect(mocks.loadMore).toHaveBeenCalled()
+		expect(mocks.navigate).toHaveBeenCalledWith({ name: RouteName.MicroAppsList })
 	})
 
 	it("enters the new app after the mobile creation prompt returns app_id", async () => {

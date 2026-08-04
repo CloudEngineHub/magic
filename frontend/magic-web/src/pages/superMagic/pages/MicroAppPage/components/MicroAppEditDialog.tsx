@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, ImagePlus, Loader2, Trash2 } from "lucide-react"
+import { ImagePlus, Loader2, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { FileApi, SuperMagicApi } from "@/apis"
 import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
+import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -22,6 +23,7 @@ interface MicroAppEditDialogProps {
 	open: boolean
 	appId?: string
 	projectName?: string
+	mobile?: boolean
 	isSubmitting?: boolean
 	onOpenChange: (open: boolean) => void
 	onConfirm: (changes: UpdateMicroAppBody) => Promise<boolean>
@@ -35,10 +37,10 @@ export default function MicroAppEditDialog({
 	open,
 	appId,
 	projectName,
+	mobile = false,
 	isSubmitting = false,
 	onOpenChange,
 	onConfirm,
-	onCaptureCover,
 }: MicroAppEditDialogProps) {
 	const { t } = useTranslation("super")
 	const coverInputRef = useRef<HTMLInputElement>(null)
@@ -71,7 +73,8 @@ export default function MicroAppEditDialog({
 	}, [open, projectName])
 
 	useEffect(() => {
-		if (!open || !appId) return
+		const currentAppId = appId
+		if (!open || !currentAppId) return
 
 		let ignore = false
 		async function loadMetadata() {
@@ -82,7 +85,7 @@ export default function MicroAppEditDialog({
 			setCoverFileKey(null)
 			setCoverUrl("")
 			try {
-				const detail = await SuperMagicApi.getMicroAppProject(appId!)
+				const detail = await SuperMagicApi.getMicroAppProject(currentAppId)
 				if (ignore) return
 
 				const nextCoverFileKey = detail.publish?.cover_file_key ?? null
@@ -204,24 +207,6 @@ export default function MicroAppEditDialog({
 		return () => document.removeEventListener("paste", handlePaste)
 	}, [capturing, handleCoverFile, isSubmitting, loading, open, uploading])
 
-	const handleCaptureCover = useCallback(async () => {
-		if (!onCaptureCover || capturing) return
-		setCapturing(true)
-		try {
-			const blob = await onCaptureCover()
-			const file = new File([blob], `micro-app-cover-${Date.now()}.webp`, {
-				type: blob.type || "image/webp",
-			})
-			setLocalCoverFile(file)
-			magicToast.success(t("microAppPage.edit.captureSuccess"))
-		} catch (error) {
-			console.error("Failed to capture micro app cover:", error)
-			magicToast.error(t("microAppPage.edit.captureFailed"))
-		} finally {
-			setCapturing(false)
-		}
-	}, [capturing, onCaptureCover, setLocalCoverFile, t])
-
 	const handleClearCover = useCallback(() => {
 		revokeCoverObjectUrl()
 		setCoverUploadError(false)
@@ -254,13 +239,165 @@ export default function MicroAppEditDialog({
 		if (updated) onOpenChange(false)
 	}
 
-	return (
-		<Dialog
-			open={open}
-			onOpenChange={(nextOpen) => {
-				if (!isSubmitting && !uploading && !capturing) onOpenChange(nextOpen)
-			}}
+	function handleContainerOpenChange(nextOpen: boolean) {
+		if (!isSubmitting && !uploading && !capturing) onOpenChange(nextOpen)
+	}
+
+	const formFields = (
+		<>
+			<label className="flex flex-col gap-2 text-sm font-medium text-foreground">
+				<span>{t("microAppPage.edit.nameLabel")}</span>
+				<Input
+					autoFocus={shouldAutoFocusInput}
+					maxLength={100}
+					value={nameInput}
+					placeholder={t("microAppPage.edit.namePlaceholder")}
+					disabled={loading || isSubmitting}
+					onChange={(event) => setNameInput(event.target.value)}
+					data-testid="micro-app-edit-name-input"
+				/>
+			</label>
+
+			<div className="flex flex-col gap-2">
+				<div>
+					<p className="text-sm font-medium text-foreground">
+						{t("microAppPage.edit.coverLabel")}
+					</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						{t("microAppPage.edit.coverDescription")}
+					</p>
+				</div>
+
+				<div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-border bg-muted">
+					{coverUrl ? (
+						<img
+							src={coverUrl}
+							alt={t("microAppPage.edit.coverPreviewAlt")}
+							className="size-full object-cover"
+							data-testid="micro-app-edit-cover-preview"
+						/>
+					) : (
+						<div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
+							<ImagePlus className="size-7" aria-hidden />
+							<span className="text-xs">
+								{loading ? t("common.loading") : t("microAppPage.edit.coverEmpty")}
+							</span>
+						</div>
+					)}
+					{coverUrl ? (
+						<Button
+							type="button"
+							variant="secondary"
+							size="icon"
+							className="absolute right-2 top-2 size-8 bg-background/90"
+							onClick={handleClearCover}
+							disabled={uploading || capturing || isSubmitting}
+							aria-label={t("microAppPage.edit.clearCover")}
+						>
+							<Trash2 className="size-4" aria-hidden />
+						</Button>
+					) : null}
+				</div>
+
+				<input
+					ref={coverInputRef}
+					type="file"
+					accept="image/*"
+					className="hidden"
+					onChange={handleCoverChange}
+				/>
+				<div className="flex flex-wrap gap-2">
+					<Button
+						type="button"
+						variant="outline"
+						className="gap-2"
+						onClick={() => coverInputRef.current?.click()}
+						disabled={capturing || uploading || loading || isSubmitting}
+					>
+						{uploading ? (
+							<Loader2 className="size-4 animate-spin" aria-hidden />
+						) : (
+							<ImagePlus className="size-4" aria-hidden />
+						)}
+						{uploading
+							? t("microAppPage.edit.uploading")
+							: t("microAppPage.edit.uploadCover")}
+					</Button>
+				</div>
+			</div>
+		</>
+	)
+
+	const cancelButton = (
+		<Button
+			type="button"
+			variant="outline"
+			className={mobile ? "h-11 w-full" : undefined}
+			disabled={isSubmitting || uploading || capturing}
+			onClick={() => onOpenChange(false)}
 		>
+			{t("common.cancel")}
+		</Button>
+	)
+	const saveButton = (
+		<Button
+			type="submit"
+			className={mobile ? "h-11 w-full" : undefined}
+			disabled={!canSubmit}
+			data-testid="micro-app-edit-confirm"
+		>
+			{isSubmitting ? t("common.loading") : t("common.save")}
+		</Button>
+	)
+
+	if (mobile) {
+		const isBusy = isSubmitting || uploading || capturing
+		const closeMobilePopup = () => handleContainerOpenChange(false)
+
+		return (
+			<MagicPopup
+				visible={open}
+				onClose={closeMobilePopup}
+				position="bottom"
+				title={t("microAppPage.edit.title")}
+				headerVariant="actionHeader"
+				headerTitle={t("microAppPage.edit.title")}
+				headerLeadingAction={{
+					icon: <X />,
+					ariaLabel: t("common.cancel"),
+					onClick: closeMobilePopup,
+					disabled: isBusy,
+					testId: "micro-app-edit-close",
+				}}
+				dismissible={!isBusy}
+				maskClosable={!isBusy}
+				className="max-h-[88dvh] rounded-t-[20px] border-0 p-0"
+				bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+			>
+				<div
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					data-testid="micro-app-edit-dialog"
+					data-mobile="true"
+				>
+					<form
+						className="flex min-h-0 flex-1 flex-col overflow-hidden"
+						onSubmit={handleSubmit}
+					>
+						<div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-5 pt-1">
+							{formFields}
+						</div>
+						<div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-background px-4 pb-4 pt-3">
+							{saveButton}
+							{cancelButton}
+						</div>
+					</form>
+				</div>
+			</MagicPopup>
+		)
+	}
+
+	return (
+		<Dialog open={open} onOpenChange={handleContainerOpenChange}>
 			<DialogContent
 				className="sm:max-w-[520px]"
 				showCloseButton={!isSubmitting && !uploading && !capturing}
@@ -276,128 +413,11 @@ export default function MicroAppEditDialog({
 				</DialogHeader>
 
 				<form className="flex flex-col gap-5" onSubmit={handleSubmit}>
-					<label className="flex flex-col gap-2 text-sm font-medium text-foreground">
-						<span>{t("microAppPage.edit.nameLabel")}</span>
-						<Input
-							autoFocus={shouldAutoFocusInput}
-							maxLength={100}
-							value={nameInput}
-							placeholder={t("microAppPage.edit.namePlaceholder")}
-							disabled={loading || isSubmitting}
-							onChange={(event) => setNameInput(event.target.value)}
-							data-testid="micro-app-edit-name-input"
-						/>
-					</label>
-
-					<div className="flex flex-col gap-2">
-						<div>
-							<p className="text-sm font-medium text-foreground">
-								{t("microAppPage.edit.coverLabel")}
-							</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								{t("microAppPage.edit.coverDescription")}
-							</p>
-						</div>
-
-						<div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-border bg-muted">
-							{coverUrl ? (
-								<img
-									src={coverUrl}
-									alt={t("microAppPage.edit.coverPreviewAlt")}
-									className="size-full object-cover"
-									data-testid="micro-app-edit-cover-preview"
-								/>
-							) : (
-								<div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
-									<ImagePlus className="size-7" aria-hidden />
-									<span className="text-xs">
-										{loading
-											? t("common.loading")
-											: t("microAppPage.edit.coverEmpty")}
-									</span>
-								</div>
-							)}
-							{coverUrl ? (
-								<Button
-									type="button"
-									variant="secondary"
-									size="icon"
-									className="absolute right-2 top-2 size-8 bg-background/90"
-									onClick={handleClearCover}
-									disabled={uploading || capturing || isSubmitting}
-									aria-label={t("microAppPage.edit.clearCover")}
-								>
-									<Trash2 className="size-4" aria-hidden />
-								</Button>
-							) : null}
-						</div>
-
-						<input
-							ref={coverInputRef}
-							type="file"
-							accept="image/*"
-							className="hidden"
-							onChange={handleCoverChange}
-						/>
-						<div className="flex flex-wrap gap-2">
-							{/* <Button
-								type="button"
-								variant="outline"
-								className="gap-2"
-								onClick={() => void handleCaptureCover()}
-								disabled={
-									!onCaptureCover ||
-									capturing ||
-									uploading ||
-									loading ||
-									isSubmitting
-								}
-								data-testid="micro-app-capture-cover"
-							>
-								{capturing ? (
-									<Loader2 className="size-4 animate-spin" aria-hidden />
-								) : (
-									<Camera className="size-4" aria-hidden />
-								)}
-								{capturing
-									? t("microAppPage.edit.capturing")
-									: t("microAppPage.edit.captureCover")}
-							</Button> */}
-							<Button
-								type="button"
-								variant="outline"
-								className="gap-2"
-								onClick={() => coverInputRef.current?.click()}
-								disabled={capturing || uploading || loading || isSubmitting}
-							>
-								{uploading ? (
-									<Loader2 className="size-4 animate-spin" aria-hidden />
-								) : (
-									<ImagePlus className="size-4" aria-hidden />
-								)}
-								{uploading
-									? t("microAppPage.edit.uploading")
-									: t("microAppPage.edit.uploadCover")}
-							</Button>
-						</div>
-					</div>
+					{formFields}
 
 					<DialogFooter>
-						<Button
-							type="button"
-							variant="outline"
-							disabled={isSubmitting || uploading || capturing}
-							onClick={() => onOpenChange(false)}
-						>
-							{t("common.cancel")}
-						</Button>
-						<Button
-							type="submit"
-							disabled={!canSubmit}
-							data-testid="micro-app-edit-confirm"
-						>
-							{isSubmitting ? t("common.loading") : t("common.save")}
-						</Button>
+						{cancelButton}
+						{saveButton}
 					</DialogFooter>
 				</form>
 			</DialogContent>

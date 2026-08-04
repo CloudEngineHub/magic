@@ -7,6 +7,7 @@ import MicroAppEditDialog from "./MicroAppEditDialog"
 interface MicroAppPageOverlaysProps {
 	appId?: string
 	projectName?: string
+	mobile?: boolean
 	publishDialogOpen: boolean
 	onPublishDialogOpenChange: (open: boolean) => void
 	onPublishStatusChange: (published: boolean) => void
@@ -23,6 +24,7 @@ interface MicroAppPageOverlaysProps {
 export default function MicroAppPageOverlays({
 	appId,
 	projectName,
+	mobile = false,
 	publishDialogOpen,
 	onPublishDialogOpenChange,
 	onPublishStatusChange,
@@ -40,6 +42,7 @@ export default function MicroAppPageOverlays({
 				open={publishDialogOpen}
 				appId={appId}
 				projectName={projectName}
+				mobile={mobile}
 				onProjectNameChange={onProjectNameChange}
 				onPublishStatusChange={onPublishStatusChange}
 				onOpenChange={onPublishDialogOpenChange}
@@ -48,6 +51,7 @@ export default function MicroAppPageOverlays({
 				open={editDialogOpen}
 				appId={appId}
 				projectName={projectName}
+				mobile={mobile}
 				isSubmitting={editSubmitting}
 				onOpenChange={onEditDialogOpenChange}
 				onConfirm={onEditMicroApp}

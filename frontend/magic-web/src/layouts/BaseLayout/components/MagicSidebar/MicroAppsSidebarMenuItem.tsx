@@ -43,6 +43,7 @@ export function MicroAppsSidebarMenuItem({ collapsed }: MicroAppsSidebarMenuItem
 				className="text-sidebar-foreground"
 				isActive={
 					routesPathMatch(RouteName.MicroApps, location.pathname) ||
+					routesPathMatch(RouteName.MicroAppsList, location.pathname) ||
 					routesPathMatch(RouteName.MicroApp, location.pathname)
 				}
 			>

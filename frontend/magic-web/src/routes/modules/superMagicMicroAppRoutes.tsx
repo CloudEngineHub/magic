@@ -17,6 +17,14 @@ export const superMagicMicroAppRoutes: RouteObject[] = [
 		},
 	},
 	{
+		name: RouteName.MicroAppsList,
+		path: `/:clusterCode${RoutePath.MicroAppsList}`,
+		element: <MicroAppsPage mobileView="list" />,
+		meta: {
+			title: "routes.application",
+		},
+	},
+	{
 		name: RouteName.MicroApp,
 		path: `/:clusterCode${RoutePath.MicroApp}`,
 		element: <MicroAppPage />,

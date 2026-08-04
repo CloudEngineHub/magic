@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ComponentProps } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import MicroAppPublishDialog, {
@@ -84,6 +84,25 @@ vi.mock("@/components/base/MagicModal", async () => {
 	)
 	return { default: MagicModal }
 })
+
+vi.mock("@/components/base-mobile/MagicPopup", () => ({
+	default: ({
+		children,
+		visible,
+		position,
+		className,
+	}: {
+		children: ReactNode
+		visible?: boolean
+		position?: string
+		className?: string
+	}) =>
+		visible ? (
+			<div data-testid="mobile-publish-popup" data-position={position} className={className}>
+				{children}
+			</div>
+		) : null,
+}))
 
 vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
 	const React = await import("react")
@@ -218,6 +237,24 @@ describe("MicroAppPublishDialog", () => {
 			"grid",
 			"max-h-[80dvh]",
 			"grid-rows-[minmax(0,1fr)_auto_auto]",
+		)
+	})
+
+	it("uses a fixed-height mobile bottom popup with a scrollable form area", async () => {
+		renderDialog({ mobile: true })
+
+		const popup = screen.getByTestId("mobile-publish-popup")
+		expect(popup).toHaveAttribute("data-position", "bottom")
+		expect(popup).toHaveClass("h-[88dvh]", "max-h-[88dvh]")
+		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveAttribute(
+			"data-mobile",
+			"true",
+		)
+
+		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
+		expect(scrollArea).toHaveClass("min-h-0", "flex-1")
+		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).toHaveClass(
+			"touch-pan-y",
 		)
 	})
 

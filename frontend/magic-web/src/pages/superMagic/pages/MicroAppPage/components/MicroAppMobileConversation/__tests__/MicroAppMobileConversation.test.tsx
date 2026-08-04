@@ -183,6 +183,7 @@ describe("MicroApp mobile conversation controls", () => {
 			"default",
 		)
 		expect(screen.getByTestId("mobile-message-list")).toBeInTheDocument()
+		expect(screen.queryByText("microAppPage.issuePrompts.trigger")).not.toBeInTheDocument()
 		expect(
 			screen.getByTestId("micro-app-mobile-conversation-empty-illustration"),
 		).toHaveAttribute("data-state", "conversation-empty")

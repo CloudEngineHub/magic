@@ -3486,6 +3486,7 @@
 		"user": "已登录用户"
 	},
 	"microAppsPage": {
+		"backToCreate": "返回创建微应用",
 		"createProject": "新建项目",
 		"createProjectFailed": "新建项目失败，请重试。",
 		"draftBadge": "开发中",
@@ -3514,6 +3515,7 @@
 		"loadMore": "加载更多",
 		"noSearchResults": "没有匹配的微应用",
 		"noSearchResultsDescription": "换个关键词试试。",
+		"openGallery": "查看微应用列表",
 		"publishedEmptyDescription": "发布者把微应用分享给你后，会显示在这里。",
 		"publishedEmptyTitle": "暂无可访问的微应用",
 		"refresh": "刷新",

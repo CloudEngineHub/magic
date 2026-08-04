@@ -60,12 +60,22 @@ vi.mock(
 	}),
 )
 
+vi.mock("@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer", () => ({
+	default: ({ editorContext }: { editorContext: SceneEditorContext }) => {
+		mocks.editorContext = editorContext
+		return <div data-testid="mock-mobile-input-container" />
+	},
+}))
+
 vi.mock("@/pages/superMagic/components/MainInputContainer/stores", () => ({
 	SceneStateProvider: ({ children }: { children: ReactNode }) => children,
 	buildTopicInputScopeKey: () => "micro-apps-create",
 	createSceneStateStore: () => ({
 		setInputScopeKey: vi.fn(),
 	}),
+	sceneStateStore: {
+		setInputScopeKey: vi.fn(),
+	},
 }))
 
 describe("MicroAppCreatePrompt", () => {
@@ -149,6 +159,11 @@ describe("MicroAppCreatePrompt", () => {
 
 		expect(mocks.editorContext?.placeholder).toBe("microAppsPage.heroPlaceholder")
 		expect(mocks.editorContext?.promptCarousel).toBeUndefined()
+		expect(mocks.editorContext?.showModeToggle).toBe(false)
+		expect(mocks.editorContext?.showModelSelector).toBe(true)
+		expect(mocks.editorContext?.containerClassName).toBeUndefined()
+		expect(screen.getByTestId("mock-mobile-input-container")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-editor-send-success")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("micro-apps-keyboard-port")).not.toBeInTheDocument()
 	})
 

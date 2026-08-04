@@ -36,7 +36,7 @@ export default function MobileDatabaseTableList({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="shrink-0 px-4 pb-3">
+			<div className="shrink-0 p-3">
 				<div className="relative">
 					<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input

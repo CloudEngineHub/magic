@@ -3486,6 +3486,7 @@
 		"user": "Signed-in user"
 	},
 	"microAppsPage": {
+		"backToCreate": "Back to create a micro app",
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
 		"draftBadge": "In progress",
@@ -3514,6 +3515,7 @@
 		"loadMore": "Load more",
 		"noSearchResults": "No matching micro apps",
 		"noSearchResultsDescription": "Try a different keyword.",
+		"openGallery": "View micro app list",
 		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
 		"publishedEmptyTitle": "No accessible micro apps",
 		"refresh": "Refresh",

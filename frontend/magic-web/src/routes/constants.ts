@@ -40,6 +40,8 @@ export enum RouteName {
 	SuperWorkspaceProjectTopicState = "SuperWorkspaceProjectTopicState",
 	/** 微应用列表 */
 	MicroApps = "MicroApps",
+	/** 微应用项目列表（移动端独立页） */
+	MicroAppsList = "MicroAppsList",
 	/** 微应用开发页面 */
 	MicroApp = "MicroApp",
 	/** 微应用发布访问页 */

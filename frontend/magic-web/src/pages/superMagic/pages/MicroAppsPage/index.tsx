@@ -24,6 +24,7 @@ import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
+const MicroAppsListPageMobile = lazy(() => import("./list.mobile"))
 
 function formatAppTime(value: string | null | undefined): string {
 	if (!value) return ""
@@ -288,7 +289,11 @@ function MicroAppsPageDesktop() {
 	)
 }
 
-export default function MicroAppsPage() {
+interface MicroAppsPageProps {
+	mobileView?: "home" | "list"
+}
+
+export default function MicroAppsPage({ mobileView = "home" }: MicroAppsPageProps) {
 	const isMobile = useIsMobile()
 
 	if (isMobile) {
@@ -300,7 +305,7 @@ export default function MicroAppsPage() {
 					</div>
 				}
 			>
-				<MicroAppsPageMobile />
+				{mobileView === "list" ? <MicroAppsListPageMobile /> : <MicroAppsPageMobile />}
 			</Suspense>
 		)
 	}

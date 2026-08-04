@@ -48,24 +48,15 @@ export function normalizeMicroAppListResponse(response: unknown): MicroAppListRe
 	}
 }
 
-export function useMicroAppsPage() {
+export function useMicroAppWorkspace(refreshVersion = 0) {
 	const [workspace, setWorkspace] = useState<Workspace | null>(null)
-	const [apps, setApps] = useState<MicroAppListItem[]>([])
-	const [scope, setScope] = useState<MicroAppListScope>("all")
-	const [keyword, setKeyword] = useState("")
-	const [page, setPage] = useState(1)
-	const [total, setTotal] = useState(0)
-	const [loading, setLoading] = useState(true)
-	const [loadingMore, setLoadingMore] = useState(false)
-	const [error, setError] = useState<unknown>(null)
-	const [refreshVersion, setRefreshVersion] = useState(0)
-	const requestIdRef = useRef(0)
 	const workspaceRef = useRef<Workspace | null>(null)
 
 	useEffect(() => {
 		if (workspaceRef.current) return
 
 		let active = true
+
 		SuperMagicApi.getMicroAppWorkspace()
 			.then((nextWorkspace) => {
 				if (!active) return
@@ -81,6 +72,21 @@ export function useMicroAppsPage() {
 		}
 	}, [refreshVersion])
 
+	return workspace
+}
+
+export function useMicroAppsPage() {
+	const [apps, setApps] = useState<MicroAppListItem[]>([])
+	const [scope, setScope] = useState<MicroAppListScope>("all")
+	const [keyword, setKeyword] = useState("")
+	const [page, setPage] = useState(1)
+	const [total, setTotal] = useState(0)
+	const [loading, setLoading] = useState(true)
+	const [loadingMore, setLoadingMore] = useState(false)
+	const [error, setError] = useState<unknown>(null)
+	const [refreshVersion, setRefreshVersion] = useState(0)
+	const requestIdRef = useRef(0)
+	const workspace = useMicroAppWorkspace(refreshVersion)
 	useEffect(() => {
 		const requestId = ++requestIdRef.current
 		let active = true

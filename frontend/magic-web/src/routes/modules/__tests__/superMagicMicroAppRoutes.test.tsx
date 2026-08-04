@@ -6,13 +6,18 @@ import { microAppPublicRoutes, superMagicMicroAppRoutes } from "../superMagicMic
 describe("superMagicMicroAppRoutes", () => {
 	it("registers workspace micro app routes", () => {
 		const listRoute = superMagicMicroAppRoutes.find((item) => item.name === RouteName.MicroApps)
+		const mobileListRoute = superMagicMicroAppRoutes.find(
+			(item) => item.name === RouteName.MicroAppsList,
+		)
 		const detailRoute = superMagicMicroAppRoutes.find(
 			(item) => item.name === RouteName.MicroApp,
 		)
 
 		expect(RoutePath.MicroApps).toBe("/super/micro-apps")
+		expect(RoutePath.MicroAppsList).toBe("/super/micro-apps/list")
 		expect(RoutePath.MicroApp).toBe("/super/micro-app/:appId")
 		expect(listRoute?.path).toBe("/:clusterCode/super/micro-apps")
+		expect(mobileListRoute?.path).toBe("/:clusterCode/super/micro-apps/list")
 		expect(detailRoute?.path).toBe("/:clusterCode/super/micro-app/:appId")
 	})
 

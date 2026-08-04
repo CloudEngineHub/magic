@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -39,6 +40,26 @@ vi.mock("@/hooks/useUploadFiles", () => ({
 			uploading: false,
 		}
 	},
+}))
+
+vi.mock("@/components/base-mobile/MagicPopup", () => ({
+	default: ({
+		children,
+		visible,
+		position,
+		headerSubtitle,
+	}: {
+		children: ReactNode
+		visible?: boolean
+		position?: string
+		headerSubtitle?: ReactNode
+	}) =>
+		visible ? (
+			<div data-testid="mobile-edit-popup" data-position={position}>
+				{headerSubtitle ? <div>{headerSubtitle}</div> : null}
+				{children}
+			</div>
+		) : null,
 }))
 
 describe("MicroAppEditDialog", () => {
@@ -118,38 +139,25 @@ describe("MicroAppEditDialog", () => {
 		})
 	})
 
-	it("captures the home page, uploads it, and submits the cover key", async () => {
-		const onConfirm = vi.fn().mockResolvedValue(true)
-		const onCaptureCover = vi
-			.fn()
-			.mockResolvedValue(new Blob(["cover"], { type: "image/webp" }))
+	it("uses the shared mobile bottom popup", async () => {
 		render(
 			<MicroAppEditDialog
 				open
 				appId="app-1"
 				projectName="Demo App"
+				mobile
 				onOpenChange={vi.fn()}
-				onConfirm={onConfirm}
-				onCaptureCover={onCaptureCover}
+				onConfirm={vi.fn().mockResolvedValue(true)}
 			/>,
 		)
 
-		await waitFor(() => expect(apiMocks.getMicroAppProject).toHaveBeenCalled())
+		await waitFor(() => expect(apiMocks.getMicroAppProject).toHaveBeenCalledWith("app-1"))
 		await waitFor(() =>
-			expect(screen.getByTestId("micro-app-capture-cover")).not.toBeDisabled(),
+			expect(screen.getByTestId("micro-app-edit-name-input")).not.toBeDisabled(),
 		)
-		fireEvent.click(screen.getByTestId("micro-app-capture-cover"))
-
-		await waitFor(() => expect(onCaptureCover).toHaveBeenCalledOnce())
-		await waitFor(() => expect(uploadMocks.uploadAndGetFileUrl).toHaveBeenCalledOnce())
-		await waitFor(() => expect(screen.getByTestId("micro-app-edit-confirm")).not.toBeDisabled())
-		fireEvent.click(screen.getByTestId("micro-app-edit-confirm"))
-
-		await waitFor(() =>
-			expect(onConfirm).toHaveBeenCalledWith({
-				cover_file_key: "micro-app/covers/new.webp",
-			}),
-		)
+		expect(screen.getByTestId("mobile-edit-popup")).toHaveAttribute("data-position", "bottom")
+		expect(screen.getByTestId("micro-app-edit-dialog")).toHaveAttribute("data-mobile", "true")
+		expect(screen.queryByText("microAppPage.edit.description")).not.toBeInTheDocument()
 	})
 
 	it("uploads a pasted image and submits the cover key", async () => {

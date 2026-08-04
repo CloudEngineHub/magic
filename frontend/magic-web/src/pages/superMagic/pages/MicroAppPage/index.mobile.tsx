@@ -247,6 +247,7 @@ function MicroAppPageMobileInner({
 			<MicroAppPageOverlays
 				appId={appId}
 				projectName={selectedProject?.project_name}
+				mobile
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
 				onPublishStatusChange={onPublishStatusChange}

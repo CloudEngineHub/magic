@@ -10,6 +10,7 @@ import {
 	SceneStateProvider,
 	buildTopicInputScopeKey,
 	createSceneStateStore,
+	sceneStateStore as sharedSceneStateStore,
 } from "@/pages/superMagic/components/MainInputContainer/stores"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types"
@@ -17,6 +18,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { CreatedProject, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { resolveMicroAppModelSelectionMode } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppModelMode"
+import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
 import promptExampleData from "./microAppPromptExamples.json"
 import styles from "./MicroAppCreatePrompt.module.css"
 import cableStyles from "./MicroAppKeyboardCable.module.css"
@@ -51,7 +53,9 @@ function MicroAppCreatePrompt({
 }: MicroAppCreatePromptProps) {
 	const { t } = useTranslation("super")
 	const lt = useLocaleText()
-	const [sceneStateStore] = useState(() => createSceneStateStore())
+	const [sceneStateStore] = useState(() =>
+		mobile ? sharedSceneStateStore : createSceneStateStore(),
+	)
 	const modelTopicMode = resolveMicroAppModelSelectionMode()
 	const appIdsByProjectIdRef = useRef(new Map<string, string>())
 	const promptCarousel = useMemo<SceneEditorContext["promptCarousel"]>(() => {
@@ -107,8 +111,14 @@ function MicroAppCreatePrompt({
 			enableMessageSendByContent: true,
 			skipInitialDraftRestore: true,
 			size: mobile ? "mobile" : "default",
-			containerClassName: `${EDITOR_CONTAINER_CLASS_NAME} ${styles.retroEnterKeyScope}`,
-			className: mobile ? "min-h-[70px]" : "min-h-[92px]",
+			containerClassName: mobile
+				? undefined
+				: `${EDITOR_CONTAINER_CLASS_NAME} ${styles.retroEnterKeyScope}`,
+			className: mobile ? undefined : "min-h-[92px]",
+			showModeToggle: mobile ? false : undefined,
+			showModelSelector: mobile ? true : undefined,
+			onEditorFocus: () => onFocusChange?.(true),
+			onEditorBlur: () => onFocusChange?.(false),
 			layoutConfig: {
 				topBarLeft: [ToolbarButton.AT],
 				bottomLeft: [ToolbarButton.MODEL_SWITCH],
@@ -147,7 +157,7 @@ function MicroAppCreatePrompt({
 				if (appId) onCreated(appId)
 			},
 		}),
-		[mobile, modelTopicMode, onCreated, promptCarousel, t, workspace],
+		[mobile, modelTopicMode, onCreated, onFocusChange, promptCarousel, t, workspace],
 	)
 
 	return (
@@ -155,8 +165,9 @@ function MicroAppCreatePrompt({
 			<div
 				className={`${cableStyles.promptShell} w-full`}
 				data-testid="micro-apps-create-prompt"
-				onFocus={() => onFocusChange?.(true)}
+				onFocus={mobile ? undefined : () => onFocusChange?.(true)}
 				onBlur={(event) => {
+					if (mobile) return
 					if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
 						onFocusChange?.(false)
 					}
@@ -174,7 +185,11 @@ function MicroAppCreatePrompt({
 						<span className={cableStyles.keyboardPortLight} />
 					</div>
 				) : null}
-				<DefaultMessageEditorContainer editorContext={editorContext} />
+				{mobile ? (
+					<MobileInputContainer editorContext={editorContext} />
+				) : (
+					<DefaultMessageEditorContainer editorContext={editorContext} />
+				)}
 			</div>
 		</SceneStateProvider>
 	)
