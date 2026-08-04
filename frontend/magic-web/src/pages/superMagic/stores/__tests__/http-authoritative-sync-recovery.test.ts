@@ -3015,6 +3015,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 
 	it("最终任务已 finished 且 HTTP 同步失败时停止 stream/loading，保留 draft 并允许独立 retry。", () => {
 		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
 		store.receiveChunk(createChunk({ content: "draft" }))
 		const generation = store.beginTopicSync(TOPIC_A)
 
@@ -3026,6 +3027,18 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		).toBe(true)
 		advanceRendering()
 
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("draft")
+		expect.soft(getUiMessages(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
+
+		// Topic terminal 已经封口当前 transport generation。即使服务端在长 HTML
+		// 场景继续投递同 correlation 的高序号尾部 Chunk，也不能重建 StreamState 或 watchdog。
+		store.receiveChunk(createChunk({ i: 5_047, content: " late-5047" }))
+		store.receiveChunk(createChunk({ i: 5_048, content: " late-5048" }))
+		vi.advanceTimersByTime(INITIAL_RECOVERY_OBSERVATION_MS)
+
+		expect.soft(recovery.events).toEqual([])
+		expect.soft(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("draft")
 		expect.soft(getUiMessages(store)).toMatchObject([{ correlation_id: CORRELATION_ID }])
@@ -3055,6 +3068,32 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			.soft(getNode(store, toAssistantSuperMessageId("next-task-correlation"))?.content)
 			.toBe("next task draft")
 		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(true)
+		recovery.unsubscribe()
+	})
+
+	it("Topic suspended 结算后拒绝同 correlation 的高序号晚到 Chunk。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		store.receiveChunk(createChunk({ content: "suspended draft" }))
+		const generation = store.beginTopicSync(TOPIC_A)
+
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "suspended",
+			}),
+		).toBe(true)
+		advanceRendering()
+		const settledContent = getNode(store, SUPER_MESSAGE_ID)?.content
+
+		store.receiveChunk(createChunk({ i: 5_047, content: " late suspended tail" }))
+		vi.advanceTimersByTime(INITIAL_RECOVERY_OBSERVATION_MS)
+
+		expect.soft(recovery.events).toEqual([])
+		expect.soft(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect.soft(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect.soft(getNode(store, SUPER_MESSAGE_ID)?.content).toBe(settledContent)
+		recovery.unsubscribe()
 	})
 
 	it("canonical message 完成后结束自身 stream，即使服务端 task 仍 running。", () => {

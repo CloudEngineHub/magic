@@ -4521,6 +4521,34 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.streamTransportBarriers.delete(`${topicId}\u0000${superMessageId}`)
 	}
 
+	/**
+	 * Topic-level terminal settlement can close a live StreamState before a canonical Final
+	 * arrives. Seal that transport generation before removing its ledger/correlation sidecars,
+	 * otherwise a late high-index Chunk would recreate a ledger from zero and trigger recovery.
+	 */
+	private ensureStreamTransportBarrierBeforeCleanup(
+		topicId: string,
+		superMessageId: string,
+		correlationId?: string,
+	) {
+		if (
+			this.getCanonicalFinalBarrier(topicId, superMessageId) ||
+			this.getStreamTransportBarrier(topicId, superMessageId)
+		)
+			return
+
+		const normalizedCorrelationId = String(
+			correlationId || this.getStreamCorrelationId(topicId, superMessageId),
+		).trim()
+		if (!normalizedCorrelationId) return
+
+		const ledger = this.getExistingStreamChunkLedger(topicId, superMessageId)
+		this.setStreamTransportBarrier(topicId, superMessageId, {
+			correlationId: normalizedCorrelationId,
+			chunkIndex: Math.max((ledger?.nextChunkIndex || 1) - 1, 0),
+		})
+	}
+
 	private setCanonicalFinalBarrier(
 		topicId: string,
 		superMessageId: string,
@@ -6433,6 +6461,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.messageMap.set(superMessageId, cache)
 			this.syncAssistantCardProjection(topicId, superMessageId)
 			topicMeta.finalizedCorrelationIds.add(superMessageId)
+			this.ensureStreamTransportBarrierBeforeCleanup(
+				topicId,
+				superMessageId,
+				streamState.correlation_id,
+			)
 			this.clearStreamRecoveryState(topicId, superMessageId)
 			this.clearStreamChunkLedger(topicId, superMessageId)
 		})
@@ -6452,6 +6485,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private completeStreamRendering(topicId: string, superMessageId?: string) {
 		const meta = this.getTopicMetadata(topicId)
+		const completedStreamState = superMessageId ? meta.content?.get(superMessageId) : undefined
+		if (superMessageId && completedStreamState?.isFinalMessageReceived) {
+			this.ensureStreamTransportBarrierBeforeCleanup(
+				topicId,
+				superMessageId,
+				completedStreamState.correlation_id,
+			)
+		}
 		this.clearStreamRecoveryTimer(topicId, superMessageId)
 		if (superMessageId) this.clearStreamChunkLedger(topicId, superMessageId)
 		meta.isStreamLoading = false
@@ -6462,7 +6503,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!superMessageId || meta.activeRenderSuperMessageId === superMessageId) {
 			meta.activeRenderSuperMessageId = null
 		}
-		const completedStreamState = superMessageId ? meta.content?.get(superMessageId) : undefined
 		if (superMessageId && completedStreamState?.isFinalMessageReceived) {
 			meta.finalizedCorrelationIds.add(superMessageId)
 			this.clearStreamRecoveryState(topicId, superMessageId)
