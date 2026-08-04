@@ -51,6 +51,17 @@ class SuperMagicAgentMarketDomainService
     }
 
     /**
+     * 批量返回已在市场上架的员工 code（仅已发布），供存在性判断复用雇佣同款口径。
+     *
+     * @param string[] $agentCodes
+     * @return string[]
+     */
+    public function listPublishedAgentCodes(array $agentCodes): array
+    {
+        return array_keys($this->agentMarketRepository->findByAgentCodes($agentCodes));
+    }
+
+    /**
      * 锁定市场记录后再校验雇佣资格，避免协作者撤权与雇佣并发留下失效关系。
      */
     public function getPublishedByAgentCodeForUpdate(
