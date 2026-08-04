@@ -14,8 +14,16 @@ const EMPTY_RESULT: StaticDependencyResult = {
 }
 
 /**
- * Resolves local resources for one supported document; batch selections return an empty result.
- * @example `fileIds: ["readme-md"]` may resolve `dependencyFileIds: ["cover-image"]`.
+ * Reports whether a file has a registered dependency parser.
+ * @example HTML/Markdown → `true`; PNG → `false`
+ */
+export function supportsStaticDependencies(file: StaticDependencyAttachment): boolean {
+	return Boolean(getStaticDependencyParser(file))
+}
+
+/**
+ * Resolves local dependencies for one file; batches return empty.
+ * @example `["readme-md"]` → `["cover-image"]`
  */
 export async function resolveSingleDocumentStaticDependencies({
 	fileIds,
@@ -45,8 +53,8 @@ export async function resolveSingleDocumentStaticDependencies({
 }
 
 /**
- * Adds dependency IDs when enabled and removes duplicates.
- * @example `(["doc"], ["image", "doc"], true)` -> `["doc", "image"]`
+ * Merges and deduplicates dependency IDs when enabled.
+ * @example `(["doc"], ["image", "doc"], true)` → `["doc", "image"]`
  */
 export function mergeStaticDependencyFileIds(
 	fileIds: string[],

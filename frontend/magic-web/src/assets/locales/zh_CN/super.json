@@ -4900,7 +4900,6 @@
 			"downloadPdfRaster": "下载 PDF 格式（截图版）",
 			"downloadPpt": "下载 PPT 格式",
 			"downloadPptx": "下载 PPTX 格式（可编辑）",
-			"downloadWithDependencies": "下载并携带关联资源",
 			"fileExport": {
 				"checkStatusFailed": "检查导出状态失败",
 				"emptyFileId": "文件ID不能为空",

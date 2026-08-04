@@ -50,6 +50,7 @@ import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDow
 import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
+	supportsStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
@@ -932,8 +933,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		return false
 	}
 
-	// 下载原始文件
-	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+	// Download the original file without dependency resolution.
+	const downloadOriginalFile = async (item: AttachmentItem, mode?: DownloadImageMode) => {
 		if (item.is_directory && item.file_id) {
 			// 为文件夹添加下载loading状态
 			setDownloadingFolders((prev) => new Set(prev).add(item.file_id || ""))
@@ -952,6 +953,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		} else if (item.file_id) {
 			await handleDownloadFile(item.file_id, mode, item.file_extension)
 		}
+	}
+
+	// Registered dependency parsers make linked resources part of the default download.
+	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (supportsStaticDependencies(item)) {
+			await downloadDocumentWithDependencies(item)
+			return
+		}
+
+		await downloadOriginalFile(item, mode)
 	}
 
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
@@ -1618,7 +1629,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 	)
 
-	const handleDownloadWithDependencies = useMemoizedFn(async (item: AttachmentItem) => {
+	const downloadDocumentWithDependencies = useMemoizedFn(async (item: AttachmentItem) => {
 		if (!item.file_id) return
 
 		try {
@@ -1633,7 +1644,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			)
 
 			if (effectiveFileIds.length === 1) {
-				await handleDownloadOriginal(item, DownloadImageMode.Download)
+				await downloadOriginalFile(item, DownloadImageMode.Download)
 				return
 			}
 
@@ -1651,7 +1662,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		} catch (error) {
 			console.error("Failed to resolve document dependencies before download:", error)
 			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
-			await handleDownloadOriginal(item, DownloadImageMode.Download)
+			await downloadOriginalFile(item, DownloadImageMode.Download)
 		}
 	})
 
@@ -1775,7 +1786,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleShareItem,
 		handleDeleteItem,
 		handleDownloadOriginal,
-		handleDownloadWithDependencies,
 		handleDownloadPdf,
 		handleDownloadPpt,
 		handleDownloadPptx,

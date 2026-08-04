@@ -5,6 +5,7 @@ export { getStaticDependencyParser } from "./parserRegistry"
 export {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
+	supportsStaticDependencies,
 } from "./resolveStaticDependencies"
 export type {
 	CollectedStaticDependencies,

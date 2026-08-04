@@ -26,7 +26,7 @@ const INITIAL_STATE: SingleDocumentStaticDependencyState = {
 	error: null,
 }
 
-/** Resolves dependencies for the currently selected single document. */
+/** Resolves dependencies for the selected document. */
 export function useSingleDocumentStaticDependencies({
 	active,
 	fileIds,

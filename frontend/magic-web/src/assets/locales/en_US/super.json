@@ -4887,7 +4887,6 @@
 			"downloadPdfRaster": "Download PDF Format (Screenshot)",
 			"downloadPpt": "Download PPT Format",
 			"downloadPptx": "Download PPTX Format (Editable)",
-			"downloadWithDependencies": "Download with Linked Resources",
 			"fileExport": {
 				"checkStatusFailed": "Failed to check export status",
 				"emptyFileId": "File ID cannot be empty",

@@ -2,16 +2,16 @@ import type { AttachmentIndex } from "@/pages/superMagic/components/TopicFilesBu
 import type { StaticDependencyAttachment } from "./types"
 
 /**
- * Returns a lowercase extension from metadata or the file name.
- * @example `README.MD` -> `md`
+ * Returns a lowercase extension.
+ * @example `README.MD` → `md`
  */
 export function getStaticDependencyFileExtension(file: StaticDependencyAttachment): string {
 	return (file.file_extension || file.file_name?.split(".").pop() || "").toLowerCase()
 }
 
 /**
- * Returns the document's relative directory, including its trailing slash.
- * @example `docs/guide/readme.md` -> `docs/guide/`
+ * Returns the document directory.
+ * @example `docs/guide/readme.md` → `docs/guide/`
  */
 export function getStaticDependencyDirectoryPath(relativeFilePath?: string): string {
 	if (!relativeFilePath) return ""
@@ -20,8 +20,8 @@ export function getStaticDependencyDirectoryPath(relativeFilePath?: string): str
 }
 
 /**
- * Finds the first dependency node below the owner's directory.
- * @example Owner `docs/index.html` and dependency `docs/images/a.png` -> the `images` folder ID.
+ * Finds the first dependency node below the owner directory.
+ * @example `docs/index.html` + `docs/images/a.png` → `images` folder ID
  */
 function getDependencyTransferRootFileId({
 	ownerDirectoryPathKeys,
@@ -50,9 +50,8 @@ function getDependencyTransferRootFileId({
 }
 
 /**
- * Collapses dependency files into roots that preserve relative paths during move/copy.
- * @example A dependency at `docs/images/a.png` becomes the `images` folder when the owner is
- * `docs/index.html`; a sibling file remains its own file ID.
+ * Returns transfer roots that preserve relative paths.
+ * @example `docs/index.html` + `docs/images/a.png` → `images` folder ID
  */
 export function getDependencyTransferFileIds({
 	ownerFileId,

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import { mergeStaticDependencyFileIds, resolveSingleDocumentStaticDependencies } from ".."
+import {
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+	supportsStaticDependencies,
+} from ".."
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getFileContentById: vi.fn(),
@@ -63,5 +67,13 @@ describe("mergeStaticDependencyFileIds", () => {
 			"script",
 		])
 		expect(mergeStaticDependencyFileIds(["doc"], ["image"], false)).toEqual(["doc"])
+	})
+})
+
+describe("supportsStaticDependencies", () => {
+	it("uses the registered parsers as the source of truth", () => {
+		expect(supportsStaticDependencies({ file_name: "index.html" })).toBe(true)
+		expect(supportsStaticDependencies({ file_name: "README.md" })).toBe(true)
+		expect(supportsStaticDependencies({ file_name: "cover.png" })).toBe(false)
 	})
 })

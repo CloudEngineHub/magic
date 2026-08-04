@@ -10,8 +10,8 @@ import { getStaticDependencyDirectoryPath, getStaticDependencyFileExtension } fr
 import type { StaticDependencyAttachment, StaticDependencyResolveContext } from "../types"
 
 /**
- * Extracts local resources from Markdown syntax and embedded media tags.
- * @example `![cover](./cover.png)` -> `["./cover.png"]`
+ * Extracts local resources from Markdown and embedded tags.
+ * @example `![cover](./cover.png)` → `["./cover.png"]`
  */
 function extractMarkdownResourcePaths(content: string): string[] {
 	const resourcePaths = [...extractImagePaths(content)]

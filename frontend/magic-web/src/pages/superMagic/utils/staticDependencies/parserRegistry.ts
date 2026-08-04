@@ -8,8 +8,8 @@ const STATIC_DEPENDENCY_PARSERS: StaticDependencyParser[] = [
 ]
 
 /**
- * Returns the first parser that supports a file.
- * @example An `md` file resolves to `MarkdownStaticDependencyParser`.
+ * Returns the parser that supports a file.
+ * @example `.md` → `MarkdownStaticDependencyParser`
  */
 export function getStaticDependencyParser(
 	file: StaticDependencyAttachment,

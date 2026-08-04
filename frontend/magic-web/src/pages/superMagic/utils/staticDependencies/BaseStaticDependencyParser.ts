@@ -9,18 +9,18 @@ import type {
 } from "./types"
 
 export abstract class BaseStaticDependencyParser implements StaticDependencyParser {
-	/** File type exposed to business callers after a successful match. */
+	/** File type handled by the parser. */
 	protected abstract readonly fileType: StaticDependencyFileType
 
-	/** Lets each parser define which files it accepts. */
+	/** Checks whether the parser supports the file. */
 	abstract supports(file: StaticDependencyAttachment): boolean
 
-	/** Extracts parser-specific dependencies; common normalization stays in `resolve`. */
+	/** Extracts format-specific dependencies. */
 	protected abstract collectDependencies(
 		context: StaticDependencyResolveContext,
 	): CollectedStaticDependencies | Promise<CollectedStaticDependencies>
 
-	/** Deduplicates parser output and derives move/copy transfer roots. */
+	/** Deduplicates and derives transfer roots. */
 	async resolve(context: StaticDependencyResolveContext): Promise<StaticDependencyResult> {
 		const collected = await this.collectDependencies(context)
 		const dependencyFileIds = [...new Set(collected.dependencyFileIds)].filter(

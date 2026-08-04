@@ -28,7 +28,6 @@ export function menuItemsIncludeNoWaterMarkDownload(items: MobileDownloadMenuIte
 
 export interface SingleFileDownloadHandlers {
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
-	handleDownloadWithDependencies?: (item: AttachmentItem) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
@@ -64,7 +63,6 @@ export function buildSingleFileDownloadMenu({
 }: BuildSingleFileDownloadMenuOptions): MobileDownloadMenuItem[] {
 	const {
 		handleDownloadOriginal,
-		handleDownloadWithDependencies,
 		handleDownloadPdf,
 		handleDownloadPpt,
 		handleDownloadPptx,
@@ -118,7 +116,6 @@ export function buildSingleFileDownloadMenu({
 	}
 
 	const canConvertToPdf = isConvertibleFile(item, ["html", "md"])
-	const canCarryStaticDependencies = isConvertibleFile(item, ["html", "md", "markdown"])
 	const canConvertToPPTX = isConvertibleFile(item, ["html"])
 	const canConvertToImage = isConvertibleFile(item, [
 		"html",
@@ -172,14 +169,6 @@ export function buildSingleFileDownloadMenu({
 				onClick: () => handleDownloadOriginal(item, DownloadImageMode.Download),
 			},
 		]
-
-		if (canCarryStaticDependencies && handleDownloadWithDependencies) {
-			items.push({
-				key: "downloadWithDependencies",
-				label: t("topicFiles.contextMenu.downloadWithDependencies"),
-				onClick: () => handleDownloadWithDependencies(item),
-			})
-		}
 
 		if (canConvertToPdf) {
 			items.push({
