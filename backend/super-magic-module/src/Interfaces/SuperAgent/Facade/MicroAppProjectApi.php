@@ -105,9 +105,4 @@ class MicroAppProjectApi extends AbstractApi
     {
         return $this->microAppProjectAppService->resolvePublished($appId);
     }
-
-    public function getProjectTitle(int $appId): array
-    {
-        return $this->microAppProjectAppService->getProjectTitle($appId);
-    }
 }
