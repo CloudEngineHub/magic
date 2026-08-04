@@ -12,6 +12,7 @@ import {
 } from "../services/memoryFileService"
 import { mergeMemoryContent } from "../services/memoryThreeWayMerge"
 import { MemoryEditConflictDialog } from "./MemoryEditConflictDialog"
+import { GlobalMemoryUsageGuide } from "./GlobalMemoryUsageGuide"
 
 type GlobalMemoryLoadState = "loading" | "ready" | "empty" | "error"
 
@@ -173,7 +174,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 			setConflictState(null)
 			magicToast.success(t("globalEditor.refreshSuccess"))
 		} catch (error) {
-			console.error("更新全局长期记忆失败", error)
+			console.error("刷新全局长期记忆失败", error)
 			magicToast.error(t("globalEditor.refreshFailed"))
 		} finally {
 			setRefreshing(false)
@@ -300,6 +301,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 								<Button
 									variant="outline"
 									size="sm"
+									className="h-8 w-20"
 									disabled={refreshing || enteringEdit}
 									onClick={() => void refreshLatestContent()}
 								>
@@ -311,6 +313,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 								</Button>
 								<Button
 									size="sm"
+									className="h-8 w-20"
 									disabled={enteringEdit || refreshing}
 									onClick={() => void startEditing()}
 								>
@@ -325,6 +328,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 						)}
 					</div>
 				</div>
+				<GlobalMemoryUsageGuide />
 				<div className="min-h-0 flex-1 overflow-hidden">
 					<EditorBody
 						isLoading={false}
@@ -335,7 +339,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 						className={
 							isEditing
 								? "h-full min-h-0 overflow-hidden"
-								: "h-full overflow-auto p-5"
+								: "h-full overflow-auto px-5 py-4 [&_.simple-editor]:!p-0"
 						}
 						isEditMode={isEditing}
 						editContent={draft}

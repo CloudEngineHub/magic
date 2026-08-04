@@ -52,6 +52,14 @@
 		"editLoadFailed": "Unable to load the latest content. Please try again.",
 		"emptyDescription": "global/MEMORY.md does not exist yet. You can view and edit it here after it is generated.",
 		"emptyTitle": "Global memory has not been generated",
+		"guide": {
+			"description": "This file stores personal information that should remain useful across tasks. The system reads it when relevant to respond with your preferences and background in mind.",
+			"notRecommendedDescription": "Passwords, verification codes, access tokens, temporary instructions for a single task, or unverified and outdated information.",
+			"notRecommendedTitle": "Not recommended",
+			"recommendedDescription": "Stable identity details, preferred names, personal preferences, recurring work habits, and communication or output requirements you want followed over time.",
+			"recommendedTitle": "Recommended",
+			"title": "What this file is for"
+		},
 		"loadFailed": "Failed to load global memory",
 		"pathDescription": "Global user memory file",
 		"placeholder": "Record user information that should be retained long term",

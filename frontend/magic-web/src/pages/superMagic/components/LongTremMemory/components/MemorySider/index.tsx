@@ -45,6 +45,7 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 					projectId={projectId}
 					activeFileId={activeFileId}
 					onFileClick={onFileClick}
+					showTitle={!showHeader}
 				/>
 			</div>
 		</div>
