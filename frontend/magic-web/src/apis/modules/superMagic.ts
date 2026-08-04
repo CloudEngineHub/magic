@@ -887,6 +887,22 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post(`/api/v1/super-agent/file/batch-copy`, params)
 	},
 	/**
+	 * @description 分享场景批量复制文件到目标项目
+	 * @param params.shareCode 分享标识（新分享为 resourceId，旧分享为 topicId）
+	 */
+	copyShareFiles(params: {
+		shareCode: string
+		pwd?: string
+		file_ids: string[]
+		target_project_id?: string
+		target_parent_id: string
+		pre_file_id?: string
+		keep_both_file_ids?: string[]
+	}) {
+		const { shareCode, ...requestData } = params
+		return fetch.post(`/api/v1/share/resources/${shareCode}/files/batch-copy`, requestData)
+	},
+	/**
 	 * @description 检查批量操作任务状态（移动、重命名等）
 	 * @param {string} batch_key 批量任务key
 	 * @returns 批量操作状态

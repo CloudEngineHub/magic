@@ -25,6 +25,8 @@ import {
 
 interface UseCrossProjectFileOperationOptions {
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	selectedWorkspace: Workspace | null
 	selectedProject: ProjectListItem | null
 	projects: ProjectListItem[]
@@ -81,7 +83,7 @@ async function resolveEffectiveOperationFileIds({
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
-	const { projectId, onSuccess } = options
+	const { projectId, shareCode, sharePassword, onSuccess } = options
 	const { t } = useTranslation("super")
 
 	const [visible, setVisible] = useState(false)
@@ -435,14 +437,24 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						? data.targetPath[data.targetPath.length - 1].file_id || ""
 						: ""
 
-				const result = await SuperMagicApi.copyFiles({
-					file_ids: effectiveFileIds,
-					project_id: projectId,
-					target_project_id: data.targetProjectId,
-					target_parent_id: targetParentId,
-					pre_file_id: "",
-					keep_both_file_ids: keepBothIds,
-				})
+				const result = shareCode
+					? await SuperMagicApi.copyShareFiles({
+							shareCode,
+							pwd: sharePassword,
+							file_ids: effectiveFileIds,
+							target_project_id: data.targetProjectId,
+							target_parent_id: targetParentId,
+							pre_file_id: "",
+							keep_both_file_ids: keepBothIds,
+						})
+					: await SuperMagicApi.copyFiles({
+							file_ids: effectiveFileIds,
+							project_id: projectId,
+							target_project_id: data.targetProjectId,
+							target_parent_id: targetParentId,
+							pre_file_id: "",
+							keep_both_file_ids: keepBothIds,
+						})
 
 				if (result.status === "success") {
 					setOperationProgress(100)
@@ -469,6 +481,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 		[
 			fileIds,
 			projectId,
+			shareCode,
+			sharePassword,
 			closeModal,
 			onSuccess,
 			t,

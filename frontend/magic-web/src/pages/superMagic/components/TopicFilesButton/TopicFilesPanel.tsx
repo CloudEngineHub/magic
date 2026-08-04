@@ -43,6 +43,8 @@ interface TopicFilesPanelProps {
 	onFileClick?: (fileItem: any) => void
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -87,6 +89,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			setUserSelectDetail,
 			onFileClick,
 			projectId,
+			shareCode,
+			sharePassword,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -216,6 +220,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const crossProjectOperation = useCrossProjectFileOperation({
 			projectId,
+			shareCode,
+			sharePassword,
 			selectedWorkspace: selectedWorkspace || null,
 			selectedProject: selectedProject || null,
 			projects,
@@ -578,6 +584,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								setUserSelectDetail={setUserSelectDetail}
 								onFileClick={onFileClick}
 								projectId={projectId}
+								shareCode={shareCode}
+								sharePassword={sharePassword}
 								fileFilters={fileFilters}
 								handleDownloadAll={handleDownloadAll}
 								allLoading={allLoading}

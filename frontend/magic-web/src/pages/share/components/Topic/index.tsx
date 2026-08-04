@@ -63,6 +63,8 @@ function Topic({
 	isImmersiveFullscreen,
 	topicId,
 	projectId,
+	shareCode,
+	sharePassword,
 	showAllProjectFiles,
 	viewFileList,
 	showCreatedByBadge,
@@ -86,6 +88,8 @@ function Topic({
 	isImmersiveFullscreen?: boolean
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
 	viewFileList?: boolean
@@ -996,6 +1000,8 @@ function Topic({
 														setUserDetail(detail)
 													}}
 													projectId={projectId}
+													shareCode={shareCode}
+													sharePassword={sharePassword}
 													className="left-0"
 													onFileClick={(fileItem: any) => {
 														setUserDetail(null)
@@ -1449,6 +1455,8 @@ function Topic({
 							}
 						}}
 						projectId={projectId}
+						shareCode={shareCode}
+						sharePassword={sharePassword}
 						handleDownloadAll={handleDownloadAll}
 						allLoading={allLoading}
 						activeFileId={activeFileId}

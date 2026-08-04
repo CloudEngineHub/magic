@@ -11,6 +11,8 @@ export default function ShareContent({
 	enableImmersiveShareChrome,
 	isImmersiveFullscreen,
 	projectId,
+	shareCode,
+	sharePassword,
 	topicId,
 	showAllProjectFiles,
 	isProjectShare,
@@ -34,6 +36,8 @@ export default function ShareContent({
 	enableImmersiveShareChrome?: boolean
 	isImmersiveFullscreen?: boolean
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	topicId?: string
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
@@ -61,6 +65,8 @@ export default function ShareContent({
 			isImmersiveFullscreen={isImmersiveFullscreen}
 			topicId={topicId}
 			projectId={projectId}
+			shareCode={shareCode}
+			sharePassword={sharePassword}
 			showAllProjectFiles={showAllProjectFiles}
 			isProjectShare={isProjectShare}
 			viewFileList={viewFileList}

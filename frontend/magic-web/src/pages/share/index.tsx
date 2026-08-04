@@ -1046,6 +1046,8 @@ function Share() {
 							enableImmersiveShareChrome={enableImmersiveShareChrome}
 							isImmersiveFullscreen={isImmersiveFullscreen}
 							projectId={projectId}
+							shareCode={data?.share_code || data?.data?.share_code || resourceId}
+							sharePassword={verifiedPassword}
 							topicId={resourceId}
 							showAllProjectFiles={showAllProjectFiles || viewFileList}
 							viewFileList={viewFileList}

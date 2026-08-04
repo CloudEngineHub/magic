@@ -21,6 +21,8 @@ export interface TopicFilesButtonProps {
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -65,6 +67,8 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			setUserSelectDetail,
 			onFileClick,
 			projectId,
+			shareCode,
+			sharePassword,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -121,6 +125,8 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					setUserSelectDetail={setUserSelectDetail}
 					onFileClick={onFileClick}
 					projectId={projectId}
+					shareCode={shareCode}
+					sharePassword={sharePassword}
 					activeFileId={activeFileId}
 					selectedTopic={selectedTopic}
 					allowEdit={allowEdit}

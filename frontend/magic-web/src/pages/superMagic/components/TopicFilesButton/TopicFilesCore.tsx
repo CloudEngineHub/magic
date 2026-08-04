@@ -120,6 +120,8 @@ interface TopicFilesCoreProps {
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	fileFilters?: {
 		documents: boolean
 		multimedia: boolean
@@ -187,6 +189,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setUserSelectDetail,
 		onFileClick,
 		projectId,
+		shareCode,
+		sharePassword,
 		fileFilters = {
 			documents: true,
 			multimedia: true,
@@ -724,6 +728,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
 		projectId,
+		shareCode,
+		sharePassword,
 		selectedWorkspace: selectedWorkspace || null,
 		selectedProject: selectedProject || null,
 		projects,
