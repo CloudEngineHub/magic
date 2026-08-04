@@ -26,7 +26,7 @@ function formatAppTime(value: string | null | undefined): string {
 
 function MobileGridLoading() {
 	return (
-		<div className="grid grid-cols-2 gap-3" data-testid="micro-apps-mobile-loading">
+		<div className="grid grid-cols-1 gap-3" data-testid="micro-apps-mobile-loading">
 			{[1, 2, 3, 4].map((item) => (
 				<div key={item} className="overflow-hidden rounded-2xl border border-border/60">
 					<div className="aspect-[16/10] animate-pulse bg-muted/50" />
@@ -105,8 +105,11 @@ export default function MicroAppsListPageMobile() {
 				className="min-h-0 flex-1"
 				data-testid="micro-apps-list-scroll-area"
 			>
-				<main className="px-3 pb-7 pt-4">
-					<div className="mb-4 space-y-3 px-1">
+				<main className="px-3 pb-7">
+					<div
+						className="sticky top-0 z-20 -mx-3 mb-4 space-y-3 border-b border-border/50 bg-mobile-background px-4 pb-4 pt-4"
+						data-testid="micro-apps-mobile-toolbar"
+					>
 						<div className="relative">
 							<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 							<Input
@@ -173,7 +176,7 @@ export default function MicroAppsListPageMobile() {
 
 					{!loading && !error && apps.length > 0 ? (
 						<div
-							className="grid grid-cols-2 gap-3"
+							className="grid grid-cols-1 gap-3"
 							data-testid="micro-apps-mobile-list"
 						>
 							{apps.map((app) => (
@@ -198,6 +201,7 @@ export default function MicroAppsListPageMobile() {
 									onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 									onRename={() => itemActions.openRename(app)}
 									onDelete={() => itemActions.openDelete(app)}
+									canDelete={app.can_delete}
 									testId={`micro-apps-mobile-app-${app.app_id}`}
 								/>
 							))}

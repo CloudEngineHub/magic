@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import type {
-	MicroAppListItem,
-	MicroAppListResponse,
+	MicroAppListItem as ApiMicroAppListItem,
+	MicroAppListResponse as ApiMicroAppListResponse,
 	MicroAppListScope,
 } from "@/apis/modules/superMagic"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
 const MICRO_APP_PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 250
+
+interface MicroAppListItem extends ApiMicroAppListItem {
+	can_delete: boolean
+}
+
+interface MicroAppListResponse extends Omit<ApiMicroAppListResponse, "list"> {
+	list: MicroAppListItem[]
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value && typeof value === "object")
@@ -25,6 +33,7 @@ function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
 		cover_url: String(item.cover_url ?? ""),
 		publish_status: String(item.publish_status ?? "unpublished"),
 		updated_at: item.updated_at == null ? null : String(item.updated_at),
+		can_delete: item.can_delete !== false,
 	}
 }
 

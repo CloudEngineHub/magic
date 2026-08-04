@@ -58,8 +58,14 @@ vi.mock("../components/MicroAppFloatingBackdrop", () => ({
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
-	default: ({ title, description, coverUrl, statusLabel, onClick, testId }: any) => (
-		<button type="button" data-testid={testId} data-cover-url={coverUrl} onClick={onClick}>
+	default: ({ title, description, coverUrl, statusLabel, canDelete, onClick, testId }: any) => (
+		<button
+			type="button"
+			data-testid={testId}
+			data-cover-url={coverUrl}
+			data-can-delete={canDelete}
+			onClick={onClick}
+		>
 			{title}
 			<span>{description}</span>
 			<span>{statusLabel}</span>
@@ -107,6 +113,7 @@ describe("MicroAppsPage", () => {
 					cover_url: "https://example.com/cover.png",
 					publish_status: "published",
 					updated_at: "2026-07-24 10:30:00",
+					can_delete: false,
 				},
 			],
 			scope: "all",
@@ -137,6 +144,7 @@ describe("MicroAppsPage", () => {
 		).toBeInTheDocument()
 		const appCard = screen.getByTestId("micro-apps-app-app-1")
 		expect(appCard).toHaveAttribute("data-cover-url", "https://example.com/cover.png")
+		expect(appCard).toHaveAttribute("data-can-delete", "false")
 		expect(screen.getByText("客户跟进与提醒工具")).toBeInTheDocument()
 		expect(screen.getByText("microAppsPage.statusPublished")).toBeInTheDocument()
 		fireEvent.click(appCard)

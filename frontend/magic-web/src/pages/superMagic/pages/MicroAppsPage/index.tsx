@@ -272,6 +272,7 @@ function MicroAppsPageDesktop() {
 								onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 								onRename={() => itemActions.openRename(app)}
 								onDelete={() => itemActions.openDelete(app)}
+								canDelete={app.can_delete}
 								testId={`micro-apps-app-${app.app_id}`}
 							/>
 						))}

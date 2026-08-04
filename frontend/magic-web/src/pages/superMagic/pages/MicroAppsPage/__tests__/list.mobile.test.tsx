@@ -22,6 +22,7 @@ interface MockMicroAppCardProps {
 	meta?: string
 	coverUrl?: string
 	statusLabel?: string
+	canDelete?: boolean
 	onClick: () => void
 	testId: string
 }
@@ -45,10 +46,17 @@ vi.mock("../components/MicroAppCard", () => ({
 		meta,
 		coverUrl,
 		statusLabel,
+		canDelete,
 		onClick,
 		testId,
 	}: MockMicroAppCardProps) => (
-		<button type="button" data-testid={testId} data-cover-url={coverUrl} onClick={onClick}>
+		<button
+			type="button"
+			data-testid={testId}
+			data-cover-url={coverUrl}
+			data-can-delete={canDelete}
+			onClick={onClick}
+		>
 			{title}
 			<span>{description}</span>
 			<span>{meta}</span>
@@ -108,6 +116,7 @@ describe("MicroAppsListPageMobile", () => {
 					cover_url: "",
 					publish_status: "unpublished",
 					updated_at: null,
+					can_delete: false,
 				},
 			],
 			scope: "all",
@@ -132,7 +141,10 @@ describe("MicroAppsListPageMobile", () => {
 			"data-slot",
 			"scroll-area",
 		)
+		expect(screen.getByTestId("micro-apps-mobile-toolbar")).toHaveClass("sticky", "top-0")
+		expect(screen.getByTestId("micro-apps-mobile-list")).toHaveClass("grid-cols-1")
 		const appCard = screen.getByTestId("micro-apps-mobile-app-app-1")
+		expect(appCard).toHaveAttribute("data-can-delete", "false")
 		expect(screen.getByText("客户跟进与提醒工具")).toBeInTheDocument()
 		expect(screen.getByText("microAppsPage.statusUnpublished")).toBeInTheDocument()
 		fireEvent.click(appCard)

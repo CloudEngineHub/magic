@@ -63,6 +63,7 @@ describe("useMicroAppsPage", () => {
 		})
 		expect(result.current.apps).toHaveLength(1)
 		expect(result.current.apps[0].app_id).toBe("933138305533177857")
+		expect(result.current.apps[0].can_delete).toBe(true)
 		expect(result.current.hasMore).toBe(true)
 	})
 
@@ -135,7 +136,13 @@ describe("useMicroAppsPage", () => {
 		expect(
 			normalizeMicroAppListResponse({
 				data: {
-					list: [{ app_id: "933138305533177857", app_name: "App" }],
+					list: [
+						{
+							app_id: "933138305533177857",
+							app_name: "App",
+							can_delete: false,
+						},
+					],
 					total: 1,
 					page: 1,
 					page_size: 20,
@@ -151,6 +158,7 @@ describe("useMicroAppsPage", () => {
 					cover_url: "",
 					publish_status: "unpublished",
 					updated_at: null,
+					can_delete: false,
 				},
 			],
 			total: 1,

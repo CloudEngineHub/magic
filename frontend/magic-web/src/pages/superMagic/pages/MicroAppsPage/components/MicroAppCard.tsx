@@ -60,6 +60,7 @@ interface MicroAppCardProps {
 	onOpenInNewWindow: () => void
 	onRename: () => void
 	onDelete: () => void
+	canDelete?: boolean
 }
 
 export default function MicroAppCard({
@@ -76,6 +77,7 @@ export default function MicroAppCard({
 	onOpenInNewWindow,
 	onRename,
 	onDelete,
+	canDelete = true,
 }: MicroAppCardProps) {
 	const { t } = useTranslation("super")
 	const theme = coverThemes[resolveThemeIndex(id)]
@@ -259,10 +261,12 @@ export default function MicroAppCard({
 						<Pencil className="size-4" />
 						{t("microAppsPage.actions.rename")}
 					</ContextMenuItem>
-					<ContextMenuItem variant="destructive" onSelect={onDelete}>
-						<Trash2 className="size-4" />
-						{t("microAppsPage.actions.deleteApp")}
-					</ContextMenuItem>
+					{canDelete ? (
+						<ContextMenuItem variant="destructive" onSelect={onDelete}>
+							<Trash2 className="size-4" />
+							{t("microAppsPage.actions.deleteApp")}
+						</ContextMenuItem>
+					) : null}
 				</ContextMenuContent>
 			</ContextMenu>
 		)
@@ -291,18 +295,22 @@ export default function MicroAppCard({
 							<Pencil className="size-4" />
 							{t("microAppsPage.actions.rename")}
 						</button>
-						<div className="ml-12 h-px bg-border/60" />
-						<button
-							type="button"
-							className="flex h-14 w-full items-center gap-3 px-4 text-left text-base text-destructive active:bg-destructive/10"
-							onClick={() => {
-								setMobileMenuOpen(false)
-								onDelete()
-							}}
-						>
-							<Trash2 className="size-4" />
-							{t("microAppsPage.actions.deleteApp")}
-						</button>
+						{canDelete ? (
+							<>
+								<div className="ml-12 h-px bg-border/60" />
+								<button
+									type="button"
+									className="flex h-14 w-full items-center gap-3 px-4 text-left text-base text-destructive active:bg-destructive/10"
+									onClick={() => {
+										setMobileMenuOpen(false)
+										onDelete()
+									}}
+								>
+									<Trash2 className="size-4" />
+									{t("microAppsPage.actions.deleteApp")}
+								</button>
+							</>
+						) : null}
 					</div>
 				</SheetContent>
 			</Sheet>

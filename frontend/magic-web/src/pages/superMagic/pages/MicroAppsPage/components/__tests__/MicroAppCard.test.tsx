@@ -57,4 +57,19 @@ describe("MicroAppCard actions", () => {
 
 		await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1))
 	})
+
+	it.each(["desktop", "mobile"] as const)(
+		"hides the delete action on %s when deletion is not allowed",
+		async (variant) => {
+			render(<MicroAppCard {...defaultProps} variant={variant} canDelete={false} />)
+
+			if (variant === "desktop") {
+				fireEvent.contextMenu(screen.getByTestId("micro-app-card"))
+			} else {
+				fireEvent.click(screen.getByTestId("micro-app-card-more"))
+			}
+
+			expect(screen.queryByText("microAppsPage.actions.deleteApp")).not.toBeInTheDocument()
+		},
+	)
 })
