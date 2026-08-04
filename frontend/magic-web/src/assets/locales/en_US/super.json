@@ -405,6 +405,13 @@
 		"manage": "Invite",
 		"noPermissionCollaborationProject": "No permission",
 		"noPermissionCollaborationProjectContent": "You have no permission to view this project, please contact the project creator",
+		"organizationSwitch": {
+			"action": "Switch Team and Open Project",
+			"description": "You can access this shared project in \"{{organizationName}}\". Switch teams to continue.",
+			"failed": "Failed to switch team",
+			"switching": "Switching...",
+			"title": "Switch Team to Open Project"
+		},
 		"people": "people",
 		"remove": "Remove",
 		"removeFailed": "Failed to remove collaborator",

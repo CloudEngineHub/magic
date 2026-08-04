@@ -1,22 +1,20 @@
-import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import { Button } from "@/components/shadcn-ui/button"
+import OrganizationSwitchState from "@/components/business/OrganizationSwitchState"
+import type { User } from "@/types/user"
 import WorkspaceButton from "../WorkspaceButton"
-// @ts-ignore
 import FolderIcon from "../../assets/icon/folder_empty.svg"
-// @ts-ignore
 import ReplayIcon from "../../assets/icon/replay_icon.svg"
 import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import { useUserInfo } from "@/models/user/hooks"
-import UserAvatarRender from "@/components/business/UserAvatarRender"
 
 interface ShareEmptyStateProps {
 	currentOrgName: string
 	targetOrgName: string
 	targetOrgLogo?: string
-	userInfo: any
+	userInfo: User.UserInfo | null
 	onSwitch: () => void
 	isLoading?: boolean
 	isFileShare?: boolean
@@ -69,69 +67,18 @@ export default function ShareEmptyState({
 				</div>
 			</div>
 
-			<div
-				className="flex flex-1 items-center justify-center p-5"
-				data-testid="share-empty-state-content"
-			>
-				<div className="flex w-full max-w-[400px] flex-col items-center gap-5">
-					<img
-						src={icon}
-						alt=""
-						className="h-[60px] w-[60px] shrink-0"
-						data-testid="share-empty-state-icon"
-					/>
-
-					<div
-						className="text-center text-lg font-semibold leading-6 text-foreground/80"
-						data-testid="share-empty-state-title"
-					>
-						{t("share.emptyState.title")}
-					</div>
-
-					<div
-						className="flex flex-col gap-5 self-stretch rounded-xl border border-[#1C1D23]/[0.08] bg-white p-5"
-						data-testid="share-empty-state-card"
-					>
-						<div className="flex flex-col items-center gap-2 self-stretch">
-							<div
-								className="self-stretch text-center text-xs font-normal leading-4 text-foreground/60"
-								data-testid="share-empty-state-tip"
-							>
-								{t("share.emptyState.switchTip", { orgName: targetOrgName })}
-							</div>
-
-							<div
-								className="flex items-center gap-1"
-								data-testid="share-empty-state-user"
-							>
-								<div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#DDE7FF] p-[1.5px]">
-									<UserAvatarRender
-										userInfo={userInfoProp}
-										size={24}
-										className="h-6 w-6 rounded-md"
-									/>
-								</div>
-								<span className="text-sm font-semibold leading-5 text-foreground">
-									{userInfoProp?.nickname || ""}
-								</span>
-							</div>
-						</div>
-
-						<Button
-							type="button"
-							onClick={onSwitch}
-							disabled={isLoading}
-							className="h-auto self-stretch rounded-lg border-0 px-6 py-1.5 text-sm font-normal leading-5"
-							data-testid="share-empty-switch-button"
-						>
-							{isLoading ? <Loader2 size={16} className="animate-spin" /> : null}
-							{isLoading
-								? t("share.emptyState.switching")
-								: t("share.emptyState.switchButton")}
-						</Button>
-					</div>
-				</div>
-			</div>
+			<OrganizationSwitchState
+				icon={icon}
+				title={t("share.emptyState.title")}
+				description={t("share.emptyState.switchTip", { orgName: targetOrgName })}
+				userInfo={userInfoProp}
+				actionLabel={t("share.emptyState.switchButton")}
+				switchingLabel={t("share.emptyState.switching")}
+				isSwitching={isLoading}
+				onSwitch={onSwitch}
+				testIdPrefix="share-empty-state"
+				switchButtonTestId="share-empty-switch-button"
+			/>
 		</div>
 	)
 }

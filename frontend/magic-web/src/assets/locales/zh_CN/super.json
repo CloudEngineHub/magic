@@ -406,6 +406,13 @@
 		"manage": "邀请",
 		"noPermissionCollaborationProject": "无权限查看项目",
 		"noPermissionCollaborationProjectContent": "您无权限查看该项目，请联系项目创建人",
+		"organizationSwitch": {
+			"action": "切换团队并进入项目",
+			"description": "您可在「{{organizationName}}」中访问此共享项目，切换团队后继续。",
+			"failed": "切换团队失败",
+			"switching": "切换中...",
+			"title": "切换团队以进入项目"
+		},
 		"people": "个人",
 		"remove": "移除",
 		"removeFailed": "移除协作者失败",
