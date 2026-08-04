@@ -147,12 +147,17 @@ export function useExportZip(): UseExportZipResult {
 					durationMs: Date.now() - startedAt,
 				})
 			} catch (err) {
-				log.error("❌ 导出 ZIP 失败", {
-					zipName: rootZipName,
-					processed,
-					total,
-					durationMs: Date.now() - startedAt,
+				log.error({
+					eventKey: "export_zip_failed",
+					errorKind: "render",
 					error: err,
+					message: "❌ 导出 ZIP 失败",
+					context: {
+						processed,
+						total,
+						rootZipName,
+						durationMs: Date.now() - startedAt,
+					},
 				})
 				setProgress((prev) => ({ ...prev, status: "error" }))
 			} finally {
@@ -215,12 +220,16 @@ export function useExportZip(): UseExportZipResult {
 					durationMs: Date.now() - startedAt,
 				})
 			} catch (err) {
-				log.error("❌ 导出长图失败", {
-					fileName: imageName,
-					processed,
-					total,
-					durationMs: Date.now() - startedAt,
+				log.error({
+					eventKey: "export_failed",
+					errorKind: "render",
 					error: err,
+					message: "❌ 导出长图失败",
+					context: {
+						processed,
+						total,
+						durationMs: Date.now() - startedAt,
+					},
 				})
 				setProgress((prev) => ({ ...prev, status: "error" }))
 			} finally {
@@ -259,10 +268,12 @@ export function useExportZip(): UseExportZipResult {
 					durationMs: Date.now() - startedAt,
 				})
 			} catch (err) {
-				log.error("❌ 导出微信公众号封面拼图失败", {
-					fileName: imageName,
-					durationMs: Date.now() - startedAt,
+				log.error({
+					eventKey: "export_failed",
+					errorKind: "render",
 					error: err,
+					message: "❌ 导出微信公众号封面拼图失败",
+					context: { durationMs: Date.now() - startedAt },
 				})
 				setProgress((prev) => ({ ...prev, status: "error" }))
 			} finally {

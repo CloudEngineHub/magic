@@ -50,11 +50,11 @@ function resolveUploadUrl(url: string | undefined, organizationCode: string | un
 	const baseUrl =
 		url ??
 		env("MAGIC_SERVICE_BASE_URL") +
-		genRequestUrl(
-			isCommercial()
-				? "/api/v1/file/temporary-credential"
-				: "/api/v1/file/temporary-credential",
-		)
+			genRequestUrl(
+				isCommercial()
+					? "/api/v1/file/temporary-credential"
+					: "/api/v1/file/temporary-credential",
+			)
 
 	if (!organizationCode) return baseUrl
 	const separator = baseUrl.includes("?") ? "&" : "?"
@@ -90,7 +90,7 @@ export class UploadService<F extends UploadFileLike> {
 		onUploadStateChange?.(true)
 
 		const promises = fileList.map(
-			(fileData) =>
+			(fileData, fileIndex) =>
 				new Promise<UploadResponse>((resolve, reject) => {
 					const fileName = fileData.name
 					if (fileData.status === "done" && fileData.result) {
@@ -100,7 +100,12 @@ export class UploadService<F extends UploadFileLike> {
 
 					const { organizationCode, authorization } = userStore.user
 					if (!fileData.file) {
-						logger.error("upload missing file body", { fileName })
+						logger.error({
+							eventKey: "upload_missing_file_body_failed",
+							errorKind: "invalid_state",
+							message: "upload missing file body",
+							context: { fileIndex, fileName },
+						})
 						reject(new Error("file is required"))
 						return
 					}
@@ -160,10 +165,12 @@ export class UploadService<F extends UploadFileLike> {
 					})
 
 					fail?.((err) => {
-						logger.error("upload failed", {
-							fileName,
-							fileSize: fileData.file?.size,
-							message: err?.message,
+						logger.error({
+							eventKey: "upload_failed",
+							errorKind: "unknown",
+							error: err,
+							message: "upload failed",
+							context: { fileSize: fileData.file?.size, fileName },
 						})
 						onFail?.(fileData, err)
 						reject({
@@ -186,16 +193,22 @@ export class UploadService<F extends UploadFileLike> {
 			onUploadStateChange?.(false)
 
 			if (rejectedData.length > 0) {
-				logger.error("batch upload finished with rejections", {
-					count: rejectedData.length,
-					files: rejectedData
-						.map((r) => {
-							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
-							return reason?.uploadFile?.name
-						})
-						.filter(Boolean),
+				logger.error({
+					eventKey: "batch_upload_finished_rejections_failed",
+					errorKind: "unknown",
+					error: rejectedData[0]?.reason,
+					message: "batch upload finished with rejections",
+					// 文件名和 rejection 明细可能含业务数据，仅保留失败数量。
+					context: {
+						count: rejectedData.length,
+						files: rejectedData
+							.map((r) => {
+								const reason = (r as PromiseRejectedResult).reason as
+									{ uploadFile?: { name?: string } } | undefined
+								return reason?.uploadFile?.name
+							})
+							.filter(Boolean),
+					},
 				})
 			}
 

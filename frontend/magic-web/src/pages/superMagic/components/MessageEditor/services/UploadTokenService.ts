@@ -66,7 +66,13 @@ class UploadTokenService {
 
 			return res
 		} catch (error) {
-			this.logger.error("fetchUploadToken failed", { projectId, url, error })
+			this.logger.error({
+				eventKey: "fetch_upload_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "fetchUploadToken failed",
+				context: { projectId, url },
+			})
 			throw error
 		}
 	}
@@ -138,7 +144,13 @@ class UploadTokenService {
 			const newToken = await this.fetchUploadToken(projectId)
 			return newToken
 		} catch (error) {
-			this.logger.error("getUploadToken failed", { projectId, error })
+			this.logger.error({
+				eventKey: "get_upload_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "getUploadToken failed",
+				context: { projectId },
+			})
 			throw error
 		}
 	}
@@ -164,7 +176,13 @@ class UploadTokenService {
 
 			return originalCredentials
 		} catch (error) {
-			this.logger.error("getUploadTokenForCustomKey failed", { projectId, error })
+			this.logger.error({
+				eventKey: "custom_key_upload_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "getUploadTokenForCustomKey failed",
+				context: { projectId },
+			})
 			throw error
 		}
 	}

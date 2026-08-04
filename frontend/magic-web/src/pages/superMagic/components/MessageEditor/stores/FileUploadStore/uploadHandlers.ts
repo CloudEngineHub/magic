@@ -133,7 +133,12 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 					})
 				}
 			} catch (error) {
-				logger.error("save file to project failed", error)
+				logger.error({
+					eventKey: "save_file_project_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "save file to project failed",
+				})
 			}
 
 			const projectFilesStore = context.getProjectFilesStore()
@@ -183,7 +188,12 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 				return newFiles
 			})
 		} catch (error) {
-			logger.error("report file failed", error)
+			logger.error({
+				eventKey: "report_file_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "report file failed",
+			})
 			context.setFilesWithLimit((prev) => {
 				const newFiles = [...prev]
 				const target = newFiles.find((f) => f.id === file.id)
@@ -220,7 +230,12 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 			return newFiles
 		})
 
-		logger.error("upload failed", { fileId: file.id, message: errorMessage })
+		logger.error({
+			eventKey: "upload_failed",
+			errorKind: "unknown",
+			message: "upload failed",
+			context: { fileId: file.id, message: errorMessage },
+		})
 	}
 
 	const handleInit = (file: FileData, { cancel }: { cancel?: () => void }) => {

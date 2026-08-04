@@ -65,19 +65,22 @@ export class SessionStorageHtmlPermissionGrantStore implements HtmlPermissionGra
 			if (!raw) return []
 			const parsed = JSON.parse(raw)
 			if (!Array.isArray(parsed)) {
-				htmlMicroAppPreviewLogger.error("Corrupted permission grants in sessionStorage", {
-					storageKey: this.storageKey,
+				htmlMicroAppPreviewLogger.error({
+					eventKey: "permission_grants_storage_corrupted",
+					errorKind: "permission",
+					message: "Corrupted permission grants in sessionStorage",
+					context: { storageKey: this.storageKey },
 				})
 				return []
 			}
 			return parsed.filter(isValidGrant)
 		} catch (error) {
-			htmlMicroAppPreviewLogger.error(
-				"Failed to read permission grants from sessionStorage",
-				{
-					error: error instanceof Error ? error.message : String(error),
-				},
-			)
+			htmlMicroAppPreviewLogger.error({
+				eventKey: "permission_grants_storage_read_failed",
+				errorKind: "permission",
+				error: error,
+				message: "Failed to read permission grants from sessionStorage",
+			})
 			return []
 		}
 	}

@@ -18,7 +18,13 @@ export class ClusterRepository extends GlobalBaseRepository<Common.PrivateConfig
 				this.put({ ...config, deployCode: config?.deployCode ?? "" }),
 			)
 		} catch (error) {
-			logger.error("setClustersConfigError", ClusterRepository.tableName, error)
+			logger.error({
+				eventKey: "set_clusters_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setClustersConfigError",
+				context: { tableName: ClusterRepository.tableName },
+			})
 		} finally {
 			clustersConfig.map((config) =>
 				Storage.set(`${ClusterRepository.tableName}:${config?.deployCode ?? ""}`, {
@@ -33,7 +39,13 @@ export class ClusterRepository extends GlobalBaseRepository<Common.PrivateConfig
 		try {
 			return await this.put(clustersConfig)
 		} catch (error) {
-			logger.error("setClusterConfigError", ClusterRepository.tableName, error)
+			logger.error({
+				eventKey: "set_cluster_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setClusterConfigError",
+				context: { tableName: ClusterRepository.tableName },
+			})
 			return Storage.set(
 				`${ClusterRepository.tableName}:${clustersConfig?.deployCode ?? ""}`,
 				clustersConfig,
@@ -45,7 +57,13 @@ export class ClusterRepository extends GlobalBaseRepository<Common.PrivateConfig
 		try {
 			return await this.getAll()
 		} catch (error) {
-			logger.error("getClustersConfigError", ClusterRepository.tableName, error)
+			logger.error({
+				eventKey: "get_clusters_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getClustersConfigError",
+				context: { tableName: ClusterRepository.tableName },
+			})
 			return Storage.getAll<Common.PrivateConfig>(`${ClusterRepository.tableName}:`)
 		}
 	}

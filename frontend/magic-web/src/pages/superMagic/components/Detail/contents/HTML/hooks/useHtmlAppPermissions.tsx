@@ -242,7 +242,12 @@ export function useHtmlAppPermissions({
 					instanceKey: htmlAppInstanceKey,
 					configState: { status: "error", error: "Invalid app.json" },
 				})
-				htmlMicroAppPreviewLogger.error("Invalid app.json", { appConfigPath })
+				htmlMicroAppPreviewLogger.error({
+					eventKey: "invalid_app_json_failed",
+					errorKind: "permission",
+					message: "Invalid app.json",
+					context: { appConfigPath },
+				})
 			})
 			.catch((error) => {
 				if (cancelled) return
@@ -251,9 +256,11 @@ export function useHtmlAppPermissions({
 					instanceKey: htmlAppInstanceKey,
 					configState: { status: "error", error: errorMessage },
 				})
-				htmlMicroAppPreviewLogger.error("Failed to load app.json", {
-					appConfigPath,
-					errorMessage,
+				htmlMicroAppPreviewLogger.error({
+					eventKey: "load_app_json_failed",
+					errorKind: "permission",
+					message: "Failed to load app.json",
+					context: { appConfigPath, errorMessage },
 				})
 			})
 

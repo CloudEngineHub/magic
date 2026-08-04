@@ -64,11 +64,15 @@ export default function useMessageSendHandler({
 			? { ...store.topicModelStore.selectedLanguageModel }
 			: null
 		if (!selectedModel) {
-			logger.error(
-				"fallback to auto model",
-				"current mode list:",
-				superMagicModeService.modeList,
-			)
+			logger.error({
+				eventKey: "fallback_auto_model_failed",
+				errorKind: "invalid_state",
+				message: "fallback to auto model",
+				// 完整迁移历史 modeList，确保自动模型回退时仍能检查候选模型状态。
+				context: {
+					currentModeList: superMagicModeService.modeList,
+				},
+			})
 			selectedModel = {
 				id: "auto",
 				group_id: "auto",

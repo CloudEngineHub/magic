@@ -15,9 +15,10 @@ import {
 } from "../utils/mention"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
+import type { StructuredErrorInput } from "@/utils/log/errorReport"
 
 interface LoggerLike {
-	error: (message: string, error?: unknown) => void
+	error: (input: StructuredErrorInput) => void
 }
 
 interface DeleteProjectFileParams {
@@ -262,7 +263,12 @@ export async function deleteProjectFile({ fileId, logger, onError }: DeleteProje
 	try {
 		await SuperMagicApi.deleteFile(fileId)
 	} catch (error) {
-		logger.error("delete project file failed", error)
+		logger.error({
+			eventKey: "delete_project_file_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "delete project file failed",
+		})
 		onError?.(error)
 	}
 }

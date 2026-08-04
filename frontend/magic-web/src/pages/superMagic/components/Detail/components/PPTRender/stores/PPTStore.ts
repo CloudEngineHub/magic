@@ -508,9 +508,15 @@ export class PPTStore {
 							},
 						})
 					} catch (error) {
-						this.logger.error("获取临时 URL 失败", error, {
-							operation: "initializeSlides",
-							metadata: { fileIdCount: fileIds.length },
+						this.logger.error({
+							eventKey: "get_url_failed",
+							errorKind: "render",
+							error: error,
+							message: "获取临时 URL 失败",
+							context: {
+								operation: "initializeSlides",
+								metadata: { fileIdCount: fileIds.length },
+							},
 						})
 					}
 				}
@@ -670,9 +676,12 @@ export class PPTStore {
 						)
 						fileIds.forEach((id) => allFileIds.add(id))
 					} catch (error) {
-						this.logger.error("加载原始内容失败", error, {
-							operation: "loadAllSlides",
-							slideIndex: index,
+						this.logger.error({
+							eventKey: "load_content_failed",
+							errorKind: "render",
+							error: error,
+							message: "加载原始内容失败",
+							context: { operation: "loadAllSlides", slideIndex: index },
 						})
 
 						runInAction(() => {
@@ -699,9 +708,15 @@ export class PPTStore {
 						}
 					})
 				} catch (error) {
-					this.logger.error("获取临时下载 URL 失败", error, {
-						operation: "loadAllSlides",
-						metadata: { fileIdCount: allFileIds.size },
+					this.logger.error({
+						eventKey: "get_download_url_failed",
+						errorKind: "render",
+						error: error,
+						message: "获取临时下载 URL 失败",
+						context: {
+							operation: "loadAllSlides",
+							metadata: { fileIdCount: allFileIds.size },
+						},
 					})
 				}
 			}
@@ -772,9 +787,12 @@ export class PPTStore {
 						// Update progress
 						this.loadingManager.updateProgress(this.slides)
 					} catch (error) {
-						this.logger.error("处理幻灯片失败", error, {
-							operation: "loadAllSlides",
-							slideIndex: index,
+						this.logger.error({
+							eventKey: "process_slide_failed",
+							errorKind: "render",
+							error: error,
+							message: "处理幻灯片失败",
+							context: { operation: "loadAllSlides", slideIndex: index },
 						})
 
 						runInAction(() => {
@@ -1282,9 +1300,15 @@ export class PPTStore {
 						metadata: { urlCount: response?.length || 0 },
 					})
 				} catch (error) {
-					this.logger.error("获取新幻灯片临时 URL 失败", error, {
-						operation: "handleNewSlideInsertion",
-						metadata: { fileIdCount: fileIds.length },
+					this.logger.error({
+						eventKey: "get_slide_url_failed",
+						errorKind: "render",
+						error: error,
+						message: "获取新幻灯片临时 URL 失败",
+						context: {
+							operation: "handleNewSlideInsertion",
+							metadata: { fileIdCount: fileIds.length },
+						},
 					})
 				}
 			}
@@ -1327,9 +1351,12 @@ export class PPTStore {
 							slideIndex: index,
 						})
 					} catch (error) {
-						this.logger.error("新幻灯片加载失败", error, {
-							operation: "handleNewSlideInsertion",
-							slideIndex: index,
+						this.logger.error({
+							eventKey: "slide_load_failed",
+							errorKind: "render",
+							error: error,
+							message: "新幻灯片加载失败",
+							context: { operation: "handleNewSlideInsertion", slideIndex: index },
 						})
 					}
 				}
@@ -1859,10 +1886,16 @@ export class PPTStore {
 								indexHint: index,
 							})
 						} catch (error) {
-							this.logger.error("恢复待加载幻灯片失败", error, {
-								operation: "recoverPendingSlidesAfterAttachmentUpdate",
-								slideIndex: index,
-								metadata: { path: slide.path },
+							this.logger.error({
+								eventKey: "restore_load_slide_failed",
+								errorKind: "render",
+								error: error,
+								message: "恢复待加载幻灯片失败",
+								context: {
+									operation: "recoverPendingSlidesAfterAttachmentUpdate",
+									slideIndex: index,
+									metadata: { path: slide.path },
+								},
 							})
 						}
 					}),
@@ -2093,9 +2126,12 @@ export class PPTStore {
 				this.setActiveIndex(cachedIndex)
 			}
 		} catch (error) {
-			this.logger.error("Failed to restore cached activeIndex", {
-				operation: "restoreCachedActiveIndex",
-				error,
+			this.logger.error({
+				eventKey: "restore_cached_active_index_failed",
+				errorKind: "render",
+				error: error,
+				message: "Failed to restore cached activeIndex",
+				context: { operation: "restoreCachedActiveIndex" },
 			})
 		}
 	}

@@ -287,8 +287,11 @@ class RecordSummaryService {
 				})
 			})
 			.catch((error) => {
-				logger.error("清理过期会话历史或音频分片失败", {
-					error: error instanceof Error ? error.message : String(error),
+				logger.error({
+					eventKey: "cleanup_session_audio_chunk_failed",
+					errorKind: "lifecycle",
+					error: error,
+					message: "清理过期会话历史或音频分片失败",
 				})
 			})
 		this.batchSaveReporter = new RecordingBatchSaveReporter()
@@ -428,7 +431,12 @@ class RecordSummaryService {
 					asr_stream_content: this.getLatestAsrContent(),
 				})
 			} catch (error) {
-				logger.error("上报登出状态失败", error)
+				logger.error({
+					eventKey: "report_logout_status_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "上报登出状态失败",
+				})
 			}
 
 			// 6. 重置 UI 状态但不清除持久化数据
@@ -436,7 +444,12 @@ class RecordSummaryService {
 
 			logger.log("用户登出处理完成，数据已保存")
 		} catch (error) {
-			logger.error("处理用户登出失败", error)
+			logger.error({
+				eventKey: "process_user_logout_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "处理用户登出失败",
+			})
 		}
 	}
 
@@ -551,7 +564,12 @@ class RecordSummaryService {
 					.getToken(session.id, session.topic?.id || "")
 				logger.log(`会话 ${session.id} 的上传凭证预加载成功`)
 			} catch (error) {
-				logger.error("获取上传凭证失败", error)
+				logger.error({
+					eventKey: "upload_token_preload_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "获取上传凭证失败",
+				})
 				throw new Error("无法获取上传凭证，录音启动失败")
 			}
 
@@ -644,11 +662,21 @@ class RecordSummaryService {
 					session.project?.id || "",
 				)
 			} catch (error) {
-				logger.error("初始化内容文件管理器失败", error)
+				logger.error({
+					eventKey: "initialize_content_file_manager_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "初始化内容文件管理器失败",
+				})
 				// Don't block recording on content file initialization failure
 			}
 		} catch (error) {
-			logger.error("启动录音失败", error)
+			logger.error({
+				eventKey: "start_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "启动录音失败",
+			})
 
 			// 重置服务（await 确保 reset 完成后再处理错误，避免并发竞态）
 			await this.reset()
@@ -940,7 +968,12 @@ class RecordSummaryService {
 
 			// 暂停语音识别
 			await this.voiceToTextService.stopRecording().catch((error) => {
-				logger.error("Failed to stop voice recording", error)
+				logger.error({
+					eventKey: "stop_voice_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to stop voice recording",
+				})
 			})
 
 			// 停止语音超时检测
@@ -955,7 +988,12 @@ class RecordSummaryService {
 				this.voiceToTextService.disconnect()
 				logger.log("All audio resources released during pause")
 			} catch (error) {
-				logger.error("Failed to release resources", error)
+				logger.error({
+					eventKey: "release_resources_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to release resources",
+				})
 			}
 
 			// Pause duration tracking and save accumulated duration
@@ -984,7 +1022,12 @@ class RecordSummaryService {
 
 			recordSummaryStore.setIsPaused(true)
 		} catch (error) {
-			logger.error("Failed to pause recording", error)
+			logger.error({
+				eventKey: "pause_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to pause recording",
+			})
 		} finally {
 			recordSummaryStore.setIsPausing(false)
 		}
@@ -1034,7 +1077,12 @@ class RecordSummaryService {
 					})
 					logger.log("Display media pre-authorized successfully")
 				} catch (error) {
-					logger.error("Failed to pre-authorize display media", error)
+					logger.error({
+						eventKey: "pre_authorize_display_media_failed",
+						errorKind: "permission",
+						error: error,
+						message: "Failed to pre-authorize display media",
+					})
 					recordSummaryStore.setIsContinuing(false)
 					const errorMessage = i18n.t(
 						"recordSummary:audioSource.errors.resumePermissionDenied",
@@ -1100,7 +1148,12 @@ class RecordSummaryService {
 
 			recordSummaryStore.setIsPaused(false)
 		} catch (error) {
-			logger.error("Failed to continue recording", error)
+			logger.error({
+				eventKey: "continue_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to continue recording",
+			})
 			// 恢复失败时，确保状态一致
 			recordSummaryStore.setIsPaused(true)
 			throw error
@@ -1187,7 +1240,12 @@ class RecordSummaryService {
 
 			logger.log("Audio source switched successfully", { newSource })
 		} catch (error) {
-			logger.error("Failed to switch audio source", error)
+			logger.error({
+				eventKey: "switch_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch audio source",
+			})
 			throw error
 		}
 	}
@@ -1243,7 +1301,12 @@ class RecordSummaryService {
 
 			logger.log("Microphone device switched successfully", { deviceId })
 		} catch (error) {
-			logger.error("Failed to switch microphone device", error)
+			logger.error({
+				eventKey: "switch_microphone_device_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch microphone device",
+			})
 			throw error
 		}
 	}
@@ -1354,7 +1417,12 @@ class RecordSummaryService {
 				audioSource: audioSource.source,
 			})
 		} catch (error) {
-			logger.error("Failed to resume recording", error)
+			logger.error({
+				eventKey: "resume_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to resume recording",
+			})
 			this.handleMediaRecorderError(error as Error)
 		}
 	}
@@ -1394,7 +1462,12 @@ class RecordSummaryService {
 					},
 				)
 			} catch (error) {
-				logger.error("初始化内容文件管理器失败", error)
+				logger.error({
+					eventKey: "initialize_content_file_manager_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "初始化内容文件管理器失败",
+				})
 				// Don't block recording on content file initialization failure
 			}
 		}
@@ -1457,7 +1530,12 @@ class RecordSummaryService {
 			// 完全清理音频资源，包括音频流
 			this.voiceToTextService.disconnect()
 		} catch (error) {
-			logger.error("Failed to stop voice recording", error)
+			logger.error({
+				eventKey: "stop_voice_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to stop voice recording",
+			})
 		}
 
 		// 停止媒体录制器并请求最终分片
@@ -1466,7 +1544,12 @@ class RecordSummaryService {
 			this.mediaRecorderService.requestData()
 			await this.mediaRecorderService.stopRecording()
 		} catch (error) {
-			logger.error("Failed to stop media recorder", error)
+			logger.error({
+				eventKey: "stop_media_recorder_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to stop media recorder",
+			})
 		}
 
 		const session = this.sessionManager.getCurrentSession()
@@ -1675,7 +1758,12 @@ class RecordSummaryService {
 			finalProject = ensured.project
 			finalTopic = ensured.topic
 		} catch (err) {
-			logger.error("处理项目和话题失败", err)
+			logger.error({
+				eventKey: "process_project_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "处理项目和话题失败",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
@@ -1711,7 +1799,12 @@ class RecordSummaryService {
 				logger.report("所有分片上传完成")
 			}
 		} catch (err) {
-			logger.error(`${sessionId} 等待所有分片上传完成失败`, err)
+			logger.error({
+				eventKey: "chunk_upload_completion_wait_failed",
+				errorKind: "unknown",
+				error: err,
+				message: `${sessionId} 等待所有分片上传完成失败`,
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.uploadChunksPreparingError", { ns: "super" }),
 			)
@@ -1752,7 +1845,12 @@ class RecordSummaryService {
 					", modelId: " +
 					modelId,
 			)
-			logger.error("Missing required parameters for summary", error)
+			logger.error({
+				eventKey: "recording_summary_parameters_missing",
+				errorKind: "invalid_state",
+				error: error,
+				message: "Missing required parameters for summary",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
@@ -1771,7 +1869,12 @@ class RecordSummaryService {
 					asrStreamContent: asr_stream_content || "",
 				})
 			} catch (err) {
-				logger.error("finish recording task failed", err)
+				logger.error({
+					eventKey: "finish_recording_task_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "finish recording task failed",
+				})
 				this.summaryMessageService.showError(
 					i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 				)
@@ -1837,10 +1940,12 @@ class RecordSummaryService {
 					)
 					logger.log("Storage image migration completed")
 				} catch (migrationError) {
-					logger.error(
-						"Failed to migrate storage images, using original content",
-						migrationError,
-					)
+					logger.error({
+						eventKey: "recording_storage_image_migration_failed",
+						errorKind: "storage",
+						error: migrationError,
+						message: "Failed to migrate storage images, using original content",
+					})
 				}
 			}
 
@@ -1871,7 +1976,12 @@ class RecordSummaryService {
 				workspace_id: workspace?.id || "",
 			})
 		} catch (err) {
-			logger.error("get recording summary result failed", err)
+			logger.error({
+				eventKey: "get_recording_summary_result_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "get recording summary result failed",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 			)
@@ -2017,7 +2127,12 @@ class RecordSummaryService {
 				model_id: model.model_id,
 			})
 		} catch (err) {
-			logger.error("get recording summary result failed", err)
+			logger.error({
+				eventKey: "get_recording_summary_result_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "get recording summary result failed",
+			})
 			onError(err as Error)
 		}
 
@@ -2114,9 +2229,12 @@ class RecordSummaryService {
 				project_name: session.project?.project_name || "",
 			}
 		} catch (error) {
-			logger.error("目标录音会话完成失败", {
-				sessionId: session.id,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "recording_session_complete_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "目标录音会话完成失败",
+				context: { sessionId: session.id },
 			})
 			throw error
 		}
@@ -2381,13 +2499,21 @@ class RecordSummaryService {
 					this.handleChunkProductionTimeout(sessionId, timeoutMs)
 				}, timeoutMs)
 			} catch (error) {
-				logger.error("分片生产监控：自动重启录音器失败", { error: String(error) })
+				logger.error({
+					eventKey: "chunk_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "分片生产监控：自动重启录音器失败",
+				})
 				this.notifyUserChunkProductionFailed()
 			}
 		} else {
 			// 恢复尝试后仍无分片，通知用户
-			logger.error("分片生产监控：自动恢复失败，录音器无法正常产出分片", {
-				sessionId,
+			logger.error({
+				eventKey: "restored_recording_chunk_production_failed",
+				errorKind: "unknown",
+				message: "分片生产监控：自动恢复失败，录音器无法正常产出分片",
+				context: { sessionId },
 			})
 			this.notifyUserChunkProductionFailed()
 		}
@@ -2477,14 +2603,23 @@ class RecordSummaryService {
 	 * 语音识别错误不应该干扰录制服务，只在UI上显示错误和重试选项
 	 */
 	private handleVoiceError = (error: Error) => {
-		logger.error("语音识别服务错误", error)
+		logger.error({
+			eventKey: "speech_recognition_service_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "语音识别服务错误",
+		})
 
 		// 获取重试信息
 		const retryInfo = this.voiceToTextService.getRetryInfo()
 
 		// 如果已经超过最大重试次数，显示重试按钮供用户手动重试
 		if (retryInfo.hasExceededRetries) {
-			logger.error("语音识别重试已经超过最大重试次数，用户可以手动重试")
+			logger.error({
+				eventKey: "speech_recognition_retry_exhausted",
+				errorKind: "unknown",
+				message: "语音识别重试已经超过最大重试次数，用户可以手动重试",
+			})
 			// UI 会显示重试按钮，用户可以点击调用 retryVoiceToTextService 方法
 		}
 
@@ -2506,9 +2641,12 @@ class RecordSummaryService {
 	 * 媒体录制错误需要重置整个录制服务状态
 	 */
 	private handleMediaRecorderError = (error: Error) => {
-		logger.error("Media recorder service error", {
-			error,
-			session: this.sessionManager.getCurrentSession(),
+		logger.error({
+			eventKey: "media_recorder_service_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "Media recorder service error",
+			context: { session: this.sessionManager.getCurrentSession() },
 		})
 
 		// 设置录制错误状态
@@ -2526,7 +2664,12 @@ class RecordSummaryService {
 				}
 			})
 			.catch((cancelError) => {
-				logger.error("Failed to cancel recording after media recorder error", cancelError)
+				logger.error({
+					eventKey: "cancel_recording_after_media_recorder_failed",
+					errorKind: "unknown",
+					error: cancelError,
+					message: "Failed to cancel recording after media recorder error",
+				})
 			})
 	}
 
@@ -2535,7 +2678,12 @@ class RecordSummaryService {
 	 * 状态上报错误不应该影响录制流程，仅记录日志
 	 */
 	private handleStatusReportError = async (error: Error) => {
-		logger.error("状态上报失败", error)
+		logger.error({
+			eventKey: "status_report_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "状态上报失败",
+		})
 		// Silent failure - does not affect recording functionality
 		// Check if error is task end error
 		if (isTaskEndError(error)) {
@@ -2565,7 +2713,12 @@ class RecordSummaryService {
 	 * 内容文件上传错误不应该影响录制流程，仅记录日志
 	 */
 	private handleContentFileUploadError = (fileType: string, error: Error) => {
-		logger.error(`Content file upload failed: ${fileType}`, error)
+		logger.error({
+			eventKey: "content_file_upload_failed",
+			errorKind: "unknown",
+			error: error,
+			message: `Content file upload failed: ${fileType}`,
+		})
 		// Silent failure - does not affect recording functionality
 	}
 
@@ -2608,7 +2761,12 @@ class RecordSummaryService {
 			await this.voiceToTextService.retry()
 			recordSummaryStore.clearVoiceError()
 		} catch (error) {
-			logger.error("手动重试语音识别服务失败", error)
+			logger.error({
+				eventKey: "retry_speech_recognition_service_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "手动重试语音识别服务失败",
+			})
 			recordSummaryStore.setVoiceError(true)
 		} finally {
 			recordSummaryStore.setRetryingState(false)
@@ -2696,18 +2854,22 @@ class RecordSummaryService {
 					}
 				},
 				onError: (error) => {
-					logger.error(
-						"Failed to complete recording after duration limit exceeded",
-						{
-							session: cancelledSession,
-							error: error,
-						},
-						error,
-					)
+					logger.error({
+						eventKey: "complete_recording_duration_limit_exceeded",
+						errorKind: "timeout",
+						error: error,
+						message: "Failed to complete recording after duration limit exceeded",
+						context: { cancelledSession },
+					})
 				},
 			})
 		} catch (error) {
-			logger.error("Failed to cancel recording after duration limit exceeded", error)
+			logger.error({
+				eventKey: "cancel_recording_duration_limit_exceeded",
+				errorKind: "timeout",
+				error: error,
+				message: "Failed to cancel recording after duration limit exceeded",
+			})
 		} finally {
 			this.isDurationLimitExceeded = false
 		}
@@ -2781,7 +2943,12 @@ class RecordSummaryService {
 			try {
 				chunkConsistency = await this.validateChunkIndexConsistency(sessionSummary.id)
 			} catch (error) {
-				logger.error("Failed to get chunk consistency in getStatus", error)
+				logger.error({
+					eventKey: "get_chunk_consistency_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to get chunk consistency in getStatus",
+				})
 			}
 		}
 
@@ -2919,7 +3086,12 @@ class RecordSummaryService {
 				fixed: false,
 			}
 		} catch (error) {
-			logger.error(`${sessionId} 验证分片索引一致性失败`, error)
+			logger.error({
+				eventKey: "validate_chunk_index_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `${sessionId} 验证分片索引一致性失败`,
+			})
 			return {
 				isConsistent: false,
 				actualChunkCount: 0,
@@ -3030,7 +3202,12 @@ class RecordSummaryService {
 				}
 			}
 		} catch (error) {
-			logger.error("恢复之前的会话失败", error)
+			logger.error({
+				eventKey: "restore_previous_session_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "恢复之前的会话失败",
+			})
 		} finally {
 			this.isRestoringSession = false
 		}
@@ -3059,7 +3236,12 @@ class RecordSummaryService {
 				})
 			}
 		} catch (error) {
-			logger.error("Failed to save final session state", error)
+			logger.error({
+				eventKey: "save_final_session_state_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to save final session state",
+			})
 		}
 	}
 	/**
@@ -3099,7 +3281,12 @@ class RecordSummaryService {
 				currentSession.project?.id || "",
 			)
 			.catch((error) => {
-				logger.error("Failed to trigger session upload", error)
+				logger.error({
+					eventKey: "trigger_session_upload_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to trigger session upload",
+				})
 			})
 	}
 
@@ -3118,7 +3305,12 @@ class RecordSummaryService {
 			this.lastPersistTime = now
 			logger.log("Session state persisted")
 		} catch (error) {
-			logger.error("Failed to persist session state", error)
+			logger.error({
+				eventKey: "persist_session_state_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to persist session state",
+			})
 		}
 	}
 
@@ -3200,7 +3392,13 @@ class RecordSummaryService {
 	 * 处理上传错误事件
 	 */
 	private handleUploadError = (taskId: string, error: Error) => {
-		logger.error("Upload failed", { taskId, error: error.message })
+		logger.error({
+			eventKey: "recording_chunk_upload_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "Upload failed",
+			context: { taskId },
+		})
 
 		// TODO: Update UI with error status
 		// TODO: Save failed upload for retry
@@ -3261,9 +3459,11 @@ class RecordSummaryService {
 	 * 处理达到最大重试次数事件
 	 */
 	private handleMaxRetriesReached = (chunkId: string, retryCount: number) => {
-		logger.error("Chunk upload failed after max retries", {
-			chunkId,
-			retryCount,
+		logger.error({
+			eventKey: "chunk_upload_max_retries_failed",
+			errorKind: "unknown",
+			message: "Chunk upload failed after max retries",
+			context: { chunkId, retryCount },
 		})
 
 		// Show error notification to user
@@ -3323,7 +3523,12 @@ class RecordSummaryService {
 
 			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}`)
 		} catch (error) {
-			logger.error(`处理任务结束事件失败：`, error)
+			logger.error({
+				eventKey: "task_end_event_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `处理任务结束事件失败：`,
+			})
 		}
 	}
 
@@ -3350,7 +3555,12 @@ class RecordSummaryService {
 						// Could potentially show a notification to user about potential recording interruption
 					}
 				} catch (error) {
-					logger.error("Error while trying to re-acquire wake lock", error)
+					logger.error({
+						eventKey: "re_acquire_wake_lock_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "Error while trying to re-acquire wake lock",
+					})
 				}
 			}, 100)
 		}
@@ -3434,7 +3644,12 @@ class RecordSummaryService {
 				sessionId: session.id,
 			})
 		} catch (error) {
-			logger.error("Failed to restore session as inactive", error)
+			logger.error({
+				eventKey: "restore_session_as_inactive_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to restore session as inactive",
+			})
 		}
 	}
 
@@ -3513,12 +3728,22 @@ class RecordSummaryService {
 					onSummarizeSuccessDefaultCallback(res)
 				},
 				onError: (error) => {
-					logger.error("finishHistoricalSession summarize failed", error)
+					logger.error({
+						eventKey: "finish_historical_session_summarize_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "finishHistoricalSession summarize failed",
+					})
 					recordSummaryStore.reset()
 				},
 			})
 		} catch (error) {
-			logger.error("finishHistoricalSession 失败", error)
+			logger.error({
+				eventKey: "finish_historical_session_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "finishHistoricalSession 失败",
+			})
 			recordSummaryStore.reset()
 		} finally {
 			this.isRestoringSession = false
@@ -3566,7 +3791,12 @@ class RecordSummaryService {
 			await this.voiceToTextService.stopRecording()
 			this.voiceToTextService.disconnect()
 		} catch (error) {
-			logger.error("停止语音识别服务失败", error)
+			logger.error({
+				eventKey: "stop_speech_recognition_service_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "停止语音识别服务失败",
+			})
 		}
 
 		// 停止语音超时检测
@@ -3581,7 +3811,12 @@ class RecordSummaryService {
 			await this.mediaRecorderService.stopRecording()
 			this.mediaRecorderService.reset()
 		} catch (error) {
-			logger.error("停止媒体录制器失败", error)
+			logger.error({
+				eventKey: "stop_media_recorder_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "停止媒体录制器失败",
+			})
 		}
 
 		// Pause duration tracking (save current duration)
@@ -3731,7 +3966,12 @@ class RecordSummaryService {
 				}
 			}
 		} catch (error) {
-			logger.error(`${session.id} 等待分片上传完成失败`, error)
+			logger.error({
+				eventKey: "wait_chunk_upload_complete_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `${session.id} 等待分片上传完成失败`,
+			})
 			throw new Error(
 				`等待分片上传完成失败: ${error instanceof Error ? error.message : String(error)}`,
 			)

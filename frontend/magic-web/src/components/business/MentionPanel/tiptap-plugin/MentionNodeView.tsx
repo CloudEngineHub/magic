@@ -42,7 +42,12 @@ class MentionNodeViewErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: unknown) {
-		logger.error("render error", error)
+		logger.error({
+			eventKey: "mention_node_render_failed",
+			errorKind: "render",
+			error: error,
+			message: "render error",
+		})
 	}
 
 	render() {

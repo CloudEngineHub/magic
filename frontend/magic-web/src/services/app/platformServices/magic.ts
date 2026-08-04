@@ -180,7 +180,12 @@ export class MagicPlatformService implements PlatformServiceInterface {
 				}
 			}
 		} catch (error) {
-			this.logger.error("切换账户后的初始化流程失败", error)
+			this.logger.error({
+				eventKey: "switch_account_initialize_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "切换账户后的初始化流程失败",
+			})
 		}
 	}
 
@@ -379,7 +384,12 @@ export class MagicPlatformService implements PlatformServiceInterface {
 		try {
 			await this.chatInitPromise
 		} catch (error) {
-			this.logger.error("初始化聊天数据失败", error)
+			this.logger.error({
+				eventKey: "initialize_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "初始化聊天数据失败",
+			})
 			throw error
 		} finally {
 			this.chatInitPromise = null

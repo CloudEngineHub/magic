@@ -273,12 +273,17 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 						// 显示用户友好的提示（取消操作不显示错误）
 						if (!isCancelled) {
-							logger.error("[uploadBatch] Batch upload failed", {
-								error: errorMessage,
-								taskId: this.id,
-								projectId: this.projectId,
-								folderPath,
-								batchSize: batch.length,
+							logger.error({
+								eventKey: "batch_upload_failed",
+								errorKind: "unknown",
+								error,
+								message: "[uploadBatch] Batch upload failed",
+								context: {
+									taskId: this.id,
+									projectId: this.projectId,
+									batchSize: batch.length,
+									folderPath,
+								},
 							})
 							magicToast.error(
 								String(this.t("folderUpload.errors.batchUploadFailedWithRetry")),
@@ -372,15 +377,20 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 			// 只在真正的错误时显示提示，用户取消操作不显示任何提示
 			if (!isCancelled) {
-				logger.error("[execute] Task execution failed", {
-					error: errorMessage,
-					taskId: this.id,
-					projectId: this.projectId,
-					projectName: this.projectName,
-					totalFiles: this.state.totalFiles,
-					processedFiles: this.state.processedFiles,
-					successFiles: this.state.successFiles,
-					errorFiles: this.state.errorFiles,
+				logger.error({
+					eventKey: "upload_task_execution_failed",
+					errorKind: "unknown",
+					error,
+					message: "[execute] Task execution failed",
+					context: {
+						taskId: this.id,
+						projectId: this.projectId,
+						totalFiles: this.state.totalFiles,
+						processedFiles: this.state.processedFiles,
+						successFiles: this.state.successFiles,
+						errorFiles: this.state.errorFiles,
+						projectName: this.projectName,
+					},
 				})
 				magicToast.error(String(this.t("folderUpload.errors.taskExecutionFailedWithRetry")))
 			}
@@ -571,11 +581,9 @@ export class FolderUploadTask implements IFolderUploadTask {
 					result.reason instanceof Error
 						? result.reason.message
 						: String(result.reason || "Unknown error")
-
-				// 🔍 提取凭证信息（如果有）
+				// 提取并沿用历史脱敏后的凭证诊断信息。
 				const temporaryCredential = (result.reason as any)?.temporaryCredential
-
-				// 🔒 过滤敏感字段用于日志记录
+				// sanitizeTemporaryCredential 的行为不在本次上报接口改造范围内。
 				const sanitizedCredential = sanitizeTemporaryCredential(temporaryCredential)
 
 				// 跳过暂停导致的"失败"
@@ -589,14 +597,18 @@ export class FolderUploadTask implements IFolderUploadTask {
 						failedAt: Date.now(),
 					})
 
-					logger.error("[uploadFilesToOSS] File upload failed", {
-						fileName: folderFile.file.name,
-						filePath: folderFile.relativePath,
-						error: errorMessage,
-						taskId: this.id,
-						projectId: this.projectId,
-						// 🔍 补充脱敏后的凭证信息
-						temporaryCredential: sanitizedCredential,
+					logger.error({
+						eventKey: "oss_file_upload_failed",
+						errorKind: "unknown",
+						error: result.reason,
+						message: "[uploadFilesToOSS] File upload failed",
+						context: {
+							fileName: folderFile.file.name,
+							filePath: folderFile.relativePath,
+							taskId: this.id,
+							projectId: this.projectId,
+							temporaryCredential: sanitizedCredential,
+						},
 					})
 				}
 			}
@@ -665,15 +677,20 @@ export class FolderUploadTask implements IFolderUploadTask {
 				relative_file_path: file.relative_file_path,
 			}))
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			// 直接透传原始 Error，避免只保留 message 而丢失堆栈。
 			console.error("Failed to save batch to project:", error)
 
-			logger.error("[saveBatchToProject] Failed to save batch to project ", {
-				error: errorMessage,
-				taskId: this.id,
-				projectId: this.projectId,
-				fileCount: ossResults.length,
-				fullErrorObject: JSON.stringify(error),
+			logger.error({
+				eventKey: "save_batch_to_project_failed",
+				errorKind: "unknown",
+				error,
+				message: "[saveBatchToProject] Failed to save batch to project ",
+				context: {
+					taskId: this.id,
+					projectId: this.projectId,
+					fileCount: ossResults.length,
+					fullErrorObject: JSON.stringify(error),
+				},
 			})
 
 			// 显示用户友好的错误提示
@@ -749,12 +766,14 @@ export class FolderUploadTask implements IFolderUploadTask {
 					})
 				}
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				// 文件夹创建异常同样保留原始 Error，目录内容不额外复制到错误上下文。
 				this.updateState({ directoryFailed: (this.state.directoryFailed || 0) + 1 })
-				logger.error("[createFolderStructure] Failed to create folder", {
-					folderPath,
-					error: errorMessage,
-					taskId: this.id,
+				logger.error({
+					eventKey: "create_folder_failed",
+					errorKind: "unknown",
+					error,
+					message: "[createFolderStructure] Failed to create folder",
+					context: { taskId: this.id, folderPath },
 				})
 				// 文件夹创建失败时不中断整体流程，saveBatchToProject 会降级使用 this.parentId
 			}
@@ -1028,38 +1047,44 @@ export class FolderUploadTask implements IFolderUploadTask {
 			}))
 
 			// 上报异常情况
-			logger.error("[FolderUpload] File count anomaly detected", {
-				taskId: this.id,
-				projectId: this.projectId,
-				projectName: this.projectName,
-				anomaly: {
-					type: "processedFiles_includes_failed_files",
-					description: `processedFiles (${currentProcessedFiles}) includes ${incorrectCount} failed files`,
-					incorrectDisplay: `${currentProcessedFiles}/${this.state.totalFiles}`,
-					correctDisplay: `${actualSuccessFiles}/${this.state.totalFiles}`,
+			logger.error({
+				eventKey: "folder_upload_file_count_anomaly",
+				errorKind: "unknown",
+				message: "[FolderUpload] File count anomaly detected",
+				context: {
+					taskId: this.id,
+					projectId: this.projectId,
+					projectName: this.projectName,
+					anomaly: {
+						type: "processedFiles_includes_failed_files",
+						description: `processedFiles (${currentProcessedFiles}) includes ${incorrectCount} failed files`,
+						incorrectDisplay: `${currentProcessedFiles}/${this.state.totalFiles}`,
+						correctDisplay: `${actualSuccessFiles}/${this.state.totalFiles}`,
+					},
+					counts: {
+						totalFiles: this.state.totalFiles,
+						processedFiles_before: currentProcessedFiles,
+						processedFiles_after: actualSuccessFiles,
+						successFiles_before: currentSuccessFiles,
+						successFiles_after: actualSuccessFiles,
+						errorFiles_before: this.state.errorFiles,
+						errorFiles_after: actualErrorFiles,
+						savedFileKeysSize: this.savedFileKeys.size,
+						failedFilesMapSize: this.failedFilesMap.size,
+					},
+					state: {
+						isCompleted: this.state.isCompleted,
+						isError: this.state.isError,
+						isPaused: this.state.isPaused,
+						currentPhase: this.state.currentPhase,
+						progress: this.state.progress,
+						currentBatch: this.state.currentBatch,
+						totalBatches: this.state.totalBatches,
+					},
+					failedFilesDetails,
+					timestamp: Date.now(),
+					failedFileCount: this.failedFilesMap.size,
 				},
-				counts: {
-					totalFiles: this.state.totalFiles,
-					processedFiles_before: currentProcessedFiles,
-					processedFiles_after: actualSuccessFiles,
-					successFiles_before: currentSuccessFiles,
-					successFiles_after: actualSuccessFiles,
-					errorFiles_before: this.state.errorFiles,
-					errorFiles_after: actualErrorFiles,
-					savedFileKeysSize: this.savedFileKeys.size,
-					failedFilesMapSize: this.failedFilesMap.size,
-				},
-				state: {
-					isCompleted: this.state.isCompleted,
-					isError: this.state.isError,
-					isPaused: this.state.isPaused,
-					currentPhase: this.state.currentPhase,
-					progress: this.state.progress,
-					currentBatch: this.state.currentBatch,
-					totalBatches: this.state.totalBatches,
-				},
-				failedFiles: failedFilesDetails,
-				timestamp: Date.now(),
 			})
 
 			console.warn(
@@ -1227,12 +1252,17 @@ export class FolderUploadTask implements IFolderUploadTask {
 		})
 		this.stopCompletionMonitoring()
 
-		logger.error("[handleProjectSaveFailure] Project save failed", {
-			source,
-			error: errorMessage,
-			taskId: this.id,
-			projectId: this.projectId,
-			fileCount: files.length,
+		logger.error({
+			eventKey: "project_save_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "[handleProjectSaveFailure] Project save failed",
+			context: {
+				source,
+				taskId: this.id,
+				projectId: this.projectId,
+				fileCount: files.length,
+			},
 		})
 
 		if (this.projectSaveFailureNotified) {
