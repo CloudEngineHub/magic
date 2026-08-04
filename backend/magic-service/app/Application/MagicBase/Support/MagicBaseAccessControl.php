@@ -26,6 +26,7 @@ use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
 use LogicException;
@@ -39,7 +40,16 @@ readonly class MagicBaseAccessControl
         private ProjectDomainService $projectDomainService,
         private ProjectMemberDomainService $projectMemberDomainService,
         private MagicDepartmentUserDomainService $departmentUserDomainService,
+        private MicroAppRepositoryInterface $microAppRepository,
     ) {
+    }
+
+    public function assertMicroAppActive(int $projectId): void
+    {
+        $microApp = $this->microAppRepository->findByProjectIdWithTrashed($projectId);
+        if ($microApp !== null && $microApp->getDeletedAt() !== null) {
+            MagicBaseExceptionBuilder::resourceNotFound('微应用');
+        }
     }
 
     public function requireReadableTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
@@ -377,6 +387,8 @@ readonly class MagicBaseAccessControl
 
     private function getProjectOrFail(int $projectId): ProjectEntity
     {
+        $this->assertMicroAppActive($projectId);
+
         $projects = $this->projectDomainService->getProjectsByIds([$projectId]);
         foreach ($projects as $project) {
             if ($project instanceof ProjectEntity && $project->getId() === $projectId) {

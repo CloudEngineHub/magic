@@ -17,6 +17,7 @@ use App\Domain\MagicBase\Entity\MagicBaseTableAdminEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTablePermissionEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseMetadataCleanupRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
@@ -30,9 +31,69 @@ use App\Domain\MagicBase\Repository\Persistence\Model\MagicBaseRowPermissionMode
 use App\Domain\MagicBase\Repository\Persistence\Model\MagicBaseTableAdminModel;
 use App\Domain\MagicBase\Repository\Persistence\Model\MagicBaseTableModel;
 use App\Domain\MagicBase\Repository\Persistence\Model\MagicBaseTablePermissionModel;
+use Hyperf\DbConnection\Db;
 
-class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, MagicBaseRelationRepositoryInterface, MagicBasePermissionRepositoryInterface, MagicBaseMigrationLogRepositoryInterface
+class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, MagicBaseRelationRepositoryInterface, MagicBasePermissionRepositoryInterface, MagicBaseMigrationLogRepositoryInterface, MagicBaseMetadataCleanupRepositoryInterface
 {
+    public function deleteProjectMetadata(string $organizationCode, int $projectId): void
+    {
+        Db::transaction(function () use ($organizationCode, $projectId): void {
+            $tableIds = MagicBaseTableModel::query()
+                ->withTrashed()
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->pluck('id')
+                ->map(static fn (mixed $id): int => (int) $id)
+                ->all();
+
+            if ($tableIds !== []) {
+                MagicBaseRowPermissionModel::query()
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('table_id', $tableIds)
+                    ->delete();
+                MagicBaseColumnPermissionModel::query()
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('table_id', $tableIds)
+                    ->delete();
+                MagicBaseTablePermissionModel::query()
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('table_id', $tableIds)
+                    ->delete();
+                MagicBaseTableAdminModel::query()
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('table_id', $tableIds)
+                    ->delete();
+
+                Db::table('magicbase_columns')
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('table_id', $tableIds)
+                    ->delete();
+            }
+
+            MagicBaseRelationModel::query()
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->delete();
+            MagicBaseMigrationLogModel::query()
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->delete();
+            MagicBaseProjectAdminModel::query()
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->delete();
+
+            Db::table('magicbase_tables')
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->delete();
+            Db::table('magicbase_project_storage_routes')
+                ->where('organization_code', $organizationCode)
+                ->where('project_id', $projectId)
+                ->delete();
+        });
+    }
+
     public function createProjectAdmin(array|MagicBaseProjectAdminEntity $data): MagicBaseProjectAdminEntity
     {
         $entity = $this->ensureEntity(MagicBaseProjectAdminEntity::class, $data);

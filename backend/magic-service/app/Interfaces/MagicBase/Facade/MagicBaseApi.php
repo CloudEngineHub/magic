@@ -406,6 +406,7 @@ class MagicBaseApi extends AbstractApi
     public function getProjectAdminAccess(string $projectId): array
     {
         $projectId = self::parseId($projectId, '项目ID');
+        $this->accessControl->assertMicroAppActive($projectId);
         $authorization = $this->getOptionalCurrentAuthorization();
         $shareToken = trim((string) $this->request->header('token', ''));
 
@@ -445,6 +446,8 @@ class MagicBaseApi extends AbstractApi
 
     private function resolveRuntimeAuthorization(int $projectId): MagicUserAuthorization
     {
+        $this->accessControl->assertMicroAppActive($projectId);
+
         $shareToken = trim((string) $this->request->header('token', ''));
         if ($shareToken === '') {
             return $this->getAuthorization();

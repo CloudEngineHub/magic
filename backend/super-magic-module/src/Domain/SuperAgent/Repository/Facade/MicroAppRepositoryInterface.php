@@ -14,7 +14,11 @@ interface MicroAppRepositoryInterface
 {
     public function findById(int $id): ?MicroAppEntity;
 
+    public function findByIdWithTrashed(int $id): ?MicroAppEntity;
+
     public function findByProjectId(int $projectId): ?MicroAppEntity;
+
+    public function findByProjectIdWithTrashed(int $projectId): ?MicroAppEntity;
 
     public function ensureByProjectId(
         int $projectId,
@@ -28,6 +32,10 @@ interface MicroAppRepositoryInterface
     public function deleteByProjectId(int $projectId): bool;
 
     public function restoreByProjectId(int $projectId): bool;
+
+    public function restoreById(int $id): bool;
+
+    public function forceDeleteById(int $id): bool;
 
     /**
      * @return MicroAppEntity[]

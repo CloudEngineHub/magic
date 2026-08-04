@@ -40,6 +40,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Service\RecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MicroAppEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectForkEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
@@ -539,13 +540,14 @@ class ProjectAppService extends AbstractAppService
 
         // 先获取项目实体用于事件发布和回收站记录
         $projectEntity = $this->projectDomainService->getProject($projectId, $dataIsolation->getCurrentUserId());
+        $microAppRecord = $this->microAppRepository->findByProjectId($projectId);
 
-        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity) {
+        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity, $microAppRecord) {
             // 删除项目
             $result = $this->projectDomainService->deleteProject($projectId, $dataIsolation->getCurrentUserId());
 
             // 微应用映射和稳定分享链接与项目保持同一删除事务。
-            $this->deleteMicroAppResources($projectId);
+            $this->deleteMicroAppResources($projectId, $microAppRecord);
 
             // 删除项目协作关系
             $this->projectMemberDomainService->deleteByProjectId($projectId);
@@ -556,18 +558,24 @@ class ProjectAppService extends AbstractAppService
 
             // 记录到回收站表
             $this->recycleBinDomainService->recordDeletion(
-                resourceType: RecycleBinResourceType::Project,
-                resourceId: $projectId,
+                resourceType: $microAppRecord === null ? RecycleBinResourceType::Project : RecycleBinResourceType::MicroApp,
+                resourceId: $microAppRecord?->getId() ?? $projectId,
                 resourceName: $projectEntity->getProjectName(),
                 ownerId: $projectEntity->getUserId(),
                 deletedBy: (string) $dataIsolation->getCurrentUserId(),
                 parentId: $projectEntity->getWorkspaceId(),
-                extraData: [
+                extraData: array_filter([
                     'parent_info' => [
                         'workspace_id' => $workspaceId,
                         'workspace_name' => $workspace ? $workspace->getName() : '',
                     ],
-                ]
+                    'micro_app' => $microAppRecord === null ? null : [
+                        'app_id' => (string) $microAppRecord->getId(),
+                        'project_id' => (string) $projectId,
+                        'organization_code' => $microAppRecord->getOrganizationCode(),
+                        'resource_id' => $microAppRecord->getResourceId(),
+                    ],
+                ], static fn (mixed $value): bool => $value !== null)
             );
 
             return $result;
@@ -692,31 +700,6 @@ class ProjectAppService extends AbstractAppService
 
         $successCount = count($deletedProjects);
         return new BatchDeleteProjectsResponseDTO(count($results), $successCount, count($results) - $successCount, $results);
-    }
-
-    private function deleteMicroAppResources(int $projectId): void
-    {
-        $microAppRecord = $this->microAppRepository->findByProjectId($projectId);
-        if ($microAppRecord === null) {
-            return;
-        }
-
-        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
-            $microAppRecord->getResourceId(),
-            ResourceType::Project->value
-        )) {
-            throw new RuntimeException(sprintf(
-                'Failed to delete micro app share for project %d',
-                $projectId
-            ));
-        }
-
-        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
-            throw new RuntimeException(sprintf(
-                'Failed to delete micro app record for project %d',
-                $projectId
-            ));
-        }
     }
 
     /**
@@ -2516,6 +2499,31 @@ class ProjectAppService extends AbstractAppService
 
         // Delete core project
         $this->projectDomainService->deleteProject($projectId, $project->getUserId());
+    }
+
+    private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
+    {
+        $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
+        if ($microAppRecord === null) {
+            return;
+        }
+
+        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
+            $microAppRecord->getResourceId(),
+            ResourceType::Project->value
+        )) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app share for project %d',
+                $projectId
+            ));
+        }
+
+        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app record for project %d',
+                $projectId
+            ));
+        }
     }
 
     /**

@@ -153,15 +153,18 @@ use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseBaseRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseDocumentRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseFragmentRepository;
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseMetadataCleanupRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseProjectStorageRouteRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseRowCleanupRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseTableRepositoryInterface;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseProjectStorageRouteRepository;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoProjectCleanupRepository;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Domain\MCP\Repository\Facade\MCPServerRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerToolRepositoryInterface;
@@ -443,6 +446,8 @@ $dependencies = [
     MagicBaseRowStoreRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
     MagicBaseRowQueryRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
     MagicBaseMigrationLogRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseMetadataCleanupRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseRowCleanupRepositoryInterface::class => MagicBaseMongoProjectCleanupRepository::class,
     MagicBaseProjectStorageRouteRepositoryInterface::class => MagicBaseProjectStorageRouteRepository::class,
     // mcp
     MCPServerRepositoryInterface::class => MCPServerRepository::class,

@@ -28,11 +28,29 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
     }
 
+    public function findByIdWithTrashed(int $id): ?MicroAppEntity
+    {
+        $model = MicroAppModel::withTrashed()
+            ->where('id', $id)
+            ->first();
+
+        return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
+    }
+
     public function findByProjectId(int $projectId): ?MicroAppEntity
     {
         $model = MicroAppModel::query()
             ->where('project_id', $projectId)
             ->whereNull('deleted_at')
+            ->first();
+
+        return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
+    }
+
+    public function findByProjectIdWithTrashed(int $projectId): ?MicroAppEntity
+    {
+        $model = MicroAppModel::withTrashed()
+            ->where('project_id', $projectId)
             ->first();
 
         return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
@@ -131,6 +149,28 @@ class MicroAppRepository implements MicroAppRepositoryInterface
                 'deleted_at' => null,
                 'updated_at' => date('Y-m-d H:i:s'),
             ]) > 0;
+    }
+
+    public function restoreById(int $id): bool
+    {
+        return MicroAppModel::withTrashed()
+            ->where('id', $id)
+            ->whereNotNull('deleted_at')
+            ->update([
+                'publish_status' => MicroAppPublishStatus::Unpublished->value,
+                'deleted_at' => null,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]) > 0;
+    }
+
+    public function forceDeleteById(int $id): bool
+    {
+        $model = MicroAppModel::withTrashed()->where('id', $id)->first();
+        if (! $model instanceof MicroAppModel) {
+            return true;
+        }
+
+        return (bool) $model->forceDelete();
     }
 
     public function findPublishedByOrganization(string $organizationCode): array
