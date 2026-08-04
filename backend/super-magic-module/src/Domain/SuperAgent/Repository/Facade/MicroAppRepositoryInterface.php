@@ -25,6 +25,10 @@ interface MicroAppRepositoryInterface
 
     public function save(MicroAppEntity $entity): MicroAppEntity;
 
+    public function deleteByProjectId(int $projectId): bool;
+
+    public function restoreByProjectId(int $projectId): bool;
+
     /**
      * @return MicroAppEntity[]
      */

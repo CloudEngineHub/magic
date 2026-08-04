@@ -17,6 +17,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Repository\Facade\RecycleBinRepositoryInte
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
@@ -47,6 +48,7 @@ class RecycleBinRestoreDomainService
         protected TopicRepositoryInterface $topicRepository,
         protected TaskFileRepositoryInterface $taskFileRepository,
         protected ProjectMemberRepositoryInterface $projectMemberRepository,
+        protected MicroAppRepositoryInterface $microAppRepository,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -238,6 +240,9 @@ class RecycleBinRestoreDomainService
         if (! $restored) {
             throw new RuntimeException(trans('recycle_bin.restore.project_failed'));
         }
+
+        // Keep the original app_id/resource_id, but require a new publish action after restore.
+        $this->microAppRepository->restoreByProjectId($projectId);
 
         $restoredMembers = $this->projectMemberRepository->restoreByProjectIds([$projectId], $userId);
         $this->logger->info('Restored project members', [

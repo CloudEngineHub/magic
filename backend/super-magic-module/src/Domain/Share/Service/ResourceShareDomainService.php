@@ -721,7 +721,7 @@ class ResourceShareDomainService
     {
         try {
             // 这里可以扩展为批量删除，目前先用单个删除
-            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType);
+            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType, false);
             if (! $shareEntity) {
                 return true;
             }

@@ -50,6 +50,7 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly ProjectDomainService $projectDomainService,
+        private readonly ProjectAppService $projectAppService,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
         private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
         private readonly PackageFilterInterface $packageFilterService,
@@ -218,6 +219,19 @@ class MicroAppProjectAppService extends AbstractAppService
         return $this->formatPublishRecord($record, $project->getProjectName());
     }
 
+    public function delete(RequestContext $requestContext, int $appId): array
+    {
+        [, $project] = $this->getValidatedMicroApp($appId);
+
+        $this->projectAppService->deleteProject($requestContext, $project->getId());
+
+        return [
+            'app_id' => (string) $appId,
+            'project_id' => (string) $project->getId(),
+            'deleted' => true,
+        ];
+    }
+
     public function show(RequestContext $requestContext, int $appId): array
     {
         $authorization = $requestContext->getUserAuthorization();
@@ -370,6 +384,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 'cover_url' => $coverUrls[$this->coverUrlMapKey($row, $coverKey)] ?? '',
                 'publish_status' => (string) ($row['publish_status'] ?? MicroAppPublishStatus::Unpublished->value),
                 'updated_at' => ($row['updated_at'] ?? null) !== null ? (string) $row['updated_at'] : null,
+                'can_delete' => (string) ($row['project_owner_id'] ?? '') === $userId,
             ];
         }
 

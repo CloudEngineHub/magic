@@ -60,6 +60,13 @@ class MicroAppProjectApi extends AbstractApi
         return $this->microAppProjectAppService->unpublish($requestContext, $appId);
     }
 
+    public function destroy(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        return $this->microAppProjectAppService->delete($requestContext, $appId);
+    }
+
     public function publishedList(RequestContext $requestContext): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());

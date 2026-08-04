@@ -544,6 +544,9 @@ class ProjectAppService extends AbstractAppService
             // 删除项目
             $result = $this->projectDomainService->deleteProject($projectId, $dataIsolation->getCurrentUserId());
 
+            // 微应用映射和稳定分享链接与项目保持同一删除事务。
+            $this->deleteMicroAppResources($projectId);
+
             // 删除项目协作关系
             $this->projectMemberDomainService->deleteByProjectId($projectId);
 
@@ -639,6 +642,7 @@ class ProjectAppService extends AbstractAppService
                 Db::transaction(function () use ($projectId, $userId, $dataIsolation, $orgCode) {
                     // Delete project and members
                     $this->projectDomainService->deleteProject($projectId, $userId);
+                    $this->deleteMicroAppResources($projectId);
                     $this->projectMemberDomainService->deleteByProjectId($projectId);
 
                     // Delete topics
@@ -688,6 +692,31 @@ class ProjectAppService extends AbstractAppService
 
         $successCount = count($deletedProjects);
         return new BatchDeleteProjectsResponseDTO(count($results), $successCount, count($results) - $successCount, $results);
+    }
+
+    private function deleteMicroAppResources(int $projectId): void
+    {
+        $microAppRecord = $this->microAppRepository->findByProjectId($projectId);
+        if ($microAppRecord === null) {
+            return;
+        }
+
+        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
+            $microAppRecord->getResourceId(),
+            ResourceType::Project->value
+        )) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app share for project %d',
+                $projectId
+            ));
+        }
+
+        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app record for project %d',
+                $projectId
+            ));
+        }
     }
 
     /**

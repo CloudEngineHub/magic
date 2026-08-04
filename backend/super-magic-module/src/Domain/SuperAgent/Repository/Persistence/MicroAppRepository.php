@@ -106,6 +106,33 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         return $this->toEntity($model);
     }
 
+    public function deleteByProjectId(int $projectId): bool
+    {
+        $now = date('Y-m-d H:i:s');
+
+        return MicroAppModel::query()
+            ->where('project_id', $projectId)
+            ->whereNull('deleted_at')
+            ->update([
+                'publish_status' => MicroAppPublishStatus::Unpublished->value,
+                'unpublished_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => $now,
+            ]) > 0;
+    }
+
+    public function restoreByProjectId(int $projectId): bool
+    {
+        return MicroAppModel::withTrashed()
+            ->where('project_id', $projectId)
+            ->whereNotNull('deleted_at')
+            ->update([
+                'publish_status' => MicroAppPublishStatus::Unpublished->value,
+                'deleted_at' => null,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]) > 0;
+    }
+
     public function findPublishedByOrganization(string $organizationCode): array
     {
         $models = MicroAppModel::query()
@@ -205,6 +232,7 @@ class MicroAppRepository implements MicroAppRepositoryInterface
                 'ma.cover_file_key',
                 'ma.publish_status',
                 'p.updated_at',
+                'p.user_id as project_owner_id',
                 'p.user_organization_code as organization_code',
             ])
             ->orderBy('p.updated_at', 'desc')
