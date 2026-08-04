@@ -68,6 +68,7 @@ use Hyperf\Context\ApplicationContext;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 use function Hyperf\Translation\trans;
@@ -681,7 +682,11 @@ class AgentDomainService
             'dynamic_config' => $taskDynamicConfig,
             'agent' => $agentProfile,
         ]);
-        $mentionsJsonStruct = $this->buildMentionsJsonStruct($taskContext->getTask()->getMentions());
+        $mentionsJsonStruct = $this->buildMentionsJsonStruct(
+            $taskContext->getTask()->getMentions(),
+            $taskContext->getTask()->getProjectId(),
+            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs/magicfs/referenced-projects')
+        );
 
         // Get original prompt
         $userRequest = $taskContext->getTask()->getPrompt();
@@ -1328,7 +1333,7 @@ class AgentDomainService
     /**
      * 根据用户ID获取 Authorization.
      * - 先以用户级别 token（MagicTokenType::User）为准，支持一个账号多个组织
-     * - 若 token 已存在但剩余有效期不足 30 天，则刷新至 30 天后.
+     * - 若 token 已存在但剩余有效期不足 29 天，则刷新至 30 天后.
      *
      * @param string $userId 用户ID
      * @return string Authorization 字符串，如果不存在则返回空字符串
@@ -1364,6 +1369,29 @@ class AgentDomainService
                 'error' => $e->getMessage(),
             ]);
             return '';
+        }
+    }
+
+    /**
+     * Mount referenced projects (cross-project @mentions) into the sandbox
+     * as a read-only space. Access control is the caller's responsibility —
+     * this method assumes the caller has already verified the user can access
+     * every target project.
+     *
+     * @param string[] $projectIds
+     * @throws RuntimeException when any mount fails
+     */
+    public function mountReferencedProjects(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        array $projectIds
+    ): void {
+        if (empty($projectIds)) {
+            return;
+        }
+
+        foreach ($projectIds as $projectId) {
+            $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId);
         }
     }
 
@@ -1844,37 +1872,143 @@ class AgentDomainService
     }
 
     /**
-     * 当用户 token 剩余有效期不足 30 天时，统一刷新到 30 天后以减少重复签发.
+     * 当用户 token 剩余有效期不足 29 天时，统一刷新到 30 天后以减少重复签发.
      *
      * @param MagicTokenEntity $tokenEntity 已存在的用户 token
      */
     private function refreshTokenExpirationIfNeeded(MagicTokenEntity $tokenEntity): void
     {
         $now = Carbon::now();
-        $threshold = $now->copy()->addDays(30);
+        $renewalThreshold = $now->copy()->addDays(29);
         $expiredAt = Carbon::parse($tokenEntity->getExpiredAt());
 
-        if ($expiredAt->greaterThanOrEqualTo($threshold)) {
+        if ($expiredAt->greaterThanOrEqualTo($renewalThreshold)) {
             return;
         }
 
-        $tokenEntity->setExpiredAt($threshold->toDateTimeString());
+        $tokenEntity->setExpiredAt($now->copy()->addDays(30)->toDateTimeString());
         $tokenEntity->setUpdatedAt($now->toDateTimeString());
         $this->magicTokenRepository->refreshTokenExpiration($tokenEntity);
     }
 
     /**
      * @param null|string $mentionsJson mentions 的 JSON 字符串
+     * @param null|int $currentProjectId 当前 task 所属项目 ID（同项目 mention 不做路径转换）
+     * @param string $mountBasePath 跨项目引用挂载的容器内基础路径（来自 env AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH）
      * @return array 处理后的 mentions 数组
      */
-    private function buildMentionsJsonStruct(?string $mentionsJson): array
-    {
+    private function buildMentionsJsonStruct(
+        ?string $mentionsJson,
+        ?int $currentProjectId,
+        string $mountBasePath
+    ): array {
         if ($mentionsJson && json_validate($mentionsJson)) {
             $mentions = (array) Json::decode($mentionsJson);
         } else {
             $mentions = [];
         }
 
+        return $this->translateCrossProjectPaths($mentions, $currentProjectId, $mountBasePath);
+    }
+
+    /**
+     * 将跨项目 mention 中的相对路径转换为容器内的绝对路径。
+     *
+     * - type=project_file / type=project_directory：把相对 file_path/directory_path 前缀挂载根
+     * - type=project：整项目挂载，直接注入 project_path = {mountBasePath}/{project_id}
+     * - 同项目（project_id === currentProjectId）跳过，走 agent 自身 workspace
+     * - file_path/directory_path 已为绝对路径（以 / 开头）跳过，防双前缀
+     * - project_id 缺失或为空时跳过.
+     */
+    private function translateCrossProjectPaths(
+        array $mentions,
+        ?int $currentProjectId,
+        string $mountBasePath
+    ): array {
+        if ($mountBasePath === '' || empty($mentions)) {
+            return $mentions;
+        }
+
+        $base = rtrim($mountBasePath, '/');
+
+        foreach ($mentions as $i => $mention) {
+            if (! is_array($mention)) {
+                continue;
+            }
+            $type = $mention['type'] ?? null;
+
+            // 统一派发：三类跨项目挂载各自要写入的路径字段
+            $pathKey = match ($type) {
+                'project' => 'project_path',
+                'project_file' => 'file_path',
+                'project_directory' => 'directory_path',
+                default => null,
+            };
+            if ($pathKey === null) {
+                continue;
+            }
+
+            // 共享 project_id 校验：缺失或同项目则跳过，走 agent 自身 workspace
+            $pidRaw = $mention['project_id'] ?? null;
+            if ($pidRaw === null || $pidRaw === '') {
+                continue;
+            }
+            $pidStr = (string) $pidRaw;
+            if ($currentProjectId !== null && (string) $currentProjectId === $pidStr) {
+                continue;
+            }
+
+            $mountRoot = $base . '/' . $pidStr;
+
+            if ($type === 'project') {
+                // 整项目挂载：直接使用挂载根
+                $mentions[$i][$pathKey] = $mountRoot;
+                continue;
+            }
+
+            // 文件/目录：拼接相对路径；为空或已是绝对路径则跳过（防双前缀）
+            $relativePath = (string) ($mention[$pathKey] ?? '');
+            if ($relativePath === '' || str_starts_with($relativePath, '/')) {
+                continue;
+            }
+            $mentions[$i][$pathKey] = $mountRoot . '/' . ltrim($relativePath, '/');
+        }
+
         return $mentions;
+    }
+
+    /**
+     * Mount a single referenced project. Resolves the root file ID and calls
+     * the sandbox gateway.
+     */
+    private function mountSingleReferencedProject(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        string $projectId
+    ): void {
+        $taskFileDomainService = ApplicationContext::getContainer()->get(TaskFileDomainService::class);
+        $rootFileId = (string) $taskFileDomainService->getProjectRootFileId((int) $projectId);
+
+        $result = $this->gateway->mountReferencedProject(
+            $dataIsolation,
+            $sandboxId,
+            $projectId,
+            $rootFileId
+        );
+
+        if (! $result->isSuccess()) {
+            $this->logger->error('[Sandbox][Domain] Failed to mount referenced project', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+                'code' => $result->getCode(),
+                'message' => $result->getMessage(),
+            ]);
+            throw new RuntimeException($result->getMessage());
+        }
+
+        $this->logger->info('[Sandbox][Domain] Referenced project mounted', [
+            'sandbox_id' => $sandboxId,
+            'project_id' => $projectId,
+        ]);
     }
 }

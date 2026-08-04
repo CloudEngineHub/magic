@@ -13,8 +13,8 @@ const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
 // 实时增量同步时每次拉取的消息数量
 const LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT = 10
 
-// 轮询同步时每次拉取的消息数量
-const POLLING_SYNC_MESSAGE_COUNT = 30
+// 常驻轮询只补最近增量；完整分页仅保留给显式 recovery。
+const POLLING_SYNC_MESSAGE_COUNT = 20
 
 // 前台恢复时第一段回拉窗口：先用中等窗口补最近消息，尽量一次命中大多数休眠场景。
 const FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT = 200
@@ -24,6 +24,9 @@ const FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT = 400
 
 // 前台恢复防抖时间（毫秒），避免重复触发同步
 const FOREGROUND_SYNC_DEDUPE_MS = 1000
+
+// 合并同一轮持久消息事件，避免用户消息和 Agent 最终消息各自触发一次相同的小窗口回拉。
+const LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS = 200
 
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
@@ -110,6 +113,9 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	const foregroundTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	const lastForegroundSyncAtRef = useRef(0)
 	const foregroundRecoveryAnchorRef = useRef<Record<string, ForegroundRecoveryAnchorState>>({})
+	const historyPullInFlightTopicsRef = useRef<Set<string>>(new Set())
+	const lastHistoryPageTokenMapRef = useRef<Record<string, string>>({})
+	const finishedPollingCompletedTopicsRef = useRef<Set<string>>(new Set())
 	selectedTopicRef.current = selectedTopic
 
 	const [isMessagesInitialLoading, setIsMessagesInitialLoading] = useState(() =>
@@ -207,10 +213,18 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (hasAttachments) {
 					checkNowDebounced?.()
 				}
-				if (updatePageToken && response?.page_token) {
-					// 服务端返回的 page_token 既供“手动加载更多”继续向旧消息翻页，
-					// 也供前台恢复场景继续拼接第二段补拉窗口。
-					topicPageTokenMap.current[chat_topic_id] = response.page_token
+				if (updatePageToken) {
+					// 历史分页必须同时记录 token 和终页状态；仅保留旧 token 会让布局滚动
+					// 在 has_more=false 后继续重复请求最后一页。
+					if (response?.has_more === false) {
+						topicNotHaveMoreMessageMap.current[chat_topic_id] = true
+						delete topicPageTokenMap.current[chat_topic_id]
+					} else {
+						topicNotHaveMoreMessageMap.current[chat_topic_id] = false
+						if (response?.page_token) {
+							topicPageTokenMap.current[chat_topic_id] = response.page_token
+						}
+					}
 				}
 
 				callback?.()
@@ -563,19 +577,39 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	 * 手动加载更早的历史消息，继续复用服务端返回的 page_token。
 	 */
 	const handlePullMoreMessage = useMemoizedFn(
-		(topicInfo: Topic | null, callback?: () => void) => {
+		async (topicInfo: Topic | null, callback?: () => void) => {
 			// if (selectedWorkspace && topicInfo) {
 			if (topicInfo) {
-				pullMessage({
-					conversation_id: topicInfo.chat_conversation_id,
-					chat_topic_id: topicInfo.chat_topic_id,
-					page_token: topicPageTokenMap.current[topicInfo?.chat_topic_id] || "",
-					order: "desc",
-					limit: 100,
-					updatePageToken: true,
-					writeIntent: "merge",
-					callback,
-				})
+				const topicId = topicInfo.chat_topic_id
+				const pageToken = topicPageTokenMap.current[topicId] || ""
+				if (
+					topicNotHaveMoreMessageMap.current[topicId] ||
+					historyPullInFlightTopicsRef.current.has(topicId) ||
+					lastHistoryPageTokenMapRef.current[topicId] === pageToken
+				) {
+					return
+				}
+
+				historyPullInFlightTopicsRef.current.add(topicId)
+				lastHistoryPageTokenMapRef.current[topicId] = pageToken
+				// Capture the viewport before awaiting HTTP so the subsequent merge can restore it.
+				callback?.()
+				try {
+					const pullResult = await pullMessage({
+						conversation_id: topicInfo.chat_conversation_id,
+						chat_topic_id: topicId,
+						page_token: pageToken,
+						order: "desc",
+						limit: 100,
+						updatePageToken: true,
+						writeIntent: "merge",
+					})
+					if (!pullResult.didPullSucceed) {
+						delete lastHistoryPageTokenMapRef.current[topicId]
+					}
+				} finally {
+					historyPullInFlightTopicsRef.current.delete(topicId)
+				}
 			}
 		},
 	)
@@ -628,36 +662,64 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Subscribe to WebSocket new message events
 	useEffect(() => {
+		let disposed = false
+		let liveSyncTimer: number | null = null
+		let liveSyncInFlight = false
+		let liveSyncPending = false
+
+		const scheduleLiveIncrementalSync = () => {
+			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
+			liveSyncTimer = window.setTimeout(async () => {
+				liveSyncTimer = null
+				if (disposed) return
+				if (liveSyncInFlight) {
+					liveSyncPending = true
+					return
+				}
+
+				const currentTopic = selectedTopicRef.current
+				if (!currentTopic?.chat_conversation_id || !currentTopic.chat_topic_id) return
+				liveSyncInFlight = true
+				liveSyncPending = false
+				try {
+					await pullMessage({
+						conversation_id: currentTopic.chat_conversation_id,
+						chat_topic_id: currentTopic.chat_topic_id,
+						page_token: "",
+						order: "desc",
+						limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
+						updatePageToken: false,
+						writeIntent: "incremental",
+					})
+				} finally {
+					liveSyncInFlight = false
+					if (!disposed && liveSyncPending) scheduleLiveIncrementalSync()
+				}
+			}, LIVE_INCREMENTAL_SYNC_DEBOUNCE_MS)
+		}
+
 		/**
 		 * 处理 WS 新消息事件。
-		 * 在线场景保持小窗口增量回拉，避免每次推送都触发大范围重建。
+		 * 同一 Topic 的短时持久消息事件合并为一次小窗口增量回拉。
 		 */
 		const handleNewMessage = (data: any) => {
 			console.log("我接受到的 ws 消息", data)
 			const { topic_id: chat_topic_id = "" } = data.message || {}
-
-			if (
-				selectedTopic?.chat_conversation_id &&
-				chat_topic_id /** selectedTopic?.chat_topic_id */
-			) {
-				pullMessage({
-					conversation_id: selectedTopic?.chat_conversation_id,
-					chat_topic_id: chat_topic_id,
-					page_token: "",
-					order: "desc",
-					// 正常在线增量同步优先追求轻量，避免每个 WS 事件都触发大窗口回拉。
-					limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
-					updatePageToken: false,
-					writeIntent: "incremental",
-				})
-			}
+			const currentTopic = selectedTopicRef.current
+			if (!currentTopic?.chat_conversation_id || chat_topic_id !== currentTopic.chat_topic_id)
+				return
+			if (data.conversation_id && data.conversation_id !== currentTopic.chat_conversation_id)
+				return
+			scheduleLiveIncrementalSync()
 		}
 		pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		return () => {
+			disposed = true
+			if (liveSyncTimer !== null) window.clearTimeout(liveSyncTimer)
 			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [selectedTopic])
+	}, [selectedTopic?.chat_conversation_id, selectedTopic?.chat_topic_id])
 
 	useEffect(() => {
 		/**
@@ -683,7 +745,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		}
 	}, [setForegroundRecoveryBaseAnchor, syncSelectedTopicOnForeground])
 
-	// Timer: poll messages every 30 seconds
+	// Timer: poll messages every 20 seconds
 	useEffect(() => {
 		let disposed = false
 		let inFlightPollingSync: { topicId: string; generation: number } | null = null
@@ -722,26 +784,27 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					writeIntent: "incremental" as const,
 				}
 
-				if (
-					taskStatus !== TaskStatus.FINISHED ||
-					typeof superMagicStore.beginTopicSync !== "function"
-				) {
+				if (taskStatus !== TaskStatus.FINISHED) {
+					finishedPollingCompletedTopicsRef.current.delete(topicId)
+					// Active chunks are the primary realtime source. The Store watchdog owns stalled
+					// stream recovery, so resident polling would only duplicate healthy traffic.
+					if (superMagicStore.isTopicStreaming(topicId)) return
 					void pullMessage(pollingParams)
 					return
 				}
+				if (typeof superMagicStore.beginTopicSync !== "function") {
+					void pullMessage(pollingParams)
+					return
+				}
+				if (finishedPollingCompletedTopicsRef.current.has(topicId)) return
 
-				// 只有 finished topic 的成功轮询才构成工具缺失响应的完成屏障。
+				// finished polling 只确认最近增量和任务完成屏障，不能复用完整历史 recovery。
 				// generation 必须单飞且不能抢占已有权威同步，避免慢请求持续作废彼此。
 				if (inFlightPollingSync || hasActiveTopicSync()) return
 				const syncGeneration = superMagicStore.beginTopicSync(topicId)
 				inFlightPollingSync = { topicId, generation: syncGeneration }
 
-				void recoverTopicMessages({
-					conversationId: currentTopic.chat_conversation_id,
-					topicId,
-					syncGeneration,
-					limit: POLLING_SYNC_MESSAGE_COUNT,
-				})
+				void pullMessage(pollingParams)
 					.then((pullResult) => {
 						if (disposed || inFlightPollingSync?.generation !== syncGeneration) return
 						if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
@@ -754,13 +817,20 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							superMagicStore.cancelTopicSync(topicId, syncGeneration)
 							return
 						}
-						superMagicStore.completeTopicSync(topicId, syncGeneration, {
-							succeeded: pullResult.didPullSucceed,
-							taskStatus: currentTaskStatus,
-							latestSeqId: pullResult.didPullSucceed
-								? superMagicStore.getLatestMessageSeqId(topicId)
-								: undefined,
-						})
+						const didComplete = superMagicStore.completeTopicSync(
+							topicId,
+							syncGeneration,
+							{
+								succeeded: pullResult.didPullSucceed,
+								taskStatus: currentTaskStatus,
+								latestSeqId: pullResult.didPullSucceed
+									? superMagicStore.getLatestMessageSeqId(topicId)
+									: undefined,
+							},
+						)
+						if (pullResult.didPullSucceed && didComplete) {
+							finishedPollingCompletedTopicsRef.current.add(topicId)
+						}
 					})
 					.catch(() => {
 						// HTTP 后处理或 Store 写入异常时释放 generation；失败同步不能成为完成屏障。
@@ -781,20 +851,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			clearInterval(timer)
 			cancelInFlightPollingSync()
 		}
-	}, [pullMessage, recoverTopicMessages, selectedTopic])
+	}, [pullMessage, selectedTopic])
 
 	// Handle refresh topic messages after revoke
 	useEffect(() => {
 		const handleRefreshTopicMessages = () =>
 			updateTopicMessages({
-				// Must use initializeMessages (replace) here.
-				// Using enqueueMessage (incremental) calls sortMessages after each
-				// individual status update, which permanently filters out revoked messages that
-				// appear before the last non-revoked message at the time of processing.
-				// When multiple messages are revoked at once (e.g. undoMessage), only the
-				// last revoked message survives in the revoked section — earlier ones are lost.
-				// initializeMessages applies all status updates in one batch and calls
-				// sortMessages only once at the end, preserving all revoked messages correctly.
+				// Revoke refresh is an authoritative snapshot: replace preserves the server's
+				// complete canonical membership, while visible-branch filtering stays in UI projection.
 				writeIntent: "replace",
 				messageCount: 500,
 			})
@@ -811,6 +875,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		return () => {
 			// Cleanup topic_id and page_token mapping
 			topicPageTokenMap.current = {}
+			topicNotHaveMoreMessageMap.current = {}
+			historyPullInFlightTopicsRef.current.clear()
+			lastHistoryPageTokenMapRef.current = {}
+			finishedPollingCompletedTopicsRef.current.clear()
 		}
 	}, [])
 

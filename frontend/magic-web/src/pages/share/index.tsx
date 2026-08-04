@@ -1,11 +1,6 @@
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
-import {
-	useMemoizedFn,
-	useResponsive,
-	useDebounceEffect,
-	useDeepCompareEffect,
-	useUpdateEffect,
-} from "ahooks"
+import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -55,6 +50,7 @@ import {
 	resolveMobileAudioShareCreatedByBadgeBottom,
 	resolveMobileAudioShareTopbarOffset,
 } from "./utils/audio-share-topbar-offset"
+import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
 const topicContainerBase =
@@ -188,8 +184,7 @@ function Share() {
 	const [error, setError] = useState<Error | null>(null)
 	const [attachments, setAttachments] = useState({} as any)
 	const [loading, setLoading] = useState(false)
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false // md breakpoint is typically 768px, so anything smaller is mobile
+	const isMobile = useIsMobile()
 	const [isProjectShare, setIsProjectShare] = useState(false)
 	const [fileId, setFileId] = useState("")
 	// Topic sharing: view_file_list state
@@ -254,11 +249,14 @@ function Share() {
 
 		return {
 			forceFullscreenMode: isPureMode || urlSearchParams.get("fullscreen") === "true",
+			// Pure shares have no surrounding chrome, so page scroll can serve long screenshots.
+			documentFlowFullscreen: isPureMode,
 			hideHeader: isPureMode || urlSearchParams.has("hideHeader"),
 			showFileHeader:
 				isPureMode || urlSearchParams.get("showFileHeader") === "false" ? false : undefined,
 		}
 	}, [data, search])
+	usePureShareDocumentFlow(shareDisplayOptions.documentFlowFullscreen)
 	const enableImmersiveShareChrome = isMobile && isFileShare && isEntryHtmlPreview
 	const effectivePreviewIsFullscreen =
 		shareDisplayOptions.forceFullscreenMode || previewIsFullscreen
@@ -821,7 +819,9 @@ function Share() {
 	return (
 		<div
 			className={cn(
-				"box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
+				shareDisplayOptions.documentFlowFullscreen
+					? "box-border flex min-h-dvh w-full flex-col overflow-visible bg-muted dark:bg-muted"
+					: "box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
 				"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
 				isFileShare && "max-md:pb-0",
 				!isFileShare && "pb-[50px]",
@@ -973,12 +973,20 @@ function Share() {
 				</div>
 			)}
 			<div
-				className="relative h-full overflow-hidden max-md:w-full"
+				className={cn(
+					"relative max-md:w-full",
+					shareDisplayOptions.documentFlowFullscreen
+						? "min-h-dvh overflow-visible"
+						: "h-full overflow-hidden",
+				)}
 				data-testid="share-content-container"
 			>
 				{loading && (
 					<div
-						className="flex h-full items-center justify-center"
+						className={cn(
+							"flex items-center justify-center",
+							shareDisplayOptions.documentFlowFullscreen ? "min-h-dvh" : "h-full",
+						)}
 						data-testid="share-loading"
 					>
 						<MagicSpin />
@@ -1038,6 +1046,7 @@ function Share() {
 							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
 							allowDownloadProjectFile={allowDownloadProjectFile}
 							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
+							documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
 							hidePreviewHeader={shareDisplayOptions.hideHeader}
 							showFileHeader={shareDisplayOptions.showFileHeader}
 							onPreviewFileChange={setCurrentPreviewFileId}

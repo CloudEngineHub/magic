@@ -15,6 +15,7 @@ import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/lib/utils"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
+import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -49,6 +50,7 @@ import {
 	saveCommonWebsitePreset,
 } from "./utils/websiteTabs"
 import {
+	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	shouldUseFileViewerFullscreenSafeArea,
@@ -88,6 +90,7 @@ const FilesViewer = memo(
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
 			const { t } = useTranslation("super")
+			const { isShareRoute } = useShareRoute()
 			const isUrlFullscreenMode = useFullscreenMode()
 			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
 			const [expandPanelVisible, setExpandPanelVisible] = useState(false)
@@ -139,7 +142,7 @@ const FilesViewer = memo(
 				cachedTabIds,
 			} = useTabCache({
 				maxCacheSize: 10,
-				enableCache: true,
+				enableCache: !isShareRoute,
 				cacheOfficeFiles: true,
 			})
 
@@ -303,9 +306,10 @@ const FilesViewer = memo(
 				if (!activeTab || !tabsContainerRef.current || tabs.length === 0) return
 
 				const container = tabsContainerRef.current
-				const activeTabElement = container.querySelector(
-					`[data-tab-id="${activeTab.id}"]`,
-				) as HTMLElement
+				// Tab ids may contain file-path characters that are invalid inside CSS selectors.
+				const activeTabElement = Array.from(
+					container.querySelectorAll<HTMLElement>("[data-tab-id]"),
+				).find((element) => element.dataset.tabId === activeTab.id)
 
 				if (activeTabElement) {
 					// 计算目标tab相对于容器的位置
@@ -401,9 +405,15 @@ const FilesViewer = memo(
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
 			const effectiveIsFullscreen =
 				isFullscreenMode || Boolean(isFullscreen) || fullscreenFileId === currentTab?.id
+			const isDocumentFlowFullscreen =
+				Boolean(props.documentFlowFullscreen) && effectiveIsFullscreen
 			const currentRenderProps = useMemo(
-				() => ({ isFullscreen: effectiveIsFullscreen, ...otherProps }),
-				[effectiveIsFullscreen, otherProps],
+				() => ({
+					isFullscreen: effectiveIsFullscreen,
+					documentFlowFullscreen: isDocumentFlowFullscreen,
+					...otherProps,
+				}),
+				[effectiveIsFullscreen, isDocumentFlowFullscreen, otherProps],
 			)
 			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
@@ -418,6 +428,7 @@ const FilesViewer = memo(
 					currentTab.fileData.file_id || "",
 					currentTab.fileData.updated_at || "",
 					String(effectiveIsFullscreen),
+					String(isDocumentFlowFullscreen),
 					String(otherProps.type || ""),
 					String(otherProps.updatedAt || ""),
 					props.activeFileId || "",
@@ -426,6 +437,7 @@ const FilesViewer = memo(
 			}, [
 				currentTab,
 				effectiveIsFullscreen,
+				isDocumentFlowFullscreen,
 				otherProps.type,
 				otherProps.updatedAt,
 				props.activeFileId,
@@ -485,6 +497,7 @@ const FilesViewer = memo(
 								allowEdit: props.allowEdit,
 								selectedTopic: props.selectedTopic,
 								selectedProject: props.selectedProject,
+								projectId: props.projectId,
 								isFileShare: props.isFileShare,
 								activeFileId: props.activeFileId,
 								onActiveFileChange: props.onActiveFileChange,
@@ -521,6 +534,7 @@ const FilesViewer = memo(
 							renderProps={renderProps}
 							onActiveFileChange={props?.onActiveFileChange}
 							isFullscreen={effectiveIsFullscreen}
+							documentFlowFullscreen={isDocumentFlowFullscreen}
 							openFileTab={openFileTab}
 							playbackProps={playbackProps}
 							hideTabBar={props.hideTabBar}
@@ -534,6 +548,7 @@ const FilesViewer = memo(
 				activeTab?.id,
 				getFromCache,
 				effectiveIsFullscreen,
+				isDocumentFlowFullscreen,
 				currentRenderProps,
 				props?.onActiveFileChange,
 				shouldRenderTab,
@@ -548,15 +563,23 @@ const FilesViewer = memo(
 			const viewer = (
 				<div
 					className={cn(
-						"flex h-full flex-col",
-						effectiveIsFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+						isDocumentFlowFullscreen
+							? `flex min-h-dvh flex-col ${FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_VIEWPORT_CLASS_NAME}`
+							: cn(
+									"flex h-full flex-col",
+									effectiveIsFullscreen &&
+										FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+								),
 					)}
 				>
 					<div
 						className={cn(
-							"flex h-full min-h-0 min-w-0 flex-col",
+							isDocumentFlowFullscreen
+								? "flex min-h-dvh min-w-0 flex-col"
+								: "flex h-full min-h-0 min-w-0 flex-col",
 							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
 							effectiveIsFullscreen &&
+								!isDocumentFlowFullscreen &&
 								shouldUseSafeAreaFullscreen &&
 								FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 						)}
@@ -626,7 +649,13 @@ const FilesViewer = memo(
 						/>
 
 						{/* Content Area */}
-						<div className="flex flex-1 flex-col overflow-hidden">
+						<div
+							className={cn(
+								isDocumentFlowFullscreen
+									? "flex min-h-dvh flex-col overflow-visible"
+									: "flex flex-1 flex-col overflow-hidden",
+							)}
+						>
 							{currentTab ? (
 								isRestoringFileTabs ? (
 									<div className="flex h-full items-center justify-center">
@@ -646,10 +675,12 @@ const FilesViewer = memo(
 				</div>
 			)
 
-			// A fixed descendant is still confined by any transformed ancestor in the workspace
-			// layout. Portal fullscreen content to the document root so it always covers the
-			// workspace list and other layout siblings.
-			return effectiveIsFullscreen && typeof document !== "undefined"
+			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so they
+			// need a body portal. Document-flow fullscreen is intentionally excluded: its height
+			// must remain below #root to propagate to the page scroll container and long screenshots.
+			return effectiveIsFullscreen &&
+				!isDocumentFlowFullscreen &&
+				typeof document !== "undefined"
 				? createPortal(viewer, document.body)
 				: viewer
 		}),

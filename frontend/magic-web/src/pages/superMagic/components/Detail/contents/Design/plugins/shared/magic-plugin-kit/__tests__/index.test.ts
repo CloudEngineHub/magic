@@ -314,6 +314,22 @@ describe("magic-plugin-kit", () => {
 		expect(root.children).toHaveLength(0)
 	})
 
+	it("requests the default panel height while allowing the panel to track the iframe viewport", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.render(ctx, root, {
+			sections: [],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector(".mpk-panel")).toBeTruthy()
+		await vi.waitFor(() => {
+			expect(ctx.ui.setHeight).toHaveBeenCalledWith(640)
+		})
+	})
+
 	it("can render externally owned ctx.state and update through the view controller", () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()

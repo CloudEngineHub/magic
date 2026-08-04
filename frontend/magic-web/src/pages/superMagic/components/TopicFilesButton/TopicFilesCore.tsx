@@ -11,8 +11,9 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import CustomTree from "./components/CustomTree/CustomTree"
 import EmptyState from "./components/EmptyState"
 import { useStyles } from "./style"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { useSuperMagicDropdown } from "../SuperMagicDropdown"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import {
 	useRename,
 	useFileOperations,
@@ -169,6 +170,8 @@ export interface TopicFilesCoreRef {
 	createVirtualFile: (type: PresetFileType, key?: string, parentPath?: string) => void
 	createVirtualFolder: (key?: string, parentPath?: string) => void
 	createDesignProject: (parentPath?: string) => Promise<any>
+	createSelfMediaProject: (parentPath?: string) => void
+	createAICardProject: (parentPath?: string) => void
 	handleUploadFile: (item?: any) => void
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
@@ -219,7 +222,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 ) {
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
 	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
@@ -920,6 +923,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				// 实际的创建逻辑在 confirmVirtualDesignProject 中处理
 				resolve(null)
 			})
+		},
+		createSelfMediaProject: (parentPath?: string) => {
+			createVirtualSelfMediaProject(undefined, parentPath)
+		},
+		createAICardProject: (parentPath?: string) => {
+			openAICardDialog(parentPath)
 		},
 		handleUploadFile,
 		handleUploadFolder,

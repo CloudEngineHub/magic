@@ -1,4 +1,5 @@
 export * from "./connectionIndex"
+export * from "./elementDetailsProvenance"
 export * from "./elementIndex"
 export * from "./merge"
 export * from "./patch"

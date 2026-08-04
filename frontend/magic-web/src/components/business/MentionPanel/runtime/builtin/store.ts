@@ -316,8 +316,16 @@ export class MentionPanelStore {
 		})
 		if (!rootItem || items.some((item) => item.id === rootItem.id)) return items
 
+		const otherProjectFilesIndex = items.findIndex(
+			(item) => item.id === BuiltinItemId.OTHER_PROJECT_FILES,
+		)
 		const projectFilesIndex = items.findIndex((item) => item.id === BuiltinItemId.PROJECT_FILES)
-		const insertIndex = projectFilesIndex >= 0 ? projectFilesIndex + 1 : items.length
+		const insertIndex =
+			otherProjectFilesIndex >= 0
+				? otherProjectFilesIndex + 1
+				: projectFilesIndex >= 0
+					? projectFilesIndex + 1
+					: items.length
 		const nextItems = [...items]
 		nextItems.splice(insertIndex, 0, rootItem)
 		return nextItems

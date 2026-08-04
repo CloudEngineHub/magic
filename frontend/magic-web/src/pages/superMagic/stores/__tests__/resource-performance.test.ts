@@ -185,7 +185,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		expect(getNode(store)?.tool_calls?.[0]?.function?.arguments).toBe(args)
 	})
 
-	it("超大 HTML arguments 在 StreamState 和 messageMap 各保留一份。", () => {
+	it("非 Final 超大 arguments 保留完整流状态并只投影有界前缀。", () => {
 		const store = createStore()
 		const html = `<html>${"<section>large</section>".repeat(4_000)}</html>`
 		store.receiveChunk(createChunk({ toolCalls: [createToolCall({ arguments: html })] }))
@@ -193,7 +193,17 @@ describe("SuperMagicStore / 资源和性能", () => {
 		expect(
 			store.getStreamState(TOPIC_A, "corr-resource")?.tool_calls[0]?.function.arguments,
 		).toBe(html)
-		expect(getNode(store)?.tool_calls ?? []).toHaveLength(0)
+		const projectedArguments = getNode(store)?.tool_calls?.[0]?.function?.arguments ?? ""
+		expect(projectedArguments.length).toBeGreaterThan(0)
+		expect(projectedArguments.length).toBeLessThan(html.length)
+		expect(html.startsWith(projectedArguments)).toBe(true)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("Final 后超大 arguments 完整投影并释放 StreamState。", () => {
+		const store = createStore()
+		const html = `<html>${"<section>large</section>".repeat(4_000)}</html>`
+		store.receiveChunk(createChunk({ toolCalls: [createToolCall({ arguments: html })] }))
 
 		store.enqueueMessage(
 			TOPIC_A,
@@ -202,6 +212,7 @@ describe("SuperMagicStore / 资源和性能", () => {
 		settle()
 		expect(store.getStreamState(TOPIC_A, "corr-resource")).toBeUndefined()
 		expect(getNode(store)?.tool_calls?.[0]?.function?.arguments).toBe(html)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
 	it("final snapshot 再复制一份完整 arguments。", () => {
@@ -223,9 +234,8 @@ describe("SuperMagicStore / 资源和性能", () => {
 	it("MobX 对每个字符片段产生观察更新。", () => {
 		const store = createStore()
 		const arrivals: unknown[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: (payload) => arrivals.push(payload),
+		const unsubscribe = store.subscribe("message.committed", (event) => arrivals.push(event), {
+			scope: { topicId: TOPIC_A },
 		})
 		const text = "a".repeat(128)
 		for (const [index, char] of [...text].entries()) {
@@ -277,10 +287,11 @@ describe("SuperMagicStore / 资源和性能", () => {
 	it("buffer 长期积压大量完整消息对象。", () => {
 		const store = createStore()
 		const arrived: string[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: ({ message }) => arrived.push(message.app_message_id),
-		})
+		const unsubscribe = store.subscribe(
+			"message.committed",
+			({ payload }) => arrived.push(payload.message.appMessageId || ""),
+			{ scope: { topicId: TOPIC_A } },
+		)
 		for (let index = 0; index < 64; index += 1) {
 			store.enqueueMessage(
 				TOPIC_A,
@@ -417,26 +428,41 @@ describe("SuperMagicStore / 资源和性能", () => {
 		stringify.mockRestore()
 	})
 
-	it("持久化对每个小 chunk 执行 JSON 序列化。", () => {
+	it("小 chunk 按 10 条或 200ms 批量持久化，Final 立即 flush。", () => {
 		const stringify = vi.spyOn(JSON, "stringify")
 		const store = createStore()
-		for (let index = 0; index < 32; index += 1) {
+		for (let index = 0; index < 9; index += 1) {
 			store.receiveChunk(createChunk({ i: index, content: "x" }))
 		}
-		store.receiveChunk(createChunk({ i: 32, finishReason: "stop" }))
+		expect(stringify).not.toHaveBeenCalled()
+
+		store.receiveChunk(createChunk({ i: 9, content: "x" }))
+		expect(stringify).toHaveBeenCalledTimes(1)
+
+		for (let index = 10; index < 15; index += 1) {
+			store.receiveChunk(createChunk({ i: index, content: "x" }))
+		}
+		vi.advanceTimersByTime(199)
+		expect(stringify).toHaveBeenCalledTimes(1)
+		vi.advanceTimersByTime(1)
+		expect(stringify).toHaveBeenCalledTimes(2)
+
+		store.receiveChunk(createChunk({ i: 15, finishReason: "stop" }))
+		expect(stringify).toHaveBeenCalledTimes(3)
 		settle()
 
-		expect(stringify.mock.calls.length).toBeLessThan(32)
+		expect(getNode(store)?.content).toBe("x".repeat(15))
 		stringify.mockRestore()
 	})
 
 	it("重复 chunk 导致 IndexedDB 写入量翻倍。", () => {
 		const store = createStore()
 		const canonicalArrivals: unknown[] = []
-		const unsubscribe = store.registerTopicMessageListener({
-			topicId: TOPIC_A,
-			callback: (payload) => canonicalArrivals.push(payload),
-		})
+		const unsubscribe = store.subscribe(
+			"message.committed",
+			(event) => canonicalArrivals.push(event),
+			{ scope: { topicId: TOPIC_A } },
+		)
 		const chunk = createChunk({ i: 0, content: "A" })
 		store.receiveChunk(chunk)
 		store.receiveChunk(JSON.parse(JSON.stringify(chunk)) as SuperMagicChunkMessage)
@@ -444,7 +470,8 @@ describe("SuperMagicStore / 资源和性能", () => {
 		settle()
 
 		// The canonical completion may be persisted once, but duplicate transport input must not double it.
-		expect(canonicalArrivals).toHaveLength(1)
+		// chunk 与打字机只改变流式投影，不生成 canonical message committed 事件。
+		expect(canonicalArrivals).toHaveLength(0)
 		expect(getNode(store)?.content).toBe("AB")
 		unsubscribe()
 	})

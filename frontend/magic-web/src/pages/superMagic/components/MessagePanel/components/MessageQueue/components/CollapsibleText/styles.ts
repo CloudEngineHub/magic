@@ -1,6 +1,6 @@
 import { createStyles } from "antd-style"
 
-export const useStyles = createStyles(({ token }) => {
+export const useStyles = createStyles(() => {
 	return {
 		container: {
 			width: "100%",
@@ -15,7 +15,7 @@ export const useStyles = createStyles(({ token }) => {
 			fontSize: "12px",
 			lineHeight: "16px",
 			wordBreak: "break-word",
-			cursor: "pointer",
+			cursor: "default",
 		},
 
 		collapsed: {
@@ -36,39 +36,39 @@ export const useStyles = createStyles(({ token }) => {
 			},
 		},
 
-		toggleButtonContainer: {
-			display: "flex",
-			justifyContent: "flex-end",
-			marginTop: "4px",
-		},
-
-		toggleButton: {
-			display: "flex",
-			alignItems: "center",
-			gap: "2px",
-			border: "none",
-			background: "transparent",
-			cursor: "pointer",
-			fontSize: "10px",
-			color: token.colorPrimary,
-			padding: "2px 4px",
-			borderRadius: token.borderRadiusXS,
-			transition: "all 0.2s ease",
-			lineHeight: "12px",
-
-			"&:hover": {
-				backgroundColor: token.colorPrimaryBg,
-				color: token.colorPrimaryHover,
+		tooltipContent: {
+			color: "inherit",
+			"& p": {
+				margin: 0,
+				fontSize: "inherit !important",
+				lineHeight: "inherit !important",
+				color: "inherit !important",
 			},
-
-			"&:active": {
-				transform: "scale(0.95)",
+			"& .magic-mention, & .super-placeholder": {
+				fontSize: "inherit !important",
+				lineHeight: "inherit !important",
+				color: "inherit !important",
 			},
-		},
-
-		toggleText: {
-			fontSize: "10px",
-			fontWeight: 400,
+			"& .inspector-detail-read-only, & .inspector-detail-read-only *": {
+				color: "inherit !important",
+			},
+			"& .inspector-detail-read-only > button": {
+				height: "16px",
+				padding: 0,
+				border: 0,
+				lineHeight: "16px",
+			},
+			"& .inspector-detail-read-only.magic-mention": {
+				borderColor: "rgb(255 255 255 / 0.3)",
+				backgroundColor: "rgb(255 255 255 / 0.12) !important",
+			},
+			"& .inspector-detail-node-view > span": {
+				borderColor: "rgb(255 255 255 / 0.3)",
+				backgroundColor: "rgb(255 255 255 / 0.12)",
+			},
+			"& .inspector-detail-node-view [class*='bg-muted']": {
+				backgroundColor: "rgb(255 255 255 / 0.12)",
+			},
 		},
 	}
 })

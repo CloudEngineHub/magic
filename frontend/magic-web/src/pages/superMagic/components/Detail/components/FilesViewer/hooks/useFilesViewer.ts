@@ -1108,7 +1108,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// Clear tabs when selectedProject changes
 	// 加载缓存状态
 	useEffect(() => {
-		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id) {
+		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id || isShareRoute) {
 			return
 		}
 
@@ -1304,6 +1304,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		openPlaybackTab,
 		fileList,
 		isAwaitingProjectAttachments,
+		isShareRoute,
 	])
 
 	useEffect(() => {

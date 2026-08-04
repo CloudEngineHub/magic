@@ -210,7 +210,8 @@ class ImageRemoveBackgroundAppService extends AbstractLLMAppService
                     $providerCode,
                     $callTime,
                     $responseTime,
-                    (int) round($startTime * 1000)
+                    (int) round($startTime * 1000),
+                    $response->getData(),
                 );
             }
 

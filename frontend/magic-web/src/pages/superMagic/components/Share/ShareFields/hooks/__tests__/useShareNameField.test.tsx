@@ -71,6 +71,37 @@ describe("useShareNameField", () => {
 		expect(onChange).toHaveBeenCalledWith("录音分享_季度复盘")
 	})
 
+	it("does not restore the default share name after the user clears it", () => {
+		const onChange = vi.fn()
+
+		const { rerender } = renderHook(
+			({ value }) =>
+				useShareNameField({
+					value,
+					onChange,
+					defaultOpenFileId: "file-1",
+					selectedFiles: [{ file_id: "file-1", name: "meeting.md" }],
+					attachments: [{ file_id: "file-1", name: "meeting.md" }],
+					shareProject: false,
+					projectName: "季度复盘",
+					projectMode: null,
+				}),
+			{
+				initialProps: {
+					value: "",
+				},
+			},
+		)
+
+		expect(onChange).toHaveBeenCalledWith("文件分享_meeting.md")
+
+		onChange.mockClear()
+		rerender({ value: "文件分享_meeting.md" })
+		rerender({ value: "" })
+
+		expect(onChange).not.toHaveBeenCalled()
+	})
+
 	/** Verify debounced rename still works when the recording prefix comes from i18n, not a hardcoded locale string. */
 	it("updates recording share name when selected files change and value uses i18n prefix", async () => {
 		vi.useFakeTimers()

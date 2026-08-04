@@ -1,5 +1,5 @@
 import type { Canvas } from "../../core/Canvas"
-import type { ImageElement as ImageElementData } from "../../document/types"
+import { ElementTypeEnum, type ImageElement as ImageElementData } from "../../document/types"
 import type {
 	GeneratedImageResultItem,
 	GetImageGenerationResultsParams,
@@ -9,9 +9,14 @@ import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import type { ImageBatchPollingRegistry } from "./ImageBatchPollingRegistry"
 import {
 	extractSmartNameFromFileName,
+	isGenerationTaskNotFoundError,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
 import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
+import {
+	getImageGenerationTaskMeta,
+	isBatchImageGenerationTaskMeta,
+} from "../image/imageGenerationTaskMeta"
 
 export interface ImageBatchPollingManagerConfig {
 	canvas: Canvas
@@ -73,12 +78,24 @@ export class ImageBatchPollingManager {
 				await this.wait(IMAGE_CONFIG.POLLING_INTERVAL)
 			}
 		} catch (error) {
+			if (isGenerationTaskNotFoundError(error, this.imageId)) {
+				this.deleteMissingTaskElements()
+			}
 			// getImageGenerationResult 失败，停止轮询
 			this.stop()
 		} finally {
 			this.registry.untrack(this)
 			this.cleanupTimer()
 			this.cleanupSubscriptions()
+		}
+	}
+
+	private deleteMissingTaskElements(): void {
+		const ownedElementIds = this.elementIds.filter((elementId, index) =>
+			this.shouldSyncElement(elementId, this.elementOutputIndexes[index]),
+		)
+		if (ownedElementIds.length > 0) {
+			this.canvas.elementManager.batchDelete(ownedElementIds)
 		}
 	}
 
@@ -150,7 +167,7 @@ export class ImageBatchPollingManager {
 
 			const elementId = this.outputIndexToElementId.get(outputIndex)
 			if (!elementId) continue
-			if (!this.shouldSyncElement(elementId)) continue
+			if (!this.shouldSyncElement(elementId, outputIndex)) continue
 			const updateData = this.buildCompletedElementUpdate(result, image)
 			// 更新元素数据
 			this.canvas.elementManager.update(elementId, updateData, { silent: false })
@@ -173,7 +190,7 @@ export class ImageBatchPollingManager {
 			this.elementIds.forEach((elementId, index) => {
 				const outputIndex = this.elementOutputIndexes[index]
 				if (this.syncedIndexes.has(outputIndex)) return
-				if (!this.shouldSyncElement(elementId)) return
+				if (!this.shouldSyncElement(elementId, outputIndex)) return
 				this.canvas.elementManager.update(
 					elementId,
 					{
@@ -183,11 +200,6 @@ export class ImageBatchPollingManager {
 					} satisfies Partial<ImageElementData>,
 					{ silent: false },
 				)
-			})
-			this.elementIds.forEach((elementId, index) => {
-				const outputIndex = this.elementOutputIndexes[index]
-				if (this.syncedIndexes.has(outputIndex)) return
-				if (!this.shouldSyncElement(elementId)) return
 				this.canvas.eventEmitter.emit({
 					type: "element:image:generate-submit-failed",
 					data: { elementId },
@@ -200,7 +212,7 @@ export class ImageBatchPollingManager {
 			this.elementIds.forEach((elementId, index) => {
 				const outputIndex = this.elementOutputIndexes[index]
 				if (this.syncedIndexes.has(outputIndex)) return
-				if (!this.shouldSyncElement(elementId)) return
+				if (!this.shouldSyncElement(elementId, outputIndex)) return
 				this.canvas.elementManager.update(
 					elementId,
 					{
@@ -265,9 +277,16 @@ export class ImageBatchPollingManager {
 		})
 	}
 
-	private shouldSyncElement(elementId: string): boolean {
+	private shouldSyncElement(elementId: string, outputIndex: number): boolean {
+		if (!this.aliveElementIds.has(elementId)) return false
+		const elementData = this.canvas.elementManager.getElementData(elementId)
+		if (elementData?.type !== ElementTypeEnum.Image) return false
+
+		const taskMeta = getImageGenerationTaskMeta(elementData)
 		return (
-			this.aliveElementIds.has(elementId) && this.canvas.elementManager.hasElement(elementId)
+			isBatchImageGenerationTaskMeta(taskMeta) &&
+			taskMeta.image_id === this.imageId &&
+			taskMeta.output_index === outputIndex
 		)
 	}
 

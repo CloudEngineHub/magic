@@ -3,6 +3,7 @@ import type {
 	CanvasConnection,
 	CanvasDocumentMergeConnectionConflictReason,
 	CanvasDocumentMergeElementConflictReason,
+	ElementDetailsProvenance,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
@@ -98,6 +99,7 @@ export interface DesignProjectManagerOptions {
 export interface DesignProjectStateBagSetters {
 	setMagicProjectJsFileId: (v: string | null) => void
 	setDesignData: (data: DesignData) => void
+	setElementDetailsProvenance?: (provenance: ElementDetailsProvenance) => void
 	setIsInitialLoading: (v: boolean) => void
 	setIsSaving: (v: boolean) => void
 	setIsReadOnly: (v: boolean) => void
@@ -110,6 +112,7 @@ export interface DesignProjectStateBagSetters {
 
 export interface DesignProjectStateBag {
 	getDesignData: () => DesignData
+	getElementDetailsProvenance?: () => ElementDetailsProvenance
 	getConflictState: () => DesignConflict | null
 	getMagicProjectJsFileId: () => string | null
 	getMagicProjectJsVersion: () => number | null

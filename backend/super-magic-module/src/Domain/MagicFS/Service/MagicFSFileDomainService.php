@@ -87,6 +87,26 @@ class MagicFSFileDomainService
     }
 
     /**
+     * 根据项目 ID 获取项目根目录的 file_id.
+     *
+     * 用于 agfs-server 动态挂载 referenced-project 时解析 root_file_id：
+     * agent 仅通过挂载路径提供 project_id，agfs-server 调本端点拿到根目录 ID。
+     */
+    public function getProjectRootFileId(int $projectId): int
+    {
+        $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
+        if ($rootDir === null) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_NOT_FOUND,
+                'magicfs.project_not_found',
+                ['project_id' => $projectId]
+            );
+        }
+
+        return $rootDir->getFileId();
+    }
+
+    /**
      * 创建文件或目录.
      *
      * @param string $name 文件名

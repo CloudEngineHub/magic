@@ -20,6 +20,7 @@ interface UseMessageSendHandlerParams {
 	canSendMessage: boolean
 	hasLoadingMarker: boolean
 	isAllFilesUploaded: boolean
+	isEditingQueueItem: boolean
 	store: MessageEditorStore
 	t: (key: string, options?: Record<string, unknown>) => string
 	onSend?: MessageEditorProps["onSend"]
@@ -33,6 +34,7 @@ export default function useMessageSendHandler({
 	canSendMessage,
 	hasLoadingMarker,
 	isAllFilesUploaded,
+	isEditingQueueItem,
 	store,
 	t,
 	onSend,
@@ -42,6 +44,10 @@ export default function useMessageSendHandler({
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
+
+		if (isEditingQueueItem && isEmptyJSONContent(store.editorStore.value)) {
+			return
+		}
 
 		if (!canSendMessage) {
 			if (hasLoadingMarker) {

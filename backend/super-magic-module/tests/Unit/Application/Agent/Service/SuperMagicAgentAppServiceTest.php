@@ -34,11 +34,13 @@ use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentTool;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentToolType;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
+use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
@@ -152,6 +154,32 @@ class SuperMagicAgentAppServiceTest extends TestCase
         $method->invoke($this->service, $dataIsolation, 'creator-only-agent');
     }
 
+    public function testAssertAgentDetailReadableRejectsVisibilityOnlyEmployee(): void
+    {
+        $resourceAccessPolicyService = $this->createMock(ResourceAccessPolicyService::class);
+        $resourceAccessPolicyService->expects($this->once())
+            ->method('getCurrentOperation')
+            ->willReturn(null);
+        $this->setProperty($this->service, 'resourceAccessPolicyService', $resourceAccessPolicyService);
+        $this->setProperty($this->service, 'userAgentDomainService', new class extends UserAgentDomainService {
+            public function __construct()
+            {
+            }
+
+            public function findUserAgentOwnershipByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): ?UserAgentEntity
+            {
+                return null;
+            }
+        });
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        $method = new ReflectionMethod($this->service, 'assertAgentDetailReadable');
+        $method->setAccessible(true);
+
+        $this->expectException(BusinessException::class);
+        $method->invoke($this->service, new SuperMagicAgentDataIsolation('ORG', 'user-1'), 'visible-only-agent');
+    }
+
     public function testSyncAgentPublishScopeTransitionKeepsCreatorVisibleWhenInternalPublishesToMarket(): void
     {
         ApplicationContext::setContainer($this->buildContainer([]));
@@ -184,6 +212,19 @@ class SuperMagicAgentAppServiceTest extends TestCase
             }
         };
         $this->setProperty($this->service, 'resourceVisibilityDomainService', $resourceVisibilityDomainService);
+
+        $superMagicAgentDomainService = new readonly class extends SuperMagicAgentDomainService {
+            public function __construct()
+            {
+            }
+
+            public function getStoreAgentsByAgentCodes(array $agentCodes): array
+            {
+                TestCase::assertSame(['SMA-agent'], $agentCodes);
+                return [];
+            }
+        };
+        $this->setProperty($this->service, 'superMagicAgentDomainService', $superMagicAgentDomainService);
 
         $agent = new SuperMagicAgentEntity();
         $agent->setCode('SMA-agent');

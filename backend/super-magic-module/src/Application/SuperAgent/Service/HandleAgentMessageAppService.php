@@ -981,7 +981,8 @@ class HandleAgentMessageAppService extends AbstractAppService
             chatTopicId: $taskContext->getChatTopicId(),
             chatConversationId: $taskContext->getChatConversationId(),
             remind: $e->getMessage(),
-            remindEvent: $remindType
+            remindEvent: $remindType,
+            dynamicParams: $topicEntity->getDynamicParams(),
         );
 
         TaskTerminationUtil::setTerminationFlag($this->redis, $this->logger, $taskContext->getTask()->getId());

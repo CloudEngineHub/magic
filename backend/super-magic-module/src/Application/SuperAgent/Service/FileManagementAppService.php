@@ -198,7 +198,14 @@ class FileManagementAppService extends AbstractAppService
             if (empty($topicEntity)) {
                 ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, trans('topic.not_found'));
             }
-            $projectEntity = $this->projectDomainService->getProjectNotUserId($topicEntity->getProjectId());
+            // Uploading files is a write operation. Resolve the project through the
+            // access check so a topic ID from another user's project cannot be used
+            // to mint an upload credential.
+            $projectEntity = $this->getAccessibleProjectWithEditor(
+                $topicEntity->getProjectId(),
+                $userId,
+                $organizationCode
+            );
             $workDir = WorkDirectoryUtil::getTopicUploadDir($userId, $topicEntity->getProjectId(), $topicEntity->getId());
 
             // 获取STS Token

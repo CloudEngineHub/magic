@@ -8,13 +8,13 @@ import { useScopedTopicReadProgress } from "../useScopedTopicReadProgress"
 const mockState = vi.hoisted(() => ({
 	activeSubscriptions: 0,
 	cleanupFunctions: [] as Array<ReturnType<typeof vi.fn>>,
-	registerTopicMessageListener: vi.fn(),
+	subscribe: vi.fn(),
 }))
 
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
 		messages: new Map<string, unknown[]>(),
-		registerTopicMessageListener: mockState.registerTopicMessageListener,
+		subscribe: mockState.subscribe,
 	},
 }))
 
@@ -58,8 +58,8 @@ describe("useScopedTopicReadProgress / topic listener lifecycle", () => {
 	beforeEach(() => {
 		mockState.activeSubscriptions = 0
 		mockState.cleanupFunctions = []
-		mockState.registerTopicMessageListener.mockReset()
-		mockState.registerTopicMessageListener.mockImplementation(() => {
+		mockState.subscribe.mockReset()
+		mockState.subscribe.mockImplementation(() => {
 			mockState.activeSubscriptions += 1
 			let active = true
 			const unsubscribe = vi.fn(() => {
@@ -84,7 +84,12 @@ describe("useScopedTopicReadProgress / topic listener lifecycle", () => {
 			{ wrapper: StrictModeWrapper },
 		)
 
-		expect(mockState.registerTopicMessageListener).toHaveBeenCalledTimes(2)
+		expect(mockState.subscribe).toHaveBeenCalledTimes(2)
+		expect(mockState.subscribe).toHaveBeenCalledWith(
+			"message.committed",
+			expect.any(Function),
+			{ scope: { topicId: "chat-topic-1" } },
+		)
 		expect(mockState.activeSubscriptions).toBe(1)
 		expect(
 			mockState.cleanupFunctions.filter((cleanup) => cleanup.mock.calls.length === 0),

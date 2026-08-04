@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Circle, CirclePlus, Ellipsis, PencilLine, Search, Trash2, ViewIcon } from "lucide-react"
@@ -10,9 +10,9 @@ import MagicDropdown from "@/components/base/MagicDropdown"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import type {
+	IdentifiedOptionItem,
 	LocaleText,
 	OptionGroup,
-	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { resolveLocalText } from "../utils"
@@ -22,9 +22,13 @@ import { DemoGroupEditDialog } from "../components/DemoGroupEditDialog"
 import { DemoItemEditDialog } from "../components/DemoItemEditDialog"
 import { DEFAULT_INSPIRATION_GROUP_KEY, useSceneEditStore } from "../store"
 import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContainer/panels/TemplateViewSwitcher"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import {
+	isIdentifiedOptionItem,
+	resolveDemoPromptText,
+} from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { cn } from "@/lib/tiptap-utils"
 import { Badge } from "@/components/shadcn-ui/badge"
+import type { InspirationItemData } from "../inspirationItems"
 
 const INSPIRATION_THEME_LABEL_KEY: Record<string, string> = {
 	grid: "playbook.edit.inspiration.config.themeOptions.grid",
@@ -45,6 +49,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [activeGroupKey, setActiveGroupKey] = useState<string | null>(defaultGroupKey)
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [searchValue, setSearchValue] = useState("")
+	// Confirm callbacks may run after a refreshed scene replaces the provider store.
+	const storeRef = useRef(store)
+	storeRef.current = store
 	const defaultGroupName = useMemo<LocaleText>(
 		() => ({
 			default: t("playbook.edit.inspiration.defaultGroup"),
@@ -57,7 +64,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [editingGroup, setEditingGroup] = useState<OptionGroup | undefined>(undefined)
 	const [itemDialogOpen, setItemDialogOpen] = useState(false)
-	const [editingItem, setEditingItem] = useState<OptionItem | undefined>(undefined)
+	const [editingItem, setEditingItem] = useState<IdentifiedOptionItem | undefined>(undefined)
 	const [editingItemGroupKey, setEditingItemGroupKey] = useState<string>("")
 
 	const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -68,7 +75,23 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}, [activeGroupKey, defaultGroupKey, groups])
 
 	const activeGroup = groups.find((g) => g.group_key === activeGroupKey) ?? null
-	const allItems = useMemo<OptionItem[]>(() => activeGroup?.children ?? [], [activeGroup])
+	const allItems = useMemo<IdentifiedOptionItem[]>(
+		() => (activeGroup?.children ?? []).filter(isIdentifiedOptionItem),
+		[activeGroup],
+	)
+	const itemsByValue = useMemo(
+		() => new Map(allItems.map((item) => [item.value, item])),
+		[allItems],
+	)
+
+	useEffect(() => {
+		setSelectedKeys((previousKeys) => {
+			const nextKeys = new Set(
+				Array.from(previousKeys).filter((key) => itemsByValue.has(key)),
+			)
+			return nextKeys.size === previousKeys.size ? previousKeys : nextKeys
+		})
+	}, [itemsByValue])
 
 	const filteredItems = useMemo(() => {
 		const search = searchValue.toLowerCase()
@@ -77,21 +100,17 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			const label = item.label
 				? resolveLocalText(item.label, i18n.language).toLowerCase()
 				: ""
-			const itemValue = localeTextToDisplayString(item.value).toLowerCase()
-			return label.includes(search) || itemValue.includes(search)
+			const prompt = resolveDemoPromptText(item, i18n.language).toLowerCase()
+			return label.includes(search) || prompt.includes(search)
 		})
 	}, [allItems, searchValue, i18n.language])
 
 	const allSelected =
-		filteredItems.length > 0 &&
-		filteredItems.every((item) => selectedKeys.has(localeTextToDisplayString(item.value)))
+		filteredItems.length > 0 && filteredItems.every((item) => selectedKeys.has(item.value))
 
 	function handleSelectAll() {
 		if (allSelected) setSelectedKeys(new Set())
-		else
-			setSelectedKeys(
-				new Set(filteredItems.map((item) => localeTextToDisplayString(item.value))),
-			)
+		else setSelectedKeys(new Set(filteredItems.map((item) => item.value)))
 	}
 
 	function handleSelectOne(value: string, checked: boolean) {
@@ -120,9 +139,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			}),
 			variant: "destructive",
 			onConfirm: () => {
-				store.deleteInspirationItems(Array.from(selectedKeys))
+				storeRef.current.deleteInspirationItems(Array.from(selectedKeys))
 				setSelectedKeys(new Set())
-				void store.save()
+				void storeRef.current.save()
 			},
 		})
 	}
@@ -154,21 +173,17 @@ export const InspirationPanel = observer(function InspirationPanel() {
 		setItemDialogOpen(true)
 	}
 
-	function openEditItem(item: OptionItem, groupKey: string) {
+	function openEditItem(item: IdentifiedOptionItem, groupKey: string) {
 		setEditingItem(item)
 		setEditingItemGroupKey(groupKey)
 		setItemDialogOpen(true)
 	}
 
 	const handleItemConfirm = useCallback(
-		(data: Partial<OptionItem>, groupKey: string) => {
-			if (editingItem)
-				store.editInspirationItem(
-					localeTextToDisplayString(editingItem.value),
-					data,
-					groupKey,
-				)
+		(data: InspirationItemData, groupKey: string) => {
+			if (editingItem) store.editInspirationItem(editingItem.value, data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
+			setSelectedKeys(new Set())
 			void store.save()
 		},
 		[defaultGroupName, editingItem, store],
@@ -310,7 +325,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 									group={group}
 									isActive={activeGroupKey === group.group_key}
 									lang={i18n.language}
-									onClick={() => setActiveGroupKey(group.group_key)}
+									onClick={() => {
+										setActiveGroupKey(group.group_key)
+										setSelectedKeys(new Set())
+									}}
 									onEdit={() => openEditGroup(group)}
 									onDelete={() =>
 										confirm({
@@ -322,8 +340,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 											),
 											variant: "destructive",
 											onConfirm: () => {
-												store.deleteInspirationGroup(group.group_key)
-												void store.save()
+												storeRef.current.deleteInspirationGroup(
+													group.group_key,
+												)
+												void storeRef.current.save()
 											},
 										})
 									}
@@ -359,8 +379,8 @@ export const InspirationPanel = observer(function InspirationPanel() {
 								),
 								variant: "destructive",
 								onConfirm: () => {
-									store.deleteInspirationItem(value)
-									void store.save()
+									storeRef.current.deleteInspirationItem(value)
+									void storeRef.current.save()
 								},
 							})
 						}

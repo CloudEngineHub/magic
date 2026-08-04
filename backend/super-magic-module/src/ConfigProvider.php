@@ -9,7 +9,9 @@ namespace Dtyq\SuperMagic;
 
 use App\Domain\Chat\DTO\Message\ChatMessage\SuperAgentMessageInterface;
 use App\Domain\Chat\Event\Agent\AgentExecuteInterface;
+use Dtyq\SuperMagic\Application\Contract\AllowAllPromptContentValidator;
 use Dtyq\SuperMagic\Application\Contract\DefaultUserAiWatermarkPolicy;
+use Dtyq\SuperMagic\Application\Contract\PromptContentValidatorInterface;
 use Dtyq\SuperMagic\Application\Contract\UserAiWatermarkPolicyInterface;
 use Dtyq\SuperMagic\Application\RecycleBin\Service\FileRecycleBinSubscriber;
 use Dtyq\SuperMagic\Application\Share\Adapter\SingleFileShareableResource;
@@ -171,6 +173,7 @@ class ConfigProvider
                 SuperAgentMessageInterface::class => SuperAgentMessage::class,
             ],
             'dependencies' => [
+                PromptContentValidatorInterface::class => AllowAllPromptContentValidator::class,
                 UserAiWatermarkPolicyInterface::class => DefaultUserAiWatermarkPolicy::class,
                 // 添加接口到实现类的映射
                 TaskFileRepositoryInterface::class => TaskFileRepository::class,

@@ -12,6 +12,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderType;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Infrastructure\Core\AbstractEntity;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use DateTime;
 use Hyperf\Codec\Json;
 
@@ -259,15 +260,33 @@ class ProviderEntity extends AbstractEntity
      */
     public function getLocalizedName(string $locale): string
     {
-        if (! empty($this->translate['name'][$locale] ?? '')) {
-            return $this->translate['name'][$locale];
-        }
-        if (! empty($this->translate['name']['zh_CN'] ?? '')) {
-            return $this->translate['name']['zh_CN'];
-        }
-        if (! empty($this->translate['name']['en_US'] ?? '')) {
-            return $this->translate['name']['en_US'];
+        if (! empty($name = $this->getTranslatedValue('name', $locale))) {
+            return $name;
         }
         return $this->name;
+    }
+
+    /**
+     * 获取翻译后的服务商名称，仅读取 translate，不回退原始 name.
+     */
+    public function getTranslatedName(string $locale): string
+    {
+        return $this->getTranslatedValue('name', $locale);
+    }
+
+    private function getTranslatedValue(string $key, string $locale): string
+    {
+        $locale = str_replace('-', '_', $locale);
+        $defaultLocales = LanguageEnum::getAllLanguageCodes();
+
+        if (! empty($this->translate[$key][$locale] ?? '')) {
+            return $this->translate[$key][$locale];
+        }
+        foreach ($defaultLocales as $defaultLocale) {
+            if (! empty($this->translate[$key][$defaultLocale] ?? '')) {
+                return $this->translate[$key][$defaultLocale];
+            }
+        }
+        return '';
     }
 }

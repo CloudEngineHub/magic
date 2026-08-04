@@ -291,6 +291,7 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
                 chatConversationId: $userMessageDTO->getChatConversationId(),
                 remind: $e->getMessage(),
                 remindEvent: TaskEventUtil::getRemindTaskEventByCode($e->getCode()),
+                dynamicParams: $userMessageDTO->getDynamicParams(),
             );
         } catch (Throwable $notifyError) {
             $this->logger->error('Failed to send reminder message to client', [
@@ -319,6 +320,7 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
                 chatTopicId: $userMessageDTO->getChatTopicId(),
                 chatConversationId: $userMessageDTO->getChatConversationId(),
                 errorMessage: trans('task.initialize_error'),
+                dynamicParams: $userMessageDTO->getDynamicParams(),
             );
         } catch (Throwable $notifyError) {
             $this->logger->error('Failed to send error message to client', [

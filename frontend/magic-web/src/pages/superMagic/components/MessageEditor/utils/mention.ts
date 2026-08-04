@@ -17,6 +17,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import { resolveDesignProjectBasePathFromAttachments } from "@/pages/superMagic/components/Detail/contents/Design/utils/utils"
 import { toWorkspaceRelativePath } from "@/pages/superMagic/components/Detail/contents/Design/utils/designPath"
 import { validateMentionWithDataService } from "@/components/business/MentionPanel/utils/dataService"
+import projectFilesStore from "@/stores/projectFiles"
 import { DraftData, FileData } from "../types"
 import { keyBy } from "lodash-es"
 import { JSONContent } from "@tiptap/core"
@@ -79,6 +80,7 @@ export function transformUploadFileToProjectFile(
 		file_path: saveResult?.relative_file_path || "",
 		relative_file_path: saveResult?.relative_file_path || "",
 		file_extension: uploadFileData.file_extension,
+		project_id: saveResult?.project_id,
 		file_size: saveResult?.file_size,
 		is_hidden: saveResult?.is_hidden,
 	}
@@ -471,6 +473,44 @@ export function transformPendingProjectReferenceMentions(
 
 export const transformPendingProjectFileMentions = transformPendingProjectReferenceMentions
 
+function stripProjectResourceDisplayMetadataFromAttrs(
+	attrs: TiptapMentionAttributes,
+): TiptapMentionAttributes {
+	if (attrs.type !== MentionItemType.PROJECT_FILE && attrs.type !== MentionItemType.FOLDER) {
+		return attrs
+	}
+
+	const data = attrs.data as Record<string, unknown> | undefined
+	if (!data || !("project_name" in data)) return attrs
+
+	const nextData = { ...data }
+	delete nextData.project_name
+
+	return {
+		...attrs,
+		data: nextData as TiptapMentionAttributes["data"],
+	}
+}
+
+/**
+ * Keep source project names in rich-text content for message-history rendering, but remove them
+ * from the structured mention items used as the send payload.
+ */
+export function stripProjectResourceMentionDisplayMetadata(
+	content: JSONContent,
+	mentionItems: MentionListItem[],
+): { content: JSONContent; mentionItems: MentionListItem[] } {
+	return {
+		// Keep the original rich-text document intact. It is persisted with the message and is the
+		// source used by the message list to render cross-project paths.
+		content,
+		mentionItems: mentionItems.map((item) => ({
+			...item,
+			attrs: stripProjectResourceDisplayMetadataFromAttrs(item.attrs),
+		})),
+	}
+}
+
 export const isAllowedMention = (
 	attrs: TiptapMentionAttributes,
 	dataService?: DataService | null,
@@ -478,7 +518,22 @@ export const isAllowedMention = (
 	if (isPendingProjectReferenceMention(attrs)) return true
 	if (attrs.type === MentionItemType.PROJECT_FILE) {
 		const data = attrs.data as ProjectFileMentionData | undefined
-		if (data?.is_hidden) return true
+		if (
+			data?.is_hidden ||
+			data?.source_project_id ||
+			(data?.project_id && data.project_id !== projectFilesStore.currentSelectedProject?.id)
+		) {
+			return true
+		}
+	}
+	if (attrs.type === MentionItemType.FOLDER) {
+		const data = attrs.data as DirectoryMentionData | undefined
+		if (
+			data?.source_project_id ||
+			(data?.project_id && data.project_id !== projectFilesStore.currentSelectedProject?.id)
+		) {
+			return true
+		}
 	}
 
 	return validateMentionWithDataService(dataService, {

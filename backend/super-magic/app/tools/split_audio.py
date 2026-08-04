@@ -1,8 +1,8 @@
 """
 音频拆分工具
 
-当音频文件时长超过4小时且文件大小超过400M时，自动拆分成多个音频文件
-确保每个拆分后的音频不超过400M或4小时
+当音频文件时长超过4.8小时或文件大小超过480MB时，自动拆分成多个音频文件
+确保每个拆分后的音频不超过480MB或4.8小时
 使用 ffmpeg 进行拆分
 """
 
@@ -33,23 +33,14 @@ class SplitAudioParams(BaseToolParams):
 [Input] Audio file path (relative to workspace root). Examples: 'audio/recording.mp3' / 'meeting_audio/discussion.wav'"""
     )
 
-    max_duration_hours: float = Field(
-        default=4.0,
-        description="""<!--zh: [阈值] 单个音频文件的最大时长（小时）。当音频时长超过此值或文件大小超过阈值时将会拆分。默认为 4 小时-->
-[Threshold] Maximum duration per audio file (hours). Audio will be split when duration exceeds this value OR file size exceeds threshold. Default is 4 hours"""
-    )
-
-    max_size_mb: int = Field(
-        default=400,
-        description="""<!--zh: [阈值] 单个音频文件的最大大小（MB）。当文件大小超过此值或时长超过阈值时将会拆分。默认为 400 MB-->
-[Threshold] Maximum size per audio file (MB). Audio will be split when file size exceeds this value OR duration exceeds threshold. Default is 400 MB"""
-    )
-
 
 @tool()
 class SplitAudio(AbstractFileTool[SplitAudioParams], WorkspaceTool[SplitAudioParams]):
-    """<!--zh: 将大音频文件拆分成多个小文件。当音频文件时长超过指定阈值或文件大小超过指定阈值时，自动拆分成多个片段，确保每个拆分后的音频不超过指定的大小或时长。支持的音频格式：MP3, WAV, M4A, AAC, OGG, FLAC 等。-->
-    Split large audio files into multiple smaller files. When audio file duration exceeds specified threshold or file size exceeds specified threshold, automatically split into multiple segments, ensuring each split audio does not exceed specified size or duration. Supported audio formats: MP3, WAV, M4A, AAC, OGG, FLAC, etc."""
+    """<!--zh: 将大音频文件拆分成多个小文件。当音频文件时长超过 4.8 小时或文件大小超过 480 MB 时，自动拆分成多个片段。支持的音频格式：MP3, WAV, M4A, AAC, OGG, FLAC 等。-->
+    Split large audio files into multiple smaller files when duration exceeds 4.8 hours or file size exceeds 480 MB. Supported audio formats: MP3, WAV, M4A, AAC, OGG, FLAC, etc."""
+
+    MAX_DURATION_HOURS = 4.8
+    MAX_SIZE_MB = 480
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -80,7 +71,7 @@ class SplitAudio(AbstractFileTool[SplitAudioParams], WorkspaceTool[SplitAudioPar
                 return ToolResult.error(error)
 
             duration_hours = duration_seconds / 3600
-            max_duration_seconds = params.max_duration_hours * 3600
+            max_duration_seconds = self.MAX_DURATION_HOURS * 3600
 
             logger.info(
                 f"音频信息 - 文件大小: {file_size_mb:.2f}MB, "
@@ -88,13 +79,13 @@ class SplitAudio(AbstractFileTool[SplitAudioParams], WorkspaceTool[SplitAudioPar
             )
 
             # 3. 判断是否需要拆分
-            if file_size_mb <= params.max_size_mb and duration_hours <= params.max_duration_hours:
+            if file_size_mb <= self.MAX_SIZE_MB and duration_hours <= self.MAX_DURATION_HOURS:
                 return ToolResult(
                     content=f"音频文件无需拆分\n\n"
                             f"📊 文件信息：\n"
-                            f"- 文件大小：{file_size_mb:.2f}MB (阈值: {params.max_size_mb}MB)\n"
-                            f"- 时长：{self._format_duration(duration_seconds)} (阈值: {params.max_duration_hours}小时)\n\n"
-                            f"💡 只有当文件大小超过 {params.max_size_mb}MB 或者时长超过 {params.max_duration_hours}小时时才会拆分。",
+                            f"- 文件大小：{file_size_mb:.2f}MB (阈值: {self.MAX_SIZE_MB}MB)\n"
+                            f"- 时长：{self._format_duration(duration_seconds)} (阈值: {self.MAX_DURATION_HOURS}小时)\n\n"
+                            f"💡 只有当文件大小超过 {self.MAX_SIZE_MB}MB 或者时长超过 {self.MAX_DURATION_HOURS}小时时才会拆分。",
                     extra_info={
                         "audio_path": str(params.audio_path),
                         "file_size_mb": file_size_mb,
@@ -108,7 +99,7 @@ class SplitAudio(AbstractFileTool[SplitAudioParams], WorkspaceTool[SplitAudioPar
                 audio_path=audio_path,
                 total_duration_seconds=duration_seconds,
                 file_size_mb=file_size_mb,
-                max_size_mb=params.max_size_mb,
+                max_size_mb=self.MAX_SIZE_MB,
                 max_duration_seconds=max_duration_seconds
             )
 

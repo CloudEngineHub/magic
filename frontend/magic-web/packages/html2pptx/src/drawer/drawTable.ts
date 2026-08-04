@@ -5,10 +5,7 @@ import { log, LogLevel } from "../logger"
 /**
  * Draw a table onto the slide
  */
-export function drawTable(
-	slide: Slide,
-	node: PPTTableNode,
-): void {
+export function drawTable(slide: Slide, node: PPTTableNode): void {
 	const { rows, colWidths, rowHeights, x, y, w } = node
 
 	// Convert to pptxgenjs format
@@ -21,7 +18,10 @@ export function drawTable(
 				const fillObj: { color: string; transparency?: number } = {
 					color: cell.options.fill,
 				}
-				if (cell.options.fillTransparency !== undefined && cell.options.fillTransparency > 0) {
+				if (
+					cell.options.fillTransparency !== undefined &&
+					cell.options.fillTransparency > 0
+				) {
 					fillObj.transparency = cell.options.fillTransparency
 				}
 				cellOptions.fill = fillObj
@@ -37,9 +37,29 @@ export function drawTable(
 				cellOptions.fontSize = cell.options.fontSize
 			}
 
+			// Font family
+			if (cell.options?.fontFace) {
+				cellOptions.fontFace = cell.options.fontFace
+			}
+
 			// Bold
 			if (cell.options?.bold) {
 				cellOptions.bold = cell.options.bold
+			}
+
+			// Italic
+			if (cell.options?.italic) {
+				cellOptions.italic = cell.options.italic
+			}
+
+			// Character spacing
+			if (cell.options?.charSpacing !== undefined) {
+				cellOptions.charSpacing = cell.options.charSpacing
+			}
+
+			// Text transparency
+			if (cell.options?.transparency !== undefined) {
+				cellOptions.transparency = cell.options.transparency
 			}
 
 			// Horizontal alignment
@@ -104,18 +124,19 @@ export function drawTable(
 	}
 
 	try {
-	slide.addTable(tableRows, options)
+		slide.addTable(tableRows, options)
 	} catch (error) {
 		log(LogLevel.L3, "Failed to add table", { error: String(error) })
 	}
 }
 
-
 /**
  * Format borders for pptxgenjs
  */
 function formatBorder(
-	border: PPTTableCellBorder | [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder],
+	border:
+		| PPTTableCellBorder
+		| [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder],
 ): unknown {
 	if (Array.isArray(border)) {
 		// Different sides: [top, right, bottom, left]

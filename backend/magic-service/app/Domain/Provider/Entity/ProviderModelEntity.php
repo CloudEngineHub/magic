@@ -16,6 +16,7 @@ use App\Domain\Provider\Entity\ValueObject\Status;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\AbstractEntity;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use DateTime;
 use Hyperf\Codec\Json;
@@ -636,16 +637,18 @@ class ProviderModelEntity extends AbstractEntity
      */
     public function getLocalizedName(string $locale): string
     {
-        if (! empty($this->translate['name'][$locale] ?? '')) {
-            return $this->translate['name'][$locale];
-        }
-        if (! empty($this->translate['name']['zh_CN'] ?? '')) {
-            return $this->translate['name']['zh_CN'];
-        }
-        if (! empty($this->translate['name']['en_US'] ?? '')) {
-            return $this->translate['name']['en_US'];
+        if (! empty($name = $this->getTranslatedValue('name', $locale))) {
+            return $name;
         }
         return $this->name;
+    }
+
+    /**
+     * 获取翻译后的模型名称，仅读取 translate，不回退原始 name.
+     */
+    public function getTranslatedName(string $locale): string
+    {
+        return $this->getTranslatedValue('name', $locale);
     }
 
     /**
@@ -653,14 +656,8 @@ class ProviderModelEntity extends AbstractEntity
      */
     public function getLocalizedDescription(string $locale): string
     {
-        if (! empty($this->translate['description'][$locale] ?? '')) {
-            return $this->translate['description'][$locale];
-        }
-        if (! empty($this->translate['description']['zh_CN'] ?? '')) {
-            return $this->translate['description']['zh_CN'];
-        }
-        if (! empty($this->translate['description']['en_US'] ?? '')) {
-            return $this->translate['description']['en_US'];
+        if (! empty($description = $this->getTranslatedValue('description', $locale))) {
+            return $description;
         }
         return $this->description;
     }
@@ -716,5 +713,21 @@ class ProviderModelEntity extends AbstractEntity
         }
 
         return $modelId;
+    }
+
+    private function getTranslatedValue(string $key, string $locale): string
+    {
+        $locale = str_replace('-', '_', $locale);
+        $defaultLocales = LanguageEnum::getAllLanguageCodes();
+
+        if (! empty($this->translate[$key][$locale] ?? '')) {
+            return $this->translate[$key][$locale];
+        }
+        foreach ($defaultLocales as $defaultLocale) {
+            if (! empty($this->translate[$key][$defaultLocale] ?? '')) {
+                return $this->translate[$key][$defaultLocale];
+            }
+        }
+        return '';
     }
 }

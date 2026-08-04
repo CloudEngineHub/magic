@@ -3,6 +3,7 @@ import {
 	SUPPORTED_IMAGE_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../../../runtime/shared/ids"
+import { getCanvasResourceIdentity } from "../../../../runtime/shared/path/canvasResourcePath"
 import type {
 	ReferenceAssetFileClass,
 	ReferenceAssetPerTypeLimits,
@@ -20,8 +21,7 @@ interface ReferenceResourcePanelBatchItemLike {
 }
 
 export function normalizeReferenceComparablePath(path?: string): string {
-	if (!path) return ""
-	return path.trim().replace(/\\/g, "/").replace(/^\/+/, "")
+	return getCanvasResourceIdentity(path)
 }
 
 export function isReferenceResourceCurrentlySelected(

@@ -82,6 +82,17 @@ class MagicFSApi extends AbstractApi
     }
 
     /**
+     * 根据项目 ID 获取项目根目录 file_id.
+     * GET /api/v1/open-api/magicfs/projects/{projectId}/root-file-id.
+     */
+    public function getProjectRootFileId(string $projectId): array
+    {
+        $authorization = $this->getCurrentUser();
+
+        return $this->magicFSFileAppService->getProjectRootFileId($authorization, $projectId);
+    }
+
+    /**
      * 批量获取文件版本号
      * POST /api/v1/open-api/magicfs/files/versions.
      */
@@ -148,6 +159,24 @@ class MagicFSApi extends AbstractApi
         $responseDTO = $this->magicFSFileAppService->getFileTree($authorization, $id, $requestDTO);
 
         return $responseDTO->toArray();
+    }
+
+    /**
+     * 写权限预检（无副作用）。
+     *
+     * 与 updateFile 复用同一套 assertFileAccessible(fileId, EDITOR) 鉴权逻辑，
+     * 仅校验不写状态。供 magicfs 客户端在写 S3 / 本地缓存之前确认当前用户
+     * 具备写权限，避免"先写 S3 再被元数据服务拒绝"导致的数据不一致。
+     *
+     * POST /api/v1/open-api/magicfs/files/{id}/check-access.
+     */
+    public function checkFileAccess(string $id): array
+    {
+        $authorization = $this->getCurrentUser();
+
+        $this->magicFSFileAppService->checkFileWriteAccess($authorization, $id);
+
+        return [];
     }
 
     /**

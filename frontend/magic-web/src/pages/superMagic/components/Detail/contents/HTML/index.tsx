@@ -1,6 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
-import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "./IsolatedHTMLRenderer"
+import IsolatedHTMLRenderer, {
+	type IsolatedHTMLRendererContentMetrics,
+	type IsolatedHTMLRendererRef,
+} from "./IsolatedHTMLRenderer"
 import {
 	createParentMessageHandler,
 	injectFetchInterceptorScript,
@@ -97,6 +100,8 @@ interface HTMLProps {
 	isFromNode?: boolean
 	onClose?: () => void
 	isFullscreen?: boolean
+	/** Keeps pure share fullscreen HTML in document flow for long screenshots. */
+	documentFlowFullscreen?: boolean
 	attachmentList?: any[]
 	isEditMode?: boolean
 	setIsEditMode?: (isEditMode: boolean) => void
@@ -134,6 +139,8 @@ interface HTMLProps {
 	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
+	/** Live tab state, excluded from cached renderProps. */
+	isTabActive?: boolean
 	showFooter?: boolean
 	onRefreshFile?: () => void
 	isPlaybackMode?: boolean
@@ -200,6 +207,7 @@ export default memo(function HTML(props: HTMLProps) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		attachmentList,
 		isEditMode,
 		setIsEditMode,
@@ -225,6 +233,7 @@ export default memo(function HTML(props: HTMLProps) {
 		selectedProject,
 		showFileHeader = true,
 		activeFileId,
+		isTabActive,
 		showFooter,
 		onRefreshFile,
 		isPlaybackMode = false,
@@ -238,6 +247,8 @@ export default memo(function HTML(props: HTMLProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const isImmersiveLayout = !showFileHeader && !showFooter
+	// The simulated phone frame has a fixed height and cannot be used for page-level scrolling.
+	const shouldUsePhonePreviewFrame = !documentFlowFullscreen && viewMode === "phone"
 	// 通过 previewPolicy 声明能力，详情页消费配置
 	const previewPolicy = displayData?.display_config?.previewPolicy
 	const isReadonlyPreview = previewPolicy?.readonly === true
@@ -249,6 +260,7 @@ export default memo(function HTML(props: HTMLProps) {
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
 	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
+	const [documentFlowContentHeight, setDocumentFlowContentHeight] = useState(0)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
@@ -318,7 +330,12 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 头部刷新：拉取 HTML / data.js 版本列表；若最新版本号变新则切到最新并加载 */
 	const handleDetailHeaderRefresh = useMemoizedFn(async () => {
-		if (!displayData?.file_id || activeFileId !== displayData.file_id) return
+		if (!displayData?.file_id) return
+
+		// Use live tab state because cached activeFileId may be stale.
+		const isCurrentTabActive =
+			isTabActive === undefined ? activeFileId === displayData.file_id : isTabActive
+		if (!isCurrentTabActive) return
 
 		const htmlFileId = displayData.file_id
 		const prevHtmlNewest = htmlFileVersionsList[0]?.version
@@ -1013,7 +1030,12 @@ export default memo(function HTML(props: HTMLProps) {
 	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
 	useEffect(() => {
 		setIsPreviewRenderReady(false)
-		if (!processedContent) return
+		// 空文件没有可写入 iframe 的内容，也不会触发 onRenderReady。
+		// 此时预览本身已经完成（展示空白区域），应立即收起 loading。
+		if (!processedContent) {
+			setIsPreviewRenderReady(true)
+			return
+		}
 		const fallbackTimer = window.setTimeout(() => {
 			setIsPreviewRenderReady(true)
 		}, 4000)
@@ -1366,17 +1388,26 @@ export default memo(function HTML(props: HTMLProps) {
 		<div
 			className={cx(styles.htmlContainer, className, {
 				[styles.immersiveHtmlContainer]: isImmersiveLayout,
+				[styles.documentFlowHtmlContainer]: documentFlowFullscreen,
 			})}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{activeHistory.loading ? (
-				<Flex
-					justify="center"
-					align="center"
-					style={{ height: "100%", width: "100%", backgroundColor: "white" }}
-				>
-					<MagicSpin spinning />
-				</Flex>
+				documentFlowFullscreen ? (
+					<div className="min-h-dvh" />
+				) : (
+					<Flex
+						justify="center"
+						align="center"
+						style={{
+							height: "100%",
+							width: "100%",
+							backgroundColor: "white",
+						}}
+					>
+						<MagicSpin spinning />
+					</Flex>
+				)
 			) : isCodeViewMode ? (
 				<div className={styles.htmlBody}>
 					<CodeEditor
@@ -1392,14 +1423,17 @@ export default memo(function HTML(props: HTMLProps) {
 			) : (
 				<div
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: viewMode === "phone",
+						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
+						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
 				>
 					<div
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: viewMode === "phone",
+							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
+							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
+							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
 						{isDataAnalysis ? (
@@ -1436,6 +1470,8 @@ export default memo(function HTML(props: HTMLProps) {
 									isPptRender={isInPPTMode}
 									scaleContentDimensions={scaleContentDimensions}
 									isFullscreen={isFullscreen}
+									documentFlowFullscreen={documentFlowFullscreen}
+									documentFlowContentHeight={documentFlowContentHeight}
 									isEditMode={isEditMode}
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
@@ -1449,11 +1485,24 @@ export default memo(function HTML(props: HTMLProps) {
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
 									onRenderReady={handlePreviewRenderReady}
+									onContentMetrics={(
+										metrics: IsolatedHTMLRendererContentMetrics,
+									) => {
+										if (!documentFlowFullscreen) return
+										const nextHeight = Math.ceil(metrics.contentHeight)
+										if (!Number.isFinite(nextHeight) || nextHeight <= 0) return
+
+										setDocumentFlowContentHeight((currentHeight) =>
+											currentHeight === nextHeight
+												? currentHeight
+												: nextHeight,
+										)
+									}}
 									onDevConsoleClose={() => setDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
-								{!isPreviewRenderReady && (
+								{!isPreviewRenderReady && !documentFlowFullscreen && (
 									<Flex
 										justify="center"
 										align="center"

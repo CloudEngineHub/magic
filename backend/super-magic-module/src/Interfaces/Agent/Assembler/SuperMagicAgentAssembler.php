@@ -23,6 +23,8 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentIconType;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentOrigin;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentListScope;
@@ -302,12 +304,16 @@ class SuperMagicAgentAssembler
         array $storeAgentsMap,
         array $latestVersionsMap,
         array $userAgentsMap,
+        string $currentUserId,
         int $page,
         int $pageSize,
         int $total,
-        array $organizationInfoMap = []
+        array $organizationInfoMap = [],
+        array $officialAgentCodes = [],
+        array $marketSourceMap = []
     ): QueryAgentsResponseDTO {
         $list = [];
+        $officialAgentCodeMap = array_fill_keys($officialAgentCodes, true);
         foreach ($agents as $agent) {
             $agentCode = $agent->getCode();
             $list[] = self::createAgentListItemDTO(
@@ -316,6 +322,13 @@ class SuperMagicAgentAssembler
                 storeAgent: $storeAgentsMap[$agentCode] ?? null,
                 latestVersionEntity: $latestVersionsMap[$agentCode] ?? null,
                 userAgent: $userAgentsMap[$agentCode] ?? null,
+                origin: self::resolveAgentOrigin(
+                    $agent,
+                    $currentUserId,
+                    $userAgentsMap[$agentCode] ?? null,
+                    $officialAgentCodeMap,
+                    $marketSourceMap
+                ),
                 scope: AgentListScope::CREATED->value,
                 organizationInfo: $organizationInfoMap[$agent->getOrganizationCode()] ?? null,
             );
@@ -345,9 +358,12 @@ class SuperMagicAgentAssembler
         array $agentOperations = [],
         array $publisherUserMap = [],
         array $creatorUserMap = [],
-        array $organizationInfoMap = []
+        array $organizationInfoMap = [],
+        array $officialAgentCodes = [],
+        array $marketSourceMap = []
     ): QueryAgentsResponseDTO {
         $list = [];
+        $officialAgentCodeMap = array_fill_keys($officialAgentCodes, true);
         foreach ($agents as $agent) {
             $agentCode = $agent->getCode();
             $list[] = self::createAgentListItemDTO(
@@ -356,6 +372,13 @@ class SuperMagicAgentAssembler
                 storeAgent: $storeAgentsMap[$agentCode] ?? null,
                 latestVersionEntity: $latestVersionsMap[$agentCode] ?? null,
                 userAgent: $userAgentsMap[$agentCode] ?? null,
+                origin: self::resolveAgentOrigin(
+                    $agent,
+                    $currentUserId,
+                    $userAgentsMap[$agentCode] ?? null,
+                    $officialAgentCodeMap,
+                    $marketSourceMap
+                ),
                 userOperation: $agentOperations[$agentCode] ?? null,
                 publisher: isset($storeAgentsMap[$agentCode])
                     ? self::buildAgentPublisher($storeAgentsMap[$agentCode]->getPublisherType(), $agent->getCreator(), $publisherUserMap)
@@ -506,6 +529,7 @@ class SuperMagicAgentAssembler
         ?AgentMarketEntity $storeAgent = null,
         ?AgentVersionEntity $latestVersionEntity = null,
         ?UserAgentEntity $userAgent = null,
+        ?AgentOrigin $origin = null,
         ?Operation $userOperation = null,
         ?array $publisher = null,
         ?array $creatorInfo = null,
@@ -522,6 +546,7 @@ class SuperMagicAgentAssembler
         }
 
         $latestVersionCode = $latestVersionEntity?->getVersion();
+        $publishTargetType = $latestVersionEntity?->getPublishTargetType()->value;
         $isAdded = $userAgent !== null;
 
         $allowDelete = false;
@@ -542,6 +567,8 @@ class SuperMagicAgentAssembler
             enabled: $agent->getEnabled() ?? false,
             isStoreOffline: false,
             latestVersionCode: $latestVersionCode,
+            publishTargetType: $publishTargetType,
+            origin: ($origin ?? AgentOrigin::TEAM_SHARED)->value,
             allowDelete: $allowDelete,
             pinnedAt: $agent->getPinnedAt(),
             latestPublishedAt: $agent->getLatestPublishedAt(),
@@ -554,6 +581,41 @@ class SuperMagicAgentAssembler
             scope: $scope,
             organizationInfo: $organizationInfo,
         );
+    }
+
+    /**
+     * Resolve the list badge from official membership, ownership, or hired market source.
+     *
+     * @param array<string, true> $officialAgentCodeMap
+     * @param array<int, AgentMarketEntity> $marketSourceMap
+     */
+    private static function resolveAgentOrigin(
+        SuperMagicAgentEntity $agent,
+        string $currentUserId,
+        ?UserAgentEntity $userAgent,
+        array $officialAgentCodeMap,
+        array $marketSourceMap
+    ): AgentOrigin {
+        if (isset($officialAgentCodeMap[$agent->getCode()])) {
+            return AgentOrigin::OFFICIAL;
+        }
+
+        if ($agent->getCreator() === $currentUserId) {
+            return AgentOrigin::CREATED;
+        }
+
+        if ($userAgent?->getSourceType()->isMarket()) {
+            $market = $marketSourceMap[$userAgent->getSourceId() ?? 0] ?? null;
+            if ($market?->getMarketType() === AgentMarketType::MARKET) {
+                return AgentOrigin::MARKET;
+            }
+            if ($market?->getMarketType() === AgentMarketType::ORGANIZATION) {
+                return AgentOrigin::TEAM_SHARED;
+            }
+        }
+
+        // Remaining visible external agents are collaborators or shelf recipients without a hire.
+        return AgentOrigin::TEAM_SHARED;
     }
 
     private static function resolveAgentListScope(

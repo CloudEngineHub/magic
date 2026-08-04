@@ -12,7 +12,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from app.utils.async_file_utils import (
     async_stat,
@@ -24,9 +24,15 @@ from app.utils.async_file_utils import (
 )
 
 from agentlang.context.tool_context import ToolContext
-from agentlang.event.data import AfterMainAgentRunEventData, AgentSuspendedEventData
+from agentlang.event.data import (
+    AfterMainAgentRunEventData,
+    AgentSuspendedEventData,
+    BeforeMainAgentRunEventData,
+    ErrorEventData,
+)
 from agentlang.event.event import Event, EventType
 from agentlang.logger import get_logger
+from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
 from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
@@ -51,10 +57,26 @@ class ConstructedFileKey:
     file_id: Optional[str]
 
 
+@dataclass(frozen=True, slots=True)
+class LocalDebugWorkspaceFileState:
+    """本地调试工作区文件状态，用于识别单次任务产生的文件变更。"""
+
+    path: Path
+    size: int
+    modified_time_ns: int
+    changed_time_ns: int
+
+    def signature(self) -> tuple[int, int, int]:
+        """返回用于比较文件是否变化的状态签名。"""
+        return self.size, self.modified_time_ns, self.changed_time_ns
+
+
 class FileStorageListenerService:
     """
     文件存储监听器服务，用于监听文件事件并将文件上传到对象存储服务
     """
+
+    _local_debug_workspace_snapshots: Dict[str, Dict[str, LocalDebugWorkspaceFileState]] = {}
 
     @staticmethod
     def register_standard_listeners(agent_context: AgentContext) -> None:
@@ -66,16 +88,48 @@ class FileStorageListenerService:
         """
         # 创建事件类型到处理函数的映射
         event_listeners = {
+            EventType.BEFORE_MAIN_AGENT_RUN: FileStorageListenerService._handle_before_main_agent_run,
             EventType.FILE_CREATED: FileStorageListenerService._handle_file_event,
             EventType.FILE_UPDATED: FileStorageListenerService._handle_file_event,
             EventType.FILE_DELETED: FileStorageListenerService._handle_file_deleted,
             EventType.AFTER_MAIN_AGENT_RUN: FileStorageListenerService._handle_after_main_agent_run,
+            EventType.ERROR: FileStorageListenerService._handle_error,
         }
 
         # 使用基类方法批量注册监听器
         BaseListenerService.register_listeners(agent_context, event_listeners)
 
-        logger.info("已为代理上下文注册文件事件、主代理完成事件和agent暂停事件监听器")
+        logger.info("已为代理上下文注册文件事件、主代理运行前后事件和错误清理监听器")
+
+    @staticmethod
+    async def _handle_before_main_agent_run(event: Event[BeforeMainAgentRunEventData]) -> None:
+        """
+        在主代理运行前保存本地调试工作区基线。
+
+        Args:
+            event: 主代理运行前事件
+        """
+        agent_context = event.data.agent_context
+        snapshot_key = FileStorageListenerService._get_local_debug_snapshot_key(agent_context)
+        FileStorageListenerService._local_debug_workspace_snapshots.pop(snapshot_key, None)
+
+        if not FileStorageListenerService._should_collect_local_debug_attachments(agent_context):
+            return
+
+        snapshot = FileStorageListenerService._snapshot_local_debug_workspace(agent_context)
+        FileStorageListenerService._local_debug_workspace_snapshots[snapshot_key] = snapshot
+        logger.info(f"已保存本地调试工作区任务前快照，共 {len(snapshot)} 个文件")
+
+    @staticmethod
+    async def _handle_error(event: Event[ErrorEventData]) -> None:
+        """
+        在任务异常结束时清理本地调试工作区快照。
+
+        Args:
+            event: 任务错误事件
+        """
+        snapshot_key = FileStorageListenerService._get_local_debug_snapshot_key(event.data.agent_context)
+        FileStorageListenerService._local_debug_workspace_snapshots.pop(snapshot_key, None)
 
     @staticmethod
     async def _handle_file_event(event: Event[FileEventData]) -> None:
@@ -133,6 +187,7 @@ class FileStorageListenerService:
            事件逐次写入的方式)，这样 shell / python 脚本等绕过工具层的写入
            也能被 magicfs 捕获并正确形成最终附件
         2. 基于填充后的 attachments 创建文件版本
+        3. 本地调试客户端显式开启时，通过任务前后快照差分补充模拟附件
 
         执行顺序依赖: dispatcher 按注册顺序顺序 await 监听器，FileStorage 的
         AFTER_MAIN_AGENT_RUN 比 StreamListener / ResourceCleanup 都先跑，
@@ -148,6 +203,135 @@ class FileStorageListenerService:
 
         logger.info("处理主代理完成事件：创建文件版本")
         await FileStorageListenerService._create_changed_files_versions(agent_context)
+
+        FileStorageListenerService._collect_local_debug_attachments(agent_context)
+
+    @staticmethod
+    def _collect_local_debug_attachments(agent_context: AgentContext) -> None:
+        """
+        在本地调试模式下，为未接入 magicfs 的普通工作区模拟最终附件候选。
+
+        仅当调试客户端显式开启、且真实附件为空时执行。模拟附件加入上下文后，
+        后续仍由 AttachmentSorter 按 finish_task 或时间戳规则排序，再写入 finished 消息。
+
+        Args:
+            agent_context: 当前主代理上下文
+        """
+        if not FileStorageListenerService._should_collect_local_debug_attachments(agent_context):
+            return
+
+        snapshot_key = FileStorageListenerService._get_local_debug_snapshot_key(agent_context)
+        before_snapshot = FileStorageListenerService._local_debug_workspace_snapshots.pop(snapshot_key, None)
+        if agent_context.get_attachments():
+            return
+        if before_snapshot is None:
+            logger.warning("未找到本地调试工作区任务前快照，跳过模拟 finished 附件")
+            return
+
+        try:
+            after_snapshot = FileStorageListenerService._snapshot_local_debug_workspace(agent_context)
+            changed_files = [
+                (relative_path, state)
+                for relative_path, state in after_snapshot.items()
+                if relative_path not in before_snapshot
+                or state.signature() != before_snapshot[relative_path].signature()
+            ]
+
+            collected = 0
+            for relative_path, state in changed_files:
+                try:
+                    attachment = FileStorageListenerService._build_attachment(
+                        filepath=str(state.path),
+                        file_key=f"local-debug/workspace/{relative_path}",
+                        file_id=f"local-debug-{hashlib.sha256(relative_path.encode('utf-8')).hexdigest()[:16]}",
+                        file_tag=AttachmentTag.PROCESS,
+                    )
+                    attachment.timestamp = state.modified_time_ns // 1_000_000_000
+                    agent_context.add_attachment(attachment)
+                    collected += 1
+                except OSError as error:
+                    logger.warning(f"跳过无法读取的本地调试附件 {state.path}: {error}")
+
+            logger.info(
+                f"本地调试附件模拟完成，共识别 {len(changed_files)} 个本轮新增或修改文件，"
+                f"成功加入 {collected} 个附件"
+            )
+        except Exception as error:
+            logger.warning(f"本地调试附件模拟失败: {error}", exc_info=True)
+
+    @staticmethod
+    def _snapshot_local_debug_workspace(
+        agent_context: AgentContext,
+    ) -> Dict[str, LocalDebugWorkspaceFileState]:
+        """
+        获取本地调试工作区的非隐藏普通文件状态快照。
+
+        Args:
+            agent_context: 当前主代理上下文
+
+        Returns:
+            Dict[str, LocalDebugWorkspaceFileState]: 相对路径到文件状态的映射
+        """
+        workspace_dir = Path(agent_context.get_workspace_dir() or PathManager.get_workspace_dir()).resolve()
+        if not workspace_dir.exists() or not workspace_dir.is_dir():
+            logger.warning(f"本地调试工作区不存在: {workspace_dir}")
+            return {}
+
+        snapshot: Dict[str, LocalDebugWorkspaceFileState] = {}
+        for root, dir_names, file_names in os.walk(workspace_dir):
+            dir_names[:] = [
+                name for name in sorted(dir_names, key=lambda item: item.lower())
+                if not name.startswith(".") and not (Path(root) / name).is_symlink()
+            ]
+            for file_name in sorted(file_names, key=lambda item: item.lower()):
+                path = Path(root) / file_name
+                if file_name.startswith(".") or path.is_symlink():
+                    continue
+                try:
+                    stat_result = path.stat()
+                    relative_path = path.relative_to(workspace_dir).as_posix()
+                    snapshot[relative_path] = LocalDebugWorkspaceFileState(
+                        path=path,
+                        size=stat_result.st_size,
+                        modified_time_ns=stat_result.st_mtime_ns,
+                        changed_time_ns=stat_result.st_ctime_ns,
+                    )
+                except OSError as error:
+                    logger.warning(f"跳过无法读取状态的本地调试文件 {path}: {error}")
+        return snapshot
+
+    @staticmethod
+    def _get_local_debug_snapshot_key(agent_context: AgentContext) -> str:
+        """
+        获取本地调试工作区快照键，隔离不同代理上下文。
+
+        Args:
+            agent_context: 当前主代理上下文
+
+        Returns:
+            str: 当前上下文对应的快照键
+        """
+        return str(getattr(agent_context, "context_id", id(agent_context)))
+
+    @staticmethod
+    def _should_collect_local_debug_attachments(agent_context: AgentContext) -> bool:
+        """
+        判断当前请求是否允许模拟 finished 附件。
+
+        Args:
+            agent_context: 当前主代理上下文
+
+        Returns:
+            bool: 同时满足本地调试环境和客户端显式开关时返回 True
+        """
+        if not is_local_debug_mode_enabled():
+            return False
+
+        chat_message = agent_context.get_chat_client_message()
+        dynamic_config = getattr(chat_message, "dynamic_config", None) or {}
+        if not isinstance(dynamic_config, dict):
+            return False
+        return dynamic_config.get("enable_debug_finished_attachments") is True
 
     @staticmethod
     def _calculate_directory_hash(directory_path: str) -> str:
@@ -825,7 +1009,12 @@ class FileStorageListenerService:
             workspace_dir = PathManager.get_workspace_dir()
             collected = 0
             for relative_path in relative_paths:
-                absolute_path = str(workspace_dir / relative_path.lstrip("/"))
+                # 跨项目挂载（referenced-projects）的变更以 agent 视角绝对路径记录，
+                # 直接使用该路径；workspace 内的相对路径仍拼 workspace 目录
+                if os.path.isabs(relative_path):
+                    absolute_path = relative_path
+                else:
+                    absolute_path = str(workspace_dir / relative_path.lstrip("/"))
 
                 constructed = await FileStorageListenerService._construct_file_key(absolute_path)
                 if not constructed:
@@ -863,7 +1052,8 @@ class FileStorageListenerService:
             file_snapshots: checkpoint_info.file_snapshots
 
         Returns:
-            List[str]: 按首次出现顺序去重后的 workspace 相对路径列表
+            List[str]: 按首次出现顺序去重后的文件路径列表；workspace 内文件为
+            相对路径，跨项目挂载（referenced-projects）文件为 agent 视角绝对路径
         """
         seen: set = set()
         ordered: List[str] = []

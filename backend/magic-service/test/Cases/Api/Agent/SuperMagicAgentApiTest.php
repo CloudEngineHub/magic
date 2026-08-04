@@ -684,6 +684,89 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertNotEmpty($sharedItem['creator_info']['name'] ?? null);
     }
 
+    public function testQueryCollaboratedAgentsScope(): void
+    {
+        $collaboratorUserId = $this->switchUserTest1();
+
+        $this->switchUserTest2();
+        $ownerHeaders = $this->getCommonHeaders();
+        $collaboratedAgentCode = $this->createTestAgent();
+        $visibilityOnlyAgentCode = $this->createTestAgent();
+
+        $addCollaboratorResponse = $this->post(
+            self::BASE_URI . '/' . $collaboratedAgentCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                        'role' => 'viewer',
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $addCollaboratorResponse['code'], $addCollaboratorResponse['message'] ?? '');
+        $this->shareAgentWithUser($visibilityOnlyAgentCode, $ownerHeaders['user-id'], $collaboratorUserId);
+
+        // 已雇佣不应遮蔽协作身份，列表仍须返回该员工。
+        UserAgentModel::query()->create([
+            'id' => IdGenerator::getSnowId(),
+            'organization_code' => $ownerHeaders['organization-code'],
+            'user_id' => $collaboratorUserId,
+            'agent_code' => $collaboratedAgentCode,
+            'source_type' => 'MARKET',
+        ]);
+
+        $this->switchUserTest1();
+        $collaboratorHeaders = $this->getCommonHeaders();
+        $createdAgentCode = $this->createTestAgent();
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            ['scope' => 'collaborated', 'page' => 1, 'page_size' => 20],
+            $collaboratorHeaders
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $codes = array_column($response['data']['list'], 'code');
+        $this->assertContains($collaboratedAgentCode, $codes, '协作者员工应出现在 collaborated 列表');
+        $this->assertNotContains($visibilityOnlyAgentCode, $codes, '仅可见但非协作者的员工不应出现在 collaborated 列表');
+        $this->assertNotContains($createdAgentCode, $codes, '本人创建的员工不应出现在 collaborated 列表');
+
+        $collaboratedItem = null;
+        foreach ($response['data']['list'] as $item) {
+            if (($item['code'] ?? null) === $collaboratedAgentCode) {
+                $collaboratedItem = $item;
+                break;
+            }
+        }
+        $this->assertNotNull($collaboratedItem);
+        $this->assertSame('viewer', $collaboratedItem['user_role']);
+
+        $removeCollaboratorResponse = $this->delete(
+            self::BASE_URI . '/' . $collaboratedAgentCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $removeCollaboratorResponse['code'], $removeCollaboratorResponse['message'] ?? '');
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            ['scope' => 'collaborated', 'page' => 1, 'page_size' => 20],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertNotContains($collaboratedAgentCode, array_column($response['data']['list'], 'code'));
+    }
+
     public function testQueryMarketInstalledAgentsEndpoint(): void
     {
         $this->switchUserTest2();

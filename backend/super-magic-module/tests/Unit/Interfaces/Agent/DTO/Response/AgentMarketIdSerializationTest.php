@@ -34,6 +34,8 @@ class AgentMarketIdSerializationTest extends TestCase
             publisherType: 'user',
             categoryId: 935290509114109954,
             category: null,
+            categoryIds: [935290509114109954],
+            categories: [],
             publishStatus: 'published',
             installCount: 0,
             sortOrder: 0,
@@ -62,7 +64,9 @@ class AgentMarketIdSerializationTest extends TestCase
             publisherType: 'user',
             publisher: [],
             categoryId: null,
+            categoryIds: [],
             isFeatured: false,
+            marketType: 'MARKET',
             isAdded: false,
             latestVersionCode: null,
             allowDelete: false,
@@ -71,5 +75,6 @@ class AgentMarketIdSerializationTest extends TestCase
         );
 
         self::assertNull($dto->toArray()['category_id']);
+        self::assertSame('MARKET', $dto->toArray()['market_type']);
     }
 }

@@ -1,6 +1,6 @@
 import type { UnifiedAgentScope } from "@/apis/modules/crew"
 
-export type MyCrewMobileFilterType = "all" | "created" | "teamShared" | "fromMarket"
+export type MyCrewMobileFilterType = "all" | "created" | "fromMarket"
 export type MyCrewMobileSortType = "updated_at" | "created_at"
 
 export interface MyCrewMobileFilterState {
@@ -13,10 +13,11 @@ export const MY_CREW_MOBILE_FILTER_DEFAULT: MyCrewMobileFilterState = {
 	sort: "updated_at",
 }
 
-/** Map the filter UI type to unified API scope parameter. */
-export function resolveFilterScope(filterType: MyCrewMobileFilterType): UnifiedAgentScope {
+/** Map the active filter, including stale persisted values, to a supported API scope. */
+export function resolveFilterScope(
+	filterType: MyCrewMobileFilterType | string | null | undefined,
+): UnifiedAgentScope {
 	if (filterType === "created") return "created"
-	if (filterType === "teamShared") return "team_shared"
 	if (filterType === "fromMarket") return "market_installed"
 	return "all"
 }

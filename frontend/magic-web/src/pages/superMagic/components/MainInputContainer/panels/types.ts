@@ -69,6 +69,8 @@ export interface FieldItem {
 export interface OptionItem {
 	value: LocaleText
 	label?: LocaleText
+	/** Prompt inserted into the main input for demo/inspiration items. */
+	prompt?: LocaleText
 	/** Replaces {preset_value} in the message while keeping value as the stable option ID. */
 	preset_value?: LocaleText
 	thumbnail_url?: string
@@ -96,6 +98,9 @@ export interface OptionItemTag {
 	name_i18n?: LocaleTextMap
 	sort?: number
 }
+
+/** Option item whose value is a stable identity rather than localized content. */
+export type IdentifiedOptionItem = Omit<OptionItem, "value"> & { value: string }
 
 /**
  * Template group configuration

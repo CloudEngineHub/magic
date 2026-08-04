@@ -15,9 +15,9 @@ use App\Domain\LongTermMemory\Entity\ValueObject\MemoryType;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\ShadowCode\ShadowCode;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageMetadata;
 use Hyperf\Codec\Json;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
@@ -53,7 +53,7 @@ class SuperAgentMemoryApi extends AbstractApi
         ];
 
         $validatedParams = $this->checkParams($requestData, $rules);
-        $metadata = $this->parseMetadata($validatedParams['metadata']);
+        $authorization = $this->getAuthorization();
 
         // 根据 immediate_effect 参数决定记忆状态和内容设置
         $immediateEffect = (bool) ($validatedParams['immediate_effect'] ?? false);
@@ -80,11 +80,11 @@ class SuperAgentMemoryApi extends AbstractApi
             'status' => $status,
             'enabled' => $enabled,
             'tags' => $validatedParams['tags'] ?? [],
-            'orgId' => $metadata->getOrganizationCode(),
+            'orgId' => $authorization->getOrganizationCode(),
             'appId' => AgentConstant::SUPER_MAGIC_CODE,
-            // 项目 id 不能从 $metadata 获取，因为这个参数是用来区分记忆是项目还是全局的。
+            // 项目 id 使用独立参数区分项目记忆和全局记忆。
             'projectId' => isset($validatedParams['project_id']) ? (string) $validatedParams['project_id'] : null,
-            'userId' => $metadata->getUserId(),
+            'userId' => $authorization->getId(),
             'expiresAt' => null,
         ]);
 
@@ -109,10 +109,10 @@ class SuperAgentMemoryApi extends AbstractApi
         ];
 
         $validatedParams = $this->checkParams($requestData, $rules);
-        $metadata = $this->parseMetadata($validatedParams['metadata']);
+        $authorization = $this->getAuthorization();
 
         // 检查权限
-        $this->checkMemoryPermission($id, $metadata);
+        $this->checkMemoryPermission($id, $authorization);
 
         // 构建更新DTO，状态转换由领域服务自动处理
         $dto = new UpdateMemoryDTO([
@@ -138,11 +138,11 @@ class SuperAgentMemoryApi extends AbstractApi
             'metadata' => 'required|array',
         ];
 
-        $validatedParams = $this->checkParams($requestData, $rules);
-        $metadata = $this->parseMetadata($validatedParams['metadata']);
+        $this->checkParams($requestData, $rules);
+        $authorization = $this->getAuthorization();
 
         // 检查权限
-        $this->checkMemoryPermission($id, $metadata);
+        $this->checkMemoryPermission($id, $authorization);
 
         $this->longTermMemoryAppService->deleteMemory($id);
 
@@ -185,23 +185,15 @@ class SuperAgentMemoryApi extends AbstractApi
     }
 
     /**
-     * 解析metadata.
-     */
-    private function parseMetadata(array $metadataArray): MessageMetadata
-    {
-        return MessageMetadata::fromArray($metadataArray);
-    }
-
-    /**
      * 检查记忆权限.
      */
-    private function checkMemoryPermission(string $memoryId, MessageMetadata $metadata): void
+    private function checkMemoryPermission(string $memoryId, MagicUserAuthorization $authorization): void
     {
         if (! $this->longTermMemoryAppService->isMemoryBelongToUser(
             $memoryId,
-            $metadata->getOrganizationCode(),
+            $authorization->getOrganizationCode(),
             AgentConstant::SUPER_MAGIC_CODE,
-            $metadata->getUserId()
+            $authorization->getId()
         )) {
             ExceptionBuilder::throw(GenericErrorCode::AccessDenied, trans('long_term_memory.api.memory_not_belong_to_user'));
         }

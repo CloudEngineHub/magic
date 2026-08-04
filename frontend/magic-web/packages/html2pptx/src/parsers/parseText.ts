@@ -17,7 +17,7 @@ import { resolveTextStyle } from "./text/style"
 export type { TextStyle } from "./text/style"
 
 interface ParseTextNodesOptions {
-	/** Kept for API compatibility. All text now uses one shape with explicit visual breaks. */
+	/** Kept for API compatibility; visual-line splitting is decided from geometry. */
 	mergeVisualLines?: boolean
 	/** Full collection map, including zero-geometry display:contents style owners. */
 	elementNodeMap?: Map<Element, ElementNode>
@@ -43,12 +43,13 @@ interface ResolvedTextFrame {
 type GlobalTransform = ReturnType<typeof getGlobalTransform>
 
 /**
- * Parse direct text nodes (including display:contents text flow) into one
- * editable text box per DOM text owner.
+ * Parse direct text nodes (including display:contents text flow) into editable
+ * PowerPoint text boxes.
  *
  * The HTML element box is authoritative for x/y/w/h. Range measurements are
- * used only to recover browser visual lines, which are emitted as soft breaks
- * inside the same PowerPoint shape.
+ * used only to recover browser visual lines. Lines that share one horizontal
+ * anchor are emitted as soft breaks inside the same PowerPoint shape;
+ * discontinuous inline flow is emitted one line per shape.
  */
 export function parseTextNodes(
 	node: ElementNode,
@@ -90,68 +91,107 @@ export function parseTextNodes(
 			})
 			const { visualLines } = measurement
 			if (visualLines.length === 0) continue
+			const ownerLineHeightPx = resolveBrowserLineHeightPx(style, visualLines)
 
-			const runs = buildPlainTextRuns({
+			const lineRuns = buildPlainTextLineRuns({
 				lines: visualLines,
 				whiteSpace,
 				textTransform: style.textTransform,
 			})
-			if (!runs.some((run) => run.text.length > 0)) continue
+			if (!lineRuns.some((run) => run?.text.length)) continue
 
-			const resolvedFrame = resolvePlainTextFrame({
-				node,
-				lines: visualLines,
-				transform,
-				textStyle: style,
-				usesElementBox,
-				measuredOwnerFrame: measurement.ownerFrame,
-			})
-			const { frame } = resolvedFrame
-			const textBase: PPTNodeBase = {
-				...base,
-				x: pxToInch(frame.left, config),
-				y: pxToInch(frame.top, config),
-				w: pxToInch(frame.width, config),
-				h: pxToInch(frame.height, config),
-			}
-			if (textBase.w <= 0 || textBase.h <= 0) continue
-
-			const lineCount = visualLines.length
-			const lineHeightPx = resolveBrowserLineHeightPx(style, visualLines) * textScale
-			const exactLineSpacingPx = resolveExactLineSpacingPx(style, visualLines)
-			const scaledStyle = {
-				...textStyle,
-				fontSize: finalFontSize,
-				transparency: isLayoutPreservingTextHidden(styleNode.element)
-					? 100
-					: textStyle.transparency,
-				lineSpacing: undefined,
-				lineSpacingPt:
-					lineCount > 1 && exactLineSpacingPx !== undefined
-						? pxToPt(exactLineSpacingPx * textScale)
-						: undefined,
-				margin: resolvedFrame.usesElementBox
-					? resolveTextMargins(node, transform)
-					: ([0, 0, 0, 0] as [number, number, number, number]),
-				valign: resolveTextVerticalAlign({
+			const appendTextNode = ({
+				lines,
+				text,
+				measuredOwnerFrame,
+			}: {
+				lines: TextLine[]
+				text: string | PPTTextRun[]
+				measuredOwnerFrame?: TextFramePx
+			}) => {
+				const resolvedFrame = resolvePlainTextFrame({
 					node,
-					lineCount,
-					lineHeightPx,
-					frameHeightPx: frame.height,
-					verticalInsetsPx: resolvedFrame.usesElementBox
-						? resolveVerticalInsetsPx(node, transform)
-						: 0,
-				}),
+					lines,
+					transform,
+					textStyle: style,
+					usesElementBox,
+					measuredOwnerFrame,
+					browserLineHeightPx: ownerLineHeightPx,
+				})
+				const { frame } = resolvedFrame
+				const textBase: PPTNodeBase = {
+					...base,
+					x: pxToInch(frame.left, config),
+					y: pxToInch(frame.top, config),
+					w: pxToInch(frame.width, config),
+					h: pxToInch(frame.height, config),
+				}
+				if (textBase.w <= 0 || textBase.h <= 0) return
+
+				const lineCount = lines.length
+				const lineHeightPx = ownerLineHeightPx * textScale
+				const exactLineSpacingPx = resolveExactLineSpacingPx(style, lines)
+				const scaledStyle = {
+					...textStyle,
+					fontSize: finalFontSize,
+					transparency: isLayoutPreservingTextHidden(styleNode.element)
+						? 100
+						: textStyle.transparency,
+					lineSpacing: undefined,
+					lineSpacingPt:
+						lineCount > 1 && exactLineSpacingPx !== undefined
+							? pxToPt(exactLineSpacingPx * textScale)
+							: undefined,
+					margin: resolvedFrame.usesElementBox
+						? resolveTextMargins(node, transform)
+						: ([0, 0, 0, 0] as [number, number, number, number]),
+					valign: resolveTextVerticalAlign({
+						node,
+						lineCount,
+						lineHeightPx,
+						frameHeightPx: frame.height,
+						verticalInsetsPx: resolvedFrame.usesElementBox
+							? resolveVerticalInsetsPx(node, transform)
+							: 0,
+					}),
+				}
+
+				results.push({
+					...textBase,
+					type: "text",
+					text,
+					...scaledStyle,
+					rotate:
+						transform.textSafe && transform.rotation !== 0
+							? transform.rotation
+							: undefined,
+					wrap: false,
+				})
 			}
 
-			results.push({
-				...textBase,
-				type: "text",
+			if (
+				shouldSplitPlainTextVisualLines({
+					enabled: options.mergeVisualLines === true,
+					lines: visualLines,
+					usesElementBox,
+					transform,
+					textAlign: textStyle.align,
+				})
+			) {
+				for (let lineIndex = 0; lineIndex < visualLines.length; lineIndex++) {
+					const lineRun = lineRuns[lineIndex]
+					if (!lineRun?.text) continue
+					appendTextNode({ lines: [visualLines[lineIndex]], text: lineRun.text })
+				}
+				continue
+			}
+
+			const runs = buildPlainTextRunsFromLineRuns(lineRuns)
+			if (runs.length === 0) continue
+			appendTextNode({
+				lines: visualLines,
 				text: runs.length === 1 ? runs[0].text : runs,
-				...scaledStyle,
-				rotate:
-					transform.textSafe && transform.rotation !== 0 ? transform.rotation : undefined,
-				wrap: false,
+				measuredOwnerFrame: measurement.ownerFrame,
 			})
 		} catch {
 			log(LogLevel.L4, "Range API 异常", { textContent: childNode.textContent })
@@ -296,28 +336,34 @@ function mapFrameThroughTransform(input: {
 	}
 }
 
-function buildPlainTextRuns(input: {
+function buildPlainTextLineRuns(input: {
 	lines: TextLine[]
 	whiteSpace: string
 	textTransform: string
-}): PPTTextRun[] {
+}): Array<PPTTextRun | null> {
 	const { lines, whiteSpace, textTransform } = input
-	const runs: PPTTextRun[] = []
 	const transformState = { previousIsWord: false }
 
-	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+	return lines.map((line) => {
 		const transformedText = transformTextWithFlowContext(
-			lines[lineIndex].text,
+			line.text,
 			textTransform,
 			transformState,
 		)
-		let text = normalizeTextByWhiteSpace({
+		const text = normalizeTextByWhiteSpace({
 			text: transformedText.replace(/[\r\n]+/g, ""),
 			whiteSpace,
 		})
+		return text ? { text } : null
+	})
+}
 
-		if (!text) {
-			if (lineIndex > 0 || lines.length > 1) {
+function buildPlainTextRunsFromLineRuns(lineRuns: Array<PPTTextRun | null>): PPTTextRun[] {
+	const runs: PPTTextRun[] = []
+	for (let lineIndex = 0; lineIndex < lineRuns.length; lineIndex++) {
+		const lineRun = lineRuns[lineIndex]
+		if (!lineRun) {
+			if (lineIndex > 0 || lineRuns.length > 1) {
 				runs.push({
 					text: "",
 					options: lineIndex > 0 ? { softBreakBefore: true } : undefined,
@@ -327,12 +373,45 @@ function buildPlainTextRuns(input: {
 		}
 
 		runs.push({
-			text,
+			text: lineRun.text,
 			options: lineIndex > 0 ? { softBreakBefore: true } : undefined,
 		})
 	}
 
 	return runs
+}
+
+/**
+ * A wrapped inline text owner can start its first row after an inline sibling
+ * and continue from the container edge on the next row. One PowerPoint text
+ * box has only one horizontal anchor, so preserving those rows requires one
+ * box per measured visual line. The caller enables this path for inline-rich
+ * conversion; legacy callers retain their existing single-box behavior.
+ */
+function shouldSplitPlainTextVisualLines(input: {
+	enabled: boolean
+	lines: TextLine[]
+	usesElementBox: boolean
+	transform: GlobalTransform
+	textAlign: "left" | "center" | "right" | "justify" | undefined
+}): boolean {
+	const { enabled, lines, usesElementBox, transform, textAlign } = input
+	if (!enabled || usesElementBox || lines.length < 2) return false
+	if (!transform.textSafe || !isIdentityTransform(transform)) return false
+
+	const firstAnchor = resolveVisualLineAnchor(lines[0], textAlign)
+	return lines
+		.slice(1)
+		.some((line) => Math.abs(resolveVisualLineAnchor(line, textAlign) - firstAnchor) > 0.75)
+}
+
+function resolveVisualLineAnchor(
+	line: TextLine,
+	textAlign: "left" | "center" | "right" | "justify" | undefined,
+): number {
+	if (textAlign === "right") return line.rect.right
+	if (textAlign === "center") return (line.rect.left + line.rect.right) / 2
+	return line.rect.left
 }
 
 function resolvePlainTextFrame(input: {
@@ -342,8 +421,17 @@ function resolvePlainTextFrame(input: {
 	textStyle: Pick<ElementNode["style"], "lineHeight" | "fontSize">
 	usesElementBox: boolean
 	measuredOwnerFrame?: TextFramePx
+	browserLineHeightPx?: number
 }): ResolvedTextFrame {
-	const { node, lines, transform, textStyle, usesElementBox, measuredOwnerFrame } = input
+	const {
+		node,
+		lines,
+		transform,
+		textStyle,
+		usesElementBox,
+		measuredOwnerFrame,
+		browserLineHeightPx,
+	} = input
 	if (!transform.textSafe && usesElementBox) {
 		return {
 			frame: {
@@ -393,7 +481,8 @@ function resolvePlainTextFrame(input: {
 
 	const bounds = unionTextLines(lines)
 	if (!bounds) return { frame: layoutFrame, usesElementBox: true }
-	const lineHeight = resolveBrowserLineHeightPx(textStyle, lines) * scaleY
+	const lineHeight =
+		(browserLineHeightPx ?? resolveBrowserLineHeightPx(textStyle, lines)) * scaleY
 	const height = lineHeight * lines.length
 	const measuredTop = bounds.top + (bounds.bottom - bounds.top) / 2 - height / 2
 	const canReuseParentLineBox =

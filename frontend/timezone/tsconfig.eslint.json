@@ -1,0 +1,13 @@
+{
+	"extends": "./tsconfig.json",
+	"include": [
+		"src/**/*.ts",
+		"./tsconfig.json",
+		"./tsconfig.eslint.json",
+		"./.eslintrc.cjs",
+		"./vite.config.ts",
+		"./vite.umd.config.ts",
+		"test/**/*.ts",
+		"test/**/*.d.ts"
+	]
+}

@@ -5,6 +5,7 @@ import type { SuperMagicMessageItem } from "@/pages/superMagic/components/Messag
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
+import { projectVisibleMessagesByRevokedTail } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
 import { resolveTopicConversationLoadingState } from "./topic-conversation-loading"
 
 interface TopicMessagesChangePayload<TStatus = unknown> {
@@ -37,10 +38,11 @@ export function useTopicConversationLoading<TStatus = unknown>({
 		topicId: string
 		messages: SuperMagicMessageItem[]
 	}>(() => {
+		const canonicalMessages = (superMagicStore.messages?.get(currentTopicId) ||
+			[]) as SuperMagicMessageItem[]
 		return {
 			topicId: currentTopicId,
-			messages: (superMagicStore.messages?.get(currentTopicId) ||
-				[]) as SuperMagicMessageItem[],
+			messages: projectVisibleMessagesByRevokedTail(canonicalMessages),
 		}
 	})
 
@@ -75,8 +77,9 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	})
 
 	useEffect(() => {
-		const currentTopicMessages = (superMagicStore.messages?.get(currentTopicId) ||
+		const currentCanonicalMessages = (superMagicStore.messages?.get(currentTopicId) ||
 			[]) as SuperMagicMessageItem[]
+		const currentTopicMessages = projectVisibleMessagesByRevokedTail(currentCanonicalMessages)
 
 		// 调用方依赖返回的 messages 做渲染；
 		// 将 topicId 与 messages 一起存入局部 state，防止切换话题时短暂暴露前一话题的消息缓存。
@@ -90,7 +93,12 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	useEffect(() => {
 		return reaction(
 			() => ({
-				messages: superMagicStore.messages?.get(currentTopicId) || [],
+				// Read the visible projection inside the tracked expression so in-place
+				// revoked-status changes also update UI consumers without mutating Store.
+				messages: projectVisibleMessagesByRevokedTail(
+					(superMagicStore.messages?.get(currentTopicId) ||
+						[]) as SuperMagicMessageItem[],
+				),
 				// 触碰 sidecar map 让 MobX 追踪它作为依赖；
 				// 仅 optimistic 状态变化时，主消息数组引用不变。
 				_sidecar: optimisticMessageStore.topicOptimisticMap[currentTopicId],

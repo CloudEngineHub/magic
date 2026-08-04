@@ -200,6 +200,26 @@ function getNode(store: SuperMagicStore, id = CORRELATION_ID): ProjectedNode | u
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
+function getEffectiveToolStatus(
+	store: SuperMagicStore,
+	toolId = "tool-1",
+	topicId = TOPIC_A,
+): string | undefined {
+	// Match ToolCall.tsx: the canonical response map wins while the Assistant snapshot remains raw history.
+	const embeddedStatus = getNode(store)?.tool_calls?.find((tool) => tool.id === toolId)?.tool
+		?.status
+	return store.toolResponseMap.get(topicId)?.get(toolId)?.status ?? embeddedStatus
+}
+
+function getStoredAssistantDebugToolCalls(store: SuperMagicStore): unknown[] | undefined {
+	const storedMessage = store.messages
+		.get(TOPIC_A)
+		?.find(
+			(message) => message.role === "assistant" && message.correlation_id === CORRELATION_ID,
+		)
+	return (storedMessage?.debug as { tool_calls?: unknown[] } | undefined)?.tool_calls
+}
+
 function getAssistantCards(
 	store: SuperMagicStore,
 	topicId = TOPIC_A,
@@ -252,6 +272,7 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 
 	afterEach(() => {
 		vi.clearAllTimers()
+		vi.restoreAllMocks()
 		vi.useRealTimers()
 	})
 
@@ -355,7 +376,7 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		})
 	})
 
-	it("toolResponseMap 已 finished，但 toolCall 内嵌状态仍显示 running。", () => {
+	it("toolResponseMap finished 时 UI effective 状态覆盖 embedded running。", () => {
 		const store = createStore()
 		enqueueAssistant(store, {
 			toolCalls: [
@@ -376,7 +397,9 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		)
 		settle()
 
-		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("finished")
+		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("running")
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")?.status).toBe("finished")
+		expect(getEffectiveToolStatus(store)).toBe("finished")
 	})
 
 	it("tool response 按错误 topicId 查询不到。", () => {
@@ -438,7 +461,7 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		expect(getNode(store)).toMatchObject({ content: "final" })
 	})
 
-	it("工具 spinner 和全局 LoadingMessage 状态相互矛盾。", () => {
+	it("正文流结束后缺失工具进入弱终态，真实 response 仍可覆盖。", () => {
 		const store = createStore()
 		enqueueAssistant(store, {
 			toolCalls: [createToolCall({ tool: { id: "tool-1", status: "running" } })],
@@ -446,6 +469,8 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("running")
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")?.status).toBe("response_missing")
+		expect(getEffectiveToolStatus(store)).toBe("response_missing")
 
 		store.enqueueMessage(
 			TOPIC_A,
@@ -458,7 +483,11 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 			}),
 		)
 		settle()
-		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("finished")
+
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(getNode(store)?.tool_calls?.[0]?.tool?.status).toBe("running")
+		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")?.status).toBe("finished")
+		expect(getEffectiveToolStatus(store)).toBe("finished")
 	})
 
 	it("tool-role message 因 status 非终态被隐藏。", () => {
@@ -528,12 +557,26 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		})
 	})
 
-	it("工具名称为空时 canonical 清理该工具且 UI 防御性不渲染。", () => {
+	it("工具名称为空时保留 raw 协议事实，但 canonical/UI 排除并告警。", () => {
 		const store = createStore()
-		enqueueAssistant(store, { toolCalls: [createToolCall({ name: "" })] })
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const invalidTool = createToolCall({ name: "" })
+		enqueueAssistant(store, { toolCalls: [invalidTool] })
 
+		expect(getStoredAssistantDebugToolCalls(store)).toEqual([invalidTool])
 		expect.soft(getNode(store)?.tool_calls ?? []).toEqual([])
 		expect(getRenderableToolIds(getNode(store))).toEqual([])
+		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(warn).toHaveBeenCalledWith(
+			"[SuperMagicStore] invalid final tool call",
+			expect.objectContaining({
+				toolCallId: "tool-1",
+				incomingIndex: 0,
+				reason: "missing-function-name",
+				resolution: "exclude-from-canonical-projection",
+			}),
+		)
 	})
 
 	it("工具 action/remark 缺失，只剩 spinner。", () => {
@@ -557,8 +600,9 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		})
 	})
 
-	it("invalid tool 被 UI 过滤后，store 仍然持续 timer。", () => {
+	it("function 为数组时保留 raw 协议事实，但 canonical/UI 排除并正常结算。", () => {
 		const store = createStore()
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const invalidTool = {
 			...createToolCall(),
 			function: [],
@@ -566,10 +610,20 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 
 		enqueueAssistant(store, { toolCalls: [invalidTool] })
 
+		expect(getStoredAssistantDebugToolCalls(store)).toEqual([invalidTool])
 		expect.soft(getNode(store)?.tool_calls ?? []).toHaveLength(0)
 		expect(getRenderableToolIds(getNode(store))).toEqual([])
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(warn).toHaveBeenCalledWith(
+			"[SuperMagicStore] invalid final tool call",
+			expect.objectContaining({
+				toolCallId: "tool-1",
+				incomingIndex: 0,
+				reason: "invalid-function",
+				resolution: "exclude-from-canonical-projection",
+			}),
+		)
 	})
 
 	it("UI 渲染正确，但后台 buffer/content Map 泄漏。", () => {
@@ -595,9 +649,17 @@ describe("SuperMagicStore / MessageList 和 UI 投影", () => {
 		enqueueAssistant(store, { appMessageId: "assistant-old", seqId: "100", content: "old" })
 		enqueueAssistant(store, { appMessageId: "assistant-new", seqId: "101", content: "new" })
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({ content: "new" })
-		expect(getNode(store, "assistant-old")).toEqual(getNode(store, CORRELATION_ID))
-		expect(getNode(store, "assistant-new")).toEqual(getNode(store, CORRELATION_ID))
+		const canonical = getNode(store, CORRELATION_ID)
+		expect(canonical).toMatchObject({ content: "new" })
+		// Historical revision ids do not permanently redirect to the mutable correlation alias.
+		expect(getNode(store, "assistant-old")).toBeUndefined()
+		expect(getNode(store, "assistant-new")).toEqual(canonical)
+		expect(getAssistantCards(store)).toEqual([
+			expect.objectContaining({
+				app_message_id: "assistant-new",
+				correlation_id: CORRELATION_ID,
+			}),
+		])
 	})
 
 	it("消息排序变化导致 React 卡片重新挂载。", () => {

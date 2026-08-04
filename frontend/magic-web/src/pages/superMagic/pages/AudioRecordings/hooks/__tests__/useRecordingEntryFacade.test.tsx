@@ -400,6 +400,7 @@ describe("useRecordingEntryFacade", () => {
 				workspace_id: "workspace-audio-001",
 				audio_source: "recorded",
 				source: "pc",
+				is_hidden: true,
 				transcription_enabled: true,
 			}),
 		)
@@ -780,6 +781,7 @@ describe("useRecordingEntryFacade", () => {
 			expect.objectContaining({
 				audio_source: "imported",
 				auto_summary: false,
+				is_hidden: true,
 			}),
 		)
 		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(

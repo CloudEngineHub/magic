@@ -5,9 +5,10 @@ import { useMemo, useState, useEffect, useRef, type RefObject, type ReactNode } 
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import CodeEditor from "@/components/base/CodeEditor"
 import { shadow } from "@/utils/shadow"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
 import CommonFooter from "../../components/CommonFooter"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
@@ -17,6 +18,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import useExportMenuItems from "../HTML/useExportMenuItems"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { textToHtml } from "../../../../utils/textToHtml"
+import MagicSpin from "@/components/base/MagicSpin"
 
 export interface CodeViewerExtensionContext {
 	fileName: string
@@ -38,6 +40,7 @@ export default function CodeViewer(props: any) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,
@@ -63,8 +66,7 @@ export default function CodeViewer(props: any) {
 	} = props
 
 	const { styles, cx } = useStyles()
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
 	const extensionScopeRef = useRef<HTMLDivElement>(null)
 
@@ -79,6 +81,7 @@ export default function CodeViewer(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loading,
 	} = useFileData({
 		file_id,
 		updatedAt,
@@ -90,6 +93,9 @@ export default function CodeViewer(props: any) {
 
 	const [content, setContent] = useState<string>("")
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
+	const isPureShareCodePreview = documentFlowFullscreen && !isEditMode
+	// Use the fetched value immediately so pure-share rendering does not wait for state mirroring.
+	const pureShareCodeContent = displayContent || fileData || content
 
 	// 初始化 content
 	useEffect(() => {
@@ -349,10 +355,31 @@ export default function CodeViewer(props: any) {
 			ref={extensionScopeRef}
 			vertical
 			className={cx(styles.container, className)}
+			style={
+				documentFlowFullscreen
+					? { height: "auto", minHeight: "100dvh", overflow: "visible" }
+					: undefined
+			}
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{isEditMode ? (
+			{isPureShareCodePreview ? (
+				loading ? (
+					<Flex
+						align="center"
+						justify="center"
+						className="min-h-dvh w-full bg-background"
+					>
+						<MagicSpin spinning />
+					</Flex>
+				) : isDeleted ? (
+					<Deleted data={data} showHeader={false} />
+				) : (
+					<pre className="m-0 min-h-dvh w-full overflow-visible whitespace-pre-wrap break-words bg-background p-4 font-mono text-sm leading-6 text-foreground">
+						<code>{pureShareCodeContent}</code>
+					</pre>
+				)
+			) : isEditMode ? (
 				<CodeEditor
 					content={content || ""}
 					fileName={file_name || "file"}

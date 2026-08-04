@@ -355,6 +355,8 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                     "无法确定调用方 Agent 标识"
                 )
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            # i18n 使用 ContextVar，子进程与后续 SDK HTTP 请求不会自动继承。
+            extra_env["SUPER_MAGIC_LANGUAGE"] = i18n.get_language()
             SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
 
             # 每次 Code Mode 执行生成唯一标识，用于精确取消本轮发起的服务端请求

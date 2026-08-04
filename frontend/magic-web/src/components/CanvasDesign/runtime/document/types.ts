@@ -152,7 +152,7 @@ export interface InteractionConfig {
 	strokePosition?: StrokePosition
 	/** 是否锁定宽高比 */
 	aspectRatioLocked?: boolean
-	/** 是否允许作为连接线起点/终点；Frame、Group 等容器元素固定不可连接 */
+	/** 是否允许作为连接线起点/终点；Group 等纯编组容器固定不可连接 */
 	connectable?: boolean
 }
 

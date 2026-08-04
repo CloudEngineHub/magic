@@ -332,10 +332,10 @@ class InitClientMessageUtil:
     @classmethod
     def _sync_chat_metadata_to_init(cls, chat_message) -> None:
         """
-        将 chat_client_message 中的 metadata 覆盖到 init_client_message.json 的 metadata 字段。
+        将 chat_client_message 中明确携带的 metadata 合并到 init_client_message.json。
 
         仅当 chat metadata 含有 super_magic_task_id 时才更新；用于在 init_client_message.json
-        中保留最新的会话上下文，方便其他链路继续读取。
+        中保留最新的会话上下文，同时避免局部 metadata 覆盖初始化阶段的完整配置。
         """
         metadata = getattr(chat_message, "metadata", None)
         if not metadata:
@@ -361,24 +361,31 @@ class InitClientMessageUtil:
                 init_data = json.load(f)
 
             if hasattr(metadata, "model_dump"):
-                chat_metadata = metadata.model_dump()
+                chat_metadata = metadata.model_dump(exclude_unset=True, exclude_none=True)
             elif hasattr(metadata, "dict"):
-                chat_metadata = metadata.dict()
+                chat_metadata = metadata.dict(exclude_unset=True, exclude_none=True)
             elif isinstance(metadata, dict):
-                chat_metadata = metadata
+                chat_metadata = {
+                    key: value
+                    for key, value in metadata.items()
+                    if value is not None
+                }
             else:
                 logger.warning(
                     f"无法识别的 metadata 类型: {type(metadata)}，跳过 init_client_message 同步"
                 )
                 return
 
-            init_data["metadata"] = chat_metadata
+            init_metadata = init_data.get("metadata")
+            if not isinstance(init_metadata, dict):
+                init_metadata = {}
+            init_data["metadata"] = {**init_metadata, **chat_metadata}
 
             with open(init_message_file, "w", encoding="utf-8") as f:
                 json.dump(init_data, f, ensure_ascii=False, indent=2)
 
             logger.info(
-                f"已将 chat_client_message 的 metadata 同步到 init_client_message: {init_message_file}"
+                f"已将 chat_client_message 的 metadata 合并到 init_client_message: {init_message_file}"
             )
             logger.debug(f"同步的 metadata 字段: {list(chat_metadata.keys())}")
         except Exception as e:

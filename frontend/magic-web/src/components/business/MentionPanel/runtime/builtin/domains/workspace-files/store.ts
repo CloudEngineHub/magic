@@ -59,6 +59,7 @@ export class MentionPanelWorkspaceFilesStore {
 					file_name: file.file_name,
 					file_path: normalizeProjectReferencePath(file.relative_file_path),
 					file_extension: file.file_extension,
+					project_id: file.project_id,
 				} as ProjectFileMentionData,
 			}
 		})

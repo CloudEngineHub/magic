@@ -49,6 +49,7 @@ export interface FileItem {
 	file_id: string
 	relative_file_path: string
 	file_name?: string
+	file_extension?: string
 	updated_at?: string
 }
 
@@ -250,10 +251,19 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 	}
 	
 	// 重写fetch函数
-	window.fetch = async function(input, init = {}) {
-		// 获取URL
-		let url = typeof input === 'string' ? input : input.url;
+	window.fetch = async function(input, init) {
+		// 原生 fetch 支持 string、URL 和 Request。未改写 URL 时必须透传原始 input，
+		// 否则 Request 中的 method、headers、body 等配置会在退化为 URL 字符串后丢失。
+		const isRequestInput = typeof Request !== 'undefined' && input instanceof Request;
+		let url = typeof input === 'string' ? input : isRequestInput ? input.url : String(input);
 		const originalUrl = url;
+		const executeOriginalFetch = (resolvedUrl) => {
+			let resolvedInput = input;
+			if (resolvedUrl !== originalUrl) {
+				resolvedInput = isRequestInput ? new Request(resolvedUrl, input) : resolvedUrl;
+			}
+			return originalFetch.call(this, resolvedInput, init);
+		};
 		
 		// 如果是相对路径且启用了拦截
 		if (${config.enableRelativePathInterception !== false} && isRelativePath(url)) {
@@ -311,7 +321,7 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 			// 如果是 HTML 文件，拦截响应并处理内容
 			if (isHtml) {
 				try {
-					const response = await originalFetch.call(this, url, init);
+					const response = await executeOriginalFetch(url);
 					
 					// 只处理成功的响应
 					if (response.ok) {
@@ -332,13 +342,13 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 				} catch (error) {
 					console.error('处理 HTML 内容失败:', error);
 					// 失败时调用原始 fetch
-					return originalFetch.call(this, url, init);
+					return executeOriginalFetch(url);
 				}
 			}
 		}
 		
 		// 调用原始fetch函数
-		return originalFetch.call(this, url, init);
+		return executeOriginalFetch(url);
 	};
 	
 	// 保持原始fetch的属性 (WebView 中可能不可配置)
@@ -555,7 +565,7 @@ export function createParentMessageHandler(
 					}
 
 					// 发送成功响应，包含 expires_at
-					; (event.source as Window)?.postMessage(
+					;(event.source as Window)?.postMessage(
 						{
 							type: FETCH_MESSAGE_TYPES.RESPONSE,
 							requestId,
@@ -570,7 +580,7 @@ export function createParentMessageHandler(
 			}
 
 			// 发送失败响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -581,7 +591,7 @@ export function createParentMessageHandler(
 			)
 		} catch (error) {
 			// 发送错误响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
