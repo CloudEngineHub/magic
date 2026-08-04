@@ -63,7 +63,11 @@ describe("useLinkedMediaAssociationController", () => {
 			).toBe(true)
 		})
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/ready.png"])
-		expect(onReadyMentionChange).toHaveBeenCalledWith(["./images/ready.png"], "@ready.png")
+		expect(onReadyMentionChange).toHaveBeenCalledWith(["./images/ready.png"], "@ready.png", {
+			source: "sync",
+			status: "ready",
+			revision: 1,
+		})
 
 		act(() => {
 			expect(
@@ -109,5 +113,60 @@ describe("useLinkedMediaAssociationController", () => {
 			).toBe(true)
 		})
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/remounted.png"])
+	})
+
+	it("keeps the persisted same-name path during sync but allows an explicit user switch", () => {
+		const onReadyMentionChange = vi.fn()
+		const editorRef = createRef<MessageEditorRef>()
+		const resolveAbsolutePath = (path: string) =>
+			path.startsWith("./") ? `/画布A/${path.replace(/^\.\/+/, "")}` : path
+		const { result } = renderHook(() =>
+			useLinkedMediaAssociationController({
+				targetElementId: "target-image",
+				targetKind: "image",
+				mediaPolicy: {
+					supportedKinds: ["image"],
+					manualReferences: [{ kind: "image", path: "/images/x.png" }],
+				},
+				editorRef,
+				onReadyMentionChange,
+				resolveAbsolutePath,
+			}),
+		)
+
+		act(() => {
+			result.current.handleMentionChange(["./images/x.png"], "@x.png", {
+				source: "sync",
+				status: "pending",
+				revision: 1,
+			})
+			result.current.handleMentionChange(["./images/x.png"], "@x.png", {
+				source: "sync",
+				status: "ready",
+				revision: 1,
+			})
+		})
+
+		expect(result.current.mentionedReferencePaths).toEqual(["/images/x.png"])
+		expect(onReadyMentionChange).toHaveBeenLastCalledWith(["/images/x.png"], "@x.png", {
+			source: "sync",
+			status: "ready",
+			revision: 1,
+		})
+
+		act(() => {
+			result.current.handleMentionChange(["./images/x.png"], "@x.png", {
+				source: "user",
+				status: "ready",
+				revision: 2,
+			})
+		})
+
+		expect(result.current.mentionedReferencePaths).toEqual(["./images/x.png"])
+		expect(onReadyMentionChange).toHaveBeenLastCalledWith(["./images/x.png"], "@x.png", {
+			source: "user",
+			status: "ready",
+			revision: 2,
+		})
 	})
 })

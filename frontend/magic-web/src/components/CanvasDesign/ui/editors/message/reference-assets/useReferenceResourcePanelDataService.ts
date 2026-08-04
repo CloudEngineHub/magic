@@ -646,10 +646,13 @@ export function checkProjectReferenceResourceDrop(options: {
 			accepted: true,
 		}
 	}
+	const hasUnavailableFile = normalizedFiles.some((file) => !matchableItemMap.has(file.path))
 
 	return {
 		accepted: false,
-		status: REFERENCE_RESOURCE_DROP_STATUS.unsupportedType,
+		status: hasUnavailableFile
+			? REFERENCE_RESOURCE_DROP_STATUS.notAvailable
+			: REFERENCE_RESOURCE_DROP_STATUS.unsupportedType,
 	}
 }
 

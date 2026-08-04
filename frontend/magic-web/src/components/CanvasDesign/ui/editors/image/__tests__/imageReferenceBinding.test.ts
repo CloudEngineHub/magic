@@ -21,6 +21,18 @@ const referenceFileInfos = [
 	{ path: "/design/images/b.png", fileName: "b.png", src: "/design/images/b.png" },
 ]
 
+function resolveDesignAAbsolutePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/")
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
+	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
+		return `/${normalized}`
+	}
+	return normalized
+}
+
 describe("imageReferenceBinding", () => {
 	it("treats placeholder-bound references as prompt-linked", () => {
 		const binding = resolveReferenceBindingState({
@@ -131,7 +143,7 @@ describe("imageReferenceBinding", () => {
 		).toEqual(["/design/images/a.png"])
 	})
 
-	it("compares reference paths by Canvas canonical identity", () => {
+	it("keeps legacy weak canonical comparison when no host context exists", () => {
 		const equivalentInfos = [
 			{ path: "./images/a.png", fileName: "a.png", src: "./images/a.png" },
 		]
@@ -148,5 +160,29 @@ describe("imageReferenceBinding", () => {
 		expect(unprotectPromptBoundReferencePaths(["./images/a.png"], ["/images/a.png"])).toEqual(
 			[],
 		)
+	})
+
+	it("uses host identity to distinguish workspace-root and current-canvas references", () => {
+		expect(
+			pruneProtectedReferencePaths(
+				["/images/a.png"],
+				["./images/a.png"],
+				resolveDesignAAbsolutePath,
+			),
+		).toEqual([])
+		expect(
+			pruneProtectedReferencePaths(
+				["/画布A/images/a.png"],
+				["./images/a.png"],
+				resolveDesignAAbsolutePath,
+			),
+		).toEqual(["./images/a.png"])
+		expect(
+			unprotectPromptBoundReferencePaths(
+				["./images/a.png"],
+				["/images/a.png"],
+				resolveDesignAAbsolutePath,
+			),
+		).toEqual(["./images/a.png"])
 	})
 })

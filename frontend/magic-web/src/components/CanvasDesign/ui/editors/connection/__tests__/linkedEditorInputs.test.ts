@@ -14,6 +14,7 @@ import {
 	dedupeLinkedMediaItemsByPath,
 	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaPaths,
+	mergeLinkedMediaPathsWithResolver,
 	mergeLinkedMediaReferences,
 	resolveLinkedMediaDisplay,
 	resolveLinkedMediaAssociation,
@@ -24,6 +25,18 @@ import {
 	type LinkedEditorMediaCandidate,
 	type ResolveLinkedMediaAssociationOptions,
 } from "../linkedEditorInputs"
+
+function resolveDesignAAbsolutePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/")
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
+	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
+		return `/${normalized}`
+	}
+	return normalized
+}
 
 function textElement(id: string, text: string, zIndex = 0): LayerElement {
 	return {
@@ -339,6 +352,23 @@ describe("resolveLinkedMediaItems", () => {
 		expect(mergeLinkedMediaPaths(["./images/source.png"], ["/images/source.png"])).toEqual([
 			"./images/source.png",
 		])
+	})
+
+	it("keeps workspace-root and current-canvas linked media separate with host identity", () => {
+		expect(
+			mergeLinkedMediaPathsWithResolver(
+				resolveDesignAAbsolutePath,
+				["./images/source.png"],
+				["/images/source.png"],
+			),
+		).toEqual(["./images/source.png", "/images/source.png"])
+		expect(
+			mergeLinkedMediaPathsWithResolver(
+				resolveDesignAAbsolutePath,
+				["./images/source.png"],
+				["/画布A/images/source.png"],
+			),
+		).toEqual(["./images/source.png"])
 	})
 
 	it("marks duplicate linked media as inactive", () => {
@@ -832,6 +862,79 @@ describe("resolveLinkedMediaPolicySelection", () => {
 		])
 		expect(result.activeMediaReferences).toEqual([
 			{ kind: "image", path: firstImageCandidate.path, sourceCrop },
+		])
+	})
+
+	it("keeps workspace-root and current-canvas candidates separately selected", () => {
+		const workspaceRootCandidate: LinkedEditorMediaCandidate = {
+			...firstImageCandidate,
+			path: "/images/shared.png",
+		}
+		const currentCanvasCandidate: LinkedEditorMediaCandidate = {
+			...secondImageCandidate,
+			path: "./images/shared.png",
+		}
+		const result = resolveLinkedMediaPolicySelection(
+			[workspaceRootCandidate, currentCanvasCandidate],
+			[workspaceRootCandidate.connectionId, currentCanvasCandidate.connectionId],
+			{
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 2 },
+				resolveAbsolutePath: resolveDesignAAbsolutePath,
+			},
+		)
+
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				connectionId: workspaceRootCandidate.connectionId,
+				selected: true,
+				status: "active",
+			}),
+			expect.objectContaining({
+				connectionId: currentCanvasCandidate.connectionId,
+				selected: true,
+				status: "active",
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/images/shared.png", sourceCrop: undefined },
+			{ kind: "image", path: "./images/shared.png", sourceCrop: undefined },
+		])
+	})
+
+	it("still deduplicates host-equivalent canvas paths", () => {
+		const canvasAbsoluteCandidate: LinkedEditorMediaCandidate = {
+			...firstImageCandidate,
+			path: "/画布A/images/shared.png",
+		}
+		const currentCanvasCandidate: LinkedEditorMediaCandidate = {
+			...secondImageCandidate,
+			path: "./images/shared.png",
+		}
+		const result = resolveLinkedMediaPolicySelection(
+			[canvasAbsoluteCandidate, currentCanvasCandidate],
+			[canvasAbsoluteCandidate.connectionId, currentCanvasCandidate.connectionId],
+			{
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 2 },
+				resolveAbsolutePath: resolveDesignAAbsolutePath,
+			},
+		)
+
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				connectionId: canvasAbsoluteCandidate.connectionId,
+				selected: true,
+				status: "active",
+			}),
+			expect.objectContaining({
+				connectionId: currentCanvasCandidate.connectionId,
+				selected: false,
+				selectionDisabledReason: "duplicate",
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/画布A/images/shared.png", sourceCrop: undefined },
 		])
 	})
 

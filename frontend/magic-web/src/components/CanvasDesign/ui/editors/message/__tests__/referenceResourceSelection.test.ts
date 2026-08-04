@@ -63,6 +63,18 @@ function normalizeDesignAResourcePathForStorage(path: string): string {
 	return `/${normalized}`
 }
 
+function resolveDesignAAbsolutePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/")
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
+	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
+		return `/${normalized}`
+	}
+	return normalized
+}
+
 describe("filterReferenceResourcePanelBatchItems", () => {
 	it("slices project selections by remaining total capacity", () => {
 		const selected = filterReferenceResourcePanelBatchItems({
@@ -96,6 +108,17 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 		})
 
 		expect(selected.map((item) => item.data.file_path)).toEqual(["/images/existing.png"])
+	})
+
+	it("treats workspace-root and current-canvas paths as separate capacity entries with host identity", () => {
+		const selected = filterReferenceResourcePanelBatchItems({
+			items: [panelItem("/images/existing.png")],
+			maxReferenceFiles: 1,
+			currentReferenceFiles: ["./images/existing.png"],
+			resolveAbsolutePath: resolveDesignAAbsolutePath,
+		})
+
+		expect(selected).toEqual([])
 	})
 
 	it("respects per-asset-type capacity and total capacity", () => {
@@ -168,6 +191,20 @@ describe("project reference resource path candidates", () => {
 		).toBe(true)
 	})
 
+	it("accepts a workspace-root resource when both root and current-canvas nodes exist", () => {
+		const files = [{ path: "/images/cat.png", fileName: "cat.png" }]
+
+		expect(
+			checkProjectReferenceResourceDrop({
+				isDropEnabled: true,
+				files,
+				matchableItems: [{ path: "./images/cat.png" }, { path: "/images/cat.png" }],
+				currentReferenceFiles: [],
+				resolveResourcePathCandidates: resolveWorkspaceRootFileCandidates,
+			}),
+		).toEqual({ accepted: true })
+	})
+
 	it("does not match other canvas resources by same file name", () => {
 		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png" }]
 		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
@@ -182,8 +219,8 @@ describe("project reference resource path candidates", () => {
 				matchableItems: [{ path: "./images/cat.png" }],
 				currentReferenceFiles: [],
 				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
-			}).accepted,
-		).toBe(false)
+			}),
+		).toEqual({ accepted: false, status: "not-available" })
 	})
 
 	it("stores accepted external project drops as workspace-absolute paths", () => {

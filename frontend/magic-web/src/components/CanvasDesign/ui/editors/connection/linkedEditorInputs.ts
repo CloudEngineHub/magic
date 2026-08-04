@@ -41,17 +41,29 @@ export interface LinkedEditorMediaPolicy {
 	) => LinkedEditorMediaInactiveReason | null
 }
 
+type ResolveAbsolutePath = (path: string) => string
+
 /** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */
-export function getLinkedMediaReferenceIdentity(path?: string): string {
-	return getCanvasResourceIdentity(path)
+export function getLinkedMediaReferenceIdentity(
+	path?: string,
+	resolveAbsolutePath?: ResolveAbsolutePath,
+): string {
+	return getCanvasResourceIdentity(path, resolveAbsolutePath)
 }
 
 export function mergeLinkedMediaPaths(...pathGroups: string[][]): string[] {
+	return mergeLinkedMediaPathsWithResolver(undefined, ...pathGroups)
+}
+
+export function mergeLinkedMediaPathsWithResolver(
+	resolveAbsolutePath: ResolveAbsolutePath | undefined,
+	...pathGroups: string[][]
+): string[] {
 	const merged: string[] = []
 	const seen = new Set<string>()
 	for (const paths of pathGroups) {
 		for (const path of paths) {
-			const identity = getLinkedMediaReferenceIdentity(path)
+			const identity = getLinkedMediaReferenceIdentity(path, resolveAbsolutePath)
 			if (!identity || seen.has(identity)) continue
 			seen.add(identity)
 			merged.push(path)
@@ -83,11 +95,14 @@ export interface LinkedEditorMediaItem extends LinkedEditorMediaCandidate {
 }
 
 /** 按资源身份折叠连线媒体；同一路径存在多个连接时优先保留已选择项。 */
-export function dedupeLinkedMediaItemsByPath<T extends LinkedEditorMediaItem>(items: T[]): T[] {
+export function dedupeLinkedMediaItemsByPath<T extends LinkedEditorMediaItem>(
+	items: T[],
+	resolveAbsolutePath?: ResolveAbsolutePath,
+): T[] {
 	const deduped: T[] = []
 	const indexByIdentity = new Map<string, number>()
 	for (const item of items) {
-		const identity = getLinkedMediaReferenceIdentity(item.path)
+		const identity = getLinkedMediaReferenceIdentity(item.path, resolveAbsolutePath)
 		if (!identity) continue
 		const existingIndex = indexByIdentity.get(identity)
 		if (existingIndex === undefined) {
@@ -112,18 +127,24 @@ export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorM
 	manualItems: TManual[],
 	getManualPath: (item: TManual) => string,
 	linkedItems: TLinked[],
+	resolveAbsolutePath?: ResolveAbsolutePath,
 ): LinkedMediaDisplayResolution<TManual, TLinked> {
 	const visibleLinkedItems = dedupeLinkedMediaItemsByPath(
 		linkedItems.filter((item): item is TLinked & { path: string } => Boolean(item.path)),
+		resolveAbsolutePath,
 	)
 	const linkedPathIdentities = new Set(
-		visibleLinkedItems.map((item) => getLinkedMediaReferenceIdentity(item.path)),
+		visibleLinkedItems.map((item) =>
+			getLinkedMediaReferenceIdentity(item.path, resolveAbsolutePath),
+		),
 	)
 
 	return {
 		manualItems: manualItems.filter(
 			(item) =>
-				!linkedPathIdentities.has(getLinkedMediaReferenceIdentity(getManualPath(item))),
+				!linkedPathIdentities.has(
+					getLinkedMediaReferenceIdentity(getManualPath(item), resolveAbsolutePath),
+				),
 		),
 		linkedItems: visibleLinkedItems,
 	}
@@ -431,9 +452,10 @@ export function resolveLinkedMediaItems(
 	options: {
 		targetKind: LinkedEditorTargetKind
 		mediaPolicy?: LinkedEditorMediaPolicy
+		resolveAbsolutePath?: ResolveAbsolutePath
 	},
 ): LinkedEditorMediaItem[] {
-	const { targetKind, mediaPolicy } = options
+	const { targetKind, mediaPolicy, resolveAbsolutePath } = options
 	const supportedKindSet = new Set(mediaPolicy?.supportedKinds ?? [])
 	const activePathSet = new Set<string>()
 	const manualReferences = mediaPolicy?.manualReferences ?? []
@@ -446,7 +468,7 @@ export function resolveLinkedMediaItems(
 		audio: 0,
 	}
 	manualReferences.forEach((reference) => {
-		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath)
 		if (!identity || activePathSet.has(identity)) return
 		activePathSet.add(identity)
 		activeReferences.push(reference)
@@ -468,7 +490,9 @@ export function resolveLinkedMediaItems(
 		if (!supportedKindSet.has(candidate.kind)) {
 			return { ...candidate, status: "inactive", reason: "unsupported-mode" }
 		}
-		if (activePathSet.has(getLinkedMediaReferenceIdentity(candidate.path))) {
+		if (
+			activePathSet.has(getLinkedMediaReferenceIdentity(candidate.path, resolveAbsolutePath))
+		) {
 			return { ...candidate, status: "inactive", reason: "duplicate" }
 		}
 		if (activePathSet.size >= totalLimit) {
@@ -493,7 +517,7 @@ export function resolveLinkedMediaItems(
 			return { ...candidate, status: "inactive", reason: validationReason }
 		}
 
-		activePathSet.add(getLinkedMediaReferenceIdentity(candidate.path))
+		activePathSet.add(getLinkedMediaReferenceIdentity(candidate.path, resolveAbsolutePath))
 		activeReferences.push(nextReference)
 		activeCountByKind[candidate.kind] += 1
 		return { ...candidate, status: "active" }
@@ -516,6 +540,7 @@ export interface ResolveLinkedMediaAssociationOptions {
 	manualReferences?: LinkedEditorMediaReference[]
 	targetKind: LinkedEditorTargetKind
 	mediaPolicy?: LinkedEditorMediaPolicy
+	resolveAbsolutePath?: ResolveAbsolutePath
 }
 
 /**
@@ -531,17 +556,18 @@ export function resolveLinkedMediaAssociation(
 		manualReferences = options.mediaPolicy?.manualReferences ?? [],
 		targetKind,
 		mediaPolicy,
+		resolveAbsolutePath,
 	} = options
 	const effectiveMediaPolicy = mediaPolicy
 		? { ...mediaPolicy, manualReferences }
 		: manualReferences.length > 0
 			? { supportedKinds: [], manualReferences }
 			: undefined
-	const selectionOptions = { targetKind, mediaPolicy: effectiveMediaPolicy }
+	const selectionOptions = { targetKind, mediaPolicy: effectiveMediaPolicy, resolveAbsolutePath }
 	const stableCandidates: LinkedEditorMediaCandidate[] = []
 	const candidateIdentities = new Set<string>()
 	for (const candidate of candidates) {
-		const identity = getLinkedMediaReferenceIdentity(candidate.path)
+		const identity = getLinkedMediaReferenceIdentity(candidate.path, resolveAbsolutePath)
 		if (identity) {
 			if (candidateIdentities.has(identity)) continue
 			candidateIdentities.add(identity)
@@ -551,14 +577,14 @@ export function resolveLinkedMediaAssociation(
 	const mentionedPaths: string[] = []
 	const mentionedIdentities = new Set<string>()
 	mentionedReferencePaths.forEach((path) => {
-		const identity = getLinkedMediaReferenceIdentity(path)
+		const identity = getLinkedMediaReferenceIdentity(path, resolveAbsolutePath)
 		if (!identity || mentionedIdentities.has(identity)) return
 		mentionedIdentities.add(identity)
 		mentionedPaths.push(path)
 	})
 
 	const associatedConnectionIds = stableCandidates.flatMap((candidate) => {
-		const identity = getLinkedMediaReferenceIdentity(candidate.path)
+		const identity = getLinkedMediaReferenceIdentity(candidate.path, resolveAbsolutePath)
 		return identity && mentionedIdentities.has(identity) ? [candidate.connectionId] : []
 	})
 	const associatedConnectionIdSet = new Set(associatedConnectionIds)
@@ -574,11 +600,15 @@ export function resolveLinkedMediaAssociation(
 			: item,
 	)
 	const unmatchedManualReferences = manualReferences.filter(
-		(reference) => !candidateIdentities.has(getLinkedMediaReferenceIdentity(reference.path)),
+		(reference) =>
+			!candidateIdentities.has(
+				getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath),
+			),
 	)
 	const activeMediaReferences = mergeLinkedMediaReferences(
 		manualReferences,
 		selectionResolution.activeMediaReferences,
+		resolveAbsolutePath,
 	)
 
 	return {
@@ -599,8 +629,10 @@ export function resolveLinkedMediaPolicySelection(
 	options: {
 		targetKind: LinkedEditorTargetKind
 		mediaPolicy?: LinkedEditorMediaPolicy
+		resolveAbsolutePath?: ResolveAbsolutePath
 	},
 ): LinkedEditorMediaSelectionResolution {
+	const { resolveAbsolutePath } = options
 	const normalizedCandidates = candidates.map((candidate): LinkedEditorMediaCandidate => ({
 		connectionId: candidate.connectionId,
 		sourceElementId: candidate.sourceElementId,
@@ -614,7 +646,9 @@ export function resolveLinkedMediaPolicySelection(
 		selectedConnectionIdSet.has(candidate.connectionId),
 	)
 	const selectedPathIdentities = new Set(
-		selectedCandidates.map((candidate) => getLinkedMediaReferenceIdentity(candidate.path)),
+		selectedCandidates.map((candidate) =>
+			getLinkedMediaReferenceIdentity(candidate.path, resolveAbsolutePath),
+		),
 	)
 	const selectedMediaPolicy = options.mediaPolicy
 		? {
@@ -622,7 +656,7 @@ export function resolveLinkedMediaPolicySelection(
 				manualReferences: options.mediaPolicy.manualReferences?.filter(
 					(reference) =>
 						!selectedPathIdentities.has(
-							getLinkedMediaReferenceIdentity(reference.path),
+							getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath),
 						),
 				),
 			}
@@ -630,6 +664,7 @@ export function resolveLinkedMediaPolicySelection(
 	const selectedResolutionOptions = {
 		targetKind: options.targetKind,
 		mediaPolicy: selectedMediaPolicy,
+		resolveAbsolutePath,
 	}
 	const selectedItems = resolveLinkedMediaItems(selectedCandidates, selectedResolutionOptions)
 	const selectedItemById = new Map(selectedItems.map((item) => [item.connectionId, item]))
@@ -644,16 +679,22 @@ export function resolveLinkedMediaPolicySelection(
 		}
 
 		const standaloneItem = resolveLinkedMediaItems([candidate], options)[0]
-		const candidateIdentity = getLinkedMediaReferenceIdentity(candidate.path)
+		const candidateIdentity = getLinkedMediaReferenceIdentity(
+			candidate.path,
+			resolveAbsolutePath,
+		)
 		const candidateSelectionOptions = {
 			targetKind: options.targetKind,
+			resolveAbsolutePath,
 			mediaPolicy: options.mediaPolicy
 				? {
 						...options.mediaPolicy,
 						manualReferences: options.mediaPolicy.manualReferences?.filter(
 							(reference) =>
-								getLinkedMediaReferenceIdentity(reference.path) !==
-								candidateIdentity,
+								getLinkedMediaReferenceIdentity(
+									reference.path,
+									resolveAbsolutePath,
+								) !== candidateIdentity,
 						),
 					}
 				: undefined,
@@ -699,25 +740,26 @@ export function resolveLinkedMediaPolicySelection(
 export function mergeLinkedMediaReferences(
 	manualReferences: LinkedEditorMediaReference[],
 	linkedReferences: LinkedEditorMediaReference[],
+	resolveAbsolutePath?: ResolveAbsolutePath,
 ): LinkedEditorMediaReference[] {
 	const merged: LinkedEditorMediaReference[] = []
 	const linkedByIdentity = new Map<string, LinkedEditorMediaReference>()
 	for (const reference of linkedReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath)
 		if (!identity || linkedByIdentity.has(identity)) continue
 		linkedByIdentity.set(identity, reference)
 	}
 	const seenPathSet = new Set<string>()
 
 	for (const reference of manualReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath)
 		if (!identity || seenPathSet.has(identity)) continue
 		seenPathSet.add(identity)
 		merged.push(linkedByIdentity.get(identity) ?? reference)
 	}
 
 	for (const reference of linkedReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path)
+		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath)
 		if (!identity || seenPathSet.has(identity)) continue
 		seenPathSet.add(identity)
 		merged.push(reference)
@@ -777,6 +819,7 @@ export function resolveLinkedEditorInputs(
 	const mediaSelection = resolveLinkedMediaPolicySelection(mediaCandidates, [], {
 		targetKind,
 		mediaPolicy,
+		resolveAbsolutePath: canvas?.magicConfigManager?.config?.methods?.resolveAbsolutePath,
 	})
 
 	return {

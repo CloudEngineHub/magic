@@ -9,6 +9,7 @@ import type {
 	ProjectAttachmentMentionNode,
 	ReferenceResourcePanelLimitInfo,
 } from "../../../../public/props"
+import type { CanvasDesignMethods } from "../../../../public/magic-types"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
 import type {
 	ReferenceAssetPerTypeLimits,
@@ -119,6 +120,7 @@ interface ProviderProps {
 	folderId?: string
 	folderName?: string
 	tree?: ProjectAttachmentMentionNode[]
+	methods?: CanvasDesignMethods
 }
 type ProviderConfig = Omit<ProviderProps, "children">
 
@@ -126,6 +128,7 @@ function Providers(props: ProviderProps) {
 	return (
 		<MagicProvider
 			readonly
+			methods={props.methods}
 			projectAttachmentMentionTree={props.tree}
 			defaultProjectAttachmentFolderId={props.folderId}
 			defaultProjectAttachmentFolderName={props.folderName}
@@ -140,6 +143,22 @@ function Providers(props: ProviderProps) {
 		</MagicProvider>
 	)
 }
+
+function resolveDesignAAbsolutePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/")
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
+	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
+		return `/${normalized}`
+	}
+	return normalized
+}
+
+const designAMethods = {
+	resolveAbsolutePath: resolveDesignAAbsolutePath,
+} as CanvasDesignMethods
 
 type RuntimeOptions = Parameters<typeof useCanvasReferenceMentionRuntime>[0]
 type MentionOptions = Parameters<typeof useCanvasReferenceMention>[0]
@@ -338,9 +357,12 @@ describe("useCanvasReferenceMention", () => {
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
 	})
 
-	it("deduplicates current and project files by Canvas canonical path", () => {
+	it("deduplicates current-canvas absolute and DSL-relative paths by host identity", () => {
 		renderMention({
-			tree: [folderNode("design-a", "Design A", [fileNode("cat.png", "/images/cat.png")])],
+			methods: designAMethods,
+			tree: [
+				folderNode("design-a", "Design A", [fileNode("cat.png", "/画布A/images/cat.png")]),
+			],
 			options: {
 				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
 				referenceResourceType: "image",
@@ -349,6 +371,22 @@ describe("useCanvasReferenceMention", () => {
 
 		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
 			expect.objectContaining({ path: "./images/cat.png" }),
+		])
+	})
+
+	it("keeps workspace-root and current-canvas resources separate", () => {
+		renderMention({
+			methods: designAMethods,
+			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png" }),
+			expect.objectContaining({ path: "/images/cat.png" }),
 		])
 	})
 })

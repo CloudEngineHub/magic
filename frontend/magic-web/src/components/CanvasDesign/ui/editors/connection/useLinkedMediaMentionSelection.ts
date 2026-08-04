@@ -15,6 +15,7 @@ interface UseLinkedMediaMentionSelectionOptions {
 	mentionedReferencePaths: string[]
 	canSelectMediaConnection: (connectionId: string) => boolean
 	editorRef: RefObject<MessageEditorRef | null>
+	resolveAbsolutePath?: (path: string) => string
 }
 
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
@@ -34,16 +35,26 @@ function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }):
 export function useLinkedMediaMentionSelection(
 	options: UseLinkedMediaMentionSelectionOptions,
 ): (connectionId: string, selected: boolean) => void {
-	const { mediaItems, mentionedReferencePaths, canSelectMediaConnection, editorRef } = options
+	const {
+		mediaItems,
+		mentionedReferencePaths,
+		canSelectMediaConnection,
+		editorRef,
+		resolveAbsolutePath,
+	} = options
+	const getResourceIdentity = useCallback(
+		(path?: string) => getLinkedMediaReferenceIdentity(path, resolveAbsolutePath),
+		[resolveAbsolutePath],
+	)
 	const mentionSnapshotByConnectionIdRef = useRef(new Map<string, LinkedMediaMentionSnapshot>())
 	const mentionedPathByIdentity = useMemo(() => {
 		const result = new Map<string, string>()
 		for (const path of mentionedReferencePaths) {
-			const identity = getLinkedMediaReferenceIdentity(path)
+			const identity = getResourceIdentity(path)
 			if (identity && !result.has(identity)) result.set(identity, path)
 		}
 		return result
-	}, [mentionedReferencePaths])
+	}, [getResourceIdentity, mentionedReferencePaths])
 
 	useEffect(() => {
 		const currentItemByConnectionId = new Map(
@@ -64,10 +75,10 @@ export function useLinkedMediaMentionSelection(
 			}
 
 			const previousMentionPath = mentionedPathByIdentity.get(
-				getLinkedMediaReferenceIdentity(snapshot.path),
+				getResourceIdentity(snapshot.path),
 			)
 			const currentMentionPath = mentionedPathByIdentity.get(
-				getLinkedMediaReferenceIdentity(currentItem.path),
+				getResourceIdentity(currentItem.path),
 			)
 			if (!previousMentionPath && !currentMentionPath) {
 				// 用户已经删除 @；选择状态的清理由 useLinkedEditorInputs 完成。
@@ -77,8 +88,7 @@ export function useLinkedMediaMentionSelection(
 
 			const currentFileName = getLinkedMediaFileName(currentItem)
 			const isSameResource =
-				getLinkedMediaReferenceIdentity(snapshot.path) ===
-				getLinkedMediaReferenceIdentity(currentItem.path)
+				getResourceIdentity(snapshot.path) === getResourceIdentity(currentItem.path)
 			if (isSameResource && snapshot.fileName === currentFileName) {
 				continue
 			}
@@ -93,7 +103,7 @@ export function useLinkedMediaMentionSelection(
 
 			const replaced =
 				editorRef.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(snapshot.path),
+					createCanvasMentionPathMatcher(snapshot.path, resolveAbsolutePath),
 					createReferenceResourcePanelItemFromPath(currentItem.path, currentFileName),
 				) ?? false
 			if (replaced) {
@@ -107,30 +117,26 @@ export function useLinkedMediaMentionSelection(
 		for (const item of currentItemByConnectionId.values()) {
 			if (snapshots.has(item.connectionId)) continue
 			if (!item.selected) continue
-			const mentionedPath = mentionedPathByIdentity.get(
-				getLinkedMediaReferenceIdentity(item.path),
-			)
+			const mentionedPath = mentionedPathByIdentity.get(getResourceIdentity(item.path))
 			if (!mentionedPath) continue
 			snapshots.set(item.connectionId, {
 				path: mentionedPath,
 				fileName: getLinkedMediaFileName(item),
 			})
 		}
-	}, [editorRef, mediaItems, mentionedPathByIdentity])
+	}, [editorRef, getResourceIdentity, mediaItems, mentionedPathByIdentity, resolveAbsolutePath])
 
 	return useCallback(
 		(connectionId: string, selected: boolean) => {
 			if (!selected) {
 				const item = mediaItems.find((candidate) => candidate.connectionId === connectionId)
 				const snapshot = mentionSnapshotByConnectionIdRef.current.get(connectionId)
-				const mentionIdentity = getLinkedMediaReferenceIdentity(
-					item?.path ?? snapshot?.path,
-				)
+				const mentionIdentity = getResourceIdentity(item?.path ?? snapshot?.path)
 				const mentionedPath = mentionedPathByIdentity.get(mentionIdentity)
 				if (
 					mentionedPath &&
 					!editorRef.current?.removeMentionItems(
-						createCanvasMentionPathMatcher(mentionedPath),
+						createCanvasMentionPathMatcher(mentionedPath, resolveAbsolutePath),
 					)
 				) {
 					return
@@ -147,9 +153,7 @@ export function useLinkedMediaMentionSelection(
 			if (!canSelectMediaConnection(connectionId)) return
 
 			const fileName = getLinkedMediaFileName(item)
-			const existingMentionPath = mentionedPathByIdentity.get(
-				getLinkedMediaReferenceIdentity(item.path),
-			)
+			const existingMentionPath = mentionedPathByIdentity.get(getResourceIdentity(item.path))
 			if (existingMentionPath) {
 				mentionSnapshotByConnectionIdRef.current.set(connectionId, {
 					path: existingMentionPath,
@@ -172,6 +176,13 @@ export function useLinkedMediaMentionSelection(
 				fileName,
 			})
 		},
-		[canSelectMediaConnection, editorRef, mediaItems, mentionedPathByIdentity],
+		[
+			canSelectMediaConnection,
+			editorRef,
+			getResourceIdentity,
+			mediaItems,
+			mentionedPathByIdentity,
+			resolveAbsolutePath,
+		],
 	)
 }

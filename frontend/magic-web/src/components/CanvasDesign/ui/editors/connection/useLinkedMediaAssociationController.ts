@@ -3,20 +3,33 @@ import type { MessageEditorMentionChangeContext, MessageEditorRef } from "../mes
 import type { LinkedEditorMediaPolicy, LinkedEditorTargetKind } from "./linkedEditorInputs"
 import { useLinkedEditorInputs } from "./useLinkedEditorInputs"
 import { useLinkedMediaMentionSelection } from "./useLinkedMediaMentionSelection"
+import { reconcileMentionPathsWithPersistedReferences } from "../message/mentionPathReconciliation"
 
 interface UseLinkedMediaAssociationControllerOptions {
 	targetElementId: string
 	targetKind: LinkedEditorTargetKind
 	mediaPolicy?: LinkedEditorMediaPolicy
 	editorRef: RefObject<MessageEditorRef | null>
-	onReadyMentionChange?: (paths: string[], currentPrompt: string) => void
+	onReadyMentionChange?: (
+		paths: string[],
+		currentPrompt: string,
+		context: MessageEditorMentionChangeContext,
+	) => void
+	resolveAbsolutePath?: (path: string) => string
 }
 
 /** 图片与视频编辑器共用的 mention 驱动关联媒体 controller。 */
 export function useLinkedMediaAssociationController(
 	options: UseLinkedMediaAssociationControllerOptions,
 ) {
-	const { targetElementId, targetKind, mediaPolicy, editorRef, onReadyMentionChange } = options
+	const {
+		targetElementId,
+		targetKind,
+		mediaPolicy,
+		editorRef,
+		onReadyMentionChange,
+		resolveAbsolutePath,
+	} = options
 	const [mentionedReferencePaths, setMentionedReferencePaths] = useState<string[]>([])
 	const pendingSyncRef = useRef<{ revision: number; token: number } | null>(null)
 	const syncTokenRef = useRef(0)
@@ -32,6 +45,7 @@ export function useLinkedMediaAssociationController(
 		mentionedReferencePaths,
 		canSelectMediaConnection: linkedEditorInputs.canSelectMediaConnection,
 		editorRef,
+		resolveAbsolutePath,
 	})
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
@@ -55,11 +69,19 @@ export function useLinkedMediaAssociationController(
 				}
 				acceptedSyncTokenRef.current = pendingSync.token
 			}
-			setMentionedReferencePaths(paths)
-			onReadyMentionChange?.(paths, currentPrompt)
+			const persistedPaths =
+				mediaPolicy?.manualReferences?.map((reference) => reference.path) ?? []
+			const reconciledPaths = reconcileMentionPathsWithPersistedReferences({
+				incomingPaths: paths,
+				persistedPaths,
+				source: context.source,
+				resolveAbsolutePath,
+			})
+			setMentionedReferencePaths(reconciledPaths)
+			onReadyMentionChange?.(reconciledPaths, currentPrompt, context)
 			return true
 		},
-		[onReadyMentionChange],
+		[mediaPolicy?.manualReferences, onReadyMentionChange, resolveAbsolutePath],
 	)
 
 	return {

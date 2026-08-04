@@ -2,6 +2,7 @@ import { ArrowLeftRight, LoaderCircle, X } from "lucide-react"
 import type { CSSProperties, ForwardedRef, PointerEvent, ReactNode, RefCallback } from "react"
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { useMagic } from "../../../app/providers/MagicProvider"
 import EditorModelSelect from "./model-config/EditorModelSelect"
 import type {
 	VideoEditorConfig,
@@ -190,13 +191,14 @@ export function resolveFrameSlotIndex(
 function resolveLinkedFrameAssignedRoles(
 	bindings: Array<LinkedFrameBinding | undefined>,
 	item: LinkedEditorMediaItem & { kind: "image"; path: string },
+	resolveAbsolutePath?: (path: string) => string,
 ): LinkedFrameRole[] {
 	return bindings.flatMap((binding) => {
 		if (!binding) return []
 		if (
 			binding.sourceConnectionId !== item.connectionId ||
-			getLinkedMediaReferenceIdentity(binding.sourcePath) !==
-				getLinkedMediaReferenceIdentity(item.path)
+			getLinkedMediaReferenceIdentity(binding.sourcePath, resolveAbsolutePath) !==
+				getLinkedMediaReferenceIdentity(item.path, resolveAbsolutePath)
 		) {
 			return []
 		}
@@ -257,6 +259,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		renderPromptOptimizationButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
+	const { methods } = useMagic()
+	const resolveAbsolutePath = methods?.resolveAbsolutePath
 	const createLinkedMediaSourceListOption = useLinkedMediaSourceListOption()
 	const sourceListScrollerRef = useRef<HTMLDivElement | null>(null)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
@@ -365,8 +369,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					Number(boundConnectionIds.has(right.connectionId)) -
 					Number(boundConnectionIds.has(left.connectionId)),
 			)
-		return dedupeLinkedMediaItemsByPath(imageItems)
-	}, [linkedDisplayMediaItems, linkedFrameBindings])
+		return dedupeLinkedMediaItemsByPath(imageItems, resolveAbsolutePath)
+	}, [linkedDisplayMediaItems, linkedFrameBindings, resolveAbsolutePath])
 	const linkedActiveMediaItems = useMemo(
 		() => linkedDisplayMediaItems.filter((item) => item.status === "active"),
 		[linkedDisplayMediaItems],
@@ -380,8 +384,9 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				referenceImageInfos.map((info, index) => ({ info, index })),
 				(entry) => entry.info.path,
 				linkedDisplayMediaItems,
+				resolveAbsolutePath,
 			),
-		[linkedDisplayMediaItems, referenceImageInfos],
+		[linkedDisplayMediaItems, referenceImageInfos, resolveAbsolutePath],
 	)
 	const linkedActiveReferenceAssetInfos = useMemo<VideoReferenceAssetInfo[]>(
 		() =>
@@ -401,11 +406,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					path: info.path,
 				})),
 				linkedActiveReferenceAssetInfos,
+				resolveAbsolutePath,
 			).map((reference) => {
 				const manualInfo = referenceImageInfos.find(
 					(info) =>
-						getLinkedMediaReferenceIdentity(info.path) ===
-						getLinkedMediaReferenceIdentity(reference.path),
+						getLinkedMediaReferenceIdentity(info.path, resolveAbsolutePath) ===
+						getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath),
 				)
 				return (
 					manualInfo ?? {
@@ -416,7 +422,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					}
 				)
 			}),
-		[linkedActiveReferenceAssetInfos, referenceImageInfos],
+		[linkedActiveReferenceAssetInfos, referenceImageInfos, resolveAbsolutePath],
 	)
 	const effectiveReferenceAssetLimits = useMemo(
 		() => resolveReferenceAssetLimits(currentInputModeConfig, effectiveReferenceAssetInfos),
@@ -450,6 +456,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						const assignedRoles = resolveLinkedFrameAssignedRoles(
 							linkedFrameBindings,
 							item,
+							resolveAbsolutePath,
 						)
 						const resourceStatusLabel = assignedRoles
 							.map((role) =>
@@ -488,13 +495,15 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
-								) === getLinkedMediaReferenceIdentity(path)
+									resolveAbsolutePath,
+								) === getLinkedMediaReferenceIdentity(path, resolveAbsolutePath)
 									? linkedFrameBindings[idx]?.sourceFileName
 									: frameImageInfos[idx]?.fileName,
 							isLinked:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
-								) === getLinkedMediaReferenceIdentity(path),
+									resolveAbsolutePath,
+								) === getLinkedMediaReferenceIdentity(path, resolveAbsolutePath),
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -518,13 +527,15 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
-								) === getLinkedMediaReferenceIdentity(path)
+									resolveAbsolutePath,
+								) === getLinkedMediaReferenceIdentity(path, resolveAbsolutePath)
 									? linkedFrameBindings[idx]?.sourceFileName
 									: frameImageInfos[idx]?.fileName,
 							isLinked:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
-								) === getLinkedMediaReferenceIdentity(path),
+									resolveAbsolutePath,
+								) === getLinkedMediaReferenceIdentity(path, resolveAbsolutePath),
 							removeResourceAriaLabel: removeSlotAriaLabel,
 							previewResourceAriaLabel,
 							onPreviewResource: onPreviewMediaResource,
@@ -569,6 +580,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		supportsStartFrame,
 		supportsEndFrame,
 		linkedFrameMediaItems,
+		resolveAbsolutePath,
 		currentFrameImages,
 		frameImageInfos,
 		linkedFrameBindings,
@@ -731,11 +743,15 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			const allowedInfos = referenceImageInfos.filter(
 				(info) => info.assetType === referenceAssetKind,
 			)
-			const optionIdentity = getLinkedMediaReferenceIdentity(option.resourcePath)
+			const optionIdentity = getLinkedMediaReferenceIdentity(
+				option.resourcePath,
+				resolveAbsolutePath,
+			)
 			const currentReferenceInfos = effectiveReferenceAssetInfos.filter(
 				(info) =>
 					!optionIdentity ||
-					getLinkedMediaReferenceIdentity(info.path) !== optionIdentity,
+					getLinkedMediaReferenceIdentity(info.path, resolveAbsolutePath) !==
+						optionIdentity,
 			)
 			const currentReferenceCount = currentReferenceInfos.length
 			const currentAssetCounts = countVideoReferenceAssetInfosByKind(currentReferenceInfos)
@@ -777,6 +793,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			effectiveReferenceAssetInfos,
 			referenceImageInfos,
 			referenceResourceTypeByKind,
+			resolveAbsolutePath,
 		],
 	)
 
@@ -801,13 +818,17 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				if (inputTab === "frame" && option.groupId === "linked-frame") {
 					const linkedFrameItem = linkedFrameMediaItems.find(
 						(item) =>
-							getLinkedMediaReferenceIdentity(item.path) ===
-							getLinkedMediaReferenceIdentity(option.resourcePath ?? ""),
+							getLinkedMediaReferenceIdentity(item.path, resolveAbsolutePath) ===
+							getLinkedMediaReferenceIdentity(
+								option.resourcePath ?? "",
+								resolveAbsolutePath,
+							),
 					)
 					if (!linkedFrameItem) return null
 					const assignedRoles = resolveLinkedFrameAssignedRoles(
 						linkedFrameBindings,
 						linkedFrameItem,
+						resolveAbsolutePath,
 					)
 					const assignedRoleSet = new Set(assignedRoles)
 					const frameAlreadyAssignedToOtherRole = (role: LinkedFrameRole) =>
@@ -948,8 +969,14 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						className={cn(
 							className,
 							Boolean(option.resourcePath && hoveredMentionPath) &&
-								getLinkedMediaReferenceIdentity(option.resourcePath) ===
-									getLinkedMediaReferenceIdentity(hoveredMentionPath) &&
+								getLinkedMediaReferenceIdentity(
+									option.resourcePath,
+									resolveAbsolutePath,
+								) ===
+									getLinkedMediaReferenceIdentity(
+										hoveredMentionPath,
+										resolveAbsolutePath,
+									) &&
 								sourceListStyles.sourceItemMentionHovered,
 						)}
 						style={style}
@@ -996,6 +1023,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			supportsStartFrame,
 			supportsEndFrame,
 			onLinkedMediaFrameSelect,
+			resolveAbsolutePath,
 		],
 	)
 

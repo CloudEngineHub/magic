@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "../../primitiv
 import styles from "./index.module.css"
 import { ChevronsUpDown } from "lucide-react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { useMagic } from "../../../app/providers/MagicProvider"
 import ResolutionSelect from "../../primitives/custom/ResolutionSelect/index"
 import EditorModelSelect from "../video/model-config/EditorModelSelect"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
@@ -32,7 +33,7 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 import type { LinkedEditorMediaItem, LinkedEditorMediaKind } from "../connection/linkedEditorInputs"
 import {
 	getLinkedMediaReferenceIdentity,
-	mergeLinkedMediaPaths,
+	mergeLinkedMediaPathsWithResolver,
 	resolveLinkedMediaDisplay,
 } from "../connection/linkedEditorInputs"
 import { useLinkedMediaSourceListOption } from "../connection/useLinkedMediaSourceListOption"
@@ -167,6 +168,8 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		renderSendButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
+	const { methods } = useMagic()
+	const resolveAbsolutePath = methods?.resolveAbsolutePath
 	const createLinkedMediaSourceListOption = useLinkedMediaSourceListOption()
 	const linkedMediaKindLabelByKind = useMemo<Record<LinkedEditorMediaKind, string>>(
 		() => ({
@@ -206,7 +209,8 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				.map((item) => item.path),
 		[linkedMediaItems],
 	)
-	const effectiveReferenceFileCount = mergeLinkedMediaPaths(
+	const effectiveReferenceFileCount = mergeLinkedMediaPathsWithResolver(
+		resolveAbsolutePath,
 		currentReferenceFiles,
 		linkedActiveImagePaths,
 	).length
@@ -217,8 +221,9 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					referenceFileInfos.map((info, index) => ({ info, index })),
 					(entry) => entry.info.path,
 					linkedMediaItems,
+					resolveAbsolutePath,
 				),
-			[linkedMediaItems, referenceFileInfos],
+			[linkedMediaItems, referenceFileInfos, resolveAbsolutePath],
 		)
 
 	useEffect(() => {
@@ -328,11 +333,12 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			const filesWithoutSlot = slotPath
 				? currentReferenceFiles.filter(
 						(path) =>
-							getLinkedMediaReferenceIdentity(path) !==
-							getLinkedMediaReferenceIdentity(slotPath),
+							getLinkedMediaReferenceIdentity(path, resolveAbsolutePath) !==
+							getLinkedMediaReferenceIdentity(slotPath, resolveAbsolutePath),
 					)
 				: currentReferenceFiles
-			const effectiveFilesWithoutSlot = mergeLinkedMediaPaths(
+			const effectiveFilesWithoutSlot = mergeLinkedMediaPathsWithResolver(
+				resolveAbsolutePath,
 				filesWithoutSlot,
 				linkedActiveImagePaths,
 			)
@@ -346,7 +352,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					effectiveFilesWithoutSlot.length >= maxReferenceFiles,
 			}
 		},
-		[currentReferenceFiles, linkedActiveImagePaths, maxReferenceFiles],
+		[currentReferenceFiles, linkedActiveImagePaths, maxReferenceFiles, resolveAbsolutePath],
 	)
 
 	const renderReferenceSourceListItem = useCallback(
@@ -365,8 +371,14 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					className={cn(
 						className,
 						Boolean(option.resourcePath && hoveredMentionPath) &&
-							getLinkedMediaReferenceIdentity(option.resourcePath) ===
-								getLinkedMediaReferenceIdentity(hoveredMentionPath) &&
+							getLinkedMediaReferenceIdentity(
+								option.resourcePath,
+								resolveAbsolutePath,
+							) ===
+								getLinkedMediaReferenceIdentity(
+									hoveredMentionPath,
+									resolveAbsolutePath,
+								) &&
 							sourceListStyles.sourceItemMentionHovered,
 					)}
 					style={style}
@@ -402,6 +414,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			onProjectSelect,
 			hoveredMentionPath,
 			handleSelectReferenceSlot,
+			resolveAbsolutePath,
 		],
 	)
 

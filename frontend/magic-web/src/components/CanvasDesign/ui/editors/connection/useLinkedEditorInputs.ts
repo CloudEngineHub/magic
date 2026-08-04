@@ -53,6 +53,7 @@ function areCropConfigsEqual(a?: CropConfig, b?: CropConfig): boolean {
 function areLinkedMediaItemsEqual(
 	prev: LinkedEditorMediaItem[],
 	next: LinkedEditorMediaItem[],
+	resolveAbsolutePath?: (path: string) => string,
 ): boolean {
 	if (prev.length !== next.length) return false
 	for (let index = 0; index < prev.length; index += 1) {
@@ -63,8 +64,8 @@ function areLinkedMediaItemsEqual(
 		if (prevItem.sourceElementId !== nextItem.sourceElementId) return false
 		if (prevItem.kind !== nextItem.kind) return false
 		if (
-			getLinkedMediaReferenceIdentity(prevItem.path) !==
-			getLinkedMediaReferenceIdentity(nextItem.path)
+			getLinkedMediaReferenceIdentity(prevItem.path, resolveAbsolutePath) !==
+			getLinkedMediaReferenceIdentity(nextItem.path, resolveAbsolutePath)
 		) {
 			return false
 		}
@@ -81,6 +82,7 @@ function areLinkedMediaItemsEqual(
 function areLinkedMediaReferencesEqual(
 	prev: LinkedEditorMediaReference[],
 	next: LinkedEditorMediaReference[],
+	resolveAbsolutePath?: (path: string) => string,
 ): boolean {
 	if (prev.length !== next.length) return false
 	for (let index = 0; index < prev.length; index += 1) {
@@ -89,8 +91,8 @@ function areLinkedMediaReferencesEqual(
 		if (!prevItem || !nextItem) return false
 		if (prevItem.kind !== nextItem.kind) return false
 		if (
-			getLinkedMediaReferenceIdentity(prevItem.path) !==
-			getLinkedMediaReferenceIdentity(nextItem.path)
+			getLinkedMediaReferenceIdentity(prevItem.path, resolveAbsolutePath) !==
+			getLinkedMediaReferenceIdentity(nextItem.path, resolveAbsolutePath)
 		) {
 			return false
 		}
@@ -102,6 +104,7 @@ function areLinkedMediaReferencesEqual(
 function areLinkedEditorInputsEqual(
 	prev: LinkedEditorInputsResolution,
 	next: LinkedEditorInputsResolution,
+	resolveAbsolutePath?: (path: string) => string,
 ): boolean {
 	if (prev.textPrompt !== next.textPrompt) return false
 	if (prev.textConnections.length !== next.textConnections.length) return false
@@ -114,8 +117,12 @@ function areLinkedEditorInputsEqual(
 		if (prevItem.text !== nextItem.text) return false
 	}
 	return (
-		areLinkedMediaItemsEqual(prev.mediaItems, next.mediaItems) &&
-		areLinkedMediaReferencesEqual(prev.activeMediaReferences, next.activeMediaReferences)
+		areLinkedMediaItemsEqual(prev.mediaItems, next.mediaItems, resolveAbsolutePath) &&
+		areLinkedMediaReferencesEqual(
+			prev.activeMediaReferences,
+			next.activeMediaReferences,
+			resolveAbsolutePath,
+		)
 	)
 }
 
@@ -180,6 +187,7 @@ export function useLinkedEditorInputs(
 	const orderedTextConnectionIds = reconciledEditorDraft.orderedTextConnectionIds
 
 	const refreshInputs = useCallback(() => {
+		const resolveAbsolutePath = canvas?.magicConfigManager?.config?.methods?.resolveAbsolutePath
 		const nextResolution = resolveLinkedEditorInputs({
 			canvas,
 			targetElementId,
@@ -188,7 +196,7 @@ export function useLinkedEditorInputs(
 			mediaPolicy,
 		})
 		setResolution((prevResolution) =>
-			areLinkedEditorInputsEqual(prevResolution, nextResolution)
+			areLinkedEditorInputsEqual(prevResolution, nextResolution, resolveAbsolutePath)
 				? prevResolution
 				: nextResolution,
 		)
@@ -239,8 +247,10 @@ export function useLinkedEditorInputs(
 				manualReferences: mediaPolicy?.manualReferences,
 				targetKind,
 				mediaPolicy,
+				resolveAbsolutePath:
+					canvas?.magicConfigManager?.config?.methods?.resolveAbsolutePath,
 			}),
-		[mediaPolicy, mentionedReferencePaths, resolution.mediaItems, targetKind],
+		[canvas, mediaPolicy, mentionedReferencePaths, resolution.mediaItems, targetKind],
 	)
 
 	useEffect(() => {

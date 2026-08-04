@@ -138,6 +138,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	)
 	const { selectedElements } = useCanvasSelectionUI()
 	const { canvas } = useCanvas()
+	const resolveAbsolutePath = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	const resolveResourcePathCandidates =
 		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
 	const normalizeResourcePathForStorage =
@@ -202,6 +203,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			mediaPolicy: linkedMediaPolicy,
 			editorRef,
 			onReadyMentionChange: handlers.handleReferenceMentionPathsChange,
+			resolveAbsolutePath,
 		})
 	const linkedFrameBindingSync = useMemo(
 		() =>
@@ -211,6 +213,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				supportsStartFrame: config.supportsStartFrame,
 				supportsEndFrame: config.supportsEndFrame,
 				linkedMediaItems: linkedEditorInputs.mediaItems,
+				resolveAbsolutePath,
 			}),
 		[
 			config.currentFrameImages,
@@ -218,6 +221,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			config.supportsStartFrame,
 			linkedEditorInputs.mediaItems,
 			linkedFrameBindings,
+			resolveAbsolutePath,
 		],
 	)
 	useEffect(() => {
@@ -237,8 +241,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			mergeLinkedVideoReferenceAssetInfos(
 				config.referenceImageInfos,
 				linkedEditorInputs.activeMediaReferences,
+				resolveAbsolutePath,
 			),
-		[config.referenceImageInfos, linkedEditorInputs.activeMediaReferences],
+		[config.referenceImageInfos, linkedEditorInputs.activeMediaReferences, resolveAbsolutePath],
 	)
 	const effectiveReferencePaths = useMemo(
 		() => mergedReferenceAssetInfos.map((info) => info.path),
@@ -438,12 +443,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			if (!item.path) return
 			const sourceFileName =
 				item.fileName || getCanvasResourceFileName(item.path) || item.path
-			const sourceIdentity = getLinkedMediaReferenceIdentity(item.path)
+			const sourceIdentity = getLinkedMediaReferenceIdentity(item.path, resolveAbsolutePath)
 			const duplicateSourceFrameIndex = config.currentFrameImages.findIndex(
 				(path, index) =>
 					index !== slotIndex &&
 					Boolean(path) &&
-					getLinkedMediaReferenceIdentity(path) === sourceIdentity,
+					getLinkedMediaReferenceIdentity(path, resolveAbsolutePath) === sourceIdentity,
 			)
 			if (duplicateSourceFrameIndex >= 0) {
 				toast.error(t("videoEditor.frameResourceAlreadyUsed", "该资源已用于其他帧"))
@@ -467,7 +472,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				return next
 			})
 		},
-		[config.currentFrameImages, handlers, setLinkedFrameBindings, t],
+		[config.currentFrameImages, handlers, resolveAbsolutePath, setLinkedFrameBindings, t],
 	)
 
 	const handleProjectSelect = useCallback(
@@ -811,6 +816,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					referenceAssetInfos: mergedReferenceAssetInfos,
 					promptReferences,
 					promptPlaceholderTokenConfig,
+					resolveAbsolutePath,
 				}),
 			}),
 		}
@@ -832,6 +838,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		linkedEditorInputs.activeMediaReferences,
 		mergedReferenceAssetInfos,
 		promptPlaceholderTokenConfig,
+		resolveAbsolutePath,
 	])
 
 	const sendButtonBusy = isSending || isEstimateLoading
@@ -967,9 +974,13 @@ function buildVideoReferenceAssetInfosFromReferences(
 function mergeLinkedVideoReferenceAssetInfos(
 	manualInfos: VideoReferenceAssetInfo[],
 	linkedReferences: LinkedEditorMediaReference[],
+	resolveAbsolutePath?: (path: string) => string,
 ): VideoReferenceAssetInfo[] {
 	const manualInfoByIdentity = new Map(
-		manualInfos.map((info) => [getLinkedMediaReferenceIdentity(info.path), info]),
+		manualInfos.map((info) => [
+			getLinkedMediaReferenceIdentity(info.path, resolveAbsolutePath),
+			info,
+		]),
 	)
 	return mergeLinkedMediaReferences(
 		manualInfos.map((info) => ({
@@ -977,10 +988,12 @@ function mergeLinkedVideoReferenceAssetInfos(
 			path: info.path,
 		})),
 		linkedReferences,
+		resolveAbsolutePath,
 	).map(
 		(reference) =>
-			manualInfoByIdentity.get(getLinkedMediaReferenceIdentity(reference.path)) ??
-			buildVideoReferenceAssetInfoFromReference(reference),
+			manualInfoByIdentity.get(
+				getLinkedMediaReferenceIdentity(reference.path, resolveAbsolutePath),
+			) ?? buildVideoReferenceAssetInfoFromReference(reference),
 	)
 }
 
@@ -1020,6 +1033,7 @@ function buildVideoPromptOptimizationReferences(options: {
 	referenceAssetInfos: VideoReferenceAssetInfo[]
 	promptReferences: VideoPromptPlaceholderReference[]
 	promptPlaceholderTokenConfig: PromptPlaceholderTokenConfig
+	resolveAbsolutePath?: (path: string) => string
 }): PromptOptimizationReferenceContext[] {
 	const {
 		frameImageInfos,
@@ -1028,18 +1042,25 @@ function buildVideoPromptOptimizationReferences(options: {
 		referenceAssetInfos,
 		promptReferences,
 		promptPlaceholderTokenConfig,
+		resolveAbsolutePath,
 	} = options
 	const visualIndexByIdentity = new Map(
-		referenceImages.map((path, index) => [getCanvasResourceIdentity(path), index + 1] as const),
+		referenceImages.map(
+			(path, index) =>
+				[getCanvasResourceIdentity(path, resolveAbsolutePath), index + 1] as const,
+		),
 	)
 	const promptReferenceByIdentity = new Map(
-		promptReferences.map((reference) => [getCanvasResourceIdentity(reference.path), reference]),
+		promptReferences.map((reference) => [
+			getCanvasResourceIdentity(reference.path, resolveAbsolutePath),
+			reference,
+		]),
 	)
 	const references: PromptOptimizationReferenceContext[] = []
 	const referenceByIdentity = new Map<string, PromptOptimizationReferenceContext>()
 
 	const pushReference = (path: string, reference: PromptOptimizationReferenceContext) => {
-		const identity = getCanvasResourceIdentity(path)
+		const identity = getCanvasResourceIdentity(path, resolveAbsolutePath)
 		const existing = referenceByIdentity.get(identity)
 		if (existing) {
 			mergePromptOptimizationReference(existing, reference)
@@ -1058,7 +1079,9 @@ function buildVideoPromptOptimizationReferences(options: {
 			label: getVideoFramePromptOptimizationLabel(frameRole, index),
 			fileName: info.fileName || getFileNameFromPath(info.path),
 			isVisualInput: true,
-			visualReferenceIndex: visualIndexByIdentity.get(getCanvasResourceIdentity(info.path)),
+			visualReferenceIndex: visualIndexByIdentity.get(
+				getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+			),
 			role: getVideoFramePromptOptimizationRole(frameRole),
 		})
 	})
@@ -1070,7 +1093,9 @@ function buildVideoPromptOptimizationReferences(options: {
 	}
 	referenceAssetInfos.forEach((info) => {
 		assetTypeCounters[info.assetType] += 1
-		const promptReference = promptReferenceByIdentity.get(getCanvasResourceIdentity(info.path))
+		const promptReference = promptReferenceByIdentity.get(
+			getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+		)
 		pushReference(info.path, {
 			kind: info.assetType,
 			placeholder: promptReference
@@ -1087,7 +1112,9 @@ function buildVideoPromptOptimizationReferences(options: {
 			isVisualInput: info.assetType === "image",
 			visualReferenceIndex:
 				info.assetType === "image"
-					? visualIndexByIdentity.get(getCanvasResourceIdentity(info.path))
+					? visualIndexByIdentity.get(
+							getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+						)
 					: undefined,
 			role: getVideoAssetPromptOptimizationRole(info.assetType),
 		})

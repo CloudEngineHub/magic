@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest"
 import { buildImageRequestWithLinkedEditorInputs } from "../linkedImageRequest"
 
+function resolveDesignAAbsolutePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/")
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
+	if (normalized.startsWith("画布A/")) return `/${normalized}`
+	return normalized
+}
+
 describe("buildImageRequestWithLinkedEditorInputs", () => {
 	it("adds linked image crop options to the generated image request", () => {
 		const request = buildImageRequestWithLinkedEditorInputs(
@@ -130,5 +140,26 @@ describe("buildImageRequestWithLinkedEditorInputs", () => {
 				crop: { x: 10, y: 20, width: 300, height: 200 },
 			},
 		])
+	})
+
+	it("keeps workspace-root and current-canvas references separate with host identity", () => {
+		const request = buildImageRequestWithLinkedEditorInputs(
+			{
+				reference_images: ["./images/shared.png"],
+			},
+			{
+				textPrompt: "",
+				activeMediaReferences: [
+					{
+						kind: "image",
+						path: "/images/shared.png",
+					},
+				],
+			},
+			"",
+			resolveDesignAAbsolutePath,
+		)
+
+		expect(request.reference_images).toEqual(["./images/shared.png", "/images/shared.png"])
 	})
 })

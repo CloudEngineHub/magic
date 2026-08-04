@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
 	areCanvasResourcePathsSame,
 	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
 	normalizeCanvasUploadFileResponsePath,
 	normalizeCanvasUploadStoragePath,
 	toCanvasUploadStoragePath,
@@ -11,15 +12,16 @@ import {
 } from "../canvasResourcePath"
 
 function resolveAbsolutePath(path: string): string {
-	const normalized = path
-		.replace(/\\/g, "/")
-		.replace(/^\.\/+/, "")
-		.replace(/^\/+/, "")
+	const normalized = path.replace(/\\/g, "/")
 	if (!normalized) return "/画布A/"
+	if (normalized.startsWith("./")) {
+		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	}
+	if (normalized.startsWith("/")) return normalized
 	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
 		return `/${normalized}`
 	}
-	return `/画布A/${normalized}`
+	return normalized
 }
 
 describe("canvasResourcePath", () => {
@@ -46,6 +48,13 @@ describe("canvasResourcePath", () => {
 		expect(toCanonicalCanvasResourcePath("/画布B/images/a.png", resolveAbsolutePath)).toBe(
 			"画布B/images/a.png",
 		)
+		expect(
+			areCanvasResourcePathsSame("./images/a.png", "/images/a.png", resolveAbsolutePath),
+		).toBe(false)
+		expect(getCanvasResourceIdentity("./images/a.png", resolveAbsolutePath)).toBe(
+			"画布A/images/a.png",
+		)
+		expect(getCanvasResourceIdentity("/images/a.png", resolveAbsolutePath)).toBe("images/a.png")
 	})
 
 	it("keeps remote load deferral keys stable for canvas-relative aliases", () => {

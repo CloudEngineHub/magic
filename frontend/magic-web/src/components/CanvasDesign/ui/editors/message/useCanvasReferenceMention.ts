@@ -108,7 +108,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 
 		const pushItem = (item: MatchableMentionItem) => {
 			if (item.path) {
-				const identity = getCanvasResourceIdentity(item.path)
+				const identity = getCanvasResourceIdentity(item.path, methods?.resolveAbsolutePath)
 				if (seenPathIdentities.has(identity)) return
 				seenPathIdentities.add(identity)
 			}
@@ -146,11 +146,13 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 							currentAssetCounts,
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
+							resolveAbsolutePath: methods?.resolveAbsolutePath,
 						})
 					: isReferenceSelectionLimitBlocked({
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
 							isReferenceFileLimitReached,
+							resolveAbsolutePath: methods?.resolveAbsolutePath,
 						})),
 		}))
 	}, [
@@ -161,6 +163,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		referenceResourceType,
 		assetLimits,
 		currentAssetCounts,
+		methods?.resolveAbsolutePath,
 	])
 
 	const mentionNodeViewRenderers = useMemo(() => {

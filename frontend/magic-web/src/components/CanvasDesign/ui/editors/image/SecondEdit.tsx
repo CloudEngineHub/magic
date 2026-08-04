@@ -37,7 +37,7 @@ interface SecondEditProps {
 export default function SecondEdit(props: SecondEditProps) {
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
-	const { imageModelList } = useMagic()
+	const { imageModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [pendingOpenMode, setPendingOpenMode] = useState<"quick-edit" | "regenerate" | null>(null)
@@ -258,6 +258,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				requestParams,
 				linkedEditorInputs,
 				prompt,
+				methods?.resolveAbsolutePath,
 			)
 			if (!generateRequest.prompt?.trim()) return
 
@@ -273,7 +274,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				},
 			)
 		},
-		[createAndSubmitImageGeneration, handlers, prompt],
+		[createAndSubmitImageGeneration, handlers, methods?.resolveAbsolutePath, prompt],
 	)
 
 	const handleGenerateAgain = useCallback(async () => {

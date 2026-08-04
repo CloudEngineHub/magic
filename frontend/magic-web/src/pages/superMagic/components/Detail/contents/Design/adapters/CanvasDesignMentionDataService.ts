@@ -191,6 +191,8 @@ export interface LimitInfo {
 	referenceFileInfos?: ReferenceResourceFileInfo[]
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	/** 宿主路径解析器，用于资源同一性比较。 */
+	resolveAbsolutePath?: (path: string) => string
 	/** 面包屑等文案用；搜索列表右侧路径与 MessageEditor 一致，由 MentionPanel renderer 根据 file_path 计算 */
 	projectFilesPathPrefix?: string
 	/** 设计根目录显示名，副标题为 `{prefix}/{父路径}`（与 workspace renderer 约定 metadata 键） */
@@ -462,6 +464,7 @@ export class CanvasDesignMentionDataService implements DataService {
 			currentAssetCounts: limitInfo.currentAssetCounts,
 			candidatePaths: [file.rawPath, file.filePath, file.fileId],
 			currentReferenceFiles: limitInfo.currentReferenceFiles,
+			resolveAbsolutePath: limitInfo.resolveAbsolutePath,
 		})
 	}
 
@@ -608,6 +611,7 @@ export class CanvasDesignMentionDataService implements DataService {
 					!isReferenceResourceCurrentlySelected(
 						candidates,
 						limitInfo.currentReferenceFiles,
+						limitInfo.resolveAbsolutePath,
 					),
 			}
 		})

@@ -114,7 +114,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		enableProjectSelectMultiSelect = true,
 	} = props
 	const { t } = useCanvasDesignI18n()
-	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
+	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer, methods } = useMagic()
 	const [displayMode, setDisplayMode] = useState<"hover" | "click">("click")
 	const [isProjectSelectVisible, setIsProjectSelectVisible] = useState(false)
 	const internalTriggerRef = useRef<HTMLDivElement>(null)
@@ -299,6 +299,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				assetLimits,
 				currentAssetCounts,
 				maxBatchItems: maxProjectSelectBatchCount,
+				resolveAbsolutePath: methods?.resolveAbsolutePath,
 			})
 
 			let didReset = false
@@ -329,6 +330,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 			handleProjectSelectClose,
 			maxProjectSelectBatchCount,
 			maxReferenceFiles,
+			methods?.resolveAbsolutePath,
 			onProjectSelect,
 		],
 	)

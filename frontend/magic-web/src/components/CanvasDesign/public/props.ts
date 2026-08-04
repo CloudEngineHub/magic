@@ -118,6 +118,8 @@ export interface ReferenceResourcePanelLimitInfo {
 	}>
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	/** 宿主路径解析器，用于区分工作区根路径与当前画布相对路径。 */
+	resolveAbsolutePath?: (path: string) => string
 	/** 面包屑等展示用文案前缀（如「当前项目文件」） */
 	projectFilesPathPrefix?: string
 	/**

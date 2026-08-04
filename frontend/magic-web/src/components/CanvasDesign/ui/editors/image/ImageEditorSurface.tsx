@@ -49,7 +49,7 @@ import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInput
 import { useLinkedMediaAssociationController } from "../connection/useLinkedMediaAssociationController"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
 import {
-	mergeLinkedMediaPaths,
+	mergeLinkedMediaPathsWithResolver,
 	type LinkedEditorMediaPolicy,
 } from "../connection/linkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
@@ -108,6 +108,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
+	const resolveAbsolutePath = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	const resolveResourcePathCandidates =
 		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
 	const normalizeResourcePathForStorage =
@@ -147,6 +148,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		mediaPolicy: linkedMediaPolicy,
 		editorRef,
 		onReadyMentionChange: config.handlers.handlePromptReferencePathsChange,
+		resolveAbsolutePath,
 	})
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const buildImagePromptPlaceholderToken = useMemo(
@@ -168,8 +170,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[linkedEditorInputs.activeMediaReferences],
 	)
 	const effectiveCurrentReferenceFiles = useMemo(
-		() => mergeLinkedMediaPaths(currentReferenceFiles, linkedActiveImagePaths),
-		[currentReferenceFiles, linkedActiveImagePaths],
+		() =>
+			mergeLinkedMediaPathsWithResolver(
+				resolveAbsolutePath,
+				currentReferenceFiles,
+				linkedActiveImagePaths,
+			),
+		[currentReferenceFiles, linkedActiveImagePaths, resolveAbsolutePath],
 	)
 	const promptOptimizationPlaceholderPaths = useMemo(
 		() => ({ image: effectiveCurrentReferenceFiles }),
@@ -369,7 +376,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
 			if (handleAssociationMentionChange(paths, currentPrompt, context)) {
-				syncMentionPaths(paths, currentPrompt)
+				syncMentionPaths(paths, currentPrompt, context)
 			}
 		},
 		[handleAssociationMentionChange, syncMentionPaths],
@@ -380,12 +387,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const currentPrompt = editorRef.current?.getCurrentPrompt() ?? prompt
 			const fileName =
 				config.referenceFileInfos.find((info) =>
-					areCanvasResourcePathsSame(info.path, path),
+					areCanvasResourcePathsSame(info.path, path, resolveAbsolutePath),
 				)?.fileName ?? getCanvasResourceFileName(path)
 			handlers.setPrompt(removeMentionFromString(currentPrompt, path, fileName))
 			handlers.handleReferenceFileRemove(path)
 		},
-		[config.referenceFileInfos, editorRef, handlers, prompt],
+		[config.referenceFileInfos, editorRef, handlers, prompt, resolveAbsolutePath],
 	)
 
 	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
@@ -400,6 +407,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				textPrompt: linkedEditorInputs.textPrompt,
 			},
 			prompt,
+			resolveAbsolutePath,
 		)
 		const referenceImages = request.reference_images ?? []
 		const encodedPrompt = (request.prompt ?? currentPrompt).trim()
@@ -434,6 +442,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		linkedEditorInputs.activeMediaReferences,
 		linkedEditorInputs.textPrompt,
 		prompt,
+		resolveAbsolutePath,
 	])
 
 	return (

@@ -86,9 +86,17 @@ export function areCanvasResourcePathsSame(
 	)
 }
 
-/** 用于跨编辑器、关联媒体与参考资源状态比较的稳定资源身份。 */
-export function getCanvasResourceIdentity(path?: string): string {
-	return path ? toCanonicalCanvasResourcePath(path) : ""
+/**
+ * 用于跨编辑器、关联媒体与参考资源状态比较的稳定资源身份。
+ *
+ * 编辑器处于宿主项目上下文时必须传入 resolveAbsolutePath，避免把工作区根路径
+ * `/images/a.png` 与当前画布路径 `./images/a.png` 按弱兼容规则错误折叠。
+ */
+export function getCanvasResourceIdentity(
+	path?: string,
+	resolveAbsolutePath?: (path: string) => string,
+): string {
+	return path ? toCanonicalCanvasResourcePath(path, resolveAbsolutePath) : ""
 }
 
 export function toCanvasUploadStoragePath(fileDir: string, fileName: string): string {
