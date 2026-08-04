@@ -21,6 +21,8 @@ export interface FilePreviewPolicy {
 	standalone?: boolean
 	/** 是否参与文件编辑状态上报和编辑冲突检测。 */
 	editingPresence?: boolean
+	/** 是否允许发起文件分享。 */
+	allowShare?: boolean
 	persistTab?: boolean
 	syncWithAttachments?: boolean
 	keepLocalContent?: boolean

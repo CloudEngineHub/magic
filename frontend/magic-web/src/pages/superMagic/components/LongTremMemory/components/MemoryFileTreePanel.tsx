@@ -71,6 +71,7 @@ function createMemoryPreviewItem(item: AttachmentItem): AttachmentItem {
 				...(item.display_config?.previewPolicy || {}),
 				standalone: true,
 				editingPresence: false,
+				allowShare: false,
 				syncWithAttachments: false,
 				persistTab: false,
 				restoreAsActive: false,

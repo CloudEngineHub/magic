@@ -2,7 +2,7 @@ import ContentRenderer from "./components/ContentRenderer"
 import { DetailType } from "./types"
 import { SuperMagicApi } from "@/apis"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useDeepCompareEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
@@ -37,7 +37,14 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
-import { isEditingPresenceEnabled } from "./components/FilesViewer/hooks/previewPolicy"
+import {
+	isEditingPresenceEnabled,
+	isFileShareAllowed,
+} from "./components/FilesViewer/hooks/previewPolicy"
+import {
+	FileActionVisibilityProvider,
+	useFileActionVisibility,
+} from "@/pages/superMagic/providers/file-action-visibility-provider"
 
 export default function Render(props: any) {
 	const {
@@ -93,7 +100,17 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
-	const editingPresenceEnabled = isEditingPresenceEnabled(displayConfig || data?.display_config)
+	const effectiveDisplayConfig = displayConfig || data?.display_config
+	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
+	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
+	const inheritedFileActionVisibility = useFileActionVisibility()
+	const fileActionVisibility = useMemo(
+		() => ({
+			...inheritedFileActionVisibility,
+			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
+		}),
+		[inheritedFileActionVisibility, fileShareAllowed],
+	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
 		(type === DetailType.Html &&
@@ -727,7 +744,7 @@ export default function Render(props: any) {
 		updatedAt,
 		detailMode,
 		// display_config: display_config || data?.display_config,
-		displayConfig: displayConfig || data?.display_config,
+		displayConfig: effectiveDisplayConfig,
 		openFileTab,
 		exportFile,
 		exportPdf,
@@ -784,7 +801,9 @@ export default function Render(props: any) {
 						)
 					}
 				>
-					<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					<FileActionVisibilityProvider value={fileActionVisibility}>
+						<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					</FileActionVisibilityProvider>
 				</Suspense>
 			</div>
 

@@ -39,6 +39,11 @@ export function isEditingPresenceEnabled(
 	return displayConfig?.previewPolicy?.editingPresence !== false
 }
 
+/** 判断当前预览文件是否允许发起文件分享。 */
+export function isFileShareAllowed(displayConfig: FileItem["display_config"] | null | undefined) {
+	return displayConfig?.previewPolicy?.allowShare !== false
+}
+
 function isExplicitOpenFilePayload(file: OpenFilePayloadLike | undefined): file is FileItem {
 	if (!file?.file_id || file.is_directory) return false
 
