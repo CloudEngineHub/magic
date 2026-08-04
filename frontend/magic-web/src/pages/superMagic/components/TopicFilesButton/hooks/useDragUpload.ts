@@ -7,10 +7,13 @@ import type { AttachmentItem } from "./types"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 interface UseDragUploadOptions {
 	allowUpload?: boolean
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	selectedProject?: any
 	selectedTopic?: any
 	workspaceId?: string
@@ -40,6 +43,7 @@ interface UseDragUploadReturn {
 export function useDragUpload({
 	allowUpload = true,
 	projectId,
+	fileScope,
 	selectedProject,
 	selectedTopic,
 	workspaceId,
@@ -67,6 +71,7 @@ export function useDragUpload({
 				try {
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
+						fileScope,
 						workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
 						topicId: selectedTopic?.id,
@@ -119,6 +124,7 @@ export function useDragUpload({
 			attachments,
 			onUpdateAttachments,
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -152,6 +158,7 @@ export function useDragUpload({
 			try {
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
+					fileScope,
 					workspaceId,
 					projectName: selectedProject?.project_name || t("common.untitledProject"),
 					topicId: selectedTopic?.id,
@@ -193,6 +200,7 @@ export function useDragUpload({
 			attachments,
 			onUpdateAttachments,
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,

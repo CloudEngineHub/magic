@@ -47,6 +47,7 @@ import {
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
 import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -98,8 +99,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
-					| undefined
+					{ type?: string; [key: string]: unknown } | undefined
 				if (config?.type === "slide") {
 					return item
 				}
@@ -228,6 +228,8 @@ export interface UseFileOperationsOptions {
 	attachments?: AttachmentItem[]
 	selectedTopic?: any
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	getItemId?: (item: AttachmentItem) => string
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
@@ -254,6 +256,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		attachments,
 		selectedTopic,
 		projectId,
+		fileScope,
 		getItemId,
 		onFileDelete,
 		onFileCreated,
@@ -274,6 +277,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			reason: string
 			callback?: () => void
 		}) => {
+			if (fileScope) {
+				options.callback?.()
+				return
+			}
+
 			void waitForProjectAttachmentChange(projectId, {
 				...options,
 				fallback: "full-refresh",
@@ -362,6 +370,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					// 为单个文件创建任务
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
+						fileScope,
 						workspaceId: workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
 						topicId: selectedTopic?.id,
@@ -427,6 +436,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -471,6 +481,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				// 所有文件作为一个任务
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
+					fileScope,
 					workspaceId: workspaceId,
 					projectName: selectedProject?.project_name || t("common.untitledProject"),
 					topicId: selectedTopic?.id,
@@ -533,6 +544,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -965,11 +977,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const toastId = createRandomUuidV4()
 			const resourceErrors = documentExporter.createResourceErrorCollector(t)
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -982,8 +992,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
-						| undefined
+						{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
 				}
@@ -1190,11 +1199,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides

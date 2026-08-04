@@ -114,6 +114,7 @@ import {
 	shouldEnableTopicFileSelection,
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
+import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -153,7 +154,7 @@ interface TopicFilesCoreProps {
 	// 外部传入的搜索值
 	externalSearchValue?: string
 	// 自定义菜单项过滤器
-	filterMenuItems?: (menuItems: any[]) => any[]
+	filterMenuItems?: (menuItems: any[], item?: AttachmentItem) => any[]
 	// 自定义批量下载菜单过滤器
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
@@ -163,7 +164,15 @@ interface TopicFilesCoreProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	// 刷新加载状态
 	refreshLoading?: boolean
+	/** 文件树所属空间及其能力配置。 */
+	spaceConfig?: TopicFilesSpaceConfig
+	/** 判断节点是否允许参与移动和多选等变更操作。 */
+	isItemSelectable?: (item: AttachmentItem) => boolean
+	/** 特殊文件空间允许操作的固定根目录。 */
+	operationRoot?: AttachmentItem
 }
+
+const DEFAULT_ITEM_SELECTABLE = () => true
 
 // 定义 ref 暴露的方法接口
 export interface TopicFilesCoreRef {
@@ -217,12 +226,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
+		spaceConfig,
+		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
+		operationRoot,
 	},
 	ref,
 ) {
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useIsMobile()
+	const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
 	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
@@ -237,7 +250,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		allowReadonlySelection,
 	})
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
-	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
+	const canUseDesktopCrossProjectMove =
+		capabilities.crossProject && projects.length > 0 && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 	const downloadProgress = useDownloadProgress()
 
@@ -261,9 +275,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const sharedDuplicateHandler = externalDuplicateHandler || internalDuplicateHandler
 
 	// 拖拽上传 hook
-	const { handleUploadFiles } = useDragUpload({
-		allowUpload: allowEdit,
+	const { handleUploadFiles: handleUploadFilesInternal } = useDragUpload({
+		allowUpload: allowEdit && capabilities.upload,
 		projectId,
+		fileScope: spaceConfig?.scope,
 		selectedProject,
 		selectedTopic,
 		workspaceId,
@@ -300,8 +315,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const {
-		handleUploadFile,
-		handleUploadFolder,
+		handleUploadFile: handleUploadFileInternal,
+		handleUploadFolder: handleUploadFolderInternal,
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
@@ -331,6 +346,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		attachments,
 		selectedTopic,
 		projectId,
+		fileScope: spaceConfig?.scope,
 		// 添加文件创建成功回调
 		onFileCreated: (fileItem: any) => {
 			console.log("🔵 文件创建成功回调:", fileItem)
@@ -395,7 +411,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setVirtualFileName,
 		errorMessage: fileErrorMessage,
 		virtualInputRef: virtualFileInputRef,
-		createVirtualFile,
+		createVirtualFile: createVirtualFileInternal,
 		cancelVirtualFile,
 		handleVirtualFileKeyDown,
 		mergeVirtualFiles,
@@ -415,7 +431,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setVirtualFolderName,
 		errorMessage: folderErrorMessage,
 		virtualInputRef: virtualFolderInputRef,
-		createVirtualFolder,
+		createVirtualFolder: createVirtualFolderInternal,
 		cancelVirtualFolder,
 		handleVirtualFolderKeyDown,
 		mergeVirtualFolders,
@@ -428,6 +444,46 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onFolderCreate: createFolderAndUpload,
 		onAttachmentsChange,
 	})
+
+	/** 获取特殊文件空间固定根目录的标准路径。 */
+	const operationRootPath = useMemo(() => {
+		if (!operationRoot) return undefined
+
+		const rootName = operationRoot.file_name || operationRoot.name || operationRoot.filename
+		return operationRoot.relative_file_path || (rootName ? `/${rootName}` : undefined)
+	}, [operationRoot])
+
+	/** 在未指定父目录时，将新文件创建到特殊文件空间的固定根目录。 */
+	const createVirtualFile = useMemoizedFn(
+		(type: PresetFileType, key?: string, parentPath?: string) => {
+			createVirtualFileInternal(
+				type,
+				key ?? operationRoot?.file_id,
+				parentPath ?? operationRootPath,
+			)
+		},
+	)
+
+	/** 在未指定父目录时，将新目录创建到特殊文件空间的固定根目录。 */
+	const createVirtualFolder = useMemoizedFn((key?: string, parentPath?: string) => {
+		createVirtualFolderInternal(key ?? operationRoot?.file_id, parentPath ?? operationRootPath)
+	})
+
+	/** 在未指定目标目录时，将文件选择上传定位到特殊文件空间的固定根目录。 */
+	const handleUploadFile = useMemoizedFn((item?: AttachmentItem) => {
+		handleUploadFileInternal(item ?? operationRoot)
+	})
+
+	/** 在未指定目标目录时，将目录选择上传定位到特殊文件空间的固定根目录。 */
+	const handleUploadFolder = useMemoizedFn((item?: AttachmentItem) => {
+		handleUploadFolderInternal(item ?? operationRoot)
+	})
+
+	/** 在未指定拖拽目标时，将外部文件上传到特殊文件空间的固定根目录。 */
+	const handleUploadFiles = useMemoizedFn(
+		(files: File[], targetItem: AttachmentItem | undefined, isFolder: boolean) =>
+			handleUploadFilesInternal(files, targetItem ?? operationRoot, isFolder),
+	)
 
 	const {
 		editingVirtualId: editingVirtualDesignProjectId,
@@ -544,6 +600,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		selectionEnabled,
 		onSelectionChange,
 		onSelectModeChange,
+		isItemSelectable,
 	})
 
 	// 文件分享 hook
@@ -604,20 +661,20 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleTreeNodeDragOver,
 		handleTreeNodeDrop,
 	} = useDragMove({
-		allowMove: allowEdit,
+		allowMove: allowEdit && capabilities.move,
 		onMoveFiles: async (fileIds: string[], targetFolderId: string | null) => {
 			if (fileIds.length === 0) return
 
 			await moveFileHook.batchMoveFilesWithDuplicateCheck({
 				fileIds,
 				projectId: selectedProject?.id || projectId || "",
-				targetParentId: targetFolderId || "",
+				targetParentId: targetFolderId || operationRoot?.file_id || "",
 			})
 		},
 		debug: process.env.NODE_ENV === "development",
 		isMoving: moveFileHook.isMoving, // 传递移动状态
 		// 外部文件上传支持
-		allowExternalDrop: allowEdit,
+		allowExternalDrop: allowEdit && capabilities.upload,
 		onUploadFiles: handleUploadFiles,
 	})
 
@@ -630,7 +687,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 		// 检查所有被拖拽的文件是否已经在根目录
 		for (const item of dragState.draggingItems) {
-			if (isInRootDirectory(item)) {
+			const isInOperationRoot = operationRoot
+				? String(item.parent_id || "") === String(operationRoot.file_id || "")
+				: isInRootDirectory(item)
+			if (isInOperationRoot) {
 				return false // 如果有任何文件已经在根目录，则不允许移动到根目录
 			}
 		}
@@ -657,7 +717,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleFileListAreaDragEnd,
 		handleFileListAreaDrop,
 	} = useFileListAreaDrag({
-		allowEdit,
+		allowEdit: allowEdit && (capabilities.move || capabilities.upload),
 		// 传递新的拖拽移动处理器
 		handleFileDragEnter: handleDragEnter,
 		handleFileDragLeave: handleDragLeave,
@@ -666,7 +726,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		// 传递检查函数
 		canMoveToRoot,
 		// 外部文件上传支持
-		allowExternalDrop: allowEdit,
+		allowExternalDrop: allowEdit && capabilities.upload,
 		onUploadFiles: handleUploadFiles,
 	})
 
@@ -696,8 +756,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getItemId,
 		afterAddFileToCurrentTopic,
 		afterAddFileToNewTopic,
-		selectedWorkspace,
-		selectedProject,
+		selectedWorkspace: spaceConfig?.chatContext?.selectedWorkspace ?? selectedWorkspace,
+		selectedProject: spaceConfig?.chatContext?.selectedProject ?? selectedProject,
+		serializeAttachmentToChatText: spaceConfig?.chatContext?.serializeAttachmentToChatText,
 	})
 
 	// 确认移动：交由 hook 内部批量处理
@@ -714,7 +775,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				return
 			}
 
-			await moveFileHook.confirmMove({ path })
+			const targetPath = path.length === 0 && operationRoot ? [operationRoot] : path
+			await moveFileHook.confirmMove({ path: targetPath })
 		},
 	)
 
@@ -840,6 +902,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 文件快捷键 hook（需要在 useContextMenu 之前调用）
 	const { getShortcutHint } = useFileShortcuts({
+		enabled: capabilities.addToChat,
 		hoveredItemRef,
 		contextMenuItemId,
 		treeIndex,
@@ -855,10 +918,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const { getMenuItems, getBatchDownloadLayerMenuItems, deleteConfirmNode } = useContextMenu({
-		handleUploadFile,
-		handleUploadFolder,
-		handleImportFromOtherProject,
-		handleShareItem: handleShareItemFromHook,
+		handleUploadFile: capabilities.upload ? handleUploadFile : undefined,
+		handleUploadFolder: capabilities.upload ? handleUploadFolder : undefined,
+		handleImportFromOtherProject: capabilities.importFromOtherProject
+			? handleImportFromOtherProject
+			: undefined,
+		handleShareItem: capabilities.share ? handleShareItemFromHook : undefined,
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
@@ -868,28 +933,40 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleOpenFile,
 		handleStartRename,
 		handleShowInfo,
-		handleAddToCurrentChat,
-		handleAddToNewChat,
-		handleMoveFile: handleMoveFileAdapter,
-		handleReplaceFile,
-		onCopyFile: handleCopyFileAdapter,
+		handleAddToCurrentChat: capabilities.addToChat ? handleAddToCurrentChat : undefined,
+		handleAddToNewChat: capabilities.addToChat ? handleAddToNewChat : undefined,
+		handleMoveFile: capabilities.move ? handleMoveFileAdapter : undefined,
+		handleReplaceFile: capabilities.replace ? handleReplaceFile : undefined,
+		onCopyFile: capabilities.crossProject ? handleCopyFileAdapter : undefined,
 		createVirtualFile,
 		createVirtualFolder,
-		createVirtualDesignProject,
-		createVirtualSelfMediaProject,
-		createVirtualAICardProject: (_key?: string, parentPath?: string) => {
-			openAICardDialog(parentPath)
-		},
+		createVirtualDesignProject: capabilities.projectContentCreation
+			? createVirtualDesignProject
+			: undefined,
+		createVirtualSelfMediaProject: capabilities.projectContentCreation
+			? createVirtualSelfMediaProject
+			: undefined,
+		createVirtualAICardProject: capabilities.projectContentCreation
+			? (_key?: string, parentPath?: string) => {
+					openAICardDialog(parentPath)
+				}
+			: undefined,
 		isMoving,
 		selectedItems,
-		handleAddMultipleFilesToCurrentChat,
-		handleAddMultipleFilesToNewChat,
+		handleAddMultipleFilesToCurrentChat: capabilities.addToChat
+			? handleAddMultipleFilesToCurrentChat
+			: undefined,
+		handleAddMultipleFilesToNewChat: capabilities.addToChat
+			? handleAddMultipleFilesToNewChat
+			: undefined,
 		handleDownloadNoWaterMark,
 		preloadWaterMarkFreeModal,
 		isFreeTrialVersion,
 		shouldUseSingleDownloadEntry,
 		getShortcutHint,
-		handleEnterMultiSelectMode,
+		handleEnterMultiSelectMode: capabilities.multiSelect
+			? handleEnterMultiSelectMode
+			: undefined,
 		isSelectMode,
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
@@ -1053,7 +1130,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
 
-		const showCheckbox = selectionEnabled
+		const showCheckbox = selectionEnabled && isItemSelectable(item)
 		const isSelected = showCheckbox ? isItemSelected(itemId) : false
 
 		// 检查是否正在定位此文件
@@ -1319,7 +1396,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			const folderDragHandlers = createFileDragHandlers({
 				item,
 				node,
-				allowEdit,
+				allowEdit: allowEdit && capabilities.move && isItemSelectable(item),
 				isExpanded,
 				dragState,
 				selectedItems,
@@ -1420,7 +1497,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							}
 						}
 					}}
-					draggable={renamingItemId !== itemId}
+					draggable={
+						renamingItemId !== itemId && capabilities.move && isItemSelectable(item)
+					}
 					{...folderDragHandlers}
 					onMouseEnter={() => setHoveredItem(itemId)}
 					onMouseLeave={() => setHoveredItem(null)}
@@ -1563,7 +1642,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							<Checkbox
 								data-testid="folder-checkbox"
 								checked={isFolderIndeterminate ? "indeterminate" : isFolderSelected}
-								disabled={isItemDisabled()}
+								disabled={isItemDisabled(item)}
 								onCheckedChange={() => {
 									handleItemSelect(item)
 								}}
@@ -1580,7 +1659,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const fileDragHandlers = createFileDragHandlers({
 			item,
 			node,
-			allowEdit,
+			allowEdit: allowEdit && capabilities.move && isItemSelectable(item),
 			isExpanded,
 			dragState,
 			selectedItems,
@@ -1668,7 +1747,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						handleOpenFile(item)
 					}
 				}}
-				draggable={renamingItemId !== itemId}
+				draggable={renamingItemId !== itemId && capabilities.move && isItemSelectable(item)}
 				{...fileDragHandlers}
 				onMouseEnter={() => {
 					setHoveredItem(itemId)
@@ -1810,7 +1889,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						<Checkbox
 							data-testid="file-checkbox"
 							checked={isSelected}
-							disabled={isItemDisabled()}
+							disabled={isItemDisabled(item)}
 							onCheckedChange={() => {
 								handleItemSelect(item)
 							}}
@@ -1846,33 +1925,38 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isMoving,
 		allowEdit,
 		allowDownload,
+		allowMove: capabilities.move,
+		allowCopy: capabilities.crossProject,
+		allowShare: capabilities.share,
 		downloadProgress,
 		// 批量分享回调
-		onBatchShareClick: async (fileIds: string[]) => {
-			if (fileIds.length > 0) {
-				// 检查是否存在相似分享
-				try {
-					const similarShares = await SuperMagicApi.findSimilarShares({
-						file_ids: fileIds,
-					})
+		onBatchShareClick: capabilities.share
+			? async (fileIds: string[]) => {
+					if (fileIds.length === 0) return
 
-					if (similarShares && similarShares.length > 0) {
-						// 显示相似分享选择弹窗
-						setSimilarShares(similarShares, fileIds)
-						return
+					// 检查是否存在相似分享
+					try {
+						const similarShares = await SuperMagicApi.findSimilarShares({
+							file_ids: fileIds,
+						})
+
+						if (similarShares && similarShares.length > 0) {
+							// 显示相似分享选择弹窗
+							setSimilarShares(similarShares, fileIds)
+							return
+						}
+					} catch (error) {
+						console.error("Check similar shares failed:", error)
 					}
-				} catch (error) {
-					console.error("Check similar shares failed:", error)
-				}
 
-				// 无相似分享，直接打开分享弹窗
-				setShareFileInfo({
-					projectName: selectedProject?.project_name,
-					fileIds,
-				})
-				setShareModalVisible(true)
-			}
-		},
+					// 无相似分享，直接打开分享弹窗
+					setShareFileInfo({
+						projectName: selectedProject?.project_name,
+						fileIds,
+					})
+					setShareModalVisible(true)
+				}
+			: undefined,
 		isInProject,
 	})
 	const showMobileBatchActions = shouldShowMobileBatchActions({

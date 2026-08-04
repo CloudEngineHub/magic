@@ -68,6 +68,8 @@ function TopicSidebar({
 							content: (
 								<LongTremMemorySider
 									projectId={selectedProject?.id}
+									selectedProject={selectedProject}
+									selectedWorkspace={selectedWorkspace}
 									activeFileId={topicFilesProps.activeFileId}
 									onFileClick={topicFilesProps.onFileClick}
 								/>

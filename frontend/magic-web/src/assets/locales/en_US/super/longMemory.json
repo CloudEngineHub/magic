@@ -34,7 +34,17 @@
 		"renameSuccess": "Renamed successfully",
 		"retry": "Retry",
 		"searchEmpty": "No matching memory files",
-		"searchPlaceholder": "Search memory files"
+		"searchPlaceholder": "Search memory files",
+		"tags": {
+			"global": "Global",
+			"globalMemory": "Global Memory",
+			"globalNotes": "Global Notes",
+			"memoryRoot": "Memory Space",
+			"project": "Project Directory",
+			"projectMemory": "Project Memory",
+			"projectNotes": "Project Notes",
+			"projects": "Projects"
+		}
 	},
 	"globalEditor": {
 		"conflict": {

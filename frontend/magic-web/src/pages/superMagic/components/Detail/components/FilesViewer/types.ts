@@ -6,6 +6,7 @@ import type {
 	TaskStatus,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // Base interfaces
 export interface BaseComponentProps {
@@ -23,6 +24,8 @@ export interface FilePreviewPolicy {
 	editingPresence?: boolean
 	/** 是否允许发起文件分享。 */
 	allowShare?: boolean
+	/** 文件编辑保存时使用的文件空间。 */
+	fileScope?: FileScope
 	persistTab?: boolean
 	syncWithAttachments?: boolean
 	keepLocalContent?: boolean

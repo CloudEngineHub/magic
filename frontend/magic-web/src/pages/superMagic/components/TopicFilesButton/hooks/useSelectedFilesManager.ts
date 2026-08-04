@@ -5,6 +5,8 @@ import {
 	addFileToNewChat,
 	addMultipleFilesToCurrentChat,
 	addMultipleFilesToNewChat,
+	addTextToCurrentChat,
+	addTextToNewChat,
 } from "../../../utils/topics"
 import {
 	handleAttachmentDragStart,
@@ -20,6 +22,7 @@ interface UseSelectedFilesManagerOptions {
 	selectedProject?: ProjectListItem | null
 	afterAddFileToCurrentTopic?: () => void
 	afterAddFileToNewTopic?: () => void
+	serializeAttachmentToChatText?: (item: AttachmentItem) => string
 }
 
 /**
@@ -74,7 +77,15 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		selectedProject,
 		afterAddFileToCurrentTopic,
 		afterAddFileToNewTopic,
+		serializeAttachmentToChatText,
 	} = options
+
+	/** 将文件序列化为当前文件空间提供给对话框的纯文本引用。 */
+	const serializeFilesForChat = useMemoizedFn((files: AttachmentItem[]) => {
+		if (!serializeAttachmentToChatText) return ""
+
+		return files.map(serializeAttachmentToChatText).filter(Boolean).join(" ")
+	})
 
 	// 获取选中的文件列表
 	const getSelectedFiles = useMemoizedFn(() => {
@@ -88,7 +99,11 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			addMultipleFilesToCurrentChat({ fileItems: selectedFiles })
+			if (serializeAttachmentToChatText) {
+				addTextToCurrentChat({ content: serializeFilesForChat(selectedFiles) })
+			} else {
+				addMultipleFilesToCurrentChat({ fileItems: selectedFiles })
+			}
 			afterAddFileToCurrentTopic?.()
 		}
 	})
@@ -100,12 +115,20 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			addMultipleFilesToNewChat({
-				fileItems: selectedFiles,
-				selectedWorkspace,
-				selectedProject,
-				afterAddFileToNewTopic,
-			})
+			if (serializeAttachmentToChatText) {
+				addTextToNewChat({
+					content: serializeFilesForChat(selectedFiles),
+					selectedProject,
+					afterAddContentToNewTopic: afterAddFileToNewTopic,
+				})
+			} else {
+				addMultipleFilesToNewChat({
+					fileItems: selectedFiles,
+					selectedWorkspace,
+					selectedProject,
+					afterAddFileToNewTopic,
+				})
+			}
 		}
 	})
 
@@ -128,18 +151,30 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 
 	// 添加单个文件到当前对话
 	const handleAddToCurrentChat = useMemoizedFn((item: AttachmentItem) => {
-		addFileToCurrentChat({ fileItem: item })
+		if (serializeAttachmentToChatText) {
+			addTextToCurrentChat({ content: serializeAttachmentToChatText(item) })
+		} else {
+			addFileToCurrentChat({ fileItem: item })
+		}
 		afterAddFileToCurrentTopic?.()
 	})
 
 	// 添加单个文件到新对话
 	const handleAddToNewChat = useMemoizedFn((item: AttachmentItem) => {
-		addFileToNewChat({
-			fileItem: item,
-			selectedWorkspace,
-			selectedProject,
-			afterAddFileToNewTopic,
-		})
+		if (serializeAttachmentToChatText) {
+			addTextToNewChat({
+				content: serializeAttachmentToChatText(item),
+				selectedProject,
+				afterAddContentToNewTopic: afterAddFileToNewTopic,
+			})
+		} else {
+			addFileToNewChat({
+				fileItem: item,
+				selectedWorkspace,
+				selectedProject,
+				afterAddFileToNewTopic,
+			})
+		}
 	})
 
 	// 处理拖拽开始事件 - 支持多文件拖拽

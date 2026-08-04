@@ -255,7 +255,13 @@ export default function Render(props: any) {
 			}
 
 			const fileKey = data?.file_key
-			const projectIdValue = selectedProject?.id || projectId
+			const projectIdValue =
+				data?.project_id !== undefined && data?.project_id !== null
+					? String(data.project_id)
+					: selectedProject?.id || projectId
+			const fileScope =
+				data?.display_config?.previewPolicy?.fileScope ||
+				effectiveDisplayConfig?.previewPolicy?.fileScope
 			const contentStr =
 				typeof newContent === "string" ? newContent : JSON.stringify(newContent)
 			const uploadContent =
@@ -273,6 +279,7 @@ export default function Render(props: any) {
 					fileKey,
 					projectIdValue,
 					data?.file_name || "content.html",
+					fileScope,
 				)
 
 				await SuperMagicApi.replaceFile({

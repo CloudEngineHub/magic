@@ -34,7 +34,17 @@
 		"renameSuccess": "重命名成功",
 		"retry": "重试",
 		"searchEmpty": "没有匹配的记忆文件",
-		"searchPlaceholder": "搜索记忆文件"
+		"searchPlaceholder": "搜索记忆文件",
+		"tags": {
+			"global": "全局",
+			"globalMemory": "全局记忆",
+			"globalNotes": "全局笔记",
+			"memoryRoot": "记忆空间",
+			"project": "项目目录",
+			"projectMemory": "项目记忆",
+			"projectNotes": "项目笔记",
+			"projects": "项目"
+		}
 	},
 	"globalEditor": {
 		"conflict": {

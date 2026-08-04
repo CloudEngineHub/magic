@@ -1,5 +1,6 @@
 // 话题相关行为
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { JSONContent } from "@tiptap/react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { MentionItemType, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
 import { getFolderMentionData } from "@/components/business/MentionPanel/utils/directoryMention"
@@ -39,6 +40,15 @@ interface AddMultipleFilesToNewChatOptions extends AddMultipleFilesToCurrentChat
 	selectedWorkspace: Workspace | null | undefined
 	selectedProject: ProjectListItem | null | undefined
 	afterAddFileToNewTopic?: () => void
+}
+
+interface AddTextToCurrentChatOptions {
+	content: string
+}
+
+interface AddTextToNewChatOptions extends AddTextToCurrentChatOptions {
+	selectedProject: ProjectListItem | null | undefined
+	afterAddContentToNewTopic?: () => void
 }
 
 /**
@@ -105,6 +115,59 @@ function convertFileToMention(fileItem: AttachmentItem): TiptapMentionAttributes
 			file_path: fileItem.relative_file_path,
 			file_extension: fileItem.file_extension,
 		} as ProjectFileMentionData,
+	}
+}
+
+/** 将纯文本内容转换为消息编辑器可插入的文档结构。 */
+function buildTextContent(content: string): JSONContent {
+	return {
+		type: "doc",
+		content: [
+			{
+				type: "paragraph",
+				content: [
+					{ type: "text", text: content },
+					{ type: "text", text: " " },
+				],
+			},
+		],
+	}
+}
+
+/** 添加纯文本到当前对话输入框。 */
+export function addTextToCurrentChat(options: AddTextToCurrentChatOptions) {
+	const content = options.content.trim()
+	if (!content) return
+
+	pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
+		content: buildTextContent(content),
+		extraData: {
+			focusAtEnd: true,
+		},
+	})
+}
+
+/** 创建新话题后，将纯文本添加到新对话输入框。 */
+export async function addTextToNewChat(options: AddTextToNewChatOptions) {
+	const { content, selectedProject, afterAddContentToNewTopic } = options
+	if (!selectedProject) {
+		magicToast.error("创建新话题功能不可用")
+		return
+	}
+
+	try {
+		await SuperMagicService.handleCreateTopic({
+			selectedProject,
+			onSuccess: () => {
+				setTimeout(() => {
+					addTextToCurrentChat({ content })
+					afterAddContentToNewTopic?.()
+				}, 500)
+			},
+		})
+	} catch (error) {
+		console.error("创建新话题失败:", error)
+		magicToast.error("创建新话题失败")
 	}
 }
 
