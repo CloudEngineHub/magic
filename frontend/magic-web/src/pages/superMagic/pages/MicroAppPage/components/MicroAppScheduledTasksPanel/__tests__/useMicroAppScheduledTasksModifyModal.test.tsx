@@ -1,13 +1,12 @@
 import type { ReactNode } from "react"
 import { act, render, renderHook, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import type { ScheduledTask } from "@/types/scheduledTask"
 
 const mocks = vi.hoisted(() => ({
-	currentSelectedProject: null as ProjectListItem | null,
 	saveMCP: vi.fn(),
 	setSelectedProject: vi.fn(),
-	updateAttachments: vi.fn(),
+	toastError: vi.fn(),
 }))
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -25,27 +24,13 @@ vi.mock("@/components/base/MagicModal", () => ({
 }))
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
-	default: { error: vi.fn() },
+	default: { error: mocks.toastError },
 }))
 
 vi.mock("@/components/shadcn-ui/spinner", () => ({ Spinner: () => null }))
 
-vi.mock("../MicroAppScheduledTasksModify", async () => {
-	const { forwardRef, useImperativeHandle } = await import("react")
-	return {
-		MicroAppScheduledTasksModify: forwardRef(function MockScheduledTasksModify(_, ref) {
-			useImperativeHandle(ref, () => ({ updateAttachments: mocks.updateAttachments }))
-			return <div data-testid="scheduled-tasks-modify" />
-		}),
-	}
-})
-
-vi.mock("@/components/business/MentionPanel/builtin-store", () => ({
-	default: {
-		get currentSelectedProject() {
-			return mocks.currentSelectedProject
-		},
-	},
+vi.mock("../MicroAppScheduledTasksModify", () => ({
+	MicroAppScheduledTasksModify: () => <div data-testid="scheduled-tasks-modify" />,
 }))
 
 vi.mock("@/stores/projectFiles", () => ({
@@ -58,21 +43,13 @@ vi.mock("@/components/business/AccountSetting/pages/ScheduledTasks/store/MCPTemp
 
 import { useMicroAppScheduledTasksModifyModal } from "../useMicroAppScheduledTasksModifyModal"
 
-function project(id: string): ProjectListItem {
-	return { id } as ProjectListItem
-}
-
 describe("useMicroAppScheduledTasksModifyModal", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		mocks.currentSelectedProject = null
-		mocks.updateAttachments.mockResolvedValue(undefined)
+		mocks.saveMCP.mockResolvedValue(undefined)
 	})
 
-	it("restores the original project when the outer route has no topic id", async () => {
-		window.history.replaceState({}, "", "/super/project-1")
-		const originalProject = project("project-1")
-		mocks.currentSelectedProject = originalProject
+	it("does not overwrite the outer project when the modal closes", async () => {
 		const { result } = renderHook(() =>
 			useMicroAppScheduledTasksModifyModal({
 				workspaceId: "workspace-1",
@@ -82,7 +59,6 @@ describe("useMicroAppScheduledTasksModifyModal", () => {
 
 		act(() => {
 			result.current.openCreateModal(vi.fn())
-			mocks.currentSelectedProject = project("micro-app-project")
 		})
 		render(result.current.content)
 		await screen.findByTestId("scheduled-tasks-modify")
@@ -90,12 +66,11 @@ describe("useMicroAppScheduledTasksModifyModal", () => {
 			await result.current.closeModal()
 		})
 
-		expect(mocks.setSelectedProject).toHaveBeenCalledWith(originalProject)
-		expect(mocks.updateAttachments).toHaveBeenCalledWith(originalProject.id)
+		expect(mocks.setSelectedProject).not.toHaveBeenCalled()
 		expect(mocks.saveMCP).toHaveBeenCalledWith([])
 	})
 
-	it("restores an empty original project context", async () => {
+	it("can close before the lazy modal content mounts without writing project state", async () => {
 		const { result } = renderHook(() =>
 			useMicroAppScheduledTasksModifyModal({
 				workspaceId: "workspace-1",
@@ -105,12 +80,36 @@ describe("useMicroAppScheduledTasksModifyModal", () => {
 
 		act(() => {
 			result.current.openCreateModal(vi.fn())
-			mocks.currentSelectedProject = project("micro-app-project")
 		})
 		await act(async () => {
 			await result.current.closeModal()
 		})
 
-		expect(mocks.setSelectedProject).toHaveBeenCalledWith(null)
+		expect(mocks.setSelectedProject).not.toHaveBeenCalled()
+		expect(result.current.state.visible).toBe(false)
+	})
+
+	it("rejects editing a task from another project without opening the modal", () => {
+		const { result } = renderHook(() =>
+			useMicroAppScheduledTasksModifyModal({
+				workspaceId: "workspace-1",
+				projectId: "micro-app-project",
+			}),
+		)
+
+		act(() => {
+			result.current.openEditModal(
+				{
+					workspace_id: "workspace-1",
+					project_id: "other-project",
+				} as ScheduledTask.UpdateTask,
+				vi.fn(),
+			)
+		})
+
+		expect(result.current.state.visible).toBe(false)
+		expect(mocks.toastError).toHaveBeenCalledWith(
+			"accountPanel.timedTasks.microAppContextMismatch",
+		)
 	})
 })

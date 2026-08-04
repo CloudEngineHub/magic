@@ -19,6 +19,7 @@ import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicMode as TopicModeEnum } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
@@ -44,6 +45,7 @@ export interface MessageEditorProps {
 	layoutConfig?: MessageEditorLayoutConfig
 	attachments?: AttachmentItem[]
 	mentionPanelStore?: MentionPanelStore
+	projectFilesStore?: ProjectFilesStore
 	showModeToggle?: boolean
 	allowChangeMode?: boolean
 	enableAiCompletion?: boolean
@@ -76,6 +78,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 		layoutConfig,
 		attachments,
 		mentionPanelStore,
+		projectFilesStore,
 		showModeToggle = false,
 		allowChangeMode = true,
 		enableAiCompletion = false,
@@ -86,7 +89,9 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 	ref,
 ) {
 	const innerRef = useRef<BaseMessageEditorRef>(null)
-	const [editorStore] = useState(() => new MessageEditorStore({ mentionPanelStore }))
+	const [editorStore] = useState(
+		() => new MessageEditorStore({ mentionPanelStore, projectFilesStore }),
+	)
 
 	useEffect(() => {
 		editorStore.topicModelStore.setSelectedLanguageModel(selectedModelProp)
@@ -120,6 +125,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			size,
 			attachments,
 			mentionPanelStore,
+			projectFilesStore,
 			selectedModel: selectedModelProp,
 			showModeToggle,
 			allowChangeMode,
@@ -152,6 +158,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			modules,
 			onChange,
 			placeholder,
+			projectFilesStore,
 			selectedModelProp,
 			selectedProject,
 			selectedTopic,

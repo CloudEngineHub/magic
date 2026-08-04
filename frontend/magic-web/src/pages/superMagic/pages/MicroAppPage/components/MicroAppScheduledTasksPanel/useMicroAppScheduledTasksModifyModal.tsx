@@ -1,18 +1,12 @@
-import { lazy, Suspense, useRef, useState } from "react"
+import { lazy, Suspense, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import projectFilesStore from "@/stores/projectFiles"
-import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { useModalStyles } from "@/components/business/AccountSetting/pages/ScheduledTasks/styles"
 import mcpTempStorage from "@/components/business/AccountSetting/pages/ScheduledTasks/store/MCPTempStorage"
 import type { FormValues } from "@/components/business/AccountSetting/pages/ScheduledTasks/types"
-import type {
-	ScheduledTasksModifyModalController,
-	ScheduledTasksModifyRef,
-} from "@/components/business/AccountSetting/pages/ScheduledTasks/types/ScheduledTasksModify"
+import type { ScheduledTasksModifyModalController } from "@/components/business/AccountSetting/pages/ScheduledTasks/types/ScheduledTasksModify"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import type { MicroAppScheduledTaskContext } from "./types"
 
@@ -34,23 +28,12 @@ export function useMicroAppScheduledTasksModifyModal(
 ): ScheduledTasksModifyModalController {
 	const { t } = useTranslation("interface")
 	const { styles } = useModalStyles({ runningRecord: false })
-	const modifyRef = useRef<ScheduledTasksModifyRef>(null)
-	const rawProjectRef = useRef<ProjectListItem | null>(null)
-	const hasCapturedProjectRef = useRef(false)
 	const [state, setState] = useState<ModalState>({ visible: false, mode: "create" })
-
-	function captureCurrentProject() {
-		// 表单会临时切换项目；同步保存首次打开前的上下文，避免 effect 时序采集到临时项目。
-		if (hasCapturedProjectRef.current) return
-		rawProjectRef.current = mentionPanelStore.currentSelectedProject
-		hasCapturedProjectRef.current = true
-	}
 
 	function openCreateModal(
 		onSubmit: (task: ScheduledTask.UpdateTask) => void,
 		initialValues?: Partial<ScheduledTask.UpdateTask>,
 	) {
-		captureCurrentProject()
 		setState({ visible: true, mode: "create", createTask: initialValues, onSubmit })
 	}
 
@@ -62,23 +45,11 @@ export function useMicroAppScheduledTasksModifyModal(
 			magicToast.error(t("accountPanel.timedTasks.microAppContextMismatch"))
 			return
 		}
-		captureCurrentProject()
 		setState({ visible: true, mode: "edit", editingTask: task, onSubmit })
 	}
 
-	async function restoreProject() {
-		mcpTempStorage.saveMCP([])
-		if (!hasCapturedProjectRef.current) return
-
-		const rawProject = rawProjectRef.current
-		hasCapturedProjectRef.current = false
-		rawProjectRef.current = null
-		projectFilesStore.setSelectedProject(rawProject)
-		if (rawProject) await modifyRef.current?.updateAttachments(rawProject.id)
-	}
-
 	async function closeModal() {
-		await restoreProject()
+		await mcpTempStorage.saveMCP([])
 		setState({
 			visible: false,
 			mode: "create",
@@ -122,7 +93,6 @@ export function useMicroAppScheduledTasksModifyModal(
 				}
 			>
 				<MicroAppScheduledTasksModify
-					ref={modifyRef}
 					context={context}
 					initialValues={getInitialValues()}
 					onSubmit={handleFormSubmit}

@@ -1,10 +1,20 @@
 import React from "react"
 import { render, screen } from "@testing-library/react"
-import { vi } from "vitest"
-import type { MessageEditorRef } from "@/components/business/AccountSetting/pages/ScheduledTasks/components/MessageEditor"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import globalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
+import type {
+	MessageEditorProps,
+	MessageEditorRef,
+} from "@/components/business/AccountSetting/pages/ScheduledTasks/components/MessageEditor"
+import globalProjectFilesStore, { ProjectFilesStore } from "@/stores/projectFiles"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { MicroAppScheduledTasksModify } from "../MicroAppScheduledTasksModify"
 import { applyMicroAppScheduledTaskContext } from "../utils"
+
+const mocks = vi.hoisted(() => ({
+	useAttachments: vi.fn(),
+	messageEditorProps: [] as MessageEditorProps[],
+}))
 
 vi.mock("antd", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("antd")>()
@@ -57,25 +67,28 @@ vi.mock("@/components/business/AccountSetting/pages/ScheduledTasks/store/MCPTemp
 }))
 
 vi.mock("@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useAttachments", () => ({
-	useAttachments: () => ({ attachments: [], updateAttachments: vi.fn() }),
+	useAttachments: mocks.useAttachments,
 }))
 
 vi.mock(
 	"@/components/business/AccountSetting/pages/ScheduledTasks/components/MessageEditor",
 	() => ({
-		default: React.forwardRef<MessageEditorRef>(function MockMessageEditor(_props, ref) {
-			React.useImperativeHandle(ref, () => ({
-				editor: {
-					getText: () => "test prompt",
-					getJSON: () => ({ type: "doc", content: [] }),
-				},
-				mentionItems: [],
-				selectedModel: null,
-				setContent: vi.fn(),
-				setSelectedModel: vi.fn(),
-			}))
-			return <div data-testid="micro-app-message-editor" />
-		}),
+		default: React.forwardRef<MessageEditorRef, MessageEditorProps>(
+			function MockMessageEditor(props, ref) {
+				mocks.messageEditorProps.push(props)
+				React.useImperativeHandle(ref, () => ({
+					editor: {
+						getText: () => "test prompt",
+						getJSON: () => ({ type: "doc", content: [] }),
+					},
+					mentionItems: [],
+					selectedModel: null,
+					setContent: vi.fn(),
+					setSelectedModel: vi.fn(),
+				}))
+				return <div data-testid="micro-app-message-editor" />
+			},
+		),
 	}),
 )
 
@@ -94,6 +107,12 @@ vi.mock(
 )
 
 describe("MicroAppScheduledTasksModify", () => {
+	beforeEach(() => {
+		mocks.messageEditorProps.length = 0
+		mocks.useAttachments.mockReset()
+		mocks.useAttachments.mockReturnValue({ attachments: [], updateAttachments: vi.fn() })
+	})
+
 	it("renders the current workspace and project instead of stale task context", () => {
 		const context = {
 			workspaceId: "hidden-workspace",
@@ -128,6 +147,27 @@ describe("MicroAppScheduledTasksModify", () => {
 		expect(screen.queryByText("微应用工作区")).not.toBeInTheDocument()
 		expect(screen.queryByText("old-workspace")).not.toBeInTheDocument()
 		expect(screen.queryByText("old-project")).not.toBeInTheDocument()
+	})
+
+	it("uses modal-scoped project and mention stores for attachments and the editor", () => {
+		render(
+			<MicroAppScheduledTasksModify
+				mode="edit"
+				context={{
+					workspaceId: "workspace-1",
+					projectId: "micro-app-project",
+				}}
+			/>,
+		)
+
+		const attachmentOptions = mocks.useAttachments.mock.calls.at(-1)?.[0]
+		const editorProps = mocks.messageEditorProps.at(-1)
+
+		expect(attachmentOptions.projectFilesStore).toBeInstanceOf(ProjectFilesStore)
+		expect(attachmentOptions.projectFilesStore).not.toBe(globalProjectFilesStore)
+		expect(attachmentOptions.mentionPanelStore).not.toBe(globalMentionPanelStore)
+		expect(editorProps?.projectFilesStore).toBe(attachmentOptions.projectFilesStore)
+		expect(editorProps?.mentionPanelStore).toBe(attachmentOptions.mentionPanelStore)
 	})
 
 	it("forces the submitted task to use the current micro app context", () => {

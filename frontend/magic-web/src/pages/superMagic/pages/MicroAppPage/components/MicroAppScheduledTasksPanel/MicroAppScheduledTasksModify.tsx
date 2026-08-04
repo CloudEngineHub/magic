@@ -1,13 +1,5 @@
 import { Form } from "antd"
-import {
-	forwardRef,
-	useEffect,
-	useImperativeHandle,
-	useMemo,
-	useRef,
-	useState,
-	type ReactNode,
-} from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
@@ -18,6 +10,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
 import { parseContent } from "@/pages/superMagic/components/MessageList/components/Text/components/RichText/utils"
+import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import {
 	ProjectStatus,
 	TaskStatus,
@@ -35,10 +28,10 @@ import MessageEditor, {
 import { ScheduledItem } from "@/components/business/AccountSetting/pages/ScheduledTasks/components/ScheduledItem"
 import ProjectTopicItem from "@/components/business/AccountSetting/pages/ScheduledTasks/components/ProjectTopicItem"
 import { useAttachments } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useAttachments"
-import type { ScheduledTasksModifyRef } from "@/components/business/AccountSetting/pages/ScheduledTasks/types/ScheduledTasksModify"
 import mcpTempStorage from "@/components/business/AccountSetting/pages/ScheduledTasks/store/MCPTempStorage"
 import type { FormValues } from "@/components/business/AccountSetting/pages/ScheduledTasks/types"
 import { ScheduledTask } from "@/types/scheduledTask"
+import { ProjectFilesStore } from "@/stores/projectFiles"
 import { getNextRunTime } from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
 import type { MicroAppScheduledTasksModifyProps } from "./types"
 import { applyMicroAppScheduledTaskContext } from "./utils"
@@ -106,10 +99,13 @@ function createProject(context: MicroAppScheduledTasksModifyProps["context"]): P
 	}
 }
 
-export const MicroAppScheduledTasksModify = forwardRef<
-	ScheduledTasksModifyRef,
-	MicroAppScheduledTasksModifyProps
->(function MicroAppScheduledTasksModify({ context, initialValues, onSubmit, onClose, mode }, ref) {
+export function MicroAppScheduledTasksModify({
+	context,
+	initialValues,
+	onSubmit,
+	onClose,
+	mode,
+}: MicroAppScheduledTasksModifyProps) {
 	const { t } = useTranslation("interface")
 	const { t: tSuper } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -120,6 +116,13 @@ export const MicroAppScheduledTasksModify = forwardRef<
 	const [promptRequired, setPromptRequired] = useState(false)
 	const [topicMode, setTopicMode] = useState<TopicMode>(TopicMode.General)
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
+	const [modalStores] = useState(() => {
+		const projectFilesStore = new ProjectFilesStore()
+		return {
+			projectFilesStore,
+			mentionPanelStore: createMentionPanelStore(projectFilesStore),
+		}
+	})
 	const selectedWorkspace = useMemo(() => createWorkspace(context), [context])
 	const selectedProject = useMemo(() => createProject(context), [context])
 
@@ -127,13 +130,13 @@ export const MicroAppScheduledTasksModify = forwardRef<
 	const deadlineEnabled = Form.useWatch("deadline_enabled", form)
 	const timeConfig = Form.useWatch("time_config", form)
 
-	const { attachments, updateAttachments } = useAttachments({
+	const { attachments } = useAttachments({
 		projectId: context.projectId,
 		selectedProject,
 		mode,
+		projectFilesStore: modalStores.projectFilesStore,
+		mentionPanelStore: modalStores.mentionPanelStore,
 	})
-
-	useImperativeHandle(ref, () => ({ updateAttachments }), [updateAttachments])
 
 	const minDate = useMemo(
 		() => (timeConfig ? getNextRunTime(timeConfig) : undefined),
@@ -343,6 +346,8 @@ export const MicroAppScheduledTasksModify = forwardRef<
 							selectedWorkspace={selectedWorkspace}
 							topicMode={topicMode}
 							setTopicMode={setTopicMode}
+							projectFilesStore={modalStores.projectFilesStore}
+							mentionPanelStore={modalStores.mentionPanelStore}
 							showModeToggle
 							enableAiCompletion
 							allowChangeMode
@@ -429,4 +434,4 @@ export const MicroAppScheduledTasksModify = forwardRef<
 			{loading ? <div className="absolute inset-0 bg-background/50" aria-hidden /> : null}
 		</div>
 	)
-})
+}
