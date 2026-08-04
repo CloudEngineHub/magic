@@ -19,6 +19,20 @@ Project memory uses `MICRO-APP.md` for the latest human-readable app memory and 
 
 MagicBase exposes a simplified MySQL-like column model. Use only these `data_type` values when creating tables or columns: `text`, `number`, `datetime`, `boolean`, `json`.
 
+### Datetime Values
+
+For `datetime` columns, MagicBase accepts only these input formats:
+
+- `YYYY-MM-DD`, normalized to `YYYY-MM-DD 00:00:00`.
+- `YYYY-MM-DD HH:mm`.
+- `YYYY-MM-DD HH:mm:ss`.
+- `YYYY-MM-DDTHH:mm`.
+- `YYYY-MM-DDTHH:mm:ss`.
+
+Use the raw value from `<input type="date">` or `<input type="datetime-local">` when it matches one of these formats. MagicBase normalizes accepted values to `YYYY-MM-DD HH:mm:ss` for storage and responses. Date and datetime filter values follow the same format rules.
+
+Do not submit `Date.prototype.toISOString()` output directly. Values such as `2026-08-02T08:35:00.000Z`, values with milliseconds, and values with timezone suffixes or offsets are not accepted. Convert them to one of the supported formats before calling `createRow`, `batchCreateRows`, `updateRow`, or a query filter. Preserve the intended local date and time when converting; do not silently remove a timezone marker if that would change the represented time.
+
 Model UI choices with MySQL-like columns:
 
 - Single-choice UI values use `text`.
