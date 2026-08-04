@@ -49,6 +49,7 @@ export function ChangePasswordModal({
 	userEmail,
 }: ChangePasswordModalProps) {
 	const { t } = useTranslation("interface")
+	const { t: tMessage } = useTranslation("message")
 	const isMobile = useIsMobile()
 	const [passwordForm] = useForm<VerifyForm>()
 	const [isSaving, setIsSaving] = useState(false)
@@ -64,12 +65,12 @@ export function ChangePasswordModal({
 			setIsSaving(true)
 			const values = await passwordForm.validateFields()
 			await UserApi.changePassword(values.code, values.password, values.password)
-			toast.success(t("setting.changePasswordSuccess", { ns: "message" }))
+			toast.success(tMessage("setting.changePasswordSuccess"))
 			passwordForm.resetFields()
 			onOpenChange(false)
 		} catch (error) {
 			console.error("Failed to change password:", error)
-			toast.error(t("setting.changePasswordFailed", { ns: "message" }))
+			toast.error(tMessage("setting.changePasswordFailed"))
 		} finally {
 			setIsSaving(false)
 		}
