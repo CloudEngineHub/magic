@@ -21,10 +21,12 @@ interface ScheduledScreenshotGeneration<T> {
 	hasStarted: () => boolean
 }
 
+type HoldScreenshotGenerationSlot = (operation: PromiseLike<unknown>) => void
+
 interface PendingScreenshotGeneration {
 	hasStarted: boolean
 	hasCancelled: boolean
-	hasFinished: boolean
+	hasSettled: boolean
 	hasReleasedSlot: boolean
 	start: () => void
 }
@@ -61,7 +63,9 @@ class ScreenshotGenerationScheduler {
 
 	constructor(private readonly concurrency: number) {}
 
-	schedule<T>(task: (signal: AbortSignal) => Promise<T>): ScheduledScreenshotGeneration<T> {
+	schedule<T>(
+		task: (signal: AbortSignal, holdSlotUntil: HoldScreenshotGenerationSlot) => Promise<T>,
+	): ScheduledScreenshotGeneration<T> {
 		let resolveGeneration: (value: T | PromiseLike<T>) => void = () => undefined
 		let rejectGeneration: (reason?: unknown) => void = () => undefined
 		const promise = new Promise<T>((resolve, reject) => {
@@ -69,11 +73,22 @@ class ScreenshotGenerationScheduler {
 			rejectGeneration = reject
 		})
 		const abortController = new AbortController()
+		const slotHolders: Promise<void>[] = []
+		const holdSlotUntil: HoldScreenshotGenerationSlot = (operation) => {
+			// Observe failures immediately so a rejected third-party operation cannot
+			// produce an unhandled rejection while the scheduler is still awaiting it.
+			slotHolders.push(
+				Promise.resolve(operation).then(
+					() => undefined,
+					() => undefined,
+				),
+			)
+		}
 		let releaseActiveSlot = () => undefined
 		const pendingGeneration: PendingScreenshotGeneration = {
 			hasStarted: false,
 			hasCancelled: false,
-			hasFinished: false,
+			hasSettled: false,
 			hasReleasedSlot: false,
 			start: () => {
 				if (pendingGeneration.hasStarted || pendingGeneration.hasCancelled) return
@@ -82,12 +97,23 @@ class ScreenshotGenerationScheduler {
 
 				void (async () => {
 					try {
-						const value = await task(abortController.signal)
-						if (!pendingGeneration.hasCancelled) resolveGeneration(value)
+						const value = await task(abortController.signal, holdSlotUntil)
+						if (!pendingGeneration.hasCancelled) {
+							pendingGeneration.hasSettled = true
+							resolveGeneration(value)
+						}
 					} catch (error) {
-						if (!pendingGeneration.hasCancelled) rejectGeneration(error)
+						if (!pendingGeneration.hasCancelled) {
+							pendingGeneration.hasSettled = true
+							rejectGeneration(error)
+						}
 					} finally {
-						pendingGeneration.hasFinished = true
+						// Cancellation settles the caller immediately, but third-party screenshot
+						// work may be non-abortable. Keep the physical slot until every registered
+						// operation has actually settled so real concurrency never exceeds the cap.
+						// A non-settling operation intentionally blocks its slot; releasing it on a
+						// timer would allow cancelled CPU/memory-heavy work to accumulate again.
+						await Promise.all(slotHolders)
 						releaseActiveSlot()
 					}
 				})()
@@ -110,16 +136,13 @@ class ScreenshotGenerationScheduler {
 			promise,
 			hasStarted: () => pendingGeneration.hasStarted,
 			cancel: (reason: unknown) => {
-				if (pendingGeneration.hasCancelled || pendingGeneration.hasFinished) return false
+				if (pendingGeneration.hasCancelled || pendingGeneration.hasSettled) return false
 				pendingGeneration.hasCancelled = true
+				pendingGeneration.hasSettled = true
 				abortController.abort(reason)
 				const pendingIndex = this.pendingGenerations.indexOf(pendingGeneration)
 				if (pendingIndex >= 0) this.pendingGenerations.splice(pendingIndex, 1)
 				rejectGeneration(reason)
-				// Active work may be inside a third-party promise that cannot be stopped.
-				// Release the logical slot now; the task still observes the abort signal and
-				// owns cleanup for any result that arrives after cancellation.
-				releaseActiveSlot()
 				return true
 			},
 		}
@@ -266,39 +289,47 @@ export class SlideScreenshotService {
 			)
 		}
 
-		const scheduledGeneration = screenshotGenerationScheduler.schedule(async (signal) => {
-			let thumbnailUrl: string
-			try {
-				const generation = this.doGenerateScreenshot(content, dimensions, signal)
-				thumbnailUrl = await this.waitForAbortableOperation(
-					generation,
-					signal,
-					(lateThumbnailUrl) => this.releaseScreenshot(lateThumbnailUrl),
-				)
-			} catch (error) {
-				this.throwIfGenerationCancelled(requestEpoch)
-				throw error
-			}
+		const scheduledGeneration = screenshotGenerationScheduler.schedule(
+			async (signal, holdSlotUntil) => {
+				let thumbnailUrl: string
+				try {
+					const generation = this.doGenerateScreenshot(
+						content,
+						dimensions,
+						signal,
+						holdSlotUntil,
+					)
+					holdSlotUntil(generation)
+					thumbnailUrl = await this.waitForAbortableOperation(
+						generation,
+						signal,
+						(lateThumbnailUrl) => this.releaseScreenshot(lateThumbnailUrl),
+					)
+				} catch (error) {
+					this.throwIfGenerationCancelled(requestEpoch)
+					throw error
+				}
 
-			if (this.generationEpoch !== requestEpoch) {
-				this.releaseScreenshot(thumbnailUrl)
-				throw new ScreenshotGenerationCancelledError()
-			}
+				if (this.generationEpoch !== requestEpoch) {
+					this.releaseScreenshot(thumbnailUrl)
+					throw new ScreenshotGenerationCancelledError()
+				}
 
-			// Different revisions of the same slide may overlap. Only the most recently
-			// requested revision should become the URL-level cache entry.
-			if (this.isLatestRequestedContent(url, content, contentHash, dimensions)) {
-				this.setCachedScreenshot(url, {
-					thumbnailUrl,
-					timestamp: Date.now(),
-					contentHash,
-					content,
-					dimensions,
-				})
-			}
+				// Different revisions of the same slide may overlap. Only the most recently
+				// requested revision should become the URL-level cache entry.
+				if (this.isLatestRequestedContent(url, content, contentHash, dimensions)) {
+					this.setCachedScreenshot(url, {
+						thumbnailUrl,
+						timestamp: Date.now(),
+						contentHash,
+						content,
+						dimensions,
+					})
+				}
 
-			return thumbnailUrl
-		})
+				return thumbnailUrl
+			},
+		)
 
 		const inFlightEntry: InFlightScreenshotGeneration = {
 			url,
@@ -360,7 +391,8 @@ export class SlideScreenshotService {
 			// Remove synchronously so a required request cannot reuse the rejected promise.
 			this.clearInFlightGeneration(key, entry)
 		}
-		// Prevent a freed active slot from briefly starting another preview from this service.
+		// Remove queued work first so an active generation that happens to finish during
+		// cancellation cannot start another preview from this service.
 		queuedGenerations.forEach(cancelGeneration)
 		activeGenerations.forEach(cancelGeneration)
 
@@ -398,8 +430,9 @@ export class SlideScreenshotService {
 
 	/**
 	 * Races non-abortable browser/third-party work against the task signal. The
-	 * underlying promise is still observed so a late Blob URL can be reclaimed
-	 * without keeping the global scheduler slot occupied.
+	 * underlying promise is still observed so a late Blob URL can be reclaimed.
+	 * The scheduler separately retains the physical slot for registered work until
+	 * the original operation settles.
 	 */
 	private waitForAbortableOperation<T>(
 		operation: Promise<T>,
@@ -550,6 +583,7 @@ export class SlideScreenshotService {
 		content: string,
 		{ width, height }: CanonicalContentDimensions,
 		signal: AbortSignal,
+		holdSlotUntil: HoldScreenshotGenerationSlot,
 	): Promise<string> {
 		this.throwIfAborted(signal)
 		// 创建临时容器用于渲染
@@ -605,24 +639,26 @@ export class SlideScreenshotService {
 
 			const restoreTextStyles = stabilizeSingleLineTextForSnapdom(screenshotTarget)
 			try {
-				const result = await this.waitForAbortableOperation(
-					snapdom(screenshotTarget, {
-						width,
-						height,
-						backgroundColor: "#ffffff",
-						embedFonts: true,
-						fallbackURL: fallbackImageBase64,
-						plugins: [this.createSnapdomAbortPlugin(signal)],
-					}),
-					signal,
-				)
+				const snapdomGeneration = snapdom(screenshotTarget, {
+					width,
+					height,
+					backgroundColor: "#ffffff",
+					embedFonts: true,
+					fallbackURL: fallbackImageBase64,
+					plugins: [this.createSnapdomAbortPlugin(signal)],
+				})
+				holdSlotUntil(snapdomGeneration)
+				const result = await this.waitForAbortableOperation(snapdomGeneration, signal)
+				this.throwIfAborted(signal)
 
+				const webpGeneration = result.toWebp({
+					width: width / THUMBNAIL_SCALE,
+					height: height / THUMBNAIL_SCALE,
+					quality: 0.8,
+				})
+				holdSlotUntil(webpGeneration)
 				thumbnailUrl = await this.waitForAbortableOperation(
-					result.toWebp({
-						width: width / THUMBNAIL_SCALE,
-						height: height / THUMBNAIL_SCALE,
-						quality: 0.8,
-					}),
+					webpGeneration,
 					signal,
 					(lateThumbnail) => {
 						this.releaseScreenshot(lateThumbnail.src)
@@ -1308,9 +1344,8 @@ export class SlideScreenshotService {
 				target.push(generation.scheduledGeneration)
 			})
 		})
-		// Remove this service's queued work before active cancellation drains the
-		// global scheduler; otherwise a just-freed slot could briefly start work
-		// that this same cleanup pass is about to cancel.
+		// Remove this service's queued work first so an active generation that happens
+		// to finish during cleanup cannot start work that this same pass is cancelling.
 		queuedGenerations.forEach((generation) => generation.cancel(cancellationError))
 		activeGenerations.forEach((generation) => generation.cancel(cancellationError))
 		this.clearAllCache()

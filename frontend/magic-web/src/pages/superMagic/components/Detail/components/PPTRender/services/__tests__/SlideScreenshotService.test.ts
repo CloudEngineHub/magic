@@ -206,6 +206,7 @@ describe("SlideScreenshotService", () => {
 				"queued",
 				expect.anything(),
 				expect.anything(),
+				expect.anything(),
 			)
 
 			resolvers.get("protected")?.("blob:protected")
@@ -364,6 +365,7 @@ describe("SlideScreenshotService", () => {
 			await vi.waitFor(() =>
 				expect(generate).toHaveBeenCalledWith(
 					newContent,
+					expect.anything(),
 					expect.anything(),
 					expect.anything(),
 				),
@@ -715,17 +717,35 @@ describe("SlideScreenshotService", () => {
 				"old-queued",
 				expect.anything(),
 				expect.anything(),
+				expect.anything(),
 			)
 			expect(service.getCacheStats().size).toBe(0)
 
-			await expect(service.generateScreenshot("new-slide", "new-content")).resolves.toBe(
-				"blob:new-content",
+			const newGeneration = service.generateScreenshot("new-slide", "new-content")
+			await Promise.resolve()
+			expect(generate).not.toHaveBeenCalledWith(
+				"new-content",
+				expect.anything(),
+				expect.anything(),
+				expect.anything(),
 			)
 
+			// Reset rejects callers immediately, but the physical slots remain occupied
+			// until the non-cooperative work from the previous deck actually settles.
 			activeResolvers.get("old-1")?.("blob:late-old-1")
-			activeResolvers.get("old-2")?.("blob:late-old-2")
 			await vi.waitFor(() => {
 				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:late-old-1")
+				expect(generate).toHaveBeenCalledWith(
+					"new-content",
+					expect.anything(),
+					expect.anything(),
+					expect.anything(),
+				)
+			})
+			await expect(newGeneration).resolves.toBe("blob:new-content")
+
+			activeResolvers.get("old-2")?.("blob:late-old-2")
+			await vi.waitFor(() => {
 				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:late-old-2")
 			})
 			expect(generate).toHaveBeenCalledTimes(3)
@@ -800,7 +820,7 @@ describe("SlideScreenshotService", () => {
 			expect(service.getCacheStats().size).toBe(0)
 		})
 
-		it("aborts active generations immediately, frees scheduler slots, and releases late results", async () => {
+		it("rejects active generations immediately but retains their slots until physical work settles", async () => {
 			const queuedService = new SlideScreenshotService()
 			const activeResolvers = new Map<string, (thumbnailUrl: string) => void>()
 			const activeSignals = new Map<string, AbortSignal>()
@@ -842,15 +862,19 @@ describe("SlideScreenshotService", () => {
 			expect(activeSignals.get("dispose-1")?.aborted).toBe(true)
 			expect(activeSignals.get("dispose-2")?.aborted).toBe(true)
 			await Promise.all([firstRejection, secondRejection])
-			await vi.waitFor(() => expect(generateQueued).toHaveBeenCalledTimes(1))
-			await queuedResult
+			expect(generateQueued).not.toHaveBeenCalled()
 
-			// The underlying render promises deliberately ignore cancellation. Their
-			// eventual blob URLs still belong to the disposed service and must be released.
+			// Finishing one cancelled physical operation releases exactly one slot.
 			activeResolvers.get("dispose-1")?.("blob:disposed-1")
-			activeResolvers.get("dispose-2")?.("blob:disposed-2")
 			await vi.waitFor(() => {
 				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:disposed-1")
+				expect(generateQueued).toHaveBeenCalledTimes(1)
+			})
+			await queuedResult
+
+			// The second cancelled operation still owns its slot until its late result arrives.
+			activeResolvers.get("dispose-2")?.("blob:disposed-2")
+			await vi.waitFor(() => {
 				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:disposed-2")
 			})
 
@@ -858,8 +882,94 @@ describe("SlideScreenshotService", () => {
 			queuedService.dispose()
 		})
 
+		it("keeps physical screenshot concurrency capped across repeated cancellations", async () => {
+			const firstService = new SlideScreenshotService()
+			const secondService = new SlideScreenshotService()
+			const thirdService = new SlideScreenshotService()
+			const testServices = [firstService, secondService, thirdService]
+			const physicalResolvers = new Map<string, () => void>()
+			const startedContents: string[] = []
+			let physicalActive = 0
+			let maxPhysicalActive = 0
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						physicalActive += 1
+						maxPhysicalActive = Math.max(maxPhysicalActive, physicalActive)
+						startedContents.push(content)
+						let hasResolved = false
+						physicalResolvers.set(content, () => {
+							if (hasResolved) return
+							hasResolved = true
+							physicalActive -= 1
+							resolve(`blob:${content}`)
+						})
+					}),
+			)
+			testServices.forEach((targetService) => {
+				Object.assign(targetService, {
+					yieldForPreparation: () => Promise.resolve(),
+					doGenerateScreenshot: generate,
+				})
+			})
+
+			const firstGenerations = [
+				firstService.generateScreenshot("first-1", "first-1"),
+				firstService.generateScreenshot("first-2", "first-2"),
+			]
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+			expect(physicalActive).toBe(2)
+
+			const secondGenerations = [
+				secondService.generateScreenshot("second-1", "second-1"),
+				secondService.generateScreenshot("second-2", "second-2"),
+			]
+			const firstRejections = firstGenerations.map((generation) =>
+				expect(generation).rejects.toMatchObject({ name: "AbortError" }),
+			)
+			firstService.dispose()
+			await Promise.all(firstRejections)
+			expect(generate).toHaveBeenCalledTimes(2)
+
+			physicalResolvers.get("first-1")?.()
+			await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(3))
+			expect(physicalActive).toBe(2)
+			const startedSecondContent = startedContents[2]
+			expect(startedSecondContent).toMatch(/^second-/)
+
+			const secondRejections = secondGenerations.map((generation) =>
+				expect(generation).rejects.toMatchObject({ name: "AbortError" }),
+			)
+			secondService.dispose()
+			await Promise.all(secondRejections)
+
+			const thirdGeneration = thirdService.generateScreenshot("third-1", "third-1")
+			await Promise.resolve()
+			expect(generate).toHaveBeenCalledTimes(3)
+
+			physicalResolvers.get("first-2")?.()
+			await vi.waitFor(() => {
+				expect(generate).toHaveBeenCalledTimes(4)
+				expect(startedContents).toContain("third-1")
+			})
+			expect(maxPhysicalActive).toBe(2)
+
+			if (startedSecondContent) physicalResolvers.get(startedSecondContent)?.()
+			physicalResolvers.get("third-1")?.()
+			await expect(thirdGeneration).resolves.toBe("blob:third-1")
+			await vi.waitFor(() => expect(physicalActive).toBe(0))
+
+			thirdService.dispose()
+		})
+
 		it("cancels its queued generations before active slots are released on dispose", async () => {
-			const generate = vi.fn(() => new Promise<string>(() => undefined))
+			const activeResolvers = new Map<string, (thumbnailUrl: string) => void>()
+			const generate = vi.fn(
+				(content: string) =>
+					new Promise<string>((resolve) => {
+						activeResolvers.set(content, resolve)
+					}),
+			)
 			Object.assign(service, {
 				yieldForPreparation: () => Promise.resolve(),
 				doGenerateScreenshot: generate,
@@ -879,6 +989,7 @@ describe("SlideScreenshotService", () => {
 				"dispose-queued",
 				expect.anything(),
 				expect.anything(),
+				expect.anything(),
 			)
 
 			const rejections = [firstGeneration, secondGeneration, queuedGeneration].map(
@@ -892,7 +1003,15 @@ describe("SlideScreenshotService", () => {
 				"dispose-queued",
 				expect.anything(),
 				expect.anything(),
+				expect.anything(),
 			)
+
+			activeResolvers.get("dispose-active-1")?.("blob:dispose-active-1")
+			activeResolvers.get("dispose-active-2")?.("blob:dispose-active-2")
+			await vi.waitFor(() => {
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:dispose-active-1")
+				expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:dispose-active-2")
+			})
 		})
 	})
 
