@@ -17,6 +17,7 @@ import {
 	PPT_SIDEBAR_THUMBNAIL_DIMENSIONS,
 	prioritizeVirtualItems,
 } from "./utils/virtualization"
+import { getPPTPreviewOverscan } from "./utils/devicePerformance"
 import { observer } from "mobx-react-lite"
 import {
 	TooltipProvider,
@@ -32,9 +33,6 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { usePPTStore } from "../hooks"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
 
-// Keep a bounded ten-page buffer on both sides of the visible range. The same virtual range
-// drives DOM mounting, slide HTML loading, and thumbnail generation.
-const VIRTUAL_OVERSCAN = 10
 const MOBILE_ROW_ESTIMATE = 140
 const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
 const DRAG_AUTO_SCROLL_MAX_SPEED = 20
@@ -59,6 +57,8 @@ function PPTSidebar({
 }: PPTSidebarProps) {
 	const { t } = useTranslation("super")
 	const store = usePPTStore()
+	// Resolve once per sidebar mount so network changes cannot resize the loading window mid-scroll.
+	const [virtualOverscan] = useState(() => getPPTPreviewOverscan())
 
 	const slides = store.slides
 	const activeIndex = store.activeIndex
@@ -132,7 +132,7 @@ function PPTSidebar({
 		estimateSize: estimateRowSize,
 		getItemKey,
 		horizontal: isMobile,
-		overscan: VIRTUAL_OVERSCAN,
+		overscan: virtualOverscan,
 		paddingStart: 8,
 		paddingEnd: 8,
 		gap: isMobile ? 8 : 0,

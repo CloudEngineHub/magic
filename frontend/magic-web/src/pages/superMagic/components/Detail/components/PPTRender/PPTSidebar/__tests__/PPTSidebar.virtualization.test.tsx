@@ -30,6 +30,7 @@ const mockState = vi.hoisted(() => {
 	}
 
 	return {
+		previewOverscan: 10,
 		store: {
 			slides: [] as SlideItem[],
 			activeIndex: 0,
@@ -81,6 +82,10 @@ vi.mock("../SortableSlideItem", () => ({
 			onDragStart={(event) => onSlideDragStart?.(event, item.id)}
 		/>
 	),
+}))
+
+vi.mock("../utils/devicePerformance", () => ({
+	getPPTPreviewOverscan: () => mockState.previewOverscan,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -194,6 +199,7 @@ describe("PPTSidebar virtualization", () => {
 		vi.clearAllMocks()
 		mockState.store.slides = makeSlides(500)
 		mockState.store.activeIndex = 0
+		mockState.previewOverscan = 10
 		mockState.values.virtualItems = Array.from({ length: 10 }, (_, index) =>
 			makeVirtualItem(index),
 		)
@@ -229,6 +235,23 @@ describe("PPTSidebar virtualization", () => {
 			]),
 		)
 		expect(mockState.store.ensureSlideScreenshot).not.toHaveBeenCalled()
+	})
+
+	it("uses the adaptive overscan selected at mount time", () => {
+		mockState.previewOverscan = 15
+		const onSlideClick = vi.fn()
+		const { rerender, unmount } = render(<PPTSidebar onSlideClick={onSlideClick} />)
+
+		expect(mockState.options?.overscan).toBe(15)
+
+		mockState.previewOverscan = 5
+		rerender(<PPTSidebar isMobile onSlideClick={onSlideClick} />)
+		expect(mockState.options?.overscan).toBe(15)
+
+		unmount()
+		render(<PPTSidebar onSlideClick={vi.fn()} />)
+
+		expect(mockState.options?.overscan).toBe(5)
 	})
 
 	it("clears queued preview demand when the sidebar unmounts", async () => {
