@@ -812,7 +812,6 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * user tool call Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
      * @return array{TaskEntity, TopicEntity}
      */
     private function getAuthorizedTaskAndTopic(
@@ -834,7 +833,7 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * ask_user Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
+     * user tool call Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
      *
      * 消息存储和推送由步骤 2、3 完成；此处只补充本路径泛型步骤 4 未覆盖的状态（终态仍走步骤 4）。
      * 路由信息（task_id）由前端回答时直接携带，无需 Redis 路由键。
