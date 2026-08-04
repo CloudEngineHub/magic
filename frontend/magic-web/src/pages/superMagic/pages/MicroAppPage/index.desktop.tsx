@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { PanelRightOpen } from "lucide-react"
 import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
-import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
-import { TOPIC_HISTORY_PANEL_WIDTH } from "@/pages/superMagic/constants/resizablePanel"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
@@ -19,14 +16,17 @@ import {
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/lib/utils"
+import PreviewDetailPopup, {
+	type PreviewDetail,
+	type PreviewDetailPopupRef,
+} from "@/pages/superMagicMobile/components/PreviewDetailPopup"
 
-import AppConversationPanel from "./components/AppConversationPanel"
+import MicroAppDesktopConversationPanels from "./components/MicroAppDesktopConversationPanels"
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
-import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
 import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
 import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
@@ -58,6 +58,8 @@ function MicroAppPageInner({
 	const aiEditHandlerRef = useRef<(() => void) | null>(null)
 	const devConsoleToggleHandlerRef = useRef<(() => void) | null>(null)
 	const workspacePanelsRef = useRef<HTMLDivElement>(null)
+	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
+	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const workspacePanelsSize = useSize(workspacePanelsRef)
 	const workspaceWidthPx = workspacePanelsSize?.width || window.innerWidth
 	const messagePanelMaxWidthPx = Math.max(
@@ -170,6 +172,14 @@ function MicroAppPageInner({
 	})
 	const showFilesView = useMemoizedFn(() => {
 		setActiveView("files")
+	})
+	const setPreviewDetail = useMemoizedFn((detail: unknown) => {
+		if (!detail || typeof detail !== "object") return
+		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
+	})
+	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
+		if (!detail || typeof detail !== "object") return
+		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
 
 	useMicroAppMessageFileOpen({
@@ -415,69 +425,26 @@ function MicroAppPageInner({
 						/>
 					</main>
 
-					{!isMessagePanelCollapsed ? (
-						<>
-							<TopicResizeHandle
-								onResizeStart={onMessagePanelResizeStart}
-								className={
-									isDraggingMessagePanel ? "before:opacity-100" : undefined
-								}
-							/>
-							<aside
-								className="h-full shrink-0 overflow-hidden border-l border-border bg-background"
-								style={{ width: messagePanelWidthPx }}
-								data-testid="micro-app-conversation-panel"
-							>
-								<AppConversationPanel
-									selectedProject={selectedProject}
-									topicStore={conversation.topicStore}
-									mentionPanelStore={store.mentionPanelStore}
-									projectFilesStore={store.projectFilesStore}
-									onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-									detailPanelVisible
-									isConversationPanelCollapsed={isMessagePanelCollapsed}
-									onToggleConversationPanel={handleToggleMessagePanelCollapse}
-									onExpandConversationPanel={() =>
-										setIsMessagePanelCollapsed(false)
-									}
-									historyTriggerMode="layout"
-									isHistoryPanelOpen={isTopicHistoryPanelOpen}
-									onToggleHistoryPanel={toggleTopicHistoryPanel}
-								/>
-							</aside>
-						</>
-					) : null}
-					{isTopicHistoryPanelOpen && !isMessagePanelCollapsed ? (
-						<aside
-							className="h-full min-w-0 shrink-0 overflow-hidden border-l border-border bg-background"
-							style={{ width: TOPIC_HISTORY_PANEL_WIDTH }}
-							data-testid="micro-app-topic-history-panel"
-						>
-							<MessageHeaderTopicHistoryPanel
-								selectedProject={selectedProject}
-								topicStore={conversation.topicStore}
-								topicActions={topicActions}
-								isConversationPanelCollapsed={isMessagePanelCollapsed}
-								onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
-								onClose={closeTopicHistoryPanel}
-							/>
-						</aside>
-					) : null}
-					{isMessagePanelCollapsed ? (
-						<aside
-							className="flex h-full shrink-0 justify-center border-l border-border bg-background py-2"
-							style={{ width: layout.COLLAPSED_RAIL_WIDTH_PX }}
-							data-testid="micro-app-conversation-rail"
-						>
-							<MicroAppPanelToggleButton
-								icon={<PanelRightOpen size={16} />}
-								label={t("microAppPage.header.showConversation")}
-								testId="micro-app-conversation-expand"
-								side="left"
-								onClick={toggleMessagePanelCollapse}
-							/>
-						</aside>
-					) : null}
+					<MicroAppDesktopConversationPanels
+						selectedProject={selectedProject}
+						topicStore={conversation.topicStore}
+						mentionPanelStore={store.mentionPanelStore}
+						projectFilesStore={store.projectFilesStore}
+						topicActions={topicActions}
+						isMessagePanelCollapsed={isMessagePanelCollapsed}
+						isMessagePanelDragging={isDraggingMessagePanel}
+						messagePanelWidthPx={messagePanelWidthPx}
+						isTopicHistoryPanelOpen={isTopicHistoryPanelOpen}
+						onMessagePanelResizeStart={onMessagePanelResizeStart}
+						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+						onToggleConversationPanel={handleToggleMessagePanelCollapse}
+						onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
+						onToggleHistoryPanel={toggleTopicHistoryPanel}
+						onCloseHistoryPanel={closeTopicHistoryPanel}
+						onSelectDetail={setPreviewDetail}
+						onExpandCollapsedPanel={toggleMessagePanelCollapse}
+						showConversationLabel={t("microAppPage.header.showConversation")}
+					/>
 				</div>
 			</div>
 
@@ -494,6 +461,23 @@ function MicroAppPageInner({
 				onEditMicroApp={handleEditMicroApp}
 				onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
 				collaboratorPanel={CollaboratorUpdatePanel}
+			/>
+			<PreviewDetailPopup
+				ref={previewDetailPopupRef}
+				setUserSelectDetail={setPreviewDetail}
+				selectedTopic={selectedTopic}
+				selectedProject={selectedProject}
+				allowEdit={!isReadOnly}
+				onOpenNewPopup={(detail, attachmentTree, nextAttachmentList) => {
+					linkPreviewPopupRef.current?.open(detail, attachmentTree, nextAttachmentList)
+				}}
+			/>
+			<PreviewDetailPopup
+				ref={linkPreviewPopupRef}
+				setUserSelectDetail={setLinkPreviewDetail}
+				selectedTopic={selectedTopic}
+				selectedProject={selectedProject}
+				allowEdit={!isReadOnly}
 			/>
 		</FileActionVisibilityProvider>
 	)

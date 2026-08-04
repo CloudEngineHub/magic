@@ -35,6 +35,7 @@ interface MicroAppMobileConversationProps {
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
 	attachments: AttachmentItem[]
+	onSelectDetail: (detail: unknown) => void
 	onOpenFile: (file?: unknown) => void
 	onOpenChange: (open: boolean) => void
 	onTerminalTopicStatusChange?: () => void
@@ -72,6 +73,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 	mentionPanelStore,
 	projectFilesStore,
 	attachments,
+	onSelectDetail,
 	onOpenFile,
 	onOpenChange,
 	onTerminalTopicStatusChange,
@@ -141,6 +143,10 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 		onOpenChange(false)
 		onOpenFile(file)
 	})
+	const handleSelectDetail = useMemoizedFn((detail: unknown) => {
+		onOpenChange(false)
+		onSelectDetail(detail)
+	})
 
 	const isEmpty =
 		isSelectedTopicMessagesReady && !isMessagesInitialLoading && messages.length === 0
@@ -197,7 +203,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							<MessageList
 								data={messages}
 								selectedTopic={selectedTopic}
-								setSelectedDetail={handleFileClick}
+								setSelectedDetail={handleSelectDetail}
 								handlePullMoreMessage={handlePullMoreMessage}
 								showLoading={showLoading}
 								onFileClick={handleFileClick}

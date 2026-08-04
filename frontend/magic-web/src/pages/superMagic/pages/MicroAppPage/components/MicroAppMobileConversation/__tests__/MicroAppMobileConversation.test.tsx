@@ -10,6 +10,10 @@ const scopedProgressMocks = vi.hoisted(() => ({
 	params: null as Record<string, unknown> | null,
 }))
 
+const messageListMocks = vi.hoisted(() => ({
+	setSelectedDetail: undefined as ((detail: unknown) => void) | undefined,
+}))
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
@@ -40,9 +44,16 @@ vi.mock("@/pages/superMagicMobile/components/icons/mobile-resource-type-icon", (
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList", () => ({
-	default: ({ fallbackRender }: { fallbackRender?: ReactNode }) => (
-		<div data-testid="mobile-message-list">{fallbackRender}</div>
-	),
+	default: ({
+		fallbackRender,
+		setSelectedDetail,
+	}: {
+		fallbackRender?: ReactNode
+		setSelectedDetail?: (detail: unknown) => void
+	}) => {
+		messageListMocks.setSelectedDetail = setSelectedDetail
+		return <div data-testid="mobile-message-list">{fallbackRender}</div>
+	},
 	MessageListProvider: ({ children }: { children: ReactNode }) => children,
 }))
 
@@ -205,5 +216,42 @@ describe("MicroApp mobile conversation controls", () => {
 				onTerminalTopicStatusChange: checkAttachmentsNowDebounced,
 			}),
 		)
+	})
+
+	it("opens tool details through the preview handler instead of the file handler", () => {
+		const onSelectDetail = vi.fn()
+		const onOpenFile = vi.fn()
+		const onOpenChange = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "需求讨论" },
+			topics: [],
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+		const detail = {
+			type: "shell",
+			currentFileId: "tool-1",
+			data: { command: "pwd" },
+		}
+
+		render(
+			<MicroAppMobileConversation
+				open
+				selectedProject={{ id: "project-1", project_name: "微应用" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				attachments={[]}
+				onSelectDetail={onSelectDetail}
+				onOpenFile={onOpenFile}
+				onOpenChange={onOpenChange}
+			/>,
+		)
+
+		messageListMocks.setSelectedDetail?.(detail)
+
+		expect(onOpenChange).toHaveBeenCalledWith(false)
+		expect(onSelectDetail).toHaveBeenCalledWith(detail)
+		expect(onOpenFile).not.toHaveBeenCalled()
 	})
 })

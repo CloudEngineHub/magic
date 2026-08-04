@@ -116,13 +116,13 @@ function MicroAppPageMobileInner({
 		handleEditMicroApp,
 	} = controller
 
-	const setPreviewDetail = useMemoizedFn((detail: PreviewDetail | null) => {
-		if (!detail) return
-		previewDetailPopupRef.current?.open(detail, attachments, attachmentList)
+	const setPreviewDetail = useMemoizedFn((detail: unknown) => {
+		if (!detail || typeof detail !== "object") return
+		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
-	const setLinkPreviewDetail = useMemoizedFn((detail: PreviewDetail | null) => {
-		if (!detail) return
-		linkPreviewPopupRef.current?.open(detail, attachments, attachmentList)
+	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
+		if (!detail || typeof detail !== "object") return
+		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
 	const { handleOpenFile: openFilePreview } = useFileOpen({
 		attachments,
@@ -277,6 +277,7 @@ function MicroAppPageMobileInner({
 						mentionPanelStore={store.mentionPanelStore}
 						projectFilesStore={store.projectFilesStore}
 						attachments={attachments}
+						onSelectDetail={setPreviewDetail}
 						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 						onOpenFile={handlePreviewFile}
 						onOpenChange={setConversationOpen}

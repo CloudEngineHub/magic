@@ -54,6 +54,10 @@ const conversationPanelMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
+const previewPopupMocks = vi.hoisted(() => ({
+	open: vi.fn(),
+}))
+
 vi.mock("react-router", () => ({
 	useParams: () => ({ appId: "app-1" }),
 }))
@@ -104,6 +108,13 @@ vi.mock("@/pages/superMagic/components/Detail", () => ({
 		useImperativeHandle(ref, () => ({ openFileTab: detailMocks.openFileTab }))
 		detailMocks.render(props)
 		return <div data-testid="desktop-files-viewer" />
+	}),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/PreviewDetailPopup", () => ({
+	default: forwardRef((_props, ref) => {
+		useImperativeHandle(ref, () => ({ open: previewPopupMocks.open }))
+		return <div data-testid="desktop-detail-preview-popup" />
 	}),
 }))
 
@@ -234,7 +245,21 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 vi.mock("../components/AppConversationPanel", () => ({
 	default: (props: Record<string, unknown>) => {
 		conversationPanelMocks.render(props)
-		return <div data-testid="desktop-conversation-panel" />
+		return (
+			<button
+				type="button"
+				data-testid="desktop-conversation-panel"
+				onClick={() =>
+					(props.onSelectDetail as ((detail: unknown) => void) | undefined)?.({
+						type: "shell",
+						currentFileId: "tool-1",
+						data: { command: "pwd" },
+					})
+				}
+			>
+				conversation
+			</button>
+		)
 	},
 }))
 
@@ -316,6 +341,7 @@ describe("MicroAppPageDesktop", () => {
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
 		conversationPanelMocks.render.mockClear()
+		previewPopupMocks.open.mockClear()
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
 	})
 
@@ -362,6 +388,22 @@ describe("MicroAppPageDesktop", () => {
 			expect.objectContaining({
 				onPublishStatusChange: resolverMocks.result.setIsPublished,
 			}),
+		)
+	})
+
+	it("opens tool details from the conversation panel in a preview modal", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		fireEvent.click(screen.getByTestId("desktop-conversation-panel"))
+
+		expect(previewPopupMocks.open).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "shell",
+				currentFileId: "tool-1",
+			}),
+			expect.any(Array),
+			expect.any(Array),
 		)
 	})
 
