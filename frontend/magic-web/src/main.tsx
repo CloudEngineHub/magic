@@ -7,7 +7,6 @@ import { createRoot } from "react-dom/client"
 import App from "./App"
 import "@/utils/polyfill"
 import { appService } from "./services/app/AppService"
-import { getTimezone, getTimezones } from "@dtyq/timezone"
 import { DevStrictMode } from "@/utils/devStrictMode"
 import { registerAppServiceWorker } from "@/workers/service-worker/register"
 
