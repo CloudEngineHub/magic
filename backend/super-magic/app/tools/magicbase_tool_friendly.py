@@ -44,8 +44,49 @@ def _column_name(arguments: Dict[str, Any], result: Optional[ToolResult]) -> str
     )
 
 
+def _table_reference(arguments: Dict[str, Any], result: Optional[ToolResult]) -> str:
+    data = _result_data(result)
+    return _table_name(arguments, result) or _text(
+        arguments.get("table_id") or data.get("table_id")
+    )
+
+
 def _translated(code: str, **kwargs: Any) -> str:
     return i18n.translate(code, category="tool.messages", **kwargs)
+
+
+def _query_rows_remark(
+    arguments: Dict[str, Any],
+    result: Optional[ToolResult],
+) -> str:
+    table = _table_reference(arguments, result)
+    table_label = (
+        _translated("magicbase.table_target", table=table)
+        if table
+        else _translated("magicbase.current_table")
+    )
+    data = _result_data(result)
+    rows = data.get("rows")
+    total = data.get("total")
+    if isinstance(rows, list) and isinstance(total, int):
+        return _translated(
+            "magicbase.query_rows_result",
+            table=table_label,
+            returned=len(rows),
+            total=total,
+        )
+
+    page = arguments.get("page") or data.get("page") or 1
+    query_filter = arguments.get("filter")
+    if isinstance(query_filter, dict) and query_filter:
+        fields = "、".join(str(field) for field in query_filter)
+        return _translated(
+            "magicbase.query_rows_filtered_page",
+            table=table_label,
+            fields=fields,
+            page=page,
+        )
+    return _translated("magicbase.query_rows_page", table=table_label, page=page)
 
 
 def build_magicbase_tool_remark(
@@ -78,9 +119,11 @@ def build_magicbase_tool_remark(
         count = len(values) or data.get("created_count") or data.get("deleted_count") or 0
         return _translated("magicbase.row_count", count=count)
 
+    if tool_name == "query_magicbase_rows":
+        return _query_rows_remark(arguments, result)
+
     message_by_tool = {
         "get_magicbase_table": "magicbase.table_structure",
-        "query_magicbase_rows": "magicbase.current_table",
         "create_magicbase_row": "magicbase.save_business_data",
         "delete_magicbase_row": "magicbase.selected_record",
         "update_magicbase_table_permissions": "magicbase.permission_scope",

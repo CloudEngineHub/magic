@@ -2883,6 +2883,22 @@
         "zh_CN": "当前数据表",
         "en_US": "Current table"
     },
+    "magicbase.table_target": {
+        "zh_CN": "表 {{table}}",
+        "en_US": "Table {{table}}"
+    },
+    "magicbase.query_rows_page": {
+        "zh_CN": "第 {{page}} 页 · {{table}}",
+        "en_US": "Page {{page}} · {{table}}"
+    },
+    "magicbase.query_rows_filtered_page": {
+        "zh_CN": "{{fields}} 筛选 · 第 {{page}} 页 · {{table}}",
+        "en_US": "Filtered by {{fields}} · Page {{page}} · {{table}}"
+    },
+    "magicbase.query_rows_result": {
+        "zh_CN": "返回 {{returned}}/{{total}} 条 · {{table}}",
+        "en_US": "{{returned}}/{{total}} rows returned · {{table}}"
+    },
     "magicbase.save_business_data": {
         "zh_CN": "保存业务数据",
         "en_US": "Save app data"
