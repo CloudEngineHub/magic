@@ -1,9 +1,8 @@
-import { Button, Flex } from "antd"
+import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
+import { Button } from "@/components/shadcn-ui/button"
 import WorkspaceButton from "../WorkspaceButton"
-// @ts-ignore
-import { useStyles } from "./style"
 // @ts-ignore
 import FolderIcon from "../../assets/icon/folder_empty.svg"
 // @ts-ignore
@@ -30,7 +29,6 @@ export default function ShareEmptyState({
 	isLoading = false,
 	isFileShare = false,
 }: ShareEmptyStateProps) {
-	const { styles } = useStyles()
 	const { t } = useTranslation("super")
 	const { userInfo } = useUserInfo()
 	const isLogined = !!userInfo?.user_id
@@ -39,11 +37,17 @@ export default function ShareEmptyState({
 	const icon = isFileShare ? FolderIcon : ReplayIcon
 
 	return (
-		<div className={styles.container} data-testid="share-empty-state">
-			{/* 头部 */}
-			<Flex className={styles.header} data-testid="share-empty-state-header">
-				<Logo className={styles.logo} />
-				<Flex gap={8}>
+		<div
+			className="flex h-screen w-screen flex-col overflow-hidden bg-[#F9F9F9]"
+			data-testid="share-empty-state"
+		>
+			{/* Keep the share header below the mobile safe area in standalone browsers. */}
+			<div
+				className="z-[99] flex h-12 items-center justify-between border-b border-border bg-white px-5 py-2.5 backdrop-blur-[50px] max-md:h-[calc(52px+var(--safe-area-inset-top,0px))] max-md:px-3 max-md:pb-0 max-md:pt-[var(--safe-area-inset-top,0px)]"
+				data-testid="share-empty-state-header"
+			>
+				<Logo className="h-[42px] shrink-0 max-md:h-9" />
+				<div className="flex gap-2">
 					{isLogined ? (
 						<WorkspaceButton
 							onClick={() => {
@@ -52,6 +56,8 @@ export default function ShareEmptyState({
 						/>
 					) : (
 						<Button
+							variant="outline"
+							size="sm"
 							onClick={() => {
 								history.replace({ name: RouteName.Login })
 							}}
@@ -60,57 +66,65 @@ export default function ShareEmptyState({
 							{t("share.login")}
 						</Button>
 					)}
-				</Flex>
-			</Flex>
+				</div>
+			</div>
 
-			{/* 主体内容 */}
-			<div className={styles.content} data-testid="share-empty-state-content">
-				<div className={styles.main}>
-					{/* 图标 */}
+			<div
+				className="flex flex-1 items-center justify-center p-5"
+				data-testid="share-empty-state-content"
+			>
+				<div className="flex w-full max-w-[400px] flex-col items-center gap-5">
 					<img
 						src={icon}
 						alt=""
-						className={styles.icon}
+						className="h-[60px] w-[60px] shrink-0"
 						data-testid="share-empty-state-icon"
 					/>
 
-					{/* 标题 */}
-					<div className={styles.title} data-testid="share-empty-state-title">
+					<div
+						className="text-center text-lg font-semibold leading-6 text-foreground/80"
+						data-testid="share-empty-state-title"
+					>
 						{t("share.emptyState.title")}
 					</div>
 
-					{/* 提示卡片 */}
-					<div className={styles.card} data-testid="share-empty-state-card">
-						<div className={styles.cardContent}>
-							{/* 提示文本 */}
-							<div className={styles.tip} data-testid="share-empty-state-tip">
+					<div
+						className="flex flex-col gap-5 self-stretch rounded-xl border border-[#1C1D23]/[0.08] bg-white p-5"
+						data-testid="share-empty-state-card"
+					>
+						<div className="flex flex-col items-center gap-2 self-stretch">
+							<div
+								className="self-stretch text-center text-xs font-normal leading-4 text-foreground/60"
+								data-testid="share-empty-state-tip"
+							>
 								{t("share.emptyState.switchTip", { orgName: targetOrgName })}
 							</div>
 
-							{/* 用户信息 */}
-							<div className={styles.userInfo} data-testid="share-empty-state-user">
-								<div className={styles.avatarContainer}>
+							<div
+								className="flex items-center gap-1"
+								data-testid="share-empty-state-user"
+							>
+								<div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#DDE7FF] p-[1.5px]">
 									<UserAvatarRender
 										userInfo={userInfoProp}
 										size={24}
-										className={styles.avatar}
+										className="h-6 w-6 rounded-md"
 									/>
 								</div>
-								<span className={styles.userName}>
+								<span className="text-sm font-semibold leading-5 text-foreground">
 									{userInfoProp?.nickname || ""}
 								</span>
 							</div>
 						</div>
 
-						{/* 切换按钮 */}
 						<Button
-							type="primary"
+							type="button"
 							onClick={onSwitch}
 							disabled={isLoading}
-							className={styles.button}
-							loading={isLoading}
+							className="h-auto self-stretch rounded-lg border-0 px-6 py-1.5 text-sm font-normal leading-5"
 							data-testid="share-empty-switch-button"
 						>
+							{isLoading ? <Loader2 size={16} className="animate-spin" /> : null}
 							{isLoading
 								? t("share.emptyState.switching")
 								: t("share.emptyState.switchButton")}

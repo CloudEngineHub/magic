@@ -10,44 +10,6 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
-vi.mock("antd", () => ({
-	Button: ({
-		children,
-		onClick,
-		disabled,
-		loading,
-		className,
-		type: buttonType,
-		...props
-	}: {
-		children: React.ReactNode
-		onClick?: React.MouseEventHandler<HTMLButtonElement>
-		disabled?: boolean
-		loading?: boolean
-		className?: string
-		type?: string
-	}) => {
-		void buttonType
-
-		return (
-			<button
-				type="button"
-				onClick={onClick}
-				disabled={disabled || loading}
-				className={className}
-				{...props}
-			>
-				{children}
-			</button>
-		)
-	},
-	Flex: ({ children, gap, ...props }: { children: React.ReactNode; gap?: number }) => {
-		void gap
-
-		return <div {...props}>{children}</div>
-	},
-}))
-
 vi.mock("@/models/user/hooks", () => ({
 	useUserInfo: () => ({ userInfo: { user_id: "current-user" } }),
 }))
@@ -60,28 +22,6 @@ vi.mock("@/components/business/UserAvatarRender", () => ({
 	default: ({ userInfo }: { userInfo: { nickname?: string } | null }) => (
 		<div data-testid="share-empty-avatar">{userInfo?.nickname}</div>
 	),
-}))
-
-vi.mock("../ShareEmptyState/style", () => ({
-	useStyles: () => ({
-		styles: {
-			container: "container",
-			header: "header",
-			logo: "logo",
-			content: "content",
-			main: "main",
-			icon: "icon",
-			title: "title",
-			card: "card",
-			cardContent: "cardContent",
-			tip: "tip",
-			userInfo: "userInfo",
-			avatarContainer: "avatarContainer",
-			avatar: "avatar",
-			userName: "userName",
-			button: "button",
-		},
-	}),
 }))
 
 vi.mock("../WorkspaceButton", () => ({
@@ -118,6 +58,23 @@ describe("share organization switching", () => {
 		fireEvent.click(screen.getByTestId("share-empty-switch-button"))
 
 		expect(onSwitch).toHaveBeenCalledOnce()
+	})
+
+	it("disables the switch action while the organization is changing", () => {
+		render(
+			<ShareEmptyState
+				currentOrgName="Current Team"
+				targetOrgName="Target Team"
+				userInfo={{ nickname: "Target User" }}
+				onSwitch={vi.fn()}
+				isLoading
+			/>,
+		)
+
+		expect(screen.getByTestId("share-empty-switch-button")).toBeDisabled()
+		expect(screen.getByTestId("share-empty-switch-button")).toHaveTextContent(
+			"share.emptyState.switching",
+		)
 	})
 
 	it("uses the migrated error-state typography for denied shares", () => {
