@@ -31,7 +31,7 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
         $projectEntity = $this->getAccessibleProjectForTaskFile(
             $fileEntity,
             $userAuthorization,
@@ -53,7 +53,7 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
         $projectEntity = $this->getAccessibleProjectForTaskFile(
             $fileEntity,
             $userAuthorization,
@@ -75,7 +75,7 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
         $projectEntity = $this->getAccessibleProjectForTaskFile(
             $fileEntity,
             $userAuthorization,

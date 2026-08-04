@@ -17,6 +17,10 @@ export interface BaseComponentProps {
 /** Preview policy declared by the opener and executed by FilesViewer, independent of file source. */
 export interface FilePreviewPolicy {
 	temporary?: boolean
+	/** 允许使用调用方提供的完整文件信息打开，不依赖当前项目附件树。 */
+	standalone?: boolean
+	/** 是否参与文件编辑状态上报和编辑冲突检测。 */
+	editingPresence?: boolean
 	persistTab?: boolean
 	syncWithAttachments?: boolean
 	keepLocalContent?: boolean

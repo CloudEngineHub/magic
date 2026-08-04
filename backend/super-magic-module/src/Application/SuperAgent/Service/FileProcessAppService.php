@@ -983,7 +983,10 @@ class FileProcessAppService extends AbstractAppService
         $storageOrganizationCode = $projectEntity?->getUserOrganizationCode()
             ?? $taskFileEntity->getOrganizationCode();
 
-        // 2. Process content (decode shadow if enabled)
+        // 2. 校验编辑基准，避免旧正文覆盖文件系统中的最新内容。
+        $this->assertExpectedRevisionMatches($taskFileEntity, $requestDTO->getExpectedRevision());
+
+        // 3. Process content (decode shadow if enabled)
         $content = $requestDTO->getContent();
         if ($requestDTO->getEnableShadow()) {
             $content = ShadowCode::unShadow($content);
@@ -995,7 +998,7 @@ class FileProcessAppService extends AbstractAppService
             ));
         }
 
-        // 3. Upload file content (replace existing content using file_key)
+        // 4. Upload file content (replace existing content using file_key)
         $result = $this->uploadFileContent(
             $content,
             $taskFileEntity->getFileKey(),
@@ -1005,10 +1008,10 @@ class FileProcessAppService extends AbstractAppService
             $taskFileEntity->getFileId()
         );
 
-        // 4. Update file metadata
-        $this->updateFileMetadata($taskFileEntity, $result, $authorization);
+        // 5. Update file metadata
+        $revision = $this->updateFileMetadata($taskFileEntity, $result, $authorization);
 
-        // 5. 创建文件版本
+        // 6. 创建文件版本
         $versionEntity = $this->taskFileVersionDomainService->createFileVersion($storageOrganizationCode, $taskFileEntity);
 
         return [
@@ -1016,8 +1019,26 @@ class FileProcessAppService extends AbstractAppService
             'size' => $result['size'],
             'updated_at' => date('Y-m-d H:i:s'),
             'version' => $versionEntity?->getVersion(),
+            'revision' => $revision,
             'shadow_decoded' => $requestDTO->getEnableShadow(),
         ];
+    }
+
+    /**
+     * 校验文件修订号，未传修订号时保持旧调用兼容。
+     */
+    private function assertExpectedRevisionMatches(TaskFileEntity $taskFileEntity, ?int $expectedRevision): void
+    {
+        if ($expectedRevision === null) {
+            return;
+        }
+
+        if (! $taskFileEntity->matchesMetadataRevision($expectedRevision)) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::FILE_CONCURRENT_MODIFICATION,
+                'file.concurrent_modification'
+            );
+        }
     }
 
     /**
@@ -1143,8 +1164,10 @@ class FileProcessAppService extends AbstractAppService
      * @param array $result Upload result
      * @param MagicUserAuthorization $authorization User authorization
      */
-    private function updateFileMetadata(TaskFileEntity $taskFileEntity, array $result, MagicUserAuthorization $authorization): void
+    private function updateFileMetadata(TaskFileEntity $taskFileEntity, array $result, MagicUserAuthorization $authorization): int
     {
+        $nextRevision = $taskFileEntity->getMetadataVersion() + 1;
+
         // Update file size via MagicFS to keep metadata version chain in sync.
         $taskFileEntity = $this->magicFSFileDomainService->updateFile(
             (string) $taskFileEntity->getFileId(),
@@ -1152,7 +1175,7 @@ class FileProcessAppService extends AbstractAppService
         );
 
         if (! $taskFileEntity->isProjectFile()) {
-            return;
+            return $nextRevision;
         }
 
         // Dispatch file content saved event for WebSocket notification
@@ -1168,5 +1191,7 @@ class FileProcessAppService extends AbstractAppService
             $authorization->getId(),
             $authorization->getOrganizationCode()
         ));
+
+        return $nextRevision;
     }
 }

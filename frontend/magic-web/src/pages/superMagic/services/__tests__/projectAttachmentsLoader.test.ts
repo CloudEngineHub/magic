@@ -1,11 +1,24 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest"
-import { createProjectAttachmentsBatchSnapshotScheduler } from "../projectAttachmentsLoader"
+import {
+	createProjectAttachmentsBatchSnapshotScheduler,
+	loadProjectAttachments,
+} from "../projectAttachmentsLoader"
 import {
 	FILE_LIST_SCROLL_IDLE_MS,
 	markProjectFileListScrollActivity,
 	resetProjectFileListScrollActivity,
 } from "../../utils/fileListScrollActivity"
 import type { ProjectAttachmentsV2Snapshot } from "../../utils/projectAttachments/v2Adapter"
+
+const superMagicApiMock = vi.hoisted(() => ({
+	getAttachmentsByProjectId: vi.fn(),
+	getProjectAttachmentsCount: vi.fn(),
+	getProjectAttachmentsV2Page: vi.fn(),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: superMagicApiMock,
+}))
 
 function createSnapshot(level: number): ProjectAttachmentsV2Snapshot & {
 	level: number
@@ -31,6 +44,8 @@ function createSnapshot(level: number): ProjectAttachmentsV2Snapshot & {
 describe("createProjectAttachmentsBatchSnapshotScheduler", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		vi.clearAllMocks()
+		window.history.replaceState({}, "", "/")
 		resetProjectFileListScrollActivity()
 	})
 
@@ -118,5 +133,57 @@ describe("createProjectAttachmentsBatchSnapshotScheduler", () => {
 
 		expect(commits.map((payload) => payload.level)).toEqual([0, 1])
 		expect(commits[1].phase).toBe("middle")
+	})
+})
+
+describe("loadProjectAttachments scope", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		window.history.replaceState({}, "", "/")
+	})
+
+	it("forwards memory scope to count and V1 requests", async () => {
+		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 1 })
+		superMagicApiMock.getAttachmentsByProjectId.mockResolvedValue({
+			tree: [],
+			list: [],
+			total: 0,
+		})
+
+		await loadProjectAttachments({
+			projectId: "project-id",
+			scope: "memory",
+			temporaryToken: null,
+		})
+
+		expect(superMagicApiMock.getProjectAttachmentsCount).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "project-id", scope: "memory" }),
+			expect.any(Object),
+		)
+		expect(superMagicApiMock.getAttachmentsByProjectId).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "project-id", scope: "memory" }),
+			expect.any(Object),
+		)
+	})
+
+	it("forwards memory scope to every V2 page request", async () => {
+		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 1000 })
+		superMagicApiMock.getProjectAttachmentsV2Page.mockResolvedValue({
+			list: [],
+			next_parent_ids: null,
+			has_more: false,
+		})
+
+		await loadProjectAttachments({
+			projectId: "project-id",
+			scope: "memory",
+			temporaryToken: null,
+		})
+
+		expect(superMagicApiMock.getProjectAttachmentsV2Page).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "project-id", scope: "memory" }),
+			expect.any(Object),
+		)
+		expect(superMagicApiMock.getAttachmentsByProjectId).not.toHaveBeenCalled()
 	})
 })

@@ -15,13 +15,11 @@ import MessageList, { MessageListProvider } from "@/pages/superMagic/components/
 import { useStyles } from "./styles"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
-import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { topicStore, projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { useTaskData } from "@/pages/superMagic/hooks/useTaskData"
 import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { LongMemoryApi } from "@/apis"
 import {
 	measureAttachmentFetch,
 	recordAttachmentsStaleResponseDropped,
@@ -54,7 +52,6 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
-import { LongMemory } from "@/types/longMemory"
 import { cn } from "@/lib/utils"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import ChatActions from "../ProjectPage/ProjectPageMain/components/ChatActions"
@@ -500,25 +497,6 @@ function TopicPage({
 		setFilesPopupOpen(true)
 	})
 
-	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
-
-	useEffect(() => {
-		if (!hasMemoryUpdateMessage) return
-		// 更新长期记忆
-		try {
-			LongMemoryApi.getMemories({
-				status: [LongMemory.MemoryStatus.Pending, LongMemory.MemoryStatus.PENDING_REVISION],
-				page_size: 99,
-			}).then((res) => {
-				if (res?.success) {
-					userStore.user.setPendingMemoryList(res.data || [])
-				}
-			})
-		} catch (error) {
-			console.error(error)
-		}
-	}, [hasMemoryUpdateMessage])
-
 	// Handle interrupt and undo message functionality
 	useInterruptAndUndoMessage({
 		selectedTopic,
@@ -735,8 +713,15 @@ function TopicPage({
 					/>
 				</MessageListProvider>
 			</div>
-			<div ref={footerRef} className={cn(styles.footer, footerClassName)} data-testid="topic-page-footer">
-				<div className={cn("flex flex-col gap-2", footerInnerClassName)} data-testid="topic-page-input-panel">
+			<div
+				ref={footerRef}
+				className={cn(styles.footer, footerClassName)}
+				data-testid="topic-page-footer"
+			>
+				<div
+					className={cn("flex flex-col gap-2", footerInnerClassName)}
+					data-testid="topic-page-input-panel"
+				>
 					{!hideChatActions && (
 						<ChatActions
 							onNewTopicClick={

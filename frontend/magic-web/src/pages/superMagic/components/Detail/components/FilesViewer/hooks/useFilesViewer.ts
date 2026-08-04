@@ -37,6 +37,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { manualPerfLogger, measureManualPerfOperation } from "@/utils/manualPerfLogger"
 import {
 	normalizeAttachmentPath,
+	isStandalonePreviewFile,
 	isTemporaryPreviewFile,
 	resolvePendingAttachmentFile,
 	resolvePersistableTabs,
@@ -95,8 +96,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -627,6 +627,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			file ||
 			(attachmentFile?.is_directory && attachmentFile?.file_id ? attachmentFile : null) ||
 			(isHiddenProjectFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
+			(isStandalonePreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			(isTemporaryPreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			pendingAttachmentFile
 

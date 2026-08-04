@@ -36,6 +36,7 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { isEditingPresenceEnabled } from "./components/FilesViewer/hooks/previewPolicy"
 
 export default function Render(props: any) {
 	const {
@@ -90,9 +91,11 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
+	const editingPresenceEnabled = isEditingPresenceEnabled(displayConfig || data?.display_config)
 	const { isEditMode, setIsEditMode, checkBeforeClose } = useEditMode({
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
+		editingPresenceEnabled,
 	})
 
 	// Use hook to manage save handler registration and wrapped checkBeforeClose
@@ -153,6 +156,16 @@ export default function Render(props: any) {
 		shouldExitEditMode: boolean = false,
 	) => {
 		const targetFileId = fileId || data.file_id
+		if (!editingPresenceEnabled) {
+			await doSave(
+				targetFileId,
+				newContent,
+				enable_shadow,
+				fetchFileVersions,
+				shouldExitEditMode,
+			)
+			return
+		}
 		const { editing_user_count } = await SuperMagicApi.getFileEditCount(targetFileId)
 		const threshold = isPPTEditMode || isEditMode ? 1 : 0
 		if (editing_user_count > threshold) {

@@ -366,6 +366,14 @@ class TaskFileEntity extends AbstractEntity
         $this->metadataVersion = $metadataVersion;
     }
 
+    /**
+     * 判断文件当前元数据修订号是否与编辑基准一致。
+     */
+    public function matchesMetadataRevision(int $expectedRevision): bool
+    {
+        return $this->metadataVersion === $expectedRevision;
+    }
+
     public function getSpaceType(): string
     {
         return $this->spaceType;
