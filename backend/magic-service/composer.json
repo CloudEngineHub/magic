@@ -40,6 +40,7 @@
         "firebase/php-jwt": "^7.0",
         "giggsey/libphonenumber-for-php": "8.13.29",
         "google/protobuf": "^4.28",
+        "guzzlehttp/guzzle": "7.15.2",
         "hyperf/amqp": "^3.1",
         "hyperf/cache": "^3.1",
         "hyperf/constants": "~3.1",
