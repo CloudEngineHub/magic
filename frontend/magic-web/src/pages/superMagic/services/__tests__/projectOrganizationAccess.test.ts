@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { interfaceStore } from "@/stores/interface"
+import type { User } from "@/types/user"
 import {
+	findProjectOrganizationTarget,
 	resolveRequiredProjectOrganizationCode,
 	suppressProjectOrganizationAccessCheckForCurrentRoute,
 } from "../projectOrganizationAccess"
@@ -11,6 +13,37 @@ vi.mock("@/apis", () => ({
 		getProjectAccessibility: vi.fn(),
 	},
 }))
+
+function createAccount(magicId: string, organizations: User.MagicOrganization[]): User.UserAccount {
+	return {
+		magic_id: magicId,
+		organizations,
+		access_token: "",
+		avatar: "",
+		deployCode: "",
+		magic_user_id: "",
+		nickname: magicId,
+		organizationCode: "",
+		teamshareOrganizations: [],
+	}
+}
+
+function createOrganization(code: string): User.MagicOrganization {
+	return {
+		magic_organization_code: code,
+		magic_user_id: `${code}-user`,
+		organization_name: code,
+		organization_logo: [],
+		is_admin: false,
+		is_application_admin: false,
+		is_complete_info: true,
+		state_code: "",
+		identifications: [],
+		creator_id: "",
+		is_personal_organization: false,
+		active_count: 0,
+	}
+}
 
 describe("resolveRequiredProjectOrganizationCode", () => {
 	beforeEach(() => {
@@ -87,5 +120,22 @@ describe("resolveRequiredProjectOrganizationCode", () => {
 		).resolves.toBe("TARGET")
 
 		expect(SuperMagicApi.getProjectAccessibility).toHaveBeenCalledOnce()
+	})
+
+	it("resolves the target organization from the current account", () => {
+		const accountA = createAccount("account-a", [createOrganization("org-a")])
+		const accountB = createAccount("account-b", [createOrganization("org-a")])
+
+		expect(
+			findProjectOrganizationTarget([accountA, accountB], "org-a", "account-b")?.account
+				.magic_id,
+		).toBe("account-b")
+	})
+
+	it("does not fall back to another account", () => {
+		const accountA = createAccount("account-a", [createOrganization("org-a")])
+		const accountB = createAccount("account-b", [createOrganization("org-b")])
+
+		expect(findProjectOrganizationTarget([accountA, accountB], "org-a", "account-b")).toBeNull()
 	})
 })

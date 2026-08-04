@@ -4,39 +4,19 @@ import { awaitAppInitPromise } from "@/apis/clients/await-app-init"
 import { ContactApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useSwitchOrganization } from "@/hooks/account/useSwitchOrganization"
-import { useAccount, useOrganization } from "@/models/user/hooks"
+import { useAccount, useOrganization, useUserInfo } from "@/models/user/hooks"
 import { userTransformer } from "@/models/user/transformers"
 import { useTranslation } from "react-i18next"
 import { reaction } from "mobx"
 import type { User } from "@/types/user"
 import { interfaceStore } from "@/stores/interface"
 import {
+	findProjectOrganizationTarget,
 	resolveRequiredProjectOrganizationCode,
 	suppressProjectOrganizationAccessCheckForCurrentRoute,
 } from "../services/projectOrganizationAccess"
 
 type ProjectOrganizationAccessStatus = "loading" | "ready" | "switch-required" | "switching"
-
-interface OrganizationTarget {
-	account: User.UserAccount
-	organization: User.MagicOrganization
-}
-
-function findOrganizationTarget(
-	accounts: User.UserAccount[],
-	organizationCode: string | null,
-): OrganizationTarget | null {
-	if (!organizationCode) return null
-
-	for (const account of accounts) {
-		const organization = account.organizations?.find(
-			(item) => item.magic_organization_code === organizationCode,
-		)
-		if (organization) return { account, organization }
-	}
-
-	return null
-}
 
 /**
  * Gates normal project routes before their project/topic loaders mount. The accessibility endpoint is
@@ -46,6 +26,7 @@ export function useProjectOrganizationAccess(projectId?: string) {
 	const { t } = useTranslation("super")
 	const { accounts } = useAccount()
 	const { organizationCode, organizationListReady } = useOrganization()
+	const { userInfo } = useUserInfo()
 	const [appInitReady, setAppInitReady] = useState(false)
 	const [requiredOrganizationCode, setRequiredOrganizationCode] = useState<string | null>(null)
 	const [isCheckingAccessibility, setIsCheckingAccessibility] = useState(true)
@@ -105,8 +86,13 @@ export function useProjectOrganizationAccess(projectId?: string) {
 	}, [appInitReady, organizationCode, projectId])
 
 	const target = useMemo(
-		() => findOrganizationTarget(accounts, requiredOrganizationCode),
-		[accounts, requiredOrganizationCode],
+		() =>
+			findProjectOrganizationTarget(
+				accounts,
+				requiredOrganizationCode,
+				userInfo?.magic_id ?? null,
+			),
+		[accounts, requiredOrganizationCode, userInfo?.magic_id],
 	)
 	const targetOrganizationCode = target?.organization.magic_organization_code
 

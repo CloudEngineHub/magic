@@ -1,6 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import type { RequestConfig } from "@/apis/core/HttpClient"
 import { interfaceStore } from "@/stores/interface"
+import type { User } from "@/types/user"
 
 const ORGANIZATION_SWITCH_SUPPRESSION_KEY = "super-magic:project-organization-access-suppression"
 const ORGANIZATION_SWITCH_SUPPRESSION_DURATION = 30_000
@@ -14,6 +15,27 @@ interface ResolveRequiredProjectOrganizationCodeParams {
 	projectId?: string
 	currentOrganizationCode?: string | null
 	requestOptions?: Omit<RequestConfig, "url">
+}
+
+export interface ProjectOrganizationTarget {
+	account: User.UserAccount
+	organization: User.MagicOrganization
+}
+
+/** Resolves the project organization from the active account to prevent an accidental account switch. */
+export function findProjectOrganizationTarget(
+	accounts: User.UserAccount[],
+	organizationCode: string | null,
+	currentMagicId: string | null,
+): ProjectOrganizationTarget | null {
+	if (!organizationCode || !currentMagicId) return null
+
+	const currentAccount = accounts.find((account) => account.magic_id === currentMagicId)
+	const organization = currentAccount?.organizations?.find(
+		(item) => item.magic_organization_code === organizationCode,
+	)
+
+	return organization && currentAccount ? { account: currentAccount, organization } : null
 }
 
 /**
