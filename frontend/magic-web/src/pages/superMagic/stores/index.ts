@@ -3689,9 +3689,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				}
 			}
 		})
-		httpToolSettlements.forEach(({ toolId, response }) => {
-			if (toolId) this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
-		})
+		if (eventPolicy === "live_arrival") {
+			// Cold history and recovery snapshots may restore canonical Tool terminal state,
+			// but only a real-time authoritative tail represents a newly arrived business event.
+			httpToolSettlements.forEach(({ toolId, response }) => {
+				if (toolId)
+					this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
+			})
+		}
 		if (toolProjectionPolicy === "historical_terminal") {
 			// Refresh/history hydration can be the only signal after a missed Tool WS event;
 			// re-enter the same Topic coordinator without inventing a stronger Tool result.
@@ -3771,7 +3776,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const updatedExistingTool = Boolean(
 					previousResponse && response && !isEqual(previousResponse, response),
 				)
-				if (response && (settledActiveStream || updatedExistingTool)) {
+				if (response && eventPolicy === "live_arrival" && updatedExistingTool) {
 					this.publishToolCallSettled(topicId, toolId, response, rawNode, "http")
 				}
 			}
@@ -3873,7 +3878,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private settleSharedToolCalls(topicId: string, toolCalls: ToolCall[]) {
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
 		let changed = false
-		const settlements: Array<{ toolId: string; response: ToolResponseState }> = []
 
 		toolCalls.forEach((toolCall) => {
 			const toolId = String(toolCall.id || "")
@@ -3895,15 +3899,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				status: "response_missing",
 			})
 			toolResponseMap.set(toolId, nextState)
-			settlements.push({ toolId, response: nextState })
 			changed = true
 		})
 
 		if (changed) {
+			// Share replay restores the historical weak terminal for rendering only;
+			// subscribers must not observe it as a newly settled Tool call.
 			this.toolResponseMap.set(topicId, toolResponseMap)
-			settlements.forEach(({ toolId, response }) => {
-				this.publishToolCallSettled(topicId, toolId, response, undefined, "shared")
-			})
 		}
 	}
 
@@ -5112,7 +5114,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.clearToolResponseRecovery(topicId, toolId)
 			}
 			// HTTP snapshot 使用 targetMap 批量构建 canonical 状态；是否对外发布由同步边界统一裁决。
-			if (!targetMap && !isOrphanFinishTask)
+			// Shared replay is historical projection: update canonical state without
+			// replaying business callbacks that belong to real-time Tool responses.
+			if (!targetMap && !isOrphanFinishTask && source !== "shared")
 				this.publishToolCallSettled(topicId, toolId, response, messageNode, source)
 		}
 		if (rawTool.status === undefined) {
@@ -7480,10 +7484,14 @@ pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (payload) => {
 	superMagicStore.recordWebSocketMessage(topicId, message, source, true)
 })
 
-superMagicStore.subscribe("task.completed", (payload: TaskCompletedPayload) => {
+superMagicStore.subscribe("toolCall.settled", (payload: ToolCallSettledEvent) => {
+	console.log("%c toolCall.settled", "background: red; color: white;padding:0 4px", payload)
+})
+
+superMagicStore.subscribe("task.completed", (payload: TaskCompletedEvent) => {
 	console.log("%c task.completed", "background: red; color: white;padding:0 4px", payload)
 })
 
-superMagicStore.subscribe("topic.execution.ended", (payload: TopicExecutionEndedPayload) => {
+superMagicStore.subscribe("topic.execution.ended", (payload: TopicExecutionEndedEvent) => {
 	console.log("%c topic.execution.ended", "background: red; color: white;padding:0 4px", payload)
 })

@@ -658,13 +658,31 @@ describe("SuperMagic Store typed events", () => {
 		const store = new SuperMagicStore()
 		const committed: MessageCommittedEvent[] = []
 		const topicEnded: TopicExecutionEndedEvent[] = []
+		const settled: ToolCallSettledEvent[] = []
 		store.subscribe("message.committed", (event) => committed.push(event))
 		store.subscribe("topic.execution.ended", (event) => topicEnded.push(event))
+		store.subscribe("toolCall.settled", (event) => settled.push(event))
 
-		store.initializeMessages(TOPIC_ID, [createAssistantEnvelope()])
+		store.initializeMessages(TOPIC_ID, [
+			createAssistantEnvelope({
+				toolCalls: [
+					{
+						id: "historical-tool-events",
+						index: 0,
+						type: "function",
+						function: { name: "list_dir", arguments: "{}" },
+					},
+				],
+			}),
+			createToolEnvelope({ toolId: "historical-tool-events", status: "finished" }),
+		])
 
 		expect(committed).toEqual([])
 		expect(topicEnded).toEqual([])
+		expect(settled).toEqual([])
+		expect(store.toolResponseMap.get(TOPIC_ID)?.get("historical-tool-events")).toMatchObject({
+			status: "finished",
+		})
 	})
 
 	it("publishes a live HTTP finish_task arrival exactly once", () => {
@@ -870,7 +888,7 @@ describe("SuperMagic Store typed events", () => {
 		})
 	})
 
-	it("publishes shared weak settlement and a later shared strong replacement", () => {
+	it("keeps shared replay tool settlements silent", () => {
 		const store = new SuperMagicStore()
 		const settled: ToolCallSettledEvent[] = []
 		const toolId = "shared-tool-events"
@@ -899,15 +917,9 @@ describe("SuperMagic Store typed events", () => {
 		])
 		store.loadSharedMessages([createSharedToolMessage(toolId)])
 
-		expect(
-			settled.map((event) => [
-				event.meta.source,
-				event.payload.strength,
-				event.payload.response.status,
-			]),
-		).toEqual([
-			["shared", "weak", "response_missing"],
-			["shared", "strong", "finished"],
-		])
+		expect(settled).toEqual([])
+		expect(store.toolResponseMap.get(TOPIC_ID)?.get(toolId)).toMatchObject({
+			status: "finished",
+		})
 	})
 })

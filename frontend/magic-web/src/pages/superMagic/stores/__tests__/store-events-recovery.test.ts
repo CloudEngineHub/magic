@@ -304,10 +304,15 @@ describe("SuperMagic Store recovery events", () => {
 		])
 		store.subscribe("toolCall.settled", (event) => settled.push(event))
 
-		store.initializeMessages(TOPIC_ID, [
-			owner,
-			createToolEnvelope({ seqId: "201", status: "finished" }),
-		])
+		store.initializeMessages(
+			TOPIC_ID,
+			[owner, createToolEnvelope({ seqId: "201", status: "finished" })],
+			{
+				mode: "merge",
+				eventPolicy: "live_arrival",
+				toolProjectionPolicy: "preserve_live",
+			},
+		)
 
 		expect(settled).toHaveLength(1)
 		expect(settled[0]).toMatchObject({
