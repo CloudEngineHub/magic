@@ -208,9 +208,15 @@ export type StreamRecoveryTriggerReason =
 	| "stream_watchdog"
 	| "tool_response"
 	| "persistent_message"
+	| "checkpoint_rollback"
 	| "topic_terminal"
 	| "topic_activation"
 	| "network_recovered"
+
+export interface CheckpointRollbackRecoveryContext {
+	eventId: string
+	action: "start" | "undo" | "commit" | "rollback"
+}
 
 export interface StreamRecoveryRequestPayload {
 	topicId: string
@@ -219,6 +225,8 @@ export interface StreamRecoveryRequestPayload {
 	requiredSeqId?: string
 	anchorAppMessageId?: string
 	anchorSeqId?: string
+	/** 检查点广播上下文；eventId 不能提升为 requiredSeqId。 */
+	checkpointRollback?: CheckpointRollbackRecoveryContext
 }
 
 export interface StreamRecoveryState {

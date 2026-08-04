@@ -7725,15 +7725,3 @@ pubsub.subscribe(PubSubEvents.Super_Magic_New_Message_V2, (payload) => {
 	)
 	superMagicStore.recordWebSocketMessage(topicId, message, source, true)
 })
-
-superMagicStore.subscribe("toolCall.settled", (payload: ToolCallSettledEvent) => {
-	console.log("%c toolCall.settled", "background: red; color: white;padding:0 4px", payload)
-})
-
-superMagicStore.subscribe("task.completed", (payload: TaskCompletedEvent) => {
-	console.log("%c task.completed", "background: red; color: white;padding:0 4px", payload)
-})
-
-superMagicStore.subscribe("topic.execution.ended", (payload: TopicExecutionEndedEvent) => {
-	console.log("%c topic.execution.ended", "background: red; color: white;padding:0 4px", payload)
-})

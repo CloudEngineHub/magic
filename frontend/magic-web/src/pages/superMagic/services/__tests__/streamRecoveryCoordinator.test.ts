@@ -255,6 +255,90 @@ describe("StreamRecoveryCoordinator", () => {
 		vi.useRealTimers()
 	})
 
+	it("debounces checkpoint rollback recovery, keeps the latest action context, and retries a failed snapshot", async () => {
+		vi.useFakeTimers()
+		const harness = createStoreHarness()
+		const coordinator = new StreamRecoveryCoordinator(harness.store, {
+			debounceMs: 50,
+			retryDelaysMs: [100],
+		})
+		const owner = createOwner({
+			recover: vi
+				.fn()
+				.mockResolvedValueOnce({ didPullSucceed: false })
+				.mockResolvedValueOnce({ didPullSucceed: true }),
+		})
+		coordinator.registerOwner(owner)
+
+		coordinator.requestRecovery({
+			topicId: "topic-1",
+			correlationId: "checkpoint:event-1",
+			reason: "checkpoint_rollback",
+			checkpointRollback: { eventId: "event-1", action: "start" },
+		})
+		coordinator.requestRecovery({
+			topicId: "topic-1",
+			correlationId: "checkpoint:event-2",
+			reason: "checkpoint_rollback",
+			checkpointRollback: { eventId: "event-2", action: "undo" },
+		})
+
+		vi.advanceTimersByTime(50)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(owner.recover).toHaveBeenCalledTimes(1)
+		expect(owner.recover).toHaveBeenCalledWith(
+			expect.objectContaining({
+				reason: "checkpoint_rollback",
+				correlationId: "checkpoint:event-2",
+				checkpointRollback: { eventId: "event-2", action: "undo" },
+			}),
+		)
+
+		vi.advanceTimersByTime(100)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(owner.recover).toHaveBeenCalledTimes(2)
+		vi.useRealTimers()
+	})
+
+	it("keeps checkpoint full-recovery priority when a persistent-message watermark coalesces", async () => {
+		vi.useFakeTimers()
+		const harness = createStoreHarness()
+		const coordinator = new StreamRecoveryCoordinator(harness.store, { debounceMs: 50 })
+		const owner = createOwner()
+		coordinator.registerOwner(owner)
+
+		coordinator.requestRecovery({
+			topicId: "topic-1",
+			correlationId: "checkpoint:event-1",
+			reason: "checkpoint_rollback",
+			checkpointRollback: { eventId: "event-1", action: "commit" },
+		})
+		coordinator.requestRecovery({
+			topicId: "topic-1",
+			correlationId: "ws:200",
+			reason: "persistent_message",
+			requiredSeqId: "200",
+		})
+
+		vi.advanceTimersByTime(50)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(owner.recover).toHaveBeenCalledWith(
+			expect.objectContaining({
+				reason: "checkpoint_rollback",
+				correlationId: "checkpoint:event-1",
+				checkpointRollback: { eventId: "event-1", action: "commit" },
+				requiredSeqId: "200",
+			}),
+		)
+		vi.useRealTimers()
+	})
+
 	it("continues bounded Tool recovery when a successful WS pull still has no role=tool", async () => {
 		vi.useFakeTimers()
 		const harness = createStoreHarness()

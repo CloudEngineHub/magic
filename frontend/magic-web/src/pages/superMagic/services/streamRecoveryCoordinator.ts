@@ -160,7 +160,9 @@ export class StreamRecoveryCoordinator {
 		}
 		const current = this.scheduledRecoveries.get(payload.topicId)
 		if (current) {
-			current.payload = mergeRecoveryPayload(current.payload, payload)
+			current.payload = mergeRecoveryPayload(current.payload, payload, {
+				preserveCheckpointPriority: true,
+			})
 			if (this.inFlightRecoveries.has(payload.topicId)) {
 				current.rerunNeeded = true
 				return
@@ -223,7 +225,9 @@ export class StreamRecoveryCoordinator {
 		// still needs recovery. Keep both pieces of information: the resolved
 		// reason/anchor drives the request, while the scheduled payload's higher
 		// requiredSeqId remains the authoritative-tail completion barrier.
-		const mergedPayload = mergeRecoveryPayload(scheduled.payload, resolvedPayload)
+		const mergedPayload = mergeRecoveryPayload(scheduled.payload, resolvedPayload, {
+			preserveCheckpointPriority: true,
+		})
 		scheduled.payload = mergedPayload
 
 		const owner = this.selectCurrentOwner(topicId)
@@ -345,7 +349,11 @@ export class StreamRecoveryCoordinator {
 	}
 
 	private isRetryableRecovery(payload: StreamRecoveryRequestPayload) {
-		return payload.reason === "tool_response" || payload.reason === "persistent_message"
+		return (
+			payload.reason === "tool_response" ||
+			payload.reason === "persistent_message" ||
+			payload.reason === "checkpoint_rollback"
+		)
 	}
 }
 
@@ -363,17 +371,37 @@ function compareRecoverySeqId(left?: string, right?: string) {
 function mergeRecoveryPayload(
 	current: StreamRecoveryRequestPayload,
 	incoming: StreamRecoveryRequestPayload,
+	options: { preserveCheckpointPriority?: boolean } = {},
 ): StreamRecoveryRequestPayload {
 	const incomingHasAnchor = Boolean(incoming.anchorSeqId || incoming.anchorAppMessageId)
 	const currentHasAnchor = Boolean(current.anchorSeqId || current.anchorAppMessageId)
 	const anchorIsEarlier =
 		incomingHasAnchor &&
 		(!currentHasAnchor || compareRecoverySeqId(incoming.anchorSeqId, current.anchorSeqId) < 0)
+	const checkpointPriorityPayload = options.preserveCheckpointPriority
+		? incoming.reason === "checkpoint_rollback"
+			? incoming
+			: current.reason === "checkpoint_rollback"
+				? current
+				: undefined
+		: undefined
 	return {
 		...current,
 		...incoming,
 		...(current.correlationId && !incoming.correlationId
 			? { correlationId: current.correlationId }
+			: {}),
+		// 非 checkpoint 触发器合并进来时，仍需保留最近一次 checkpoint 的动作语义。
+		...(current.checkpointRollback && !incoming.checkpointRollback
+			? { checkpointRollback: current.checkpointRollback }
+			: {}),
+		// 状态撤销/删除需要完整快照；同一防抖窗口内的普通消息水位不能将其降级为尾部对账。
+		...(checkpointPriorityPayload
+			? {
+					reason: "checkpoint_rollback" as const,
+					correlationId: checkpointPriorityPayload.correlationId,
+					checkpointRollback: checkpointPriorityPayload.checkpointRollback,
+				}
 			: {}),
 		...(anchorIsEarlier
 			? {

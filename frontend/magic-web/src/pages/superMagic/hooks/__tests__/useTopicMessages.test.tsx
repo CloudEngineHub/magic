@@ -47,6 +47,7 @@ const mockState = vi.hoisted(() => ({
 			},
 		),
 		reconcileHttpMessageStatuses: vi.fn(),
+		authorizeImStatusRestore: vi.fn(),
 		enqueueMessage: vi.fn(),
 		reconcileAuthoritativeMessages: vi.fn(
 			(
@@ -119,6 +120,7 @@ vi.mock("@/utils/pubsub", () => ({
 	},
 	PubSubEvents: {
 		Super_Magic_New_Message_V2: "Super_Magic_New_Message_V2",
+		Super_Magic_Checkpoint_Rollback: "Super_Magic_Checkpoint_Rollback",
 		Refresh_Topic_Messages: "Refresh_Topic_Messages",
 	},
 }))
@@ -139,6 +141,7 @@ describe("useTopicMessages", () => {
 		mockState.superMagicStoreMock.buffer = new Map()
 		mockState.superMagicStoreMock.topicMeta = new Map()
 		mockState.superMagicStoreMock.isTopicStreaming.mockReturnValue(false)
+		mockState.superMagicStoreMock.authorizeImStatusRestore.mockReset()
 		mockState.activeRevokedAnchor = undefined
 		mockState.optimisticStatuses.clear()
 		mockState.clearActiveRevokedAnchor.mockReset()
@@ -933,6 +936,141 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 	})
 
+	it("reconciles a matching checkpoint rollback through a complete HTTP snapshot without using the event id as a message watermark", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		const restoredMessage = createUserMessageEnvelope("restored-user", "10", "read")
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [restoredMessage],
+			has_more: false,
+			page_token: "",
+			snapshot_complete: true,
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		act(() => {
+			mockState.pubsubHandlers.get("Super_Magic_Checkpoint_Rollback")?.({
+				seq_id: "rollback-domain-event-900",
+				conversation_id: "conversation-1",
+				message: {
+					type: "super_magic_checkpoint_rollback",
+					action: "undo",
+					project_id: "project-1",
+					topic_id: "topic-1",
+					chat_topic_id: "chat-topic-1",
+					target_seq_id: "10",
+					affected_seq_ids: ["10"],
+					affected_count: 1,
+					truncated: false,
+					refresh_required: true,
+					timestamp: "2026-08-04T12:00:00Z",
+				},
+			})
+		})
+
+		expect(mockState.requestTopicRecoveryMock).toHaveBeenCalledWith({
+			topicId: "chat-topic-1",
+			correlationId: "checkpoint:rollback-domain-event-900",
+			reason: "checkpoint_rollback",
+			checkpointRollback: {
+				eventId: "rollback-domain-event-900",
+				action: "undo",
+			},
+		})
+		expect(mockState.requestTopicRecoveryMock.mock.calls[0]?.[0]).not.toHaveProperty(
+			"requiredSeqId",
+		)
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(300)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				chat_topic_id: "chat-topic-1",
+				conversation_id: "conversation-1",
+				limit: 100,
+			}),
+		)
+		expect(mockState.superMagicStoreMock.authorizeImStatusRestore).toHaveBeenCalledWith(
+			"chat-topic-1",
+		)
+		expect(
+			mockState.superMagicStoreMock.authorizeImStatusRestore.mock.invocationCallOrder[0],
+		).toBeLessThan(
+			mockState.superMagicStoreMock.initializeMessages.mock.invocationCallOrder[0] ||
+				Infinity,
+		)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			[restoredMessage],
+			{
+				mode: "replace",
+				syncGeneration: expect.any(Number),
+				toolProjectionPolicy: "historical_terminal",
+			},
+		)
+		vi.useRealTimers()
+	})
+
+	it("ignores checkpoint rollback notifications for another conversation or business topic", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		const publishCheckpoint = (overrides: Record<string, unknown>) =>
+			mockState.pubsubHandlers.get("Super_Magic_Checkpoint_Rollback")?.({
+				seq_id: "rollback-domain-event-901",
+				conversation_id: "conversation-1",
+				message: {
+					type: "super_magic_checkpoint_rollback",
+					action: "commit",
+					project_id: "project-1",
+					topic_id: "topic-1",
+					chat_topic_id: "chat-topic-1",
+					refresh_required: true,
+					...overrides,
+				},
+			})
+
+		act(() => {
+			publishCheckpoint({ topic_id: "another-topic" })
+			publishCheckpoint({ chat_topic_id: "another-chat-topic" })
+			mockState.pubsubHandlers.get("Super_Magic_Checkpoint_Rollback")?.({
+				seq_id: "rollback-domain-event-902",
+				conversation_id: "another-conversation",
+				message: {
+					type: "super_magic_checkpoint_rollback",
+					action: "commit",
+					project_id: "project-1",
+					topic_id: "topic-1",
+					chat_topic_id: "chat-topic-1",
+					refresh_required: true,
+				},
+			})
+		})
+
+		expect(mockState.requestTopicRecoveryMock).not.toHaveBeenCalled()
+	})
+
 	it("does not commit an authoritative tail until HTTP reaches the highest debounced WS seq", async () => {
 		vi.useFakeTimers()
 		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
@@ -1489,10 +1627,55 @@ describe("useTopicMessages", () => {
 				conversationId: "conversation-1",
 				correlationId: "correlation-1",
 				syncGeneration: 24,
+				reason: "checkpoint_rollback",
+				checkpointRollback: { eventId: "event-incomplete", action: "undo" },
 			})
 		})
 
 		expect(recoveryResult).toEqual(expect.objectContaining({ didPullSucceed: false }))
+		expect(mockState.superMagicStoreMock.authorizeImStatusRestore).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+	})
+
+	it("does not authorize an undo restore when the recovery generation is already stale", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		const registration = mockState.registerStreamRecoveryOwnerMock.mock.calls[0]?.[0] as {
+			recover: (context: Record<string, unknown>) => Promise<{ didPullSucceed: boolean }>
+		}
+
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createUserMessageEnvelope("stale-restored-user", "10", "read")],
+			has_more: false,
+			page_token: "",
+			snapshot_complete: true,
+		})
+		mockState.superMagicStoreMock.isTopicSyncCurrent.mockReturnValue(false)
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		let recoveryResult: { didPullSucceed: boolean } | undefined
+		await act(async () => {
+			recoveryResult = await registration.recover({
+				topicId: "chat-topic-1",
+				conversationId: "conversation-1",
+				correlationId: "checkpoint:stale-event",
+				syncGeneration: 25,
+				reason: "checkpoint_rollback",
+				checkpointRollback: { eventId: "stale-event", action: "undo" },
+			})
+		})
+
+		expect(recoveryResult).toEqual(expect.objectContaining({ didPullSucceed: false }))
+		expect(mockState.superMagicStoreMock.authorizeImStatusRestore).not.toHaveBeenCalled()
 		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
 	})
 

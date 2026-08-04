@@ -8,6 +8,11 @@ import {
 } from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore, type CanonicalCommitTrigger } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
+import {
+	IntermediateMessageType,
+	type SuperMagicCheckpointRollbackMessage,
+} from "@/types/chat/intermediate_message"
+import type { SeqResponse } from "@/types/request"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { MessageStatus, TaskStatus, Topic } from "../pages/Workspace/types"
 
@@ -663,11 +668,16 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			topicId,
 			syncGeneration,
 			limit = FULL_TOPIC_SYNC_MESSAGE_COUNT,
+			checkpointRollback,
 		}: {
 			conversationId: string
 			topicId: string
 			syncGeneration: number
 			limit?: number
+			checkpointRollback?: {
+				eventId: string
+				action: "start" | "undo" | "commit" | "rollback"
+			}
 		}): Promise<PullMessageResult> => {
 			const pulledItems: any[] = []
 			const statusItems: any[] = []
@@ -705,7 +715,19 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (latestResponse?.snapshot_complete !== true) {
 				return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 			}
+			// Checkpoint 快照拥有缺席删除和 revoked -> read 语义，只允许当前 generation 提交。
+			if (
+				checkpointRollback &&
+				!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
+			) {
+				return { didPullSucceed: false, pulledItems: [], statusItems: [] }
+			}
 
+			// undo 是唯一允许 HTTP 把 canonical imStatus 从 revoked 恢复为 read 的远端动作。
+			// 授权必须紧邻完整快照提交，避免不完整或失败请求提前放开状态单调性保护。
+			if (checkpointRollback?.action === "undo" && statusItems.length > 0) {
+				superMagicStore.authorizeImStatusRestore(topicId)
+			}
 			superMagicStore.reconcileAuthoritativeMessages(topicId, {
 				statusItems: dedupePulledItemsByAppMessageId(statusItems),
 				membershipItems: pulledItems,
@@ -1045,7 +1067,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (currentTopic?.chat_topic_id !== topicId) return undefined
 				return currentTopic.task_status || currentTopic.status
 			},
-			recover: ({ syncGeneration, reason, requiredSeqId, anchorAppMessageId }) =>
+			recover: ({
+				syncGeneration,
+				reason,
+				requiredSeqId,
+				anchorAppMessageId,
+				checkpointRollback,
+			}) =>
 				reason === "tool_response" || reason === "persistent_message"
 					? pullMessage({
 							conversation_id: conversationId,
@@ -1061,7 +1089,12 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							requiredSeqId,
 							recoveryAnchorAppMessageId: anchorAppMessageId,
 						})
-					: recoverTopicMessages({ conversationId, topicId, syncGeneration }),
+					: recoverTopicMessages({
+							conversationId,
+							topicId,
+							syncGeneration,
+							checkpointRollback,
+						}),
 		})
 	}, [
 		pullMessage,
@@ -1070,6 +1103,45 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
 	])
+
+	// Subscribe to checkpoint rollback events. The event is only an invalidation signal;
+	// canonical message membership and IM status always come from the complete HTTP snapshot.
+	useEffect(() => {
+		const handleCheckpointRollback = (
+			data: SeqResponse<SuperMagicCheckpointRollbackMessage>,
+		) => {
+			const currentTopic = selectedTopicRef.current
+			const event = data?.message
+			const eventId = String(data?.seq_id || "")
+			if (!currentTopic?.chat_conversation_id || !event || !eventId) return
+			if (data.conversation_id !== currentTopic.chat_conversation_id) return
+			if (event.chat_topic_id !== currentTopic.chat_topic_id) return
+			if (event.topic_id !== currentTopic.id) return
+			if (
+				event.type !== IntermediateMessageType.SuperMagicCheckpointRollback ||
+				event.refresh_required !== true
+			)
+				return
+
+			requestTopicRecovery({
+				topicId: event.chat_topic_id,
+				correlationId: `checkpoint:${eventId}`,
+				reason: "checkpoint_rollback",
+				checkpointRollback: {
+					eventId,
+					action: event.action,
+				},
+			})
+		}
+
+		pubsub.subscribe(PubSubEvents.Super_Magic_Checkpoint_Rollback, handleCheckpointRollback)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Super_Magic_Checkpoint_Rollback,
+				handleCheckpointRollback,
+			)
+		}
+	}, [selectedTopic?.chat_conversation_id, selectedTopic?.chat_topic_id, selectedTopic?.id])
 
 	// Subscribe to WebSocket new message events
 	useEffect(() => {
