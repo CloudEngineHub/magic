@@ -10,7 +10,7 @@ import {
 import {
 	extractQuestionsField,
 	parseQuestionsXml,
-} from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tools/askUser/parse"
+} from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/tools/AskUser/parse"
 import type {
 	RawSuperMagicMessageNode,
 	ToolCall,

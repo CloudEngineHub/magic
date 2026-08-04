@@ -3,7 +3,7 @@ import { ComponentType, lazy } from "react"
 export const ToolsMap: Record<string, ComponentType<any>> = {
 	// web_search: lazy(() => import("./WebSearch")),
 	// shell_exec: lazy(() => import("./ShellExec")),
-	write_file: lazy(() => import("../../MessageNode/tools/WriteFile")),
+	write_file: lazy(() => import("../../MessageNode/tool-call/tools/WriteFile")),
 	// edit_file_range: lazy(() => import("./EditFile")),
 	// multi_edit_file_range: lazy(() => import("./EditFile")),
 	// edit_file: lazy(() => import("./EditFile")),

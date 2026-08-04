@@ -19,7 +19,7 @@ import { useHtmlCodeBlockPreviewStreamingScroll } from "./hooks/useHtmlCodeBlock
 import { hasVisibleHtmlPreviewContent } from "./shared"
 import type { HtmlCodeBlockPreviewProps } from "./types"
 import { resolveHtmlPreviewIntrinsicWidthHint } from "./preview-width"
-import { useStreamingCommittedContent } from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tools/WriteFileStreamingContent"
+import { useStreamingCommittedContent } from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/tools/WriteFile/StreamingContent"
 
 function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	const {

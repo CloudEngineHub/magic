@@ -873,7 +873,7 @@ npx vitest run \
 - R（raw/message）：messageMap、messages、buffer 和 listener；tool response 在 src/pages/superMagic/stores/index.ts:1152-1168 先写 C，再由 :1423-1453 写 R 并发事件。
 - S（stream/topic）：topicMeta、isTopicStreaming()、HTTP 同步和任务终态。
 
-下表证据简称：test = src/pages/superMagic/stores/**tests**/tool-response-execution-state.test.ts；index.ts = src/pages/superMagic/stores/index.ts；types.ts = src/pages/superMagic/stores/types.ts；ToolCall.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/ToolCall.tsx；MessageNode/index.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/index.tsx；MCPTool.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tools/MCPTool.tsx；events = src/pages/superMagic/stores/events/。
+下表证据简称：test = src/pages/superMagic/stores/**tests**/tool-response-execution-state.test.ts；index.ts = src/pages/superMagic/stores/index.ts；types.ts = src/pages/superMagic/stores/types.ts；ToolCall.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/ToolCall.tsx；MessageNode/index.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/index.tsx；MCPTool.tsx = src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/tools/MCP/index.tsx；events = src/pages/superMagic/stores/events/。
 
 主归因统计（每个失败只选一个主因）：
 
