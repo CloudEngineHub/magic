@@ -1,4 +1,5 @@
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { AttachmentItem } from "./hooks/types"
 
@@ -15,11 +16,11 @@ export interface TopicFilesCapabilities {
 	multiSelect: boolean
 }
 
-/** 特殊文件空间加入对话时使用的上下文与文本序列化规则。 */
+/** 特殊文件空间加入对话时使用的上下文与 mention 构造规则。 */
 export interface TopicFilesChatContext {
 	selectedProject?: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
-	serializeAttachmentToChatText?: (item: AttachmentItem) => string
+	createAttachmentMention?: (item: AttachmentItem) => TiptapMentionAttributes | null
 }
 
 /** 文件树空间配置。 */

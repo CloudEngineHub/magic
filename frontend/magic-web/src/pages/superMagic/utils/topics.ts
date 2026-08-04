@@ -42,6 +42,17 @@ interface AddMultipleFilesToNewChatOptions extends AddMultipleFilesToCurrentChat
 	afterAddFileToNewTopic?: () => void
 }
 
+interface AddMentionsToCurrentChatOptions {
+	items: TiptapMentionAttributes[]
+	isNewTopic?: boolean
+	autoFocus?: boolean
+}
+
+interface AddMentionsToNewChatOptions extends AddMentionsToCurrentChatOptions {
+	selectedProject: ProjectListItem | null | undefined
+	afterAddFileToNewTopic?: () => void
+}
+
 interface AddTextToCurrentChatOptions {
 	content: string
 }
@@ -179,11 +190,45 @@ export function addFileToCurrentChat(options: AddToCurrentChatOptions) {
 
 	// 转换为 mention 格式并发布事件，由 MessageEditor 统一插入（仅此一条链路，避免与 insert_drag_data 重复插入）
 	const mentionItem = convertFileToMention(fileItem)
+	addMentionsToCurrentChat({ items: [mentionItem], isNewTopic, autoFocus })
+}
+
+/** 将已构造的 mention 添加到当前对话。 */
+export function addMentionsToCurrentChat(options: AddMentionsToCurrentChatOptions) {
+	const { items, isNewTopic = false, autoFocus = false } = options
+	if (items.length === 0) return
+
 	pubsub.publish(PubSubEvents.Add_File_To_Chat, {
-		items: [mentionItem],
+		items,
 		is_new_topic: isNewTopic,
 		autoFocus,
 	})
+}
+
+/** 创建新话题后，将已构造的 mention 添加到输入框。 */
+export async function addMentionsToNewChat(options: AddMentionsToNewChatOptions) {
+	const { items, selectedProject, afterAddFileToNewTopic, autoFocus = false } = options
+
+	if (items.length === 0) return
+	if (!selectedProject) {
+		magicToast.error("创建新话题功能不可用")
+		return
+	}
+
+	try {
+		await SuperMagicService.handleCreateTopic({
+			selectedProject,
+			onSuccess: () => {
+				setTimeout(() => {
+					addMentionsToCurrentChat({ items, isNewTopic: true, autoFocus })
+					afterAddFileToNewTopic?.()
+				}, 500)
+			},
+		})
+	} catch (error) {
+		console.error("创建新话题失败:", error)
+		magicToast.error("创建新话题失败")
+	}
 }
 
 /**
@@ -203,22 +248,12 @@ export async function addFileToNewChat(options: AddToNewChatOptions) {
 		return
 	}
 
-	try {
-		// 先创建新话题
-		await SuperMagicService.handleCreateTopic({
-			selectedProject,
-			onSuccess: () => {
-				// 话题创建成功并导航完成后，添加文件到新创建的对话
-				setTimeout(() => {
-					addFileToCurrentChat({ fileItem, isNewTopic: true, autoFocus })
-					afterAddFileToNewTopic?.()
-				}, 500)
-			},
-		})
-	} catch (error) {
-		console.error("创建新话题失败:", error)
-		magicToast.error("创建新话题失败")
-	}
+	return addMentionsToNewChat({
+		items: [convertFileToMention(fileItem)],
+		selectedProject,
+		afterAddFileToNewTopic,
+		autoFocus,
+	})
 }
 
 /**
@@ -229,11 +264,7 @@ export function addMultipleFilesToCurrentChat(options: AddMultipleFilesToCurrent
 
 	// 转换为 mention 格式并发布事件，由 MessageEditor 统一插入（仅此一条链路，避免与 insert_drag_data 重复插入）
 	const mentionItems = fileItems.map(convertFileToMention)
-	pubsub.publish(PubSubEvents.Add_File_To_Chat, {
-		items: mentionItems,
-		is_new_topic: false,
-		autoFocus,
-	})
+	addMentionsToCurrentChat({ items: mentionItems, autoFocus })
 }
 
 /**
@@ -253,20 +284,10 @@ export async function addMultipleFilesToNewChat(options: AddMultipleFilesToNewCh
 		return
 	}
 
-	try {
-		// 先创建新话题
-		await SuperMagicService.handleCreateTopic({
-			selectedProject,
-			onSuccess: () => {
-				// 话题创建成功并导航完成后，添加文件到新创建的对话
-				setTimeout(() => {
-					addMultipleFilesToCurrentChat({ fileItems, autoFocus })
-					afterAddFileToNewTopic?.()
-				}, 500)
-			},
-		})
-	} catch (error) {
-		console.error("创建新话题失败:", error)
-		magicToast.error("创建新话题失败")
-	}
+	return addMentionsToNewChat({
+		items: fileItems.map(convertFileToMention),
+		selectedProject,
+		afterAddFileToNewTopic,
+		autoFocus,
+	})
 }

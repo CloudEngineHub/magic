@@ -758,7 +758,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		afterAddFileToNewTopic,
 		selectedWorkspace: spaceConfig?.chatContext?.selectedWorkspace ?? selectedWorkspace,
 		selectedProject: spaceConfig?.chatContext?.selectedProject ?? selectedProject,
-		serializeAttachmentToChatText: spaceConfig?.chatContext?.serializeAttachmentToChatText,
+		createAttachmentMention: spaceConfig?.chatContext?.createAttachmentMention,
 	})
 
 	// 确认移动：交由 hook 内部批量处理

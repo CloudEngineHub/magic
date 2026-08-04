@@ -1,12 +1,13 @@
 import { useMemoizedFn } from "ahooks"
 import type { AttachmentItem } from "./types"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	addFileToCurrentChat,
 	addFileToNewChat,
+	addMentionsToCurrentChat,
+	addMentionsToNewChat,
 	addMultipleFilesToCurrentChat,
 	addMultipleFilesToNewChat,
-	addTextToCurrentChat,
-	addTextToNewChat,
 } from "../../../utils/topics"
 import {
 	handleAttachmentDragStart,
@@ -22,7 +23,7 @@ interface UseSelectedFilesManagerOptions {
 	selectedProject?: ProjectListItem | null
 	afterAddFileToCurrentTopic?: () => void
 	afterAddFileToNewTopic?: () => void
-	serializeAttachmentToChatText?: (item: AttachmentItem) => string
+	createAttachmentMention?: (item: AttachmentItem) => TiptapMentionAttributes | null
 }
 
 /**
@@ -77,14 +78,16 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		selectedProject,
 		afterAddFileToCurrentTopic,
 		afterAddFileToNewTopic,
-		serializeAttachmentToChatText,
+		createAttachmentMention,
 	} = options
 
-	/** 将文件序列化为当前文件空间提供给对话框的纯文本引用。 */
-	const serializeFilesForChat = useMemoizedFn((files: AttachmentItem[]) => {
-		if (!serializeAttachmentToChatText) return ""
+	/** 将文件转换为当前文件空间定义的 mention。 */
+	const createMentionsForChat = useMemoizedFn((files: AttachmentItem[]) => {
+		if (!createAttachmentMention) return []
 
-		return files.map(serializeAttachmentToChatText).filter(Boolean).join(" ")
+		return files
+			.map(createAttachmentMention)
+			.filter((item): item is TiptapMentionAttributes => item !== null)
 	})
 
 	// 获取选中的文件列表
@@ -99,8 +102,11 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			if (serializeAttachmentToChatText) {
-				addTextToCurrentChat({ content: serializeFilesForChat(selectedFiles) })
+			if (createAttachmentMention) {
+				addMentionsToCurrentChat({
+					items: createMentionsForChat(selectedFiles),
+					autoFocus: true,
+				})
 			} else {
 				addMultipleFilesToCurrentChat({ fileItems: selectedFiles })
 			}
@@ -115,11 +121,12 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			if (serializeAttachmentToChatText) {
-				addTextToNewChat({
-					content: serializeFilesForChat(selectedFiles),
+			if (createAttachmentMention) {
+				addMentionsToNewChat({
+					items: createMentionsForChat(selectedFiles),
 					selectedProject,
-					afterAddContentToNewTopic: afterAddFileToNewTopic,
+					afterAddFileToNewTopic,
+					autoFocus: true,
 				})
 			} else {
 				addMultipleFilesToNewChat({
@@ -151,8 +158,9 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 
 	// 添加单个文件到当前对话
 	const handleAddToCurrentChat = useMemoizedFn((item: AttachmentItem) => {
-		if (serializeAttachmentToChatText) {
-			addTextToCurrentChat({ content: serializeAttachmentToChatText(item) })
+		if (createAttachmentMention) {
+			const mention = createAttachmentMention(item)
+			if (mention) addMentionsToCurrentChat({ items: [mention], autoFocus: true })
 		} else {
 			addFileToCurrentChat({ fileItem: item })
 		}
@@ -161,11 +169,14 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 
 	// 添加单个文件到新对话
 	const handleAddToNewChat = useMemoizedFn((item: AttachmentItem) => {
-		if (serializeAttachmentToChatText) {
-			addTextToNewChat({
-				content: serializeAttachmentToChatText(item),
+		if (createAttachmentMention) {
+			const mention = createAttachmentMention(item)
+			if (!mention) return
+			addMentionsToNewChat({
+				items: [mention],
 				selectedProject,
-				afterAddContentToNewTopic: afterAddFileToNewTopic,
+				afterAddFileToNewTopic,
+				autoFocus: true,
 			})
 		} else {
 			addFileToNewChat({

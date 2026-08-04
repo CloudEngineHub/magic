@@ -92,6 +92,7 @@
 	"memoryRevisionSuggestion": "记忆修改建议",
 	"memorySuggestion": "新的记忆建议",
 	"memorySuggestionCount": "{{count}} 待处理",
+	"mentionPrefix": "记忆",
 	"noData": "暂无数据",
 	"onlyEdit": "仅修改",
 	"pendingMemory": "待采纳的记忆",

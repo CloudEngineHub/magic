@@ -394,8 +394,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					return (
 						runActiveEditor(
 							editor,
-							(activeEditor) =>
-								activeEditor.chain().focus().insertContent("@").run(),
+							(activeEditor) => activeEditor.chain().focus().insertContent("@").run(),
 							false,
 						) ?? false
 					)
@@ -468,9 +467,9 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 
 							const isAllowed = this.options.dataService
 								? (this.options.isAllowedMention?.(
-									attrs,
-									this.options.dataService,
-								) ?? true)
+										attrs,
+										this.options.dataService,
+									) ?? true)
 								: true
 
 							if (!isAllowed) {
@@ -702,10 +701,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 
 						let ghostCount = 0
 						mentionContainers.forEach((node) => {
-							if (
-								node.childElementCount === 0 &&
-								!node.textContent?.trim()
-							) {
+							if (node.childElementCount === 0 && !node.textContent?.trim()) {
 								ghostCount++
 							}
 						})
@@ -742,10 +738,9 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 										}
 									})
 								if (stillGhostCount > 0) {
-									logger.warn(
-										"ghost nodes persist after recovery attempt",
-										{ stillGhostCount },
-									)
+									logger.warn("ghost nodes persist after recovery attempt", {
+										stillGhostCount,
+									})
 								}
 							})
 						} catch (e) {
@@ -777,7 +772,10 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 		const icon = getMentionIcon(attrs)
 		const uniqueId = getMentionUniqueId(attrs)
 
-		if (attrs.type === MentionItemType.FOLDER) {
+		if (
+			attrs.type === MentionItemType.FOLDER ||
+			attrs.type === MentionItemType.MEMORY_DIRECTORY
+		) {
 			displayName = `${displayName}/`
 		}
 

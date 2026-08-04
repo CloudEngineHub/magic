@@ -92,6 +92,7 @@
 	"memoryRevisionSuggestion": "Memory Revision Suggestion",
 	"memorySuggestion": "New Suggestion",
 	"memorySuggestionCount": "{{count}} Pending",
+	"mentionPrefix": "Memory",
 	"noData": "No data",
 	"onlyEdit": "Only Edit",
 	"pendingMemory": "Memory To Be Adopted",
