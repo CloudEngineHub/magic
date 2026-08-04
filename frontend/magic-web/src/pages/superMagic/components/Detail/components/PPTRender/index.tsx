@@ -77,8 +77,6 @@ interface PPTRenderProps {
 
 	// ========== 模式标志 ==========
 	isPlaybackMode?: boolean
-	/** 外层文件查看器/播放页控制的全屏状态 */
-	isFullscreen?: boolean
 	allowEdit?: boolean
 
 	// ========== 业务回调 ==========
@@ -184,7 +182,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	initialActiveIndex,
 	onActiveIndexChange,
 	isPlaybackMode,
-	isFullscreen: externalIsFullscreen,
 	allowEdit = false,
 	saveEditContent,
 	onSortSave,
@@ -256,14 +253,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// 在文件树中定位活动幻灯片；缩略图滚动由虚拟侧边栏自身负责。
 	useSlideFileLocator({ store })
 
-	// 业务容器全屏与浏览器原生全屏都需要驱动同一套渲染和预加载策略。
-	const { isFullscreen: nativeIsFullscreen, toggleFullscreen } = useFullscreen({ containerRef })
-	const isFullscreen = Boolean(externalIsFullscreen || nativeIsFullscreen)
+	// 这里只表示 PPT 放映全屏。外层 FilesViewer 全屏只放大完整查看界面，不能隐藏侧栏和工具栏。
+	const {
+		isFullscreen: isPresentationFullscreen,
+		toggleFullscreen: togglePresentationFullscreen,
+	} = useFullscreen({ containerRef })
 
 	// 先于子组件的被动 effect 同步，避免退出全屏时侧栏恢复请求仍被旧状态丢弃。
 	useLayoutEffect(() => {
-		store.setFullscreen(isFullscreen)
-	}, [isFullscreen, store])
+		store.setFullscreen(isPresentationFullscreen)
+	}, [isPresentationFullscreen, store])
 
 	// 订阅下载事件
 	useEffect(() => {
@@ -277,15 +276,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useEffect(() => {
 		const unsubscribe = onFullscreenToggle(() => {
 			if (onFileFullscreen) onFileFullscreen()
-			else toggleFullscreen()
+			else togglePresentationFullscreen()
 		})
 		return unsubscribe
-	}, [onFileFullscreen, toggleFullscreen, onFullscreenToggle])
+	}, [onFileFullscreen, togglePresentationFullscreen, onFullscreenToggle])
 
 	// 发出全屏状态变化事件
 	useEffect(() => {
-		emitFullscreenStateChange(isFullscreen)
-	}, [isFullscreen, emitFullscreenStateChange])
+		emitFullscreenStateChange(isPresentationFullscreen)
+	}, [isPresentationFullscreen, emitFullscreenStateChange])
 
 	// 在移动模式下禁用编辑功能
 	const effectiveAllowEdit = allowEdit && !isMobile
@@ -363,14 +362,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					changeSlide("next")
 					break
 				case " ":
-					if (isFullscreen) changeSlide("next")
+					if (isPresentationFullscreen) changeSlide("next")
 					break
 			}
 		}
 
 		window.addEventListener("keydown", handleKeyDown)
 		return () => window.removeEventListener("keydown", handleKeyDown)
-	}, [changeSlide, isFullscreen, isAnySlideEditing, isDeleteModalOpen])
+	}, [changeSlide, isPresentationFullscreen, isAnySlideEditing, isDeleteModalOpen])
 
 	// iframe postMessage 导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
 	useEffect(() => {
@@ -538,12 +537,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				ref={containerRef}
 				data-testid="ppt-render-container"
 				className={
-					isFullscreen
+					isPresentationFullscreen
 						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row`
 						: "relative h-full w-full overflow-hidden"
 				}
 			>
-				{isSidebarCollapsed && !isFullscreen && (
+				{isSidebarCollapsed && !isPresentationFullscreen && (
 					<MagicTooltip title={t("fileViewer.expandSidebar")}>
 						<Button
 							variant="ghost"
@@ -573,14 +572,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							"shrink-0 overflow-hidden",
 							!isResizing && "transition-all duration-300 ease-in-out",
 							isMobile
-								? isSidebarCollapsed || isFullscreen
+								? isSidebarCollapsed || isPresentationFullscreen
 									? "h-0"
 									: "h-[140px]"
 								: "",
 						)}
 						style={{
 							width: !isMobile
-								? isSidebarCollapsed || isFullscreen
+								? isSidebarCollapsed || isPresentationFullscreen
 									? 0
 									: sidebarWidth
 								: undefined,
@@ -607,14 +606,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}
 								isCollapsed={isSidebarCollapsed}
-								isPreviewLoadingEnabled={!isSidebarCollapsed && !isFullscreen}
+								isPreviewLoadingEnabled={
+									!isSidebarCollapsed && !isPresentationFullscreen
+								}
 								onCollapsedChange={handleSidebarCollapsedChange}
 							/>
 						</div>
 					</div>
 
 					{/* 调整宽度的 Handle - 仅在桌面端且侧边栏未折叠/全屏时显示 */}
-					{!isMobile && !isSidebarCollapsed && !isFullscreen && (
+					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
 							className="absolute bottom-0 top-0 z-20 w-4 -translate-x-1/2 cursor-col-resize bg-transparent"
@@ -712,7 +713,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											rawContent={slide.rawContent || ""}
 											loadingState={slide.loadingState}
 											loadingError={slide.loadingError}
-											isFullscreen={isFullscreen}
+											isFullscreen={isPresentationFullscreen}
 											isPlaybackMode={isPlaybackMode}
 											manualScale={manualScale}
 											onManualScaleChange={handleManualScaleChange}
@@ -773,25 +774,28 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							</div>
 
 							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
-							{!isAnySlideEditing && !isFullscreen && store.isReady && hasSlides && (
-								<PPTControlBar
-									activeIndex={store.activeIndex}
-									totalSlides={store.slideUrls.length}
-									isTransitioning={store.isTransitioning}
-									isMobile={isMobile}
-									isFullscreen={isFullscreen}
-									onPrevSlide={() => changeSlide("prev")}
-									onNextSlide={() => changeSlide("next")}
-									onGoToFirstSlide={goToFirstSlide}
-									onRefreshSlides={handleRefreshAllSlides}
-									onJumpToPage={handleJumpToPage}
-									onToggleFullscreen={toggleFullscreen}
-									scaleRatio={activeSlideScaleRatio}
-									onScaleChange={handleManualScaleChange}
-									onResetScale={() => handleManualScaleChange(null)}
-									t={t}
-								/>
-							)}
+							{!isAnySlideEditing &&
+								!isPresentationFullscreen &&
+								store.isReady &&
+								hasSlides && (
+									<PPTControlBar
+										activeIndex={store.activeIndex}
+										totalSlides={store.slideUrls.length}
+										isTransitioning={store.isTransitioning}
+										isMobile={isMobile}
+										isFullscreen={isPresentationFullscreen}
+										onPrevSlide={() => changeSlide("prev")}
+										onNextSlide={() => changeSlide("next")}
+										onGoToFirstSlide={goToFirstSlide}
+										onRefreshSlides={handleRefreshAllSlides}
+										onJumpToPage={handleJumpToPage}
+										onToggleFullscreen={togglePresentationFullscreen}
+										scaleRatio={activeSlideScaleRatio}
+										onScaleChange={handleManualScaleChange}
+										onResetScale={() => handleManualScaleChange(null)}
+										t={t}
+									/>
+								)}
 						</div>
 					</div>
 				</div>

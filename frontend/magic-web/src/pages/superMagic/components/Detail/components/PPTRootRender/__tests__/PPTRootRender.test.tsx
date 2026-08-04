@@ -149,11 +149,11 @@ describe("PPTRootRender", () => {
 		)
 	})
 
-	it("forwards controlled fullscreen state to PPTRender", async () => {
+	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {
 		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
 
 		await waitFor(() => {
-			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "true")
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
 		})
 	})
 

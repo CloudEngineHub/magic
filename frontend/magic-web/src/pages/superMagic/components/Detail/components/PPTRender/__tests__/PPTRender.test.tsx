@@ -151,6 +151,7 @@ vi.mock("../PPTSlide", async () => {
 
 	function MockPPTSlide({
 		isActive,
+		isFullscreen,
 		manualScale,
 		onScaleRatioChange,
 		onEditModeChange,
@@ -160,6 +161,7 @@ vi.mock("../PPTSlide", async () => {
 		onManualSave,
 	}: {
 		isActive?: boolean
+		isFullscreen?: boolean
 		manualScale?: number | null
 		onScaleRatioChange?: (scale: number) => void
 		onEditModeChange?: (isEditing: boolean) => void
@@ -176,7 +178,7 @@ vi.mock("../PPTSlide", async () => {
 			index: number,
 		) => Promise<void>
 	}) {
-		mockState.pptSlideProps({ manualScale })
+		mockState.pptSlideProps({ manualScale, isFullscreen })
 
 		React.useEffect(() => {
 			if (!isActive) return
@@ -333,7 +335,6 @@ vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
-	isFullscreen?: boolean
 }) {
 	return render(
 		<PPTRender
@@ -342,7 +343,6 @@ function renderPPTRender(input?: {
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
 			allowEdit={true}
-			isFullscreen={input?.isFullscreen}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
 		/>,
@@ -376,16 +376,26 @@ describe("PPTRender", () => {
 		mockState.discardHandler.mockResolvedValue(true)
 	})
 
-	it("syncs controlled fullscreen before the sidebar restores preview demand", async () => {
-		const { rerender } = renderPPTRender({ isFullscreen: true })
+	it("uses only PPT presentation fullscreen to hide viewer controls", async () => {
+		mockState.isSlideEditing = false
+		mockState.nativeIsFullscreen = true
+		const { rerender } = renderPPTRender()
 
 		await waitFor(() => {
 			expect(mockState.store.setFullscreen).toHaveBeenCalledWith(true)
 			expect(mockState.sidebarPreviewEffect).toHaveBeenCalledWith(false)
 		})
+		expect(screen.getByTestId("ppt-render-container")).toHaveClass("fixed")
+		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "0px" })
+		expect(screen.queryByTestId("ppt-render-sidebar-resize-handle")).toBeNull()
+		expect(screen.queryByTestId("ppt-control-bar")).toBeNull()
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isFullscreen: true }),
+		)
 
 		mockState.store.setFullscreen.mockClear()
 		mockState.sidebarPreviewEffect.mockClear()
+		mockState.nativeIsFullscreen = false
 		rerender(
 			<PPTRender
 				slidePaths={["slide-1.html"]}
@@ -393,7 +403,6 @@ describe("PPTRender", () => {
 				mainFileId="ppt-root-file"
 				mainFileName="Deck.html"
 				allowEdit={true}
-				isFullscreen={false}
 			/>,
 		)
 
@@ -403,6 +412,13 @@ describe("PPTRender", () => {
 		})
 		expect(mockState.store.setFullscreen.mock.invocationCallOrder[0]).toBeLessThan(
 			mockState.sidebarPreviewEffect.mock.invocationCallOrder[0],
+		)
+		expect(screen.getByTestId("ppt-render-container")).not.toHaveClass("fixed")
+		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "200px" })
+		expect(screen.getByTestId("ppt-render-sidebar-resize-handle")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-control-bar")).toBeInTheDocument()
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isFullscreen: false }),
 		)
 	})
 
