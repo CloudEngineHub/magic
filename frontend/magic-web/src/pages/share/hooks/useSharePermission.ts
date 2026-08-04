@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useAccount } from "@/models/user/hooks/useAccount"
+import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { useUserInfo } from "@/models/user/hooks/useUserInfo"
 import { useSwitchOrganization } from "@/hooks/account/useSwitchOrganization"
 import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import { ContactApi } from "@/apis"
 import type { User } from "@/types/user"
+import { findProjectOrganizationTarget } from "@/pages/superMagic/services/projectOrganizationAccess"
 
 interface SharePermissionInfo {
 	currentOrgName: string
@@ -18,21 +21,23 @@ interface SharePermissionInfo {
 export function useSharePermission() {
 	const { t } = useTranslation("super")
 	const { accounts } = useAccount()
+	const { organizationCode } = useOrganization()
+	const { userInfo } = useUserInfo()
 	const [requiredOrgCode, setRequiredOrgCode] = useState<string>("")
 	const [isSwitching, setIsSwitching] = useState(false)
 	const [targetUserInfo, setTargetUserInfo] = useState<User.UserInfo | null>(null)
-	const { organizationCode } = userStore.user
 
-	// 查找目标组织信息
-	const findTargetOrganization = useMemoizedFn((orgCode: string) => {
-		for (const account of accounts) {
-			const org = account.organizations?.find((o) => o.magic_organization_code === orgCode)
-			if (org) {
-				return { account, organization: org }
-			}
-		}
-		return null
-	})
+	// Share links must switch the current account's organization only. Falling back to another
+	// account can rewrite the /share/files URL through account-switch route handling.
+	const target = useMemo(
+		() =>
+			findProjectOrganizationTarget(
+				accounts,
+				requiredOrgCode || null,
+				userInfo?.magic_id ?? null,
+			),
+		[accounts, requiredOrgCode, userInfo?.magic_id],
+	)
 
 	// 组织切换 hook
 	const switchOrganization = useSwitchOrganization({
@@ -53,7 +58,6 @@ export function useSharePermission() {
 				return
 			}
 
-			const target = findTargetOrganization(requiredOrgCode)
 			if (!target) {
 				setTargetUserInfo(null)
 				return
@@ -86,13 +90,12 @@ export function useSharePermission() {
 		}
 
 		fetchTargetUserInfo()
-	}, [requiredOrgCode, organizationCode, findTargetOrganization])
+	}, [requiredOrgCode, organizationCode, target])
 
 	// 切换组织处理函数
 	const handleSwitchOrganization = useMemoizedFn(async () => {
 		if (!requiredOrgCode || requiredOrgCode === organizationCode) return
 
-		const target = findTargetOrganization(requiredOrgCode)
 		if (!target) {
 			magicToast.error(t("share.organizationNotFound"))
 			return
@@ -111,7 +114,6 @@ export function useSharePermission() {
 	const emptyStateInfo = useMemo<SharePermissionInfo | null>(() => {
 		if (!requiredOrgCode || requiredOrgCode === organizationCode) return null
 
-		const target = findTargetOrganization(requiredOrgCode)
 		if (!target) return null
 
 		const currentOrgCode = userStore.user.organizationCode
@@ -125,7 +127,7 @@ export function useSharePermission() {
 			targetOrgLogo: target.organization.organization_logo,
 			userInfo: targetUserInfo,
 		}
-	}, [requiredOrgCode, organizationCode, findTargetOrganization, targetUserInfo])
+	}, [requiredOrgCode, organizationCode, target, targetUserInfo])
 
 	return {
 		emptyStateInfo,
