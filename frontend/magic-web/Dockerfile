@@ -23,7 +23,7 @@ COPY eslint ./eslint
 RUN --mount=type=cache,id=node-npm-${NODE_VERSION}-alpine-${TARGETARCH},target=/root/.npm \
     --mount=type=cache,id=node-npm-compile-cache-${NODE_VERSION}-alpine-${TARGETARCH},target=/tmp/node-compile-cache \
     npm config set registry "${NPM_REGISTRY}" && \
-    npm install pnpm --location=global && \
+    npm install pnpm@10.6.5 --location=global && \
     npm install patch-package -g && \
     CI=true pnpm install --frozen-lockfile
 
