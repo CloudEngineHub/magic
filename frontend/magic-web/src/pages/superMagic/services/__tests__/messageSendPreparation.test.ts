@@ -96,6 +96,7 @@ describe("messageSendPreparation", () => {
 			context: {
 				selectedProject,
 				selectedTopic: staleTopic,
+				refreshProjectAfterTopicRename: true,
 				createTopic,
 				setSelectedTopic,
 			},
@@ -107,6 +108,7 @@ describe("messageSendPreparation", () => {
 			selectedProject: expect.objectContaining({ id: "project-b" }),
 		})
 		expect(result?.currentTopic?.id).toBe("topic-b")
+		expect(result?.context.refreshProjectAfterTopicRename).toBe(true)
 		expect(setSelectedTopic).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: "topic-b",

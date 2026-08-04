@@ -99,6 +99,7 @@ function MicroAppCreatePrompt({
 			setSelectedWorkspace: workspaceStore.setSelectedWorkspace,
 			setSelectedProject: projectStore.setSelectedProject,
 			setSelectedTopic: topicStore.setSelectedTopic,
+			refreshProjectAfterTopicRename: true,
 			topicMode: TopicMode.MicroApp,
 			modelTopicMode,
 			placeholder: t("microAppsPage.heroPlaceholder"),

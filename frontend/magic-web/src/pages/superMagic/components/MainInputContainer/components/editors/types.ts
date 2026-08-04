@@ -53,6 +53,8 @@ export interface SceneEditorContext {
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
 	setSelectedTopic?: (topic: Topic | null) => void
+	/** 话题自动命名完成后，让目标详情页同步话题名称并重新读取项目名称。 */
+	refreshProjectAfterTopicRename?: boolean
 	setSelectedProject?: (project: ProjectListItem | null) => void
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
 	topicMode: TopicMode

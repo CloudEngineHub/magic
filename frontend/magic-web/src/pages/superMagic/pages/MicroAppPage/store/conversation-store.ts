@@ -1,7 +1,12 @@
 import { makeAutoObservable } from "mobx"
 import { SuperMagicApi } from "@/apis"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { takeProjectRenameTask } from "@/pages/superMagic/services/messageSendRenameTask"
+import type { MessageSendRenameResult } from "@/pages/superMagic/services/messageSendRenameTask"
+import { logger as Logger } from "@/utils/log"
 import { type ProjectListItem, type TaskStatus, type Topic } from "../../Workspace/types"
+
+const logger = Logger.createLogger("AppConversationStore")
 
 interface ConversationHydration {
 	project: ProjectListItem | null
@@ -51,6 +56,33 @@ export class AppConversationStore {
 			topics: response.list,
 			selectedTopicId: project.current_topic_id,
 		})
+
+		const pendingRename = takeProjectRenameTask(projectId)
+		if (pendingRename) {
+			void this.refreshProjectAfterRename(projectId, pendingRename)
+		}
+	}
+
+	private async refreshProjectAfterRename(
+		projectId: string,
+		pendingRename: Promise<MessageSendRenameResult | null>,
+	) {
+		try {
+			const renameResult = await pendingRename
+			if (!renameResult || this.selectedProject?.id !== projectId) return
+
+			this.topicStore.updateTopicName(renameResult.topicId, renameResult.topicName)
+
+			const refreshedProject = await SuperMagicApi.getProjectDetail(
+				{ id: projectId },
+				{ enableErrorMessagePrompt: false },
+			)
+			if (!refreshedProject || this.selectedProject?.id !== projectId) return
+
+			this.setSelectedProject(refreshedProject)
+		} catch (error) {
+			logger.error("Failed to refresh project after topic rename", error)
+		}
 	}
 
 	setConversationGenerating(isGenerating: boolean) {

@@ -96,6 +96,7 @@ describe("MicroAppCreatePrompt", () => {
 		expect(mocks.editorContext?.modelTopicMode).toBe(TopicMode.Default)
 		expect(mocks.editorContext?.selectedProject).toBeNull()
 		expect(mocks.editorContext?.selectedTopic).toBeNull()
+		expect(mocks.editorContext?.refreshProjectAfterTopicRename).toBe(true)
 		expect(mocks.editorContext?.placeholder).toBe("microAppsPage.heroPlaceholder")
 		expect(mocks.editorContext?.promptCarousel?.examples).toHaveLength(60)
 		expect(mocks.editorContext?.promptCarousel?.examples).toContain(

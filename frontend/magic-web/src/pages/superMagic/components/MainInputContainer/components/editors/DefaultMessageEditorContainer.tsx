@@ -296,6 +296,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					selectedWorkspace,
 					setSelectedProject: editorContext?.setSelectedProject,
 					setSelectedTopic: editorContext?.setSelectedTopic,
+					refreshProjectAfterTopicRename: editorContext?.refreshProjectAfterTopicRename,
 					setSelectedWorkspace: editorContext?.setSelectedWorkspace,
 					// 与 _topicStore 回退一致，保证 smartRename 写入 topicStore.topics（历史列表合并依赖）。
 					topicStore: _topicStore,

@@ -6,6 +6,8 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const mocks = vi.hoisted(() => ({
 	addToQueue: vi.fn(),
+	preparePanelSend: vi.fn(),
+	sendPanelMessage: vi.fn(),
 	handleSend: undefined as
 		| ((params: {
 				value: JSONContent
@@ -72,13 +74,13 @@ vi.mock("../../../stores", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
-	createMessageSendService: () => ({ sendPanelMessage: vi.fn() }),
+	createMessageSendService: () => ({ sendPanelMessage: mocks.sendPanelMessage }),
 }))
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	createTopicForMessageContext: vi.fn(),
 	ensureProjectForMessageContext: vi.fn(),
-	preparePanelSend: vi.fn(),
+	preparePanelSend: mocks.preparePanelSend,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
@@ -92,6 +94,8 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 		vi.clearAllMocks()
 		mocks.handleSend = undefined
 		mocks.addToQueue.mockResolvedValue("queue-1")
+		mocks.preparePanelSend.mockReset()
+		mocks.sendPanelMessage.mockReset()
 	})
 
 	it.each([
@@ -190,5 +194,48 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 			selectedVideoModel: undefined,
 			topicMode: TopicMode.MicroApp,
 		})
+	})
+
+	it("passes the post-rename project refresh policy into send preparation", async () => {
+		const currentProject = { id: "project-1" }
+		const currentTopic = { id: "topic-1" }
+		mocks.preparePanelSend.mockResolvedValue({
+			params: {
+				value: { type: "doc" },
+				mentionItems: [],
+			},
+			context: { refreshProjectAfterTopicRename: true },
+			currentProject,
+			currentTopic,
+		})
+		mocks.sendPanelMessage.mockResolvedValue({ currentProject, currentTopic })
+
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: currentProject as never,
+					selectedTopic: currentTopic as never,
+					topicMode: TopicMode.MicroApp,
+					refreshProjectAfterTopicRename: true,
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value: { type: "doc" },
+				mentionItems: [],
+				topicMode: TopicMode.MicroApp,
+			})
+		})
+
+		expect(mocks.preparePanelSend).toHaveBeenCalledWith(
+			expect.objectContaining({
+				context: expect.objectContaining({ refreshProjectAfterTopicRename: true }),
+			}),
+		)
 	})
 })
