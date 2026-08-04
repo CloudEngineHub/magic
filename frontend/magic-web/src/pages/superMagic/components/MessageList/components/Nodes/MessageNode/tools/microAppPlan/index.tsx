@@ -82,14 +82,19 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const isPending = plan.status === PLAN_STATUS.pending
 	const isStreaming = !!loading && !plan.isComplete
 	const isOpen = isStreaming || open
+	const toolId = tool?.id
+	const conversationId = selectedTopic?.chat_conversation_id || ""
+	const topicId = selectedTopic?.chat_topic_id || ""
+	const taskId = resolveTaskId(topicId, toolId)
+	const hasSubmitContext = !!conversationId && !!topicId && !!toolId && !!taskId
+	// loading 只表示工具消息的传输状态；历史恢复后，完整且待确认的计划仍应允许操作。
 	const isFrozen =
 		pendingAction !== null ||
-		!loading ||
 		isStreaming ||
 		props.isShare ||
 		isShareRoute ||
-		!isPending
-	const toolId = tool?.id
+		!isPending ||
+		!hasSubmitContext
 
 	const statusConfig = useMemo(() => {
 		if (isStreaming && plan.status === PLAN_STATUS.pending) {
@@ -130,12 +135,8 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 
 	const submitReply = useCallback(
 		async (responseStatus: PlanResponseStatus, comment = "") => {
-			const conversationId = selectedTopic?.chat_conversation_id || ""
-			const topicId = selectedTopic?.chat_topic_id || ""
 			if (!conversationId || !topicId) throw new Error("missing_topic_context")
 			if (!toolId) throw new Error("missing_plan_tool_call_id")
-
-			const taskId = resolveTaskId(topicId, toolId)
 			if (!taskId) throw new Error("missing_plan_task_id")
 
 			const detail: PlanActionDetail = {
@@ -155,7 +156,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 				isAnswered: responseStatus === PLAN_STATUS.approved,
 			})
 		},
-		[plan.planId, selectedTopic?.chat_conversation_id, selectedTopic?.chat_topic_id, toolId],
+		[conversationId, plan.planId, taskId, toolId, topicId],
 	)
 
 	const handleApprove = useCallback(async () => {

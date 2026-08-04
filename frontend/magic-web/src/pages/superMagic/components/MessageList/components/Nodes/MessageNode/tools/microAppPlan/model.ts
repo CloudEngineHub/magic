@@ -380,14 +380,25 @@ export function resolvePlan(tool?: ToolDataLike): PlanCardData {
 export function resolveTaskId(topicId: string, toolId?: string) {
 	if (!toolId) return ""
 	const messages = superMagicStore.messages.get(topicId) || []
+	const getMessageNode = (item?: Record<string, unknown>) => {
+		if (!item) return undefined
+		// Assistant 消息以 super_message_id 作为统一身份；app_message_id 仅用于兼容历史消息。
+		const messageIds = [item.super_message_id, item.app_message_id].filter(
+			(messageId): messageId is string => typeof messageId === "string" && !!messageId,
+		)
+		for (const messageId of messageIds) {
+			const messageNode = superMagicStore.getMessageNode(messageId)
+			if (messageNode) return messageNode
+		}
+		return undefined
+	}
 	const relatedMessage = (messages as Array<Record<string, unknown>>).find((item) => {
-		const messageNode = superMagicStore.getMessageNode(item.app_message_id as string)
+		const messageNode = getMessageNode(item)
 		const toolCalls = (messageNode as { tool_calls?: Array<{ id?: string }> })?.tool_calls
 		return Array.isArray(toolCalls) && toolCalls.some((toolCall) => toolCall?.id === toolId)
 	})
 
-	const relatedMessageNode = superMagicStore.getMessageNode(
-		relatedMessage?.app_message_id as string,
-	) as { task_id?: unknown } | undefined
-	return typeof relatedMessageNode?.task_id === "string" ? relatedMessageNode.task_id : ""
+	const relatedMessageNode = getMessageNode(relatedMessage) as { task_id?: unknown } | undefined
+	const taskId = relatedMessageNode?.task_id ?? relatedMessage?.task_id
+	return typeof taskId === "string" ? taskId : ""
 }
