@@ -69,6 +69,7 @@ function Topic({
 	viewFileList,
 	showCreatedByBadge,
 	allowDownloadProjectFile,
+	allowCopyProjectFiles = false,
 	forceFullscreenMode,
 	documentFlowFullscreen,
 	hidePreviewHeader,
@@ -95,6 +96,7 @@ function Topic({
 	viewFileList?: boolean
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
+	allowCopyProjectFiles?: boolean
 	forceFullscreenMode?: boolean
 	documentFlowFullscreen?: boolean
 	hidePreviewHeader?: boolean
@@ -138,9 +140,10 @@ function Topic({
 	const shouldRenderFullscreenFileOnly = isFullscreenMode && Boolean(isFileShare) && !isMobile
 
 	// 使用分享页面菜单过滤 Hook
+	const allowCopySharedFiles = isLogined && allowCopyProjectFiles
 	const { filterShareMenuItems, filterBatchDownloadLayerMenuItems } = useShareMenuFilters({
 		allowDownloadProjectFile,
-		allowCopyProjectFile: isLogined,
+		allowCopyProjectFile: allowCopySharedFiles,
 	})
 
 	// 判断是否需要调整 BackToLatestButton 的位置
@@ -1012,7 +1015,7 @@ function Topic({
 													}}
 													activeFileId={activeFileId}
 													allowEdit={false}
-													allowCopyTo={isLogined}
+													allowCopyTo={allowCopySharedFiles}
 													filterMenuItems={filterShareMenuItems}
 													filterBatchDownloadLayerMenuItems={
 														filterBatchDownloadLayerMenuItems
@@ -1461,7 +1464,7 @@ function Topic({
 						allLoading={allLoading}
 						activeFileId={activeFileId}
 						allowEdit={false}
-						allowCopyTo={isLogined}
+						allowCopyTo={allowCopySharedFiles}
 						filterMenuItems={filterShareMenuItems}
 						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 						allowDownload={allowDownloadProjectFile}

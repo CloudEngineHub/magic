@@ -1053,6 +1053,7 @@ function Share() {
 							viewFileList={viewFileList}
 							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
 							allowDownloadProjectFile={allowDownloadProjectFile}
+							allowCopyProjectFiles={allowCopyProjectFiles}
 							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
 							documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
 							hidePreviewHeader={shareDisplayOptions.hideHeader}
