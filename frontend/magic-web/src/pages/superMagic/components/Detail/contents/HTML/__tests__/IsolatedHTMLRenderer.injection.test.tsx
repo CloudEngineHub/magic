@@ -406,6 +406,33 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		vi.restoreAllMocks()
 	})
 
+	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		await flushReactEffects()
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe")
+		const sandboxTokens = iframe.getAttribute("sandbox")?.split(/\s+/) ?? []
+		const allowedFeatures = iframe
+			.getAttribute("allow")
+			?.split(";")
+			.map((feature) => feature.trim())
+			.filter(Boolean)
+
+		expect(sandboxTokens).toEqual(
+			expect.arrayContaining(["allow-orientation-lock", "allow-presentation"]),
+		)
+		expect(allowedFeatures).toEqual(
+			expect.arrayContaining([
+				"fullscreen",
+				"autoplay",
+				"picture-in-picture",
+				"encrypted-media",
+				"web-share",
+				"clipboard-write",
+			]),
+		)
+	})
+
 	it("shows the scrollbar style only while a PPT is manually zoomed", async () => {
 		hookState.isManualZoom = true
 		hookState.shouldApplyScaling = true

@@ -2113,8 +2113,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									src={htmlSandboxShellUrl}
 									onLoad={handleIframeElementLoad}
 									onError={handleIframeElementError}
-									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock"
-									allow="fullscreen pointer-lock"
+									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
+									allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
 									allowFullScreen
 									translate="no"
 									style={
