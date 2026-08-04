@@ -34,7 +34,7 @@ The same `eventId` and `release` are used for the Provider and self-hosted paths
 | `eventKey`        | String attribute                              | Top-level field                              |
 | `errorKind`       | String attribute                              | Top-level field                              |
 | `error: Error`    | Original Error passed to `captureException`   | `{ name, message, stack }`                   |
-| non-Error `error` | Provider creates a synthetic Error            | Original value after sanitization/JSON rules |
+| non-Error `error` | Provider creates `MagicLoggerSyntheticError`  | Original value after sanitization/JSON rules |
 | `message`         | Fallback for synthetic Error creation         | Independent top-level field                  |
 | `context`         | Not currently included in Provider attributes | Independent top-level object                 |
 | `release`         | Provider attribute and SDK release            | Top-level field                              |
@@ -48,18 +48,18 @@ Provider value = error ?? message
 Provider fallback = message || eventKey
 ```
 
-| Business value                | Probe message | Probe stack | `syntheticError` | Self-hosted `error`             |
-| ----------------------------- | ------------- | ----------- | ---------------- | ------------------------------- |
-| `Error("A")`, message `"B"`   | `A`           | Original    | `false`          | `{ name, message: "A", stack }` |
-| string `"A"`, message `"B"`   | `A`           | Synthetic   | `true`           | `"A"`                           |
-| object, message `"B"`         | `B`           | Synthetic   | `true`           | Object                          |
-| number/boolean, message `"B"` | `B`           | Synthetic   | `true`           | Primitive                       |
-| `null`, message `"B"`         | `B`           | Synthetic   | `true`           | `null`                          |
-| no error, message `"B"`       | `B`           | Synthetic   | `true`           | Field omitted                   |
-| object, no message            | `eventKey`    | Synthetic   | `true`           | Object                          |
-| no error or message           | `eventKey`    | Synthetic   | `true`           | Field omitted                   |
+| Business value                | Probe error name            | Probe message | Probe stack | `syntheticError` | Self-hosted `error`             |
+| ----------------------------- | --------------------------- | ------------- | ----------- | ---------------- | ------------------------------- |
+| `Error("A")`, message `"B"`   | Original name               | `A`           | Original    | `false`          | `{ name, message: "A", stack }` |
+| string `"A"`, message `"B"`   | `MagicLoggerSyntheticError` | `A`           | Synthetic   | `true`           | `"A"`                           |
+| object, message `"B"`         | `MagicLoggerSyntheticError` | `B`           | Synthetic   | `true`           | Object                          |
+| number/boolean, message `"B"` | `MagicLoggerSyntheticError` | `B`           | Synthetic   | `true`           | Primitive                       |
+| `null`, message `"B"`         | `MagicLoggerSyntheticError` | `B`           | Synthetic   | `true`           | `null`                          |
+| no error, message `"B"`       | `MagicLoggerSyntheticError` | `B`           | Synthetic   | `true`           | Field omitted                   |
+| object, no message            | `MagicLoggerSyntheticError` | `eventKey`    | Synthetic   | `true`           | Object                          |
+| no error or message           | `MagicLoggerSyntheticError` | `eventKey`    | Synthetic   | `true`           | Field omitted                   |
 
-Do not treat a synthetic stack as the original throw location.
+The Provider also emits `syntheticError: "true"` for these internally created errors. Do not treat a synthetic stack as the original throw location.
 
 ## Self-Hosted Logical Record
 

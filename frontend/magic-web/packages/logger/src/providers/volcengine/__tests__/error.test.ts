@@ -19,6 +19,7 @@ describe("normalizeVolcengineError", () => {
 		])
 
 		expect(result.error).toBe(error)
+		expect(result.error.name).toBe("TypeError")
 		expect(result.attributes).toMatchObject({
 			release: "3.10.7",
 			syntheticError: false,
@@ -48,6 +49,7 @@ describe("normalizeVolcengineError", () => {
 		])
 
 		expect(result.error).toBeInstanceOf(Error)
+		expect(result.error.name).toBe("MagicLoggerSyntheticError")
 		expect(result.error.message).toBe("socket timeout")
 		expect(result.attributes.syntheticError).toBe(true)
 	})

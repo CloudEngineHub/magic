@@ -5,6 +5,14 @@ export interface NormalizedVolcengineError {
 	attributes: ProviderErrorInput["attributes"] & { syntheticError: boolean }
 }
 
+class MagicLoggerSyntheticError extends Error {
+	constructor(message: string) {
+		super(message)
+		// 使用独立名称，便于在探针平台直接识别 Logger 内部合成的异常。
+		this.name = "MagicLoggerSyntheticError"
+	}
+}
+
 export function isProviderErrorInput(value: unknown): value is ProviderErrorInput {
 	if (!value || typeof value !== "object") return false
 
@@ -38,7 +46,7 @@ export function normalizeVolcengineError(args: unknown[]): NormalizedVolcengineE
 	const fallbackMessage = toSafeMessage(value, internalInput?.fallbackMessage ?? "Unknown error")
 
 	return {
-		error: originalError ?? new Error(fallbackMessage),
+		error: originalError ?? new MagicLoggerSyntheticError(fallbackMessage),
 		attributes: {
 			namespace: internalInput?.attributes.namespace ?? "global",
 			eventId: internalInput?.attributes.eventId ?? "",
