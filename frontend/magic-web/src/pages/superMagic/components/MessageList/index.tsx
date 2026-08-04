@@ -59,6 +59,7 @@ import { MessageListProvider, useMessageListContext } from "./context"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
+import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 
 export { MessageListProvider }
 
@@ -90,6 +91,7 @@ interface MessageListProps {
 	backToLatestButtonClassName?: string
 	enableRevokedUserMessageReedit?: boolean
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
+	revokedEditorContext?: RevokedMessageEditorContext
 	/** Enable message-export selection mode. Caller drives entry via exportApiRef. */
 	enableExport?: boolean
 	/** Receives an imperative handle to drive export selection mode. */
@@ -152,6 +154,7 @@ const MessageList = observer(
 		backToLatestButtonClassName,
 		enableRevokedUserMessageReedit = false,
 		topicModelStore,
+		revokedEditorContext,
 		enableExport = false,
 		exportApiRef,
 		exportTitle,
@@ -676,6 +679,7 @@ const MessageList = observer(
 																}
 																onFileClick={onFileClick}
 																topicModelStore={topicModelStore}
+																editorContext={revokedEditorContext}
 																onPendingSendChange={
 																	setIsFirstRevokedUserMessagePendingSend
 																}

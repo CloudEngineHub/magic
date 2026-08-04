@@ -16,6 +16,7 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
+import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -28,7 +29,6 @@ import MessageQueue from "@/pages/superMagic/components/MessagePanel/components/
 import useMessageQueue from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import MessageHeader from "@/pages/superMagic/components/MessageHeader"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
-import { merge } from "lodash-es"
 import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEditor/constants/constant"
 import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
@@ -40,6 +40,7 @@ import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/to
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
 import MicroAppIssuePromptPanel from "./MicroAppIssuePromptPanel"
+import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -54,6 +55,7 @@ interface AppConversationPanelProps {
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
+	onSelectDetail?: (detail: unknown) => void
 }
 
 function AppConversationPanel({
@@ -69,6 +71,7 @@ function AppConversationPanel({
 	mentionPanelStore,
 	projectFilesStore,
 	onTerminalTopicStatusChange,
+	onSelectDetail,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
@@ -115,6 +118,15 @@ function AppConversationPanel({
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
+
+	const mergeMicroAppSendParams = useMemoizedFn(
+		({ defaultParams }: { defaultParams: HandleSendParams }) => {
+			return {
+				...defaultParams,
+				topicMode: TopicMode.MicroApp,
+			}
+		},
+	)
 
 	const handleSendMsg = useMemoizedFn(
 		(content: JSONContent | string, options?: SendMessageOptions) => {
@@ -199,11 +211,7 @@ function AppConversationPanel({
 					project: currentProject ?? selectedProject,
 				})
 			},
-			mergeSendParams: ({ defaultParams }) => {
-				return merge(defaultParams, {
-					topicMode: TopicMode.MicroApp,
-				})
-			},
+			mergeSendParams: mergeMicroAppSendParams,
 			queueContext: {
 				editingQueueItem: messageQueue.editingQueueItem,
 				addToQueue: messageQueue.addToQueue,
@@ -223,7 +231,30 @@ function AppConversationPanel({
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,
+		mergeMicroAppSendParams,
 		detailPanelVisible,
+	])
+
+	const revokedEditorContext = useMemo<RevokedMessageEditorContext>(() => {
+		return {
+			selectedProject,
+			setSelectedTopic: topicStore.setSelectedTopic,
+			topicMode: modelTopicMode,
+			modelTopicMode,
+			topicStore,
+			mentionPanelStore,
+			projectFilesStore,
+			topicModelStore,
+			mergeSendParams: mergeMicroAppSendParams,
+		}
+	}, [
+		selectedProject,
+		topicStore,
+		modelTopicMode,
+		mentionPanelStore,
+		projectFilesStore,
+		topicModelStore,
+		mergeMicroAppSendParams,
 	])
 
 	const messageListProviderValue = useMemo(() => {
@@ -272,6 +303,9 @@ function AppConversationPanel({
 			messageListProviderValue={messageListProviderValue}
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
+			setSelectedDetail={onSelectDetail}
+			enableRevokedUserMessageReedit
+			revokedEditorContext={revokedEditorContext}
 			handlePullMoreMessage={handlePullMoreMessage}
 			showLoading={showLoading}
 			currentTopicStatus={selectedTopic?.task_status}

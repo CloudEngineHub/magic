@@ -9,6 +9,9 @@ vi.mock("react-i18next", () => ({
 
 const scaffoldMocks = vi.hoisted(() => ({
 	messageListProviderValue: null as Record<string, unknown> | null,
+	setSelectedDetail: undefined as ((detail: unknown) => void) | undefined,
+	enableRevokedUserMessageReedit: false,
+	revokedEditorContext: null as Record<string, unknown> | null,
 }))
 
 const scopedProgressMocks = vi.hoisted(() => ({
@@ -30,12 +33,21 @@ vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 		editor,
 		emptyCompact,
 		messageListProviderValue,
+		setSelectedDetail,
+		enableRevokedUserMessageReedit,
+		revokedEditorContext,
 	}: {
 		editor: React.ReactNode
 		emptyCompact: React.ReactNode
 		messageListProviderValue: Record<string, unknown>
+		setSelectedDetail?: (detail: unknown) => void
+		enableRevokedUserMessageReedit?: boolean
+		revokedEditorContext?: Record<string, unknown>
 	}) => {
 		scaffoldMocks.messageListProviderValue = messageListProviderValue
+		scaffoldMocks.setSelectedDetail = setSelectedDetail
+		scaffoldMocks.enableRevokedUserMessageReedit = Boolean(enableRevokedUserMessageReedit)
+		scaffoldMocks.revokedEditorContext = revokedEditorContext ?? null
 		return (
 			<div>
 				{emptyCompact}
@@ -243,6 +255,61 @@ describe("AppConversationPanel", () => {
 		expect(scaffoldMocks.messageListProviderValue).toEqual(
 			expect.objectContaining({ projectFilesStore }),
 		)
+	})
+
+	it("enables the revoked user message editor", () => {
+		const selectedProject = { id: "project-1", project_name: "Micro App" } as never
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic", topic_mode: "micro-app" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={selectedProject}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+			/>,
+		)
+
+		expect(scaffoldMocks.enableRevokedUserMessageReedit).toBe(true)
+		expect(scaffoldMocks.revokedEditorContext).toEqual(
+			expect.objectContaining({
+				selectedProject,
+				topicMode: "default",
+				modelTopicMode: "default",
+				topicStore,
+			}),
+		)
+		const mergeSendParams = scaffoldMocks.revokedEditorContext?.mergeSendParams as
+			| ((params: { defaultParams: Record<string, unknown> }) => Record<string, unknown>)
+			| undefined
+		expect(mergeSendParams?.({ defaultParams: { topicMode: "default" } })).toEqual(
+			expect.objectContaining({ topicMode: "micro-app" }),
+		)
+	})
+
+	it("forwards tool details to the page preview handler", () => {
+		const onSelectDetail = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				onSelectDetail={onSelectDetail}
+			/>,
+		)
+
+		expect(scaffoldMocks.setSelectedDetail).toBe(onSelectDetail)
 	})
 
 	it("requests an attachment refresh when the topic reaches a terminal status", () => {
