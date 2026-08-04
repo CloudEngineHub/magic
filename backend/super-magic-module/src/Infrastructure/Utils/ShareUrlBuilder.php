@@ -38,7 +38,7 @@ class ShareUrlBuilder
 
     public function buildResourceShareUrl(ResourceType $resourceType, string $resourceId, ?string $password = null): ?string
     {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
+        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
         if ($frontendDomain === '') {
             return null;
         }
@@ -63,7 +63,7 @@ class ShareUrlBuilder
 
     public function buildMicroAppShareUrl(string $appId, ?string $password = null): ?string
     {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
+        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
         if ($frontendDomain === '') {
             return null;
         }
