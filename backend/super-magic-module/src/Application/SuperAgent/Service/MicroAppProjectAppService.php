@@ -281,6 +281,26 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
+    public function getProjectTitle(int $appId): array
+    {
+        $record = $this->microAppRepository->findById($appId);
+        if ($record === null || $record->getPublishStatus() !== MicroAppPublishStatus::Published->value) {
+            return ['app_name' => ''];
+        }
+
+        $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
+        if ($shareEntity === null) {
+            return ['app_name' => ''];
+        }
+
+        $project = $this->projectRepository->findById($record->getProjectId());
+        if ($project === null || $project->getDeletedAt() !== null) {
+            return ['app_name' => ''];
+        }
+
+        return ['app_name' => trim($project->getProjectName())];
+    }
+
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
     {
         $authorization = $requestContext->getUserAuthorization();

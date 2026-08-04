@@ -17,9 +17,9 @@ class SEO {
 		if (appId) {
 			try {
 				const data = await getMicroAppProjectName(appId)
-				const projectName = data?.data?.project_name
-				if (typeof projectName === "string" && projectName.trim()) {
-					title = projectName.trim()
+				const appName = data?.data?.app_name
+				if (typeof appName === "string" && appName.trim()) {
+					title = appName.trim()
 				}
 			} catch (_) {
 				// Keep the localized fallback when the metadata service is unavailable.
