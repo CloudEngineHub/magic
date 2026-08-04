@@ -17,9 +17,6 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation
 class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
 {
     /**
-     * usable_codes 仅包含当前用户可直接使用的员工（本地创建/已雇佣/官方）；
-     * missing_codes 表示既不在这几个来源、也未在市场上架的员工 code。
-     *
      * @param array<string> $agentCodes
      * @return array{usable_codes: array<string>, missing_codes: array<string>}
      */
@@ -44,11 +41,6 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
             }
             $ownedAgentCodes[] = $agentCode;
         }
-        // 市场已上架的员工与本地/雇佣关系是“或”的关系：视为存在，但不直接可用。
-        $marketAgentCodes = array_values(array_intersect(
-            $agentCodes,
-            $this->marketEligibilityDomainService->listPublishedAgentCodes($agentCodes)
-        ));
         $usableLookup = array_fill_keys(array_merge($ownedAgentCodes, $officialAgentCodes), true);
 
         $usableAgentCodes = [];
@@ -63,15 +55,12 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
             'usable_codes' => $usableAgentCodes,
             'missing_codes' => $this->collectMissingCodes(
                 $agentCodes,
-                array_values(array_unique(array_merge($foundAgentCodes, $ownedAgentCodes, $officialAgentCodes, $marketAgentCodes)))
+                array_values(array_unique(array_merge($foundAgentCodes, $ownedAgentCodes, $officialAgentCodes)))
             ),
         ];
     }
 
     /**
-     * exists 表示员工对当前用户"存在"：本组织可见、已创建/已雇佣、官方员工，
-     * 或已在员工市场上架（未雇佣时 exists=true 但 can_use=false）。
-     *
      * @return array{code: string, exists: bool, can_use: bool}
      */
     public function checkUsableAgentCode(string $organizationCode, string $userId, string $agentCode): array
@@ -86,11 +75,24 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
         }
 
         $result = $this->listUsableAgentCodes($organizationCode, $userId, [$normalizedCode]);
+        $canUse = in_array($normalizedCode, $result['usable_codes'], true);
+        $exists = ! in_array($normalizedCode, $result['missing_codes'], true);
+
+        if (! $exists) {
+            $market = $this->marketEligibilityDomainService->getPublishedByAgentCode($normalizedCode);
+            if ($market !== null) {
+                $exists = $this->marketEligibilityDomainService->isMarketDiscoverableForUser(
+                    PermissionDataIsolation::create($organizationCode, $userId),
+                    $market,
+                    $userId
+                );
+            }
+        }
 
         return [
             'code' => $normalizedCode,
-            'exists' => ! in_array($normalizedCode, $result['missing_codes'], true),
-            'can_use' => in_array($normalizedCode, $result['usable_codes'], true),
+            'exists' => $exists,
+            'can_use' => $canUse,
         ];
     }
 

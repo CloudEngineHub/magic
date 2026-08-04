@@ -19,6 +19,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\MagicClawEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
@@ -133,7 +134,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         self::assertSame([], $result['missing_codes']);
     }
 
-    public function testListUsableAgentCodesTreatsMarketPublishedAgentAsExisting(): void
+    public function testListUsableAgentCodesDoesNotExpandMissingCodesForUnownedMarketAgent(): void
     {
         $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([]));
         $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
@@ -145,7 +146,7 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         $result = $this->service->listUsableAgentCodes('DT001', 'user-1', ['market-agent', 'unknown-agent']);
 
         self::assertSame([], $result['usable_codes']);
-        self::assertSame(['unknown-agent'], $result['missing_codes']);
+        self::assertSame(['market-agent', 'unknown-agent'], $result['missing_codes']);
     }
 
     public function testCheckUsableAgentCodeTreatsUnhiredMarketAgentAsExistingButUnusable(): void
@@ -162,6 +163,23 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
             'exists' => true,
             'can_use' => false,
         ], $this->service->checkUsableAgentCode('DT001', 'user-1', 'market-agent'));
+    }
+
+    public function testCheckUsableAgentCodeRejectsMarketAgentThatCurrentUserCannotDiscover(): void
+    {
+        $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([]));
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+        $this->setProperty($this->service, 'marketEligibilityDomainService', $this->createMarketDomainService(
+            ['private-market-agent'],
+            []
+        ));
+
+        self::assertSame([
+            'code' => 'private-market-agent',
+            'exists' => false,
+            'can_use' => false,
+        ], $this->service->checkUsableAgentCode('DT001', 'user-1', 'private-market-agent'));
     }
 
     public function testCheckUsableAgentCodeReturnsPermissionStatus(): void
@@ -452,16 +470,30 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
     /**
      * @param array<string> $publishedCodes 已在市场上架（已发布）的员工 code
      */
-    private function createMarketDomainService(array $publishedCodes): SuperMagicAgentMarketDomainService
-    {
-        return new class($publishedCodes) extends SuperMagicAgentMarketDomainService {
-            public function __construct(private array $publishedCodes)
+    private function createMarketDomainService(
+        array $publishedCodes,
+        ?array $discoverableCodes = null
+    ): SuperMagicAgentMarketDomainService {
+        return new class($publishedCodes, $discoverableCodes ?? $publishedCodes) extends SuperMagicAgentMarketDomainService {
+            public function __construct(private array $publishedCodes, private array $discoverableCodes)
             {
             }
 
-            public function listPublishedAgentCodes(array $agentCodes): array
+            public function getPublishedByAgentCode(string $agentCode): ?AgentMarketEntity
             {
-                return array_values(array_intersect($agentCodes, $this->publishedCodes));
+                if (! in_array($agentCode, $this->publishedCodes, true)) {
+                    return null;
+                }
+
+                return (new AgentMarketEntity())->setAgentCode($agentCode);
+            }
+
+            public function isMarketDiscoverableForUser(
+                PermissionDataIsolation $permissionIsolation,
+                AgentMarketEntity $market,
+                string $userId
+            ): bool {
+                return in_array($market->getAgentCode(), $this->discoverableCodes, true);
             }
         };
     }
