@@ -1,205 +1,46 @@
+import { observer } from "mobx-react-lite"
+import { cn } from "@/lib/utils"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
-import { useEffect, useMemo, type ComponentProps } from "react"
-import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
-import { useScrollAreaAutoScroll } from "../shared/hooks/useScrollAreaAutoScroll"
-import { useTranslation } from "react-i18next"
-import { ReasoningPanel } from "../shared/ReasoningPanel"
-import { observer } from "mobx-react-lite"
-import { ToolCall } from "./ToolCall"
-import { cn } from "@/lib/utils"
-import MarkdownComponent from "../../Text/components/Markdown"
-import { extractCitations, trimIncompleteCitationTag } from "@/pages/superMagic/utils/citations"
-import { CitationCard } from "../../Citations"
-import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
-import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
-import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
-import { useMemoizedFn } from "ahooks"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import {
-	buildFilePathAttachments,
-	type FilePathAttachment,
-} from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
-import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
-import projectFilesStore from "@/stores/projectFiles"
-import { FilePathAttachmentList } from "./FilePathAttachmentList"
-import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
-import {
-	MessageViewStateScopeProvider,
-	useMessageViewState,
-} from "../../../view-state/MessageViewStateContext"
-
-const markdownBaseClassName = cn(
-	"w-full break-words leading-relaxed text-foreground",
-	"[&_h1]:mb-2.5 [&_h1]:mt-2.5 [&_h1]:pb-1.5 [&_h1]:text-[2em] [&_h1]:font-semibold [&_h1]:leading-tight",
-	"[&_h2]:mb-2.5 [&_h2]:mt-2.5 [&_h2]:pb-1.5 [&_h2]:text-[1.5em] [&_h2]:font-semibold [&_h2]:leading-tight",
-	"[&_h3]:mb-2.5 [&_h3]:mt-2.5 [&_h3]:text-[1.25em] [&_h3]:font-semibold [&_h3]:leading-tight",
-	"[&_h4]:mb-2.5 [&_h4]:mt-2.5 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:leading-tight",
-	"[&_h5]:mb-2.5 [&_h5]:mt-2.5 [&_h5]:text-sm [&_h5]:font-semibold [&_h5]:leading-tight",
-	"[&_h6]:mb-2.5 [&_h6]:mt-2.5 [&_h6]:text-sm [&_h6]:font-semibold [&_h6]:leading-tight",
-	"[&_blockquote]:mt-0 [&_blockquote]:border-l-4 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_p:has(+p)]:!mb-1 [&_p]:!mb-0 [&_p]:!mt-0 [&_p]:whitespace-pre-wrap",
-	"[&_ul]:m-0 [&_ul]:list-outside [&_ul]:p-0 [&_ul]:pl-5",
-	"[&_ol]:m-0 [&_ol]:list-outside [&_ol]:p-0 [&_ol]:pl-5",
-	"[&>ul]:!mb-1 [&>ul]:!mt-1",
-	"[&>ol]:!mb-1 [&>ol]:!mt-1",
-	"[&_li]:!m-0 [&_li]:p-0 [&_li]:pl-1 [&_li]:align-top [&_li]:!leading-[2em] [&_li]:leading-normal",
-	"[&_li_ul]:m-0 [&_li_ul]:p-0 [&_li_ul]:pl-5",
-	"[&_li_ol]:m-0 [&_li_ol]:p-0 [&_li_ol]:pl-5",
-	"[&_table]:mt-0 [&_table]:block [&_table]:w-full [&_table]:border-collapse [&_table]:border-spacing-0 [&_table]:overflow-auto",
-	"[&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left",
-	"[&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5",
-	"[&_tr:nth-child(2n)]:bg-muted/40 [&_tr]:border-t [&_tr]:border-border [&_tr]:bg-background",
-	"[&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline",
-	"[&_pre]:mt-0 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-4 [&_pre]:text-[85%] [&_pre]:leading-[1.45]",
-	"[&_code]:rounded-md [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[85%]",
-	"[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[100%]",
-	"[&_img]:max-w-full",
-)
-
-const reasoningMarkdownClassName = cn(
-	markdownBaseClassName,
-	"text-xs leading-5 text-muted-foreground",
-)
-
-type RenderableToolCall = ComponentProps<typeof ToolCall>["toolCall"]
-
-function isRenderableToolCall(toolCall: unknown): toolCall is RenderableToolCall {
-	if (!toolCall || typeof toolCall !== "object") return false
-	const candidate = toolCall as {
-		id?: unknown
-		function?: { name?: unknown }
-	}
-	return Boolean(
-		typeof candidate.id === "string" &&
-		candidate.id &&
-		typeof candidate.function?.name === "string" &&
-		candidate.function.name,
-	)
-}
+import { AttachmentSection } from "./sections/AttachmentSection"
+import { ContentSection } from "./sections/ContentSection"
+import { ReasoningSection } from "./sections/ReasoningSection"
+import { ToolCallContainer } from "./tool-call/ToolCallContainer"
+import { isRenderableToolCall } from "./tool-call/types"
 
 const MessageNode = observer(function MessageNode(props: NodeProps) {
-	const {
-		onMouseEnter,
-		onMouseLeave,
-		onFileClick: handleFileClick,
-		onSelectDetail,
-		selectedTopic,
-	} = props
-
-	const { t } = useTranslation("super")
-
 	const node = (superMagicStore.getRenderedMessageNode?.(
-		props?.node?.super_message_id,
-		props?.node?.topic_id,
-	) ?? superMagicStore.getMessageNode(props?.node?.super_message_id)) as
+		props.node?.super_message_id,
+		props.node?.topic_id,
+	) ?? superMagicStore.getMessageNode(props.node?.super_message_id)) as
 		Record<string, unknown> | undefined
-	const topicId = props?.node?.topic_id || ""
-	const correlationId = props?.node?.correlation_id || ""
-	const messageId = props?.node?.app_message_id || ""
-	const ownerSuperMessageId = String(
-		node?.super_message_id || props?.node?.super_message_id || "",
-	)
-
-	const reasoningContent =
-		typeof node?.reasoning_content === "string" ? node.reasoning_content : ""
-	const hasReasoningContent = !/^\s*$/.test(reasoningContent)
-	const rawContent = typeof node?.content === "string" ? node.content : ""
-	const hasContent = !/^\s*$/.test(rawContent)
-	const hasAssistantContent = node?.role === "assistant" && hasContent
-
-	const [highlightedCitation, setHighlightedCitation] = useMessageViewState<number | null>(
-		"highlighted-citation",
-		null,
-	)
-
+	const topicId = props.node?.topic_id || ""
+	const correlationId = props.node?.correlation_id || ""
+	const messageId = props.node?.app_message_id || ""
+	const ownerSuperMessageId = String(node?.super_message_id || props.node?.super_message_id || "")
 	const streamState =
 		superMagicStore.getStreamState(topicId, correlationId)?.stage ||
 		superMagicStore.getStreamState(topicId, messageId)?.stage
-	const isContentStreaming = streamState === "content"
-
-	// 解析引用数据：仅对 assistant 消息提取 <references> 数据；标签由 Markdown 自定义组件隐藏
-	const citations = useMemo(
-		() => (hasAssistantContent ? extractCitations(rawContent) : []),
-		[rawContent, hasAssistantContent],
-	)
-	const displayContent = useMemo(
-		() => (isContentStreaming ? trimIncompleteCitationTag(rawContent) : rawContent),
-		[rawContent, isContentStreaming],
-	)
-
-	const [openReasoning, setOpenReasoning] = useMessageViewState("reasoning-expanded", false)
-	const [hasUserControlledReasoning, setHasUserControlledReasoning] = useMessageViewState(
-		"reasoning-user-controlled",
-		false,
-	)
-	// Store 负责根治乱序归并；这里仅做展示边界防御，避免历史脏数据生成无响应 id 的永久 spinner。
+	const rawContent = typeof node?.content === "string" ? node.content : ""
+	const hasAssistantContent = node?.role === "assistant" && !/^\s*$/.test(rawContent)
 	const renderableToolCalls = (Array.isArray(node?.tool_calls) ? node.tool_calls : []).filter(
 		isRenderableToolCall,
 	)
-	const hasToolCall = renderableToolCalls.length > 0
 
-	// 兼容话题分享场景下，数据清洗不彻底导致附件在props.node中
-	const attachments = Array.isArray(node?.attachments)
-		? (node.attachments as AttachmentProps[])
-		: Array.isArray(props?.node?.attachments)
-			? (props?.node?.attachments as AttachmentProps[])
-			: []
-
-	// 解析前一条消息 content 中的 [@file_path:...]，仅保留在当前工作区附件树中真实存在的文件
-	const rawFilePathAttachments = useMemo<FilePathAttachment[]>(() => {
-		const prevSuperMessageId = props?.prevNode?.super_message_id
-		if (!prevSuperMessageId) return []
-		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			Record<string, unknown> | undefined
-		const prevContent =
-			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
-		if (!prevContent) return []
-		return buildFilePathAttachments(prevContent)
-	}, [props?.prevNode?.super_message_id])
-
-	const filePathAttachments = rawFilePathAttachments.filter((attachment) => {
-		const found = findAttachmentByPath(
-			projectFilesStore.workspaceFilesList,
-			attachment.filePath,
-		)
-		if (!found) return false
-		if (found.type === "directory" || found.is_directory) return false
-		return true
-	})
-
-	const { viewportRef: reasoningViewportRef } = useScrollAreaAutoScroll({
-		isStreaming: streamState === "reasoning_content",
-	})
-
-	const onFileClick = useMemoizedFn((item?: unknown) => {
-		openMessageFile(item)
-
-		onSelectDetail?.(item)
-	})
-
-	useEffect(() => {
-		if (hasUserControlledReasoning) return
-		setOpenReasoning(streamState === "reasoning_content")
-	}, [hasUserControlledReasoning, messageId, setOpenReasoning, streamState])
-
-	// console.log("@=======>", JSON.parse(JSON.stringify(node || {})), props?.node)
 	if (node?.role === "tool") {
 		return (
 			<div className="mb-3">
-				{filePathAttachments.length > 0 ? (
-					<FilePathAttachmentList attachments={filePathAttachments} />
-				) : (
-					attachments.length > 0 && (
-						<Attachment
-							attachments={attachments}
-							onSelectDetail={onFileClick}
-							onFileClick={handleFileClick}
-						/>
-					)
-				)}
+				<AttachmentSection
+					node={node}
+					fallbackNode={props.node}
+					prevSuperMessageId={props.prevNode?.super_message_id}
+					onFileClick={props.onFileClick}
+					onSelectDetail={props.onSelectDetail}
+				/>
 			</div>
 		)
 	}
+
 	return (
 		<div
 			className={cn(
@@ -208,115 +49,42 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 					"rounded-lg transition-[background-color,box-shadow] group-hover:bg-muted group-hover:shadow-[-2px_0_0_5px_rgb(var(--muted-rgb))]",
 			)}
 		>
-			{hasReasoningContent && (
-				<ReasoningPanel
-					classNames="p-0"
-					open={openReasoning}
-					loading={streamState === "reasoning_content"}
-					title={
-						streamState === "reasoning_content"
-							? t("agentThink.thinking")
-							: t("agentThink.thinkDone")
-					}
-					onToggle={() => {
-						pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)
-						setHasUserControlledReasoning(true)
-						setOpenReasoning((open) => !open)
-					}}
-				>
-					<ScrollArea
-						viewportRef={reasoningViewportRef}
-						className="mx-[6px] mb-1 rounded-lg border-black/[0.08] bg-[#f5f6f7] dark:bg-white/10 [&_[data-radix-scroll-area-viewport]]:max-h-60"
-					>
-						<MarkdownComponent
-							className={cn(
-								reasoningMarkdownClassName,
-								"w-full px-3 pb-1 pt-2 text-muted-foreground/50",
-							)}
-							onMouseEnter={onMouseEnter}
-							onMouseLeave={onMouseLeave}
-							isStreaming={streamState === "reasoning_content"}
-							enableHtmlCodeBlockPreview={false}
-							content={reasoningContent}
-						/>
-						<ScrollBar orientation="vertical" />
-					</ScrollArea>
-				</ReasoningPanel>
-			)}
-			{hasContent && (
-				<>
-					<MarkdownComponent
-						className={markdownBaseClassName}
-						isStreaming={isContentStreaming}
-						content={displayContent}
-						citations={citations}
-						highlightedCitation={highlightedCitation}
-						onCitationClick={setHighlightedCitation}
-						onMouseEnter={onMouseEnter}
-						onMouseLeave={onMouseLeave}
+			<ReasoningSection
+				node={node}
+				messageId={messageId}
+				streamState={streamState}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+			<ContentSection
+				node={node}
+				streamState={streamState}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+			{renderableToolCalls.map((toolCall) =>
+				toolCall.function.name === "run_sdk_snippet" ? null : (
+					<ToolCallContainer
+						key={toolCall.id}
+						toolCall={toolCall}
+						topicId={topicId}
+						ownerSuperMessageId={ownerSuperMessageId}
+						selectedTopic={props.selectedTopic}
+						isShare={props.isShare}
+						correlationId={correlationId || messageId}
+						onSelectDetail={props.onSelectDetail}
+						onMouseEnter={props.onMouseEnter}
+						onMouseLeave={props.onMouseLeave}
 					/>
-					{citations.length > 0 && (
-						<CitationCard
-							sources={citations}
-							highlightedIndex={highlightedCitation}
-							onHighlightChange={setHighlightedCitation}
-							onFileClick={(citation) => {
-								if (
-									citation.type === "knowledge_base" &&
-									hasKnowledgeBaseTabTarget({
-										knowledgeBaseId: citation.knowledge_base_id || "",
-										documentCode: citation.document_code,
-										fileKey: citation.file_key,
-									})
-								) {
-									pubsub.publish(PubSubEvents.Open_Knowledge_Base_Tab, {
-										knowledgeBaseId: citation.knowledge_base_id || "",
-										documentCode: citation.document_code,
-										fileKey: citation.file_key,
-										title: citation.title,
-										knowledgeBaseName: citation.knowledge_base_name,
-										fileExtension: citation.file_extension,
-									})
-								}
-							}}
-						/>
-					)}
-				</>
+				),
 			)}
-
-			{hasToolCall &&
-				renderableToolCalls.map((o) => {
-					if (o?.function?.name === "run_sdk_snippet") {
-						return null
-					}
-					return (
-						<MessageViewStateScopeProvider key={o?.id} messageKey={o?.id}>
-							<ToolCall
-								toolCall={o}
-								topicId={topicId}
-								ownerSuperMessageId={ownerSuperMessageId}
-								selectedTopic={selectedTopic}
-								isShare={props.isShare}
-								correlationId={correlationId || messageId}
-								onSelectDetail={onSelectDetail}
-								onMouseEnter={onMouseEnter}
-								onMouseLeave={onMouseLeave}
-							/>
-						</MessageViewStateScopeProvider>
-					)
-				})}
-			{/* 路径附件优先展示；无路径附件时兜底使用原有 attachments */}
-			{filePathAttachments.length > 0 ? (
-				<FilePathAttachmentList attachments={filePathAttachments} />
-			) : (
-				attachments.length > 0 && (
-					<Attachment
-						attachments={attachments}
-						onSelectDetail={onFileClick}
-						onFileClick={handleFileClick}
-					/>
-				)
-			)}
+			<AttachmentSection
+				node={node}
+				fallbackNode={props.node}
+				prevSuperMessageId={props.prevNode?.super_message_id}
+				onFileClick={props.onFileClick}
+				onSelectDetail={props.onSelectDetail}
+			/>
 		</div>
 	)
 })

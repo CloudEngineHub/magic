@@ -54,8 +54,8 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
-vi.mock("../ToolCall", () => ({
-	ToolCall: ({ toolCall }: { toolCall: { id?: string } }) => (
+vi.mock("../tool-call/ToolCallContainer", () => ({
+	ToolCallContainer: ({ toolCall }: { toolCall: { id?: string } }) => (
 		<div data-testid={`tool-${toolCall.id || "missing"}`} />
 	),
 }))

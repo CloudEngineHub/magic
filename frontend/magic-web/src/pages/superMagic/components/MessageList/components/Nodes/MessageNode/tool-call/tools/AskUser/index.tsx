@@ -4,10 +4,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
-import type {
-	DefaultToolProps,
-	ToolDataLike,
-} from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/tools/DefaultTool"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	buildAskUserToolReplyDetail,
 	resolveAskUserLocaleFromAction,
@@ -28,11 +25,23 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { IconLoader2 } from "@tabler/icons-react"
 import { ChevronDown } from "lucide-react"
 import { observer } from "mobx-react-lite"
-import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useMemo, useRef, useState, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { AskUserForm, type AskUserAnswers } from "./AskUserForm"
 import { extractQuestionsField, parseQuestionsXml, type ParsedQuestion } from "./parse"
-import { useMessageViewState } from "../../../../../view-state/MessageViewStateContext"
+import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import type { ToolCallViewModel } from "../../types"
+
+interface AskUserToolCallProps {
+	toolData?: ToolCallViewModel
+	loading?: boolean
+	classNames?: string
+	selectedTopic?: Topic | null
+	isShare?: boolean
+	onSelectDetail?: (detail: unknown) => void
+	onMouseEnter?: (event: MouseEvent) => void
+	onMouseLeave?: (event: MouseEvent) => void
+}
 
 type AskUserDetailQuestion = {
 	default_value?: string | readonly string[] | null
@@ -111,15 +120,13 @@ function resolveSubmittedAnswers({
 	return hasAnswer ? mappedAnswers : undefined
 }
 
-function AskUserToolCall(props: DefaultToolProps) {
+function AskUserToolCall(props: AskUserToolCallProps) {
 	const { onMouseEnter, onMouseLeave, loading, classNames, selectedTopic } = props
 
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
 
-	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		{ tool?: ToolDataLike } | undefined
-	const tool = props.toolData || node?.tool
+	const tool = props.toolData
 	const detailData = tool?.detail?.data as Record<string, unknown> | undefined
 
 	// 优先从 rawArguments 读取原始 arguments 字符串（流式阶段 detail 可能不存在），

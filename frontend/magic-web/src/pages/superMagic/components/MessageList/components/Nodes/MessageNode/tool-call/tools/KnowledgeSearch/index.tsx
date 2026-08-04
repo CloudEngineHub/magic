@@ -14,7 +14,7 @@ import {
 	type KnowledgeSearchSnippet,
 } from "@/pages/superMagic/utils/knowledgeSearchDetail"
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
-import { useMessageViewState } from "../../../../view-state/MessageViewStateContext"
+import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 
 type ToolCardStatus = "running" | "success" | "error"
 

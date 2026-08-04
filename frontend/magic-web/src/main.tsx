@@ -10,6 +10,7 @@ import { appService } from "./services/app/AppService"
 import { getTimezone, getTimezones } from "@dtyq/timezone"
 import { DevStrictMode } from "@/utils/devStrictMode"
 import { registerAppServiceWorker } from "@/workers/service-worker/register"
+import "@/pages/superMagic/stores/test"
 
 enableMapSet()
 

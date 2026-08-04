@@ -3,7 +3,7 @@ import { observable } from "mobx"
 import { Suspense } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { ToolCall } from "../ToolCall"
+import { ToolCallContainer as ToolCall } from "../ToolCallContainer"
 
 const storeHarness = vi.hoisted(() => ({
 	toolResponseMap: new Map<string, Map<string, Record<string, unknown>>>(),
@@ -69,7 +69,7 @@ vi.mock("@/pages/superMagic/components/MessageList/components/shared/ToolIconCon
 	ToolIconBadge: () => null,
 }))
 
-vi.mock("../tools/KnowledgeSearchTool", () => ({
+vi.mock("../tools/KnowledgeSearch", () => ({
 	default: ({ loading, onClick }: { loading?: boolean; onClick?: () => void }) => (
 		<div>
 			<span>{loading ? "loading" : "loaded"}</span>
@@ -84,8 +84,16 @@ vi.mock("../tools/WriteFile", () => ({
 	default: () => null,
 }))
 
-vi.mock("../tools/MCPTool", () => ({
+vi.mock("../tools/MCP", () => ({
 	MCPTool: () => null,
+}))
+
+vi.mock("../tools/AskUser", () => ({
+	default: ({ loading }: { loading?: boolean }) => (
+		<button type="button" data-testid="ask-user-v2-card-collapse-button" disabled={loading}>
+			{loading ? <span className="animate-spin">loading</span> : "loaded"}
+		</button>
+	),
 }))
 
 describe("ToolCall knowledge search playback", () => {

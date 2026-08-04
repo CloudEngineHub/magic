@@ -1,9 +1,9 @@
-import type { NodeProps } from "../../types"
+import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import { cn } from "@/lib/utils"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useCallback, useMemo } from "react"
 import { observer } from "mobx-react-lite"
-import { useToolTooltip } from "../../ToolCall/hooks/useToolTooltip"
+import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { isEmpty } from "lodash-es"
@@ -15,7 +15,6 @@ import { MonitorPlay, CircleAlert } from "lucide-react"
 import { MagicTooltip, VerticalLine } from "@/components/base"
 import type { ReactNode } from "react"
 import { IconLoader2 } from "@tabler/icons-react"
-import { useScrollAreaAutoScroll } from "../../shared/hooks/useScrollAreaAutoScroll"
 
 interface ToolDataLike {
 	id?: string
@@ -29,10 +28,15 @@ interface ToolDataLike {
 	attachments?: FileItem[]
 }
 
-interface DefaultToolProps extends Partial<NodeProps> {
+interface DefaultToolProps {
+	node?: NodeProps["node"]
 	toolData?: ToolDataLike
 	loading?: boolean
 	classNames?: string
+	onClick?: NodeProps["onClick"]
+	onSelectDetail?: NodeProps["onSelectDetail"]
+	onMouseEnter?: NodeProps["onMouseEnter"]
+	onMouseLeave?: NodeProps["onMouseLeave"]
 }
 
 export const getToolDesignProjectInfo = (tool: unknown) => {
@@ -59,14 +63,9 @@ function DefaultTool(props: DefaultToolProps) {
 	const { t } = useTranslation("super")
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const fileData = useMemo(() => tool?.detail?.data || {}, [tool?.detail?.data])
-
-	const { viewportRef: toolViewportRef } = useScrollAreaAutoScroll({
-		isStreaming: !!loading,
-	})
 
 	const { tooltipProps, renderTooltip } = useToolTooltip({
 		text: tool?.remark,

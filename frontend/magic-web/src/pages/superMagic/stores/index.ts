@@ -7393,55 +7393,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * @param message 消息
 	 */
 	handleSuperMagicChunkMessage(message: SuperMagicChunkMessage) {}
-
-	/**
-	 * @description 设置测试消息(DEBUG 专用)
-	 * @param topicId 话题id
-	 */
-	setTest(topicId: string) {
-		this.messages.set(topicId, [
-			{
-				magic_message_id: "35ef35e5b262aaf728408aefda28f4d6",
-				app_message_id: "ml4spbx3-r3j3lwr6mjh",
-				topic_id: topicId,
-				type: "rich_text",
-				unread_count: 0,
-				sender_id: "usi_5f2de55e890e1df920df700e569bc64f",
-				send_time: dayjs().unix(),
-				status: "read",
-				imStatus: "read",
-				parent_correlation_id: "",
-				role: "user",
-				seq_id: "876836510905307136",
-				refer_message_id: "",
-			} as unknown as MessageItem,
-		])
-		this.messageMap.set("ml4spbx3-r3j3lwr6mjh", {
-			instructs: [
-				{
-					value: "normal",
-					instruction: null,
-				},
-			],
-			extra: {
-				super_agent: {
-					chat_mode: "normal",
-					topic_pattern: "general",
-					agent_code: null,
-					model: {
-						model_id: "gemini-3-pro-preview",
-					},
-					image_model: {
-						model_id: "gemini-2.5-flash-image-preview",
-					},
-					enable_web_search: true,
-					processed_by_api: null,
-				},
-			},
-			content:
-				'{"type":"doc","content":[{"type":"paragraph","attrs":{"suggestion":"，最好能生成一个时间轴图表"},"content":[{"type":"text","text":"帮我整理"漫威"宇宙中的英雄与电影，我需要从钢铁侠开始到现在的蜘蛛侠，每年上映的漫威宇宙电影有哪些？，并列出对应的主要英雄角色、电影海报、上映时间等等，行程可视化的html，按照时间线排序。"}]}]}',
-		})
-	}
 }
 
 // Module-level assembly: query capabilities injected via collaborators, write notifications bound via callback registration.

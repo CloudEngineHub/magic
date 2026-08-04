@@ -83,8 +83,8 @@ const askUserOptionControlBase =
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
-	if (Array.isArray(value)) return value.join("、")
-	return value || ""
+	if (typeof value === "string") return value
+	return value?.join("、") || ""
 }
 
 function getSingleAnswerValue(value?: AnswerValue) {
@@ -108,7 +108,7 @@ function normalizeDefaultAnswer(question: ParsedQuestion): AnswerValue | null {
 	const defaultValue = question.defaultValue
 	if (defaultValue === undefined || defaultValue === null) return null
 	if (question.type === "multi_select") {
-		if (Array.isArray(defaultValue)) return defaultValue
+		if (typeof defaultValue !== "string") return defaultValue
 		return defaultValue
 			.split(",")
 			.map((item) => item.trim())
@@ -703,7 +703,7 @@ interface MultiSelectFieldProps {
 
 function parseMultiSelectAnswer(answer: AnswerValue | undefined): readonly string[] {
 	if (!answer) return EMPTY_ARRAY
-	if (Array.isArray(answer)) return answer.filter(Boolean)
+	if (typeof answer !== "string") return answer.filter(Boolean)
 	try {
 		const parsed = JSON.parse(answer)
 		if (Array.isArray(parsed)) return parsed.filter((v): v is string => typeof v === "string")

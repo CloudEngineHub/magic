@@ -1,19 +1,19 @@
 import { Suspense, lazy, memo, type ClipboardEvent, type ReactNode } from "react"
-import type { NodeProps } from "../../types"
+import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import type { FileItem } from "@/pages/superMagic/pages/Workspace/types"
 import { cn } from "@/lib/utils"
 import { ChevronUp, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
-import { useToggleWithScrollPreserve } from "../../shared/hooks/useToggleWithScrollPreserve"
+import { useToggleWithScrollPreserve } from "@/pages/superMagic/components/MessageList/components/Nodes/shared/hooks/useToggleWithScrollPreserve"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
-import { useScrollAreaAutoScroll } from "../../shared/hooks/useScrollAreaAutoScroll"
+import { useScrollAreaAutoScroll } from "@/pages/superMagic/components/MessageList/components/Nodes/shared/hooks/useScrollAreaAutoScroll"
 import {
 	customTheme,
 	syntaxCustomStyle,
 	syntaxLineNumberStyle,
-} from "../../ToolCall/tools/MCP/syntaxConfig"
+} from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/tools/MCP/syntaxConfig"
 
 const loadSyntaxHighlighter = () =>
 	import("react-syntax-highlighter").then((module) => ({
@@ -197,7 +197,11 @@ function MCPToolNode(props: MCPToolProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.parameters")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"
@@ -216,7 +220,11 @@ function MCPToolNode(props: MCPToolProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.result")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy-2">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy-2"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"

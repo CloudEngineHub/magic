@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ComponentProps } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import KnowledgeSearchTool from "../KnowledgeSearchTool"
+import KnowledgeSearchTool from ".."
 
 const translations = vi.hoisted(() => new Map<string, string>())
 
@@ -95,11 +95,7 @@ const knowledgeSearchToolData = {
 
 function renderKnowledgeSearchTool(props?: Partial<ComponentProps<typeof KnowledgeSearchTool>>) {
 	return render(
-		<KnowledgeSearchTool
-			toolData={knowledgeSearchToolData}
-			loading={false}
-			{...props}
-		/>,
+		<KnowledgeSearchTool toolData={knowledgeSearchToolData} loading={false} {...props} />,
 	)
 }
 
