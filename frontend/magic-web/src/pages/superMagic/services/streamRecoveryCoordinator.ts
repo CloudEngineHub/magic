@@ -36,7 +36,13 @@ interface StreamRecoveryStore {
 	completeTopicSync: (
 		topicId: string,
 		generation: number,
-		result: { succeeded: boolean; taskStatus?: string; latestSeqId?: string },
+		result: {
+			succeeded: boolean
+			taskStatus?: string
+			latestSeqId?: string
+			lifecycleEventPolicy?: "silent" | "live"
+			trigger?: "websocket" | "recovery"
+		},
 	) => boolean
 	cancelTopicSync: (topicId: string, generation: number) => void
 	getLatestMessageSeqId: (topicId: string) => string
@@ -258,6 +264,13 @@ export class StreamRecoveryCoordinator {
 
 	private async executeRecovery(recovery: InFlightRecovery) {
 		const scheduled = this.scheduledRecoveries.get(recovery.topicId)
+		const isWebSocketAuthoritativeTail = recovery.payload.reason === "persistent_message"
+		const lifecycleContext = {
+			lifecycleEventPolicy: isWebSocketAuthoritativeTail
+				? ("live" as const)
+				: ("silent" as const),
+			trigger: isWebSocketAuthoritativeTail ? ("websocket" as const) : ("recovery" as const),
+		}
 		try {
 			const pullResult = await recovery.owner.recover({
 				...recovery.payload,
@@ -272,6 +285,7 @@ export class StreamRecoveryCoordinator {
 				this.store.completeTopicSync(recovery.topicId, recovery.generation, {
 					succeeded: false,
 					taskStatus,
+					...lifecycleContext,
 				})
 				if (this.isRetryableRecovery(recovery.payload)) {
 					this.scheduleRetry(recovery, scheduled)
@@ -283,6 +297,7 @@ export class StreamRecoveryCoordinator {
 				succeeded: true,
 				taskStatus,
 				latestSeqId: this.store.getLatestMessageSeqId(recovery.topicId),
+				...lifecycleContext,
 			})
 			// Any successful authoritative pull can race role=tool persistence. Re-check the
 			// canonical Tool sidecar even when the original trigger was a WS watermark, then

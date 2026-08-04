@@ -312,6 +312,11 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			pollingResponse.items,
 			{
+				canonicalCommitContext: {
+					lifecycleEventPolicy: "silent",
+					source: "http",
+					trigger: "polling",
+				},
 				eventPolicy: "live_arrival",
 				mode: "merge",
 				toolProjectionPolicy: "preserve_live",
@@ -428,6 +433,11 @@ describe("useTopicMessages", () => {
 			{
 				mode: "replace_tail",
 				anchorSuperMessageId: "local-anchor",
+				canonicalCommitContext: {
+					lifecycleEventPolicy: "silent",
+					source: "http",
+					trigger: "polling",
+				},
 				eventPolicy: "live_arrival",
 				preserveStreamSuperMessageIds: [],
 				toolProjectionPolicy: "preserve_live",
@@ -908,6 +918,11 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[newerEnvelope, olderEnvelope],
 			{
+				canonicalCommitContext: {
+					lifecycleEventPolicy: "live",
+					source: "http",
+					trigger: "websocket",
+				},
 				eventPolicy: "live_arrival",
 				mode: "merge",
 				syncGeneration: expect.any(Number),

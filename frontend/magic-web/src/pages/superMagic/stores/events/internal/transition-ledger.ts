@@ -16,9 +16,65 @@ interface ToolSettlementSnapshot {
 	strength: "strong" | "weak"
 }
 
-interface TopicExecutionState {
-	isTerminal: boolean
+export type TopicExecutionPhase = "idle" | "active" | "terminal"
+
+export type TopicExecutionAuthority = "history" | "stream" | "assistant_final" | "topic_status"
+
+export interface TopicExecutionState {
+	generation: number
+	phase: TopicExecutionPhase
+	executionId: string
 	status?: string
+	lastSeqId?: string
+	correlationId?: string
+	taskId?: string
+	authority: TopicExecutionAuthority
+}
+
+interface TopicExecutionObservation {
+	executionId: string
+	status?: string
+	seqId?: string
+	correlationId?: string
+	taskId?: string
+	authority: TopicExecutionAuthority
+}
+
+interface TopicExecutionSeed extends TopicExecutionObservation {
+	isTerminal: boolean
+}
+
+export interface TopicExecutionEndTransition {
+	ended: boolean
+	state: TopicExecutionState
+	previousStatus?: string
+	statusConflict: boolean
+	stale: boolean
+}
+
+function compareExecutionSeqId(left?: string, right?: string): number {
+	if (!left && !right) return 0
+	if (!left) return -1
+	if (!right) return 1
+	const normalizedLeft = left.replace(/^0+/, "") || "0"
+	const normalizedRight = right.replace(/^0+/, "") || "0"
+	if (normalizedLeft.length !== normalizedRight.length) {
+		return normalizedLeft.length > normalizedRight.length ? 1 : -1
+	}
+	return normalizedLeft === normalizedRight ? 0 : normalizedLeft > normalizedRight ? 1 : -1
+}
+
+function getTopicExecutionAuthorityRank(authority: TopicExecutionAuthority): number {
+	switch (authority) {
+		case "topic_status":
+			return 3
+		case "assistant_final":
+			return 2
+		case "stream":
+			return 1
+		case "history":
+			return 0
+	}
 }
 
 /**
@@ -108,19 +164,183 @@ export class SuperMagicEventTransitionLedger {
 		}
 	}
 
-	seedTopicExecution(topicKey: string, status: string, isTerminal: boolean) {
-		this.topicExecutionStates.set(topicKey, { isTerminal, status })
+	seedTopicExecution(topicKey: string, seed: TopicExecutionSeed) {
+		const current = this.topicExecutionStates.get(topicKey)
+		// Historical pages may arrive in either direction. Once a live execution exists,
+		// hydration cannot replace it; among historical facts only the highest seq/authority wins.
+		if (current?.authority !== undefined && current.authority !== "history") return current
+		if (current) {
+			const seqOrder = compareExecutionSeqId(seed.seqId, current.lastSeqId)
+			if (seqOrder < 0) return current
+			if (seqOrder === 0) {
+				const authorityOrder =
+					getTopicExecutionAuthorityRank(seed.authority) -
+					getTopicExecutionAuthorityRank(current.authority)
+				if (authorityOrder < 0) return current
+				if (authorityOrder === 0) {
+					if (current.phase === "terminal" && !seed.isTerminal) return current
+					if (
+						current.phase === (seed.isTerminal ? "terminal" : "idle") &&
+						current.executionId >= seed.executionId
+					)
+						return current
+				}
+			}
+		}
+
+		const state: TopicExecutionState = {
+			generation: current?.generation || 1,
+			phase: seed.isTerminal ? "terminal" : "idle",
+			executionId: seed.executionId,
+			status: seed.status,
+			lastSeqId: seed.seqId,
+			correlationId: seed.correlationId,
+			taskId: seed.taskId,
+			authority: "history",
+		}
+		this.topicExecutionStates.set(topicKey, state)
+		return state
 	}
 
-	recordTopicExecutionStatus(topicKey: string, status: string, isTerminal: boolean) {
-		const previous = this.topicExecutionStates.get(topicKey)
-		if (!isTerminal) {
-			this.topicExecutionStates.set(topicKey, { isTerminal: false, status })
-			return undefined
+	beginTopicExecution(topicKey: string, observation: TopicExecutionObservation) {
+		const current = this.topicExecutionStates.get(topicKey)
+		if (current?.executionId === observation.executionId) {
+			if (current.phase === "active") {
+				const seqOrder = compareExecutionSeqId(observation.seqId, current.lastSeqId)
+				if (seqOrder < 0) return { started: false, state: current }
+				if (observation.status) current.status = observation.status
+				if (observation.seqId) current.lastSeqId = observation.seqId
+				if (
+					getTopicExecutionAuthorityRank(observation.authority) >=
+					getTopicExecutionAuthorityRank(current.authority)
+				) {
+					current.authority = observation.authority
+				}
+				return { started: false, state: current }
+			}
+			// A terminal execution with the same stable task identity is replay, not a new round.
+			if (current.phase === "terminal") return { started: false, state: current }
+			const state: TopicExecutionState = {
+				...current,
+				phase: "active",
+				status: observation.status || current.status,
+				lastSeqId: observation.seqId || current.lastSeqId,
+				correlationId: observation.correlationId || current.correlationId,
+				taskId: observation.taskId || current.taskId,
+				authority: observation.authority,
+			}
+			this.topicExecutionStates.set(topicKey, state)
+			return { started: true, state }
 		}
-		if (previous?.isTerminal) return undefined
-		this.topicExecutionStates.set(topicKey, { isTerminal: true, status })
-		return { previousStatus: previous?.status }
+		if (
+			current &&
+			observation.authority !== "stream" &&
+			compareExecutionSeqId(observation.seqId, current.lastSeqId) <= 0
+		) {
+			// A lower/equal-seq live status for another identity is a delayed observation of an
+			// older execution. Only an admitted stream start may advance without a message seq.
+			return { started: false, state: current }
+		}
+
+		const state: TopicExecutionState = {
+			generation: (current?.generation || 0) + 1,
+			phase: "active",
+			executionId: observation.executionId,
+			status: observation.status,
+			lastSeqId: observation.seqId,
+			correlationId: observation.correlationId,
+			taskId: observation.taskId,
+			authority: observation.authority,
+		}
+		this.topicExecutionStates.set(topicKey, state)
+		return { started: true, state }
+	}
+
+	endTopicExecution(
+		topicKey: string,
+		observation: TopicExecutionObservation,
+	): TopicExecutionEndTransition {
+		const current = this.topicExecutionStates.get(topicKey)
+		const hasStableIdentity = Boolean(
+			observation.executionId || observation.taskId || observation.correlationId,
+		)
+		const matchesCurrent = Boolean(
+			current &&
+			(observation.executionId === current.executionId ||
+				(Boolean(observation.taskId) && observation.taskId === current.taskId) ||
+				(Boolean(observation.correlationId) &&
+					observation.correlationId === current.correlationId)),
+		)
+
+		if (current?.phase === "active" && hasStableIdentity && !matchesCurrent) {
+			return {
+				ended: false,
+				state: current,
+				previousStatus: current.status,
+				statusConflict: false,
+				stale: true,
+			}
+		}
+
+		if (current?.phase === "terminal") {
+			if (!matchesCurrent && hasStableIdentity) {
+				const seqOrder = compareExecutionSeqId(observation.seqId, current.lastSeqId)
+				if (seqOrder <= 0) {
+					return {
+						ended: false,
+						state: current,
+						previousStatus: current.status,
+						statusConflict: false,
+						stale: true,
+					}
+				}
+			} else {
+				const previousStatus = current.status
+				const statusConflict = Boolean(
+					previousStatus && observation.status && previousStatus !== observation.status,
+				)
+				if (compareExecutionSeqId(observation.seqId, current.lastSeqId) >= 0) {
+					current.status = observation.status || current.status
+					current.lastSeqId = observation.seqId || current.lastSeqId
+					if (
+						getTopicExecutionAuthorityRank(observation.authority) >=
+						getTopicExecutionAuthorityRank(current.authority)
+					) {
+						current.authority = observation.authority
+					}
+				}
+				return {
+					ended: false,
+					state: current,
+					previousStatus,
+					statusConflict,
+					stale: false,
+				}
+			}
+		}
+
+		const previousStatus = current?.status
+		const usesCurrentExecution = Boolean(current && (!hasStableIdentity || matchesCurrent))
+		const currentExecution = usesCurrentExecution ? current : undefined
+		const state: TopicExecutionState = {
+			generation: currentExecution?.generation || (current?.generation || 0) + 1,
+			phase: "terminal",
+			executionId:
+				currentExecution?.executionId || observation.executionId || `implicit:${topicKey}`,
+			status: observation.status,
+			lastSeqId: observation.seqId || currentExecution?.lastSeqId,
+			correlationId: observation.correlationId || currentExecution?.correlationId,
+			taskId: observation.taskId || currentExecution?.taskId,
+			authority: observation.authority,
+		}
+		this.topicExecutionStates.set(topicKey, state)
+		return {
+			ended: true,
+			state,
+			previousStatus,
+			statusConflict: false,
+			stale: false,
+		}
 	}
 
 	recordToolSettlement(
@@ -139,5 +359,9 @@ export class SuperMagicEventTransitionLedger {
 		if (this.completedTasks.has(taskKey)) return false
 		this.completedTasks.add(taskKey)
 		return true
+	}
+
+	seedTaskCompleted(taskKey: string) {
+		this.completedTasks.add(taskKey)
 	}
 }

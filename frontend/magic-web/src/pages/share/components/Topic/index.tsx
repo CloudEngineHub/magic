@@ -1134,7 +1134,7 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 											projectFilesStore={projectFilesStore}
 											scrollContainerRef={messageContainerRef}
 										/>
@@ -1297,7 +1297,7 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 										projectFilesStore={projectFilesStore}
 										scrollContainerRef={messageContainerRef}
 									/>

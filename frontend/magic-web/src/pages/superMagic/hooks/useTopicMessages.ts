@@ -6,7 +6,7 @@ import {
 	registerStreamRecoveryOwner,
 	requestTopicRecovery,
 } from "@/pages/superMagic/services/streamRecoveryCoordinator"
-import { superMagicStore } from "@/pages/superMagic/stores"
+import { superMagicStore, type CanonicalCommitTrigger } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { MessageStatus, TaskStatus, Topic } from "../pages/Workspace/types"
@@ -45,6 +45,7 @@ interface PullMessageParams {
 	limit?: number
 	updatePageToken?: boolean
 	writeIntent: "replace" | "merge" | "incremental" | "authoritative_tail"
+	canonicalCommitTrigger?: CanonicalCommitTrigger
 	syncGeneration?: number
 	requiredSeqId?: string
 	recoveryAnchorAppMessageId?: string
@@ -536,6 +537,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			limit = 20,
 			updatePageToken = true,
 			writeIntent,
+			canonicalCommitTrigger,
 			syncGeneration,
 			requiredSeqId,
 			recoveryAnchorAppMessageId,
@@ -576,6 +578,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (!pullResult.didPullSucceed) return pullResult
 			if (writeIntent === "authoritative_tail") {
 				const authoritativeTailResult = pullResult as AuthoritativeTailPullResult
+				const commitTrigger = canonicalCommitTrigger || "polling"
 				if (!authoritativeTailResult.writeOptions) {
 					return { ...pullResult, didPullSucceed: false }
 				}
@@ -585,6 +588,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					writeOptions: {
 						...authoritativeTailResult.writeOptions,
 						...(syncGeneration !== undefined ? { syncGeneration } : {}),
+						canonicalCommitContext: {
+							source: "http",
+							lifecycleEventPolicy: commitTrigger === "websocket" ? "live" : "silent",
+							trigger: commitTrigger,
+						},
 						eventPolicy: "live_arrival",
 						// 最近尾部对账可能包含仍在运行的当前任务，不能仅因来自 HTTP
 						// 就把 embedded waiting/running 提前投影成历史弱终态。
@@ -819,6 +827,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				limit: POLLING_SYNC_MESSAGE_COUNT,
 				updatePageToken: false,
 				writeIntent: "authoritative_tail",
+				canonicalCommitTrigger: "recovery",
 			})
 			return
 		}
@@ -1046,6 +1055,8 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 							limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
 							updatePageToken: false,
 							writeIntent: "authoritative_tail",
+							canonicalCommitTrigger:
+								reason === "persistent_message" ? "websocket" : "recovery",
 							syncGeneration,
 							requiredSeqId,
 							recoveryAnchorAppMessageId: anchorAppMessageId,
@@ -1151,6 +1162,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					limit: POLLING_SYNC_MESSAGE_COUNT,
 					updatePageToken: false,
 					writeIntent: "authoritative_tail" as const,
+					canonicalCommitTrigger: "polling" as const,
 				}
 
 				if (taskStatus !== TaskStatus.FINISHED) {

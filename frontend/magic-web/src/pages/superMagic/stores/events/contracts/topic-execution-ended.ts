@@ -9,6 +9,15 @@ export interface TopicExecutionEndedEvent {
 	meta: SuperMagicEventMeta
 	payload: {
 		status: TopicExecutionEndedStatus
+		/** Stable identity for this Topic execution; unlike meta.revision it survives revisions. */
+		executionId?: string
+		/** Store-local Topic execution generation, incremented only by an admitted live begin. */
+		generation?: number
+		taskId?: string
+		previousStatus?: string
+		authority?: "assistant_final" | "topic_status"
+		correlationId?: string
+		messageSeqId?: string
 		triggerMessage?: SuperMagicEventMessageRef & { role: "assistant" }
 	}
 }

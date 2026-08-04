@@ -43,7 +43,10 @@ import type {
 	TopicExecutionEndedStatus,
 } from "./events"
 import { createSuperMagicEventEmitter } from "./events/internal/emitter"
-import { SuperMagicEventTransitionLedger } from "./events/internal/transition-ledger"
+import {
+	SuperMagicEventTransitionLedger,
+	type TopicExecutionAuthority,
+} from "./events/internal/transition-ledger"
 
 // Re-export types (preserves all existing public type exports)
 export type {
@@ -56,6 +59,9 @@ export type {
 	ToolResponseRecoveryState,
 	InitializeMessagesOptions,
 	HttpToolProjectionPolicy,
+	LifecycleEventPolicy,
+	CanonicalCommitTrigger,
+	CanonicalCommitContext,
 	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
@@ -121,6 +127,9 @@ import type {
 	StreamRecoveryFailurePayload,
 	ToolResponseRecoveryState,
 	InitializeMessagesOptions,
+	LifecycleEventPolicy,
+	CanonicalCommitTrigger,
+	CanonicalCommitContext,
 	ReconcileAuthoritativeMessagesInput,
 	TopicSyncRenderStrategy,
 } from "./types"
@@ -912,13 +921,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
-	private isOrphanFinishTaskResponse(messageNode: RawSuperMagicMessageNode, toolId: string) {
-		return Boolean(
-			messageNode.role === "tool" &&
-			messageNode.tool?.name === "finish_task" &&
-			/^\d+$/.test(toolId) &&
-			String(messageNode.task_id || "").trim(),
-		)
+	private isOwnerlessFinishTaskResponse(messageNode: RawSuperMagicMessageNode) {
+		return Boolean(messageNode.role === "tool" && messageNode.tool?.name === "finish_task")
 	}
 
 	private primeHttpAssistantToolOwnership(
@@ -1118,10 +1122,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		chunkIndex: number,
 		startsWith: SuperMagicEventMap["message.stream.started"]["payload"]["startsWith"],
 		correlationId = streamIdentity,
+		taskId?: string,
 	) {
 		const streamKey = this.getEventEntityKey("stream", topicId, streamIdentity)
 		const transition = this.eventTransitions.startStream(streamKey)
 		if (!transition.started) return transition.generation
+		this.eventTransitions.beginTopicExecution(this.getTopicExecutionKey(topicId), {
+			executionId: this.getTopicExecutionId(taskId, correlationId, transition.generation),
+			correlationId,
+			taskId,
+			authority: "stream",
+		})
 		// 只有新的 Assistant 首个有效正文/推理/工具 Chunk 才能作为上一条工具的
 		// 执行完成屏障；heartbeat/usage metadata 不具备该业务语义。
 		if (startsWith !== "metadata") {
@@ -1269,7 +1280,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicId: string,
 		message: MessageItem,
 		messageNode: RawSuperMagicMessageNode | undefined,
-		source: SuperMagicEventSource,
+		context: CanonicalCommitContext,
 		authority: "server" | "local" = "server",
 	) {
 		const messageRef = this.toEventMessageRef(message, messageNode)
@@ -1288,7 +1299,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 		this.eventEmitter.emit({
 			type: "message.committed",
-			meta: this.createEventMeta(source, messageKey, identity, revision),
+			meta: this.createEventMeta(context.source, messageKey, identity, revision),
 			payload: {
 				message: messageRef,
 				operation: transition.operation,
@@ -1296,16 +1307,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				changedFields: transition.changedFields,
 			},
 		})
-		this.publishTaskCompleted(topicId, message, messageNode, source)
-
-		if (messageRef.role === "assistant") {
-			this.observeTopicExecutionStatus(
-				topicId,
-				messageRef.superStatus || "",
-				source,
-				messageRef,
-			)
-		}
+		this.projectTaskCompletedAfterCommit(topicId, message, messageNode, context)
+		this.projectTopicExecutionAfterCommit(topicId, messageRef, messageNode, context)
 	}
 
 	private getMessageTransitionSnapshot(
@@ -1338,46 +1341,188 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.getMessageTransitionSnapshot(messageRef, messageNode),
 		)
 		if (messageRef.role === "assistant") {
-			const status = String(messageRef.superStatus || "")
-			this.eventTransitions.seedTopicExecution(
-				this.getEventEntityKey("topic", topicId, "execution"),
-				status,
-				this.isTopicTerminalStatus(status),
-			)
+			this.seedTopicExecution(topicId, messageRef, messageNode)
 		}
+		this.seedTaskCompleted(topicId, message, messageNode)
 	}
 
 	private isTopicTerminalStatus(status?: string): status is TopicExecutionEndedStatus {
 		return Boolean(status && TERMINAL_TOPIC_TASK_STATUSES.has(status))
 	}
 
-	private observeTopicExecutionStatus(
-		topicId: string,
-		status: string,
-		source: SuperMagicEventSource,
-		message?: SuperMagicEventMessageRef,
-	) {
-		const transition = this.eventTransitions.recordTopicExecutionStatus(
-			this.getEventEntityKey("topic", topicId, "execution"),
-			status,
-			this.isTopicTerminalStatus(status),
-		)
-		if (!transition || !this.isTopicTerminalStatus(status)) return
+	private getTopicExecutionKey(topicId: string) {
+		return this.getEventEntityKey("topic", topicId, "execution")
+	}
 
-		const topicKey = this.getEventEntityKey("topic", topicId, "execution")
+	private getTopicExecutionId(
+		taskId?: string,
+		correlationId?: string,
+		streamGeneration?: number,
+	) {
+		const normalizedTaskId = String(taskId || "").trim()
+		if (normalizedTaskId) return `task:${normalizedTaskId}`
+		const normalizedCorrelationId = String(correlationId || "").trim()
+		if (normalizedCorrelationId && streamGeneration) {
+			return `correlation:${normalizedCorrelationId}:stream:${streamGeneration}`
+		}
+		if (normalizedCorrelationId) return `correlation:${normalizedCorrelationId}`
+		return ""
+	}
+
+	private getTopicExecutionIdentityFromMessage(
+		topicId: string,
+		message: SuperMagicEventMessageRef,
+		messageNode?: RawSuperMagicMessageNode,
+	) {
+		const taskId = String(messageNode?.task_id || "").trim() || undefined
+		const correlationId = message.correlationId
+		const streamGeneration = message.logicalMessageId
+			? this.eventTransitions.getStreamGeneration(
+					this.getEventEntityKey("stream", topicId, message.logicalMessageId),
+				)
+			: undefined
+		return {
+			executionId: this.getTopicExecutionId(taskId, correlationId, streamGeneration),
+			taskId,
+			correlationId,
+			streamGeneration,
+		}
+	}
+
+	private seedTopicExecution(
+		topicId: string,
+		message: SuperMagicEventMessageRef,
+		messageNode?: RawSuperMagicMessageNode,
+	) {
+		const status = String(message.superStatus || "")
+		const identity = this.getTopicExecutionIdentityFromMessage(topicId, message, messageNode)
+		this.eventTransitions.seedTopicExecution(this.getTopicExecutionKey(topicId), {
+			executionId:
+				identity.executionId ||
+				`history:${identity.correlationId || message.logicalMessageId || message.seqId || "unknown"}`,
+			status,
+			seqId: message.seqId,
+			correlationId: identity.correlationId,
+			taskId: identity.taskId,
+			authority: "history",
+			isTerminal: this.isTopicTerminalStatus(status),
+		})
+	}
+
+	private endTopicExecution(
+		topicId: string,
+		status: TopicExecutionEndedStatus,
+		source: SuperMagicEventSource,
+		authority: Exclude<TopicExecutionAuthority, "history" | "stream">,
+		identity: {
+			executionId?: string
+			correlationId?: string
+			taskId?: string
+			messageSeqId?: string
+		},
+		message?: SuperMagicEventMessageRef,
+		shouldPublish = true,
+	) {
+		const transition = this.eventTransitions.endTopicExecution(
+			this.getTopicExecutionKey(topicId),
+			{
+				executionId: identity.executionId || "",
+				status,
+				seqId: identity.messageSeqId,
+				correlationId: identity.correlationId,
+				taskId: identity.taskId,
+				authority,
+			},
+		)
+		if (transition.statusConflict) {
+			console.warn("[SuperMagicStore] conflicting Topic execution terminal revision", {
+				code: "topic-execution-terminal-conflict",
+				topicId,
+				executionId: transition.state.executionId,
+				generation: transition.state.generation,
+				previousStatus: transition.previousStatus,
+				status,
+				messageSeqId: identity.messageSeqId,
+			})
+		}
+		if (!transition.ended || !shouldPublish) return
+
+		const executionKey = this.getEventEntityKey(
+			"topic",
+			topicId,
+			`execution:${transition.state.executionId}`,
+		)
 		this.eventEmitter.emit({
 			type: "topic.execution.ended",
-			meta: this.createEventMeta(source, topicKey, {
+			meta: this.createEventMeta(source, executionKey, {
 				topicId,
-				...(message?.correlationId ? { correlationId: message.correlationId } : {}),
+				...(transition.state.correlationId
+					? { correlationId: transition.state.correlationId }
+					: {}),
 				...(message?.appMessageId ? { appMessageId: message.appMessageId } : {}),
-				...(message?.seqId ? { messageSeqId: message.seqId } : {}),
+				...(transition.state.lastSeqId ? { messageSeqId: transition.state.lastSeqId } : {}),
 			}),
 			payload: {
 				status,
+				executionId: transition.state.executionId,
+				generation: transition.state.generation,
+				...(transition.state.taskId ? { taskId: transition.state.taskId } : {}),
+				...(transition.previousStatus ? { previousStatus: transition.previousStatus } : {}),
+				authority,
+				...(transition.state.correlationId
+					? { correlationId: transition.state.correlationId }
+					: {}),
+				...(transition.state.lastSeqId ? { messageSeqId: transition.state.lastSeqId } : {}),
 				...(message ? { triggerMessage: { ...message, role: "assistant" } } : {}),
 			},
 		} satisfies TopicExecutionEndedEvent)
+	}
+
+	private projectTopicExecutionAfterCommit(
+		topicId: string,
+		message: SuperMagicEventMessageRef,
+		messageNode: RawSuperMagicMessageNode | undefined,
+		context: CanonicalCommitContext,
+	) {
+		if (message.role !== "assistant") return
+		if (context.lifecycleEventPolicy !== "live" || context.trigger !== "websocket") {
+			this.seedTopicExecution(topicId, message, messageNode)
+			return
+		}
+		if (message.imStatus === "revoked") return
+
+		const status = String(message.superStatus || "")
+		const identity = this.getTopicExecutionIdentityFromMessage(topicId, message, messageNode)
+		if (this.isTopicTerminalStatus(status)) {
+			this.endTopicExecution(
+				topicId,
+				status,
+				context.source,
+				"assistant_final",
+				{
+					executionId: identity.executionId,
+					correlationId: identity.correlationId,
+					taskId: identity.taskId,
+					messageSeqId: message.seqId,
+				},
+				message,
+			)
+			return
+		}
+
+		if (
+			identity.taskId &&
+			(status === "running" || status === "waiting" || status === "waiting_for_user")
+		) {
+			this.eventTransitions.beginTopicExecution(this.getTopicExecutionKey(topicId), {
+				executionId: identity.executionId,
+				status,
+				seqId: message.seqId,
+				correlationId: identity.correlationId,
+				taskId: identity.taskId,
+				authority: "assistant_final",
+			})
+		}
 	}
 
 	private resolveAuthoritativeStreamEndReason(status?: string): MessageStreamEndReason {
@@ -1429,32 +1574,90 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
-	private publishTaskCompleted(
+	private getTaskCompletionKey(taskId: string) {
+		return `task\u0000${taskId}`
+	}
+
+	private resolveTaskCompletionCandidate(
 		topicId: string,
 		message: MessageItem,
 		messageNode: RawSuperMagicMessageNode | undefined,
-		source: SuperMagicEventSource,
 	) {
-		if (messageNode?.role !== "tool") return
+		if (messageNode?.role !== "tool" || messageNode.tool?.name !== "finish_task") return
 		const toolId = String(messageNode.tool?.id || "").trim()
-		if (
-			!toolId ||
-			this.getToolCallOwner(topicId, toolId) ||
-			!this.isOrphanFinishTaskResponse(messageNode, toolId)
-		)
-			return
-
 		const correlationId = String(messageNode.correlation_id || "").trim()
 		const appMessageId = String(message.app_message_id || "").trim()
 		const taskId = String(messageNode.task_id || "").trim()
-		if (!correlationId || !appMessageId || !taskId) return
+		const missingFields = [
+			...(!taskId ? ["task_id"] : []),
+			...(!correlationId ? ["correlation_id"] : []),
+			...(!appMessageId ? ["app_message_id"] : []),
+		]
+		if (missingFields.length > 0) {
+			console.warn("[SuperMagicStore] invalid finish_task lifecycle message", {
+				code: "finish-task-missing-required-fields",
+				topicId,
+				toolId,
+				missingFields,
+			})
+			return
+		}
+		if (messageNode.tool?.status !== "finished") {
+			console.warn("[SuperMagicStore] invalid finish_task lifecycle message", {
+				code: "finish-task-invalid-status",
+				topicId,
+				toolId,
+				taskId,
+				status: messageNode.tool?.status,
+			})
+			return
+		}
+		const ownerIdentity = toolId ? this.getToolCallOwner(topicId, toolId) : undefined
+		if (ownerIdentity) {
+			console.warn("[SuperMagicStore] invalid finish_task lifecycle message", {
+				code: "finish-task-owner-conflict",
+				topicId,
+				toolId,
+				taskId,
+				ownerIdentity,
+			})
+			return
+		}
 
-		const taskKey = this.getEventEntityKey("task", topicId, taskId)
+		return { taskId, correlationId, appMessageId }
+	}
+
+	private seedTaskCompleted(
+		topicId: string,
+		message: MessageItem,
+		messageNode: RawSuperMagicMessageNode | undefined,
+	) {
+		const candidate = this.resolveTaskCompletionCandidate(topicId, message, messageNode)
+		if (!candidate) return
+		this.eventTransitions.seedTaskCompleted(this.getTaskCompletionKey(candidate.taskId))
+	}
+
+	private projectTaskCompletedAfterCommit(
+		topicId: string,
+		message: MessageItem,
+		messageNode: RawSuperMagicMessageNode | undefined,
+		context: CanonicalCommitContext,
+	) {
+		const candidate = this.resolveTaskCompletionCandidate(topicId, message, messageNode)
+		if (!candidate) return
+		const { taskId, correlationId, appMessageId } = candidate
+		const taskKey = this.getTaskCompletionKey(taskId)
+		if (context.lifecycleEventPolicy !== "live" || context.trigger !== "websocket") {
+			// 历史、恢复和轮询只建立 exactly-once 基线；它们没有观察到实时生命周期转换。
+			this.eventTransitions.seedTaskCompleted(taskKey)
+			return
+		}
+
 		if (!this.eventTransitions.recordTaskCompleted(taskKey)) return
 		this.eventEmitter.emit({
 			type: "task.completed",
 			meta: {
-				...this.createEventMeta(source, taskKey, {
+				...this.createEventMeta(context.source, taskKey, {
 					topicId,
 					correlationId,
 					appMessageId,
@@ -2371,11 +2574,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			taskStatus,
 			latestSeqId,
 			renderStrategy = "auto",
+			lifecycleEventPolicy = "silent",
+			trigger = "recovery",
 		}: {
 			succeeded: boolean
 			taskStatus?: string
 			latestSeqId?: string
 			renderStrategy?: TopicSyncRenderStrategy
+			lifecycleEventPolicy?: LifecycleEventPolicy
+			trigger?: CanonicalCommitTrigger
 		},
 	): boolean {
 		if (!this.isTopicSyncCurrent(topicId, generation)) return false
@@ -2482,10 +2689,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			)
 		}
 		if (taskStatus) {
-			// Publish Topic terminal state only after the sync has settled the tracked
-			// message streams; subscribers must never observe a Topic-ended event while
-			// an authoritative terminal sync still exposes active StreamState entries.
-			this.observeTopicExecutionStatus(topicId, taskStatus, "http")
+			// Topic status settles the ledger only after tracked streams are released. Recovery
+			// and polling still close the execution silently so a later duplicate cannot replay it;
+			// only a WS-triggered authoritative confirmation is observable by subscribers.
+			if (this.isTopicTerminalStatus(taskStatus)) {
+				this.endTopicExecution(
+					topicId,
+					taskStatus,
+					"http",
+					"topic_status",
+					{ messageSeqId: latestSeqId },
+					undefined,
+					lifecycleEventPolicy === "live" && trigger === "websocket",
+				)
+			}
 		}
 		if (!isTerminalTopic) this.requestPendingGapFinalRecoveries(topicId)
 		return true
@@ -3178,7 +3395,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
 		})
 		committedUpdates.forEach(({ message, node }) => {
-			this.publishMessageCommitted(topicId, message, node, "http")
+			this.publishMessageCommitted(topicId, message, node, {
+				source: "http",
+				lifecycleEventPolicy: "silent",
+				trigger: "recovery",
+			})
 		})
 	}
 
@@ -3221,6 +3442,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			mode = "replace",
 			toolProjectionPolicy = "historical_terminal",
 			eventPolicy = "silent_hydration",
+			canonicalCommitContext = {
+				source: "http",
+				lifecycleEventPolicy: "silent",
+				trigger: "history",
+			},
 			statusMessages,
 			anchorSuperMessageId,
 			preserveStreamSuperMessageIds,
@@ -3761,7 +3987,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				)
 			}
 			if (eventPolicy === "live_arrival" || settledActiveStream || updatedExistingMessage) {
-				this.publishMessageCommitted(topicId, currentMessage, canonicalNode, "http")
+				this.publishMessageCommitted(
+					topicId,
+					currentMessage,
+					canonicalNode,
+					canonicalCommitContext,
+				)
 			} else {
 				this.seedMessageEventState(topicId, currentMessage, canonicalNode)
 			}
@@ -3794,7 +4025,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const currentMessage = (this.messages.get(topicId) || []).find(
 				(item) => item.app_message_id === message.app_message_id,
 			)
-			if (currentMessage) this.publishMessageCommitted(topicId, currentMessage, node, "http")
+			if (currentMessage)
+				this.publishMessageCommitted(topicId, currentMessage, node, canonicalCommitContext)
 		})
 	}
 
@@ -4102,6 +4334,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						Number(orderedChunk.i),
 						"metadata",
 						correlationId,
+						taskId,
 					)
 					continue
 				}
@@ -4124,6 +4357,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						Number(orderedChunk.i),
 						"metadata",
 						correlationId,
+						taskId,
 					)
 					this.publishStreamEnded(
 						topicId,
@@ -4360,6 +4594,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			Number(messageChunk.i),
 			startsWith,
 			messageChunk.correlation_id,
+			messageChunk.task_id,
 		)
 		if (contentDelta || reasoningContentDelta || toolCallDeltas.length > 0) {
 			this.publishStreamDelta(
@@ -4909,7 +5144,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				source,
 				String(canonicalNode.correlation_id || correlationId || ""),
 			)
-			this.publishMessageCommitted(topicId, canonicalMessage, canonicalNode, source)
+			this.publishMessageCommitted(topicId, canonicalMessage, canonicalNode, {
+				source,
+				lifecycleEventPolicy: source === "im" ? "live" : "silent",
+				trigger: source === "im" ? "websocket" : "history",
+			})
 		}
 
 		return {
@@ -5080,8 +5319,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const ownerCorrelationId = ownerIdentity
 			? this.getStreamCorrelationId(topicId, ownerIdentity)
 			: ""
-		const isOrphanFinishTask =
-			!ownerIdentity && this.isOrphanFinishTaskResponse(messageNode, toolId)
+		const isOrphanFinishTask = !ownerIdentity && this.isOwnerlessFinishTaskResponse(messageNode)
 		if (!isOrphanFinishTask && !ownerIdentity) return { kind: "missing_owner" }
 		if (
 			!isOrphanFinishTask &&
@@ -6066,7 +6304,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				messages.push(message)
 				this.messages.set(topicId, unionBy(sortMessages(messages), "app_message_id"))
 				this.setNonAssistantMessageNode(topicId, message.super_message_id, messageNode)
-				this.publishMessageCommitted(topicId, message, messageNode, "im")
+				this.publishMessageCommitted(topicId, message, messageNode, {
+					source: "im",
+					lifecycleEventPolicy: "live",
+					trigger: "websocket",
+				})
 
 				buffer.isProcessing = false
 				this.processMessageBuffer(topicId)

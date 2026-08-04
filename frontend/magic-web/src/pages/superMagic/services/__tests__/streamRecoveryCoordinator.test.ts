@@ -104,6 +104,8 @@ describe("StreamRecoveryCoordinator", () => {
 			succeeded: true,
 			taskStatus: "finished",
 			latestSeqId: "seq-200",
+			lifecycleEventPolicy: "silent",
+			trigger: "recovery",
 		})
 		expect(harness.store.cancelTopicSync).not.toHaveBeenCalled()
 	})
@@ -124,6 +126,8 @@ describe("StreamRecoveryCoordinator", () => {
 		expect(harness.store.completeTopicSync).toHaveBeenCalledWith("topic-1", 7, {
 			succeeded: false,
 			taskStatus: "finished",
+			lifecycleEventPolicy: "silent",
+			trigger: "recovery",
 		})
 		expect(harness.store.beginTopicSync).toHaveBeenCalledTimes(1)
 		expect(harness.store.cancelTopicSync).not.toHaveBeenCalled()
@@ -238,6 +242,14 @@ describe("StreamRecoveryCoordinator", () => {
 				requiredSeqId: "200",
 				anchorAppMessageId: "assistant-a",
 				anchorSeqId: "100",
+			}),
+		)
+		expect(harness.store.completeTopicSync).toHaveBeenCalledWith(
+			"topic-1",
+			7,
+			expect.objectContaining({
+				lifecycleEventPolicy: "live",
+				trigger: "websocket",
 			}),
 		)
 		vi.useRealTimers()

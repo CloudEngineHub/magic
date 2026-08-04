@@ -24,12 +24,28 @@ export interface PendingUserMessageEnvelope {
 
 export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
 
+export type LifecycleEventPolicy = "silent" | "live"
+
+export type CanonicalCommitTrigger = "websocket" | "recovery" | "polling" | "history"
+
+/**
+ * Canonical 写入来源与生命周期事件来源是两个独立维度。
+ * HTTP authoritative-tail 只有明确由 WebSocket 通知触发时才属于实时生命周期。
+ */
+export interface CanonicalCommitContext {
+	source: "im" | "http"
+	lifecycleEventPolicy: LifecycleEventPolicy
+	trigger?: CanonicalCommitTrigger
+}
+
 export interface InitializeMessagesOptions {
 	mode?: "replace" | "merge" | "replace_tail"
 	/** 历史 HTTP 快照必须让普通 Tool 进入终态；live 增量则保留 waiting/running。 */
 	toolProjectionPolicy?: HttpToolProjectionPolicy
 	/** 冷历史只建立事件基线；实时权威尾部需要广播本次新到达的 canonical 消息。 */
 	eventPolicy?: "silent_hydration" | "live_arrival"
+	/** task.completed 等生命周期投影必须显式区分 WS 实时确认与历史/恢复/轮询。 */
+	canonicalCommitContext?: CanonicalCommitContext
 	/** HTTP 返回的完整 IM 状态观察集；可包含不参与本次 membership 替换的消息。 */
 	statusMessages?: RawSuperMagicMessageEnvelope[]
 	/** `replace_tail` 保留该 SuperMessage 及其之前的本地前缀，并权威替换其后的 membership。 */
