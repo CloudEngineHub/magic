@@ -3,17 +3,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import SidebarContent from "../SidebarContent"
 
-const { mockIsMagicApp, navigateMock, changeBottomTabMock, useSlidesTemplateStatisticsMock } =
-	vi.hoisted(() => ({
-		mockIsMagicApp: vi.fn(),
-		navigateMock: vi.fn(),
-		changeBottomTabMock: vi.fn(),
-		useSlidesTemplateStatisticsMock: vi.fn(),
-	}))
+const {
+	envMock,
+	mockIsMagicApp,
+	navigateMock,
+	changeBottomTabMock,
+	useSlidesTemplateStatisticsMock,
+} = vi.hoisted(() => ({
+	envMock: {
+		isPrivateDeployment: false,
+	},
+	mockIsMagicApp: vi.fn(),
+	navigateMock: vi.fn(),
+	changeBottomTabMock: vi.fn(),
+	useSlidesTemplateStatisticsMock: vi.fn(),
+}))
 const animatedNumberTextMock = vi.hoisted(() => vi.fn())
 
 afterEach(() => {
 	vi.unstubAllGlobals()
+})
+
+beforeEach(() => {
+	envMock.isPrivateDeployment = false
 })
 
 vi.mock("react-i18next", () => ({
@@ -62,6 +74,15 @@ vi.mock("@/utils/devices", () => ({
 	},
 }))
 
+vi.mock("@/utils/env", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/utils/env")>()
+
+	return {
+		...actual,
+		isPrivateDeployment: () => envMock.isPrivateDeployment,
+	}
+})
+
 vi.mock("@/platform/native", () => ({
 	getNativePort: () => ({
 		navigation: {
@@ -92,6 +113,8 @@ vi.mock("@/routes/constants", () => ({
 		Super: "Super",
 		AudioRecordings: "AudioRecordings",
 		SuperSlidesTemplates: "SuperSlidesTemplates",
+		MicroApps: "MicroApps",
+		MicroApp: "MicroApp",
 	},
 }))
 
@@ -253,6 +276,39 @@ describe("SidebarContent audio recordings entry", () => {
 			bottomTabHeight: 0,
 		})
 		expect(navigateMock).not.toHaveBeenCalled()
+	})
+})
+
+describe("SidebarContent micro apps entry", () => {
+	beforeEach(() => {
+		navigateMock.mockReset()
+	})
+
+	it("shows the entry outside private deployment", () => {
+		renderSidebarContent()
+
+		expect(screen.getByTestId("sidebar-content-micro-apps-button")).toBeVisible()
+	})
+
+	it("navigates to the micro apps list", () => {
+		renderSidebarContent()
+
+		const anchor = screen
+			.getByTestId("sidebar-content-micro-apps-button")
+			.querySelector<HTMLAnchorElement>("a")
+		if (!anchor) throw new Error("Expected micro apps anchor to exist")
+
+		fireEvent.click(anchor)
+
+		expect(navigateMock).toHaveBeenCalledWith({ name: "MicroApps" })
+	})
+
+	it("hides the entry in private deployment", () => {
+		envMock.isPrivateDeployment = true
+
+		renderSidebarContent()
+
+		expect(screen.queryByTestId("sidebar-content-micro-apps-button")).toBeNull()
 	})
 })
 
