@@ -34,9 +34,12 @@ const mockState = vi.hoisted(() => ({
 		isReady: true,
 		loadingProgress: 0,
 		isTransitioning: false,
+		isAutomaticLoadingEnabled: true,
 		setFullscreen: vi.fn(),
 		setActiveIndex: vi.fn(),
+		ensureSlideContent: vi.fn(async () => true),
 		getFileIdByPath: vi.fn(() => "slide-file-id"),
+		getSlideEditingState: vi.fn(() => false),
 		getSlideServerUpdate: vi.fn(() => undefined),
 		clearSlideServerUpdate: vi.fn(),
 		updateSlideContent: vi.fn(),
@@ -150,20 +153,26 @@ vi.mock("../PPTSlide", async () => {
 	const React = await import("react")
 
 	function MockPPTSlide({
+		fileId,
 		isActive,
+		isPresented,
 		isFullscreen,
 		manualScale,
 		onScaleRatioChange,
+		onRenderReadyChange,
 		onEditModeChange,
 		onRegisterSaveHandler,
 		onRegisterCloseSaveHandler,
 		onRegisterDiscardHandler,
 		onManualSave,
 	}: {
+		fileId?: string
 		isActive?: boolean
+		isPresented?: boolean
 		isFullscreen?: boolean
 		manualScale?: number | null
 		onScaleRatioChange?: (scale: number) => void
+		onRenderReadyChange?: (ready: boolean) => void
 		onEditModeChange?: (isEditing: boolean) => void
 		onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
 		onRegisterCloseSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
@@ -178,7 +187,7 @@ vi.mock("../PPTSlide", async () => {
 			index: number,
 		) => Promise<void>
 	}) {
-		mockState.pptSlideProps({ manualScale, isFullscreen })
+		mockState.pptSlideProps({ fileId, isActive, isPresented, manualScale, isFullscreen })
 
 		React.useEffect(() => {
 			if (!isActive) return
@@ -202,19 +211,24 @@ vi.mock("../PPTSlide", async () => {
 		return (
 			<button
 				type="button"
-				data-testid="ppt-slide-manual-save"
-				onClick={() =>
-					void onManualSave?.(
-						{
-							fileId: "slide-file-id",
-							success: true,
-							cleanContent:
-								'<div class="slide-container" style="background-image:url(assets/bg.png)">raw</div>',
-							rawContent: "<html>raw editor content</html>",
-						},
-						0,
-					)
-				}
+				data-testid={fileId ? `ppt-slide-${fileId}` : "ppt-slide-manual-save"}
+				data-active={String(Boolean(isActive))}
+				data-presented={String(Boolean(isPresented))}
+				onClick={() => {
+					onRenderReadyChange?.(true)
+					if (fileId === "slide-file-id") {
+						void onManualSave?.(
+							{
+								fileId: "slide-file-id",
+								success: true,
+								cleanContent:
+									'<div class="slide-container" style="background-image:url(assets/bg.png)">raw</div>',
+								rawContent: "<html>raw editor content</html>",
+							},
+							0,
+						)
+					}
+				}}
 			>
 				ppt-slide
 			</button>
@@ -355,7 +369,14 @@ describe("PPTRender", () => {
 		mockState.lastStoreConfig = null
 		mockState.store.setFullscreen.mockReset()
 		mockState.store.setActiveIndex.mockReset()
-		mockState.store.getFileIdByPath.mockClear()
+		mockState.store.ensureSlideContent.mockReset()
+		mockState.store.ensureSlideContent.mockResolvedValue(true)
+		mockState.store.getFileIdByPath.mockReset()
+		mockState.store.getFileIdByPath.mockImplementation((path: string) =>
+			path === "slide-1.html" ? "slide-file-id" : path.replace(/\.html$/, "-file-id"),
+		)
+		mockState.store.getSlideEditingState.mockReset()
+		mockState.store.getSlideEditingState.mockReturnValue(false)
 		mockState.store.getSlideServerUpdate.mockClear()
 		mockState.store.updateSlideContent.mockReset()
 		mockState.store.updateSlideContent.mockResolvedValue(
@@ -374,6 +395,19 @@ describe("PPTRender", () => {
 		mockState.closeSaveHandler.mockResolvedValue(true)
 		mockState.discardHandler.mockReset()
 		mockState.discardHandler.mockResolvedValue(true)
+		mockState.store.activeIndex = 0
+		mockState.store.slidePaths = ["slide-1.html"]
+		mockState.store.slideUrls = ["slide-1.html"]
+		mockState.store.slides = [
+			{
+				id: "slide-1",
+				path: "slide-1.html",
+				content: "<div>slide</div>",
+				rawContent: "<div>slide</div>",
+				loadingState: "loaded",
+				loadingError: undefined,
+			},
+		]
 	})
 
 	it("uses only PPT presentation fullscreen to hide viewer controls", async () => {
@@ -392,6 +426,7 @@ describe("PPTRender", () => {
 		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({ isFullscreen: true }),
 		)
+		const liveSlideNode = screen.getByTestId("ppt-slide-slide-file-id")
 
 		mockState.store.setFullscreen.mockClear()
 		mockState.sidebarPreviewEffect.mockClear()
@@ -420,6 +455,7 @@ describe("PPTRender", () => {
 		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({ isFullscreen: false }),
 		)
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(liveSlideNode)
 	})
 
 	it("registers a before-close confirmation callback for the PPT file", async () => {
@@ -477,7 +513,7 @@ describe("PPTRender", () => {
 	it("regenerates the saved slide thumbnail from processed content", async () => {
 		renderPPTRender()
 
-		fireEvent.click(screen.getByTestId("ppt-slide-manual-save"))
+		fireEvent.click(screen.getByTestId("ppt-slide-slide-file-id"))
 
 		await waitFor(() => {
 			expect(mockState.store.generateSlideScreenshot).toHaveBeenCalledWith(
@@ -490,6 +526,124 @@ describe("PPTRender", () => {
 			'<div class="slide-container" style="background-image:url(assets/bg.png)">raw</div>',
 		)
 		expect(mockState.store.markSlideAsManuallySaved).toHaveBeenCalledWith("slide-file-id")
+	})
+
+	it("keeps the old real slide visible until a cold target iframe is ready", async () => {
+		mockState.isSlideEditing = false
+		const slidePaths = Array.from({ length: 6 }, (_, index) => `slide-${index + 1}.html`)
+		mockState.store.slidePaths = slidePaths
+		mockState.store.slideUrls = slidePaths
+		mockState.store.slides = slidePaths.map((path, index) => ({
+			id: `slide-${index + 1}`,
+			path,
+			content: `<div>slide ${index + 1}</div>`,
+			rawContent: `<div>slide ${index + 1}</div>`,
+			loadingState: "loaded" as const,
+			loadingError: undefined,
+			lastLoadedAt: index + 1,
+		}))
+
+		const renderDeck = () => (
+			<PPTRender
+				slidePaths={slidePaths}
+				filePathMapping={new Map()}
+				mainFileId="ppt-root-file"
+				mainFileName="Deck.html"
+			/>
+		)
+		const { rerender } = render(renderDeck())
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-slide-slide-file-id")).toHaveAttribute(
+				"data-presented",
+				"true",
+			)
+		})
+		const firstSlideNode = screen.getByTestId("ppt-slide-slide-file-id")
+
+		mockState.store.activeIndex = 4
+		rerender(renderDeck())
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-slide-slide-5-file-id")).toHaveAttribute(
+				"data-active",
+				"true",
+			)
+		})
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(firstSlideNode)
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toHaveAttribute(
+			"data-presented",
+			"true",
+		)
+		expect(screen.getByTestId("ppt-slide-slide-5-file-id")).toHaveAttribute(
+			"data-presented",
+			"false",
+		)
+
+		fireEvent.click(screen.getByTestId("ppt-slide-slide-5-file-id"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-slide-slide-5-file-id")).toHaveAttribute(
+				"data-presented",
+				"true",
+			)
+		})
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toHaveAttribute(
+			"data-presented",
+			"false",
+		)
+	})
+
+	it("ignores a stale ready callback after rapid navigation chooses a newer target", async () => {
+		mockState.isSlideEditing = false
+		const slidePaths = Array.from({ length: 6 }, (_, index) => `slide-${index + 1}.html`)
+		mockState.store.slidePaths = slidePaths
+		mockState.store.slideUrls = slidePaths
+		mockState.store.slides = slidePaths.map((path, index) => ({
+			id: `slide-${index + 1}`,
+			path,
+			content: `<div>slide ${index + 1}</div>`,
+			rawContent: `<div>slide ${index + 1}</div>`,
+			loadingState: "loaded" as const,
+			lastLoadedAt: index + 1,
+		}))
+
+		const renderDeck = () => (
+			<PPTRender
+				slidePaths={slidePaths}
+				filePathMapping={new Map()}
+				mainFileId="ppt-root-file"
+				mainFileName="Deck.html"
+			/>
+		)
+		const { rerender } = render(renderDeck())
+		await screen.findByTestId("ppt-slide-slide-file-id")
+
+		mockState.store.activeIndex = 4
+		rerender(renderDeck())
+		await screen.findByTestId("ppt-slide-slide-5-file-id")
+
+		mockState.store.activeIndex = 2
+		rerender(renderDeck())
+		await screen.findByTestId("ppt-slide-slide-3-file-id")
+
+		fireEvent.click(screen.getByTestId("ppt-slide-slide-5-file-id"))
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toHaveAttribute(
+			"data-presented",
+			"true",
+		)
+		expect(screen.getByTestId("ppt-slide-slide-5-file-id")).toHaveAttribute(
+			"data-presented",
+			"false",
+		)
+
+		fireEvent.click(screen.getByTestId("ppt-slide-slide-3-file-id"))
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-slide-slide-3-file-id")).toHaveAttribute(
+				"data-presented",
+				"true",
+			)
+		})
 	})
 
 	it("shows the save-and-close confirmation and calls the active slide close-save handler", async () => {

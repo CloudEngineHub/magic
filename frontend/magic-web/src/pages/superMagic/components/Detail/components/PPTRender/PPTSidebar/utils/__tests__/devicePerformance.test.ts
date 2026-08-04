@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { resolveDevicePerformanceTier, resolvePPTPreviewOverscan } from "../devicePerformance"
+import {
+	resolveDevicePerformanceTier,
+	resolvePPTLiveRenderCacheSize,
+	resolvePPTPreviewOverscan,
+} from "../devicePerformance"
 
 describe("PPT sidebar device performance", () => {
 	it("uses a five-page overscan for constrained devices", () => {
@@ -65,5 +69,12 @@ describe("PPT sidebar device performance", () => {
 			}),
 		).toBe("unknown")
 		expect(resolvePPTPreviewOverscan({})).toBe(10)
+	})
+
+	it("keeps the live iframe cache much smaller than the HTML preload window", () => {
+		expect(resolvePPTLiveRenderCacheSize({ hardwareConcurrency: 4, deviceMemory: 8 })).toBe(3)
+		expect(resolvePPTLiveRenderCacheSize({ hardwareConcurrency: 6, deviceMemory: 8 })).toBe(5)
+		expect(resolvePPTLiveRenderCacheSize({ hardwareConcurrency: 16, deviceMemory: 16 })).toBe(5)
+		expect(resolvePPTLiveRenderCacheSize({})).toBe(5)
 	})
 })

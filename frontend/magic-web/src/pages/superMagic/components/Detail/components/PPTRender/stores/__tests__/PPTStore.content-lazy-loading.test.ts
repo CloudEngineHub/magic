@@ -368,7 +368,7 @@ describe("PPTStore content lazy loading", () => {
 
 		expect(fullscreenSignal?.aborted).toBe(true)
 		await vi.waitFor(() => expect(store.slides[5]?.loadingState).toBe("idle"))
-		expect(store.visibleSlides.map(({ index }) => index)).toEqual([4])
+		expect(store.visibleSlides.map(({ index }) => index)).toEqual([3, 4, 5])
 	})
 
 	it("cancels obsolete fullscreen work after a far jump and starts the new active page", async () => {

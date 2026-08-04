@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useMemo, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -18,6 +18,7 @@ import {
 	useSlideNavigation,
 	useSlideHandlers,
 } from "./hooks"
+import { getLiveRenderSlideKey, usePPTLiveRenderCache } from "./hooks/usePPTLiveRenderCache"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
@@ -40,6 +41,7 @@ import { cn } from "@/lib/utils"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
+import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 
 interface ManualSaveResult {
 	fileId?: string
@@ -400,7 +402,37 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const slideContainerRef = useRef<HTMLDivElement>(null)
 	const shouldShowButtonText = useContainerShowButtonText(slideContainerRef, 700)
 
-	const visibleSlides = store.visibleSlides
+	const [liveRenderCacheSize] = useState(() => getPPTLiveRenderCacheSize())
+	const localRenderScopeId = useId()
+	const pinnedSlideKeys = store.slides
+		.filter((slide) => {
+			const fileId = store.getFileIdByPath(slide.path)
+			return Boolean(fileId && store.getSlideEditingState(fileId))
+		})
+		.map(getLiveRenderSlideKey)
+	const { residentSlides, presentedKey, pendingKey, warmSlideIndices, onSlideReadyChange } =
+		usePPTLiveRenderCache({
+			slides: store.slides,
+			activeIndex: store.activeIndex,
+			capacity: isPresentationFullscreen
+				? Math.max(5, liveRenderCacheSize)
+				: isMobile
+					? 3
+					: liveRenderCacheSize,
+			neighborRadius: isPresentationFullscreen ? 2 : 1,
+			scopeKey: mainFileId || `local-ppt-render:${localRenderScopeId}`,
+			pinnedKeys: pinnedSlideKeys,
+		})
+	// Normal viewer mode explicitly prepares the two live neighbors without generating screenshots.
+	// Fullscreen already owns a wider adaptive HTML preload window in PPTStore.
+	useEffect(() => {
+		if (isPresentationFullscreen || !store.isAutomaticLoadingEnabled) return
+
+		warmSlideIndices.forEach((index) => {
+			void store.ensureSlideContent(index, "preview")
+		})
+	}, [isPresentationFullscreen, store, store.isAutomaticLoadingEnabled, warmSlideIndices])
+
 	const hasSlides = store.slideUrls.length > 0
 
 	// 识别“待初始化窗口”：slidePaths 已就绪，但 store 还未灌入 slides
@@ -639,6 +671,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									: t("ppt.noSlidesAvailable")
 							}
 							data-testid="ppt-render-div"
+							data-pending-slide={pendingKey || undefined}
 						>
 							<div className="relative h-full w-full overflow-hidden">
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
@@ -697,7 +730,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									</div>
 								)}
 
-								{visibleSlides.map(({ slide, index }) => {
+								{residentSlides.map(({ slide, index, key, revision }) => {
 									const slideFileId = store.getFileIdByPath(slide.path) || ""
 									const slideFileItem = attachmentList?.find(
 										(item) => item.file_id === slideFileId,
@@ -706,11 +739,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
-											key={slide.id}
+											key={key}
 											index={index}
 											isActive={index === store.activeIndex}
+											isPresented={key === presentedKey}
 											content={slide.content || ""}
 											rawContent={slide.rawContent || ""}
+											renderRevision={revision}
 											loadingState={slide.loadingState}
 											loadingError={slide.loadingError}
 											isFullscreen={isPresentationFullscreen}
@@ -718,6 +753,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											manualScale={manualScale}
 											onManualScaleChange={handleManualScaleChange}
 											onScaleRatioChange={setActiveSlideScaleRatio}
+											onRenderReadyChange={(ready) =>
+												onSlideReadyChange(key, revision, ready)
+											}
 											saveEditContent={saveEditContent}
 											fileId={slideFileId}
 											projectId={resolvedProjectId}

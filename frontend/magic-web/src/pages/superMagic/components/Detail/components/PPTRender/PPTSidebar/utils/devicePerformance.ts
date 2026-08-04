@@ -24,6 +24,18 @@ export const PPT_PREVIEW_OVERSCAN_BY_DEVICE_TIER: Record<DevicePerformanceTier, 
 	unknown: 10,
 }
 
+/**
+ * Live iframe cache is intentionally much smaller than the HTML/thumbnail preload window.
+ * Hidden iframes still retain a full DOM/JS runtime, so even high-end devices use a steady-state
+ * budget of 5 (a cold double-buffer transition may temporarily add one outgoing iframe).
+ */
+export const PPT_LIVE_RENDER_CACHE_SIZE_BY_DEVICE_TIER: Record<DevicePerformanceTier, number> = {
+	low: 3,
+	normal: 5,
+	high: 5,
+	unknown: 5,
+}
+
 const LOW_MAX_HARDWARE_CONCURRENCY = 4
 const HIGH_MIN_HARDWARE_CONCURRENCY = 8
 const LOW_MAX_DEVICE_MEMORY_GB = 4
@@ -88,4 +100,14 @@ export function getPPTPreviewOverscan(): number {
 export function resolvePPTPreviewOverscan(signals: DevicePerformanceSignals): number {
 	const tier = resolveDevicePerformanceTier(signals)
 	return PPT_PREVIEW_OVERSCAN_BY_DEVICE_TIER[tier]
+}
+
+/** Returns the maximum number of real PPT iframe renderers kept alive at once. */
+export function getPPTLiveRenderCacheSize(): number {
+	return resolvePPTLiveRenderCacheSize(getDevicePerformanceSignals())
+}
+
+export function resolvePPTLiveRenderCacheSize(signals: DevicePerformanceSignals): number {
+	const tier = resolveDevicePerformanceTier(signals)
+	return PPT_LIVE_RENDER_CACHE_SIZE_BY_DEVICE_TIER[tier]
 }

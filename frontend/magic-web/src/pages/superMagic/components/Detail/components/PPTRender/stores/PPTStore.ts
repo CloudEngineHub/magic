@@ -138,6 +138,8 @@ export class PPTStore {
 	private activeContentKey: string | null = null
 	private activeIndexAutoSaveDisposer: (() => void) | null = null
 	private disposed = false
+	/** Normal viewer keeps the current slide and its immediate neighbors mounted. */
+	private readonly normalRenderWindowSize = 1
 	/**
 	 * Render window size - number of slides to render before/after active slide
 	 * 渲染窗口大小 - 在当前幻灯片前后渲染的幻灯片数量
@@ -258,6 +260,7 @@ export class PPTStore {
 				previewScreenshotKeys: false,
 				activeIndexAutoSaveDisposer: false,
 				disposed: false,
+				normalRenderWindowSize: false,
 			} as Record<string, false>,
 			{ autoBind: true },
 		)
@@ -755,28 +758,25 @@ export class PPTStore {
 	 * Get visible slides for rendering
 	 * 获取需要渲染的可见幻灯片
 	 * - Fullscreen: render window around current slide for smooth transitions (prerendering)
-	 * - Non-fullscreen: current only (1 slide)
+	 * - Non-fullscreen: current slide and its immediate neighbors (up to 3 slides)
 	 * - 全屏：渲染当前幻灯片周围的窗口以实现流畅切换（预渲染）
-	 * - 非全屏：仅当前页（1 页）
+	 * - 非全屏：当前页及前后各一页（最多 3 页）
 	 */
 	get visibleSlides(): Array<{ slide: SlideItem; index: number }> {
-		// Non-fullscreen: only render current slide
-		if (!this.isFullscreen) {
-			return this.slides[this.activeIndex]
-				? [{ slide: this.slides[this.activeIndex], index: this.activeIndex }]
-				: []
-		}
-
-		// Fullscreen: render only slides within the window (prerendering for smooth transitions)
-		// This significantly improves performance when there are many slides
-		const startIndex = Math.max(0, this.activeIndex - this.renderWindowSize)
-		const endIndex = Math.min(this.slides.length - 1, this.activeIndex + this.renderWindowSize)
+		const renderRadius = this.isFullscreen ? this.renderWindowSize : this.normalRenderWindowSize
+		const startIndex = Math.max(0, this.activeIndex - renderRadius)
+		const endIndex = Math.min(this.slides.length - 1, this.activeIndex + renderRadius)
 
 		const result: Array<{ slide: SlideItem; index: number }> = []
 		for (let i = startIndex; i <= endIndex; i++) {
 			result.push({ slide: this.slides[i], index: i })
 		}
 		return result
+	}
+
+	/** Whether automatic neighbor/content preparation is enabled for this deck. */
+	get isAutomaticLoadingEnabled(): boolean {
+		return this.config.autoLoadAndGenerate !== false
 	}
 
 	// ==================== Slide Initialization & Loading ====================
