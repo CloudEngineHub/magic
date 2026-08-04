@@ -39,7 +39,11 @@ export function useMessageAttachmentDownload(messageAttachments?: AttachmentProp
 			return
 		}
 
-		const attachments = projectFile ? projectAttachments : [...projectAttachments, messageFile]
+		const attachments = projectFile
+			? projectAttachments
+			: messageFile
+				? [...projectAttachments, messageFile]
+				: projectAttachments
 
 		try {
 			const result = await resolveSingleDocumentStaticDependencies({
