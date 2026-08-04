@@ -3486,6 +3486,23 @@
 		"user": "已登录用户"
 	},
 	"microAppsPage": {
+		"actions": {
+			"deleteApp": "删除应用",
+			"deleteDescription": "「{{name}}」及对应项目将移入回收站，30 天内可以恢复。",
+			"deleteFailed": "删除应用失败，请重试。",
+			"deleteSuccess": "应用已移入回收站",
+			"deleteTitle": "删除应用",
+			"deleting": "删除中...",
+			"more": "更多操作",
+			"openInNewWindow": "新窗口打开",
+			"rename": "重命名",
+			"renameDescription": "修改微应用在列表和详情页显示的名称。",
+			"renameFailed": "重命名失败，请重试。",
+			"renamePlaceholder": "请输入应用名称",
+			"renameSuccess": "应用名称已更新",
+			"renameTitle": "重命名应用",
+			"renaming": "保存中..."
+		},
 		"backToCreate": "返回创建微应用",
 		"createProject": "新建项目",
 		"createProjectFailed": "新建项目失败，请重试。",
@@ -3534,6 +3551,7 @@
 		"tabProjects": "我的项目",
 		"tabPublished": "已发布微应用",
 		"title": "微应用",
+		"unnamedApp": "未命名微应用",
 		"updatedAt": "更新于 {{date}}"
 	},
 	"mobile": {
@@ -3863,6 +3881,7 @@
 				"type": {
 					"file": "文件",
 					"folder": "文件夹",
+					"microApp": "微应用",
 					"project": "项目",
 					"topic": "话题",
 					"workspace": "工作区"
@@ -3885,6 +3904,7 @@
 				"title": "部分内容无法直接还原"
 			},
 			"pathScopes": {
+				"microApps": "微应用",
 				"workspaces": "工作空间"
 			},
 			"purge": {
@@ -3945,6 +3965,7 @@
 			"tabs": {
 				"all": "全部 ({{count}})",
 				"files": "文件 ({{count}})",
+				"microApps": "微应用 ({{count}})",
 				"projects": "项目 ({{count}})",
 				"topics": "话题 ({{count}})",
 				"workspaces": "工作区 ({{count}})"
@@ -4799,6 +4820,7 @@
 			"type": {
 				"file": "文件",
 				"folder": "文件夹",
+				"microApp": "微应用",
 				"project": "项目",
 				"topic": "话题",
 				"workspace": "工作区"
@@ -4880,6 +4902,7 @@
 		"tabs": {
 			"all": "全部 ({{count}})",
 			"files": "文件 ({{count}})",
+			"microApps": "微应用 ({{count}})",
 			"projects": "项目 ({{count}})",
 			"topics": "话题 ({{count}})",
 			"workspaces": "工作区 ({{count}})"

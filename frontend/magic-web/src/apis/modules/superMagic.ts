@@ -155,6 +155,12 @@ export interface MicroAppMetadata {
 	updated_at?: string | null
 }
 
+export interface DeleteMicroAppResponse {
+	app_id: string
+	project_id: string
+	deleted: boolean
+}
+
 export interface PublishedMicroAppProjectRecord {
 	project?: {
 		id?: string | number
@@ -3090,6 +3096,17 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.put<MicroAppMetadata>(
 			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
 			body,
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 删除微应用及对应项目，路径参数必须使用 app_id
+	 */
+	deleteMicroApp(appId: string) {
+		return fetch.delete<DeleteMicroAppResponse>(
+			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
+			undefined,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},

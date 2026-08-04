@@ -1,8 +1,10 @@
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { type RecycleBinTab, useRecycleBinTabLabel } from "../tab-config"
 
 export function RecycleBinSidebar({ tabs, activeTabId, onTabChange }: RecycleBinSidebarProps) {
 	const { t } = useTranslation("super")
+	const getTabLabel = useRecycleBinTabLabel("pc")
 
 	return (
 		<div
@@ -35,7 +37,7 @@ export function RecycleBinSidebar({ tabs, activeTabId, onTabChange }: RecycleBin
 						)}
 						onClick={() => onTabChange(tab.id)}
 					>
-						{t(tab.labelKey, { count: tab.count })}
+						{getTabLabel(tab.id, tab.count)}
 					</button>
 				)
 			})}
@@ -47,10 +49,4 @@ interface RecycleBinSidebarProps {
 	tabs: RecycleBinTab[]
 	activeTabId: string
 	onTabChange: (tabId: string) => void
-}
-
-interface RecycleBinTab {
-	id: string
-	labelKey: string
-	count: number
 }

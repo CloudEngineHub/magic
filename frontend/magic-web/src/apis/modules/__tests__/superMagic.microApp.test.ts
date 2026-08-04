@@ -33,7 +33,7 @@ describe("SuperMagic micro app API", () => {
 		)
 	})
 
-	it("creates, edits, and publishes with app fields and string-safe parsing", async () => {
+	it("creates, edits, deletes, and publishes with app fields and string-safe parsing", async () => {
 		const client: MicroAppHttpClientMock = {
 			get: vi.fn(),
 			post: vi.fn().mockResolvedValue({ app_id: "933138305533177857" }),
@@ -50,6 +50,7 @@ describe("SuperMagic micro app API", () => {
 			app_name: "客户跟进助手",
 			cover_file_key: null,
 		})
+		await api.deleteMicroApp("933138305533177857")
 		await api.publishMicroAppProject("933138305533177857", {
 			app_name: "客户跟进助手",
 			share_type: 4,
@@ -69,6 +70,11 @@ describe("SuperMagic micro app API", () => {
 		expect(client.put).toHaveBeenCalledWith(
 			"/api/v1/super-agent/micro-apps/933138305533177857",
 			{ app_name: "客户跟进助手", cover_file_key: null },
+			{ parseJsonLargeIntAsString: true },
+		)
+		expect(client.delete).toHaveBeenCalledWith(
+			"/api/v1/super-agent/micro-apps/933138305533177857",
+			undefined,
 			{ parseJsonLargeIntAsString: true },
 		)
 		expect(client.post).toHaveBeenNthCalledWith(

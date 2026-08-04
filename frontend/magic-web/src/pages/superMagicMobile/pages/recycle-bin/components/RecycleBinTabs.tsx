@@ -1,7 +1,10 @@
 import { memo } from "react"
-import { useTranslation } from "react-i18next"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
-import { RECYCLE_BIN_TABS_CONFIG, type RecycleBinTabId } from "@/pages/recycleBin/tab-config"
+import {
+	RECYCLE_BIN_TABS_CONFIG,
+	type RecycleBinTabId,
+	useRecycleBinTabLabel,
+} from "@/pages/recycleBin/tab-config"
 
 import tabsActiveIndicator from "../assets/svg/tabs-active-indicator.svg"
 type RecycleBinTabValue = RecycleBinTabId
@@ -14,7 +17,7 @@ interface RecycleBinTabsProps {
 
 function RecycleBinTabs(props: RecycleBinTabsProps) {
 	const { activeTab, onTabChange, tabCounts = {} } = props
-	const { t } = useTranslation("super")
+	const getTabLabel = useRecycleBinTabLabel("mobile")
 
 	return (
 		<div
@@ -35,7 +38,7 @@ function RecycleBinTabs(props: RecycleBinTabsProps) {
 						<RecycleBinTabTrigger
 							key={tab.id}
 							value={tab.id}
-							label={t(tab.labelKey.mobile, { count: tabCounts[tab.id] ?? 0 })}
+							label={getTabLabel(tab.id, tabCounts[tab.id] ?? 0)}
 						/>
 					))}
 				</TabsList>

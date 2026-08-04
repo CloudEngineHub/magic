@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
 	setKeyword: vi.fn(),
 	refresh: vi.fn(),
 	loadMore: vi.fn(),
+	renameApp: vi.fn(),
+	deleteApp: vi.fn(),
 	useMicroAppsPage: vi.fn(),
 	t: vi.fn((key: string) => (key === "microAppsPage.heroTitlePrefix" ? "一句话，" : key)),
 }))
@@ -117,6 +119,8 @@ describe("MicroAppsPage", () => {
 			error: null,
 			refresh: mocks.refresh,
 			loadMore: mocks.loadMore,
+			renameApp: mocks.renameApp,
+			deleteApp: mocks.deleteApp,
 		})
 	})
 

@@ -5,12 +5,16 @@ import { normalizeMicroAppListResponse, useMicroAppsPage } from "../useMicroApps
 const mocks = vi.hoisted(() => ({
 	getMicroAppWorkspace: vi.fn(),
 	getMicroApps: vi.fn(),
+	updateMicroApp: vi.fn(),
+	deleteMicroApp: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getMicroAppWorkspace: mocks.getMicroAppWorkspace,
 		getMicroApps: mocks.getMicroApps,
+		updateMicroApp: mocks.updateMicroApp,
+		deleteMicroApp: mocks.deleteMicroApp,
 	},
 }))
 
@@ -33,6 +37,16 @@ describe("useMicroAppsPage", () => {
 			total: 21,
 			page: 1,
 			page_size: 20,
+		})
+		mocks.updateMicroApp.mockResolvedValue({
+			app_id: "933138305533177857",
+			app_name: "更新后的应用",
+			updated_at: "2026-08-04 12:00:00",
+		})
+		mocks.deleteMicroApp.mockResolvedValue({
+			app_id: "933138305533177857",
+			project_id: "933138305533177858",
+			deleted: true,
 		})
 	})
 
@@ -159,5 +173,51 @@ describe("useMicroAppsPage", () => {
 			expect.any(Error),
 		)
 		consoleErrorSpy.mockRestore()
+	})
+
+	it("renames and removes an app with app_id", async () => {
+		mocks.getMicroApps
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "933138305533177857",
+						app_name: "客户跟进助手",
+						app_description: "客户跟进与提醒工具",
+						creator_id: "user-1",
+						cover_url: "https://cdn.example.com/cover.png",
+						publish_status: "published",
+						updated_at: "2026-07-24 10:30:00",
+					},
+				],
+				total: 1,
+				page: 1,
+				page_size: 20,
+			})
+			.mockResolvedValueOnce({ list: [], total: 0, page: 1, page_size: 20 })
+		const { result } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		await act(async () => {
+			await result.current.renameApp("933138305533177857", "更新后的应用")
+		})
+
+		expect(mocks.updateMicroApp).toHaveBeenCalledWith("933138305533177857", {
+			app_name: "更新后的应用",
+		})
+		expect(result.current.apps[0]).toMatchObject({
+			app_id: "933138305533177857",
+			app_name: "更新后的应用",
+			updated_at: "2026-08-04 12:00:00",
+		})
+
+		await act(async () => {
+			await result.current.deleteApp("933138305533177857")
+		})
+
+		expect(mocks.deleteMicroApp).toHaveBeenCalledWith("933138305533177857")
+		await waitFor(() => expect(mocks.getMicroApps).toHaveBeenCalledTimes(2))
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		expect(result.current.apps).toEqual([])
+		expect(result.current.hasMore).toBe(false)
 	})
 })

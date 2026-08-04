@@ -3486,6 +3486,23 @@
 		"user": "Signed-in user"
 	},
 	"microAppsPage": {
+		"actions": {
+			"deleteApp": "Delete app",
+			"deleteDescription": "“{{name}}” and its project will be moved to the recycle bin and can be restored within 30 days.",
+			"deleteFailed": "Failed to delete the app. Please retry.",
+			"deleteSuccess": "App moved to the recycle bin",
+			"deleteTitle": "Delete app",
+			"deleting": "Deleting...",
+			"more": "More actions",
+			"openInNewWindow": "Open in new window",
+			"rename": "Rename",
+			"renameDescription": "Change the name shown in the micro app list and detail page.",
+			"renameFailed": "Failed to rename the app. Please retry.",
+			"renamePlaceholder": "Enter an app name",
+			"renameSuccess": "App name updated",
+			"renameTitle": "Rename app",
+			"renaming": "Saving..."
+		},
 		"backToCreate": "Back to create a micro app",
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
@@ -3534,6 +3551,7 @@
 		"tabProjects": "My Projects",
 		"tabPublished": "Published Apps",
 		"title": "Micro Apps",
+		"unnamedApp": "Untitled micro app",
 		"updatedAt": "Updated {{date}}"
 	},
 	"mobile": {
@@ -3863,6 +3881,7 @@
 				"type": {
 					"file": "File",
 					"folder": "Folder",
+					"microApp": "Micro app",
 					"project": "Project",
 					"topic": "Topic",
 					"workspace": "Workspace"
@@ -3885,6 +3904,7 @@
 				"title": "Some items can't be restored"
 			},
 			"pathScopes": {
+				"microApps": "Micro Apps",
 				"workspaces": "Workspace"
 			},
 			"purge": {
@@ -3945,6 +3965,7 @@
 			"tabs": {
 				"all": "All ({{count}})",
 				"files": "Files ({{count}})",
+				"microApps": "Micro Apps ({{count}})",
 				"projects": "Projects ({{count}})",
 				"topics": "Topics ({{count}})",
 				"workspaces": "Workspaces ({{count}})"
@@ -4797,6 +4818,7 @@
 			"type": {
 				"file": "File",
 				"folder": "Folder",
+				"microApp": "Micro app",
 				"project": "Project",
 				"topic": "Topic",
 				"workspace": "Workspace"
@@ -4878,6 +4900,7 @@
 		"tabs": {
 			"all": "All ({{count}})",
 			"files": "Files ({{count}})",
+			"microApps": "Micro Apps ({{count}})",
 			"projects": "Projects ({{count}})",
 			"topics": "Topics ({{count}})",
 			"workspaces": "Workspaces ({{count}})"

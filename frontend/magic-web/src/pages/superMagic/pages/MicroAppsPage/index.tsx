@@ -20,7 +20,9 @@ import MicroAppCreatePrompt from "./components/MicroAppCreatePrompt"
 import MicroAppFloatingBackdrop from "./components/MicroAppFloatingBackdrop"
 import MicroAppHeroTitle from "./components/MicroAppHeroTitle"
 import MicroAppKeyboardCable from "./components/MicroAppKeyboardCable"
+import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
+import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
@@ -89,7 +91,10 @@ function MicroAppsPageDesktop() {
 		error,
 		refresh,
 		loadMore,
+		renameApp,
+		deleteApp,
 	} = useMicroAppsPage()
+	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
 	const [promptFocused, setPromptFocused] = useState(false)
 	const reduceMotion = Boolean(useReducedMotion())
 	const [keyboardConnectorReady, setKeyboardConnectorReady] = useState(reduceMotion)
@@ -264,6 +269,9 @@ function MicroAppsPageDesktop() {
 										: t("microAppsPage.statusUnpublished")
 								}
 								onClick={() => handleOpenApp(app.app_id)}
+								onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
+								onRename={() => itemActions.openRename(app)}
+								onDelete={() => itemActions.openDelete(app)}
 								testId={`micro-apps-app-${app.app_id}`}
 							/>
 						))}
@@ -285,6 +293,16 @@ function MicroAppsPageDesktop() {
 					</div>
 				) : null}
 			</main>
+			<MicroAppListActionDialogs
+				renameTarget={itemActions.renameTarget}
+				deleteTarget={itemActions.deleteTarget}
+				renaming={itemActions.renaming}
+				deleting={itemActions.deleting}
+				onCloseRename={itemActions.closeRename}
+				onCloseDelete={itemActions.closeDelete}
+				onConfirmRename={itemActions.confirmRename}
+				onConfirmDelete={itemActions.confirmDelete}
+			/>
 		</ScrollArea>
 	)
 }

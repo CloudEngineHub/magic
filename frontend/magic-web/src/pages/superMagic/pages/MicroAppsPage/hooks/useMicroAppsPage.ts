@@ -150,6 +150,31 @@ export function useMicroAppsPage() {
 		}
 	}, [apps.length, keyword, loading, loadingMore, page, scope, total])
 
+	const renameApp = useCallback(async (appId: string, appName: string) => {
+		const metadata = await SuperMagicApi.updateMicroApp(appId, { app_name: appName })
+		setApps((current) =>
+			current.map((app) =>
+				app.app_id === appId
+					? {
+							...app,
+							app_name: metadata.app_name || appName,
+							updated_at: metadata.updated_at ?? app.updated_at,
+						}
+					: app,
+			),
+		)
+		return metadata
+	}, [])
+
+	const deleteApp = useCallback(async (appId: string) => {
+		const result = await SuperMagicApi.deleteMicroApp(appId)
+		setApps((current) => current.filter((app) => app.app_id !== appId))
+		setTotal((current) => Math.max(0, current - 1))
+		// 删除会改变分页边界，重新加载第一页，避免后续加载更多时跳过一条记录。
+		setRefreshVersion((value) => value + 1)
+		return result
+	}, [])
+
 	const refresh = useCallback(() => {
 		setRefreshVersion((value) => value + 1)
 	}, [])
@@ -167,5 +192,7 @@ export function useMicroAppsPage() {
 		error,
 		refresh,
 		loadMore,
+		renameApp,
+		deleteApp,
 	}
 }
