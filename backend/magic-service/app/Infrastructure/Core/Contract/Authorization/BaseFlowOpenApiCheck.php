@@ -15,16 +15,22 @@ use App\ErrorCode\FlowErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Flow\DTO\MagicFlowApiChatDTO;
+use Throwable;
 
 class BaseFlowOpenApiCheck implements FlowOpenApiCheckInterface
 {
     public function handle(MagicFlowApiChatDTO $magicFlowApiChatDTO): MagicUserAuthorization
     {
         $authOptions = $this->getAuthOptions($magicFlowApiChatDTO);
-        return match ($authOptions['type']) {
-            'api-key' => $this->apiKey($magicFlowApiChatDTO, $authOptions['authorization']),
-            default => ExceptionBuilder::throw(FlowErrorCode::AccessDenied, 'error authorization type'),
-        };
+
+        try {
+            return match ($authOptions['type']) {
+                'api-key' => $this->apiKey($magicFlowApiChatDTO, $authOptions['authorization']),
+                default => ExceptionBuilder::throw(FlowErrorCode::AccessDenied, 'error authorization type'),
+            };
+        } catch (Throwable $throwable) {
+            ExceptionBuilder::throw(FlowErrorCode::AccessDenied, '登录异常', throwable: $throwable);
+        }
     }
 
     /**

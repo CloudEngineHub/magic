@@ -1,6 +1,7 @@
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { handleProjectFileMention } from "@/pages/superMagic/components/MessageEditor/utils"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { ProjectFileMentionData } from "@/components/business/MentionPanel/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTranslation } from "react-i18next"
@@ -49,13 +50,12 @@ function RichText(props: NodeProps) {
 	const { projectFilesStore } = useMessageListContext()
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		| RichTextMessageNode
-		| undefined
+		RichTextMessageNode | undefined
 	const mentions: NonNullable<MessageRichTextProps["mentions"]> =
 		((node?.extra?.super_agent?.mentions || []) as MessageRichTextProps["mentions"]) || []
 	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)
 	const attachments = (node?.attachments || []) as unknown as MessageAttachmentProps[]
-	const isMobile = !useResponsive().md
+	const isMobile = useIsMobile()
 
 	const { t } = useTranslation("super")
 

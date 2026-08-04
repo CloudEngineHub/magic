@@ -1,5 +1,29 @@
 import { describe, expect, it, vi } from "vitest"
+import { ElementTypeEnum, type ImageElement } from "../../document/types"
+import { createBatchImageTaskMeta } from "../image/imageGenerationTaskMeta"
 import { ImageBatchPollingManager } from "../polling/ImageBatchPollingManager"
+
+function createBatchElement(
+	elementId: string,
+	outputIndex: number,
+	imageId = "batch-1",
+): ImageElement {
+	return {
+		id: elementId,
+		type: ElementTypeEnum.Image,
+		x: 0,
+		y: 0,
+		width: 512,
+		height: 512,
+		zIndex: outputIndex,
+		status: "processing",
+		imageGenerationTaskMeta: createBatchImageTaskMeta({
+			imageId,
+			outputIndex,
+			outputCount: 2,
+		}),
+	}
+}
 
 describe("ImageBatchPollingManager", () => {
 	it("stops polling when the last tracked element is deleted", async () => {
@@ -22,7 +46,9 @@ describe("ImageBatchPollingManager", () => {
 			},
 			elementManager: {
 				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => createBatchElement("element-1", 1)),
 				update: vi.fn(),
+				batchDelete: vi.fn(),
 			},
 			eventEmitter: {
 				emit: vi.fn(),
@@ -86,7 +112,9 @@ describe("ImageBatchPollingManager", () => {
 			},
 			elementManager: {
 				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => createBatchElement("element-1", 1)),
 				update: vi.fn(),
+				batchDelete: vi.fn(),
 			},
 			eventEmitter: {
 				emit: vi.fn(),
@@ -135,6 +163,7 @@ describe("ImageBatchPollingManager", () => {
 	it("maps generated result indexes to explicit element output indexes", async () => {
 		const update = vi.fn()
 		const emit = vi.fn()
+		const element = createBatchElement("element-2", 2)
 		const canvas = {
 			magicConfigManager: {
 				config: {
@@ -156,7 +185,9 @@ describe("ImageBatchPollingManager", () => {
 			},
 			elementManager: {
 				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => element),
 				update,
+				batchDelete: vi.fn(),
 			},
 			eventEmitter: {
 				emit,
@@ -190,5 +221,84 @@ describe("ImageBatchPollingManager", () => {
 			type: "element:image:resultUpdated",
 			data: { elementId: "element-2" },
 		})
+	})
+
+	it("deletes a restored batch when the backend confirms that exact task is missing", async () => {
+		const elements = new Map([
+			["element-1", createBatchElement("element-1", 1)],
+			["element-2", createBatchElement("element-2", 2)],
+		])
+		const batchDelete = vi.fn()
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						getImageGenerationResults: vi.fn().mockRejectedValue({
+							code: 14000,
+							message: "batch-1 未找到",
+						}),
+					},
+				},
+			},
+			elementManager: {
+				hasElement: vi.fn(() => true),
+				getElementData: vi.fn((elementId: string) => elements.get(elementId)),
+				batchDelete,
+				update: vi.fn(),
+			},
+			eventEmitter: {
+				emit: vi.fn(),
+				on: vi.fn(() => vi.fn()),
+			},
+		}
+		const registry = { track: vi.fn(), untrack: vi.fn() }
+		const manager = new ImageBatchPollingManager({
+			canvas: canvas as never,
+			imageId: "batch-1",
+			elementIds: ["element-1", "element-2"],
+			registry: registry as never,
+		})
+
+		await manager.start()
+
+		expect(batchDelete).toHaveBeenCalledOnce()
+		expect(batchDelete).toHaveBeenCalledWith(["element-1", "element-2"])
+	})
+
+	it("does not delete an element that has moved to a newer batch task", async () => {
+		const elements = new Map([["element-1", createBatchElement("element-1", 1, "newer-batch")]])
+		const batchDelete = vi.fn()
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						getImageGenerationResults: vi.fn().mockRejectedValue({
+							code: 14000,
+							message: "batch-1 未找到",
+						}),
+					},
+				},
+			},
+			elementManager: {
+				getElementData: vi.fn((elementId: string) => elements.get(elementId)),
+				batchDelete,
+				update: vi.fn(),
+			},
+			eventEmitter: {
+				emit: vi.fn(),
+				on: vi.fn(() => vi.fn()),
+			},
+		}
+		const registry = { track: vi.fn(), untrack: vi.fn() }
+		const manager = new ImageBatchPollingManager({
+			canvas: canvas as never,
+			imageId: "batch-1",
+			elementIds: ["element-1"],
+			registry: registry as never,
+		})
+
+		await manager.start()
+
+		expect(batchDelete).not.toHaveBeenCalled()
 	})
 })

@@ -200,6 +200,11 @@ function getProjectDisplayName(data: Record<string, unknown>, language?: string)
 	return projectName || LANGUAGE_PACKS[normalizeLocale(language || "")].unnamedProject
 }
 
+function shouldShowProjectPrefix(data: Record<string, unknown>) {
+	// Current-project files also carry project_id; project_name is only attached to cross-project references.
+	return Boolean(data.project_id && typeof data.project_name === "string")
+}
+
 // Get display name for mention
 export function getMentionDisplayName(
 	attrs: TiptapMentionAttributes,
@@ -220,7 +225,7 @@ export function getMentionDisplayName(
 			return (data?.name as string) || "Skill"
 		case MentionItemType.PROJECT_FILE: {
 			const fileName = (data?.file_name as string) || "File"
-			return data?.project_id
+			return shouldShowProjectPrefix(data)
 				? `${getProjectDisplayName(data, language)}/${fileName}`
 				: fileName
 		}
@@ -230,7 +235,7 @@ export function getMentionDisplayName(
 			return (data?.file_name as string) || "Cloud File"
 		case MentionItemType.FOLDER: {
 			const directoryName = (data?.directory_name as string) || "Folder"
-			return data?.project_id
+			return shouldShowProjectPrefix(data)
 				? `${getProjectDisplayName(data, language)}/${directoryName}`
 				: directoryName
 		}

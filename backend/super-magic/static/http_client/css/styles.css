@@ -1142,6 +1142,29 @@ input[type="checkbox"] {
 .ai-markdown hr { border: none; border-top: 1px solid var(--wechat-border); margin: 10px 0; }
 .ai-markdown img { max-width: 100%; border-radius: 4px; }
 
+/* AI 回复中的工作区文件路径标签 */
+.ai-file-path-mention {
+    display: inline;
+    padding: 2px 6px;
+    color: #315cec;
+    background: #f0f6ff;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 20px;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.ai-file-path-mention:hover {
+    background: #e0ecff;
+}
+
+.ai-file-path-mention:focus-visible {
+    outline: 2px solid rgba(49, 92, 236, 0.35);
+    outline-offset: 1px;
+}
+
 /* AI 回复中的 iframe 渲染区域 */
 .ai-iframe-wrapper {
     margin-top: 8px;
@@ -1325,6 +1348,104 @@ input[type="checkbox"] {
     max-height: 300px;
     overflow-y: auto;
     line-height: 1.5;
+}
+
+/* 任务完成附件列表 */
+.tool-call-attachments {
+    width: min(620px, 100%);
+    margin-top: 6px;
+    padding: 10px;
+    box-sizing: border-box;
+    color: #2471a3;
+    background-color: rgba(41, 128, 185, 0.04);
+    border: 1px solid rgba(41, 128, 185, 0.15);
+    border-radius: 8px;
+}
+
+.tool-call-attachments-title {
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tool-call-attachments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tool-call-attachment-item {
+    min-width: 0;
+}
+
+.tool-call-attachment-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 8px;
+    box-sizing: border-box;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(41, 128, 185, 0.12);
+    border-radius: 7px;
+    font: inherit;
+    text-align: left;
+}
+
+button.tool-call-attachment-content.is-clickable {
+    cursor: pointer;
+}
+
+button.tool-call-attachment-content.is-clickable:hover {
+    background: rgba(41, 128, 185, 0.08);
+    border-color: rgba(41, 128, 185, 0.24);
+}
+
+.tool-call-attachment-order {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    color: #fff;
+    background: #2471a3;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.tool-call-attachment-text {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tool-call-attachment-name {
+    overflow: hidden;
+    color: #24506f;
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-call-attachment-meta {
+    color: #6f8797;
+    font-size: 10px;
+}
+
+.tool-call-attachment-action {
+    flex: 0 0 auto;
+    color: #2471a3;
+    font-size: 11px;
 }
 
 /* ask_user 交互卡片 */

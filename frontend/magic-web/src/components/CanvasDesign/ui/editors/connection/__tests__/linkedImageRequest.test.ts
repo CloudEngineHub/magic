@@ -99,4 +99,36 @@ describe("buildImageRequestWithLinkedEditorInputs", () => {
 			},
 		])
 	})
+
+	it("lets linked crop metadata override a manual option for the same resource", () => {
+		const request = buildImageRequestWithLinkedEditorInputs(
+			{
+				reference_images: ["./images/shared.png"],
+				reference_image_options: [
+					{
+						path: "./images/shared.png",
+						crop: { x: 1, y: 2, width: 30, height: 40 },
+					},
+				],
+			},
+			{
+				textPrompt: "",
+				activeMediaReferences: [
+					{
+						kind: "image",
+						path: "/images/shared.png",
+						sourceCrop: { x: 10, y: 20, width: 300, height: 200 },
+					},
+				],
+			},
+		)
+
+		expect(request.reference_images).toEqual(["/images/shared.png"])
+		expect(request.reference_image_options).toEqual([
+			{
+				path: "/images/shared.png",
+				crop: { x: 10, y: 20, width: 300, height: 200 },
+			},
+		])
+	})
 })

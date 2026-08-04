@@ -345,7 +345,9 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				source: recordingSource,
 				device_id: "Web",
 				audio_source: options.audioSource,
-				is_hidden: false,
+				// Keep incomplete recordings and imports out of authoritative lists.
+				// Existing finish/import endpoints publish the project after usable audio is available.
+				is_hidden: true,
 			})
 
 			if (!createdProject?.project || !createdProject?.topic) return null

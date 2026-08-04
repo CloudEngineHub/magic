@@ -1,11 +1,6 @@
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
-import {
-	useMemoizedFn,
-	useResponsive,
-	useDebounceEffect,
-	useDeepCompareEffect,
-	useUpdateEffect,
-} from "ahooks"
+import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -189,8 +184,7 @@ function Share() {
 	const [error, setError] = useState<Error | null>(null)
 	const [attachments, setAttachments] = useState({} as any)
 	const [loading, setLoading] = useState(false)
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false // md breakpoint is typically 768px, so anything smaller is mobile
+	const isMobile = useIsMobile()
 	const [isProjectShare, setIsProjectShare] = useState(false)
 	const [fileId, setFileId] = useState("")
 	// Topic sharing: view_file_list state

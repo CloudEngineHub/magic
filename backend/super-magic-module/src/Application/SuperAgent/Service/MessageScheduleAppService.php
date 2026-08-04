@@ -45,6 +45,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateMessageScheduleRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\QueryMessageScheduleLogsRequestDTO;
@@ -133,7 +134,7 @@ class MessageScheduleAppService extends AbstractAppService
 
         // Check project permission
         $this->getAccessibleProjectWithEditor((int) $requestDTO->getProjectId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
-        $this->assertMessageContentAgentUsable($dataIsolation, $requestDTO->getMessageContent());
+        $this->assertMessageContentAgentAccess($dataIsolation, $requestDTO->getMessageContent());
 
         try {
             return Db::transaction(function () use ($requestDTO, $dataIsolation) {
@@ -315,7 +316,7 @@ class MessageScheduleAppService extends AbstractAppService
 
         // Get existing message schedule
         $messageSchedule = $this->messageScheduleDomainService->getMessageScheduleByIdWithValidation($dataIsolation, $id);
-        $this->assertMessageContentAgentUsable(
+        $this->assertMessageContentAgentAccess(
             $dataIsolation,
             $requestDTO->getMessageContent() === [] ? $messageSchedule->getMessageContent() : $requestDTO->getMessageContent()
         );
@@ -710,7 +711,10 @@ class MessageScheduleAppService extends AbstractAppService
                 }
 
                 try {
-                    $this->assertMessageContentAgentUsable($dataIsolation, $messageScheduleEntity->getMessageContent());
+                    $this->assertMessageContentAgentAccess(
+                        $dataIsolation,
+                        $messageScheduleEntity->getMessageContent()
+                    );
                 } catch (BusinessException $throwable) {
                     $messageScheduleEntity->setEnabled(0);
                     $this->updateTaskScheduler($messageScheduleEntity);
@@ -1205,21 +1209,24 @@ class MessageScheduleAppService extends AbstractAppService
         return DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
     }
 
-    /** @param array<string, mixed> $messageContent */
-    private function assertMessageContentAgentUsable(DataIsolation $dataIsolation, array $messageContent): void
+    /** 校验定时消息中的话题模式，避免把 MagicClaw code 当成员工 code。 */
+    private function assertMessageContentAgentAccess(DataIsolation $dataIsolation, array $messageContent): void
     {
-        $agentCode = trim((string) ($messageContent['extra']['super_agent']['agent_code'] ?? ''));
-        if ($agentCode === '') {
-            return;
-        }
+        $superAgent = $messageContent['extra']['super_agent'] ?? [];
+        $topicPattern = trim((string) ($superAgent['topic_pattern'] ?? 'general'));
+        $agentCode = trim((string) ($superAgent['agent_code'] ?? ''));
 
-        $this->superMagicAgentAccessAppService->assertAgentUsable(
+        [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
             SuperMagicAgentDataIsolation::create(
                 $dataIsolation->getCurrentOrganizationCode(),
                 $dataIsolation->getCurrentUserId()
             ),
+            $topicPattern,
             $agentCode
         );
+        if (! $allowed) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
+        }
     }
 
     /**

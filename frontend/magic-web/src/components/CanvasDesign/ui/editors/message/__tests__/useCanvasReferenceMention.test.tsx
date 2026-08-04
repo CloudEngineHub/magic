@@ -338,4 +338,18 @@ describe("useCanvasReferenceMention", () => {
 			| undefined
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
 	})
+
+	it("deduplicates current and project files by Canvas canonical path", () => {
+		renderMention({
+			tree: [folderNode("design-a", "Design A", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png" }),
+		])
+	})
 })

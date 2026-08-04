@@ -9,9 +9,10 @@ import {
 	useMemo,
 	useLayoutEffect,
 } from "react"
-import { useDeepCompareEffect, useMemoizedFn, useResponsive } from "ahooks"
+import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import { filterInjectedTags, preserveOriginalTrailingNewline } from "./utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import { genFileData } from "@/pages/chatNew/components/MessageEditor/components/InputFiles/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
@@ -364,7 +365,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 
 		const { styles, cx } = useStyles()
-		const isMobile = useResponsive().md === false
+		const isMobile = useIsMobile()
 		const documentFlowIframeStyle = useMemo(() => {
 			if (!documentFlowFullscreen) return undefined
 			// Mobile keeps the HTML document inside a viewport-sized iframe so native touch

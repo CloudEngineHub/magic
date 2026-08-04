@@ -88,6 +88,16 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 		expect(selected.map((item) => item.data.file_path)).toEqual(["project/existing.png"])
 	})
 
+	it("does not consume capacity for canonical path variants of an existing file", () => {
+		const selected = filterReferenceResourcePanelBatchItems({
+			items: [panelItem("/images/existing.png"), panelItem("/images/new.png")],
+			maxReferenceFiles: 1,
+			currentReferenceFiles: ["./images/existing.png"],
+		})
+
+		expect(selected.map((item) => item.data.file_path)).toEqual(["/images/existing.png"])
+	})
+
 	it("respects per-asset-type capacity and total capacity", () => {
 		const currentAssetCounts: ReferenceAssetTypeCounts = {
 			images: 1,

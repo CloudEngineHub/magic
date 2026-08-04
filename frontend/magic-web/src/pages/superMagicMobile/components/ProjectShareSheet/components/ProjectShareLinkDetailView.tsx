@@ -84,10 +84,14 @@ export default function ProjectShareLinkDetailView({
 					{t("projectShare.linkLabel")}
 				</div>
 				<div
-					className="flex h-12 items-center rounded-lg bg-white px-3.5"
+					className="flex min-h-12 items-center rounded-lg bg-white px-3.5 py-3"
 					data-testid="project-share-sheet-detail-link-card"
 				>
-					<div className="truncate font-mono text-[15px] leading-5 text-foreground">
+					{/* Keep the complete URL visible and selectable so mobile users can manually copy it when clipboard access fails. */}
+					<div
+						className="min-w-0 select-text whitespace-normal break-all font-mono text-[15px] leading-5 text-foreground [-webkit-touch-callout:default] [-webkit-user-select:text]"
+						data-testid="project-share-sheet-detail-link-value"
+					>
 						{shareUrl}
 					</div>
 				</div>

@@ -42,6 +42,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentType;
+use Dtyq\SuperMagic\Domain\Agent\Service\MagicClawDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryRelationDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentMarketDomainService;
@@ -49,6 +50,7 @@ use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillVersionEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\BuiltinSkill;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
@@ -66,6 +68,9 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
     #[Inject]
     protected UserAgentDomainService $userAgentDomainService;
+
+    #[Inject]
+    protected MagicClawDomainService $magicClawDomainService;
 
     #[Inject]
     protected SuperMagicAgentMarketDomainService $marketEligibilityDomainService;
@@ -94,6 +99,52 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         }
 
         ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.agent_not_available');
+    }
+
+    /**
+     * 根据话题模式统一判断员工、创建器和 MagicClaw 的使用权限。
+     *
+     * @return array{0: bool, 1: string}
+     */
+    public function checkAgentAccess(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $topicPattern,
+        string $agentCode
+    ): array {
+        $errorMessage = 'super_magic.agent.agent_not_available';
+
+        if (in_array($topicPattern, [BuiltinSkill::CrewCreator->value, BuiltinSkill::SkillCreator->value], true)) {
+            if ($agentCode === '') {
+                return [true, ''];
+            }
+
+            $operation = $this->resourceAccessPolicyService->getCurrentOperation(
+                $dataIsolation,
+                OperationPermissionResourceType::CustomAgent,
+                $agentCode
+            );
+            $allowed = $operation?->canEdit() ?? false;
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        if ($topicPattern === ProjectMode::MAGICLAW->value) {
+            // MagicClaw 是用户私有实例，只校验归属，不进入员工雇佣关系判断。
+            $allowed = $this->magicClawDomainService->isOwnedBy(
+                $agentCode,
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            );
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        $employeeCode = str_starts_with($topicPattern, 'SMA-') ? $topicPattern : $agentCode;
+        if ($topicPattern === ProjectMode::CUSTOM_AGENT->value || str_starts_with($topicPattern, 'SMA-')) {
+            $allowed = $employeeCode !== ''
+                && in_array($employeeCode, $this->getUsableAgentCodes($dataIsolation)['codes'], true);
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        return [true, ''];
     }
 
     /** 市场发现资格由领域服务统一计算，执行资格仍独立校验。 */
