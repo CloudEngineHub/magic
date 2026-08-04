@@ -12,7 +12,6 @@ import { SuperMagicApi } from "@/apis"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -242,13 +241,14 @@ function WorkspaceList() {
 		const scrollContainer = sentinel.closest<HTMLElement>(
 			"[data-testid='sidebar-content-root']",
 		)
+		if (!scrollContainer) return
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) loadNextPage()
 			},
-			// Observe the actual sidebar scroll container. An initially visible
-			// sentinel naturally fills tall screens without manual height measurements.
+			// Observe the shared sidebar scroll container. An initially visible sentinel
+			// naturally loads enough pages to fill tall screens without manual measurements.
 			{ root: scrollContainer, threshold: 0 },
 		)
 		observer.observe(sentinel)
@@ -314,7 +314,7 @@ function WorkspaceList() {
 
 	return (
 		<SidebarGroup
-			className="flex min-h-0 w-full flex-col py-0 pl-2 pr-0"
+			className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
 			data-testid="sidebar-workspace-list"
 		>
 			{isSearchMode ? (
@@ -404,16 +404,9 @@ function WorkspaceList() {
 					<Plus className="h-4 w-4" />
 				</button>
 			</div>
-			<SidebarGroupContent className="flex min-h-0">
-				<SidebarMenu className="h-full min-h-0">
-					<ScrollArea
-						className={cn(
-							"h-full min-h-0 w-full scroll-smooth [&_[data-slot='scroll-area-scrollbar']]:bg-transparent",
-							"[&_[data-slot='scroll-area-viewport']>div]:!block",
-							"pr-3",
-						)}
-						viewportClassName="overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
-					>
+			<SidebarGroupContent>
+				<SidebarMenu>
+					<div className="w-full pr-3">
 						<div ref={workspaceListRef}>
 							{isCreatingWorkspace && (
 								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
@@ -450,7 +443,7 @@ function WorkspaceList() {
 							)}
 							<div ref={loadMoreSentinelRef} className="h-px" aria-hidden="true" />
 						</div>
-					</ScrollArea>
+					</div>
 				</SidebarMenu>
 			</SidebarGroupContent>
 		</SidebarGroup>

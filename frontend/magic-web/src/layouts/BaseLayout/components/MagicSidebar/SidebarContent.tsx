@@ -157,10 +157,10 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 			{collapsed ? (
 				<CollapsedWorkspaceMenu />
 			) : (
-				<div className="flex min-h-40 flex-1 flex-col gap-1 overflow-hidden">
+				<div className="flex min-h-40 flex-1 flex-col gap-1">
 					<WorkspaceList />
 					<SidebarGroup
-						className="w-full flex-1 shrink-0 px-2 py-0"
+						className="w-full shrink-0 px-2 py-0"
 						data-testid="sidebar-content-share-workspace-group"
 					>
 						<SidebarGroupContent>

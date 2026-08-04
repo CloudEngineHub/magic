@@ -107,8 +107,10 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 			syncSidebarByViewport(isShrinking)
 		}
 
-		// Initial load: keep persisted expanded/collapsed; shrink-triggered collapse runs in handleResize.
-		syncSidebarByViewport(false)
+		// A narrow desktop must start in the compact navigation state. The sidebar
+		// can still be expanded manually afterwards; we only run this automatic
+		// collapse when the layout is first mounted or the viewport shrinks.
+		syncSidebarByViewport(true)
 		window.addEventListener("resize", handleResize)
 
 		return () => {
