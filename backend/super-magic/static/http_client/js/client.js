@@ -366,6 +366,7 @@ function renderClientEntry(entry, options = {}) {
 
 // DOM 元素
 const serverUrlInput = document.getElementById('serverUrl');
+const authTokenInput = document.getElementById('authToken');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -3350,7 +3351,21 @@ function connectWebSocket() {
     }
 
     // 构建WebSocket URL
-    const wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+    let wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+
+    // 浏览器 WebSocket 无法设置自定义 header，通过 ?token= 携带鉴权凭证。
+    // 优先取输入框的值，留空时回落到上传配置中的 authorization
+    let authToken = authTokenInput ? authTokenInput.value.trim() : '';
+    if (!authToken) {
+        const uploadedConfig = typeof getUploadedConfig === 'function' ? getUploadedConfig() : null;
+        if (uploadedConfig) {
+            const metadata = uploadedConfig.metadata || {};
+            authToken = uploadedConfig.authorization || metadata.authorization || '';
+        }
+    }
+    if (authToken) {
+        wsUrl += '?token=' + encodeURIComponent(authToken);
+    }
 
     try {
         updateSubscribeButtonState('connecting');
@@ -5143,7 +5158,10 @@ function handleWebSocketClose(event) {
     updateSubscribeButtonState('disconnected');
     hideAssistantActivity();
 
-    if (event.wasClean) {
+    if (event.code === 4401 || event.code === 4503) {
+        // 服务端鉴权拒绝：4401 未授权（凭证缺失或不一致），4503 sandbox 未绑定 metadata.json
+        showConnectionStatusMessage(`WebSocket连接被服务端拒绝 (code: ${event.code}): ${event.reason || '鉴权失败'}`);
+    } else if (event.wasClean) {
         showConnectionStatusMessage("WebSocket连接正常关闭");
     } else {
         showConnectionStatusMessage(`WebSocket连接意外断开 (code: ${event.code})`);
