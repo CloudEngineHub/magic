@@ -44,7 +44,7 @@ interface WechatArticleViewProps {
 
 export interface WechatArticleViewRef {
 	getIframeElement: () => HTMLIFrameElement | null
-	getArticleHtml: () => string | null
+	getArticleHtml: () => Promise<string | null>
 	copyArticleRichContent: () => Promise<boolean>
 	startInspector: () => void
 	startInspectorAppend: () => void
@@ -232,9 +232,9 @@ function WechatArticleViewInner(
 		ref,
 		() => ({
 			getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
-			getArticleHtml: () =>
+			getArticleHtml: async () =>
 				buildWechatClipboardHtmlFromIframe(rendererRef.current?.getIframeElement()) ||
-				(content ? buildWechatClipboardHtmlFromSource(content) : null),
+				(content ? await buildWechatClipboardHtmlFromSource(content) : null),
 			copyArticleRichContent: () => {
 				const iframe = rendererRef.current?.getIframeElement() ?? null
 				if (

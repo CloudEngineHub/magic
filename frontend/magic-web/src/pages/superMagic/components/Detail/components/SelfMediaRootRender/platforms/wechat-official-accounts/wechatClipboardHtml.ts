@@ -1,3 +1,8 @@
+import {
+	injectWechatExternalStylesheets,
+	prepareWechatExternalStylesheets,
+} from "./wechatClipboardStyles"
+
 const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 	"box-sizing",
 	"display",
@@ -75,8 +80,29 @@ const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 
 const WECHAT_ARTICLE_COMMENTS_SELECTOR = "[data-wechat-article-comments='true']"
 
-function parseInlineStyle(styleText: string | null): Map<string, string> {
-	const result = new Map<string, string>()
+interface StyleValue {
+	priority: string
+	value: string
+}
+
+type StyleMap = Map<string, StyleValue>
+type SelectorSpecificity = [number, number, number]
+
+interface StyleCandidate extends StyleValue {
+	order: number
+	specificity: SelectorSpecificity
+}
+
+interface ActiveStyleRule {
+	declarations: StyleMap
+	selectorText: string
+}
+
+const CSS_STYLE_RULE = 1
+const CSS_MEDIA_RULE = 4
+
+function parseInlineStyle(styleText: string | null): StyleMap {
+	const result: StyleMap = new Map()
 	if (!styleText) return result
 
 	const declaration = document.createElement("span").style
@@ -84,37 +110,134 @@ function parseInlineStyle(styleText: string | null): Map<string, string> {
 	for (let i = 0; i < declaration.length; i += 1) {
 		const property = declaration.item(i)
 		const value = declaration.getPropertyValue(property).trim()
-		if (property && value) result.set(property, value)
+		if (property && value) {
+			result.set(property, {
+				priority: declaration.getPropertyPriority(property),
+				value,
+			})
+		}
 	}
 	return result
 }
 
-function serializeStyle(styleMap: Map<string, string>): string {
+function serializeStyle(styleMap: StyleMap): string {
 	return Array.from(styleMap.entries())
-		.map(([property, value]) => `${property}:${value}`)
+		.map(
+			([property, { priority, value }]) =>
+				`${property}:${value}${priority ? ` !${priority}` : ""}`,
+		)
 		.join(";")
 }
 
-function applyStyleMap(target: Element, nextStyles: Map<string, string>): void {
+function applyStyleMap(target: Element, nextStyles: StyleMap): void {
 	if (!nextStyles.size) return
 	const styleMap = parseInlineStyle(target.getAttribute("style"))
-	nextStyles.forEach((value, property) => {
-		if (value) styleMap.set(property, value)
+	nextStyles.forEach((styleValue, property) => {
+		if (styleValue.value) styleMap.set(property, styleValue)
 	})
 	const serialized = serializeStyle(styleMap)
 	if (serialized) target.setAttribute("style", serialized)
 }
 
-function parseDeclarationBlock(block: string): Map<string, string> {
-	const result = new Map<string, string>()
-	const declaration = document.createElement("span").style
-	declaration.cssText = block
-	for (let i = 0; i < declaration.length; i += 1) {
-		const property = declaration.item(i)
-		const value = declaration.getPropertyValue(property).trim()
-		if (property && value) result.set(property, value)
+function compareSpecificity(left: SelectorSpecificity, right: SelectorSpecificity): number {
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) return left[index] - right[index]
 	}
-	return result
+	return 0
+}
+
+function getSelectorSpecificity(selector: string): SelectorSpecificity {
+	const withoutAttributes = selector.replace(/\[[^\]]*\]/g, "")
+	const idCount = (withoutAttributes.match(/#[\w-]+/g) || []).length
+	const classCount =
+		(withoutAttributes.match(/\.[\w-]+/g) || []).length +
+		(selector.match(/\[[^\]]*\]/g) || []).length
+	const typeSelectorText = withoutAttributes.replace(/#[\w-]+|\.[\w-]+/g, "").replace(/\*/g, "")
+	const typeCount = (typeSelectorText.match(/(?:^|[\s>+~])(?:[\w-]+\|)?[a-z][\w-]*/gi) || [])
+		.length
+	return [idCount, classCount, typeCount]
+}
+
+function shouldReplaceCandidate(
+	current: StyleCandidate | undefined,
+	next: StyleCandidate,
+): boolean {
+	if (!current) return true
+	const currentImportant = current.priority === "important"
+	const nextImportant = next.priority === "important"
+	if (currentImportant !== nextImportant) return nextImportant
+
+	const specificityDifference = compareSpecificity(next.specificity, current.specificity)
+	if (specificityDifference !== 0) return specificityDifference > 0
+	return next.order >= current.order
+}
+
+function isMediaQueryActive(sourceDocument: Document, mediaText: string | null): boolean {
+	const query = mediaText?.trim()
+	if (!query || query.toLowerCase() === "all") return true
+
+	const sourceWindow = sourceDocument.defaultView
+	if (sourceWindow?.matchMedia) return sourceWindow.matchMedia(query).matches
+
+	// DOM-only test environments may not implement matchMedia. Keep ordinary
+	// screen and feature queries active, but never apply print-only declarations.
+	return query.split(",").some((item) => {
+		const normalized = item.trim().toLowerCase()
+		if (/^(?:only\s+)?print(?:\s+and|\s*$)/.test(normalized)) return false
+		if (/^not\s+(?:only\s+)?screen(?:\s+and|\s*$)/.test(normalized)) return false
+		return true
+	})
+}
+
+function parseStyleRulesFromText(cssText: string): ActiveStyleRule[] {
+	const rules: ActiveStyleRule[] = []
+	const rulePattern = /([^{}]+)\{([^{}]+)\}/g
+	let match: RegExpExecArray | null
+	while ((match = rulePattern.exec(cssText))) {
+		const selectorText = match[1].trim()
+		const declarations = parseInlineStyle(match[2].trim())
+		if (selectorText && !selectorText.startsWith("@") && declarations.size) {
+			rules.push({ declarations, selectorText })
+		}
+	}
+	return rules
+}
+
+function getActiveStyleRules(
+	styleElement: HTMLStyleElement,
+	sourceDocument: Document,
+): ActiveStyleRule[] {
+	if (!isMediaQueryActive(sourceDocument, styleElement.getAttribute("media"))) return []
+
+	try {
+		const sheetRules = styleElement.sheet?.cssRules
+		if (!sheetRules) return parseStyleRulesFromText(styleElement.textContent || "")
+
+		const activeRules: ActiveStyleRule[] = []
+		const collectRules = (rules: CSSRuleList): void => {
+			Array.from(rules).forEach((rule) => {
+				if (rule.type === CSS_STYLE_RULE) {
+					const styleRule = rule as CSSStyleRule
+					const declarations = parseInlineStyle(styleRule.style.cssText)
+					if (styleRule.selectorText && declarations.size) {
+						activeRules.push({ declarations, selectorText: styleRule.selectorText })
+					}
+					return
+				}
+
+				if (rule.type === CSS_MEDIA_RULE) {
+					const mediaRule = rule as CSSMediaRule
+					if (isMediaQueryActive(sourceDocument, mediaRule.media.mediaText)) {
+						collectRules(mediaRule.cssRules)
+					}
+				}
+			})
+		}
+		collectRules(sheetRules)
+		return activeRules
+	} catch {
+		return parseStyleRulesFromText(styleElement.textContent || "")
+	}
 }
 
 function inlineStyleRules(sourceDocument: Document, targetBody: HTMLElement): void {
@@ -123,40 +246,69 @@ function inlineStyleRules(sourceDocument: Document, targetBody: HTMLElement): vo
 	if (!sourceElements.length || !targetElements.length) return
 
 	const sourceToTarget = new Map<Element, Element>()
+	const candidatesByElement = new Map<Element, Map<string, StyleCandidate>>()
 	sourceElements.forEach((element, index) => {
 		const target = targetElements[index]
 		if (target) sourceToTarget.set(element, target)
 	})
 
-	sourceDocument.querySelectorAll("style").forEach((styleElement) => {
-		const cssText = styleElement.textContent || ""
-		const rulePattern = /([^{}]+)\{([^{}]+)\}/g
-		let match: RegExpExecArray | null
-		while ((match = rulePattern.exec(cssText))) {
-			const selectorText = match[1].trim()
-			const declarationText = match[2].trim()
-			if (!selectorText || selectorText.startsWith("@")) continue
+	let ruleOrder = 0
+	sourceDocument.querySelectorAll<HTMLStyleElement>("style").forEach((styleElement) => {
+		getActiveStyleRules(styleElement, sourceDocument).forEach(
+			({ declarations, selectorText }) => {
+				ruleOrder += 1
 
-			const declarations = parseDeclarationBlock(declarationText)
-			if (!declarations.size) continue
+				selectorText.split(",").forEach((rawSelector) => {
+					const selector = rawSelector.trim()
+					if (!selector || selector.includes(":")) return
+					const specificity = getSelectorSpecificity(selector)
+					try {
+						const matches = [
+							...(sourceDocument.body.matches(selector) ? [sourceDocument.body] : []),
+							...sourceDocument.body.querySelectorAll(selector),
+						]
+						matches.forEach((sourceElement) => {
+							let elementCandidates = candidatesByElement.get(sourceElement)
+							if (!elementCandidates) {
+								elementCandidates = new Map()
+								candidatesByElement.set(sourceElement, elementCandidates)
+							}
+							declarations.forEach(({ priority, value }, property) => {
+								const candidate = { order: ruleOrder, priority, specificity, value }
+								if (
+									shouldReplaceCandidate(
+										elementCandidates.get(property),
+										candidate,
+									)
+								) {
+									elementCandidates.set(property, candidate)
+								}
+							})
+						})
+					} catch {
+						// Ignore selectors the browser cannot query in a paste-safe fragment.
+					}
+				})
+			},
+		)
+	})
 
-			selectorText.split(",").forEach((rawSelector) => {
-				const selector = rawSelector.trim()
-				if (!selector || selector.includes(":")) return
-				try {
-					const matches = [
-						...(sourceDocument.body.matches(selector) ? [sourceDocument.body] : []),
-						...sourceDocument.body.querySelectorAll(selector),
-					]
-					matches.forEach((sourceElement) => {
-						const targetElement = sourceToTarget.get(sourceElement)
-						if (targetElement) applyStyleMap(targetElement, declarations)
-					})
-				} catch {
-					// Ignore selectors the browser cannot query in a paste-safe fragment.
-				}
-			})
-		}
+	candidatesByElement.forEach((candidates, sourceElement) => {
+		const targetElement = sourceToTarget.get(sourceElement)
+		if (!targetElement) return
+		const inlineStyles = parseInlineStyle(sourceElement.getAttribute("style"))
+		const winningStyles: StyleMap = new Map()
+		candidates.forEach((candidate, property) => {
+			const inlineStyle = inlineStyles.get(property)
+			if (
+				inlineStyle &&
+				(inlineStyle.priority === "important" || candidate.priority !== "important")
+			) {
+				return
+			}
+			winningStyles.set(property, candidate)
+		})
+		applyStyleMap(targetElement, winningStyles)
 	})
 }
 
@@ -171,10 +323,10 @@ function inlineComputedStyles(sourceDocument: Document, targetBody: HTMLElement)
 		if (!targetElement) return
 
 		const computed = sourceWindow.getComputedStyle(sourceElement)
-		const nextStyles = new Map<string, string>()
+		const nextStyles: StyleMap = new Map()
 		WECHAT_COMPUTED_STYLE_PROPERTIES.forEach((property) => {
 			const value = computed.getPropertyValue(property).trim()
-			if (value) nextStyles.set(property, value)
+			if (value) nextStyles.set(property, { priority: "", value })
 		})
 		applyStyleMap(targetElement, nextStyles)
 	})
@@ -197,7 +349,7 @@ function sanitizeSourceBeforeRender(root: ParentNode): void {
 
 function removeUnsafeClipboardNodes(root: ParentNode): void {
 	root.querySelectorAll(
-		`script,style,link[rel='stylesheet'],meta,title,iframe,object,embed,base,${WECHAT_ARTICLE_COMMENTS_SELECTOR}`,
+		`script,style,link,meta,title,iframe,object,embed,base,${WECHAT_ARTICLE_COMMENTS_SELECTOR}`,
 	).forEach((node) => node.remove())
 	removeEventHandlerAttributes(root)
 }
@@ -243,6 +395,15 @@ function createRenderedSourceDocument(html: string): {
 	}
 }
 
+async function waitForRenderedStyles(): Promise<void> {
+	// External CSS has already been converted to inline style elements. Yielding
+	// one parent-page task lets the iframe finish stylesheet parsing. Timers from
+	// a hidden sandbox iframe can be suspended indefinitely in Chromium.
+	await new Promise<void>((resolve) => {
+		setTimeout(resolve, 0)
+	})
+}
+
 export function buildWechatClipboardHtmlFromDocument(sourceDocument: Document): string | null {
 	const sourceBody = sourceDocument.body
 	if (!sourceBody) return null
@@ -268,16 +429,22 @@ export function buildWechatClipboardHtmlFromIframe(
 	}
 }
 
-export function buildWechatClipboardHtmlFromSource(html: string): string {
+export async function buildWechatClipboardHtmlFromSource(html: string): Promise<string> {
 	if (!html) return html
 	if (typeof DOMParser === "undefined") return html
 
 	const parsedDocument = new DOMParser().parseFromString(html, "text/html")
 	sanitizeSourceBeforeRender(parsedDocument)
+	const externalStylesheets = await prepareWechatExternalStylesheets(parsedDocument)
 	const renderedSource = createRenderedSourceDocument(parsedDocument.documentElement.outerHTML)
-	if (!renderedSource) return buildWechatClipboardHtmlFromDocument(parsedDocument) || html
+	if (!renderedSource) {
+		injectWechatExternalStylesheets(parsedDocument, externalStylesheets)
+		return buildWechatClipboardHtmlFromDocument(parsedDocument) || html
+	}
 
 	try {
+		injectWechatExternalStylesheets(renderedSource.document, externalStylesheets)
+		await waitForRenderedStyles()
 		return buildWechatClipboardHtmlFromDocument(renderedSource.document) || html
 	} finally {
 		renderedSource.dispose()

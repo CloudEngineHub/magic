@@ -274,7 +274,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		try {
 			const copiedFromPreview = await articleViewRef.current?.copyArticleRichContent()
 			if (!copiedFromPreview) {
-				let html = articleViewRef.current?.getArticleHtml()
+				let html = await articleViewRef.current?.getArticleHtml()
 				if (!html) {
 					const target = await store.ensurePostLoaded(activePostIndex)
 					const fileId = target?.article?.fileId
@@ -284,14 +284,13 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 						attachmentList,
 						attachments,
 					})
-					html = buildWechatClipboardHtmlFromSource(result.content)
+					html = await buildWechatClipboardHtmlFromSource(result.content)
 				}
 				await writeWechatHtmlToClipboard(html)
 			}
 			magicToast.success(t("detail.selfMedia.export.wechat.copySuccess"))
-		} catch (error) {
+		} catch {
 			magicToast.error(t("detail.selfMedia.export.wechat.copyFailed"))
-			throw error
 		} finally {
 			setIsCopyingWechatHtml(false)
 		}
