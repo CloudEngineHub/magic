@@ -1,11 +1,13 @@
-import { Settings, Copyright } from "lucide-react"
+import { Settings, Mail, Copyright } from "lucide-react"
 import { useMemoizedFn } from "ahooks"
 import { toAboutUs } from "@/layouts/BaseLayoutMobile/utils/url"
 import { isMagicApp } from "@/utils/devices"
+import showOnlineFeedbackModal from "@/components/business/OnlineFeedbackModal"
+import { isPrivateDeployment } from "@/utils/env"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { useTranslation } from "react-i18next"
-import MenuButton from "../MenuButton"
+import MenuButton from "@/pages/user/pages/my/components/MenuButton"
 
 export default function SystemSettingsSection() {
 	const { t } = useTranslation("interface")
@@ -19,6 +21,10 @@ export default function SystemSettingsSection() {
 		if (isMagicApp) {
 			toAboutUs()
 		}
+	})
+
+	const handleFeedback = useMemoizedFn(() => {
+		showOnlineFeedbackModal()
 	})
 
 	return (
@@ -42,6 +48,13 @@ export default function SystemSettingsSection() {
 						icon={<Copyright className="size-4" />}
 						label={t("setting.aboutUs")}
 						onClick={handleAboutUs}
+					/>
+				)}
+				{!isPrivateDeployment() && (
+					<MenuButton
+						icon={<Mail className="size-4" />}
+						label={t("sider.onlineFeedback")}
+						onClick={handleFeedback}
 					/>
 				)}
 			</div>

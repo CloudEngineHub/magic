@@ -1,7 +1,7 @@
 import { Upload, type UploadConfig, type UploadCallBack } from "@dtyq/upload-sdk"
 import { RequestMethod as OpenSourceRequestMethod } from "@/apis/constant"
 import { userStore } from "@/models/user"
-import { env, isCommercial } from "@/utils/env"
+import { env } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
 import { logger as Logger } from "@/utils/log"
 import { groupBy } from "lodash-es"
