@@ -75,24 +75,62 @@ The UMD script exposes one global object:
 window.MagicWidget
 ```
 
-| Method            | Signature                                                             | Description                                                                                                       | Boundary                                                             |
-| ----------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `mount`           | `(options: MagicWidget.MountOptions) => void`                         | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists.   |
-| `open`            | `() => void`                                                          | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.          |
-| `close`           | `() => void`                                                          | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
-| `destroy`         | `() => void`                                                          | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
-| `on`              | `on("agent_ready", listener)`<br>`on("preview_fullscreen", listener)` | Subscribes to Agent readiness or preview fullscreen state events and returns an unsubscribe function.             | Each event has a distinct listener signature; see Event API below.   |
-| `setInput`        | `(content: string) => Promise<void>`                                  | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response. |
-| `appendInput`     | `(content: string) => Promise<void>`                                  | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response. |
-| `clearInput`      | `() => Promise<void>`                                                 | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
-| `getInput`        | `() => Promise<string>`                                               | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                              |
-| `sendMessage`     | `(content: string) => Promise<void>`                                  | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.     |
-| `newConversation` | `() => Promise<void>`                                                 | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.   |
-| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>`        | Incrementally updates the current embedded-page configuration.                                                    | Does not change the URL, replace `iframe.src`, or reload the iframe. |
+| Method            | Signature                                                      | Description                                                                                                       | Boundary                                                             |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `mount`           | `(options: MagicWidget.MountOptions) => void`                  | Creates the widget and displays the floating button. Calling `mount` again replaces the previous widget instance. | Must be called in a browser document after `document.body` exists.   |
+| `open`            | `() => void`                                                   | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.          |
+| `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
+| `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
+| `on`              | `on(event, listener)`                                          | Subscribes to Agent readiness, preview state, tool settlement, or task completion events.                         | Each event has a distinct listener signature; see Event API below.   |
+| `setInput`        | `(content: string) => Promise<void>`                           | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response. |
+| `appendInput`     | `(content: string) => Promise<void>`                           | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response. |
+| `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
+| `getInput`        | `() => Promise<string>`                                        | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                              |
+| `sendMessage`     | `(content: string) => Promise<void>`                           | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.     |
+| `newConversation` | `() => Promise<void>`                                          | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.   |
+| `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | Incrementally updates the current embedded-page configuration.                                                    | Does not change the URL, replace `iframe.src`, or reload the iframe. |
 
 The object also exposes `window.MagicWidget.version` for diagnostics.
 
 ### Event API
+
+#### `toolCall.settled`
+
+```ts
+on(event: "toolCall.settled", listener: (event: MagicWidget.ToolCallSettledEvent) => void): () => void
+```
+
+The SDK forwards the complete event whenever Magic Web publishes a tool settlement:
+
+```js
+const unsubscribeTool = window.MagicWidget.on("toolCall.settled", (event) => {
+	// Refresh host state without depending on Magic Web's internal payload shape.
+	void refreshHostToolState(event)
+})
+```
+
+- The SDK only guarantees the event name. Magic Web owns the fields inside `meta` and `payload`, so their structure is intentionally not fixed by the public types.
+- The SDK does not interpret, trim, deduplicate, or reclassify tool events. It forwards exactly what Magic Web publishes.
+- Hosts that consume the current data shape should validate or narrow `event.payload` inside their own business boundary.
+
+#### `task.completed`
+
+```ts
+on(event: "task.completed", listener: (event: MagicWidget.TaskCompletedEvent) => void): () => void
+```
+
+The SDK forwards the complete event whenever Magic Web publishes a task completion:
+
+```js
+const unsubscribeTask = window.MagicWidget.on("task.completed", (event) => {
+	// Refresh host state without depending on Magic Web's internal payload shape.
+	void refreshHostTaskState(event)
+})
+```
+
+The SDK does not define Magic Web's internal completion criteria or interpret result data. Event production and field contents follow Magic Web's current behavior.
+
+Both result events are best-effort browser notifications. They do not replay earlier events or guarantee delivery after Widget destruction, iframe reload, background scheduling, network loss, offline use, or execution on another device. Hosts may update temporary UI or trigger their own data refresh, but must not treat these events as durable business records. The SDK adds no current-topic filter; events actually emitted by Magic Web and observed by the iframe are forwarded directly.
 
 #### `preview_fullscreen`
 
@@ -244,9 +282,9 @@ namespace MagicWidget {
 
 | Field                        | Description                                                    | Boundary                                                                                                                                                                                                            |
 | ---------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. When omitted, responsive layout selection follows the mobile semantics selected by `responsive.mobileDetection` together with legacy mobile-query overrides. |
+| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. SDK embeds default to `mobile`; set `desktop` explicitly when needed.                                                                                         |
 | `shell.appSidebar`           | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                                                                                             |
-| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `device-and-viewport`, combining the existing device `isMobile` result with the iframe breakpoint. Set `viewport` to restore viewport-only detection.                                         |
+| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions.                                             |
 | `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
 | `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
 | `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                                                              |
@@ -268,7 +306,7 @@ await window.MagicWidget.updateConfig({
 })
 ```
 
-`layout` controls which Crew presentation is rendered, while `responsive.mobileDetection` controls device-sensitive interactions used by existing Magic Web components. SDK embeds use `device-and-viewport` by default, so a narrow desktop iframe keeps ordinary Enter as the desktop send behavior. Set the option to `viewport` only when the host intentionally wants legacy viewport-only semantics. Device detection directly reuses Magic Web's existing `utils/devices.ts` `isMobile` result.
+`layout` controls which Crew presentation is rendered, while `responsive.mobileDetection` controls device-sensitive interactions used by existing Magic Web components. SDK embeds default to `layout: "mobile"` and `mobileDetection: "viewport"` to preserve existing mobile host behavior. Hosts that need desktop presentation or desktop interactions inside a narrow PC iframe should explicitly set `layout: "desktop"` or `mobileDetection: "device-and-viewport"`. Device detection directly reuses Magic Web's existing `utils/devices.ts` `isMobile` result.
 
 Initial configuration is encoded in an SDK-owned protected query parameter so the first frame can render the selected layout without a flash. This configuration only becomes active inside a real SDK iframe with matching protected embed metadata.
 

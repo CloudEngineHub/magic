@@ -79,6 +79,29 @@ function dispatchPreviewFullscreen(
 	)
 }
 
+/** Sends one fictional runtime result from the currently mounted iframe. */
+function dispatchRuntimeEvent(
+	iframe: HTMLIFrameElement,
+	frameWindow: Window,
+	origin: string,
+	event: Record<string, unknown>,
+) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "event",
+				event,
+			},
+		}),
+	)
+}
+
 describe("createMagicWidgetController", () => {
 	beforeEach(() => {
 		setViewport(1024, 768)
@@ -146,6 +169,15 @@ describe("createMagicWidgetController", () => {
 		expect(iframe?.getAttribute("src")).toContain("/private-mock/super/crew/crew-001")
 		expect(iframe?.getAttribute("src")).toContain("login-strategy=phone_password")
 		expect(iframe?.getAttribute("src")).toContain("organizationCode=org-001")
+		const initialConfig = JSON.parse(
+			new URL(iframe?.getAttribute("src") ?? "https://widget.example.invalid").searchParams.get(
+				"magicWidgetConfig",
+			) ?? "null",
+		)
+		expect(initialConfig).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
 	})
 
 	it("plays a closing animation before hiding the panel", () => {
@@ -346,6 +378,94 @@ describe("createMagicWidgetController", () => {
 
 		expect(listener).toHaveBeenCalledTimes(1)
 		unsubscribe()
+	})
+
+	it("delivers runtime result events and isolates failing host listeners", () => {
+		const origin = "https://magic-runtime-events.example.invalid"
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const widget = createMagicWidgetController()
+		const target = document.createElement("div")
+		document.body.append(target)
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const toolEvents: unknown[] = []
+		const taskEvents: unknown[] = []
+		const unsubscribeFailing = widget.on("toolCall.settled", () => {
+			throw new Error("mock host listener failure")
+		})
+		const unsubscribeTool = widget.on("toolCall.settled", (event) => toolEvents.push(event))
+		const unsubscribeTask = widget.on("task.completed", (event) => taskEvents.push(event))
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-runtime-events" },
+			target,
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const frameWindow = { postMessage: vi.fn() } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+
+		const toolEvent = {
+			type: "toolCall.settled",
+			meta: {
+				sequence: 4,
+				revision: 1,
+				occurredAt: 1_700_000_000_000,
+				source: "im",
+				topicId: "topic-mock-runtime-events",
+				toolCallId: "tool-mock-runtime-events",
+			},
+			payload: {
+				toolCall: { id: "tool-mock-runtime-events", name: "mock_tool" },
+				response: { status: "finished" },
+				strength: "strong",
+				replaceable: false,
+			},
+		}
+		const taskEvent = {
+			type: "task.completed",
+			meta: {
+				sequence: 5,
+				revision: 1,
+				occurredAt: 1_700_000_000_100,
+				source: "im",
+				topicId: "topic-mock-runtime-events",
+				correlationId: "correlation-mock-runtime-events",
+				appMessageId: "message-mock-runtime-events",
+				taskId: "task-mock-runtime-events",
+			},
+			payload: {
+				source: "finish_task",
+				result: { attachments: [] },
+			},
+		}
+
+		dispatchRuntimeEvent(iframe, frameWindow, origin, toolEvent)
+		dispatchRuntimeEvent(iframe, frameWindow, origin, taskEvent)
+
+		expect(toolEvents).toEqual([toolEvent])
+		expect(taskEvents).toEqual([taskEvent])
+		expect(consoleError).toHaveBeenCalledWith(
+			"Magic widget toolCall.settled listener failed",
+			expect.any(Error),
+		)
+
+		unsubscribeFailing()
+		unsubscribeTool()
+		unsubscribeTask()
+		widget.destroy()
+	})
+
+	it("rejects unsupported event names from JavaScript callers", () => {
+		const widget = createMagicWidgetController()
+		const subscribe = widget.on as unknown as (event: string, listener: () => void) => () => void
+
+		expect(() => subscribe("task.complete", vi.fn())).toThrow(
+			"Magic widget event name is not supported",
+		)
 	})
 
 	it("positions the opened desktop panel over the trigger area", () => {
@@ -701,6 +821,7 @@ describe("createMagicWidgetController", () => {
 		}
 		expect(configMessage.config).toEqual({
 			layout: "desktop",
+			responsive: { mobileDetection: "viewport" },
 			shell: { appSidebar: false },
 			conversation: { projectFiles: false, topicHistory: true },
 		})
@@ -744,7 +865,10 @@ describe("createMagicWidgetController", () => {
 		const updatePromise = widget.updateConfig({ layout: "mobile" })
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
 		const runtimeMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(runtimeMessage.config).toEqual({ layout: "mobile" })
+		expect(runtimeMessage.config).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
 		respondToConfig(frameWindow, origin, runtimeMessage)
 		await expect(updatePromise).resolves.toBeUndefined()
 		postMessage.mockClear()
@@ -753,7 +877,10 @@ describe("createMagicWidgetController", () => {
 		dispatchConfigReady(iframe, frameWindow, origin)
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
 		const reloadMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(reloadMessage.config).toEqual({ layout: "mobile" })
+		expect(reloadMessage.config).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
 		expect(iframe.src).toBe(initialSrc)
 		respondToConfig(frameWindow, origin, reloadMessage)
 		widget.destroy()

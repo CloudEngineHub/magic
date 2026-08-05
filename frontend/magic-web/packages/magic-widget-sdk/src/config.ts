@@ -147,6 +147,19 @@ export function normalizeWidgetConfig(value: unknown): MagicWidget.WidgetConfig 
 	}
 }
 
+/** Applies backward-compatible mobile defaults before the Widget creates its initial iframe. */
+export function resolveInitialWidgetConfig(value: unknown): MagicWidget.WidgetConfig {
+	const normalizedConfig = normalizeWidgetConfig(value)
+	return {
+		layout: "mobile",
+		...normalizedConfig,
+		responsive: {
+			mobileDetection: "viewport",
+			...normalizedConfig.responsive,
+		},
+	}
+}
+
 /** Applies a validated field-level update without mutating the previous snapshot. */
 export function mergeWidgetConfig(
 	current: MagicWidget.WidgetConfig,

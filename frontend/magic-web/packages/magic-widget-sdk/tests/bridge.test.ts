@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { WidgetBridge } from "../src/bridge"
 import { WIDGET_PROTOCOL, WIDGET_PROTOCOL_VERSION } from "../src/protocol"
+import type { MagicWidget } from "../src/types"
 
 const TEST_ORIGIN = "https://magic.example.invalid"
 const TEST_INSTANCE_ID = "widget-mock-instance"
@@ -69,6 +70,27 @@ function dispatchPreviewFullscreen(
 				instanceId: TEST_INSTANCE_ID,
 				type: "ui_state",
 				state: { previewFullscreen: isFullscreen },
+			},
+		}),
+	)
+}
+
+/** Delivers one fictional runtime result through the bound iframe identity. */
+function dispatchRuntimeEvent(
+	iframe: HTMLIFrameElement,
+	event: MagicWidget.RuntimeEvent,
+	options?: { origin?: string; instanceId?: string },
+) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin: options?.origin ?? TEST_ORIGIN,
+			source: iframe.contentWindow,
+			data: {
+				protocol: WIDGET_PROTOCOL,
+				version: WIDGET_PROTOCOL_VERSION,
+				instanceId: options?.instanceId ?? TEST_INSTANCE_ID,
+				type: "event",
+				event,
 			},
 		}),
 	)
@@ -324,5 +346,61 @@ describe("WidgetBridge", () => {
 
 		expect(listener).toHaveBeenNthCalledWith(1, true)
 		expect(listener).toHaveBeenNthCalledWith(2, false)
+	})
+
+	it("forwards only validated runtime result events from the bound iframe", () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const listener = vi.fn()
+		bridge.onRuntimeEvent(listener)
+		const event: MagicWidget.ToolCallSettledEvent = {
+			type: "toolCall.settled",
+			meta: {
+				sequence: 3,
+				revision: 1,
+				occurredAt: 1_700_000_000_000,
+				source: "im",
+				topicId: "topic-mock-bridge",
+				toolCallId: "tool-mock-bridge",
+			},
+			payload: {
+				toolCall: { id: "tool-mock-bridge", name: "mock_tool" },
+				response: { status: "response_missing" },
+				strength: "weak",
+				replaceable: true,
+			},
+		}
+
+		dispatchRuntimeEvent(iframe, event)
+		dispatchRuntimeEvent(iframe, event, {
+			origin: "https://untrusted-widget.example.invalid",
+		})
+		dispatchRuntimeEvent(iframe, event, { instanceId: "widget-wrong-instance" })
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		expect(listener).toHaveBeenCalledWith(event)
+	})
+
+	it("ignores runtime messages whose nested event name is not public", () => {
+		const { iframe } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const listener = vi.fn()
+		bridge.onRuntimeEvent(listener)
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					type: "event",
+					event: { type: "message.stream.delta" },
+				},
+			}),
+		)
+
+		expect(listener).not.toHaveBeenCalled()
 	})
 })

@@ -1,7 +1,30 @@
 import { describe, expect, it } from "vitest"
-import { mergeWidgetConfig, normalizeWidgetConfig } from "../src/config"
+import {
+	mergeWidgetConfig,
+	normalizeWidgetConfig,
+	resolveInitialWidgetConfig,
+} from "../src/config"
 
 describe("Widget config", () => {
+	it("uses the legacy mobile layout and viewport semantics as initial defaults", () => {
+		expect(resolveInitialWidgetConfig(undefined)).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
+	})
+
+	it("keeps explicit initial layout and responsive overrides", () => {
+		expect(
+			resolveInitialWidgetConfig({
+				layout: "desktop",
+				responsive: { mobileDetection: "device-and-viewport" },
+			}),
+		).toEqual({
+			layout: "desktop",
+			responsive: { mobileDetection: "device-and-viewport" },
+		})
+	})
+
 	it("normalizes the supported layout and visibility fields", () => {
 		expect(
 			normalizeWidgetConfig({

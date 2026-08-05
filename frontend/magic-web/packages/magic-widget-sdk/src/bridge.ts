@@ -56,6 +56,7 @@ export class WidgetBridge {
 	private agentReadyListeners = new Set<() => void>()
 	private configReadyListeners = new Set<() => void>()
 	private previewFullscreenListeners = new Set<(isFullscreen: boolean) => void>()
+	private runtimeEventListeners = new Set<(event: MagicWidget.RuntimeEvent) => void>()
 
 	constructor(
 		private readonly iframe: HTMLIFrameElement,
@@ -87,6 +88,12 @@ export class WidgetBridge {
 	onPreviewFullscreenChange(listener: (isFullscreen: boolean) => void): () => void {
 		this.previewFullscreenListeners.add(listener)
 		return () => this.previewFullscreenListeners.delete(listener)
+	}
+
+	/** Registers an internal listener for validated runtime result events. */
+	onRuntimeEvent(listener: (event: MagicWidget.RuntimeEvent) => void): () => void {
+		this.runtimeEventListeners.add(listener)
+		return () => this.runtimeEventListeners.delete(listener)
 	}
 
 	/** Reports whether the current iframe document can receive protocol requests. */
@@ -141,6 +148,17 @@ export class WidgetBridge {
 				listener(isFullscreen)
 			} catch (error) {
 				console.error("Magic widget preview fullscreen listener failed", error)
+			}
+		})
+	}
+
+	/** Delivers one validated result event without allowing a listener failure to stop peers. */
+	private notifyRuntimeEvent(event: MagicWidget.RuntimeEvent): void {
+		this.runtimeEventListeners.forEach((listener) => {
+			try {
+				listener(event)
+			} catch (error) {
+				console.error(`Magic widget ${event.type} listener failed`, error)
 			}
 		})
 	}
@@ -308,6 +326,10 @@ export class WidgetBridge {
 			}
 			return
 		}
+		if (event.data.type === "event") {
+			this.notifyRuntimeEvent(event.data.event)
+			return
+		}
 
 		if (event.data.type !== "response") return
 		const pending = this.pendingRequests.get(event.data.requestId)
@@ -354,5 +376,6 @@ export class WidgetBridge {
 		this.agentReadyListeners.clear()
 		this.configReadyListeners.clear()
 		this.previewFullscreenListeners.clear()
+		this.runtimeEventListeners.clear()
 	}
 }

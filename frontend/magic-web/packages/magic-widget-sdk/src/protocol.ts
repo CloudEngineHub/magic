@@ -75,6 +75,15 @@ export interface WidgetUiCommandMessage {
 	command: "dismiss_preview"
 }
 
+/** Carries one validated SuperMagic runtime result from the iframe to its host. */
+export interface WidgetRuntimeEventMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	type: "event"
+	event: MagicWidget.RuntimeEvent
+}
+
 export type WidgetProtocolMessage =
 	| WidgetReadyMessage
 	| WidgetCommandMessage
@@ -82,22 +91,34 @@ export type WidgetProtocolMessage =
 	| WidgetConfigReadyMessage
 	| WidgetUiStateMessage
 	| WidgetUiCommandMessage
+	| WidgetRuntimeEventMessage
 	| WidgetResponseMessage
+
+/** Checks the minimal discriminated shape before the bridge exposes a runtime result. */
+function isRuntimeEvent(value: unknown): value is MagicWidget.RuntimeEvent {
+	if (!value || typeof value !== "object") return false
+	const event = value as Record<string, unknown>
+	return event.type === "toolCall.settled" || event.type === "task.completed"
+}
 
 /** Checks the stable envelope before either side consumes a cross-window message. */
 export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocolMessage {
 	if (!value || typeof value !== "object") return false
 	const message = value as Record<string, unknown>
+	const isKnownType =
+		message.type === "ready" ||
+		message.type === "command" ||
+		message.type === "config" ||
+		message.type === "config_ready" ||
+		message.type === "ui_state" ||
+		message.type === "ui_command" ||
+		message.type === "response" ||
+		(message.type === "event" && isRuntimeEvent(message.event))
+
 	return (
 		message.protocol === WIDGET_PROTOCOL &&
 		message.version === WIDGET_PROTOCOL_VERSION &&
 		typeof message.instanceId === "string" &&
-		(message.type === "ready" ||
-			message.type === "command" ||
-			message.type === "config" ||
-			message.type === "config_ready" ||
-			message.type === "ui_state" ||
-			message.type === "ui_command" ||
-			message.type === "response")
+		isKnownType
 	)
 }

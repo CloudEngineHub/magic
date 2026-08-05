@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react"
 import type { JSONContent } from "@tiptap/react"
 import { useMemoizedFn } from "ahooks"
+import { isObservable, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { SuperMagicWidgetEditorCommandName } from "@/pages/superMagic/events/message"
+import { superMagicStore } from "@/pages/superMagic/stores"
+import type { TaskCompletedEvent, ToolCallSettledEvent } from "@/pages/superMagic/stores"
 
 const PROTOCOL = "magic-widget"
 const VERSION = 1
@@ -47,6 +50,26 @@ function createTextContent(content: string): JSONContent {
 		type: "doc",
 		content: [{ type: "paragraph", content: [{ type: "text", text: content }] }],
 	}
+}
+
+/** Converts observable event branches into plain values accepted by structured cloning. */
+function createCloneableRuntimeValue(value: unknown): unknown {
+	if (!value || typeof value !== "object") return value
+
+	const snapshot = isObservable(value) ? toJS(value) : value
+	if (Array.isArray(snapshot)) {
+		return snapshot.map((item) => createCloneableRuntimeValue(item))
+	}
+
+	const prototype = Object.getPrototypeOf(snapshot)
+	if (prototype !== Object.prototype && prototype !== null) return snapshot
+
+	return Object.fromEntries(
+		Object.entries(snapshot as Record<string, unknown>).map(([key, item]) => [
+			key,
+			createCloneableRuntimeValue(item),
+		]),
+	)
 }
 
 /** Bridges approved Widget commands into the Crew editor and conversation store. */
@@ -147,6 +170,29 @@ export function useMagicWidgetBridge({
 	useEffect(() => {
 		if (!context || window.parent === window) return
 		const targetOrigin = context.hostOrigin
+
+		/** Forwards one Store result without adding topic filters or changing its payload. */
+		const forwardRuntimeEvent = (event: ToolCallSettledEvent | TaskCompletedEvent) => {
+			const cloneableEvent = createCloneableRuntimeValue(event)
+			window.parent.postMessage(
+				{
+					protocol: PROTOCOL,
+					version: VERSION,
+					instanceId: context.instanceId,
+					type: "event",
+					event: cloneableEvent,
+				},
+				targetOrigin,
+			)
+		}
+		const unsubscribeToolCallSettled = superMagicStore.subscribe(
+			"toolCall.settled",
+			forwardRuntimeEvent,
+		)
+		const unsubscribeTaskCompleted = superMagicStore.subscribe(
+			"task.completed",
+			forwardRuntimeEvent,
+		)
 
 		/** Sends one correlated response back to the bound host window. */
 		const respond = (
@@ -251,7 +297,11 @@ export function useMagicWidgetBridge({
 		}
 
 		window.addEventListener("message", handleMessage)
-		return () => window.removeEventListener("message", handleMessage)
+		return () => {
+			window.removeEventListener("message", handleMessage)
+			unsubscribeToolCallSettled()
+			unsubscribeTaskCompleted()
+		}
 	}, [context, createNewConversation, executeEditorCommand, waitForAgentReadyAfter])
 
 	useEffect(() => {

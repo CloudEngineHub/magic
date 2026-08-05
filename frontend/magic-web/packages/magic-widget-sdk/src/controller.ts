@@ -3,7 +3,7 @@ import type { MagicWidget } from "./types"
 import { getWidgetScriptOrigin } from "./scriptOrigin"
 import { buildWidgetIframeUrl, validateWidgetMountOptions } from "./url"
 import { WidgetBridge, createWidgetCommandError, createWidgetId } from "./bridge"
-import { mergeWidgetConfig, normalizeWidgetConfig } from "./config"
+import { mergeWidgetConfig, resolveInitialWidgetConfig } from "./config"
 
 const ROOT_ATTRIBUTE = "data-magic-widget-root"
 const TRIGGER_ATTRIBUTE = "data-magic-widget-trigger"
@@ -194,6 +194,8 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let lifecycleId = 0
 	const agentReadyListeners = new Set<MagicWidget.AgentReadyEventListener>()
 	const previewFullscreenListeners = new Set<MagicWidget.PreviewFullscreenEventListener>()
+	const toolCallSettledListeners = new Set<MagicWidget.RuntimeEventListener<"toolCall.settled">>()
+	const taskCompletedListeners = new Set<MagicWidget.RuntimeEventListener<"task.completed">>()
 
 	/** Notifies host subscribers whenever the current iframe editor becomes usable. */
 	const notifyAgentReady = () => {
@@ -202,6 +204,28 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 				listener()
 			} catch (error) {
 				console.error("Magic widget agent_ready listener failed", error)
+			}
+		})
+	}
+
+	/** Routes one validated result event to host listeners registered for its exact type. */
+	const notifyRuntimeEvent = (event: MagicWidget.RuntimeEvent) => {
+		if (event.type === "toolCall.settled") {
+			toolCallSettledListeners.forEach((listener) => {
+				try {
+					listener(event)
+				} catch (error) {
+					console.error("Magic widget toolCall.settled listener failed", error)
+				}
+			})
+			return
+		}
+
+		taskCompletedListeners.forEach((listener) => {
+			try {
+				listener(event)
+			} catch (error) {
+				console.error("Magic widget task.completed listener failed", error)
 			}
 		})
 	}
@@ -618,10 +642,14 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		return bridge.send(command)
 	}
 
-	/** Subscribes to public lifecycle and preview state events. */
+	/** Subscribes to public lifecycle, UI state, and runtime result events. */
 	const on = (
-		event: "agent_ready" | "preview_fullscreen",
-		listener: MagicWidget.AgentReadyEventListener | MagicWidget.PreviewFullscreenEventListener,
+		event: MagicWidget.EventName,
+		listener:
+			| MagicWidget.AgentReadyEventListener
+			| MagicWidget.PreviewFullscreenEventListener
+			| MagicWidget.RuntimeEventListener<"toolCall.settled">
+			| MagicWidget.RuntimeEventListener<"task.completed">,
 	) => {
 		if (typeof listener !== "function") {
 			throw new TypeError("Magic widget event listener must be a function")
@@ -632,11 +660,25 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 				window.queueMicrotask(listener as MagicWidget.AgentReadyEventListener)
 			return () => agentReadyListeners.delete(listener as MagicWidget.AgentReadyEventListener)
 		}
-		const previewListener = listener as MagicWidget.PreviewFullscreenEventListener
-		previewFullscreenListeners.add(previewListener)
-		// Replay the current preview state synchronously so hosts can apply layout before the next paint.
-		previewListener(previewFullscreen)
-		return () => previewFullscreenListeners.delete(previewListener)
+		if (event === "preview_fullscreen") {
+			const previewListener = listener as MagicWidget.PreviewFullscreenEventListener
+			previewFullscreenListeners.add(previewListener)
+			// Replay the current preview state synchronously so hosts can apply layout before the next paint.
+			previewListener(previewFullscreen)
+			return () => previewFullscreenListeners.delete(previewListener)
+		}
+		if (event === "toolCall.settled") {
+			const runtimeListener = listener as MagicWidget.RuntimeEventListener<"toolCall.settled">
+			toolCallSettledListeners.add(runtimeListener)
+			return () => toolCallSettledListeners.delete(runtimeListener)
+		}
+		if (event === "task.completed") {
+			const runtimeListener = listener as MagicWidget.RuntimeEventListener<"task.completed">
+			taskCompletedListeners.add(runtimeListener)
+			return () => taskCompletedListeners.delete(runtimeListener)
+		}
+
+		throw new TypeError("Magic widget event name is not supported")
 	}
 
 	/** Applies one serialized configuration update while preserving iframe and conversation state. */
@@ -686,7 +728,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	const mount = (nextOptions: MagicWidget.MountOptions) => {
 		requireDocument()
 		validateWidgetMountOptions(nextOptions)
-		const initialConfig = normalizeWidgetConfig(nextOptions.config)
+		const initialConfig = resolveInitialWidgetConfig(nextOptions.config)
 		destroy()
 		if (
 			nextOptions.target &&
@@ -811,6 +853,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
 		bridge.onAgentReady(notifyAgentReady)
 		bridge.onPreviewFullscreenChange(setPreviewFullscreen)
+		bridge.onRuntimeEvent(notifyRuntimeEvent)
 		bridge.onConfigReady(() => {
 			if (!bridge || !options) return
 			const loadLifecycleId = lifecycleId

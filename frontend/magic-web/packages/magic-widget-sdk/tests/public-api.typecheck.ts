@@ -58,6 +58,26 @@ const unsubscribePreviewFullscreen = window.MagicWidget?.on(
 	},
 )
 void unsubscribePreviewFullscreen
+
+const unsubscribeToolCallSettled = window.MagicWidget?.on("toolCall.settled", (event) => {
+	const eventType: "toolCall.settled" = event.type
+	const meta: Record<string, unknown> = event.meta
+	const payload: unknown = event.payload
+	void eventType
+	void meta
+	void payload
+})
+void unsubscribeToolCallSettled
+
+const unsubscribeTaskCompleted = window.MagicWidget?.on("task.completed", (event) => {
+	const eventType: "task.completed" = event.type
+	const meta: Record<string, unknown> = event.meta
+	const payload: unknown = event.payload
+	void eventType
+	void meta
+	void payload
+})
+void unsubscribeTaskCompleted
 void window.MagicWidget?.setInput("mock input")
 void window.MagicWidget?.appendInput("mock suffix")
 void window.MagicWidget?.clearInput()
