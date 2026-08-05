@@ -1513,17 +1513,11 @@ export interface CanvasDesignMethods {
 	 * Resolve paths, attachment nodes, storage values, and resource identities through the
 	 * host's authoritative namespace-aware resource model.
 	 */
-	resolveResourceReference?: ResolveCanvasResourceReference
+	resolveResourceReference: ResolveCanvasResourceReference
 	/** Resolver 与语义 revision 的原子快照；Canvas 运行时优先使用此入口。 */
 	resourceReferenceResolverSnapshot?: CanvasResourceReferenceResolverSnapshot
 	/** @deprecated 兼容旧宿主；新实现应通过 resourceReferenceResolverSnapshot 提供 revision。 */
 	resourceReferenceResolverVersion?: string
-	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
-	resolveAbsolutePath: (path: string) => string
-	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
-	resolveResourcePathCandidates?: (path: string) => string[]
-	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
-	normalizeResourcePathForStorage?: (path: string) => string
 	/**
 	 * 获取画布虚拟媒体资源的宿主 scope，用于在同源虚拟链接中隔离工作区/项目上下文。
 	 * @returns 例如：/global/super/{workspaceId}/{projectId}

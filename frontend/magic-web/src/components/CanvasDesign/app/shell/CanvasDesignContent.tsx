@@ -204,10 +204,13 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [getDevice, canvas])
 
 	useUpdateEffect(() => {
-		canvas?.magicConfigManager.update({
+		const updateResult = canvas?.magicConfigManager.update({
 			methods: methods,
 			permissions: permissions,
 		})
+		if (updateResult?.resourceReferenceResolverChanged) {
+			canvas?.handleResourceReferenceResolverChanged()
+		}
 		canvas?.invalidateMagicModelListCaches()
 	}, [methods, permissions, canvas, t])
 

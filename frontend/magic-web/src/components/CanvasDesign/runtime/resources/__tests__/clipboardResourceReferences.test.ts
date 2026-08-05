@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import type { FrameElement, ImageElement, VideoElement } from "../../document/types"
 import { ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import {
+	addClipboardResourceAliasMappings,
 	collectElementResourceReferences,
 	rewriteElementResourceReferences,
 } from "../clipboard/clipboardResourceReferences"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
 describe("clipboardResourceReferences", () => {
 	it("collects resource references recursively and skips remote paths", () => {
@@ -19,7 +21,7 @@ describe("clipboardResourceReferences", () => {
 			},
 			imageGenerationTaskMeta: {
 				type: ImageGenerationTaskTypeMap.Eraser,
-				file_path: "images/visible.png",
+				file_path: "./images/visible.png",
 				mask_path: "source/mask.png",
 				mark_path: "data:image/png;base64,aaaa",
 			},
@@ -50,8 +52,7 @@ describe("clipboardResourceReferences", () => {
 			})),
 		).toEqual([
 			{ path: "source/ref.png", isSelfReferenceOnly: false },
-			{ path: "images/visible.png", isSelfReferenceOnly: true },
-			{ path: "source/mask.png", isSelfReferenceOnly: false },
+			{ path: "./images/visible.png", isSelfReferenceOnly: true },
 			{ path: "source/start.png", isSelfReferenceOnly: false },
 			{ path: "source/ref.mp4", isSelfReferenceOnly: false },
 			{ path: "source/video.mp4", isSelfReferenceOnly: true },
@@ -73,6 +74,8 @@ describe("clipboardResourceReferences", () => {
 				type: ImageGenerationTaskTypeMap.Expand,
 				file_path: "source/base.png",
 				canvas_path: "source/canvas.png",
+				mask_path: "source/mask.png",
+				mark_path: "source/mark.png",
 			},
 		}
 
@@ -82,6 +85,8 @@ describe("clipboardResourceReferences", () => {
 				["source/ref.png", "target/ref.png"],
 				["source/base.png", "target/base.png"],
 				["source/canvas.png", "target/canvas.png"],
+				["source/mask.png", "target/mask.png"],
+				["source/mark.png", "target/mark.png"],
 			]),
 		)
 
@@ -96,8 +101,80 @@ describe("clipboardResourceReferences", () => {
 		expect(image.imageGenerationTaskMeta).toEqual(
 			expect.objectContaining({
 				file_path: "target/base.png",
-				canvas_path: "target/canvas.png",
+				canvas_path: "source/canvas.png",
+				mask_path: "source/mask.png",
+				mark_path: "source/mark.png",
 			}),
 		)
+	})
+
+	it("dedupes and rewrites aliases without crossing workspace roots", () => {
+		const resolveResourceReference = createTestResourceReferenceResolver()
+		const image: ImageElement = {
+			id: "image-1",
+			type: "image",
+			src: "./images/owner.png",
+			generateImageRequest: {
+				reference_images: ["./images/x.png", "/画布A/images/x.png", "/images/x.png"],
+			},
+		}
+
+		expect(collectElementResourceReferences([image], resolveResourceReference)).toEqual([
+			{
+				path: "./images/x.png",
+				identity: "workspace:/画布A/images/x.png",
+				aliases: ["./images/x.png", "/画布A/images/x.png"],
+				isSelfReferenceOnly: false,
+			},
+			{
+				path: "/images/x.png",
+				identity: "workspace:/images/x.png",
+				aliases: ["/images/x.png"],
+				isSelfReferenceOnly: false,
+			},
+		])
+
+		rewriteElementResourceReferences(
+			image,
+			new Map([["./images/x.png", "./images/copied.png"]]),
+			resolveResourceReference,
+		)
+
+		expect(image.generateImageRequest?.reference_images).toEqual([
+			"./images/copied.png",
+			"./images/copied.png",
+			"/images/x.png",
+		])
+	})
+
+	it("rewrites source-canvas aliases without interpreting them through the target resolver", () => {
+		const sourceResolver = createTestResourceReferenceResolver({
+			currentCanvasWorkspacePath: "/画布A",
+		})
+		const targetResolver = createTestResourceReferenceResolver({
+			currentCanvasWorkspacePath: "/画布B",
+		})
+		const image: ImageElement = {
+			id: "image-1",
+			type: "image",
+			generateImageRequest: {
+				reference_images: ["./images/x.png", "/画布A/images/x.png"],
+			},
+		}
+		const [reference] = collectElementResourceReferences([image], sourceResolver)
+		const pathMap = new Map<string, string>()
+		addClipboardResourceAliasMappings(
+			pathMap,
+			reference.path,
+			reference.aliases,
+			"./images/copied.png",
+		)
+
+		rewriteElementResourceReferences(image, pathMap, targetResolver)
+
+		expect(image.generateImageRequest?.reference_images).toEqual([
+			"./images/copied.png",
+			"./images/copied.png",
+		])
 	})
 })

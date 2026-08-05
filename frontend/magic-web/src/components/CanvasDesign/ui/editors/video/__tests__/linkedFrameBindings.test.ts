@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	reconcileLinkedFrameBindings,
 	synchronizeLinkedFrameBindings,
 } from "../linkedFrameBindings"
 import type { LinkedFrameBinding } from "../video-editor-config.types"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 function createBinding(framePath: string, frameRole: "start" | "end"): LinkedFrameBinding {
 	return {
@@ -54,9 +57,10 @@ describe("reconcileLinkedFrameBindings", () => {
 
 		const result = reconcileLinkedFrameBindings({
 			previous,
-			currentFrameImages: ["/images/start.png"],
+			currentFrameImages: ["/画布A/images/start.png"],
 			supportsStartFrame: true,
 			supportsEndFrame: false,
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result).toBe(previous)
@@ -194,17 +198,18 @@ describe("synchronizeLinkedFrameBindings", () => {
 		const previous = [startBinding]
 		const result = synchronizeLinkedFrameBindings({
 			previous,
-			currentFrameImages: ["/images/start.png"],
+			currentFrameImages: ["/画布A/images/start.png"],
 			supportsStartFrame: true,
 			supportsEndFrame: false,
 			linkedMediaItems: [
 				{
 					connectionId: startBinding.sourceConnectionId,
 					kind: "image",
-					path: "images/start.png",
+					path: "/画布A/images/start.png",
 					fileName: startBinding.sourceFileName,
 				},
 			],
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.bindings).toBe(previous)

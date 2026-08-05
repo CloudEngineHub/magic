@@ -4,6 +4,7 @@ import type { LinkedEditorMediaPolicy, LinkedEditorTargetKind } from "./linkedEd
 import { useLinkedEditorInputs } from "./useLinkedEditorInputs"
 import { useLinkedMediaMentionSelection } from "./useLinkedMediaMentionSelection"
 import { reconcileMentionPathsWithPersistedReferences } from "../message/mentionPathReconciliation"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 interface UseLinkedMediaAssociationControllerOptions {
 	targetElementId: string
@@ -15,7 +16,7 @@ interface UseLinkedMediaAssociationControllerOptions {
 		currentPrompt: string,
 		context: MessageEditorMentionChangeContext,
 	) => void
-	resolveAbsolutePath?: (path: string) => string
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 /** 图片与视频编辑器共用的 mention 驱动关联媒体 controller。 */
@@ -28,7 +29,7 @@ export function useLinkedMediaAssociationController(
 		mediaPolicy,
 		editorRef,
 		onReadyMentionChange,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	} = options
 	const [mentionedReferencePaths, setMentionedReferencePaths] = useState<string[]>([])
 	const pendingSyncRef = useRef<{ revision: number; token: number } | null>(null)
@@ -45,7 +46,7 @@ export function useLinkedMediaAssociationController(
 		mentionedReferencePaths,
 		canSelectMediaConnection: linkedEditorInputs.canSelectMediaConnection,
 		editorRef,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	})
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
@@ -75,13 +76,13 @@ export function useLinkedMediaAssociationController(
 				incomingPaths: paths,
 				persistedPaths,
 				source: context.source,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			})
 			setMentionedReferencePaths(reconciledPaths)
 			onReadyMentionChange?.(reconciledPaths, currentPrompt, context)
 			return true
 		},
-		[mediaPolicy?.manualReferences, onReadyMentionChange, resolveAbsolutePath],
+		[mediaPolicy?.manualReferences, onReadyMentionChange, resolveResourceReference],
 	)
 
 	return {

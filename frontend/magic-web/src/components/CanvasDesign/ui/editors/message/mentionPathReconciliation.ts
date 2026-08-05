@@ -1,27 +1,30 @@
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import type { MessageEditorMentionChangeContext } from "./MessageEditor"
 
 interface ReconcileMentionPathsOptions {
 	incomingPaths: string[]
 	persistedPaths: string[]
 	source: MessageEditorMentionChangeContext["source"]
-	resolveAbsolutePath?: (path: string) => string
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 /**
  * MessageEditor 从纯文本恢复 mention 时只能看到文件名，无法可靠区分同名资源。
- * sync 来源因此以已经持久化的引用为准；用户显式编辑仍直接采用编辑器给出的路径。
+ * sync 来源因此只能校正已经解析出的 mention，不能用暂时的空快照删除持久化引用；
+ * 用户显式编辑仍直接采用编辑器给出的路径，包括删除全部引用。
  */
 export function reconcileMentionPathsWithPersistedReferences(
 	options: ReconcileMentionPathsOptions,
 ): string[] {
-	const { incomingPaths, persistedPaths, source, resolveAbsolutePath } = options
-	if (source !== "sync" || incomingPaths.length === 0 || persistedPaths.length === 0) {
+	const { incomingPaths, persistedPaths, source, resolveResourceReference } = options
+	if (source !== "sync" || persistedPaths.length === 0) {
 		return incomingPaths
 	}
+	if (incomingPaths.length === 0) return [...persistedPaths]
 
 	const incomingIndexesByFileName = new Map<string, number[]>()
 	incomingPaths.forEach((path, index) => {
@@ -38,7 +41,7 @@ export function reconcileMentionPathsWithPersistedReferences(
 		const fileName = getCanvasResourceFileName(path)
 		if (!fileName || !incomingIndexesByFileName.has(fileName)) return
 
-		const identity = getCanvasResourceIdentity(path, resolveAbsolutePath)
+		const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 		const identities = persistedIdentitiesByFileName.get(fileName) ?? new Set<string>()
 		if (identity && identities.has(identity)) return
 
@@ -57,14 +60,14 @@ export function reconcileMentionPathsWithPersistedReferences(
 		const selectedPaths = currentPaths.slice(0, incomingIndexes.length)
 		const selectedIdentities = new Set(
 			selectedPaths
-				.map((path) => getCanvasResourceIdentity(path, resolveAbsolutePath))
+				.map((path) => getCanvasResourceReferenceIdentity(path, resolveResourceReference))
 				.filter(Boolean),
 		)
 		const incomingGroupPaths = incomingIndexes.map((index) => incomingPaths[index])
 
 		for (const path of incomingGroupPaths) {
 			if (selectedPaths.length >= incomingIndexes.length) break
-			const identity = getCanvasResourceIdentity(path, resolveAbsolutePath)
+			const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 			if (identity && selectedIdentities.has(identity)) continue
 			selectedPaths.push(path)
 			if (identity) selectedIdentities.add(identity)

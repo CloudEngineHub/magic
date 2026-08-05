@@ -13,9 +13,9 @@ import type {
 } from "../../../public/magic-types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import {
-	areCanvasResourcePathsSame,
+	areCanvasResourceReferencesSame,
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { useFileInput } from "../message/useFileInput"
 import { removeMentionFromString } from "../message/tiptap/contentUtils"
@@ -134,7 +134,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const { t } = useCanvasDesignI18n()
 	const { videoModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
-	const resolveAbsolutePath = methods?.resolveAbsolutePath
+	const resolveResourceReference = methods?.resolveResourceReference
 
 	const [selectedModelId, setSelectedModelId] = useState("")
 	const [selectedInputMode, setSelectedInputMode] = useState<VideoInputMode>("standard")
@@ -461,10 +461,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const updateProtectedReferencePaths = useCallback(
 		(nextPaths: string[]) => {
 			setProtectedReferencePaths((prev) => {
-				return areOrderedPathsEqual(prev, nextPaths, resolveAbsolutePath) ? prev : nextPaths
+				return areOrderedPathsEqual(prev, nextPaths, resolveResourceReference)
+					? prev
+					: nextPaths
 			})
 		},
-		[resolveAbsolutePath],
+		[resolveResourceReference],
 	)
 	const applyBindingStateFromPromptAndReferences = useCallback(
 		(nextPrompt: string, nextReferenceInfos: VideoReferenceAssetInfo[]) => {
@@ -472,12 +474,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				prompt: nextPrompt,
 				referenceFileInfos: nextReferenceInfos,
 				tokenConfig: promptPlaceholderTokenConfig,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			})
 			updateProtectedReferencePaths(bindingState.protectedReferencePaths)
 			return bindingState
 		},
-		[promptPlaceholderTokenConfig, resolveAbsolutePath, updateProtectedReferencePaths],
+		[promptPlaceholderTokenConfig, resolveResourceReference, updateProtectedReferencePaths],
 	)
 	const referenceBindingMode = useMemo<ReferenceBindingMode>(() => {
 		const protectedCount = protectedReferencePaths.length
@@ -727,10 +729,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (
 				Boolean(
 					previousInfo?.path &&
-					areCanvasResourcePathsSame(
+					areCanvasResourceReferencesSame(
 						previousInfo.path,
 						fileInfo.path,
-						resolveAbsolutePath,
+						resolveResourceReference,
 					),
 				) ||
 				frameImageInfos.some(
@@ -738,10 +740,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 						index !== slotIndex &&
 						Boolean(
 							info?.path &&
-							areCanvasResourcePathsSame(
+							areCanvasResourceReferencesSame(
 								info.path,
 								fileInfo.path,
-								resolveAbsolutePath,
+								resolveResourceReference,
 							),
 						),
 				)
@@ -768,7 +770,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				resetSelectedResourceSlot()
 			}
 		},
-		[frameImageInfos, resetSelectedResourceSlot, resolveAbsolutePath],
+		[frameImageInfos, resetSelectedResourceSlot, resolveResourceReference],
 	)
 
 	const replaceReferenceImageAt = useCallback(
@@ -798,16 +800,20 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (
 				Boolean(
 					previousInfo?.path &&
-					areCanvasResourcePathsSame(
+					areCanvasResourceReferencesSame(
 						previousInfo.path,
 						fileInfo.path,
-						resolveAbsolutePath,
+						resolveResourceReference,
 					),
 				) ||
 				referenceImageInfos.some(
 					(info, index) =>
 						index !== slotIndex &&
-						areCanvasResourcePathsSame(info.path, fileInfo.path, resolveAbsolutePath),
+						areCanvasResourceReferencesSame(
+							info.path,
+							fileInfo.path,
+							resolveResourceReference,
+						),
 				)
 			) {
 				if (!options?.retainResourceSlot) {
@@ -824,7 +830,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			}
 			const deduped = referenceImageInfos.filter(
 				(info) =>
-					!areCanvasResourcePathsSame(info.path, fileInfo.path, resolveAbsolutePath),
+					!areCanvasResourceReferencesSame(
+						info.path,
+						fileInfo.path,
+						resolveResourceReference,
+					),
 			)
 			const nextInfos = [...deduped]
 			const shouldReplaceExisting =
@@ -845,7 +855,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const nextProtectedReferencePaths =
 				shouldReplaceExisting && previousInfo?.path
 					? protectedReferencePaths.map((path) =>
-							areCanvasResourcePathsSame(path, previousInfo.path, resolveAbsolutePath)
+							areCanvasResourceReferencesSame(
+								path,
+								previousInfo.path,
+								resolveResourceReference,
+							)
 								? normalizedFileInfo.path
 								: path,
 						)
@@ -854,12 +868,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				pruneProtectedReferencePaths(
 					limitedInfos.map((info) => info.path),
 					nextProtectedReferencePaths,
-					resolveAbsolutePath,
+					resolveResourceReference,
 				),
 			)
 			if (shouldReplaceExisting && previousInfo?.path) {
 				messageEditorRef?.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(previousInfo.path, resolveAbsolutePath),
+					createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
 					createReferenceResourcePanelItemFromPath(
 						normalizedFileInfo.path,
 						normalizedFileInfo.fileName,
@@ -869,10 +883,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (
 				!shouldReplaceExisting &&
 				limitedInfos.some((info) =>
-					areCanvasResourcePathsSame(
+					areCanvasResourceReferencesSame(
 						info.path,
 						normalizedFileInfo.path,
-						resolveAbsolutePath,
+						resolveResourceReference,
 					),
 				)
 			) {
@@ -891,7 +905,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			currentInputModeConfig,
 			referenceImageInfos,
 			protectedReferencePaths,
-			resolveAbsolutePath,
+			resolveResourceReference,
 			updateProtectedReferencePaths,
 			messageEditorRef,
 		],
@@ -1091,13 +1105,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (referenceImageInfos.length > nextReferenceMaxCount) {
 				const retainedPathIdentities = new Set(
 					limitedReferenceInfos.map((info) =>
-						getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+						getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 					),
 				)
 				const removedInfos = referenceImageInfos.filter(
 					(info) =>
 						!retainedPathIdentities.has(
-							getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+							getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 						),
 				)
 				setReferenceImageInfos(limitedReferenceInfos)
@@ -1105,7 +1119,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					pruneProtectedReferencePaths(
 						limitedReferenceInfos.map((info) => info.path),
 						protectedReferencePaths,
-						resolveAbsolutePath,
+						resolveResourceReference,
 					),
 				)
 				setPrompt((currentPrompt) => {
@@ -1119,7 +1133,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					pruneProtectedReferencePaths(
 						limitedReferenceInfos.map((info) => info.path),
 						protectedReferencePaths,
-						resolveAbsolutePath,
+						resolveResourceReference,
 					),
 				)
 			}
@@ -1127,7 +1141,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[
 			modelOptions,
 			referenceImageInfos,
-			resolveAbsolutePath,
+			resolveResourceReference,
 			updateVideoElementSize,
 			selectedResolution,
 			selectedAspectRatio,
@@ -1252,7 +1266,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (!supportsReferenceAssets) return
 			const uniquePathByIdentity = new Map<string, string>()
 			paths.forEach((path) => {
-				const identity = getCanvasResourceIdentity(path, resolveAbsolutePath)
+				const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 				if (identity && !uniquePathByIdentity.has(identity)) {
 					uniquePathByIdentity.set(identity, path)
 				}
@@ -1261,17 +1275,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const nextProtectedPaths = unprotectPromptBoundReferencePaths(
 				protectedReferencePaths,
 				uniquePaths,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			)
 			updateProtectedReferencePaths(nextProtectedPaths)
 			const nextProtectedPathIdentities = new Set(
 				nextProtectedPaths.map((path) =>
-					getCanvasResourceIdentity(path, resolveAbsolutePath),
+					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
 				),
 			)
 			const protectedInfos = referenceImageInfos.filter((info) =>
 				nextProtectedPathIdentities.has(
-					getCanvasResourceIdentity(info.path, resolveAbsolutePath),
+					getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 				),
 			)
 			const sourcePaths = [
@@ -1279,14 +1293,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				...uniquePaths.filter(
 					(path) =>
 						!nextProtectedPathIdentities.has(
-							getCanvasResourceIdentity(path, resolveAbsolutePath),
+							getCanvasResourceReferenceIdentity(path, resolveResourceReference),
 						),
 				),
 			]
 			const nextInfos = sourcePaths
 				.map((path) => {
 					const protectedInfo = protectedInfos.find((info) =>
-						areCanvasResourcePathsSame(info.path, path, resolveAbsolutePath),
+						areCanvasResourceReferencesSame(info.path, path, resolveResourceReference),
 					)
 					if (protectedInfo) return protectedInfo
 					const assetType = resolveReferenceAssetType(path)
@@ -1295,7 +1309,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					const matchedItem = matchableItems.find((item) =>
 						Boolean(
 							item.path &&
-							areCanvasResourcePathsSame(item.path, path, resolveAbsolutePath),
+							areCanvasResourceReferencesSame(
+								item.path,
+								path,
+								resolveResourceReference,
+							),
 						),
 					)
 					return {
@@ -1329,7 +1347,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			resetSelectedResourceSlot,
 			protectedReferencePaths,
 			referenceImageInfos,
-			resolveAbsolutePath,
+			resolveResourceReference,
 			updateProtectedReferencePaths,
 		],
 	)
@@ -1372,20 +1390,25 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				popoverCloseTimeoutRef.current = null
 			}
 			const removedInfo = referenceImageInfos.find((info) =>
-				areCanvasResourcePathsSame(info.path, path, resolveAbsolutePath),
+				areCanvasResourceReferencesSame(info.path, path, resolveResourceReference),
 			)
 			setPrompt((currentPrompt) =>
 				removeMentionFromString(currentPrompt, path, removedInfo?.fileName),
 			)
 			setReferenceImageInfos((prev) =>
 				prev.filter(
-					(info) => !areCanvasResourcePathsSame(info.path, path, resolveAbsolutePath),
+					(info) =>
+						!areCanvasResourceReferencesSame(info.path, path, resolveResourceReference),
 				),
 			)
 			updateProtectedReferencePaths(
 				protectedReferencePaths.filter(
 					(protectedPath) =>
-						!areCanvasResourcePathsSame(protectedPath, path, resolveAbsolutePath),
+						!areCanvasResourceReferencesSame(
+							protectedPath,
+							path,
+							resolveResourceReference,
+						),
 				),
 			)
 			setTimeout(() => {
@@ -1395,7 +1418,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[
 			protectedReferencePaths,
 			referenceImageInfos,
-			resolveAbsolutePath,
+			resolveResourceReference,
 			updateProtectedReferencePaths,
 		],
 	)
@@ -1818,13 +1841,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			pruneProtectedReferencePaths(
 				currentReferenceImages,
 				protectedReferencePaths,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			),
 		)
 	}, [
 		currentReferenceImages,
 		protectedReferencePaths,
-		resolveAbsolutePath,
+		resolveResourceReference,
 		updateProtectedReferencePaths,
 	])
 

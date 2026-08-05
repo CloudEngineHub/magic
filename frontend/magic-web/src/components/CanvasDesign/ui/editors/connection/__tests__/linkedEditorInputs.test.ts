@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Canvas } from "../../../../runtime/core/Canvas"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	type CanvasConnection,
 	ElementTypeEnum,
@@ -13,7 +14,6 @@ import {
 	createLinkedUpstreamSourceId,
 	dedupeLinkedMediaItemsByPath,
 	getLinkedMediaReferenceIdentity,
-	mergeLinkedMediaPaths,
 	mergeLinkedMediaPathsWithResolver,
 	mergeLinkedMediaReferences,
 	resolveLinkedMediaDisplay,
@@ -26,17 +26,7 @@ import {
 	type ResolveLinkedMediaAssociationOptions,
 } from "../linkedEditorInputs"
 
-function resolveDesignAAbsolutePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/")
-	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
-	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
-		return `/${normalized}`
-	}
-	return normalized
-}
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 function textElement(id: string, text: string, zIndex = 0): LayerElement {
 	return {
@@ -347,24 +337,30 @@ describe("resolveLinkedMediaItems", () => {
 		).toEqual([expect.objectContaining({ status: "inactive", reason: "over-limit" })])
 	})
 
-	it("normalizes equivalent resource paths for identity checks", () => {
-		expect(getLinkedMediaReferenceIdentity("./images/source.png")).toBe("images/source.png")
-		expect(mergeLinkedMediaPaths(["./images/source.png"], ["/images/source.png"])).toEqual([
-			"./images/source.png",
-		])
+	it("normalizes only host-proven current-canvas aliases", () => {
+		expect(
+			getLinkedMediaReferenceIdentity("./images/source.png", resolveDesignAResourceReference),
+		).toBe("workspace:/画布A/images/source.png")
+		expect(
+			mergeLinkedMediaPathsWithResolver(
+				resolveDesignAResourceReference,
+				["./images/source.png"],
+				["/画布A/images/source.png"],
+			),
+		).toEqual(["./images/source.png"])
 	})
 
 	it("keeps workspace-root and current-canvas linked media separate with host identity", () => {
 		expect(
 			mergeLinkedMediaPathsWithResolver(
-				resolveDesignAAbsolutePath,
+				resolveDesignAResourceReference,
 				["./images/source.png"],
 				["/images/source.png"],
 			),
 		).toEqual(["./images/source.png", "/images/source.png"])
 		expect(
 			mergeLinkedMediaPathsWithResolver(
-				resolveDesignAAbsolutePath,
+				resolveDesignAResourceReference,
 				["./images/source.png"],
 				["/画布A/images/source.png"],
 			),
@@ -480,32 +476,36 @@ describe("mergeLinkedMediaReferences", () => {
 		expect(
 			mergeLinkedMediaReferences(
 				[{ kind: "image", path: "./images/source.png" }],
-				[{ kind: "image", path: "/images/source.png", sourceCrop }],
+				[{ kind: "image", path: "/画布A/images/source.png", sourceCrop }],
+				resolveDesignAResourceReference,
 			),
-		).toEqual([{ kind: "image", path: "/images/source.png", sourceCrop }])
+		).toEqual([{ kind: "image", path: "/画布A/images/source.png", sourceCrop }])
 	})
 })
 
 describe("dedupeLinkedMediaItemsByPath", () => {
 	it("shows one item per resource and keeps the selected connection", () => {
-		const items = dedupeLinkedMediaItemsByPath([
-			{
-				connectionId: "connection-1",
-				sourceElementId: "source-1",
-				kind: "image",
-				path: "./images/shared.png",
-				status: "inactive",
-				selected: false,
-			},
-			{
-				connectionId: "connection-2",
-				sourceElementId: "source-2",
-				kind: "image",
-				path: "/images/shared.png",
-				status: "active",
-				selected: true,
-			},
-		])
+		const items = dedupeLinkedMediaItemsByPath(
+			[
+				{
+					connectionId: "connection-1",
+					sourceElementId: "source-1",
+					kind: "image",
+					path: "./images/shared.png",
+					status: "inactive",
+					selected: false,
+				},
+				{
+					connectionId: "connection-2",
+					sourceElementId: "source-2",
+					kind: "image",
+					path: "/画布A/images/shared.png",
+					status: "active",
+					selected: true,
+				},
+			],
+			resolveDesignAResourceReference,
+		)
 
 		expect(items).toHaveLength(1)
 		expect(items[0]).toEqual(expect.objectContaining({ connectionId: "connection-2" }))
@@ -518,7 +518,7 @@ describe("resolveLinkedMediaDisplay", () => {
 			connectionId: "connection-image",
 			sourceElementId: "image-source",
 			kind: "image" as const,
-			path: "/images/shared.png",
+			path: "/画布A/images/shared.png",
 			status: "inactive" as const,
 			selected: false,
 		}
@@ -526,6 +526,7 @@ describe("resolveLinkedMediaDisplay", () => {
 			[{ path: "./images/shared.png", fileName: "shared.png" }],
 			(item) => item.path,
 			[linkedItem],
+			resolveDesignAResourceReference,
 		)
 
 		expect(result.manualItems).toEqual([])
@@ -564,9 +565,10 @@ describe("resolveLinkedMediaAssociation", () => {
 					path: "./images/source.png",
 				},
 			],
-			mentionedPaths: ["/images/source.png"],
+			mentionedPaths: ["/画布A/images/source.png"],
 			targetKind: "image",
 			mediaPolicy: { supportedKinds: ["image"] },
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.items[0]?.selected).toBe(true)
@@ -606,12 +608,13 @@ describe("resolveLinkedMediaAssociation", () => {
 					connectionId: "connection-second",
 					sourceElementId: "image-second",
 					kind: "image",
-					path: "/images/source.png",
+					path: "/画布A/images/source.png",
 				},
 			],
-			mentionedPaths: ["images/source.png"],
+			mentionedPaths: ["/画布A/images/source.png"],
 			targetKind: "image",
 			mediaPolicy: { supportedKinds: ["image"] },
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.items).toHaveLength(1)
@@ -630,9 +633,10 @@ describe("resolveLinkedMediaAssociation", () => {
 					path: "./images/source.png",
 				},
 			],
-			mentionedPaths: ["/images/source.png"],
+			mentionedPaths: ["/画布A/images/source.png"],
 			targetKind: "video",
 			mediaPolicy: { supportedKinds: ["video"] },
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.items[0]).toEqual(
@@ -662,9 +666,10 @@ describe("resolveLinkedMediaAssociation", () => {
 					path: "./images/second.png",
 				},
 			],
-			mentionedPaths: ["/images/first.png", "/images/second.png"],
+			mentionedPaths: ["/画布A/images/first.png", "/画布A/images/second.png"],
 			targetKind: "image",
 			mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.items).toEqual([
@@ -695,9 +700,10 @@ describe("resolveLinkedMediaAssociation", () => {
 			targetKind: "image",
 			mediaPolicy: {
 				supportedKinds: ["image"],
-				manualReferences: [{ kind: "image", path: "/images/source.png" }],
+				manualReferences: [{ kind: "image", path: "/画布A/images/source.png" }],
 				maxTotalCount: 1,
 			},
+			resolveResourceReference: resolveDesignAResourceReference,
 		} satisfies Omit<ResolveLinkedMediaAssociationOptions, "mentionedPaths">
 		const result = resolveLinkedMediaAssociation({
 			...associationOptions,
@@ -714,7 +720,7 @@ describe("resolveLinkedMediaAssociation", () => {
 
 		const checkedResult = resolveLinkedMediaAssociation({
 			...associationOptions,
-			mentionedPaths: ["/images/source.png"],
+			mentionedPaths: ["/画布A/images/source.png"],
 		})
 		expect(checkedResult.items[0]?.selected).toBe(true)
 		expect(checkedResult.activeMediaReferences).toEqual([
@@ -738,12 +744,13 @@ describe("resolveLinkedMediaAssociation", () => {
 				},
 			],
 			mentionedPaths: [],
-			manualReferences: [{ kind: "image", path: "/images/source.png" }],
+			manualReferences: [{ kind: "image", path: "/画布A/images/source.png" }],
 			targetKind: "image",
 			mediaPolicy: {
 				supportedKinds: ["image"],
 				maxTotalCount: 1,
 			},
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(result.items[0]).toEqual(
@@ -754,7 +761,7 @@ describe("resolveLinkedMediaAssociation", () => {
 			}),
 		)
 		expect(result.activeMediaReferences).toEqual([
-			{ kind: "image", path: "/images/source.png" },
+			{ kind: "image", path: "/画布A/images/source.png" },
 		])
 	})
 })
@@ -840,8 +847,13 @@ describe("resolveLinkedMediaPolicySelection", () => {
 
 	it("keeps a selected linked resource active when it is also manually mentioned", () => {
 		const sourceCrop = { x: 4, y: 8, width: 200, height: 120 }
+		const canvasAbsoluteCandidate = {
+			...firstImageCandidate,
+			path: "/画布A/images/source-1.png",
+			sourceCrop,
+		}
 		const result = resolveLinkedMediaPolicySelection(
-			[{ ...firstImageCandidate, sourceCrop }],
+			[canvasAbsoluteCandidate],
 			[firstImageCandidate.connectionId],
 			{
 				targetKind: "image",
@@ -850,6 +862,7 @@ describe("resolveLinkedMediaPolicySelection", () => {
 					manualReferences: [{ kind: "image", path: "./images/source-1.png" }],
 					maxTotalCount: 1,
 				},
+				resolveResourceReference: resolveDesignAResourceReference,
 			},
 		)
 
@@ -861,7 +874,7 @@ describe("resolveLinkedMediaPolicySelection", () => {
 			}),
 		])
 		expect(result.activeMediaReferences).toEqual([
-			{ kind: "image", path: firstImageCandidate.path, sourceCrop },
+			{ kind: "image", path: canvasAbsoluteCandidate.path, sourceCrop },
 		])
 	})
 
@@ -880,7 +893,7 @@ describe("resolveLinkedMediaPolicySelection", () => {
 			{
 				targetKind: "image",
 				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 2 },
-				resolveAbsolutePath: resolveDesignAAbsolutePath,
+				resolveResourceReference: resolveDesignAResourceReference,
 			},
 		)
 
@@ -917,7 +930,7 @@ describe("resolveLinkedMediaPolicySelection", () => {
 			{
 				targetKind: "image",
 				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 2 },
-				resolveAbsolutePath: resolveDesignAAbsolutePath,
+				resolveResourceReference: resolveDesignAResourceReference,
 			},
 		)
 

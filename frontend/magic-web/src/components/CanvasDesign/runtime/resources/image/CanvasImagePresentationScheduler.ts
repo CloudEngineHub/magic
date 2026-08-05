@@ -1,5 +1,5 @@
 import type { Canvas } from "../../core/Canvas"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 import { getImageResourceMaxEdge } from "../visibility/CanvasMediaViewingPolicy"
 import type {
 	ImageResourceLoadPriority,
@@ -227,6 +227,23 @@ export class CanvasImagePresentationScheduler {
 		this.updateCurrentCounts()
 	}
 
+	public handleResourceReferenceResolverChanged(): void {
+		if (this.destroyed) return
+
+		this.targetElementIdsByPath.clear()
+		this.targets.forEach((target, elementId) => {
+			const canonicalPath = this.canonicalPath(target.path)
+			if (target.canonicalPath !== canonicalPath) {
+				target.canonicalPath = canonicalPath
+				target.generation = ++this.generation
+				this.dropPendingTask(elementId)
+			}
+			this.addTargetToPathIndex(target)
+			this.enqueueBestCachedResource(target)
+		})
+		this.updateCurrentCounts()
+	}
+
 	public getSnapshot(): ImagePresentationSnapshot {
 		this.updateCurrentCounts()
 		return { ...this.stats }
@@ -248,10 +265,7 @@ export class CanvasImagePresentationScheduler {
 	}
 
 	private canonicalPath(path: string): string {
-		return toCanonicalCanvasResourcePath(
-			path,
-			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath,
-		)
+		return getCanvasHostResourceReferenceIdentity(this.canvas, path)
 	}
 
 	private addTargetToPathIndex(target: InternalPresentationTarget): void {

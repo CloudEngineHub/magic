@@ -121,8 +121,6 @@ export interface ReferenceResourcePanelLimitInfo {
 	currentAssetCounts?: ReferenceAssetTypeCounts
 	/** 宿主资源解析器，用于区分工作区根路径与当前画布相对路径。 */
 	resolveResourceReference?: ResolveCanvasResourceReference
-	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
-	resolveAbsolutePath?: (path: string) => string
 	/** 面包屑等展示用文案前缀（如「当前项目文件」） */
 	projectFilesPathPrefix?: string
 	/**

@@ -4,6 +4,7 @@ import type { MessageEditorRef } from "../message/MessageEditor"
 import { createReferenceResourcePanelItemFromPath } from "../message/reference-assets/createReferenceResourcePanelItem"
 import { getLinkedMediaReferenceIdentity, type LinkedEditorMediaItem } from "./linkedEditorInputs"
 import { createCanvasMentionPathMatcher } from "./linkedMediaMentionMatcher"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 interface LinkedMediaMentionSnapshot {
 	path: string
@@ -15,7 +16,7 @@ interface UseLinkedMediaMentionSelectionOptions {
 	mentionedReferencePaths: string[]
 	canSelectMediaConnection: (connectionId: string) => boolean
 	editorRef: RefObject<MessageEditorRef | null>
-	resolveAbsolutePath?: (path: string) => string
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
@@ -40,11 +41,11 @@ export function useLinkedMediaMentionSelection(
 		mentionedReferencePaths,
 		canSelectMediaConnection,
 		editorRef,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	} = options
 	const getResourceIdentity = useCallback(
-		(path?: string) => getLinkedMediaReferenceIdentity(path, resolveAbsolutePath),
-		[resolveAbsolutePath],
+		(path?: string) => getLinkedMediaReferenceIdentity(path, resolveResourceReference),
+		[resolveResourceReference],
 	)
 	const mentionSnapshotByConnectionIdRef = useRef(new Map<string, LinkedMediaMentionSnapshot>())
 	const mentionedPathByIdentity = useMemo(() => {
@@ -103,7 +104,7 @@ export function useLinkedMediaMentionSelection(
 
 			const replaced =
 				editorRef.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(snapshot.path, resolveAbsolutePath),
+					createCanvasMentionPathMatcher(snapshot.path, resolveResourceReference),
 					createReferenceResourcePanelItemFromPath(currentItem.path, currentFileName),
 				) ?? false
 			if (replaced) {
@@ -124,7 +125,13 @@ export function useLinkedMediaMentionSelection(
 				fileName: getLinkedMediaFileName(item),
 			})
 		}
-	}, [editorRef, getResourceIdentity, mediaItems, mentionedPathByIdentity, resolveAbsolutePath])
+	}, [
+		editorRef,
+		getResourceIdentity,
+		mediaItems,
+		mentionedPathByIdentity,
+		resolveResourceReference,
+	])
 
 	return useCallback(
 		(connectionId: string, selected: boolean) => {
@@ -136,7 +143,7 @@ export function useLinkedMediaMentionSelection(
 				if (
 					mentionedPath &&
 					!editorRef.current?.removeMentionItems(
-						createCanvasMentionPathMatcher(mentionedPath, resolveAbsolutePath),
+						createCanvasMentionPathMatcher(mentionedPath, resolveResourceReference),
 					)
 				) {
 					return
@@ -182,7 +189,7 @@ export function useLinkedMediaMentionSelection(
 			getResourceIdentity,
 			mediaItems,
 			mentionedPathByIdentity,
-			resolveAbsolutePath,
+			resolveResourceReference,
 		],
 	)
 }

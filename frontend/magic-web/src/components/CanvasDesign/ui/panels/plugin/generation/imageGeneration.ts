@@ -25,9 +25,8 @@ import {
 	type LayerElement,
 } from "../../../../runtime/document/types"
 import {
-	toWeakCanvasResourcePath,
-	areCanvasResourcePathsSame,
-	stripCurrentDirectoryPrefix,
+	areCanvasHostResourceReferencesSame,
+	getCanvasHostResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { Rect } from "../../../../runtime/shared/ids"
 import {
@@ -283,11 +282,10 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 
 /** 用路径/URL 反查画布图片，覆盖插件只回传 reference 字符串的场景。 */
 function resolveImageElementByReference(canvas: Canvas, reference: string): ImageElement | null {
-	const resolveAbsolutePath = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	return (
 		getImageElements(canvas).find((element) => {
 			if (!element.src) return false
-			return areCanvasResourcePathsSame(element.src, reference, resolveAbsolutePath)
+			return areCanvasHostResourceReferencesSame(canvas, element.src, reference)
 		}) ?? null
 	)
 }
@@ -322,15 +320,17 @@ function getPluginReferenceKeys(params: PluginGenerateAndPlaceParams): string[] 
 	return [...referenceImages, ...referenceOptionPaths]
 }
 
-/** 归一化引用 key，避免 "./foo.png" 与 "foo.png" 被识别成两组生成结果。 */
-function normalizePluginReferenceKey(reference: string): string {
-	return stripCurrentDirectoryPrefix(toWeakCanvasResourcePath(reference.trim()))
-}
-
 /** 去重并排序后的引用 key 用于生成稳定的落点分组 key。 */
-function getNormalizedPluginReferenceKeys(params: PluginGenerateAndPlaceParams): string[] {
+function getNormalizedPluginReferenceKeys(
+	canvas: Canvas,
+	params: PluginGenerateAndPlaceParams,
+): string[] {
 	return Array.from(
-		new Set(getPluginReferenceKeys(params).map(normalizePluginReferenceKey).filter(Boolean)),
+		new Set(
+			getPluginReferenceKeys(params)
+				.map((reference) => getCanvasHostResourceReferenceIdentity(canvas, reference))
+				.filter(Boolean),
+		),
 	).sort()
 }
 
@@ -354,10 +354,10 @@ function stableStringify(value: unknown): string {
 }
 
 /** 提取影响历史网格续排的生成配置；prompt/model/aspect_ratio 不参与画布排布分组。 */
-function getGenerationPlacementKey(request: PluginGenerateAndPlaceParams): string {
+function getGenerationPlacementKey(canvas: Canvas, request: PluginGenerateAndPlaceParams): string {
 	return stableStringify({
 		resolution: request.resolution,
-		references: getNormalizedPluginReferenceKeys(request),
+		references: getNormalizedPluginReferenceKeys(canvas, request),
 		image_generation_config: request.image_generation_config ?? {},
 	})
 }
@@ -368,7 +368,7 @@ function collectMatchingGeneratedGridRects(
 	elements: LayerElement[],
 	request: GenerateImageRequest,
 ): Rect[] {
-	const targetPlacementKey = getGenerationPlacementKey(request)
+	const targetPlacementKey = getGenerationPlacementKey(canvas, request)
 	return flattenLayerElements(elements).flatMap((element) => {
 		if (element.type !== ElementTypeEnum.Image || !isVisibleCanvasElement(canvas, element)) {
 			return []
@@ -377,7 +377,10 @@ function collectMatchingGeneratedGridRects(
 		if (!imageElement.generateImageRequest || !isGeneratedImageElement(imageElement)) {
 			return []
 		}
-		if (getGenerationPlacementKey(imageElement.generateImageRequest) !== targetPlacementKey) {
+		if (
+			getGenerationPlacementKey(canvas, imageElement.generateImageRequest) !==
+			targetPlacementKey
+		) {
 			return []
 		}
 		const rect = layerElementToObstacleRect(imageElement)
@@ -399,7 +402,11 @@ function resolvePluginSourceElement(
 	sourceElementByAssetKey?: PluginSourceElementMap,
 ): ImageElement | null {
 	const references = getPluginReferenceKeys(params)
-	const sourceElementId = resolvePluginSourceElementId(sourceElementByAssetKey, references)
+	const sourceElementId = resolvePluginSourceElementId(
+		sourceElementByAssetKey,
+		references,
+		canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+	)
 	const sourceElement = getImageElementById(canvas, sourceElementId)
 	if (sourceElement) return sourceElement
 

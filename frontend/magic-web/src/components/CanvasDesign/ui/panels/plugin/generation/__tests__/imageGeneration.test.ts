@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { createTestResourceReferenceResolver } from "../../../../../public/__tests__/testResourceReferenceResolver"
 
 const { start, generateImages, ImageBatchPollingManagerMock } = vi.hoisted(() => {
 	const start = vi.fn()
@@ -37,8 +38,11 @@ vi.mock("../../../../../runtime/resources/polling/ImageBatchPollingManager", () 
 }))
 
 import { generatePluginImages } from "../imageGeneration"
+import type { Canvas } from "../../../../../runtime/core/Canvas"
 import { GenerationRuntimeManager } from "../../../../../runtime/generation/GenerationRuntimeManager"
 import { GenerationAttemptCoordinator } from "../../../../../runtime/generation/GenerationAttemptCoordinator"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 function createCanvas({
 	maxOutputImages = 4,
@@ -85,6 +89,7 @@ function createCanvas({
 					generateImage: vi.fn(),
 					generateImages,
 					getImageGenerationResults: vi.fn(),
+					resolveResourceReference: resolveDesignAResourceReference,
 					getImageModelList: vi.fn().mockResolvedValue([
 						{
 							model_id: modelId,
@@ -149,11 +154,10 @@ function createCanvas({
 			emit,
 		},
 		imageBatchPollingRegistry,
-	} as any
+	} as unknown as Canvas
 	canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 
-	return {
-		...canvas,
+	return Object.assign(canvas, {
 		__spies: {
 			createImageElementsNearViewport,
 			createImageElementsAtPositions,
@@ -167,7 +171,7 @@ function createCanvas({
 			emit,
 			imageBatchPollingRegistry,
 		},
-	}
+	})
 }
 
 describe("imageGeneration", () => {
@@ -641,7 +645,7 @@ describe("imageGeneration", () => {
 			prompt: "Generate",
 			size: "1024x1024",
 			count: 1,
-			reference_image_options: [{ path: "images/external-source.png" }],
+			reference_image_options: [{ path: "/画布A/images/external-source.png" }],
 		})
 
 		expect(canvas.__spies.createImageElementsAtPositions).toHaveBeenCalledWith(
@@ -695,7 +699,7 @@ describe("imageGeneration", () => {
 			size: "1024x1024",
 			aspect_ratio: "9:16",
 			count: 1,
-			reference_image_options: [{ path: "images/external-source.png" }],
+			reference_image_options: [{ path: "/画布A/images/external-source.png" }],
 		})
 
 		expect(canvas.__spies.createImageElementsAtPositions).toHaveBeenCalledWith(
@@ -749,7 +753,7 @@ describe("imageGeneration", () => {
 			size: "1024x1024",
 			aspect_ratio: "9:16",
 			count: 1,
-			reference_image_options: [{ path: "images/external-source.png" }],
+			reference_image_options: [{ path: "/画布A/images/external-source.png" }],
 		})
 
 		expect(canvas.__spies.createImageElementsAtPositions).toHaveBeenCalledWith(

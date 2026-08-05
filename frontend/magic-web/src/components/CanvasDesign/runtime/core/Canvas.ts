@@ -243,7 +243,7 @@ export class Canvas {
 			rootPath: options.plugins?.user?.rootPath,
 			directories: options.plugins?.user?.directories,
 			getFileInfo: options.magic?.methods?.getFileInfo,
-			resolveAbsolutePath: options.magic?.methods?.resolveAbsolutePath,
+			resolveResourceReference: options.magic?.methods?.resolveResourceReference,
 		})
 
 		// 初始化 MagicConfigManager
@@ -258,8 +258,8 @@ export class Canvas {
 		})
 
 		this.mediaResourceOfflineCacheManager = new MediaResourceOfflineCacheManager({
-			getResolveAbsolutePath: () =>
-				this.magicConfigManager.config?.methods?.resolveAbsolutePath,
+			getResolveResourceReference: () =>
+				this.magicConfigManager.config?.methods?.resolveResourceReference,
 			getVirtualResourceScope: () =>
 				buildVirtualResourceScope(
 					this.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
@@ -1273,6 +1273,16 @@ export class Canvas {
 			this.connectionGroup.moveToBottom()
 		}
 		return this.connectionGroup
+	}
+
+	public handleResourceReferenceResolverChanged(): void {
+		this.imageResourceManager.handleResourceReferenceResolverChanged()
+		this.imagePresentationScheduler.handleResourceReferenceResolverChanged()
+		this.visibilityManager.handleResourceReferenceResolverChanged()
+		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged()
+		this.elementManager.getAllElementIds().forEach((elementId) => {
+			this.elementManager.getElementInstance(elementId)?.onResourceReferenceResolverChanged()
+		})
 	}
 
 	/**

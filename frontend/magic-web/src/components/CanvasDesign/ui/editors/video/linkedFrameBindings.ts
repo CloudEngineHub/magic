@@ -1,12 +1,13 @@
 import type { LinkedFrameBinding } from "./video-editor-config.types"
 import { getLinkedMediaReferenceIdentity } from "../connection/linkedEditorInputs"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 interface ReconcileLinkedFrameBindingsOptions {
 	previous: Array<LinkedFrameBinding | undefined>
 	currentFrameImages: Array<string | undefined>
 	supportsStartFrame: boolean
 	supportsEndFrame: boolean
-	resolveAbsolutePath?: (path: string) => string
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 interface LinkedFrameSourceItem {
@@ -34,7 +35,7 @@ export interface LinkedFrameBindingSyncResult {
 function areLinkedFrameBindingsEqual(
 	left: Array<LinkedFrameBinding | undefined>,
 	right: Array<LinkedFrameBinding | undefined>,
-	resolveAbsolutePath?: (path: string) => string,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	if (left.length !== right.length) return false
 	// 首尾帧删除会产生稀疏数组，必须显式读取每个索引，不能使用会跳过空位的 every。
@@ -42,15 +43,15 @@ function areLinkedFrameBindingsEqual(
 		const leftItem = left[index]
 		const rightItem = right[index]
 		if (
-			getLinkedMediaReferenceIdentity(leftItem?.framePath, resolveAbsolutePath) !==
-			getLinkedMediaReferenceIdentity(rightItem?.framePath, resolveAbsolutePath)
+			getLinkedMediaReferenceIdentity(leftItem?.framePath, resolveResourceReference) !==
+			getLinkedMediaReferenceIdentity(rightItem?.framePath, resolveResourceReference)
 		) {
 			return false
 		}
 		if (leftItem?.sourceConnectionId !== rightItem?.sourceConnectionId) return false
 		if (
-			getLinkedMediaReferenceIdentity(leftItem?.sourcePath, resolveAbsolutePath) !==
-			getLinkedMediaReferenceIdentity(rightItem?.sourcePath, resolveAbsolutePath)
+			getLinkedMediaReferenceIdentity(leftItem?.sourcePath, resolveResourceReference) !==
+			getLinkedMediaReferenceIdentity(rightItem?.sourcePath, resolveResourceReference)
 		) {
 			return false
 		}
@@ -70,7 +71,7 @@ export function reconcileLinkedFrameBindings(
 		currentFrameImages,
 		supportsStartFrame,
 		supportsEndFrame,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	} = options
 	const frameRoles = [
 		...(supportsStartFrame ? (["start"] as const) : []),
@@ -79,17 +80,17 @@ export function reconcileLinkedFrameBindings(
 	const next = Array.from({ length: currentFrameImages.length }, (_, index) => {
 		const path = currentFrameImages[index]
 		if (!path) return undefined
-		const pathIdentity = getLinkedMediaReferenceIdentity(path, resolveAbsolutePath)
+		const pathIdentity = getLinkedMediaReferenceIdentity(path, resolveResourceReference)
 		const binding = previous.find(
 			(item) =>
-				getLinkedMediaReferenceIdentity(item?.framePath, resolveAbsolutePath) ===
+				getLinkedMediaReferenceIdentity(item?.framePath, resolveResourceReference) ===
 				pathIdentity,
 		)
 		return binding
 			? { ...binding, frameRole: frameRoles[index] ?? binding.frameRole }
 			: undefined
 	})
-	return areLinkedFrameBindingsEqual(previous, next, resolveAbsolutePath) ? previous : next
+	return areLinkedFrameBindingsEqual(previous, next, resolveResourceReference) ? previous : next
 }
 
 /**
@@ -99,7 +100,7 @@ export function reconcileLinkedFrameBindings(
 export function synchronizeLinkedFrameBindings(
 	options: SynchronizeLinkedFrameBindingsOptions,
 ): LinkedFrameBindingSyncResult {
-	const { previous, currentFrameImages, linkedMediaItems, resolveAbsolutePath } = options
+	const { previous, currentFrameImages, linkedMediaItems, resolveResourceReference } = options
 	const reconciled = reconcileLinkedFrameBindings(options)
 	const next = [...reconciled]
 	const frameUpdates: LinkedFrameImageUpdate[] = []
@@ -117,10 +118,13 @@ export function synchronizeLinkedFrameBindings(
 			return
 		}
 
-		const sourceIdentity = getLinkedMediaReferenceIdentity(sourceItem.path, resolveAbsolutePath)
+		const sourceIdentity = getLinkedMediaReferenceIdentity(
+			sourceItem.path,
+			resolveResourceReference,
+		)
 		const boundSourceIdentity = getLinkedMediaReferenceIdentity(
 			binding.sourcePath,
-			resolveAbsolutePath,
+			resolveResourceReference,
 		)
 		const sourceFileName = sourceItem.fileName || sourceItem.path
 		if (sourceIdentity === boundSourceIdentity) {
@@ -134,7 +138,7 @@ export function synchronizeLinkedFrameBindings(
 			(path, index) =>
 				index !== slotIndex &&
 				Boolean(path) &&
-				getLinkedMediaReferenceIdentity(path, resolveAbsolutePath) === sourceIdentity,
+				getLinkedMediaReferenceIdentity(path, resolveResourceReference) === sourceIdentity,
 		)
 		if (duplicatesAnotherFrame) {
 			next[slotIndex] = undefined
@@ -155,7 +159,7 @@ export function synchronizeLinkedFrameBindings(
 	})
 
 	return {
-		bindings: areLinkedFrameBindingsEqual(previous, next, resolveAbsolutePath)
+		bindings: areLinkedFrameBindingsEqual(previous, next, resolveResourceReference)
 			? previous
 			: next,
 		frameUpdates,

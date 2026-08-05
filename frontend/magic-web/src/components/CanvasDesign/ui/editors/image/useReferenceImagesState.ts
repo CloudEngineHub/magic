@@ -7,7 +7,7 @@ import { VideoElement as VideoElementClass } from "../../../runtime/elements/vid
 import type { ReferenceResourceFileInfo } from "../message/reference-assets/reference-resource.types"
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseReferenceImagesStateOptions {
@@ -77,10 +77,11 @@ function isSameReferenceInfos(
  */
 export function useReferenceImagesState(options: UseReferenceImagesStateOptions) {
 	const { canvas, imageElementId, maxReferenceFiles } = options
-	const resolveAbsolutePath = canvas?.magicConfigManager.config?.methods?.resolveAbsolutePath
+	const resolveResourceReference =
+		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
 	const getResourceIdentity = useCallback(
-		(path?: string) => getCanvasResourceIdentity(path, resolveAbsolutePath),
-		[resolveAbsolutePath],
+		(path?: string) => getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		[resolveResourceReference],
 	)
 
 	// 核心状态：参考文件路径列表（单一数据源）

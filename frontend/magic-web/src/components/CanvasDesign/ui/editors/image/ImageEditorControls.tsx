@@ -169,7 +169,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { methods } = useMagic()
-	const resolveAbsolutePath = methods?.resolveAbsolutePath
+	const resolveResourceReference = methods?.resolveResourceReference
 	const createLinkedMediaSourceListOption = useLinkedMediaSourceListOption()
 	const linkedMediaKindLabelByKind = useMemo<Record<LinkedEditorMediaKind, string>>(
 		() => ({
@@ -210,7 +210,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		[linkedMediaItems],
 	)
 	const effectiveReferenceFileCount = mergeLinkedMediaPathsWithResolver(
-		resolveAbsolutePath,
+		resolveResourceReference,
 		currentReferenceFiles,
 		linkedActiveImagePaths,
 	).length
@@ -221,9 +221,9 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					referenceFileInfos.map((info, index) => ({ info, index })),
 					(entry) => entry.info.path,
 					linkedMediaItems,
-					resolveAbsolutePath,
+					resolveResourceReference,
 				),
-			[linkedMediaItems, referenceFileInfos, resolveAbsolutePath],
+			[linkedMediaItems, referenceFileInfos, resolveResourceReference],
 		)
 
 	useEffect(() => {
@@ -333,12 +333,12 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			const filesWithoutSlot = slotPath
 				? currentReferenceFiles.filter(
 						(path) =>
-							getLinkedMediaReferenceIdentity(path, resolveAbsolutePath) !==
-							getLinkedMediaReferenceIdentity(slotPath, resolveAbsolutePath),
+							getLinkedMediaReferenceIdentity(path, resolveResourceReference) !==
+							getLinkedMediaReferenceIdentity(slotPath, resolveResourceReference),
 					)
 				: currentReferenceFiles
 			const effectiveFilesWithoutSlot = mergeLinkedMediaPathsWithResolver(
-				resolveAbsolutePath,
+				resolveResourceReference,
 				filesWithoutSlot,
 				linkedActiveImagePaths,
 			)
@@ -352,7 +352,12 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					effectiveFilesWithoutSlot.length >= maxReferenceFiles,
 			}
 		},
-		[currentReferenceFiles, linkedActiveImagePaths, maxReferenceFiles, resolveAbsolutePath],
+		[
+			currentReferenceFiles,
+			linkedActiveImagePaths,
+			maxReferenceFiles,
+			resolveResourceReference,
+		],
 	)
 
 	const renderReferenceSourceListItem = useCallback(
@@ -373,11 +378,11 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 						Boolean(option.resourcePath && hoveredMentionPath) &&
 							getLinkedMediaReferenceIdentity(
 								option.resourcePath,
-								resolveAbsolutePath,
+								resolveResourceReference,
 							) ===
 								getLinkedMediaReferenceIdentity(
 									hoveredMentionPath,
-									resolveAbsolutePath,
+									resolveResourceReference,
 								) &&
 							sourceListStyles.sourceItemMentionHovered,
 					)}
@@ -414,7 +419,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			onProjectSelect,
 			hoveredMentionPath,
 			handleSelectReferenceSlot,
-			resolveAbsolutePath,
+			resolveResourceReference,
 		],
 	)
 
@@ -428,6 +433,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 								<SourceList
 									options={referenceSourceListOptions}
 									renderItem={renderReferenceSourceListItem}
+									resolveResourceReference={resolveResourceReference}
 								/>
 							</div>
 						</div>

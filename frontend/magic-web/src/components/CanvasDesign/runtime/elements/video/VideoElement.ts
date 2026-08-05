@@ -16,9 +16,14 @@ import {
 } from "../decorators/ElementCornerActionsDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { TransformContext } from "../core/BaseElement"
+import {
+	appendReferenceImageInfos,
+	removeReferenceImageInfosByPath,
+	replaceReferenceImageInfos,
+} from "../core/referenceImageInfos"
 import { VideoRenderer } from "./VideoRenderer"
 import { VideoPollingManager } from "../../resources/polling/VideoPollingManager"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import {
 	buildFullscreenVideoPlaybackConsumerId,
 	buildInlineVideoPlaybackConsumerId,
@@ -32,6 +37,7 @@ import type {
 } from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
+import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -372,14 +378,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private setupVideoResourceRefreshedListener(): void {
-		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 		this.videoResourceRefreshedHandler = ({ data }) => {
 			const currentPath = this.data.src
 			if (!currentPath) return
-			if (
-				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
-				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
-			) {
+			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
 			}
 
@@ -405,14 +407,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private setupVideoResourceLoadFailedListener(): void {
-		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 		this.videoResourceLoadFailedHandler = ({ data }) => {
 			const currentPath = this.data.src
 			if (!currentPath) return
-			if (
-				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
-				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
-			) {
+			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
 			}
 
@@ -962,8 +960,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				placeholderMode: "error",
 				text: this.isRetryEditing
 					? this.getText("video.retryEditing", "请重新编辑视频生成需求")
-					: this.data.errorMessage ||
-						this.getText("video.generateFailed", "视频生成失败"),
+					: resolveGenerationErrorMessage(
+							this.data.errorMessage,
+							this.getText("video.generateFailed", "视频生成失败"),
+						),
 			}
 		}
 
@@ -1298,29 +1298,25 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 追加一张参考图/帧（去重 path），并预热图片缓存 */
 	public saveReferenceImageInfo(fileInfo: UploadFileResponse): void {
-		const exists = this.referenceImageInfos.some((info) => info.path === fileInfo.path)
-		if (!exists) {
-			this.canvas.imageResourceManager.loadResource(fileInfo.path)
-			this.referenceImageInfos.push(fileInfo)
-		}
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			[fileInfo],
+		)
 	}
 
 	/** 批量追加参考图信息（去重） */
 	public saveReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		const existingPaths = new Set(this.referenceImageInfos.map((info) => info.path))
-		const newInfos = fileInfos.filter((info) => !existingPaths.has(info.path))
-		newInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-		this.referenceImageInfos.push(...newInfos)
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			fileInfos,
+		)
 	}
 
 	/** 覆盖参考图列表并广播 referenceImages:changed */
 	public setReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		fileInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-		this.referenceImageInfos = fileInfos
+		this.referenceImageInfos = replaceReferenceImageInfos(this.canvas, fileInfos)
 		this.canvas.eventEmitter.emit({
 			type: "referenceImages:changed",
 			data: { elementId: this.data.id },
@@ -1334,7 +1330,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 按 path 移除一项并广播变更 */
 	public removeReferenceImageInfo(path: string): void {
-		this.referenceImageInfos = this.referenceImageInfos.filter((info) => info.path !== path)
+		this.referenceImageInfos = removeReferenceImageInfosByPath(
+			this.canvas,
+			this.referenceImageInfos,
+			path,
+		)
 		this.canvas.eventEmitter.emit({
 			type: "referenceImages:changed",
 			data: { elementId: this.data.id },

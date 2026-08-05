@@ -34,6 +34,7 @@ import {
 	getReferenceResourceHoverState,
 	getReferenceResourceLocalHoverState,
 	normalizeProjectDropFilesForStorage,
+	REFERENCE_RESOURCE_DROP_STATUS,
 	type ReferenceDropProjectFile,
 	useReferenceResourceDrop,
 } from "../message/reference-assets/useReferenceResourcePanelDataService"
@@ -61,7 +62,7 @@ import {
 } from "../prompt-optimization/promptOptimizationUserPrompt"
 import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../public/magic-types"
 import {
-	areCanvasResourcePathsSame,
+	areCanvasResourceReferencesSame,
 	getCanvasResourceFileName,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import {
@@ -108,11 +109,8 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
-	const resolveAbsolutePath = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-	const resolveResourcePathCandidates =
-		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
-	const normalizeResourcePathForStorage =
-		canvas.magicConfigManager.config?.methods?.normalizeResourcePathForStorage
+	const resolveResourceReference =
+		canvas.magicConfigManager.config?.methods?.resolveResourceReference
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
@@ -148,7 +146,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		mediaPolicy: linkedMediaPolicy,
 		editorRef,
 		onReadyMentionChange: config.handlers.handlePromptReferencePathsChange,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	})
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const buildImagePromptPlaceholderToken = useMemo(
@@ -172,11 +170,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const effectiveCurrentReferenceFiles = useMemo(
 		() =>
 			mergeLinkedMediaPathsWithResolver(
-				resolveAbsolutePath,
+				resolveResourceReference,
 				currentReferenceFiles,
 				linkedActiveImagePaths,
 			),
-		[currentReferenceFiles, linkedActiveImagePaths, resolveAbsolutePath],
+		[currentReferenceFiles, linkedActiveImagePaths, resolveResourceReference],
 	)
 	const promptOptimizationPlaceholderPaths = useMemo(
 		() => ({ image: effectiveCurrentReferenceFiles }),
@@ -267,13 +265,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const canAcceptProjectFiles = useCallback(
 		(files: ReferenceDropProjectFile[]) => {
+			if (!resolveResourceReference) {
+				return { accepted: false, status: REFERENCE_RESOURCE_DROP_STATUS.notAvailable }
+			}
 			return checkProjectReferenceResourceDrop({
 				isDropEnabled: canAcceptReferenceDrop,
 				files,
 				matchableItems,
 				currentReferenceFiles: effectiveCurrentReferenceFiles,
 				maxReferenceFiles,
-				resolveResourcePathCandidates,
+				resolveResourceReference,
 			})
 		},
 		[
@@ -281,7 +282,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			matchableItems,
 			effectiveCurrentReferenceFiles,
 			maxReferenceFiles,
-			resolveResourcePathCandidates,
+			resolveResourceReference,
 		],
 	)
 
@@ -332,23 +333,15 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleProjectFilesDrop = useCallback(
 		(files: ReferenceDropProjectFile[]) => {
-			const normalizedFiles = normalizeProjectDropFilesForStorage(
-				files,
-				matchableItems,
-				effectiveCurrentReferenceFiles,
-				{ resolveResourcePathCandidates, normalizeResourcePathForStorage },
-			)
+			if (!resolveResourceReference) return
+			const normalizedFiles = normalizeProjectDropFilesForStorage(files, {
+				resolveResourceReference,
+			})
 			editorRef.current?.insertMentionItems(
 				normalizedFiles.map((file) => createReferenceResourcePanelItemFromDropFile(file)),
 			)
 		},
-		[
-			effectiveCurrentReferenceFiles,
-			editorRef,
-			matchableItems,
-			normalizeResourcePathForStorage,
-			resolveResourcePathCandidates,
-		],
+		[editorRef, resolveResourceReference],
 	)
 
 	const handlePaste = useCallback(
@@ -387,12 +380,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const currentPrompt = editorRef.current?.getCurrentPrompt() ?? prompt
 			const fileName =
 				config.referenceFileInfos.find((info) =>
-					areCanvasResourcePathsSame(info.path, path, resolveAbsolutePath),
+					areCanvasResourceReferencesSame(info.path, path, resolveResourceReference),
 				)?.fileName ?? getCanvasResourceFileName(path)
 			handlers.setPrompt(removeMentionFromString(currentPrompt, path, fileName))
 			handlers.handleReferenceFileRemove(path)
 		},
-		[config.referenceFileInfos, editorRef, handlers, prompt, resolveAbsolutePath],
+		[config.referenceFileInfos, editorRef, handlers, prompt, resolveResourceReference],
 	)
 
 	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
@@ -407,7 +400,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				textPrompt: linkedEditorInputs.textPrompt,
 			},
 			prompt,
-			resolveAbsolutePath,
+			resolveResourceReference,
 		)
 		const referenceImages = request.reference_images ?? []
 		const encodedPrompt = (request.prompt ?? currentPrompt).trim()
@@ -442,7 +435,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		linkedEditorInputs.activeMediaReferences,
 		linkedEditorInputs.textPrompt,
 		prompt,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	])
 
 	return (

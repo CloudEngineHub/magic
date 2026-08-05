@@ -1,10 +1,7 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import { AttachmentSource } from "../../../public/magic-types"
 import { getSelectedFileElements, getSelectedImageElements } from "../../../runtime/shared/ids"
-import {
-	getCanvasResourceFileName,
-	toCanonicalCanvasResourcePath,
-} from "../../../runtime/shared/path/canvasResourcePath"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 
 /**
  * 画布下载菜单判定「图片」扩展名（语义与宿主 Topic isImage 对齐；枚举值见 types.magic 的 AttachmentSource）。
@@ -89,7 +86,6 @@ export async function resolveCanvasDownloadMenuContext(
 		}
 	}
 
-	const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	const getFileResourceMeta = canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 	const flags = await Promise.all(
 		imageElements.map(async (img) => {
@@ -102,8 +98,7 @@ export async function resolveCanvasDownloadMenuContext(
 					? meta
 					: await canvas.imageResourceManager.getEntry(img.src)
 			if (!entry?.fileName) return false
-			const normalizedSrc = toCanonicalCanvasResourcePath(img.src, resolveAbs)
-			const isImage = isRasterImageFile(entry.fileName, normalizedSrc)
+			const isImage = isRasterImageFile(entry.fileName, img.src)
 			const isAi = entry.source === AttachmentSource.AI
 			return isImage && isAi
 		}),

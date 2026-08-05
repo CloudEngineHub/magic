@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ReferenceResourcePanelItem } from "../../../../public/props"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -8,8 +9,6 @@ import { filterReferenceResourcePanelBatchItems } from "../reference-assets/refe
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
 import {
 	checkProjectReferenceResourceDrop,
-	getProjectFilePathCandidates,
-	normalizeProjectDropFiles,
 	normalizeProjectDropFilesForStorage,
 } from "../reference-assets/useReferenceResourcePanelDataService"
 
@@ -36,44 +35,14 @@ const mediaLimits: ReferenceAssetPerTypeLimits = {
 	total: { min: 0, max: 3 },
 }
 
-function resolveDesignAResourceCandidates(path: string): string[] {
-	if (path === "/画布A/images/cat.png") {
-		return [path, "画布A/images/cat.png", "./images/cat.png", "images/cat.png"]
-	}
-	if (path === "/画布B/images/cat.png") {
-		return [path, "画布B/images/cat.png"]
-	}
-	return [path]
-}
-
-function resolveAmbiguousBareResourceCandidates(path: string): string[] {
-	return [path]
-}
-
-function resolveWorkspaceRootFileCandidates(path: string): string[] {
-	return [path, path.replace(/^\/+/, "")]
-}
-
-function normalizeDesignAResourcePathForStorage(path: string): string {
-	if (path.startsWith("./")) return path
-	const normalized = path.replace(/^\/+/, "")
-	if (normalized.startsWith("画布A/")) {
-		return `./${normalized.slice("画布A/".length)}`
-	}
-	return `/${normalized}`
-}
-
-function resolveDesignAAbsolutePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/")
-	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
-	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
-		return `/${normalized}`
-	}
-	return normalized
-}
+const resolveDesignAResourceReference = createTestResourceReferenceResolver({
+	attachmentPathsByFileId: {
+		"current-cat": "画布A/images/cat.png",
+		"other-cat": "画布B/images/cat.png",
+		"root-cat": "images/cat.png",
+		"project-root-cat": "cat.png",
+	},
+})
 
 describe("filterReferenceResourcePanelBatchItems", () => {
 	it("slices project selections by remaining total capacity", () => {
@@ -102,12 +71,13 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 
 	it("does not consume capacity for canonical path variants of an existing file", () => {
 		const selected = filterReferenceResourcePanelBatchItems({
-			items: [panelItem("/images/existing.png"), panelItem("/images/new.png")],
+			items: [panelItem("/画布A/images/existing.png"), panelItem("/画布A/images/new.png")],
 			maxReferenceFiles: 1,
 			currentReferenceFiles: ["./images/existing.png"],
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
-		expect(selected.map((item) => item.data.file_path)).toEqual(["/images/existing.png"])
+		expect(selected.map((item) => item.data.file_path)).toEqual(["/画布A/images/existing.png"])
 	})
 
 	it("treats workspace-root and current-canvas paths as separate capacity entries with host identity", () => {
@@ -115,7 +85,7 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 			items: [panelItem("/images/existing.png")],
 			maxReferenceFiles: 1,
 			currentReferenceFiles: ["./images/existing.png"],
-			resolveAbsolutePath: resolveDesignAAbsolutePath,
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(selected).toEqual([])
@@ -158,41 +128,28 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 	})
 })
 
-describe("project reference resource path candidates", () => {
-	it("keeps canvas-relative paths compatible without suffix guessing", () => {
-		expect(getProjectFilePathCandidates("./images/cat.png")).toEqual(
-			expect.arrayContaining(["./images/cat.png", "images/cat.png"]),
-		)
-		expect(getProjectFilePathCandidates("images/cat.png")).toEqual(
-			expect.arrayContaining(["./images/cat.png", "images/cat.png"]),
-		)
-
-		const otherCanvasCandidates = getProjectFilePathCandidates("/画布B/images/cat.png")
-		expect(otherCanvasCandidates).toContain("/画布B/images/cat.png")
-		expect(otherCanvasCandidates).not.toContain("./images/cat.png")
-		expect(otherCanvasCandidates).not.toContain("images/cat.png")
-	})
-
-	it("uses host-safe candidates to match current canvas absolute paths", () => {
-		const files = [{ path: "/画布A/images/cat.png", fileName: "cat.png" }]
-		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
-			resolveResourcePathCandidates: resolveDesignAResourceCandidates,
-		})
-
-		expect(normalized).toEqual([{ path: "./images/cat.png", fileName: "cat.png" }])
+describe("project reference resource resolution", () => {
+	it("uses attachment identity to match a current-canvas storage alias", () => {
+		const files = [
+			{
+				path: "/画布A/images/cat.png",
+				fileName: "cat.png",
+				fileId: "current-cat",
+			},
+		]
 		expect(
 			checkProjectReferenceResourceDrop({
 				isDropEnabled: true,
 				files,
 				matchableItems: [{ path: "./images/cat.png" }],
 				currentReferenceFiles: [],
-				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+				resolveResourceReference: resolveDesignAResourceReference,
 			}).accepted,
 		).toBe(true)
 	})
 
 	it("accepts a workspace-root resource when both root and current-canvas nodes exist", () => {
-		const files = [{ path: "/images/cat.png", fileName: "cat.png" }]
+		const files = [{ path: "/images/cat.png", fileName: "cat.png", fileId: "root-cat" }]
 
 		expect(
 			checkProjectReferenceResourceDrop({
@@ -200,69 +157,86 @@ describe("project reference resource path candidates", () => {
 				files,
 				matchableItems: [{ path: "./images/cat.png" }, { path: "/images/cat.png" }],
 				currentReferenceFiles: [],
-				resolveResourcePathCandidates: resolveWorkspaceRootFileCandidates,
+				resolveResourceReference: resolveDesignAResourceReference,
 			}),
 		).toEqual({ accepted: true })
 	})
 
 	it("does not match other canvas resources by same file name", () => {
-		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png" }]
-		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
-			resolveResourcePathCandidates: resolveDesignAResourceCandidates,
-		})
-
-		expect(normalized).toEqual(files)
+		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png", fileId: "other-cat" }]
 		expect(
 			checkProjectReferenceResourceDrop({
 				isDropEnabled: true,
 				files,
 				matchableItems: [{ path: "./images/cat.png" }],
 				currentReferenceFiles: [],
-				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+				resolveResourceReference: resolveDesignAResourceReference,
 			}),
 		).toEqual({ accepted: false, status: "not-available" })
 	})
 
-	it("stores accepted external project drops as workspace-absolute paths", () => {
-		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png" }]
-		const normalized = normalizeProjectDropFilesForStorage(
-			files,
-			[{ path: "画布B/images/cat.png" }],
-			[],
-			{
-				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
-				normalizeResourcePathForStorage: normalizeDesignAResourcePathForStorage,
-			},
-		)
-
-		expect(normalized).toEqual([{ path: "/画布B/images/cat.png", fileName: "cat.png" }])
-	})
-
-	it("stores a single project-root file as a workspace-absolute path", () => {
-		const files = [{ path: "/cat.png", fileName: "cat.png" }]
-		const normalized = normalizeProjectDropFilesForStorage(files, [{ path: "cat.png" }], [], {
-			resolveResourcePathCandidates: resolveWorkspaceRootFileCandidates,
-			normalizeResourcePathForStorage: normalizeDesignAResourcePathForStorage,
-		})
-
-		expect(normalized).toEqual([{ path: "/cat.png", fileName: "cat.png" }])
-	})
-
-	it("does not turn an attachment-ambiguous bare resource into a current-canvas reference", () => {
-		const files = [{ path: "images/cat.png", fileName: "cat.png" }]
-		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
-			resolveResourcePathCandidates: resolveAmbiguousBareResourceCandidates,
+	it("stores accepted cross-canvas project drops as workspace-absolute paths", () => {
+		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png", fileId: "other-cat" }]
+		const normalized = normalizeProjectDropFilesForStorage(files, {
+			resolveResourceReference: resolveDesignAResourceReference,
 		})
 
 		expect(normalized).toEqual(files)
+	})
+
+	it("stores a single project-root file as a workspace-absolute path", () => {
+		const files = [{ path: "/cat.png", fileName: "cat.png", fileId: "project-root-cat" }]
+		const normalized = normalizeProjectDropFilesForStorage(files, {
+			resolveResourceReference: resolveDesignAResourceReference,
+		})
+
+		expect(normalized).toEqual(files)
+	})
+
+	it("treats a drag workspace path as workspace-root, never as current-canvas shorthand", () => {
+		const files = [{ path: "images/cat.png", fileName: "cat.png" }]
 		expect(
 			checkProjectReferenceResourceDrop({
 				isDropEnabled: true,
 				files,
 				matchableItems: [{ path: "./images/cat.png" }],
 				currentReferenceFiles: [],
-				resolveResourcePathCandidates: resolveAmbiguousBareResourceCandidates,
+				resolveResourceReference: resolveDesignAResourceReference,
 			}).accepted,
 		).toBe(false)
+	})
+
+	it("lets fileId override a stale drag path before storage", () => {
+		const normalized = normalizeProjectDropFilesForStorage(
+			[
+				{
+					path: "/画布B/images/cat.png",
+					fileName: "cat.png",
+					fileId: "current-cat",
+				},
+			],
+			{ resolveResourceReference: resolveDesignAResourceReference },
+		)
+
+		expect(normalized).toEqual([
+			{
+				path: "./images/cat.png",
+				fileName: "cat.png",
+				fileId: "current-cat",
+			},
+		])
+	})
+
+	it("fails closed when attachment evidence is not ready", () => {
+		const pendingResolver = createTestResourceReferenceResolver({ attachmentsReady: false })
+		expect(
+			checkProjectReferenceResourceDrop({
+				isDropEnabled: true,
+				files: [{ path: "/画布A/images/cat.png", fileName: "cat.png", fileId: "pending" }],
+				matchableItems: [{ path: "./images/cat.png" }],
+				currentReferenceFiles: [],
+				resolveResourceReference: pendingResolver,
+			}),
+		).toEqual({ accepted: false, status: "not-available" })
 	})
 })

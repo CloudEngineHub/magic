@@ -1,5 +1,4 @@
 import type { UploadFileResponse, VideoInputMode } from "../../../../public/magic-types"
-import { removeMentionFromString } from "../../message/tiptap/contentUtils"
 import type {
 	LinkedFrameBinding,
 	VideoModeInputDraft,
@@ -22,27 +21,6 @@ export function cloneLinkedFrameBindings(
 	bindings?: Array<LinkedFrameBinding | undefined>,
 ): Array<LinkedFrameBinding | undefined> {
 	return (bindings || []).map((binding) => (binding ? { ...binding } : binding))
-}
-
-/**
- * 同步参考素材变更时的 prompt 字符串：仅移除不再存在的 @；
- * 新增参考的 @ 由编辑器 insertMentionItems 插入。
- */
-export function computeReferencePromptSync(
-	prompt: string,
-	prevRefs: VideoReferenceAssetInfo[],
-	nextRefs: VideoReferenceAssetInfo[],
-): { nextPrompt: string; refsToInsertMentions: VideoReferenceAssetInfo[] } {
-	const nextPaths = new Set(nextRefs.map((r) => r.path))
-	let nextPrompt = prompt
-	for (const ref of prevRefs) {
-		if (!nextPaths.has(ref.path)) {
-			nextPrompt = removeMentionFromString(nextPrompt, ref.path, ref.fileName)
-		}
-	}
-	const prevPaths = new Set(prevRefs.map((r) => r.path))
-	const refsToInsertMentions = nextRefs.filter((ref) => !prevPaths.has(ref.path))
-	return { nextPrompt, refsToInsertMentions }
 }
 
 export function cloneModeDraftCache(

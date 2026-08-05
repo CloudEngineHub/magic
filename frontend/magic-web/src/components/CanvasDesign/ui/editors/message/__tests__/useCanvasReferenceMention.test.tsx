@@ -1,15 +1,18 @@
-import { render } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { createElement, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CanvasDesignI18nProvider } from "../../../../app/providers/I18nProvider"
 import { MagicProvider } from "../../../../app/providers/MagicProvider"
 import type {
 	MentionDataServiceCtor,
 	MentionExtensionCtor,
+	CanvasMentionNodeViewRenderer,
 	ProjectAttachmentMentionNode,
 	ReferenceResourcePanelLimitInfo,
 } from "../../../../public/props"
 import type { CanvasDesignMethods } from "../../../../public/magic-types"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
 import type {
 	ReferenceAssetPerTypeLimits,
@@ -18,6 +21,8 @@ import type {
 import { useCanvasReferenceMentionRuntime } from "../reference-assets/useCanvasReferenceMentionRuntime"
 import { useCanvasReferenceMention } from "../useCanvasReferenceMention"
 import { getContentFromString } from "../tiptap/contentUtils"
+
+vi.mock("@tiptap/react", () => ({ NodeViewWrapper: "span" }))
 
 class TestMentionDataService {
 	static instances: TestMentionDataService[] = []
@@ -85,6 +90,7 @@ function getConfiguredOptions() {
 		getInitialLoadOptions?: () => { itemId?: string } | undefined
 		getInitialNavigationStack?: () => Array<{ id: string; name: string }> | undefined
 		canSelectItem?: (item: { type?: string; isFolder?: boolean }) => boolean
+		nodeViewRenderers?: Record<string, CanvasMentionNodeViewRenderer>
 	}
 }
 
@@ -144,20 +150,38 @@ function Providers(props: ProviderProps) {
 	)
 }
 
-function resolveDesignAAbsolutePath(path: string): string {
+const resolveDesignAResourceReference: ResolveCanvasResourceReference = (input) => {
+	const path =
+		input.namespace === "external-url" ? input.url : "path" in input ? input.path : input.fileId
 	const normalized = path.replace(/\\/g, "/")
+	let workspacePath: string
 	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
+		workspacePath = `/画布A/${normalized.replace(/^\.\/+/, "")}`
+	} else if (normalized.startsWith("/")) {
+		workspacePath = normalized
+	} else if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
+		workspacePath = `/${normalized}`
+	} else {
+		workspacePath = `/${normalized}`
 	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
-		return `/${normalized}`
+	const storagePath = workspacePath.startsWith("/画布A/")
+		? `./${workspacePath.slice("/画布A/".length)}`
+		: workspacePath
+	return {
+		status: "resolved",
+		resourceKind: "workspace-file",
+		rawReference: path,
+		workspacePath,
+		storagePath,
+		identity: `workspace:${workspacePath}`,
+		candidates: [workspacePath],
+		legacyRecovered: false,
+		resolutionSource: "strict-path",
 	}
-	return normalized
 }
 
 const designAMethods = {
-	resolveAbsolutePath: resolveDesignAAbsolutePath,
+	resolveResourceReference: resolveDesignAResourceReference,
 } as CanvasDesignMethods
 
 type RuntimeOptions = Parameters<typeof useCanvasReferenceMentionRuntime>[0]
@@ -388,5 +412,44 @@ describe("useCanvasReferenceMention", () => {
 			expect.objectContaining({ path: "./images/cat.png" }),
 			expect.objectContaining({ path: "/images/cat.png" }),
 		])
+	})
+
+	it("renders a confirmed deleted mention in red semantics and disables locating it", () => {
+		const locateProjectFile = vi.fn()
+		const resolveResourceReference = createTestResourceReferenceResolver({
+			attachmentsReady: true,
+		})
+		const methods = { resolveResourceReference, locateProjectFile } as CanvasDesignMethods
+		renderMention({ methods, tree: [] })
+		const Renderer =
+			getConfiguredOptions().nodeViewRenderers?.[
+				CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
+			]
+		if (!Renderer) throw new Error("Missing project-file node view renderer")
+
+		render(
+			<Providers methods={methods}>
+				{createElement(Renderer, {
+					node: {
+						attrs: {
+							type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
+							data: {
+								file_id: "deleted",
+								file_name: "截屏.png",
+								file_path: "/images/images/截屏.png",
+								file_extension: "png",
+							},
+						},
+					},
+					extension: { options: {} },
+				})}
+			</Providers>,
+		)
+
+		const mention = screen.getByTestId("canvas-project-file-mention")
+		expect(mention).toHaveAttribute("data-deleted", "true")
+		expect(mention).toHaveTextContent("@截屏.png（已删除）")
+		fireEvent.click(mention)
+		expect(locateProjectFile).not.toHaveBeenCalled()
 	})
 })

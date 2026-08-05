@@ -267,38 +267,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		}),
 		[resolveResourceReference, resourceReferenceResolverRevision],
 	)
-	const resolveAbsolutePath = useCallback<CanvasDesignMethods["resolveAbsolutePath"]>(
-		(path) => {
-			const resolution = resolveCanvasStorageResourceReference(path, resolveResourceReference)
-			return resolution.status === "resolved"
-				? (resolution.workspacePath ?? resolution.storagePath)
-				: path
-		},
-		[resolveResourceReference],
-	)
-	const resolveResourcePathCandidates = useCallback<
-		NonNullable<CanvasDesignMethods["resolveResourcePathCandidates"]>
-	>(
-		(path) => {
-			const resolution = resolveCanvasStorageResourceReference(path, resolveResourceReference)
-			const candidates = new Set<string>([path, ...resolution.candidates])
-			if (resolution.status === "resolved") {
-				if (resolution.workspacePath) candidates.add(resolution.workspacePath)
-				candidates.add(resolution.storagePath)
-			}
-			return Array.from(candidates)
-		},
-		[resolveResourceReference],
-	)
-	const normalizeResourcePathForStorage = useCallback<
-		NonNullable<CanvasDesignMethods["normalizeResourcePathForStorage"]>
-	>(
-		(path) => {
-			const resolution = resolveResourceReference({ namespace: "workspace-path", path })
-			return resolution.status === "resolved" ? resolution.storagePath : path
-		},
-		[resolveResourceReference],
-	)
 
 	const locateProjectFile: NonNullable<CanvasDesignMethods["locateProjectFile"]> = useCallback(
 		(params) => {
@@ -664,9 +632,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			resolveResourceReference: resourceReferenceResolverSnapshot.resolve,
 			resourceReferenceResolverSnapshot,
 			resourceReferenceResolverVersion: resourceReferenceResolverSnapshot.revision,
-			resolveAbsolutePath,
-			resolveResourcePathCandidates,
-			normalizeResourcePathForStorage,
 			getVirtualResourceScope,
 			getImageProcessCacheSignature: getPreviewFileUrlWatermarkSignature,
 			addToConversation,
@@ -711,9 +676,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getFileInfo,
 		getFileResourceMeta,
 		resourceReferenceResolverSnapshot,
-		resolveAbsolutePath,
-		resolveResourcePathCandidates,
-		normalizeResourcePathForStorage,
 		getVirtualResourceScope,
 		addToConversation,
 		downloadFiles,

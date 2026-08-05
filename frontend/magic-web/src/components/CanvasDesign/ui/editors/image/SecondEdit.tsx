@@ -258,7 +258,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				requestParams,
 				linkedEditorInputs,
 				prompt,
-				methods?.resolveAbsolutePath,
+				methods?.resolveResourceReference,
 			)
 			if (!generateRequest.prompt?.trim()) return
 
@@ -274,7 +274,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				},
 			)
 		},
-		[createAndSubmitImageGeneration, handlers, methods?.resolveAbsolutePath, prompt],
+		[createAndSubmitImageGeneration, handlers, methods?.resolveResourceReference, prompt],
 	)
 
 	const handleGenerateAgain = useCallback(async () => {

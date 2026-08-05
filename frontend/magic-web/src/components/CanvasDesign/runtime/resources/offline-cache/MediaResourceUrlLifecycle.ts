@@ -10,16 +10,17 @@ import type {
 	MediaResourceOfflineCacheMediaType,
 } from "./MediaResourceOfflineCacheManager"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
-import {
-	toCanonicalCanvasResourcePath,
-	toWeakCanvasResourcePath,
-} from "../../shared/path/canvasResourcePath"
+import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
 } from "../media-common/resourceLoadFailure"
 
 export interface MediaResourceUrlEntry {
+	/** 可交给宿主 resolver/API 的资源引用路径，不能是 identity。 */
+	referencePath: string
+	/** 仅用于 Map、Set、缓存与去重的稳定资源身份。 */
+	resourceIdentity: string
 	ossSrc: string | null
 	ossSrcFromCachedFallback: boolean
 	sourceUrl: string | null
@@ -49,11 +50,11 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 	isDestroyed: () => boolean
 	onStaleRequestDrop?: () => void
 	setFailureReason: (entry: TEntry, reason: ResourceLoadFailureReason | null) => void
-	onResourceDeleted: (normalizedPath: string, entry: TEntry) => void
+	onResourceDeleted: (resourceIdentity: string, entry: TEntry) => void
 	refreshResource: (path: string) => Promise<boolean>
-	onResourceMetadataHydrated?: (normalizedPath: string, entry: TEntry) => void
+	onResourceMetadataHydrated?: (resourceIdentity: string, entry: TEntry) => void
 	onResourceVersionChanged?: (
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 		previousVersion: string,
 		nextVersion: string,
@@ -78,19 +79,10 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 const BACKGROUND_METADATA_REFRESH_COOLDOWN_MS = 60 * 1000
 
 export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
-	private readonly pathAliasToCanonical = new Map<string, string>()
-
 	constructor(private readonly options: MediaResourceUrlLifecycleOptions<TEntry>) {}
 
-	public canonicalResourcePath(path: string): string {
-		const canonical = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
-		this.rememberPathAlias(path, canonical)
-		return canonical
-	}
-
-	public getCanonicalFromAlias(path: string): string {
-		const weak = toWeakCanvasResourcePath(path)
-		return this.pathAliasToCanonical.get(weak) ?? weak
+	public getResourceIdentity(path: string): string {
+		return getCanvasHostResourceReferenceIdentity(this.options.canvas, path)
 	}
 
 	public clearCachedFallbackOssSrc(entry: TEntry): void {
@@ -256,16 +248,13 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 						const previousResourceVersion = entry.resourceVersion
 						this.applyFileInfoMetadata(entry, fileInfo)
 						if (!previousResourceVersion) {
-							this.options.onResourceMetadataHydrated?.(
-								this.canonicalResourcePath(path),
-								entry,
-							)
+							this.options.onResourceMetadataHydrated?.(entry.resourceIdentity, entry)
 						} else if (
 							entry.resourceVersion &&
 							entry.resourceVersion !== previousResourceVersion
 						) {
 							this.options.onResourceVersionChanged?.(
-								this.canonicalResourcePath(path),
+								entry.resourceIdentity,
 								entry,
 								previousResourceVersion,
 								entry.resourceVersion,
@@ -289,10 +278,9 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 							},
 						)
 					if (this.isDestroyed()) return null
-					if (isCurrentExchange()) {
-						entry.ossSrc = resourceUrl
-						entry.ossSrcFromCachedFallback = false
-					}
+					if (!isCurrentExchange()) return null
+					entry.ossSrc = resourceUrl
+					entry.ossSrcFromCachedFallback = false
 					return resourceUrl
 				}
 				if (isCurrentExchange()) this.options.setFailureReason(entry, "load-error")
@@ -301,9 +289,8 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				const reason = getFailureReasonFromGetFileInfoError(error)
 				if (isCurrentExchange()) this.options.setFailureReason(entry, reason)
 				if (isCurrentExchange() && reason === "not-found") {
-					const cachePath = this.canonicalResourcePath(path)
 					this.options.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
-						path: cachePath,
+						path,
 						mediaType: this.options.mediaType,
 					})
 				}
@@ -325,7 +312,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 
 	public triggerBackgroundMetadataRefresh(
 		path: string,
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 	): void {
 		if (this.isDestroyed()) return
@@ -349,7 +336,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 
 		this.options.incrementDiagnostic("backgroundRefreshQueuedCount")
-		entry.backgroundRefreshPromise = this.refreshResourceMetadata(path, normalizedPath, entry)
+		entry.backgroundRefreshPromise = this.refreshResourceMetadata(path, resourceIdentity, entry)
 			.then(() => undefined)
 			.catch(() => undefined)
 			.finally(() => {
@@ -359,7 +346,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 
 	public async refreshResourceMetadata(
 		path: string,
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 	): Promise<void> {
 		if (this.isDestroyed()) return
@@ -388,7 +375,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				if (meta.status === "deleted") {
 					this.options.incrementDiagnostic("metadataDeletedCount")
 					this.options.setFailureReason(entry, "not-found")
-					this.options.onResourceDeleted(normalizedPath, entry)
+					this.options.onResourceDeleted(resourceIdentity, entry)
 					return
 				}
 
@@ -401,7 +388,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					this.options.setFailureReason(entry, null)
 					this.applyResourceMeta(entry, meta)
 					if (!currentVersion) {
-						this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+						this.options.onResourceMetadataHydrated?.(resourceIdentity, entry)
 					}
 					return
 				}
@@ -434,7 +421,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				const hadResourceVersion = !!entry.resourceVersion
 				this.applyFileInfoMetadata(entry, fileInfo)
 				if (!hadResourceVersion) {
-					this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+					this.options.onResourceMetadataHydrated?.(resourceIdentity, entry)
 				}
 
 				await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
@@ -460,7 +447,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			this.options.setFailureReason(entry, reason)
 			if (reason !== "not-found") return
 
-			this.options.onResourceDeleted(normalizedPath, entry)
+			this.options.onResourceDeleted(resourceIdentity, entry)
 		} finally {
 			if (isCurrentRefresh()) {
 				entry.exchangeToken = undefined
@@ -510,7 +497,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			previousResourceVersion !== entry.resourceVersion
 		) {
 			this.options.onResourceVersionChanged?.(
-				this.canonicalResourcePath(path),
+				entry.resourceIdentity,
 				entry,
 				previousResourceVersion,
 				entry.resourceVersion,
@@ -571,29 +558,18 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		})
 		entry.ossSrc = fileInfo.src
 		entry.ossSrcFromCachedFallback = false
-		const normalizedPath = this.canonicalResourcePath(path)
 		if (
 			previousResourceVersion &&
 			entry.resourceVersion &&
 			previousResourceVersion !== entry.resourceVersion
 		) {
 			this.options.onResourceVersionChanged?.(
-				normalizedPath,
+				entry.resourceIdentity,
 				entry,
 				previousResourceVersion,
 				entry.resourceVersion,
 			)
 		}
-	}
-
-	private getResolveAbsolutePath(): ((path: string) => string) | undefined {
-		return this.options.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-	}
-
-	private rememberPathAlias(rawPath: string, canonical: string): void {
-		const weak = toWeakCanvasResourcePath(rawPath)
-		this.pathAliasToCanonical.set(weak, canonical)
-		this.pathAliasToCanonical.set(canonical, canonical)
 	}
 
 	private isDestroyed(): boolean {

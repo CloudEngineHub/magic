@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { GenerateVideoRequest } from "../../../../../public/magic-types"
+import { createTestResourceReferenceResolver } from "../../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	collectPendingVideoGenerationRequestResourcePaths,
 	collectVideoGenerationRequestResourcePaths,
 } from "../video-points-estimate.resources"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 describe("video-points-estimate.resources", () => {
 	it("collects video generation schema resource paths and ignores prompt text", () => {
@@ -40,20 +43,19 @@ describe("video-points-estimate.resources", () => {
 			inputs: {
 				frames: [
 					{ role: "start", uri: "./images/ref.jpg" },
-					{ role: "end", uri: "images/ref.jpg" },
+					{ role: "end", uri: "/画布A/images/ref.jpg" },
 				],
 				reference_videos: [
 					{ uri: "https://example.com/ref.mp4" },
 					{ uri: "./videos/ref.mp4" },
 				],
-				video: { uri: "videos/ref.mp4" },
+				video: { uri: "/画布A/videos/ref.mp4" },
 			},
 		}
 
-		expect(collectVideoGenerationRequestResourcePaths(request)).toEqual([
-			"./images/ref.jpg",
-			"./videos/ref.mp4",
-		])
+		expect(
+			collectVideoGenerationRequestResourcePaths(request, resolveDesignAResourceReference),
+		).toEqual(["./images/ref.jpg", "./videos/ref.mp4"])
 	})
 
 	it("returns only paths that are currently deferred", () => {

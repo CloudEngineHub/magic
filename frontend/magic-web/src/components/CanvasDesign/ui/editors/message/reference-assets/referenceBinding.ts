@@ -5,8 +5,9 @@ import {
 } from "./promptPlaceholderTokenConfig"
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import { getMatchablePathsFromValue } from "../tiptap/contentUtils"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
@@ -23,8 +24,6 @@ export interface ReferenceBindingState {
 	protectedReferencePaths: string[]
 }
 
-type ResolveAbsolutePath = (path: string) => string
-
 function resolveAssetType(info: ReferenceBindingResourceInfo): PromptPlaceholderTokenKind {
 	return info.assetType ?? "image"
 }
@@ -39,14 +38,14 @@ function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceI
 export function areOrderedPathsEqual(
 	left: string[],
 	right: string[],
-	resolveAbsolutePath?: ResolveAbsolutePath,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	if (left === right) return true
 	if (left.length !== right.length) return false
 	for (let index = 0; index < left.length; index += 1) {
 		if (
-			getCanvasResourceIdentity(left[index], resolveAbsolutePath) !==
-			getCanvasResourceIdentity(right[index], resolveAbsolutePath)
+			getCanvasResourceReferenceIdentity(left[index], resolveResourceReference) !==
+			getCanvasResourceReferenceIdentity(right[index], resolveResourceReference)
 		) {
 			return false
 		}
@@ -65,9 +64,9 @@ export function resolveExplicitPromptReferencePaths(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
-	resolveAbsolutePath?: ResolveAbsolutePath
+	resolveResourceReference?: ResolveCanvasResourceReference
 }): string[] {
-	const { prompt, referenceFileInfos, tokenConfig, resolveAbsolutePath } = params
+	const { prompt, referenceFileInfos, tokenConfig, resolveResourceReference } = params
 	if (!prompt || referenceFileInfos.length === 0) return []
 
 	const explicitPathIdentities = new Set<string>()
@@ -79,7 +78,7 @@ export function resolveExplicitPromptReferencePaths(params: {
 		const referencedInfo = matchingResources[match.index - 1]
 		if (referencedInfo?.path) {
 			explicitPathIdentities.add(
-				getCanvasResourceIdentity(referencedInfo.path, resolveAbsolutePath),
+				getCanvasResourceReferenceIdentity(referencedInfo.path, resolveResourceReference),
 			)
 		}
 	}
@@ -89,7 +88,9 @@ export function resolveExplicitPromptReferencePaths(params: {
 		buildPromptMatchableItems(referenceFileInfos),
 	)
 	for (const path of mentionPaths) {
-		explicitPathIdentities.add(getCanvasResourceIdentity(path, resolveAbsolutePath))
+		explicitPathIdentities.add(
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		)
 	}
 
 	return referenceFileInfos
@@ -97,7 +98,9 @@ export function resolveExplicitPromptReferencePaths(params: {
 		.filter(
 			(path) =>
 				path &&
-				explicitPathIdentities.has(getCanvasResourceIdentity(path, resolveAbsolutePath)),
+				explicitPathIdentities.has(
+					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+				),
 		)
 }
 
@@ -105,18 +108,18 @@ export function resolveReferenceBindingState(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
-	resolveAbsolutePath?: ResolveAbsolutePath
+	resolveResourceReference?: ResolveCanvasResourceReference
 }): ReferenceBindingState {
-	const { prompt, referenceFileInfos, tokenConfig, resolveAbsolutePath } = params
+	const { prompt, referenceFileInfos, tokenConfig, resolveResourceReference } = params
 	const explicitPromptReferencePaths = resolveExplicitPromptReferencePaths({
 		prompt,
 		referenceFileInfos,
 		tokenConfig,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	})
 	const explicitPathIdentities = new Set(
 		explicitPromptReferencePaths.map((path) =>
-			getCanvasResourceIdentity(path, resolveAbsolutePath),
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
 		),
 	)
 	const protectedReferencePaths = referenceFileInfos
@@ -124,7 +127,9 @@ export function resolveReferenceBindingState(params: {
 		.filter(
 			(path) =>
 				path &&
-				!explicitPathIdentities.has(getCanvasResourceIdentity(path, resolveAbsolutePath)),
+				!explicitPathIdentities.has(
+					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+				),
 		)
 
 	if (protectedReferencePaths.length === 0) {
@@ -153,30 +158,37 @@ export function resolveReferenceBindingState(params: {
 export function pruneProtectedReferencePaths(
 	currentReferencePaths: string[],
 	protectedReferencePaths: string[],
-	resolveAbsolutePath?: ResolveAbsolutePath,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): string[] {
 	const currentPathIdentities = new Set(
-		currentReferencePaths.map((path) => getCanvasResourceIdentity(path, resolveAbsolutePath)),
+		currentReferencePaths.map((path) =>
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
 	)
 	return protectedReferencePaths.filter((path) =>
-		currentPathIdentities.has(getCanvasResourceIdentity(path, resolveAbsolutePath)),
+		currentPathIdentities.has(
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
 	)
 }
 
 export function unprotectPromptBoundReferencePaths(
 	protectedReferencePaths: string[],
 	explicitPromptReferencePaths: string[],
-	resolveAbsolutePath?: ResolveAbsolutePath,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): string[] {
 	if (protectedReferencePaths.length === 0 || explicitPromptReferencePaths.length === 0) {
 		return protectedReferencePaths
 	}
 	const explicitPathIdentities = new Set(
 		explicitPromptReferencePaths.map((path) =>
-			getCanvasResourceIdentity(path, resolveAbsolutePath),
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
 		),
 	)
 	return protectedReferencePaths.filter(
-		(path) => !explicitPathIdentities.has(getCanvasResourceIdentity(path, resolveAbsolutePath)),
+		(path) =>
+			!explicitPathIdentities.has(
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+			),
 	)
 }

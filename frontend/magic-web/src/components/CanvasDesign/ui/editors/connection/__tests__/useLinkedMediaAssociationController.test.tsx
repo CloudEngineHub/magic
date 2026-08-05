@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { createRef } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { MessageEditorRef } from "../../message/MessageEditor"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 
 const mocks = vi.hoisted(() => ({
 	useLinkedEditorInputs: vi.fn(),
@@ -118,8 +119,7 @@ describe("useLinkedMediaAssociationController", () => {
 	it("keeps the persisted same-name path during sync but allows an explicit user switch", () => {
 		const onReadyMentionChange = vi.fn()
 		const editorRef = createRef<MessageEditorRef>()
-		const resolveAbsolutePath = (path: string) =>
-			path.startsWith("./") ? `/画布A/${path.replace(/^\.\/+/, "")}` : path
+		const resolveResourceReference = createTestResourceReferenceResolver()
 		const { result } = renderHook(() =>
 			useLinkedMediaAssociationController({
 				targetElementId: "target-image",
@@ -130,7 +130,7 @@ describe("useLinkedMediaAssociationController", () => {
 				},
 				editorRef,
 				onReadyMentionChange,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			}),
 		)
 

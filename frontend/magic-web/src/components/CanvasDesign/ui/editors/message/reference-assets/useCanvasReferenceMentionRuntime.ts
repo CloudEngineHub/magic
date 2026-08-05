@@ -103,7 +103,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
-		resolveAbsolutePath: methods?.resolveAbsolutePath,
+		resolveResourceReference: methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 	})
@@ -116,7 +116,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
-		resolveAbsolutePath: methods?.resolveAbsolutePath,
+		resolveResourceReference: methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 	}
@@ -196,7 +196,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
-		methods?.resolveAbsolutePath,
+		methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 		defaultProjectAttachmentFolderId,

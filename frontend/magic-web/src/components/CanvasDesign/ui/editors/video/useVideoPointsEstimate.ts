@@ -35,20 +35,23 @@ export function useVideoPointsEstimate(
 	const [error, setError] = useState<unknown>(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [deferralVersion, setDeferralVersion] = useState(0)
+	const resolveResourceReference = methods?.resolveResourceReference
 
 	const requestResourcePaths = useMemo(() => {
-		return collectVideoGenerationRequestResourcePaths(request)
-	}, [request])
+		return collectVideoGenerationRequestResourcePaths(request, resolveResourceReference)
+	}, [request, resolveResourceReference])
 	const pendingResourcePaths = useMemo(() => {
 		const uploadManager = canvas?.canvasFileUploadManager
 		if (!request) return []
 		if (!uploadManager) return requestResourcePaths
 
 		void deferralVersion
-		return collectPendingVideoGenerationRequestResourcePaths(request, (path) =>
-			uploadManager.shouldDeferRemoteResourceLoad(path),
+		return collectPendingVideoGenerationRequestResourcePaths(
+			request,
+			(path) => uploadManager.shouldDeferRemoteResourceLoad(path),
+			resolveResourceReference,
 		)
-	}, [canvas, request, requestResourcePaths, deferralVersion])
+	}, [canvas, request, requestResourcePaths, deferralVersion, resolveResourceReference])
 
 	const pendingResourceKey = useMemo(
 		() => pendingResourcePaths.join("\0"),

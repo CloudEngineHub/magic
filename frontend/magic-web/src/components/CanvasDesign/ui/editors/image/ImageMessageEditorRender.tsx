@@ -90,7 +90,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 				requestParams,
 				linkedEditorInputs,
 				config.prompt,
-				canvas.magicConfigManager.config?.methods?.resolveAbsolutePath,
+				canvas.magicConfigManager.config?.methods?.resolveResourceReference,
 			)
 			if (!generateRequest.prompt?.trim()) {
 				return

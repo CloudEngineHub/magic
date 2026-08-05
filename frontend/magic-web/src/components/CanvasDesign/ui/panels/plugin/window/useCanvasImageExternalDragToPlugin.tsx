@@ -401,7 +401,11 @@ export function useCanvasImageExternalDragToPlugin({
 					}
 					// 拖入插件的文件可能随后作为 reference_images 回到宿主，提前记录文件 key 与画布元素的关系。
 					files.forEach((file) => {
-						registerPluginFileAssetSource(sourceElementByAssetKeyRef.current, file)
+						registerPluginFileAssetSource(
+							sourceElementByAssetKeyRef.current,
+							file,
+							canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+						)
 					})
 					postPluginMessage({
 						type: "magic-canvas-plugin:canvas-asset-drop",

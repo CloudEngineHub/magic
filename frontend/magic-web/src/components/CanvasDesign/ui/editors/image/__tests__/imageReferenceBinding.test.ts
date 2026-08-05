@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	pruneProtectedReferencePaths,
 	resolveExplicitPromptReferencePaths,
@@ -21,17 +22,7 @@ const referenceFileInfos = [
 	{ path: "/design/images/b.png", fileName: "b.png", src: "/design/images/b.png" },
 ]
 
-function resolveDesignAAbsolutePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/")
-	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
-	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
-		return `/${normalized}`
-	}
-	return normalized
-}
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 describe("imageReferenceBinding", () => {
 	it("treats placeholder-bound references as prompt-linked", () => {
@@ -143,7 +134,7 @@ describe("imageReferenceBinding", () => {
 		).toEqual(["/design/images/a.png"])
 	})
 
-	it("keeps legacy weak canonical comparison when no host context exists", () => {
+	it("keeps unresolved path spellings separate when no host context exists", () => {
 		const equivalentInfos = [
 			{ path: "./images/a.png", fileName: "a.png", src: "./images/a.png" },
 		]
@@ -154,12 +145,10 @@ describe("imageReferenceBinding", () => {
 		})
 
 		expect(binding.explicitPromptReferencePaths).toEqual(["./images/a.png"])
-		expect(pruneProtectedReferencePaths(["/images/a.png"], ["./images/a.png"])).toEqual([
+		expect(pruneProtectedReferencePaths(["/images/a.png"], ["./images/a.png"])).toEqual([])
+		expect(unprotectPromptBoundReferencePaths(["./images/a.png"], ["/images/a.png"])).toEqual([
 			"./images/a.png",
 		])
-		expect(unprotectPromptBoundReferencePaths(["./images/a.png"], ["/images/a.png"])).toEqual(
-			[],
-		)
 	})
 
 	it("uses host identity to distinguish workspace-root and current-canvas references", () => {
@@ -167,21 +156,21 @@ describe("imageReferenceBinding", () => {
 			pruneProtectedReferencePaths(
 				["/images/a.png"],
 				["./images/a.png"],
-				resolveDesignAAbsolutePath,
+				resolveDesignAResourceReference,
 			),
 		).toEqual([])
 		expect(
 			pruneProtectedReferencePaths(
 				["/画布A/images/a.png"],
 				["./images/a.png"],
-				resolveDesignAAbsolutePath,
+				resolveDesignAResourceReference,
 			),
 		).toEqual(["./images/a.png"])
 		expect(
 			unprotectPromptBoundReferencePaths(
 				["./images/a.png"],
 				["/images/a.png"],
-				resolveDesignAAbsolutePath,
+				resolveDesignAResourceReference,
 			),
 		).toEqual(["./images/a.png"])
 	})

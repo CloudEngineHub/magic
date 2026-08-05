@@ -1,4 +1,5 @@
 import type { GenerateImageRequest, ReferenceImageOptions } from "../../../public/magic-types"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import { buildReferenceImageOptions } from "../../../runtime/resources/image/imageCropUtils"
 import {
 	getLinkedMediaReferenceIdentity,
@@ -22,7 +23,7 @@ function buildLinkedReferenceImageOptions(
 }
 
 function mergeReferenceImageOptions(
-	resolveAbsolutePath: ((path: string) => string) | undefined,
+	resolveResourceReference: ResolveCanvasResourceReference | undefined,
 	...groups: Array<ReferenceImageOptions | undefined>
 ): ReferenceImageOptions | undefined {
 	const merged: ReferenceImageOptions = []
@@ -30,7 +31,7 @@ function mergeReferenceImageOptions(
 
 	for (const group of groups) {
 		for (const option of group ?? []) {
-			const identity = getLinkedMediaReferenceIdentity(option.path, resolveAbsolutePath)
+			const identity = getLinkedMediaReferenceIdentity(option.path, resolveResourceReference)
 			if (!identity) continue
 			const existingIndex = optionIndexByPath.get(identity)
 			if (existingIndex !== undefined) {
@@ -49,7 +50,7 @@ export function buildImageRequestWithLinkedEditorInputs(
 	request: GenerateImageRequest,
 	linkedInputs: Pick<LinkedEditorInputsResolution, "activeMediaReferences" | "textPrompt">,
 	promptFallback = "",
-	resolveAbsolutePath?: (path: string) => string,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): GenerateImageRequest {
 	const mergedImageReferences = mergeLinkedMediaReferences(
 		(request.reference_images ?? []).map((path) => ({
@@ -57,11 +58,11 @@ export function buildImageRequestWithLinkedEditorInputs(
 			path,
 		})),
 		linkedInputs.activeMediaReferences,
-		resolveAbsolutePath,
+		resolveResourceReference,
 	).filter((reference) => reference.kind === "image")
 	const mergedReferenceImages = mergedImageReferences.map((reference) => reference.path)
 	const referenceImageOptions = mergeReferenceImageOptions(
-		resolveAbsolutePath,
+		resolveResourceReference,
 		request.reference_image_options,
 		buildLinkedReferenceImageOptions(mergedImageReferences),
 	)

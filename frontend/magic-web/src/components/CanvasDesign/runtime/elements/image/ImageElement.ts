@@ -17,7 +17,7 @@ import type {
 } from "../../../public/magic-types"
 import { GenerationStatus, ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import { generateUUID, collectElementsByType, type Rect } from "../../shared/ids"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
@@ -47,6 +47,11 @@ import { ImagePollingManager } from "../../resources/polling/ImagePollingManager
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../core/BaseElement"
 import {
+	appendReferenceImageInfos,
+	removeReferenceImageInfosByPath,
+	replaceReferenceImageInfos,
+} from "../core/referenceImageInfos"
+import {
 	createExpandImageTaskMeta,
 	createEraserTaskMeta,
 	createHighImageTaskMeta,
@@ -54,6 +59,7 @@ import {
 	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
 } from "../../resources/image/imageGenerationTaskMeta"
+import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
@@ -355,6 +361,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (this.data.src) {
 			this.canvas.visibilityManager.registerImageElement(this.data.id, this.data.src)
 		}
+	}
+
+	override onResourceReferenceResolverChanged(): void {
+		this.setupResourceLoadedListener()
 	}
 
 	/**
@@ -995,11 +1005,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!this.data.src) return
 
 		const path = this.data.src
-		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-		const canonicalPath = toCanonicalCanvasResourcePath(path, resolveAbs)
 		const isCurrentResourcePath = (resourcePath: string): boolean =>
-			resourcePath === path ||
-			toCanonicalCanvasResourcePath(resourcePath, resolveAbs) === canonicalPath
+			areCanvasHostResourceReferencesSame(this.canvas, resourcePath, path)
 
 		this.resourceLoadFailedHandler = ({ data }) => {
 			if (isCurrentResourcePath(data.path)) {
@@ -1746,8 +1753,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 有结果且失败，渲染错误信息
 		if (status === GenerationStatus.Failed) {
-			const errorMessage =
-				this.data.errorMessage || this.getText("image.generateFailed", "图片生成失败")
+			const errorMessage = resolveGenerationErrorMessage(
+				this.data.errorMessage,
+				this.getText("image.generateFailed", "图片生成失败"),
+			)
 			return this.renderError(errorMessage)
 		}
 
@@ -2449,43 +2458,29 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 与 saveReferenceImageInfos 一致：对新项预加载资源，供 Popover 预览立即展示
 	 */
 	saveReferenceImageInfo(fileInfo: UploadFileResponse): void {
-		const exists = this.referenceImageInfos.some((info) => info.path === fileInfo.path)
-		if (!exists) {
-			this.canvas.imageResourceManager.loadResource(fileInfo.path)
-			this.referenceImageInfos.push(fileInfo)
-		}
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			[fileInfo],
+		)
 	}
 
 	/**
 	 * 批量保存参考图信息（追加模式，性能优化版本）
 	 */
 	saveReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		// 构建现有 path 的 Set，用于快速查重
-		const existingPaths = new Set(this.referenceImageInfos.map((info) => info.path))
-
-		// 过滤出不重复的新信息
-		const newInfos = fileInfos.filter((info) => !existingPaths.has(info.path))
-
-		// 为新的参考图加载资源
-		newInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-
-		// 批量添加
-		this.referenceImageInfos.push(...newInfos)
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			fileInfos,
+		)
 	}
 
 	/**
 	 * 完全替换参考图信息列表（用于重新排序或批量更新）
 	 */
 	setReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		// 为新的参考图加载资源
-		fileInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-
-		// 完全替换
-		this.referenceImageInfos = fileInfos
+		this.referenceImageInfos = replaceReferenceImageInfos(this.canvas, fileInfos)
 
 		// 触发资源回收事件
 		this.canvas.eventEmitter.emit({
@@ -2506,7 +2501,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 触发资源回收：ImageResourceManager 会检查 usedPaths，释放不再被引用的资源
 	 */
 	removeReferenceImageInfo(path: string): void {
-		this.referenceImageInfos = this.referenceImageInfos.filter((info) => info.path !== path)
+		this.referenceImageInfos = removeReferenceImageInfosByPath(
+			this.canvas,
+			this.referenceImageInfos,
+			path,
+		)
 		this.canvas.eventEmitter.emit({
 			type: "referenceImages:changed",
 			data: { elementId: this.data.id },

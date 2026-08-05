@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import { useCanvasEvent } from "../canvas"
-import { toCanonicalCanvasResourcePath } from "../../../runtime/shared/path/canvasResourcePath"
+import { areCanvasHostResourceReferencesSame } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 import { TOOLTIP_PREVIEW_MIN_SIZE } from "../../../runtime/resources/image/imagePreviewUtils"
 
@@ -113,6 +113,18 @@ export function useReferenceImageUrls(
 
 		const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
+		if (failureReason === "not-found") {
+			lowImageRequestIdRef.current += 1
+			releaseLowImageUrl()
+			setUrlInfo((prev) => ({
+				...prev,
+				lowUrl: undefined,
+				fullUrl: undefined,
+				imageInfo: undefined,
+				hasError: true,
+			}))
+			return
+		}
 
 		setUrlInfo((prev) => {
 			if (prev.fullUrl) {
@@ -125,7 +137,7 @@ export function useReferenceImageUrls(
 				hasError: !ossInfo?.ossSrc && !!failureReason,
 			}
 		})
-	}, [canvas, enabled, path])
+	}, [canvas, enabled, path, releaseLowImageUrl])
 
 	// 处理弹窗打开/关闭事件
 	const handleOpenChange = useCallback(
@@ -161,12 +173,13 @@ export function useReferenceImageUrls(
 		const lowUrl = lowImage?.url
 		const imageInfo = lowImage?.imageInfo
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
+		const isDeleted = failureReason === "not-found"
 
 		setUrlInfo((prev) => {
 			const newInfo = {
 				lowUrl: lowUrl || undefined,
-				fullUrl: prev.fullUrl, // 保持已有的 tooltip URL
-				imageInfo: imageInfo || prev.imageInfo,
+				fullUrl: isDeleted ? undefined : prev.fullUrl,
+				imageInfo: isDeleted ? undefined : imageInfo || prev.imageInfo,
 				hasError: !lowUrl && !!failureReason,
 				loadTooltip,
 			}
@@ -213,6 +226,18 @@ export function useReferenceImageUrls(
 			const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
 			const failureReason = canvas.imageResourceManager.getFailureReason(path)
 			if (cancelled) return
+			if (failureReason === "not-found") {
+				lowImageRequestIdRef.current += 1
+				releaseLowImageUrl()
+				setUrlInfo((prev) => ({
+					...prev,
+					lowUrl: undefined,
+					fullUrl: undefined,
+					imageInfo: undefined,
+					hasError: true,
+				}))
+				return
+			}
 			setUrlInfo((prev) => ({
 				...prev,
 				fullUrl: ossInfo?.ossSrc || prev.fullUrl,
@@ -222,7 +247,7 @@ export function useReferenceImageUrls(
 		return () => {
 			cancelled = true
 		}
-	}, [canvas, enabled, path, eagerFullUrl])
+	}, [canvas, enabled, path, eagerFullUrl, releaseLowImageUrl])
 
 	// 监听图片资源加载完成事件，确保 ossSrc 可用后更新 tooltip URL
 	useCanvasEvent(
@@ -230,11 +255,7 @@ export function useReferenceImageUrls(
 		useCallback(
 			({ data }) => {
 				if (!canvas || !enabled) return
-				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-				if (
-					toCanonicalCanvasResourcePath(path, resolveAbs) !==
-					toCanonicalCanvasResourcePath(data.path, resolveAbs)
-				) {
+				if (!areCanvasHostResourceReferencesSame(canvas, path, data.path)) {
 					return
 				}
 				// 如果弹窗已打开但 fullUrl 还未设置，尝试加载
@@ -251,11 +272,22 @@ export function useReferenceImageUrls(
 		useCallback(
 			({ data }) => {
 				if (!canvas || !enabled) return
-				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-				if (
-					toCanonicalCanvasResourcePath(path, resolveAbs) !==
-					toCanonicalCanvasResourcePath(data.path, resolveAbs)
-				) {
+				if (!areCanvasHostResourceReferencesSame(canvas, path, data.path)) {
+					return
+				}
+
+				if (data.reason === "not-found") {
+					// A confirmed deletion invalidates every previously visible representation, including
+					// object URLs created by an older persistent-cache restore.
+					lowImageRequestIdRef.current += 1
+					releaseLowImageUrl()
+					setUrlInfo({
+						lowUrl: undefined,
+						fullUrl: undefined,
+						imageInfo: undefined,
+						hasError: true,
+						loadTooltip,
+					})
 					return
 				}
 
@@ -270,7 +302,7 @@ export function useReferenceImageUrls(
 					}
 				})
 			},
-			[canvas, enabled, path],
+			[canvas, enabled, path, loadTooltip, releaseLowImageUrl],
 		),
 	)
 
@@ -280,11 +312,7 @@ export function useReferenceImageUrls(
 		useCallback(
 			({ data }) => {
 				if (!canvas || !enabled) return
-				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-				if (
-					toCanonicalCanvasResourcePath(path, resolveAbs) !==
-					toCanonicalCanvasResourcePath(data.path, resolveAbs)
-				) {
+				if (!areCanvasHostResourceReferencesSame(canvas, path, data.path)) {
 					return
 				}
 				updatePathUrl()

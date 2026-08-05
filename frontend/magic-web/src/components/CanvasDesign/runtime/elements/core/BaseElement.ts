@@ -77,6 +77,11 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 		// 默认实现为空，子类可以重写
 	}
 
+	/** 宿主资源 resolver 语义变化时，允许元素重绑 identity 相关运行时状态。 */
+	onResourceReferenceResolverChanged(): void {
+		// 默认实现为空，只有持有 identity 固化监听的元素需要重写
+	}
+
 	/**
 	 * 获取当前节点
 	 */

@@ -299,7 +299,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				assetLimits,
 				currentAssetCounts,
 				maxBatchItems: maxProjectSelectBatchCount,
-				resolveAbsolutePath: methods?.resolveAbsolutePath,
+				resolveResourceReference: methods?.resolveResourceReference,
 			})
 
 			let didReset = false
@@ -330,7 +330,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 			handleProjectSelectClose,
 			maxProjectSelectBatchCount,
 			maxReferenceFiles,
-			methods?.resolveAbsolutePath,
+			methods?.resolveResourceReference,
 			onProjectSelect,
 		],
 	)

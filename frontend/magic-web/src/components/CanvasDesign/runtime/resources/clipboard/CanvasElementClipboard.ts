@@ -49,6 +49,10 @@ export interface CanvasElementClipboardFileMetadata {
 	role: "element-media" | "canvas-export" | "generation-resource"
 	/** 生成请求中的原始资源路径；仅 generation-resource 使用 */
 	resourcePath?: string
+	/** 源画布 resolver 计算出的资源 identity；目标画布不得重新解释源路径。 */
+	resourceIdentity?: string
+	/** 本次复制元素数据中实际出现过的同资源路径写法。 */
+	resourceAliases?: string[]
 	/** 原资源引用。Blob 不可用或后续做大文件降级时，可按该引用重新下载再上传。 */
 	sourceRef?: {
 		src?: string
@@ -248,6 +252,18 @@ function normalizeFileMetadata(file: unknown): CanvasElementClipboardFileMetadat
 		fileSize: file.fileSize,
 		role,
 		resourcePath: typeof file.resourcePath === "string" ? file.resourcePath : undefined,
+		resourceIdentity:
+			typeof file.resourceIdentity === "string" ? file.resourceIdentity : undefined,
+		resourceAliases: Array.isArray(file.resourceAliases)
+			? Array.from(
+					new Set(
+						file.resourceAliases
+							.filter((alias): alias is string => typeof alias === "string")
+							.map((alias) => alias.trim())
+							.filter(Boolean),
+					),
+				).slice(0, 128)
+			: undefined,
 		sourceRef: normalizeSourceRef(file.sourceRef),
 	}
 }
@@ -308,6 +324,8 @@ export class CanvasElementClipboard {
 		filename: string
 		mimeType: string
 		fileSize: number
+		resourceIdentity?: string
+		resourceAliases?: string[]
 		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 	}): CanvasElementClipboardFileMetadata {
 		return {
@@ -317,6 +335,8 @@ export class CanvasElementClipboard {
 			mimeType: options.mimeType,
 			fileSize: options.fileSize,
 			role: "element-media",
+			resourceIdentity: options.resourceIdentity,
+			resourceAliases: options.resourceAliases,
 			sourceRef: options.sourceRef,
 		}
 	}
@@ -354,6 +374,8 @@ export class CanvasElementClipboard {
 	public static createGenerationResourceMetadata(options: {
 		fileId: string
 		resourcePath: string
+		resourceIdentity: string
+		resourceAliases: string[]
 		filename: string
 		mimeType: string
 		fileSize: number
@@ -367,6 +389,8 @@ export class CanvasElementClipboard {
 			fileSize: options.fileSize,
 			role: "generation-resource",
 			resourcePath: options.resourcePath,
+			resourceIdentity: options.resourceIdentity,
+			resourceAliases: options.resourceAliases,
 			sourceRef: options.sourceRef,
 		}
 	}

@@ -6,7 +6,7 @@ import type { UploadFileResponse } from "../../../public/magic-types"
 import type { MatchableMentionItem } from "./tiptap/contentUtils"
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MessageEditorMentionChangeContext } from "./MessageEditor"
 import { reconcileMentionPathsWithPersistedReferences } from "./mentionPathReconciliation"
@@ -56,10 +56,10 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 	const syncMentionPaths = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
 			if (!canvas) return
-			const resolveAbsolutePath =
-				canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
+			const resolveResourceReference =
+				canvas.magicConfigManager.config?.methods?.resolveResourceReference
 			const getResourceIdentity = (path?: string) =>
-				getCanvasResourceIdentity(path, resolveAbsolutePath)
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 
 			// 保护：paths 为空但 currentPrompt 中仍有 @ 时，可能是 @ 尚未解析为 mention 节点，不执行
 			if (paths.length === 0 && /@/.test(currentPrompt)) {
@@ -79,7 +79,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 				incomingPaths: paths,
 				persistedPaths: currentInfos.map((info) => info.path),
 				source: context.source,
-				resolveAbsolutePath,
+				resolveResourceReference,
 			})
 			const currentPathByIdentity = new Map(
 				currentInfos.map((info) => [getResourceIdentity(info.path), info.path]),

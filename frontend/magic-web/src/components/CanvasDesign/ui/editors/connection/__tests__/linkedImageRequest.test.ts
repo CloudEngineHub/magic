@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import { buildImageRequestWithLinkedEditorInputs } from "../linkedImageRequest"
 
-function resolveDesignAAbsolutePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/")
-	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
-	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/")) return `/${normalized}`
-	return normalized
-}
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 describe("buildImageRequestWithLinkedEditorInputs", () => {
 	it("adds linked image crop options to the generated image request", () => {
@@ -126,17 +119,19 @@ describe("buildImageRequestWithLinkedEditorInputs", () => {
 				activeMediaReferences: [
 					{
 						kind: "image",
-						path: "/images/shared.png",
+						path: "/画布A/images/shared.png",
 						sourceCrop: { x: 10, y: 20, width: 300, height: 200 },
 					},
 				],
 			},
+			"",
+			resolveDesignAResourceReference,
 		)
 
-		expect(request.reference_images).toEqual(["/images/shared.png"])
+		expect(request.reference_images).toEqual(["/画布A/images/shared.png"])
 		expect(request.reference_image_options).toEqual([
 			{
-				path: "/images/shared.png",
+				path: "/画布A/images/shared.png",
 				crop: { x: 10, y: 20, width: 300, height: 200 },
 			},
 		])
@@ -157,7 +152,7 @@ describe("buildImageRequestWithLinkedEditorInputs", () => {
 				],
 			},
 			"",
-			resolveDesignAAbsolutePath,
+			resolveDesignAResourceReference,
 		)
 
 		expect(request.reference_images).toEqual(["./images/shared.png", "/images/shared.png"])

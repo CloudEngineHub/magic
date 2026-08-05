@@ -7,6 +7,9 @@ import {
 	type UploadSubDirType,
 } from "../../../public/magic-types"
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 interface RemoteTransferHarness {
 	canvas: {
@@ -52,7 +55,9 @@ function createRemoteTransferManager(options: {
 	}
 	manager.remoteResourceTransfers = new Map([
 		[
-			`target-canvas:${options.sourceCanvasId}:${options.metadata.sourceRef?.src}`,
+			`target-canvas:${options.sourceCanvasId}:${
+				options.metadata.resourceIdentity || options.metadata.sourceRef?.src
+			}`,
 			{
 				status: "completed",
 				result: options.result,
@@ -145,6 +150,13 @@ describe("CanvasFileUploadManager remote resource load deferrals", () => {
 			canvas: {
 				id: string
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+				magicConfigManager: {
+					config: {
+						methods: {
+							resolveResourceReference: typeof resolveDesignAResourceReference
+						}
+					}
+				}
 			}
 			pendingRemoteResourceLoadDeferrals: Map<string, number>
 			registerPendingRemoteResourceLoadDeferral: CanvasFileUploadManager["registerPendingRemoteResourceLoadDeferral"]
@@ -154,14 +166,21 @@ describe("CanvasFileUploadManager remote resource load deferrals", () => {
 		manager.canvas = {
 			id: "target-canvas",
 			eventEmitter: { emit },
+			magicConfigManager: {
+				config: {
+					methods: { resolveResourceReference: resolveDesignAResourceReference },
+				},
+			},
 		}
 		manager.pendingRemoteResourceLoadDeferrals = new Map()
 
 		const releaseA = manager.registerPendingRemoteResourceLoadDeferral("./videos/reference.mp4")
-		const releaseB = manager.registerPendingRemoteResourceLoadDeferral("videos/reference.mp4")
+		const releaseB = manager.registerPendingRemoteResourceLoadDeferral(
+			"/画布A/videos/reference.mp4",
+		)
 
 		expect(manager.shouldDeferRemoteResourceLoad("./videos/reference.mp4")).toBe(true)
-		expect(manager.shouldDeferRemoteResourceLoad("videos/reference.mp4")).toBe(true)
+		expect(manager.shouldDeferRemoteResourceLoad("/画布A/videos/reference.mp4")).toBe(true)
 		expect(manager.shouldDeferRemoteResourceLoad("https://example.test/reference.mp4")).toBe(
 			false,
 		)
@@ -176,8 +195,8 @@ describe("CanvasFileUploadManager remote resource load deferrals", () => {
 		expect(emit).toHaveBeenCalledWith({
 			type: "resource:remote-load-deferral-released",
 			data: {
-				path: "videos/reference.mp4",
-				key: "videos/reference.mp4",
+				path: "/画布A/videos/reference.mp4",
+				key: "workspace:/画布A/videos/reference.mp4",
 			},
 		})
 
@@ -187,6 +206,49 @@ describe("CanvasFileUploadManager remote resource load deferrals", () => {
 })
 
 describe("CanvasFileUploadManager remote resource transfer cache", () => {
+	it("uses source resource identity to reuse transfers across path aliases and roles", () => {
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: { id: string }
+			getRemoteResourceTransferKey: (
+				options: Parameters<CanvasFileUploadManager["transferRemoteResource"]>[0],
+			) => string | undefined
+		}
+		manager.canvas = { id: "target-canvas" }
+
+		const elementMediaKey = manager.getRemoteResourceTransferKey({
+			sourceCanvasId: "source-canvas",
+			metadata: {
+				id: "element-media",
+				elementId: "source-image",
+				filename: "image.png",
+				mimeType: "image/png",
+				fileSize: 0,
+				role: "element-media",
+				resourceIdentity: "workspace:/画布A/images/image.png",
+				sourceRef: { src: "./images/image.png" },
+			},
+		})
+		const generationResourceKey = manager.getRemoteResourceTransferKey({
+			sourceCanvasId: "source-canvas",
+			metadata: {
+				id: "generation-resource:0",
+				elementId: "generation-resource:0",
+				filename: "image.png",
+				mimeType: "image/png",
+				fileSize: 0,
+				role: "generation-resource",
+				resourcePath: "/画布A/images/image.png",
+				resourceIdentity: "workspace:/画布A/images/image.png",
+				sourceRef: { src: "/画布A/images/image.png" },
+			},
+		})
+
+		expect(elementMediaKey).toBe(
+			"target-canvas:source-canvas:workspace:/画布A/images/image.png",
+		)
+		expect(generationResourceKey).toBe(elementMediaKey)
+	})
+
 	it("reuses completed element media transfers without creating another upload", async () => {
 		const result: UploadFileResponse = {
 			path: "target/videos/video.mp4",

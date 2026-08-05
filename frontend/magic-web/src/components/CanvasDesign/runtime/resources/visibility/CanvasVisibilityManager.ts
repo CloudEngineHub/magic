@@ -11,7 +11,10 @@ import {
 	type MediaDisplayResourceVariant,
 } from "./CanvasMediaViewingPolicy"
 import { getViewportCanvasRect } from "../../shared/placement/elementUtils"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import {
+	areCanvasHostResourceReferencesSame,
+	getCanvasHostResourceReferenceIdentity,
+} from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import {
 	CanvasRenderVisibilityController,
@@ -689,6 +692,21 @@ export class CanvasVisibilityManager {
 		return { ...this.statsSnapshot }
 	}
 
+	public handleResourceReferenceResolverChanged(): void {
+		if (this.destroyed) return
+
+		const controllers = this.getViewportResourceAbortControllers()
+		controllers.forEach((controller) => controller.abort())
+		controllers.clear()
+		this.lastVisibilityState.clear()
+		this.lastVideoVisibilityState.clear()
+		this.lastRequestedLoadState.clear()
+		this.lastRequestedVideoLoadState.clear()
+		this.lowFallbackPreviewPathByElementId.clear()
+		this.imageRetentionHints.clear()
+		this.scheduleRefresh("resource-reference-resolver-changed", true)
+	}
+
 	public destroy(): void {
 		this.destroyed = true
 		if (this.rafId !== null && typeof cancelAnimationFrame !== "undefined") {
@@ -750,12 +768,7 @@ export class CanvasVisibilityManager {
 	}
 
 	private isSameResourcePath(left: string, right: string): boolean {
-		const resolveAbsolutePath =
-			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-		return (
-			toCanonicalCanvasResourcePath(left, resolveAbsolutePath) ===
-			toCanonicalCanvasResourcePath(right, resolveAbsolutePath)
-		)
+		return areCanvasHostResourceReferencesSame(this.canvas, left, right)
 	}
 
 	private getViewportResourceSignal(mediaType: "image" | "video", path: string): AbortSignal {
@@ -770,9 +783,7 @@ export class CanvasVisibilityManager {
 	}
 
 	private getViewportResourceAbortKey(mediaType: "image" | "video", path: string): string {
-		const resolveAbsolutePath =
-			this.canvas.magicConfigManager?.config?.methods?.resolveAbsolutePath
-		return `${mediaType}\0${toCanonicalCanvasResourcePath(path, resolveAbsolutePath)}`
+		return `${mediaType}\0${getCanvasHostResourceReferenceIdentity(this.canvas, path)}`
 	}
 
 	private cancelFarViewportResourceSignals(activeKeys: Set<string>): void {

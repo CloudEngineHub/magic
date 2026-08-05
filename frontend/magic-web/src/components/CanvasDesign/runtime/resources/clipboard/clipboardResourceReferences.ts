@@ -1,12 +1,12 @@
 import type { ImageElement, LayerElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
-import {
-	toWeakCanvasResourcePath,
-	stripCurrentDirectoryPrefix,
-} from "../../shared/path/canvasResourcePath"
+import { getCanvasResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 export interface ClipboardResourceReference {
 	path: string
+	identity: string
+	aliases: string[]
 	isSelfReferenceOnly?: boolean
 }
 
@@ -26,10 +26,13 @@ function normalizeResourcePath(value: unknown): string | null {
 	return path
 }
 
-export function getClipboardResourcePathKey(value: unknown): string | null {
+export function getClipboardResourcePathKey(
+	value: unknown,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): string | null {
 	const path = normalizeResourcePath(value)
 	if (!path) return null
-	return stripCurrentDirectoryPrefix(toWeakCanvasResourcePath(path))
+	return getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 }
 
 function addPath(
@@ -37,25 +40,32 @@ function addPath(
 	seen: Map<string, ClipboardResourceReference>,
 	value: unknown,
 	ownerSourcePath?: string | null,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	const path = normalizeResourcePath(value)
 	if (!path) return
 
-	const pathKey = getClipboardResourcePathKey(path)
+	const pathKey = getClipboardResourcePathKey(path, resolveResourceReference)
 	if (!pathKey) return
 
-	const isSelfReference = getClipboardResourcePathKey(ownerSourcePath) === pathKey
+	const isSelfReference =
+		getClipboardResourcePathKey(ownerSourcePath, resolveResourceReference) === pathKey
 	const existing = seen.get(pathKey)
 	if (existing) {
+		if (!existing.aliases.includes(path)) existing.aliases.push(path)
 		if (!isSelfReference) {
+			if (existing.isSelfReferenceOnly) {
+				existing.path = path
+			}
 			existing.isSelfReferenceOnly = false
-			existing.path = path
 		}
 		return
 	}
 
 	const ref: ClipboardResourceReference = {
 		path,
+		identity: pathKey,
+		aliases: [path],
 		isSelfReferenceOnly: isSelfReference,
 	}
 	seen.set(pathKey, ref)
@@ -67,10 +77,11 @@ function collectPathArray(
 	seen: Map<string, ClipboardResourceReference>,
 	value: unknown,
 	ownerSourcePath?: string | null,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	if (!Array.isArray(value)) return
 	for (const item of value) {
-		addPath(refs, seen, item, ownerSourcePath)
+		addPath(refs, seen, item, ownerSourcePath, resolveResourceReference)
 	}
 }
 
@@ -80,10 +91,11 @@ function collectPathFieldArray(
 	value: unknown,
 	field: string,
 	ownerSourcePath?: string | null,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	if (!Array.isArray(value)) return
 	for (const item of value) {
-		addPath(refs, seen, asRecord(item)?.[field], ownerSourcePath)
+		addPath(refs, seen, asRecord(item)?.[field], ownerSourcePath, resolveResourceReference)
 	}
 }
 
@@ -91,44 +103,64 @@ function collectImageResourceReferences(
 	element: ImageElement,
 	refs: ClipboardResourceReference[],
 	seen: Map<string, ClipboardResourceReference>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	const ownerSourcePath = normalizeResourcePath(element.src)
 	const generateImageRequest = asRecord(element.generateImageRequest)
 	if (generateImageRequest) {
-		collectPathArray(refs, seen, generateImageRequest.reference_images, ownerSourcePath)
+		collectPathArray(
+			refs,
+			seen,
+			generateImageRequest.reference_images,
+			ownerSourcePath,
+			resolveResourceReference,
+		)
 		collectPathFieldArray(
 			refs,
 			seen,
 			generateImageRequest.reference_image_options,
 			"path",
 			ownerSourcePath,
+			resolveResourceReference,
 		)
 	}
 
 	const imageGenerationTaskMeta = asRecord(element.imageGenerationTaskMeta)
 	if (imageGenerationTaskMeta) {
-		addPath(refs, seen, imageGenerationTaskMeta.file_path, ownerSourcePath)
-		addPath(refs, seen, imageGenerationTaskMeta.canvas_path, ownerSourcePath)
-		addPath(refs, seen, imageGenerationTaskMeta.mask_path, ownerSourcePath)
-		addPath(refs, seen, imageGenerationTaskMeta.mark_path, ownerSourcePath)
+		addPath(
+			refs,
+			seen,
+			imageGenerationTaskMeta.file_path,
+			ownerSourcePath,
+			resolveResourceReference,
+		)
+		// 生成辅助图属于 private upload，不是可复制的工作区资源引用。
 		collectPathFieldArray(
 			refs,
 			seen,
 			imageGenerationTaskMeta.reference_image_options,
 			"path",
 			ownerSourcePath,
+			resolveResourceReference,
 		)
 	}
 
 	const generateHightImageRequest = asRecord(element.generateHightImageRequest)
 	if (generateHightImageRequest) {
-		addPath(refs, seen, generateHightImageRequest.file_path, ownerSourcePath)
+		addPath(
+			refs,
+			seen,
+			generateHightImageRequest.file_path,
+			ownerSourcePath,
+			resolveResourceReference,
+		)
 		collectPathFieldArray(
 			refs,
 			seen,
 			generateHightImageRequest.reference_image_options,
 			"path",
 			ownerSourcePath,
+			resolveResourceReference,
 		)
 	}
 }
@@ -137,86 +169,168 @@ function collectVideoResourceReferences(
 	element: VideoElement,
 	refs: ClipboardResourceReference[],
 	seen: Map<string, ClipboardResourceReference>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	const ownerSourcePath = normalizeResourcePath(element.src)
 	const generateVideoRequest = asRecord(element.generateVideoRequest)
 	const inputs = asRecord(generateVideoRequest?.inputs)
 	if (!inputs) return
 
-	collectPathFieldArray(refs, seen, inputs.frames, "uri", ownerSourcePath)
-	collectPathFieldArray(refs, seen, inputs.reference_images, "uri", ownerSourcePath)
-	collectPathFieldArray(refs, seen, inputs.reference_videos, "uri", ownerSourcePath)
-	collectPathFieldArray(refs, seen, inputs.reference_audios, "uri", ownerSourcePath)
-	collectPathFieldArray(refs, seen, inputs.audio, "uri", ownerSourcePath)
-	addPath(refs, seen, asRecord(inputs.video)?.uri, ownerSourcePath)
-	addPath(refs, seen, asRecord(inputs.mask)?.uri, ownerSourcePath)
+	collectPathFieldArray(
+		refs,
+		seen,
+		inputs.frames,
+		"uri",
+		ownerSourcePath,
+		resolveResourceReference,
+	)
+	collectPathFieldArray(
+		refs,
+		seen,
+		inputs.reference_images,
+		"uri",
+		ownerSourcePath,
+		resolveResourceReference,
+	)
+	collectPathFieldArray(
+		refs,
+		seen,
+		inputs.reference_videos,
+		"uri",
+		ownerSourcePath,
+		resolveResourceReference,
+	)
+	collectPathFieldArray(
+		refs,
+		seen,
+		inputs.reference_audios,
+		"uri",
+		ownerSourcePath,
+		resolveResourceReference,
+	)
+	collectPathFieldArray(
+		refs,
+		seen,
+		inputs.audio,
+		"uri",
+		ownerSourcePath,
+		resolveResourceReference,
+	)
+	addPath(refs, seen, asRecord(inputs.video)?.uri, ownerSourcePath, resolveResourceReference)
+	addPath(refs, seen, asRecord(inputs.mask)?.uri, ownerSourcePath, resolveResourceReference)
 }
 
 function collectElementReferences(
 	element: LayerElement,
 	refs: ClipboardResourceReference[],
 	seen: Map<string, ClipboardResourceReference>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
 	if (element.type === ElementTypeEnum.Image) {
-		collectImageResourceReferences(element, refs, seen)
+		collectImageResourceReferences(element, refs, seen, resolveResourceReference)
 	}
 
 	if (element.type === ElementTypeEnum.Video) {
-		collectVideoResourceReferences(element, refs, seen)
+		collectVideoResourceReferences(element, refs, seen, resolveResourceReference)
 	}
 
 	if ("children" in element && Array.isArray(element.children)) {
 		for (const child of element.children) {
-			collectElementReferences(child, refs, seen)
+			collectElementReferences(child, refs, seen, resolveResourceReference)
 		}
 	}
 }
 
 export function collectElementResourceReferences(
 	elements: LayerElement[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): ClipboardResourceReference[] {
 	const refs: ClipboardResourceReference[] = []
 	const seen = new Map<string, ClipboardResourceReference>()
 	for (const element of elements) {
-		collectElementReferences(element, refs, seen)
+		collectElementReferences(element, refs, seen, resolveResourceReference)
 	}
 	return refs
 }
 
-function resolveReplacement(value: unknown, pathMap: ReadonlyMap<string, string>): string | null {
+export function addClipboardResourceAliasMappings(
+	pathMap: Map<string, string>,
+	resourcePath: string,
+	aliases: readonly string[] | undefined,
+	replacement: string,
+): void {
+	pathMap.set(resourcePath, replacement)
+	aliases?.forEach((alias) => {
+		const normalizedAlias = normalizeResourcePath(alias)
+		if (normalizedAlias) pathMap.set(normalizedAlias, replacement)
+	})
+}
+
+function resolveReplacement(
+	value: unknown,
+	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): string | null {
 	const path = normalizeResourcePath(value)
 	if (!path) return null
 	const exactReplacement = pathMap.get(path)
 	if (exactReplacement) return exactReplacement
 
-	const pathKey = getClipboardResourcePathKey(path)
+	const pathKey = getClipboardResourcePathKey(path, resolveResourceReference)
 	if (!pathKey) return null
+	return replacementByIdentity.get(pathKey) ?? null
+}
+
+function createReplacementIdentityIndex(
+	pathMap: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): ReadonlyMap<string, string> {
+	const replacementByIdentity = new Map<string, string>()
 	for (const [sourcePath, replacement] of pathMap.entries()) {
-		if (getClipboardResourcePathKey(sourcePath) === pathKey) {
-			return replacement
+		const identity = getClipboardResourcePathKey(sourcePath, resolveResourceReference)
+		if (identity && !replacementByIdentity.has(identity)) {
+			replacementByIdentity.set(identity, replacement)
 		}
 	}
-	return null
+	return replacementByIdentity
 }
 
 function rewritePathField(
 	target: MutableRecord | null,
 	field: string,
 	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	if (!target) return false
-	const replacement = resolveReplacement(target[field], pathMap)
+	const replacement = resolveReplacement(
+		target[field],
+		pathMap,
+		replacementByIdentity,
+		resolveResourceReference,
+	)
 	if (!replacement) return false
 	target[field] = replacement
 	return true
 }
 
-function rewritePathArray(value: unknown, pathMap: ReadonlyMap<string, string>): boolean {
+function rewritePathArray(
+	value: unknown,
+	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
 	if (!Array.isArray(value)) return false
 
 	let hasChanged = false
 	for (let index = 0; index < value.length; index += 1) {
-		const replacement = resolveReplacement(value[index], pathMap)
+		const replacement = resolveReplacement(
+			value[index],
+			pathMap,
+			replacementByIdentity,
+			resolveResourceReference,
+		)
 		if (!replacement) continue
 		value[index] = replacement
 		hasChanged = true
@@ -228,12 +342,22 @@ function rewritePathFieldArray(
 	value: unknown,
 	field: string,
 	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	if (!Array.isArray(value)) return false
 
 	let hasChanged = false
 	for (const item of value) {
-		if (rewritePathField(asRecord(item), field, pathMap)) {
+		if (
+			rewritePathField(
+				asRecord(item),
+				field,
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		) {
 			hasChanged = true
 		}
 	}
@@ -243,12 +367,30 @@ function rewritePathFieldArray(
 function rewriteImageResourceReferences(
 	element: ImageElement,
 	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	let hasChanged = false
 	const generateImageRequest = asRecord(element.generateImageRequest)
 	if (generateImageRequest) {
-		if (rewritePathArray(generateImageRequest.reference_images, pathMap)) hasChanged = true
-		if (rewritePathFieldArray(generateImageRequest.reference_image_options, "path", pathMap)) {
+		if (
+			rewritePathArray(
+				generateImageRequest.reference_images,
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathFieldArray(
+				generateImageRequest.reference_image_options,
+				"path",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		) {
 			hasChanged = true
 		}
 		delete generateImageRequest.project_id
@@ -258,12 +400,25 @@ function rewriteImageResourceReferences(
 
 	const imageGenerationTaskMeta = asRecord(element.imageGenerationTaskMeta)
 	if (imageGenerationTaskMeta) {
-		if (rewritePathField(imageGenerationTaskMeta, "file_path", pathMap)) hasChanged = true
-		if (rewritePathField(imageGenerationTaskMeta, "canvas_path", pathMap)) hasChanged = true
-		if (rewritePathField(imageGenerationTaskMeta, "mask_path", pathMap)) hasChanged = true
-		if (rewritePathField(imageGenerationTaskMeta, "mark_path", pathMap)) hasChanged = true
 		if (
-			rewritePathFieldArray(imageGenerationTaskMeta.reference_image_options, "path", pathMap)
+			rewritePathField(
+				imageGenerationTaskMeta,
+				"file_path",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		// private-upload 字段保留原值，不进入工作区 identity / rewrite 管道。
+		if (
+			rewritePathFieldArray(
+				imageGenerationTaskMeta.reference_image_options,
+				"path",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
 		) {
 			hasChanged = true
 		}
@@ -274,12 +429,23 @@ function rewriteImageResourceReferences(
 
 	const generateHightImageRequest = asRecord(element.generateHightImageRequest)
 	if (generateHightImageRequest) {
-		if (rewritePathField(generateHightImageRequest, "file_path", pathMap)) hasChanged = true
+		if (
+			rewritePathField(
+				generateHightImageRequest,
+				"file_path",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
 		if (
 			rewritePathFieldArray(
 				generateHightImageRequest.reference_image_options,
 				"path",
 				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
 			)
 		) {
 			hasChanged = true
@@ -295,18 +461,83 @@ function rewriteImageResourceReferences(
 function rewriteVideoResourceReferences(
 	element: VideoElement,
 	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	let hasChanged = false
 	const generateVideoRequest = asRecord(element.generateVideoRequest)
 	const inputs = asRecord(generateVideoRequest?.inputs)
 	if (inputs) {
-		if (rewritePathFieldArray(inputs.frames, "uri", pathMap)) hasChanged = true
-		if (rewritePathFieldArray(inputs.reference_images, "uri", pathMap)) hasChanged = true
-		if (rewritePathFieldArray(inputs.reference_videos, "uri", pathMap)) hasChanged = true
-		if (rewritePathFieldArray(inputs.reference_audios, "uri", pathMap)) hasChanged = true
-		if (rewritePathFieldArray(inputs.audio, "uri", pathMap)) hasChanged = true
-		if (rewritePathField(asRecord(inputs.video), "uri", pathMap)) hasChanged = true
-		if (rewritePathField(asRecord(inputs.mask), "uri", pathMap)) hasChanged = true
+		if (
+			rewritePathFieldArray(
+				inputs.frames,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathFieldArray(
+				inputs.reference_images,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathFieldArray(
+				inputs.reference_videos,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathFieldArray(
+				inputs.reference_audios,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathFieldArray(
+				inputs.audio,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathField(
+				asRecord(inputs.video),
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
+		if (
+			rewritePathField(
+				asRecord(inputs.mask),
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		)
+			hasChanged = true
 	}
 
 	if (generateVideoRequest) {
@@ -318,25 +549,58 @@ function rewriteVideoResourceReferences(
 	return hasChanged
 }
 
-export function rewriteElementResourceReferences(
+function rewriteElementResourceReferencesWithIndex(
 	element: LayerElement,
 	pathMap: ReadonlyMap<string, string>,
+	replacementByIdentity: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	let hasChanged = false
 
 	if (element.type === ElementTypeEnum.Image) {
-		hasChanged = rewriteImageResourceReferences(element, pathMap) || hasChanged
+		hasChanged =
+			rewriteImageResourceReferences(
+				element,
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			) || hasChanged
 	}
 
 	if (element.type === ElementTypeEnum.Video) {
-		hasChanged = rewriteVideoResourceReferences(element, pathMap) || hasChanged
+		hasChanged =
+			rewriteVideoResourceReferences(
+				element,
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			) || hasChanged
 	}
 
 	if ("children" in element && Array.isArray(element.children)) {
 		for (const child of element.children) {
-			hasChanged = rewriteElementResourceReferences(child, pathMap) || hasChanged
+			hasChanged =
+				rewriteElementResourceReferencesWithIndex(
+					child,
+					pathMap,
+					replacementByIdentity,
+					resolveResourceReference,
+				) || hasChanged
 		}
 	}
 
 	return hasChanged
+}
+
+export function rewriteElementResourceReferences(
+	element: LayerElement,
+	pathMap: ReadonlyMap<string, string>,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return rewriteElementResourceReferencesWithIndex(
+		element,
+		pathMap,
+		createReplacementIdentityIndex(pathMap, resolveResourceReference),
+		resolveResourceReference,
+	)
 }

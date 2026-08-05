@@ -3,9 +3,12 @@ import {
 	MediaResourceUrlLifecycle,
 	type MediaResourceUrlEntry,
 } from "../offline-cache/MediaResourceUrlLifecycle"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
 function createEntry(overrides: Partial<MediaResourceUrlEntry> = {}): MediaResourceUrlEntry {
 	return {
+		referencePath: "./images/a.png",
+		resourceIdentity: "workspace:/画布A/images/a.png",
 		ossSrc: null,
 		ossSrcFromCachedFallback: false,
 		sourceUrl: null,
@@ -49,7 +52,7 @@ function createLifecycle(options?: {
 				methods: {
 					getFileInfo,
 					getFileResourceMeta: options?.getFileResourceMeta,
-					resolveAbsolutePath: (path: string) => `/workspace/${path}`,
+					resolveResourceReference: createTestResourceReferenceResolver(),
 				},
 			},
 		},
@@ -129,7 +132,10 @@ describe("MediaResourceUrlLifecycle", () => {
 
 		await lifecycle.exchangeOssSrc("./images/a.png", entry)
 
-		expect(onResourceMetadataHydrated).toHaveBeenCalledWith("workspace/./images/a.png", entry)
+		expect(onResourceMetadataHydrated).toHaveBeenCalledWith(
+			"workspace:/画布A/images/a.png",
+			entry,
+		)
 	})
 
 	it("notifies when an exchange discovers a newer resource version", async () => {
@@ -145,7 +151,7 @@ describe("MediaResourceUrlLifecycle", () => {
 		await lifecycle.exchangeOssSrc("./images/a.png", entry)
 
 		expect(onResourceVersionChanged).toHaveBeenCalledWith(
-			"workspace/./images/a.png",
+			"workspace:/画布A/images/a.png",
 			entry,
 			"v1",
 			"v2",
@@ -295,7 +301,7 @@ describe("MediaResourceUrlLifecycle", () => {
 			fileName: "image.png",
 			resource_version: "v1",
 		})
-		await oldRequest
+		await expect(oldRequest).resolves.toBeNull()
 
 		expect(entry.ossSrc).toBe("https://oss.test/image-v2.png")
 		expect(entry.sourceUrl).toBe("https://oss.test/image-v2.png")

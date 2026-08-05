@@ -36,9 +36,11 @@ import {
 	type CanvasElementClipboardFileMetadata,
 } from "../../resources/clipboard/CanvasElementClipboard"
 import {
+	addClipboardResourceAliasMappings,
 	collectElementResourceReferences,
 	getClipboardResourcePathKey,
 	rewriteElementResourceReferences,
+	type ClipboardResourceReference,
 } from "../../resources/clipboard/clipboardResourceReferences"
 import canvasSize from "canvas-size"
 
@@ -929,9 +931,11 @@ export class ClipboardManager {
 		elements: LayerElement[],
 	): Promise<CollectedClipboardFiles> {
 		const mediaElements = this.getClipboardMediaElements(elements)
-		const generationResourceRefs = collectElementResourceReferences(elements).filter(
-			(ref) => !ref.isSelfReferenceOnly,
-		)
+		const resolveResourceReference =
+			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference
+		const resourceRefs = collectElementResourceReferences(elements, resolveResourceReference)
+		const resourceRefByIdentity = new Map(resourceRefs.map((ref) => [ref.identity, ref]))
+		const generationResourceRefs = resourceRefs.filter((ref) => !ref.isSelfReferenceOnly)
 		const [mediaMetadataResults, generationMetadataResults] = await Promise.all([
 			Promise.all(mediaElements.map((element) => this.getCanvasFileMetadata(element))),
 			Promise.all(
@@ -968,6 +972,7 @@ export class ClipboardManager {
 				filename: result.filename,
 				mimeType: result.mimeType,
 				fileSize: result.fileSize,
+				...this.getElementResourceMetadata(element, resourceRefByIdentity),
 				sourceRef: result.sourceRef,
 			})
 			metadataList.push(metadata)
@@ -999,6 +1004,8 @@ export class ClipboardManager {
 				CanvasElementClipboard.createGenerationResourceMetadata({
 					fileId: `generation-resource:${i}`,
 					resourcePath: ref.path,
+					resourceIdentity: ref.identity,
+					resourceAliases: ref.aliases,
 					filename: result.filename,
 					mimeType: result.mimeType,
 					fileSize: result.fileSize,
@@ -1008,6 +1015,22 @@ export class ClipboardManager {
 		}
 
 		return { metadata: metadataList, files, native }
+	}
+
+	private getElementResourceMetadata(
+		element: CanvasFileElement,
+		resourceRefByIdentity: ReadonlyMap<string, ClipboardResourceReference>,
+	): Pick<CanvasElementClipboardFileMetadata, "resourceIdentity" | "resourceAliases"> {
+		const resourceIdentity = getClipboardResourcePathKey(
+			element.src,
+			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference,
+		)
+		if (!resourceIdentity || !element.src) return {}
+
+		const resourceAliases = Array.from(
+			new Set([element.src, ...(resourceRefByIdentity.get(resourceIdentity)?.aliases ?? [])]),
+		)
+		return { resourceIdentity, resourceAliases }
 	}
 
 	private getClipboardMediaElements(elements: LayerElement[]): CanvasFileElement[] {
@@ -1322,36 +1345,6 @@ export class ClipboardManager {
 		return JSON.parse(JSON.stringify(element)) as LayerElement
 	}
 
-	private withSourceElementPathMapping(
-		pathMap: ReadonlyMap<string, string>,
-		sourceElement: CanvasFileElement,
-		uploadResult: UploadFileResponse,
-	): ReadonlyMap<string, string> {
-		if (!sourceElement.src) return pathMap
-		const nextPathMap = new Map(this.withoutSourceElementPathMapping(pathMap, sourceElement))
-		nextPathMap.set(sourceElement.src, uploadResult.path)
-		return nextPathMap
-	}
-
-	private withoutSourceElementPathMapping(
-		pathMap: ReadonlyMap<string, string>,
-		sourceElement: CanvasFileElement,
-	): ReadonlyMap<string, string> {
-		const sourcePathKey = getClipboardResourcePathKey(sourceElement.src)
-		if (!sourcePathKey) return pathMap
-
-		let hasChanged = false
-		const nextPathMap = new Map<string, string>()
-		for (const [sourcePath, targetPath] of pathMap.entries()) {
-			if (getClipboardResourcePathKey(sourcePath) === sourcePathKey) {
-				hasChanged = true
-				continue
-			}
-			nextPathMap.set(sourcePath, targetPath)
-		}
-		return hasChanged ? nextPathMap : pathMap
-	}
-
 	private async resolveGenerationResourcePathMap(
 		fileMetadata: CanvasElementClipboardFileMetadata[],
 		sourceCanvasId?: string,
@@ -1367,7 +1360,7 @@ export class ClipboardManager {
 		)
 		for (const metadata of generationResources) {
 			const resourcePath = metadata.resourcePath
-			const resourcePathKey = getClipboardResourcePathKey(resourcePath)
+			const resourcePathKey = metadata.resourceIdentity || resourcePath
 			if (!resourcePath || !resourcePathKey || seenResourceKeys.has(resourcePathKey)) {
 				continue
 			}
@@ -1385,16 +1378,21 @@ export class ClipboardManager {
 					})
 				if (uploadResult?.path) {
 					this.primeGenerationResourceCache(resourcePath, uploadResult, metadata)
-					return { resourcePath, uploadResult, failed: false }
+					return { metadata, resourcePath, uploadResult, failed: false }
 				}
-				return { resourcePath, uploadResult: null, failed: true }
+				return { metadata, resourcePath, uploadResult: null, failed: true }
 			}),
 		)
 
 		let failureCount = 0
 		for (const result of transferResults) {
 			if (result.uploadResult?.path) {
-				pathMap.set(result.resourcePath, result.uploadResult.path)
+				addClipboardResourceAliasMappings(
+					pathMap,
+					result.resourcePath,
+					result.metadata.resourceAliases,
+					result.uploadResult.path,
+				)
 				continue
 			}
 			if (result.failed) {
@@ -1415,17 +1413,19 @@ export class ClipboardManager {
 				continue
 			}
 
-			const resourceKey = getClipboardResourcePathKey(metadata.resourcePath)
-			if (!resourceKey || seenKeys.has(resourceKey)) {
-				continue
+			const aliases = metadata.resourceAliases?.length
+				? metadata.resourceAliases
+				: [metadata.resourcePath]
+			for (const alias of aliases) {
+				const resourceKey = `${metadata.resourceIdentity || metadata.id}\0${alias}`
+				if (seenKeys.has(resourceKey)) continue
+				seenKeys.add(resourceKey)
+				releases.push(
+					this.canvas.canvasFileUploadManager.registerPendingRemoteResourceLoadDeferral(
+						alias,
+					),
+				)
 			}
-
-			seenKeys.add(resourceKey)
-			releases.push(
-				this.canvas.canvasFileUploadManager.registerPendingRemoteResourceLoadDeferral(
-					metadata.resourcePath,
-				),
-			)
 		}
 		return releases
 	}
@@ -1493,7 +1493,6 @@ export class ClipboardManager {
 		finalElement: CanvasFileElement
 		fileByElementId: Map<string, File>
 		metadataByElementId: Map<string, CanvasElementClipboardFileMetadata>
-		resourcePathMap: ReadonlyMap<string, string>
 		sourceCanvasId?: string
 	}): Promise<PreparedClipboardTreeFileElement> {
 		const {
@@ -1501,37 +1500,9 @@ export class ClipboardManager {
 			finalElement,
 			fileByElementId,
 			metadataByElementId,
-			resourcePathMap,
 			sourceCanvasId,
 		} = options
 		const metadata = metadataByElementId.get(sourceElement.id)
-
-		if (metadata?.role === "generation-resource") {
-			const completedTransfer =
-				await this.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer(
-					{
-						sourceCanvasId,
-						metadata,
-					},
-				)
-			if (completedTransfer) {
-				const cachedElement = this.getFileElementDataWithUploadResult(
-					finalElement,
-					completedTransfer,
-				)
-				const nextPathMap = this.withSourceElementPathMapping(
-					resourcePathMap,
-					sourceElement,
-					completedTransfer,
-				)
-				rewriteElementResourceReferences(cachedElement, nextPathMap)
-				this.primeFileElementResourceCache(cachedElement, completedTransfer)
-				return {
-					element: cachedElement,
-					sourceReferenceFailureCount: 0,
-				}
-			}
-		}
 
 		const file = fileByElementId.get(sourceElement.id)
 		if (file) {
@@ -1544,6 +1515,7 @@ export class ClipboardManager {
 					sourceCanvasId,
 					sourcePath: sourceElement.src,
 					file,
+					metadata,
 				},
 			}
 		}
@@ -1578,7 +1550,6 @@ export class ClipboardManager {
 		canReuseElementSrc: boolean
 		fileByElementId: Map<string, File>
 		metadataByElementId: Map<string, CanvasElementClipboardFileMetadata>
-		resourcePathMap: ReadonlyMap<string, string>
 		sourceCanvasId?: string
 	}): Promise<PreparedClipboardTreeElement> {
 		const {
@@ -1591,7 +1562,6 @@ export class ClipboardManager {
 			canReuseElementSrc,
 			fileByElementId,
 			metadataByElementId,
-			resourcePathMap,
 			sourceCanvasId,
 		} = options
 		let sourceReferenceFailureCount = 0
@@ -1620,7 +1590,6 @@ export class ClipboardManager {
 					canReuseElementSrc,
 					fileByElementId,
 					metadataByElementId,
-					resourcePathMap,
 					sourceCanvasId,
 				})
 				sourceReferenceFailureCount += preparedChild.sourceReferenceFailureCount
@@ -1641,17 +1610,11 @@ export class ClipboardManager {
 			return { element: finalElement, sourceReferenceFailureCount, pendingUploads }
 		}
 
-		const resourcePathMapForElement = this.withoutSourceElementPathMapping(
-			resourcePathMap,
-			sourceElement,
-		)
-		rewriteElementResourceReferences(finalElement, resourcePathMapForElement)
 		const resolvedFileElement = await this.resolveCrossCanvasTreeFileElement({
 			sourceElement,
 			finalElement: finalElement as CanvasFileElement,
 			fileByElementId,
 			metadataByElementId,
-			resourcePathMap,
 			sourceCanvasId,
 		})
 
@@ -1712,10 +1675,17 @@ export class ClipboardManager {
 			uploadResult,
 		)
 		if (upload.sourcePath) {
-			rewriteElementResourceReferences(
-				uploadedElement,
-				new Map([[upload.sourcePath, uploadResult.path]]),
+			const pathMap = new Map<string, string>()
+			addClipboardResourceAliasMappings(
+				pathMap,
+				upload.sourcePath,
+				[
+					upload.metadata?.sourceRef?.src,
+					...(upload.metadata?.resourceAliases ?? []),
+				].filter((alias): alias is string => typeof alias === "string" && alias.length > 0),
+				uploadResult.path,
 			)
+			rewriteElementResourceReferences(uploadedElement, pathMap)
 		}
 		this.primeFileElementResourceCache(uploadedElement, uploadResult)
 		const resourceUpdates = this.getFileElementResourceUpdates(uploadedElement)
@@ -1850,12 +1820,6 @@ export class ClipboardManager {
 				async () => {
 					const pendingBatchId =
 						this.canvas.canvasFileUploadManager.getCurrentPendingBatchId()
-					const generationResourceResult = {
-						pathMap: new Map<string, string>(),
-						failureCount: 0,
-					}
-					sourceReferenceFailureCount += generationResourceResult.failureCount
-					const resourcePathMap = generationResourceResult.pathMap
 					let nextZIndex = maxZIndex + 1
 
 					for (const element of sortedElements) {
@@ -1870,7 +1834,6 @@ export class ClipboardManager {
 							canReuseElementSrc,
 							fileByElementId,
 							metadataByElementId,
-							resourcePathMap,
 							sourceCanvasId: canvasId,
 						})
 						sourceReferenceFailureCount += preparedTree.sourceReferenceFailureCount

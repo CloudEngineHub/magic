@@ -18,8 +18,9 @@ import {
 	isAudioFile,
 } from "../../shared/ids"
 import {
+	getCanvasHostResourceReferenceIdentity,
+	isRemoteOrSpecialPath,
 	normalizeCanvasUploadFileResponsePath,
-	toRemoteLoadDeferralKey,
 } from "../../shared/path/canvasResourcePath"
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
@@ -282,7 +283,9 @@ export class CanvasFileUploadManager {
 	}
 
 	public getRemoteResourceLoadDeferralKey(path?: string | null): string | null {
-		return toRemoteLoadDeferralKey(path)
+		const rawPath = path?.trim()
+		if (!rawPath || isRemoteOrSpecialPath(rawPath)) return null
+		return getCanvasHostResourceReferenceIdentity(this.canvas, rawPath)
 	}
 
 	public shouldDeferRemoteResourceLoad(path: string): boolean {
@@ -1027,13 +1030,16 @@ export class CanvasFileUploadManager {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
 	}): string | undefined {
-		const sourcePath = options.metadata.sourceRef?.src
+		const sourceResourceKey =
+			options.metadata.resourceIdentity || options.metadata.sourceRef?.src
 		const targetCanvasId = this.canvas.id
-		if (!targetCanvasId || !options.sourceCanvasId || !sourcePath) {
+		if (!targetCanvasId || !options.sourceCanvasId || !sourceResourceKey) {
 			return undefined
 		}
 		// 解决场景：多 tab / 多窗口在同一目标画布反复粘贴，需要跨页面复用已完成的资源迁移结果。
-		return `${targetCanvasId}:${options.sourceCanvasId}:${sourcePath}`
+		// 源画布 identity 是权威身份，可让 `./images/x` 与 `/画布A/images/x`
+		// 在 element-media / generation-resource 之间共用同一次迁移；旧剪贴板数据则回退到原路径。
+		return `${targetCanvasId}:${options.sourceCanvasId}:${sourceResourceKey}`
 	}
 
 	private async isCompletedRemoteResourceTransferUsable(

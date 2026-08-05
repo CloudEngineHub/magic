@@ -15,7 +15,7 @@
  * 路径规范化会参与 IndexedDB id 与 CacheStorage key；语义变化时必须递增此版本。
  * 主线程离线缓存管理器直接复用这些常量，避免它与 SW 升级不一致。
  */
-export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 2
+export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 3
 const DB_BASE_NAME = "canvas-media-resource-offline-cache"
 export const CANVAS_MEDIA_DB_NAME = `${DB_BASE_NAME}-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 export const CANVAS_MEDIA_CACHE_NAME = `canvas-media-resources-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`

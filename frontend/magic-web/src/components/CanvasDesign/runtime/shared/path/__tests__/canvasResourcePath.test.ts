@@ -1,76 +1,164 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
-	areCanvasResourcePathsSame,
+	areCanvasResourceReferencesSame,
+	getCanvasResourceAvailability,
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 	normalizeCanvasUploadFileResponsePath,
-	normalizeCanvasUploadStoragePath,
-	toCanvasUploadStoragePath,
-	toCanonicalCanvasResourcePath,
-	toRemoteLoadDeferralKey,
-	toWeakCanvasResourcePath,
+	resolveCanvasGeneratedResourceStoragePath,
+	resolveCanvasStorageResourceReference,
 } from "../canvasResourcePath"
 
-function resolveAbsolutePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/")
-	if (!normalized) return "/画布A/"
-	if (normalized.startsWith("./")) {
-		return `/画布A/${normalized.replace(/^\.\/+/, "")}`
-	}
-	if (normalized.startsWith("/")) return normalized
-	if (normalized.startsWith("画布A/") || normalized.startsWith("画布B/")) {
-		return `/${normalized}`
-	}
-	return normalized
-}
-
 describe("canvasResourcePath", () => {
-	it("normalizes current-canvas weak and canonical paths", () => {
-		expect(toWeakCanvasResourcePath("./images/a.png")).toBe("images/a.png")
-		expect(toWeakCanvasResourcePath("images/a.png")).toBe("images/a.png")
-		expect(toCanonicalCanvasResourcePath("./images/a.png")).toBe("images/a.png")
-		expect(toCanonicalCanvasResourcePath("images/a.png")).toBe("images/a.png")
-		expect(areCanvasResourcePathsSame("./images/a.png", "images/a.png")).toBe(true)
-		expect(areCanvasResourcePathsSame("./images/a.png", "/images/a.png")).toBe(true)
+	it("keeps unresolved identities exact when no host resolver is available", () => {
+		expect(getCanvasResourceReferenceIdentity("./images/a.png")).toBe(
+			"unresolved:./images/a.png",
+		)
+		expect(getCanvasResourceReferenceIdentity("/images/a.png")).toBe("unresolved:/images/a.png")
+		expect(areCanvasResourceReferencesSame("./images/a.png", "/images/a.png")).toBe(false)
 	})
 
-	it("resolves the same resource across host absolute and DSL forms without cross-canvas fallback", () => {
+	it("uses structured host identities without weak fallback for unresolved references", () => {
+		const resolveResourceReference: ResolveCanvasResourceReference = vi.fn((input) => {
+			const path =
+				input.namespace === "external-url"
+					? input.url
+					: "path" in input
+						? input.path
+						: input.fileId
+			if (path === "./images/a.png" || path === "/画布A/images/a.png") {
+				return {
+					status: "resolved" as const,
+					resourceKind: "workspace-file" as const,
+					rawReference: path || "",
+					workspacePath: "/画布A/images/a.png",
+					storagePath: "./images/a.png",
+					identity: "workspace:/画布A/images/a.png",
+					candidates: ["/画布A/images/a.png"],
+					legacyRecovered: false,
+					resolutionSource: "strict-path" as const,
+				}
+			}
+			return {
+				status: "ambiguous" as const,
+				rawReference: path || "",
+				candidates: [],
+			}
+		})
+
 		expect(
-			areCanvasResourcePathsSame(
+			areCanvasResourceReferencesSame(
 				"./images/a.png",
 				"/画布A/images/a.png",
-				resolveAbsolutePath,
+				resolveResourceReference,
 			),
 		).toBe(true)
 		expect(
-			areCanvasResourcePathsSame("画布B/images/a.png", "./images/a.png", resolveAbsolutePath),
+			areCanvasResourceReferencesSame(
+				"./images/a.png",
+				"/images/a.png",
+				resolveResourceReference,
+			),
 		).toBe(false)
-		expect(toCanonicalCanvasResourcePath("/画布B/images/a.png", resolveAbsolutePath)).toBe(
-			"画布B/images/a.png",
+		expect(getCanvasResourceReferenceIdentity("/images/a.png", resolveResourceReference)).toBe(
+			"unresolved:/images/a.png",
 		)
-		expect(
-			areCanvasResourcePathsSame("./images/a.png", "/images/a.png", resolveAbsolutePath),
-		).toBe(false)
-		expect(getCanvasResourceIdentity("./images/a.png", resolveAbsolutePath)).toBe(
-			"画布A/images/a.png",
-		)
-		expect(getCanvasResourceIdentity("/images/a.png", resolveAbsolutePath)).toBe("images/a.png")
 	})
 
-	it("keeps remote load deferral keys stable for canvas-relative aliases", () => {
-		expect(toRemoteLoadDeferralKey("./videos/a.mp4")).toBe("videos/a.mp4")
-		expect(toRemoteLoadDeferralKey("videos/a.mp4")).toBe("videos/a.mp4")
-		expect(toRemoteLoadDeferralKey("/videos/a.mp4")).toBe("videos/a.mp4")
+	it("routes historical bare paths only through legacy recovery", () => {
+		const resolveResourceReference = vi.fn(createTestResourceReferenceResolver())
+
+		resolveCanvasStorageResourceReference("images/a.png", resolveResourceReference)
+		resolveCanvasStorageResourceReference("./images/a.png", resolveResourceReference)
+
+		expect(resolveResourceReference).toHaveBeenNthCalledWith(
+			1,
+			{
+				namespace: "canvas-storage",
+				path: "images/a.png",
+				mode: "legacy-recovery",
+			},
+			undefined,
+		)
+		expect(resolveResourceReference).toHaveBeenNthCalledWith(
+			2,
+			{
+				namespace: "canvas-storage",
+				path: "./images/a.png",
+				mode: "strict-current-canvas",
+			},
+			undefined,
+		)
+	})
+
+	it("marks only the exact missing attachment path as deleted", () => {
+		const resolveResourceReference = createTestResourceReferenceResolver({
+			currentCanvasWorkspacePath: "/画布A",
+			attachmentsReady: true,
+			attachmentPathsByFileId: {
+				current: "/画布A/images/same.png",
+			},
+		})
+
+		expect(getCanvasResourceAvailability("./images/same.png", resolveResourceReference)).toBe(
+			"available",
+		)
+		expect(
+			getCanvasResourceAvailability("/images/images/same.png", resolveResourceReference),
+		).toBe("deleted")
+	})
+
+	it("does not treat an incomplete attachment snapshot as deletion", () => {
+		const resolveResourceReference = createTestResourceReferenceResolver({
+			attachmentsReady: false,
+		})
+
+		expect(
+			getCanvasResourceAvailability("./images/pending.png", resolveResourceReference),
+		).toBe("pending")
 	})
 
 	it("normalizes upload storage paths and file response paths", () => {
-		expect(toCanvasUploadStoragePath("images", "image_x.png")).toBe("images/image_x.png")
-		expect(normalizeCanvasUploadStoragePath("/imagesimage_x.png")).toBe("images/image_x.png")
-		expect(toCanvasUploadStoragePath("videos", "video_x.mp4")).toBe("videos/video_x.mp4")
-		expect(normalizeCanvasUploadStoragePath("/audiosaudio_x.mp3")).toBe("audios/audio_x.mp3")
-		expect(normalizeCanvasUploadFileResponsePath({ path: "/videosvideo_x.mp4" }).path).toBe(
-			"videos/video_x.mp4",
+		expect(normalizeCanvasUploadFileResponsePath({ path: "/imagesimage_x.png" }).path).toBe(
+			"/images/image_x.png",
 		)
+		expect(normalizeCanvasUploadFileResponsePath({ path: "imagesimage_x.png" }).path).toBe(
+			"images/image_x.png",
+		)
+		expect(normalizeCanvasUploadFileResponsePath({ path: "/audiosaudio_x.mp3" }).path).toBe(
+			"/audios/audio_x.mp3",
+		)
+		expect(normalizeCanvasUploadFileResponsePath({ path: "/videosvideo_x.mp4" }).path).toBe(
+			"/videos/video_x.mp4",
+		)
+	})
+
+	it("derives generated upload paths from the workspace namespace", () => {
+		const resolveResourceReference = createTestResourceReferenceResolver()
+		const host = {
+			magicConfigManager: { config: { methods: { resolveResourceReference } } },
+		}
+
+		expect(resolveCanvasGeneratedResourceStoragePath(host, "/画布A/images/", "x.png")).toBe(
+			"./images/x.png",
+		)
+		expect(resolveCanvasGeneratedResourceStoragePath(host, "/images/", "x.png")).toBe(
+			"/images/x.png",
+		)
+		expect(resolveCanvasGeneratedResourceStoragePath(host, "/画布B/images/", "x.png")).toBe(
+			"/画布B/images/x.png",
+		)
+		expect(resolveCanvasGeneratedResourceStoragePath(host, "images", "x.png")).toBe(
+			"/images/x.png",
+		)
+		expect(
+			resolveCanvasGeneratedResourceStoragePath(undefined, "/images/", "x.png"),
+		).toBeUndefined()
+		expect(
+			resolveCanvasGeneratedResourceStoragePath(host, "https://example.test/images", "x.png"),
+		).toBeUndefined()
 	})
 
 	it("extracts file names from urls and paths", () => {

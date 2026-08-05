@@ -12,6 +12,7 @@ import { ElementTypeEnum } from "../../../document/types"
 import { GenerationRuntimeManager } from "../../../generation/GenerationRuntimeManager"
 import { GenerationAttemptCoordinator } from "../../../generation/GenerationAttemptCoordinator"
 import type { Canvas } from "../../../core/Canvas"
+import { INVALID_GENERATED_RESOURCE_PATH_ERROR } from "../../../resources/polling/generationPollingUtils"
 
 function createDeferred() {
 	let resolve!: () => void
@@ -313,6 +314,61 @@ describe("ImageElement mounted image node sync", () => {
 			stage: "uploading",
 			placeholderMode: "loading",
 			text: "正在上传中...",
+		})
+	})
+
+	it("renders a localized image generation failure when the completed path is unresolved", () => {
+		const renderedError = new Konva.Group()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: {
+				status: GenerationStatus
+				errorMessage: string
+			}
+			canvas: { t: (key: string, fallback: string) => string }
+			isGenerating: boolean
+			getActiveGenerateImageRequest: () => undefined
+			getActiveImageGenerationTaskMeta: () => undefined
+			renderError: ReturnType<typeof vi.fn>
+		}
+		element.data = {
+			status: GenerationStatus.Failed,
+			errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+		}
+		element.canvas = {
+			t: (key, fallback) => (key === "image.generateFailed" ? "本地化图片失败" : fallback),
+		}
+		element.isGenerating = false
+		element.getActiveGenerateImageRequest = () => undefined
+		element.getActiveImageGenerationTaskMeta = () => undefined
+		element.renderError = vi.fn(() => renderedError)
+
+		expect(element.render()).toBe(renderedError)
+		expect(element.renderError).toHaveBeenCalledWith("本地化图片失败")
+	})
+
+	it("renders a localized video generation failure when the completed path is unresolved", () => {
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: {
+				status: GenerationStatus
+				errorMessage: string
+			}
+			canvas: { t: (key: string, fallback: string) => string }
+			isRetryEditing: boolean
+			resolveRenderState: () => { stage: string; placeholderMode?: string; text?: string }
+		}
+		element.data = {
+			status: GenerationStatus.Failed,
+			errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+		}
+		element.canvas = {
+			t: (key, fallback) => (key === "video.generateFailed" ? "本地化视频失败" : fallback),
+		}
+		element.isRetryEditing = false
+
+		expect(element.resolveRenderState()).toEqual({
+			stage: "error",
+			placeholderMode: "error",
+			text: "本地化视频失败",
 		})
 	})
 
@@ -698,6 +754,18 @@ describe("ImageElement mounted image node sync", () => {
 			expect.any(Function),
 		)
 		expect(element.resourceSubscriptionCleanups).toHaveLength(2)
+	})
+
+	it("rebinds identity-scoped resource listeners when the host resolver changes", () => {
+		const setupResourceLoadedListener = vi.fn()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			setupResourceLoadedListener: typeof setupResourceLoadedListener
+		}
+		element.setupResourceLoadedListener = setupResourceLoadedListener
+
+		element.onResourceReferenceResolverChanged()
+
+		expect(setupResourceLoadedListener).toHaveBeenCalledTimes(1)
 	})
 
 	it("exposes an image generation request while submission is pending", async () => {
