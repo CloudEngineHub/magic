@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import { flattenAttachmentsList } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -10,8 +10,6 @@ interface UseAttachmentsOptions {
 	attachments?: FileItem[]
 	/** 已扁平化的附件列表 */
 	attachmentList?: FileItem[]
-	/** 当前项目的附件快照是否已完成首次加载。禁止从数组是否存在或长度推断。 */
-	attachmentsReady: boolean
 	/** 当前项目 ID，用于请求附件树刷新 */
 	projectId?: string
 }
@@ -19,7 +17,7 @@ interface UseAttachmentsOptions {
 interface UseAttachmentsReturn {
 	/** 已扁平化的附件列表 */
 	flatAttachments: FileItem[]
-	/** 附件快照是否已由入口提供；观测过真实快照后，空数组也可能是一个有效快照 */
+	/** 当前项目是否已观测到附件快照；观测后空数组也可能是有效快照 */
 	attachmentsReady: boolean
 	/** 附件索引（路径 / id / 文件名维度快速查找） */
 	attachmentIndex: DesignAttachmentIndex
@@ -31,7 +29,14 @@ interface UseAttachmentsReturn {
  * 文件列表更新处理 Hook
  */
 export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsReturn {
-	const { attachments, attachmentList, attachmentsReady, projectId } = options
+	const { attachments, attachmentList, projectId } = options
+	const observedProjectIdRef = useRef(projectId)
+	const hasObservedAttachmentSnapshotRef = useRef(false)
+
+	if (observedProjectIdRef.current !== projectId) {
+		observedProjectIdRef.current = projectId
+		hasObservedAttachmentSnapshotRef.current = false
+	}
 
 	// 扁平化附件列表
 	const flatAttachments = useMemo(() => {
@@ -43,6 +48,14 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 		if (!attachments) return []
 		return flattenAttachmentsList(attachments)
 	}, [attachments, attachmentList])
+
+	if (flatAttachments.length > 0) {
+		hasObservedAttachmentSnapshotRef.current = true
+	}
+
+	const attachmentsReady =
+		hasObservedAttachmentSnapshotRef.current &&
+		(Array.isArray(attachmentList) || Array.isArray(attachments))
 
 	const attachmentIndex = useMemo(
 		() => buildDesignAttachmentIndex(flatAttachments),

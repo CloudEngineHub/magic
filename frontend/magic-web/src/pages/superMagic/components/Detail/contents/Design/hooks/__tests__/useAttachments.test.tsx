@@ -13,13 +13,55 @@ function attachment(fileId: string): FileItem {
 }
 
 describe("useAttachments", () => {
-	it("does not infer readiness from an explicit empty attachment list", () => {
-		const staleTree = [attachment("stale")]
+	it("becomes ready after observing a non-empty snapshot", () => {
 		const { result } = renderHook(() =>
 			useAttachments({
-				attachments: staleTree,
+				attachments: [attachment("a")],
+				projectId: "project-a",
+			}),
+		)
+
+		expect(result.current.attachmentsReady).toBe(true)
+	})
+
+	it("resets readiness immediately when the project changes", () => {
+		const { result, rerender } = renderHook(
+			(options: { projectId: string; attachments?: FileItem[] }) => useAttachments(options),
+			{
+				initialProps: {
+					projectId: "project-a",
+					attachments: [attachment("a")],
+				},
+			},
+		)
+
+		expect(result.current.attachmentsReady).toBe(true)
+		rerender({ projectId: "project-b", attachments: undefined })
+		expect(result.current.attachmentsReady).toBe(false)
+	})
+
+	it("does not reuse readiness when returning to a previous project", () => {
+		const { result, rerender } = renderHook(
+			(options: { projectId: string; attachments?: FileItem[] }) => useAttachments(options),
+			{
+				initialProps: {
+					projectId: "project-a",
+					attachments: [attachment("a")],
+				},
+			},
+		)
+
+		rerender({ projectId: "project-b", attachments: undefined })
+		rerender({ projectId: "project-a", attachments: undefined })
+
+		expect(result.current.attachmentsReady).toBe(false)
+	})
+
+	it("uses an explicit empty flat list instead of stale tree attachments", () => {
+		const { result } = renderHook(() =>
+			useAttachments({
+				attachments: [attachment("stale")],
 				attachmentList: [],
-				attachmentsReady: false,
 				projectId: "project-a",
 			}),
 		)
@@ -29,35 +71,17 @@ describe("useAttachments", () => {
 		expect(result.current.attachmentIndex.byFileId.size).toBe(0)
 	})
 
-	it("accepts an explicit ready empty snapshot", () => {
-		const { result } = renderHook(() =>
-			useAttachments({
-				attachments: [],
-				attachmentList: [],
-				attachmentsReady: true,
-				projectId: "project-a",
-			}),
-		)
-
-		expect(result.current.attachmentsReady).toBe(true)
-		expect(result.current.flatAttachments).toEqual([])
-	})
-
-	it("uses project-scoped readiness supplied by the attachment owner", () => {
+	it("remains ready when the same project's snapshot becomes empty", () => {
 		const { result, rerender } = renderHook(
-			(options: { projectId: string; attachments?: FileItem[]; attachmentsReady: boolean }) =>
-				useAttachments(options),
+			(options: { attachments: FileItem[] }) =>
+				useAttachments({ ...options, projectId: "project-a" }),
 			{
-				initialProps: {
-					projectId: "project-a",
-					attachments: [] as FileItem[],
-					attachmentsReady: true,
-				},
+				initialProps: { attachments: [attachment("a")] },
 			},
 		)
 
 		expect(result.current.attachmentsReady).toBe(true)
-		rerender({ projectId: "project-b", attachments: undefined, attachmentsReady: false })
-		expect(result.current.attachmentsReady).toBe(false)
+		rerender({ attachments: [] })
+		expect(result.current.attachmentsReady).toBe(true)
 	})
 })

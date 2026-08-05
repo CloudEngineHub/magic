@@ -298,15 +298,14 @@ function DesignViewer(props: DesignViewerProps) {
 		onFullscreen,
 	} = props
 
-	const effectiveAttachmentsReady = props.attachmentsReady ?? !selectedTopic?.project_id
+	const projectId = selectedTopic?.project_id ?? props.projectId ?? selectedProject?.id
 
 	// 文件列表更新处理
 	const { flatAttachments, attachmentsReady, attachmentIndex, updateAttachments } =
 		useAttachments({
 			attachments,
 			attachmentList,
-			attachmentsReady: effectiveAttachmentsReady,
-			projectId: selectedTopic?.project_id,
+			projectId,
 		})
 
 	const propsElements = props.data?.elements
