@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react"
-import { Avatar, Empty, Input } from "antd"
-import { IconPlus, IconSearch, IconX } from "@tabler/icons-react"
-import { Folder } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Avatar, Empty, Input, type InputRef } from "antd"
+import { IconCheck, IconPlus, IconSearch, IconX } from "@tabler/icons-react"
+import { Folder, Loader2 } from "lucide-react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { MagicIcon, MagicSelect } from "@/components/base"
+import MagicIcon from "@/components/base/MagicIcon"
+import MagicSelect from "@/components/base/MagicSelect"
+import magicToast from "@/components/base/MagicToaster/utils"
 import IconMessageTopic from "@/components/icons/IconMessageTopic"
 import IconWorkspaceCase from "@/components/icons/IconWorkspaceCase"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import { useProjects } from "../hooks/useProjects"
@@ -54,17 +57,44 @@ const TYPE_CONFIG = {
 
 function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }: SelectItemProps) {
 	const { t } = useTranslation("interface")
+	const isMobile = useIsMobile()
 	const { workspaceOptions, handleAddWorkspace } = useWorkspace()
 	const { projectOptions, handleAddProject } = useProjects(workspaceId)
 	const { topicOptions, handleAddTopic } = useTopics(workspaceId, projectId)
 	const [open, setOpen] = useState(false)
 	const [searchValue, setSearchValue] = useState("")
+	const [viewMode, setViewMode] = useState<"select" | "create">("select")
+	const [newItemName, setNewItemName] = useState("")
+	const [creating, setCreating] = useState(false)
+	const [selectInstanceKey, setSelectInstanceKey] = useState(0)
+	const [localCreatedOption, setLocalCreatedOption] = useState<{
+		option: OptionItem
+		workspaceId?: string
+		projectId?: string
+	}>()
+	const createInputRef = useRef<InputRef>(null)
 
-	const options = useMemo(() => {
+	const sourceOptions = useMemo(() => {
 		if (type === "workspace") return workspaceOptions
 		if (type === "project") return projectOptions
 		return topicOptions
 	}, [projectOptions, topicOptions, type, workspaceOptions])
+	// Keep the newly created value renderable until the refreshed API list contains it.
+	const scopedCreatedOption =
+		localCreatedOption &&
+		localCreatedOption.workspaceId === workspaceId &&
+		localCreatedOption.projectId === projectId
+			? localCreatedOption.option
+			: undefined
+	const options = useMemo(() => {
+		if (
+			!scopedCreatedOption ||
+			sourceOptions.some((option) => option.value === scopedCreatedOption.value)
+		) {
+			return sourceOptions
+		}
+		return [scopedCreatedOption, ...sourceOptions]
+	}, [scopedCreatedOption, sourceOptions])
 
 	const filteredOptions = useMemo(() => {
 		const keyword = searchValue.trim().toLowerCase()
@@ -73,41 +103,107 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 	}, [options, searchValue])
 
 	const config = TYPE_CONFIG[type]
+	const createPlaceholder =
+		type === "workspace"
+			? t("accountPanel.timedTasks.createWorkspacePlaceholder")
+			: type === "project"
+				? t("accountPanel.timedTasks.createProjectPlaceholder")
+				: t("accountPanel.timedTasks.createTopicPlaceholder")
+	const createDisabledReason = useMemo(() => {
+		if (type === "project") {
+			if (!workspaceId) return t("super:project.pleaseSelectWorkspace")
+			if (workspaceId === SHARE_WORKSPACE_ID) {
+				return t("accountPanel.timedTasks.sharedWorkspaceProjectCreateDisabled")
+			}
+		}
+
+		if (type === "topic" && (!workspaceId || !projectId)) {
+			return t("super:topic.pleaseSelectWorkspaceAndProject")
+		}
+
+		return undefined
+	}, [projectId, t, type, workspaceId])
+
+	useEffect(() => {
+		if (viewMode === "create") createInputRef.current?.focus()
+	}, [viewMode])
+
+	const closePopup = useMemoizedFn(() => {
+		setOpen(false)
+		// MagicSelect's mobile popup owns its open state, so remount this local instance to close custom content.
+		if (isMobile) setSelectInstanceKey((key) => key + 1)
+	})
 
 	const handleInnerChange = useMemoizedFn((nextValue: string) => {
 		onChange?.(nextValue)
 		onSelect?.(options.find((option) => option.value === nextValue))
-		setOpen(false)
+		closePopup()
 	})
 
 	const handleAddNew = useMemoizedFn(async () => {
-		const name = searchValue.trim()
+		const name = newItemName.trim()
 		if (!name) return
 
-		const created =
-			type === "workspace"
-				? await handleAddWorkspace(name)
-				: type === "project"
-					? await handleAddProject(name)
-					: await handleAddTopic(name)
+		setCreating(true)
+		try {
+			const created =
+				type === "workspace"
+					? await handleAddWorkspace(name)
+					: type === "project"
+						? await handleAddProject(name)
+						: await handleAddTopic(name)
 
-		if (!created?.id) return
+			if (!created?.id) {
+				magicToast.error(t("accountPanel.timedTasks.createFailed"))
+				return
+			}
 
-		const createdOption = {
-			value: created.id,
-			label: created.name || created.project_name || created.topic_name || t(config.emptyKey),
+			const createdOption = {
+				value: created.id,
+				label:
+					created.name ||
+					created.project_name ||
+					created.topic_name ||
+					t(config.emptyKey),
+			}
+
+			setLocalCreatedOption({ option: createdOption, workspaceId, projectId })
+			onChange?.(createdOption.value)
+			onSelect?.(createdOption)
+			setSearchValue("")
+			setNewItemName("")
+			setViewMode("select")
+			closePopup()
+		} finally {
+			setCreating(false)
 		}
+	})
 
-		onChange?.(createdOption.value)
-		onSelect?.(createdOption)
-		setSearchValue("")
-		setOpen(false)
+	const handleStartCreate = useMemoizedFn(() => {
+		if (createDisabledReason) return
+		setNewItemName("")
+		setViewMode("create")
+	})
+
+	const handleCancelCreate = useMemoizedFn(() => {
+		setNewItemName("")
+		setViewMode("select")
+	})
+
+	const handleOpenChange = useMemoizedFn((nextOpen: boolean) => {
+		if (!nextOpen && creating) return
+		setOpen(nextOpen)
+		if (!nextOpen) {
+			setNewItemName("")
+			setViewMode("select")
+		}
 	})
 
 	const currentLabel = options.find((option) => option.value === value)?.label
 
 	return (
 		<MagicSelect
+			key={selectInstanceKey}
 			value={value}
 			className="w-full"
 			placeholder={t(config.labelKey)}
@@ -115,7 +211,7 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 			labelInValue={false}
 			onChange={handleInnerChange}
 			open={open}
-			onOpenChange={setOpen}
+			onOpenChange={handleOpenChange}
 			showSearch={false}
 			popupRender={() => (
 				<div className="-m-1 flex flex-col pb-safe-bottom">
@@ -126,6 +222,7 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 							placeholder={t(config.searchKey)}
 							value={searchValue}
 							onChange={(event) => setSearchValue(event.target.value)}
+							onKeyDown={(event) => event.stopPropagation()}
 						/>
 						{searchValue ? (
 							<button
@@ -167,16 +264,64 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 							<Empty />
 						)}
 					</div>
-					<Button
-						onClick={handleAddNew}
-						type="button"
-						variant="ghost"
-						className="justify-start rounded-none border-t px-3 py-2"
-						disabled={type === "project" && workspaceId === SHARE_WORKSPACE_ID}
-					>
-						<IconPlus className="size-5" />
-						{t(config.addKey)}
-					</Button>
+					<div className="border-t p-2">
+						{viewMode === "create" ? (
+							<div className="flex items-center gap-1.5">
+								<Input
+									ref={createInputRef}
+									className="h-8 min-w-0 flex-1"
+									autoComplete="off"
+									placeholder={createPlaceholder}
+									value={newItemName}
+									disabled={creating}
+									onChange={(event) => setNewItemName(event.target.value)}
+									onKeyDown={(event) => event.stopPropagation()}
+									onPressEnter={handleAddNew}
+								/>
+								<Button
+									type="button"
+									size="icon-sm"
+									aria-label={t("accountPanel.timedTasks.create")}
+									disabled={!newItemName.trim() || creating}
+									onClick={handleAddNew}
+								>
+									{creating ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<IconCheck className="size-4" />
+									)}
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("accountPanel.timedTasks.cancel")}
+									disabled={creating}
+									onClick={handleCancelCreate}
+								>
+									<IconX className="size-4" />
+								</Button>
+							</div>
+						) : (
+							<>
+								<Button
+									onClick={handleStartCreate}
+									type="button"
+									variant="ghost"
+									className="w-full justify-start px-1 py-2"
+									disabled={!!createDisabledReason}
+								>
+									<IconPlus className="size-5" />
+									{t(config.addKey)}
+								</Button>
+								{createDisabledReason ? (
+									<div className="px-1 pb-1 text-xs text-muted-foreground">
+										{createDisabledReason}
+									</div>
+								) : null}
+							</>
+						)}
+					</div>
 				</div>
 			)}
 		>
