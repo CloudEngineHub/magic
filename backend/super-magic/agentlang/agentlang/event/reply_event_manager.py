@@ -109,7 +109,7 @@ class ReplyEventManager:
             use_stream_mode: 是否使用流式模式
             exception: 异常（失败时）
             content_type: 内容类型 ("reasoning" | "content")
-            content: 累积的内容（流式模式下使用，优先级高于 response）
+            content: 累积的内容；V1 保持旧传输协议，V2 仅在缺少完整响应时降级使用
         """
         if not agent_context:
             return
@@ -135,13 +135,15 @@ class ReplyEventManager:
                 except Exception:
                     pass
 
-            # 确定最终的 llm_response_message
-            # 优先使用传入的 content（流式模式），否则使用从 response 提取的
-            if content:
-                final_message = ChatCompletionMessage(role="assistant", content=content)
+            # V1 保持阶段传输语义；V2 优先保留完整响应并按字段类型降级构造。
+            final_message = ReplyEventManager._build_final_message(
+                extracted_message=extracted_message,
+                content=content,
+                content_type=content_type,
+                message_version=agent_context.get_message_version(),
+            )
+            if final_message is not None and extracted_message is None:
                 success = True
-            else:
-                final_message = extracted_message
 
             # 创建事件数据
             event_data = AfterAgentReplyEventData(
@@ -173,6 +175,32 @@ class ReplyEventManager:
 
         except Exception as e:
             logger.error(f"[{request_id}] 触发大模型响应完成后事件失败: {e}", exc_info=True)
+
+    @staticmethod
+    def _build_final_message(
+        extracted_message: Optional[ChatCompletionMessage],
+        content: str,
+        content_type: str,
+        message_version: str = "v2",
+    ) -> Optional[ChatCompletionMessage]:
+        """按消息协议保留 V1 传输语义，并为 V2 构造字段保真的 Assistant 消息。"""
+        if message_version == "v1":
+            if content:
+                return ChatCompletionMessage(role="assistant", content=content)
+            return extracted_message
+        if extracted_message is not None:
+            return extracted_message
+        if not content:
+            return None
+        if content_type == "reasoning":
+            message = ChatCompletionMessage(role="assistant", content=None)
+            setattr(message, "reasoning_content", content)
+            return message
+        if content_type == "content":
+            return ChatCompletionMessage(role="assistant", content=content)
+
+        logger.warning(f"未知 Reply content_type={content_type}，按普通 content 兼容处理")
+        return ChatCompletionMessage(role="assistant", content=content)
 
     @staticmethod
     def _create_tool_context(agent_context: AgentContextInterface) -> ToolContext:
