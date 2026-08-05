@@ -20,7 +20,7 @@ readonly class MiniMaxVideoClient
 {
     use HasLogger;
 
-    private const int REQUEST_TIMEOUT_SECONDS = 30;
+    private const int REQUEST_TIMEOUT_SECONDS = 180;
 
     private const array NON_RETRIABLE_HTTP_STATUSES = [400, 401, 402, 422];
 
@@ -119,7 +119,6 @@ readonly class MiniMaxVideoClient
     {
         return $this->clientFactory->create([
             'timeout' => self::REQUEST_TIMEOUT_SECONDS,
-            'verify' => false,
         ]);
     }
 
@@ -140,8 +139,7 @@ readonly class MiniMaxVideoClient
         string $message,
         ?int $httpStatus,
         Throwable $previous,
-    ): ProviderVideoException
-    {
+    ): ProviderVideoException {
         if (in_array($httpStatus, self::NON_RETRIABLE_HTTP_STATUSES, true)) {
             return ProviderVideoException::nonRetriable($message, $previous, $httpStatus);
         }

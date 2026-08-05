@@ -118,7 +118,6 @@ class CloudswayVideoClientTest extends TestCase
             $this->assertSame('durationSeconds must be one of [4,6,8]', $logger->records[1]['context']['error']);
         }
     }
-
 }
 
 final class CloudswayRecordingLogger extends AbstractLogger

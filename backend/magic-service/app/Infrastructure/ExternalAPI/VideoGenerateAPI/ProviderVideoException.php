@@ -17,8 +17,7 @@ final class ProviderVideoException extends RuntimeException
         private readonly bool $retriable,
         private readonly ?int $httpStatus = null,
         ?Throwable $previous = null,
-    )
-    {
+    ) {
         parent::__construct($message, 0, $previous);
     }
 

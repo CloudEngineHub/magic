@@ -174,7 +174,6 @@ class MiniMaxVideoClientTest extends TestCase
             self::assertSame(400, $exception->getHttpStatus());
         }
     }
-
 }
 
 final class MiniMaxRecordingLogger extends AbstractLogger

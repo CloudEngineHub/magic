@@ -109,7 +109,6 @@ class ApiKeyDashScopeTransportTest extends TestCase
             ['video_id' => 'video-1']
         );
     }
-
 }
 
 final class DashScopeRecordingLogger extends AbstractLogger

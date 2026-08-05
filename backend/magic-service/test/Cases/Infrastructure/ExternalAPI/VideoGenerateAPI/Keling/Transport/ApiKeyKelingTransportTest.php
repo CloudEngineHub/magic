@@ -201,7 +201,6 @@ class ApiKeyKelingTransportTest extends TestCase
             ['video_id' => 'video-2']
         );
     }
-
 }
 
 final class KelingRecordingLogger extends AbstractLogger
