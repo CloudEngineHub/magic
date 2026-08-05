@@ -95,7 +95,7 @@ class RunSdkSnippet(AbstractFileTool[RunSdkSnippetParams]):
         return """\
     <!--zh
     根据执行过程应该如何展示给用户来选择工具：
-    - 只有脚本的主要目的是通过 sdk.tool 导入 tool 并调用 tool.call() 时，才使用 run_sdk_snippet。run_sdk_snippet 的外层包装卡片会隐藏，避免重复展示；脚本内每次 tool.call() 仍会分别展示真实工具卡片。
+    - 只有脚本的主要目的是通过 sdk.tool 导入 tool 并调用 tool.call() 时，才使用 run_sdk_snippet。run_sdk_snippet 的外层包装卡片会由前端隐藏；脚本内每次 tool.call() 仍会分别展示真实工具卡片。
     - 普通 Python 计算、数据处理、校验、文件操作，或不使用 tool.call() 的库与 SDK 调用，应使用 run_python_snippet。它的 Python 执行卡片保持可见，用户可以检查实际执行的代码。
     - 不要把 run_sdk_snippet 当作普通 Python 运行器。脚本没有导入 sdk.tool 并调用 tool.call() 时，应选择 run_python_snippet。
 
@@ -193,7 +193,7 @@ else:
     也可以链式串联多个工具：从一个工具取 ID，传给另一个工具，再合并输出。
     -->
     Choose this tool based on how the execution should appear to the user:
-    - Use run_sdk_snippet only for Code Mode scripts whose primary purpose is to import tool from sdk.tool and call tool.call(). The run_sdk_snippet wrapper card is hidden to avoid duplicate UI, while each inner tool.call() is shown as its own tool card.
+    - Use run_sdk_snippet only for Code Mode scripts whose primary purpose is to import tool from sdk.tool and call tool.call(). The frontend hides the run_sdk_snippet wrapper card, while each inner tool.call() is shown as its own tool card.
     - Use run_python_snippet for plain Python computation, data processing, validation, file operations, or direct library and SDK calls that do not use tool.call(). Its Python execution card remains visible so the user can inspect the code that ran.
     - Do not use run_sdk_snippet merely as a Python runner. If the script does not import sdk.tool and call tool.call(), choose run_python_snippet.
 

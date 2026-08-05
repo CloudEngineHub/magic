@@ -22,6 +22,12 @@ class _FakeAgentContext:
     def get_interruption_event(self):
         return None
 
+    def get_workspace_dir(self):
+        """返回当前测试通过 PathManager 注入的工作区目录。"""
+        from app.path_manager import PathManager
+
+        return PathManager.get_project_root()
+
 
 class _FakeToolContext:
     def __init__(self, context_id: str = "ctx_test_123", current_model_id: str | None = None) -> None:
@@ -34,6 +40,10 @@ class _FakeToolContext:
         if name == "agent_context":
             return self._agent_context
         return None
+
+    def get_extension_typed(self, name: str, _extension_type):
+        """按类型扩展接口返回测试使用的 AgentContext。"""
+        return self.get_extension(name)
 
 
 @pytest.mark.asyncio
