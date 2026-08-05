@@ -19,6 +19,7 @@ const MagicSidebar = observer(() => {
 	const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false)
 	const shouldUseWorkspaceDrawer =
 		collapsed && sidebarStore.windowWidth <= sidebarStore.AUTO_COLLAPSE_MIN_VIEWPORT_WIDTH_PX
+	const shouldRenderMainSidebarContent = !shouldUseWorkspaceDrawer || !workspaceDrawerOpen
 
 	function handleToggleCollapse() {
 		if (shouldUseWorkspaceDrawer) {
@@ -52,7 +53,11 @@ const MagicSidebar = observer(() => {
 					className="min-h-0 flex-1 gap-0 overflow-hidden p-0 pb-1"
 					data-testid="sidebar-content"
 				>
-					<MagicSidebarContent collapsed={collapsed} />
+					{/* When the narrow-screen drawer is open, its expanded content replaces this
+					 * covered rail content so polling, workspace paging, and DOM refs have one owner. */}
+					{shouldRenderMainSidebarContent && (
+						<MagicSidebarContent collapsed={collapsed} />
+					)}
 				</ShadcnSidebarContent>
 				<Divider direction="horizontal" className="mx-auto !w-[calc(100%-16px)]" />
 				<ShadcnSidebarFooter className="shrink-0 p-0" data-testid="sidebar-footer">
