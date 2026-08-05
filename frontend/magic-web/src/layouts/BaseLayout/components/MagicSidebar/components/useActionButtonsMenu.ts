@@ -20,6 +20,6 @@ export function useActionButtonsMenu(): ActionButtonItem[] {
 				onClick: () => navigate({ name: RouteName.RecycleBin }),
 			},
 		],
-		[],
+		[navigate],
 	)
 }
