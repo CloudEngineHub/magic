@@ -14,6 +14,17 @@
 	cursor: pointer;
 }
 
+.deletedPlaceholder {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 4px;
+	color: rgb(220 38 38);
+	font-weight: 500;
+	font-size: inherit;
+	line-height: 20px;
+	vertical-align: baseline;
+}
+
 /* .placeholderButton:hover {
 }
 

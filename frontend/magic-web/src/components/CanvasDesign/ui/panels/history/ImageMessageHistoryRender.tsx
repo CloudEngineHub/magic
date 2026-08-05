@@ -30,7 +30,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { imageElement, onPreviewMediaResource } = props
 	const { selectedElements } = useCanvasSelectionUI()
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
-	const { imageModelList, convertHightConfig } = useMagic()
+	const { imageModelList, convertHightConfig, methods } = useMagic()
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(imageElement.id)
@@ -189,6 +189,8 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 									tokenConfig={promptPlaceholderTokenConfig}
 									placeholderPaths={{ image: referenceImagePaths }}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
+									deletedSuffix={t("messageHistory.deletedSuffix", "（已删除）")}
 								/>
 							}
 							emptyLabel={t("messageHistory.noPrompt", "暂无提示词")}
@@ -216,6 +218,9 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 											path={path}
 											sourceCrop={sourceCrop}
 											onPreviewMediaResource={onPreviewMediaResource}
+											resolveResourceReference={
+												methods?.resolveResourceReference
+											}
 										/>
 									)
 								})}

@@ -473,6 +473,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			function getHoveredMentionPath(target: EventTarget | null): string | null {
 				if (!(target instanceof Element)) return null
 				const mentionEl = target.closest<HTMLElement>(".canvas-project-file-mention")
+				if (mentionEl?.dataset.deleted === "true") return null
 				return mentionEl?.dataset.filePath || null
 			}
 

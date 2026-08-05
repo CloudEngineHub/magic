@@ -18,9 +18,13 @@ import { Checkbox } from "../../primitives/shadcn/checkbox"
 import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceAvailability,
+	getCanvasResourceFileName,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { CropConfig } from "../../../runtime/document/types"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 const DEFAULT_OVERLAY_SLOT_ORDINALS: [number, number] = [0, 1]
 
@@ -102,11 +106,12 @@ interface SourceListProps {
 	className?: string
 	style?: CSSProperties
 	renderItem?: (params: SourceListRenderItemParams) => ReactNode
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 /** 视频/图片编辑器顶部素材槽位列表（首帧 / 尾帧 / 参考素材等） */
 export default function SourceList(props: SourceListProps) {
-	const { className, style, options, renderItem } = props
+	const { className, style, options, renderItem, resolveResourceReference } = props
 	const portalContainer = usePortalContainer()
 
 	const entries = options ?? []
@@ -212,8 +217,14 @@ export default function SourceList(props: SourceListProps) {
 					const resourceKind = resourcePath
 						? getMediaResourcePathKind(resourcePath)
 						: "other"
+					const resourceAvailability = getCanvasResourceAvailability(
+						resourcePath,
+						resolveResourceReference,
+					)
 					const previewResource =
-						resourcePath && resourceKind !== "other"
+						resourcePath &&
+						resourceKind !== "other" &&
+						resourceAvailability !== "deleted"
 							? ({
 									path: resourcePath,
 									fileName: resourceDisplayName,

@@ -1,13 +1,16 @@
 import { Node } from "@/infrastructure/editors/tiptap/core"
-import { act, render, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, waitFor } from "@testing-library/react"
 import { createRef } from "react"
 import { describe, expect, it, vi } from "vitest"
 import MessageEditor, {
 	resolveMentionInsertionRange,
 	type MessageEditorRef,
 } from "../MessageEditor"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import { createReferenceResourcePanelItemFromPath } from "../reference-assets/createReferenceResourcePanelItem"
 import { createCanvasMentionPathMatcher } from "../../connection/linkedMediaMentionMatcher"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 const TestMentionExtension = Node.create({
 	name: "mention",
@@ -37,6 +40,32 @@ function expectCollapsedSelectionInside(editorDom: HTMLElement) {
 }
 
 describe("MessageEditor mention synchronization", () => {
+	it("does not report deleted mentions as preview hover targets", async () => {
+		const onMentionItemHoverChange = vi.fn()
+		const { container } = render(
+			<MessageEditor
+				value=""
+				mentionExtension={TestMentionExtension}
+				onMentionItemHoverChange={onMentionItemHoverChange}
+			/>,
+		)
+
+		const editorDom = await waitFor(() => {
+			const element = container.querySelector<HTMLElement>("[contenteditable='true']")
+			expect(element).not.toBeNull()
+			return element as HTMLElement
+		})
+		const deletedMention = document.createElement("span")
+		deletedMention.className = "canvas-project-file-mention"
+		deletedMention.dataset.filePath = "./images/deleted.png"
+		deletedMention.dataset.deleted = "true"
+		editorDom.append(deletedMention)
+
+		fireEvent.pointerOver(deletedMention)
+
+		expect(onMentionItemHoverChange).not.toHaveBeenCalled()
+	})
+
 	it("reports mentions that were already parsed during editor initialization", async () => {
 		const onMentionChange = vi.fn()
 
@@ -170,7 +199,10 @@ describe("MessageEditor mention synchronization", () => {
 			act(() => {
 				expect(
 					editorRef.current?.removeMentionItems(
-						createCanvasMentionPathMatcher("/images/source.png"),
+						createCanvasMentionPathMatcher(
+							"/画布A/images/source.png",
+							resolveDesignAResourceReference,
+						),
 					),
 				).toBe(true)
 			})
@@ -209,7 +241,7 @@ describe("MessageEditor mention synchronization", () => {
 				act(() => {
 					expect(
 						editorRef.current?.removeMentionItems(
-							createCanvasMentionPathMatcher("images/source.png"),
+							createCanvasMentionPathMatcher("./images/source.png"),
 						),
 					).toBe(true)
 				})
@@ -244,9 +276,12 @@ describe("MessageEditor mention synchronization", () => {
 			act(() => {
 				expect(
 					editorRef.current?.replaceMentionItems(
-						createCanvasMentionPathMatcher("/images/source.png"),
+						createCanvasMentionPathMatcher(
+							"/画布A/images/source.png",
+							resolveDesignAResourceReference,
+						),
 						createReferenceResourcePanelItemFromPath(
-							"images/updated.png",
+							"./images/updated.png",
 							"updated.png",
 						),
 					),

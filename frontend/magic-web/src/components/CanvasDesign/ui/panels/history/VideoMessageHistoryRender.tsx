@@ -33,7 +33,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	const { videoElement, onPreviewMediaResource } = props
 	const { selectedElements } = useCanvasSelectionUI()
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
-	const { videoModelList } = useMagic()
+	const { videoModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(videoElement.id)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
@@ -182,6 +182,8 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 									tokenConfig={promptPlaceholderTokenConfig}
 									placeholderPaths={promptPlaceholderPaths}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
+									deletedSuffix={t("messageHistory.deletedSuffix", "（已删除）")}
 								/>
 							}
 							emptyLabel={t("messageHistory.noPrompt", "暂无提示词")}
@@ -200,6 +202,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 								<ReferenceImageItem
 									path={startFrame.uri}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
 								/>
 							</div>
 						</div>
@@ -216,6 +219,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 								<ReferenceImageItem
 									path={endFrame.uri}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
 								/>
 							</div>
 						</div>
@@ -234,6 +238,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
@@ -253,6 +258,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
@@ -272,6 +278,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
