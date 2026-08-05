@@ -19,6 +19,7 @@ use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Chat\Event\Agent\UserCallAgentEvent;
 use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -242,6 +243,11 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
             $this->logger->warning(sprintf('Handle super agent message, event processing failed: %s', $e->getMessage()));
             $this->sendFailureReminderToClient($dataIsolation, $userMessageDTO, $e);
             // Acknowledge message even on error to avoid message accumulation
+        } catch (BusinessException $e) {
+            // Business exceptions contain translated, client-safe messages.
+            $this->logger->warning(sprintf('Handle super agent message, business processing failed: %s', $e->getMessage()));
+            $this->sendFailureErrorToClient($dataIsolation, $userMessageDTO, $e->getMessage());
+            // Acknowledge message even on error to avoid message accumulation
         } catch (Throwable $e) {
             // Unexpected failure (parsing / dispatch / infrastructure): log full context
             // and surface a generic error to the client so the request is never left silent.
@@ -308,7 +314,8 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
      */
     private function sendFailureErrorToClient(
         ?DataIsolation $dataIsolation,
-        ?UserMessageDTO $userMessageDTO
+        ?UserMessageDTO $userMessageDTO,
+        string $errorMessage = ''
     ): void {
         if ($dataIsolation === null || $userMessageDTO === null) {
             return;
@@ -319,7 +326,7 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
                 taskId: '',
                 chatTopicId: $userMessageDTO->getChatTopicId(),
                 chatConversationId: $userMessageDTO->getChatConversationId(),
-                errorMessage: trans('task.initialize_error'),
+                errorMessage: trim($errorMessage) !== '' ? $errorMessage : trans('task.initialize_error'),
                 dynamicParams: $userMessageDTO->getDynamicParams(),
             );
         } catch (Throwable $notifyError) {

@@ -964,14 +964,19 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      *
      * @param array $fileIds 文件ID数组
      * @param bool $forceDelete 是否强制删除（物理删除），默认为true，false为软删除
+     * @param null|int $projectId 可选项目作用域
      */
-    public function deleteByIds(array $fileIds, bool $forceDelete = true): void
+    public function deleteByIds(array $fileIds, bool $forceDelete = true, ?int $projectId = null): void
     {
         if (empty($fileIds)) {
             return;
         }
 
         $query = $this->model::query()->whereIn('file_id', $fileIds);
+
+        if ($projectId !== null && $projectId > 0) {
+            $query->where('project_id', $projectId);
+        }
 
         if ($forceDelete) {
             $query->forceDelete();

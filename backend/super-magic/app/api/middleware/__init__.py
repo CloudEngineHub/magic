@@ -11,11 +11,15 @@ from app.api.middleware.user_authorization_middleware import (
     USER_AUTHORIZATION_HEADER,
     UserAuthorizationMiddleware,
 )
+from app.api.middleware.websocket_authorization_middleware import (
+    WebSocketAuthorizationMiddleware,
+)
 
 __all__ = [
+    "USER_AUTHORIZATION_HEADER",
     "DebugMiddleware",
     "OptionsMiddleware",
     "RequestLoggingMiddleware",
     "UserAuthorizationMiddleware",
-    "USER_AUTHORIZATION_HEADER",
+    "WebSocketAuthorizationMiddleware",
 ]

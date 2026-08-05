@@ -12,6 +12,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\CheckpointRollbackFilesChangedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\CheckpointRollbackMessagesChangedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\SandboxVersionDomainService;
@@ -279,16 +280,25 @@ readonly class AgentAppService
      * 回滚到指定的checkpoint.
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
+     * @param int $topicId 话题ID
      * @param string $sandboxId 沙箱ID
      * @param string $targetMessageId 目标消息ID
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpoint(DataIsolation $dataIsolation, string $sandboxId, string $targetMessageId): AgentResponse
+    public function rollbackCheckpoint(DataIsolation $dataIsolation, int $topicId, string $sandboxId, string $targetMessageId): AgentResponse
     {
         $this->logger->info('[Sandbox][App] Rollback checkpoint requested', [
             'sandbox_id' => $sandboxId,
             'target_message_id' => $targetMessageId,
         ]);
+
+        $topicEntity = $this->topicDomainService->getTopicById($topicId);
+        if ($topicEntity === null) {
+            throw new BusinessException('Topic not found for ID: ' . $topicId);
+        }
+        if ($topicEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
+            throw new BusinessException('Access denied for topic ID: ' . $topicId);
+        }
 
         // 执行沙箱回滚
         $response = $this->agentDomainService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
@@ -319,7 +329,14 @@ readonly class AgentAppService
         ]);
 
         // 执行消息回滚
-        $this->topicDomainService->rollbackMessages($targetMessageId);
+        $affectedSeqIds = $this->topicDomainService->rollbackMessages($targetMessageId);
+        $this->dispatchRollbackMessageChanges(
+            $topicEntity,
+            $dataIsolation,
+            CheckpointRollbackMessagesChangedEvent::ACTION_ROLLBACK,
+            $affectedSeqIds,
+            $targetMessageId
+        );
 
         $this->logger->info('[Sandbox][App] Message rollback completed successfully', [
             'sandbox_id' => $sandboxId,
@@ -370,7 +387,14 @@ readonly class AgentAppService
         }
 
         // 沙箱操作成功后，执行消息状态标记
-        $this->topicDomainService->rollbackMessagesStart($targetMessageId);
+        $affectedSeqIds = $this->topicDomainService->rollbackMessagesStart($targetMessageId);
+        $this->dispatchRollbackMessageChanges(
+            $topicEntity,
+            $dataIsolation,
+            CheckpointRollbackMessagesChangedEvent::ACTION_START,
+            $affectedSeqIds,
+            $targetMessageId
+        );
         $this->dispatchRollbackAffectedFileChanges(
             $topicEntity,
             $dataIsolation,
@@ -425,7 +449,13 @@ readonly class AgentAppService
         }
 
         // 沙箱操作成功后，执行物理删除撤回状态的消息
-        $this->topicDomainService->rollbackMessagesCommit($topicId, $dataIsolation->getCurrentUserId());
+        $affectedSeqIds = $this->topicDomainService->rollbackMessagesCommit($topicId, $dataIsolation->getCurrentUserId());
+        $this->dispatchRollbackMessageChanges(
+            $topicEntity,
+            $dataIsolation,
+            CheckpointRollbackMessagesChangedEvent::ACTION_COMMIT,
+            $affectedSeqIds
+        );
 
         $this->logger->info('[Sandbox][App] Message rollback commit completed successfully', [
             'topic_id' => $topicId,
@@ -483,7 +513,13 @@ readonly class AgentAppService
         }
 
         // 沙箱操作成功后，执行消息撤回撤销操作（恢复为正常状态）
-        $this->topicDomainService->rollbackMessagesUndo($topicId, $dataIsolation->getCurrentUserId());
+        $affectedSeqIds = $this->topicDomainService->rollbackMessagesUndo($topicId, $dataIsolation->getCurrentUserId());
+        $this->dispatchRollbackMessageChanges(
+            $topicEntity,
+            $dataIsolation,
+            CheckpointRollbackMessagesChangedEvent::ACTION_UNDO,
+            $affectedSeqIds
+        );
         $this->dispatchRollbackAffectedFileChanges(
             $topicEntity,
             $dataIsolation,
@@ -603,6 +639,42 @@ readonly class AgentAppService
                 'topic_id' => $topicEntity->getId(),
                 'project_id' => $projectId,
                 'reason' => $reason,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param array<int|string> $affectedSeqIds
+     */
+    private function dispatchRollbackMessageChanges(
+        TopicEntity $topicEntity,
+        DataIsolation $dataIsolation,
+        string $action,
+        array $affectedSeqIds,
+        ?string $targetSeqId = null
+    ): void {
+        if (empty($affectedSeqIds)) {
+            return;
+        }
+
+        try {
+            $this->eventDispatcher->dispatch(new CheckpointRollbackMessagesChangedEvent(
+                $action,
+                $topicEntity->getId(),
+                $topicEntity->getChatTopicId(),
+                $topicEntity->getProjectId(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                $topicEntity->getChatConversationId(),
+                $affectedSeqIds,
+                $targetSeqId
+            ));
+        } catch (Throwable $throwable) {
+            $this->logger->warning('[Sandbox][App] Failed to dispatch rollback message change event', [
+                'topic_id' => $topicEntity->getId(),
+                'action' => $action,
+                'affected_count' => count($affectedSeqIds),
                 'error' => $throwable->getMessage(),
             ]);
         }

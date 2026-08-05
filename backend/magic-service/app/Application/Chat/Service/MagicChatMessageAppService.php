@@ -7,10 +7,9 @@ declare(strict_types=1);
 
 namespace App\Application\Chat\Service;
 
-use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
+use App\Application\ModelGateway\Service\AiAbilityModelAppService;
 use App\Application\ModelGateway\Service\LLMAppService;
-use App\Application\ModelGateway\Service\ModelConfigAppService;
 use App\Domain\Chat\DTO\ConversationListQueryDTO;
 use App\Domain\Chat\DTO\Message\ChatFileInterface;
 use App\Domain\Chat\DTO\Message\ChatMessage\AbstractAttachmentMessage;
@@ -34,7 +33,6 @@ use App\Domain\Chat\Entity\MagicSeqEntity;
 use App\Domain\Chat\Entity\ValueObject\ConversationStatus;
 use App\Domain\Chat\Entity\ValueObject\ConversationType;
 use App\Domain\Chat\Entity\ValueObject\FileType;
-use App\Domain\Chat\Entity\ValueObject\LLMModelEnum;
 use App\Domain\Chat\Entity\ValueObject\MagicMessageStatus;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ControlMessageType;
@@ -48,8 +46,8 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\File\Service\FileDomainService;
-use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Service\ModelConfigDomainService;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\ErrorCode\ChatErrorCode;
 use App\ErrorCode\UserErrorCode;
 use App\Infrastructure\Core\Constants\Order;
@@ -97,6 +95,7 @@ class MagicChatMessageAppService extends MagicSeqAppService
         protected Redis $redis,
         protected LockerInterface $locker,
         protected readonly LLMAppService $llmAppService,
+        protected readonly AiAbilityModelAppService $aiAbilityModelAppService,
         protected readonly ModelConfigDomainService $modelConfigDomainService,
         protected readonly MagicMessageVersionDomainService $magicMessageVersionDomainService,
     ) {
@@ -646,14 +645,12 @@ class MagicChatMessageAppService extends MagicSeqAppService
      */
     public function summarizeTextWithCustomPrompt(MagicUserAuthorization $authorization, string $customPrompt): string
     {
-        if (empty($customPrompt)) {
-            return '';
-        }
+        return $this->generateTextWithCustomPrompt($authorization, $customPrompt, AiAbilityCode::ContentSummary);
+    }
 
-        $conversationId = uniqid('', true);
-        $messageHistory = new MessageHistory();
-        $messageHistory->addMessages(new SystemMessage($customPrompt), $conversationId);
-        return $this->getSummaryFromLLM($authorization, $messageHistory, $conversationId);
+    public function generateTitleWithCustomPrompt(MagicUserAuthorization $authorization, string $customPrompt): string
+    {
+        return $this->generateTextWithCustomPrompt($authorization, $customPrompt, AiAbilityCode::SmartRename);
     }
 
     public function getMessageReceiveList(string $messageId, MagicUserAuthorization $userAuthorization): array
@@ -1047,6 +1044,21 @@ class MagicChatMessageAppService extends MagicSeqAppService
         }
     }
 
+    private function generateTextWithCustomPrompt(
+        MagicUserAuthorization $authorization,
+        string $customPrompt,
+        AiAbilityCode $abilityCode
+    ): string {
+        if (empty($customPrompt)) {
+            return '';
+        }
+
+        $conversationId = uniqid('', true);
+        $messageHistory = new MessageHistory();
+        $messageHistory->addMessages(new SystemMessage($customPrompt), $conversationId);
+        return $this->getSummaryFromLLM($authorization, $messageHistory, $conversationId, $abilityCode);
+    }
+
     /**
      * 为了保证收发双方的消息顺序一致性，如果是私聊，则同步生成 seq.
      * @throws Throwable
@@ -1074,16 +1086,15 @@ class MagicChatMessageAppService extends MagicSeqAppService
         MagicUserAuthorization $authorization,
         MessageHistory $messageHistory,
         string $conversationId,
+        AiAbilityCode $abilityCode,
         string $topicId = ''
     ): string {
-        $orgCode = $authorization->getOrganizationCode();
         $dataIsolation = $this->createDataIsolation($authorization);
-        $chatModelName = di(ModelConfigAppService::class)->getChatModelTypeByFallbackChain($orgCode, $dataIsolation->getCurrentUserId(), LLMModelEnum::DEEPSEEK_V3->value);
-
-        $modelGatewayMapperDataIsolation = ModelGatewayDataIsolation::createByOrganizationCodeWithoutSubscription($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId());
-        # 开始请求大模型
-        $modelGatewayMapper = di(ModelGatewayMapper::class);
-        $model = $modelGatewayMapper->getChatModelProxy($modelGatewayMapperDataIsolation, $chatModelName);
+        $model = $this->aiAbilityModelAppService->getChatModel(
+            $abilityCode,
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+        );
         $memoryManager = $messageHistory->getMemoryManager($conversationId);
         $agent = AgentFactory::create(
             model: $model,

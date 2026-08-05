@@ -41,6 +41,7 @@ import CommonList from "../components/CommonList"
 export const AiPowerLogoMap = {
 	[PlatformPackage.PowerCode.OCR]: ocr,
 	[PlatformPackage.PowerCode.WEB_SEARCH]: webSearch,
+	[PlatformPackage.PowerCode.AI_SEARCH_MODEL]: webSearch,
 	[PlatformPackage.PowerCode.WEB_SCRAPE]: webScrape,
 	[PlatformPackage.PowerCode.IMAGE_SEARCH]: imageSearch,
 	[PlatformPackage.PowerCode.REALTIME_SPEECH_RECOGNITION]: speechRecognition,

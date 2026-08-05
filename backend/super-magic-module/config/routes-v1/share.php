@@ -41,6 +41,8 @@ Router::addGroup(
 
             // 根据文件ID批量获取文件详情
             Router::post('/files/batch', [ShareApi::class, 'getFilesByIds']);
+            // 将已授权的分享文件批量复制到现有项目
+            Router::post('/{shareCode}/files/batch-copy', [ShareApi::class, 'batchCopySharedFiles']);
         });
 
         // 获取分享的项目树形结构（按工作区分组）

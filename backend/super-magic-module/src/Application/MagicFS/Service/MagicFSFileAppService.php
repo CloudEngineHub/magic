@@ -33,6 +33,7 @@ use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\FileVersionResponseDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\FileVersionsResponseDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\ListFilesResponseDTO;
 use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\MagicFSFileDTO;
+use Hyperf\Coroutine\Coroutine;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -315,10 +316,13 @@ class MagicFSFileAppService extends AbstractAppService
         // 3. 规范化子节点列表，构建树结构
         $entityMap = [];
         $treeFiles = [];
-        foreach ($children as $child) {
-            $fileId = (string) $child->getFileId();
-            $entityMap[$fileId] = $child;
+        foreach ($children as $index => $child) {
+            $childFileId = (string) $child->getFileId();
+            $entityMap[$childFileId] = $child;
             $treeFiles[] = $this->normalizeFileForTree($child);
+            if (($index + 1) % 500 === 0) {
+                Coroutine::sleep(0.001);
+            }
         }
 
         $childrenTree = $this->fileTreeBuilder->buildTree(
@@ -340,7 +344,7 @@ class MagicFSFileAppService extends AbstractAppService
             'file_id' => $fileId,
             'depth' => $requestDTO->depth,
             'root_name' => $rootFile->getFileName(),
-            'total_children' => $this->countTotalChildren($childrenTree),
+            'total_children' => count($children),
         ]);
 
         return $responseDTO;
@@ -365,7 +369,7 @@ class MagicFSFileAppService extends AbstractAppService
     protected function buildMagicFsTreeDtos(array $nodes, array $entityMap): array
     {
         $result = [];
-        foreach ($nodes as $node) {
+        foreach ($nodes as $index => $node) {
             $fileId = (string) ($node['file_id'] ?? '');
             if ($fileId === '' || ! isset($entityMap[$fileId])) {
                 continue;
@@ -376,25 +380,12 @@ class MagicFSFileAppService extends AbstractAppService
                 $dto->children = $this->buildMagicFsTreeDtos($node['children'], $entityMap);
             }
             $result[] = $dto;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Count total children for logging.
-     */
-    protected function countTotalChildren(array $tree): int
-    {
-        $count = 0;
-        foreach ($tree as $node) {
-            ++$count;
-            if (! empty($node['children'])) {
-                $count += $this->countTotalChildren($node['children']);
+            if (($index + 1) % 500 === 0) {
+                Coroutine::sleep(0.001);
             }
         }
 
-        return $count;
+        return $result;
     }
 
     /**

@@ -24,6 +24,7 @@ use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\Share\Factory\ShareableResourceFactory;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\ProjectForkPublisher;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\FileManagementAppService;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Constant\ShareAccessType;
@@ -59,6 +60,7 @@ use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\Share\Assembler\ShareAssembler;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCancelShareRequestDTO;
+use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCopySharedFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CopyResourceFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\FindSimilarShareRequestDTO;
@@ -1027,6 +1029,116 @@ class ResourceShareAppService extends AbstractShareAppService
             $requestDTO->getTargetWorkspaceId(),
             $requestDTO->getTargetProjectName(),
             $fileIds
+        );
+    }
+
+    /**
+     * Copy files authorized by a valid share into an editable target project.
+     */
+    public function batchCopySharedFiles(
+        MagicUserAuthorization $userAuthorization,
+        string $shareCode,
+        BatchCopySharedFilesRequestDTO $requestDTO
+    ): array {
+        $shareEntity = $this->shareDomainService->getValidShareByCode($shareCode);
+        if (empty($shareEntity)) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
+        }
+
+        $this->shareDomainService->validateShareAccess(
+            $shareEntity,
+            $userAuthorization->getId(),
+            $userAuthorization->getOrganizationCode(),
+            $shareCode
+        );
+
+        if (! empty($shareEntity->getPassword())
+            && $requestDTO->getPassword() !== PasswordCrypt::decrypt($shareEntity->getPassword())) {
+            ExceptionBuilder::throw(ShareErrorCode::PASSWORD_ERROR, trans('share.password_error'));
+        }
+
+        if (! $shareEntity->getExtraAttribute(CreateShareRequestDTO::EXTRA_FIELD_ALLOW_COPY_PROJECT_FILES, true)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::COPY_PROJECT_FILES_NOT_ALLOWED,
+                trans('share.copy_project_files_not_allowed')
+            );
+        }
+
+        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
+        if (! in_array($resourceType, [ResourceType::Project, ResourceType::FileCollection, ResourceType::File], true)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED,
+                trans('share.resource_type_not_supported_for_copy', [(string) $shareEntity->getResourceType()])
+            );
+        }
+
+        $sourceProjectId = (int) $shareEntity->getProjectId();
+        $sourceProject = $sourceProjectId > 0
+            ? $this->projectDomainService->getProjectNotUserId($sourceProjectId)
+            : null;
+        if ($sourceProject === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+        }
+
+        $requestedFileIds = array_map('intval', $requestDTO->getFileIds());
+        $requestedFileIds = array_filter($requestedFileIds, static fn (int $fileId): bool => $fileId > 0);
+        $requestedFileIds = array_values(array_unique($requestedFileIds));
+        if (count($requestedFileIds) !== count(array_unique($requestDTO->getFileIds()))) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $allowedFileIds = $resourceType === ResourceType::Project
+            ? null
+            : $this->resolveCollectionCopyScope($shareEntity, $sourceProjectId);
+
+        if ($allowedFileIds !== null && array_diff($requestedFileIds, $allowedFileIds) !== []) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $requestedEntities = $this->taskFileDomainService->getProjectFilesByIds(
+            $sourceProjectId,
+            array_map('strval', $requestedFileIds)
+        );
+        $resolvedRequestedIds = array_map(static fn (TaskFileEntity $entity): int => $entity->getFileId(), $requestedEntities);
+        sort($resolvedRequestedIds);
+        $expectedRequestedIds = $requestedFileIds;
+        sort($expectedRequestedIds);
+        if ($resolvedRequestedIds !== $expectedRequestedIds) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $directoryIds = array_map(
+            static fn (TaskFileEntity $entity): int => $entity->getFileId(),
+            array_filter($requestedEntities, static fn (TaskFileEntity $entity): bool => $entity->getIsDirectory())
+        );
+        $expandedFileIds = $requestedFileIds;
+        if ($directoryIds !== []) {
+            $descendantIds = $this->taskFileDomainService->getAllChildrenFileIdsByDirectoryIds(
+                $directoryIds,
+                $sourceProjectId
+            );
+            if ($allowedFileIds !== null) {
+                $descendantIds = array_values(array_intersect($descendantIds, $allowedFileIds));
+            }
+            $expandedFileIds = array_values(array_unique(array_merge($expandedFileIds, $descendantIds)));
+        }
+
+        $fileManagementAppService = di(FileManagementAppService::class);
+        $targetProject = $fileManagementAppService->getAccessibleProjectWithEditor(
+            (int) $requestDTO->getTargetProjectId(),
+            $userAuthorization->getId(),
+            $userAuthorization->getOrganizationCode()
+        );
+
+        return $fileManagementAppService->batchCopyAuthorizedFiles(
+            $userAuthorization,
+            $sourceProject,
+            $targetProject,
+            $expandedFileIds,
+            $requestDTO->getTargetParentId(),
+            $requestDTO->getPreFileId(),
+            $requestDTO->getKeepBothFileIds(),
+            $requestDTO->shouldPreserveParentPath()
         );
     }
 
@@ -2775,6 +2887,49 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 提取所有文件ID并返回
         return array_map(fn ($entity) => $entity->getFileId(), $allEntities);
+    }
+
+    /**
+     * Resolve the selectable and expandable file scope for File/FileCollection shares.
+     * Parent directories used only for rendering paths are intentionally excluded.
+     *
+     * @return int[]
+     */
+    private function resolveCollectionCopyScope(ResourceShareEntity $shareEntity, int $sourceProjectId): array
+    {
+        $collectionItems = $this->fileCollectionDomainService->getFilesByCollectionId(
+            (int) $shareEntity->getResourceId()
+        );
+        $originalFileIds = array_map('intval', array_map(
+            static fn ($item): string => $item->getFileId(),
+            $collectionItems
+        ));
+        $originalFileIds = array_filter($originalFileIds, static fn (int $fileId): bool => $fileId > 0);
+        $originalFileIds = array_values(array_unique($originalFileIds));
+        if ($originalFileIds === []) {
+            return [];
+        }
+
+        $originalEntities = $this->taskFileDomainService->getProjectFilesByIds(
+            $sourceProjectId,
+            array_map('strval', $originalFileIds)
+        );
+        if (count($originalEntities) !== count($originalFileIds)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $directoryIds = array_map(
+            static fn (TaskFileEntity $entity): int => $entity->getFileId(),
+            array_filter($originalEntities, static fn (TaskFileEntity $entity): bool => $entity->getIsDirectory())
+        );
+        if ($directoryIds === []) {
+            return $originalFileIds;
+        }
+
+        return array_values(array_unique(array_merge(
+            $originalFileIds,
+            $this->taskFileDomainService->getAllChildrenFileIdsByDirectoryIds($directoryIds, $sourceProjectId)
+        )));
     }
 
     /**
