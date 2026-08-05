@@ -5,6 +5,7 @@ import { env, isCommercial } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
 import { logger as Logger } from "@/utils/log"
 import { groupBy } from "lodash-es"
+import { normalizeUploadProgress } from "../utils/uploadProgress"
 
 export interface UploadResponse {
 	key: string
@@ -17,16 +18,22 @@ export interface UploadResult {
 	rejected: PromiseRejectedResult[]
 }
 
+export type UploadAttemptId = symbol
+
 export interface UploadServiceOptions<F> {
 	storageType?: "private" | "public"
 	sts?: boolean
 	url?: string
 	body?: Record<string, unknown>
 	onBeforeUpload?: () => void
-	onProgress?: (file: F, progress: number) => void
-	onSuccess?: (file: F, response: UploadResponse) => void
-	onFail?: (file: F, error?: unknown) => void
-	onInit?: (file: F, tools: Pick<UploadCallBack, "cancel" | "pause" | "resume">) => void
+	onProgress?: (file: F, progress: number, attemptId: UploadAttemptId) => void
+	onSuccess?: (file: F, response: UploadResponse, attemptId: UploadAttemptId) => void
+	onFail?: (file: F, error: unknown, attemptId: UploadAttemptId) => void
+	onInit?: (
+		file: F,
+		tools: Pick<UploadCallBack, "cancel" | "pause" | "resume">,
+		attemptId: UploadAttemptId,
+	) => void
 	rewriteFileName?: boolean
 	onUploadStateChange?: (isUploading: boolean) => void
 }
@@ -50,11 +57,11 @@ function resolveUploadUrl(url: string | undefined, organizationCode: string | un
 	const baseUrl =
 		url ??
 		env("MAGIC_SERVICE_BASE_URL") +
-		genRequestUrl(
-			isCommercial()
-				? "/api/v1/file/temporary-credential"
-				: "/api/v1/file/temporary-credential",
-		)
+			genRequestUrl(
+				isCommercial()
+					? "/api/v1/file/temporary-credential"
+					: "/api/v1/file/temporary-credential",
+			)
 
 	if (!organizationCode) return baseUrl
 	const separator = baseUrl.includes("?") ? "&" : "?"
@@ -92,6 +99,7 @@ export class UploadService<F extends UploadFileLike> {
 		const promises = fileList.map(
 			(fileData) =>
 				new Promise<UploadResponse>((resolve, reject) => {
+					const attemptId: UploadAttemptId = Symbol(fileData.name)
 					const fileName = fileData.name
 					if (fileData.status === "done" && fileData.result) {
 						resolve(fileData.result)
@@ -143,7 +151,7 @@ export class UploadService<F extends UploadFileLike> {
 						reject(new Error("Upload cancelled"))
 					}
 
-					onInit?.(fileData, { cancel: wrappedCancel, pause, resume })
+					onInit?.(fileData, { cancel: wrappedCancel, pause, resume }, attemptId)
 
 					success?.((res) => {
 						if (!res) {
@@ -155,7 +163,7 @@ export class UploadService<F extends UploadFileLike> {
 							name: fileName,
 							size: fileData.file?.size ?? 0,
 						}
-						onSuccess?.(fileData, response)
+						onSuccess?.(fileData, response, attemptId)
 						resolve(response)
 					})
 
@@ -165,7 +173,7 @@ export class UploadService<F extends UploadFileLike> {
 							fileSize: fileData.file?.size,
 							message: err?.message,
 						})
-						onFail?.(fileData, err)
+						onFail?.(fileData, err, attemptId)
 						reject({
 							...err,
 							uploadFile: fileData,
@@ -173,7 +181,10 @@ export class UploadService<F extends UploadFileLike> {
 					})
 
 					progress?.((percent) => {
-						if (percent) onProgress?.(fileData, percent)
+						const normalizedProgress = normalizeUploadProgress(percent)
+						if (normalizedProgress !== undefined) {
+							onProgress?.(fileData, normalizedProgress, attemptId)
+						}
 					})
 				}),
 		)

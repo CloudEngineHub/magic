@@ -1,4 +1,5 @@
 import { t } from "i18next"
+import { runInAction } from "mobx"
 import { FileApi, SuperMagicApi } from "@/apis"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { logger as Logger } from "@/utils/log"
@@ -8,7 +9,8 @@ import {
 	type AttachmentItem,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { FileData, UploadSource } from "../../types"
-import type { UploadResponse } from "../../services/UploadService"
+import type { UploadAttemptId, UploadResponse } from "../../services/UploadService"
+import { UploadProgressBatcher } from "./UploadProgressBatcher"
 
 const logger = Logger.createLogger("SuperMagicUpload")
 
@@ -18,8 +20,10 @@ interface UploadHandlersContext {
 	getStorageType: () => "workspace" | "topic"
 	getSource: () => UploadSource | undefined
 	getProjectFilesStore: () => ProjectFilesStore
+	getFiles: () => FileData[]
 	trackSavedProjectFileId: (fileId?: string) => void
 	setFilesWithLimit: (updater: (prev: FileData[]) => FileData[]) => void
+	onProgressFilesChanged: (files: FileData[]) => void
 	onFileProgressUpdate?: (
 		fileId: string,
 		progress: number,
@@ -34,10 +38,16 @@ interface UploadHandlersContext {
 }
 
 interface UploadHandlers {
-	handleProgress: (file: FileData, progress: number) => void
-	handleSuccess: (file: FileData, response: UploadResponse) => Promise<void>
-	handleFail: (file: FileData, error?: unknown) => void
-	handleInit: (file: FileData, tools: { cancel?: () => void }) => void
+	handleProgress: (file: FileData, progress: number, attemptId: UploadAttemptId) => void
+	handleSuccess: (
+		file: FileData,
+		response: UploadResponse,
+		attemptId: UploadAttemptId,
+	) => Promise<void>
+	handleFail: (file: FileData, error: unknown, attemptId: UploadAttemptId) => void
+	handleInit: (file: FileData, tools: { cancel?: () => void }, attemptId: UploadAttemptId) => void
+	removeProgress: (...fileIds: Array<string | undefined>) => void
+	clearProgress: () => void
 }
 
 function mapUploadSourceToAttachmentSource(source?: UploadSource): AttachmentSource {
@@ -48,20 +58,45 @@ function mapUploadSourceToAttachmentSource(source?: UploadSource): AttachmentSou
 }
 
 export function createUploadHandlers(context: UploadHandlersContext): UploadHandlers {
-	const handleProgress = (file: FileData, progress: number) => {
-		context.setFilesWithLimit((prev) => {
-			const newFiles = [...prev]
-			const target = newFiles.find((f) => f.id === file.id)
-			if (target) {
+	const currentAttempts = new Map<string, UploadAttemptId>()
+	const progressBatcher = new UploadProgressBatcher((updates) => {
+		const files = context.getFiles()
+		let hasChanges = false
+
+		runInAction(() => {
+			updates.forEach((progress, fileId) => {
+				const target = files.find((file) => file.id === fileId)
+				if (!target || (target.status === "uploading" && target.progress === progress))
+					return
+
 				target.status = "uploading"
 				target.progress = progress
-				context.onFileProgressUpdate?.(file.id, progress, "uploading")
-			}
-			return newFiles
+				hasChanges = true
+			})
 		})
+
+		if (hasChanges) context.onProgressFilesChanged([...files])
+		updates.forEach((progress, fileId) => {
+			context.onFileProgressUpdate?.(fileId, progress, "uploading")
+		})
+	})
+
+	const isCurrentAttempt = (fileId: string, attemptId: UploadAttemptId) =>
+		currentAttempts.get(fileId) === attemptId
+
+	const handleProgress = (file: FileData, progress: number, attemptId: UploadAttemptId) => {
+		if (!isCurrentAttempt(file.id, attemptId)) return
+		progressBatcher.enqueue(file.id, progress)
 	}
 
-	const handleSuccess = async (file: FileData, response: UploadResponse) => {
+	const handleSuccess = async (
+		file: FileData,
+		response: UploadResponse,
+		attemptId: UploadAttemptId,
+	) => {
+		if (!isCurrentAttempt(file.id, attemptId)) return
+		// The upload body is complete even though report/save work may still be pending.
+		progressBatcher.complete(file.id)
 		try {
 			const reportResult = await FileApi.reportFileUploads([
 				{
@@ -71,6 +106,7 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 					file_name: response.name,
 				},
 			])
+			if (!isCurrentAttempt(file.id, attemptId)) return
 
 			const projectId = context.getProjectId()
 			if (!projectId) {
@@ -86,6 +122,7 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 					}
 					return newFiles
 				})
+				currentAttempts.delete(file.id)
 				return
 			}
 
@@ -135,6 +172,7 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 			} catch (error) {
 				logger.error("save file to project failed", error)
 			}
+			if (!isCurrentAttempt(file.id, attemptId)) return
 
 			const projectFilesStore = context.getProjectFilesStore()
 
@@ -182,7 +220,11 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 				}
 				return newFiles
 			})
+			currentAttempts.delete(file.id)
 		} catch (error) {
+			if (!isCurrentAttempt(file.id, attemptId)) return
+			currentAttempts.delete(file.id)
+			progressBatcher.remove(file.id)
 			logger.error("report file failed", error)
 			context.setFilesWithLimit((prev) => {
 				const newFiles = [...prev]
@@ -202,7 +244,10 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 		}
 	}
 
-	const handleFail = (file: FileData, error?: unknown) => {
+	const handleFail = (file: FileData, error: unknown, attemptId: UploadAttemptId) => {
+		if (!isCurrentAttempt(file.id, attemptId)) return
+		currentAttempts.delete(file.id)
+		progressBatcher.remove(file.id)
 		const errorMessage =
 			typeof error === "string"
 				? error
@@ -223,12 +268,22 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 		logger.error("upload failed", { fileId: file.id, message: errorMessage })
 	}
 
-	const handleInit = (file: FileData, { cancel }: { cancel?: () => void }) => {
+	const handleInit = (
+		file: FileData,
+		{ cancel }: { cancel?: () => void },
+		attemptId: UploadAttemptId,
+	) => {
+		currentAttempts.set(file.id, attemptId)
+		progressBatcher.begin(file.id)
 		context.setFilesWithLimit((prev) => {
 			const newFiles = [...prev]
 			const target = newFiles.find((f) => f.id === file.id)
 			if (target) {
 				target.cancel = cancel
+				target.status = "uploading"
+				target.progress = 0
+				target.error = undefined
+				context.onFileProgressUpdate?.(file.id, 0, "uploading")
 			}
 			return newFiles
 		})
@@ -239,5 +294,16 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 		handleSuccess,
 		handleFail,
 		handleInit,
+		removeProgress: (...fileIds) => {
+			fileIds.forEach((fileId) => {
+				if (!fileId) return
+				currentAttempts.delete(fileId)
+				progressBatcher.remove(fileId)
+			})
+		},
+		clearProgress: () => {
+			currentAttempts.clear()
+			progressBatcher.dispose()
+		},
 	}
 }

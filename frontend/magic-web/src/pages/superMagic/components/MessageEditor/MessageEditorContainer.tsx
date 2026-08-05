@@ -28,6 +28,7 @@ import {
 	type SendMessageByContentPayload,
 } from "./types"
 import {
+	type DataService,
 	McpMentionData,
 	MentionItemType,
 	type MentionSelectContext,
@@ -64,6 +65,7 @@ import {
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { isAllowedMention as defaultIsAllowedMention } from "./utils/mention"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -208,6 +210,7 @@ export const MessageEditorContainer = observer(
 				handleRemoveFile,
 				handleRemoveUploadedFile,
 				handleMentionRemoveItems: handleUploadMentionRemoveItems,
+				isAllowedUploadMention,
 				shouldRestoreRemovedMention,
 			} = useUploadMentionFlow({
 				fileUploadStore,
@@ -335,11 +338,16 @@ export const MessageEditorContainer = observer(
 				onBlur?.()
 				if (isMobile) resetDocumentScrollPosition()
 			})
-
 			const handleFocus = useMemoizedFn(() => {
 				setIsEditorFocused(true)
 				onFocus?.()
 			})
+
+			const isAllowedEditorMention = useMemoizedFn(
+				(attrs: TiptapMentionAttributes, dataService: DataService) =>
+					isAllowedUploadMention(attrs) &&
+					(isAllowedMention ?? defaultIsAllowedMention)(attrs, dataService),
+			)
 
 			const handleSend = useMessageSendHandler({
 				voiceInputRef,
@@ -364,9 +372,8 @@ export const MessageEditorContainer = observer(
 				onPromptCarouselNavigate: navigatePromptCarousel,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
-					if (!selectedProject?.id) {
-						store.fileUploadStore.addPendingProjectFileReferences(items)
-					}
+					store.fileUploadStore.restorePastedUploadFileReferences(items)
+					store.fileUploadStore.addPendingProjectFileReferences(items)
 					onMentionInsertItems?.(items)
 				},
 				onChange: setValue,
@@ -383,7 +390,7 @@ export const MessageEditorContainer = observer(
 				size,
 				topicMode,
 				mentionPanelStore,
-				isAllowedMention,
+				isAllowedMention: isAllowedEditorMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
 				shouldRestoreRemovedMention,
 			})
