@@ -6,6 +6,7 @@
 # 导出工具类
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
+from app.tools.micro_app_plan import MicroAppPlanTool
 from app.tools.web_search import WebSearch
 from app.tools.agent_list import AgentList
 from app.tools.prepare_agent import PrepareAgent
@@ -114,6 +115,12 @@ from app.tools.design.tools import (
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+from app.tools.magicbase_tools import (
+    CreateMagicColumn,
+    CreateMagicTable,
+    GetMagicTable,
+    QueryMagicTables,
+)
 
 # Skill 管理工具
 from app.tools.find_skills import FindSkillsTool
@@ -171,6 +178,7 @@ import app.tools.design
 __all__ = [
     "DummyTool",
     "AskUserTool",
+    "MicroAppPlanTool",
 
     # 核心组件
     "BaseTool",
@@ -230,6 +238,10 @@ __all__ = [
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",
+    "QueryMagicTables",
+    "GetMagicTable",
+    "CreateMagicTable",
+    "CreateMagicColumn",
     "InstallSkillsTool",
     "ListDir",
     "Purify",

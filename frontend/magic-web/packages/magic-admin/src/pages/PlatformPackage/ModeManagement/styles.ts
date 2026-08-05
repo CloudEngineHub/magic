@@ -7,6 +7,55 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			padding: 10px;
 			background-color: transparent;
 		`,
+		defaultAgentSetting: css`
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 20px;
+			padding: 12px 14px;
+			border: 1px solid ${token.magicColorUsages.border};
+			border-radius: 8px;
+			background-color: ${token.magicColorUsages.bg[0]};
+
+			@media (max-width: 767px) {
+				align-items: stretch;
+				flex-direction: column;
+				gap: 10px;
+			}
+		`,
+		defaultAgentInfo: css`
+			min-width: 0;
+		`,
+		defaultAgentLabel: css`
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 20px;
+			color: ${token.magicColorUsages.text[1]};
+		`,
+		defaultAgentDescription: css`
+			margin-top: 2px;
+			font-size: 12px;
+			line-height: 18px;
+			color: ${token.magicColorUsages.text[2]};
+		`,
+		defaultAgentSelect: css`
+			width: 320px;
+			flex-shrink: 0;
+
+			@media (max-width: 767px) {
+				width: 100%;
+			}
+		`,
+		defaultAgentIcon: css`
+			width: 24px;
+			height: 24px;
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			overflow: hidden;
+		`,
 		listContainer: css`
 			height: 100%;
 			flex: 1;

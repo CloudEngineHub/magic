@@ -40,6 +40,15 @@ export const HIDE_CLAW_FILE_ACTIONS: FileActionVisibility = {
 	hideCreateNewTopic: true,
 }
 
+/** viewer 仍可预览和下载文件，但不能修改文件或发起分享/对话。 */
+export const VIEWER_FILE_ACTIONS: FileActionVisibility = {
+	hideCopyTo: true,
+	hideMoveTo: true,
+	hideShareFile: true,
+	hideShareTopic: true,
+	hideCreateNewTopic: true,
+}
+
 const FileActionVisibilityContext = createContext(defaultFileActionVisibility)
 
 export function FileActionVisibilityProvider({

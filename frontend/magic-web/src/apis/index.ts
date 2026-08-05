@@ -24,6 +24,7 @@ import { generateInitializationApi } from "./modules/initialization"
 import { generateMagicClawApi } from "./modules/magicClaw"
 import { generateFunctionPermissionApi } from "./modules/function-permission"
 import { generateMagicFSApi } from "./modules/magicFS"
+import { generateMagicBaseApi } from "./modules/magicBase"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -64,6 +65,8 @@ export const MagicClawApi = generateMagicClawApi(magicClient)
 export const FunctionPermissionApi = generateFunctionPermissionApi(magicClient)
 /** MagicFS 通用文件系统。 */
 export const MagicFSApi = generateMagicFSApi(magicClient)
+/** MagicBase */
+export const MagicBaseApi = generateMagicBaseApi(magicClient)
 
 export { MAGIC_CLAW_STATUS } from "./modules/magicClaw"
 export { FUNCTION_PERMISSION_CODE } from "./modules/function-permission"
@@ -88,3 +91,11 @@ export type {
 	MagicFSFileResponse,
 } from "./modules/magicFS"
 export type { FileScope } from "./modules/fileScope"
+export type {
+	MagicBaseColumn,
+	MagicBaseQueryRowsRequest,
+	MagicBaseQueryRowsResponse,
+	MagicBaseRow,
+	MagicBaseSortRule,
+	MagicBaseTable,
+} from "./modules/magicBase"

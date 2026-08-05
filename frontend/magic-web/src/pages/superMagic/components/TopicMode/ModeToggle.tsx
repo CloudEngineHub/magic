@@ -11,7 +11,7 @@ import { observer } from "mobx-react-lite"
 import { useTranslation, Trans } from "react-i18next"
 import { isString } from "lodash-es"
 import { useMemoizedFn } from "ahooks"
-import { Check, ChevronsUpDown, MessageCirclePlus, Search } from "lucide-react"
+import { Check, ChevronDown, ChevronsUpDown, MessageCirclePlus, Search } from "lucide-react"
 import { CrewItem } from "../../pages/Workspace/types"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
@@ -34,6 +34,7 @@ import { CollapsibleDescription } from "../MessageEditor/components/ModelSwitch/
 import { DrawerTitle } from "@/components/shadcn-ui/drawer"
 import { shouldSuppressInputAutoFocusOnIPad } from "@/utils/inputFocusPolicy"
 import ModeAvatar from "../ModeAvatar"
+import { partitionModesByVisibility } from "./modeVisibility"
 
 const TRIGGER_SIZE_MAP: Record<MessageEditorSize, string> = {
 	small: "h-6 px-1.5 py-1 gap-1.5",
@@ -114,9 +115,11 @@ function ModeToggle({
 	const [popoverOpen, setPopoverOpen] = useState(false)
 	const [popoverTarget, setPopoverTarget] = useState<HTMLElement | null>(null)
 	const [searchKeyword, setSearchKeyword] = useState("")
+	const [hiddenModesExpanded, setHiddenModesExpanded] = useState(false)
 	const modeList = superMagicModeService.modeList
 	const popoverTargetRef = useRef<HTMLElement | null>(null)
-	const modeListScrollRef = useRef<HTMLDivElement | null>(null)
+	const visibleModeListScrollRef = useRef<HTMLDivElement | null>(null)
+	const hiddenModeListScrollRef = useRef<HTMLDivElement | null>(null)
 	const [expandedModeDescriptions, setExpandedModeDescriptions] = useState<
 		Record<string, boolean>
 	>({})
@@ -146,6 +149,7 @@ function ModeToggle({
 
 	const closeAllPanels = useMemoizedFn(() => {
 		setOpen(false)
+		setHiddenModesExpanded(false)
 		resetConfirmPopover()
 		resetSearchKeyword()
 		setShowNewTopicModal({ visible: false, mode: null })
@@ -169,11 +173,43 @@ function ModeToggle({
 		})
 	}, [modeList, resolveModeText, searchKeyword, tCrewCreate])
 
-	const scrollToSelectedMode = useMemoizedFn(() => {
-		const container = modeListScrollRef.current
-		if (!container) return
+	const { visibleModes, hiddenModes } = useMemo(
+		() => partitionModesByVisibility(filteredModeList),
+		[filteredModeList],
+	)
 
-		const selectedItem = container.querySelector("[data-selected='true']") as HTMLElement | null
+	const selectedModeIsHidden = useMemo(
+		() =>
+			modeList.some(
+				(item) =>
+					item.agent.is_visible === false &&
+					modeMatchesTopic(item.mode.identifier, topicMode, agentCode),
+			),
+		[agentCode, modeList, topicMode],
+	)
+
+	const handleOpenChange = useMemoizedFn((nextOpen: boolean) => {
+		setOpen(nextOpen)
+		setHiddenModesExpanded(nextOpen ? selectedModeIsHidden : false)
+		if (!nextOpen) {
+			resetSearchKeyword()
+			resetConfirmPopover()
+		}
+	})
+
+	useEffect(() => {
+		if (open && selectedModeIsHidden) {
+			setHiddenModesExpanded(true)
+		}
+	}, [open, selectedModeIsHidden])
+
+	const scrollToSelectedMode = useMemoizedFn(() => {
+		const selectedItem = [visibleModeListScrollRef.current, hiddenModeListScrollRef.current]
+			.map(
+				(container) =>
+					container?.querySelector("[data-selected='true']") as HTMLElement | null,
+			)
+			.find(Boolean)
 		if (!selectedItem) return
 
 		selectedItem.scrollIntoView({
@@ -192,7 +228,7 @@ function ModeToggle({
 		return () => {
 			window.cancelAnimationFrame(frameId)
 		}
-	}, [open, scrollToSelectedMode, topicMode, agentCode])
+	}, [agentCode, open, scrollToSelectedMode, selectedModeIsHidden, topicMode])
 
 	const handleModeChange = useMemoizedFn(
 		(mode: CrewItem["mode"], anchorElement?: HTMLElement | null) => {
@@ -410,32 +446,76 @@ function ModeToggle({
 					/>
 				</div>
 				<div
-					ref={modeListScrollRef}
 					className={cn(
-						"scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto",
+						"flex min-h-0 flex-1 flex-col overflow-hidden",
 						isCompactList ? "max-h-[236px]" : "max-h-[340px]",
 					)}
-					data-testid="super-message-editor-mode-toggle-list"
+					data-testid="super-message-editor-mode-toggle-list-container"
 				>
-					{filteredModeList?.length ? (
-						filteredModeList.map((tab) => renderStaticModeItem(tab))
-					) : (
-						<div className="px-2.5 py-6 text-center text-sm text-muted-foreground">
-							{t("modeToggle.emptySearchResult")}
+					{/* 两类员工使用独立滚动容器，避免隐藏员工区域随可见员工列表滚走。 */}
+					<div
+						ref={visibleModeListScrollRef}
+						className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain"
+						data-testid="super-message-editor-mode-toggle-list"
+					>
+						{visibleModes.length || hiddenModes.length ? (
+							visibleModes.map((tab) => renderStaticModeItem(tab))
+						) : (
+							<div className="px-2.5 py-6 text-center text-sm text-muted-foreground">
+								{t("modeToggle.emptySearchResult")}
+							</div>
+						)}
+					</div>
+					{hiddenModes.length ? (
+						<div
+							className="shrink-0 border-t border-border pt-1"
+							data-testid="super-message-editor-mode-toggle-hidden-section"
+						>
+							<button
+								type="button"
+								className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+								aria-expanded={hiddenModesExpanded}
+								aria-controls="super-message-editor-mode-toggle-hidden-list"
+								data-testid="super-message-editor-mode-toggle-hidden-trigger"
+								onClick={() => setHiddenModesExpanded((expanded) => !expanded)}
+							>
+								<span className="flex-1">{t("modeToggle.hiddenCrew")}</span>
+								<span className="text-xs tabular-nums">{hiddenModes.length}</span>
+								<ChevronDown
+									className={cn(
+										"size-4 transition-transform",
+										hiddenModesExpanded && "rotate-180",
+									)}
+								/>
+							</button>
+							{hiddenModesExpanded ? (
+								<div
+									ref={hiddenModeListScrollRef}
+									id="super-message-editor-mode-toggle-hidden-list"
+									className={cn(
+										"scrollbar-y-thin flex flex-col gap-1 overflow-y-auto overscroll-contain",
+										isCompactList ? "max-h-[104px]" : "max-h-[160px]",
+									)}
+									data-testid="super-message-editor-mode-toggle-hidden-list"
+								>
+									{hiddenModes.map((tab) => renderStaticModeItem(tab))}
+								</div>
+							) : null}
 						</div>
-					)}
+					) : null}
 				</div>
 			</div>
 		)
 	}, [
-		expandedModeDescriptions,
-		filteredModeList,
+		hiddenModes,
+		hiddenModesExpanded,
 		isCompactList,
 		isMobile,
 		renderStaticModeItem,
 		searchKeyword,
 		setSearchKeyword,
 		t,
+		visibleModes,
 	])
 
 	const confirmPopoverContent = useMemo(() => {
@@ -491,37 +571,63 @@ function ModeToggle({
 	])
 
 	const currentModeItem = useMemo(() => {
-		if (!currentMode) return null
+		const triggerClassName = cn(MODE_TOGGLE_TRIGGER_CLASS, TRIGGER_SIZE_MAP[size])
+		const chevronIcon = (
+			<ChevronsUpDown
+				className={cn("shrink-0 text-foreground", size === "small" ? "size-3" : "size-4")}
+			/>
+		)
+
+		if (currentMode) {
+			return (
+				<button
+					type="button"
+					className={triggerClassName}
+					aria-expanded={open}
+					aria-haspopup="dialog"
+					data-testid="mode-toggle-button"
+					data-mode={topicMode}
+					data-disabled={!allowChangeMode}
+					data-mode-name={resolveModeText(currentMode.mode.name)}
+				>
+					{renderModeIcon(currentMode.mode, size === "small" ? 16 : 24)}
+					<div
+						className={cn(
+							"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-foreground",
+							size === "small" ? "text-xs" : "text-sm",
+						)}
+					>
+						{resolveModeText(currentMode.mode.name)}
+					</div>
+					{chevronIcon}
+				</button>
+			)
+		}
+
+		if (!allowChangeMode || !topicMode) return null
 
 		return (
 			<button
 				type="button"
-				className={cn(MODE_TOGGLE_TRIGGER_CLASS, TRIGGER_SIZE_MAP[size])}
+				className={triggerClassName}
 				aria-expanded={open}
 				aria-haspopup="dialog"
 				data-testid="mode-toggle-button"
 				data-mode={topicMode}
-				data-disabled={!allowChangeMode}
-				data-mode-name={resolveModeText(currentMode.mode.name)}
+				data-mode-unavailable="true"
 			>
-				{renderModeIcon(currentMode.mode, size === "small" ? 16 : 24)}
 				<div
 					className={cn(
-						"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-foreground",
+						"max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-medium leading-4 text-muted-foreground",
 						size === "small" ? "text-xs" : "text-sm",
 					)}
 				>
-					{resolveModeText(currentMode.mode.name)}
+					{t("modeToggle.selectCrew")}
 				</div>
-				<ChevronsUpDown
-					className={cn(
-						"shrink-0 text-foreground",
-						size === "small" ? "size-3" : "size-4",
-					)}
-				/>
+				{chevronIcon}
 			</button>
 		)
-	}, [allowChangeMode, currentMode, open, renderModeIcon, resolveModeText, size, topicMode])
+	}, [allowChangeMode, currentMode, open, renderModeIcon, resolveModeText, size, t, topicMode])
 
 	if (!topicMode && !isString(topicMode)) {
 		return null
@@ -535,7 +641,7 @@ function ModeToggle({
 			>
 				<div
 					className="w-fit min-w-0 rounded-md"
-					onClick={() => setOpen(true)}
+					onClick={() => handleOpenChange(true)}
 					data-testid="set-open"
 				>
 					{currentModeItem}
@@ -543,9 +649,7 @@ function ModeToggle({
 				<MagicPopup
 					visible={open}
 					onClose={() => {
-						setOpen(false)
-						resetSearchKeyword()
-						resetConfirmPopover()
+						handleOpenChange(false)
 					}}
 					position="top"
 					className="z-popup"
@@ -576,16 +680,7 @@ function ModeToggle({
 				className={cn("relative w-fit min-w-0")}
 				data-testid="super-message-editor-mode-toggle-root"
 			>
-				<Popover
-					open={open}
-					onOpenChange={(nextOpen) => {
-						setOpen(nextOpen)
-						if (!nextOpen) {
-							resetSearchKeyword()
-							resetConfirmPopover()
-						}
-					}}
-				>
+				<Popover open={open} onOpenChange={handleOpenChange}>
 					<PopoverTrigger asChild>{currentModeItem}</PopoverTrigger>
 					<PopoverContent
 						{...MODE_TOGGLE_POPOVER_PROPS}
@@ -606,12 +701,8 @@ function ModeToggle({
 			<Popover
 				open={open}
 				onOpenChange={(nextOpen) => {
-					setOpen(nextOpen)
-					if (!nextOpen) {
-						resetSearchKeyword()
-						resetConfirmPopover()
-						setShowNewTopicModal({ visible: false, mode: null })
-					}
+					handleOpenChange(nextOpen)
+					if (!nextOpen) setShowNewTopicModal({ visible: false, mode: null })
 				}}
 			>
 				<PopoverTrigger asChild>{currentModeItem}</PopoverTrigger>

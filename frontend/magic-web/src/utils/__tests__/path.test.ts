@@ -42,7 +42,7 @@ describe("calculateRelativePath", () => {
 		})
 
 		it("should handle immediate child directory", () => {
-			expect(calculateRelativePath("./readme.md", "./docs/guide.md")).toBe("./docs/guide.md")
+			expect(calculateRelativePath("./README.md", "./docs/guide.md")).toBe("./docs/guide.md")
 		})
 	})
 

@@ -29,10 +29,7 @@ function RecycleBinPage() {
 	const [tabCounts, setTabCounts] = useState<Record<string, number>>({})
 
 	const tabs = useMemo<RecycleBinTab[]>(() => {
-		return getRecycleBinTabs({
-			counts: tabCounts,
-			variant: "pc",
-		})
+		return getRecycleBinTabs({ counts: tabCounts })
 	}, [tabCounts])
 
 	const activeTab = useMemo(() => {

@@ -99,6 +99,7 @@ class AgentMode(str, Enum):
     TEST = "test"  # 工具模式，使用tool.agent
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
+    MICRO_APP = "micro-app"  # 微应用开发模式，使用micro-app.agent
     MAGICLAW = "magiclaw"  # Magic Claw 模式，从 agents/claws/<claw_code>/ 编译运行
 
     def get_agent_type(self) -> str:
@@ -115,6 +116,7 @@ class AgentMode(str, Enum):
             AgentMode.TEST: "test",
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",
+            AgentMode.MICRO_APP: "micro-app",  # 微应用开发模式
             AgentMode.MAGICLAW: "magiclaw",
         }
         return agent_type_mapping.get(self, "magic")

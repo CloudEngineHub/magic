@@ -344,8 +344,8 @@ class FileTreeUtilTest extends TestCase
             ],
             [
                 'file_id' => '2',
-                'file_name' => 'readme.md',
-                'relative_file_path' => '/project/readme.md',
+                'file_name' => 'README.md',
+                'relative_file_path' => '/project/README.md',
                 'is_directory' => false,
                 'file_size' => 512,
                 'file_extension' => 'md',
@@ -374,7 +374,7 @@ class FileTreeUtilTest extends TestCase
         $project = $result[0];
         $this->assertEquals('project', $project['name']);
         $this->assertTrue($project['is_directory']);
-        $this->assertCount(3, $project['children']); // docs/, readme.md, config.json
+        $this->assertCount(3, $project['children']); // docs/, README.md, config.json
 
         // Check that docs directory contains api.md
         $docsDir = null;

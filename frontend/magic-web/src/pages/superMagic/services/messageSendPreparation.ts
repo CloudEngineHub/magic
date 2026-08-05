@@ -16,6 +16,7 @@ import {
 	superMagicTopicModelService,
 } from "@/services/superMagic/topicModel"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 import { shouldCreateFreshTopicForProject } from "./topicProjectConsistency"
 import TopicService from "./topicService"
 import SuperMagicService from "./index"
@@ -40,6 +41,7 @@ export interface MessageSendPreparationContext {
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
 	topicStore?: TopicStore
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
+	refreshProjectAfterTopicRename?: boolean
 	renameProject?: (
 		projectId: string,
 		projectName: string,
@@ -141,6 +143,7 @@ export function resolveMessageSendContext(
 		selectedWorkspace,
 		workspaceId: selectedWorkspace?.id ?? selectedProject?.workspace_id,
 		updateTopicName,
+		refreshProjectAfterTopicRename: context?.refreshProjectAfterTopicRename,
 		renameProject,
 		setSelectedProject,
 		setSelectedTopic,
@@ -162,7 +165,12 @@ export async function preparePanelSend({
 	let currentTopic = resolvedContext.selectedTopic
 	let nextMentionItems = [...params.mentionItems]
 	let nextContent = params.value
-	const agentCode = resolveAgentCode(params)
+	const selection = resolveAgentSelection(
+		params.topicMode ?? tabPattern,
+		resolveAgentCode(params),
+	)
+	const agentCode = selection.agentCode
+	const normalizedParams = applyAgentSelectionToParams(params, selection)
 
 	if (!nextContent) {
 		return null
@@ -181,8 +189,8 @@ export async function preparePanelSend({
 		currentProject = createdProject.project
 		currentTopic = {
 			...createdProject.topic,
-			topic_mode: params.topicMode ?? tabPattern,
-			...(agentCode && { agent_code: agentCode }),
+			topic_mode: selection.topicPattern,
+			agent_code: agentCode,
 		}
 
 		resolvedContext.setSelectedProject(currentProject)
@@ -209,14 +217,14 @@ export async function preparePanelSend({
 		}
 		currentTopic = {
 			...createdTopic,
-			topic_mode: params.topicMode ?? tabPattern,
-			...(agentCode && { agent_code: agentCode }),
+			topic_mode: selection.topicPattern,
+			agent_code: agentCode,
 		}
 	} else {
 		currentTopic = {
 			...currentTopic,
-			topic_mode: params.topicMode ?? tabPattern,
-			...(agentCode && { agent_code: agentCode }),
+			topic_mode: selection.topicPattern,
+			agent_code: agentCode,
 		}
 	}
 
@@ -256,10 +264,11 @@ export async function preparePanelSend({
 			selectedWorkspace: resolvedContext.selectedWorkspace,
 			workspaceId: resolvedContext.workspaceId,
 			updateTopicName: resolvedContext.updateTopicName,
+			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,
 			renameProject: resolvedContext.renameProject,
 		},
 		params: {
-			...params,
+			...normalizedParams,
 			value: nextContent,
 			mentionItems: nextMentionItems,
 		},
@@ -296,9 +305,11 @@ export async function ensureProjectForMessageContext({
 	}
 
 	currentProject = createdProject.project
+	const selection = resolveAgentSelection(tabPattern)
 	currentTopic = {
 		...createdProject.topic,
-		topic_mode: tabPattern,
+		topic_mode: selection.topicPattern,
+		agent_code: selection.agentCode,
 	}
 
 	resolvedContext.setSelectedProject(currentProject)
@@ -430,6 +441,25 @@ function resolveAgentCode(params: HandleSendParams): string | undefined {
 	const agentCode = params.extra?.agent_code
 	if (typeof agentCode !== "string") return undefined
 	return agentCode.trim() || undefined
+}
+
+function applyAgentSelectionToParams(
+	params: HandleSendParams,
+	selection: ReturnType<typeof resolveAgentSelection>,
+): HandleSendParams {
+	const extra = { ...(params.extra ?? {}) }
+	delete extra.agent_code
+	const normalizedExtra = selection.agentCode
+		? { ...extra, agent_code: selection.agentCode }
+		: Object.keys(extra).length > 0
+			? extra
+			: undefined
+
+	return {
+		...params,
+		topicMode: selection.topicPattern,
+		extra: normalizedExtra,
+	}
 }
 
 async function copyGlobalModelConfiguration({

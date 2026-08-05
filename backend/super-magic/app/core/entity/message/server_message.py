@@ -48,6 +48,7 @@ class DisplayType(str, Enum):
     TODO = "todo"  # 添加TODO枚举值
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
+    PLAN = "plan"  # 开发计划确认展示
 
 
 class TodoOperationType(str, Enum):
@@ -256,6 +257,43 @@ class AskUserResultContent(BaseModel):
     answers: Dict[str, Any]
 
 
+class PlanFileContent(BaseModel):
+    """开发计划中的文件项。"""
+
+    path: str
+    purpose: str
+
+
+class PlanDataModelContent(BaseModel):
+    """开发计划中的数据模型项。"""
+
+    table_name: str
+    purpose: str
+    fields: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
+
+
+class PlanToolContent(BaseModel):
+    """开发计划确认卡片内容模型。
+
+    用于 plan 工具在 BEFORE/AFTER_TOOL_CALL 消息中向前端展示方案、
+    用户确认状态和修改意见。
+    """
+
+    plan_id: Optional[str] = None
+    status: str
+    title: str
+    summary: str
+    app_type: str = ""
+    requirements: List[str] = Field(default_factory=list)
+    implementation_steps: List[str] = Field(default_factory=list)
+    files: List[PlanFileContent] = Field(default_factory=list)
+    data_model: List[PlanDataModelContent] = Field(default_factory=list)
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    response: Optional[str] = None
+    expires_at: int = 0
+
+
 class ToolDetail(BaseModel):
     """工具详情模型"""
 
@@ -263,7 +301,7 @@ class ToolDetail(BaseModel):
     data: Union[
         FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
-        AskUserQuestionContent, AskUserResultContent, Dict[str, Any]
+        AskUserQuestionContent, AskUserResultContent, PlanToolContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示
 
     model_config = ConfigDict(use_enum_values=True)

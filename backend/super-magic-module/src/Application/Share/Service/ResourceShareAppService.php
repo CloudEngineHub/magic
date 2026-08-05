@@ -57,6 +57,7 @@ use Dtyq\SuperMagic\Infrastructure\Utils\FileMetadataUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\PasswordCrypt;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\Share\Assembler\ShareAssembler;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCancelShareRequestDTO;
@@ -124,6 +125,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
         private readonly ProjectForkRepositoryInterface $projectForkRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
+        private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -148,7 +150,7 @@ class ResourceShareAppService extends AbstractShareAppService
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值
         // 只用 resource_id 查询，不校验 resource_type，避免类型转换(13↔12)时查询失败
-        $existingShare = $this->shareDomainService->getShareByResourceId($dto->resourceId);
+        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed($dto->resourceId);
 
         // 校验 file_ids 必填条件（问题2修复：使用 hasField() 判断，区分"不传"和"传空数组"）
         $isFileCollectionType = $resourceType === ResourceType::FileCollection;
@@ -311,7 +313,9 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         // 9. 获取项目ID（根据不同资源类型）
-        $projectId = $this->getProjectIdByResourceType($resourceType, $realResourceId);
+        $projectId = ($isProjectType && $dto->getProjectId() !== null && $dto->getProjectId() !== '')
+            ? $dto->getProjectId()
+            : $this->getProjectIdByResourceType($resourceType, $realResourceId);
 
         // 10. 如果是项目类型（resource_type=12），需要校验能否获取到项目ID
         if ($isProjectType) {
@@ -615,6 +619,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $result = [
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
             'resource_name' => $shareEntity->getResourceName() ?: $factory->getResourceNameForDetail($shareEntity) ?: '', // 优先使用数据库中的 resource_name，如果为空则从资源获取
+            'project_id' => $shareEntity->getProjectId() !== null ? (string) $shareEntity->getProjectId() : null,
             'temporary_token' => AccessTokenUtil::generate((string) $shareEntity->getId(), $shareEntity->getOrganizationCode()),
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
@@ -904,6 +909,7 @@ class ResourceShareAppService extends AbstractShareAppService
             $projectId = (int) $shareEntity->getProjectId();
             if ($projectId === 0) {
                 return [
+                    'project_id' => null,
                     'list' => [],
                     'tree' => [],
                     'total' => 0,
@@ -2386,7 +2392,10 @@ class ResourceShareAppService extends AbstractShareAppService
         // Build file tree structure with VS Code-style sorting (default to zh_CN for share context)
         $tree = FileTreeUtil::assembleFilesTreeByParentId($allList, 'zh_CN');
 
+        $projectId = $this->getProjectIdFromFileCollection($collectionId);
+
         return [
+            'project_id' => $projectId ?? '',
             'list' => $list,
             'tree' => $tree,
             'total' => $total,
@@ -4103,22 +4112,7 @@ class ResourceShareAppService extends AbstractShareAppService
         ResourceShareEntity $savedEntity,
         CreateShareRequestDTO $dto
     ): ?string {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
-        if ($frontendDomain === '') {
-            return null;
-        }
-
-        $uri = match ($resourceType) {
-            ResourceType::Topic => '/share/topic/' . $resourceId,
-            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
-            default => null,
-        };
-
-        if ($uri === null) {
-            return null;
-        }
-
-        $shareUrl = $frontendDomain . $uri;
+        $plainPassword = null;
 
         if (! empty($savedEntity->getPassword())) {
             // Prefer the plain-text password supplied in the current request to avoid an extra DB round-trip.
@@ -4139,11 +4133,9 @@ class ResourceShareAppService extends AbstractShareAppService
                 }
             }
 
-            if ($plainPassword !== '') {
-                $shareUrl .= '?password=' . rawurlencode($plainPassword);
-            }
+            $plainPassword = $plainPassword !== '' ? $plainPassword : null;
         }
 
-        return $shareUrl;
+        return $this->shareUrlBuilder->buildResourceShareUrl($resourceType, $resourceId, $plainPassword);
     }
 }

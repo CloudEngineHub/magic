@@ -339,7 +339,7 @@ class ResourceShareDomainService
     ): ResourceShareEntity {
         // 1. 查找是否已存在分享（通过 resource_id 查询，不校验 resource_type）
         // 这样可以避免类型转换(13↔12)时查询失败
-        $shareEntity = $this->getShareByResourceId($resourceId);
+        $shareEntity = $this->getShareByResourceIdWithTrashed($resourceId);
 
         // 2. 如果不存在，创建新的分享实体
         if (! $shareEntity) {
@@ -721,7 +721,7 @@ class ResourceShareDomainService
     {
         try {
             // 这里可以扩展为批量删除，目前先用单个删除
-            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType);
+            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType, false);
             if (! $shareEntity) {
                 return true;
             }

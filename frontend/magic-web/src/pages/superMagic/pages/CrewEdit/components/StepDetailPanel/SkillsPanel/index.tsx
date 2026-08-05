@@ -5,11 +5,13 @@ import { useCrewEditStore } from "../../../context"
 import { CREW_SKILLS_TAB } from "../../../store"
 import { useSkillsPanel } from "./useSkillsPanel"
 import { SkillsPanelShell } from "./SkillsPanelShell"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 function SkillsPanelInner() {
 	const { i18n } = useTranslation("crew/create")
 	const store = useCrewEditStore()
 	const { layout, skills } = store
+	const readOnly = isReadOnlyProject(store.conversation.selectedProject?.user_role)
 	const { closeSkillsPanel } = layout
 
 	const agentSkillCodes = new Set(skills.skills.map((skill) => skill.skill_code))
@@ -32,6 +34,7 @@ function SkillsPanelInner() {
 		onSearchCompositionStart,
 		onSearchCompositionEnd,
 	} = useSkillsPanel({
+		readOnly,
 		activeTab: layout.activeSkillsTab,
 		onTabChange: layout.setActiveSkillsTab,
 		agentSkillCodes,
@@ -49,6 +52,7 @@ function SkillsPanelInner() {
 
 	return (
 		<SkillsPanelShell
+			readOnly={readOnly}
 			onClose={closeSkillsPanel}
 			activeTab={activeTab}
 			setActiveTab={setActiveTab}

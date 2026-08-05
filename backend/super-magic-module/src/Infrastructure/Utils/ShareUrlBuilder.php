@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\Utils;
 
+use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
+
 /**
  * 分享URL构建器工具类.
  */
@@ -32,6 +34,46 @@ class ShareUrlBuilder
         }
 
         return $url;
+    }
+
+    public function buildResourceShareUrl(ResourceType $resourceType, string $resourceId, ?string $password = null): ?string
+    {
+        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
+        if ($frontendDomain === '') {
+            return null;
+        }
+
+        $uri = match ($resourceType) {
+            ResourceType::Topic => '/share/topic/' . $resourceId,
+            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
+            default => null,
+        };
+
+        if ($uri === null) {
+            return null;
+        }
+
+        $shareUrl = $frontendDomain . $uri;
+        if ($password !== null && $password !== '') {
+            $shareUrl .= '?password=' . rawurlencode($password);
+        }
+
+        return $shareUrl;
+    }
+
+    public function buildMicroAppShareUrl(string $appId, ?string $password = null): ?string
+    {
+        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
+        if ($frontendDomain === '') {
+            return null;
+        }
+
+        $shareUrl = $frontendDomain . '/micro-app/' . $appId;
+        if ($password !== null && $password !== '') {
+            $shareUrl .= '?password=' . rawurlencode($password);
+        }
+
+        return $shareUrl;
     }
 
     /**

@@ -18,6 +18,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayPublicApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenFileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMessageScheduleApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMicroAppApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenTaskApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenWorkspaceApi;
@@ -217,3 +218,6 @@ Router::addGroup(
 
 // 获取项目基本信息（公开接口，无需鉴权；放在 super-magic 鉴权分组之后，确保 /queries 静态路由先于 {id} 动态路由注册，避免 FastRoute 路由遮蔽冲突）
 Router::get('/api/v1/open-api/super-magic/projects/{id}', [OpenProjectApi::class, 'show']);
+
+// 获取已发布微应用的项目名称（公开接口，仅用于 Web Node 服务生成页面标题）
+Router::get('/api/v1/open-api/super-magic/micro-apps/{appId}/title', [OpenMicroAppApi::class, 'showTitle']);

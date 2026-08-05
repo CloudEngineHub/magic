@@ -61,14 +61,24 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 				clearTimeout(timer)
 				window.removeEventListener("message", handler)
 				if (event.data["success"]) {
-					const result = extractResult
-						? extractResult(event.data)
-						: ((event.data["content"] ?? event.data) as T)
-					this.logger.info("request:success", {
-						type,
-						requestId,
-					})
-					resolve(result)
+					try {
+						const result = extractResult
+							? extractResult(event.data)
+							: ((event.data["content"] ?? event.data) as T)
+						this.logger.info("request:success", {
+							type,
+							requestId,
+							result,
+						})
+						resolve(result)
+					} catch (error) {
+						this.logger.error("request:extract_failure", {
+							type,
+							requestId,
+							error: error instanceof Error ? error.message : String(error),
+						})
+						reject(error instanceof Error ? error : new Error(String(error)))
+					}
 				} else {
 					this.logger.error("request:failure", {
 						type,

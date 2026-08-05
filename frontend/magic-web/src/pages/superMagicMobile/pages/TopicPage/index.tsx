@@ -602,7 +602,7 @@ function TopicPage({
 	}, [isProgrammaticScroll, nodesPanelRef, handlePullMoreMessage, selectedTopic])
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -749,6 +749,7 @@ function TopicPage({
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 					/>
 				</div>

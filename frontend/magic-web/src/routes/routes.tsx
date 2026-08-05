@@ -11,6 +11,10 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import {
+	microAppPublicRoutes,
+	superMagicMicroAppRoutes,
+} from "@/routes/modules/superMagicMicroAppRoutes"
 import { superMagicSlidesTemplateRoutes } from "@/routes/modules/superMagicSlidesTemplateRoutes"
 import ProjectOrganizationAccessGuard from "@/pages/superMagic/components/ProjectOrganizationAccessGuard"
 
@@ -472,6 +476,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.SuperWorkspaceState}`,
 						element: <WorkspacePage />,
 					},
+					...superMagicMicroAppRoutes,
 					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
@@ -554,6 +559,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			path: RoutePath.SuperMagicShare,
 			element: <SuperMagicShare />,
 		},
+		...microAppPublicRoutes,
 		{
 			name: RouteName.SuperMagicFileShare,
 			path: RoutePath.SuperMagicFileShare,

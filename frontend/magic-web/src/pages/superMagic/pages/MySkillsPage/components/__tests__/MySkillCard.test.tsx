@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { CollaboratorPermissionEnum } from "@/pages/superMagic/types/collaboration"
 import type { UserSkillView } from "@/services/skills/SkillsService"
 import MySkillCard from "../MySkillCard"
+import { shouldOpenMySkillEditor } from "../MySkillCardShared"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -178,7 +179,7 @@ describe("MySkillCard", () => {
 		expect(screen.getByTestId("my-skill-card-delete")).toBeInTheDocument()
 	})
 
-	it("keeps team-shared viewers in details-only mode", () => {
+	it("keeps team-shared viewers without management actions", () => {
 		render(
 			<MySkillCard
 				skill={createSkill({
@@ -195,6 +196,16 @@ describe("MySkillCard", () => {
 		expect(screen.queryByTestId("my-skill-card-edit")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("my-skill-card-delete")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("my-skill-card-remove")).not.toBeInTheDocument()
+	})
+
+	it("routes collaborated viewers to the read-only editor page", () => {
+		expect(shouldOpenMySkillEditor("team", CollaboratorPermissionEnum.READONLY)).toBe(true)
+		expect(shouldOpenMySkillEditor("team", CollaboratorPermissionEnum.EDITABLE)).toBe(true)
+	})
+
+	it("keeps non-collaborated team and library skills in detail mode", () => {
+		expect(shouldOpenMySkillEditor("team", undefined)).toBe(false)
+		expect(shouldOpenMySkillEditor("library", CollaboratorPermissionEnum.READONLY)).toBe(false)
 	})
 
 	it("shows powered by footer with market publisher for skills library items", () => {

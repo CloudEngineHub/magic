@@ -10,6 +10,7 @@ return [
         'project' => 'Project',
         'topic' => 'Topic',
         'file' => 'File',
+        'micro_app' => 'Micro App',
     ],
     'validation' => [
         'resource_ids_must_be_array' => 'Parameter resource_ids must be an array',
@@ -43,6 +44,8 @@ return [
     ],
     'restore' => [
         'project_failed' => 'Failed to restore project',
+        'micro_app_failed' => 'Failed to restore micro app',
+        'micro_app_not_found_or_permanently_deleted' => 'Micro app does not exist or has been permanently deleted',
         'topic_failed' => 'Failed to restore topic',
         'unsupported_resource_type' => 'Unsupported resource type: :type',
         'workspace_not_found_or_permanently_deleted' => 'Workspace does not exist or has been permanently deleted',

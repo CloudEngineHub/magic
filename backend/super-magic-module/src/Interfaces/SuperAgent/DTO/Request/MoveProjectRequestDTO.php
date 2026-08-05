@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 
 /**
  * Move project request DTO
@@ -104,11 +105,13 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
      */
     protected static function getHyperfValidationRules(): array
     {
+        $projectModes = implode(',', ProjectMode::getAllModes());
+
         return [
             'source_project_id' => 'required|numeric',
             'target_workspace_id' => 'present|string|max:64',
             'target_project_name' => 'nullable|string|max:100',
-            'project_mode' => 'nullable|string|in:general,ppt,data_analysis,report,meeting,summary,super_magic,audio,agent_creator,skill_creator,custom_agent,custom_skill,magiclaw,chat',
+            'project_mode' => 'nullable|string|in:' . $projectModes,
         ];
     }
 

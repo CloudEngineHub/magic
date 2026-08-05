@@ -10,7 +10,6 @@ import type {
 	FilesViewerProps,
 	TabItem,
 	FileItem,
-	TabAction,
 	WebsitePreset,
 	PlaybackTabItem,
 	ActiveDetailTabType,
@@ -20,7 +19,6 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
-	handleDuplicateTabNames,
 	convertFileToTabItem,
 	getFileTabTitle,
 	normalizeSlideProjectTabItem,
@@ -49,6 +47,7 @@ import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/compo
 import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
 import { getFileViewerTabType } from "../utils/tabType"
 import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
+import { tabReducer } from "./tabReducer"
 
 function normalizeFileId(value: unknown): string | undefined {
 	if (typeof value === "string" && value.trim()) return value.trim()
@@ -134,191 +133,6 @@ function isHiddenProjectFile(file: FileItem | undefined): file is FileItem {
 // 	downloadFileContent,
 // } from "@/pages/superMagic/utils/api"
 
-// Tab reducer function
-function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
-	const now = Date.now() // Timestamp for all operations
-
-	switch (action.type) {
-		case TabActionType.ADD_TAB:
-			if (!action.payload?.tab) return state
-
-			// Check if tab already exists
-			const existingTabIndex = state.findIndex((tab) => tab.id === action.payload!.tab!.id)
-			if (existingTabIndex !== -1) {
-				const shouldUsePendingAttachmentSyncTab =
-					action.payload.tab.fileData?.display_config?.previewPolicy
-						?.awaitAttachmentSync === true
-				const shouldReplaceFileData =
-					action.payload.tab.fileData?.display_config?.type === DetailType.SelfMedia ||
-					shouldUsePendingAttachmentSyncTab
-				// Switch to existing tab and update active_at
-				const newState = state.map((tab) => {
-					if (tab.id !== action.payload!.tab!.id) {
-						return {
-							...tab,
-							active: false,
-						}
-					}
-
-					return {
-						...tab,
-						active: true,
-						active_at: now,
-						title: shouldReplaceFileData ? action.payload!.tab!.title : tab.title,
-						fileData: shouldReplaceFileData
-							? action.payload!.tab!.fileData
-							: tab.fileData,
-						isDeleted: shouldUsePendingAttachmentSyncTab ? false : tab.isDeleted,
-						isLoading: shouldUsePendingAttachmentSyncTab ? true : tab.isLoading,
-						display_config: shouldReplaceFileData
-							? action.payload!.tab!.display_config
-							: tab.display_config,
-						filePath: shouldReplaceFileData
-							? action.payload!.tab!.fileData.relative_file_path ||
-								action.payload!.tab!.filePath
-							: tab.fileData.relative_file_path || tab.filePath,
-					}
-				})
-				return newState
-			}
-
-			// Prepare new tab with filePath and timestamps
-			const newTab = {
-				...action.payload.tab,
-				active: true,
-				filePath:
-					action.payload.tab.fileData.relative_file_path || action.payload.tab.filePath,
-				create_at: now,
-				active_at: now,
-			}
-
-			// Handle duplicate names and add new tab
-			const addedState = handleDuplicateTabNames(state, newTab)
-			return addedState
-
-		case TabActionType.REMOVE_TAB:
-			if (!action.payload?.tabId) return state
-
-			// If only one tab left, clear all tabs but don't auto-open
-			if (state.length === 1) {
-				return []
-			}
-
-			const filteredTabs = state.filter((tab) => tab.id !== action.payload!.tabId)
-
-			// If removing active tab, activate the most recently active tab
-			const removedTab = state.find((tab) => tab.id === action.payload!.tabId)
-			if (removedTab?.active && filteredTabs.length > 0) {
-				// Find the most recently active tab (highest active_at timestamp)
-				const mostRecentTab = filteredTabs.reduce((mostRecent, current) => {
-					// 如果当前 tab 没有 active_at，使用 create_at 或者当前时间
-					const currentActiveAt = current.active_at || current.create_at || 0
-					const mostRecentActiveAt = mostRecent.active_at || mostRecent.create_at || 0
-
-					return currentActiveAt > mostRecentActiveAt ? current : mostRecent
-				})
-
-				const removedState = filteredTabs.map((tab) => ({
-					...tab,
-					active: tab.id === mostRecentTab.id,
-					active_at: tab.id === mostRecentTab.id ? now : tab.active_at,
-				}))
-				return removedState
-			}
-
-			return filteredTabs
-
-		case TabActionType.SWITCH_TAB:
-			if (!action.payload?.tabId) return state
-
-			return state.map((tab) => ({
-				...tab,
-				active: tab.id === action.payload!.tabId,
-				active_at: tab.id === action.payload!.tabId ? now : tab.active_at,
-			}))
-
-		case TabActionType.UPDATE_TAB:
-			if (!action.payload?.tab) return state
-
-			const updatedState = state.map((tab) =>
-				tab.id === action.payload!.tab!.id ? { ...tab, ...action.payload!.tab } : tab,
-			)
-			return updatedState
-
-		case TabActionType.CLEAR_TABS:
-			const clearedState: TabItem[] = []
-			return clearedState
-
-		case TabActionType.CLOSE_OTHER_TABS:
-			if (!action.payload?.tabId) return state
-
-			// Keep only the specified tab
-			const keepTab = state.find((tab) => tab.id === action.payload!.tabId)
-			if (!keepTab) return state
-
-			return [{ ...keepTab, active: true, active_at: now }]
-
-		case TabActionType.CLOSE_TABS_TO_RIGHT:
-			if (!action.payload?.tabId) return state
-
-			// Find the index of the specified tab
-			const targetIndex = state.findIndex((tab) => tab.id === action.payload!.tabId)
-			if (targetIndex === -1) return state
-
-			// Keep tabs from start to target index (inclusive)
-			const tabsToRightClosedState = state.slice(0, targetIndex + 1)
-			return tabsToRightClosedState
-
-		case TabActionType.SYNC_TABS_DATA:
-			if (!action.payload?.tabs) return state
-
-			return action.payload.tabs
-
-		case TabActionType.REORDER_TABS:
-			if (action.payload?.fromIndex === undefined || action.payload?.toIndex === undefined) {
-				return state
-			}
-
-			const { fromIndex, toIndex } = action.payload
-
-			// 禁止拖拽演示模式tab（固定在第一位）
-			if (state[fromIndex]?.id === PLAYBACK_TAB_ID) {
-				return state
-			}
-
-			// 禁止将其他tab拖拽到演示模式tab的位置（如果演示模式tab存在且在第一位）
-			if (state[0]?.id === PLAYBACK_TAB_ID && toIndex === 0) {
-				return state
-			}
-
-			if (
-				fromIndex === toIndex ||
-				fromIndex < 0 ||
-				toIndex < 0 ||
-				fromIndex >= state.length ||
-				toIndex >= state.length
-			) {
-				return state
-			}
-
-			const reorderedState = [...state]
-			const [movedTab] = reorderedState.splice(fromIndex, 1)
-			reorderedState.splice(toIndex, 0, movedTab)
-
-			return reorderedState
-
-		case TabActionType.DEACTIVATE_ALL:
-			// 将所有tab设置为非激活状态
-			return state.map((tab) => ({
-				...tab,
-				active: false,
-			}))
-
-		default:
-			return state
-	}
-}
-
 /**
  * useFilesViewer - FilesViewer组件主要逻辑Hook
  *
@@ -353,7 +167,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 		topicName,
 		projectId,
 		onFileTabsCacheLoaded,
+		nonClosableFileIds,
 	} = props
+	const nonClosableFileIdsKey = (nonClosableFileIds || []).map(String).sort().join("|")
+	const nonClosableFileIdSet = useMemo(
+		() => new Set(nonClosableFileIdsKey ? nonClosableFileIdsKey.split("|") : []),
+		[nonClosableFileIdsKey],
+	)
 
 	const onFileTabsCacheLoadedRef = useRef(onFileTabsCacheLoaded)
 	onFileTabsCacheLoadedRef.current = onFileTabsCacheLoaded
@@ -662,6 +482,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 		if (!newTab) {
 			return
 		}
+		newTab.closeable = !(
+			nonClosableFileIdSet.has(newTab.id) ||
+			nonClosableFileIdSet.has(String(newTab.fileData.file_id))
+		)
 
 		if (isPendingAttachmentOpen) {
 			newTab.isLoading = true
@@ -759,6 +583,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 			}
 			return
 		}
+
+		if (tabs.find((tab) => tab.id === tabId)?.closeable === false) return
 
 		// 检查是否正在关闭当前激活的tab
 		const closingTab = tabs.find((tab) => tab.id === tabId)
@@ -1185,7 +1011,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 								return {
 									...tab,
 									type: tab.type || (isCachedWebsiteTab ? "website" : "file"),
-									closeable: true,
+									closeable: !nonClosableFileIdSet.has(String(tab.id)),
 									isDeleted: isDeleted || false, // 确保类型为boolean
 									isLoading,
 									fileData: {
@@ -1324,9 +1150,33 @@ export function useFilesViewer(props: FilesViewerProps) {
 			checkBeforeCloseMapRef.current.clear()
 			setFullscreenFileId(null)
 			setCacheLoaded(false) // Reset cache loaded state
-			clearAllTabs()
+			dispatchTabs({
+				type: TabActionType.CLEAR_TABS,
+				payload: { force: true },
+			})
 		}
-	}, [clearAllTabs, viewerProjectId])
+	}, [viewerProjectId])
+
+	useEffect(() => {
+		let hasUpdates = false
+		const updatedTabs = tabs.map((tab) => {
+			const closeable = !(
+				nonClosableFileIdSet.has(tab.id) ||
+				nonClosableFileIdSet.has(String(tab.fileData.file_id))
+			)
+			if (tab.closeable === closeable) return tab
+
+			hasUpdates = true
+			return { ...tab, closeable }
+		})
+
+		if (hasUpdates) {
+			dispatchTabs({
+				type: TabActionType.SYNC_TABS_DATA,
+				payload: { tabs: updatedTabs },
+			})
+		}
+	}, [nonClosableFileIdSet, tabs])
 
 	// Sync tab data when fileList changes
 	useEffect(() => {

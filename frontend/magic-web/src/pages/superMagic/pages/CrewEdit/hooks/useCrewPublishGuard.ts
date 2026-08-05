@@ -11,6 +11,7 @@ interface UseCrewPublishGuardParams {
 	identity: CrewIdentityStore
 	layout: CrewLayoutStore
 	isInitializing: boolean
+	readOnly?: boolean
 	projectId?: string
 	openPublishingStep: () => void
 }
@@ -19,6 +20,7 @@ export function useCrewPublishGuard({
 	identity,
 	layout,
 	isInitializing,
+	readOnly = false,
 	projectId,
 	openPublishingStep,
 }: UseCrewPublishGuardParams) {
@@ -28,15 +30,17 @@ export function useCrewPublishGuard({
 	const hasPublishName = hasCrewPublishName(identity.name_i18n, i18n.language)
 
 	useEffect(() => {
+		if (readOnly) return
 		if (isInitializing && !hasPublishName) return
 		if (layout.activeDetailKey !== CREW_EDIT_STEP.Publishing) return
 		if (hasPublishName) return
 
 		layout.setActiveStep(null)
 		setIsPublishIdentityDialogOpen(true)
-	}, [hasPublishName, isInitializing, layout, layout.activeDetailKey])
+	}, [hasPublishName, isInitializing, layout, layout.activeDetailKey, readOnly])
 
 	const preparePublishing = useMemoizedFn(async () => {
+		if (readOnly) return
 		setIsPublishingPending(true)
 		try {
 			const isIdentityFileReady = await identity.ensureIdentityMarkdownFile({ projectId })
@@ -56,6 +60,7 @@ export function useCrewPublishGuard({
 	})
 
 	const handleOpenPublishing = useMemoizedFn(() => {
+		if (readOnly) return
 		void (async () => {
 			if (layout.activeDetailKey === CREW_EDIT_STEP.Publishing) {
 				openPublishingStep()

@@ -56,6 +56,7 @@ interface SkillsPanelPaginationState {
 }
 
 interface UseSkillsPanelOptions {
+	readOnly?: boolean
 	activeTab: CrewSkillsTab
 	onTabChange: (tab: CrewSkillsTab) => void
 	/**
@@ -161,6 +162,7 @@ function createInitialPaginationState(): SkillsPanelPaginationState {
 }
 
 export function useSkillsPanel({
+	readOnly = false,
 	activeTab,
 	onTabChange,
 	agentSkillCodes,
@@ -335,6 +337,7 @@ export function useSkillsPanel({
 
 	const handleInstall = useCallback(
 		async (skillCode: string) => {
+			if (readOnly) return
 			const skill = displayItems.find((item) => item.skillCode === skillCode)
 			if (!skill || busySkills.has(skillCode)) return
 
@@ -427,11 +430,13 @@ export function useSkillsPanel({
 			overrideInstall,
 			rawLibrary,
 			setBusy,
+			readOnly,
 		],
 	)
 
 	const handleUninstall = useCallback(
 		async (skillCode: string) => {
+			if (readOnly) return
 			if (busySkills.has(skillCode)) return
 
 			const skill = displayItems.find((item) => item.skillCode === skillCode)
@@ -485,6 +490,7 @@ export function useSkillsPanel({
 			onRemoveSkill,
 			onRemoveSkillFromAgent,
 			overrideUninstall,
+			readOnly,
 			setBusy,
 		],
 	)
@@ -533,9 +539,10 @@ export function useSkillsPanel({
 	 * publish prompt is handled by SkillActionDropdown (ImportSkillPublishPromptDialog).
 	 */
 	const handleImportSuccess = useCallback(async () => {
+		if (readOnly) return
 		onTabChange(CREW_SKILLS_TAB.MySkills)
 		await fetchMySkills({ page: 1 })
-	}, [fetchMySkills, onTabChange])
+	}, [fetchMySkills, onTabChange, readOnly])
 
 	return {
 		activeTab,

@@ -7,15 +7,9 @@ import {
 	createRecycleBinTabCounts,
 	RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID,
 } from "@/pages/recycleBin/tab-config"
+import { getResourceTypeByTabId } from "@/pages/recycleBin/components/recycle-bin-domain"
 import type { RecycleBinItemData } from "../components/RecycleBinItem"
 import { mapListItemToItemData } from "./mobileRecycleBinMappers"
-
-const TAB_TO_RESOURCE_TYPE: Record<string, number> = {
-	workspaces: 1,
-	projects: 2,
-	topics: 3,
-	files: 4,
-}
 
 const RECYCLE_BIN_PAGE_SIZE = 50
 
@@ -30,16 +24,16 @@ export function useMobileRecycleBinList(props: {
 	// 回收站列表按接口关键字查询，统一使用防抖关键字减少移动端重复请求。
 	const debouncedSearchValue = useDebounce(searchValue.trim(), { wait: 300 })
 
-	const queryParams = useMemo(
-		() => ({
-			...(activeTab !== "all" ? { resource_type: TAB_TO_RESOURCE_TYPE[activeTab] } : {}),
+	const queryParams = useMemo(() => {
+		const resourceType = getResourceTypeByTabId(activeTab)
+		return {
+			...(resourceType ? { resource_type: resourceType } : {}),
 			keyword: debouncedSearchValue || undefined,
 			order,
 			page: 1,
 			page_size: RECYCLE_BIN_PAGE_SIZE,
-		}),
-		[activeTab, debouncedSearchValue, order],
-	)
+		}
+	}, [activeTab, debouncedSearchValue, order])
 
 	const [items, setItems] = useState<RecycleBinItemData[]>([])
 	const [hasError, setHasError] = useState(false)
@@ -115,7 +109,7 @@ export function useMobileRecycleBinList(props: {
 
 	const filteredItems = useMemo(() => {
 		if (activeTab === "all") return items
-		const targetType = TAB_TO_RESOURCE_TYPE[activeTab]
+		const targetType = getResourceTypeByTabId(activeTab)
 		if (!targetType) return items
 		return items.filter((item) => item.resourceType === targetType)
 	}, [items, activeTab])

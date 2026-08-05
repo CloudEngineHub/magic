@@ -7,7 +7,7 @@ describe("shouldShowCrewKnowledgeBaseEntry", () => {
 		expect(shouldShowCrewKnowledgeBaseEntry(CollaboratorPermissionEnum.OWNER)).toBe(true)
 		expect(shouldShowCrewKnowledgeBaseEntry(CollaboratorPermissionEnum.MANAGE)).toBe(false)
 		expect(shouldShowCrewKnowledgeBaseEntry(CollaboratorPermissionEnum.EDITABLE)).toBe(false)
-		expect(shouldShowCrewKnowledgeBaseEntry(CollaboratorPermissionEnum.READONLY)).toBe(false)
+		expect(shouldShowCrewKnowledgeBaseEntry(CollaboratorPermissionEnum.READONLY)).toBe(true)
 		expect(shouldShowCrewKnowledgeBaseEntry()).toBe(false)
 	})
 })
