@@ -81,6 +81,21 @@ describe("otherProjectMention", () => {
 		)
 	})
 
+	it("does not prefix a current-project file even when project_id is present", () => {
+		expect(
+			getMentionDisplayName({
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: "current-file",
+					file_name: "current.md",
+					file_path: "current.md",
+					file_extension: "md",
+					project_id: "current-project",
+				},
+			}),
+		).toBe("current.md")
+	})
+
 	it("creates a relative cross-project directory mention without the project work directory", () => {
 		const selection: ProjectResourceSelection = {
 			level: "attachment",

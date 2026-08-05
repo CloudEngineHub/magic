@@ -136,6 +136,17 @@ export class ConnectionHandleRenderer {
 		)
 	}
 
+	public isPointInHandleKeepAliveRegion(
+		rect: Rect,
+		stageScale: number,
+		point: { x: number; y: number },
+	): boolean {
+		return (
+			this.isPointInRect(point, rect) ||
+			this.isPointInHandleHitRegion(rect, stageScale, point)
+		)
+	}
+
 	private createCorridorNode(side: ConnectionHandleSide): Konva.Rect {
 		const corridor = new Konva.Rect({
 			name: ConnectionHandleRenderer.HANDLE_CORRIDOR_NAME,

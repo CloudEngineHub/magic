@@ -16,9 +16,10 @@ import {
 } from "../types"
 import useStyles from "./style"
 import { findFileInTree, calculateActualFileCount } from "../FileSelector/utils"
-import { useResponsive, useDebounceFn } from "ahooks"
+import { useDebounceFn } from "ahooks"
 import { handleShareTypeChangeWithConfirm, generateSharePassword } from "../utils"
 import MagicModal from "@/components/base/MagicModal"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
 import {
 	ShareNameField,
@@ -93,8 +94,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 
 	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
 	const initialLockShareProject = fileShareUiConfig?.lockShareProject ?? false

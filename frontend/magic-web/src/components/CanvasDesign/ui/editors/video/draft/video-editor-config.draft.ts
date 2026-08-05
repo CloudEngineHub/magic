@@ -1,6 +1,10 @@
 import type { UploadFileResponse, VideoInputMode } from "../../../../public/magic-types"
 import { removeMentionFromString } from "../../message/tiptap/contentUtils"
-import type { VideoModeInputDraft, VideoReferenceAssetInfo } from "../video-editor-config.types"
+import type {
+	LinkedFrameBinding,
+	VideoModeInputDraft,
+	VideoReferenceAssetInfo,
+} from "../video-editor-config.types"
 
 export function cloneFrameSlotInfos(
 	frames?: Array<UploadFileResponse | undefined>,
@@ -12,6 +16,12 @@ export function cloneVideoReferenceAssetInfos(
 	infos?: VideoReferenceAssetInfo[],
 ): VideoReferenceAssetInfo[] {
 	return (infos || []).map((item) => ({ ...item }))
+}
+
+export function cloneLinkedFrameBindings(
+	bindings?: Array<LinkedFrameBinding | undefined>,
+): Array<LinkedFrameBinding | undefined> {
+	return (bindings || []).map((binding) => (binding ? { ...binding } : binding))
 }
 
 /**
@@ -52,6 +62,7 @@ export function cloneModeDraftCache(
 			prompt: draft.prompt ?? "",
 			activeInputTab: draft.activeInputTab ?? "frame",
 			frameImageInfos: cloneFrameSlotInfos(draft.frameImageInfos),
+			linkedFrameBindings: cloneLinkedFrameBindings(draft.linkedFrameBindings),
 			referenceAssetInfos: cloneVideoReferenceAssetInfos(draft.referenceAssetInfos),
 		}
 	}
@@ -66,12 +77,14 @@ export function mergeCurrentUiIntoModeDraftCache(
 	activeInputTab: "frame" | "reference",
 	frames: Array<UploadFileResponse | undefined>,
 	refs: VideoReferenceAssetInfo[],
+	linkedFrameBindings: Array<LinkedFrameBinding | undefined>,
 ): Partial<Record<VideoInputMode, VideoModeInputDraft>> {
 	const out = cloneModeDraftCache(base)
 	out[selectedMode] = {
 		prompt,
 		activeInputTab,
 		frameImageInfos: cloneFrameSlotInfos(frames),
+		linkedFrameBindings: cloneLinkedFrameBindings(linkedFrameBindings),
 		referenceAssetInfos: cloneVideoReferenceAssetInfos(refs),
 	}
 	return out

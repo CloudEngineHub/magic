@@ -4,7 +4,10 @@ import { ImageElement as ImageElementClass } from "../../../runtime/elements/ima
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import type { UploadFileResponse } from "../../../public/magic-types"
 import type { MatchableMentionItem } from "./tiptap/contentUtils"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseMentionSyncOptions {
 	canvas: Canvas | null
@@ -68,23 +71,49 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
-			const currentPaths = new Set(currentInfos.map((info) => info.path))
-			const pathsSet = new Set(paths)
-			const protectedPathSet = new Set(protectedReferencePaths)
+			const currentPathByIdentity = new Map(
+				currentInfos.map((info) => [getCanvasResourceIdentity(info.path), info.path]),
+			)
+			const mentionedPathIdentities = new Set(paths.map(getCanvasResourceIdentity))
+			const protectedPathIdentities = new Set(
+				protectedReferencePaths.map(getCanvasResourceIdentity),
+			)
+			const findMatchableItem = (path: string) => {
+				const identity = getCanvasResourceIdentity(path)
+				return matchableItems.find(
+					(item) => getCanvasResourceIdentity(item.path) === identity,
+				)
+			}
 
-			let pathsToAdd = paths.filter((path) => path && !currentPaths.has(path))
+			const pathsToAddIdentities = new Set<string>()
+			let pathsToAdd = paths.filter((path) => {
+				const identity = getCanvasResourceIdentity(path)
+				if (
+					!identity ||
+					currentPathByIdentity.has(identity) ||
+					pathsToAddIdentities.has(identity)
+				) {
+					return false
+				}
+				pathsToAddIdentities.add(identity)
+				return true
+			})
 			const pathsToRemove = mentionSyncAddOnly
 				? []
-				: Array.from(currentPaths).filter(
-						(path) => !pathsSet.has(path) && !protectedPathSet.has(path),
-					)
+				: currentInfos
+						.map((info) => info.path)
+						.filter(
+							(path) =>
+								!mentionedPathIdentities.has(getCanvasResourceIdentity(path)) &&
+								!protectedPathIdentities.has(getCanvasResourceIdentity(path)),
+						)
 
 			// 限制场景下过滤 pathsToAdd
 			if (isReferenceFileLimitReached && maxReferenceFiles !== undefined) {
-				const currentPathsArray = Array.from(currentPaths)
+				const currentPathsArray = currentInfos.map((info) => info.path)
 				pathsToAdd = pathsToAdd.filter((path) => {
-					if (currentPathsArray.includes(path)) return true
-					const matchableItem = matchableItems.find((item) => item.path === path)
+					if (currentPathByIdentity.has(getCanvasResourceIdentity(path))) return true
+					const matchableItem = findMatchableItem(path)
 					if (matchableItem?.disabled) return false
 					const currentCount = currentPathsArray.length - pathsToRemove.length
 					if (currentCount >= maxReferenceFiles) return false
@@ -103,7 +132,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			})
 
 			pathsToAdd.forEach((path) => {
-				const matchableItem = matchableItems.find((item) => item.path === path)
+				const matchableItem = findMatchableItem(path)
 				if (matchableItem && !matchableItem.disabled) {
 					const newInfo: UploadFileResponse = {
 						path: matchableItem.path || path,

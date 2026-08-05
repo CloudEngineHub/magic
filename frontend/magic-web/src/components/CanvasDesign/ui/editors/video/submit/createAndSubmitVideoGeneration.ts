@@ -4,7 +4,7 @@ import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document
 import { calculateNewElementPosition, generateElementId } from "../../../../runtime/shared/ids"
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
 import { calculateCanvasSizeFromAspectRatio } from "../generation/video-editor-config.generation"
-import { hasVideoGenerationRequestUserIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
 
 interface CreateAndSubmitVideoGenerationOptions {
 	canvas: Canvas | null | undefined
@@ -17,7 +17,7 @@ export async function createAndSubmitVideoGeneration(
 	options: CreateAndSubmitVideoGenerationOptions,
 ): Promise<boolean> {
 	const { canvas, sourceVideoElement, request, newElementSize } = options
-	if (!canvas || !request.model_id || !hasVideoGenerationRequestUserIntent(request)) {
+	if (!canvas || !request.model_id || !hasVideoGenerationRequestSubmitIntent(request)) {
 		return false
 	}
 
@@ -55,11 +55,14 @@ export async function createAndSubmitVideoGeneration(
 		zIndex: newZIndex,
 	}
 
-	canvas.elementManager.create(newVideoElement)
+	// 后端确认任务创建成功前，生成结果节点只属于运行时占位态。
+	// 这样即使创建事件触发画布导出，也不会把尚未成立的 video_id 写入 DSL。
+	canvas.elementManager.createTemporaryElement(newVideoElement, { silent: true })
 	canvas.selectionManager.select(newElementId)
 
 	const newElementInstance = canvas.elementManager.getElementInstance(newElementId)
 	if (!(newElementInstance instanceof VideoElementClass)) {
+		canvas.elementManager.delete(newElementId)
 		return false
 	}
 
@@ -69,7 +72,41 @@ export async function createAndSubmitVideoGeneration(
 	}
 	newElementInstance.saveTempGenerateVideoRequest(requestToSubmit)
 
-	return newElementInstance.generateVideo(requestToSubmit)
+	let submitted: boolean
+	try {
+		submitted = await newElementInstance.generateVideo(requestToSubmit)
+	} catch (error) {
+		if (!canvas.elementManager.hasElement(newElementId)) {
+			throw error
+		}
+		if (canvas.generationRuntimeManager.getTargetState(newElementId)) {
+			throw error
+		}
+		canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
+			newElementId,
+			"promote-empty",
+		)
+		throw error
+	}
+
+	if (!submitted) {
+		if (!canvas.elementManager.hasElement(newElementId)) {
+			return false
+		}
+		// false 也可能来自被更新 attempt 取代的旧请求；旧 helper 不得覆盖新任务。
+		if (canvas.generationRuntimeManager.getTargetState(newElementId)) {
+			return false
+		}
+		// generateVideo 已按 attempt 的 promote-empty 策略完成收尾；这里只处理建立 attempt 前的兜底。
+		canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
+			newElementId,
+			"promote-empty",
+		)
+		return false
+	}
+
+	// generateVideo 已在后端确认后原子写入任务并转正。
+	return true
 }
 
 function normalizeVideoElementSize(

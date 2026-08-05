@@ -4157,8 +4157,8 @@ function handleSuperMagicMessage(smsg, payload) {
             correlationId: smsg.correlation_id || payload.correlation_id,
             toolCallId: item.toolCallId,
             modelContent: item.modelContent,
-            attachments: finishedAttachments && isFinalTaskTool(item.tool)
-                ? finishedAttachments
+            attachments: isFinalTaskTool(item.tool)
+                ? (finishedAttachments || [])
                 : undefined,
         });
         if (payload.event === 'before_tool_call') {

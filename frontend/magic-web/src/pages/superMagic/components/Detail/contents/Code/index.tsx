@@ -5,9 +5,10 @@ import { useMemo, useState, useEffect, useRef, type RefObject, type ReactNode } 
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import CodeEditor from "@/components/base/CodeEditor"
 import { shadow } from "@/utils/shadow"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
 import CommonFooter from "../../components/CommonFooter"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
@@ -65,8 +66,7 @@ export default function CodeViewer(props: any) {
 	} = props
 
 	const { styles, cx } = useStyles()
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
 	const extensionScopeRef = useRef<HTMLDivElement>(null)
 

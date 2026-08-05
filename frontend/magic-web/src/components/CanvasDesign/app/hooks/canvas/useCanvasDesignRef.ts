@@ -88,10 +88,14 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				// 兼容 useImmer 创建的 Proxy 对象，转换为普通对象
 				const plainData = toPlainObject(data)
 				if (options?.mode === "replace") {
-					canvas.loadDocument(plainData)
+					canvas.loadDocument(plainData, {
+						elementDetailsProvenance: options.elementDetailsProvenance,
+					})
 				} else {
 					// 使用智能差异更新，只更新变化的元素，保留当前状态
-					canvas.loadDocumentSmart(plainData)
+					canvas.loadDocumentSmart(plainData, {
+						elementDetailsProvenance: options?.elementDetailsProvenance,
+					})
 					// 立即记录历史，支持撤销到更新前的状态
 					canvas.historyManager.recordHistoryImmediate()
 				}

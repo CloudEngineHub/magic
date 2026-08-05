@@ -86,13 +86,16 @@ export async function generatePluginImages(
 		model_id: params.model_id,
 		prompt: params.prompt,
 		size: params.size,
+		aspect_ratio: params.aspect_ratio,
 		resolution: params.resolution,
 		reference_images: params.reference_images,
 		reference_image_options: params.reference_image_options,
 		image_generation_config: params.image_generation_config,
 		generate_num: count,
 	}
-	const { image_id, generate_num, ...generateImageRequest } = request
+	const generateImageRequest: GenerateImageRequest & { generate_num?: number } = { ...request }
+	delete generateImageRequest.image_id
+	delete generateImageRequest.generate_num
 
 	const elementIds = await withHistoryManagerAsync(canvas.historyManager, async () => {
 		const imageGeneratorTool = canvas.toolManager.getImageGeneratorTool()
@@ -131,9 +134,11 @@ export async function generatePluginImages(
 		})
 		const nextElementIds = canvas.toolManager
 			.getImageGeneratorTool()
-			.createImageElementsAtPositions(positions, imageSize.width, imageSize.height)
+			.createImageElementsAtPositions(positions, imageSize.width, imageSize.height, {
+				temporary: true,
+			})
 
-		// 先创建全部占位元素，再批量绑定同一个 image_id，轮询回填时才能按 outputIndex 对应结果。
+		// 提交确认前只写 Canvas RuntimeManager；Element/DSL/历史/剪贴板均不包含任务身份。
 		nextElementIds.forEach((elementId) => {
 			canvas.eventEmitter.emit({
 				type: "element:image:generate-submit-started",
@@ -141,33 +146,76 @@ export async function generatePluginImages(
 			})
 		})
 
-		nextElementIds.forEach((elementId, index) => {
-			canvas.elementManager.update(
+		const attemptId = canvas.generationRuntimeManager.beginAttempt({
+			operation: "image-batch",
+			phase: "submitting",
+			failurePolicy: "remove-placeholder",
+			targets: nextElementIds.map((elementId, index) => ({
 				elementId,
-				{
-					status: "processing",
-					errorMessage: undefined,
-					generateImageRequest: generateImageRequest,
-					imageGenerationTaskMeta: createBatchImageTaskMeta({
-						imageId: batchImageId,
-						outputIndex: index + 1,
-						outputCount: count,
-					}),
+				outputIndex: index + 1,
+				generateImageRequest: {
+					...generateImageRequest,
+					image_id: batchImageId,
 				},
-				{ silent: false },
-			)
+				imageGenerationTaskMeta: createBatchImageTaskMeta({
+					imageId: batchImageId,
+					outputIndex: index + 1,
+					outputCount: count,
+				}),
+			})),
 		})
 
-		await generateImages(request)
+		try {
+			await generateImages(request)
+		} catch (error) {
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			throw error
+		}
+
+		const committedElementIds = nextElementIds.filter(
+			(elementId) =>
+				canvas.generationRuntimeManager.isCurrent(attemptId, elementId) &&
+				canvas.elementManager.hasElement(elementId),
+		)
+		if (committedElementIds.length === 0) {
+			return []
+		}
+
+		// 只有批量提交成功后，才原子写入正式字段并允许剩余目标进入 DSL。
+		try {
+			const confirmed = canvas.generationAttemptCoordinator.confirmAttempt(
+				attemptId,
+				committedElementIds.map((elementId) => {
+					const outputIndex = nextElementIds.indexOf(elementId) + 1
+					return {
+						elementId,
+						persistedPatch: {
+							status: "processing",
+							errorMessage: undefined,
+							generateImageRequest,
+							imageGenerationTaskMeta: createBatchImageTaskMeta({
+								imageId: batchImageId,
+								outputIndex,
+								outputCount: count,
+							}),
+						},
+					}
+				}),
+			)
+			if (!confirmed) return []
+		} catch (error) {
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			throw error
+		}
 		const batchPollingManager = new ImageBatchPollingManager({
 			canvas,
 			imageId: batchImageId,
-			elementIds: nextElementIds,
+			elementIds: committedElementIds,
 			registry: canvas.imageBatchPollingRegistry,
 		})
 		void batchPollingManager.start()
 
-		return nextElementIds
+		return committedElementIds
 	})
 
 	if (elementIds.length > 0) {

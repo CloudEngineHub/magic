@@ -112,6 +112,7 @@ describe("ProjectShareSheetFooter", () => {
 			<ProjectShareSheetFooter
 				controller={createController({
 					view: "linkDetail",
+					selectedShareMessageText: "Fictional share text",
 					copySelectedShareUrl,
 					goToDeleteConfirm,
 				})}
@@ -122,6 +123,37 @@ describe("ProjectShareSheetFooter", () => {
 		fireEvent.click(screen.getByTestId("project-share-sheet-delete-button"))
 		expect(copySelectedShareUrl).toHaveBeenCalledTimes(1)
 		expect(goToDeleteConfirm).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps copy disabled until the prefetched message is ready", () => {
+		const copySelectedShareUrl = vi.fn()
+
+		const { rerender } = render(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					selectedShareMessageText: "",
+					copySelectedShareUrl,
+				})}
+			/>,
+		)
+
+		const button = screen.getByTestId("project-share-sheet-copy-link-button")
+		expect(button).toBeDisabled()
+		fireEvent.click(button)
+		expect(copySelectedShareUrl).not.toHaveBeenCalled()
+
+		rerender(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					selectedShareMessageText: "Fictional share text",
+					copySelectedShareUrl,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("project-share-sheet-copy-link-button")).toBeEnabled()
 	})
 
 	it("keeps only the native share icon in the link detail actions", () => {

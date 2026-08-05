@@ -1,9 +1,10 @@
 import { Modal, Button, Checkbox, Flex } from "antd"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { createStyles, useResponsive } from "antd-style"
+import { createStyles } from "antd-style"
 import IconInfo from "./icons/IconInfo"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export interface DuplicateFileModalProps {
 	visible: boolean
@@ -208,7 +209,7 @@ export function DuplicateFileModal({
 	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
 	const [applyToAll, setApplyToAll] = useState(false)
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 
 	// 只有冲突文件数 > 1 时才显示 "全部应用" checkbox
 	const showApplyToAll = (totalDuplicates || 0) > 1

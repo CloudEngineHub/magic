@@ -1,6 +1,7 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
+import { syncNodeTransformRelativeTo } from "../../shared/geometry/nodeTransform"
 
 const ERASER_CURSOR_GROUP_NAME = "eraser-cursor-overlay"
 
@@ -104,14 +105,7 @@ export class EraserCursorRenderer {
 		const height = elementNode.height() ?? elementData.height ?? 0
 		if (width <= 0 || height <= 0) return
 
-		this.cursorGroup.setAttrs({
-			x: elementNode.x(),
-			y: elementNode.y(),
-			scaleX: elementNode.scaleX(),
-			scaleY: elementNode.scaleY(),
-			rotation: elementNode.rotation(),
-			offset: { x: 0, y: 0 },
-		})
+		syncNodeTransformRelativeTo(elementNode, this.cursorGroup, this.canvas.controlsLayer)
 		this.cursorGroup.moveToTop()
 		this.canvas.controlsLayer.batchDraw()
 	}

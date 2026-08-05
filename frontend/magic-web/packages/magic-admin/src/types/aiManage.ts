@@ -79,6 +79,13 @@ export namespace AiManage {
 		SERVICE_ACCOUNT = "service_account",
 	}
 
+	export enum ReferenceImageTransport {
+		BASE64 = "base64",
+		URL = "url",
+		URL_FALLBACK_BASE64 = "url_fallback_base64",
+		BASE64_FALLBACK_URL = "base64_fallback_url",
+	}
+
 	/* API key 配置信息 */
 	export interface ApiKeyConfig {
 		ak: string
@@ -103,6 +110,8 @@ export namespace AiManage {
 		client_id?: string
 		location?: string
 		gcs_bucket?: string
+		/* Google 生图参考图传输方式 */
+		reference_image_transport?: ReferenceImageTransport
 	}
 
 	/* 计费货币单位 */

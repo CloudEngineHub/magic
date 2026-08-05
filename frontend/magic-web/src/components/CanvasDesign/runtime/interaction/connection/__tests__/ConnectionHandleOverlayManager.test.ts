@@ -112,6 +112,9 @@ function createCanvasStub(
 		releasePendingHandleInteraction: vi.fn(),
 		isDraggingConnection: () => state.connectionDragging,
 	}
+	const getSelectedIds = vi.fn(() => state.selectedIds)
+	const getSelectionCount = vi.fn(() => state.selectedIds.length)
+	const getElementBounds = vi.fn(() => state.bounds)
 	const getElementData = vi.fn((elementId: string): LayerElement | undefined => {
 		if (!state.elementIds.has(elementId)) return undefined
 		return {
@@ -141,7 +144,8 @@ function createCanvasStub(
 		cursorManager,
 		connectionDragManager,
 		selectionManager: {
-			getSelectedIds: () => state.selectedIds,
+			getSelectedIds,
+			getSelectionCount,
 		},
 		hoverManager: {
 			getHoveredElementId: () => state.hoveredElementId,
@@ -150,7 +154,7 @@ function createCanvasStub(
 			hasElement: (elementId: string) => state.elementIds.has(elementId),
 			getElementData,
 			getNodeAdapter: () => ({
-				getElementBounds: () => state.bounds,
+				getElementBounds,
 			}),
 		},
 		permissionManager: {
@@ -160,7 +164,6 @@ function createCanvasStub(
 				!!element &&
 				state.visible &&
 				element.interactionConfig?.connectable !== false &&
-				element.type !== ElementTypeEnum.Frame &&
 				element.type !== ElementTypeEnum.Group,
 		},
 		transformManager: {
@@ -181,6 +184,9 @@ function createCanvasStub(
 		requestLayerDraw,
 		cursorManager,
 		connectionDragManager,
+		getElementBounds,
+		getSelectedIds,
+		getSelectionCount,
 		state,
 	}
 }
@@ -246,6 +252,43 @@ describe("ConnectionHandleOverlayManager", () => {
 		manager.destroy()
 	})
 
+	it("skips reconciliation for empty-canvas and steady-hover pointer movement", () => {
+		const { canvas, controlsLayer, manager, state, getSelectionCount } = createCanvasStub()
+
+		getSelectionCount.mockClear()
+		canvas.stage.fire("mousemove")
+		expect(getSelectionCount).not.toHaveBeenCalled()
+
+		state.hoveredElementId = "element-1"
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		const overlay = getRequiredOverlay(controlsLayer)
+
+		getSelectionCount.mockClear()
+		canvas.stage.fire("mousemove")
+		expect(getSelectionCount).not.toHaveBeenCalled()
+		expect(getOverlay(controlsLayer)).toBe(overlay)
+
+		manager.destroy()
+	})
+
+	it("does not materialize selected IDs for desktop reconciliation", () => {
+		const { canvas, manager, getSelectedIds, getSelectionCount } = createCanvasStub({
+			selectedIds: ["element-1", "element-2"],
+		})
+
+		getSelectedIds.mockClear()
+		getSelectionCount.mockClear()
+		canvas.eventEmitter.emit({
+			type: "element:select",
+			data: { elementIds: ["element-1", "element-2"] },
+		})
+
+		expect(getSelectionCount).toHaveBeenCalledTimes(1)
+		expect(getSelectedIds).not.toHaveBeenCalled()
+
+		manager.destroy()
+	})
+
 	it("starts the enter animation from an inward offset with handles faded out", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub({
 			useRealLayer: true,
@@ -302,14 +345,14 @@ describe("ConnectionHandleOverlayManager", () => {
 		manager.destroy()
 	})
 
-	it("does not show handles for non-connectable container elements", () => {
+	it("shows handles for frames but not groups", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub()
 		state.elementTypes.set("element-1", ElementTypeEnum.Frame)
 		state.elementTypes.set("element-2", ElementTypeEnum.Group)
 
 		state.hoveredElementId = "element-1"
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
-		expect(getOverlay(controlsLayer)).toBeNull()
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
 
 		state.hoveredElementId = "element-2"
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-2" } })
@@ -319,7 +362,9 @@ describe("ConnectionHandleOverlayManager", () => {
 	})
 
 	it("keeps handles alive while the pointer is inside the overlay corridor", () => {
-		const { canvas, controlsLayer, manager, state } = createCanvasStub()
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			pointerPosition: { x: 140, y: 60 },
+		})
 
 		state.hoveredElementId = "element-1"
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
@@ -327,15 +372,36 @@ describe("ConnectionHandleOverlayManager", () => {
 		const overlay = getOverlay(controlsLayer)
 		expect(overlay).toBeInstanceOf(Konva.Group)
 
-		overlay?.fire("mouseenter")
 		state.hoveredElementId = null
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
 
 		expect(getOverlay(controlsLayer)).toBe(overlay)
 
-		overlay?.fire("mouseleave")
+		state.pointerPosition = { x: 220, y: 60 }
+		canvas.stage.fire("mousemove")
 
 		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("reuses bridge bounds during pointer-move reconciliation", () => {
+		const { canvas, controlsLayer, manager, state, getElementBounds } = createCanvasStub({
+			pointerPosition: { x: 140, y: 60 },
+		})
+
+		state.hoveredElementId = "element-1"
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		const overlay = getRequiredOverlay(controlsLayer)
+
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+		getElementBounds.mockClear()
+
+		canvas.stage.fire("mousemove")
+
+		expect(getElementBounds).toHaveBeenCalledTimes(1)
+		expect(getOverlay(controlsLayer)).toBe(overlay)
+
 		manager.destroy()
 	})
 
@@ -356,6 +422,112 @@ describe("ConnectionHandleOverlayManager", () => {
 
 		state.pointerPosition = { x: 220, y: 60 }
 		canvas.stage.fire("mousemove")
+
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("keeps a continuous bridge through the element bounds after shape hover ends", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+			pointerPosition: { x: 60, y: 60 },
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		const overlay = getRequiredOverlay(controlsLayer)
+
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+
+		expect(getOverlay(controlsLayer)).toBe(overlay)
+
+		state.pointerPosition = { x: 60, y: 10 }
+		canvas.stage.fire("mousemove")
+
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("revalidates geometry-kept handles while the viewport pans without pointer movement", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+			pointerPosition: { x: 140, y: 60 },
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		const overlay = getRequiredOverlay(controlsLayer)
+
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+
+		canvas.eventEmitter.emit({ type: "viewport:pan", data: { x: 10, y: 0 } })
+		expect(getOverlay(controlsLayer)).toBe(overlay)
+
+		state.pointerPosition = { x: 220, y: 60 }
+		canvas.eventEmitter.emit({ type: "viewport:pan", data: { x: 20, y: 0 } })
+
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("invalidates stale overlay mouseenter state when the viewport pans", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+			pointerPosition: { x: 140, y: 60 },
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		const overlay = getRequiredOverlay(controlsLayer)
+		overlay.fire("mouseenter")
+
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+		expect(getOverlay(controlsLayer)).toBe(overlay)
+
+		state.pointerPosition = { x: 220, y: 60 }
+		canvas.eventEmitter.emit({ type: "viewport:pan", data: { x: 20, y: 0 } })
+
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("revalidates the pointer bridge when the active element geometry changes", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+			pointerPosition: { x: 140, y: 60 },
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
+
+		state.bounds = { x: 300, y: 20, width: 120, height: 80 }
+		canvas.eventEmitter.emit({
+			type: "element:updated",
+			data: {
+				elementId: "element-1",
+				data: canvas.elementManager.getElementData("element-1")!,
+			},
+		})
+
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("revalidates the pointer bridge on scale-only viewport changes", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+			pointerPosition: { x: 155, y: 60 },
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
+
+		canvas.stage.scale({ x: 2, y: 2 })
+		canvas.eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
 
 		expect(getOverlay(controlsLayer)).toBeNull()
 		manager.destroy()
@@ -436,6 +608,48 @@ describe("ConnectionHandleOverlayManager", () => {
 			},
 		})
 
+		expect(getOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("preserves the menu display source across temporary readonly blocking", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+			hoveredElementId: "element-1",
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		canvas.eventEmitter.emit({
+			type: "connection:menu:open",
+			data: {
+				originElementId: "element-1",
+				originSide: "right",
+				x: 120,
+				y: 60,
+				canvasX: 140,
+				canvasY: 60,
+				source: "handle",
+			},
+		})
+		state.hoveredElementId = null
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
+
+		state.readonly = true
+		canvas.eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		expect(getOverlay(controlsLayer)).toBeNull()
+
+		state.readonly = false
+		canvas.eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		const overlay = getRequiredOverlay(controlsLayer)
+		expect(getHandle(overlay, "right").id()).toBe("element-1")
+
+		canvas.eventEmitter.emit({
+			type: "connection:menu:close",
+			data: {
+				originElementId: "element-1",
+				originSide: "right",
+				source: "handle",
+			},
+		})
 		expect(getOverlay(controlsLayer)).toBeNull()
 		manager.destroy()
 	})
@@ -628,6 +842,7 @@ describe("ConnectionHandleOverlayManager", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub({
 			selectedIds: ["element-1"],
 			hoveredElementId: "element-2",
+			pointerPosition: { x: 140, y: 60 },
 		})
 
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-2" } })
@@ -635,13 +850,13 @@ describe("ConnectionHandleOverlayManager", () => {
 		const overlay = getRequiredOverlay(controlsLayer)
 		expect(getHandle(overlay, "left").id()).toBe("element-2")
 
-		overlay.fire("mouseenter")
 		state.hoveredElementId = null
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
 
 		expect(getHandle(overlay, "left").id()).toBe("element-2")
 
-		overlay.fire("mouseleave")
+		state.pointerPosition = { x: 220, y: 60 }
+		canvas.stage.fire("mousemove")
 
 		expect(getOverlay(controlsLayer)).toBeNull()
 
@@ -653,6 +868,7 @@ describe("ConnectionHandleOverlayManager", () => {
 			selectedIds: ["element-1"],
 			hoveredElementId: "element-2",
 			deviceInfo: createTouchDeviceInfo(),
+			pointerPosition: { x: 140, y: 60 },
 		})
 
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-2" } })
@@ -660,13 +876,13 @@ describe("ConnectionHandleOverlayManager", () => {
 		const overlay = getRequiredOverlay(controlsLayer)
 		expect(getHandle(overlay, "left").id()).toBe("element-2")
 
-		overlay.fire("mouseenter")
 		state.hoveredElementId = null
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
 
 		expect(getHandle(overlay, "left").id()).toBe("element-2")
 
-		overlay.fire("mouseleave")
+		state.pointerPosition = { x: 220, y: 60 }
+		canvas.stage.fire("mousemove")
 
 		expect(getHandle(overlay, "left").id()).toBe("element-1")
 
@@ -794,7 +1010,7 @@ describe("ConnectionHandleOverlayManager", () => {
 	})
 
 	it("hides immediately when a direct element drag starts", () => {
-		const { canvas, controlsLayer, manager, state } = createCanvasStub({
+		const { canvas, controlsLayer, manager } = createCanvasStub({
 			hoveredElementId: "element-1",
 			useRealLayer: true,
 		})
@@ -825,6 +1041,25 @@ describe("ConnectionHandleOverlayManager", () => {
 
 		expect(getOverlay(controlsLayer)).toBeNull()
 		expect(getExitingOverlay(controlsLayer)).toBeNull()
+		manager.destroy()
+	})
+
+	it("reconciles the current hover source after Konva stage dragging ends", async () => {
+		const { canvas, controlsLayer, manager } = createCanvasStub({
+			hoveredElementId: "element-1",
+			useRealLayer: true,
+		})
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
+
+		canvas.stage.fire("dragstart")
+		expect(getOverlay(controlsLayer)).toBeNull()
+
+		canvas.stage.fire("dragend")
+		await flushMicrotasks()
+
+		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
 		manager.destroy()
 	})
 
