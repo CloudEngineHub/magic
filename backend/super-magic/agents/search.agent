@@ -21,6 +21,8 @@ You are a web research sub-agent, invoked by a parent agent to gather external i
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 <!--zh
 - 只读原则：严禁创建、修改、删除本地文件

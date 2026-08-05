@@ -65,6 +65,12 @@ interface UseBatchDownloadOptions {
 	isMoving?: boolean
 	allowEdit?: boolean
 	allowDownload?: boolean
+	/** 是否允许批量移动。 */
+	allowMove?: boolean
+	/** 是否允许批量复制。 */
+	allowCopy?: boolean
+	/** 是否允许批量分享。 */
+	allowShare?: boolean
 	// 新增：批量分享回调
 	onBatchShareClick?: (fileIds: string[]) => void
 	// 是否在项目内
@@ -95,6 +101,9 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		isMoving = false,
 		allowEdit,
 		allowDownload,
+		allowMove = true,
+		allowCopy = true,
+		allowShare = true,
 		onBatchShareClick,
 		isInProject,
 		downloadProgress,
@@ -513,7 +522,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	// 创建下拉菜单项配置
 	const batchMenuItems = normalizeMenuItems([
 		// 分享文件（仅在项目内显示）
-		...(isInProject && allowEdit && !hideShareFile
+		...(isInProject && allowEdit && allowShare && onBatchShareClick && !hideShareFile
 			? [
 					{
 						key: "share",
@@ -624,7 +633,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					]
 				: []),
 		// 批量移动（仅在允许编辑时显示）
-		...(isInProject && allowEdit && !hideMoveTo
+		...(isInProject && allowEdit && allowMove && !hideMoveTo
 			? [
 					{
 						key: "move",
@@ -639,8 +648,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					},
 				]
 			: []),
-		// 批量复制（仅在允许编辑时显示）
-		...(isInProject && allowEdit && !hideCopyTo
+		// 批量复制（仅在允许编辑且当前空间开放复制能力时显示）
+		...(isInProject && allowEdit && allowCopy && !hideCopyTo
 			? [
 					{
 						key: "copy",

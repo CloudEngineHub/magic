@@ -182,12 +182,14 @@ class MagicFSFileAppService extends AbstractAppService
             $requestDTO->getSpaceType()              // 空间类型（如 project、user）
         );
 
-        // Dispatch file uploaded event so downstream subscribers are notified
-        $this->eventDispatcher->dispatch(new FileUploadedEvent(
-            $fileEntity,
-            $fileEntity->getUserId(),
-            $fileEntity->getOrganizationCode()
-        ));
+        if ($fileEntity->isProjectFile()) {
+            // Dispatch file uploaded event so downstream subscribers are notified
+            $this->eventDispatcher->dispatch(new FileUploadedEvent(
+                $fileEntity,
+                $fileEntity->getUserId(),
+                $fileEntity->getOrganizationCode()
+            ));
+        }
 
         // 记录日志
         $this->logger->info('[CREATE] ' . ($requestDTO->is_directory ? 'Directory' : 'File'), [
@@ -232,12 +234,14 @@ class MagicFSFileAppService extends AbstractAppService
         // 调用领域服务更新文件（文件系统语义：同名自动覆盖）
         $fileEntity = $this->magicFSFileDomainService->updateFile($fileId, $updates);
 
-        // Dispatch file content saved event so downstream subscribers are notified of the metadata update
-        $this->eventDispatcher->dispatch(new FileContentSavedEvent(
-            $fileEntity,
-            $fileEntity->getUserId(),
-            $fileEntity->getOrganizationCode()
-        ));
+        if ($fileEntity->isProjectFile()) {
+            // Dispatch file content saved event so downstream subscribers are notified of the metadata update
+            $this->eventDispatcher->dispatch(new FileContentSavedEvent(
+                $fileEntity,
+                $fileEntity->getUserId(),
+                $fileEntity->getOrganizationCode()
+            ));
+        }
 
         // 记录日志
         $this->logger->info('[UPDATE] File updated', [
@@ -279,18 +283,20 @@ class MagicFSFileAppService extends AbstractAppService
 
         $this->magicFSFileDomainService->deleteFile($fileId);
 
-        // Dispatch appropriate event based on entity type
-        if ($fileEntity->getIsDirectory()) {
-            $userAuthorization = new MagicUserAuthorization();
-            $userAuthorization->setId($fileEntity->getUserId());
-            $userAuthorization->setOrganizationCode($fileEntity->getOrganizationCode());
-            $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
-        } else {
-            $this->eventDispatcher->dispatch(new FileDeletedEvent(
-                $fileEntity,
-                $fileEntity->getUserId(),
-                $fileEntity->getOrganizationCode()
-            ));
+        if ($fileEntity->isProjectFile()) {
+            // Dispatch appropriate event based on entity type
+            if ($fileEntity->getIsDirectory()) {
+                $userAuthorization = new MagicUserAuthorization();
+                $userAuthorization->setId($fileEntity->getUserId());
+                $userAuthorization->setOrganizationCode($fileEntity->getOrganizationCode());
+                $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
+            } else {
+                $this->eventDispatcher->dispatch(new FileDeletedEvent(
+                    $fileEntity,
+                    $fileEntity->getUserId(),
+                    $fileEntity->getOrganizationCode()
+                ));
+            }
         }
 
         // 记录日志
@@ -489,11 +495,7 @@ class MagicFSFileAppService extends AbstractAppService
      */
     protected function assertUserSpaceFileAccessible(TaskFileEntity $fileEntity, MagicUserAuthorization $authorization): void
     {
-        $fileUserId = $fileEntity->getUserId();
-        $fileOrgCode = $fileEntity->getOrganizationCode();
-        if ($fileUserId === '' || $fileOrgCode === ''
-            || $fileUserId !== $authorization->getId()
-            || $fileOrgCode !== $authorization->getOrganizationCode()) {
+        if (! $this->hasTaskFileOwnerPermission($fileEntity, $authorization)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
         }
     }

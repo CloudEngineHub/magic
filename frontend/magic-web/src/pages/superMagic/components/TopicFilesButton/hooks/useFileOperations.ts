@@ -52,6 +52,7 @@ import {
 	resolveSingleDocumentStaticDependencies,
 	supportsStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -232,6 +233,8 @@ export interface UseFileOperationsOptions {
 	attachments?: AttachmentItem[]
 	selectedTopic?: any
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	getItemId?: (item: AttachmentItem) => string
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
@@ -258,6 +261,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		attachments,
 		selectedTopic,
 		projectId,
+		fileScope,
 		getItemId,
 		onFileDelete,
 		onFileCreated,
@@ -278,6 +282,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			reason: string
 			callback?: () => void
 		}) => {
+			if (fileScope) {
+				options.callback?.()
+				return
+			}
+
 			void waitForProjectAttachmentChange(projectId, {
 				...options,
 				fallback: "full-refresh",
@@ -366,6 +375,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					// 为单个文件创建任务
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
+						fileScope,
 						workspaceId: workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
 						topicId: selectedTopic?.id,
@@ -431,6 +441,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -475,6 +486,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				// 所有文件作为一个任务
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
+					fileScope,
 					workspaceId: workspaceId,
 					projectName: selectedProject?.project_name || t("common.untitledProject"),
 					topicId: selectedTopic?.id,
@@ -537,6 +549,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,

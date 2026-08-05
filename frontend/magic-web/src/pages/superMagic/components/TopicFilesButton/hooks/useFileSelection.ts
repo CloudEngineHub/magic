@@ -21,6 +21,7 @@ import {
 } from "./useFileSelectionPerf"
 
 const EMPTY_NODE_CHECK_STATES = new Map<string, FileSelectionCheckState>()
+const DEFAULT_ITEM_SELECTABLE = () => true
 
 interface UseFileSelectionOptions {
 	projectId?: string
@@ -30,6 +31,8 @@ interface UseFileSelectionOptions {
 	selectionEnabled?: boolean
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
 	onSelectModeChange?: (isSelectMode: boolean) => void
+	/** 判断节点是否允许进入多选集合。 */
+	isItemSelectable?: (item: AttachmentItem) => boolean
 }
 
 /**
@@ -44,8 +47,41 @@ export function useFileSelection(options: UseFileSelectionOptions) {
 		selectionEnabled = isSelectMode,
 		onSelectionChange,
 		onSelectModeChange,
+		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
 	} = options
 	const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+
+	/** 计算当前文件空间可参与多选的节点总数。 */
+	const selectableItemCount = useMemo(() => {
+		return treeIndex.allKeys.reduce((count, key) => {
+			const item = treeIndex.getItemByKey(key)
+			return item && isItemSelectable(item) ? count + 1 : count
+		}, 0)
+	}, [isItemSelectable, treeIndex])
+
+	/** 收集每个可选分支的最高层节点，避免选中固定空间根目录。 */
+	const selectableBranchRootKeys = useMemo(() => {
+		const result: string[] = []
+		const pendingKeys = [...treeIndex.rootKeys].reverse()
+
+		while (pendingKeys.length > 0) {
+			const key = pendingKeys.pop()
+			if (!key) continue
+
+			const item = treeIndex.getItemByKey(key)
+			if (item && isItemSelectable(item)) {
+				result.push(key)
+				continue
+			}
+
+			const childKeys = treeIndex.getChildKeysByKey(key)
+			for (let index = childKeys.length - 1; index >= 0; index -= 1) {
+				pendingKeys.push(childKeys[index])
+			}
+		}
+
+		return result
+	}, [isItemSelectable, treeIndex])
 
 	// 当 projectId 变更时，清空 selectedItems
 	useEffect(() => {
@@ -100,18 +136,22 @@ export function useFileSelection(options: UseFileSelectionOptions) {
 		}
 
 		if (onSelectionChange) {
-			onSelectionChange(selectedCount, treeIndex.totalCount)
+			onSelectionChange(selectedCount, selectableItemCount)
 		}
-	}, [selectionEnabled, selectedCount, treeIndex.totalCount, onSelectionChange])
+	}, [selectionEnabled, selectedCount, selectableItemCount, onSelectionChange])
 
 	// 监听全选和取消全选事件
 	useEffect(() => {
 		const handleSelectAll = () => {
 			if (!isSelectMode) return
 
-			measureSelectAll(treeIndex.rootKeys.length, () => {
-				// Only collect first-level root file/folder IDs.
-				const rootFileIds = getSelectionIdsByKeys(treeIndex, treeIndex.rootKeys, getItemId)
+			measureSelectAll(selectableBranchRootKeys.length, () => {
+				// 选择每个可选分支的最高层节点，由父级选中状态覆盖其后代。
+				const rootFileIds = getSelectionIdsByKeys(
+					treeIndex,
+					selectableBranchRootKeys,
+					getItemId,
+				)
 				setSelectedItems(new Set(rootFileIds))
 				return rootFileIds
 			})
@@ -128,7 +168,7 @@ export function useFileSelection(options: UseFileSelectionOptions) {
 			pubsub.unsubscribe(PubSubEvents.Select_All_Files, handleSelectAll)
 			pubsub.unsubscribe(PubSubEvents.Deselect_All_Files, handleDeselectAll)
 		}
-	}, [isSelectMode, treeIndex, getItemId])
+	}, [getItemId, isSelectMode, selectableBranchRootKeys, treeIndex])
 
 	// 递归获取文件夹下所有子项ID（包括文件和文件夹）
 	const getAllItemIds = (folder: AttachmentItem): string[] => {
@@ -154,14 +194,15 @@ export function useFileSelection(options: UseFileSelectionOptions) {
 	)
 
 	// 检查某个项目是否应该被禁用
-	const isItemDisabled = (): boolean => {
-		// 所有项目都不禁用，因为选中状态现在是独立的
-		return false
+	const isItemDisabled = (item: AttachmentItem): boolean => {
+		return !isItemSelectable(item)
 	}
 
 	// 处理项目选择 - 使用优化后的查询函数
 	const handleItemSelect = useCallback(
 		(item: AttachmentItem) => {
+			if (!isItemSelectable(item)) return
+
 			const itemId = getItemId(item)
 			const checkState = getNodeCheckState(itemId)
 			let newSelectedIds: string[]
@@ -255,7 +296,7 @@ export function useFileSelection(options: UseFileSelectionOptions) {
 				},
 			)
 		},
-		[getItemId, getNodeCheckState, selectedItems, treeIndex],
+		[getItemId, getNodeCheckState, isItemSelectable, selectedItems, treeIndex],
 	)
 
 	// 重置选择状态

@@ -1,4 +1,5 @@
 import { SuperMagicApi } from "@/apis"
+import type { FileScope } from "@/apis/modules/fileScope"
 import type { ProjectAttachmentsV2NextParentState } from "@/apis/modules/superMagic"
 import type { AttachmentItem } from "../components/TopicFilesButton/hooks"
 import { AttachmentDataProcessor } from "../utils/attachmentDataProcessor"
@@ -33,18 +34,10 @@ import {
 
 export type ProjectAttachmentsSourceVersion = "v1" | "v2"
 export type ProjectAttachmentsLoadStrategy =
-	| "force_v1"
-	| "force_v2"
-	| "count_v1"
-	| "count_v2"
-	| "fallback_v1"
+	"force_v1" | "force_v2" | "count_v1" | "count_v2" | "fallback_v1"
 
 export type ProjectAttachmentsFallbackReason =
-	| "count_failed"
-	| "count_below_threshold"
-	| "v2_fetch_failed"
-	| "bfs_anomaly"
-	| "forced_v1"
+	"count_failed" | "count_below_threshold" | "v2_fetch_failed" | "bfs_anomaly" | "forced_v1"
 
 export interface ProjectAttachmentsDiagnostics extends Partial<ProjectAttachmentsV2Diagnostics> {
 	fallback_reason?: ProjectAttachmentsFallbackReason
@@ -77,7 +70,10 @@ export type ProjectAttachmentsBatchSnapshotPayload = ProjectAttachmentsV2Snapsho
 
 export interface ProjectAttachmentsLoaderOptions {
 	projectId: string
-	temporaryToken?: string
+	/** 特殊文件作用域；为空时保持原项目文件加载行为。 */
+	scope?: FileScope
+	/** Pass null to explicitly disable the share token inherited from window. */
+	temporaryToken?: string | null
 	threshold?: number
 	pageSize?: number
 	signal?: AbortSignal
@@ -119,7 +115,9 @@ function resolveWindowSearchParams() {
 	return new URLSearchParams(window.location.search)
 }
 
-function resolveTemporaryToken(temporaryToken?: string) {
+/** 解析临时访问令牌，显式传入 null 时禁用页面继承的分享令牌。 */
+function resolveTemporaryToken(temporaryToken?: string | null) {
+	if (temporaryToken === null) return ""
 	if (temporaryToken) return temporaryToken
 	if (typeof window === "undefined") return ""
 	const tokenWindow = window as TemporaryTokenWindow
@@ -368,6 +366,7 @@ function toProcessedResult(
 
 async function loadAttachmentsViaV1(params: {
 	projectId: string
+	scope?: FileScope
 	temporaryToken?: string
 	strategy: ProjectAttachmentsLoadStrategy
 	rawTotal?: number
@@ -379,6 +378,7 @@ async function loadAttachmentsViaV1(params: {
 		const response = await SuperMagicApi.getAttachmentsByProjectId(
 			{
 				projectId: params.projectId,
+				scope: params.scope,
 				temporaryToken: params.temporaryToken,
 			},
 			{ signal: params.signal },
@@ -405,6 +405,7 @@ async function loadAttachmentsViaV1(params: {
 
 async function loadAttachmentsViaV2(params: {
 	projectId: string
+	scope?: FileScope
 	temporaryToken?: string
 	pageSize: number
 	strategy: ProjectAttachmentsLoadStrategy
@@ -434,6 +435,7 @@ async function loadAttachmentsViaV2(params: {
 			const response = await SuperMagicApi.getProjectAttachmentsV2Page(
 				{
 					projectId: params.projectId,
+					scope: params.scope,
 					nextParentIds: requestNextParentIds,
 					pageSize: params.pageSize,
 					fileType: FILE_TYPES,
@@ -550,6 +552,7 @@ export async function loadProjectAttachments(
 		return finalizeLoadResult(
 			await loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "force_v1",
 				fallbackReason: "forced_v1",
@@ -565,6 +568,7 @@ export async function loadProjectAttachments(
 		try {
 			return await loadAttachmentsViaV2({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				pageSize,
 				strategy,
@@ -588,6 +592,7 @@ export async function loadProjectAttachments(
 			recordProjectAttachmentsV2Fallback(fallbackReason)
 			return loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "fallback_v1",
 				rawTotal,
@@ -608,6 +613,7 @@ export async function loadProjectAttachments(
 		const countResponse = await SuperMagicApi.getProjectAttachmentsCount(
 			{
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 			},
 			{ signal: options.signal },
@@ -624,6 +630,7 @@ export async function loadProjectAttachments(
 		return finalizeLoadResult(
 			await loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "fallback_v1",
 				fallbackReason: "count_failed",
@@ -641,6 +648,7 @@ export async function loadProjectAttachments(
 	return finalizeLoadResult(
 		await loadAttachmentsViaV1({
 			projectId: options.projectId,
+			scope: options.scope,
 			temporaryToken,
 			strategy: "count_v1",
 			rawTotal,

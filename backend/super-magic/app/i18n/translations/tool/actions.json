@@ -367,18 +367,6 @@
         "zh_CN": "查看任务列表",
         "en_US": "View task list"
     },
-    "create_memory": {
-        "zh_CN": "创建记忆",
-        "en_US": "Create memory"
-    },
-    "update_memory": {
-        "zh_CN": "更新记忆",
-        "en_US": "Update memory"
-    },
-    "delete_memory": {
-        "zh_CN": "删除记忆",
-        "en_US": "Delete memory"
-    },
     "get_agent_info": {
         "zh_CN": "获取员工信息",
         "en_US": "Get employee info"

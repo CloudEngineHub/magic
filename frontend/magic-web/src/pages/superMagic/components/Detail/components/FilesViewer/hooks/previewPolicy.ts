@@ -27,6 +27,30 @@ export function isTemporaryPreviewFile(file: Pick<FileItem, "display_config"> | 
 	return file?.display_config?.previewPolicy?.temporary === true
 }
 
+/** 判断当前文件是否由调用方独立提供，不参与项目附件树解析。 */
+export function isStandalonePreviewFile(file: Pick<FileItem, "display_config"> | null | undefined) {
+	return file?.display_config?.previewPolicy?.standalone === true
+}
+
+/** 判断当前文件是否需要参与编辑状态上报和编辑冲突检测。 */
+export function isEditingPresenceEnabled(
+	displayConfig: FileItem["display_config"] | null | undefined,
+) {
+	return displayConfig?.previewPolicy?.editingPresence !== false
+}
+
+/** 判断当前预览文件是否允许发起文件分享。 */
+export function isFileShareAllowed(displayConfig: FileItem["display_config"] | null | undefined) {
+	return displayConfig?.previewPolicy?.allowShare !== false
+}
+
+/** 判断当前预览文件是否允许查看和切换历史版本。 */
+export function isFileVersionHistoryAllowed(
+	displayConfig: FileItem["display_config"] | null | undefined,
+) {
+	return displayConfig?.previewPolicy?.allowVersionHistory !== false
+}
+
 function isExplicitOpenFilePayload(file: OpenFilePayloadLike | undefined): file is FileItem {
 	if (!file?.file_id || file.is_directory) return false
 

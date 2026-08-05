@@ -1,5 +1,6 @@
 import type { HttpClient, RequestConfig } from "@/apis/core/HttpClient"
 import type { SeqRecord } from "@/apis/modules/chat/types"
+import type { FileScope } from "./fileScope"
 import type {
 	CopiedProjectResponse,
 	CopyProjectRequest,
@@ -66,11 +67,20 @@ export interface SaveFileContentResponse {
 			file_id: string
 			size: number
 			updated_at: string
+			version?: number | null
+			revision?: number
 			shadow_decoded?: boolean
 		}
 		duration_ms: number
 	}>
-	error_files: unknown[]
+	error_files: Array<{
+		index: number
+		file_id: string
+		status: "error"
+		error: string
+		error_code: number
+		duration_ms: number
+	}>
 	completed_at: string
 }
 
@@ -224,6 +234,7 @@ export interface GetProjectAttachmentsV2Response {
 
 export interface GetProjectAttachmentsV2Params {
 	projectId: string
+	scope?: FileScope
 	nextParentIds?: ProjectAttachmentsV2NextParentState[] | null
 	parentId?: string | number
 	pageSize?: number
@@ -1075,7 +1086,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	// 通过项目id获取附件列表
 	getAttachmentsByProjectId(
-		params: { projectId: string; temporaryToken?: string },
+		params: { projectId: string; temporaryToken?: string; scope?: FileScope },
 		requestConfig?: Omit<RequestConfig, "url" | "body">,
 	) {
 		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
@@ -1085,6 +1096,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				page: 1,
 				page_size: 999,
 				file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params?.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
 			{
@@ -1095,13 +1107,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	getProjectAttachmentsCount(
-		params: { projectId: string; temporaryToken?: string },
+		params: { projectId: string; temporaryToken?: string; scope?: FileScope },
 		requestConfig?: Omit<RequestConfig, "url" | "body">,
 	) {
 		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
 		return fetch.post<GetProjectAttachmentsCountResponse>(
 			`/api/v1/super-agent/projects/${projectId}/attachments/count`,
 			{
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
 			{
@@ -1120,6 +1133,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			`/api/v2/super-agent/projects/${projectId}/attachments`,
 			{
 				page_size: params.pageSize ?? 1000,
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params.fileType ? { file_type: params.fileType } : {}),
 				...(params.parentId !== undefined && params.parentId !== null
 					? { parent_id: params.parentId }
@@ -1876,6 +1890,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			file_id: string
 			content: any
 			enable_shadow?: boolean
+			expected_revision?: number
 		}>,
 	) {
 		// 将保存过的file_id存入localStorage

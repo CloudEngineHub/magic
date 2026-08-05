@@ -2,7 +2,7 @@ import ContentRenderer from "./components/ContentRenderer"
 import { DetailType } from "./types"
 import { SuperMagicApi } from "@/apis"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useDeepCompareEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
@@ -42,6 +42,15 @@ import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
+import {
+	isEditingPresenceEnabled,
+	isFileShareAllowed,
+	isFileVersionHistoryAllowed,
+} from "./components/FilesViewer/hooks/previewPolicy"
+import {
+	FileActionVisibilityProvider,
+	useFileActionVisibility,
+} from "@/pages/superMagic/providers/file-action-visibility-provider"
 
 export default function Render(props: any) {
 	const {
@@ -98,6 +107,20 @@ export default function Render(props: any) {
 	} = props
 	const { t } = useTranslation("super")
 	const downloadProgress = useDownloadProgress()
+	const effectiveDisplayConfig = displayConfig || data?.display_config
+	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
+	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
+	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
+	const inheritedFileActionVisibility = useFileActionVisibility()
+	const fileActionVisibility = useMemo(
+		() => ({
+			...inheritedFileActionVisibility,
+			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
+			hideVersionHistory:
+				inheritedFileActionVisibility.hideVersionHistory || !fileVersionHistoryAllowed,
+		}),
+		[inheritedFileActionVisibility, fileShareAllowed, fileVersionHistoryAllowed],
+	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
 		(type === DetailType.Html &&
@@ -111,6 +134,7 @@ export default function Render(props: any) {
 	const { isEditMode, setIsEditMode, checkBeforeClose } = useEditMode({
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
+		editingPresenceEnabled,
 	})
 
 	// Use hook to manage save handler registration and wrapped checkBeforeClose
@@ -171,6 +195,16 @@ export default function Render(props: any) {
 		shouldExitEditMode: boolean = false,
 	) => {
 		const targetFileId = fileId || data.file_id
+		if (!editingPresenceEnabled) {
+			await doSave(
+				targetFileId,
+				newContent,
+				enable_shadow,
+				fetchFileVersions,
+				shouldExitEditMode,
+			)
+			return
+		}
 		const { editing_user_count } = await SuperMagicApi.getFileEditCount(targetFileId)
 		const threshold = isPPTEditMode || isEditMode ? 1 : 0
 		if (editing_user_count > threshold) {
@@ -231,7 +265,13 @@ export default function Render(props: any) {
 			}
 
 			const fileKey = data?.file_key
-			const projectIdValue = selectedProject?.id || projectId
+			const projectIdValue =
+				data?.project_id !== undefined && data?.project_id !== null
+					? String(data.project_id)
+					: selectedProject?.id || projectId
+			const fileScope =
+				data?.display_config?.previewPolicy?.fileScope ||
+				effectiveDisplayConfig?.previewPolicy?.fileScope
 			const contentStr =
 				typeof newContent === "string" ? newContent : JSON.stringify(newContent)
 			const uploadContent =
@@ -249,6 +289,7 @@ export default function Render(props: any) {
 					fileKey,
 					projectIdValue,
 					data?.file_name || "content.html",
+					fileScope,
 				)
 
 				await SuperMagicApi.replaceFile({
@@ -748,7 +789,7 @@ export default function Render(props: any) {
 		updatedAt,
 		detailMode,
 		// display_config: display_config || data?.display_config,
-		displayConfig: displayConfig || data?.display_config,
+		displayConfig: effectiveDisplayConfig,
 		openFileTab,
 		exportFile,
 		exportPdf,
@@ -805,7 +846,9 @@ export default function Render(props: any) {
 						)
 					}
 				>
-					<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					<FileActionVisibilityProvider value={fileActionVisibility}>
+						<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					</FileActionVisibilityProvider>
 				</Suspense>
 			</div>
 

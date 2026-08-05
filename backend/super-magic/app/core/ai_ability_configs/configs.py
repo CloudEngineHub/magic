@@ -50,3 +50,9 @@ class VideoUnderstandingAbilityConfig(ModelIdRequiredAIAbilityConfig):
     """视频理解能力运行时配置。"""
 
     ability_key_value = "video_understanding"
+
+
+class MemoryAbilityConfig(ModelIdRequiredAIAbilityConfig):
+    """后续回合记忆提取使用的运行时配置。"""
+
+    ability_key_value = "memory"

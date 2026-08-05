@@ -56,7 +56,6 @@ from app.core.entity.final_task_state import (
 )
 from app.core.models.agent_model_context import TextModelState
 from app.core.entity.message.server_message import TaskStatus
-from app.core.entity.message.client_message import MemoryItem
 
 # 多语言支持
 from app.magic.user_command_handler import Commands
@@ -467,6 +466,7 @@ class Agent(BaseAgent):
             "workspace_dir": self.agent_context._workspace_dir,
             "workspace_skills_dir": str(get_workspace_skills_dir().relative_to(PathManager.get_workspace_dir())),
             "project_root": str(PathManager.get_project_root()),
+            "memory_root": str(PathManager.get_memory_root_dir()),
             "agfs_fuse_mount_path": os.getenv("AGFS_FUSE_MOUNT_PATH", "/mnt/agfs"),
             "cwd": self.agent_context._workspace_dir,
             "python_version": sys.version,
@@ -542,7 +542,7 @@ class Agent(BaseAgent):
         return snapshot
 
     async def async_complete_dynamic_init(self) -> None:
-        """异步完成动态初始化，将 workspace 文件树、memory、用户语言同步到 AgentHorizon。
+        """异步完成动态初始化，将 workspace 文件树和用户语言同步到 AgentHorizon。
 
         此方法应在 Agent 构造完成后、首次运行前调用（在 agent_service 中）。
         Horizon 首次 build_context_update 时会将这些内容注入 LLM 的 initial_context。
@@ -552,15 +552,6 @@ class Agent(BaseAgent):
         # ── workspace 文件树（异步扫描）──────────────────────────────────────
         snapshot = await self._get_workspace_snapshot()
         await horizon.set_workspace_snapshot(snapshot)
-
-        # ── 用户长期记忆（来自 InitClientMessage）────────────────────────────
-        # magiclaw 使用文件系统作为记忆机制（.magic/MEMORY.md 等），不注入外部 long_term_memory
-        init_client_message = self.agent_context.get_init_client_message()
-        if self.agent_context.is_magiclaw():
-            memory_content = ""
-        else:
-            memory_content = self._extract_memory_content(init_client_message)
-        await horizon.set_memory(memory_content)
 
         # ── 用户偏好语言 ─────────────────────────────────────────────────────
         if not i18n.is_language_manually_set():
@@ -575,7 +566,7 @@ class Agent(BaseAgent):
             from app.path_manager import PathManager
             await self.agent_context.horizon.restore_magiclaw_startup(PathManager.get_magic_dir())
 
-        logger.info("async_complete_dynamic_init 完成：workspace files、memory、language 已同步到 horizon")
+        logger.info("async_complete_dynamic_init 完成：workspace files、language 已同步到 horizon")
 
     async def refresh_workspace_files(self) -> None:
         """每次用户消息前调用，刷新工作区文件树并更新 horizon。
@@ -584,73 +575,6 @@ class Agent(BaseAgent):
         """
         snapshot = await self._get_workspace_snapshot()
         await self.agent_context.horizon.set_workspace_snapshot(snapshot)
-
-    def _extract_memory_content(self, init_client_message) -> str:
-        """
-        从 InitClientMessage 中提取 memory 内容，支持新旧格式兼容
-
-        Args:
-            init_client_message: InitClientMessage 实例
-
-        Returns:
-            str: 格式化后的 memory 内容，如果没有则返回空字符串
-        """
-        if not init_client_message:
-            return ""
-
-        # 优先使用新的 memories 格式（JSON 数组）
-        if hasattr(init_client_message, 'memories') and init_client_message.memories:
-            return self._format_memories_array(init_client_message.memories)
-
-        # 向后兼容：如果没有 memories，则使用旧的 memory 字段
-        if hasattr(init_client_message, 'memory') and init_client_message.memory:
-            memory_content = init_client_message.memory
-            logger.info(f"已从 InitClientMessage 获取到 memory 数据（旧格式），长度: {len(memory_content)}")
-            return memory_content
-
-        return ""
-
-    def _format_memories_array(self, memories: List[MemoryItem]) -> str:
-        """
-        将 memories 数组格式化为文本
-
-        Args:
-            memories: memories 数组，每个元素是 MemoryItem 对象，包含 id 和 content 字段
-
-        Returns:
-            str: 格式化后的文本内容，格式为：
-                <long_term_memory>
-                [memory_id: xxx] content1
-                [memory_id: xxx] content2
-                </long_term_memory>
-        """
-        memory_items = []
-        for memory_item in memories:
-            # 支持 MemoryItem 对象（Pydantic 模型）和字典格式（向后兼容）
-            if isinstance(memory_item, MemoryItem):
-                memory_id = memory_item.id
-                memory_text = memory_item.content
-            elif isinstance(memory_item, dict):
-                memory_id = memory_item.get('id', '')
-                memory_text = memory_item.get('content', '')
-            else:
-                logger.warning(f"memories 格式不正确，跳过: {memory_item}")
-                continue
-
-            if not memory_text:
-                continue
-
-            if memory_id:
-                memory_items.append(f"[memory_id: {memory_id}] {memory_text}")
-            else:
-                memory_items.append(memory_text)
-
-        if not memory_items:
-            return ""
-
-        memory_content = "<long_term_memory>\n" + "\n".join(memory_items) + "\n</long_term_memory>"
-        logger.info(f"已从 InitClientMessage 获取到 memories 数据，数量: {len(memories)}")
-        return memory_content
 
     def _generate_agent_id(self) -> str:
         """生成符合规范的 Agent ID"""

@@ -86,6 +86,8 @@ Your workflow:
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <user_first_law>
 {{ @include(path="./prompts/user_first_law.prompt") }}
 </user_first_law>

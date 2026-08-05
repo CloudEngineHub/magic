@@ -1,4 +1,12 @@
-import { memo, useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
+import {
+	memo,
+	useState,
+	useRef,
+	useEffect,
+	forwardRef,
+	useImperativeHandle,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, { type TopicFilesCoreRef } from "./TopicFilesCore"
 import { useDownloadAll } from "./useDownloadAll"
@@ -34,10 +42,13 @@ import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDown
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
+import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 
 interface TopicFilesPanelProps {
 	className?: string
 	title?: string
+	/** 是否显示文件树内部标题。 */
+	showTitle?: boolean
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
@@ -58,7 +69,7 @@ interface TopicFilesPanelProps {
 	onMultiSelectModeChange?: (isMultiSelectMode: boolean) => void
 	showMobileActions?: boolean
 	// 自定义菜单项过滤器
-	filterMenuItems?: (menuItems: any[]) => any[]
+	filterMenuItems?: (menuItems: any[], item?: AttachmentItem) => any[]
 	// 自定义批量下载菜单过滤器
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
@@ -66,6 +77,13 @@ interface TopicFilesPanelProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	headerTrailingAction?: ReactNode
+	/** 文件树所属空间及其能力配置。 */
+	spaceConfig?: TopicFilesSpaceConfig
+	/** 判断节点是否允许参与移动和多选等变更操作。 */
+	isItemSelectable?: (item: AttachmentItem) => boolean
+	/** 特殊文件空间允许操作的固定根目录。 */
+	operationRoot?: AttachmentItem
 }
 
 export interface TopicFilesPanelRef {
@@ -81,6 +99,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		{
 			className,
 			title,
+			showTitle = true,
 			attachments = [],
 			setUserSelectDetail,
 			onFileClick,
@@ -102,12 +121,17 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			headerTrailingAction,
+			spaceConfig,
+			isItemSelectable,
+			operationRoot,
 		},
 		ref,
 	) {
 		const { t } = useTranslation("super")
 		const resolvedTitle = title || t("topicFiles.title")
 		const isMobile = useIsMobile()
+		const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 		const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 		const { isShareRoute } = useShareRoute()
 		const [fileFilters] = useState({
@@ -160,6 +184,11 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			})
 		})
 
+		/** 特殊文件空间不依赖项目附件事件，文件变更后主动重新加载。 */
+		const handleCoreAttachmentsUpdate = useMemoizedFn(() => {
+			requestAttachmentsRefresh("topic-files-core-operation-success")
+		})
+
 		// 使用 UploadWithModal hook 管理上传逻辑
 		const {
 			uploadModalVisible,
@@ -171,6 +200,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			handleUploadModalClose,
 		} = useUploadWithModal({
 			projectId,
+			fileScope: spaceConfig?.scope,
 			selectedProject,
 			selectedTopic,
 			attachments,
@@ -183,6 +213,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		// 使用文件替换 hook
 		const { handleReplaceFile } = useFileReplace({
 			projectId,
+			fileScope: spaceConfig?.scope,
 			selectedProject,
 			selectedTopic,
 		})
@@ -400,8 +431,30 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			coreRef.current?.handleImportFromOtherProject()
 		}
 
+		const handleUploadFile = () => {
+			if (!allowEdit) return
+			handleCustomUploadFile()
+		}
+
+		const handleUploadFolder = () => {
+			if (!allowEdit) return
+			handleCustomUploadFolder()
+		}
+
+		/** 刷新当前文件空间，特殊空间优先调用外部加载器。 */
 		const handleRefreshList = () => {
 			setRefreshLoading(true)
+			if (refreshAttachments) {
+				Promise.resolve(refreshAttachments())
+					.then(() => {
+						magicToast.success(t("common.refreshSuccess"))
+					})
+					.finally(() => {
+						setRefreshLoading(false)
+					})
+				return
+			}
+
 			requestProjectAttachmentsFullRefresh({
 				projectId,
 				reason: "topic-files-panel-manual-refresh",
@@ -532,7 +585,11 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onSearchChange={handleSearchChange}
 									onSearchCommit={handleSearchCommit}
 									onClose={handleCloseSearch}
-									className="duration-200 animate-in fade-in"
+									headerTrailingAction={headerTrailingAction}
+									className={cn(
+										"duration-200 animate-in fade-in",
+										!showTitle && "[&>p]:hidden",
+									)}
 								/>
 							) : isSelectMode ? (
 								<SelectModeHeader
@@ -555,14 +612,37 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onRefresh={handleRefreshList}
 									onSearch={handleSearch}
 									onAddFile={handleAddFile}
-									onAddDesign={handleAddDesign}
-									onAddSelfMedia={handleAddSelfMedia}
-									onAddAICard={handleAddAICard}
+									onAddDesign={
+										capabilities.projectContentCreation
+											? handleAddDesign
+											: undefined
+									}
+									onAddSelfMedia={
+										capabilities.projectContentCreation
+											? handleAddSelfMedia
+											: undefined
+									}
+									onAddAICard={
+										capabilities.projectContentCreation
+											? handleAddAICard
+											: undefined
+									}
 									onAddFolder={handleAddFolder}
-									onUploadFile={handleCustomUploadFile}
-									onUploadFolder={handleCustomUploadFolder}
-									onImportFromOtherProject={handleImportFromOtherProject}
-									onEnterSelectMode={handleEnterSelectMode}
+									onUploadFile={
+										capabilities.upload ? handleUploadFile : undefined
+									}
+									onUploadFolder={
+										capabilities.upload ? handleUploadFolder : undefined
+									}
+									onImportFromOtherProject={
+										capabilities.importFromOtherProject
+											? handleImportFromOtherProject
+											: undefined
+									}
+									onEnterSelectMode={
+										capabilities.multiSelect ? handleEnterSelectMode : undefined
+									}
+									headerTrailingAction={headerTrailingAction}
 									className="duration-200 animate-in fade-in"
 								/>
 							)}
@@ -586,6 +666,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									setTotalCount(totalCount)
 								}}
 								allowEdit={allowEdit}
+								onUpdateAttachments={
+									spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined
+								}
 								onAttachmentsChange={onAttachmentsChange}
 								onSelectModeChange={setIsSelectMode}
 								selectedProject={selectedProject}
@@ -604,6 +687,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
+								spaceConfig={spaceConfig}
+								isItemSelectable={isItemSelectable}
+								operationRoot={operationRoot}
 							/>
 						</>
 					)}
@@ -619,6 +705,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							projectId={selectedProject.id}
 							uploadFiles={projectDetailFilesController.selectedUploadFiles}
 							attachments={attachments}
+							defaultPath={operationRoot ? [operationRoot] : []}
 							isShowCreateDirectory={true}
 							isUploadingFolder={projectDetailFilesController.isUploadingFolder}
 							tips={
@@ -636,6 +723,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							projectId={selectedProject.id}
 							uploadFiles={selectedUploadFiles}
 							attachments={attachments}
+							defaultPath={operationRoot ? [operationRoot] : []}
 							isShowCreateDirectory={true}
 							isUploadingFolder={isUploadingFolder}
 							tips={

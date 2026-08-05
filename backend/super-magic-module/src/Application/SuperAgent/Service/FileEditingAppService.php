@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Infrastructure\Util\Context\RequestContext;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\FileEditingDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
@@ -30,11 +31,17 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProjectWithEditor($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::EDITOR,
+        );
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层处理业务逻辑
-        $this->fileEditingDomainService->joinEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
+        $this->fileEditingDomainService->joinEditing($fileId, $userAuthorization->getId(), $organizationCode);
     }
 
     /**
@@ -45,11 +52,17 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProjectWithEditor($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::EDITOR,
+        );
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层处理业务逻辑
-        $this->fileEditingDomainService->leaveEditing($fileId, $userAuthorization->getId(), $projectEntity->getUserOrganizationCode());
+        $this->fileEditingDomainService->leaveEditing($fileId, $userAuthorization->getId(), $organizationCode);
     }
 
     /**
@@ -60,10 +73,16 @@ class FileEditingAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 权限检查
-        $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
-        $projectEntity = $this->getAccessibleProject($fileEntity->getProjectId(), $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $fileEntity = $this->taskFileDomainService->getFileEntityById($fileId);
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $fileEntity,
+            $userAuthorization,
+            MemberRole::VIEWER,
+        );
+        $organizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $fileEntity->getOrganizationCode();
 
         // 委托Domain层查询编辑用户数量
-        return $this->fileEditingDomainService->getEditingUsersCount($fileId, $projectEntity->getUserOrganizationCode());
+        return $this->fileEditingDomainService->getEditingUsersCount($fileId, $organizationCode);
     }
 }
