@@ -178,29 +178,7 @@ function AskUser(props: NodeProps) {
 				</div>
 				<div className="shrink-0 pt-0.5" data-testid="ask-user-card-footer">
 					<div className="flex flex-wrap items-center justify-between gap-1.5">
-						<div className="flex min-w-0 items-center gap-1 text-xs font-medium leading-4 text-muted-foreground">
-							<span
-								className={cn(
-									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-								)}
-							>
-								{askUserT("askUser.status.autoSubmitIn", {
-									time: remainingText,
-								})}
-							</span>
-						</div>
 						<div className="flex shrink-0 items-center gap-1">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={shouldDisableInteraction || pendingAction !== null}
-								onClick={handleSkip}
-								data-testid="ask-user-card-skip-button"
-								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
-							>
-								{askUserT("askUser.actions.skip")}
-							</Button>
 							<Button
 								type="button"
 								size="sm"
@@ -213,6 +191,28 @@ function AskUser(props: NodeProps) {
 							>
 								{askUserT("askUser.actions.submit")}
 							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={shouldDisableInteraction || pendingAction !== null}
+								onClick={handleSkip}
+								data-testid="ask-user-card-skip-button"
+								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
+							>
+								{askUserT("askUser.actions.skip")}
+							</Button>
+						</div>
+						<div className="ml-auto flex min-w-0 items-center gap-1 text-right text-xs font-medium leading-4 text-muted-foreground">
+							<span
+								className={cn(
+									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+								)}
+							>
+								{askUserT("askUser.status.autoSubmitIn", {
+									time: remainingText,
+								})}
+							</span>
 						</div>
 					</div>
 				</div>
