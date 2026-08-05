@@ -47,11 +47,14 @@ const markdownSanitizeSchema = {
 }
 
 const VirtualMarkdownList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-	function VirtualMarkdownList({ className, ...props }, ref) {
+	function VirtualMarkdownList({ className, style, ...props }, ref) {
+		// ReactMarkdown inserts newline text nodes between block elements. TipTap's
+		// pre-wrap style makes those nodes occupy an extra visual line in every chunk.
 		return (
 			<div
 				ref={ref}
 				className={cn("tiptap ProseMirror simple-editor", className)}
+				style={{ ...style, whiteSpace: "normal" }}
 				{...props}
 			/>
 		)
