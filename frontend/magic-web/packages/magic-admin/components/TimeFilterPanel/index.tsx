@@ -12,5 +12,5 @@ export {
 	TimeFilterTab,
 	TimePresetKey,
 } from "./types"
-export type { TimeFilterHistoryItem, TimeRangeValue } from "./types"
+export type { TimeFilterHistoryItem, TimeFilterPrecisionValue, TimeRangeValue } from "./types"
 export { getSyncedTimeFilterValue } from "./utils"
