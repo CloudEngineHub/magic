@@ -16,12 +16,12 @@ readonly class ApiKeyMiniMaxTransport
     {
     }
 
-    public function submit(QueueExecutorConfig $config, array $payload, array $logContext = []): array
+    public function submit(QueueExecutorConfig $config, array $payload): array
     {
-        return $this->client->request('POST', $config->getBaseUrl(), $config->getApiKey(), '/v2/video_generation', $payload, $logContext);
+        return $this->client->request('POST', $config->getBaseUrl(), $config->getApiKey(), '/v2/video_generation', $payload);
     }
 
-    public function query(QueueExecutorConfig $config, string $taskId, array $logContext = []): array
+    public function query(QueueExecutorConfig $config, string $taskId): array
     {
         return $this->client->request(
             'GET',
@@ -29,7 +29,6 @@ readonly class ApiKeyMiniMaxTransport
             $config->getApiKey(),
             '/v2/query/video_generation/' . rawurlencode($taskId),
             [],
-            $logContext,
         );
     }
 }

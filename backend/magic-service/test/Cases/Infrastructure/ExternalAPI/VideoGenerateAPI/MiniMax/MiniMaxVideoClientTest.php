@@ -70,13 +70,11 @@ class MiniMaxVideoClientTest extends TestCase
                     'image_url' => ['url' => 'data:image/png;base64,very-sensitive-base64-content'],
                 ]],
             ],
-            ['operation_id' => 'op-minimax-submit'],
         );
 
         $this->assertSame('task-123', $response['task_id']);
         $this->assertCount(2, $logger->records);
         $this->assertSame('minimax video request', $logger->records[0]['message']);
-        $this->assertSame('op-minimax-submit', $logger->records[0]['context']['context']['operation_id']);
         $this->assertSame($prompt, $logger->records[0]['context']['payload']['content'][0]['text']);
         $this->assertSame(
             'data:image/png;base64,very-sensitive-base64-content',
@@ -85,10 +83,11 @@ class MiniMaxVideoClientTest extends TestCase
         $this->assertSame('minimax video response', $logger->records[1]['message']);
         $this->assertSame(200, $logger->records[1]['context']['http_status']);
         $this->assertSame('request-123', $logger->records[1]['context']['provider_request_id']);
-        $this->assertIsInt($logger->records[1]['context']['elapsed_ms']);
+        $this->assertArrayNotHasKey('base_url', $logger->records[1]['context']);
+        $this->assertArrayNotHasKey('elapsed_ms', $logger->records[1]['context']);
     }
 
-    public function testGetErrorLogsTaskContext(): void
+    public function testGetErrorLogsHttpStatus(): void
     {
         $httpClient = $this->createMock(Client::class);
         $httpClient->expects($this->once())
@@ -132,13 +131,10 @@ class MiniMaxVideoClientTest extends TestCase
                 'secret-api-key',
                 '/v2/query/video_generation/task-429',
                 [],
-                ['operation_id' => 'op-minimax-query', 'provider_task_id' => 'task-429'],
             );
         } finally {
             $this->assertCount(2, $logger->records);
             $this->assertSame('minimax video error', $logger->records[1]['message']);
-            $this->assertSame('op-minimax-query', $logger->records[1]['context']['context']['operation_id']);
-            $this->assertSame('task-429', $logger->records[1]['context']['context']['provider_task_id']);
             $this->assertSame(429, $logger->records[1]['context']['http_status']);
         }
     }

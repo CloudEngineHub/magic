@@ -98,12 +98,7 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationProviderAdapterIn
 
     public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string
     {
-        $response = $this->transport->submit($config, $operation->getProviderPayload(), [
-            'operation_id' => $operation->getId(),
-            'model' => $operation->getModel(),
-            'model_version' => $operation->getModelVersion(),
-            'provider_model_id' => $operation->getProviderModelId(),
-        ]);
+        $response = $this->transport->submit($config, $operation->getProviderPayload());
         $taskId = trim((string) ($response['task_id'] ?? ''));
         if ($taskId === '') {
             throw new ProviderVideoException('MiniMax H3 submit succeeded but task_id is missing');
@@ -113,13 +108,7 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationProviderAdapterIn
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array
     {
-        $response = $this->transport->query($config, $providerTaskId, [
-            'operation_id' => $operation->getId(),
-            'model' => $operation->getModel(),
-            'model_version' => $operation->getModelVersion(),
-            'provider_model_id' => $operation->getProviderModelId(),
-            'provider_task_id' => $providerTaskId,
-        ]);
+        $response = $this->transport->query($config, $providerTaskId);
         $task = is_array($response['task'] ?? null) ? $response['task'] : [];
         $status = strtolower((string) ($task['status'] ?? 'queued'));
         $url = is_array($task['content'] ?? null) ? ($task['content']['url'] ?? null) : null;
