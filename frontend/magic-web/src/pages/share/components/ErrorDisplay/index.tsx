@@ -7,13 +7,13 @@ import { useTranslation } from "react-i18next"
 
 interface ErrorDisplayProps {
 	errorMessage?: string
-	onRetry?: () => void
+	onBack?: () => void
 	isFileShare?: boolean
 }
 
 export default function ErrorDisplay({
 	errorMessage,
-	onRetry,
+	onBack,
 	isFileShare = false,
 }: ErrorDisplayProps) {
 	const { t } = useTranslation("super")
@@ -46,15 +46,13 @@ export default function ErrorDisplay({
 				>
 					{description}
 				</span>
-				{onRetry && (
+				{onBack && (
 					<Button
 						type="button"
 						variant="default"
 						size="sm"
 						className="rounded-lg px-6 py-1.5"
-						onClick={() => {
-							window.location.href = window.location.origin
-						}}
+						onClick={onBack}
 						data-testid="error-display-retry-button"
 					>
 						{t("common.back")}

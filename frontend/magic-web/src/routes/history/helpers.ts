@@ -48,6 +48,7 @@ export function fillRoute(path: string, params: Record<string, string>): string 
 			return ""
 			// throw new Error(`Missing required parameter: ${ key }`)
 		})
+		.replace(/\*/g, () => params["*"] || "")
 		.replace(/\/+/g, "/")
 		.replace(/\/$/, "") // 确保不出现多余的斜杠
 }

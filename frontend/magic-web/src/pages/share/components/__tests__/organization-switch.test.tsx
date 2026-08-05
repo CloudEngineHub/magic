@@ -87,4 +87,13 @@ describe("share organization switching", () => {
 		)
 		expect(screen.getByTestId("error-display-description")).toHaveClass("mt-2.5", "leading-5")
 	})
+
+	it("delegates the back action to the share page", () => {
+		const onBack = vi.fn()
+		render(<ErrorDisplay isFileShare onBack={onBack} />)
+
+		fireEvent.click(screen.getByTestId("error-display-retry-button"))
+
+		expect(onBack).toHaveBeenCalledOnce()
+	})
 })
