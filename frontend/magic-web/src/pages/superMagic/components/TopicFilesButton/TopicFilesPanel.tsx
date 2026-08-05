@@ -599,6 +599,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onSelectAll={handleSelectAll}
 									onDeselectAll={handleDeselectAll}
 									onCancel={handleCancelSelect}
+									headerTrailingAction={headerTrailingAction}
 									className="duration-200 animate-in fade-in"
 								/>
 							) : (

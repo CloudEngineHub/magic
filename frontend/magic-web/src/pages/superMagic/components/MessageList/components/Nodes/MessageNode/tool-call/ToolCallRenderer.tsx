@@ -6,6 +6,7 @@ import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
+const MicroAppPlanToolCall = lazy(() => import("../tools/microAppPlan"))
 
 export function ToolCallRenderer({
 	toolCall,
@@ -38,6 +39,23 @@ export function ToolCallRenderer({
 		return (
 			<Suspense fallback={null}>
 				<AskUserToolCall
+					toolData={toolData}
+					loading={loading}
+					classNames={classNames}
+					selectedTopic={selectedTopic}
+					isShare={isShare}
+					onSelectDetail={onSelectDetail}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
+		)
+	}
+
+	if (toolCall.function.name === "micro_app_plan") {
+		return (
+			<Suspense fallback={null}>
+				<MicroAppPlanToolCall
 					toolData={toolData}
 					loading={loading}
 					classNames={classNames}

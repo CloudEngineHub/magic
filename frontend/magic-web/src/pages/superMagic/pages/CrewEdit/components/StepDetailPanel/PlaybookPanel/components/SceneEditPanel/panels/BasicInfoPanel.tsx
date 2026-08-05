@@ -64,7 +64,10 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 	}
 
 	return (
-		<div className="flex h-full flex-col gap-3.5">
+		<div
+			className="flex h-full min-h-0 flex-col gap-3.5 overflow-y-auto pr-1"
+			data-testid="basic-info-scroll-container"
+		>
 			{/* Content header */}
 			<div className="flex shrink-0 items-center">
 				<p className="flex-1 truncate text-lg font-medium text-foreground">

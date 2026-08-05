@@ -54,7 +54,10 @@ describe("readPluginCanvasClipboard", () => {
 						mimeType: "image/png",
 						fileSize: 0,
 						role: "element-media",
-						sourceRef: { src: "uploads/canvas-image.png", ossUrl: "https://example.com/a.png" },
+						sourceRef: {
+							src: "uploads/canvas-image.png",
+							ossUrl: "https://example.com/a.png",
+						},
 					},
 				],
 			},

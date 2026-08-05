@@ -23,6 +23,22 @@ from .ingest_third_party_message_parameter import IngestThirdPartyMessageParamet
 from .scan_wav_parameter import ScanWavParameter  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .search_knowledge_parameter import SearchKnowledgeParameter
 from .update_file_source_parameter import UpdateFileSourceParameter, FileSource
+from .create_magicbase_column_parameter import CreateMagicBaseColumnParameter
+from .create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from .delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
+from .get_magicbase_table_parameter import GetMagicBaseTableParameter
+from .query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from .update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from .update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
+from .magicbase_row_parameter import (
+    BatchCreateMagicBaseRowsParameter,
+    BatchDeleteMagicBaseRowsParameter,
+    CreateMagicBaseRowParameter,
+    DeleteMagicBaseRowParameter,
+    QueryMagicBaseRowsParameter,
+)
+
 
 __all__ = [
     'AiAbilityRuntimeConfigParameter',
@@ -47,4 +63,17 @@ __all__ = [
     'SearchKnowledgeParameter',
     'UpdateFileSourceParameter',
     'FileSource',
+    'CreateMagicBaseColumnParameter',
+    'CreateMagicBaseTableParameter',
+    'DeleteMagicBaseColumnParameter',
+    'DeleteMagicBaseTableParameter',
+    'GetMagicBaseTableParameter',
+    'QueryMagicBaseTablesParameter',
+    'UpdateMagicBaseColumnParameter',
+    'UpdateMagicBaseTablePermissionsParameter',
+    'BatchCreateMagicBaseRowsParameter',
+    'BatchDeleteMagicBaseRowsParameter',
+    'CreateMagicBaseRowParameter',
+    'DeleteMagicBaseRowParameter',
+    'QueryMagicBaseRowsParameter',
 ]

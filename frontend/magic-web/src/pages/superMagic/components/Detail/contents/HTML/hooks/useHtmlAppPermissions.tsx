@@ -21,6 +21,8 @@ import {
 	type HtmlPermissionMissingDeclarationRequest,
 } from "../iframe-api/services/IframePermissionService"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
+import { hasManageableHtmlPermissionDeclarations } from "../iframe-api/services/htmlPermissionDeclarations"
+import { useHtmlPermissionI18n } from "./useHtmlPermissionI18n"
 
 interface HtmlAppFileItem {
 	file_id: string
@@ -33,6 +35,7 @@ interface UseHtmlAppPermissionsOptions {
 	relativeFilePath?: string
 	projectId?: string
 	fileList: HtmlAppFileItem[]
+	enabled?: boolean
 }
 
 export function useHtmlAppPermissions({
@@ -41,8 +44,11 @@ export function useHtmlAppPermissions({
 	relativeFilePath,
 	projectId,
 	fileList,
+	enabled = true,
 }: UseHtmlAppPermissionsOptions) {
 	const { t } = useTranslation("super")
+	const { getScopeLabel, getTtlLabel, getUserInfoFieldLabel } = useHtmlPermissionI18n()
+	const [grantRevision, setGrantRevision] = useState(0)
 
 	const htmlAppInstanceKey = useMemo(() => {
 		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
@@ -72,6 +78,9 @@ export function useHtmlAppPermissions({
 	)
 
 	const htmlAppConfig = htmlAppConfigState.status === "loaded" ? htmlAppConfigState.config : null
+	const hasHtmlPermissionDeclarations =
+		htmlAppConfigState.status === "loaded" &&
+		hasManageableHtmlPermissionDeclarations(htmlAppConfigState.config)
 
 	const htmlAppInstance = useMemo(() => {
 		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
@@ -97,32 +106,82 @@ export function useHtmlAppPermissions({
 			appName,
 			isLegacy,
 			appConfigLoadError,
-			scopeLabelKey,
+			scopes,
 			reason,
+			presentation,
 			ttlOptions,
 			defaultTtlMs,
 		}: HtmlPermissionConfirmRequest) =>
 			new Promise<{ allowed: boolean; ttlMs: number }>((resolve) => {
 				let selectedTtlMs = defaultTtlMs
-				const scopeLabel = t(scopeLabelKey)
-				const contentKey = isLegacy
-					? appConfigLoadError
-						? "htmlEditor.permissionAuthorizationConfirm.appConfigUnavailableContent"
-						: "htmlEditor.permissionAuthorizationConfirm.legacyContent"
-					: reason
-						? "htmlEditor.permissionAuthorizationConfirm.content"
-						: "htmlEditor.permissionAuthorizationConfirm.contentWithoutReason"
+				const displayAppName = appName || t("htmlEditor.permissionManager.defaultAppName")
+				const scopeLabel = scopes
+					.map(getScopeLabel)
+					.join(t("htmlEditor.permissionAuthorizationConfirm.scopeSeparator"))
+				const isUserInfo = presentation === "userInfo"
+				const fieldsText = scopes
+					.map(getUserInfoFieldLabel)
+					.join(t("htmlEditor.userInfoAuthorizationConfirm.fieldSeparator"))
+				const contentParams = {
+					appName: displayAppName,
+					scope: scopeLabel,
+					fields: fieldsText,
+					reason,
+					error: appConfigLoadError,
+				}
+				let contentText: string
+				if (isUserInfo) {
+					if (isLegacy && appConfigLoadError) {
+						contentText = t(
+							"htmlEditor.userInfoAuthorizationConfirm.appConfigUnavailableContent",
+							contentParams,
+						)
+					} else if (isLegacy) {
+						contentText = t(
+							"htmlEditor.userInfoAuthorizationConfirm.legacyContent",
+							contentParams,
+						)
+					} else if (reason) {
+						contentText = t(
+							"htmlEditor.userInfoAuthorizationConfirm.content",
+							contentParams,
+						)
+					} else {
+						contentText = t(
+							"htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason",
+							contentParams,
+						)
+					}
+				} else if (isLegacy && appConfigLoadError) {
+					contentText = t(
+						"htmlEditor.permissionAuthorizationConfirm.appConfigUnavailableContent",
+						contentParams,
+					)
+				} else if (isLegacy) {
+					contentText = t(
+						"htmlEditor.permissionAuthorizationConfirm.legacyContent",
+						contentParams,
+					)
+				} else if (reason) {
+					contentText = t(
+						"htmlEditor.permissionAuthorizationConfirm.content",
+						contentParams,
+					)
+				} else {
+					contentText = t(
+						"htmlEditor.permissionAuthorizationConfirm.contentWithoutReason",
+						contentParams,
+					)
+				}
 				const modal = MagicModal.confirm({
-					title: t("htmlEditor.permissionAuthorizationConfirm.title"),
+					title: isUserInfo
+						? t("htmlEditor.userInfoAuthorizationConfirm.title")
+						: t("htmlEditor.permissionAuthorizationConfirm.title"),
 					content: (
 						<div>
-							<p>
-								{t(contentKey, {
-									appName,
-									scope: scopeLabel,
-									reason,
-									error: appConfigLoadError,
-								})}
+							<p>{contentText}</p>
+							<p className="mt-3 text-xs text-muted-foreground">
+								{t("htmlEditor.permissionAuthorizationConfirm.durationLabel")}
 							</p>
 							<Select
 								defaultValue={String(defaultTtlMs)}
@@ -140,7 +199,7 @@ export function useHtmlAppPermissions({
 												key={option.ttlMs}
 												value={String(option.ttlMs)}
 											>
-												{t(option.labelKey)}
+												{getTtlLabel(option.ttlMs)}
 											</SelectItem>
 										),
 									)}
@@ -148,8 +207,12 @@ export function useHtmlAppPermissions({
 							</Select>
 						</div>
 					),
-					okText: t("htmlEditor.permissionAuthorizationConfirm.allow"),
-					cancelText: t("htmlEditor.permissionAuthorizationConfirm.deny"),
+					okText: isUserInfo
+						? t("htmlEditor.userInfoAuthorizationConfirm.allow")
+						: t("htmlEditor.permissionAuthorizationConfirm.allow"),
+					cancelText: isUserInfo
+						? t("htmlEditor.userInfoAuthorizationConfirm.deny")
+						: t("htmlEditor.permissionAuthorizationConfirm.deny"),
 					closable: false,
 					maskClosable: false,
 					centered: true,
@@ -166,18 +229,21 @@ export function useHtmlAppPermissions({
 	)
 
 	const notifyMissingPermissionDeclaration = useMemoizedFn(
-		({ appName, scope, scopeLabelKey }: HtmlPermissionMissingDeclarationRequest) => {
+		({ appName, scope }: HtmlPermissionMissingDeclarationRequest) => {
 			magicToast.warning({
 				key: `html-permission-missing-${scope}`,
 				content: t("htmlEditor.permissionAuthorizationConfirm.missingScope", {
-					appName,
-					scope: t(scopeLabelKey),
+					appName: appName || t("htmlEditor.permissionManager.defaultAppName"),
+					scope: getScopeLabel(scope),
 					rawScope: scope,
 				}),
 				duration: 4000,
 			})
 		},
 	)
+	const notifyGrantsChanged = useMemoizedFn(() => {
+		setGrantRevision((revision) => revision + 1)
+	})
 
 	const htmlPermissionService = useMemo(
 		() =>
@@ -185,6 +251,7 @@ export function useHtmlAppPermissions({
 				grantStore: htmlPermissionGrantStore,
 				confirmPermission: confirmHtmlPermission,
 				onMissingDeclaration: notifyMissingPermissionDeclaration,
+				onGrantsChanged: notifyGrantsChanged,
 				appConfigState: htmlAppConfigState,
 				appInstance: htmlAppInstance,
 			}),
@@ -193,13 +260,39 @@ export function useHtmlAppPermissions({
 			htmlAppConfigState,
 			htmlAppInstance,
 			htmlPermissionGrantStore,
+			notifyGrantsChanged,
 			notifyMissingPermissionDeclaration,
 		],
 	)
 
-	const authorizeHtmlPermission = useMemoizedFn((scope: HtmlPermissionScope) =>
-		htmlPermissionService.authorize(scope),
+	const authorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+		return htmlPermissionService.authorize(scope)
+	})
+
+	const authorizeHtmlPermissions = useMemoizedFn(
+		async (
+			scopes: HtmlPermissionScope[],
+			options?: Parameters<IframePermissionService["authorizeMany"]>[1],
+		) => {
+			return htmlPermissionService.authorizeMany(scopes, options)
+		},
 	)
+
+	const getPermissionSnapshot = useMemoizedFn(() => htmlPermissionService.getPermissionSnapshot())
+
+	const revokeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+		return htmlPermissionService.revoke(scope)
+	})
+
+	const updateHtmlPermissionTtl = useMemoizedFn(
+		async (scope: HtmlPermissionScope, ttlMs: number) => {
+			return htmlPermissionService.updateGrantTtl(scope, ttlMs)
+		},
+	)
+
+	const revokeAllHtmlPermissions = useMemoizedFn(async () => {
+		return htmlPermissionService.revokeAll()
+	})
 
 	useEffect(() => {
 		let cancelled = false
@@ -211,8 +304,15 @@ export function useHtmlAppPermissions({
 			instanceKey: htmlAppInstanceKey,
 			configState: { status: "loading" },
 		})
+		if (!enabled) {
+			setHtmlAppConfigStateWithKey({
+				instanceKey: htmlAppInstanceKey,
+				configState: { status: "absent" },
+			})
+			return
+		}
 		const appConfigFile = fileList.find(
-			(file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath,
+			(file) => file.relative_file_path?.replace(/^\/+/, "") === appConfigPath,
 		)
 
 		if (!appConfigFile) {
@@ -231,7 +331,7 @@ export function useHtmlAppPermissions({
 				if (!response.ok) throw new Error(`HTTP ${response.status}`)
 				const config = (await response.json()) as HTMLAppConfig
 				if (cancelled) return
-				if (config && typeof config === "object") {
+				if (config && typeof config === "object" && !Array.isArray(config)) {
 					setHtmlAppConfigStateWithKey({
 						instanceKey: htmlAppInstanceKey,
 						configState: { status: "loaded", config },
@@ -260,12 +360,21 @@ export function useHtmlAppPermissions({
 		return () => {
 			cancelled = true
 		}
-	}, [fileList, htmlAppInstanceKey, relativeFilePath])
+	}, [enabled, fileList, htmlAppInstanceKey, relativeFilePath])
 
 	return {
 		htmlAppConfig,
 		htmlAppConfigState,
+		hasHtmlPermissionDeclarations,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
+		authorizeHtmlPermissions,
+		getPermissionSnapshot,
+		revokeHtmlPermission,
+		updateHtmlPermissionTtl,
+		revokeAllHtmlPermissions,
+		permissionRevision: `${htmlAppInstanceKey}:${htmlAppConfigState.status}:${grantRevision}`,
 	}
 }
+
+export type HtmlAppPermissionController = ReturnType<typeof useHtmlAppPermissions>

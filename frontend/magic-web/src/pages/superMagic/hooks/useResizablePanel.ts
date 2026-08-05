@@ -55,6 +55,14 @@ function useResizablePanel({
 		widthRef.current = width
 	}, [width])
 
+	useEffect(() => {
+		const nextWidth = Math.max(minWidth, Math.min(maxWidth, widthRef.current))
+		if (nextWidth === widthRef.current) return
+
+		widthRef.current = nextWidth
+		setWidth(nextWidth)
+	}, [maxWidth, minWidth])
+
 	// 组件挂载后从 localStorage 初始化宽度
 	useMount(() => {
 		const initialWidth = getInitialWidth()

@@ -321,8 +321,7 @@ function useMessageQueue({
 					const agentCode = messageContent.extra?.super_agent?.agent_code
 					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
-						| TopicMode
-						| undefined
+						TopicMode | undefined
 
 					return {
 						content: jsonContent,
@@ -406,7 +405,7 @@ function useMessageQueue({
 			const queueData =
 				response?.list?.map(
 					(item: {
-						queue_id: number
+						queue_id: string
 						message_content: string
 						status: number
 						execute_time?: string | null
@@ -425,7 +424,7 @@ function useMessageQueue({
 							clientSyncId,
 						} = deserializeMessageContent(item.message_content)
 						return {
-							id: item.queue_id.toString(),
+							id: item.queue_id,
 							content,
 							mentionItems,
 							selectedModel,
@@ -605,24 +604,24 @@ function useMessageQueue({
 		let unsubscribe: (() => void) | undefined
 		let cancelled = false
 
-			; (async () => {
-				try {
-					const { initializeService } =
-						await import("@/services/recordSummary/serviceInstance")
+		;(async () => {
+			try {
+				const { initializeService } =
+					await import("@/services/recordSummary/serviceInstance")
 
-					const recordSummaryService = initializeService()
+				const recordSummaryService = initializeService()
 
-					if (cancelled || !recordSummaryService?.on) return
-					unsubscribe = recordSummaryService.on(
-						RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
-						() => {
-							fetchQueueList?.()
-						},
-					)
-				} catch (error) {
-					console.error("Failed to bind recording complete listener", error)
-				}
-			})()
+				if (cancelled || !recordSummaryService?.on) return
+				unsubscribe = recordSummaryService.on(
+					RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
+					() => {
+						fetchQueueList?.()
+					},
+				)
+			} catch (error) {
+				console.error("Failed to bind recording complete listener", error)
+			}
+		})()
 
 		return () => {
 			cancelled = true
@@ -644,25 +643,25 @@ function useMessageQueue({
 	) => {
 		const modelObj = selectedModel
 			? {
-				model_id: selectedModel.model_id,
-				model_name: selectedModel.model_name,
-				model_icon: selectedModel.model_icon,
-			}
+					model_id: selectedModel.model_id,
+					model_name: selectedModel.model_name,
+					model_icon: selectedModel.model_icon,
+				}
 			: { model_id: "auto" }
 
 		const imageModelObj = selectedImageModel?.model_id
 			? {
-				model_id: selectedImageModel.model_id,
-				model_name: selectedImageModel.model_name,
-				model_icon: selectedImageModel.model_icon,
-			}
+					model_id: selectedImageModel.model_id,
+					model_name: selectedImageModel.model_name,
+					model_icon: selectedImageModel.model_icon,
+				}
 			: undefined
 		const videoModelObj = selectedVideoModel?.model_id
 			? {
-				model_id: selectedVideoModel.model_id,
-				model_name: selectedVideoModel.model_name,
-				model_icon: selectedVideoModel.model_icon,
-			}
+					model_id: selectedVideoModel.model_id,
+					model_name: selectedVideoModel.model_name,
+					model_icon: selectedVideoModel.model_icon,
+				}
 			: undefined
 
 		// 转换 mention items，自定义发送给 agent 的内容

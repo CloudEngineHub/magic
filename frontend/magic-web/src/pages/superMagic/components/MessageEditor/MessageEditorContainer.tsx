@@ -46,8 +46,10 @@ import {
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { insertMentionFromDroppedData } from "./utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
+import useEditorPromptCarousel from "./hooks/useEditorPromptCarousel"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
+import { resolveModelTopicMode } from "./utils/modelTopicMode"
 import type { Topic } from "../../pages/Workspace/types"
 import useSharedDataFromApp from "./hooks/useSharedDataFromApp"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
@@ -85,6 +87,7 @@ export const MessageEditorContainer = observer(
 				containerClassName,
 				onSend,
 				placeholder,
+				promptCarousel,
 				onFileUpload,
 				isTaskRunning = false,
 				onInterrupt,
@@ -97,6 +100,7 @@ export const MessageEditorContainer = observer(
 				isSending = false,
 				sendButtonLoading = false,
 				topicMode,
+				modelTopicMode,
 				onFocus,
 				onBlur,
 				onMentionInsertItems,
@@ -226,6 +230,23 @@ export const MessageEditorContainer = observer(
 					content: store.editorStore.value,
 				})
 
+			const {
+				promptCarouselConfigured,
+				effectiveAiCompletionEnabled,
+				promptCarouselNode,
+				acceptPromptCarousel,
+				navigatePromptCarousel,
+				setIsEditorFocused,
+			} = useEditorPromptCarousel({
+				promptCarousel,
+				isMobile,
+				hasEditorContent: !isEmptyJSONContent(store.editorStore.value),
+				hasFiles: files.length > 0,
+				isComposing: store.editorStore.isComposing,
+				aiCompletionEnabled,
+				editorRef: tiptapEditorRef,
+			})
+
 			const handleMentionRemove = useMemoizedFn((mentionAttrs: TiptapMentionAttributes) => {
 				handleMarkerMentionRemove(mentionAttrs)
 				handleRemoveFile(mentionAttrs)
@@ -299,6 +320,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handleBlur = useMemoizedFn(() => {
+				setIsEditorFocused(false)
 				store.draftStore.saveDraftOnBlur({
 					value: store.editorStore.value,
 					onError: (error) => {
@@ -309,6 +331,11 @@ export const MessageEditorContainer = observer(
 				})
 				onBlur?.()
 				if (isMobile) resetDocumentScrollPosition()
+			})
+
+			const handleFocus = useMemoizedFn(() => {
+				setIsEditorFocused(true)
+				onFocus?.()
 			})
 
 			const handleSend = useMessageSendHandler({
@@ -328,7 +355,10 @@ export const MessageEditorContainer = observer(
 			const { tiptapEditor, domRef } = useMessageEditor({
 				value: store.editorStore.value,
 				onSend: handleSend,
-				placeholder,
+				placeholder: promptCarouselConfigured ? "" : placeholder,
+				ariaLabel: placeholder,
+				onPromptCarouselAccept: acceptPromptCarousel,
+				onPromptCarouselNavigate: navigatePromptCarousel,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
 					if (!selectedProject?.id) {
@@ -343,9 +373,9 @@ export const MessageEditorContainer = observer(
 				onKeyboardInput: handleKeyboardInput,
 				shouldEnableMention,
 				sendEnabled,
-				aiCompletionEnabled,
+				aiCompletionEnabled: effectiveAiCompletionEnabled,
 				isOAuthInProgress: store.editorStore.isOAuthInProgress,
-				onFocus,
+				onFocus: handleFocus,
 				onBlur: handleBlur,
 				size,
 				topicMode,
@@ -742,7 +772,7 @@ export const MessageEditorContainer = observer(
 				isEditingQueueItem: isEditingQueueItem ?? false,
 				selectedTopic,
 				selectedProject,
-				topicMode,
+				topicMode: resolveModelTopicMode(topicMode, modelTopicMode),
 				mentionPanelStore,
 				mcpButtonConfig,
 				handleSelectMentionItem,
@@ -791,7 +821,8 @@ export const MessageEditorContainer = observer(
 					outsideBottomContent={outsideBottomContent}
 					outsideTopContent={outsideTopContent}
 					uploadModal={uploadModal}
-					showAiCompletion={aiCompletionEnabled}
+					promptCarouselNode={promptCarouselNode}
+					showAiCompletion={effectiveAiCompletionEnabled}
 				/>
 			)
 		},

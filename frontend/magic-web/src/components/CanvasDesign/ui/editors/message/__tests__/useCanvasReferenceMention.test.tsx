@@ -334,8 +334,7 @@ describe("useCanvasReferenceMention", () => {
 
 		const doc = getContentFromString("@cat.png", getMention().matchableItems)
 		const mentionNode = doc.content?.[0]?.content?.[0] as
-			| { attrs?: { data?: { file_path?: string } } }
-			| undefined
+			{ attrs?: { data?: { file_path?: string } } } | undefined
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
 	})
 

@@ -23,6 +23,10 @@ vi.mock("../tools/AskUser", () => ({
 	default: () => <div data-testid="ask-user-tool" />,
 }))
 
+vi.mock("../../tools/microAppPlan", () => ({
+	default: () => <div data-testid="micro-app-plan-tool" />,
+}))
+
 function createToolCall(name: string): ToolCallItem {
 	return {
 		id: `tool-${name}`,
@@ -71,6 +75,17 @@ describe("ToolCallRenderer", () => {
 		renderTool(createToolCall("ask_user"))
 
 		expect(await screen.findByTestId("ask-user-tool")).toBeInTheDocument()
+	})
+
+	it("selects the micro-app plan renderer only for micro_app_plan", async () => {
+		const { unmount } = renderTool(createToolCall("micro_app_plan"))
+
+		expect(await screen.findByTestId("micro-app-plan-tool")).toBeInTheDocument()
+		unmount()
+
+		renderTool(createToolCall("plan"))
+
+		expect(screen.getByTestId("default-tool")).toBeInTheDocument()
 	})
 
 	it("selects the write-file renderer", () => {

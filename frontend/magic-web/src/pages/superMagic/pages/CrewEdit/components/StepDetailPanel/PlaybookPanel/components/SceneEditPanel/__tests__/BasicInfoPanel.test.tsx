@@ -94,6 +94,17 @@ function renderPanel(store: SceneEditStore) {
 }
 
 describe("BasicInfoPanel", () => {
+	it("keeps basic info scrollable when the edit panel is shorter than its content", () => {
+		const store = new SceneEditStore(createScene(), vi.fn().mockResolvedValue(undefined))
+
+		renderPanel(store)
+
+		expect(screen.getByTestId("basic-info-scroll-container")).toHaveClass(
+			"min-h-0",
+			"overflow-y-auto",
+		)
+	})
+
 	it("keeps saved basic info when the panel is mounted again", async () => {
 		const handleSave = vi.fn().mockResolvedValue(undefined)
 		const store = new SceneEditStore(createScene(), handleSave)

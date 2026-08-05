@@ -12,6 +12,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\AudioProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\FileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\FileEditingApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MessageApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MicroAppProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectInvitationLinkApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectMemberApi;
@@ -150,6 +151,32 @@ Router::addGroup(
                 // 删除音频标记
                 Router::delete('/{id}', [AudioMarkerApi::class, 'deleteMarker']);
             });
+        });
+
+        // 微应用项目管理
+        Router::addGroup('/micro-app-projects', static function () {
+            // 创建微应用项目
+            Router::post('', [MicroAppProjectApi::class, 'store']);
+            // 获取已发布微应用列表
+            Router::get('/published/queries', [MicroAppProjectApi::class, 'publishedList']);
+            // 根据项目 ID 获取或补建微应用映射
+            Router::get('/by-project/{projectId}', [MicroAppProjectApi::class, 'showByProject']);
+            // 根据 app_id 获取微应用项目映射
+            Router::get('/{appId}', [MicroAppProjectApi::class, 'show']);
+            // 发布微应用
+            Router::post('/{appId}/publish', [MicroAppProjectApi::class, 'publish']);
+            // 下架微应用
+            Router::delete('/{appId}/publish', [MicroAppProjectApi::class, 'unpublish']);
+        });
+
+        // 微应用业务接口，仅使用 app_id 作为对外标识
+        Router::addGroup('/micro-apps', static function () {
+            // 获取当前用户可访问的微应用列表
+            Router::get('/queries', [MicroAppProjectApi::class, 'list']);
+            // 编辑微应用名称和封面
+            Router::put('/{appId}', [MicroAppProjectApi::class, 'update']);
+            // 删除微应用及其对应项目
+            Router::delete('/{appId}', [MicroAppProjectApi::class, 'destroy']);
         });
 
         // 用户级别特殊项目

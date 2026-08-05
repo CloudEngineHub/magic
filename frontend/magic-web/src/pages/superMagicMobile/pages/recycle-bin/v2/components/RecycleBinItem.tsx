@@ -6,7 +6,7 @@ import { formatRelativeTime } from "@/utils/string"
 
 export interface RecycleBinItemData {
 	id: string
-	type: "workspace" | "project" | "topic" | "file" | "folder"
+	type: "workspace" | "project" | "topic" | "file" | "folder" | "microApp"
 	title: string
 	/** ISO，用于列表展示删除时间 */
 	deletedAt?: string
@@ -42,7 +42,14 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 	}, [item.deletedAt, i18n.language])
 
 	const retentionLabel = t("mobile.recycleBin.item.remainingShort", { days: item.validDays })
-	const typeLabel = t(`mobile.recycleBin.item.type.${item.type}`)
+	const typeLabel = (() => {
+		if (item.type === "workspace") return t("mobile.recycleBin.item.type.workspace")
+		if (item.type === "project") return t("mobile.recycleBin.item.type.project")
+		if (item.type === "topic") return t("mobile.recycleBin.item.type.topic")
+		if (item.type === "folder") return t("mobile.recycleBin.item.type.folder")
+		if (item.type === "microApp") return t("mobile.recycleBin.item.type.microApp")
+		return t("mobile.recycleBin.item.type.file")
+	})()
 
 	const hasDeletedTime = Boolean(deletedTimeLabel)
 
@@ -69,9 +76,7 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 						<RecycleBinTypeBadge label={typeLabel} />
 						<p className="min-w-0 flex-1 truncate text-left text-[12px] font-light leading-4 text-muted-foreground">
 							{hasDeletedTime ? deletedTimeLabel : null}
-							{hasDeletedTime ? (
-								<span className="mx-1 opacity-50">·</span>
-							) : null}
+							{hasDeletedTime ? <span className="mx-1 opacity-50">·</span> : null}
 							<span className="tabular-nums text-orange-500 dark:text-orange-400">
 								{retentionLabel}
 							</span>

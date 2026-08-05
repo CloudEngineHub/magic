@@ -40,6 +40,7 @@ export interface MessageSendPreparationContext {
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
 	topicStore?: TopicStore
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
+	refreshProjectAfterTopicRename?: boolean
 	renameProject?: (
 		projectId: string,
 		projectName: string,
@@ -141,6 +142,7 @@ export function resolveMessageSendContext(
 		selectedWorkspace,
 		workspaceId: selectedWorkspace?.id ?? selectedProject?.workspace_id,
 		updateTopicName,
+		refreshProjectAfterTopicRename: context?.refreshProjectAfterTopicRename,
 		renameProject,
 		setSelectedProject,
 		setSelectedTopic,
@@ -256,6 +258,7 @@ export async function preparePanelSend({
 			selectedWorkspace: resolvedContext.selectedWorkspace,
 			workspaceId: resolvedContext.workspaceId,
 			updateTopicName: resolvedContext.updateTopicName,
+			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,
 			renameProject: resolvedContext.renameProject,
 		},
 		params: {

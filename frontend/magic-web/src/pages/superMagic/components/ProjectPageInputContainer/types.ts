@@ -42,6 +42,8 @@ export interface ProjectPageInputContainerProps {
 	 * 话题模式逻辑，用于控制话题模式的选择和切换
 	 */
 	topicModeLogic?: TopicModeLogic
+	/** 模型选择器使用的模式目录，不改变实际发送时的话题模式。 */
+	modelTopicMode?: SceneEditorContext["modelTopicMode"]
 	/**
 	 * 是否启用通过内容发送消息
 	 */
@@ -63,6 +65,10 @@ export interface ProjectPageInputContainerProps {
 	showTopicModeExamplePortal?: boolean
 	/** 仅允许特定页面消费“撤回消息重新编辑”事件，避免移动端保活页面重复弹层 */
 	enableReEditMessageFromPubSub?: boolean
+	/** 是否显示模式/员工选择入口；桌面端与移动端共用。 */
+	showModeToggle?: boolean
+	/** 移动端固定模式场景仍允许切换语言/图像/视频模型。 */
+	showModelSelector?: boolean
 	onSendComplete?: (params: {
 		success: boolean
 		currentProject: ProjectListItem | null

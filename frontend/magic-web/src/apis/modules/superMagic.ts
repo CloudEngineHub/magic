@@ -97,6 +97,115 @@ export interface LlmModelTemperature {
 	value: number
 }
 
+export type MicroAppPublishShareType = 2 | 4 | 5
+export type MicroAppPublishShareRange = "all" | "designated"
+export type MicroAppListScope = "all" | "created" | "collaborated"
+
+export interface MicroAppPublishTarget {
+	target_type: "User" | "Department"
+	target_id: string
+}
+
+export interface PublishMicroAppProjectBody {
+	app_name: string
+	share_type: MicroAppPublishShareType
+	share_range?: MicroAppPublishShareRange
+	target_ids?: MicroAppPublishTarget[]
+	password?: string
+	cover_file_key?: string | null
+}
+
+export interface PublishedMicroAppProjectItem {
+	app_id?: string
+	project_id?: string
+	app_name?: string
+	project_name?: string
+	resource_id?: string
+	share_id?: string
+	share_code?: string
+	share_type: MicroAppPublishShareType
+	share_range?: MicroAppPublishShareRange
+	target_ids?: MicroAppPublishTarget[]
+	access_url?: string
+	published_at?: string
+	password?: string
+	cover_file_key?: string | null
+	cover_url?: string
+	publish_status?: "published" | "unpublished" | string
+}
+
+export interface MicroAppListItem {
+	app_id: string
+	app_name: string
+	app_description: string
+	creator_id: string
+	cover_url: string
+	publish_status: "published" | "unpublished" | string
+	updated_at: string | null
+}
+
+export interface MicroAppListResponse {
+	list: MicroAppListItem[]
+	total: number
+	page: number
+	page_size: number
+}
+
+export interface UpdateMicroAppBody {
+	app_name?: string
+	cover_file_key?: string | null
+}
+
+export interface MicroAppMetadata {
+	app_id: string
+	app_name: string
+	cover_file_key?: string | null
+	cover_url?: string
+	publish_status?: "published" | "unpublished" | string
+	updated_at?: string | null
+}
+
+export interface DeleteMicroAppResponse {
+	app_id: string
+	project_id: string
+	deleted: boolean
+}
+
+export interface PublishedMicroAppProjectRecord {
+	project?: {
+		id?: string | number
+		workspace_id?: string | number
+		project_name?: string
+		project_description?: string
+		project_mode?: string
+		current_topic_id?: string | number
+		current_topic_status?: string
+		created_at?: string
+		updated_at?: string
+	}
+	publish?: PublishedMicroAppProjectItem
+}
+
+export interface PublishedMicroAppProjectsResponse {
+	list: Array<PublishedMicroAppProjectItem | PublishedMicroAppProjectRecord>
+	total?: number
+	page?: number
+	page_size?: number
+}
+
+export interface MicroAppProjectDetail {
+	app_id: string
+	project_id: string
+	project?: ProjectListItem
+	publish?: PublishedMicroAppProjectItem
+}
+
+export interface CreateMicroAppProjectResponse {
+	app_id: string
+	project: ProjectListItem
+	topic: Topic
+}
+
 /** A single LLM model returned by matchLlmModels */
 export interface LlmModelItem {
 	id: string
@@ -738,6 +847,29 @@ export interface GetConvertHightConfigResponse {
 			/** 分辨率等级，如 "1K", "2K", "4K" */
 			scale: string
 		}[]
+	}
+}
+
+export interface ShareResourceSettings {
+	resource_id?: string
+	resource_name?: string
+	project_id?: string
+	project_name?: string
+	default_open_file_id?: string | null
+	file_ids?: string[]
+	share_type?: number
+	share_range?: string | null
+	target_ids?: Array<{ target_type: string; target_id: string }>
+	share_project?: boolean
+	password?: string
+	expire_days?: number | null
+	extra?: {
+		allow_copy_project_files?: boolean
+		view_file_list?: boolean
+		hide_created_by_super_magic?: boolean
+		show_original_info?: boolean
+		allow_download_project_file?: boolean
+		pure_mode?: boolean
 	}
 }
 
@@ -1520,7 +1652,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param code
 	 */
 	getShareInfoByCode({ code }: { code: string }) {
-		return fetch.get(`/api/v1/share/resources/${code}/setting`)
+		return fetch.get<ShareResourceSettings>(`/api/v1/share/resources/${code}/setting`)
 	},
 
 	/**
@@ -2490,12 +2622,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		message_type: string
 		message_content: any
 	}) {
-		return fetch.post("/api/v1/super-agent/message-queue", {
-			project_id,
-			topic_id,
-			message_type,
-			message_content,
-		})
+		return fetch.post<{ queue_id: string; status: number }>(
+			"/api/v1/super-agent/message-queue",
+			{
+				project_id,
+				topic_id,
+				message_type,
+				message_content,
+			},
+		)
 	},
 
 	/**
@@ -2948,5 +3083,164 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	getChatWorkspace() {
 		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/chat")
+	},
+
+	/**
+	 * @description 获取微应用的特殊 workspace
+	 * @returns 特殊 workspace
+	 */
+	getMicroAppWorkspace() {
+		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/micro-app")
+	},
+
+	/**
+	 * @description 创建微应用项目并生成稳定 app_id
+	 */
+	createMicroAppProject({
+		workspace_id,
+		project_name = "",
+		dynamic_params,
+	}: {
+		workspace_id?: string
+		project_name?: string
+		dynamic_params?: Record<string, unknown>
+	}) {
+		return fetch.post<CreateMicroAppProjectResponse>(
+			"/api/v1/super-agent/micro-app-projects",
+			{
+				workspace_id,
+				project_name,
+				dynamic_params: dynamic_params ?? {
+					agent_mode: "micro-app",
+					message_version: "v2",
+				},
+			},
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 获取当前用户可访问的微应用列表
+	 */
+	getMicroApps(
+		params: {
+			page?: number
+			page_size?: number
+			keyword?: string
+			scope?: MicroAppListScope
+		} = {},
+	) {
+		const { page = 1, page_size = 20, keyword = "", scope = "all" } = params
+		return fetch.get<MicroAppListResponse>(
+			genRequestUrl(
+				"/api/v1/super-agent/micro-apps/queries",
+				{},
+				{ page, page_size, keyword, scope },
+			),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 更新微应用名称或封面
+	 */
+	updateMicroApp(appId: string, body: UpdateMicroAppBody) {
+		return fetch.put<MicroAppMetadata>(
+			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
+			body,
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 删除微应用及对应项目，路径参数必须使用 app_id
+	 */
+	deleteMicroApp(appId: string) {
+		return fetch.delete<DeleteMicroAppResponse>(
+			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
+			undefined,
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 根据 app_id 获取微应用对应的内部项目
+	 */
+	getMicroAppProject(appId: string) {
+		return fetch.get<MicroAppProjectDetail>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}", { appId }),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 为已有微应用项目获取或补建稳定 app_id
+	 */
+	getMicroAppProjectByProjectId(projectId: string) {
+		return fetch.get<MicroAppProjectDetail>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/by-project/${projectId}", {
+				projectId,
+			}),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 将公开微应用 app_id 解析为当前有效分享资源
+	 */
+	resolvePublishedMicroApp(appId: string) {
+		return fetch.get<{
+			app_id: string
+			resource_id: string
+			share_code: string
+			cover_url?: string
+		}>(genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }), {
+			parseJsonLargeIntAsString: true,
+		})
+	},
+
+	/**
+	 * @description 发布微应用项目
+	 */
+	publishMicroAppProject(appId: string, body: PublishMicroAppProjectBody) {
+		return fetch.post<PublishedMicroAppProjectItem>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
+				appId,
+			}),
+			body,
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	/**
+	 * @description 下架微应用项目
+	 */
+	unpublishMicroAppProject(appId: string) {
+		return fetch.delete<unknown>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
+				appId,
+			}),
+		)
+	},
+
+	/**
+	 * @description 获取已发布微应用列表
+	 */
+	getPublishedMicroAppProjects(
+		params: {
+			page?: number
+			page_size?: number
+			keyword?: string
+		} = {},
+	) {
+		const { page = 1, page_size = 20, keyword = "" } = params
+		return fetch.get<PublishedMicroAppProjectsResponse>(
+			genRequestUrl(
+				"/api/v1/super-agent/micro-app-projects/published/queries",
+				{},
+				{ page, page_size, keyword },
+			),
+			{ parseJsonLargeIntAsString: true },
+		)
 	},
 })

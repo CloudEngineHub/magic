@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import ScenePanelContainer from "@/pages/superMagic/components/MainInputContainer/components/ScenePanelContainer"
 import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContainer/components/LazyScenePanel/types"
 import {
@@ -23,6 +24,7 @@ export const ScenePreviewPanel = observer(function ScenePreviewPanel() {
 	const { t } = useTranslation("crew/create")
 	const store = useSceneEditStore()
 	const [activePreview, setActivePreview] = useState<PreviewTab>("home")
+	const [isPreviewExpanded, setIsPreviewExpanded] = useState(true)
 	const [previewStore] = useState(() => new SceneStateStore(new SceneConfigStore()))
 
 	const panels = [store.presets, store.quickStart, store.inspiration].filter(
@@ -48,11 +50,34 @@ export const ScenePreviewPanel = observer(function ScenePreviewPanel() {
 			data-testid="scene-preview-panel"
 		>
 			<div className="flex items-center justify-between gap-3 border-b border-border/60 pb-2">
-				<div className="flex min-w-0 items-center gap-2">
-					<p className="truncate text-xs font-medium text-muted-foreground">
+				<button
+					type="button"
+					className="flex min-w-0 items-center gap-1.5 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+					onClick={() => setIsPreviewExpanded((expanded) => !expanded)}
+					aria-expanded={isPreviewExpanded}
+					aria-controls="scene-preview-content"
+					aria-label={t(
+						isPreviewExpanded
+							? "playbook.edit.preview.collapse"
+							: "playbook.edit.preview.expand",
+					)}
+					data-testid="scene-preview-toggle"
+				>
+					{isPreviewExpanded ? (
+						<ChevronDown
+							className="size-3.5 shrink-0 text-muted-foreground"
+							aria-hidden="true"
+						/>
+					) : (
+						<ChevronRight
+							className="size-3.5 shrink-0 text-muted-foreground"
+							aria-hidden="true"
+						/>
+					)}
+					<span className="truncate text-xs font-medium text-muted-foreground">
 						{t("playbook.edit.preview.title")}
-					</p>
-				</div>
+					</span>
+				</button>
 				<div className="w-[220px]" data-testid="scene-preview-tabs">
 					<SmoothTabs
 						tabs={previewTabs}
@@ -67,7 +92,9 @@ export const ScenePreviewPanel = observer(function ScenePreviewPanel() {
 				</div>
 			</div>
 			<div
+				id="scene-preview-content"
 				className="min-h-[132px] overflow-hidden rounded-md bg-background/75 p-3"
+				hidden={!isPreviewExpanded}
 				data-testid="scene-preview-content"
 			>
 				<SceneStateProvider

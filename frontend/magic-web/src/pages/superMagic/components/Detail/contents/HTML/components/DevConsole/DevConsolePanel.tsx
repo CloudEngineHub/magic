@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { platformKey } from "@/utils/storage"
 import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
+import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import {
 	Tooltip,
@@ -44,7 +45,16 @@ import {
 	ToggleRight,
 	Link,
 	Crosshair,
+	EllipsisVertical,
+	PanelBottom,
+	PanelRight,
 } from "lucide-react"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuLabel,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import type {
 	ConsoleEntry,
 	NetworkEntry,
@@ -54,6 +64,7 @@ import type {
 	DependencyEntry,
 	DevConsoleTab,
 	DevConsoleMode,
+	DevConsoleLayout,
 } from "./types"
 import { ConsoleTab } from "./ConsoleTab"
 import { NetworkTab } from "./NetworkTab"
@@ -96,11 +107,16 @@ interface DevConsolePanelProps {
 	inspectorActive?: boolean
 	/** Toggle element inspector */
 	onToggleInspector?: () => void
+	layout: DevConsoleLayout
+	onLayoutChange: (layout: DevConsoleLayout) => void
 }
 
 const MIN_HEIGHT = 120
 const DEFAULT_HEIGHT = 240
 const MAX_HEIGHT = 600
+const MIN_WIDTH = 320
+const DEFAULT_WIDTH = 480
+const MAX_WIDTH = 720
 
 // ─── Tab order persistence ────────────────────────────────────────────────────
 
@@ -161,11 +177,15 @@ export function DevConsolePanel({
 	onClose,
 	inspectorActive,
 	onToggleInspector,
+	layout,
+	onLayoutChange,
 }: DevConsolePanelProps) {
 	const { t } = useTranslation("super")
 	const [collapsed, setCollapsed] = useState(false)
 	const [height, setHeight] = useState(DEFAULT_HEIGHT)
+	const [width, setWidth] = useState(DEFAULT_WIDTH)
 	const [showOnboarding, setShowOnboarding] = useState(false)
+	const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
 	const [mode, setMode] = useState<DevConsoleMode>(() => {
 		return (localStorage.getItem(platformKey("devConsole_mode")) as DevConsoleMode) || "basic"
 	})
@@ -267,6 +287,8 @@ export function DevConsolePanel({
 	// Store drag state in refs — no state updates during drag
 	const dragStartY = useRef(0)
 	const dragStartHeight = useRef(0)
+	const dragStartX = useRef(0)
+	const dragStartWidth = useRef(0)
 
 	// Pointer-capture based drag: avoids global event listeners and
 	// uses direct DOM mutation so React never re-renders during drag.
@@ -277,16 +299,29 @@ export function DevConsolePanel({
 			if (!handle) return
 
 			handle.setPointerCapture(e.pointerId)
-			dragStartY.current = e.clientY
-			dragStartHeight.current = panelRef.current?.offsetHeight ?? height
+			if (layout === "right") {
+				dragStartX.current = e.clientX
+				dragStartWidth.current = panelRef.current?.offsetWidth ?? width
+			} else {
+				dragStartY.current = e.clientY
+				dragStartHeight.current = panelRef.current?.offsetHeight ?? height
+			}
 
 			const onMove = (ev: PointerEvent) => {
-				const delta = dragStartY.current - ev.clientY
-				const newHeight = Math.min(
-					MAX_HEIGHT,
-					Math.max(MIN_HEIGHT, dragStartHeight.current + delta),
-				)
-				if (panelRef.current) {
+				if (!panelRef.current) return
+				if (layout === "right") {
+					const delta = dragStartX.current - ev.clientX
+					const newWidth = Math.min(
+						MAX_WIDTH,
+						Math.max(MIN_WIDTH, dragStartWidth.current + delta),
+					)
+					panelRef.current.style.width = `${newWidth}px`
+				} else {
+					const delta = dragStartY.current - ev.clientY
+					const newHeight = Math.min(
+						MAX_HEIGHT,
+						Math.max(MIN_HEIGHT, dragStartHeight.current + delta),
+					)
 					panelRef.current.style.height = `${newHeight}px`
 				}
 			}
@@ -295,7 +330,9 @@ export function DevConsolePanel({
 				handle.removeEventListener("pointermove", onMove)
 				handle.removeEventListener("pointerup", onUp)
 				// Sync into React state once drag ends
-				if (panelRef.current) {
+				if (panelRef.current && layout === "right") {
+					setWidth(panelRef.current.offsetWidth)
+				} else if (panelRef.current) {
 					setHeight(panelRef.current.offsetHeight)
 				}
 			}
@@ -303,20 +340,43 @@ export function DevConsolePanel({
 			handle.addEventListener("pointermove", onMove)
 			handle.addEventListener("pointerup", onUp)
 		},
-		[height],
+		[height, layout, width],
+	)
+
+	const handleLayoutChange = useCallback(
+		(nextLayout: DevConsoleLayout) => {
+			setCollapsed(false)
+			onLayoutChange(nextLayout)
+			setLayoutMenuOpen(false)
+		},
+		[onLayoutChange],
 	)
 
 	return (
 		<div
 			ref={panelRef}
-			className="relative flex w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-t bg-background/95 backdrop-blur-sm"
-			style={{ height: collapsed ? 36 : height }}
+			className={cn(
+				"relative flex min-h-0 min-w-0 flex-shrink-0 flex-col overflow-hidden bg-background/95 backdrop-blur-sm",
+				layout === "right" ? "h-full border-l" : "w-full border-t",
+			)}
+			style={
+				layout === "right"
+					? { width, maxWidth: "70%" }
+					: { height: collapsed ? 36 : height }
+			}
+			data-testid="dev-console-panel"
+			data-layout={layout}
 		>
 			{/* Resize handle — uses pointer capture for smooth, iframe-safe drag */}
 			{!collapsed && (
 				<div
 					ref={dragHandleRef}
-					className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none"
+					className={cn(
+						"absolute z-10 touch-none",
+						layout === "right"
+							? "inset-y-0 -left-1 w-2 cursor-col-resize"
+							: "inset-x-0 -top-1 h-2 cursor-row-resize",
+					)}
 					onPointerDown={handleDragStart}
 					data-testid="handle-drag-start"
 				/>
@@ -324,13 +384,17 @@ export function DevConsolePanel({
 
 			{/* Header bar */}
 			<div className="flex h-9 min-w-0 flex-shrink-0 items-center justify-between border-b px-2">
-				<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
+				<ScrollArea
+					className="h-full min-w-0 flex-1"
+					viewportClassName="h-full"
+					data-testid="dev-console-tabs-scroll-area"
+				>
 					<Tabs
 						value={activeTab}
 						onValueChange={(v) => onTabChange(v as DevConsoleTab)}
-						className="min-w-0"
+						className="flex h-full w-max min-w-full items-center"
 					>
-						<TabsList className="h-7 flex-nowrap whitespace-nowrap bg-transparent p-0">
+						<TabsList className="mr-auto h-8 w-max flex-nowrap whitespace-nowrap bg-transparent p-0">
 							{visibleTabs.map((tabId, index) => {
 								const isDropTarget =
 									dragOverIdx === index &&
@@ -404,9 +468,10 @@ export function DevConsolePanel({
 							})}
 						</TabsList>
 					</Tabs>
-				</div>
+					<ScrollBar orientation="horizontal" className="h-1.5" />
+				</ScrollArea>
 
-				<div className="flex items-center gap-1">
+				<div className="flex shrink-0 items-center gap-1">
 					{/* Clear button — only for tabs with clearable entries, advanced mode only */}
 					{!isBasicMode &&
 						(activeTab === "console" ||
@@ -530,14 +595,61 @@ export function DevConsolePanel({
 						</Tooltip>
 					</TooltipProvider>
 
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-6 w-6"
-						onClick={() => setCollapsed(!collapsed)}
-					>
-						{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-					</Button>
+					<DropdownMenu open={layoutMenuOpen} onOpenChange={setLayoutMenuOpen}>
+						<DropdownMenuTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-6 w-6"
+								aria-label={t("stylePanel.devConsole.dockSide")}
+								data-testid="dev-console-more-button"
+							>
+								<EllipsisVertical size={14} />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end" className="w-48">
+							<DropdownMenuLabel className="flex items-center justify-between gap-4 px-2 py-1.5 font-normal">
+								<span>{t("stylePanel.devConsole.dockSide")}</span>
+								<div className="flex items-center gap-1">
+									<button
+										type="button"
+										className={cn(
+											"flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+											layout === "bottom" && "bg-accent text-primary",
+										)}
+										onClick={() => handleLayoutChange("bottom")}
+										aria-label={t("stylePanel.devConsole.dockToBottom")}
+										data-testid="dev-console-layout-bottom"
+									>
+										<PanelBottom size={18} />
+									</button>
+									<button
+										type="button"
+										className={cn(
+											"flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+											layout === "right" && "bg-accent text-primary",
+										)}
+										onClick={() => handleLayoutChange("right")}
+										aria-label={t("stylePanel.devConsole.dockToRight")}
+										data-testid="dev-console-layout-right"
+									>
+										<PanelRight size={18} />
+									</button>
+								</div>
+							</DropdownMenuLabel>
+						</DropdownMenuContent>
+					</DropdownMenu>
+
+					{layout === "bottom" && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-6 w-6"
+							onClick={() => setCollapsed(!collapsed)}
+						>
+							{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+						</Button>
+					)}
 
 					<Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
 						<X size={14} />

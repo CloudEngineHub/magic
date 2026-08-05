@@ -1,0 +1,13 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#query_table_bg)"/>
+<rect x="4.5" y="5" width="8.5" height="9" rx="1.25" stroke="white"/>
+<path d="M4.5 8H13M8.75 5V14" stroke="white"/>
+<circle cx="13.25" cy="13.25" r="2.25" fill="#3875F6" stroke="white"/>
+<path d="M14.9 14.9L16 16" stroke="white" stroke-linecap="round"/>
+<defs>
+<linearGradient id="query_table_bg" x1="1" y1="2" x2="19" y2="18" gradientUnits="userSpaceOnUse">
+<stop stop-color="#25B7FF"/>
+<stop offset="1" stop-color="#315BEE"/>
+</linearGradient>
+</defs>
+</svg>

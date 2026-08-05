@@ -4,6 +4,7 @@ import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucid
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
 import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
@@ -148,6 +149,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</AppsSubMenu>
 						</SidebarMenuItem>
+						<MicroAppsSidebarMenuItem collapsed={collapsed} />
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>

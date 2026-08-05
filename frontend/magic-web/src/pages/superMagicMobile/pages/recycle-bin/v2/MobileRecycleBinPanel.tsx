@@ -15,6 +15,7 @@ import {
 	getRecycleBinTabIdFromSearchParams,
 	setRecycleBinTabQuery,
 	type RecycleBinTabId,
+	useRecycleBinTabLabel,
 } from "@/pages/recycleBin/tab-config"
 
 import RecycleBinContent from "./components/RecycleBinContent"
@@ -25,6 +26,7 @@ const INITIAL_TAB_COUNTS = createRecycleBinTabCounts()
 function MobileRecycleBinPanel() {
 	const [searchParams] = useSearchParams()
 	const { t } = useTranslation("super")
+	const getTabLabel = useRecycleBinTabLabel("mobile")
 
 	const [activeTab, setActiveTab] = useState<RecycleBinTabId>(() => {
 		return getRecycleBinTabIdFromSearchParams(searchParams) ?? "all"
@@ -163,9 +165,7 @@ function MobileRecycleBinPanel() {
 								data-testid={`mobile-recycle-bin-tab-${tab.id}`}
 							>
 								<span className="text-left text-[16px] text-foreground">
-									{t(tab.labelKey.mobile, {
-										count: tabCounts[tab.id] ?? 0,
-									})}
+									{getTabLabel(tab.id, tabCounts[tab.id] ?? 0)}
 								</span>
 								{activeTab === tab.id ? (
 									<Check

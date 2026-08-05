@@ -39,6 +39,11 @@ import { RouteName } from "@/routes/constants"
 import { crewService } from "@/services/crew/CrewService"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
+import {
+	DEFAULT_MAX_WIDTH,
+	DEFAULT_MIN_WIDTH,
+	DEFAULT_WIDTH,
+} from "@/pages/superMagic/constants/resizablePanel"
 import { CrewEditStoreProvider, useCrewEditStore } from "./context"
 import { useCrewEditErrorToasts } from "./hooks/useCrewEditErrorToasts"
 import { useIdentityMarkdownSync } from "./hooks/useIdentityMarkdownSync"
@@ -83,13 +88,9 @@ function CrewEditErrorFallback({ error, onBack }: { error: string; onBack: () =>
 const SIDEBAR_DEFAULT_PX = 320
 const SIDEBAR_MIN_PX = 240
 const SIDEBAR_MAX_PX = 500
-const DETAIL_DEFAULT_PX = 688
-const DETAIL_MIN_PX = 400
-const DETAIL_MAX_PX = 900
-const MESSAGE_PANEL_WIDTH_PX = 360
+const CREW_EDIT_MESSAGE_PANEL_STORAGE_KEY = "MAGIC:crew-edit-message-panel-width"
 
 const CREW_EDIT_SIDEBAR_STORAGE_KEY = "MAGIC:crew-edit-sidebar-width"
-const CREW_EDIT_DETAIL_STORAGE_KEY = "MAGIC:crew-edit-detail-panel-width"
 const CREW_EDIT_PANEL_QUERY_KEY = "panel"
 
 /** 知识库详情 / 文档流程 URL 参数；从知识库切到附件预览时应清除 */
@@ -355,15 +356,15 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	})
 
 	const {
-		width: detailPanelWidthPx,
-		isDragging: isDraggingDetail,
-		handleResizeStart: onDetailResizeStart,
+		width: messagePanelWidthPx,
+		isDragging: isDraggingMessagePanel,
+		handleResizeStart: onMessagePanelResizeStart,
 	} = useResizablePanel({
-		minWidth: DETAIL_MIN_PX,
-		maxWidth: DETAIL_MAX_PX,
-		defaultWidth: DETAIL_DEFAULT_PX,
-		storageKey: CREW_EDIT_DETAIL_STORAGE_KEY,
-		direction: "left",
+		minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
+		maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
+		defaultWidth: DEFAULT_WIDTH.MESSAGE_PANEL,
+		storageKey: CREW_EDIT_MESSAGE_PANEL_STORAGE_KEY,
+		direction: "right",
 	})
 
 	useLayoutEffect(() => {
@@ -552,8 +553,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			<div className="flex h-full w-full overflow-hidden" data-testid="crew-edit-page">
 				<CrewEditPanels
 					sidebarWidthPx={sidebarWidthPx}
-					detailPanelWidthPx={detailPanelWidthPx}
-					messagePanelWidthPx={MESSAGE_PANEL_WIDTH_PX}
+					messagePanelWidthPx={messagePanelWidthPx}
 					showDetailPanel={shouldShowDetailPanel}
 					isDetailPanelFullscreen={isDetailPanelFullscreen}
 					isConversationPanelCollapsed={layout.isConversationPanelCollapsed}
@@ -582,9 +582,9 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 						),
 					}}
 					onSidebarResizeStart={onSidebarResizeStart}
-					onDetailResizeStart={onDetailResizeStart}
+					onMessagePanelResizeStart={onMessagePanelResizeStart}
 					isDraggingSidebar={isDraggingSidebar}
-					isDraggingDetail={isDraggingDetail}
+					isDraggingMessagePanel={isDraggingMessagePanel}
 					sidebar={
 						<ConfigStepsPanel
 							onBack={handleBack}

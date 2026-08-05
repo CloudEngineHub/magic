@@ -188,6 +188,9 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 	/** 当前项目 tabs 缓存已加载完成时的回调用 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+
+	/** File ids whose tabs cannot be removed by any close action. */
+	nonClosableFileIds?: string[]
 }
 
 // FilesViewer ref interface

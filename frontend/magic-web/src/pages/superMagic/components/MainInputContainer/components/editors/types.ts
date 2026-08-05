@@ -11,13 +11,19 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import type {
 	DraftKey,
+	EditorPromptCarouselConfig,
 	ModelItem,
 	MessageEditorLayoutConfig,
 	MessageEditorModules,
 	MessageEditorSize,
 } from "@/pages/superMagic/components/MessageEditor/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import type { CreatedProject, ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type {
+	CreatedProject,
+	ProjectListItem,
+	Topic,
+	Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
@@ -33,21 +39,27 @@ export interface QueueMessageInput {
 
 export interface SceneEditorQueueContext {
 	editingQueueItem: QueuedMessage | null
-	addToQueue: (params: QueueMessageInput) => void
+	addToQueue: (params: QueueMessageInput) => Promise<string | undefined>
 	finishEditQueueItem: (value: JSONContent | undefined, mentionItems: MentionListItem[]) => void
 }
 
 export interface SceneEditorContext {
 	/** Override input placeholder from skill config (LocaleText) */
 	placeholder?: LocaleText
+	/** Optional rotating examples shown while the editor is empty */
+	promptCarousel?: EditorPromptCarouselConfig
 	draftKey?: DraftKey
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
 	setSelectedTopic?: (topic: Topic | null) => void
+	/** 话题自动命名完成后，让目标详情页同步话题名称并重新读取项目名称。 */
+	refreshProjectAfterTopicRename?: boolean
 	setSelectedProject?: (project: ProjectListItem | null) => void
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
 	topicMode: TopicMode
+	/** Optional catalog mode used by model pickers without changing the send-time topic mode. */
+	modelTopicMode?: TopicMode
 	/** custom_agent: same as featured mode.identifier */
 	agentCode?: string
 	setTopicMode?: (mode: TopicMode) => void
@@ -119,6 +131,8 @@ export interface SceneEditorContext {
 	/** 跳过首次草稿恢复，避免覆盖外部显式恢复的内容 */
 	skipInitialDraftRestore?: boolean
 	showModeToggle?: boolean
+	/** Keep the mobile model picker visible while hiding the employee/mode picker. */
+	showModelSelector?: boolean
 	allowChangeMode?: boolean
 	mobileModeSelectorVariant?: "default" | "claw"
 }

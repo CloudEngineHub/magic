@@ -12,6 +12,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
 use Dtyq\SuperMagic\Domain\RecycleBin\Repository\Facade\RecycleBinRepositoryInterface;
 use Dtyq\SuperMagic\Domain\RecycleBin\Service\RecycleBinRestoreDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
@@ -39,6 +40,8 @@ class RecycleBinRestoreDomainServiceTest extends TestCase
 
     private MockObject|ProjectMemberRepositoryInterface $projectMemberRepo;
 
+    private MicroAppRepositoryInterface|MockObject $microAppRepo;
+
     private RecycleBinRestoreDomainService $service;
 
     protected function setUp(): void
@@ -51,6 +54,7 @@ class RecycleBinRestoreDomainServiceTest extends TestCase
         $this->topicRepo = $this->createMock(TopicRepositoryInterface::class);
         $this->workspaceRepo = $this->createMock(WorkspaceRepositoryInterface::class);
         $this->projectMemberRepo = $this->createMock(ProjectMemberRepositoryInterface::class);
+        $this->microAppRepo = $this->createMock(MicroAppRepositoryInterface::class);
         $this->projectRepo->method('existsAndNotDeleted')
             ->willReturnCallback(fn (int $projectId) => $projectId !== 404);
 
@@ -65,8 +69,29 @@ class RecycleBinRestoreDomainServiceTest extends TestCase
             $this->topicRepo,
             $this->taskFileRepo,
             $this->projectMemberRepo,
+            $this->microAppRepo,
             $loggerFactory
         );
+    }
+
+    public function testRestoresMicroAppMappingWithProject(): void
+    {
+        $projectId = 123;
+        $userId = 'user1';
+
+        $this->projectRepo->expects($this->once())
+            ->method('restore')
+            ->with($projectId, $userId)
+            ->willReturn(true);
+        $this->microAppRepo->expects($this->once())
+            ->method('restoreByProjectId')
+            ->with($projectId)
+            ->willReturn(true);
+        $this->projectMemberRepo->method('restoreByProjectIds')->willReturn(0);
+        $this->recycleBinRepo->method('findResourceIdsByParent')->willReturn([]);
+        $this->topicRepo->method('restoreByProjectId')->willReturn(0);
+
+        $this->service->restoreProjectWithoutParentCheck($projectId, $userId);
     }
 
     // ----------------------------------------------------------------

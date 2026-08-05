@@ -190,6 +190,8 @@ const FilesViewer = memo(
 			const handleClearAllTabs = async () => {
 				// Check if any tab has unsaved changes
 				for (const tab of tabs) {
+					if (tab.closeable === false) continue
+
 					const checkBeforeClose = getCheckBeforeClose(tab.id)
 
 					if (checkBeforeClose && typeof checkBeforeClose === "function") {
@@ -386,16 +388,18 @@ const FilesViewer = memo(
 							<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-xs font-normal leading-[1.33] text-foreground/80">
 								{tab.title || tab.name}
 							</span>
-							<div
-								className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded transition-colors duration-200 hover:bg-black/10"
-								onClick={(e) => {
-									e.stopPropagation()
-									handleTabClose(tab.id)
-								}}
-								data-testid="handle-tab-close"
-							>
-								<IconX />
-							</div>
+							{tab.closeable ? (
+								<div
+									className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded transition-colors duration-200 hover:bg-black/10"
+									onClick={(e) => {
+										e.stopPropagation()
+										handleTabClose(tab.id)
+									}}
+									data-testid="handle-tab-close"
+								>
+									<IconX />
+								</div>
+							) : null}
 						</div>
 					</Tooltip>
 				)
@@ -446,6 +450,7 @@ const FilesViewer = memo(
 			const shouldShowDetailEmpty =
 				props.showFallbackWhenEmpty ||
 				(!currentTab && (tabs.length > 0 || Boolean(props.activeFileId)))
+			const hasCloseableTabs = tabs.some((tab) => tab.closeable !== false)
 
 			// 缓存当前 tab 的渲染属性
 			useEffect(() => {
@@ -618,19 +623,21 @@ const FilesViewer = memo(
 								</DropdownMenu>
 
 								{/* 关闭所有 tab 按钮 */}
-								<Tooltip
-									title={t("shortcut.closeAllTabs")}
-									placement="bottom"
-									mouseEnterDelay={0.3}
-								>
-									<div
-										className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
-										onClick={handleClearAllTabs}
-										data-testid="handle-clear-all-tabs"
+								{hasCloseableTabs ? (
+									<Tooltip
+										title={t("shortcut.closeAllTabs")}
+										placement="bottom"
+										mouseEnterDelay={0.3}
 									>
-										<MagicIcon component={IconX} size={16} />
-									</div>
-								</Tooltip>
+										<div
+											className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
+											onClick={handleClearAllTabs}
+											data-testid="handle-clear-all-tabs"
+										>
+											<MagicIcon component={IconX} size={16} />
+										</div>
+									</Tooltip>
+								) : null}
 							</div>
 						)}
 
