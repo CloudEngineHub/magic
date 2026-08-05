@@ -48,13 +48,7 @@ const logger = Logger.createLogger("MessageEditorUploadService")
 
 function resolveUploadUrl(url: string | undefined, organizationCode: string | undefined) {
 	const baseUrl =
-		url ??
-		env("MAGIC_SERVICE_BASE_URL") +
-		genRequestUrl(
-			isCommercial()
-				? "/api/v1/file/temporary-credential"
-				: "/api/v1/file/temporary-credential",
-		)
+		url ?? env("MAGIC_SERVICE_BASE_URL") + genRequestUrl("/api/v1/file/temporary-credential")
 
 	if (!organizationCode) return baseUrl
 	const separator = baseUrl.includes("?") ? "&" : "?"
@@ -191,8 +185,7 @@ export class UploadService<F extends UploadFileLike> {
 					files: rejectedData
 						.map((r) => {
 							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
+								{ uploadFile?: { name?: string } } | undefined
 							return reason?.uploadFile?.name
 						})
 						.filter(Boolean),

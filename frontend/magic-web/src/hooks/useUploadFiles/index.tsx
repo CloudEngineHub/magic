@@ -123,11 +123,7 @@ export const useUpload = <F extends FileUploadData>({
 					const uploadUrl = `${
 						url ??
 						env("MAGIC_SERVICE_BASE_URL") +
-							genRequestUrl(
-								isCommercial()
-									? "/api/v1/file/temporary-credential"
-									: "/api/v1/file/temporary-credential",
-							)
+							genRequestUrl("/api/v1/file/temporary-credential")
 					}?organization_code=${organizationCode}`
 
 					const file = new File([fileData.file], "file", {
@@ -222,8 +218,7 @@ export const useUpload = <F extends FileUploadData>({
 					files: rejectedData
 						.map((r) => {
 							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
+								{ uploadFile?: { name?: string } } | undefined
 							return reason?.uploadFile?.name
 						})
 						.filter(Boolean),
