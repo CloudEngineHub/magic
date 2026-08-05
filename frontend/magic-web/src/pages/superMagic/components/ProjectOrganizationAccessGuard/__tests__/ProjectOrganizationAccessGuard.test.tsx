@@ -75,6 +75,12 @@ describe("ProjectOrganizationAccessGuard", () => {
 		)
 		expect(screen.queryByRole("banner")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("logo")).not.toBeInTheDocument()
+		expect(screen.getByTestId("project-organization-switch")).toHaveClass(
+			"h-full",
+			"w-full",
+			"min-w-0",
+		)
+		expect(screen.getByTestId("project-organization-switch")).not.toHaveClass("w-screen")
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "collaborators.organizationSwitch.action" }),

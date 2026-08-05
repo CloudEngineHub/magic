@@ -32,7 +32,7 @@ export default function ProjectOrganizationAccessGuard({
 
 	return (
 		<div
-			className="flex h-screen w-screen flex-col overflow-hidden bg-[#F9F9F9]"
+			className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#F9F9F9]"
 			data-testid="project-organization-switch"
 		>
 			<OrganizationSwitchState
