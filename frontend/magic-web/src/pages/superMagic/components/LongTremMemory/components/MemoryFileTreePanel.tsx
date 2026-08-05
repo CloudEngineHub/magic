@@ -65,6 +65,7 @@ function createMemoryPreviewItem(item: AttachmentItem): AttachmentItem {
 				standalone: true,
 				editingPresence: false,
 				allowShare: false,
+				allowVersionHistory: false,
 				fileScope: MEMORY_SCOPE,
 				syncWithAttachments: false,
 				persistTab: false,

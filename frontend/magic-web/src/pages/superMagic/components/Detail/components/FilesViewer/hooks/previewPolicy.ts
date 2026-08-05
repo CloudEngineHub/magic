@@ -44,6 +44,13 @@ export function isFileShareAllowed(displayConfig: FileItem["display_config"] | n
 	return displayConfig?.previewPolicy?.allowShare !== false
 }
 
+/** 判断当前预览文件是否允许查看和切换历史版本。 */
+export function isFileVersionHistoryAllowed(
+	displayConfig: FileItem["display_config"] | null | undefined,
+) {
+	return displayConfig?.previewPolicy?.allowVersionHistory !== false
+}
+
 function isExplicitOpenFilePayload(file: OpenFilePayloadLike | undefined): file is FileItem {
 	if (!file?.file_id || file.is_directory) return false
 

@@ -40,6 +40,7 @@ import {
 import {
 	isEditingPresenceEnabled,
 	isFileShareAllowed,
+	isFileVersionHistoryAllowed,
 } from "./components/FilesViewer/hooks/previewPolicy"
 import {
 	FileActionVisibilityProvider,
@@ -103,13 +104,16 @@ export default function Render(props: any) {
 	const effectiveDisplayConfig = displayConfig || data?.display_config
 	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
 	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
+	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
 	const inheritedFileActionVisibility = useFileActionVisibility()
 	const fileActionVisibility = useMemo(
 		() => ({
 			...inheritedFileActionVisibility,
 			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
+			hideVersionHistory:
+				inheritedFileActionVisibility.hideVersionHistory || !fileVersionHistoryAllowed,
 		}),
-		[inheritedFileActionVisibility, fileShareAllowed],
+		[inheritedFileActionVisibility, fileShareAllowed, fileVersionHistoryAllowed],
 	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||

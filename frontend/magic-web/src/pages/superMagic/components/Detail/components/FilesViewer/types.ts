@@ -24,6 +24,8 @@ export interface FilePreviewPolicy {
 	editingPresence?: boolean
 	/** 是否允许发起文件分享。 */
 	allowShare?: boolean
+	/** 是否允许查看和切换文件历史版本。 */
+	allowVersionHistory?: boolean
 	/** 文件编辑保存时使用的文件空间。 */
 	fileScope?: FileScope
 	persistTab?: boolean
