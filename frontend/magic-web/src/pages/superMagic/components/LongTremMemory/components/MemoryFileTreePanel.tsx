@@ -44,6 +44,7 @@ const MEMORY_SPACE_CAPABILITIES: NonNullable<TopicFilesSpaceConfig["capabilities
 	addToChat: true,
 	crossProject: false,
 	importFromOtherProject: false,
+	multiSelect: false,
 	projectContentCreation: false,
 	share: false,
 }
