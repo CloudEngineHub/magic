@@ -5,7 +5,6 @@ import type {
 	GetVideoGenerationResultParams as ApiGetVideoGenerationResultParams,
 } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type {
@@ -29,8 +28,6 @@ import {
 
 interface UseVideoGenerationOptions {
 	projectId?: string
-	topicMode?: TopicMode
-	agentCode?: string | null
 	currentFile?: {
 		id: string
 		name: string
@@ -64,8 +61,6 @@ interface UseVideoGenerationReturn {
 export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideoGenerationReturn {
 	const {
 		projectId,
-		topicMode,
-		agentCode,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -75,11 +70,9 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const { t } = useTranslation("super")
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
-		// Keep Canvas grouping aligned with MessageEditor for the active topic. The all-mode
-		// fallback is only for hosts that do not provide topic context.
-		const officialGroups = topicMode
-			? superMagicModeService.getVideoModelGroupsByMode(topicMode, agentCode) || []
-			: superMagicModeService.getAllVideoModelGroups()
+		await superMagicModeService.fetchModeList({ force: false })
+		await superMagicModeService.fetchDefaultModeModelList({ force: false })
+		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const result = officialGroups.flatMap((groupItem) =>
 			(groupItem.models || []).map((model): VideoModelItem => ({
 				...model,
@@ -94,7 +87,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 			})),
 		)
 		return result
-	}, [agentCode, topicMode])
+	}, [])
 
 	const generateVideo = useCallback(
 		async (params: GenerateVideoRequest): Promise<GenerateVideoResponse> => {

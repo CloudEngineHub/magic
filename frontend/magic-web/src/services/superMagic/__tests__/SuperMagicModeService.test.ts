@@ -4,6 +4,7 @@ import { ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/com
 import { IconType } from "@/pages/superMagic/components/AgentSelector/types"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 vi.mock("@/models/user", () => ({
 	userStore: {
@@ -351,6 +352,98 @@ describe("SuperMagicModeService", () => {
 
 		expect(resolved?.id).toBe("custom-image-1")
 		expect(resolved?.model_name).toBe("Custom Shared Image Model")
+	})
+
+	it("uses default model groups to organize all supported image and video models", () => {
+		const videoFast = createModelItem({
+			id: "video-fast",
+			modelId: "seedance-2-fast",
+			name: "Seedance 2 Fast",
+		})
+		const videoPro = createModelItem({
+			id: "video-pro",
+			modelId: "veo-3-pro",
+			name: "Veo 3 Pro",
+		})
+		const videoExtra = createModelItem({
+			id: "video-extra",
+			modelId: "new-video-model",
+			name: "New Video Model",
+		})
+		const imageFast = createModelItem({
+			id: "image-fast",
+			modelId: "image-fast",
+			name: "Image Fast",
+		})
+		const imagePro = createModelItem({
+			id: "image-pro",
+			modelId: "image-pro",
+			name: "Image Pro",
+		})
+
+		const createGroup = (
+			id: string,
+			name: string,
+			imageModels: ModelItem[],
+			videoModels: ModelItem[],
+		) =>
+			({
+				group: { id, name, sort: 1 },
+				models: [],
+				model_ids: [],
+				image_models: imageModels,
+				image_model_ids: imageModels.map((model) => model.id),
+				video_models: videoModels,
+				video_model_ids: videoModels.map((model) => model.id),
+			}) as any
+
+		const dynamicGroup = createGroup(
+			"dynamic",
+			"测试动态模型",
+			[imageFast, imagePro],
+			[videoFast, videoPro],
+		)
+		const extraGroup = createGroup("extra", "扩展-video", [], [videoExtra])
+		const defaultVideoFastGroup = createGroup("default-fast", "claude-video", [], [videoFast])
+		const defaultVideoProGroup = createGroup("default-pro", "视频", [], [videoPro])
+		const defaultImageFastGroup = createGroup(
+			"default-image-fast",
+			"claude-image",
+			[imageFast],
+			[],
+		)
+		const defaultImageProGroup = createGroup("default-image-pro", "图片", [imagePro], [])
+
+		superMagicModeService._modeList = [
+			{ groups: [dynamicGroup] },
+			{ groups: [extraGroup] },
+		] as any
+		;(superMagicModeService as any)._modeMap.set(TopicMode.Default, {
+			groups: [
+				defaultVideoFastGroup,
+				defaultVideoProGroup,
+				defaultImageFastGroup,
+				defaultImageProGroup,
+			],
+		})
+
+		expect(
+			superMagicModeService
+				.getAllVideoModelGroups()
+				.map((group) => [group.group.name, group.models.map((model) => model.model_id)]),
+		).toEqual([
+			["claude-video", ["seedance-2-fast"]],
+			["视频", ["veo-3-pro"]],
+			["扩展-video", ["new-video-model"]],
+		])
+		expect(
+			superMagicModeService
+				.getAllImageModelGroups()
+				.map((group) => [group.group.name, group.models.map((model) => model.model_id)]),
+		).toEqual([
+			["claude-image", ["image-fast"]],
+			["图片", ["image-pro"]],
+		])
 	})
 
 	it("fetches again when force is true despite fresh cache", async () => {

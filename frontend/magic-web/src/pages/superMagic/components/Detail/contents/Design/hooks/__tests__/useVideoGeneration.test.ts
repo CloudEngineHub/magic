@@ -1,6 +1,5 @@
 import { renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { useVideoGeneration } from "../useVideoGeneration"
 
@@ -14,7 +13,8 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 	default: {
-		getVideoModelGroupsByMode: vi.fn(),
+		fetchModeList: vi.fn(async () => []),
+		fetchDefaultModeModelList: vi.fn(async () => undefined),
 		getAllVideoModelGroups: vi.fn(),
 	},
 }))
@@ -37,20 +37,15 @@ describe("useVideoGeneration model grouping", () => {
 		vi.clearAllMocks()
 	})
 
-	it("uses the active topic mode groups to match MessageEditor", async () => {
-		vi.mocked(superMagicModeService.getVideoModelGroupsByMode).mockReturnValue([
+	it("loads all supported models independently of the active topic", async () => {
+		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([
 			createGroup("claude-video", "claude-video", "seedance-2-fast"),
 			createGroup("video", "视频", "ke"),
-		] as never)
-		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([
-			createGroup("dynamic", "测试动态模型", "seedance-2-fast"),
 		] as never)
 
 		const { result } = renderHook(() =>
 			useVideoGeneration({
 				projectId: "project-1",
-				topicMode: "claude" as TopicMode,
-				agentCode: "agent-1",
 				updateAttachments: vi.fn(),
 			}),
 		)
@@ -65,32 +60,10 @@ describe("useVideoGeneration model grouping", () => {
 				model_group: expect.objectContaining({ id: "video", name: "视频" }),
 			}),
 		])
-		expect(superMagicModeService.getVideoModelGroupsByMode).toHaveBeenCalledWith(
-			"claude",
-			"agent-1",
-		)
-		expect(superMagicModeService.getAllVideoModelGroups).not.toHaveBeenCalled()
-	})
-
-	it("falls back to all-mode groups when topic context is unavailable", async () => {
-		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([
-			createGroup("video", "video", "veo-3-pro"),
-		] as never)
-
-		const { result } = renderHook(() =>
-			useVideoGeneration({
-				projectId: "project-1",
-				updateAttachments: vi.fn(),
-			}),
-		)
-
-		await expect(result.current.getVideoModelList()).resolves.toEqual([
-			expect.objectContaining({
-				model_id: "veo-3-pro",
-				model_group: expect.objectContaining({ id: "video", name: "video" }),
-			}),
-		])
+		expect(superMagicModeService.fetchModeList).toHaveBeenCalledWith({ force: false })
+		expect(superMagicModeService.fetchDefaultModeModelList).toHaveBeenCalledWith({
+			force: false,
+		})
 		expect(superMagicModeService.getAllVideoModelGroups).toHaveBeenCalledTimes(1)
-		expect(superMagicModeService.getVideoModelGroupsByMode).not.toHaveBeenCalled()
 	})
 })

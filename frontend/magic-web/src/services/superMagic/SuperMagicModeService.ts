@@ -624,43 +624,62 @@ class SuperMagicModeService {
 	/**
 	 * 获取当前用户所有模式下可用的模型分组列表
 	 * @param modelType 模型类型
-	 * @returns 按组名分组，组内模型按模型ID去重
+	 * @returns 模型按ID去重，优先使用默认模型配置确定稳定分组
 	 */
 	private getAllModelGroupsByType(modelType: Extract<ModeModelType, "image" | "video">) {
-		const modelIdSet = new Set<string>()
+		const modelMap = new Map<string, ModelItem>()
 		const groupMap = new Map<string, ModeModelGroupItem>()
 		const groups: ModeModelGroupItem[] = []
+		const assignedModelIds = new Set<string>()
+		const getGroupModels = (groupItem: ModeModelGroupItem) =>
+			modelType === "image" ? groupItem.image_models || [] : groupItem.video_models || []
 
+		// The featured list defines the complete set available to Canvas, independent of
+		// the active topic. Keep the first hydrated model object for backward compatibility.
 		this._modeList.forEach((modeItem) => {
 			modeItem.groups.forEach((groupItem) => {
-				const models =
-					modelType === "image"
-						? groupItem.image_models || []
-						: groupItem.video_models || []
-				const uniqueModels = models.filter((model) => {
-					if (!model?.model_id) return false
-					if (modelIdSet.has(model.model_id)) return false
-					modelIdSet.add(model.model_id)
-					return true
+				getGroupModels(groupItem).forEach((model) => {
+					if (!model?.model_id || modelMap.has(model.model_id)) return
+					modelMap.set(model.model_id, model)
 				})
+			})
+		})
 
-				if (uniqueModels.length === 0) return
+		const appendGroup = (groupItem: ModeModelGroupItem) => {
+			const uniqueModels = getGroupModels(groupItem).flatMap((model) => {
+				const availableModel = modelMap.get(model.model_id)
+				if (!availableModel || assignedModelIds.has(model.model_id)) return []
+				assignedModelIds.add(model.model_id)
+				return [availableModel]
+			})
 
-				const groupKey =
-					normalizeAllModelGroupName(groupItem.group.name, modelType) ||
-					groupItem.group.id
-				const existingGroup = groupMap.get(groupKey)
-				if (existingGroup) {
-					existingGroup.models.push(...uniqueModels)
-					return
-				}
+			if (uniqueModels.length === 0) return
 
-				const nextGroup = {
-					...groupItem,
-					models: uniqueModels,
-				}
-				groupMap.set(groupKey, nextGroup)
-				groups.push(nextGroup)
+			const groupKey =
+				normalizeAllModelGroupName(groupItem.group.name, modelType) || groupItem.group.id
+			const existingGroup = groupMap.get(groupKey)
+			if (existingGroup) {
+				existingGroup.models.push(...uniqueModels)
+				return
+			}
+
+			const nextGroup = {
+				...groupItem,
+				models: uniqueModels,
+			}
+			groupMap.set(groupKey, nextGroup)
+			groups.push(nextGroup)
+		}
+
+		// A model may belong to different groups under different agents. Use the default
+		// model configuration as the canonical presentation grouping for Canvas.
+		const defaultGroups = this._modeMap.get(TopicMode.Default)?.groups || []
+		defaultGroups.forEach(appendGroup)
+
+		// Preserve newly supported models that have not reached the default configuration yet.
+		this._modeList.forEach((modeItem) => {
+			modeItem.groups.forEach((groupItem) => {
+				appendGroup(groupItem)
 			})
 		})
 

@@ -164,8 +164,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult } =
 		useVideoGeneration({
 			projectId,
-			topicMode: selectedTopic?.topic_mode,
-			agentCode: selectedTopic?.agent_code,
 			currentFile,
 			flatAttachments,
 			designProjectBasePath,
