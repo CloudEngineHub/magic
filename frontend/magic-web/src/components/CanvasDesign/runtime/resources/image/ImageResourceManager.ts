@@ -174,6 +174,10 @@ type ImageDisplayResourceSlots = Record<ImageDisplayResourceVariant, ImageDispla
  * 资源条目接口（统一管理 src(path) 相关的所有状态）
  */
 export interface ImageResourceEntry extends MediaResourceUrlEntry, MediaResourceBodyCacheEntry {
+	/** 外部权威状态代际；上传结果或删除确认会推进，用于淘汰旧 refresh/load。 */
+	resourceStateGeneration: number
+	/** 上传结果尚未被附件快照确认；确认前旧快照中的 deleted 不能覆盖新上传结果。 */
+	awaitingResolverAvailability: boolean
 	/** 换取到的 ossSrc（可能为 null，表示换取失败或还未换取） */
 	ossSrc: string | null
 	/** 当前 ossSrc 是否来自 CacheStorage/virtual URL 兜底 */
@@ -326,6 +330,13 @@ export interface ImageResourceLoadFailedEvent {
 	}
 }
 
+export interface ImageResourceRecoveryStartedEvent {
+	data: {
+		path: string
+		ossSrc: string
+	}
+}
+
 export interface ImageResourceWillCloseEvent {
 	data: {
 		path?: string
@@ -336,6 +347,7 @@ export interface ImageResourceWillCloseEvent {
 }
 
 export type ImageResourceLoadFailedHandler = (event: ImageResourceLoadFailedEvent) => void
+export type ImageResourceRecoveryStartedHandler = (event: ImageResourceRecoveryStartedEvent) => void
 export type ImageResourceWillCloseHandler = (event: ImageResourceWillCloseEvent) => void
 
 /**
@@ -367,6 +379,10 @@ export class ImageResourceManager {
 		string,
 		Set<ImageResourceLoadFailedHandler>
 	>()
+	private imageResourceRecoveryStartedHandlersByIdentity = new Map<
+		string,
+		Set<ImageResourceRecoveryStartedHandler>
+	>()
 	private imageResourceWillCloseHandlersByIdentity = new Map<
 		string,
 		Set<ImageResourceWillCloseHandler>
@@ -389,6 +405,17 @@ export class ImageResourceManager {
 	): () => void {
 		return this.addResourceIdentityHandler(
 			this.imageResourceLoadFailedHandlersByIdentity,
+			path,
+			handler,
+		)
+	}
+
+	public onImageResourceRecoveryStarted(
+		path: string,
+		handler: ImageResourceRecoveryStartedHandler,
+	): () => void {
+		return this.addResourceIdentityHandler(
+			this.imageResourceRecoveryStartedHandlersByIdentity,
 			path,
 			handler,
 		)
@@ -480,6 +507,17 @@ export class ImageResourceManager {
 		)
 	}
 
+	private emitImageResourceRecoveryStarted(
+		data: ImageResourceRecoveryStartedEvent["data"],
+		resourceIdentity: string,
+	): void {
+		this.notifyResourceIdentityHandlers(
+			this.imageResourceRecoveryStartedHandlersByIdentity,
+			resourceIdentity,
+			{ data },
+		)
+	}
+
 	private emitImageResourceWillClose(
 		data: ImageResourceWillCloseEvent["data"],
 		resourceIdentity?: string,
@@ -529,6 +567,34 @@ export class ImageResourceManager {
 		if (!options?.signal?.aborted) return false
 		this.markStaleRequestDrop()
 		return true
+	}
+
+	private advanceResourceStateGeneration(entry: ImageResourceEntry): number {
+		entry.resourceStateGeneration += 1
+		return entry.resourceStateGeneration
+	}
+
+	private isResourceStateGenerationCurrent(
+		entry: ImageResourceEntry,
+		generation: number,
+	): boolean {
+		return entry.resourceStateGeneration === generation
+	}
+
+	private abortEntryLoadingRequests(entry: ImageResourceEntry): void {
+		entry.persistentLowLoadingPromise?.abort()
+		entry.persistentLowLoadingPromise = null
+		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+			this.getDisplayLoadingPromise(entry, variant)?.abort()
+			this.setDisplayLoadingPromise(entry, variant, null)
+		}
+		entry.fullLoadingPromise?.abort()
+		entry.fullLoadingPromise = null
+		this.clearEntryBodyPromise(entry)
+	}
+
+	private isPrimedResourceAwaitingResolverSnapshot(entry: ImageResourceEntry): boolean {
+		return entry.awaitingResolverAvailability && Boolean(entry.ossSrc)
 	}
 
 	private clearCachedFallbackOssSrc(entry: ImageResourceEntry): void {
@@ -2189,6 +2255,7 @@ export class ImageResourceManager {
 		}
 		const resourceIdentity = this.getResourceIdentity(path)
 		const entry = this.getOrCreateEntry(resourceIdentity, path)
+		const resourceStateGeneration = entry.resourceStateGeneration
 		const shouldRefreshCached = options?.refreshCached !== false
 		const variant = options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT
 		const priority = this.normalizeLoadPriority(options?.priority, variant)
@@ -2199,7 +2266,7 @@ export class ImageResourceManager {
 
 		// Attachment existence is authoritative over decoded and persistent caches. Otherwise a
 		// deleted historical reference can be revived from IndexedDB without ever querying the host.
-		if (availability === "deleted") {
+		if (availability === "deleted" && !this.isPrimedResourceAwaitingResolverSnapshot(entry)) {
 			this.handleImageResourceDeleted(resourceIdentity, entry)
 			return null
 		}
@@ -2233,6 +2300,10 @@ export class ImageResourceManager {
 			if (variant === "low") {
 				const persistentDisplayResource = await persistentLowPromise
 				if (this.shouldDropAbortedLoad(options)) return null
+				if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+					this.markStaleRequestDrop()
+					return null
+				}
 				if (persistentDisplayResource) return persistentDisplayResource
 			} else {
 				// low 是 bootstrap surface，不应阻塞 preview/full 的网络与 body 加载。
@@ -2248,6 +2319,10 @@ export class ImageResourceManager {
 			const result = await loadingRequest.consume(options?.signal)
 			if (this.destroyed) return null
 			const wasAborted = this.shouldDropAbortedLoad(options)
+			if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+				this.markStaleRequestDrop()
+				return null
+			}
 			if (!result && this.emitNotFoundLoadFailedIfNeeded(entry)) {
 				return null
 			}
@@ -2308,6 +2383,10 @@ export class ImageResourceManager {
 		const result = await request.consume(options?.signal)
 		if (this.destroyed) return null
 		const wasAborted = this.shouldDropAbortedLoad(options)
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+			this.markStaleRequestDrop()
+			return null
+		}
 		if (!result && this.emitNotFoundLoadFailedIfNeeded(entry)) {
 			return null
 		}
@@ -2406,9 +2485,6 @@ export class ImageResourceManager {
 			if (this.destroyed) return null
 			if (this.shouldDropAbortedLoad(options)) return null
 			if (!ossSrc) {
-				if (variant === "preview") {
-					this.emitPreviewLoadFailed(entry)
-				}
 				return null
 			}
 		}
@@ -2740,12 +2816,18 @@ export class ImageResourceManager {
 
 		const entry = this.getOrCreateEntry(resourceIdentity, path)
 		const previousRefresh = entry.refreshPromise
+		const resourceStateGeneration = entry.resourceStateGeneration
 		const refreshPromise = (async () => {
 			if (previousRefresh) {
 				await previousRefresh.catch(() => false)
 			}
 			if (this.destroyed) return false
-			return this.refreshImageResourceFromNetwork(path, resourceIdentity, entry)
+			return this.refreshImageResourceFromNetwork(
+				path,
+				resourceIdentity,
+				entry,
+				resourceStateGeneration,
+			)
 		})()
 		entry.refreshPromise = refreshPromise
 
@@ -2762,14 +2844,17 @@ export class ImageResourceManager {
 		path: string,
 		resourceIdentity: string,
 		entry: ImageResourceEntry,
+		resourceStateGeneration = entry.resourceStateGeneration,
 	): Promise<boolean> {
 		if (this.destroyed) return false
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) return false
 		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
 			await this.getDisplayLoadingPromise(entry, variant)?.promise.catch(() => null)
 		}
 		if (entry.fullLoadingPromise) {
 			await entry.fullLoadingPromise.promise.catch(() => null)
 		}
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) return false
 		const previousDisplaySlots = this.cloneDisplayResourceSlots(entry)
 		const previousLowResource = previousDisplaySlots.low.resource
 		const previousResource = previousDisplaySlots.preview.resource
@@ -2837,6 +2922,10 @@ export class ImageResourceManager {
 			priority: "critical",
 		})
 		if (this.destroyed) return false
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+			this.markStaleRequestDrop()
+			return false
+		}
 		if (!ossSrc) {
 			const reason = entry.lastFailureReason ?? "not-found"
 			// 附件已删除（同路径无文件）：禁止恢复旧位图，否则画布仍显示已删文件内容
@@ -2905,6 +2994,10 @@ export class ImageResourceManager {
 		for (const variant of variantsToReload) {
 			const result = await this.loadImageResource(resourceIdentity, ossSrc, entry, variant)
 			if (this.destroyed) return false
+			if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+				this.markStaleRequestDrop()
+				return false
+			}
 			if (result) {
 				loaded = true
 				loadedResourceOssSrc = result.ossSrc
@@ -2973,6 +3066,9 @@ export class ImageResourceManager {
 	}
 
 	private handleImageResourceDeleted(resourceIdentity: string, entry: ImageResourceEntry): void {
+		this.advanceResourceStateGeneration(entry)
+		entry.awaitingResolverAvailability = false
+		this.abortEntryLoadingRequests(entry)
 		this.setFailureReason(entry, "not-found")
 		this.invalidatePersistentLowGeneration(resourceIdentity, entry, entry.resourceVersion)
 		this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
@@ -3008,13 +3104,19 @@ export class ImageResourceManager {
 		const resolveResourceReference =
 			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
 		if (!resolveResourceReference) return
-
 		this.entries.forEach((entry, resourceIdentity) => {
 			const availability = getCanvasResourceAvailability(
 				entry.referencePath,
 				resolveResourceReference,
 			)
-			if (availability === "deleted") {
+			if (availability === "available") {
+				entry.awaitingResolverAvailability = false
+				return
+			}
+			if (
+				availability === "deleted" &&
+				!this.isPrimedResourceAwaitingResolverSnapshot(entry)
+			) {
 				this.handleImageResourceDeleted(resourceIdentity, entry)
 			}
 		})
@@ -3584,6 +3686,8 @@ export class ImageResourceManager {
 
 	private createEntry(referencePath: string, resourceIdentity: string): ImageResourceEntry {
 		return {
+			resourceStateGeneration: 0,
+			awaitingResolverAvailability: false,
 			referencePath,
 			resourceIdentity,
 			ossSrc: null,
@@ -3645,8 +3749,22 @@ export class ImageResourceManager {
 	): void {
 		const resourceIdentity = this.getResourceIdentity(path)
 		const entry = this.getOrCreateEntry(resourceIdentity, path)
+		this.advanceResourceStateGeneration(entry)
+		const availability = getCanvasResourceAvailability(
+			path,
+			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+		)
+		entry.awaitingResolverAvailability = availability !== "available"
+		this.abortEntryLoadingRequests(entry)
 		this.urlLifecycle.primeCache(path, entry, fileInfo)
 		this.setFailureReason(entry, null)
+		this.emitImageResourceRecoveryStarted(
+			{
+				path: entry.referencePath,
+				ossSrc: fileInfo.src,
+			},
+			resourceIdentity,
+		)
 	}
 
 	/**
@@ -3787,6 +3905,7 @@ export class ImageResourceManager {
 		this.clearDecodedByteTracking()
 		this.lastSuccessfulDecodeIdentityByPathVariant.clear()
 		this.imageResourceLoadFailedHandlersByIdentity.clear()
+		this.imageResourceRecoveryStartedHandlersByIdentity.clear()
 		this.imageResourceWillCloseHandlersByIdentity.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)
 		this.canvas.eventEmitter.off("element:batchdeleted", this.handleBatchDeleted)

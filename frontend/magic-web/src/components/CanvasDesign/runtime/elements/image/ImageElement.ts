@@ -32,6 +32,7 @@ import type {
 	ImageResourceVariant,
 	ImageResourceWillCloseHandler,
 	ImageResourceLoadFailedHandler,
+	ImageResourceRecoveryStartedHandler,
 } from "../../resources/image/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../resources/image/imageCropUtils"
 import { getImageSourceDimensions } from "../../resources/image/imageSourceUtils"
@@ -114,6 +115,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	// 资源失败与 decoded surface 释放必须同步处理；成功资源由画布级呈现调度器提交。
 	private resourceWillCloseHandler?: ImageResourceWillCloseHandler
 	private resourceLoadFailedHandler?: ImageResourceLoadFailedHandler
+	private resourceRecoveryStartedHandler?: ImageResourceRecoveryStartedHandler
 	private resourceSubscriptionCleanups: Array<() => void> = []
 	/** 最后一次加载失败原因（与 resource:image:load-failed 同步） */
 	private imageLoadFailureReason: ResourceLoadFailureReason | null = null
@@ -871,7 +873,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isErrorState = false
 		this.lastAppliedLoadFailureSignature = null
 		const patchResult = this.patchMountedImageContentNodeWithLoadedResource()
-
 		if ((resource.variant === "preview" || resource.variant === "full") && this.ossSrcResolve) {
 			this.ossSrcResolve(resource.ossSrc)
 			this.ossSrcResolve = undefined
@@ -1028,6 +1029,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.resourceWillCloseHandler = ({ data }) => {
 			this.handleImageSourceWillClose(data.image, data.variant)
 		}
+		this.resourceRecoveryStartedHandler = ({ data }) => {
+			if (!isCurrentResourcePath(data.path)) return
+			this.setOssSrc(data.ossSrc)
+		}
 		this.resourceSubscriptionCleanups = [
 			this.canvas.imageResourceManager.onImageResourceWillClose(
 				path,
@@ -1036,6 +1041,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.canvas.imageResourceManager.onImageResourceLoadFailed(
 				path,
 				this.resourceLoadFailedHandler,
+			),
+			this.canvas.imageResourceManager.onImageResourceRecoveryStarted(
+				path,
+				this.resourceRecoveryStartedHandler,
 			),
 		]
 	}
@@ -1047,6 +1056,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.resourceSubscriptionCleanups.forEach((cleanup) => cleanup())
 		this.resourceSubscriptionCleanups = []
 		this.resourceLoadFailedHandler = undefined
+		this.resourceRecoveryStartedHandler = undefined
 		this.resourceWillCloseHandler = undefined
 	}
 

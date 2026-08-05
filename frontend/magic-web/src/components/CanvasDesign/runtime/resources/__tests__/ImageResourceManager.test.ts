@@ -70,6 +70,8 @@ function createImageResource(
 
 function createEntry(overrides: Record<string, unknown> = {}) {
 	return {
+		resourceStateGeneration: 0,
+		awaitingResolverAvailability: false,
 		referencePath: "./images/test.png",
 		resourceIdentity: "unresolved:./images/test.png",
 		ossSrc: null,
@@ -161,11 +163,22 @@ function createManager() {
 		persistentLowWriteSequence: number
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
 		imageResourceLoadFailedHandlersByIdentity: Map<string, Set<unknown>>
+		imageResourceRecoveryStartedHandlersByIdentity: Map<string, Set<unknown>>
 		imageResourceWillCloseHandlersByIdentity: Map<string, Set<unknown>>
 		urlLifecycle: {
 			getResourceIdentity: (path: string) => string
 			clearExpiredOssSrc: (entry: ReturnType<typeof createEntry>) => boolean
 			applyVirtualResourceBypass: () => void
+			primeCache: (
+				path: string,
+				entry: ReturnType<typeof createEntry>,
+				fileInfo: {
+					src: string
+					resource_version?: string
+					updated_at?: string
+					content_length?: number
+				},
+			) => void
 		}
 		loadResource: (path: string, options?: Record<string, unknown>) => void
 		getSnapshot: () => ReturnType<ImageResourceManager["getSnapshot"]>
@@ -210,11 +223,20 @@ function createManager() {
 	manager.persistentLowWriteSequence = 0
 	manager.diagnostics = createImageResourceDiagnostics()
 	manager.imageResourceLoadFailedHandlersByIdentity = new Map()
+	manager.imageResourceRecoveryStartedHandlersByIdentity = new Map()
 	manager.imageResourceWillCloseHandlersByIdentity = new Map()
 	manager.urlLifecycle = {
 		getResourceIdentity: (path: string) => path,
 		clearExpiredOssSrc: vi.fn(() => false),
 		applyVirtualResourceBypass: vi.fn(),
+		primeCache: vi.fn((_path, entry, fileInfo) => {
+			entry.exchangePromise = null
+			entry.ossSrc = fileInfo.src
+			entry.sourceUrl = fileInfo.src
+			entry.resourceVersion = fileInfo.resource_version ?? null
+			entry.sourceUpdatedAt = fileInfo.updated_at ?? null
+			entry.contentLength = fileInfo.content_length ?? null
+		}),
 	}
 	return { manager, eventEmitter, visibilityManager, mediaResourceOfflineCacheManager }
 }
@@ -698,6 +720,238 @@ describe("ImageResourceManager image resources", () => {
 			type: "resource:image:load-failed",
 			data: { path, reason: "not-found" },
 		})
+	})
+
+	it("keeps a primed upload authoritative until the resolver acknowledges it as available", async () => {
+		const { manager, eventEmitter } = createManager()
+		const path = "./images/reuploaded.png"
+		manager.canvas.magicConfigManager.config = {
+			methods: {
+				resolveResourceReference: createTestResourceReferenceResolver({
+					attachmentsReady: true,
+				}),
+			},
+		}
+		const previewResource = createImageResource("preview")
+		const managerInternals = manager as unknown as {
+			primeCache: (
+				path: string,
+				fileInfo: { src: string; fileName: string; resource_version: string },
+			) => void
+			loadImageResourcePipeline: ReturnType<typeof vi.fn>
+			loadImageInternal: (
+				path: string,
+				options: { variant: ImageResourceVariant; bypassQueue: boolean },
+			) => Promise<TestImageResource | null>
+			handleResourceReferenceResolverChanged: () => void
+		}
+		managerInternals.loadImageResourcePipeline = vi.fn(async () => previewResource)
+
+		managerInternals.primeCache(path, {
+			src: "https://oss.example/reuploaded.png",
+			fileName: "reuploaded.png",
+			resource_version: "v2",
+		})
+		const loaded = await managerInternals.loadImageInternal(path, {
+			variant: "preview",
+			bypassQueue: true,
+		})
+
+		expect(loaded).toBe(previewResource)
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:load-failed" }),
+		)
+
+		managerInternals.handleResourceReferenceResolverChanged()
+
+		const entry = manager.entries.get(path)
+		expect(entry?.ossSrc).toBe("https://oss.example/reuploaded.png")
+		expect(entry?.resourceVersion).toBe("v2")
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:load-failed" }),
+		)
+
+		manager.canvas.magicConfigManager.config = {
+			methods: {
+				resolveResourceReference: createTestResourceReferenceResolver({
+					attachmentsReady: true,
+					attachmentPathsByFileId: { "file-1": path },
+				}),
+			},
+		}
+		managerInternals.handleResourceReferenceResolverChanged()
+		expect(entry?.awaitingResolverAvailability).toBe(false)
+
+		manager.canvas.magicConfigManager.config = {
+			methods: {
+				resolveResourceReference: createTestResourceReferenceResolver({
+					attachmentsReady: true,
+				}),
+			},
+		}
+		managerInternals.handleResourceReferenceResolverChanged()
+
+		expect(entry?.ossSrc).toBeNull()
+		expect(entry?.resourceVersion).toBeNull()
+		expect(eventEmitter.emit).toHaveBeenCalledWith({
+			type: "resource:image:load-failed",
+			data: { path, reason: "not-found" },
+		})
+	})
+
+	it("notifies every same-identity subscriber when an uploaded resource is primed", () => {
+		const { manager } = createManager()
+		const path = "./images/reuploaded.png"
+		const firstHandler = vi.fn()
+		const secondHandler = vi.fn()
+		const otherPathHandler = vi.fn()
+		const managerInternals = manager as unknown as {
+			onImageResourceRecoveryStarted: (
+				path: string,
+				handler: (event: { data: { path: string; ossSrc: string } }) => void,
+			) => () => void
+			primeCache: (
+				path: string,
+				fileInfo: { src: string; fileName: string; resource_version: string },
+			) => void
+		}
+		const cleanups = [
+			managerInternals.onImageResourceRecoveryStarted(path, firstHandler),
+			managerInternals.onImageResourceRecoveryStarted(path, secondHandler),
+			managerInternals.onImageResourceRecoveryStarted("./images/other.png", otherPathHandler),
+		]
+
+		managerInternals.primeCache(path, {
+			src: "https://oss.example/reuploaded.png",
+			fileName: "reuploaded.png",
+			resource_version: "v2",
+		})
+
+		const expectedEvent = {
+			data: {
+				path,
+				ossSrc: "https://oss.example/reuploaded.png",
+			},
+		}
+		expect(firstHandler).toHaveBeenCalledOnce()
+		expect(firstHandler).toHaveBeenCalledWith(expectedEvent)
+		expect(secondHandler).toHaveBeenCalledOnce()
+		expect(secondHandler).toHaveBeenCalledWith(expectedEvent)
+		expect(otherPathHandler).not.toHaveBeenCalled()
+
+		cleanups.forEach((cleanup) => cleanup())
+	})
+
+	it("does not broadcast a failure when a primed upload supersedes an in-flight refresh", async () => {
+		const { manager, eventEmitter } = createManager()
+		const path = "./images/reuploaded.png"
+		const entry = createEntry({ referencePath: path, resourceIdentity: path })
+		manager.entries.set(path, entry)
+		const exchangeResult = deferred<string | null>()
+		const exchangeOssSrc = vi.fn(() => exchangeResult.promise)
+		const managerInternals = manager as unknown as {
+			exchangeOssSrc: typeof exchangeOssSrc
+			primeCache: (
+				path: string,
+				fileInfo: { src: string; fileName: string; resource_version: string },
+			) => void
+		}
+		managerInternals.exchangeOssSrc = exchangeOssSrc
+
+		const refresh = manager.refreshResource(path)
+		await vi.waitFor(() => expect(exchangeOssSrc).toHaveBeenCalledTimes(1))
+		managerInternals.primeCache(path, {
+			src: "https://oss.example/reuploaded.png",
+			fileName: "reuploaded.png",
+			resource_version: "v2",
+		})
+		exchangeResult.resolve(null)
+
+		await expect(refresh).resolves.toBe(false)
+		expect(entry.ossSrc).toBe("https://oss.example/reuploaded.png")
+		expect(entry.resourceVersion).toBe("v2")
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:load-failed" }),
+		)
+	})
+
+	it("does not fence a primed upload that the current resolver already sees as available", () => {
+		const { manager, eventEmitter } = createManager()
+		const path = "./images/reuploaded.png"
+		manager.canvas.magicConfigManager.config = {
+			methods: {
+				resolveResourceReference: createTestResourceReferenceResolver({
+					attachmentsReady: true,
+					attachmentPathsByFileId: { "file-1": path },
+				}),
+			},
+		}
+		const managerInternals = manager as unknown as {
+			primeCache: (
+				path: string,
+				fileInfo: { src: string; fileName: string; resource_version: string },
+			) => void
+			handleResourceReferenceResolverChanged: () => void
+		}
+
+		managerInternals.primeCache(path, {
+			src: "https://oss.example/reuploaded.png",
+			fileName: "reuploaded.png",
+			resource_version: "v2",
+		})
+		const entry = manager.entries.get(path)
+		expect(entry?.awaitingResolverAvailability).toBe(false)
+
+		manager.canvas.magicConfigManager.config = {
+			methods: {
+				resolveResourceReference: createTestResourceReferenceResolver({
+					attachmentsReady: true,
+				}),
+			},
+		}
+		managerInternals.handleResourceReferenceResolverChanged()
+
+		expect(entry?.ossSrc).toBeNull()
+		expect(eventEmitter.emit).toHaveBeenCalledWith({
+			type: "resource:image:load-failed",
+			data: { path, reason: "not-found" },
+		})
+	})
+
+	it("does not broadcast load-error when a primed upload supersedes an in-flight preview", async () => {
+		const { manager, eventEmitter } = createManager()
+		const path = "./images/reuploaded.png"
+		const previewResult = deferred<TestImageResource | null>()
+		const loadImageResourcePipeline = vi.fn(() => previewResult.promise)
+		const managerInternals = manager as unknown as {
+			loadImageResourcePipeline: typeof loadImageResourcePipeline
+			loadImageInternal: (
+				path: string,
+				options: { variant: ImageResourceVariant; bypassQueue: boolean },
+			) => Promise<TestImageResource | null>
+			primeCache: (
+				path: string,
+				fileInfo: { src: string; fileName: string; resource_version: string },
+			) => void
+		}
+		managerInternals.loadImageResourcePipeline = loadImageResourcePipeline
+
+		const load = managerInternals.loadImageInternal(path, {
+			variant: "preview",
+			bypassQueue: true,
+		})
+		await vi.waitFor(() => expect(loadImageResourcePipeline).toHaveBeenCalledTimes(1))
+		managerInternals.primeCache(path, {
+			src: "https://oss.example/reuploaded.png",
+			fileName: "reuploaded.png",
+			resource_version: "v2",
+		})
+		previewResult.resolve(null)
+
+		await expect(load).resolves.toBeNull()
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:load-failed" }),
+		)
 	})
 
 	it("allows persistent cache bootstrap while attachments are still pending", async () => {

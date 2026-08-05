@@ -714,10 +714,19 @@ describe("ImageElement mounted image node sync", () => {
 		expect(rerenderWhenTransformIdle).toHaveBeenCalled()
 	})
 
-	it("subscribes only to load failures and decoded surface close events", () => {
+	it("subscribes to recovery, load failures, and decoded surface close events", () => {
 		const cleanup = vi.fn()
 		const onImageResourceWillClose = vi.fn(() => cleanup)
 		const onImageResourceLoadFailed = vi.fn(() => cleanup)
+		let recoveryStartedHandler:
+			((event: { data: { path: string; ossSrc: string } }) => void) | undefined
+		const onImageResourceRecoveryStarted = vi.fn(
+			(_path: string, handler: typeof recoveryStartedHandler) => {
+				recoveryStartedHandler = handler
+				return cleanup
+			},
+		)
+		const setOssSrc = vi.fn()
 		const element = Object.create(ImageElement.prototype) as {
 			data: { id: string; src: string }
 			canvas: {
@@ -726,9 +735,11 @@ describe("ImageElement mounted image node sync", () => {
 				imageResourceManager: {
 					onImageResourceWillClose: typeof onImageResourceWillClose
 					onImageResourceLoadFailed: typeof onImageResourceLoadFailed
+					onImageResourceRecoveryStarted: typeof onImageResourceRecoveryStarted
 				}
 			}
 			resourceSubscriptionCleanups: Array<() => void>
+			setOssSrc: typeof setOssSrc
 			removeResourceLoadedListener: () => void
 			setupResourceLoadedListener: () => void
 		}
@@ -739,9 +750,11 @@ describe("ImageElement mounted image node sync", () => {
 			imageResourceManager: {
 				onImageResourceWillClose,
 				onImageResourceLoadFailed,
+				onImageResourceRecoveryStarted,
 			},
 		}
 		element.resourceSubscriptionCleanups = []
+		element.setOssSrc = setOssSrc
 
 		element.setupResourceLoadedListener()
 
@@ -753,7 +766,19 @@ describe("ImageElement mounted image node sync", () => {
 			"./images/a.png",
 			expect.any(Function),
 		)
-		expect(element.resourceSubscriptionCleanups).toHaveLength(2)
+		expect(onImageResourceRecoveryStarted).toHaveBeenCalledWith(
+			"./images/a.png",
+			expect.any(Function),
+		)
+		expect(element.resourceSubscriptionCleanups).toHaveLength(3)
+
+		recoveryStartedHandler?.({
+			data: {
+				path: "./images/a.png",
+				ossSrc: "https://oss.example/a.png",
+			},
+		})
+		expect(setOssSrc).toHaveBeenCalledWith("https://oss.example/a.png")
 	})
 
 	it("rebinds identity-scoped resource listeners when the host resolver changes", () => {
