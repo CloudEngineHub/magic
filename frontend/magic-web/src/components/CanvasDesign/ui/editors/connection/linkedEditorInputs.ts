@@ -1,5 +1,6 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import {
+	type AudioElement,
 	type CropConfig,
 	ElementTypeEnum,
 	type FrameElement,
@@ -211,7 +212,8 @@ function isLinkedEditorConsumableElement(element: LayerElement): boolean {
 	return (
 		element.type === ElementTypeEnum.Text ||
 		element.type === ElementTypeEnum.Image ||
-		element.type === ElementTypeEnum.Video
+		element.type === ElementTypeEnum.Video ||
+		element.type === ElementTypeEnum.Audio
 	)
 }
 
@@ -813,6 +815,18 @@ export function resolveLinkedEditorInputs(
 					connectionId,
 					sourceElementId,
 					kind: "video",
+					path,
+					fileName: path ? getFileName(path) : undefined,
+				})
+				return
+			}
+
+			if (sourceElement.type === ElementTypeEnum.Audio) {
+				const path = (sourceElement as AudioElement).src
+				mediaCandidates.push({
+					connectionId,
+					sourceElementId,
+					kind: "audio",
 					path,
 					fileName: path ? getFileName(path) : undefined,
 				})

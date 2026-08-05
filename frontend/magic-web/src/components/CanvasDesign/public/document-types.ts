@@ -1,5 +1,6 @@
 export type {
 	CanvasDocument,
+	AudioElement,
 	CanvasFileElement,
 	FrameElement,
 	ImageElement,

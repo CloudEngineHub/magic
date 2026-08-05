@@ -501,6 +501,27 @@ export interface FileTypeConfig {
 	maxSize: number
 }
 
+const SUPPORTED_AUDIO_MIME_TYPES = [
+	"audio/mpeg",
+	"audio/mp3",
+	"audio/wav",
+	"audio/x-wav",
+	"audio/wave",
+	"audio/vnd.wave",
+	"audio/ogg",
+	"audio/mp4",
+	"audio/x-m4a",
+	"audio/m4a",
+	"audio/aac",
+	"audio/x-aac",
+] as const
+
+function isSupportedAudioMimeType(mimeType: string): boolean {
+	return SUPPORTED_AUDIO_MIME_TYPES.includes(
+		mimeType.toLowerCase() as (typeof SUPPORTED_AUDIO_MIME_TYPES)[number],
+	)
+}
+
 /**
  * 允许的文件类型配置（基于 MIME type）
  * 用于验证 File 对象（从文件系统拖拽）
@@ -510,7 +531,7 @@ export interface FileTypeConfig {
 export const ALLOWED_FILE_TYPES: FileTypeConfig[] = [
 	{ mimeType: "image/", maxSize: Infinity }, // Infinity 表示不限制大小
 	{ mimeType: "video/", maxSize: Infinity },
-	{ mimeType: "audio/", maxSize: Infinity },
+	...SUPPORTED_AUDIO_MIME_TYPES.map((mimeType) => ({ mimeType, maxSize: Infinity })),
 ]
 
 /**
@@ -562,6 +583,22 @@ export function isFileSizeValid(file: File): boolean {
  * @returns 验证结果，包含是否有效和错误信息
  */
 export function validateFile(file: File): { valid: boolean; error?: string } {
+	const hasSupportedAudioExtension = isAudioFile(file)
+	const hasAudioMimeType = file.type.toLowerCase().startsWith("audio/")
+	if (hasSupportedAudioExtension || hasAudioMimeType) {
+		if (!hasSupportedAudioExtension) {
+			return { valid: false, error: `不支持的音频格式: ${file.name}` }
+		}
+		if (
+			file.type &&
+			file.type !== "application/octet-stream" &&
+			!isSupportedAudioMimeType(file.type)
+		) {
+			return { valid: false, error: `不支持的音频类型: ${file.type}` }
+		}
+		return { valid: true }
+	}
+
 	if (!isAllowedFileType(file)) {
 		return { valid: false, error: `不支持的文件类型: ${file.type}` }
 	}
@@ -639,11 +676,8 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".we
 export const SUPPORTED_VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm"] as const
 export const SUPPORTED_AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".m4a", ".aac"] as const
 
-/**
- * 检查文件是否为音频类型（MIME 或扩展名回退）
- */
+/** 检查文件扩展名是否属于画布一期支持的音频格式。 */
 export function isAudioFile(file: File): boolean {
-	if (file.type.startsWith("audio/")) return true
 	const lower = file.name.toLowerCase()
 	return SUPPORTED_AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
@@ -1109,6 +1143,13 @@ export function getFileExtensionFromMimeType(mimeType: string): string {
 		"image/svg+xml": "svg",
 		"image/bmp": "bmp",
 		"image/x-icon": "ico",
+		"audio/mpeg": "mp3",
+		"audio/mp3": "mp3",
+		"audio/wav": "wav",
+		"audio/x-wav": "wav",
+		"audio/ogg": "ogg",
+		"audio/mp4": "m4a",
+		"audio/aac": "aac",
 	}
 
 	// 如果映射中存在，直接返回
@@ -1187,7 +1228,11 @@ export function getLoadedVideoElements(canvas: Canvas): CanvasFileElement[] {
  * 获取已加载的文件元素列表（图片、视频等，用于下载/添加到对话）
  */
 export function getLoadedFileElements(canvas: Canvas): CanvasFileElement[] {
-	return [...getLoadedImageElements(canvas), ...getLoadedVideoElements(canvas)]
+	return [
+		...getLoadedImageElements(canvas),
+		...getLoadedVideoElements(canvas),
+		...getSelectedAudioElements(canvas),
+	]
 }
 
 /**
@@ -1209,6 +1254,14 @@ export function getSelectedVideoElements(canvas: Canvas): CanvasFileElement[] {
 		.filter((element): element is CanvasFileElement => element?.type === ElementTypeEnum.Video)
 }
 
+/** 获取当前选区中的全部音频元素。 */
+export function getSelectedAudioElements(canvas: Canvas): CanvasFileElement[] {
+	return canvas.selectionManager
+		.getSelectedIds()
+		.map((id) => canvas.elementManager.getElementData(id))
+		.filter((element): element is CanvasFileElement => element?.type === ElementTypeEnum.Audio)
+}
+
 /** 获取当前选区中的全部媒体元素，自动忽略文本、形状等非媒体元素。 */
 export function getSelectedFileElements(canvas: Canvas): CanvasFileElement[] {
 	return canvas.selectionManager
@@ -1216,6 +1269,8 @@ export function getSelectedFileElements(canvas: Canvas): CanvasFileElement[] {
 		.map((id) => canvas.elementManager.getElementData(id))
 		.filter(
 			(element): element is CanvasFileElement =>
-				element?.type === ElementTypeEnum.Image || element?.type === ElementTypeEnum.Video,
+				element?.type === ElementTypeEnum.Image ||
+				element?.type === ElementTypeEnum.Video ||
+				element?.type === ElementTypeEnum.Audio,
 		)
 }

@@ -467,6 +467,10 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 			}
 		}
 
+		if (element.type === "audio") {
+			setPathFieldForDsl(element, "src", base, rewritePath)
+		}
+
 		if (Array.isArray(element.children)) {
 			for (const child of element.children as Record<string, unknown>[]) {
 				walk(child)

@@ -144,6 +144,12 @@ export function isValidElementData(data: unknown): data is LayerElement {
 				return false
 			}
 			break
+
+		case ElementTypeEnum.Audio:
+			if (element.src !== undefined && typeof element.src !== "string") {
+				return false
+			}
+			break
 	}
 
 	return true

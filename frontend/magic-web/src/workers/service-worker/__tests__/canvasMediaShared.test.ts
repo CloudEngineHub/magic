@@ -14,7 +14,7 @@ type StoredCanvasEntry = {
 	id: string
 	namespace: string
 	path: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 	url?: string
 	cacheKey?: string
 	sourceUrl?: string
@@ -161,8 +161,11 @@ class FakeCacheStorage {
 	}
 }
 
-function buildVirtualUrl(path: string): string {
-	return `${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/${path}`
+function buildVirtualUrl(
+	path: string,
+	mediaType: StoredCanvasEntry["mediaType"] = "image",
+): string {
+	return `${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/${mediaType}/design-resource/${path}`
 }
 
 async function saveCanvasEntry(
@@ -278,6 +281,15 @@ describe("canvasMediaShared", () => {
 		})
 	})
 
+	it("parses audio virtual urls without changing the v3 cache namespace", () => {
+		expect(parseVirtualResourceRequest(buildVirtualUrl("audios/voice.mp3", "audio"))).toEqual({
+			namespace: "workspace/project/design/demo",
+			mediaType: "audio",
+			resourcePath: "audios/voice.mp3",
+		})
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(3)
+	})
+
 	it("returns cached canvas response when cache entry exists", async () => {
 		const requestUrl = buildVirtualUrl("images/example.png")
 		const entry: StoredCanvasEntry = {
@@ -328,6 +340,40 @@ describe("canvasMediaShared", () => {
 		})
 		expect(await response?.text()).toBe("network-image")
 		expect(await cachedResponse?.text()).toBe("network-image")
+	})
+
+	it("caches an audio body and serves byte ranges for playback seeking", async () => {
+		const requestUrl = buildVirtualUrl("audios/voice.mp3", "audio")
+		const entry: StoredCanvasEntry = {
+			id: "workspace/project/design/demo/audio/audios/voice.mp3",
+			namespace: "workspace/project/design/demo",
+			path: "audios/voice.mp3",
+			mediaType: "audio",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/audios/voice.mp3",
+		}
+		await saveCanvasEntry(entry)
+		const networkBlob = new NodeBlob(["0123456789"], { type: "audio/mpeg" })
+		const networkResponse = new Response(networkBlob, {
+			status: 200,
+			headers: { "Content-Type": "audio/mpeg" },
+		})
+		Object.defineProperty(networkResponse, "blob", {
+			value: vi.fn(async () => networkBlob),
+		})
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(networkResponse)
+		const rangeResponse = await handleCanvasMediaRequest(
+			new Request(requestUrl, { headers: { Range: "bytes=2-5" } }),
+		)
+		expect(rangeResponse?.status).toBe(206)
+		expect(rangeResponse?.headers.get("Content-Range")).toBe("bytes 2-5/10")
+		expect(await rangeResponse?.text()).toBe("2345")
+		expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+		const invalidRangeResponse = await handleCanvasMediaRequest(
+			new Request(requestUrl, { headers: { Range: "bytes=20-30" } }),
+		)
+		expect(invalidRangeResponse?.status).toBe(416)
 	})
 
 	it("handles cache register message and writes resource metadata", async () => {

@@ -1,5 +1,5 @@
 import Konva from "konva"
-import type { LayerElement } from "../../document/types"
+import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import type { Box } from "konva/lib/shapes/Transformer"
 import { getKeepRatioAspectRatio, isEdgeAnchor, applyAspectRatioToBoundBox } from "./anchorUtils"
@@ -918,18 +918,32 @@ export class TransformManager {
 
 		// 创建新的 Transformer
 		const anchorSize = STANDARD_TRANSFORMER_STYLE.ANCHOR_SIZE
+		const singleElement =
+			transformableElementIds.length === 1
+				? this.canvas.elementManager.getElementInstance(transformableElementIds[0])
+				: undefined
+		const singleElementConstraints = singleElement?.getTransformConstraints()
+		const multiSelectionContainsAudio =
+			transformableElementIds.length > 1 &&
+			transformableElementIds.some(
+				(elementId) =>
+					this.canvas.elementManager.getElementData(elementId)?.type ===
+					ElementTypeEnum.Audio,
+			)
 		let enabledAnchors: string[] = []
 		if (!this.canvas.readonly) {
-			enabledAnchors = [
-				"top-left",
-				"top-right",
-				"bottom-left",
-				"bottom-right",
-				"top-center",
-				"bottom-center",
-				"middle-left",
-				"middle-right",
-			]
+			enabledAnchors = multiSelectionContainsAudio
+				? []
+				: (singleElementConstraints?.enabledAnchors ?? [
+						"top-left",
+						"top-right",
+						"bottom-left",
+						"bottom-right",
+						"top-center",
+						"bottom-center",
+						"middle-left",
+						"middle-right",
+					])
 		}
 		// 限制最小尺寸并防止翻转
 		const boundBoxFunc = (oldBox: Box, newBox: Box): Box => {
@@ -943,6 +957,35 @@ export class TransformManager {
 			}
 			let resultBox: Box = newBox
 			const activeAnchor = this.transformer?.getActiveAnchor()
+			const applySingleElementConstraints = (box: Box): Box | null => {
+				if (!singleElementConstraints) return box
+
+				const elementWidth = singleElement?.getSize().width ?? oldBox.width
+				const elementHeight = singleElement?.getSize().height ?? oldBox.height
+				const widthScale = elementWidth > 0 ? oldBox.width / elementWidth : 1
+				const heightScale = elementHeight > 0 ? oldBox.height / elementHeight : 1
+				const minWidth = (singleElementConstraints.minWidth ?? 0) * widthScale
+				const minHeight = (singleElementConstraints.minHeight ?? 0) * heightScale
+				const constrainedBox =
+					singleElementConstraints.fixedHeight !== undefined
+						? {
+								...box,
+								y: oldBox.y,
+								height: singleElementConstraints.fixedHeight * heightScale,
+							}
+						: box
+				if (minWidth > 0 && constrainedBox.width < minWidth) {
+					return null
+				}
+				if (minHeight > 0 && constrainedBox.height < minHeight) {
+					return null
+				}
+				return constrainedBox
+			}
+
+			const initiallyConstrainedBox = applySingleElementConstraints(resultBox)
+			if (!initiallyConstrainedBox) return oldBox
+			resultBox = initiallyConstrainedBox
 
 			// 动态检查当前是否需要保持宽高比（支持运行时按下 Shift 键）
 			const currentShouldKeepRatio = this.shouldKeepRatio(transformableElementIds)
@@ -972,7 +1015,7 @@ export class TransformManager {
 					{ keepRatio: currentShouldKeepRatio, aspectRatio },
 				)
 			}
-			return resultBox
+			return applySingleElementConstraints(resultBox) ?? oldBox
 		}
 
 		// 自定义 anchor 形状：中间位置的 anchor 显示为长方形

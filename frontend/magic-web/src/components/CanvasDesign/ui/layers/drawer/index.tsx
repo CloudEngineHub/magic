@@ -8,6 +8,7 @@ import {
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
+	Music2,
 	Search,
 	Type,
 	Video,
@@ -271,6 +272,9 @@ export default function LayersDrawer() {
 					break
 				case ElementTypeEnum.Video:
 					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Audio:
+					iconContent = <Music2 size={16} className={styles.layerNodeVideoIcon} />
 					break
 				default:
 					iconContent = <div className={styles.layerNodeElementIcon}></div>

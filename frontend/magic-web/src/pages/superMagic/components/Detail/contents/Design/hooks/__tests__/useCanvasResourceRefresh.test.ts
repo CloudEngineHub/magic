@@ -137,4 +137,34 @@ describe("useCanvasResourceRefresh snapshots", () => {
 			{ path: "./images/shared.png", mediaType: "image" },
 		])
 	})
+
+	it("tracks audio attachment updates and audio directory file changes", () => {
+		const canvas = {
+			elements: [
+				{
+					id: "audio-1",
+					type: ElementTypeEnum.Audio,
+					src: "./audios/voice.mp3",
+				},
+			],
+		} as CanvasDocument
+		const previous = buildSnapshot(canvas, [
+			attachment("audio-1", "画布A/audios/voice.mp3", "1"),
+		])
+		const next = buildSnapshot(canvas, [attachment("audio-1", "画布A/audios/voice.mp3", "2")])
+
+		expect(getChangedCanvasResources(previous, next)).toEqual([
+			{ path: "./audios/voice.mp3", mediaType: "audio" },
+		])
+		expect(
+			getChangedCanvasResourcesFromFileChanges(
+				[
+					{
+						file: { relative_file_path: "画布A/audios/voice.mp3" },
+					},
+				] as SuperMagicFileChangeMessage["changes"],
+				next,
+			),
+		).toEqual([{ path: "./audios/voice.mp3", mediaType: "audio" }])
+	})
 })

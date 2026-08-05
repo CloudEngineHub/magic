@@ -66,6 +66,9 @@ function createDropHarness(options: {
 		primeCache: vi.fn(),
 		loadResource: vi.fn(),
 	}
+	const audioResourceManager = {
+		primeCache: vi.fn(),
+	}
 	const overlayHost = document.createElement("div")
 	const canvasContainer = document.createElement("div")
 	overlayHost.appendChild(canvasContainer)
@@ -76,6 +79,7 @@ function createDropHarness(options: {
 		selectionManager,
 		imageResourceManager,
 		videoResourceManager,
+		audioResourceManager,
 		magicConfigManager: {
 			config: {
 				methods: {
@@ -186,6 +190,31 @@ describe("DropOverlayManager custom attachment drops", () => {
 		const [element] = harness.elements.values()
 		expect(element).toMatchObject({ width: 1024, height: 1024 })
 		expect(toast.dismiss).toHaveBeenCalledWith("drop-toast-id")
+	})
+
+	it("creates project audio directly at the fixed card size", async () => {
+		const harness = createDropHarness({
+			getFileInfo: vi.fn(async () => ({
+				src: "https://example.test/voice.mp3",
+				fileName: "voice.mp3",
+			})),
+		})
+
+		await harness.manager.handleCustomDragData(["./audios/voice.mp3"], {
+			x: 100,
+			y: 200,
+		})
+
+		const [element] = harness.elements.values()
+		expect(element).toMatchObject({
+			type: "audio",
+			width: 1280,
+			height: 720,
+			src: "./audios/voice.mp3",
+		})
+		expect(harness.canvas.audioResourceManager.primeCache).toHaveBeenCalledTimes(1)
+		expect(harness.canvas.imageResourceManager.loadResource).not.toHaveBeenCalled()
+		expect(harness.canvas.videoResourceManager.loadResource).not.toHaveBeenCalled()
 	})
 
 	it("shows an error toast and creates nothing when preload fails", async () => {

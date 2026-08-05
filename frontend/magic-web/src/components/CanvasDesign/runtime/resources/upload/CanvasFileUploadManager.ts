@@ -6,6 +6,7 @@ import {
 	type UploadFile,
 } from "../../../public/magic-types"
 import type {
+	AudioElement as AudioElementData,
 	ImageElement as ImageElementData,
 	VideoElement as VideoElementData,
 } from "../../document/types"
@@ -25,6 +26,8 @@ import {
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
+import { AudioElement as AudioElementClass } from "../../elements/audio/AudioElement"
+import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import {
 	isDefaultClipboardFilenameFile,
 	type CanvasElementClipboardFileMetadata,
@@ -67,7 +70,7 @@ export interface UploadFileElementOptions {
 	/** 文件位置（文件中心对齐到该位置） */
 	position: { x: number; y: number }
 	/** 可选的元素初始数据（用于复制粘贴时保留元素属性） */
-	elementData?: Partial<ImageElementData> | Partial<VideoElementData>
+	elementData?: Partial<ImageElementData> | Partial<VideoElementData> | Partial<AudioElementData>
 	/** 是否管理历史记录（默认 true，在批量操作时应设为 false） */
 	manageHistory?: boolean
 	/** 上传完成回调（用于外部同步真实上传进度） */
@@ -87,11 +90,11 @@ export interface UploadRemoteFileElementOptions {
 	/** 来源画布 ID，用于目标画布内对跨画布反复粘贴做资源迁移去重 */
 	sourceCanvasId?: string
 	/** 元素类型，用于在下载前创建正确的临时元素 */
-	elementType: ImageElementData["type"] | VideoElementData["type"]
+	elementType: ImageElementData["type"] | VideoElementData["type"] | AudioElementData["type"]
 	/** 文件位置（文件中心对齐到该位置） */
 	position: { x: number; y: number }
 	/** 可选的元素初始数据（用于复制粘贴时保留元素属性） */
-	elementData?: Partial<ImageElementData> | Partial<VideoElementData>
+	elementData?: Partial<ImageElementData> | Partial<VideoElementData> | Partial<AudioElementData>
 	/** 是否管理历史记录（默认 true，在批量操作时应设为 false） */
 	manageHistory?: boolean
 	/** 远程文件下载失败回调 */
@@ -733,6 +736,9 @@ export class CanvasFileUploadManager {
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
 			return null
 		}
+		if (isAudioFile(file)) {
+			return this.uploadAudioElementAfterSuccess(options)
+		}
 
 		const historyManager = manageHistory ? this.canvas.historyManager : null
 
@@ -846,6 +852,9 @@ export class CanvasFileUploadManager {
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
 			return null
 		}
+		if (elementType === ElementTypeEnum.Audio) {
+			return this.uploadRemoteAudioElementAfterSuccess(options)
+		}
 
 		const historyManager = manageHistory ? this.canvas.historyManager : null
 		const transferKey = this.getRemoteResourceTransferKey({ sourceCanvasId, metadata })
@@ -937,6 +946,115 @@ export class CanvasFileUploadManager {
 		})
 
 		return elementId
+	}
+
+	private async uploadAudioElementAfterSuccess(
+		options: UploadFileElementOptions,
+	): Promise<string | null> {
+		const {
+			file,
+			position,
+			elementData,
+			manageHistory = true,
+			onUploadComplete,
+			onUploadFailed,
+		} = options
+		const elementId = generateElementId()
+
+		try {
+			const [uploadResult] = await this.uploadDirect([file])
+			if (!uploadResult) throw new Error("Upload failed: no result returned")
+
+			const existingNames = getAllExistingNames(this.canvas.elementManager)
+			const baseName = file.name.replace(/\.[^/.]+$/, "")
+			const uniqueName = generateUniqueElementName(baseName, existingNames)
+			const width = Math.max(
+				(elementData as Partial<AudioElementData> | undefined)?.width ??
+					AUDIO_CONFIG.DEFAULT_WIDTH,
+				AUDIO_CONFIG.MIN_WIDTH,
+			)
+			const audioElement = AudioElementClass.createElementData({
+				id: elementId,
+				x: position.x - width / 2,
+				y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
+				width,
+				zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
+				name: uniqueName,
+				src: uploadResult.path,
+			})
+			const finalElement: AudioElementData = {
+				...audioElement,
+				...(elementData as Partial<AudioElementData> | undefined),
+				id: elementId,
+				type: ElementTypeEnum.Audio,
+				src: uploadResult.path,
+				height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+			}
+			this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+			this.canvas.elementManager.create(finalElement)
+			if (manageHistory) {
+				this.canvas.historyManager.recordHistoryImmediate()
+			}
+			onUploadComplete?.(elementId, uploadResult)
+			return elementId
+		} catch (error) {
+			const uploadError = error instanceof Error ? error : new Error(String(error))
+			onUploadFailed?.(elementId, uploadError)
+			return null
+		}
+	}
+
+	private async uploadRemoteAudioElementAfterSuccess(
+		options: UploadRemoteFileElementOptions,
+	): Promise<string | null> {
+		const {
+			metadata,
+			sourceCanvasId,
+			position,
+			elementData,
+			manageHistory = true,
+			onDownloadFailed,
+		} = options
+		try {
+			const uploadResult = await this.transferRemoteResource({ sourceCanvasId, metadata })
+			if (!uploadResult) return null
+
+			const audioData = elementData as Partial<AudioElementData> | undefined
+			const width = Math.max(
+				audioData?.width ?? AUDIO_CONFIG.DEFAULT_WIDTH,
+				AUDIO_CONFIG.MIN_WIDTH,
+			)
+			const existingNames = getAllExistingNames(this.canvas.elementManager)
+			const uniqueName = generateUniqueElementName(
+				metadata.filename.replace(/\.[^/.]+$/, ""),
+				existingNames,
+			)
+			const elementId = generateElementId()
+			const finalElement: AudioElementData = {
+				...AudioElementClass.createElementData({
+					id: elementId,
+					x: audioData?.x ?? position.x - width / 2,
+					y: audioData?.y ?? position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
+					width,
+					zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
+					name: uniqueName,
+					src: uploadResult.path,
+				}),
+				...audioData,
+				id: elementId,
+				type: ElementTypeEnum.Audio,
+				src: uploadResult.path,
+				height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+			}
+			this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+			this.canvas.elementManager.create(finalElement)
+			if (manageHistory) this.canvas.historyManager.recordHistoryImmediate()
+			return elementId
+		} catch (error) {
+			const transferError = error instanceof Error ? error : new Error(String(error))
+			if (isRemoteResourceDownloadError(transferError)) onDownloadFailed?.(transferError)
+			return null
+		}
 	}
 
 	private async downloadAndQueueRemoteUpload(options: {

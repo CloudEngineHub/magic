@@ -253,6 +253,10 @@ function replaceElementPaths(element: LayerElement, context: PathReplacementCont
 		hasChanged = replaceVideoElementPaths(elementRecord, context)
 	}
 
+	if (element.type === "audio") {
+		hasChanged = replacePathField(elementRecord, "src", context)
+	}
+
 	if ("children" in element && Array.isArray(element.children)) {
 		for (const child of element.children) {
 			if (replaceElementPaths(child, context)) {

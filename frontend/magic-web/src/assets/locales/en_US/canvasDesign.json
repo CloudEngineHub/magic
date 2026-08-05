@@ -1,4 +1,9 @@
 {
+	"audio": {
+		"defaultName": "Audio",
+		"fileMissing": "Audio file is missing",
+		"loadFailed": "Failed to load audio. Click play to retry."
+	},
 	"common": {
 		"cancel": "Cancel",
 		"close": "Close",
@@ -248,6 +253,7 @@
 		"copyPng": "Copy as PNG",
 		"copySuccess": "Copy successful",
 		"delete": "Delete",
+		"downloadAudio": "Download Audio",
 		"downloadFile": "Download File",
 		"downloadImage": "Download Image",
 		"downloadImageNoWatermark": "Download Image (No Watermark)",
@@ -484,6 +490,7 @@
 		"space": "Space",
 		"text": "Text",
 		"upload": "Upload",
+		"uploadAudio": "Upload Audio",
 		"uploadImage": "Upload Image",
 		"uploadVideo": "Upload Video",
 		"videoGenerator": "Video Generator"

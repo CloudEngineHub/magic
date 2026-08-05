@@ -2,12 +2,24 @@ import { describe, expect, it, vi } from "vitest"
 import { CanvasVisibilityManager } from "../visibility/CanvasVisibilityManager"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
 interface VideoCandidate {
 	elementId: string
 	path: string
 	priority: ImageResourceLoadPriority
 	tier: "url" | "poster"
+	visibilityState: "visible" | "near" | "far"
+	screenArea: number
+	screenLongEdge: number
+	distanceToViewportCenter: number
+}
+
+interface AudioCandidate {
+	elementId: string
+	path: string
+	priority: ImageResourceLoadPriority
+	tier: "url" | "preload"
 	visibilityState: "visible" | "near" | "far"
 	screenArea: number
 	screenLongEdge: number
@@ -31,6 +43,19 @@ function createCandidate(priority: ImageResourceLoadPriority): VideoCandidate {
 		path: "./videos/a.mp4",
 		priority,
 		tier: priority === "near" ? "url" : "poster",
+		visibilityState: priority === "near" ? "near" : "visible",
+		screenArea: 1000,
+		screenLongEdge: 100,
+		distanceToViewportCenter: 0,
+	}
+}
+
+function createAudioCandidate(priority: "visible" | "near"): AudioCandidate {
+	return {
+		elementId: "audio-1",
+		path: "./audios/a.mp3",
+		priority,
+		tier: priority === "near" ? "url" : "preload",
 		visibilityState: priority === "near" ? "near" : "visible",
 		screenArea: 1000,
 		screenLongEdge: 100,
@@ -106,6 +131,10 @@ function createManager(requestPreviewLoad = vi.fn()) {
 
 function createConstructedManager(requestPreviewLoad = vi.fn()) {
 	const ensureFreshOssInfo = vi.fn()
+	const getAudioResource = vi.fn()
+	const prepareAudio = vi.fn()
+	const releaseAudio = vi.fn()
+	const releaseViewportPreload = vi.fn()
 	const imagePresentationScheduler = {
 		replaceTargets: vi.fn(),
 		removeTarget: vi.fn(),
@@ -157,6 +186,14 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		},
 		videoResourceManager: {
 			ensureFreshOssInfo,
+		},
+		audioResourceManager: {
+			getResource: getAudioResource,
+		},
+		audioPlaybackManager: {
+			prepare: prepareAudio,
+			release: releaseAudio,
+			releaseViewportPreload,
 		},
 		imageResourceManager: {
 			getSnapshot: vi.fn(() => ({
@@ -211,14 +248,19 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 	return {
 		contentLayer,
 		ensureFreshOssInfo,
+		getAudioResource,
 		handlers,
 		imagePresentationScheduler,
 		manager,
+		prepareAudio,
+		releaseAudio,
+		releaseViewportPreload,
 		requestPreviewLoad,
 	}
 }
 
 type RequestVideoLoad = (candidate: VideoCandidate, reason: string, force?: boolean) => void
+type RequestAudioLoad = (candidate: AudioCandidate, reason: string, force?: boolean) => void
 type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
 type UpdateImageRetentionHints = (candidates: ImageCandidate[], lastSeenAt: number) => void
 
@@ -316,6 +358,179 @@ describe("CanvasVisibilityManager video load requests", () => {
 		})
 
 		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(false)
+	})
+})
+
+describe("CanvasVisibilityManager audio viewport requests", () => {
+	it("updates equivalent audio references and allows refreshed resources to load again", () => {
+		const { manager, releaseAudio } = createConstructedManager()
+		const internals = manager as unknown as {
+			canvas: {
+				magicConfigManager: {
+					config: {
+						methods: {
+							resolveResourceReference?: ReturnType<
+								typeof createTestResourceReferenceResolver
+							>
+						}
+					}
+				}
+			}
+			registeredAudios: Map<string, { elementId: string; path: string }>
+			lastAudioVisibilityState: Map<string, string>
+			lastRequestedAudioLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					tier: "url" | "preload"
+					requestedAt: number
+				}
+			>
+			scheduleRefresh: ReturnType<typeof vi.fn>
+			cancelViewportResourceSignalIfUnused: ReturnType<typeof vi.fn>
+		}
+		internals.canvas.magicConfigManager.config.methods.resolveResourceReference =
+			createTestResourceReferenceResolver({ currentCanvasWorkspacePath: "/画布A" })
+		internals.scheduleRefresh = vi.fn()
+		internals.cancelViewportResourceSignalIfUnused = vi.fn()
+		internals.registeredAudios.set("audio-1", {
+			elementId: "audio-1",
+			path: "./audios/a.mp3",
+		})
+		internals.lastAudioVisibilityState.set("audio-1", "visible")
+		internals.lastRequestedAudioLoadState.set("audio-1", {
+			priority: "visible",
+			tier: "preload",
+			requestedAt: 1,
+		})
+
+		manager.updateAudioElement("audio-1", "/画布A/audios/a.mp3")
+
+		expect(internals.registeredAudios.get("audio-1")?.path).toBe("/画布A/audios/a.mp3")
+		expect(releaseAudio).toHaveBeenCalledWith("audio-1")
+		expect(internals.lastAudioVisibilityState.has("audio-1")).toBe(false)
+		expect(internals.lastRequestedAudioLoadState.has("audio-1")).toBe(false)
+
+		internals.lastRequestedAudioLoadState.set("audio-1", {
+			priority: "visible",
+			tier: "preload",
+			requestedAt: 2,
+		})
+		internals.scheduleRefresh.mockClear()
+
+		manager.invalidateAudioLoadRequest("./audios/a.mp3", "host-refresh")
+
+		expect(internals.lastRequestedAudioLoadState.has("audio-1")).toBe(false)
+		expect(internals.scheduleRefresh).toHaveBeenCalledWith(
+			"audio:load-request-invalidated:host-refresh",
+			true,
+		)
+	})
+
+	it("resolves near audio URLs without creating an HTMLAudioElement session", () => {
+		const { getAudioResource, manager, prepareAudio } = createConstructedManager()
+		const requestAudioLoad = (manager as unknown as { requestAudioLoad: RequestAudioLoad })
+			.requestAudioLoad
+
+		requestAudioLoad.call(manager, createAudioCandidate("near"), "viewport:idle-media")
+
+		expect(getAudioResource).toHaveBeenCalledWith(
+			"./audios/a.mp3",
+			expect.objectContaining({
+				allowCachedFallback: true,
+				priority: "near",
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(prepareAudio).not.toHaveBeenCalled()
+	})
+
+	it("preloads visible audio through the managed viewport session", () => {
+		const { getAudioResource, manager, prepareAudio } = createConstructedManager()
+		const requestAudioLoad = (manager as unknown as { requestAudioLoad: RequestAudioLoad })
+			.requestAudioLoad
+
+		requestAudioLoad.call(manager, createAudioCandidate("visible"), "document:loaded")
+
+		expect(prepareAudio).toHaveBeenCalledWith(
+			"audio-1",
+			"./audios/a.mp3",
+			expect.objectContaining({
+				source: "viewport",
+				priority: "visible",
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(getAudioResource).not.toHaveBeenCalled()
+	})
+
+	it("upgrades a near URL request to visible preload and dedupes repeats", () => {
+		const { getAudioResource, manager, prepareAudio } = createConstructedManager()
+		const requestAudioLoad = (manager as unknown as { requestAudioLoad: RequestAudioLoad })
+			.requestAudioLoad
+
+		requestAudioLoad.call(manager, createAudioCandidate("near"), "audio:register")
+		requestAudioLoad.call(manager, createAudioCandidate("near"), "viewport:idle-media")
+		requestAudioLoad.call(manager, createAudioCandidate("visible"), "viewport:idle-media")
+
+		expect(getAudioResource).toHaveBeenCalledTimes(1)
+		expect(prepareAudio).toHaveBeenCalledTimes(1)
+	})
+
+	it("clears transient failure dedupe but keeps not-found terminal", () => {
+		const { handlers, manager } = createConstructedManager()
+		const state = manager as unknown as {
+			lastRequestedAudioLoadState: Map<string, unknown>
+			registeredAudios: Map<string, { elementId: string; path: string }>
+		}
+		state.registeredAudios.set("audio-1", {
+			elementId: "audio-1",
+			path: "./audios/a.mp3",
+		})
+		state.lastRequestedAudioLoadState.set("audio-1", {})
+
+		handlers.get("resource:audio:load-failed")?.[0]?.({
+			data: { path: "./audios/a.mp3", reason: "load-error" },
+		})
+		expect(state.lastRequestedAudioLoadState.has("audio-1")).toBe(false)
+
+		state.lastRequestedAudioLoadState.set("audio-1", {})
+		handlers.get("resource:audio:load-failed")?.[0]?.({
+			data: { path: "./audios/a.mp3", reason: "not-found" },
+		})
+		expect(state.lastRequestedAudioLoadState.has("audio-1")).toBe(true)
+	})
+
+	it("releases only far viewport sessions after the far drain is ready", () => {
+		const { manager, releaseViewportPreload } = createConstructedManager()
+		const audioState = manager as unknown as {
+			registeredAudios: Map<string, { elementId: string; path: string }>
+			lastAudioVisibilityState: Map<string, string>
+			scheduleFarVisibilityDrain: ReturnType<typeof vi.fn>
+			updateAudioVisibilityStates: (
+				visibleAudioIds: ReadonlySet<string>,
+				nearAudioIds: ReadonlySet<string>,
+				farDrainReady: boolean,
+			) => number
+		}
+		audioState.scheduleFarVisibilityDrain = vi.fn()
+		audioState.registeredAudios.set("audio-visible", {
+			elementId: "audio-visible",
+			path: "./audios/visible.mp3",
+		})
+		audioState.registeredAudios.set("audio-far", {
+			elementId: "audio-far",
+			path: "./audios/far.mp3",
+		})
+
+		expect(
+			audioState.updateAudioVisibilityStates(new Set(["audio-visible"]), new Set(), false),
+		).toBe(1)
+		expect(releaseViewportPreload).not.toHaveBeenCalled()
+		expect(audioState.scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
+
+		audioState.updateAudioVisibilityStates(new Set(["audio-visible"]), new Set(), true)
+		expect(releaseViewportPreload).toHaveBeenCalledWith("audio-far")
 	})
 })
 
@@ -1395,6 +1610,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
+			registeredAudios: Map<string, { elementId: string; path: string }>
 			lastRequestedLoadState: Map<
 				string,
 				{
@@ -1404,8 +1620,10 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				}
 			>
 			lastRequestedVideoLoadState: Map<string, unknown>
+			lastRequestedAudioLoadState: Map<string, unknown>
 			lastVisibilityState: Map<string, string>
 			lastVideoVisibilityState: Map<string, string>
+			lastAudioVisibilityState: Map<string, string>
 			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
 			imageRetentionHints: Map<string, unknown>
 			imagePresentationPhase: "moving" | "idle"
@@ -1444,10 +1662,13 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			["image-1", { elementId: "image-1", path: "./images/a.png" }],
 		])
 		manager.registeredVideos = new Map()
+		manager.registeredAudios = new Map()
 		manager.lastRequestedLoadState = new Map()
 		manager.lastRequestedVideoLoadState = new Map()
+		manager.lastRequestedAudioLoadState = new Map()
 		manager.lastVisibilityState = new Map()
 		manager.lastVideoVisibilityState = new Map()
+		manager.lastAudioVisibilityState = new Map()
 		manager.lastContainerDisplayVariant = new Map()
 		manager.imageRetentionHints = new Map()
 		manager.imagePresentationPhase = "moving"
@@ -1455,8 +1676,10 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		manager.statsSnapshot = {
 			registeredImageCount: 0,
 			registeredVideoCount: 0,
+			registeredAudioCount: 0,
 			registerDedupedCount: 0,
 			videoRegisterDedupedCount: 0,
+			audioRegisterDedupedCount: 0,
 			lowFallbackPreviewCount: 0,
 			visibleImageCount: 0,
 			nearImageCount: 0,
@@ -1464,15 +1687,21 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			visibleVideoCount: 0,
 			nearVideoCount: 0,
 			farVideoCount: 0,
+			visibleAudioCount: 0,
+			nearAudioCount: 0,
+			farAudioCount: 0,
 			lastQueryDurationMs: 0,
 			lastRequestedVisibleCount: 0,
 			lastRequestedNearCount: 0,
 			lastRequestedVisibleVideoCount: 0,
 			lastRequestedNearVideoCount: 0,
+			lastRequestedVisibleAudioCount: 0,
+			lastRequestedNearAudioCount: 0,
 			lowDetailVisibleVideoCount: 0,
 			pendingLowDetailVisibleVideoLoadCandidateCount: 0,
 			pendingImageLoadCandidateCount: 0,
 			pendingVideoLoadCandidateCount: 0,
+			pendingAudioLoadCandidateCount: 0,
 			drainScheduledCount: 0,
 			drainRunCount: 0,
 			lastViewportScale: 1,
@@ -1624,13 +1853,21 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 		const manager = Object.create(CanvasVisibilityManager.prototype) as {
 			canvas: { magicConfigManager?: { config?: { methods?: unknown } } }
 			destroyed: boolean
-			getViewportResourceSignal: (mediaType: "image" | "video", path: string) => AbortSignal
-			getViewportResourceAbortKey: (mediaType: "image" | "video", path: string) => string
+			getViewportResourceSignal: (
+				mediaType: "image" | "video" | "audio",
+				path: string,
+			) => AbortSignal
+			getViewportResourceAbortKey: (
+				mediaType: "image" | "video" | "audio",
+				path: string,
+			) => string
 			cancelFarViewportResourceSignals: (activeKeys: Set<string>) => void
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
+			registeredAudios: Map<string, { elementId: string; path: string }>
 			lastRequestedLoadState: Map<string, unknown>
 			lastRequestedVideoLoadState: Map<string, unknown>
+			lastRequestedAudioLoadState: Map<string, unknown>
 		}
 		manager.canvas = {}
 		manager.destroyed = false
@@ -1642,12 +1879,14 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 		manager.registeredVideos = new Map([
 			["video-1", { elementId: "video-1", path: "./videos/a.mp4" }],
 		])
+		manager.registeredAudios = new Map()
 		manager.lastRequestedLoadState = new Map([
 			["image-1", {}],
 			["image-2", {}],
 			["image-3", {}],
 		])
 		manager.lastRequestedVideoLoadState = new Map([["video-1", {}]])
+		manager.lastRequestedAudioLoadState = new Map()
 
 		const initialSignal = manager.getViewportResourceSignal("image", "./images/a.png")
 		const nextSignal = manager.getViewportResourceSignal("image", "./images/a.png")
@@ -1677,9 +1916,11 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 
 describe("CanvasVisibilityManager image load priorities", () => {
 	function createImageCandidateManager(options?: {
+		audio?: Partial<LayerElement>
 		frame?: Partial<LayerElement>
 		image?: Partial<LayerElement>
 		registered?: boolean
+		registeredAudio?: boolean
 		registeredVideo?: boolean
 		video?: Partial<LayerElement>
 	}) {
@@ -1706,6 +1947,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
+			registeredAudios: Map<string, { elementId: string; path: string }>
 			lastRequestedLoadState: Map<
 				string,
 				{
@@ -1736,7 +1978,21 @@ describe("CanvasVisibilityManager image load priorities", () => {
 			height: 180,
 			...options?.video,
 		} as LayerElement
-		const frameChildren = options?.video ? [imageElement, videoElement] : [imageElement]
+		const audioElement = {
+			id: "audio-1",
+			type: ElementTypeEnum.Audio,
+			src: "./audios/a.mp3",
+			x: 40,
+			y: 40,
+			width: 240,
+			height: 120,
+			...options?.audio,
+		} as LayerElement
+		const frameChildren = [
+			imageElement,
+			...(options?.video ? [videoElement] : []),
+			...(options?.audio ? [audioElement] : []),
+		]
 		const elements: Record<string, LayerElement> = {
 			"frame-1": {
 				id: "frame-1",
@@ -1750,13 +2006,16 @@ describe("CanvasVisibilityManager image load priorities", () => {
 			},
 			"image-1": imageElement,
 			"video-1": videoElement,
+			"audio-1": audioElement,
 		}
 		manager.canvas = {
 			elementManager: {
 				getAllElements: () => [elements["frame-1"]],
 				getElementData: (elementId: string) => elements[elementId],
 				findParentIdForElement: (elementId: string) =>
-					elementId === "image-1" || elementId === "video-1" ? "frame-1" : undefined,
+					elementId === "image-1" || elementId === "video-1" || elementId === "audio-1"
+						? "frame-1"
+						: undefined,
 				isElementVisibleInDataTree: () => true,
 			},
 			geometryCacheManager: {
@@ -1765,7 +2024,9 @@ describe("CanvasVisibilityManager image load priorities", () => {
 						? { x: 0, y: 0, width: 400, height: 300 }
 						: elementId === "video-1"
 							? { x: 20, y: 20, width: 300, height: 180 }
-							: { x: 0, y: 0, width: 200, height: 160 },
+							: elementId === "audio-1"
+								? { x: 40, y: 40, width: 240, height: 120 }
+								: { x: 0, y: 0, width: 200, height: 160 },
 				queryElementIdsByExpandedRect: (_rect, _padding, options) =>
 					Array.from(options?.elementIds ?? []).filter(
 						(elementId) => elementId === "frame-1",
@@ -1780,6 +2041,10 @@ describe("CanvasVisibilityManager image load priorities", () => {
 			options?.registeredVideo === false
 				? new Map()
 				: new Map([["video-1", { elementId: "video-1", path: "./videos/a.mp4" }]])
+		manager.registeredAudios =
+			options?.audio && options.registeredAudio !== false
+				? new Map([["audio-1", { elementId: "audio-1", path: "./audios/a.mp3" }]])
+				: new Map()
 		manager.lastRequestedLoadState = new Map()
 		manager.lastContainerDisplayVariant = new Map()
 		return manager
@@ -1796,6 +2061,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				}) => {
 					imageCandidates: ImageCandidate[]
 					videoCandidates: VideoCandidate[]
+					audioCandidates: AudioCandidate[]
 				}
 			}
 		).collectVisibleContainerMediaCandidates
@@ -1819,6 +2085,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				}) => {
 					imageCandidates: ImageCandidate[]
 					videoCandidates: VideoCandidate[]
+					audioCandidates: AudioCandidate[]
 				}
 			}
 		).collectVisibleContainerMediaCandidates
@@ -2083,6 +2350,29 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				path: "./videos/a.mp4",
 				priority: "critical",
 				tier: "poster",
+				visibilityState: "visible",
+			}),
+		])
+	})
+
+	it("promotes visible frame audio descendants to critical preload candidates", () => {
+		const manager = createImageCandidateManager({ audio: {} })
+		const collectVisibleContainerMediaCandidates =
+			getCollectVisibleContainerMediaCandidates(manager)
+
+		const candidates = collectVisibleContainerMediaCandidates.call(manager, {
+			reason: "viewport:pan",
+			viewportRect: { x: 0, y: 0, width: 500, height: 500 },
+			viewportScale: 1,
+			viewportCenter: { x: 250, y: 250 },
+		})
+
+		expect(candidates.audioCandidates).toEqual([
+			expect.objectContaining({
+				elementId: "audio-1",
+				path: "./audios/a.mp3",
+				priority: "critical",
+				tier: "preload",
 				visibilityState: "visible",
 			}),
 		])

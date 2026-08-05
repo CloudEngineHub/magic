@@ -180,6 +180,11 @@ describe("designPath contract", () => {
 							type: "image",
 							src: `/${DESIGN_A}/images/cat.png`,
 						},
+						{
+							id: "audio-1",
+							type: "audio",
+							src: `/${DESIGN_A}/audios/voice.mp3`,
+						},
 					],
 				},
 			} as never,
@@ -187,7 +192,9 @@ describe("designPath contract", () => {
 		)
 
 		expect(content).toContain("./images/cat.png")
+		expect(content).toContain("./audios/voice.mp3")
 		expect(content).not.toContain(`/${DESIGN_A}/images/cat.png`)
+		expect(content).not.toContain(`/${DESIGN_A}/audios/voice.mp3`)
 	})
 
 	it("keeps external workspace resources absolute when saving magic.project.js", () => {

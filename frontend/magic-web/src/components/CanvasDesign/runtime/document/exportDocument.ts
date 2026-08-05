@@ -1,5 +1,6 @@
 import {
 	ElementTypeEnum,
+	type AudioElement,
 	type CanvasDocument,
 	type CropConfig,
 	type EllipseElement,
@@ -287,6 +288,15 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 					element.videoGenerationResultMeta,
 				)
 			}
+			return result
+		}
+
+		case ElementTypeEnum.Audio: {
+			const result = assignBaseElementProps<AudioElement>(
+				{ id: element.id, type: element.type },
+				element,
+			)
+			if (element.src !== undefined) result.src = element.src
 			return result
 		}
 

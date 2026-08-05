@@ -23,7 +23,7 @@ import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/regis
  *   勿仅用 `isEnabled()`（后者含 `isActiveConsumer`），否则 Canvas 销毁后仍在飞行的换链会退回 OSS 直链。
  */
 
-export type MediaResourceOfflineCacheMediaType = "image" | "video"
+export type MediaResourceOfflineCacheMediaType = "image" | "video" | "audio"
 
 export interface MediaResourceOfflineCacheOptions {
 	/** 离线缓存总容量上限，默认 1GB */

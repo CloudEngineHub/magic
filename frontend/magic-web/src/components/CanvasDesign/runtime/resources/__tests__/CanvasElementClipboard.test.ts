@@ -6,6 +6,18 @@ import {
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 
 describe("CanvasElementClipboard", () => {
+	it("reads external audio clipboard items as audio files", async () => {
+		const item = {
+			types: ["audio/mpeg"],
+			getType: async () => new Blob(["audio"], { type: "audio/mpeg" }),
+		} as ClipboardItem
+
+		const file = await CanvasElementClipboard.readExternalFileItem(item)
+
+		expect(file?.name).toBe("audio.mp3")
+		expect(file?.type).toBe("audio/mpeg")
+	})
+
 	it("ignores generation resource metadata when restoring event files", () => {
 		const generationResourceMetadata: CanvasElementClipboardFileMetadata = {
 			id: "generation-resource:0",

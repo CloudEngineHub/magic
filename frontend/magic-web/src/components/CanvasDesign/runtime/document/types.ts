@@ -130,6 +130,8 @@ export const ElementTypeEnum = {
 	Star: "star",
 	/** 视频 */
 	Video: "video",
+	/** 音频 */
+	Audio: "audio",
 } as const
 
 /** 元素类型 */
@@ -350,8 +352,15 @@ export interface VideoElement extends BaseElementProps {
 	videoGenerationResultMeta?: VideoGenerationResultMeta
 }
 
-/** 可上传/下载的文件类元素（图片、视频等），用于 uploadFiles / downloadFiles 等接口 */
-export type CanvasFileElement = ImageElement | VideoElement
+/** 音频元素（仅支持上传资源，不持久化播放或上传状态） */
+export interface AudioElement extends BaseElementProps {
+	type: typeof ElementTypeEnum.Audio
+	/** 音频源（用来换取可播放 URL 的临时 path） */
+	src?: string
+}
+
+/** 可上传/下载的文件类元素（图片、视频、音频），用于 uploadFiles / downloadFiles 等接口 */
+export type CanvasFileElement = ImageElement | VideoElement | AudioElement
 
 /** 图层元素联合类型 */
 export type LayerElement =
@@ -364,6 +373,7 @@ export type LayerElement =
 	| TextElement
 	| ImageElement
 	| VideoElement
+	| AudioElement
 
 /** 视口状态 */
 export interface ViewportState {

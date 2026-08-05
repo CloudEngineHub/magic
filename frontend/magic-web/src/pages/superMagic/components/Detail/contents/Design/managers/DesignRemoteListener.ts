@@ -1,6 +1,7 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	ElementTypeEnum,
+	type AudioElement,
 	type FrameElement,
 	type GroupElement,
 	type ImageElement,
@@ -62,8 +63,12 @@ function walkCanvasMediaSources(
 	if (!elements?.length) return
 
 	for (const el of elements) {
-		if (el.type === ElementTypeEnum.Image || el.type === ElementTypeEnum.Video) {
-			const media = el as ImageElement | VideoElement
+		if (
+			el.type === ElementTypeEnum.Image ||
+			el.type === ElementTypeEnum.Video ||
+			el.type === ElementTypeEnum.Audio
+		) {
+			const media = el as ImageElement | VideoElement | AudioElement
 			const s = media.src?.trim()
 			if (!s || /^file:/i.test(s)) continue
 			onSrc(s)

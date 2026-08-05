@@ -1,6 +1,7 @@
 import type { Canvas } from "../../core/Canvas"
 import type {
 	LayerElement,
+	AudioElement,
 	ImageElement,
 	VideoElement,
 	CanvasFileElement,
@@ -16,8 +17,10 @@ import {
 	generateElementId,
 	generateUniqueElementName,
 	isVideoFile,
+	isAudioFile,
 	validateFile,
 } from "../../shared/ids"
+import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import {
 	getAllExistingNames,
 	filterRedundantElements,
@@ -48,6 +51,7 @@ const PNG_MIME_TYPE = "image/png"
 const PNG_EXTENSION = ".png"
 const DEFAULT_IMAGE_MIME_TYPE = "image/png"
 const DEFAULT_VIDEO_MIME_TYPE = "video/mp4"
+const DEFAULT_AUDIO_MIME_TYPE = "audio/mpeg"
 
 interface CopyToastHandle {
 	success: () => void
@@ -863,11 +867,24 @@ export class ClipboardManager {
 		return metadata ? { element, ...metadata } : null
 	}
 
+	private async getAudioMetadata(element: AudioElement): Promise<CanvasFileMetadataData | null> {
+		if (!element.src) return null
+		const metadata = await this.fetchOriginalFileMetadata({
+			src: element.src,
+			fallbackFilename: `${element.name || "audio"}.mp3`,
+			fallbackMimeType: DEFAULT_AUDIO_MIME_TYPE,
+		})
+		return metadata ? { element, ...metadata } : null
+	}
+
 	private async getCanvasFileMetadata(
 		element: CanvasFileElement,
 	): Promise<CanvasFileMetadataData | null> {
 		if (element.type === ElementTypeEnum.Image) {
 			return this.getImageMetadata(element)
+		}
+		if (element.type === ElementTypeEnum.Audio) {
+			return this.getAudioMetadata(element)
 		}
 
 		return this.getVideoMetadata(element)
@@ -1197,6 +1214,9 @@ export class ClipboardManager {
 		finalElement: CanvasFileElement,
 		uploadResult: UploadFileResponse,
 	): CanvasFileElement {
+		if (finalElement.type === ElementTypeEnum.Audio) {
+			return { ...finalElement, src: uploadResult.path, visible: true }
+		}
 		return this.stripMediaGenerationTaskIdentity({
 			...finalElement,
 			src: uploadResult.path,
@@ -1211,7 +1231,10 @@ export class ClipboardManager {
 	 */
 	private getFileElementResourceUpdates(
 		uploadedElement: CanvasFileElement,
-	): Partial<ImageElement> | Partial<VideoElement> {
+	): Partial<ImageElement> | Partial<VideoElement> | Partial<AudioElement> {
+		if (uploadedElement.type === ElementTypeEnum.Audio) {
+			return { src: uploadedElement.src, visible: uploadedElement.visible }
+		}
 		const commonUpdates = {
 			src: uploadedElement.src,
 			status: uploadedElement.status,
@@ -1233,7 +1256,9 @@ export class ClipboardManager {
 		}
 	}
 
-	private getFileElementUploadingPlaceholder(finalElement: CanvasFileElement): CanvasFileElement {
+	private getFileElementUploadingPlaceholder(
+		finalElement: Exclude<CanvasFileElement, AudioElement>,
+	): CanvasFileElement {
 		return this.stripMediaGenerationTaskIdentity({
 			...finalElement,
 			src: undefined,
@@ -1243,7 +1268,11 @@ export class ClipboardManager {
 	}
 
 	private stripMediaGenerationTaskIdentity<
-		T extends CanvasFileElement | Partial<ImageElement> | Partial<VideoElement>,
+		T extends
+			| CanvasFileElement
+			| Partial<ImageElement>
+			| Partial<VideoElement>
+			| Partial<AudioElement>,
 	>(element: T): T {
 		const sanitized = { ...element } as T & Partial<ImageElement> & Partial<VideoElement>
 		const stripRequestIdentity = (request: unknown, idKey: string) => {
@@ -1297,6 +1326,10 @@ export class ClipboardManager {
 
 		if (element.type === ElementTypeEnum.Image) {
 			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
+			return
+		}
+		if (element.type === ElementTypeEnum.Audio) {
+			this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
 			return
 		}
 
@@ -1505,38 +1538,56 @@ export class ClipboardManager {
 		const metadata = metadataByElementId.get(sourceElement.id)
 
 		const file = fileByElementId.get(sourceElement.id)
-		if (file) {
-			return {
-				element: this.getFileElementUploadingPlaceholder(finalElement),
-				sourceReferenceFailureCount: 0,
-				pendingUpload: {
+		const pendingUpload: ClipboardTreeFileUpload | null = file
+			? {
 					sourceElementId: sourceElement.id,
 					targetElementId: finalElement.id,
 					sourceCanvasId,
 					sourcePath: sourceElement.src,
 					file,
 					metadata,
-				},
+				}
+			: metadata?.sourceRef?.ossUrl
+				? {
+						sourceElementId: sourceElement.id,
+						targetElementId: finalElement.id,
+						sourceCanvasId,
+						sourcePath: sourceElement.src,
+						metadata,
+					}
+				: null
+
+		if (!pendingUpload) {
+			return {
+				element: null,
+				sourceReferenceFailureCount: 1,
 			}
 		}
 
-		if (metadata?.sourceRef?.ossUrl) {
+		if (finalElement.type === ElementTypeEnum.Audio) {
+			// AudioElement 不具备可持久化的上传状态；先完成上传再加入元素树，避免撤销
+			// 恢复出永久隐藏且没有 src 的空音频节点。
+			const uploadResult = await this.resolveClipboardTreeUploadResult(pendingUpload)
+			if (!uploadResult) {
+				return {
+					element: null,
+					sourceReferenceFailureCount: 1,
+				}
+			}
 			return {
-				element: this.getFileElementUploadingPlaceholder(finalElement),
+				element: this.finalizeClipboardTreeFileElement(
+					finalElement,
+					pendingUpload,
+					uploadResult,
+				),
 				sourceReferenceFailureCount: 0,
-				pendingUpload: {
-					sourceElementId: sourceElement.id,
-					targetElementId: finalElement.id,
-					sourceCanvasId,
-					sourcePath: sourceElement.src,
-					metadata,
-				},
 			}
 		}
 
 		return {
-			element: null,
-			sourceReferenceFailureCount: 1,
+			element: this.getFileElementUploadingPlaceholder(finalElement),
+			sourceReferenceFailureCount: 0,
+			pendingUpload,
 		}
 	}
 
@@ -1670,24 +1721,11 @@ export class ClipboardManager {
 			return false
 		}
 
-		const uploadedElement = this.getFileElementDataWithUploadResult(
+		const uploadedElement = this.finalizeClipboardTreeFileElement(
 			currentElement,
+			upload,
 			uploadResult,
 		)
-		if (upload.sourcePath) {
-			const pathMap = new Map<string, string>()
-			addClipboardResourceAliasMappings(
-				pathMap,
-				upload.sourcePath,
-				[
-					upload.metadata?.sourceRef?.src,
-					...(upload.metadata?.resourceAliases ?? []),
-				].filter((alias): alias is string => typeof alias === "string" && alias.length > 0),
-				uploadResult.path,
-			)
-			rewriteElementResourceReferences(uploadedElement, pathMap)
-		}
-		this.primeFileElementResourceCache(uploadedElement, uploadResult)
 		const resourceUpdates = this.getFileElementResourceUpdates(uploadedElement)
 
 		if (this.canvas.elementManager.isTemporary(upload.targetElementId)) {
@@ -1702,6 +1740,29 @@ export class ClipboardManager {
 		this.activateUploadedFileElementResource(uploadedElement, uploadResult)
 
 		return true
+	}
+
+	private finalizeClipboardTreeFileElement(
+		finalElement: CanvasFileElement,
+		upload: ClipboardTreeFileUpload,
+		uploadResult: UploadFileResponse,
+	): CanvasFileElement {
+		const uploadedElement = this.getFileElementDataWithUploadResult(finalElement, uploadResult)
+		if (upload.sourcePath) {
+			const pathMap = new Map<string, string>()
+			addClipboardResourceAliasMappings(
+				pathMap,
+				upload.sourcePath,
+				[
+					upload.metadata?.sourceRef?.src,
+					...(upload.metadata?.resourceAliases ?? []),
+				].filter((alias): alias is string => typeof alias === "string" && alias.length > 0),
+				uploadResult.path,
+			)
+			rewriteElementResourceReferences(uploadedElement, pathMap)
+		}
+		this.primeFileElementResourceCache(uploadedElement, uploadResult)
+		return uploadedElement
 	}
 
 	private activateUploadedFileElementResource(
@@ -1729,14 +1790,21 @@ export class ClipboardManager {
 			elementInstance.requestPreviewLoad({ force: true })
 		}
 
-		this.canvas.visibilityManager.requestImmediateMediaLoadForElements([element.id], {
-			reason: "clipboard-tree-upload",
-			priority: "critical",
-		})
+		if (element.type !== ElementTypeEnum.Audio) {
+			this.canvas.visibilityManager.requestImmediateMediaLoadForElements([element.id], {
+				reason: "clipboard-tree-upload",
+				priority: "critical",
+			})
+		}
 	}
 
 	private applyClipboardTreeUploadFailure(upload: ClipboardTreeFileUpload): void {
 		if (!this.canvas.elementManager.hasElement(upload.targetElementId)) {
+			return
+		}
+		const element = this.canvas.elementManager.getElementData(upload.targetElementId)
+		if (element?.type === ElementTypeEnum.Audio) {
+			// 音频不会进入异步占位上传链路；防御性忽略旧任务，避免重新引入隐藏空节点语义。
 			return
 		}
 
@@ -1926,7 +1994,7 @@ export class ClipboardManager {
 	}
 
 	/**
-	 * 粘贴多个文件到画布（支持图片、视频）
+	 * 粘贴多个文件到画布（支持图片、视频、音频）
 	 * @param files 文件数组
 	 * @param anchorPosition 锚点位置（第一个文件的中心位置）
 	 * @param options 可选配置
@@ -1957,7 +2025,14 @@ export class ClipboardManager {
 					const pendingBatchId =
 						this.canvas.canvasFileUploadManager.getCurrentPendingBatchId()
 					const mediaDimensions = await Promise.all(
-						files.map((file) => getMediaDimensions(file)),
+						files.map((file) =>
+							isAudioFile(file)
+								? {
+										width: AUDIO_CONFIG.DEFAULT_WIDTH,
+										height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+									}
+								: getMediaDimensions(file),
+						),
 					)
 					const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
 
@@ -2003,6 +2078,8 @@ export class ClipboardManager {
 			) {
 				this.canvas.historyManager.recordHistoryImmediate()
 				this.canvas.canvasFileUploadManager.commitPendingUploadBatch(pendingBatchId)
+			} else if (createdElementIds.length > 0) {
+				this.canvas.historyManager.recordHistoryImmediate()
 			}
 
 			const existingElementIds = createdElementIds.filter((elementId) =>
@@ -2020,7 +2097,7 @@ export class ClipboardManager {
 	}
 
 	/**
-	 * 粘贴文件到画布（支持图片、视频）
+	 * 粘贴文件到画布（支持图片、视频、音频）
 	 * @param file 文件
 	 * @param position 可选的位置参数，如果提供则在该位置创建文件元素
 	 * @param options 可选配置
@@ -2058,7 +2135,7 @@ export class ClipboardManager {
 		anchorPosition: { x: number; y: number },
 		options?: { skipFocus?: boolean },
 	): Promise<string[]> {
-		const imageFiles = files.filter((file) => !isVideoFile(file))
+		const imageFiles = files.filter((file) => !isVideoFile(file) && !isAudioFile(file))
 		return this.pasteMultipleCanvasFiles(imageFiles, anchorPosition, options)
 	}
 
@@ -2074,7 +2151,7 @@ export class ClipboardManager {
 		position?: { x: number; y: number },
 		options?: { skipFocus?: boolean },
 	): Promise<string | null> {
-		if (isVideoFile(file)) {
+		if (isVideoFile(file) || isAudioFile(file)) {
 			return null
 		}
 		return this.pasteCanvasFile(file, position, options)

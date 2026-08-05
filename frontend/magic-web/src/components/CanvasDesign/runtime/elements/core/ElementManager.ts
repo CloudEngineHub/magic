@@ -1205,6 +1205,7 @@ export class ElementManager {
 				case "element:video:generate-submit-started":
 				case "element:video:generate-submit-failed":
 				case "element:video:fullscreenClick":
+				case "element:audio:fullscreenClick":
 				case "element:image:resultUpdated":
 				case "element:image:loaded":
 				case "element:image:ossSrcReady":

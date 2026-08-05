@@ -5,6 +5,7 @@ import type {
 } from "@/components/CanvasDesign/public/props"
 import {
 	ElementTypeEnum,
+	type AudioElement,
 	type CanvasDocument,
 	type ImageElement,
 	type LayerElement,
@@ -194,6 +195,19 @@ function collectCanvasResourceSnapshots(params: {
 			})
 		}
 
+		if (element.type === ElementTypeEnum.Audio) {
+			addCanvasResourceSnapshot({
+				src: (element as AudioElement).src,
+				mediaType: "audio",
+				flatAttachments,
+				attachmentsReady,
+				attachmentIndex,
+				designProjectBasePath,
+				items,
+				itemsByReference,
+			})
+		}
+
 		if ("children" in element) {
 			collectCanvasResourceSnapshots({
 				elements: element.children,
@@ -344,7 +358,7 @@ function normalizeCanvasResourcePath(path?: string): string {
 
 function isDesignMediaResourcePath(path: string): boolean {
 	const parts = normalizeCanvasResourcePath(path).split("/")
-	return parts.includes("images") || parts.includes("videos")
+	return parts.includes("images") || parts.includes("videos") || parts.includes("audios")
 }
 
 export interface CanvasResourceSnapshot extends CanvasResourceRefreshItem {

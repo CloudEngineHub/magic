@@ -111,6 +111,19 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					resources,
 					RESOURCE_REFRESH_CONCURRENCY,
 					async (resource) => {
+						if (resource.mediaType === "audio") {
+							canvas.audioPlaybackManager.releaseByPath(resource.path)
+							const refreshed = await canvas.audioResourceManager.refresh(
+								resource.path,
+							)
+							if (refreshed) {
+								canvas.visibilityManager.invalidateAudioLoadRequest(
+									resource.path,
+									"host-refresh",
+								)
+							}
+							return
+						}
 						if (resource.mediaType === "video") {
 							return canvas.videoResourceManager.refreshResource(resource.path)
 						}

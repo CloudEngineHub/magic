@@ -24,6 +24,8 @@ describe("Canvas destroy", () => {
 			eraserManager: destroyable("eraserManager"),
 			imageEditingCoordinator: destroyable("imageEditingCoordinator"),
 			generationRuntimeManager: destroyable("generationRuntimeManager"),
+			mediaPlaybackCoordinator: destroyable("mediaPlaybackCoordinator"),
+			audioPlaybackManager: destroyable("audioPlaybackManager"),
 			eventEmitter: {
 				removeAllListeners: vi.fn(() => destroyOrder.push("eventEmitter")),
 			},
@@ -61,6 +63,7 @@ describe("Canvas destroy", () => {
 			submitImageWorkerManager: destroyable("submitImageWorkerManager"),
 			videoPlaybackManager: destroyable("videoPlaybackManager"),
 			videoResourceManager: destroyable("videoResourceManager"),
+			audioResourceManager: destroyable("audioResourceManager"),
 			mediaResourceOfflineCacheManager: destroyable("mediaResourceOfflineCacheManager"),
 			pluginManager: destroyable("pluginManager"),
 			stage: destroyable("stage"),

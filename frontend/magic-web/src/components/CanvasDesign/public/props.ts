@@ -312,7 +312,7 @@ export type ElementToolType = (typeof ElementToolTypeEnum)[keyof typeof ElementT
 
 export interface CanvasResourceRefreshItem {
 	path: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 }
 
 export interface CanvasDesignRef {
@@ -355,7 +355,7 @@ export interface CanvasDesignRef {
 	exportCurrentDocument: () => CanvasDocument | null
 	/** 获取当前 Canvas 实例；用于跨 React 树的画布资源预览 */
 	getCanvasInstance: () => Canvas | null
-	/** 按资源路径强制刷新画布内已缓存的图片/视频资源 */
+	/** 按资源路径强制刷新画布内已缓存的图片/视频/音频资源 */
 	refreshResources: (resources: CanvasResourceRefreshItem[]) => Promise<void>
 	/** 如果元素不在可视区域，则移动到可视区域 */
 	ensureElementVisible: (

@@ -32,13 +32,14 @@ import {
 } from "./magicProjectCompression"
 import { stripHeavyFields } from "./elementDetailsStore"
 
-function layerTreeHasImageOrVideo(elements: LayerElement[] | undefined): boolean {
+function layerTreeHasMedia(elements: LayerElement[] | undefined): boolean {
 	if (!elements?.length) return false
 	for (const el of elements) {
 		const elementType = (el as { type?: string }).type
-		if (elementType === "image" || elementType === "video") return true
+		if (elementType === "image" || elementType === "video" || elementType === "audio")
+			return true
 		const children = (el as { children?: LayerElement[] }).children
-		if (children?.length && layerTreeHasImageOrVideo(children)) return true
+		if (children?.length && layerTreeHasMedia(children)) return true
 	}
 	return false
 }
@@ -136,7 +137,7 @@ export function generateMagicProjectJsContent(
 	const connections = getCanvasConnections(designData.canvas)
 	const basePath = options?.projectBasePath?.trim()
 	const isV2 = isV2Version(designData.version)
-	const needPathRewrite = !!basePath && layerTreeHasImageOrVideo(rawElements)
+	const needPathRewrite = !!basePath && layerTreeHasMedia(rawElements)
 
 	// v2 需先克隆再剥离重字段，避免污染内存态；路径改写同样需要克隆
 	let elements = rawElements
@@ -671,6 +672,15 @@ function replacePathsInElement(
 					hasReplaced = true
 				})
 			}
+		}
+	}
+
+	if (element.type === "audio" && element.src && typeof element.src === "string") {
+		const originalSrc = element.src as string
+		const newSrc = replaceDirectoryNameInPath(originalSrc, oldDirName, newDirName)
+		if (newSrc !== originalSrc) {
+			element.src = newSrc
+			hasReplaced = true
 		}
 	}
 

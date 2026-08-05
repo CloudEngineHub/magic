@@ -13,6 +13,7 @@ import VideoGenerateEditor from "../../ui/editors/video/index"
 import MessageHistory from "../../ui/panels/history/index"
 import VideoFullscreenOverlay from "../../ui/fullscreen/video/index"
 import ImageElementFullscreenOverlay from "../../ui/fullscreen/image-element/index"
+import AudioElementFullscreenOverlay from "../../ui/fullscreen/audio-element/index"
 import { useMagic } from "../providers/MagicProvider"
 import { toPlainObject } from "../../runtime/shared/ids"
 import type { CanvasDesignRef, CanvasDesignProps } from "../../public/props"
@@ -243,6 +244,12 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			) : null}
 			{fullscreenMediaElement?.type === "image" ? (
 				<ImageElementFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
+			{fullscreenMediaElement?.type === "audio" ? (
+				<AudioElementFullscreenOverlay
 					elementId={fullscreenMediaElement.elementId}
 					onClose={() => setFullscreenMediaElement(null)}
 				/>

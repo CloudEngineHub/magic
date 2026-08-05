@@ -28,7 +28,11 @@ function resolveMediaElementFile(
 
 	const element = canvas.elementManager.getElementData(resolvedElementId)
 	if (!element) return null
-	if (element.type !== ElementTypeEnum.Image && element.type !== ElementTypeEnum.Video)
+	if (
+		element.type !== ElementTypeEnum.Image &&
+		element.type !== ElementTypeEnum.Video &&
+		element.type !== ElementTypeEnum.Audio
+	)
 		return null
 	if (!element.src) return null
 	if (!isLocatableProjectFilePath(element.src)) return null

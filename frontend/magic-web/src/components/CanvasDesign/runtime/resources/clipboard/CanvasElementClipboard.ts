@@ -20,7 +20,7 @@ export const CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE = "web application/x-canvas-desi
  * CanvasDesign 内部媒体 Blob MIME。
  *
  * 每个图片 / 视频元素对应一个该 MIME 的 ClipboardItem，用 payload.files 中的
- * `elementId` 和顺序进行匹配。媒体项会额外写入自身原生 `image/*` / `video/*` MIME，
+ * `elementId` 和顺序进行匹配。媒体项会额外写入自身原生 `image/*` / `video/*` / `audio/*` MIME，
  * 用于外部应用互操作。
  */
 export const CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE = "web application/x-canvas-design-file"
@@ -120,7 +120,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isCanvasFileElement(element: LayerElement): element is CanvasFileElement {
-	return element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video
+	return (
+		element.type === ElementTypeEnum.Image ||
+		element.type === ElementTypeEnum.Video ||
+		element.type === ElementTypeEnum.Audio
+	)
 }
 
 function isClipboardBlobBackedMetadata(metadata: CanvasElementClipboardFileMetadata): boolean {
@@ -140,7 +144,11 @@ function buildFileFromBlob(blob: Blob, metadata: CanvasElementClipboardFileMetad
 }
 
 function getExternalClipboardFallbackFilename(mediaType: string): string {
-	const basename = mediaType.startsWith("video/") ? "video" : "image"
+	const basename = mediaType.startsWith("video/")
+		? "video"
+		: mediaType.startsWith("audio/")
+			? "audio"
+			: "image"
 	return `${basename}.${getFileExtensionFromMimeType(mediaType)}`
 }
 
@@ -401,7 +409,7 @@ export class CanvasElementClipboard {
 	 * 写入形态：
 	 * 1. 第一个 ClipboardItem：私有元素 payload。
 	 * 2. 后续 ClipboardItem：每个媒体 Blob 一个私有文件项。
-	 * 3. 媒体 Blob 额外暴露自身原生 `image/*` / `video/*`，让用户可在外部应用按普通媒体粘贴。
+	 * 3. 媒体 Blob 额外暴露自身原生 `image/*` / `video/*` / `audio/*`，让用户可在外部应用按普通媒体粘贴。
 	 */
 	public static createClipboardItems(options: {
 		payload: CanvasElementClipboardPayload
@@ -421,7 +429,8 @@ export class CanvasElementClipboard {
 			}
 			if (
 				clipboardFile.type.startsWith("image/") ||
-				clipboardFile.type.startsWith("video/")
+				clipboardFile.type.startsWith("video/") ||
+				clipboardFile.type.startsWith("audio/")
 			) {
 				itemData[clipboardFile.type] = clipboardFile
 			}
@@ -479,7 +488,7 @@ export class CanvasElementClipboard {
 	 * 1. CanvasDesign 私有 payload + 私有媒体 Blob。
 	 * 2. Ctrl/Cmd+V 路径如果已读到 payload 但 Clipboard API 未返回 Blob，
 	 *    用同步 paste event 的 clipboardData.files/items 补齐。
-	 * 3. 非 CanvasDesign 内容，按外部图片 / 视频文件处理。
+	 * 3. 非 CanvasDesign 内容，按外部图片 / 视频 / 音频文件处理。
 	 *
 	 * 菜单粘贴没有 ClipboardEvent，因此不会进入第 2 步，只能依赖 Clipboard API read()。
 	 */
@@ -599,11 +608,12 @@ export class CanvasElementClipboard {
 	/**
 	 * 读取非 CanvasDesign 的普通媒体 ClipboardItem。
 	 *
-	 * 仅作为外部图片 / 视频粘贴 fallback，不解析任何 CanvasDesign 元数据。
+	 * 仅作为外部图片 / 视频 / 音频粘贴 fallback，不解析任何 CanvasDesign 元数据。
 	 */
 	public static async readExternalFileItem(item: ClipboardItem): Promise<File | null> {
 		const mediaType = item.types.find(
-			(type) => type.startsWith("image/") || type.startsWith("video/"),
+			(type) =>
+				type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/"),
 		)
 		if (!mediaType) {
 			return null
@@ -648,7 +658,7 @@ export class CanvasElementClipboard {
 	/**
 	 * 从 Clipboard API 读取普通外部媒体文件。
 	 *
-	 * 该路径只处理 `image/*` / `video/*`，不会解析任何旧 CanvasDesign 文本或 HTML 格式。
+	 * 该路径只处理 `image/*` / `video/*` / `audio/*`，不会解析任何旧 CanvasDesign 文本或 HTML 格式。
 	 */
 	private static async parseFilesFromClipboardItems(
 		items: ClipboardItem[] | null,
@@ -744,7 +754,8 @@ export class CanvasElementClipboard {
 				(type) =>
 					type === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE ||
 					type.startsWith("image/") ||
-					type.startsWith("video/"),
+					type.startsWith("video/") ||
+					type.startsWith("audio/"),
 			),
 		)
 
@@ -778,7 +789,12 @@ export class CanvasElementClipboard {
 		const mediaType =
 			preferredType ??
 			item.types.find((type) => type === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE) ??
-			item.types.find((type) => type.startsWith("image/") || type.startsWith("video/"))
+			item.types.find(
+				(type) =>
+					type.startsWith("image/") ||
+					type.startsWith("video/") ||
+					type.startsWith("audio/"),
+			)
 		if (!mediaType) {
 			return null
 		}

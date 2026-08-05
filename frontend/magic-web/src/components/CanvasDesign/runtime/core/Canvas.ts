@@ -43,6 +43,9 @@ import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollin
 import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
+import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
+import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
+import { MediaPlaybackCoordinator } from "../interaction/media-playback/MediaPlaybackCoordinator"
 import { MediaResourceOfflineCacheManager } from "../resources/offline-cache/MediaResourceOfflineCacheManager"
 import { CanvasVisibilityManager } from "../resources/visibility/CanvasVisibilityManager"
 import { CanvasResourceScheduler } from "../resources/scheduler/CanvasResourceScheduler"
@@ -153,6 +156,9 @@ export class Canvas {
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoPlaybackManager: VideoPlaybackManager
+	public audioResourceManager: AudioResourceManager
+	public audioPlaybackManager: AudioPlaybackManager
+	public mediaPlaybackCoordinator: MediaPlaybackCoordinator
 	public mediaResourceOfflineCacheManager: MediaResourceOfflineCacheManager
 	public visibilityManager: CanvasVisibilityManager
 	public resourceScheduler: CanvasResourceScheduler
@@ -292,6 +298,9 @@ export class Canvas {
 			canvas: this,
 		})
 
+		this.audioResourceManager = new AudioResourceManager({ canvas: this })
+		this.audioPlaybackManager = new AudioPlaybackManager({ canvas: this })
+
 		// 初始化 ClipboardManager
 		this.clipboardManager = new ClipboardManager({
 			canvas: this,
@@ -340,6 +349,8 @@ export class Canvas {
 		this.selectionManager = new SelectionManager({
 			canvas: this,
 		})
+
+		this.mediaPlaybackCoordinator = new MediaPlaybackCoordinator({ canvas: this })
 
 		// 初始化 TransformManager（使用 Controls Layer）
 		this.transformManager = new TransformManager({
@@ -1277,6 +1288,7 @@ export class Canvas {
 
 	public handleResourceReferenceResolverChanged(): void {
 		this.imageResourceManager.handleResourceReferenceResolverChanged()
+		this.audioResourceManager.handleResourceReferenceResolverChanged()
 		this.imagePresentationScheduler.handleResourceReferenceResolverChanged()
 		this.visibilityManager.handleResourceReferenceResolverChanged()
 		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged()
@@ -1322,6 +1334,8 @@ export class Canvas {
 		this.imageEditingCoordinator.destroy()
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
+		this.mediaPlaybackCoordinator.destroy()
+		this.audioPlaybackManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
@@ -1362,6 +1376,7 @@ export class Canvas {
 		this.submitImageWorkerManager.destroy()
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
+		this.audioResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
 		this.pluginManager.destroy()
 		this.stage.destroy()

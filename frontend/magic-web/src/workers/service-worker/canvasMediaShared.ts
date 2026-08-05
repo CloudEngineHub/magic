@@ -26,13 +26,15 @@ const DEFAULT_RESOURCE_NAMESPACE = "__global__"
 const VIRTUAL_RESOURCE_PATH_SEGMENT = "/canvas-design-media/"
 const VIRTUAL_RESOURCE_ROUTE_MARKER = `/sw${VIRTUAL_RESOURCE_PATH_SEGMENT}`
 const VIRTUAL_RESOURCE_DESIGN_RESOURCE_SEGMENT = "/design-resource/"
-const VIRTUAL_RESOURCE_MEDIA_TYPES = new Set(["image", "video"])
+export type CanvasMediaType = "image" | "video" | "audio"
+
+const VIRTUAL_RESOURCE_MEDIA_TYPES = new Set<CanvasMediaType>(["image", "video", "audio"])
 
 type CanvasMediaEntry = {
 	id?: string
 	namespace?: string
 	path?: string
-	mediaType?: "image" | "video"
+	mediaType?: CanvasMediaType
 	url?: string
 	cacheKey?: string
 	sourceUrl?: string
@@ -99,7 +101,7 @@ function joinUrlPathSegments(...segments: Array<string | null | undefined>): str
 /** 使用固定虚拟资源协议构造缓存键，保持与历史方案兼容。 */
 function buildVirtualResourceUrl(
 	namespace: string | null | undefined,
-	mediaType: "image" | "video" | null | undefined,
+	mediaType: CanvasMediaType | null | undefined,
 	resourcePath: string | null | undefined,
 ): string {
 	return joinUrlPathSegments(
@@ -234,7 +236,7 @@ function hasResourceChanged(
 /** 从虚拟媒体 URL 解析资源定位信息。 */
 export function parseVirtualResourceRequest(
 	url: string,
-): { namespace: string; mediaType: "image" | "video"; resourcePath: string } | null {
+): { namespace: string; mediaType: CanvasMediaType; resourcePath: string } | null {
 	const parsedUrl = new URL(url)
 	const segmentIndex = parsedUrl.pathname.indexOf(VIRTUAL_RESOURCE_ROUTE_MARKER)
 	if (segmentIndex < 0) return null
@@ -263,7 +265,7 @@ export function parseVirtualResourceRequest(
 	const resourcePath = normalizeResourcePathForLookup(rawResourcePath)
 	if (!resourcePath) return null
 
-	return { namespace, mediaType, resourcePath }
+	return { namespace, mediaType: mediaType as CanvasMediaType, resourcePath }
 }
 
 async function saveEntry(entry: CanvasMediaEntry): Promise<void> {
@@ -304,7 +306,7 @@ async function getAllEntries(): Promise<CanvasMediaEntry[]> {
 async function getEntryByPath(
 	resourcePath: string,
 	namespace: string,
-	mediaType: "image" | "video",
+	mediaType: CanvasMediaType,
 ): Promise<CanvasMediaEntry | null> {
 	const normalizedPath = normalizeResourcePathForLookup(resourcePath)
 	if (!normalizedPath) return null
@@ -410,22 +412,28 @@ async function buildRangeResponse(response: Response, request: Request): Promise
 	const range = request.headers.get("range")
 	if (!range) return response
 
-	const blob = await response.blob()
-	const parsedRange = parseRange(range, blob.size)
+	// CacheStorage/Response may originate from a different realm (notably SW and test runtimes).
+	// ArrayBuffer slicing avoids Blob-brand mismatches while preserving the existing full-body
+	// cache plus 206 response contract used by video and audio seeking.
+	const bodyBuffer = await response.arrayBuffer()
+	const parsedRange = parseRange(range, bodyBuffer.byteLength)
 	if (!parsedRange) {
 		return new Response(null, {
 			status: 416,
 			headers: {
-				"Content-Range": `bytes */${blob.size}`,
+				"Content-Range": `bytes */${bodyBuffer.byteLength}`,
 			},
 		})
 	}
 
-	const body = blob.slice(parsedRange.start, parsedRange.end + 1)
+	const body = bodyBuffer.slice(parsedRange.start, parsedRange.end + 1)
 	const headers = new Headers(response.headers)
 	headers.set("Accept-Ranges", "bytes")
-	headers.set("Content-Length", String(body.size))
-	headers.set("Content-Range", `bytes ${parsedRange.start}-${parsedRange.end}/${blob.size}`)
+	headers.set("Content-Length", String(body.byteLength))
+	headers.set(
+		"Content-Range",
+		`bytes ${parsedRange.start}-${parsedRange.end}/${bodyBuffer.byteLength}`,
+	)
 
 	return new Response(body, {
 		status: 206,
@@ -499,7 +507,7 @@ export async function refreshCanvasMediaResource(
 	const previousEntry = await getEntryByPath(
 		String(entry.path || "").replace(/^\/+/, ""),
 		normalizeResourceNamespace(entry.namespace),
-		entry.mediaType as "image" | "video",
+		entry.mediaType as CanvasMediaType,
 	)
 	await saveEntry(entry)
 	const result = await fetchResourceBlobOnce(entry)

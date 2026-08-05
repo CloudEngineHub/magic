@@ -45,6 +45,10 @@ function videoElement(id: string, src: string, zIndex = 0): LayerElement {
 	return { id, type: ElementTypeEnum.Video, zIndex, src }
 }
 
+function audioElement(id: string, src?: string, zIndex = 0): LayerElement {
+	return { id, type: ElementTypeEnum.Audio, zIndex, src }
+}
+
 function createCanvasStub(elements: LayerElement[], connections: CanvasConnection[]): Canvas {
 	const elementById = new Map(elements.map((element) => [element.id, element]))
 	return {
@@ -59,6 +63,76 @@ function createCanvasStub(elements: LayerElement[], connections: CanvasConnectio
 }
 
 describe("linked frame source collection", () => {
+	it("collects direct and framed audio candidates for video targets", () => {
+		const directAudio = audioElement("direct-audio", "./audios/direct.mp3")
+		const framedAudio = audioElement("framed-audio", "./audios/framed.wav")
+		const frame: FrameElement = {
+			id: "audio-frame",
+			type: ElementTypeEnum.Frame,
+			children: [framedAudio],
+		}
+		const target = videoElement("target", "./videos/target.mp4")
+		const canvas = createCanvasStub(
+			[directAudio, framedAudio, frame, target],
+			[
+				{
+					id: "direct-audio-connection",
+					sourceElementId: directAudio.id,
+					targetElementId: target.id,
+				},
+				{
+					id: "frame-connection",
+					sourceElementId: frame.id,
+					targetElementId: target.id,
+				},
+			],
+		)
+
+		const result = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: target.id,
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["audio"], maxCountByKind: { audio: 2 } },
+		})
+
+		expect(result.mediaItems).toEqual([
+			expect.objectContaining({
+				connectionId: "direct-audio-connection",
+				kind: "audio",
+				path: "./audios/direct.mp3",
+				status: "inactive",
+			}),
+			expect.objectContaining({
+				connectionId: createLinkedFrameSourceId("frame-connection", "framed-audio"),
+				kind: "audio",
+				path: "./audios/framed.wav",
+				status: "inactive",
+			}),
+		])
+	})
+
+	it("marks audio without src as missing and keeps it unsupported for image targets", () => {
+		const source = audioElement("audio-source")
+		const target = imageElement("target", "./images/target.png")
+		const canvas = createCanvasStub(
+			[source, target],
+			[{ id: "audio-image", sourceElementId: source.id, targetElementId: target.id }],
+		)
+
+		const [item] = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: target.id,
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["audio"] },
+		}).mediaItems
+
+		expect(item).toMatchObject({
+			kind: "audio",
+			status: "inactive",
+			reason: "unsupported-type",
+		})
+	})
+
 	it("recursively collects consumable visible descendants in stable z-index order", () => {
 		const frame: FrameElement = {
 			id: "frame-source",

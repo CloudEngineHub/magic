@@ -10,6 +10,7 @@ import {
 	MousePointer2,
 	Type,
 	Image as ImageIcon,
+	Music2,
 	Upload,
 } from "lucide-react"
 import { ImageSparkles } from "../primitives/icons/index"
@@ -34,8 +35,10 @@ import {
 	getMediaDimensions,
 	isImageFile,
 	isVideoFile,
+	isAudioFile,
 	validateFile,
 } from "../../runtime/shared/ids"
+import { AUDIO_CONFIG } from "../../runtime/elements/audio/AudioElement.config"
 import {
 	collectObstacleRects,
 	findNextImageVideoPlaceholderPositionNearViewport,
@@ -78,6 +81,7 @@ export default function Tools() {
 	const [activeTool, setActiveToolState] = useState<ToolType | null>(null)
 	const imageUploadInputRef = useRef<HTMLInputElement>(null)
 	const videoUploadInputRef = useRef<HTMLInputElement>(null)
+	const audioUploadInputRef = useRef<HTMLInputElement>(null)
 
 	// 监听 Canvas 的工具状态变化
 	useCanvasEvent("tool:change", ({ data }) => {
@@ -123,7 +127,9 @@ export default function Tools() {
 					canvas.permissionManager.isVisible(el) && !canvas.permissionManager.isLocked(el)
 				)
 			})
-			const { width, height } = await getMediaDimensions(file)
+			const { width, height } = isAudioFile(file)
+				? { width: AUDIO_CONFIG.DEFAULT_WIDTH, height: AUDIO_CONFIG.DEFAULT_HEIGHT }
+				: await getMediaDimensions(file)
 			const mediaPlacementConfig = getResolvedMediaPlacementConfig(canvas)
 			const targetPosition = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
 				elementWidth: width,
@@ -144,13 +150,15 @@ export default function Tools() {
 	)
 
 	const handleUploadFiles = useCallback(
-		async (files: File[], type: "image" | "video") => {
+		async (files: File[], type: "image" | "video" | "audio") => {
 			if (!canvas || canvas.readonly || files.length === 0) return
 
 			const validFiles = files.filter((file) => {
 				const validation = validateFile(file)
 				if (!validation.valid) return false
-				return type === "image" ? isImageFile(file) : isVideoFile(file)
+				if (type === "image") return isImageFile(file)
+				if (type === "video") return isVideoFile(file)
+				return isAudioFile(file)
 			})
 			if (validFiles.length === 0) return
 
@@ -180,12 +188,25 @@ export default function Tools() {
 		[handleUploadFiles],
 	)
 
+	const handleAudioUploadChange = useCallback(
+		async (event: ChangeEvent<HTMLInputElement>) => {
+			const files = Array.from(event.target.files || [])
+			event.target.value = ""
+			await handleUploadFiles(files, "audio")
+		},
+		[handleUploadFiles],
+	)
+
 	const openLocalUploadPicker = useCallback(
-		(type: "image" | "video") => {
+		(type: "image" | "video" | "audio") => {
 			if (!canvas || canvas.readonly) return
 
 			const input =
-				type === "image" ? imageUploadInputRef.current : videoUploadInputRef.current
+				type === "image"
+					? imageUploadInputRef.current
+					: type === "video"
+						? videoUploadInputRef.current
+						: audioUploadInputRef.current
 			if (!input) return
 
 			input.value = ""
@@ -280,6 +301,13 @@ export default function Tools() {
 						openLocalUploadPicker("video")
 					},
 				},
+				{
+					label: t("tools.uploadAudio", "上传音频"),
+					icon: Music2,
+					onClick: () => {
+						openLocalUploadPicker("audio")
+					},
+				},
 			],
 		},
 	]
@@ -310,6 +338,14 @@ export default function Tools() {
 				multiple
 				style={{ display: "none" }}
 				onChange={handleVideoUploadChange}
+			/>
+			<input
+				ref={audioUploadInputRef}
+				type="file"
+				accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/x-aac,.mp3,.wav,.ogg,.m4a,.aac"
+				multiple
+				style={{ display: "none" }}
+				onChange={handleAudioUploadChange}
 			/>
 			{tools.map((item, index) => {
 				if (item === Divider) {

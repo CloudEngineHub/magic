@@ -44,6 +44,11 @@ interface RegisteredVideoElement {
 	path: string
 }
 
+interface RegisteredAudioElement {
+	elementId: string
+	path: string
+}
+
 interface LoadCandidateBase {
 	elementId: string
 	path: string
@@ -68,11 +73,21 @@ interface VideoLoadCandidate extends LoadCandidateBase {
 	frameVisibleBounds?: Rect
 }
 
+type AudioLoadTier = "url" | "preload"
+
+interface AudioLoadCandidate extends LoadCandidateBase {
+	tier: AudioLoadTier
+	frameAdjustedBounds?: Rect
+	frameVisibleBounds?: Rect
+}
+
 export interface CanvasVisibilitySnapshot {
 	registeredImageCount: number
 	registeredVideoCount: number
+	registeredAudioCount: number
 	registerDedupedCount: number
 	videoRegisterDedupedCount: number
+	audioRegisterDedupedCount: number
 	lowFallbackPreviewCount: number
 	visibleImageCount: number
 	nearImageCount: number
@@ -80,15 +95,21 @@ export interface CanvasVisibilitySnapshot {
 	visibleVideoCount: number
 	nearVideoCount: number
 	farVideoCount: number
+	visibleAudioCount: number
+	nearAudioCount: number
+	farAudioCount: number
 	lastQueryDurationMs: number
 	lastRequestedVisibleCount: number
 	lastRequestedNearCount: number
 	lastRequestedVisibleVideoCount: number
 	lastRequestedNearVideoCount: number
+	lastRequestedVisibleAudioCount: number
+	lastRequestedNearAudioCount: number
 	lowDetailVisibleVideoCount: number
 	pendingLowDetailVisibleVideoLoadCandidateCount: number
 	pendingImageLoadCandidateCount: number
 	pendingVideoLoadCandidateCount: number
+	pendingAudioLoadCandidateCount: number
 	drainScheduledCount: number
 	drainRunCount: number
 	lastViewportScale: number
@@ -112,6 +133,10 @@ const MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD = 160
 const LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT = 4
 const MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY = 12
 const MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY = 6
+const MIN_VISIBLE_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD = MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD
+const MIN_NEAR_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD = MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD
+const MAX_VISIBLE_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY
+const MAX_NEAR_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY
 const VISIBILITY_DRAIN_DELAY_MS = 80
 const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
 const MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS = 48
@@ -136,6 +161,12 @@ interface RequestedImageLoadState {
 interface RequestedVideoLoadState {
 	priority: ImageResourceLoadPriority
 	tier: VideoLoadTier
+	requestedAt: number
+}
+
+interface RequestedAudioLoadState {
+	priority: ImageResourceLoadPriority
+	tier: AudioLoadTier
 	requestedAt: number
 }
 
@@ -273,6 +304,10 @@ function getVideoLoadTierRank(tier: VideoLoadTier): number {
 	return tier === "poster" ? 0 : 1
 }
 
+function getAudioLoadTierRank(tier: AudioLoadTier): number {
+	return tier === "preload" ? 0 : 1
+}
+
 function hasChildren(
 	element: LayerElement,
 ): element is LayerElement & { children: LayerElement[] } {
@@ -299,11 +334,14 @@ export class CanvasVisibilityManager {
 	private readonly canvas: Canvas
 	private readonly registeredImages = new Map<string, RegisteredImageElement>()
 	private readonly registeredVideos = new Map<string, RegisteredVideoElement>()
+	private readonly registeredAudios = new Map<string, RegisteredAudioElement>()
 	private readonly lastVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastVideoVisibilityState = new Map<string, VisibilityState>()
+	private readonly lastAudioVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastRequestedLoadState = new Map<string, RequestedImageLoadState>()
 	private readonly lowFallbackPreviewPathByElementId = new Map<string, string>()
 	private readonly lastRequestedVideoLoadState = new Map<string, RequestedVideoLoadState>()
+	private readonly lastRequestedAudioLoadState = new Map<string, RequestedAudioLoadState>()
 	private readonly lastContainerDisplayVariant = new Map<string, MediaDisplayResourceVariant>()
 	private readonly imageRetentionHints = new Map<string, DecodedImageRetentionHint>()
 	private rafId: number | null = null
@@ -333,8 +371,10 @@ export class CanvasVisibilityManager {
 	private statsSnapshot: CanvasVisibilitySnapshot = {
 		registeredImageCount: 0,
 		registeredVideoCount: 0,
+		registeredAudioCount: 0,
 		registerDedupedCount: 0,
 		videoRegisterDedupedCount: 0,
+		audioRegisterDedupedCount: 0,
 		lowFallbackPreviewCount: 0,
 		visibleImageCount: 0,
 		nearImageCount: 0,
@@ -342,15 +382,21 @@ export class CanvasVisibilityManager {
 		visibleVideoCount: 0,
 		nearVideoCount: 0,
 		farVideoCount: 0,
+		visibleAudioCount: 0,
+		nearAudioCount: 0,
+		farAudioCount: 0,
 		lastQueryDurationMs: 0,
 		lastRequestedVisibleCount: 0,
 		lastRequestedNearCount: 0,
 		lastRequestedVisibleVideoCount: 0,
 		lastRequestedNearVideoCount: 0,
+		lastRequestedVisibleAudioCount: 0,
+		lastRequestedNearAudioCount: 0,
 		lowDetailVisibleVideoCount: 0,
 		pendingLowDetailVisibleVideoLoadCandidateCount: 0,
 		pendingImageLoadCandidateCount: 0,
 		pendingVideoLoadCandidateCount: 0,
+		pendingAudioLoadCandidateCount: 0,
 		drainScheduledCount: 0,
 		drainRunCount: 0,
 		lastViewportScale: 1,
@@ -410,6 +456,16 @@ export class CanvasVisibilityManager {
 		this.registeredVideos.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
 			this.lastRequestedVideoLoadState.delete(elementId)
+		})
+	}
+
+	private readonly handleAudioResourceLoadFailed = (event: {
+		data: { path: string; reason?: ResourceLoadFailureReason }
+	}): void => {
+		if (event.data.reason === "not-found") return
+		this.registeredAudios.forEach((registered, elementId) => {
+			if (!this.isSameResourcePath(registered.path, event.data.path)) return
+			this.lastRequestedAudioLoadState.delete(elementId)
 		})
 	}
 
@@ -488,6 +544,10 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
+		)
+		this.canvas.eventEmitter.on(
+			"resource:audio:load-failed",
+			this.handleAudioResourceLoadFailed,
 		)
 		this.canvas.eventEmitter.on(
 			"resource:image:load-failed",
@@ -574,6 +634,66 @@ export class CanvasVisibilityManager {
 		const current = this.registeredVideos.get(elementId)
 		if (current?.path === path) return
 		this.registerVideoElement(elementId, path)
+	}
+
+	public registerAudioElement(elementId: string, path: string): void {
+		if (this.destroyed) return
+		const current = this.registeredAudios.get(elementId)
+		if (current?.path === path) {
+			this.statsSnapshot.audioRegisterDedupedCount += 1
+			return
+		}
+		this.registeredAudios.set(elementId, { elementId, path })
+		if (current) {
+			// 等价资源引用也可能从相对路径切换成项目绝对路径。必须更新保存的引用并
+			// 释放旧会话，否则后续刷新会继续使用旧 path 和已完成的请求去重状态。
+			this.cancelViewportResourceSignalIfUnused("audio", current.path, this.registeredAudios)
+			this.canvas.audioPlaybackManager.release(elementId)
+		}
+		this.lastAudioVisibilityState.delete(elementId)
+		this.lastRequestedAudioLoadState.delete(elementId)
+		this.scheduleRefresh("audio:register", true)
+	}
+
+	public unregisterAudioElement(elementId: string): void {
+		const registered = this.registeredAudios.get(elementId)
+		if (!registered) return
+		this.registeredAudios.delete(elementId)
+		this.cancelViewportResourceSignalIfUnused("audio", registered.path, this.registeredAudios)
+		this.lastAudioVisibilityState.delete(elementId)
+		this.lastRequestedAudioLoadState.delete(elementId)
+		this.canvas.audioPlaybackManager.release(elementId)
+		this.scheduleRefresh("audio:unregister", true)
+	}
+
+	public updateAudioElement(elementId: string, path: string | null | undefined): void {
+		if (!path) {
+			this.unregisterAudioElement(elementId)
+			return
+		}
+
+		const current = this.registeredAudios.get(elementId)
+		if (current?.path === path) return
+		this.registerAudioElement(elementId, path)
+	}
+
+	public invalidateAudioLoadRequest(
+		path: string,
+		reason = "resource-invalidated",
+		options?: { scheduleRefresh?: boolean },
+	): void {
+		if (this.destroyed || !path) return
+
+		let matched = false
+		this.registeredAudios.forEach((registered, elementId) => {
+			if (!this.isSameResourcePath(registered.path, path)) return
+			matched = true
+			this.lastRequestedAudioLoadState.delete(elementId)
+		})
+
+		if (matched && options?.scheduleRefresh !== false) {
+			this.scheduleRefresh(`audio:load-request-invalidated:${reason}`, true)
+		}
 	}
 
 	public requestImmediateImageLoad(
@@ -700,8 +820,10 @@ export class CanvasVisibilityManager {
 		controllers.clear()
 		this.lastVisibilityState.clear()
 		this.lastVideoVisibilityState.clear()
+		this.lastAudioVisibilityState.clear()
 		this.lastRequestedLoadState.clear()
 		this.lastRequestedVideoLoadState.clear()
+		this.lastRequestedAudioLoadState.clear()
 		this.lowFallbackPreviewPathByElementId.clear()
 		this.imageRetentionHints.clear()
 		this.scheduleRefresh("resource-reference-resolver-changed", true)
@@ -736,11 +858,14 @@ export class CanvasVisibilityManager {
 		this.restoreContentLayerHitGraph()
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
+		this.registeredAudios.clear()
 		this.lastVisibilityState.clear()
 		this.lastVideoVisibilityState.clear()
+		this.lastAudioVisibilityState.clear()
 		this.lastRequestedLoadState.clear()
 		this.lowFallbackPreviewPathByElementId.clear()
 		this.lastRequestedVideoLoadState.clear()
+		this.lastRequestedAudioLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
 		this.imageRetentionHints.clear()
 		const controllers = this.getViewportResourceAbortControllers()
@@ -758,6 +883,10 @@ export class CanvasVisibilityManager {
 			this.handleVideoResourceLoadFailed,
 		)
 		this.canvas.eventEmitter.off(
+			"resource:audio:load-failed",
+			this.handleAudioResourceLoadFailed,
+		)
+		this.canvas.eventEmitter.off(
 			"resource:image:load-failed",
 			this.handleImageResourceLoadFailed,
 		)
@@ -771,7 +900,10 @@ export class CanvasVisibilityManager {
 		return areCanvasHostResourceReferencesSame(this.canvas, left, right)
 	}
 
-	private getViewportResourceSignal(mediaType: "image" | "video", path: string): AbortSignal {
+	private getViewportResourceSignal(
+		mediaType: "image" | "video" | "audio",
+		path: string,
+	): AbortSignal {
 		const key = this.getViewportResourceAbortKey(mediaType, path)
 		const controllers = this.getViewportResourceAbortControllers()
 		let controller = controllers.get(key)
@@ -782,7 +914,10 @@ export class CanvasVisibilityManager {
 		return controller.signal
 	}
 
-	private getViewportResourceAbortKey(mediaType: "image" | "video", path: string): string {
+	private getViewportResourceAbortKey(
+		mediaType: "image" | "video" | "audio",
+		path: string,
+	): string {
 		return `${mediaType}\0${getCanvasHostResourceReferenceIdentity(this.canvas, path)}`
 	}
 
@@ -800,10 +935,12 @@ export class CanvasVisibilityManager {
 
 	private clearViewportResourceLoadRequestStates(resourceKeys: ReadonlySet<string>): void {
 		if (resourceKeys.size === 0) return
-		const clearMatchingStates = <T extends RegisteredImageElement | RegisteredVideoElement>(
+		const clearMatchingStates = <
+			T extends RegisteredImageElement | RegisteredVideoElement | RegisteredAudioElement,
+		>(
 			registered: Map<string, T>,
 			requestedStates: Map<string, unknown>,
-			mediaType: "image" | "video",
+			mediaType: "image" | "video" | "audio",
 		): void => {
 			registered.forEach((resource, elementId) => {
 				if (!resourceKeys.has(this.getViewportResourceAbortKey(mediaType, resource.path))) {
@@ -815,12 +952,16 @@ export class CanvasVisibilityManager {
 
 		clearMatchingStates(this.registeredImages, this.lastRequestedLoadState, "image")
 		clearMatchingStates(this.registeredVideos, this.lastRequestedVideoLoadState, "video")
+		clearMatchingStates(this.registeredAudios, this.lastRequestedAudioLoadState, "audio")
 	}
 
 	private cancelViewportResourceSignalIfUnused(
-		mediaType: "image" | "video",
+		mediaType: "image" | "video" | "audio",
 		path: string,
-		registered: Map<string, RegisteredImageElement | RegisteredVideoElement>,
+		registered: Map<
+			string,
+			RegisteredImageElement | RegisteredVideoElement | RegisteredAudioElement
+		>,
 	): void {
 		const key = this.getViewportResourceAbortKey(mediaType, path)
 		const stillRegistered = Array.from(registered.values()).some(
@@ -1068,7 +1209,9 @@ export class CanvasVisibilityManager {
 	private refreshVisibility(reason: string, force: boolean): void {
 		if (
 			this.destroyed ||
-			(this.registeredImages.size === 0 && this.registeredVideos.size === 0)
+			(this.registeredImages.size === 0 &&
+				this.registeredVideos.size === 0 &&
+				this.registeredAudios.size === 0)
 		) {
 			return
 		}
@@ -1125,6 +1268,10 @@ export class CanvasVisibilityManager {
 		this.registeredVideos.forEach((_, elementId) => {
 			registeredVideoIds.push(elementId)
 		})
+		const registeredAudioIds: string[] = []
+		this.registeredAudios.forEach((_, elementId) => {
+			registeredAudioIds.push(elementId)
+		})
 		const visibleIds = new Set(
 			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
 				elementIds: registeredImageIds,
@@ -1153,6 +1300,20 @@ export class CanvasVisibilityManager {
 		)
 		visibleVideoIds.forEach((elementId) => nearVideoIds.delete(elementId))
 
+		const visibleAudioIds = new Set(
+			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
+				elementIds: registeredAudioIds,
+			}),
+		)
+		const nearAudioIds = new Set(
+			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+				viewportRect,
+				nearPadding,
+				{ elementIds: registeredAudioIds },
+			),
+		)
+		visibleAudioIds.forEach((elementId) => nearAudioIds.delete(elementId))
+
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
 		const visibleCandidates: ImageLoadCandidate[] = []
@@ -1161,6 +1322,8 @@ export class CanvasVisibilityManager {
 		const visibleVideoCandidates: VideoLoadCandidate[] = []
 		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
 		const nearVideoCandidates: VideoLoadCandidate[] = []
+		const visibleAudioCandidates: AudioLoadCandidate[] = []
+		const nearAudioCandidates: AudioLoadCandidate[] = []
 
 		visibleIds.forEach((elementId) => {
 			const candidate = this.createCandidate(
@@ -1225,6 +1388,20 @@ export class CanvasVisibilityManager {
 				removeCandidatesByIds(nearVideoCandidates, frameAdjustedVideoIds)
 				visibleVideoCandidates.push(...visibleContainerMediaCandidates.videoCandidates)
 			}
+			if (visibleContainerMediaCandidates.audioCandidates.length > 0) {
+				const frameAdjustedAudioIds = new Set(
+					visibleContainerMediaCandidates.audioCandidates.map(
+						(candidate) => candidate.elementId,
+					),
+				)
+				frameAdjustedAudioIds.forEach((elementId) => {
+					visibleAudioIds.add(elementId)
+					nearAudioIds.delete(elementId)
+				})
+				removeCandidatesByIds(visibleAudioCandidates, frameAdjustedAudioIds)
+				removeCandidatesByIds(nearAudioCandidates, frameAdjustedAudioIds)
+				visibleAudioCandidates.push(...visibleContainerMediaCandidates.audioCandidates)
+			}
 		}
 
 		const presentationCandidates =
@@ -1249,7 +1426,6 @@ export class CanvasVisibilityManager {
 				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
-
 		nearVideoIds.forEach((elementId) => {
 			const candidate = this.createVideoCandidate(
 				elementId,
@@ -1261,6 +1437,34 @@ export class CanvasVisibilityManager {
 			if (!candidate) return
 			if (candidate.screenLongEdge >= MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
 				nearVideoCandidates.push(candidate)
+			}
+		})
+
+		visibleAudioIds.forEach((elementId) => {
+			const candidate = this.createAudioCandidate(
+				elementId,
+				"visible",
+				viewportScale,
+				viewportCenter,
+				"preload",
+			)
+			if (!candidate) return
+			if (candidate.screenLongEdge >= MIN_VISIBLE_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleAudioCandidates.push(candidate)
+			}
+		})
+
+		nearAudioIds.forEach((elementId) => {
+			const candidate = this.createAudioCandidate(
+				elementId,
+				"near",
+				viewportScale,
+				viewportCenter,
+				"url",
+			)
+			if (!candidate) return
+			if (candidate.screenLongEdge >= MIN_NEAR_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD) {
+				nearAudioCandidates.push(candidate)
 			}
 		})
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
@@ -1280,6 +1484,12 @@ export class CanvasVisibilityManager {
 		)
 		const pendingNearVideoCandidates = nearVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
+		)
+		const pendingVisibleAudioCandidates = visibleAudioCandidates.filter((candidate) =>
+			this.shouldRequestAudioCandidate(candidate),
+		)
+		const pendingNearAudioCandidates = nearAudioCandidates.filter((candidate) =>
+			this.shouldRequestAudioCandidate(candidate),
 		)
 		const shouldDeferNearLoads =
 			this.imagePresentationPhase === "moving" || isViewportMovementReason(reason)
@@ -1310,11 +1520,21 @@ export class CanvasVisibilityManager {
 			: pendingNearVideoCandidates
 					.sort(sortCandidates)
 					.slice(0, MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY)
+		const visibleAudiosToLoad = pendingVisibleAudioCandidates
+			.sort(sortCandidates)
+			.slice(0, MAX_VISIBLE_AUDIO_LOAD_REQUESTS_PER_QUERY)
+		const nearAudiosToLoad = shouldDeferNearLoads
+			? []
+			: pendingNearAudioCandidates
+					.sort(sortCandidates)
+					.slice(0, MAX_NEAR_AUDIO_LOAD_REQUESTS_PER_QUERY)
 
 		visibleToLoad.forEach((candidate) => this.requestImageLoad(candidate, reason))
 		nearToLoad.forEach((candidate) => this.requestImageLoad(candidate, reason))
 		visibleVideosToLoad.forEach((candidate) => this.requestVideoLoad(candidate, reason))
 		nearVideosToLoad.forEach((candidate) => this.requestVideoLoad(candidate, reason))
+		visibleAudiosToLoad.forEach((candidate) => this.requestAudioLoad(candidate, reason))
+		nearAudiosToLoad.forEach((candidate) => this.requestAudioLoad(candidate, reason))
 
 		const pendingImageLoadCandidateCount =
 			pendingVisibleCandidates.length +
@@ -1324,13 +1544,18 @@ export class CanvasVisibilityManager {
 			pendingVisibleVideoCandidates.length +
 			pendingLowDetailVisibleVideoCandidates.length +
 			pendingNearVideoCandidates.length
+		const pendingAudioLoadCandidateCount =
+			pendingVisibleAudioCandidates.length + pendingNearAudioCandidates.length
 		const requestedImageLoadCount = visibleToLoad.length + nearToLoad.length
 		const requestedVideoLoadCount = visibleVideosToLoad.length + nearVideosToLoad.length
+		const requestedAudioLoadCount = visibleAudiosToLoad.length + nearAudiosToLoad.length
 		this.scheduleDrainIfNeeded({
 			pendingImageLoadCandidateCount,
 			pendingVideoLoadCandidateCount,
+			pendingAudioLoadCandidateCount,
 			requestedImageLoadCount,
 			requestedVideoLoadCount,
+			requestedAudioLoadCount,
 		})
 
 		if (isViewportMovementReason(reason)) {
@@ -1361,11 +1586,19 @@ export class CanvasVisibilityManager {
 			this.lastVideoVisibilityState.set(elementId, state)
 			if (state === "far") farVideoCount += 1
 		})
+		const farAudioCount = this.updateAudioVisibilityStates(
+			visibleAudioIds,
+			nearAudioIds,
+			farDrainReady,
+		)
 		const activeViewportResourceKeys = new Set<string>()
 		const retainRegisteredResources = (
-			registered: Map<string, RegisteredImageElement | RegisteredVideoElement>,
+			registered: Map<
+				string,
+				RegisteredImageElement | RegisteredVideoElement | RegisteredAudioElement
+			>,
 			elementIds: Set<string>,
-			mediaType: "image" | "video",
+			mediaType: "image" | "video" | "audio",
 		) => {
 			elementIds.forEach((elementId) => {
 				if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
@@ -1378,8 +1611,15 @@ export class CanvasVisibilityManager {
 		}
 		const activeImageIds = new Set([...visibleIds, ...nearIds])
 		const activeVideoIds = new Set([...visibleVideoIds, ...nearVideoIds])
+		const activeAudioIds = new Set([...visibleAudioIds, ...nearAudioIds])
 		retainRegisteredResources(this.registeredImages, activeImageIds, "image")
 		retainRegisteredResources(this.registeredVideos, activeVideoIds, "video")
+		// 音频视口任务沿用三秒 far drain：移动期间先保留 path 级信号，
+		// drain 确认仍为 far 后再取消排队/进行中的 metadata 预加载。
+		const retainedAudioIds = farDrainReady
+			? activeAudioIds
+			: new Set(this.registeredAudios.keys())
+		retainRegisteredResources(this.registeredAudios, retainedAudioIds, "audio")
 		this.cancelFarViewportResourceSignals(activeViewportResourceKeys)
 		if (farDrainReady) {
 			const retainedVideoPaths = new Set<string>()
@@ -1395,8 +1635,10 @@ export class CanvasVisibilityManager {
 		this.statsSnapshot = {
 			registeredImageCount: this.registeredImages.size,
 			registeredVideoCount: this.registeredVideos.size,
+			registeredAudioCount: this.registeredAudios.size,
 			registerDedupedCount: previousSnapshot.registerDedupedCount,
 			videoRegisterDedupedCount: previousSnapshot.videoRegisterDedupedCount,
+			audioRegisterDedupedCount: previousSnapshot.audioRegisterDedupedCount,
 			lowFallbackPreviewCount: previousSnapshot.lowFallbackPreviewCount,
 			visibleImageCount: visibleIds.size,
 			nearImageCount: nearIds.size,
@@ -1404,16 +1646,22 @@ export class CanvasVisibilityManager {
 			visibleVideoCount: visibleVideoIds.size,
 			nearVideoCount: nearVideoIds.size,
 			farVideoCount,
+			visibleAudioCount: visibleAudioIds.size,
+			nearAudioCount: nearAudioIds.size,
+			farAudioCount,
 			lastQueryDurationMs: durationMs,
 			lastRequestedVisibleCount: visibleToLoad.length,
 			lastRequestedNearCount: nearToLoad.length,
 			lastRequestedVisibleVideoCount: visibleVideosToLoad.length,
 			lastRequestedNearVideoCount: nearVideosToLoad.length,
+			lastRequestedVisibleAudioCount: visibleAudiosToLoad.length,
+			lastRequestedNearAudioCount: nearAudiosToLoad.length,
 			lowDetailVisibleVideoCount: lowDetailVisibleVideoCandidates.length,
 			pendingLowDetailVisibleVideoLoadCandidateCount:
 				pendingLowDetailVisibleVideoCandidates.length,
 			pendingImageLoadCandidateCount,
 			pendingVideoLoadCandidateCount,
+			pendingAudioLoadCandidateCount,
 			drainScheduledCount: previousSnapshot.drainScheduledCount,
 			drainRunCount: previousSnapshot.drainRunCount,
 			lastViewportScale: viewportScale,
@@ -1441,6 +1689,10 @@ export class CanvasVisibilityManager {
 		this.registeredVideos.forEach((_, elementId) => {
 			registeredVideoIds.push(elementId)
 		})
+		const registeredAudioIds: string[] = []
+		this.registeredAudios.forEach((_, elementId) => {
+			registeredAudioIds.push(elementId)
+		})
 
 		const visibleIds = new Set(
 			registeredImageIds.length > 0
@@ -1456,6 +1708,13 @@ export class CanvasVisibilityManager {
 					})
 				: [],
 		)
+		const visibleAudioIds = new Set(
+			registeredAudioIds.length > 0
+				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
+						elementIds: registeredAudioIds,
+					})
+				: [],
+		)
 
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
@@ -1463,6 +1722,7 @@ export class CanvasVisibilityManager {
 		const lowDetailVisibleCandidates: ImageLoadCandidate[] = []
 		const visibleVideoCandidates: VideoLoadCandidate[] = []
 		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
+		const visibleAudioCandidates: AudioLoadCandidate[] = []
 
 		visibleIds.forEach((elementId) => {
 			const candidate = this.createCandidate(
@@ -1497,6 +1757,19 @@ export class CanvasVisibilityManager {
 				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
+		visibleAudioIds.forEach((elementId) => {
+			const candidate = this.createAudioCandidate(
+				elementId,
+				"visible",
+				viewportScale,
+				viewportCenter,
+				"preload",
+			)
+			if (!candidate) return
+			if (candidate.screenLongEdge >= MIN_VISIBLE_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleAudioCandidates.push(candidate)
+			}
+		})
 		const presentationCandidates = [...visibleCandidates, ...lowDetailVisibleCandidates]
 		this.replaceImagePresentationTargets(presentationCandidates)
 		this.updateImageRetentionHints(presentationCandidates, startedAt)
@@ -1511,6 +1784,9 @@ export class CanvasVisibilityManager {
 		)
 		const pendingLowDetailVisibleVideoCandidates = lowDetailVisibleVideoCandidates.filter(
 			(candidate) => this.shouldRequestVideoCandidate(candidate),
+		)
+		const pendingVisibleAudioCandidates = visibleAudioCandidates.filter((candidate) =>
+			this.shouldRequestAudioCandidate(candidate),
 		)
 
 		const selectedVisibleToLoad =
@@ -1530,21 +1806,29 @@ export class CanvasVisibilityManager {
 				: pendingLowDetailVisibleVideoCandidates
 						.sort(sortCandidates)
 						.slice(0, LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT)
+		const visibleAudiosToLoad = pendingVisibleAudioCandidates
+			.sort(sortCandidates)
+			.slice(0, MAX_VISIBLE_AUDIO_LOAD_REQUESTS_PER_QUERY)
 
 		visibleToLoad.forEach((candidate) => this.requestImageLoad(candidate, reason))
 		visibleVideosToLoad.forEach((candidate) => this.requestVideoLoad(candidate, reason))
+		visibleAudiosToLoad.forEach((candidate) => this.requestAudioLoad(candidate, reason))
 
 		const pendingImageLoadCandidateCount =
 			pendingVisibleCandidates.length + pendingLowDetailVisibleCandidates.length
 		const pendingVideoLoadCandidateCount =
 			pendingVisibleVideoCandidates.length + pendingLowDetailVisibleVideoCandidates.length
+		const pendingAudioLoadCandidateCount = pendingVisibleAudioCandidates.length
 		const requestedImageLoadCount = visibleToLoad.length
 		const requestedVideoLoadCount = visibleVideosToLoad.length
+		const requestedAudioLoadCount = visibleAudiosToLoad.length
 		this.scheduleDrainIfNeeded({
 			pendingImageLoadCandidateCount,
 			pendingVideoLoadCandidateCount,
+			pendingAudioLoadCandidateCount,
 			requestedImageLoadCount,
 			requestedVideoLoadCount,
+			requestedAudioLoadCount,
 		})
 		this.scheduleFarVisibilityDrain()
 
@@ -1554,6 +1838,9 @@ export class CanvasVisibilityManager {
 		visibleVideoIds.forEach((elementId) => {
 			this.lastVideoVisibilityState.set(elementId, "visible")
 		})
+		visibleAudioIds.forEach((elementId) => {
+			this.lastAudioVisibilityState.set(elementId, "visible")
+		})
 
 		const durationMs = now() - startedAt
 		const previousSnapshot = this.statsSnapshot
@@ -1561,11 +1848,14 @@ export class CanvasVisibilityManager {
 			...previousSnapshot,
 			visibleImageCount: visibleIds.size,
 			visibleVideoCount: visibleVideoIds.size,
+			visibleAudioCount: visibleAudioIds.size,
 			lastQueryDurationMs: durationMs,
 			lastRequestedVisibleCount: visibleToLoad.length,
 			lastRequestedVisibleVideoCount: visibleVideosToLoad.length,
+			lastRequestedVisibleAudioCount: visibleAudiosToLoad.length,
 			pendingImageLoadCandidateCount,
 			pendingVideoLoadCandidateCount,
+			pendingAudioLoadCandidateCount,
 			queryCount: previousSnapshot.queryCount + 1,
 		}
 	}
@@ -1616,6 +1906,44 @@ export class CanvasVisibilityManager {
 		if (tierImproved) return true
 		if (previousState.tier !== candidate.tier) return false
 		return getPriorityRank(previousState.priority) > getPriorityRank(candidate.priority)
+	}
+
+	private shouldRequestAudioCandidate(candidate: AudioLoadCandidate): boolean {
+		const previousState = this.lastRequestedAudioLoadState.get(candidate.elementId)
+		if (!previousState) return true
+		const tierImproved =
+			getAudioLoadTierRank(previousState.tier) > getAudioLoadTierRank(candidate.tier)
+		if (tierImproved) return true
+		if (previousState.tier !== candidate.tier) return false
+		return getPriorityRank(previousState.priority) > getPriorityRank(candidate.priority)
+	}
+
+	private updateAudioVisibilityStates(
+		visibleAudioIds: ReadonlySet<string>,
+		nearAudioIds: ReadonlySet<string>,
+		farDrainReady: boolean,
+	): number {
+		let farAudioCount = 0
+		this.registeredAudios.forEach((_, elementId) => {
+			const state: VisibilityState = visibleAudioIds.has(elementId)
+				? "visible"
+				: nearAudioIds.has(elementId)
+					? "near"
+					: "far"
+			this.lastAudioVisibilityState.set(elementId, state)
+			if (state !== "far") return
+
+			farAudioCount += 1
+			if (farDrainReady) {
+				this.canvas.audioPlaybackManager.releaseViewportPreload(elementId)
+			}
+		})
+		if (farAudioCount > 0 && !farDrainReady) {
+			// 元素自身被拖出视口也只会触发 element:change，而不是 viewport:pan。
+			// 此处确保这类 far 音频同样进入三秒 drain，避免视口会话永久滞留。
+			this.scheduleFarVisibilityDrain()
+		}
+		return farAudioCount
 	}
 
 	private selectImageCandidatesToLoad(options: {
@@ -1717,15 +2045,19 @@ export class CanvasVisibilityManager {
 	private scheduleDrainIfNeeded(options: {
 		pendingImageLoadCandidateCount: number
 		pendingVideoLoadCandidateCount: number
+		pendingAudioLoadCandidateCount: number
 		requestedImageLoadCount: number
 		requestedVideoLoadCount: number
+		requestedAudioLoadCount: number
 	}): void {
 		if (this.destroyed || this.drainTimerId !== null) return
 		const hasMoreImages =
 			options.pendingImageLoadCandidateCount > options.requestedImageLoadCount
 		const hasMoreVideos =
 			options.pendingVideoLoadCandidateCount > options.requestedVideoLoadCount
-		if (!hasMoreImages && !hasMoreVideos) return
+		const hasMoreAudios =
+			options.pendingAudioLoadCandidateCount > options.requestedAudioLoadCount
+		if (!hasMoreImages && !hasMoreVideos && !hasMoreAudios) return
 
 		this.statsSnapshot.drainScheduledCount += 1
 		this.drainTimerId = setTimeout(() => {
@@ -1783,6 +2115,7 @@ export class CanvasVisibilityManager {
 		return (
 			reason === "document:loaded" ||
 			reason === "image:register" ||
+			reason === "audio:register" ||
 			reason === "viewport:pan" ||
 			reason === "viewport:scale" ||
 			reason === "visibility:drain"
@@ -1793,6 +2126,7 @@ export class CanvasVisibilityManager {
 		return (
 			reason === "document:loaded" ||
 			reason === "image:register" ||
+			reason === "audio:register" ||
 			reason === "viewport:pan" ||
 			reason === "viewport:scale" ||
 			reason === "visibility:drain"
@@ -1896,10 +2230,11 @@ export class CanvasVisibilityManager {
 	}): {
 		imageCandidates: ImageLoadCandidate[]
 		videoCandidates: VideoLoadCandidate[]
+		audioCandidates: AudioLoadCandidate[]
 	} {
 		const { rootContainers } = this.getContainerRootCache()
 		if (rootContainers.length === 0) {
-			return { imageCandidates: [], videoCandidates: [] }
+			return { imageCandidates: [], videoCandidates: [], audioCandidates: [] }
 		}
 
 		const visibleContainerIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
@@ -1908,11 +2243,12 @@ export class CanvasVisibilityManager {
 			{ elementIds: rootContainers.map((element) => element.id) },
 		)
 		if (visibleContainerIds.length === 0) {
-			return { imageCandidates: [], videoCandidates: [] }
+			return { imageCandidates: [], videoCandidates: [], audioCandidates: [] }
 		}
 
 		const imageCandidates: ImageLoadCandidate[] = []
 		const videoCandidates: VideoLoadCandidate[] = []
+		const audioCandidates: AudioLoadCandidate[] = []
 		const queuedMediaIds = new Set<string>()
 
 		const visit = (
@@ -1926,7 +2262,7 @@ export class CanvasVisibilityManager {
 			},
 		): void => {
 			if (
-				imageCandidates.length + videoCandidates.length >=
+				imageCandidates.length + videoCandidates.length + audioCandidates.length >=
 				MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS
 			) {
 				return
@@ -2040,6 +2376,42 @@ export class CanvasVisibilityManager {
 				return
 			}
 
+			if (element.type === ElementTypeEnum.Audio) {
+				if (queuedMediaIds.has(element.id)) return
+				const registered = this.registeredAudios.get(element.id)
+				const path = registered?.path ?? element.src
+				if (!path) return
+
+				const elementBounds = this.getElementDataBoundsInCanvas(element, parentTransform)
+				if (!elementBounds) return
+				const clippedBounds = getIntersectionRect(elementBounds, parentTransform.clipBounds)
+				if (!clippedBounds) return
+				const visibleBounds = getIntersectionRect(clippedBounds, options.viewportRect)
+				if (!visibleBounds) return
+				const screenArea = getArea(visibleBounds) * options.viewportScale ** 2
+				const screenLongEdge =
+					Math.max(visibleBounds.width, visibleBounds.height) * options.viewportScale
+				if (screenArea <= 0) return
+
+				queuedMediaIds.add(element.id)
+				audioCandidates.push({
+					elementId: element.id,
+					path,
+					priority: "critical",
+					tier: "preload",
+					visibilityState: "visible",
+					screenArea,
+					screenLongEdge,
+					distanceToViewportCenter: getDistance(
+						getRectCenter(visibleBounds),
+						options.viewportCenter,
+					),
+					frameAdjustedBounds: elementBounds,
+					frameVisibleBounds: visibleBounds,
+				})
+				return
+			}
+
 			if (hasChildren(element)) {
 				const elementBounds = this.getElementDataBoundsInCanvas(element, parentTransform)
 				if (!elementBounds) {
@@ -2110,7 +2482,7 @@ export class CanvasVisibilityManager {
 			)
 		})
 
-		return { imageCandidates, videoCandidates }
+		return { imageCandidates, videoCandidates, audioCandidates }
 	}
 
 	private decideContainerDisplayVariant(options: {
@@ -2165,6 +2537,38 @@ export class CanvasVisibilityManager {
 		tier: VideoLoadTier,
 	): VideoLoadCandidate | null {
 		const registered = this.registeredVideos.get(elementId)
+		if (!registered) return null
+		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return null
+
+		const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
+		if (!bounds) return null
+		const screenWidth = Math.max(0, bounds.width * viewportScale)
+		const screenHeight = Math.max(0, bounds.height * viewportScale)
+		const screenLongEdge = Math.max(screenWidth, screenHeight)
+		const screenArea = screenWidth * screenHeight
+		const priority: ImageResourceLoadPriority =
+			visibilityState === "visible" ? "visible" : "near"
+
+		return {
+			elementId,
+			path: registered.path,
+			priority,
+			tier,
+			visibilityState,
+			screenArea,
+			screenLongEdge,
+			distanceToViewportCenter: getDistance(getRectCenter(bounds), viewportCenter),
+		}
+	}
+
+	private createAudioCandidate(
+		elementId: string,
+		visibilityState: "visible" | "near",
+		viewportScale: number,
+		viewportCenter: { x: number; y: number },
+		tier: AudioLoadTier,
+	): AudioLoadCandidate | null {
+		const registered = this.registeredAudios.get(elementId)
 		if (!registered) return null
 		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return null
 
@@ -2274,6 +2678,41 @@ export class CanvasVisibilityManager {
 						signal,
 					}
 				: {}),
+		})
+	}
+
+	private requestAudioLoad(candidate: AudioLoadCandidate, _reason: string, force = false): void {
+		// 本方法只由 Visibility Manager 调用；document load、register、idle drain 等
+		// 同样属于视口预加载，必须共享可在 far drain 时取消的 path 级信号。
+		const signal = this.getViewportResourceSignal("audio", candidate.path)
+		const previousState = this.lastRequestedAudioLoadState.get(candidate.elementId)
+		if (
+			!force &&
+			previousState &&
+			previousState.tier === candidate.tier &&
+			getPriorityRank(previousState.priority) <= getPriorityRank(candidate.priority)
+		) {
+			return
+		}
+
+		this.lastRequestedAudioLoadState.set(candidate.elementId, {
+			priority: candidate.priority,
+			tier: candidate.tier,
+			requestedAt: now(),
+		})
+		if (candidate.tier === "url") {
+			void this.canvas.audioResourceManager.getResource(candidate.path, {
+				allowCachedFallback: true,
+				priority: candidate.priority,
+				signal,
+			})
+			return
+		}
+
+		void this.canvas.audioPlaybackManager.prepare(candidate.elementId, candidate.path, {
+			source: "viewport",
+			priority: candidate.priority,
+			signal,
 		})
 	}
 }

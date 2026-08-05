@@ -22,6 +22,14 @@ function createVideo(id: string, src: string): LayerElement {
 	}
 }
 
+function createAudio(id: string, src: string): LayerElement {
+	return {
+		id,
+		type: ElementTypeEnum.Audio,
+		src,
+	}
+}
+
 function createCanvasMock(
 	elements: Record<string, LayerElement>,
 	getFileInfo = vi.fn(),
@@ -106,6 +114,29 @@ describe("CanvasResourceUrlWarmupManager", () => {
 			successCount: 2,
 			queuedCount: 0,
 			warmingCount: 0,
+		})
+		manager.destroy()
+	})
+
+	it("leaves audio URL admission to the visibility manager", async () => {
+		const getFileInfo = vi.fn(async (path: string) => ({
+			src: `https://example.test/${path}`,
+			fileName: path,
+		}))
+		const elements = {
+			audio: createAudio("audio", "./audios/a.mp3"),
+		}
+		const manager = new CanvasResourceUrlWarmupManager({
+			canvas: createCanvasMock(elements, getFileInfo) as unknown as Canvas,
+		})
+
+		manager.warmupCurrentDocument("test")
+		await flushWarmupTimer()
+
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(manager.getSnapshot()).toMatchObject({
+			registeredElementCount: 0,
+			trackedPathCount: 0,
 		})
 		manager.destroy()
 	})

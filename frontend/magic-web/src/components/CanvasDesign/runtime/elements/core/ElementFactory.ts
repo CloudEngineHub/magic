@@ -8,6 +8,7 @@ import { BaseElement, BASE_ELEMENT_DEFAULTS } from "./BaseElement"
 import { TextElement } from "../text/TextElement"
 import { ImageElement } from "../image/ImageElement"
 import { VideoElement } from "../video/VideoElement"
+import { AudioElement } from "../audio/AudioElement"
 // import { GroupElement } from "../frame/GroupElement"
 import { FrameElement } from "../frame/FrameElement"
 import type { Canvas } from "../../core/Canvas"
@@ -66,6 +67,9 @@ export class ElementFactory {
 
 			case ElementTypeEnum.Video:
 				return new VideoElement(data, canvas)
+
+			case ElementTypeEnum.Audio:
+				return new AudioElement(data, canvas)
 
 			// case ElementTypeEnum.Group:
 			// 	return new GroupElement(
@@ -161,6 +165,7 @@ export class ElementFactory {
 			imageHeight?: number
 			videoWidth?: number
 			videoHeight?: number
+			audioWidth?: number
 		},
 	): Record<string, unknown> {
 		// 先获取基础元素默认配置
@@ -202,6 +207,13 @@ export class ElementFactory {
 					options?.videoWidth,
 					options?.videoHeight,
 				)
+				break
+
+			case ElementTypeEnum.Audio:
+				specificConfig = {
+					...AudioElement.getDefaultConfig(),
+					width: options?.audioWidth ?? AudioElement.getDefaultConfig().width,
+				}
 				break
 
 			case ElementTypeEnum.Frame:

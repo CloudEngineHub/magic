@@ -7,7 +7,7 @@ import type { ElementToolType } from "../../public/props"
 
 export interface FullscreenMediaElement {
 	elementId: string
-	type: "image" | "video"
+	type: "image" | "video" | "audio"
 }
 
 interface CanvasUIContextValue {
@@ -176,6 +176,14 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		"element:video:fullscreenClick",
 		({ data }) => {
 			setFullscreenMediaElement({ elementId: data.elementId, type: "video" })
+		},
+		[],
+	)
+
+	useCanvasEvent(
+		"element:audio:fullscreenClick",
+		({ data }) => {
+			setFullscreenMediaElement({ elementId: data.elementId, type: "audio" })
 		},
 		[],
 	)

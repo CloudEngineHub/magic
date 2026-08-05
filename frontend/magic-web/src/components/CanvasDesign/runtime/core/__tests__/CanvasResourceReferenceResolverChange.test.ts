@@ -40,6 +40,7 @@ describe("Canvas resource reference resolver changes", () => {
 		const firstElementChanged = vi.fn()
 		const secondElementChanged = vi.fn()
 		const imageResourceChanged = vi.fn()
+		const audioResourceChanged = vi.fn()
 		const presentationChanged = vi.fn()
 		const visibilityChanged = vi.fn()
 		const warmupChanged = vi.fn()
@@ -51,6 +52,9 @@ describe("Canvas resource reference resolver changes", () => {
 		Object.assign(canvas, {
 			imageResourceManager: {
 				handleResourceReferenceResolverChanged: imageResourceChanged,
+			},
+			audioResourceManager: {
+				handleResourceReferenceResolverChanged: audioResourceChanged,
 			},
 			imagePresentationScheduler: {
 				handleResourceReferenceResolverChanged: presentationChanged,
@@ -70,6 +74,7 @@ describe("Canvas resource reference resolver changes", () => {
 		canvas.handleResourceReferenceResolverChanged()
 
 		expect(imageResourceChanged).toHaveBeenCalledTimes(1)
+		expect(audioResourceChanged).toHaveBeenCalledTimes(1)
 		expect(presentationChanged).toHaveBeenCalledTimes(1)
 		expect(visibilityChanged).toHaveBeenCalledTimes(1)
 		expect(warmupChanged).toHaveBeenCalledTimes(1)
@@ -82,8 +87,10 @@ describe("Canvas resource reference resolver changes", () => {
 		const scheduleRefresh = vi.fn()
 		const lastVisibilityState = new Map([["image-1", "visible"]])
 		const lastVideoVisibilityState = new Map([["video-1", "visible"]])
+		const lastAudioVisibilityState = new Map([["audio-1", "visible"]])
 		const lastRequestedLoadState = new Map([["image-1", {}]])
 		const lastRequestedVideoLoadState = new Map([["video-1", {}]])
+		const lastRequestedAudioLoadState = new Map([["audio-1", {}]])
 		const lowFallbackPreviewPathByElementId = new Map([["image-1", "./images/a.png"]])
 		const imageRetentionHints = new Map([["image-1", {}]])
 		const manager = Object.create(CanvasVisibilityManager.prototype)
@@ -92,8 +99,10 @@ describe("Canvas resource reference resolver changes", () => {
 			viewportResourceAbortControllers: new Map([["image\0old", { abort }]]),
 			lastVisibilityState,
 			lastVideoVisibilityState,
+			lastAudioVisibilityState,
 			lastRequestedLoadState,
 			lastRequestedVideoLoadState,
+			lastRequestedAudioLoadState,
 			lowFallbackPreviewPathByElementId,
 			imageRetentionHints,
 			scheduleRefresh,
@@ -104,8 +113,10 @@ describe("Canvas resource reference resolver changes", () => {
 		expect(abort).toHaveBeenCalledTimes(1)
 		expect(lastVisibilityState.size).toBe(0)
 		expect(lastVideoVisibilityState.size).toBe(0)
+		expect(lastAudioVisibilityState.size).toBe(0)
 		expect(lastRequestedLoadState.size).toBe(0)
 		expect(lastRequestedVideoLoadState.size).toBe(0)
+		expect(lastRequestedAudioLoadState.size).toBe(0)
 		expect(lowFallbackPreviewPathByElementId.size).toBe(0)
 		expect(imageRetentionHints.size).toBe(0)
 		expect(scheduleRefresh).toHaveBeenCalledWith("resource-reference-resolver-changed", true)

@@ -141,6 +141,10 @@ export class VideoRenderer {
 		this.playback.pause()
 	}
 
+	public isPaused(): boolean {
+		return this.playback.paused
+	}
+
 	public toggle(): void {
 		this.playback.toggle()
 	}

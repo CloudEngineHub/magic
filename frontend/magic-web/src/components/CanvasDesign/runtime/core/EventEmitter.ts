@@ -152,6 +152,7 @@ export interface CanvasEventMap {
 	"element:video:generate-submit-failed": { elementId: string }
 	"element:image:fullscreenClick": { elementId: string }
 	"element:video:fullscreenClick": { elementId: string }
+	"element:audio:fullscreenClick": { elementId: string }
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件
@@ -191,6 +192,10 @@ export interface CanvasEventMap {
 		/** refresh 失败时可保留旧 poster，仅使调度状态失效并等待后续重试 */
 		preservePreview?: boolean
 	} // 视频换链/刷新失败（如附件已删除）
+	"resource:audio:load-failed": {
+		path: string
+		reason?: ResourceLoadFailureReason
+	} // 音频换链、预加载或刷新失败
 	"resource:remote-load-deferral-released": { path: string; key: string } // 跨画布粘贴远程参考资源迁移完成/结束，允许预览重试
 	"resource:released": { path: string } // 资源生命周期清理事件（供资源 URL 缓存同步）
 

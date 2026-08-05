@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { ClipboardManager } from "../clipboard/ClipboardManager"
-import type { FrameElement, ImageElement, LayerElement, VideoElement } from "../../document/types"
+import type {
+	AudioElement,
+	FrameElement,
+	ImageElement,
+	LayerElement,
+	VideoElement,
+} from "../../document/types"
 import {
 	GenerationStatus,
 	ImageGenerationTaskTypeMap,
@@ -19,6 +25,9 @@ interface ClipboardManagerTestHarness {
 			primeCache: ReturnType<typeof vi.fn>
 		}
 		videoResourceManager: {
+			primeCache: ReturnType<typeof vi.fn>
+		}
+		audioResourceManager: {
 			primeCache: ReturnType<typeof vi.fn>
 		}
 	}
@@ -70,6 +79,9 @@ function createClipboardManager(): ClipboardManagerTestHarness {
 			primeCache: vi.fn(),
 		},
 		videoResourceManager: {
+			primeCache: vi.fn(),
+		},
+		audioResourceManager: {
 			primeCache: vi.fn(),
 		},
 	}
@@ -996,6 +1008,75 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(pastedChild.id).not.toBe("video-child")
 	})
 
+	it("uploads an audio child before returning the pasted frame", async () => {
+		const child: AudioElement = {
+			id: "audio-child",
+			type: "audio",
+			name: "Child audio",
+			src: "source/audio.mp3",
+			x: 12,
+			y: 16,
+			width: 480,
+			height: 120,
+		}
+		const frame: FrameElement = {
+			id: "frame-1",
+			type: "frame",
+			name: "Frame",
+			x: 100,
+			y: 120,
+			width: 600,
+			height: 240,
+			children: [child],
+		}
+		const manager = createClipboardManager()
+		manager.canvas.canvasFileUploadManager.transferRemoteResource.mockResolvedValue({
+			path: "target/audio.mp3",
+			src: "https://target.test/audio.mp3",
+			fileName: "audio.mp3",
+		})
+		const metadata = {
+			elementId: "audio-child",
+			filename: "audio.mp3",
+			mimeType: "audio/mpeg",
+			fileSize: 0,
+			sourceRef: {
+				src: "source/audio.mp3",
+				ossUrl: "https://source.test/audio.mp3",
+			},
+		}
+
+		const result = await manager.prepareClipboardTreeElement({
+			sourceElement: frame,
+			currentNames: new Set(),
+			isRoot: true,
+			offsetX: 0,
+			offsetY: 0,
+			canReuseElementSrc: false,
+			fileByElementId: new Map(),
+			metadataByElementId: new Map([["audio-child", metadata]]),
+			sourceCanvasId: "source-canvas",
+		})
+
+		expect(result.sourceReferenceFailureCount).toBe(0)
+		expect(result.pendingUploads).toEqual([])
+		const pastedFrame = result.element as FrameElement
+		const pastedChild = pastedFrame.children?.[0] as AudioElement
+		expect(pastedChild).toEqual(
+			expect.objectContaining({
+				type: "audio",
+				src: "target/audio.mp3",
+				visible: true,
+			}),
+		)
+		expect(pastedFrame.children).toHaveLength(1)
+		expect(pastedChild.id).not.toBe("audio-child")
+		expect(manager.canvas.audioResourceManager.primeCache).toHaveBeenCalledWith(
+			"target/audio.mp3",
+			expect.objectContaining({ path: "target/audio.mp3" }),
+		)
+	})
+
 	it("rewrites every source-canvas alias after a pasted image upload applies", () => {
 		const uploadResult: UploadFileResponse = {
 			path: "target/image.png",
@@ -1173,6 +1254,123 @@ describe("ClipboardManager frame clipboard trees", () => {
 			reason: "clipboard-tree-upload",
 			priority: "critical",
 		})
+	})
+
+	it("finalizes a pasted frame audio child without scheduling viewport media loading", () => {
+		const uploadResult: UploadFileResponse = {
+			path: "target/audio.mp3",
+			src: "https://target.test/audio.mp3",
+			fileName: "audio.mp3",
+		}
+		const currentElement: AudioElement = {
+			id: "pasted-audio",
+			type: "audio",
+			name: "Pasted audio",
+			x: 12,
+			y: 16,
+			width: 480,
+			height: 120,
+			visible: false,
+		}
+		const requestImmediateMediaLoadForElements = vi.fn()
+		const convertToPermament = vi.fn()
+		const manager = createClipboardManager()
+		manager.canvas = {
+			...manager.canvas,
+			elementManager: {
+				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => currentElement),
+				getElementInstance: vi.fn(() => undefined),
+				isTemporary: vi.fn(() => true),
+				convertToPermament,
+				update: vi.fn(),
+			},
+			visibilityManager: {
+				requestImmediateMediaLoadForElements,
+			},
+		} as unknown as ClipboardManagerTestHarness["canvas"]
+
+		const applied = (
+			manager as unknown as {
+				applyClipboardTreeUploadResult: (
+					upload: {
+						sourceElementId: string
+						targetElementId: string
+					},
+					nextUploadResult: UploadFileResponse,
+				) => boolean
+			}
+		).applyClipboardTreeUploadResult(
+			{
+				sourceElementId: "source-audio",
+				targetElementId: "pasted-audio",
+			},
+			uploadResult,
+		)
+
+		expect(applied).toBe(true)
+		const audioResourceUpdates = convertToPermament.mock.calls[0]?.[1]
+		expect(audioResourceUpdates).toEqual({
+			src: "target/audio.mp3",
+			visible: true,
+		})
+		expect(convertToPermament).toHaveBeenCalledWith("pasted-audio", audioResourceUpdates, {
+			silent: true,
+		})
+		expect(manager.canvas.audioResourceManager.primeCache).toHaveBeenCalledWith(
+			"target/audio.mp3",
+			uploadResult,
+		)
+		expect(requestImmediateMediaLoadForElements).not.toHaveBeenCalled()
+	})
+
+	it("omits a cross-canvas audio child when its upload fails", async () => {
+		const child: AudioElement = {
+			id: "source-audio",
+			type: "audio",
+			src: "source/audio.mp3",
+			x: 12,
+			y: 16,
+			width: 480,
+			height: 120,
+		}
+		const frame: FrameElement = {
+			id: "frame-1",
+			type: "frame",
+			x: 0,
+			y: 0,
+			width: 600,
+			height: 240,
+			children: [child],
+		}
+		const manager = createClipboardManager()
+		manager.canvas.canvasFileUploadManager.transferRemoteResource.mockResolvedValue(null)
+		const metadata = {
+			elementId: "source-audio",
+			filename: "audio.mp3",
+			mimeType: "audio/mpeg",
+			fileSize: 0,
+			sourceRef: {
+				src: "source/audio.mp3",
+				ossUrl: "https://source.test/audio.mp3",
+			},
+		}
+
+		const result = await manager.prepareClipboardTreeElement({
+			sourceElement: frame,
+			currentNames: new Set(),
+			isRoot: true,
+			offsetX: 0,
+			offsetY: 0,
+			canReuseElementSrc: false,
+			fileByElementId: new Map(),
+			metadataByElementId: new Map([["source-audio", metadata]]),
+			sourceCanvasId: "source-canvas",
+		})
+
+		expect(result.sourceReferenceFailureCount).toBe(1)
+		expect(result.pendingUploads).toEqual([])
+		expect((result.element as FrameElement).children).toEqual([])
 	})
 
 	it("rewrites source-canvas aliases during background resource transfers", async () => {

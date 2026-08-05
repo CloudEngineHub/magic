@@ -23,7 +23,7 @@ const DOWNLOAD_MENU_IMAGE_EXTENSIONS: readonly string[] = [
 export interface CanvasDownloadMenuContext {
 	/** 与 Topic 单文件一致：仅一张图片，且附件元信息表明它是 AI 图片。 */
 	useAiImageSubmenu: boolean
-	selectionKind: "video-only" | "mixed" | "image-only" | "none"
+	selectionKind: "video-only" | "audio-only" | "mixed" | "image-only" | "none"
 }
 
 function extensionFromFileNameOrPath(fileName: string, path?: string): string {
@@ -63,14 +63,17 @@ export async function resolveCanvasDownloadMenuContext(
 
 	const hasVideo = selectedMedia.some((e) => e.type === "video")
 	const hasImage = selectedMedia.some((e) => e.type === "image")
+	const hasAudio = selectedMedia.some((e) => e.type === "audio")
+	const selectedTypeCount = Number(hasVideo) + Number(hasImage) + Number(hasAudio)
 
 	let selectionKind: CanvasDownloadMenuContext["selectionKind"]
-	if (hasVideo && hasImage) selectionKind = "mixed"
+	if (selectedTypeCount > 1) selectionKind = "mixed"
 	else if (hasVideo) selectionKind = "video-only"
+	else if (hasAudio) selectionKind = "audio-only"
 	else if (hasImage) selectionKind = "image-only"
 	else selectionKind = "none"
 
-	if (!hasImage || hasVideo) {
+	if (!hasImage || hasVideo || hasAudio) {
 		return {
 			useAiImageSubmenu: false,
 			selectionKind,

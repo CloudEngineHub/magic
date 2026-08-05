@@ -483,6 +483,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		const consumerId = this.getInlinePlaybackConsumerId()
+		if (autoPlay) {
+			this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
+		}
 
 		if (this.renderer.hasAttachedPlayback()) {
 			if (autoPlay) {
@@ -553,6 +556,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 内联 consumer 将会话移交给全屏 consumer，用于进入全屏层 */
 	public handoffPlaybackToFullscreen(): HTMLVideoElement | null {
+		this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 		const session = this.canvas.videoPlaybackManager.handoff(
 			this.getInlinePlaybackConsumerId(),
 			this.getFullscreenPlaybackConsumerId(),
@@ -578,6 +582,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			return null
 		}
 
+		this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 		const session = await this.canvas.videoPlaybackManager.acquire(
 			path,
 			this.getFullscreenPlaybackConsumerId(),
@@ -1222,6 +1227,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (this.renderer.hasAttachedPlayback()) {
+			this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 			this.renderer.play()
 			return
 		}
@@ -1245,6 +1251,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (this.renderer.hasAttachedPlayback()) {
+			if (this.renderer.isPaused()) {
+				this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
+			}
 			this.renderer.toggle()
 			return
 		}

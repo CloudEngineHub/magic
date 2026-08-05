@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
-import type { LayerElement } from "../../document/types"
+import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import { TransformManager } from "../transform/TransformManager"
 
 interface TransformElementStub {
@@ -100,6 +100,18 @@ interface TransformManagerPrivate {
 interface TransformManagerModifierClickPrivate {
 	handleMultiSelectionProxyModifierClick: (e: Konva.KonvaEventObject<MouseEvent>) => void
 }
+
+beforeEach(() => {
+	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+		clearRect: vi.fn(),
+		fillRect: vi.fn(),
+		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+	} as unknown as CanvasRenderingContext2D)
+})
+
+afterEach(() => {
+	vi.restoreAllMocks()
+})
 
 function createModifierClickManager(options?: { canSelect?: boolean; isSelected?: boolean }) {
 	const elementId = "element-under-proxy"
@@ -257,6 +269,71 @@ function createProxySyncManager() {
 	return { applyTransform, element, emit, manager, node, requestLayerDraw, update }
 }
 
+function createConstraintManager(elementTypes: Record<string, LayerElement["type"]>) {
+	const elementIds = Object.keys(elementTypes)
+	const nodes = new Map(
+		elementIds.map((elementId, index) => [
+			elementId,
+			new Konva.Group({
+				id: elementId,
+				x: index * 500,
+				y: 0,
+				width: 480,
+				height: 120,
+			}),
+		]),
+	)
+	const getElementData = vi.fn((elementId: string) => ({
+		id: elementId,
+		type: elementTypes[elementId],
+		x: 0,
+		y: 0,
+		width: 480,
+		height: 120,
+	}))
+	const getElementInstance = vi.fn((elementId: string) => ({
+		getSize: () => ({ width: 480, height: 120 }),
+		getTransformConstraints: () =>
+			elementTypes[elementId] === ElementTypeEnum.Audio
+				? {
+						enabledAnchors: ["middle-left", "middle-right"],
+						minWidth: 240,
+						fixedHeight: 120,
+					}
+				: undefined,
+		shouldKeepRatio: () => false,
+	}))
+	const getSnappedBox = vi.fn((_oldBox, newBox) => newBox)
+	const canvas = {
+		readonly: false,
+		eventEmitter: { on: vi.fn(), emit: vi.fn() },
+		runtimeScheduler: { requestLayerDraw: vi.fn() },
+		isKeepRatioModifierPressed: () => false,
+		elementManager: {
+			getElementData,
+			getElementInstance,
+			getNodeAdapter: () => ({
+				getNodesForTransform: (ids: string[]) => ids.map((id) => nodes.get(id)),
+				getElementsBounds: () => ({
+					x: 0,
+					y: 0,
+					width: elementIds.length * 480,
+					height: 120,
+				}),
+			}),
+		},
+		permissionManager: { canTransform: () => true },
+		controlsLayer: { add: vi.fn() },
+		selectionManager: { getSelectedIds: () => elementIds },
+		snapGuideManager: { getSnappedBox },
+	} as unknown as Canvas
+
+	return {
+		getSnappedBox,
+		manager: new TransformManager({ canvas }),
+	}
+}
+
 describe("TransformManager multi-selection proxy modifier click", () => {
 	it("toggles the top content element beneath the proxy", () => {
 		const { getIntersection, manager, pointer, toggle } = createModifierClickManager()
@@ -295,6 +372,60 @@ describe("TransformManager multi-selection proxy modifier click", () => {
 
 		expect(getIntersection).not.toHaveBeenCalled()
 		expect(toggle).not.toHaveBeenCalled()
+	})
+})
+
+describe("TransformManager element constraints", () => {
+	it("uses horizontal anchors and preserves the audio minimum width and fixed height", () => {
+		const { getSnappedBox, manager } = createConstraintManager({
+			"audio-1": ElementTypeEnum.Audio,
+		})
+
+		manager.showTransformer(["audio-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+		expect(transformer.enabledAnchors()).toEqual(["middle-left", "middle-right"])
+
+		vi.spyOn(transformer, "getActiveAnchor").mockReturnValue("middle-right")
+		const boundBoxFunc = transformer.boundBoxFunc()
+		const oldBox = { x: 0, y: 0, width: 480, height: 120, rotation: 0 }
+		getSnappedBox.mockReturnValueOnce({
+			x: 0,
+			y: 20,
+			width: 300,
+			height: 80,
+			rotation: 0,
+		})
+		expect(boundBoxFunc(oldBox, { x: 0, y: 10, width: 300, height: 90, rotation: 0 })).toEqual({
+			x: 0,
+			y: 0,
+			width: 300,
+			height: 120,
+			rotation: 0,
+		})
+
+		getSnappedBox.mockReturnValueOnce({
+			x: 0,
+			y: 0,
+			width: 239,
+			height: 120,
+			rotation: 0,
+		})
+		expect(boundBoxFunc(oldBox, { x: 0, y: 0, width: 260, height: 120, rotation: 0 })).toEqual(
+			oldBox,
+		)
+	})
+
+	it("disables resize anchors when a multi-selection contains audio", () => {
+		const { manager } = createConstraintManager({
+			"audio-1": ElementTypeEnum.Audio,
+			"rectangle-1": ElementTypeEnum.Rectangle,
+		})
+
+		manager.showTransformer(["audio-1", "rectangle-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+		expect(transformer.nodes()).toHaveLength(1)
 	})
 })
 

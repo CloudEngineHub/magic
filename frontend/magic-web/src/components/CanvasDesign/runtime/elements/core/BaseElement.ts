@@ -20,6 +20,24 @@ export interface TransformContext {
 	initialAspectRatio?: number
 }
 
+export type ElementTransformAnchor =
+	| "top-left"
+	| "top-right"
+	| "bottom-left"
+	| "bottom-right"
+	| "top-center"
+	| "bottom-center"
+	| "middle-left"
+	| "middle-right"
+
+/** 元素级 Transformer 约束；多选策略由 TransformManager 统一仲裁。 */
+export interface ElementTransformConstraints {
+	enabledAnchors?: ElementTransformAnchor[]
+	minWidth?: number
+	minHeight?: number
+	fixedHeight?: number
+}
+
 /**
  * 基础元素默认配置
  */
@@ -346,6 +364,11 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 */
 	public shouldKeepRatio(): boolean {
 		return this.data.interactionConfig?.aspectRatioLocked ?? false
+	}
+
+	/** 子类可声明单选时的 Transformer 锚点和尺寸限制。 */
+	public getTransformConstraints(): ElementTransformConstraints | undefined {
+		return undefined
 	}
 
 	/**
