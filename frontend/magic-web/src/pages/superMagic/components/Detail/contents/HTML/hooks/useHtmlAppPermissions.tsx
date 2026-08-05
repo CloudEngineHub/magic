@@ -25,6 +25,7 @@ import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
 interface HtmlAppFileItem {
 	file_id: string
 	relative_file_path: string
+	updated_at?: string
 }
 
 interface UseHtmlAppPermissionsOptions {
@@ -43,17 +44,17 @@ export function useHtmlAppPermissions({
 	fileList,
 }: UseHtmlAppPermissionsOptions) {
 	const { t } = useTranslation("super")
+	const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
+	const lastSlash = cleanedEntryPath.lastIndexOf("/")
+	const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
 
 	const htmlAppInstanceKey = useMemo(() => {
-		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
-		const lastSlash = cleanedEntryPath.lastIndexOf("/")
-		const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
 		return JSON.stringify({
 			projectId: projectId || "",
 			appRootDir,
 			entryPath: cleanedEntryPath,
 		})
-	}, [relativeFilePath, projectId])
+	}, [appRootDir, cleanedEntryPath, projectId])
 
 	const [htmlAppConfigStateWithKey, setHtmlAppConfigStateWithKey] = useState<{
 		instanceKey: string
@@ -72,11 +73,17 @@ export function useHtmlAppPermissions({
 	)
 
 	const htmlAppConfig = htmlAppConfigState.status === "loaded" ? htmlAppConfigState.config : null
+	const appConfigPath = `${appRootDir}app.json`
+	// 普通附件更新不应重新加载 app.json；仅跟踪配置文件自身的身份和版本。
+	const appConfigFile = useMemo(
+		() =>
+			fileList.find((file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath),
+		[fileList, appConfigPath],
+	)
+	const appConfigFileId = appConfigFile?.file_id || ""
+	const appConfigFileUpdatedAt = appConfigFile?.updated_at || ""
 
 	const htmlAppInstance = useMemo(() => {
-		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
-		const lastSlash = cleanedEntryPath.lastIndexOf("/")
-		const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
 		const info = userStore.user.userInfo
 		const magicId = info?.magic_id?.trim()
 		const userId = info?.user_id?.trim()
@@ -88,7 +95,7 @@ export function useHtmlAppPermissions({
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
 		}
-	}, [content, rawSourceCode, relativeFilePath, projectId])
+	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode])
 
 	const htmlPermissionGrantStore = useMemo(() => new SessionStorageHtmlPermissionGrantStore(), [])
 
@@ -203,19 +210,12 @@ export function useHtmlAppPermissions({
 
 	useEffect(() => {
 		let cancelled = false
-		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
-		const lastSlash = cleanedEntryPath.lastIndexOf("/")
-		const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
-		const appConfigPath = `${appRootDir}app.json`
 		setHtmlAppConfigStateWithKey({
 			instanceKey: htmlAppInstanceKey,
 			configState: { status: "loading" },
 		})
-		const appConfigFile = fileList.find(
-			(file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath,
-		)
 
-		if (!appConfigFile) {
+		if (!appConfigFileId) {
 			setHtmlAppConfigStateWithKey({
 				instanceKey: htmlAppInstanceKey,
 				configState: { status: "absent" },
@@ -223,7 +223,7 @@ export function useHtmlAppPermissions({
 			return
 		}
 
-		getIframeDownloadUrl([appConfigFile.file_id])
+		getIframeDownloadUrl([appConfigFileId])
 			.then(async (urls) => {
 				const url = urls?.[0]?.url
 				if (!url) throw new Error("Failed to get app.json download URL")
@@ -260,7 +260,7 @@ export function useHtmlAppPermissions({
 		return () => {
 			cancelled = true
 		}
-	}, [fileList, htmlAppInstanceKey, relativeFilePath])
+	}, [appConfigFileId, appConfigFileUpdatedAt, appConfigPath, htmlAppInstanceKey])
 
 	return {
 		htmlAppConfig,
