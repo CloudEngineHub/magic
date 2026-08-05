@@ -42,6 +42,7 @@ from app.service.agent_event.resource_cleanup_listener_service import ResourceCl
 from app.service.agent_event.stream_listener_service import StreamListenerService
 from app.service.agent_event.checkpoint_listener_service import CheckpointListenerService
 from app.service.agent_event.third_party_message_listener_service import ThirdPartyMessageListenerService
+from app.service.memory.runtime.events.memory_event_listener import MemoryListenerService
 from app.infrastructure.observability import install_tool_monitoring_listener
 from app.service.mcp_service import MCPService
 from app.path_manager import PathManager
@@ -171,6 +172,7 @@ class AgentDispatcher(Base):
         RagListenerService.register_standard_listeners(self.agent_context)
         # FileListenerService.register_standard_listeners(self.agent_context)
         CheckpointListenerService.register_standard_listeners(self.agent_context)
+        MemoryListenerService.register_standard_listeners(self.agent_context)
         ResourceCleanupListenerService.register_standard_listeners(self.agent_context)
         ChannelStartupListenerService.register_standard_listeners(self.agent_context)
         UserToolCallListenerService.register_standard_listeners(self.agent_context)

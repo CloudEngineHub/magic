@@ -64,7 +64,7 @@ _HORIZON_DIAGNOSTIC_BLOCK_TAGS = (
     "context_usage",
     "model_info",
     "workspace_files_changed",
-    "long_term_memory_changed",
+    "persistent_memory",
     "user_preferred_language_changed",
     "file_changes",
     "notifications",

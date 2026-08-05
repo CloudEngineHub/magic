@@ -2,7 +2,6 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useMessageChanges } from "../../hooks/useMessageChanges"
 import Detail, { type DetailRef } from "../../components/Detail"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
@@ -33,11 +32,10 @@ import { isCollaborationWorkspace } from "../../constants"
 import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermissionCollaborationProject"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
-import { LongMemoryApi, SuperMagicApi } from "@/apis"
+import { SuperMagicApi } from "@/apis"
 import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
-import { LongMemory } from "@/types/longMemory"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
 import { useTopicConversationLoading } from "../../hooks/useTopicConversationLoading"
 import { useTopicMessages } from "../../hooks/useTopicMessages"
@@ -525,25 +523,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		},
 	})
 
-	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
-
-	useEffect(() => {
-		if (!hasMemoryUpdateMessage) return
-		// 更新长期记忆
-		try {
-			LongMemoryApi.getMemories({
-				status: [LongMemory.MemoryStatus.Pending, LongMemory.MemoryStatus.PENDING_REVISION],
-				page_size: 99,
-			}).then((res) => {
-				if (res?.success) {
-					userStore.user.setPendingMemoryList(res.data || [])
-				}
-			})
-		} catch (error) {
-			console.error(error)
-		}
-	}, [hasMemoryUpdateMessage])
-
 	// Handle interrupt and undo message functionality
 	useInterruptAndUndoMessage({
 		selectedTopic,
@@ -598,7 +577,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				getActiveFileId: () => activeFileIdRef.current,
 			})
 		})
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在话题 id / 消息首轮就绪变化时调度；回调内通过 ref 取最新 activeFileId
 	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
 
 	const updateAttachments = useDebounceFn(

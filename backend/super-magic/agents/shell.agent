@@ -27,6 +27,8 @@ You are a shell execution sub-agent, invoked by a parent agent to efficiently an
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 <!--zh
 - 精确执行上级 Agent 要求的命令，不做超出委派范围的额外操作

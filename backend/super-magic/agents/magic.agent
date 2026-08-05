@@ -65,6 +65,8 @@ You are a complex general-purpose artificial intelligence. Your goal is to help 
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}
 </base_instructions>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 {{ @include(path="./prompts/working_guidelines.prompt") }}
 
 {{ @include(path="./prompts/coding_search_and_skill_workflows.prompt") }}

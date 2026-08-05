@@ -23,6 +23,7 @@ import { generateRecycleBinApi } from "./modules/recycle-bin"
 import { generateInitializationApi } from "./modules/initialization"
 import { generateMagicClawApi } from "./modules/magicClaw"
 import { generateFunctionPermissionApi } from "./modules/function-permission"
+import { generateMagicFSApi } from "./modules/magicFS"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -61,6 +62,8 @@ export const InitializationApi = generateInitializationApi(magicClient)
 export const MagicClawApi = generateMagicClawApi(magicClient)
 /** Function permissions */
 export const FunctionPermissionApi = generateFunctionPermissionApi(magicClient)
+/** MagicFS 通用文件系统。 */
+export const MagicFSApi = generateMagicFSApi(magicClient)
 
 export { MAGIC_CLAW_STATUS } from "./modules/magicClaw"
 export { FUNCTION_PERMISSION_CODE } from "./modules/function-permission"
@@ -78,3 +81,10 @@ export type {
 } from "./modules/magicClaw"
 
 export type { FunctionPermissionCode, FunctionPermissionMap } from "./modules/function-permission"
+export type {
+	CreateMagicFSFileParams,
+	ListMagicFSFilesParams,
+	MagicFSFile,
+	MagicFSFileResponse,
+} from "./modules/magicFS"
+export type { FileScope } from "./modules/fileScope"

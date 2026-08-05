@@ -65,7 +65,15 @@ function TopicSidebar({
 							key: "longMemory",
 							title: tLongMemory("longMemory"),
 							icon: <Brain size={16} />,
-							content: <LongTremMemorySider projectId={selectedProject?.id} />,
+							content: (
+								<LongTremMemorySider
+									projectId={selectedProject?.id}
+									selectedProject={selectedProject}
+									selectedWorkspace={selectedWorkspace}
+									activeFileId={topicFilesProps.activeFileId}
+									onFileClick={topicFilesProps.onFileClick}
+								/>
+							),
 						},
 					]),
 			{

@@ -59,7 +59,8 @@ class MagicFSFileDomainService
         return $this->taskFileRepository->getChildrenByParentAndProject(
             $projectId,
             $parentIdInt,
-            10000  // 设置一个较大的限制值，避免意外的无限查询
+            10000, // 设置一个较大的限制值，避免意外的无限查询
+            $storageType
         );
     }
 

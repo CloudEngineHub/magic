@@ -34,6 +34,7 @@ class PathManager(BasePathManager):
                 .env         ← Magic 全局环境变量
             .tmp/            ← 临时文件（按需创建）
         ~/.magic/            ← 个人 Magic 目录（按需创建）
+            memory/          ← 文件型持久记忆（按需创建）
             skills/          ← 个人 skills（按需创建）
 
     目录创建约定：
@@ -463,6 +464,12 @@ class PathManager(BasePathManager):
         """获取个人 skills 目录路径（~/.magic/skills，按需创建）"""
         cls._ensure_app_initialization()
         return Path.home() / cls._magic_dir_name / cls._magic_skills_dir_name
+
+    @classmethod
+    def get_memory_root_dir(cls) -> Path:
+        """获取文件型持久记忆根目录路径（~/.magic/memory，按需创建）。"""
+        cls._ensure_app_initialization()
+        return Path.home() / cls._magic_dir_name / "memory"
 
     @classmethod
     def get_agents_skills_dir(cls) -> Path:

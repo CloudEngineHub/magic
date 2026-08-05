@@ -35,13 +35,6 @@ class User(BaseModel):
     departments: Optional[List[Department]] = Field(default_factory=list)
 
 
-class MemoryItem(BaseModel):
-    """长期记忆项"""
-
-    id: str = Field(..., description="记忆的唯一标识ID")
-    content: str = Field(..., description="记忆的内容")
-
-
 class Metadata(BaseModel):
     """元数据信息"""
 
@@ -302,11 +295,6 @@ class InitClientMessage(ClientMessage):
         default=True,
         description="Flag to decide whether remote chat history should be downloaded during initialization",
     )
-    memory: Optional[str] = None  # 长期记忆数据（旧格式，向后兼容），用于传递给 dynamic_context
-    memories: Optional[List[MemoryItem]] = Field(
-        default=None,
-        description="长期记忆数据（新格式），数组格式，每个元素包含 id 和 content 字段"
-    )  # 长期记忆数据，用于传递给 dynamic_context
     dynamic_config: Optional[Dict[str, Any]] = None  # 动态配置（如 message_version），由 PHP 侧 dynamic_params 透传
     agent: Optional["InitAgentConfig"] = Field(
         default=None,

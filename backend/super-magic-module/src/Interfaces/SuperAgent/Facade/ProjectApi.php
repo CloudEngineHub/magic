@@ -10,6 +10,7 @@ namespace Dtyq\SuperMagic\Interfaces\SuperAgent\Facade;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Dtyq\SuperMagic\Application\MagicFS\FileScope\FileScopeHandlerResolver;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectMemberAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\TransferAppService;
@@ -42,6 +43,7 @@ class ProjectApi extends AbstractApi
         private readonly ProjectAppService $projectAppService,
         private readonly ProjectMemberAppService $projectMemberAppService,
         private readonly TransferAppService $transferAppService,
+        private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -242,6 +244,13 @@ class ProjectApi extends AbstractApi
         $dto = GetProjectAttachmentsRequestDTO::fromRequest($this->request);
         // 临时解决用户使用上限问题
         $dto->setPageSize(10000);
+        if ($dto->hasScope()) {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($dto->getScope())
+                ->listProjectAttachments($authorization, $dto);
+        }
+
         if (! empty($dto->getToken())) {
             // 走令牌校验的逻辑
             return $this->projectAppService->getProjectAttachmentsByAccessToken($dto);
@@ -259,6 +268,13 @@ class ProjectApi extends AbstractApi
     {
         $dto = GetProjectAttachmentsV2RequestDTO::fromRequest($this->request);
 
+        if ($dto->hasScope()) {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($dto->getScope())
+                ->listProjectAttachmentsV2($authorization, $dto);
+        }
+
         if (! empty($dto->getToken())) {
             return $this->projectAppService->getProjectAttachmentsByAccessTokenV2($dto);
         }
@@ -273,6 +289,14 @@ class ProjectApi extends AbstractApi
      */
     public function getProjectAttachmentsCount(RequestContext $requestContext, string $id): array
     {
+        $scope = trim((string) $this->request->input('scope', ''));
+        if ($scope !== '') {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($scope)
+                ->countProjectAttachments($authorization);
+        }
+
         $token = (string) $this->request->input('token', '');
 
         if ($token !== '') {

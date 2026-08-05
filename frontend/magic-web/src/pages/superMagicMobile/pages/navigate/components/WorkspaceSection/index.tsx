@@ -1,21 +1,10 @@
-import {
-	IconChevronRight,
-	IconOctahedron,
-	IconBrain,
-	IconClockPlay,
-	IconHeart,
-	IconShare3,
-} from "@tabler/icons-react"
+import { IconChevronRight, IconOctahedron, IconBrain, IconShare3 } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import FlexBox from "@/components/base/FlexBox"
 import { useStyles } from "./styles"
 import { openLongTremMemoryModal } from "@/pages/superMagic/components/LongTremMemory"
 import { openShareManagementModal } from "@/pages/superMagic/components/ShareManagement/openShareManagementModal"
-import { userStore } from "@/models/user"
 import { observer } from "mobx-react-lite"
-import { useEffect } from "react"
-import { LongMemoryApi } from "@/apis"
-import { LongMemory } from "@/types/longMemory"
 import { projectStore } from "@/pages/superMagic/stores/core"
 
 interface MenuItemProps {
@@ -44,7 +33,6 @@ export default observer(function WorkspaceSection({ toWorkspace }: { toWorkspace
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
 
-	const { pendingMemoryList, setPendingMemoryList } = userStore.user
 	const selectedProject = projectStore.selectedProject
 
 	const workspaceIcon = (
@@ -77,28 +65,6 @@ export default observer(function WorkspaceSection({ toWorkspace }: { toWorkspace
 	// 	</div>
 	// )
 
-	const notificationBadge =
-		pendingMemoryList.length > 0 ? (
-			<div className={styles.badge}>
-				<span className={styles.badgeText}>{pendingMemoryList.length}</span>
-			</div>
-		) : null
-
-	useEffect(() => {
-		try {
-			LongMemoryApi.getMemories({
-				status: [LongMemory.MemoryStatus.Pending, LongMemory.MemoryStatus.PENDING_REVISION],
-				page_size: 99,
-			}).then((res) => {
-				if (res?.success) {
-					setPendingMemoryList(res.data || [])
-				}
-			})
-		} catch (error) {
-			console.error(error)
-		}
-	}, [])
-
 	return (
 		<div className={styles.container}>
 			<MenuItem
@@ -110,8 +76,7 @@ export default observer(function WorkspaceSection({ toWorkspace }: { toWorkspace
 			<MenuItem
 				icon={memoryIcon}
 				title={t("mobile.navigate.longTermMemory")}
-				badge={notificationBadge}
-				onClick={() => openLongTremMemoryModal({ onWorkspaceStateChange: () => { } })}
+				onClick={() => openLongTremMemoryModal()}
 			/>
 			{selectedProject && (
 				<>

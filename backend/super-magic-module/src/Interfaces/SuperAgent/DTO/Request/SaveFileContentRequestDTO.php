@@ -36,11 +36,24 @@ class SaveFileContentRequestDTO implements JsonSerializable
      */
     private bool $enableShadow = true;
 
-    public function __construct(string $fileId = '', string $content = '', bool $enableShadow = true)
-    {
+    /**
+     * 保存前期望匹配的文件元数据修订号。
+     */
+    private ?int $expectedRevision = null;
+
+    /**
+     * 创建文件正文保存请求。
+     */
+    public function __construct(
+        string $fileId = '',
+        string $content = '',
+        bool $enableShadow = true,
+        ?int $expectedRevision = null
+    ) {
         $this->fileId = $fileId;
         $this->content = $content;
         $this->enableShadow = $enableShadow;
+        $this->expectedRevision = $expectedRevision;
     }
 
     /**
@@ -58,8 +71,9 @@ class SaveFileContentRequestDTO implements JsonSerializable
         // Allow empty string value
         $content = (string) $requestData['content'];
         $enableShadow = (bool) ($requestData['enable_shadow'] ?? false);
+        $expectedRevision = self::parseExpectedRevision($requestData);
 
-        $dto = new self($fileId, $content, $enableShadow);
+        $dto = new self($fileId, $content, $enableShadow, $expectedRevision);
         $dto->validate();
 
         return $dto;
@@ -81,6 +95,10 @@ class SaveFileContentRequestDTO implements JsonSerializable
         $contentSize = strlen($this->content);
         if ($contentSize > self::MAX_CONTENT_SIZE) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'content_too_large');
+        }
+
+        if ($this->expectedRevision !== null && $this->expectedRevision <= 0) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'expected_revision_invalid');
         }
     }
 
@@ -114,12 +132,51 @@ class SaveFileContentRequestDTO implements JsonSerializable
         $this->enableShadow = $enableShadow;
     }
 
+    /**
+     * 获取保存前期望匹配的文件元数据修订号。
+     */
+    public function getExpectedRevision(): ?int
+    {
+        return $this->expectedRevision;
+    }
+
+    /**
+     * 设置保存前期望匹配的文件元数据修订号。
+     */
+    public function setExpectedRevision(?int $expectedRevision): void
+    {
+        $this->expectedRevision = $expectedRevision;
+    }
+
     public function jsonSerialize(): array
     {
-        return [
+        $data = [
             'file_id' => $this->fileId,
             'content' => $this->content,
             'enable_shadow' => $this->enableShadow,
         ];
+
+        if ($this->expectedRevision !== null) {
+            $data['expected_revision'] = $this->expectedRevision;
+        }
+
+        return $data;
+    }
+
+    /**
+     * 从请求中解析可选的修订号，并拒绝非正整数字段。
+     */
+    private static function parseExpectedRevision(array $requestData): ?int
+    {
+        if (! array_key_exists('expected_revision', $requestData) || $requestData['expected_revision'] === null) {
+            return null;
+        }
+
+        $value = $requestData['expected_revision'];
+        if (! is_int($value) && (! is_string($value) || preg_match('/^[1-9][0-9]*$/', $value) !== 1)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'expected_revision_invalid');
+        }
+
+        return (int) $value;
     }
 }

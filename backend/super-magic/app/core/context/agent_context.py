@@ -192,7 +192,7 @@ class AgentContext(BaseAgentContext):
 
     def is_interactive_main_agent_context(self) -> bool:
         """当前上下文是否可以直接向终端用户发起交互。"""
-        return bool(getattr(self, "is_main_agent", False)) and not self.is_subagent_context()
+        return self.is_main_agent_context() and not self.is_subagent_context()
 
     def set_subagent_parent_agent_name(self, agent_name: Optional[str]) -> None:
         """记录调用当前子 Agent 的父 Agent 名称。"""
@@ -598,6 +598,26 @@ class AgentContext(BaseAgentContext):
             Optional[ChatClientMessage]: 聊天客户端消息
         """
         return self.shared_context.get_field("chat_client_message")
+
+    def get_project_id(self) -> Optional[str]:
+        """优先从当前聊天消息获取项目 ID，缺失时回退到初始化消息。"""
+        chat_client_message = self.get_chat_client_message()
+        if chat_client_message is not None and chat_client_message.metadata is not None:
+            project_id = str(chat_client_message.metadata.project_id or "").strip()
+            if project_id:
+                return project_id
+
+        try:
+            init_metadata = self.get_init_client_message_metadata()
+        except Exception as error:
+            logger.debug(f"从初始化消息读取项目 ID 失败: {error}")
+            return None
+
+        if init_metadata is None:
+            return None
+
+        project_id = str(init_metadata.project_id or "").strip()
+        return project_id or None
 
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流

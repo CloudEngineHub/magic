@@ -13,6 +13,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Dtyq\SuperMagic\Application\MagicFS\FileScope\FileScopeHandlerResolver;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AccessTokenAuthorizationService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AgentFileAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\FileBatchAppService;
@@ -63,6 +64,7 @@ class FileApi extends AbstractApi
         protected AgentFileAppService $agentFileAppService,
         private readonly SandboxFileNotificationAppService $sandboxFileNotificationAppService,
         private readonly AccessTokenAuthorizationService $accessTokenAuthorizationService,
+        private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -333,6 +335,12 @@ class FileApi extends AbstractApi
         // 获取请求数据并创建DTO
         $requestData = $this->request->all();
         $requestDTO = ProjectUploadTokenRequestDTO::fromRequest($requestData);
+
+        if ($requestDTO->hasScope()) {
+            return $this->fileScopeHandlerResolver
+                ->resolve($requestDTO->getScope())
+                ->getUploadToken($requestContext->getUserAuthorization(), $requestDTO);
+        }
 
         // 调用应用服务
         return $this->fileManagementAppService->getProjectUploadToken($requestContext, $requestDTO);

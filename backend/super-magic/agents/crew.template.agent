@@ -42,6 +42,8 @@ CREW_ROLE
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
 
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
+
 <base_instructions>
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}
 </base_instructions>

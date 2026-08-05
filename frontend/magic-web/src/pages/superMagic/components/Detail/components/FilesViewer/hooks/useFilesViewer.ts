@@ -37,6 +37,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { manualPerfLogger, measureManualPerfOperation } from "@/utils/manualPerfLogger"
 import {
 	normalizeAttachmentPath,
+	isStandalonePreviewFile,
 	isTemporaryPreviewFile,
 	resolvePendingAttachmentFile,
 	resolvePersistableTabs,
@@ -95,7 +96,8 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		FileItem["display_config"] | undefined
+		| FileItem["display_config"]
+		| undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -626,6 +628,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			file ||
 			(attachmentFile?.is_directory && attachmentFile?.file_id ? attachmentFile : null) ||
 			(isHiddenProjectFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
+			(isStandalonePreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			(isTemporaryPreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			pendingAttachmentFile
 
@@ -991,6 +994,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						content: resolvePreviewContent(file),
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1010,6 +1014,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						file_size: file.file_size,
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1030,6 +1035,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						file_size: file.file_size,
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1048,6 +1054,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						content: resolvePreviewContent(file),
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1617,8 +1624,11 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		// 如果有活跃的 tab，强制刷新其内容
 		if (activeTab) {
-			// 重新获取文件数据
-			const file = fileById.get(String(activeTab.id))
+			// 项目文件使用附件索引；独立预览文件使用 Tab 自身数据重新拉取内容。
+			const indexedFile = fileById.get(String(activeTab.id))
+			const file =
+				indexedFile ||
+				(isStandalonePreviewFile(activeTab.fileData) ? activeTab.fileData : undefined)
 			if (file) {
 				// 使用 getFileTabTitle 获取正确的 tab title（处理 index.html 的情况）
 				const tabTitle = getFileTabTitle(file, attachments, file.display_config)

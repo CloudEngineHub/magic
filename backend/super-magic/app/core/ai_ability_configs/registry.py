@@ -10,6 +10,7 @@ from app.core.ai_ability_configs.configs import (
     AnalysisAudioAbilityConfig,
     CompactAbilityConfig,
     DeepWriteAbilityConfig,
+    MemoryAbilityConfig,
     PurifyAbilityConfig,
     SmartFilenameAbilityConfig,
     SummarizeAbilityConfig,
@@ -28,6 +29,7 @@ _ABILITY_CONFIG_CLASSES: Dict[str, Type[BaseAIAbilityConfig]] = {
     CompactAbilityConfig.ability_key_value: CompactAbilityConfig,
     AnalysisAudioAbilityConfig.ability_key_value: AnalysisAudioAbilityConfig,
     VideoUnderstandingAbilityConfig.ability_key_value: VideoUnderstandingAbilityConfig,
+    MemoryAbilityConfig.ability_key_value: MemoryAbilityConfig,
 }
 
 

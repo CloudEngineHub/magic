@@ -12,6 +12,7 @@ import {
 	resolveFolderWorkspaceEntryFromProjectFile,
 	resolveFolderWorkspaceEntryFromTab,
 } from "@/components/business/MentionPanel/utils/projectReferenceMention"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { dragLogger } from "./dragLogger"
 import { runActiveEditor, type MaybeEditor } from "./editorLifecycle"
 
@@ -99,11 +100,13 @@ export function handleTabDragEnd(e: React.DragEvent) {
 export interface AttachmentDragData {
 	type: DRAG_TYPE.ProjectFile | DRAG_TYPE.ProjectDirectory
 	data: AttachmentItem
+	mention?: TiptapMentionAttributes
 }
 
 export interface MultipleFilesDragData {
 	type: DRAG_TYPE.MultipleFiles
 	data: AttachmentItem[]
+	mentions?: Array<TiptapMentionAttributes | null>
 }
 
 export interface PPTSlideDragData {
@@ -133,10 +136,11 @@ export interface SelfMediaCardDragData {
  * @param data
  * @returns
  */
-export function genAttachmentDragData(data: AttachmentItem) {
+export function genAttachmentDragData(data: AttachmentItem, mention?: TiptapMentionAttributes) {
 	return JSON.stringify({
 		type: data.is_directory ? DRAG_TYPE.ProjectDirectory : DRAG_TYPE.ProjectFile,
 		data,
+		mention,
 	})
 }
 
@@ -145,10 +149,14 @@ export function genAttachmentDragData(data: AttachmentItem) {
  * @param data 文件列表
  * @returns
  */
-export function genMultipleFilesDragData(data: AttachmentItem[]) {
+export function genMultipleFilesDragData(
+	data: AttachmentItem[],
+	mentions?: Array<TiptapMentionAttributes | null>,
+) {
 	return JSON.stringify({
 		type: DRAG_TYPE.MultipleFiles,
 		data,
+		mentions,
 	})
 }
 
@@ -157,8 +165,12 @@ export function genMultipleFilesDragData(data: AttachmentItem[]) {
  * @param e
  * @param file
  */
-export function handleAttachmentDragStart(e: React.DragEvent, file: AttachmentItem) {
-	const payload = genAttachmentDragData(file)
+export function handleAttachmentDragStart(
+	e: React.DragEvent,
+	file: AttachmentItem,
+	mention?: TiptapMentionAttributes,
+) {
+	const payload = genAttachmentDragData(file, mention)
 	e.dataTransfer.setData("text/plain", payload)
 	e.dataTransfer.setData(PROJECT_ATTACHMENT_DRAG_MIME, payload)
 	if (isImageAttachment(file)) {
@@ -183,8 +195,12 @@ export function handleAttachmentDragStart(e: React.DragEvent, file: AttachmentIt
  * @param e
  * @param files 文件列表
  */
-export function handleMultipleFilesDragStart(e: React.DragEvent, files: AttachmentItem[]) {
-	const payload = genMultipleFilesDragData(files)
+export function handleMultipleFilesDragStart(
+	e: React.DragEvent,
+	files: AttachmentItem[],
+	mentions?: Array<TiptapMentionAttributes | null>,
+) {
+	const payload = genMultipleFilesDragData(files, mentions)
 	e.dataTransfer.setData("text/plain", payload)
 	e.dataTransfer.setData(PROJECT_ATTACHMENT_DRAG_MIME, payload)
 	if (files.some(isImageAttachment)) {
@@ -441,7 +457,9 @@ export function insertMentionFromDroppedData({
 					return
 				}
 				case DRAG_TYPE.ProjectFile: {
-					const mentionContent = createMentionContentFromProjectFile(data.data)
+					const mentionContent = data.mention
+						? { type: "mention", attrs: data.mention }
+						: createMentionContentFromProjectFile(data.data)
 					activeEditor.commands.insertContent(mentionContent)
 					activeEditor.commands.focus()
 
@@ -456,19 +474,19 @@ export function insertMentionFromDroppedData({
 					return
 				}
 				case DRAG_TYPE.ProjectDirectory: {
-					activeEditor.commands.insertContent({
-						type: "mention",
-						attrs: {
+					const mention =
+						data.mention ||
+						({
 							type: MentionItemType.FOLDER,
 							data: createDirectoryMentionData(data.data),
-						},
-					})
+						} satisfies TiptapMentionAttributes)
+					activeEditor.commands.insertContent({ type: "mention", attrs: mention })
 					activeEditor.commands.focus()
 
 					// 📋 日志记录：Mention 插入成功
 					dragLogger.logMentionInsert({
 						success: true,
-						mentionType: MentionItemType.FOLDER,
+						mentionType: mention.type,
 						mentionData: {
 							directory_name: data.data.file_name,
 						},
@@ -477,7 +495,10 @@ export function insertMentionFromDroppedData({
 				}
 				case DRAG_TYPE.MultipleFiles: {
 					// 处理多文件拖拽，为每个文件创建一个mention
-					const mentions = data.data.map((item) => {
+					const mentions = data.data.map((item, index) => {
+						const customMention = data.mentions?.[index]
+						if (customMention) return { type: "mention", attrs: customMention }
+
 						if (item.is_directory) {
 							return {
 								type: "mention",

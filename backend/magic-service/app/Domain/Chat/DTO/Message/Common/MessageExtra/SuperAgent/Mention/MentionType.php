@@ -11,6 +11,8 @@ enum MentionType: string
 {
     case PROJECT_DIRECTORY = 'project_directory';
     case PROJECT_FILE = 'project_file';
+    case MEMORY_DIRECTORY = 'memory_directory';
+    case MEMORY_FILE = 'memory_file';
 
     /**
      * 跨项目挂载：引用整个项目（只读挂载到当前沙箱）.
