@@ -153,4 +153,30 @@ describe("WechatArticleView clipboard HTML", () => {
 		expect(html).toContain("color:rgb(230, 57, 70)")
 		expect(html).not.toContain("<link")
 	})
+
+	it("uses source conversion for same-origin previews with external stylesheets", async () => {
+		vi.mocked(loadWechatArticleHtml).mockResolvedValue({
+			content:
+				'<html><head><link rel="stylesheet" href="https://cdn.example.com/article.css"></head><body><img class="hero" src="cover.png"></body></html>',
+			filePathMapping: new Map(),
+		})
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve(".hero { width: 100%; height: auto; }"),
+			}),
+		)
+		const ref = createRef<WechatArticleViewRef>()
+
+		render(<WechatArticleView ref={ref} post={post} attachmentList={[]} />)
+
+		await screen.findByTitle("mock wechat article")
+		await waitFor(() => expect(ref.current).not.toBeNull())
+		const html = (await ref.current?.getArticleHtml()) || ""
+
+		expect(html).toContain("width:100%")
+		expect(html).toContain("height:auto")
+		expect(html).not.toContain("<link")
+	})
 })

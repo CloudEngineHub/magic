@@ -18,32 +18,10 @@ import WechatEditView from "./edit"
 import { WechatOfficialContentGate } from "./WechatOfficialContentGate"
 import { loadWechatArticleHtml } from "./wechatArticleHtml"
 import { buildWechatClipboardHtmlFromSource } from "./wechatClipboardHtml"
+import { writeWechatHtmlToClipboard } from "./wechatClipboardWriter"
 import { WECHAT_COVER_BASE_HEIGHT, WECHAT_COVER_BASE_WIDTH } from "./wechatCoverDimensions"
 
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
-
-async function writeWechatHtmlToClipboard(html: string): Promise<void> {
-	if (
-		typeof navigator === "undefined" ||
-		!navigator.clipboard?.write ||
-		typeof ClipboardItem === "undefined"
-	) {
-		throw new Error("htmlClipboardUnsupported")
-	}
-
-	await navigator.clipboard.write([
-		new ClipboardItem({
-			"text/html": new Blob([html], { type: "text/html" }),
-			"text/plain": new Blob([htmlToPlainText(html)], { type: "text/plain" }),
-		}),
-	])
-}
-
-function htmlToPlainText(html: string): string {
-	if (typeof DOMParser === "undefined") return html
-	const sourceDocument = new DOMParser().parseFromString(html, "text/html")
-	return sourceDocument.body.textContent?.trim() || ""
-}
 
 function WechatOfficialShell(props: PlatformComponentProps) {
 	const store = useOptionalSelfMediaStore()
@@ -272,10 +250,12 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		if (isCopyingWechatHtml) return
 		setIsCopyingWechatHtml(true)
 		try {
-			const copiedFromPreview = await articleViewRef.current?.copyArticleRichContent()
+			const copiedFromPreview = articleViewRef.current?.copyArticleRichContent()
 			if (!copiedFromPreview) {
-				let html = await articleViewRef.current?.getArticleHtml()
-				if (!html) {
+				await writeWechatHtmlToClipboard(async () => {
+					const html = await articleViewRef.current?.getArticleHtml()
+					if (html) return html
+
 					const target = await store.ensurePostLoaded(activePostIndex)
 					const fileId = target?.article?.fileId
 					if (!fileId) throw new Error("noArticleUrl")
@@ -284,9 +264,8 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 						attachmentList,
 						attachments,
 					})
-					html = await buildWechatClipboardHtmlFromSource(result.content)
-				}
-				await writeWechatHtmlToClipboard(html)
+					return buildWechatClipboardHtmlFromSource(result.content)
+				})
 			}
 			magicToast.success(t("detail.selfMedia.export.wechat.copySuccess"))
 		} catch {

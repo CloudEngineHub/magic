@@ -24,7 +24,7 @@ import {
 	buildWechatClipboardHtmlFromIframe,
 	buildWechatClipboardHtmlFromSource,
 } from "./wechatClipboardHtml"
-import { copyWechatArticleSelection } from "./wechatNativeClipboard"
+import { copyWechatArticleSelectionSynchronously } from "./wechatNativeClipboard"
 
 interface WechatArticleViewProps {
 	post: SelfMediaPost
@@ -45,7 +45,7 @@ interface WechatArticleViewProps {
 export interface WechatArticleViewRef {
 	getIframeElement: () => HTMLIFrameElement | null
 	getArticleHtml: () => Promise<string | null>
-	copyArticleRichContent: () => Promise<boolean>
+	copyArticleRichContent: () => boolean
 	startInspector: () => void
 	startInspectorAppend: () => void
 	stopInspector: () => void
@@ -243,9 +243,9 @@ function WechatArticleViewInner(
 					copyReadyPreviewRef.current?.content !== renderedContent ||
 					copyReadyPreviewRef.current.iframe !== iframe
 				) {
-					return Promise.resolve(false)
+					return false
 				}
-				return copyWechatArticleSelection(iframe)
+				return copyWechatArticleSelectionSynchronously(iframe)
 			},
 			startInspector: () => rendererRef.current?.startInspectorAppend(),
 			startInspectorAppend: () => rendererRef.current?.startInspectorAppend(),

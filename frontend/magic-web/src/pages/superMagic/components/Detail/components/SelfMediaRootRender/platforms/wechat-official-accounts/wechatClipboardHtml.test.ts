@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { buildWechatClipboardHtmlFromSource } from "./wechatClipboardHtml"
+import {
+	buildWechatClipboardHtmlFromDocument,
+	buildWechatClipboardHtmlFromSource,
+} from "./wechatClipboardHtml"
 
 describe("wechatClipboardHtml", () => {
 	afterEach(() => {
@@ -74,6 +77,32 @@ describe("wechatClipboardHtml", () => {
 
 		expect(html).toContain("color:rgb(7, 193, 96)")
 		expect(html).not.toContain("color:rgb(230, 57, 70)")
+	})
+
+	it("processes every rule in a CSSRuleList without stopping after the first", () => {
+		const sourceDocument = document.implementation.createHTMLDocument("wechat article")
+		const styleElement = sourceDocument.createElement("style")
+		sourceDocument.head.appendChild(styleElement)
+		sourceDocument.body.innerHTML =
+			'<p class="lead">article</p><strong class="note">note</strong>'
+		const rules = [
+			{ type: 1, selectorText: ".lead", style: { cssText: "color: red" } },
+			{ type: 1, selectorText: ".note", style: { cssText: "font-weight: 700" } },
+		]
+		Object.defineProperty(styleElement, "sheet", {
+			configurable: true,
+			value: {
+				cssRules: {
+					length: rules.length,
+					item: (index: number) => rules[index] || null,
+				},
+			},
+		})
+
+		const html = buildWechatClipboardHtmlFromDocument(sourceDocument) || ""
+
+		expect(html).toContain("color:red")
+		expect(html).toContain("font-weight:700")
 	})
 
 	it("preserves selector specificity for author width and height rules", async () => {
@@ -214,25 +243,95 @@ describe("wechatClipboardHtml", () => {
 		expect(outcome).toBe("stylesheetLoadFailed")
 	})
 
-	it("does not wait on timers from the hidden sandbox iframe", async () => {
+	it("does not cross a timer task before returning source clipboard HTML", async () => {
 		vi.useFakeTimers()
-		const originalAppendChild = document.body.appendChild.bind(document.body)
-		vi.spyOn(document.body, "appendChild").mockImplementation(((node: Node) => {
-			const appendedNode = originalAppendChild(node)
-			if (node instanceof HTMLIFrameElement && node.getAttribute("aria-hidden") === "true") {
-				vi.spyOn(node.contentWindow as Window, "setTimeout").mockImplementation(() => 0)
-			}
-			return appendedNode
-		}) as typeof document.body.appendChild)
-
 		const conversion = buildWechatClipboardHtmlFromSource("<main>article</main>")
 		let outcome = "pending"
 		void conversion.then(() => {
 			outcome = "resolved"
 		})
 
-		await vi.advanceTimersByTimeAsync(1)
+		await Promise.resolve()
+		await Promise.resolve()
 		expect(outcome).toBe("resolved")
+	})
+
+	it("rejects CSS with more than 3000 active style rules", async () => {
+		const rules = Array.from(
+			{ length: 3001 },
+			(_, index) => `.rule-${index} { color: red; }`,
+		).join("\n")
+
+		await expect(
+			buildWechatClipboardHtmlFromSource(
+				`<html><head><style>${rules}</style></head><body><p>article</p></body></html>`,
+			),
+		).rejects.toThrow("stylesheetRuleLimitExceeded")
+	})
+
+	it("rejects CSS with more than 6000 selectors", async () => {
+		const selectors = Array.from({ length: 6001 }, (_, index) => `.rule-${index}`).join(",")
+
+		await expect(
+			buildWechatClipboardHtmlFromSource(
+				`<html><head><style>${selectors} { color: red; }</style></head><body><p>article</p></body></html>`,
+			),
+		).rejects.toThrow("stylesheetRuleLimitExceeded")
+	})
+
+	it("rejects inline @import rules that cannot be prepared safely", async () => {
+		await expect(
+			buildWechatClipboardHtmlFromSource(`
+				<html>
+					<head><style>@import "./theme.css"; .lead { color: red; }</style></head>
+					<body><p class="lead">article</p></body>
+				</html>
+			`),
+		).rejects.toThrow("stylesheetImportUnsupported")
+	})
+
+	it("does not treat @import text in CSS comments or strings as an import rule", async () => {
+		const html = await buildWechatClipboardHtmlFromSource(`
+			<html>
+				<head>
+					<style>
+						/* @import "./old-theme.css"; */
+						.lead::before { content: "@import is text"; }
+						.lead { color: red; }
+					</style>
+				</head>
+				<body><p class="lead">article</p></body>
+			</html>
+		`)
+
+		expect(html).toContain("color:rgb(255, 0, 0)")
+	})
+
+	it("inlines recursively imported external styles in the final clipboard HTML", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((url: string) =>
+				Promise.resolve({
+					ok: true,
+					text: () =>
+						Promise.resolve(
+							url.endsWith("main.css")
+								? '@import "./theme.css"; .lead { font-weight: 700; }'
+								: ".lead { color: rgb(7, 193, 96); }",
+						),
+				}),
+			),
+		)
+
+		const html = await buildWechatClipboardHtmlFromSource(`
+			<html>
+				<head><link rel="stylesheet" href="https://cdn.example.com/main.css"></head>
+				<body><p class="lead">article</p></body>
+			</html>
+		`)
+
+		expect(html).toContain("color:rgb(7, 193, 96)")
+		expect(html).toContain("font-weight:700")
 	})
 
 	it("does not parse external CSS text as iframe HTML", async () => {

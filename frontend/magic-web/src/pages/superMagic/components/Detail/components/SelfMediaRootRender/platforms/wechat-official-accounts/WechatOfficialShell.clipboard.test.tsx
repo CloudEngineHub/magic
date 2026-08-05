@@ -15,9 +15,9 @@ const {
 	toastErrorMock,
 	toastSuccessMock,
 } = vi.hoisted(() => ({
-	clipboardItemPayloads: [] as Array<Record<string, Blob>>,
+	clipboardItemPayloads: [] as Array<Record<string, Blob | Promise<Blob>>>,
 	clipboardWriteMock: vi.fn(),
-	copyArticleRichContentMock: vi.fn(() => Promise.resolve(false)),
+	copyArticleRichContentMock: vi.fn(() => false),
 	getArticleHtmlMock: vi.fn(() => Promise.resolve<string | null>(null)),
 	loadWechatArticleHtmlMock: vi.fn(() =>
 		Promise.resolve({
@@ -155,7 +155,7 @@ describe("WechatOfficialShell clipboard export", () => {
 			}
 		}
 		class MockClipboardItem {
-			constructor(items: Record<string, Blob>) {
+			constructor(items: Record<string, Blob | Promise<Blob>>) {
 				clipboardItemPayloads.push(items)
 			}
 		}
@@ -166,6 +166,10 @@ describe("WechatOfficialShell clipboard export", () => {
 			configurable: true,
 			value: { write: clipboardWriteMock },
 		})
+		clipboardWriteMock.mockImplementation(async () => {
+			const payload = clipboardItemPayloads.at(-1)
+			if (payload) await Promise.all(Object.values(payload))
+		})
 	})
 
 	afterEach(() => {
@@ -174,7 +178,7 @@ describe("WechatOfficialShell clipboard export", () => {
 		clipboardItemPayloads.length = 0
 		clipboardWriteMock.mockReset()
 		copyArticleRichContentMock.mockReset()
-		copyArticleRichContentMock.mockResolvedValue(false)
+		copyArticleRichContentMock.mockReturnValue(false)
 		getArticleHtmlMock.mockReset()
 		getArticleHtmlMock.mockResolvedValue(null)
 		loadWechatArticleHtmlMock.mockReset()
@@ -187,26 +191,42 @@ describe("WechatOfficialShell clipboard export", () => {
 		toastSuccessMock.mockReset()
 	})
 
-	it("writes both HTML and plain text after async source conversion", async () => {
+	it("starts the clipboard write before async source conversion finishes", async () => {
+		let resolveArticleHtml:
+			| ((value: { content: string; filePathMapping: Map<never, never> }) => void)
+			| null = null
+		loadWechatArticleHtmlMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveArticleHtml = resolve
+				}),
+		)
 		renderShell()
 		fireEvent.click(screen.getByTestId("open-wechat-export"))
 		fireEvent.click(await screen.findByTestId("copy-wechat-html"))
 
-		await waitFor(() => expect(clipboardWriteMock).toHaveBeenCalledTimes(1))
+		expect(clipboardWriteMock).toHaveBeenCalledTimes(1)
 		expect(Object.keys(clipboardItemPayloads[0])).toEqual(["text/html", "text/plain"])
-		const htmlBlob = clipboardItemPayloads[0]["text/html"] as unknown as {
+
+		await waitFor(() => expect(loadWechatArticleHtmlMock).toHaveBeenCalledTimes(1))
+		resolveArticleHtml?.({
+			content:
+				'<html><head><style>.fallback{color:red;font-weight:700}</style></head><body><section class="fallback">fallback html</section></body></html>',
+			filePathMapping: new Map(),
+		})
+		const htmlBlob = (await clipboardItemPayloads[0]["text/html"]) as unknown as {
 			parts: string[]
 		}
-		const textBlob = clipboardItemPayloads[0]["text/plain"] as unknown as {
+		const textBlob = (await clipboardItemPayloads[0]["text/plain"]) as unknown as {
 			parts: string[]
 		}
 		expect(htmlBlob.parts[0]).toContain("color:rgb(255, 0, 0)")
 		expect(textBlob.parts).toEqual(["fallback html"])
-		expect(toastSuccessMock).toHaveBeenCalledTimes(1)
+		await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledTimes(1))
 	})
 
 	it("uses native preview copy before the HTML fallback", async () => {
-		copyArticleRichContentMock.mockResolvedValueOnce(true)
+		copyArticleRichContentMock.mockReturnValueOnce(true)
 		renderShell()
 		fireEvent.click(screen.getByTestId("open-wechat-export"))
 		fireEvent.click(await screen.findByTestId("copy-wechat-html"))
@@ -253,6 +273,6 @@ describe("WechatOfficialShell clipboard export", () => {
 		expect(copyButton).not.toBeDisabled()
 		expect(toastErrorMock).toHaveBeenCalledTimes(1)
 		expect(toastSuccessMock).not.toHaveBeenCalled()
-		expect(clipboardWriteMock).not.toHaveBeenCalled()
+		expect(clipboardWriteMock).toHaveBeenCalledTimes(1)
 	})
 })
