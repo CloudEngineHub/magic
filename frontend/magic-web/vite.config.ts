@@ -256,6 +256,9 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
 				editor: "code",
+				// The inspector injects globals into every JSX module. Keep it opt-in so a
+				// missing inspector runtime cannot break normal local pages.
+				needEnvInspector: true,
 			}),
 			react(),
 			babel({

@@ -7,15 +7,12 @@ import { useTranslation } from "react-i18next"
 import MagicButton from "@/components/base/MagicButton"
 import MagicIcon from "@/components/base/MagicIcon"
 import MagicEmpty from "@/components/base/MagicEmpty"
-
-import { useStyles } from "./styles"
-
 import ChatFileService from "@/services/chat/file/ChatFileService"
 import MessageFilePreviewService from "@/services/chat/message/MessageFilePreview"
 import MessageFilePreviewStore from "@/stores/chatNew/messagePreview/FilePreviewStore"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cx } from "antd-style"
 import { AntdSkeleton } from "@/components/base"
+import { cn } from "@/lib/utils"
 
 const UniverComponent = lazy(() => import("@/components/UniverComponent"))
 const MagicPdfRender = lazy(() => import("@/components/base/MagicPdfRender"))
@@ -29,7 +26,6 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 	style?: React.CSSProperties
 }) {
 	const { t } = useTranslation("interface")
-	const { styles } = useStyles()
 	const isMobile = useIsMobile()
 
 	const previewInfo = MessageFilePreviewStore.previewInfo
@@ -39,7 +35,7 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 
 			if (previewInfo.src) {
 				return {
-					download_name: previewInfo.file_name!,
+					download_name: previewInfo.file_name ?? "",
 					url: previewInfo.src,
 					file_extension: previewInfo.file_extension,
 				}
@@ -94,16 +90,20 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 
 	return (
 		<div
-			className={cx(styles.container, isFullscreen && styles.fullscreen, className)}
+			className={cn(
+				"flex h-full flex-col border-l border-border bg-background",
+				isFullscreen && "fixed inset-0 z-detail-fullscreen h-screen w-screen border-0",
+				className,
+			)}
 			style={style}
 		>
-			<div className={styles.header}>
-				<div className={styles.headerLeft}>
-					<div className={styles.headerLeftTitle}>
+			<div className="flex h-[var(--chat-preview-header-height)] shrink-0 items-center justify-between border-b border-border px-4">
+				<div className="flex items-center justify-between">
+					<div className="text-base font-semibold">
 						<span>{t("chat.filePreview.title")}</span>
 					</div>
 				</div>
-				<div className={styles.headerRight}>
+				<div className="flex items-center justify-between gap-2">
 					<MagicButton
 						hidden={isMobile}
 						type="text"
@@ -123,7 +123,7 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 					/>
 				</div>
 			</div>
-			<div className={styles.content}>
+			<div className="flex min-h-0 flex-1 items-center justify-center">
 				<Suspense fallback={null}>{Content()}</Suspense>
 			</div>
 		</div>

@@ -1,5 +1,4 @@
-import { Flex } from "antd"
-import { Suspense, lazy, type CSSProperties } from "react"
+import { Suspense, lazy } from "react"
 import { observer } from "mobx-react-lite"
 import MagicSplitter from "@/components/base/MagicSplitter"
 import ChatMessageList from "../ChatMessageList"
@@ -10,7 +9,6 @@ import StartPageContent from "./components/StartPageContent"
 import conversationStore from "@/stores/chatNew/conversation"
 import ConversationBotDataService from "@/services/chat/conversation/ConversationBotDataService"
 import { interfaceStore } from "@/stores/interface"
-import { useStyles } from "../../styles"
 import startPageStore from "@/stores/chatNew/startPage"
 
 // 懒加载组件
@@ -19,15 +17,13 @@ const SettingExtraSection = lazy(() => import("../setting"))
 
 interface MainContentProps {
 	onInputResize: (size: number[]) => void
-	style?: CSSProperties
 }
 
 /**
  * 聊天主内容区域组件
  * 包含头部、消息列表、输入框以及额外的侧边栏
  */
-const MainContent = observer(function MainContent({ onInputResize, style }: MainContentProps) {
-	const { styles } = useStyles()
+const MainContent = observer(function MainContent({ onInputResize }: MainContentProps) {
 	const showExtra = conversationStore.topicOpen
 
 	// MobX observer会自动追踪这些依赖的变化
@@ -43,13 +39,17 @@ const MainContent = observer(function MainContent({ onInputResize, style }: Main
 		return <StartPageContent agentName={ConversationBotDataService.agentName} />
 
 	return (
-		<Flex style={style}>
-			<MagicSplitter layout="vertical" className={styles.main} onResizeEnd={onInputResize}>
+		<div className="flex size-full min-w-0">
+			<MagicSplitter
+				layout="vertical"
+				className="h-full min-w-[var(--chat-main-min-width)] flex-1"
+				onResizeEnd={onInputResize}
+			>
 				<MagicSplitter.Panel min={60} defaultSize={60} max={60}>
 					<Header />
 				</MagicSplitter.Panel>
 				<MagicSplitter.Panel>
-					<div className={styles.chatList}>
+					<div className="flex h-full min-h-0 flex-1 overflow-x-hidden">
 						<DragFileSendTip>
 							<ChatMessageList />
 						</DragFileSendTip>
@@ -60,13 +60,13 @@ const MainContent = observer(function MainContent({ onInputResize, style }: Main
 					defaultSize={interfaceStore.chatInputDefaultHeight}
 					max="50%"
 				>
-					<div className={styles.editor}>
+					<div className="h-full">
 						<MessageEditor visible sendWhenEnter />
 					</div>
 				</MagicSplitter.Panel>
 			</MagicSplitter>
 			{showExtra && (
-				<div className={styles.extra}>
+				<div className="w-60 select-none border-l border-border">
 					<Suspense fallback={null}>
 						{conversationStore.topicOpen && <TopicExtraSection />}
 					</Suspense>
@@ -77,7 +77,7 @@ const MainContent = observer(function MainContent({ onInputResize, style }: Main
 					<SettingExtraSection />
 				</Suspense>
 			)}
-		</Flex>
+		</div>
 	)
 })
 
