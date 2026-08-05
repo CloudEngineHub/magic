@@ -36,8 +36,20 @@
         "en_US": "The agent has not been initialized yet. Please initialize the workspace first."
     },
     "messages.agent_load_failed": {
-        "zh_CN": "当前员工加载失败，请确认员工「{agent_code}」存在，并且当前账号有使用权限。",
-        "en_US": "Failed to load employee agent \"{agent_code}\". Check that it exists and that your account has permission to use it."
+        "zh_CN": "员工「{agent_code}」加载失败，请稍后重试；如持续失败，请联系管理员。",
+        "en_US": "Failed to load employee agent \"{agent_code}\". Please try again later; contact an administrator if the problem persists."
+    },
+    "messages.agent_load_access_denied": {
+        "zh_CN": "当前账号无法访问员工「{agent_code}」，请确认员工已发布且账号具有使用权限。",
+        "en_US": "The current account cannot access employee agent \"{agent_code}\". Check that it is published and that the account has permission to use it."
+    },
+    "messages.agent_load_invalid_package": {
+        "zh_CN": "员工「{agent_code}」的配置不完整，暂时无法加载。请重新发布后再试；如仍然失败，请联系管理员。",
+        "en_US": "Employee agent \"{agent_code}\" has an incomplete configuration and cannot be loaded. Republish it and try again; contact an administrator if the problem persists."
+    },
+    "messages.agent_load_fetch_failed": {
+        "zh_CN": "员工「{agent_code}」的数据获取失败，请稍后重试。",
+        "en_US": "Failed to retrieve data for employee agent \"{agent_code}\". Please try again later."
     },
     "messages.internal_dispatch_failed": {
         "zh_CN": "当前请求处理失败，请联系系统管理员。",

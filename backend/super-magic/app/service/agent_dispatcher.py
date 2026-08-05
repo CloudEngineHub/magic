@@ -7,7 +7,13 @@ from typing import Dict, Optional, Union
 import importlib
 import importlib.metadata
 import inspect
+from enum import StrEnum
 
+from app.infrastructure.sdk.base.exceptions import HttpRequestError
+from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import (
+    MagicServiceApiError,
+    MagicServiceUnauthorizedException,
+)
 from app.core.context.agent_context import AgentContext
 from app.core.context.execution_source import (
     ASK_USER_POLICY_HORIZON_SOURCE,
@@ -44,18 +50,67 @@ from app.service.agent_event.channel_startup_listener_service import ChannelStar
 from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
 from app.service.cli_manager import CliManagerService
 from app.service.home_persistence_service import HomePersistenceService
+from app.service.crew_downloader import (
+    CrewPackageFetchError,
+    CrewPackageInvalidError,
+)
 from agentlang.logger import get_logger
 from app.core.base_service import Base
 
 logger = get_logger(__name__)
 
 
+class AgentLoadFailureReason(StrEnum):
+    ACCESS_DENIED = "access_denied"
+    INVALID_PACKAGE = "invalid_package"
+    FETCH_FAILED = "fetch_failed"
+    UNKNOWN = "unknown"
+
+
 class AgentLoadFailedError(RuntimeError):
     """Raised when a user-selected employee agent cannot be loaded."""
 
-    def __init__(self, agent_code: str):
+    def __init__(
+        self,
+        agent_code: str,
+        reason: AgentLoadFailureReason = AgentLoadFailureReason.UNKNOWN,
+    ) -> None:
         self.agent_code = agent_code
-        super().__init__(f"failed to load employee agent: {agent_code}")
+        self.reason = reason
+        super().__init__(f"failed to load employee agent: {agent_code}, reason={reason.value}")
+
+
+_AGENT_LOAD_MESSAGE_KEYS = {
+    AgentLoadFailureReason.ACCESS_DENIED: "messages.agent_load_access_denied",
+    AgentLoadFailureReason.INVALID_PACKAGE: "messages.agent_load_invalid_package",
+    AgentLoadFailureReason.FETCH_FAILED: "messages.agent_load_fetch_failed",
+    AgentLoadFailureReason.UNKNOWN: "messages.agent_load_failed",
+}
+
+
+def _classify_agent_load_failure(error: Exception) -> AgentLoadFailureReason:
+    if isinstance(error, MagicServiceUnauthorizedException):
+        return AgentLoadFailureReason.ACCESS_DENIED
+    if isinstance(error, CrewPackageInvalidError):
+        return AgentLoadFailureReason.INVALID_PACKAGE
+    if isinstance(
+        error,
+        (CrewPackageFetchError, HttpRequestError, MagicServiceApiError),
+    ):
+        return AgentLoadFailureReason.FETCH_FAILED
+    return AgentLoadFailureReason.UNKNOWN
+
+
+def _build_agent_load_final_task_state(error: AgentLoadFailedError):
+    message = i18n.translate(
+        _AGENT_LOAD_MESSAGE_KEYS[error.reason],
+        category="common.messages",
+        agent_code=error.agent_code,
+    )
+    return build_final_task_state(
+        FinalTaskStateCode.AGENT_LOAD_FAILED,
+        custom_message=message,
+    )
 
 
 class AgentDispatcher(Base):
@@ -516,10 +571,15 @@ class AgentDispatcher(Base):
                 await self._prepare_crew_agent(agent_code)
             elif normalized_mode == "magiclaw" and agent_code:
                 await self._prepare_claw_agent(agent_code)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            logger.error(f"Agent preparation failed (mode={agent_mode}, code={agent_code}): {e}")
+            reason = _classify_agent_load_failure(e)
+            logger.error(
+                f"Agent preparation failed (mode={agent_mode}, code={agent_code}, reason={reason.value}): {e}"
+            )
             if agent_code:
-                raise AgentLoadFailedError(agent_code) from e
+                raise AgentLoadFailedError(agent_code, reason) from e
             logger.info("Falling back to default agent profile")
 
     @staticmethod
@@ -674,10 +734,7 @@ class AgentDispatcher(Base):
             logger.error(f"[AgentDispatcher] agent load failed: {e}")
             try:
                 if self.agent_context:
-                    final_task_state = build_final_task_state(
-                        FinalTaskStateCode.AGENT_LOAD_FAILED,
-                        i18n_params={"agent_code": e.agent_code},
-                    )
+                    final_task_state = _build_agent_load_final_task_state(e)
                     self.agent_context.set_final_task_state(final_task_state)
                     await self.agent_context.dispatch_event(
                         EventType.ERROR,
@@ -693,8 +750,6 @@ class AgentDispatcher(Base):
             import traceback
             logger.error(traceback.format_exc())
             try:
-                from agentlang.event.data import ErrorEventData
-                from agentlang.event.event import EventType
                 if self.agent_context:
                     final_task_state = build_final_task_state(
                         FinalTaskStateCode.INTERNAL_DISPATCH_FAILED,
