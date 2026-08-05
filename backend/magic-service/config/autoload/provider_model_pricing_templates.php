@@ -347,6 +347,24 @@ return [
                 ],
             ],
         ],
+        [
+            'code' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
+            'label' => 'MiniMax H3 视频媒体用量计费',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
+            'items' => [
+                ['billing_object' => BillingObject::videoDuration('768p')->value, 'label' => '768P 视频输出时长'],
+                ['billing_object' => BillingObject::videoDurationCost('768p')->value, 'label' => '768P 视频输出时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('768p')->value, 'label' => '768P 参考视频输入时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('768p')->value, 'label' => '768P 参考视频输入时长成本'],
+                ['billing_object' => BillingObject::videoDuration('2k')->value, 'label' => '2K 视频输出时长'],
+                ['billing_object' => BillingObject::videoDurationCost('2k')->value, 'label' => '2K 视频输出时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('2k')->value, 'label' => '2K 参考视频输入时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('2k')->value, 'label' => '2K 参考视频输入时长成本'],
+                ['billing_object' => BillingObject::videoReferenceImageAfter5Count()->value, 'label' => '第 6 张起参考图片数量'],
+                ['billing_object' => BillingObject::videoReferenceImageAfter5CountCost()->value, 'label' => '第 6 张起参考图片数量成本'],
+            ],
+        ],
     ],
 
     'defaults' => [
@@ -405,6 +423,13 @@ return [
             'template_codes' => [
                 BillingType::ImageCount->value,
                 BillingType::Seedream5ProImage->value,
+            ],
+        ],
+        [
+            'provider_code' => ProviderCode::MiniMax->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::MiniMaxH3VideoMediaUsagePricing->value,
             ],
         ],
 

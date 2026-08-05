@@ -107,6 +107,10 @@ final class BillingObject
      */
     public const IMAGE_REFERENCE_INPUT_COUNT_COST = 'image_reference_input_count_cost';
 
+    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT = 'video.reference_image_after_5.count';
+
+    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST = 'video.reference_image_after_5.count.cost';
+
     /**
      * TextTokens 固定对象。
      */
@@ -143,6 +147,8 @@ final class BillingObject
         self::OLD_IMAGE_COUNT_COST,
         self::IMAGE_REFERENCE_INPUT_COUNT,
         self::IMAGE_REFERENCE_INPUT_COUNT_COST,
+        self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT,
+        self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST,
     ];
 
     private const array OLD_IMAGE_OBJECTS = [
@@ -250,6 +256,16 @@ final class BillingObject
     public static function videoDurationCost(string $resolution): self
     {
         return self::videoObject($resolution, self::VIDEO_MODIFIER_BASE, self::VIDEO_BILLING_UNIT_DURATION, true);
+    }
+
+    public static function videoReferenceImageAfter5Count(): self
+    {
+        return new self(self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT);
+    }
+
+    public static function videoReferenceImageAfter5CountCost(): self
+    {
+        return new self(self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST);
     }
 
     /**

@@ -579,9 +579,9 @@ readonly class VideoOperationAppService
             $videoGenerationConfig
         );
         $outputDetails = $this->videoBillingDetailsResolver->resolveFromRequest($normalizedRequest, $videoGenerationConfig);
-        $referenceVideos = is_array($normalizedRequest['inputs']['reference_videos'] ?? null)
-            ? $normalizedRequest['inputs']['reference_videos']
-            : [];
+        $referenceVideos = is_array($normalizedRequest['inputs']['reference_videos'] ?? null) ? $normalizedRequest['inputs']['reference_videos'] : [];
+        $inputMedia = is_array($normalizedRequest['inputs'] ?? null) ? $normalizedRequest['inputs'] : [];
+
         $inputMetadata = $this->resolveEstimateInputMetadata($dataIsolation, $requestDTO, $referenceVideos);
         $hasAudioOutput = $this->videoGenerationConfigDomainService->resolveHasAudioOutput(
             $modelVersion,
@@ -601,6 +601,7 @@ readonly class VideoOperationAppService
             (int) $inputMetadata['reference_video_count'] > 0,
             $requestDTO->getBusinessParams(),
             $hasAudioOutput,
+            $inputMedia,
         );
     }
 

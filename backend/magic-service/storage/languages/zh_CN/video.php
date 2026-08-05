@@ -8,6 +8,10 @@ return [
     'input_modes' => [
         'standard' => '普通文生视频模式，不依赖任何参考素材。',
         'omni_reference' => '上传 1~:max_count 张参考图片生成视频；若同时上传 1 个参考视频，则参考图片最多 6 张。示例：综合 @图片 1 的主体与 @视频 1 的动态，生成一段氛围感短片。',
+        'minimax_h3_omni_reference' => '支持最多 9 张参考图片、3 个参考视频和 3 个参考音频；参考音频需与参考图片或参考视频搭配使用。',
+        'minimax_h3_omni_reference_mode' => [
+            'reference_media' => '可混合上传参考图片、参考视频和参考音频；图片最多 9 张，视频和音频各最多 3 个。参考音频需搭配图片或视频。',
+        ],
         'omni_reference_mode' => [
             'images_only' => '仅上传参考图片，最多支持 7 张。',
             'image_and_video' => '同时上传参考图片和 1 个参考视频时，参考图片最多支持 6 张。',

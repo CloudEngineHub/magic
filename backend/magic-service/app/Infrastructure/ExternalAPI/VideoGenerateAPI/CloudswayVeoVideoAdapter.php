@@ -97,7 +97,6 @@ readonly class CloudswayVeoVideoAdapter extends AbstractCloudswayVideoAdapter
                 'default_resolution' => self::DEFAULT_RESOLUTION,
                 'supports_seed' => true,
                 'seed_range' => [self::MIN_SEED, self::MAX_SEED],
-                'supports_watermark' => false,
                 'supports_negative_prompt' => true,
                 'supports_generate_audio' => true,
                 'supports_person_generation' => true,

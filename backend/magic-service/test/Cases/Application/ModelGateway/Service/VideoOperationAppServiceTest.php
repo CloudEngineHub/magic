@@ -59,6 +59,10 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmni
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
@@ -1332,6 +1336,10 @@ class VideoOperationAppServiceTest extends TestCase
                         new Wan27GenerationCapabilityProvider(),
                         $this->createMock(DashScopeTransportInterface::class),
                     )),
+                    new MiniMaxH3VideoAdapter(
+                        new MiniMaxH3GenerationCapabilityProvider(),
+                        new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                    ),
                 ),
             ),
         );
@@ -2319,6 +2327,10 @@ class VideoOperationAppServiceTest extends TestCase
                     new Wan27GenerationCapabilityProvider(),
                     $this->createMock(DashScopeTransportInterface::class),
                 )),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
             )
         );
     }

@@ -93,15 +93,9 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,
                 'default_resolution' => self::MODE_TO_RESOLUTION[self::DEFAULT_MODE],
-                'supports_seed' => false,
                 'supports_watermark' => true,
                 'supports_negative_prompt' => true,
                 'supports_generate_audio' => true,
-                'supports_person_generation' => false,
-                'supports_enhance_prompt' => false,
-                'supports_compression_quality' => false,
-                'supports_resize_mode' => false,
-                'supports_sample_count' => false,
             ],
             'input_modes' => [
                 'standard' => [

@@ -650,13 +650,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      *     supports_seed: bool,
      *     seed_range: list<int>,
      *     supports_watermark: bool,
-     *     supports_negative_prompt: bool,
      *     supports_generate_audio: bool,
-     *     supports_person_generation: bool,
-     *     supports_enhance_prompt: bool,
-     *     supports_compression_quality: bool,
-     *     supports_resize_mode: bool,
-     *     supports_sample_count: bool
      *   },
      *   validation: array{
      *     explicit_resolution_errors?: array<string, array{key: string, replace: array<string, string>}>
@@ -704,13 +698,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      *   supports_seed: bool,
      *   seed_range: list<int>,
      *   supports_watermark: bool,
-     *   supports_negative_prompt: bool,
      *   supports_generate_audio: bool,
-     *   supports_person_generation: bool,
-     *   supports_enhance_prompt: bool,
-     *   supports_compression_quality: bool,
-     *   supports_resize_mode: bool,
-     *   supports_sample_count: bool
      * }
      */
     private function baseGenerationConfig(): array
@@ -723,13 +711,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             'supports_seed' => true,
             'seed_range' => [-1, 4294967295],
             'supports_watermark' => true,
-            'supports_negative_prompt' => false,
             'supports_generate_audio' => true,
-            'supports_person_generation' => false,
-            'supports_enhance_prompt' => false,
-            'supports_compression_quality' => false,
-            'supports_resize_mode' => false,
-            'supports_sample_count' => false,
         ];
     }
 
