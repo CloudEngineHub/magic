@@ -152,7 +152,9 @@ export class PPTSlideContentScheduler {
 		return {
 			active: this.activeCount,
 			queued: this.queue.length,
-			total: this.tasks.size,
+			// A cancelled running task is removed from the key map immediately so the same slide
+			// can be requested again, but it remains physically active until run() settles.
+			total: this.activeCount + this.queue.length,
 		}
 	}
 
@@ -176,7 +178,9 @@ export class PPTSlideContentScheduler {
 					.sort((a, b) => b.priorityValue - a.priorityValue || b.sequence - a.sequence)[0]
 				if (!runningLowerPriorityTask) break
 				this.cancelTask(runningLowerPriorityTask)
-				continue
+				// The cancelled task still owns its physical slot until run() settles. Wait for its
+				// finally block to pump again instead of cancelling every lower-priority task at once.
+				break
 			}
 
 			const concurrencyLimit =
@@ -212,7 +216,8 @@ export class PPTSlideContentScheduler {
 		if (task.cancelled) return
 		task.cancelled = true
 		task.controller.abort()
-		this.releaseSlot(task)
+		// Aborting only notifies cooperative work. HTML processing and resource URL resolution may
+		// still be running, so keep the physical slot until runTask() reaches its finally block.
 		this.settleTask(task, false)
 		if (this.tasks.get(task.key) === task) this.tasks.delete(task.key)
 	}
