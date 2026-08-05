@@ -193,9 +193,15 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const dragData = getFilesForDrag(item)
 
 		if (dragData.isMultiple) {
-			handleMultipleFilesDragStart(e, dragData.files)
+			handleMultipleFilesDragStart(
+				e,
+				dragData.files,
+				createAttachmentMention
+					? dragData.files.map((file) => createAttachmentMention(file))
+					: undefined,
+			)
 		} else {
-			handleAttachmentDragStart(e, item)
+			handleAttachmentDragStart(e, item, createAttachmentMention?.(item) || undefined)
 		}
 	})
 

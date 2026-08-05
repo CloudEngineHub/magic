@@ -79,10 +79,13 @@ function createMemoryPreviewItem(item: AttachmentItem): AttachmentItem {
 function filterMemoryMenuItems(
 	menuItems: TopicFilesMenuItem[],
 	isFixedRoot: boolean,
+	isDirectory: boolean,
 ): TopicFilesMenuItem[] {
 	const hiddenKeys = isFixedRoot
 		? new Set([...MEMORY_HIDDEN_MENU_KEYS, ...MEMORY_ROOT_HIDDEN_MENU_KEYS])
-		: MEMORY_HIDDEN_MENU_KEYS
+		: new Set(MEMORY_HIDDEN_MENU_KEYS)
+
+	if (isDirectory) hiddenKeys.add("downloadFolder")
 
 	return menuItems
 		.filter((menuItem) => !menuItem?.key || !hiddenKeys.has(String(menuItem.key)))
@@ -93,6 +96,7 @@ function filterMemoryMenuItems(
 				children: filterMemoryMenuItems(
 					menuItem.children as TopicFilesMenuItem[],
 					isFixedRoot,
+					isDirectory,
 				),
 			}
 		})
@@ -262,7 +266,7 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	/** 过滤记忆空间不适用的菜单操作。 */
 	const filterMemoryTreeMenuItems = useCallback(
 		(menuItems: TopicFilesMenuItem[], item?: AttachmentItem) =>
-			filterMemoryMenuItems(menuItems, isFixedMemoryRoot(item)),
+			filterMemoryMenuItems(menuItems, isFixedMemoryRoot(item), Boolean(item?.is_directory)),
 		[isFixedMemoryRoot],
 	)
 
