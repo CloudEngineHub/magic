@@ -34,7 +34,9 @@ export class ConnectionManager {
 	}
 
 	public exportConnections(): CanvasConnection[] {
-		return this.store.getConnections()
+		return this.store
+			.getConnections()
+			.filter((connection) => this.canPersistConnection(connection))
 	}
 
 	public getConnections(): CanvasConnection[] {
@@ -90,9 +92,12 @@ export class ConnectionManager {
 		CanvasDocumentPatch,
 		"connectionUpserts" | "deletedConnectionIds" | "changedConnectionIds"
 	> {
-		const changedConnectionIds = options.changedConnectionIds ?? []
+		const connectionUpserts = this.store
+			.getConnectionsByIds(options.changedConnectionIds ?? [])
+			.filter((connection) => this.canPersistConnection(connection))
+		const changedConnectionIds = connectionUpserts.map((connection) => connection.id)
 		return {
-			connectionUpserts: this.store.getConnectionsByIds(changedConnectionIds),
+			connectionUpserts,
 			deletedConnectionIds: options.deletedConnectionIds ?? [],
 			changedConnectionIds,
 		}
@@ -110,6 +115,7 @@ export class ConnectionManager {
 		) {
 			return null
 		}
+		if (!this.canPersistConnection(connection)) return null
 
 		const id = connection.id ?? generateConnectionId()
 		if (this.store.hasConnectionId(id)) {
@@ -136,7 +142,12 @@ export class ConnectionManager {
 		| { status: "created"; connectionId: string }
 		| {
 				status: "invalid"
-				reason: "self" | "missing-element" | "already-connected" | "reverse-existing"
+				reason:
+					| "self"
+					| "missing-element"
+					| "temporary-element"
+					| "already-connected"
+					| "reverse-existing"
 		  } {
 		const { sourceElementId, targetElementId } = options
 		if (sourceElementId === targetElementId) {
@@ -144,6 +155,9 @@ export class ConnectionManager {
 		}
 		if (!this.hasElement(sourceElementId) || !this.hasElement(targetElementId)) {
 			return { status: "invalid", reason: "missing-element" }
+		}
+		if (!this.canPersistConnection({ sourceElementId, targetElementId })) {
+			return { status: "invalid", reason: "temporary-element" }
 		}
 
 		if (this.hasConnection(sourceElementId, targetElementId)) {
@@ -605,6 +619,7 @@ export class ConnectionManager {
 	private getRenderableConnections(): CanvasConnection[] {
 		return this.store.getConnections().filter((connection) => {
 			return (
+				this.canPersistConnection(connection) &&
 				this.isElementVisible(connection.sourceElementId) &&
 				this.isElementVisible(connection.targetElementId)
 			)
@@ -616,9 +631,21 @@ export class ConnectionManager {
 			return (
 				connection.sourceElementId !== connection.targetElementId &&
 				this.hasElement(connection.sourceElementId) &&
-				this.hasElement(connection.targetElementId)
+				this.hasElement(connection.targetElementId) &&
+				this.canPersistConnection(connection)
 			)
 		})
+	}
+
+	private canPersistConnection(
+		connection: Pick<CanvasConnection, "sourceElementId" | "targetElementId">,
+	): boolean {
+		return (
+			this.canvas.elementManager.canParticipateInDocumentRelations(
+				connection.sourceElementId,
+			) &&
+			this.canvas.elementManager.canParticipateInDocumentRelations(connection.targetElementId)
+		)
 	}
 
 	private hasElement(elementId: string): boolean {

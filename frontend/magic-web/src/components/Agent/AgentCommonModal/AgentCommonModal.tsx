@@ -11,10 +11,11 @@ import {
 import type { PropsWithChildren, ReactElement } from "react"
 import type { DraggableData, DraggableEvent } from "react-draggable"
 import Draggable from "react-draggable"
-import { useMemoizedFn, useMount, useResponsive } from "ahooks"
+import { useMemoizedFn, useMount } from "ahooks"
 import { MagicModal } from "@/components/base"
 import { AgentCommonModalRef, AgentCommonModalProps, AgentCommonModalChildrenProps } from "./types"
 import MagicPopup from "../../base-mobile/MagicPopup"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 const modalTestIds = {
 	root: "agent-common-modal",
@@ -30,8 +31,7 @@ export const AgentCommonModal = forwardRef<
 >((props, ref) => {
 	const { onClose, isResponsive = true, open: propOpen, onOpenChange, ...modalProps } = props
 
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
 
 	const draggleRef = useRef<HTMLDivElement>({} as HTMLDivElement)
 

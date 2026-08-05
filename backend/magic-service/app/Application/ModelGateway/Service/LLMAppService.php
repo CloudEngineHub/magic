@@ -422,6 +422,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setImageSize($imageGenerateRequest->getSize());
         $imageGeneratedEvent->setReferenceImageCount($referenceImageCount);
         $imageGeneratedEvent->setProviderModelId($providerConfigItem->getProviderModelId());
+        $imageGeneratedEvent->setGeneratedImages($images);
         $imageGeneratedEvent->setBusinessParams($imageGenerateAuditBusinessParams);
 
         AsyncEventUtil::dispatch($imageGeneratedEvent);
@@ -506,6 +507,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setSourceType($reqDTO->getSourceType());
         $imageGeneratedEvent->setSourceId($reqDTO->getSourceId());
         $imageGeneratedEvent->setProviderModelId($providerConfigItem->getProviderModelId());
+        $imageGeneratedEvent->setGeneratedImages([$imageUrl]);
         $imageGeneratedEvent->setBusinessParams($imageConvertHighAuditBusinessParams);
 
         AsyncEventUtil::dispatch($imageGeneratedEvent);
@@ -1607,7 +1609,8 @@ class LLMAppService extends AbstractLLMAppService
                 ['chain' => 'textGenerateImageV2'],
                 $this->resolveImageTokenUsage($generateImageOpenAIFormat->getUsage()),
                 $imageGenerateRequest->getResolution(),
-                $imageGenerateRequest->getSize()
+                $imageGenerateRequest->getSize(),
+                $generateImageOpenAIFormat->getData()
             );
         } catch (Exception $e) {
             $errorMessage = $e->getMessage();
@@ -2080,7 +2083,8 @@ class LLMAppService extends AbstractLLMAppService
         array $auditBusinessParams = [],
         ?Usage $usage = null,
         ?string $resolution = null,
-        ?string $imageSize = null
+        ?string $imageSize = null,
+        array $generatedImages = []
     ): void {
         // 计算响应时间（毫秒）
         $responseTime = (int) ((microtime(true) - $startTime) * 1000);
@@ -2108,6 +2112,7 @@ class LLMAppService extends AbstractLLMAppService
             $imageSize,
             $referenceImageCount
         );
+        $event->setGeneratedImages($generatedImages);
         $businessParams = array_merge(
             $requestDTO->getBusinessParams(),
             [
@@ -2186,6 +2191,7 @@ class LLMAppService extends AbstractLLMAppService
         $imageGeneratedEvent->setResolution($resolution);
         $imageGeneratedEvent->setImageSize($imageSize);
         $imageGeneratedEvent->setReferenceImageCount($referenceImageCount);
+        $imageGeneratedEvent->setSourceId($requestDTO->getSourceId());
         // 设置原始 model_id（目前用于识别是否动态模型），用于计费服务
         $imageGeneratedEvent->setOriginalModelId($requestDTO->getOriginalModelId());
         $imageGeneratedEvent->setUsage($usage);

@@ -320,6 +320,132 @@ describe("CanvasVisibilityManager video load requests", () => {
 })
 
 describe("CanvasVisibilityManager image load requests", () => {
+	it("clears image request dedupe state after transient load failures", () => {
+		const { handlers, manager: constructedManager } = createConstructedManager()
+		const manager = constructedManager as CanvasVisibilityManager & {
+			registeredImages: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			scheduleRefresh: ReturnType<typeof vi.fn>
+		}
+
+		manager.registeredImages.set("image-preview", {
+			elementId: "image-preview",
+			path: "./images/a.png",
+		})
+		manager.registeredImages.set("image-full", {
+			elementId: "image-full",
+			path: "./images/a.png",
+		})
+		manager.registeredImages.set("image-other", {
+			elementId: "image-other",
+			path: "./images/b.png",
+		})
+		manager.lastRequestedLoadState.set("image-preview", {
+			priority: "visible",
+			variant: "preview",
+			requestedAt: 1,
+		})
+		manager.lastRequestedLoadState.set("image-full", {
+			priority: "critical",
+			variant: "full",
+			requestedAt: 1,
+		})
+		manager.lastRequestedLoadState.set("image-other", {
+			priority: "visible",
+			variant: "preview",
+			requestedAt: 1,
+		})
+		manager.scheduleRefresh = vi.fn()
+
+		handlers.get("resource:image:load-failed")?.[0]?.({
+			data: { path: "./images/a.png", reason: "load-error" },
+		})
+
+		expect(manager.lastRequestedLoadState.has("image-preview")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-full")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-other")).toBe(true)
+		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
+	})
+
+	it("keeps not-found image requests terminal instead of creating a retry loop", () => {
+		const { handlers, manager: constructedManager } = createConstructedManager()
+		const manager = constructedManager as CanvasVisibilityManager & {
+			registeredImages: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+		}
+
+		manager.registeredImages.set("image-1", {
+			elementId: "image-1",
+			path: "./images/missing.png",
+		})
+		manager.lastRequestedLoadState.set("image-1", {
+			priority: "visible",
+			variant: "preview",
+			requestedAt: 1,
+		})
+
+		handlers.get("resource:image:load-failed")?.[0]?.({
+			data: { path: "./images/missing.png", reason: "not-found" },
+		})
+
+		expect(manager.lastRequestedLoadState.has("image-1")).toBe(true)
+	})
+
+	it("clears only the failed non-low image variant request state", () => {
+		const { handlers, manager: constructedManager } = createConstructedManager()
+		const manager = constructedManager as CanvasVisibilityManager & {
+			registeredImages: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+		}
+
+		manager.registeredImages.set("image-preview", {
+			elementId: "image-preview",
+			path: "./images/a.png",
+		})
+		manager.registeredImages.set("image-full", {
+			elementId: "image-full",
+			path: "./images/a.png",
+		})
+		manager.lastRequestedLoadState.set("image-preview", {
+			priority: "visible",
+			variant: "preview",
+			requestedAt: 1,
+		})
+		manager.lastRequestedLoadState.set("image-full", {
+			priority: "critical",
+			variant: "full",
+			requestedAt: 1,
+		})
+
+		handlers.get("resource:image:variant-load-failed")?.[0]?.({
+			data: { path: "./images/a.png", variant: "full", reason: "load-error" },
+		})
+
+		expect(manager.lastRequestedLoadState.has("image-preview")).toBe(true)
+		expect(manager.lastRequestedLoadState.has("image-full")).toBe(false)
+	})
+
 	it("does not reissue an unchanged viewport image request across pan and scale", () => {
 		const loadResource = vi.fn()
 		const manager = Object.create(

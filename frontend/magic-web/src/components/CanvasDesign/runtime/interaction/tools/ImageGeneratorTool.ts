@@ -325,6 +325,7 @@ export class ImageGeneratorTool extends BaseTool {
 		positions: Array<{ x: number; y: number }>,
 		width?: number,
 		height?: number,
+		options?: { temporary?: boolean },
 	): string[] {
 		const imageSize = this.getImageElementSize(width, height)
 		return positions.map((position) =>
@@ -332,6 +333,7 @@ export class ImageGeneratorTool extends BaseTool {
 				select: false,
 				ensureInViewport: false,
 				completeTask: false,
+				temporary: options?.temporary,
 			}),
 		)
 	}
@@ -381,6 +383,7 @@ export class ImageGeneratorTool extends BaseTool {
 			select?: boolean
 			ensureInViewport?: boolean
 			completeTask?: boolean
+			temporary?: boolean
 		},
 	): string {
 		const size = this.getImageElementSize(width, height)
@@ -408,8 +411,11 @@ export class ImageGeneratorTool extends BaseTool {
 			zIndex: newZIndex,
 		}
 
-		// 创建元素
-		this.canvas.elementManager.create(imageElement)
+		if (options?.temporary) {
+			this.canvas.elementManager.createTemporaryElement(imageElement, { silent: true })
+		} else {
+			this.canvas.elementManager.create(imageElement)
+		}
 		if (options?.select !== false) {
 			this.canvas.selectionManager?.select(elementId)
 		}

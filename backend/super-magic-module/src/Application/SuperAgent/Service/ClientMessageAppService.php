@@ -143,27 +143,45 @@ class ClientMessageAppService extends AbstractAppService
         string $taskId,
         string $chatTopicId,
         string $chatConversationId,
-        string $errorMessage
+        string $errorMessage,
+        ?array $dynamicParams = null
     ): void {
         try {
             $messageId = IdGenerator::getSnowId();
-            $message = $this->createSuperAgentMessage(
-                $messageId,
-                $topicId,
-                $taskId,
-                $errorMessage,
-                MessageType::Error->value,
-                TaskStatus::ERROR->value,
-                '',
-                [],
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            if ($this->shouldUseV2Message($dynamicParams)) {
+                $this->sendV2StatusMessage(
+                    $messageId,
+                    $topicId,
+                    $taskId,
+                    $chatTopicId,
+                    $chatConversationId,
+                    $errorMessage,
+                    TaskStatus::ERROR->value,
+                );
+            } else {
+                $message = $this->createSuperAgentMessage(
+                    $messageId,
+                    $topicId,
+                    $taskId,
+                    $errorMessage,
+                    MessageType::Error->value,
+                    TaskStatus::ERROR->value,
+                    '',
+                    [],
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                );
 
-            $this->doSendMessage($message, $chatTopicId, $chatConversationId);
+                $this->doSendMessage(
+                    $message,
+                    $chatTopicId,
+                    $chatConversationId,
+                    $message->getMessageId(),
+                );
+            }
 
             $this->logger->info(sprintf(
                 'Error message sent to client, Task ID: %s, Error: %s',
@@ -230,27 +248,45 @@ class ClientMessageAppService extends AbstractAppService
         string $chatTopicId,
         string $chatConversationId,
         string $remind = '',
-        string $remindEvent = ''
+        string $remindEvent = '',
+        ?array $dynamicParams = null
     ): void {
         try {
             $messageId = IdGenerator::getSnowId();
-            $message = $this->createSuperAgentMessage(
-                $messageId,
-                $topicId,
-                $taskId,
-                $remind,
-                MessageType::Reminder->value,
-                TaskStatus::Suspended->value,
-                $remindEvent,
-                [],
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            if ($this->shouldUseV2Message($dynamicParams)) {
+                $this->sendV2StatusMessage(
+                    $messageId,
+                    $topicId,
+                    $taskId,
+                    $chatTopicId,
+                    $chatConversationId,
+                    $remind,
+                    TaskStatus::Suspended->value,
+                );
+            } else {
+                $message = $this->createSuperAgentMessage(
+                    $messageId,
+                    $topicId,
+                    $taskId,
+                    $remind,
+                    MessageType::Reminder->value,
+                    TaskStatus::Suspended->value,
+                    $remindEvent,
+                    [],
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                );
 
-            $this->doSendMessage($message, $chatTopicId, $chatConversationId);
+                $this->doSendMessage(
+                    $message,
+                    $chatTopicId,
+                    $chatConversationId,
+                    $message->getMessageId(),
+                );
+            }
 
             $this->logger->info(sprintf(
                 'Reminder message sent to client, Task ID: %s, Reminder Reason: %s , Event: %s',
@@ -265,6 +301,57 @@ class ClientMessageAppService extends AbstractAppService
                 $taskId
             ));
         }
+    }
+
+    /**
+     * 根据动态参数判断消息结构版本，未指定时默认使用 v2。
+     */
+    private function shouldUseV2Message(?array $dynamicParams): bool
+    {
+        $messageVersion = $dynamicParams['message_version'] ?? null;
+        if (! is_string($messageVersion)) {
+            return true;
+        }
+
+        $messageVersion = strtolower(trim($messageVersion));
+        return $messageVersion !== 'v1';
+    }
+
+    /**
+     * 构造并发送 v2 状态消息，用于异常、提醒和安全拦截结果。
+     */
+    private function sendV2StatusMessage(
+        int $messageId,
+        int $topicId,
+        string $taskId,
+        string $chatTopicId,
+        string $chatConversationId,
+        string $content,
+        string $status
+    ): void {
+        $rawContent = [
+            'type' => ChatMessageType::SuperMagicMessage->value,
+            'super_magic_message' => [
+                'message_id' => (string) $messageId,
+                'topic_id' => (string) $topicId,
+                'task_id' => $taskId,
+                'role' => 'assistant',
+                'content' => $content,
+                'status' => $status,
+            ],
+        ];
+
+        $this->sendMessageToClient(
+            messageId: $messageId,
+            topicId: $topicId,
+            taskId: $taskId,
+            chatTopicId: $chatTopicId,
+            chatConversationId: $chatConversationId,
+            content: $content,
+            messageType: ChatMessageType::SuperMagicMessage->value,
+            status: $status,
+            rawContent: $rawContent,
+        );
     }
 
     /**

@@ -132,12 +132,20 @@ export function TableMenu({ editor, isEditable }: TableMenuProps) {
 	})
 
 	// Check if commands are available
-	const canAddRowBefore = runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowBefore(), false) ?? false
-	const canAddRowAfter = runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowAfter(), false) ?? false
-	const canAddColumnBefore = runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnBefore(), false) ?? false
-	const canAddColumnAfter = runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnAfter(), false) ?? false
-	const canDeleteRow = runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteRow(), false) ?? false
-	const canDeleteColumn = runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteColumn(), false) ?? false
+	const canAddRowBefore =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowBefore(), false) ?? false
+	const canAddRowAfter =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowAfter(), false) ?? false
+	const canAddColumnBefore =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnBefore(), false) ??
+		false
+	const canAddColumnAfter =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnAfter(), false) ??
+		false
+	const canDeleteRow =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteRow(), false) ?? false
+	const canDeleteColumn =
+		runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteColumn(), false) ?? false
 
 	if (!isVisible || !position) {
 		return null
@@ -235,7 +243,7 @@ export function TableMenu({ editor, isEditable }: TableMenuProps) {
 						<IconColumnRemove />
 					</button>
 				</TooltipTrigger>
-				<TooltipContent>{t("tableMenu.deleteColumn")}</TooltipContent>
+				<TooltipContent>{t("toolbar.tableMenu.deleteColumn")}</TooltipContent>
 			</Tooltip>
 		</div>,
 		document.body,

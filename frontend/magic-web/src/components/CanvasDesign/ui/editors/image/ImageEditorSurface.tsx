@@ -19,7 +19,10 @@ import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
 } from "../../../public/props"
-import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
+import MessageEditor, {
+	type MessageEditorMentionChangeContext,
+	type MessageEditorRef,
+} from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import { useMentionSync } from "../message/useMentionSync"
 import { removeMentionFromString } from "../message/tiptap/contentUtils"
@@ -42,12 +45,13 @@ import type { ImageEditorConfig } from "./useImageEditorConfig"
 import styles from "./index.module.css"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import LinkedEditorInputsBar from "../connection/LinkedEditorInputsBar"
-import {
-	type LinkedEditorInputsState,
-	useLinkedEditorInputs,
-} from "../connection/useLinkedEditorInputs"
+import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
+import { useLinkedMediaAssociationController } from "../connection/useLinkedMediaAssociationController"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
-import type { LinkedEditorMediaPolicy } from "../connection/linkedEditorInputs"
+import {
+	mergeLinkedMediaPaths,
+	type LinkedEditorMediaPolicy,
+} from "../connection/linkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
 import PromptOptimizationButton from "../prompt-optimization/PromptOptimizationButton"
 import {
@@ -56,7 +60,10 @@ import {
 	type PromptOptimizationReferenceContext,
 } from "../prompt-optimization/promptOptimizationUserPrompt"
 import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../public/magic-types"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	areCanvasResourcePathsSame,
+	getCanvasResourceFileName,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import {
 	createPromptPlaceholderTokenFactory,
 	resolvePromptPlaceholderTokenConfig,
@@ -130,10 +137,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			maxCountByKind: { image: maxCount },
 		}
 	}, [currentReferenceFiles, maxReferenceFiles])
-	const linkedEditorInputs = useLinkedEditorInputs({
+	const {
+		linkedEditorInputs,
+		handleMentionChange: handleAssociationMentionChange,
+		handleLinkedMediaSelectionChange,
+	} = useLinkedMediaAssociationController({
 		targetElementId: imageElement.id,
 		targetKind: "image",
 		mediaPolicy: linkedMediaPolicy,
+		editorRef,
+		onReadyMentionChange: config.handlers.handlePromptReferencePathsChange,
 	})
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const buildImagePromptPlaceholderToken = useMemo(
@@ -155,7 +168,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[linkedEditorInputs.activeMediaReferences],
 	)
 	const effectiveCurrentReferenceFiles = useMemo(
-		() => mergeUniquePaths(currentReferenceFiles, linkedActiveImagePaths),
+		() => mergeLinkedMediaPaths(currentReferenceFiles, linkedActiveImagePaths),
 		[currentReferenceFiles, linkedActiveImagePaths],
 	)
 	const promptOptimizationPlaceholderPaths = useMemo(
@@ -354,19 +367,21 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	})
 
 	const handleMentionChange = useCallback(
-		(paths: string[], currentPrompt: string) => {
-			config.handlers.handlePromptReferencePathsChange(paths)
-			syncMentionPaths(paths, currentPrompt)
+		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			if (handleAssociationMentionChange(paths, currentPrompt, context)) {
+				syncMentionPaths(paths, currentPrompt)
+			}
 		},
-		[config.handlers, syncMentionPaths],
+		[handleAssociationMentionChange, syncMentionPaths],
 	)
 
 	const handleReferenceFileRemoveFromPopover = useCallback(
 		(path: string) => {
 			const currentPrompt = editorRef.current?.getCurrentPrompt() ?? prompt
 			const fileName =
-				config.referenceFileInfos.find((info) => info.path === path)?.fileName ??
-				getCanvasResourceFileName(path)
+				config.referenceFileInfos.find((info) =>
+					areCanvasResourcePathsSame(info.path, path),
+				)?.fileName ?? getCanvasResourceFileName(path)
 			handlers.setPrompt(removeMentionFromString(currentPrompt, path, fileName))
 			handlers.handleReferenceFileRemove(path)
 		},
@@ -441,7 +456,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			{linkedEditorInputs ? (
 				<LinkedEditorInputsBar
 					textConnections={linkedEditorInputs.textConnections}
-					onRemoveConnection={linkedEditorInputs.removeConnection}
+					isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+					onTextConnectionSelectedChange={linkedEditorInputs.setTextConnectionSelected}
+					onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
 				/>
 			) : null}
 			<MessageEditor
@@ -458,6 +475,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				matchableItems={matchableItems}
 				mentionDataService={mentionDataService}
 				mentionExtension={mentionExtension}
+				mentionItemsReady={config.hasRestoredRef.current}
 				onMentionChange={handleMentionChange}
 				onMentionItemHoverChange={setHoveredMentionPath}
 				mentionEnabled={mentionEnabled}
@@ -471,7 +489,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs?.mediaItems}
-				onRemoveLinkedConnection={linkedEditorInputs?.removeConnection}
+				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
 				renderPromptOptimizationButton={() => (
 					<PromptOptimizationButton
 						buildRequest={buildPromptOptimizationRequest}
@@ -499,17 +517,6 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			/>
 		</ReferenceResourceDropSurface>
 	)
-}
-
-function mergeUniquePaths(paths: string[], extraPaths: string[]): string[] {
-	const merged: string[] = []
-	const seen = new Set<string>()
-	for (const path of [...paths, ...extraPaths]) {
-		if (!path || seen.has(path)) continue
-		seen.add(path)
-		merged.push(path)
-	}
-	return merged
 }
 
 function buildImagePromptOptimizationReferences(

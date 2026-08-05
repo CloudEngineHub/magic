@@ -95,8 +95,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -1107,7 +1106,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// Clear tabs when selectedProject changes
 	// 加载缓存状态
 	useEffect(() => {
-		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id) {
+		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id || isShareRoute) {
 			return
 		}
 
@@ -1303,6 +1302,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		openPlaybackTab,
 		fileList,
 		isAwaitingProjectAttachments,
+		isShareRoute,
 	])
 
 	useEffect(() => {

@@ -10,8 +10,8 @@ import { IconCopy } from "@tabler/icons-react"
 import { DetailTerminalData } from "../../types"
 import TerminalDisplay from "./components/TerminalDisplay"
 import { ActionButton } from "../../components/CommonHeader/components"
-import { useResponsive } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface TerminalProps {
 	data: DetailTerminalData
@@ -73,7 +73,7 @@ export default memo(function Terminal(props: TerminalProps) {
 	const { t } = useTranslation("super")
 
 	const { command, output, exit_code } = data
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 
 	// 处理复制功能
 	const handleTerminalCopy = useCallback(async () => {

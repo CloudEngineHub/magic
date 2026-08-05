@@ -1333,7 +1333,7 @@ class AgentDomainService
     /**
      * 根据用户ID获取 Authorization.
      * - 先以用户级别 token（MagicTokenType::User）为准，支持一个账号多个组织
-     * - 若 token 已存在但剩余有效期不足 30 天，则刷新至 30 天后.
+     * - 若 token 已存在但剩余有效期不足 29 天，则刷新至 30 天后.
      *
      * @param string $userId 用户ID
      * @return string Authorization 字符串，如果不存在则返回空字符串
@@ -1872,21 +1872,21 @@ class AgentDomainService
     }
 
     /**
-     * 当用户 token 剩余有效期不足 30 天时，统一刷新到 30 天后以减少重复签发.
+     * 当用户 token 剩余有效期不足 29 天时，统一刷新到 30 天后以减少重复签发.
      *
      * @param MagicTokenEntity $tokenEntity 已存在的用户 token
      */
     private function refreshTokenExpirationIfNeeded(MagicTokenEntity $tokenEntity): void
     {
         $now = Carbon::now();
-        $threshold = $now->copy()->addDays(30);
+        $renewalThreshold = $now->copy()->addDays(29);
         $expiredAt = Carbon::parse($tokenEntity->getExpiredAt());
 
-        if ($expiredAt->greaterThanOrEqualTo($threshold)) {
+        if ($expiredAt->greaterThanOrEqualTo($renewalThreshold)) {
             return;
         }
 
-        $tokenEntity->setExpiredAt($threshold->toDateTimeString());
+        $tokenEntity->setExpiredAt($now->copy()->addDays(30)->toDateTimeString());
         $tokenEntity->setUpdatedAt($now->toDateTimeString());
         $this->magicTokenRepository->refreshTokenExpiration($tokenEntity);
     }
