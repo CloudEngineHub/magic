@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
-import PPTRender from "../index"
+import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
 
 const mockState = vi.hoisted(() => ({
 	store: {
@@ -54,6 +54,8 @@ const mockState = vi.hoisted(() => ({
 	lastStoreConfig: null as null | Record<string, any>,
 	pptControlBarProps: vi.fn(),
 	pptSlideProps: vi.fn(),
+	toolbarMounted: vi.fn(),
+	toolbarUnmounted: vi.fn(),
 	sidebarPreviewEffect: vi.fn(),
 	nativeIsFullscreen: false,
 	isSlideEditing: true,
@@ -149,6 +151,35 @@ vi.mock("../PPTControlBar", () => ({
 	},
 }))
 
+vi.mock("../../EditToolbar", async () => {
+	const React = await import("react")
+
+	function MockEditToolbar({
+		fileId,
+		interactionDisabled,
+	}: {
+		fileId?: string
+		interactionDisabled?: boolean
+	}) {
+		React.useEffect(() => {
+			mockState.toolbarMounted()
+			return () => mockState.toolbarUnmounted()
+		}, [])
+
+		return (
+			<div
+				data-testid="ppt-edit-toolbar"
+				data-file-id={fileId}
+				data-interaction-disabled={String(Boolean(interactionDisabled))}
+			/>
+		)
+	}
+
+	return {
+		default: MockEditToolbar,
+	}
+})
+
 vi.mock("../PPTSlide", async () => {
 	const React = await import("react")
 
@@ -165,6 +196,8 @@ vi.mock("../PPTSlide", async () => {
 		onRegisterCloseSaveHandler,
 		onRegisterDiscardHandler,
 		onManualSave,
+		toolbarOwnerKey,
+		onToolbarModelChange,
 	}: {
 		fileId?: string
 		isActive?: boolean
@@ -177,6 +210,12 @@ vi.mock("../PPTSlide", async () => {
 		onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
 		onRegisterCloseSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
 		onRegisterDiscardHandler?: (handler: (() => Promise<boolean>) | null) => void
+		toolbarOwnerKey?: string
+		onToolbarModelChange?: (
+			ownerKey: string,
+			model: { token: object; props: { fileId?: string } } | null,
+			token: object,
+		) => void
 		onManualSave?: (
 			saveResult: {
 				fileId?: string
@@ -187,7 +226,28 @@ vi.mock("../PPTSlide", async () => {
 			index: number,
 		) => Promise<void>
 	}) {
+		const toolbarToken = React.useRef({}).current
+		const toolbarModel = React.useMemo(
+			() =>
+				isFullscreen
+					? null
+					: {
+							token: toolbarToken,
+							props: { fileId },
+						},
+			[fileId, isFullscreen, toolbarToken],
+		)
+
 		mockState.pptSlideProps({ fileId, isActive, isPresented, manualScale, isFullscreen })
+
+		React.useLayoutEffect(() => {
+			if (!toolbarOwnerKey || !onToolbarModelChange) return
+			onToolbarModelChange(toolbarOwnerKey, toolbarModel, toolbarToken)
+
+			return () => {
+				onToolbarModelChange(toolbarOwnerKey, null, toolbarToken)
+			}
+		}, [onToolbarModelChange, toolbarModel, toolbarOwnerKey, toolbarToken])
 
 		React.useEffect(() => {
 			if (!isActive) return
@@ -386,6 +446,8 @@ describe("PPTRender", () => {
 		mockState.store.markSlideAsManuallySaved.mockReset()
 		mockState.pptControlBarProps.mockReset()
 		mockState.pptSlideProps.mockReset()
+		mockState.toolbarMounted.mockReset()
+		mockState.toolbarUnmounted.mockReset()
 		mockState.sidebarPreviewEffect.mockReset()
 		mockState.nativeIsFullscreen = false
 		mockState.isSlideEditing = true
@@ -408,6 +470,21 @@ describe("PPTRender", () => {
 				loadingError: undefined,
 			},
 		]
+	})
+
+	it("ignores a stale toolbar cleanup after a newer model takes over the same owner", () => {
+		const ownerKey = "deck::slide-1"
+		const oldToken = {}
+		const newToken = {}
+		const oldModel = { token: oldToken, props: { fileId: "old-file" } }
+		const newModel = { token: newToken, props: { fileId: "new-file" } }
+
+		let models = reconcilePPTSlideToolbarModels(new Map(), ownerKey, oldModel, oldToken)
+		models = reconcilePPTSlideToolbarModels(models, ownerKey, newModel, newToken)
+		const afterStaleCleanup = reconcilePPTSlideToolbarModels(models, ownerKey, null, oldToken)
+
+		expect(afterStaleCleanup).toBe(models)
+		expect(afterStaleCleanup.get(ownerKey)).toBe(newModel)
 	})
 
 	it("uses only PPT presentation fullscreen to hide viewer controls", async () => {
@@ -592,6 +669,86 @@ describe("PPTRender", () => {
 			"data-presented",
 			"false",
 		)
+	})
+
+	it("keeps one stable toolbar instance while the presented slide changes", async () => {
+		mockState.isSlideEditing = false
+		const slidePaths = Array.from({ length: 6 }, (_, index) => `slide-${index + 1}.html`)
+		mockState.store.slidePaths = slidePaths
+		mockState.store.slideUrls = slidePaths
+		mockState.store.slides = slidePaths.map((path, index) => ({
+			id: `slide-${index + 1}`,
+			path,
+			content: `<div>slide ${index + 1}</div>`,
+			rawContent: `<div>slide ${index + 1}</div>`,
+			loadingState: "loaded" as const,
+			loadingError: undefined,
+			lastLoadedAt: index + 1,
+		}))
+
+		const renderDeck = () => (
+			<PPTRender
+				slidePaths={slidePaths}
+				filePathMapping={new Map()}
+				mainFileId="ppt-root-file"
+				mainFileName="Deck.html"
+			/>
+		)
+		const { rerender } = render(renderDeck())
+
+		const toolbar = await screen.findByTestId("ppt-edit-toolbar")
+		expect(toolbar).toHaveAttribute("data-file-id", "slide-file-id")
+		expect(screen.getAllByTestId("ppt-edit-toolbar")).toHaveLength(1)
+		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
+		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
+
+		// A resident page that has already reported ready should switch immediately
+		// without replacing the shared toolbar instance.
+		fireEvent.click(await screen.findByTestId("ppt-slide-slide-2-file-id"))
+		mockState.store.activeIndex = 1
+		rerender(renderDeck())
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-edit-toolbar")).toHaveAttribute(
+				"data-file-id",
+				"slide-2-file-id",
+			)
+		})
+		expect(screen.getByTestId("ppt-edit-toolbar")).toBe(toolbar)
+		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
+		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
+
+		mockState.store.activeIndex = 4
+		rerender(renderDeck())
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-slide-slide-5-file-id")).toHaveAttribute(
+				"data-active",
+				"true",
+			)
+		})
+		expect(screen.getByTestId("ppt-edit-toolbar")).toBe(toolbar)
+		expect(toolbar).toHaveAttribute("data-file-id", "slide-2-file-id")
+		expect(screen.getByTestId("ppt-render-edit-toolbar")).toHaveAttribute("aria-busy", "true")
+		expect(screen.getByTestId("ppt-render-edit-toolbar")).toHaveStyle({
+			pointerEvents: "none",
+		})
+		expect(toolbar).toHaveAttribute("data-interaction-disabled", "true")
+
+		fireEvent.click(screen.getByTestId("ppt-slide-slide-5-file-id"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-edit-toolbar")).toHaveAttribute(
+				"data-file-id",
+				"slide-5-file-id",
+			)
+		})
+		expect(screen.getByTestId("ppt-edit-toolbar")).toBe(toolbar)
+		expect(screen.getAllByTestId("ppt-edit-toolbar")).toHaveLength(1)
+		expect(screen.getByTestId("ppt-render-edit-toolbar")).toHaveAttribute("aria-busy", "false")
+		expect(toolbar).toHaveAttribute("data-interaction-disabled", "false")
+		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
+		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
 	})
 
 	it("ignores a stale ready callback after rapid navigation chooses a newer target", async () => {

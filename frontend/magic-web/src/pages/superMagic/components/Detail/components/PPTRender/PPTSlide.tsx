@@ -1,10 +1,20 @@
-import { useState, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react"
+import {
+	useState,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	type CSSProperties,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { FileX, Loader2 } from "lucide-react"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../contents/HTML/IsolatedHTMLRenderer"
-import EditToolbar from "@/pages/superMagic/components/Detail/components/EditToolbar"
+import EditToolbar, {
+	type EditToolbarProps,
+} from "@/pages/superMagic/components/Detail/components/EditToolbar"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -35,6 +45,11 @@ import { cn } from "@/lib/utils"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
+
+export interface PPTSlideToolbarModel {
+	token: object
+	props: EditToolbarProps
+}
 
 interface PPTSlideProps {
 	allowDownload?: boolean
@@ -97,6 +112,14 @@ interface PPTSlideProps {
 	onScaleRatioChange?: (scale: number) => void
 	/** Reports whether the real iframe/fallback for this slide is ready to be presented. */
 	onRenderReadyChange?: (ready: boolean) => void
+	/** Scoped live-render key used to associate this slide with the shared toolbar host. */
+	toolbarOwnerKey?: string
+	/** Registers this slide's toolbar model without mounting another EditToolbar instance. */
+	onToolbarModelChange?: (
+		ownerKey: string,
+		model: PPTSlideToolbarModel | null,
+		token: object,
+	) => void
 }
 
 interface PerformSaveOptions {
@@ -143,6 +166,8 @@ const PPTSlide = observer(function PPTSlide({
 	onManualScaleChange,
 	onScaleRatioChange,
 	onRenderReadyChange,
+	toolbarOwnerKey,
+	onToolbarModelChange,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -166,6 +191,7 @@ const PPTSlide = observer(function PPTSlide({
 	// IsolatedHTMLRenderer 的 ref，用于重置内容
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const slideWrapperRef = useRef<HTMLDivElement>(null)
+	const toolbarRegistrationToken = useRef({}).current
 	const pendingSaveIntentRef = useRef<"save" | "save-and-exit" | "save-and-switch" | null>(null)
 	const pendingSaveResolveRef = useRef<((didSave: boolean) => void) | null>(null)
 	const isConfirmingConflictSaveRef = useRef(false)
@@ -804,6 +830,107 @@ const PPTSlide = observer(function PPTSlide({
 		projectId,
 	])
 
+	const handleStartInspector = useMemoizedFn(() => {
+		rendererRef.current?.startInspector()
+	})
+	const handleStartInspectorAppend = useMemoizedFn(() => {
+		rendererRef.current?.startInspectorAppend()
+	})
+	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
+	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
+		if (!showEditToolbar) return null
+
+		return {
+			token: toolbarRegistrationToken,
+			props: {
+				onStartInspector: handleStartInspector,
+				onStartInspectorAppend: handleStartInspectorAppend,
+				isAppendPicking,
+				showAIOptimization: allowEdit && !fileVersion,
+				showFileEdit: allowEdit && !fileVersion,
+				isEditMode,
+				isSaving,
+				attachmentList,
+				fileId,
+				mainFileId,
+				projectId: selectedProject?.id || projectId,
+				onEdit: handleEdit,
+				onSave: handleSave,
+				onSaveAndExit: handleSaveAndExit,
+				onCancel: handleCancel,
+				hasServerUpdate,
+				onViewServerUpdate: handleViewServerUpdate,
+				viewMode,
+				onViewModeChange: setViewMode,
+				showVersionHistory: allowEdit,
+				fileVersion,
+				fileVersionsList,
+				isNewestVersion,
+				onVersionChange: handleVersionChange,
+				onVersionRollback: handleRollback,
+				onCompareVersion: handleCompareVersion,
+				fetchFileVersions,
+				shouldShowButtonText: showButtonText,
+				showRefresh: !isShareRoute,
+				onRefresh: handleRefresh,
+				isRefreshing,
+				currentFile,
+				attachments,
+				showShare: allowEdit,
+				allowShare: isNewestVersion && !fileVersion,
+				showDownload: allowDownload,
+				className: "max-w-full flex-shrink-0 overflow-x-auto bg-white dark:bg-card",
+			},
+		}
+	}, [
+		allowDownload,
+		allowEdit,
+		attachmentList,
+		attachments,
+		currentFile,
+		fetchFileVersions,
+		fileId,
+		fileVersion,
+		fileVersionsList,
+		handleCancel,
+		handleCompareVersion,
+		handleEdit,
+		handleRefresh,
+		handleRollback,
+		handleSave,
+		handleSaveAndExit,
+		handleStartInspector,
+		handleStartInspectorAppend,
+		handleVersionChange,
+		handleViewServerUpdate,
+		hasServerUpdate,
+		isAppendPicking,
+		isEditMode,
+		isNewestVersion,
+		isRefreshing,
+		isSaving,
+		isShareRoute,
+		mainFileId,
+		projectId,
+		selectedProject?.id,
+		showButtonText,
+		showEditToolbar,
+		toolbarRegistrationToken,
+		viewMode,
+	])
+
+	useLayoutEffect(() => {
+		if (!onToolbarModelChange) return
+		onToolbarModelChange(resolvedToolbarOwnerKey, toolbarModel, toolbarRegistrationToken)
+	}, [onToolbarModelChange, resolvedToolbarOwnerKey, toolbarModel, toolbarRegistrationToken])
+
+	useLayoutEffect(() => {
+		if (!onToolbarModelChange) return
+		return () => {
+			onToolbarModelChange(resolvedToolbarOwnerKey, null, toolbarRegistrationToken)
+		}
+	}, [onToolbarModelChange, resolvedToolbarOwnerKey, toolbarRegistrationToken])
+
 	const renderMainContent = () => {
 		if (loadingState === "loading") {
 			return (
@@ -956,51 +1083,7 @@ const PPTSlide = observer(function PPTSlide({
 				aria-hidden={!effectiveIsPresented}
 				data-interactive={String(isInteractive)}
 			>
-				{showEditToolbar && (
-					<EditToolbar
-						onStartInspector={() => rendererRef.current?.startInspector()}
-						onStartInspectorAppend={() => rendererRef.current?.startInspectorAppend()}
-						isAppendPicking={isAppendPicking}
-						showAIOptimization={allowEdit && !fileVersion}
-						showFileEdit={allowEdit && !fileVersion}
-						isEditMode={isEditMode}
-						isSaving={isSaving}
-						attachmentList={attachmentList}
-						fileId={fileId}
-						mainFileId={mainFileId}
-						projectId={selectedProject?.id || projectId}
-						onEdit={handleEdit}
-						onSave={handleSave}
-						onSaveAndExit={handleSaveAndExit}
-						onCancel={handleCancel}
-						hasServerUpdate={hasServerUpdate}
-						onViewServerUpdate={handleViewServerUpdate}
-						viewMode={viewMode}
-						onViewModeChange={setViewMode}
-						showVersionHistory={allowEdit}
-						fileVersion={fileVersion}
-						fileVersionsList={fileVersionsList}
-						isNewestVersion={isNewestVersion}
-						onVersionChange={handleVersionChange}
-						onVersionRollback={handleRollback}
-						onCompareVersion={handleCompareVersion}
-						fetchFileVersions={fetchFileVersions}
-						shouldShowButtonText={showButtonText}
-						showRefresh={!isShareRoute}
-						onRefresh={handleRefresh}
-						isRefreshing={isRefreshing}
-						currentFile={currentFile}
-						attachments={attachments}
-						showShare={allowEdit}
-						allowShare={isNewestVersion && !fileVersion}
-						showDownload={allowDownload}
-						className="max-w-full flex-shrink-0 overflow-x-auto bg-white dark:bg-card"
-						style={{
-							visibility: effectiveIsPresented ? "visible" : "hidden",
-							pointerEvents: isInteractive ? "auto" : "none",
-						}}
-					/>
-				)}
+				{!onToolbarModelChange && toolbarModel && <EditToolbar {...toolbarModel.props} />}
 
 				{renderMainContent()}
 			</div>

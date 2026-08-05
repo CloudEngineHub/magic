@@ -1,9 +1,9 @@
-import { useEffect, useId, useLayoutEffect, useRef, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { ChevronDown, Loader2, PanelLeftOpen, Presentation, Plus } from "lucide-react"
-import PPTSlide from "./PPTSlide"
+import PPTSlide, { type PPTSlideToolbarModel } from "./PPTSlide"
 import PPTSidebar from "./PPTSidebar/index"
 import { PPTControlBar } from "./PPTControlBar"
 import {
@@ -42,10 +42,32 @@ import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
+import EditToolbar from "../EditToolbar"
 
 interface ManualSaveResult {
 	fileId?: string
 	cleanContent?: string
+}
+
+export function reconcilePPTSlideToolbarModels(
+	currentModels: Map<string, PPTSlideToolbarModel>,
+	ownerKey: string,
+	model: PPTSlideToolbarModel | null,
+	token: object,
+): Map<string, PPTSlideToolbarModel> {
+	const currentModel = currentModels.get(ownerKey)
+
+	if (model) {
+		if (currentModel === model) return currentModels
+		const nextModels = new Map(currentModels)
+		nextModels.set(ownerKey, model)
+		return nextModels
+	}
+
+	if (!currentModel || currentModel.token !== token) return currentModels
+	const nextModels = new Map(currentModels)
+	nextModels.delete(ownerKey)
+	return nextModels
 }
 
 function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; file_name?: string }) {
@@ -404,6 +426,19 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 	const [liveRenderCacheSize] = useState(() => getPPTLiveRenderCacheSize())
 	const localRenderScopeId = useId()
+	const liveRenderScopeKey = mainFileId || `local-ppt-render:${localRenderScopeId}`
+	const [toolbarModels, setToolbarModels] = useState<Map<string, PPTSlideToolbarModel>>(
+		() => new Map(),
+	)
+	const toolbarHostRef = useRef<HTMLDivElement>(null)
+	const handleToolbarModelChange = useCallback(
+		(ownerKey: string, model: PPTSlideToolbarModel | null, token: object) => {
+			setToolbarModels((currentModels) =>
+				reconcilePPTSlideToolbarModels(currentModels, ownerKey, model, token),
+			)
+		},
+		[],
+	)
 	const pinnedSlideKeys = store.slides
 		.filter((slide) => {
 			const fileId = store.getFileIdByPath(slide.path)
@@ -420,9 +455,25 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					? 3
 					: liveRenderCacheSize,
 			neighborRadius: isPresentationFullscreen ? 2 : 1,
-			scopeKey: mainFileId || `local-ppt-render:${localRenderScopeId}`,
+			scopeKey: liveRenderScopeKey,
 			pinnedKeys: pinnedSlideKeys,
 		})
+	const scopedPresentedKey = presentedKey?.startsWith(`${liveRenderScopeKey}::`)
+		? presentedKey
+		: null
+	const presentedToolbarModel = scopedPresentedKey
+		? toolbarModels.get(scopedPresentedKey)
+		: undefined
+
+	useLayoutEffect(() => {
+		const host = toolbarHostRef.current as (HTMLDivElement & { inert?: boolean }) | null
+		if (!host) return
+
+		host.inert = Boolean(pendingKey)
+		if (pendingKey && host.contains(document.activeElement)) {
+			;(document.activeElement as HTMLElement | null)?.blur?.()
+		}
+	}, [pendingKey, presentedToolbarModel])
 	// Normal viewer mode explicitly prepares the two live neighbors without generating screenshots.
 	// Fullscreen already owns a wider adaptive HTML preload window in PPTStore.
 	useEffect(() => {
@@ -663,7 +714,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						className="min-h-0 min-w-0 flex-1"
 					>
 						<div
-							className="relative h-full w-full overflow-hidden"
+							className="relative flex h-full w-full flex-col overflow-hidden"
 							tabIndex={0}
 							aria-label={
 								hasSlides
@@ -673,30 +724,50 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							data-testid="ppt-render-div"
 							data-pending-slide={pendingKey || undefined}
 						>
-							<div className="relative h-full w-full overflow-hidden">
+							{/* 加载状态覆盖工具栏和画布，保持初始化阶段的原有遮罩语义。 */}
+							{isLoadingOverlayVisible && (
+								<div
+									data-testid="ppt-render-loading"
+									className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm"
+								>
+									<div className="flex items-center gap-2">
+										<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+										<TextAnimation dotwaveAnimation>
+											{t("ppt.loading")}
+										</TextAnimation>
+										{store.loadingProgress > 0 && (
+											<p className="text-xs text-muted-foreground">
+												{store.loadingProgress}%
+											</p>
+										)}
+									</div>
+								</div>
+							)}
+
+							{presentedToolbarModel && (
+								<div
+									ref={toolbarHostRef}
+									data-testid="ppt-render-edit-toolbar"
+									data-toolbar-owner={scopedPresentedKey || undefined}
+									aria-busy={Boolean(pendingKey)}
+									className="min-w-0 flex-shrink-0"
+									style={{ pointerEvents: pendingKey ? "none" : "auto" }}
+								>
+									<EditToolbar
+										key={liveRenderScopeKey}
+										{...presentedToolbarModel.props}
+										interactionDisabled={Boolean(pendingKey)}
+									/>
+								</div>
+							)}
+
+							<div
+								data-testid="ppt-render-slide-stage"
+								className="relative min-h-0 w-full flex-1 overflow-hidden"
+							>
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
 								{isResizing && (
 									<div className="absolute inset-0 z-50 bg-transparent" />
-								)}
-
-								{/* 加载状态 - 初始化时显示 */}
-								{isLoadingOverlayVisible && (
-									<div
-										data-testid="ppt-render-loading"
-										className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm"
-									>
-										<div className="flex items-center gap-2">
-											<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-											<TextAnimation dotwaveAnimation>
-												{t("ppt.loading")}
-											</TextAnimation>
-											{store.loadingProgress > 0 && (
-												<p className="text-xs text-muted-foreground">
-													{store.loadingProgress}%
-												</p>
-											)}
-										</div>
-									</div>
 								)}
 
 								{isNoSlidesFallbackVisible && (
@@ -743,6 +814,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											index={index}
 											isActive={index === store.activeIndex}
 											isPresented={key === presentedKey}
+											toolbarOwnerKey={key}
+											onToolbarModelChange={handleToolbarModelChange}
 											content={slide.content || ""}
 											rawContent={slide.rawContent || ""}
 											renderRevision={revision}

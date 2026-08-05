@@ -399,6 +399,33 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("registers its toolbar model for a shared host without mounting a duplicate toolbar", () => {
+		const onToolbarModelChange = vi.fn()
+		const { unmount } = renderPPTSlide({
+			toolbarOwnerKey: "deck::slide-1",
+			onToolbarModelChange,
+		})
+
+		expect(screen.queryByTestId("ppt-edit-toolbar")).toBeNull()
+		expect(onToolbarModelChange).toHaveBeenCalledWith(
+			"deck::slide-1",
+			expect.objectContaining({
+				props: expect.objectContaining({ fileId: "slide-1" }),
+			}),
+			expect.any(Object),
+		)
+
+		const registrationToken = onToolbarModelChange.mock.calls[0]?.[2]
+		expect(onToolbarModelChange.mock.calls[0]?.[1]?.token).toBe(registrationToken)
+		unmount()
+
+		expect(onToolbarModelChange).toHaveBeenLastCalledWith(
+			"deck::slide-1",
+			null,
+			registrationToken,
+		)
+	})
+
 	it("向 HTML renderer 传入竖版 PPT 的缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1080" data-height="1920"></div>',
