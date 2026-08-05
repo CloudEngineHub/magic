@@ -19,6 +19,7 @@ export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 3
 const DB_BASE_NAME = "canvas-media-resource-offline-cache"
 export const CANVAS_MEDIA_DB_NAME = `${DB_BASE_NAME}-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 export const CANVAS_MEDIA_CACHE_NAME = `canvas-media-resources-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
+const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = [1, 2] as const
 const STORE_NAME = "resources"
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
@@ -117,6 +118,52 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 		request.onsuccess = () => resolve(request.result)
 		request.onerror = () => reject(request.error)
 	})
+}
+
+function deleteDatabaseBestEffort(factory: IDBFactory, name: string): Promise<void> {
+	return new Promise((resolve) => {
+		try {
+			const request = factory.deleteDatabase(name)
+			const finish = () => resolve()
+			request.onsuccess = finish
+			request.onerror = finish
+			request.onblocked = finish
+		} catch {
+			resolve()
+		}
+	})
+}
+
+/**
+ * Best-effort cleanup for obsolete Canvas media namespaces.
+ * Only known v1/v2 namespaces are removed; current v3 is never included.
+ */
+export async function cleanupLegacyCanvasMediaStorage(options?: {
+	indexedDBFactory?: IDBFactory
+	cacheStorage?: CacheStorage
+}): Promise<void> {
+	const indexedDBFactory =
+		options?.indexedDBFactory ?? (typeof indexedDB === "undefined" ? undefined : indexedDB)
+	const cacheStorage =
+		options?.cacheStorage ?? (typeof caches === "undefined" ? undefined : caches)
+	const cleanupTasks: Promise<unknown>[] = []
+
+	for (const version of LEGACY_CANVAS_MEDIA_CACHE_VERSIONS) {
+		if (indexedDBFactory) {
+			cleanupTasks.push(
+				deleteDatabaseBestEffort(indexedDBFactory, `${DB_BASE_NAME}-v${version}`),
+			)
+		}
+		if (cacheStorage) {
+			cleanupTasks.push(
+				Promise.resolve()
+					.then(() => cacheStorage.delete(`canvas-media-resources-v${version}`))
+					.catch(() => false),
+			)
+		}
+	}
+
+	await Promise.allSettled(cleanupTasks)
 }
 
 function openDb(): Promise<IDBDatabase> {
