@@ -72,6 +72,7 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 		workspaceId?: string
 		projectId?: string
 	}>()
+	const creatingRef = useRef(false)
 	const createInputRef = useRef<InputRef>(null)
 
 	const sourceOptions = useMemo(() => {
@@ -141,9 +142,12 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 	})
 
 	const handleAddNew = useMemoizedFn(async () => {
+		if (creatingRef.current) return
+
 		const name = newItemName.trim()
 		if (!name) return
 
+		creatingRef.current = true
 		setCreating(true)
 		try {
 			const created =
@@ -175,6 +179,7 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 			setViewMode("select")
 			closePopup()
 		} finally {
+			creatingRef.current = false
 			setCreating(false)
 		}
 	})

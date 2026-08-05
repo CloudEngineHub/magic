@@ -116,6 +116,31 @@ describe("SelectItem create flow", () => {
 		expect(screen.queryByTestId("magic-popup")).not.toBeInTheDocument()
 	})
 
+	it("prevents duplicate creation while the first request is pending", async () => {
+		let resolveCreation: ((value: { id: string; project_name: string }) => void) | undefined
+		mocks.addProject.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					resolveCreation = resolve
+				}),
+		)
+		render(<SelectItem type="project" workspaceId="workspace-1" />)
+
+		fireEvent.click(screen.getByRole("button", { name: "accountPanel.timedTasks.project" }))
+		fireEvent.click(screen.getByRole("button", { name: "accountPanel.timedTasks.addProject" }))
+		const createInput = screen.getByPlaceholderText(
+			"accountPanel.timedTasks.createProjectPlaceholder",
+		)
+		fireEvent.change(createInput, { target: { value: "Brand new" } })
+
+		fireEvent.keyDown(createInput, { key: "Enter" })
+		fireEvent.keyDown(createInput, { key: "Enter" })
+
+		expect(mocks.addProject).toHaveBeenCalledTimes(1)
+		resolveCreation?.({ id: "project-1", project_name: "Brand new" })
+		await waitFor(() => expect(screen.queryByTestId("magic-popup")).not.toBeInTheDocument())
+	})
+
 	it("keeps the filtered list visible and preserves its search when creation is cancelled", () => {
 		render(<SelectItem type="project" workspaceId="workspace-1" />)
 
