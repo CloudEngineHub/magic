@@ -361,12 +361,39 @@ function AskUserFormImpl({
 				{shouldShowActions && (
 					<div className="shrink-0 pt-0.5" data-testid="ask-user-v2-card-footer">
 						<div className="flex flex-wrap items-center justify-between gap-1.5">
+							<div
+								className="flex shrink-0 items-center gap-1"
+								data-testid="ask-user-v2-card-actions"
+							>
+								<Button
+									type="button"
+									size="sm"
+									disabled={submitDisabled}
+									onClick={() => handleSubmit()}
+									data-testid="ask-user-v2-card-submit-button"
+									className="h-7 rounded-md bg-primary px-3 text-sm font-medium leading-5 text-primary-foreground shadow-none hover:bg-primary/90"
+								>
+									{getAskUserSubmitActionText(locale)}
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									disabled={actionsDisabled}
+									onClick={handleSkip}
+									data-testid="ask-user-v2-card-skip-button"
+									className="h-7 rounded-md border border-border px-3 text-sm font-medium leading-5 text-foreground shadow-none"
+								>
+									{getAskUserSkipActionText(locale)}
+								</Button>
+							</div>
 							{showCountdown ? (
 								<div
 									className={cn(
-										"flex min-w-0 items-center gap-1 font-medium",
+										"ml-auto flex min-w-0 items-center gap-1 text-right font-medium",
 										askUserMutedTextClass,
 									)}
+									data-testid="ask-user-v2-card-countdown"
 								>
 									<span
 										className={cn(
@@ -379,32 +406,7 @@ function AskUserFormImpl({
 										})}
 									</span>
 								</div>
-							) : (
-								<div />
-							)}
-							<div className="flex shrink-0 items-center gap-1">
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									disabled={actionsDisabled}
-									onClick={handleSkip}
-									data-testid="ask-user-v2-card-skip-button"
-									className="h-7 rounded-md border border-border px-3 text-sm font-medium leading-5 text-foreground shadow-none"
-								>
-									{getAskUserSkipActionText(locale)}
-								</Button>
-								<Button
-									type="button"
-									size="sm"
-									disabled={submitDisabled}
-									onClick={() => handleSubmit()}
-									data-testid="ask-user-v2-card-submit-button"
-									className="h-7 rounded-md bg-primary px-3 text-sm font-medium leading-5 text-primary-foreground shadow-none hover:bg-primary/90"
-								>
-									{getAskUserSubmitActionText(locale)}
-								</Button>
-							</div>
+							) : null}
 						</div>
 					</div>
 				)}

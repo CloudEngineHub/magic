@@ -9,7 +9,11 @@ import { sidebarStore } from "@/stores/layout"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import superMagicService from "@/pages/superMagic/services"
 import { SuperMagicApi } from "@/apis"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	WorkspaceStatus,
+	type ProjectListItem,
+	type Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
 import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -61,15 +65,40 @@ function WorkspaceList() {
 		}
 		return result
 	}, [searchState.projects])
+	const projectParentWorkspaces = useMemo(() => {
+		const knownWorkspaces = new Map(
+			[...workspaces, ...searchState.workspaces].map((workspace) => [
+				workspace.id,
+				workspace,
+			]),
+		)
+
+		return Array.from(projectsByWorkspaceId.entries()).map(([workspaceId, projects]) => {
+			const knownWorkspace = knownWorkspaces.get(workspaceId)
+			if (knownWorkspace) return knownWorkspace
+
+			const project = projects[0]
+			// Project search already returns the parent ID and name. Build a search-only
+			// projection so an unloaded paginated workspace can still contain its matches.
+			return {
+				id: workspaceId,
+				name: project.workspace_name,
+				is_archived: 0,
+				current_topic_id: project.current_topic_id || "",
+				current_project_id: project.id,
+				workspace_status: WorkspaceStatus.WAITING,
+				project_count: projects.length,
+				workspace_type: "default",
+			} satisfies Workspace
+		})
+	}, [projectsByWorkspaceId, searchState.workspaces, workspaces])
 	const displayedWorkspaces = isSearchMode
 		? Array.from(
 				new Map(
-					[
-						...searchState.workspaces,
-						...workspaces.filter((workspace) =>
-							projectsByWorkspaceId.has(workspace.id),
-						),
-					].map((workspace) => [workspace.id, workspace]),
+					[...searchState.workspaces, ...projectParentWorkspaces].map((workspace) => [
+						workspace.id,
+						workspace,
+					]),
 				).values(),
 			)
 		: workspaces
