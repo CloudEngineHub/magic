@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { toJS } from "mobx"
 import { useRequest } from "ahooks"
@@ -25,7 +25,11 @@ import {
 
 const SEARCH_PAGE_SIZE = 20
 
-function WorkspaceList() {
+interface WorkspaceListProps {
+	beforeItems?: ReactNode
+}
+
+function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	const { t } = useTranslation()
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
@@ -407,6 +411,7 @@ function WorkspaceList() {
 			<SidebarGroupContent>
 				<SidebarMenu>
 					<div className="w-full pr-3">
+						{beforeItems}
 						<div ref={workspaceListRef}>
 							{isCreatingWorkspace && (
 								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
