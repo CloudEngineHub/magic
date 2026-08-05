@@ -5,6 +5,10 @@ import type {
 	MarkerTypeEnum,
 	CropConfig,
 } from "../runtime/document/types"
+import type {
+	CanvasResourceReferenceResolverSnapshot,
+	ResolveCanvasResourceReference,
+} from "./resource-reference"
 
 // 附件来源
 export const AttachmentSource = {
@@ -1506,20 +1510,19 @@ export interface CanvasDesignMethods {
 		options?: { useImageProcess?: boolean },
 	) => Promise<CanvasFileResourceMeta>
 	/**
-	 * 将画布中记录的资源路径（如 ./xxx/xx）解析为宿主可识别的绝对路径（必选；画布资源同一性与此对齐）
-	 * @param path 原始资源路径（相对或绝对）
-	 * @returns 解析后的绝对路径，例如：/workspace/xxx/xx
+	 * Resolve paths, attachment nodes, storage values, and resource identities through the
+	 * host's authoritative namespace-aware resource model.
 	 */
+	resolveResourceReference?: ResolveCanvasResourceReference
+	/** Resolver 与语义 revision 的原子快照；Canvas 运行时优先使用此入口。 */
+	resourceReferenceResolverSnapshot?: CanvasResourceReferenceResolverSnapshot
+	/** @deprecated 兼容旧宿主；新实现应通过 resourceReferenceResolverSnapshot 提供 revision。 */
+	resourceReferenceResolverVersion?: string
+	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
 	resolveAbsolutePath: (path: string) => string
-	/**
-	 * 返回与原始资源路径指向同一文件的宿主安全候选路径。
-	 * 宿主必须避免返回可能跨画布串线的 suffix 猜测。
-	 */
+	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
 	resolveResourcePathCandidates?: (path: string) => string[]
-	/**
-	 * 将宿主工作区路径转换为画布持久化路径。
-	 * 当前画布资源应返回 `./...`，其他工作区资源应返回 `/...`。
-	 */
+	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
 	normalizeResourcePathForStorage?: (path: string) => string
 	/**
 	 * 获取画布虚拟媒体资源的宿主 scope，用于在同源虚拟链接中隔离工作区/项目上下文。

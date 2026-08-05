@@ -3,6 +3,7 @@ import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"
 import type { MagicConfig } from "./magic-types"
+import type { ResolveCanvasResourceReference } from "./resource-reference"
 import type {
 	CanvasDeviceInfo,
 	CanvasDesignPluginModuleConfig,
@@ -118,7 +119,9 @@ export interface ReferenceResourcePanelLimitInfo {
 	}>
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
-	/** 宿主路径解析器，用于区分工作区根路径与当前画布相对路径。 */
+	/** 宿主资源解析器，用于区分工作区根路径与当前画布相对路径。 */
+	resolveResourceReference?: ResolveCanvasResourceReference
+	/** @deprecated 迁移期兼容；新调用方应使用 resolveResourceReference。 */
 	resolveAbsolutePath?: (path: string) => string
 	/** 面包屑等展示用文案前缀（如「当前项目文件」） */
 	projectFilesPathPrefix?: string
