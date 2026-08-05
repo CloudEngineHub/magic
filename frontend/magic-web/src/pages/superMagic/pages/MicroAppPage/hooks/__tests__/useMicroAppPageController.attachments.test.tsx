@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
 		selectedProject,
 		checkAttachmentsNowDebounced: vi.fn(),
 		useProjectAttachmentsChangeRealtime: vi.fn(),
+		useCollaboratorUpdatePanel: vi.fn(),
 		pubsub: {
 			publish: vi.fn(),
 			subscribe: vi.fn(),
@@ -89,11 +90,14 @@ vi.mock("../../utils/captureMicroAppCover", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel", () => ({
-	default: () => ({
-		openManageModal: vi.fn(),
-		CollaboratorUpdatePanel: null,
-		canManageCollaborators: false,
-	}),
+	default: (params: unknown) => {
+		mocks.useCollaboratorUpdatePanel(params)
+		return {
+			openManageModal: vi.fn(),
+			CollaboratorUpdatePanel: null,
+			canManageCollaborators: false,
+		}
+	},
 }))
 
 vi.mock("@/pages/superMagic/utils/attachmentDataProcessor", () => ({
@@ -145,5 +149,16 @@ describe("useMicroAppPageController attachment synchronization", () => {
 		})
 
 		expect(mocks.setWorkspaceFileTree).toHaveBeenCalledWith([entry])
+	})
+
+	it("向协作者面板传入微应用 app_id", () => {
+		renderHook(() => useMicroAppPageController("app-1", "project-1"))
+
+		expect(mocks.useCollaboratorUpdatePanel).toHaveBeenCalledWith({
+			selectedProject: expect.objectContaining({
+				id: "project-1",
+				app_id: "app-1",
+			}),
+		})
 	})
 })

@@ -59,6 +59,17 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const canEdit = canEditMicroAppMetadata(selectedProject)
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
+	const collaborationProject = useMemo(
+		() =>
+			selectedProject
+				? {
+						...selectedProject,
+						// 协作接口继续使用 project_id，协作弹窗的访问地址使用微应用 app_id。
+						app_id: appId,
+					}
+				: null,
+		[appId, selectedProject],
+	)
 
 	const setAttachments = useMemoizedFn((nextAttachments: AttachmentItem[]) => {
 		store.projectFilesStore.setWorkspaceFileTree(nextAttachments)
@@ -277,7 +288,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		openManageModal,
 		CollaboratorUpdatePanel,
 		canManageCollaborators: hasCollaboratorManagementCapability,
-	} = useCollaboratorUpdatePanel({ selectedProject })
+	} = useCollaboratorUpdatePanel({ selectedProject: collaborationProject })
 	// 能力位只表示当前版本支持协作者管理，项目角色仍决定当前用户是否有权使用该入口。
 	const canManageCollaborators =
 		hasCollaboratorManagementCapability && canManageProject(selectedProject?.user_role)
