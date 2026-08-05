@@ -75,6 +75,7 @@ function MicroAppPageInner({
 		hasRunningTopic,
 		isReadOnly,
 		canEdit,
+		canPublish,
 		attachments,
 		attachmentList,
 		activeFileId,
@@ -274,6 +275,7 @@ function MicroAppPageInner({
 				<MicroAppHeader
 					selectedProject={selectedProject}
 					hasEntries={Boolean(defaultEntryFile)}
+					canPublish={canPublish}
 					isPublished={isPublished}
 					onBack={handleBackToMicroApps}
 					onPublish={handleOpenPublishDialog}

@@ -7,6 +7,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 interface MicroAppHeaderProps {
 	selectedProject: ProjectListItem | null
 	hasEntries: boolean
+	canPublish: boolean
 	isPublished?: boolean
 	onBack: () => void
 	onPublish: () => void
@@ -19,6 +20,7 @@ interface MicroAppHeaderProps {
 export default function MicroAppHeader({
 	selectedProject,
 	hasEntries,
+	canPublish,
 	isPublished = false,
 	onBack,
 	onPublish,
@@ -97,7 +99,7 @@ export default function MicroAppHeader({
 				</Tooltip>
 			) : null}
 
-			{hasEntries ? (
+			{hasEntries && canPublish ? (
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

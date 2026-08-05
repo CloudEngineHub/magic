@@ -92,6 +92,7 @@ function MicroAppPageMobileInner({
 		hasRunningTopic,
 		isReadOnly,
 		canEdit,
+		canPublish,
 		attachments,
 		attachmentList,
 		defaultEntryFile,
@@ -178,6 +179,7 @@ function MicroAppPageMobileInner({
 				<MicroAppMobileHeader
 					selectedProject={selectedProject}
 					hasEntries={Boolean(defaultEntryFile)}
+					canPublish={canPublish}
 					isPublished={isPublished}
 					isDatabasePanelOpen={isDatabasePanelOpen}
 					onBack={handleBackToMicroApps}

@@ -15,6 +15,7 @@ describe("MicroAppMobileHeader", () => {
 			<MicroAppMobileHeader
 				selectedProject={{ id: "project-1", project_name: "Todo App" } as never}
 				hasEntries
+				canPublish
 				isDatabasePanelOpen={false}
 				onBack={vi.fn()}
 				onToggleDatabasePanel={vi.fn()}
@@ -40,6 +41,7 @@ describe("MicroAppMobileHeader", () => {
 			<MicroAppMobileHeader
 				selectedProject={{ id: "project-1", project_name: "Todo App" } as never}
 				hasEntries
+				canPublish
 				isDatabasePanelOpen={false}
 				onBack={onBack}
 				onToggleDatabasePanel={onToggleDatabasePanel}
@@ -70,6 +72,7 @@ describe("MicroAppMobileHeader", () => {
 			<MicroAppMobileHeader
 				selectedProject={{ id: "project-1", project_name: "Todo App" } as never}
 				hasEntries
+				canPublish
 				isPublished
 				isDatabasePanelOpen={false}
 				onBack={vi.fn()}
@@ -81,5 +84,21 @@ describe("MicroAppMobileHeader", () => {
 		expect(screen.getByTestId("micro-app-mobile-publish-button")).toHaveAccessibleName(
 			"microAppPage.publish.published",
 		)
+	})
+
+	it("does not render publish button without publish permission", () => {
+		render(
+			<MicroAppMobileHeader
+				selectedProject={{ id: "project-1", project_name: "Todo App" } as never}
+				hasEntries
+				canPublish={false}
+				isDatabasePanelOpen={false}
+				onBack={vi.fn()}
+				onToggleDatabasePanel={vi.fn()}
+				onPublish={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("micro-app-mobile-publish-button")).not.toBeInTheDocument()
 	})
 })

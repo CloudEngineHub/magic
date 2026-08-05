@@ -20,6 +20,7 @@ function renderHeader(props: Partial<ComponentProps<typeof MicroAppHeader>> = {}
 		<MicroAppHeader
 			selectedProject={project}
 			hasEntries={false}
+			canPublish
 			onBack={vi.fn()}
 			onPublish={vi.fn()}
 			{...props}
@@ -44,6 +45,12 @@ describe("MicroAppHeader", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-button"))
 
 		expect(onPublish).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not render publish button without publish permission", () => {
+		renderHeader({ hasEntries: true, canPublish: false })
+
+		expect(screen.queryByTestId("micro-app-publish-button")).not.toBeInTheDocument()
 	})
 
 	it("shows published status when the micro app is already published", () => {

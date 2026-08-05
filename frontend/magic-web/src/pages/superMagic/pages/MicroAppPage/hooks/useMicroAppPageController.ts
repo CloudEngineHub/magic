@@ -27,7 +27,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
 import { captureMicroAppCover } from "../utils/captureMicroAppCover"
-import { canEditMicroAppMetadata } from "../utils/microAppPermissions"
+import { canEditMicroAppMetadata, canPublishMicroApp } from "../utils/microAppPermissions"
 import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 
@@ -57,6 +57,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const canEdit = canEditMicroAppMetadata(selectedProject)
+	const canPublish = canPublishMicroApp(selectedProject)
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
 	const collaborationProject = useMemo(
@@ -269,7 +270,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	})
 
 	const handleOpenPublishDialog = useMemoizedFn(() => {
-		if (!selectedProject?.id || !defaultEntryFile) return
+		if (!canPublish || !defaultEntryFile) return
 		setPublishDialogOpen(true)
 	})
 
@@ -350,6 +351,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		hasRunningTopic,
 		isReadOnly,
 		canEdit,
+		canPublish,
 		attachments,
 		attachmentList,
 		activeFileId,

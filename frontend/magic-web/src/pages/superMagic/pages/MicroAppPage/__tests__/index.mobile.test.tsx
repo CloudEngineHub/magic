@@ -85,6 +85,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		hasRunningTopic: true,
 		isReadOnly: false,
 		canEdit: false,
+		canPublish: true,
 		attachments: [
 			{
 				file_id: "entry-1",

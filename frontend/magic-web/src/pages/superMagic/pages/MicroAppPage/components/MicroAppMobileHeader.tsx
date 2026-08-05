@@ -7,6 +7,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 interface MicroAppMobileHeaderProps {
 	selectedProject: ProjectListItem | null
 	hasEntries: boolean
+	canPublish: boolean
 	isPublished?: boolean
 	isDatabasePanelOpen: boolean
 	onBack: () => void
@@ -22,6 +23,7 @@ interface MicroAppMobileHeaderProps {
 export default function MicroAppMobileHeader({
 	selectedProject,
 	hasEntries,
+	canPublish,
 	isPublished = false,
 	isDatabasePanelOpen,
 	onBack,
@@ -106,7 +108,7 @@ export default function MicroAppMobileHeader({
 					</Button>
 				) : null}
 
-				{hasEntries ? (
+				{hasEntries && canPublish ? (
 					<Button
 						type="button"
 						variant="ghost"
