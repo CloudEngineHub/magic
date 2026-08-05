@@ -34,13 +34,6 @@ const config = {
 			},
 		},
 		extend: {
-			screens: {
-				"desktop-compact": {
-					raw: "(min-width: 768px) and (min-height: 721px) and (max-height: 800px)",
-				},
-				"desktop-short": { raw: "(min-width: 768px) and (max-height: 720px)" },
-				"desktop-narrow": { raw: "(min-width: 768px) and (max-width: 1199px)" },
-			},
 			zIndex: {
 				"context-menu": "var(--z-index-context-menu)",
 				"detail-fullscreen": "var(--z-index-detail-fullscreen)",
@@ -306,6 +299,14 @@ const config = {
 	plugins: [
 		animate,
 		plugin(({ addVariant }) => {
+			// Keep compound desktop queries out of `theme.screens`: Tailwind 3.4 disables
+			// every `min-*`/`max-*` variant when any configured screen is an object.
+			addVariant(
+				"desktop-compact",
+				"@media (min-width: 768px) and (min-height: 721px) and (max-height: 800px)",
+			)
+			addVariant("desktop-short", "@media (min-width: 768px) and (max-height: 720px)")
+			addVariant("desktop-narrow", "@media (min-width: 768px) and (max-width: 1199px)")
 			// Desktop layout and input capability are separate: iPad can render desktop UI while still using coarse touch input.
 			addVariant("no-hover", "@media (hover: none) and (pointer: coarse)")
 		}),
