@@ -1,10 +1,20 @@
-import { useState, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react"
+import {
+	useState,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	type CSSProperties,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { FileX, Loader2 } from "lucide-react"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../contents/HTML/IsolatedHTMLRenderer"
-import EditToolbar from "@/pages/superMagic/components/Detail/components/EditToolbar"
+import EditToolbar, {
+	type EditToolbarProps,
+} from "@/pages/superMagic/components/Detail/components/EditToolbar"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -36,12 +46,21 @@ import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
 
+export interface PPTSlideToolbarModel {
+	token: object
+	props: EditToolbarProps
+}
+
 interface PPTSlideProps {
 	allowDownload?: boolean
 	index: number
 	isActive: boolean
+	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
+	isPresented?: boolean
 	content: string
 	rawContent: string
+	/** Stable content revision used to remount only the iframe whose HTML actually changed. */
+	renderRevision?: string
 	isFullscreen: boolean
 	isPlaybackMode?: boolean
 	saveEditContent?: (
@@ -91,6 +110,16 @@ interface PPTSlideProps {
 	manualScale?: number | null
 	onManualScaleChange?: (scale: number | null) => void
 	onScaleRatioChange?: (scale: number) => void
+	/** Reports whether the real iframe/fallback for this slide is ready to be presented. */
+	onRenderReadyChange?: (ready: boolean) => void
+	/** Scoped live-render key used to associate this slide with the shared toolbar host. */
+	toolbarOwnerKey?: string
+	/** Registers this slide's toolbar model without mounting another EditToolbar instance. */
+	onToolbarModelChange?: (
+		ownerKey: string,
+		model: PPTSlideToolbarModel | null,
+		token: object,
+	) => void
 }
 
 interface PerformSaveOptions {
@@ -101,8 +130,10 @@ interface PerformSaveOptions {
 const PPTSlide = observer(function PPTSlide({
 	index,
 	isActive,
+	isPresented,
 	content,
 	rawContent,
+	renderRevision,
 	isFullscreen,
 	isPlaybackMode,
 	saveEditContent,
@@ -134,9 +165,14 @@ const PPTSlide = observer(function PPTSlide({
 	manualScale,
 	onManualScaleChange,
 	onScaleRatioChange,
+	onRenderReadyChange,
+	toolbarOwnerKey,
+	onToolbarModelChange,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const effectiveIsPresented = isPresented ?? isActive
+	const isInteractive = effectiveIsPresented && isActive
 
 	// 内部管理编辑模式
 	const { isEditMode, setIsEditMode } = useEditMode({ fileId })
@@ -154,6 +190,8 @@ const PPTSlide = observer(function PPTSlide({
 	>(null)
 	// IsolatedHTMLRenderer 的 ref，用于重置内容
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
+	const slideWrapperRef = useRef<HTMLDivElement>(null)
+	const toolbarRegistrationToken = useRef({}).current
 	const pendingSaveIntentRef = useRef<"save" | "save-and-exit" | "save-and-switch" | null>(null)
 	const pendingSaveResolveRef = useRef<((didSave: boolean) => void) | null>(null)
 	const isConfirmingConflictSaveRef = useRef(false)
@@ -174,10 +212,21 @@ const PPTSlide = observer(function PPTSlide({
 		fileId: fileId || "",
 	})
 
-	const [displayContent, setDisplayContent] = useState<{ content: string; rawContent: string }>({
+	const [displayContent, setDisplayContent] = useState<{
+		content: string
+		rawContent: string
+		sourceVersion?: number
+	}>({
 		content: content,
 		rawContent: rawContent,
+		sourceVersion: undefined,
 	})
+	const isDisplayContentCurrent =
+		fileVersion === undefined
+			? displayContent.sourceVersion === undefined && displayContent.rawContent === rawContent
+			: typeof versionContent === "string" &&
+				displayContent.sourceVersion === fileVersion &&
+				displayContent.rawContent === versionContent
 	const [viewMode, setViewMode] = useState<"code" | "desktop" | "phone">("desktop")
 	const [editingCodeContent, setEditingCodeContent] = useState<string>(rawContent)
 	const scaleContentDimensions = useMemo(
@@ -218,29 +267,56 @@ const PPTSlide = observer(function PPTSlide({
 
 	// Listen to version content changes (when switching versions)
 	useEffect(() => {
-		if (versionContent && typeof versionContent === "string") {
-			// Process historical version content with path replacement
-			processHistoricalContent(versionContent).then((processedContent) => {
-				setDisplayContent({ content: processedContent, rawContent: versionContent })
-				// Notify renderer to update content
-				if (rendererRef.current) {
-					rendererRef.current.updateContent(processedContent)
-				}
-			})
+		if (fileVersion === undefined || typeof versionContent !== "string") {
+			return
 		}
-	}, [versionContent, processHistoricalContent])
+
+		let cancelled = false
+		const targetVersion = fileVersion
+		void processHistoricalContent(versionContent).then((processedContent) => {
+			if (cancelled) return
+			setDisplayContent({
+				content: processedContent,
+				rawContent: versionContent,
+				sourceVersion: targetVersion,
+			})
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [fileVersion, processHistoricalContent, versionContent])
 
 	// 当传入的 content 变化且不在查看历史版本时，更新显示内容
 	useEffect(() => {
-		if (!fileVersion && rawContent !== displayContent.rawContent) {
-			processHistoricalContent(rawContent).then((processedContent) => {
-				setDisplayContent({ content: processedContent, rawContent })
-				if (rendererRef.current) {
-					rendererRef.current.updateContent(processedContent)
-				}
-			})
+		if (fileVersion !== undefined) return
+		if (
+			displayContent.sourceVersion === undefined &&
+			rawContent === displayContent.rawContent
+		) {
+			return
 		}
-	}, [rawContent, fileVersion, displayContent, processHistoricalContent])
+
+		let cancelled = false
+		void processHistoricalContent(rawContent).then((processedContent) => {
+			if (cancelled) return
+			setDisplayContent({
+				content: processedContent,
+				rawContent,
+				sourceVersion: undefined,
+			})
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [
+		displayContent.rawContent,
+		displayContent.sourceVersion,
+		fileVersion,
+		processHistoricalContent,
+		rawContent,
+	])
 
 	// 服务端更新状态管理 - 使用自定义 hook
 	const {
@@ -277,36 +353,59 @@ const PPTSlide = observer(function PPTSlide({
 		return !isMobile && !isFullscreen && !isPlaybackMode
 	}, [isMobile, isFullscreen, isPlaybackMode])
 
-	const slideWrapperClassNames = cn(
-		isFullscreen ? "absolute left-0 top-0 block h-full w-full" : "flex h-full w-full flex-col",
-	)
-	// Keep layout for all slides to prevent re-mounting and flickering
+	const slideWrapperClassNames = "absolute inset-0 flex h-full w-full flex-col"
+	// Keep every resident slide at the same dimensions while only the presented one is interactive.
 	const slideWrapperStyle: CSSProperties = {
-		visibility: isActive ? "visible" : "hidden",
-		pointerEvents: isActive ? "auto" : "none",
-		// Optimize rendering performance
-		willChange: isActive ? "auto" : "transform",
+		visibility: effectiveIsPresented ? "visible" : "hidden",
+		pointerEvents: isInteractive ? "auto" : "none",
+		zIndex: effectiveIsPresented ? 1 : 0,
 	}
+
+	useEffect(() => {
+		const wrapper = slideWrapperRef.current as (HTMLDivElement & { inert?: boolean }) | null
+		if (!wrapper) return
+
+		wrapper.inert = !isInteractive
+		if (!isInteractive && wrapper.contains(document.activeElement)) {
+			;(document.activeElement as HTMLElement | null)?.blur?.()
+		}
+	}, [isInteractive])
 
 	// 接收 IsolatedHTMLRenderer 暴露的保存函数
 	const handleSaveReady = useCallback((triggerSave: () => Promise<SaveResult | undefined>) => {
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
+	const reportSlideRenderReady = useMemoizedFn((ready: boolean) => {
+		setIsSlideRenderReady(ready)
+		onRenderReadyChange?.(ready)
+	})
+
 	const handleSlideRenderReady = useMemoizedFn(() => {
-		setIsSlideRenderReady(true)
+		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
+			return
+		}
+		reportSlideRenderReady(true)
 	})
 
 	useEffect(() => {
-		if (viewMode === "code") {
-			setIsSlideRenderReady(true)
+		const canPresentWithoutIframe =
+			loadingState === "error" ||
+			(loadingState === "loaded" &&
+				isDisplayContentCurrent &&
+				(viewMode === "code" || !displayContent.content.trim()))
+
+		if (canPresentWithoutIframe) {
+			reportSlideRenderReady(true)
 			return
 		}
 
-		setIsSlideRenderReady(false)
-		if (!displayContent.content) return
+		reportSlideRenderReady(false)
+		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) return
 
 		// 兜底：极端情况下 iframe 未回传 renderReady，避免 loading 永久卡住。
+		// This only releases the local spinner for the initially presented page. It must not tell the
+		// double buffer that a hidden target is safe to swap before a real renderComplete signal.
 		const fallbackTimer = window.setTimeout(() => {
 			setIsSlideRenderReady(true)
 		}, 4000)
@@ -314,7 +413,17 @@ const PPTSlide = observer(function PPTSlide({
 		return () => {
 			window.clearTimeout(fallbackTimer)
 		}
-	}, [displayContent.content, viewMode, fileVersion])
+	}, [
+		content,
+		displayContent.content,
+		fileVersion,
+		isDisplayContentCurrent,
+		loadingState,
+		rawContent,
+		renderRevision,
+		reportSlideRenderReady,
+		viewMode,
+	])
 
 	// 当幻灯片变为非激活状态时，检查是否需要提示保存
 	useEffect(() => {
@@ -721,6 +830,107 @@ const PPTSlide = observer(function PPTSlide({
 		projectId,
 	])
 
+	const handleStartInspector = useMemoizedFn(() => {
+		rendererRef.current?.startInspector()
+	})
+	const handleStartInspectorAppend = useMemoizedFn(() => {
+		rendererRef.current?.startInspectorAppend()
+	})
+	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
+	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
+		if (!showEditToolbar) return null
+
+		return {
+			token: toolbarRegistrationToken,
+			props: {
+				onStartInspector: handleStartInspector,
+				onStartInspectorAppend: handleStartInspectorAppend,
+				isAppendPicking,
+				showAIOptimization: allowEdit && !fileVersion,
+				showFileEdit: allowEdit && !fileVersion,
+				isEditMode,
+				isSaving,
+				attachmentList,
+				fileId,
+				mainFileId,
+				projectId: selectedProject?.id || projectId,
+				onEdit: handleEdit,
+				onSave: handleSave,
+				onSaveAndExit: handleSaveAndExit,
+				onCancel: handleCancel,
+				hasServerUpdate,
+				onViewServerUpdate: handleViewServerUpdate,
+				viewMode,
+				onViewModeChange: setViewMode,
+				showVersionHistory: allowEdit,
+				fileVersion,
+				fileVersionsList,
+				isNewestVersion,
+				onVersionChange: handleVersionChange,
+				onVersionRollback: handleRollback,
+				onCompareVersion: handleCompareVersion,
+				fetchFileVersions,
+				shouldShowButtonText: showButtonText,
+				showRefresh: !isShareRoute,
+				onRefresh: handleRefresh,
+				isRefreshing,
+				currentFile,
+				attachments,
+				showShare: allowEdit,
+				allowShare: isNewestVersion && !fileVersion,
+				showDownload: allowDownload,
+				className: "max-w-full flex-shrink-0 overflow-x-auto bg-white dark:bg-card",
+			},
+		}
+	}, [
+		allowDownload,
+		allowEdit,
+		attachmentList,
+		attachments,
+		currentFile,
+		fetchFileVersions,
+		fileId,
+		fileVersion,
+		fileVersionsList,
+		handleCancel,
+		handleCompareVersion,
+		handleEdit,
+		handleRefresh,
+		handleRollback,
+		handleSave,
+		handleSaveAndExit,
+		handleStartInspector,
+		handleStartInspectorAppend,
+		handleVersionChange,
+		handleViewServerUpdate,
+		hasServerUpdate,
+		isAppendPicking,
+		isEditMode,
+		isNewestVersion,
+		isRefreshing,
+		isSaving,
+		isShareRoute,
+		mainFileId,
+		projectId,
+		selectedProject?.id,
+		showButtonText,
+		showEditToolbar,
+		toolbarRegistrationToken,
+		viewMode,
+	])
+
+	useLayoutEffect(() => {
+		if (!onToolbarModelChange) return
+		onToolbarModelChange(resolvedToolbarOwnerKey, toolbarModel, toolbarRegistrationToken)
+	}, [onToolbarModelChange, resolvedToolbarOwnerKey, toolbarModel, toolbarRegistrationToken])
+
+	useLayoutEffect(() => {
+		if (!onToolbarModelChange) return
+		return () => {
+			onToolbarModelChange(resolvedToolbarOwnerKey, null, toolbarRegistrationToken)
+		}
+	}, [onToolbarModelChange, resolvedToolbarOwnerKey, toolbarRegistrationToken])
+
 	const renderMainContent = () => {
 		if (loadingState === "loading") {
 			return (
@@ -794,6 +1004,20 @@ const PPTSlide = observer(function PPTSlide({
 			)
 		}
 
+		if (!isDisplayContentCurrent) {
+			return (
+				<div
+					data-testid="ppt-slide-content-updating"
+					className={slideWrapperClassNames}
+					style={slideWrapperStyle}
+				>
+					<div className="flex h-full w-full items-center justify-center bg-background">
+						<MagicSpin spinning />
+					</div>
+				</div>
+			)
+		}
+
 		return viewMode === "code" ? (
 			<CodeEditor
 				content={displayContent.rawContent || ""}
@@ -809,6 +1033,7 @@ const PPTSlide = observer(function PPTSlide({
 				className={cn("relative min-h-0 w-full", isFullscreen ? "h-full" : "flex-1")}
 			>
 				<IsolatedHTMLRenderer
+					key={`${renderRevision || `${fileId}:${content.length}:${rawContent.length}`}:${displayContent.sourceVersion ?? "latest"}`}
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
 					content={displayContent.content}
 					rawSourceCode={displayContent.rawContent}
@@ -817,8 +1042,8 @@ const PPTSlide = observer(function PPTSlide({
 					scaleContentDimensions={scaleContentDimensions}
 					isFullscreen={isFullscreen}
 					isEditMode={isEditMode}
-					isVisible={isActive}
-					isTabActive={isActive}
+					isVisible={effectiveIsPresented}
+					isTabActive={isInteractive}
 					isSaving={isSaving}
 					saveEditContent={saveEditContent}
 					fileId={fileId}
@@ -835,7 +1060,7 @@ const PPTSlide = observer(function PPTSlide({
 					autoFitVerticalPadding={64}
 					manualScale={manualScale}
 					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
-					onScaleRatioChange={isActive ? onScaleRatioChange : undefined}
+					onScaleRatioChange={effectiveIsPresented ? onScaleRatioChange : undefined}
 					onRenderReady={handleSlideRenderReady}
 					onAppendPickingChange={setIsAppendPicking}
 				/>
@@ -851,55 +1076,14 @@ const PPTSlide = observer(function PPTSlide({
 	return (
 		<>
 			<div
+				ref={slideWrapperRef}
 				data-testid={fileId ? `ppt-slide-item-${fileId}` : "ppt-slide-item"}
 				className={slideWrapperClassNames}
 				style={slideWrapperStyle}
+				aria-hidden={!effectiveIsPresented}
+				data-interactive={String(isInteractive)}
 			>
-				{showEditToolbar && (
-					<EditToolbar
-						onStartInspector={() => rendererRef.current?.startInspector()}
-						onStartInspectorAppend={() => rendererRef.current?.startInspectorAppend()}
-						isAppendPicking={isAppendPicking}
-						showAIOptimization={allowEdit && !fileVersion}
-						showFileEdit={allowEdit && !fileVersion}
-						isEditMode={isEditMode}
-						isSaving={isSaving}
-						attachmentList={attachmentList}
-						fileId={fileId}
-						mainFileId={mainFileId}
-						projectId={selectedProject?.id || projectId}
-						onEdit={handleEdit}
-						onSave={handleSave}
-						onSaveAndExit={handleSaveAndExit}
-						onCancel={handleCancel}
-						hasServerUpdate={hasServerUpdate}
-						onViewServerUpdate={handleViewServerUpdate}
-						viewMode={viewMode}
-						onViewModeChange={setViewMode}
-						showVersionHistory={allowEdit}
-						fileVersion={fileVersion}
-						fileVersionsList={fileVersionsList}
-						isNewestVersion={isNewestVersion}
-						onVersionChange={handleVersionChange}
-						onVersionRollback={handleRollback}
-						onCompareVersion={handleCompareVersion}
-						fetchFileVersions={fetchFileVersions}
-						shouldShowButtonText={showButtonText}
-						showRefresh={!isShareRoute}
-						onRefresh={handleRefresh}
-						isRefreshing={isRefreshing}
-						currentFile={currentFile}
-						attachments={attachments}
-						showShare={allowEdit}
-						allowShare={isNewestVersion && !fileVersion}
-						showDownload={allowDownload}
-						className="max-w-full flex-shrink-0 overflow-x-auto bg-white dark:bg-card"
-						style={{
-							visibility: isActive ? "visible" : "hidden",
-							pointerEvents: isActive ? "auto" : "none",
-						}}
-					/>
-				)}
+				{!onToolbarModelChange && toolbarModel && <EditToolbar {...toolbarModel.props} />}
 
 				{renderMainContent()}
 			</div>

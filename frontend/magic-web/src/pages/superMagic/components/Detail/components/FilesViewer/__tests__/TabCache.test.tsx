@@ -197,4 +197,23 @@ describe("TabCache", () => {
 		expect(container).toHaveClass("inset-0")
 		expect(container).not.toHaveClass("fixed")
 	})
+
+	it("fills a stable PPT portal surface without viewport positioning", () => {
+		render(
+			<TabCache
+				tab={mockTab}
+				isActive={true}
+				renderProps={mockRenderProps}
+				isFullscreen
+				fillPortalSurface
+			/>,
+		)
+
+		const container = screen.getByTestId("render-component").parentElement
+		expect(container).toHaveClass("absolute")
+		expect(container).toHaveClass("inset-0")
+		expect(container).toHaveClass("h-full")
+		expect(container).not.toHaveClass("fixed")
+		expect(container).not.toHaveClass("top-11")
+	})
 })

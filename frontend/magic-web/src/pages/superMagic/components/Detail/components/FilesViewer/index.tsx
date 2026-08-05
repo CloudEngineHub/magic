@@ -44,6 +44,7 @@ import WebsitePresetMenu from "./components/WebsitePresetMenu"
 import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./components/CommonWebsitePresetDialog"
+import StablePPTPortalSurface from "./components/StablePPTPortalSurface"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
@@ -55,6 +56,7 @@ import {
 	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	shouldUseFileViewerFullscreenSafeArea,
 } from "./utils/fullscreenSafeArea"
+import { shouldUsePPTRootRender } from "../../utils/file"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -466,8 +468,9 @@ const FilesViewer = memo(
 				[activeTab?.id, cachedTabIds],
 			)
 
-			// 渲染活跃和缓存的 tabs
-			const renderCachedTabs = useMemo(() => {
+			// 渲染活跃和缓存的 tabs。PPTRootRender tabs 会被放入稳定的 body Portal，
+			// 避免 FilesViewer 在普通 DOM 与全屏 Portal 间切换时销毁 PPTStore。
+			const cachedTabRenders = useMemo(() => {
 				const filteredTabs = tabs.filter(shouldRenderTab)
 
 				return filteredTabs.map((tab) => {
@@ -525,22 +528,30 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+					const usesStablePptPortal =
+						!props.documentFlowFullscreen &&
+						shouldUsePPTRootRender(renderProps.type, renderProps.data)
 
-					return (
-						<TabCache
-							key={tab.id}
-							tab={tab as any}
-							isActive={isActive}
-							renderProps={renderProps}
-							onActiveFileChange={props?.onActiveFileChange}
-							isFullscreen={effectiveIsFullscreen}
-							documentFlowFullscreen={isDocumentFlowFullscreen}
-							openFileTab={openFileTab}
-							playbackProps={playbackProps}
-							hideTabBar={props.hideTabBar}
-							knowledgeBaseData={knowledgeBaseData}
-						/>
-					)
+					return {
+						isActive,
+						usesStablePptPortal,
+						node: (
+							<TabCache
+								key={tab.id}
+								tab={tab as any}
+								isActive={isActive}
+								renderProps={renderProps}
+								onActiveFileChange={props?.onActiveFileChange}
+								isFullscreen={effectiveIsFullscreen}
+								documentFlowFullscreen={isDocumentFlowFullscreen}
+								openFileTab={openFileTab}
+								playbackProps={playbackProps}
+								hideTabBar={props.hideTabBar}
+								knowledgeBaseData={knowledgeBaseData}
+								fillPortalSurface={usesStablePptPortal}
+							/>
+						),
+					}
 				})
 				// eslint-disable-next-line react-hooks/exhaustive-deps
 			}, [
@@ -559,6 +570,20 @@ const FilesViewer = memo(
 				props.userSelectDetail,
 				openFileTab,
 			])
+			const inlineCachedTabs = cachedTabRenders
+				.filter((entry) => !entry.usesStablePptPortal)
+				.map((entry) => entry.node)
+			const stablePptCachedTabs = cachedTabRenders
+				.filter((entry) => entry.usesStablePptPortal)
+				.map((entry) => entry.node)
+			const hasActiveStablePptTab = cachedTabRenders.some(
+				(entry) => entry.usesStablePptPortal && entry.isActive,
+			)
+			const hasStablePptTabs = stablePptCachedTabs.length > 0
+			const shouldShowStablePptSurface =
+				hasActiveStablePptTab && Boolean(currentTab) && !isRestoringFileTabs
+			const [stablePptSurfaceAnchor, setStablePptSurfaceAnchor] =
+				useState<HTMLDivElement | null>(null)
 
 			const viewer = (
 				<div
@@ -663,8 +688,15 @@ const FilesViewer = memo(
 									</div>
 								) : (
 									<>
-										{/* Render all cached tabs */}
-										{renderCachedTabs}
+										{/* Non-PPT tabs keep the existing FilesViewer rendering path. */}
+										{inlineCachedTabs}
+										{hasActiveStablePptTab ? (
+											<div
+												ref={setStablePptSurfaceAnchor}
+												className="relative min-h-0 flex-1"
+												data-files-viewer-ppt-anchor="true"
+											/>
+										) : null}
 									</>
 								)
 							) : shouldShowDetailEmpty ? (
@@ -676,13 +708,35 @@ const FilesViewer = memo(
 			)
 
 			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so they
-			// need a body portal. Document-flow fullscreen is intentionally excluded: its height
-			// must remain below #root to propagate to the page scroll container and long screenshots.
-			return effectiveIsFullscreen &&
+			// need a body portal. PPT TabCache nodes are a stable sibling Portal and survive this
+			// inline/body switch; document-flow fullscreen stays in the share document tree.
+			const viewerLayer =
+				effectiveIsFullscreen &&
 				!isDocumentFlowFullscreen &&
 				typeof document !== "undefined"
-				? createPortal(viewer, document.body)
-				: viewer
+					? createPortal(viewer, document.body)
+					: viewer
+
+			return (
+				<>
+					<StablePPTPortalSurface
+						anchor={stablePptSurfaceAnchor}
+						borderRadius={
+							effectiveIsFullscreen
+								? "0px"
+								: props.hideTabBar
+									? "0.5rem"
+									: "0px 0px 0.5rem 0.5rem"
+						}
+						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStablePptTabs}
+						isFullscreen={effectiveIsFullscreen}
+						visible={shouldShowStablePptSurface}
+					>
+						{stablePptCachedTabs}
+					</StablePPTPortalSurface>
+					{viewerLayer}
+				</>
+			)
 		}),
 	),
 )
