@@ -8,6 +8,7 @@ import {
 	ElementTypeEnum,
 	type CanvasDocument,
 } from "@/components/CanvasDesign/runtime/document/types"
+import { createTestResourceReferenceResolver } from "@/components/CanvasDesign/public/__tests__/testResourceReferenceResolver"
 
 function folderNode(
 	id: string,
@@ -35,9 +36,36 @@ function fileNode(name: string, path: string): ProjectAttachmentMentionNode {
 	}
 }
 
+function createService(
+	attachmentRoots: ProjectAttachmentMentionNode[],
+	options?: { referenceResourceType?: "image" | "video" },
+): CanvasDesignMentionDataService {
+	const attachmentPathsByFileId: Record<string, string> = {}
+	const collectFiles = (nodes: ProjectAttachmentMentionNode[]) => {
+		for (const node of nodes) {
+			if (node.isDirectory) {
+				collectFiles(node.children ?? [])
+				continue
+			}
+			attachmentPathsByFileId[node.fileId] = node.path
+		}
+	}
+	collectFiles(attachmentRoots)
+
+	const service = new CanvasDesignMentionDataService(attachmentRoots)
+	service.setLimitInfoGetter(() => ({
+		...options,
+		resolveResourceReference: createTestResourceReferenceResolver({
+			currentCanvasWorkspacePath: "/design-a",
+			attachmentPathsByFileId,
+		}),
+	}))
+	return service
+}
+
 describe("CanvasDesignMentionDataService", () => {
 	it("keeps folders navigable while keeping project files selectable", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", [fileNode("cat.png", "design-a/cat.png")]),
 			fileNode("cover.png", "cover.png"),
 		])
@@ -63,7 +91,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("injects current canvas elements into the current design folder", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", [
 				folderNode("design-a/images", "images", [
 					fileNode("cat.png", "design-a/images/cat.png"),
@@ -142,7 +170,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("resolves canvas elements when current design files are stored as dsl-relative paths", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("/design-a/", "Design A", [fileNode("cat.png", "./images/cat.png")]),
 		])
 		service.setCanvasReferenceElementsContext({
@@ -194,7 +222,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("keeps dsl-relative canvas element matches scoped to the current design root", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("images", "images", [fileNode("cat.png", "images/cat.png")]),
 			folderNode("design-a", "Design A", [fileNode("cat.png", "./images/cat.png")]),
 		])
@@ -232,7 +260,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("searches current canvas elements by element name", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", [fileNode("cat.png", "design-a/images/cat.png")]),
 		])
 		service.setCanvasReferenceElementsContext({
@@ -269,7 +297,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("does not resolve current canvas relative resources from another design folder", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", []),
 			folderNode("design-b", "Design B", [
 				folderNode("design-b/images", "images", [
@@ -304,7 +332,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("does not guess other design resources by basename when strict lookup misses", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", [
 				folderNode("design-a/images", "images", [
 					fileNode("cat.png", "design-a/images/cat.png"),
@@ -338,15 +366,15 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("keeps video canvas elements visible when the current picker only accepts images", async () => {
-		const service = new CanvasDesignMentionDataService([
-			folderNode("design-a", "Design A", [
-				fileNode("cat.png", "design-a/images/cat.png"),
-				fileNode("clip.mp4", "design-a/videos/clip.mp4"),
-			]),
-		])
-		service.setLimitInfoGetter(() => ({
-			referenceResourceType: "image",
-		}))
+		const service = createService(
+			[
+				folderNode("design-a", "Design A", [
+					fileNode("cat.png", "design-a/images/cat.png"),
+					fileNode("clip.mp4", "design-a/videos/clip.mp4"),
+				]),
+			],
+			{ referenceResourceType: "image" },
+		)
 		service.setCanvasReferenceElementsContext({
 			canvasName: "Design A",
 			rootFolderId: "design-a",
@@ -389,7 +417,7 @@ describe("CanvasDesignMentionDataService", () => {
 	})
 
 	it("invalidates current canvas elements cache when refreshing", async () => {
-		const service = new CanvasDesignMentionDataService([
+		const service = createService([
 			folderNode("design-a", "Design A", [
 				fileNode("cat.png", "design-a/images/cat.png"),
 				fileNode("clip.mp4", "design-a/videos/clip.mp4"),

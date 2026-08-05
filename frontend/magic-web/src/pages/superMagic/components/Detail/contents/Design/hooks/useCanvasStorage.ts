@@ -18,6 +18,7 @@ interface UseCanvasStorageOptions {
 	designProjectId?: string
 	designProjectBasePath?: string
 	flatAttachments?: FileItem[]
+	attachmentsReady?: boolean
 	attachmentIndex?: DesignAttachmentIndex | null
 }
 
@@ -36,14 +37,21 @@ interface UseCanvasStorageReturn {
  * - 将存储数据保存到 localStorage
  */
 export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasStorageReturn {
-	const { designProjectId, designProjectBasePath, flatAttachments, attachmentIndex } = options
+	const {
+		designProjectId,
+		designProjectBasePath,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex,
+	} = options
 	const pathContext = useMemo<DesignPathTransitionMigrationContext>(
 		() => ({
 			designProjectBasePath,
 			flatAttachments,
+			attachmentsReady,
 			attachmentIndex,
 		}),
-		[attachmentIndex, designProjectBasePath, flatAttachments],
+		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
 	)
 
 	// 获取 storage key（基于目录 ID），用于 viewport、图层 UI 和 minimapOpen 等项目级状态。

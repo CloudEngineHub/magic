@@ -11,9 +11,9 @@ import type {
 	UploadPrivateFileResponse,
 } from "@/components/CanvasDesign/public/magic-types"
 import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
+import { getCanvasResourceFileName } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { drawMarkerOnCanvas } from "./markerDrawers"
 import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
-import { getDesignPathFileName } from "../../utils/designPath"
 
 /** 用于合成的图片信息 */
 interface ImageInfoForComposite {
@@ -233,8 +233,7 @@ async function loadImageFromUrl(
 	const naturalWidth = image.naturalWidth
 	const naturalHeight = image.naturalHeight
 
-	const urlPath = url.split("?")[0] || ""
-	const filename = getDesignPathFileName(urlPath) || "image.png"
+	const filename = getCanvasResourceFileName(url) || "image.png"
 
 	return {
 		image,

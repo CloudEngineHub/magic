@@ -18,7 +18,10 @@ import type {
 } from "@/components/CanvasDesign/public/magic-types"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
-import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
+import {
+	resolveDesignCanvasResourceWorkspacePath,
+	resolveDesignWorkspaceStoragePath,
+} from "../utils/designResourceReferenceResolver"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
 import {
 	calculateUploadDirectory,
@@ -158,26 +161,26 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				result.file_url &&
 				result.file_name
 			) {
-				let filePath = ""
-				if (normalizedResult.file_dir) {
-					const normalizedDir = normalizePath(normalizedResult.file_dir)
-					filePath = normalizedDir
-						? `${normalizedDir}/${normalizedResult.file_name}`
-						: normalizedResult.file_name
-				} else {
-					filePath = normalizedResult.file_name
-				}
-				await syncFileInfoAfterGenerationComplete({
-					projectId,
-					filePath,
-					fileUrl: normalizedResult.file_url,
-					fileName: normalizedResult.file_name,
-					setFileInfoCache,
+				const normalizedDir = normalizePath(normalizedResult.file_dir || "")
+				const workspacePath = normalizedDir
+					? `${normalizedDir}/${normalizedResult.file_name}`
+					: normalizedResult.file_name
+				const filePath = resolveDesignWorkspaceStoragePath(workspacePath, {
+					designProjectBasePath,
 				})
+				if (filePath) {
+					await syncFileInfoAfterGenerationComplete({
+						projectId,
+						filePath,
+						fileUrl: normalizedResult.file_url,
+						fileName: normalizedResult.file_name,
+						setFileInfoCache,
+					})
+				}
 			}
 			return normalizedResult
 		},
-		[projectId, setFileInfoCache, t],
+		[designProjectBasePath, projectId, setFileInfoCache, t],
 	)
 
 	return { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult }
@@ -400,7 +403,7 @@ function ensureDesignAbsolutePath(
 	pathUnresolvedMessage?: string,
 ): string {
 	if (!path) return path
-	const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
+	const resolved = resolveDesignCanvasResourceWorkspacePath(path, {
 		designProjectBasePath,
 		flatAttachments,
 	})

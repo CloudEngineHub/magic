@@ -13,10 +13,7 @@ import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import { ImageFormat, ImageProcessOptions } from "@/utils/image-processing"
-import {
-	ImageGenerationTaskMeta,
-	ImageGenerationTaskTypeMap,
-} from "@/components/CanvasDesign/public/magic-types"
+import type { ImageGenerationTaskMeta } from "@/components/CanvasDesign/public/magic-types"
 import { toDesignProjectBasePath } from "./designPath"
 import {
 	migrateLoadedDesignDataPaths,
@@ -519,55 +516,7 @@ function replacePathsInElement(
 		) {
 			hasReplaced = true
 		}
-		if (
-			imageGenerationTaskMeta &&
-			typeof imageGenerationTaskMeta === "object" &&
-			imageGenerationTaskMeta.type === ImageGenerationTaskTypeMap.Expand &&
-			imageGenerationTaskMeta.canvas_path &&
-			typeof imageGenerationTaskMeta.canvas_path === "string"
-		) {
-			const newCanvasPath = replaceDirectoryNameInPath(
-				imageGenerationTaskMeta.canvas_path,
-				oldDirName,
-				newDirName,
-			)
-			if (newCanvasPath !== imageGenerationTaskMeta.canvas_path) {
-				imageGenerationTaskMeta.canvas_path = newCanvasPath
-				hasReplaced = true
-			}
-		}
-		if (
-			imageGenerationTaskMeta &&
-			typeof imageGenerationTaskMeta === "object" &&
-			imageGenerationTaskMeta.mask_path &&
-			typeof imageGenerationTaskMeta.mask_path === "string"
-		) {
-			const newMaskPath = replaceDirectoryNameInPath(
-				imageGenerationTaskMeta.mask_path,
-				oldDirName,
-				newDirName,
-			)
-			if (newMaskPath !== imageGenerationTaskMeta.mask_path) {
-				imageGenerationTaskMeta.mask_path = newMaskPath
-				hasReplaced = true
-			}
-		}
-		if (
-			imageGenerationTaskMeta &&
-			typeof imageGenerationTaskMeta === "object" &&
-			imageGenerationTaskMeta.mark_path &&
-			typeof imageGenerationTaskMeta.mark_path === "string"
-		) {
-			const newMarkPath = replaceDirectoryNameInPath(
-				imageGenerationTaskMeta.mark_path,
-				oldDirName,
-				newDirName,
-			)
-			if (newMarkPath !== imageGenerationTaskMeta.mark_path) {
-				imageGenerationTaskMeta.mark_path = newMarkPath
-				hasReplaced = true
-			}
-		}
+		// canvas_path / mask_path / mark_path 来自 private upload，不属于可重命名的工作区目录。
 
 		const generateHightImageRequest = element.generateHightImageRequest as
 			| {

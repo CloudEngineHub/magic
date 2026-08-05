@@ -53,7 +53,13 @@ export function resolveStrictDesignDslCanvasResourceCandidates(
 	}
 	const trimmed = path.trim()
 	const base = stripEdgeSlashes(projectBasePath?.trim() ?? "")
-	if (!trimmed || !base || !isDesignDslCanvasRelativeResourcePath(trimmed)) return empty
+	if (
+		!trimmed ||
+		!base ||
+		!hasCurrentDirectoryPrefix(trimmed) ||
+		!isDesignDslCanvasRelativeResourcePath(trimmed)
+	)
+		return empty
 
 	const resourcePath = stripEdgeSlashes(
 		hasCurrentDirectoryPrefix(trimmed)
@@ -275,142 +281,6 @@ export function resolveDesignDslPathCandidatesToWorkspaceRelative(
 	return [norm]
 }
 
-export function resolveDesignDslPathToWorkspaceAbsoluteByCandidates(
-	storedPath: string,
-	projectBasePath: string | undefined,
-	options?: {
-		ensureTrailingSlash?: boolean
-		pathExists?: (workspaceRelativePath: string) => boolean
-	},
-): string {
-	if (!storedPath) return storedPath
-
-	const trimmed = storedPath.trim()
-	if (!trimmed) return storedPath
-	if (isRemoteOrSpecialPath(trimmed)) return storedPath
-
-	const base = stripEdgeSlashes(projectBasePath || "")
-	if (
-		base &&
-		(trimmed === "." || trimmed === "./" || trimmed === ".\\" || trimmed === `/${base}`)
-	) {
-		let absolute = `/${base}`
-		if (options?.ensureTrailingSlash && !absolute.endsWith("/")) {
-			absolute = `${absolute}/`
-		}
-		return absolute
-	}
-
-	const candidates = resolveDesignDslPathCandidatesToWorkspaceRelative(trimmed, projectBasePath)
-	// 同一个历史裸路径可能对应两个位置，优先选择附件树中真实存在的文件。
-	const resolved = options?.pathExists
-		? (candidates.find((candidate) => options.pathExists?.(candidate)) ?? candidates[0])
-		: candidates[0]
-
-	if (!resolved || isRemoteOrSpecialPath(resolved)) return resolved || storedPath
-	if (!resolved.includes("/") && !resolved.includes("\\")) return storedPath
-
-	let absolute = `/${stripEdgeSlashes(resolved)}`
-	if (options?.ensureTrailingSlash && !absolute.endsWith("/")) {
-		absolute = `${absolute}/`
-	}
-	return absolute
-}
-
-export function createDesignWorkspacePathExists(
-	flatAttachments?: Array<{ is_directory?: boolean; relative_file_path?: string }>,
-): (workspaceRelativePath: string) => boolean {
-	return (workspaceRelativePath) => {
-		// 统一生成/编辑接口的存在性判断，保证 fallback 候选不会因各 hook 比较规则不同而分叉。
-		const normalizedPath = stripEdgeSlashes(workspaceRelativePath)
-		if (!normalizedPath || !flatAttachments?.length) return false
-		return flatAttachments.some(
-			(item) =>
-				!item.is_directory &&
-				stripEdgeSlashes(item.relative_file_path || "") === normalizedPath,
-		)
-	}
-}
-
-/**
- * 将 DSL 中的路径还原为请求后端时使用的工作区绝对路径。
- * - `images/a.png` -> `/画布/images/a.png`（历史兼容）
- * - `./images/a.png` -> `/画布/images/a.png`
- * - `/画布/images/a.png` -> `/画布/images/a.png`
- * - `.` / `./` -> `/画布/`
- */
-export function resolveDesignDslPathToWorkspaceAbsolute(
-	storedPath: string,
-	projectBasePath: string | undefined,
-	options?: { ensureTrailingSlash?: boolean },
-): string {
-	if (!storedPath) return storedPath
-
-	const trimmed = storedPath.trim()
-	if (!trimmed) return storedPath
-	if (isRemoteOrSpecialPath(trimmed)) return storedPath
-
-	const base = stripEdgeSlashes(projectBasePath || "")
-	if (!base) {
-		if (!trimmed.startsWith("/")) return storedPath
-		if (!options?.ensureTrailingSlash) return trimmed
-		return trimmed.endsWith("/") ? trimmed : `${trimmed}/`
-	}
-
-	const isCurrentDirectory =
-		trimmed === "." || trimmed === "./" || trimmed === ".\\" || trimmed === `/${base}`
-
-	if (isCurrentDirectory) {
-		let absolute = base ? `/${base}` : "/"
-		if (options?.ensureTrailingSlash && !absolute.endsWith("/")) {
-			absolute = `${absolute}/`
-		}
-		return absolute
-	}
-
-	return resolveDesignDslPathToWorkspaceAbsoluteByCandidates(trimmed, base, options)
-}
-
-/**
- * 供 Design 后端接口使用的相对路径：
- * - 当前设计目录内资源：`images/a.png`、`videos/a.mp4`、`audios/a.mp3`
- * - 其他项目资源：`foo/bar.png`
- * - 兼容历史绝对路径：`/foo/bar.png` -> `foo/bar.png`
- */
-export function normalizeDesignApiPath(
-	storedPath: string,
-	projectBasePath: string | undefined,
-	options?: { ensureTrailingSlash?: boolean },
-): string {
-	if (!storedPath) return storedPath
-
-	const trimmed = storedPath.trim()
-	if (!trimmed) return storedPath
-	if (isRemoteOrSpecialPath(trimmed)) return storedPath
-
-	let normalized = projectBasePath?.trim()
-		? toDesignDslRelativeStoragePath(trimmed, projectBasePath.trim())
-		: trimmed
-
-	if (hasCurrentDirectoryPrefix(normalized)) {
-		const relativePath = stripCurrentDirectoryPrefix(normalized)
-		normalized = relativePath || "."
-	}
-
-	if (!isRemoteOrSpecialPath(normalized)) {
-		if (normalized === ".") {
-			normalized = options?.ensureTrailingSlash ? "./" : "."
-		} else {
-			normalized = normalized.replace(/^\/+/, "")
-			if (options?.ensureTrailingSlash && normalized && !normalized.endsWith("/")) {
-				normalized = `${normalized}/`
-			}
-		}
-	}
-
-	return normalized
-}
-
 export type DesignDslPathRewrite = (path: string, projectBasePath: string) => string
 
 function setPathFieldForDsl(
@@ -495,13 +365,10 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 			}
 
 			const imageGenerationTaskMeta = element.imageGenerationTaskMeta as
-				| Record<string, unknown>
-				| undefined
+				Record<string, unknown> | undefined
 			if (imageGenerationTaskMeta && typeof imageGenerationTaskMeta === "object") {
 				setPathFieldForDsl(imageGenerationTaskMeta, "file_path", base, rewritePath)
-				setPathFieldForDsl(imageGenerationTaskMeta, "canvas_path", base, rewritePath)
-				setPathFieldForDsl(imageGenerationTaskMeta, "mask_path", base, rewritePath)
-				setPathFieldForDsl(imageGenerationTaskMeta, "mark_path", base, rewritePath)
+				// 生成辅助图来自 private upload，保持其独立存储命名空间，不参与工作区持久化改写。
 				setReferenceImageOptionsForDsl(
 					imageGenerationTaskMeta,
 					"reference_image_options",
@@ -511,8 +378,7 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 			}
 
 			const generateHightImageRequest = element.generateHightImageRequest as
-				| Record<string, unknown>
-				| undefined
+				Record<string, unknown> | undefined
 			if (generateHightImageRequest && typeof generateHightImageRequest === "object") {
 				setPathFieldForDsl(generateHightImageRequest, "file_path", base, rewritePath)
 				setPathFieldForDsl(generateHightImageRequest, "file_dir", base, rewritePath)

@@ -19,22 +19,13 @@ import {
 	waitForNextAttachmentsRefreshForProject,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
-	formatCanvasRelativeResourcePath,
-	hasCurrentDirectoryPrefix,
-	isCanvasResourceRootPath,
-	isRemoteOrSpecialPath,
-	toWeakCanvasResourcePath,
-	stripCurrentDirectoryPrefix,
-	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
-import {
 	loadMagicProjectJsContent,
 	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
-import { resolveDesignAttachment } from "../utils/designPath"
+import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import { isV2Version } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
@@ -64,28 +55,6 @@ interface ToolDesignData {
  * - 工作区路径：`path/to/file` 或 `/path/to/file`（与附件 relative_file_path 对齐时去掉首尾 `/`）
  * 其余（http、blob、data、`//`、file: 等）不参与附件缺失判断。
  */
-function normalizeCanvasMediaSrcForAttachmentWalk(raw: string): string | null {
-	const trimmed = raw.trim()
-	if (!trimmed) return null
-	if (isRemoteOrSpecialPath(trimmed)) return null
-	if (/^file:/i.test(trimmed)) return null
-
-	if (hasCurrentDirectoryPrefix(trimmed)) {
-		const rest = stripCurrentDirectoryPrefix(trimmed)
-		if (!rest) return null
-		return formatCanvasRelativeResourcePath(rest)
-	}
-
-	const local = toWeakCanvasResourcePath(trimmed)
-	if (isCanvasResourceRootPath(local)) {
-		return stripPathEdgeSlashes(local)
-	}
-
-	if (local.includes("/")) return stripPathEdgeSlashes(local)
-
-	return local
-}
-
 function walkCanvasMediaSources(
 	elements: LayerElement[] | undefined,
 	onSrc: (src: string) => void,
@@ -96,10 +65,8 @@ function walkCanvasMediaSources(
 		if (el.type === ElementTypeEnum.Image || el.type === ElementTypeEnum.Video) {
 			const media = el as ImageElement | VideoElement
 			const s = media.src?.trim()
-			if (!s) continue
-			const normalized = normalizeCanvasMediaSrcForAttachmentWalk(s)
-			if (!normalized) continue
-			onSrc(normalized)
+			if (!s || /^file:/i.test(s)) continue
+			onSrc(s)
 			continue
 		}
 
@@ -119,16 +86,17 @@ function designDataHasMediaMissingFromAttachments(
 	let missing = false
 	walkCanvasMediaSources(designData.canvas?.elements, (src) => {
 		if (missing) return
-		const resolvedFile = resolveDesignAttachment(
+		const resolution = resolveDesignCanvasResourceReference(
 			src,
 			{
 				flatAttachments: storeFiles,
 				designProjectBasePath,
 				attachmentIndex: index,
+				attachmentsReady: true,
 			},
-			{ mode: "legacy-recovery" },
+			{ requireAttachment: true },
 		)
-		if (resolvedFile.status === "not-found") missing = true
+		if (resolution.status !== "resolved") missing = true
 	})
 	return missing
 }

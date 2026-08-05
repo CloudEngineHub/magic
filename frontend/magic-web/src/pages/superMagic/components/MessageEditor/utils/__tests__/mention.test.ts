@@ -263,4 +263,23 @@ describe("mention utils", () => {
 			expect(markerData.image_relative).toBe(imagePath)
 		},
 	)
+
+	it("does not guess when a legacy marker path matches different attachment nodes", () => {
+		const transformed = transformMarkerImagePathsToWorkspaceAbsolute(
+			markerMentionContent("images/cat.png"),
+			[
+				...designAttachments,
+				{
+					file_id: "root-cat-file",
+					file_name: "cat.png",
+					relative_file_path: "images/cat.png",
+					is_directory: false,
+				},
+			],
+		) as ReturnType<typeof markerMentionContent>
+
+		const markerData = getFirstMentionData(transformed)
+		expect(markerData.image).toBe("images/cat.png")
+		expect(markerData).not.toHaveProperty("image_relative")
+	})
 })

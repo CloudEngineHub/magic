@@ -23,7 +23,7 @@ import {
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
-import { resolveDesignAttachment } from "./utils/designPath"
+import { resolveDesignCanvasResourceFileItem } from "./utils/designResourceReferenceResolver"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -252,6 +252,8 @@ function resolveDesignPluginDirectories(options: {
 interface DesignViewerProps {
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
+	/** 当前项目附件快照是否已完成首次加载。 */
+	attachmentsReady?: boolean
 	/** Project id forwarded by standalone/native preview when no selected topic exists. */
 	projectId?: string
 	currentFile?: {
@@ -296,11 +298,14 @@ function DesignViewer(props: DesignViewerProps) {
 		onFullscreen,
 	} = props
 
+	const effectiveAttachmentsReady = props.attachmentsReady ?? !selectedTopic?.project_id
+
 	// 文件列表更新处理
 	const { flatAttachments, attachmentsReady, attachmentIndex, updateAttachments } =
 		useAttachments({
 			attachments,
 			attachmentList,
+			attachmentsReady: effectiveAttachmentsReady,
 			projectId: selectedTopic?.project_id,
 		})
 
@@ -678,16 +683,13 @@ function DesignViewer(props: DesignViewerProps) {
 				latestDesignDataRef.current.canvas ??
 				null,
 			resolveFileBySrc: (src) => {
-				const resolvedFile = resolveDesignAttachment(
-					src,
-					{
+				return (
+					resolveDesignCanvasResourceFileItem(src, {
 						flatAttachments,
 						designProjectBasePath,
 						attachmentIndex,
-					},
-					{ mode: "strict-current-canvas" },
+					}) ?? null
 				)
-				return resolvedFile.status === "found" ? resolvedFile.fileItem : null
 			},
 		})
 		setCanvasElementResourceGetter(
@@ -1012,6 +1014,7 @@ function DesignViewer(props: DesignViewerProps) {
 			canvasDesignRef,
 			currentCanvasData: designData.canvas,
 			flatAttachments,
+			attachmentsReady,
 			attachmentIndex,
 			designProjectBasePath,
 			projectId,
@@ -1100,6 +1103,7 @@ function DesignViewer(props: DesignViewerProps) {
 		canvasDesignRef,
 		canvas: designData.canvas,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		projectId,

@@ -1,4 +1,9 @@
 import type { UploadFileResponse } from "../../../public/magic-types"
+import type {
+	CanvasResourceReferenceResolution,
+	CanvasResourceReferenceResolveOptions,
+	ResolveCanvasResourceReference,
+} from "../../../public/resource-reference"
 import {
 	CANVAS_RESOURCE_ROOTS,
 	buildVirtualResourceScope,
@@ -32,6 +37,28 @@ export type CanvasResourcePathInfo = CanonicalResourcePathInfo
 
 export function isCanvasResourceRootPath(path: string): boolean {
 	return isCanvasRelativeResourcePathInternal(path)
+}
+
+/** Resolve a path stored in Canvas data with the host's explicit namespace contract. */
+export function resolveCanvasStorageResourceReference(
+	path: string,
+	resolveResourceReference: ResolveCanvasResourceReference,
+	options?: CanvasResourceReferenceResolveOptions,
+): CanvasResourceReferenceResolution {
+	const trimmedPath = path.trim()
+	const isLegacyBareResource =
+		!trimmedPath.startsWith("/") &&
+		!hasCurrentDirectoryPrefix(trimmedPath) &&
+		!isRemoteOrSpecialPath(trimmedPath) &&
+		isCanvasResourceRootPath(trimmedPath)
+	return resolveResourceReference(
+		{
+			namespace: "canvas-storage",
+			path: trimmedPath,
+			mode: isLegacyBareResource ? "legacy-recovery" : "strict-current-canvas",
+		},
+		options,
+	)
 }
 
 export function toWeakCanvasResourcePath(path: string): string {

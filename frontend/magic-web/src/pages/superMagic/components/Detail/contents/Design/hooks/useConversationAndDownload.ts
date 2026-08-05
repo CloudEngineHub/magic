@@ -19,7 +19,7 @@ import {
 	getDesignDirectoryInfo,
 	type PackDownloadFileEntry,
 } from "../utils/utils"
-import { resolveDesignAttachment } from "../utils/designPath"
+import { resolveDesignCanvasResourceFileItem } from "../utils/designResourceReferenceResolver"
 import { useTranslation } from "react-i18next"
 import { addFileToCurrentChat, addMultipleFilesToNewChat } from "@/pages/superMagic/utils/topics"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -230,6 +230,7 @@ function buildImageProcessOptions(params: {
 interface UseConversationAndDownloadOptions {
 	/** 已扁平化的附件列表 */
 	flatAttachments?: FileItem[]
+	attachmentsReady?: boolean
 	attachmentIndex?: DesignAttachmentIndex | null
 	/** 画布目录路径段，解析元素 src 中相对路径（`images/...` 或 `./images/...`） */
 	designProjectBasePath?: string
@@ -260,6 +261,7 @@ interface UseConversationAndDownloadOptions {
 export function useConversationAndDownload(options: UseConversationAndDownloadOptions) {
 	const {
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		selectedWorkspace,
@@ -297,22 +299,19 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				}
 
 				// 从 flatAttachments 中查找对应的文件
-				const resolvedFile = resolveDesignAttachment(
-					item.src,
-					{
-						flatAttachments,
-						designProjectBasePath,
-						attachmentIndex,
-					},
-					{ mode: "strict-current-canvas" },
-				)
+				const resolvedFile = resolveDesignCanvasResourceFileItem(item.src, {
+					flatAttachments,
+					attachmentsReady,
+					designProjectBasePath,
+					attachmentIndex,
+				})
 
-				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
+				if (!resolvedFile?.file_id) {
 					throw new Error(t("design.errors.fileNotFoundBySrc", { src: item.src }))
 				}
 
 				// 将 FileItem 转换为 AttachmentItem 格式
-				const attachmentItem = convertFileItemToAttachmentItem(resolvedFile.fileItem)
+				const attachmentItem = convertFileItemToAttachmentItem(resolvedFile)
 				attachmentItems.push(attachmentItem)
 			}
 			// 参考文件列表的实现：使用 addFileToCurrentChat 或 addMultipleFilesToNewChat
@@ -350,6 +349,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 		},
 		[
 			flatAttachments,
+			attachmentsReady,
 			attachmentIndex,
 			designProjectBasePath,
 			t,
@@ -390,17 +390,14 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
 				}
 
-				const resolvedFile = resolveDesignAttachment(
-					element.src,
-					{
-						flatAttachments,
-						designProjectBasePath,
-						attachmentIndex,
-					},
-					{ mode: "strict-current-canvas" },
-				)
+				const resolvedFile = resolveDesignCanvasResourceFileItem(element.src, {
+					flatAttachments,
+					attachmentsReady,
+					designProjectBasePath,
+					attachmentIndex,
+				})
 
-				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
+				if (!resolvedFile?.file_id) {
 					throw new CanvasMediaDownloadPreflightError(
 						t("design.errors.fileNotFoundBySrc", { src: element.src }),
 					)
@@ -408,7 +405,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 				const imageProcess = buildImageProcessOptions({
 					fileElement: element,
-					fileItem: resolvedFile.fileItem,
+					fileItem: resolvedFile,
 					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
 				})
 				if (element.type === ElementTypeEnum.Image && element.crop && !imageProcess) {
@@ -417,7 +414,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 				resolvedEntries.push({
 					element,
-					fileItem: resolvedFile.fileItem,
+					fileItem: resolvedFile,
 					imageProcess,
 				})
 			}
@@ -530,6 +527,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 		},
 		[
 			attachmentIndex,
+			attachmentsReady,
 			currentFile,
 			designProjectBasePath,
 			downloadProgress,

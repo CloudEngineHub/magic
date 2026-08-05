@@ -9,15 +9,22 @@ import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignRef,
 } from "@/components/CanvasDesign/public/props"
+import type { ResolveCanvasResourceReference } from "@/components/CanvasDesign/public/resource-reference"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { validateFilename } from "@/utils/filename-validator"
-import { resolveDesignAttachment, toDesignDslPathFromWorkspacePath } from "../utils/designPath"
 import { compareDesignData, normalizePath, splitFileName } from "../utils/utils"
-import { replaceCanvasFilePathReferences } from "../utils/replace-canvas-file-path-references"
+import {
+	getCanvasFilePathReplacementResult,
+	replaceCanvasFilePathReferences,
+} from "../utils/replace-canvas-file-path-references"
 import { registerWaitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
+import {
+	resolveDesignCanvasResourceFileItem,
+	resolveDesignResourceReference,
+} from "../utils/designResourceReferenceResolver"
 
 const GENERIC_CLIPBOARD_IMAGE_FILE_NAME_PATTERN =
 	/^image(?:\(\d+\))?\.(png|jpg|jpeg|webp|gif|bmp)$/i
@@ -31,6 +38,7 @@ interface UseCanvasImageFileRenameSyncOptions {
 	canvasDesignRef: RefObject<CanvasDesignRef | null>
 	currentCanvasData?: CanvasDocument
 	flatAttachments: FileItem[]
+	attachmentsReady?: boolean
 	attachmentIndex?: DesignAttachmentIndex | null
 	designProjectBasePath?: string
 	projectId?: string
@@ -140,6 +148,7 @@ export function useCanvasImageFileRenameSync(
 		canvasDesignRef,
 		currentCanvasData,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		projectId,
@@ -151,6 +160,7 @@ export function useCanvasImageFileRenameSync(
 	const previousCanvasDataRef = useRef<CanvasDocument | undefined>(currentCanvasData)
 	const latestCanvasDataRef = useRef<CanvasDocument | undefined>(currentCanvasData)
 	const flatAttachmentsRef = useRef<FileItem[]>(flatAttachments)
+	const attachmentsReadyRef = useRef(attachmentsReady)
 	const attachmentIndexRef = useRef<DesignAttachmentIndex | null | undefined>(attachmentIndex)
 	const designProjectBasePathRef = useRef(designProjectBasePath)
 	const isApplyingSyncedCanvasUpdateRef = useRef(false)
@@ -165,6 +175,10 @@ export function useCanvasImageFileRenameSync(
 	useEffect(() => {
 		flatAttachmentsRef.current = flatAttachments
 	}, [flatAttachments])
+
+	useEffect(() => {
+		attachmentsReadyRef.current = attachmentsReady
+	}, [attachmentsReady])
 
 	useEffect(() => {
 		designProjectBasePathRef.current = designProjectBasePath
@@ -209,6 +223,44 @@ export function useCanvasImageFileRenameSync(
 				return
 			}
 
+			const oldWorkspaceRelativePath =
+				currentFileItem.relative_file_path || currentFileItem.file_name || currentFileName
+			const fallbackRenamedRelativeFilePath = buildFallbackRelativeFilePath(
+				currentFileItem.relative_file_path || currentFileName,
+				task.targetFileName,
+			)
+			const preflightCanvasData = latestCanvasDataRef.current
+			if (
+				!oldWorkspaceRelativePath ||
+				!fallbackRenamedRelativeFilePath ||
+				!preflightCanvasData
+			) {
+				return
+			}
+			const resolverContext = {
+				designProjectBasePath: designProjectBasePathRef.current,
+				flatAttachments: currentAttachments,
+				attachmentIndex: attachmentIndexRef.current,
+				attachmentsReady: attachmentsReadyRef.current,
+			}
+			const resolveResourceReference: ResolveCanvasResourceReference = (input, options) =>
+				resolveDesignResourceReference(input, resolverContext, options)
+			const fallbackRenamedResolution = resolveResourceReference({
+				namespace: "workspace-path",
+				path: fallbackRenamedRelativeFilePath,
+			})
+			if (fallbackRenamedResolution.status !== "resolved") return
+
+			const preflight = getCanvasFilePathReplacementResult(preflightCanvasData, {
+				oldWorkspaceRelativePath,
+				newCanvasPath: fallbackRenamedResolution.storagePath,
+				resolveResourceReference,
+			})
+			if (preflight.status === "unsafe") {
+				magicToast.error(t("topicFiles.contextMenu.renameFailed"))
+				return
+			}
+
 			try {
 				await SuperMagicApi.renameFile({
 					file_id: task.fileId,
@@ -238,12 +290,6 @@ export function useCanvasImageFileRenameSync(
 					(item) => !item.is_directory && item.file_id === task.fileId,
 				) ?? null
 
-			const oldWorkspaceRelativePath =
-				currentFileItem.relative_file_path || currentFileItem.file_name || currentFileName
-			const fallbackRenamedRelativeFilePath = buildFallbackRelativeFilePath(
-				currentFileItem.relative_file_path || currentFileName,
-				task.targetFileName,
-			)
 			const isRefreshedFileFresh = isRenamedFileItemFresh(
 				renamedFileItem,
 				task.targetFileName,
@@ -254,18 +300,20 @@ export function useCanvasImageFileRenameSync(
 					: fallbackRenamedRelativeFilePath
 			if (!oldWorkspaceRelativePath || !renamedRelativeFilePath) return
 
-			const latestCanvasData = latestCanvasDataRef.current
-			if (!latestCanvasData) return
-
-			const nextCanvasPath = toDesignDslPathFromWorkspacePath(renamedRelativeFilePath, {
-				designProjectBasePath: designProjectBasePathRef.current,
+			const renamedResolution = resolveResourceReference({
+				namespace: "workspace-path",
+				path: renamedRelativeFilePath,
 			})
-			const nextCanvasData = replaceCanvasFilePathReferences(latestCanvasData, {
+			if (renamedResolution.status !== "resolved") return
+			const nextCanvasPath = renamedResolution.storagePath
+			const canvasDataBeforeReplacement = latestCanvasDataRef.current
+			if (!canvasDataBeforeReplacement) return
+			const nextCanvasData = replaceCanvasFilePathReferences(canvasDataBeforeReplacement, {
 				oldWorkspaceRelativePath,
 				newCanvasPath: nextCanvasPath,
-				designProjectBasePath: designProjectBasePathRef.current,
+				resolveResourceReference,
 			})
-			if (nextCanvasData === latestCanvasData) return
+			if (nextCanvasData === canvasDataBeforeReplacement) return
 
 			latestCanvasDataRef.current = nextCanvasData
 			previousCanvasDataRef.current = nextCanvasData
@@ -325,25 +373,21 @@ export function useCanvasImageFileRenameSync(
 				const sourcePath = newElement.src || oldElement.src
 				if (!sourcePath) return
 
-				const matchedFileItem = resolveDesignAttachment(
-					sourcePath,
-					{
-						flatAttachments: flatAttachmentsRef.current,
-						designProjectBasePath: designProjectBasePathRef.current,
-						attachmentIndex: attachmentIndexRef.current,
-					},
-					{ mode: "strict-current-canvas" },
-				)
-				if (matchedFileItem.status !== "found" || !matchedFileItem.fileItem.file_id) return
+				const matchedFileItem = resolveDesignCanvasResourceFileItem(sourcePath, {
+					flatAttachments: flatAttachmentsRef.current,
+					designProjectBasePath: designProjectBasePathRef.current,
+					attachmentIndex: attachmentIndexRef.current,
+				})
+				if (!matchedFileItem?.file_id) return
 
-				const currentFileName = getFileDisplayName(matchedFileItem.fileItem)
+				const currentFileName = getFileDisplayName(matchedFileItem)
 				if (!currentFileName || !isGenericClipboardImageFileName(currentFileName)) return
 
 				const targetFileName = buildTargetFileName(nextElementName, currentFileName)
 				if (!targetFileName || targetFileName === currentFileName) return
 
 				enqueueRenameTask({
-					fileId: matchedFileItem.fileItem.file_id,
+					fileId: matchedFileItem.file_id,
 					targetFileName,
 				})
 			}
@@ -360,25 +404,21 @@ export function useCanvasImageFileRenameSync(
 				const sourcePath = change.newSrc || change.oldSrc
 				if (!sourcePath) return
 
-				const matchedFileItem = resolveDesignAttachment(
-					sourcePath,
-					{
-						flatAttachments: flatAttachmentsRef.current,
-						designProjectBasePath: designProjectBasePathRef.current,
-						attachmentIndex: attachmentIndexRef.current,
-					},
-					{ mode: "strict-current-canvas" },
-				)
-				if (matchedFileItem.status !== "found" || !matchedFileItem.fileItem.file_id) return
+				const matchedFileItem = resolveDesignCanvasResourceFileItem(sourcePath, {
+					flatAttachments: flatAttachmentsRef.current,
+					designProjectBasePath: designProjectBasePathRef.current,
+					attachmentIndex: attachmentIndexRef.current,
+				})
+				if (!matchedFileItem?.file_id) return
 
-				const currentFileName = getFileDisplayName(matchedFileItem.fileItem)
+				const currentFileName = getFileDisplayName(matchedFileItem)
 				if (!currentFileName || !isGenericClipboardImageFileName(currentFileName)) return
 
 				const targetFileName = buildTargetFileName(nextElementName, currentFileName)
 				if (!targetFileName || targetFileName === currentFileName) return
 
 				enqueueRenameTask({
-					fileId: matchedFileItem.fileItem.file_id,
+					fileId: matchedFileItem.file_id,
 					targetFileName,
 				})
 			}

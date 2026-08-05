@@ -1,0 +1,140 @@
+import { describe, expect, it } from "vitest"
+import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
+import {
+	ElementTypeEnum,
+	type CanvasDocument,
+} from "@/components/CanvasDesign/runtime/document/types"
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { buildDesignAttachmentIndex } from "../../utils/designAttachmentIndex"
+import {
+	buildCanvasResourceSnapshot,
+	getChangedCanvasResources,
+	getChangedCanvasResourcesFromFileChanges,
+} from "../useCanvasResourceRefresh"
+
+function attachment(fileId: string, path: string, updatedAt = "1"): FileItem {
+	return {
+		file_id: fileId,
+		file_name: path.split("/").pop() || path,
+		relative_file_path: path,
+		updated_at: updatedAt,
+		file_size: 100,
+		is_directory: false,
+	} as FileItem
+}
+
+function canvasWithImages(...paths: string[]): CanvasDocument {
+	return {
+		elements: paths.map((src, index) => ({
+			id: `image-${index}`,
+			type: ElementTypeEnum.Image,
+			src,
+		})),
+	} as CanvasDocument
+}
+
+function buildSnapshot(
+	canvas: CanvasDocument,
+	flatAttachments: FileItem[],
+	attachmentsReady = true,
+) {
+	return buildCanvasResourceSnapshot({
+		canvas,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
+		designProjectBasePath: "画布A",
+	})
+}
+
+describe("useCanvasResourceRefresh snapshots", () => {
+	it("deduplicates current-canvas aliases without crossing workspace roots", () => {
+		const flatAttachments = [
+			attachment("canvas-a", "画布A/images/shared.png"),
+			attachment("workspace-root", "images/shared.png"),
+			attachment("canvas-b", "画布B/images/shared.png"),
+		]
+		const snapshot = buildSnapshot(
+			canvasWithImages(
+				"./images/shared.png",
+				"/画布A/images/shared.png",
+				"/images/shared.png",
+				"/画布B/images/shared.png",
+				"images/shared.png",
+			),
+			flatAttachments,
+		)
+
+		// A 的两种明确写法合并；工作区根、画布 B 和歧义裸路径各自独立。
+		expect(snapshot.items.size).toBe(4)
+	})
+
+	it("refreshes a stable logical resource when attachment metadata changes", () => {
+		const canvas = canvasWithImages("./images/shared.png")
+		const previous = buildSnapshot(canvas, [
+			attachment("canvas-a", "画布A/images/shared.png", "1"),
+		])
+		const next = buildSnapshot(canvas, [attachment("canvas-a", "画布A/images/shared.png", "2")])
+
+		expect(getChangedCanvasResources(previous, next)).toEqual([
+			{ path: "./images/shared.png", mediaType: "image" },
+		])
+	})
+
+	it("refreshes an exact Canvas reference when attachments become ready", () => {
+		const canvas = canvasWithImages("./images/shared.png")
+		const previous = buildCanvasResourceSnapshot({
+			canvas,
+			attachmentsReady: false,
+			designProjectBasePath: "画布A",
+		})
+		const next = buildSnapshot(canvas, [attachment("canvas-a", "画布A/images/shared.png")])
+
+		expect(getChangedCanvasResources(previous, next)).toEqual([
+			{ path: "./images/shared.png", mediaType: "image" },
+		])
+	})
+
+	it("refreshes an exact Canvas reference when a resolved attachment disappears", () => {
+		const canvas = canvasWithImages("./images/shared.png")
+		const previous = buildSnapshot(canvas, [attachment("canvas-a", "画布A/images/shared.png")])
+		const next = buildSnapshot(canvas, [])
+
+		expect(getChangedCanvasResources(previous, next)).toEqual([
+			{ path: "./images/shared.png", mediaType: "image" },
+		])
+	})
+
+	it("keeps every stored alias refreshable after identity deduplication", () => {
+		const canvas = canvasWithImages("./images/shared.png", "/画布A/images/shared.png")
+		const previous = buildSnapshot(canvas, [
+			attachment("canvas-a", "画布A/images/shared.png", "1"),
+		])
+		const next = buildSnapshot(canvas, [attachment("canvas-a", "画布A/images/shared.png", "2")])
+
+		expect(previous.items.size).toBe(1)
+		expect(previous.itemsByReference.size).toBe(2)
+		expect(getChangedCanvasResources(previous, next)).toEqual([
+			{ path: "./images/shared.png", mediaType: "image" },
+			{ path: "/画布A/images/shared.png", mediaType: "image" },
+		])
+	})
+
+	it("routes file-change refreshes to the exact workspace resource", () => {
+		const flatAttachments = [
+			attachment("canvas-a", "画布A/images/shared.png"),
+			attachment("workspace-root", "images/shared.png"),
+		]
+		const snapshot = buildSnapshot(
+			canvasWithImages("./images/shared.png", "/images/shared.png"),
+			flatAttachments,
+		)
+		const changes = [
+			{ file: { relative_file_path: "画布A/images/shared.png" } },
+		] as SuperMagicFileChangeMessage["changes"]
+
+		expect(getChangedCanvasResourcesFromFileChanges(changes, snapshot)).toEqual([
+			{ path: "./images/shared.png", mediaType: "image" },
+		])
+	})
+})

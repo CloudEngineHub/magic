@@ -15,7 +15,8 @@ import {
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { resolveDesignProjectBasePathFromAttachments } from "@/pages/superMagic/components/Detail/contents/Design/utils/utils"
-import { toWorkspaceRelativePath } from "@/pages/superMagic/components/Detail/contents/Design/utils/designPath"
+import { buildDesignAttachmentIndex } from "@/pages/superMagic/components/Detail/contents/Design/utils/designAttachmentIndex"
+import { resolveDesignCanvasResourceReference } from "@/pages/superMagic/components/Detail/contents/Design/utils/designResourceReferenceResolver"
 import { validateMentionWithDataService } from "@/components/business/MentionPanel/utils/dataService"
 import projectFilesStore from "@/stores/projectFiles"
 import { DraftData, FileData } from "../types"
@@ -250,6 +251,7 @@ export function transformMarkerImagePathsToWorkspaceAbsolute(
 
 	const flatAttachments = mapAttachmentsToFileItems(attachments)
 	if (!flatAttachments.length) return content
+	const attachmentIndex = buildDesignAttachmentIndex(flatAttachments)
 
 	const basePathCache = new Map<string, string | undefined>()
 
@@ -280,11 +282,20 @@ export function transformMarkerImagePathsToWorkspaceAbsolute(
 				if (!markerData) return transformedNode
 
 				const imagePath = getCanvasMarkerMentionImagePath(markerData)
-				const workspaceImagePath = toWorkspaceRelativePath(imagePath, {
+				const imageResolution = resolveDesignCanvasResourceReference(imagePath, {
 					designProjectBasePath: getBasePathByDesignProjectId(
 						markerData.design_project_id,
 					),
+					flatAttachments,
+					attachmentIndex,
+					attachmentsReady: true,
 				})
+				const workspaceImagePath =
+					imageResolution.status === "resolved"
+						? imageResolution.resourceKind === "workspace-file"
+							? imageResolution.workspacePath?.replace(/^\/+/, "")
+							: imageResolution.storagePath
+						: undefined
 
 				// Agent/后端只需要工作区路径；原始相对路径保留在 image_relative 里，供缩略图兜底。
 				const nextMarkerData: CanvasMarkerMentionData = {

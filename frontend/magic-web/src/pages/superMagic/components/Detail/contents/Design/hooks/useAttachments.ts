@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useMemo } from "react"
 import { flattenAttachmentsList } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -10,6 +10,8 @@ interface UseAttachmentsOptions {
 	attachments?: FileItem[]
 	/** 已扁平化的附件列表 */
 	attachmentList?: FileItem[]
+	/** 当前项目的附件快照是否已完成首次加载。禁止从数组是否存在或长度推断。 */
+	attachmentsReady: boolean
 	/** 当前项目 ID，用于请求附件树刷新 */
 	projectId?: string
 }
@@ -29,27 +31,18 @@ interface UseAttachmentsReturn {
  * 文件列表更新处理 Hook
  */
 export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsReturn {
-	const { attachments, attachmentList, projectId } = options
-	const hasObservedAttachmentSnapshotRef = useRef(false)
+	const { attachments, attachmentList, attachmentsReady, projectId } = options
 
 	// 扁平化附件列表
 	const flatAttachments = useMemo(() => {
 		// 如果 attachmentList 存在，直接使用（已经是扁平化的）
-		if (attachmentList && attachmentList.length > 0) {
+		if (Array.isArray(attachmentList)) {
 			return attachmentList
 		}
 		// 否则从 attachments 扁平化
 		if (!attachments) return []
 		return flattenAttachmentsList(attachments)
 	}, [attachments, attachmentList])
-
-	if (flatAttachments.length > 0) {
-		hasObservedAttachmentSnapshotRef.current = true
-	}
-
-	const attachmentsReady =
-		hasObservedAttachmentSnapshotRef.current &&
-		(Array.isArray(attachmentList) || Array.isArray(attachments))
 
 	const attachmentIndex = useMemo(
 		() => buildDesignAttachmentIndex(flatAttachments),
