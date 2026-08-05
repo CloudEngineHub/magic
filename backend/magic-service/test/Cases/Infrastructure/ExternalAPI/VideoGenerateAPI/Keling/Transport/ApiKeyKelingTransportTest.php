@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Tr
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Hyperf\Guzzle\ClientFactory;
@@ -200,6 +201,32 @@ class ApiKeyKelingTransportTest extends TestCase
             true,
             ['video_id' => 'video-2']
         );
+    }
+
+    public function testQueryVideoRejectsNonRetriableProviderErrorEnvelope(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willReturn(new Response(200, [], json_encode([
+                'code' => 'INVALID_ARGUMENT',
+                'message' => 'provider rejected task id',
+            ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())->method('get')->willReturn(new KelingRecordingLogger());
+
+        $transport = new ApiKeyKelingTransport(new KelingVideoClient($clientFactory, $loggerFactory));
+
+        try {
+            $transport->queryV3Video(new QueueExecutorConfig('https://localhost', 'secret', 3, 20, []), 'task-invalid', false);
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertFalse($exception->isRetriable());
+            self::assertSame('keling video get failed: provider rejected task id', $exception->getMessage());
+        }
     }
 }
 

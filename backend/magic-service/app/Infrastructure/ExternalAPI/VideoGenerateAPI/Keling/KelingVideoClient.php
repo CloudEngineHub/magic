@@ -148,7 +148,37 @@ readonly class KelingVideoClient
             throw ProviderVideoException::retriable(sprintf('keling video %s returned invalid json', $action));
         }
 
+        $this->assertProviderSuccess($data, $action);
+
         return $data;
+    }
+
+    private function assertProviderSuccess(array $data, string $action): void
+    {
+        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
+        $code = $data['code'] ?? $error['code'] ?? null;
+        if ($error === [] && ($code === null || $code === '' || $code === 0 || $code === '0')) {
+            return;
+        }
+
+        $message = 'unknown provider error';
+        foreach ([
+            $error['message'] ?? null,
+            $data['message'] ?? null,
+            $data['msg'] ?? null,
+            is_array($data['data'] ?? null) ? ($data['data']['message'] ?? null) : null,
+            is_array($data['data']['error'] ?? null) ? ($data['data']['error']['message'] ?? null) : null,
+        ] as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                $message = trim($candidate);
+                break;
+            }
+        }
+
+        throw ProviderVideoException::fromProviderError(
+            sprintf('keling video %s failed: %s', $action, $message),
+            is_string($code) || is_int($code) ? $code : null,
+        );
     }
 
     private function formatRequestExceptionMessage(RequestException $exception, string $action): string

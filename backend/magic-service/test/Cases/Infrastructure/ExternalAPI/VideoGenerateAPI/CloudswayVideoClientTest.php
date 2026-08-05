@@ -121,6 +121,32 @@ class CloudswayVideoClientTest extends TestCase
             $this->assertSame('durationSeconds must be one of [4,6,8]', $logger->records[1]['context']['error']);
         }
     }
+
+    public function testGetRejectsNonRetriableProviderErrorEnvelope(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willReturn(new Response(200, [], json_encode([
+                'code' => 'INVALID_ARGUMENT',
+                'message' => 'provider rejected task id',
+            ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())->method('get')->willReturn(new CloudswayRecordingLogger());
+
+        $client = new CloudswayVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->get('https://localhost', 'secret-api-key', '/v1/task/task-invalid');
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertFalse($exception->isRetriable());
+            self::assertSame('cloudsway video get failed: provider rejected task id', $exception->getMessage());
+        }
+    }
 }
 
 final class CloudswayRecordingLogger extends AbstractLogger

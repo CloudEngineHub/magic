@@ -494,9 +494,19 @@ readonly class VideoOperationAppService
                 'error' => $throwable->getMessage(),
             ]);
             $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
-            $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams);
-            $this->videoQueueDomainService->saveOperation($operation);
-            $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            try {
+                $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams);
+            } catch (Throwable $eventThrowable) {
+                $this->logger->error('video failed event dispatch failed', [
+                    'operation_id' => $operation->getId(),
+                    'organization_code' => $operation->getOrganizationCode(),
+                    'provider_task_id' => $providerTaskId,
+                    'error' => $eventThrowable->getMessage(),
+                ]);
+            } finally {
+                $this->videoQueueDomainService->saveOperation($operation);
+                $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            }
         }
     }
 

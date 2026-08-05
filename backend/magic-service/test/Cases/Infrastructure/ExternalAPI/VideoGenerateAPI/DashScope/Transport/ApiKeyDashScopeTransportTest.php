@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Transport\ApiKeyDashScopeTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Hyperf\Guzzle\ClientFactory;
@@ -108,6 +109,32 @@ class ApiKeyDashScopeTransportTest extends TestCase
             'task-123',
             ['video_id' => 'video-1']
         );
+    }
+
+    public function testQueryTaskRejectsNonRetriableErrorEnvelope(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willReturn(new Response(200, [], json_encode([
+                'code' => 'InvalidParameter',
+                'message' => 'task id is invalid',
+            ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())->method('get')->willReturn(new DashScopeRecordingLogger());
+
+        $transport = new ApiKeyDashScopeTransport(new DashScopeVideoClient($clientFactory, $loggerFactory));
+
+        try {
+            $transport->queryTask(new QueueExecutorConfig('https://localhost', 'secret', 3, 20, []), 'task-invalid');
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertFalse($exception->isRetriable());
+            self::assertSame('dashscope video get failed: task id is invalid', $exception->getMessage());
+        }
     }
 }
 

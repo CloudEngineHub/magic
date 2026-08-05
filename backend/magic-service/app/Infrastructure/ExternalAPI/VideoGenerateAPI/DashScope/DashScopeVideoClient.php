@@ -166,7 +166,10 @@ readonly class DashScopeVideoClient
         }
 
         $message = $this->extractProviderMessage($data) ?? 'unknown provider error';
-        throw ProviderVideoException::retriable(sprintf('dashscope video %s failed: %s', $action, $message));
+        throw ProviderVideoException::fromProviderError(
+            sprintf('dashscope video %s failed: %s', $action, $message),
+            is_string($code) || is_int($code) ? $code : null,
+        );
     }
 
     private function formatRequestExceptionMessage(RequestException $exception, string $action): string

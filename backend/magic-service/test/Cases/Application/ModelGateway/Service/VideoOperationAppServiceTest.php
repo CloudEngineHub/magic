@@ -2141,6 +2141,30 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('provider task id is invalid', $operationRepository->operations[$operation->getId()]->getErrorMessage());
     }
 
+    public function testManagedPollPersistsFailedOperationWhenFailureEventDispatchFails(): void
+    {
+        $operation = $this->createOperation('op-provider-query-event-failure');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-event-failure');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $operationRepository->claimUserActiveOperation($operation, 1, 60);
+        $this->eventDispatcher->throwable = new RuntimeException('event dispatch failed');
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryThrowable: ProviderVideoException::nonRetriable('provider task id is invalid'),
+            ),
+        );
+
+        self::assertTrue($service->pollOperationById($operation->getId(), ['organization_id' => 'org-test']));
+        self::assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
+        self::assertSame([], $operationRepository->getUserActiveOperations($operation->getOrganizationCode(), $operation->getUserId()));
+    }
+
     public function testManagedPollKeepsOperationRunningWhenProviderQueryIsRetriable(): void
     {
         $operation = $this->createOperation('op-provider-query-retry');
@@ -2967,9 +2991,15 @@ final class RecordingEventDispatcher implements EventDispatcherInterface
     /** @var list<object> */
     public array $events = [];
 
+    public ?Throwable $throwable = null;
+
     public function dispatch(object $event): object
     {
         $this->events[] = $event;
+
+        if ($this->throwable instanceof Throwable) {
+            throw $this->throwable;
+        }
 
         return $event;
     }

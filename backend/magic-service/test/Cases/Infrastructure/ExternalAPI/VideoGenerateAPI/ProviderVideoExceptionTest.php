@@ -31,4 +31,13 @@ class ProviderVideoExceptionTest extends TestCase
             self::assertSame($status, $exception->getHttpStatus());
         }
     }
+
+    public function testClassifiesProviderEnvelopeFailuresByRetryability(): void
+    {
+        self::assertFalse(ProviderVideoException::fromProviderError('invalid request', 'InvalidParameter')->isRetriable());
+        self::assertTrue(ProviderVideoException::fromProviderError('rate quota exceeded', 'Throttling.RateQuotaExhausted')->isRetriable());
+        self::assertTrue(ProviderVideoException::fromProviderError('internal service failure', 'InternalError')->isRetriable());
+        self::assertFalse(ProviderVideoException::fromProviderError('invalid task id', '400')->isRetriable());
+        self::assertTrue(ProviderVideoException::fromProviderError('rate limited', '429')->isRetriable());
+    }
 }
