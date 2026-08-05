@@ -175,6 +175,20 @@ class MagicUserDomainService extends AbstractContactDomainService
         return $this->userRepository->getUserById($userId);
     }
 
+    /**
+     * 同一自然人在指定组织下的账号（magic_id + organization_code -> user_id）.
+     */
+    public function getUserByMagicIdInOrganization(string $magicId, string $organizationCode): ?MagicUserEntity
+    {
+        if ($magicId === '' || $organizationCode === '') {
+            return null;
+        }
+
+        $dataIsolation = DataIsolation::create($organizationCode, '');
+
+        return $this->userRepository->getUserByMagicId($dataIsolation, $magicId);
+    }
+
     public function getByAiCode(DataIsolation $dataIsolation, string $aiCode): ?MagicUserEntity
     {
         $account = $this->accountRepository->getByAiCode($aiCode);

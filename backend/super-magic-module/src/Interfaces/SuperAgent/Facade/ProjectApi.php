@@ -370,4 +370,22 @@ class ProjectApi extends AbstractApi
 
         return $this->transferAppService->transferProjects($requestContext, $requestDTO);
     }
+
+    /**
+     * GET /projects/{project_id}/accessibility：可访问时返回 project_id 与归属 magic 组织编码；否则 null.
+     */
+    public function getProjectAccessibility(RequestContext $requestContext, string $project_id): ?array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $project = $this->projectAppService->getProjectAccessibility($requestContext, (int) $project_id);
+        if ($project === null) {
+            return null;
+        }
+
+        return [
+            'project_id' => $project->getId(),
+            'required_magic_organization_code' => $project->getUserOrganizationCode(),
+        ];
+    }
 }

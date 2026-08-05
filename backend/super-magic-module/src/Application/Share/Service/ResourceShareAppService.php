@@ -550,12 +550,13 @@ class ResourceShareAppService extends AbstractShareAppService
             ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
         }
 
-        // 验证分享访问权限
+        // 验证分享访问权限, 支持跨组织访问
         $this->shareDomainService->validateShareAccess(
             $shareEntity,
             $userAuthorization?->getId(),
             $userAuthorization?->getOrganizationCode(),
-            $shareCode
+            $shareCode,
+            false
         );
 
         // 记录访问日志（权限验证通过后记录，确保只统计有效访问）
@@ -565,6 +566,7 @@ class ResourceShareAppService extends AbstractShareAppService
         return [
             'has_password' => ! empty($shareEntity->getPassword()),
             'user_id' => ! is_null($userAuthorization) ? $userAuthorization->getId() : '',
+            'required_magic_organization_code' => $shareEntity->getOrganizationCode(),
         ];
     }
 
