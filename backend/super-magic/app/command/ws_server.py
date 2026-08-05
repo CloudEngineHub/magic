@@ -134,14 +134,6 @@ async def lifespan(app: FastAPI):
     # git_commit_id = os.getenv("GIT_COMMIT_ID", "未知")
     # logger.info(f"当前版本Git commit ID: {git_commit_id}")
 
-    # 运行启动时迁移任务
-    try:
-        from app.utils.migration_helper import run_startup_migrations
-        run_startup_migrations()
-        logger.info("启动时迁移任务已启动")
-    except Exception as e:
-        logger.error(f"启动时迁移任务失败: {e}")
-
     # 初始化工具定义缓存；失败时内部回退到运行时工具扫描，不阻塞服务启动。
     try:
         from app.tools.core.tool_factory import tool_factory
@@ -175,10 +167,16 @@ async def lifespan(app: FastAPI):
     await cleanup_stale_files_on_startup()
 
     logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
-    yield
-    # 关闭时
-    logger.info("服务正在关闭...")
-    shutdown_telemetry()
+    try:
+        yield
+    finally:
+        # 关闭时
+        logger.info("服务正在关闭...")
+        from app.service.agent_runtime import AgentRuntime
+        try:
+            await AgentRuntime.get_instance().close_all(reason="service_shutdown")
+        finally:
+            shutdown_telemetry()
 
 def create_app() -> FastAPI:
     """创建并配置FastAPI应用实例"""

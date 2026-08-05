@@ -4,8 +4,10 @@ Init Client Message Utility Module
 Provides utilities for reading and accessing initialization configuration data.
 """
 import json
+import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Iterable, Optional
+from urllib.parse import urlparse
 
 from agentlang.logger import get_logger
 from agentlang.config.config import config
@@ -308,6 +310,60 @@ class MetadataUtil:
         except Exception as e:
             logger.debug(f"获取 magic authorization 失败: {e}")
             return None
+
+    @classmethod
+    def should_send_magic_authorization_headers(cls, api_base_url: str) -> bool:
+        """判断目标地址是否允许携带 Magic/User 认证头。"""
+        host = cls._extract_host(api_base_url)
+        if not host:
+            return False
+        if host == "magic-gateway":
+            return True
+
+        allowed_hosts = {
+            cls._extract_host(os.environ.get("MAGIC_API_BASE_URL", "")),
+            cls._extract_host(cls._get_init_client_magic_service_host()),
+            *[cls._extract_host(value) for value in cls._get_auth_header_base_urls()],
+        }
+        allowed_hosts.discard("")
+        return host in allowed_hosts
+
+    @staticmethod
+    def _extract_host(value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            return ""
+
+        text = value.strip()
+        parsed = urlparse(text)
+        if parsed.hostname:
+            return parsed.hostname.lower()
+
+        # 配置里可能只写内网 service 名或裸 host，不强制要求 URL scheme。
+        if "://" not in text:
+            return text.split("/", 1)[0].split(":", 1)[0].lower()
+
+        return ""
+
+    @classmethod
+    def _get_auth_header_base_urls(cls) -> Iterable[str]:
+        raw = config.get("llm.auth_header_base_urls")
+        if raw is None:
+            return ()
+        if isinstance(raw, str):
+            return (item.strip() for item in raw.split(",") if item.strip())
+        if isinstance(raw, (list, tuple, set)):
+            return (str(item).strip() for item in raw if str(item).strip())
+        logger.warning("llm.auth_header_base_urls must be a string or list; ignoring invalid value")
+        return ()
+
+    @classmethod
+    def _get_init_client_magic_service_host(cls) -> str:
+        try:
+            config_data = cls.get_full_config()
+        except Exception:
+            return ""
+        value = config_data.get("magic_service_host") if isinstance(config_data, dict) else ""
+        return value if isinstance(value, str) else ""
 
     @staticmethod
     def _find_header_key(headers: Dict[str, Any], target_header: str) -> Optional[str]:

@@ -1,10 +1,10 @@
 # Slide Template `template.json` Specification
 
-`template.json` 是模板源码目录内的唯一元数据入口。机器校验使用同目录下的 `template-json.schema.json`。
+`template.json` is the only metadata entry point in a template source directory. Use `template-json.schema.json` in the same directory for machine validation.
 
-本规范只描述新版 HTML slide template project。旧的单文件 `preview.html`、`template-pages.*`、`source.css`、嵌套 `packages/` 和写入源码目录的 `previews/` 都属于历史格式，不再作为新模板输出。
+This specification covers only the current HTML slide template project format. Legacy single-file `preview.html`, `template-pages.*`, `source.css`, nested `packages/`, and `previews/` written into the source directory must not be produced for new templates.
 
-## 1. 文件位置
+## 1. File Location
 
 ```text
 <template-dir>/
@@ -18,17 +18,17 @@
     └── ...
 ```
 
-模板源码目录只保存可复用源文件。预览图、截图缓存、发布图片和打包产物不得放入模板源码目录。
+The template source directory contains reusable source files only. Do not place previews, screenshot caches, published images, or package artifacts in it.
 
-PPTX 转换草稿目录可以包含 `magic.project.js`，用于 slide 预览或编辑。它不是模板元数据，不写入 `template.json.files`；最终 ZIP 不包含该文件。
+A PPTX conversion draft may include `magic.project.js` for slide preview or editing. It is not template metadata, must not be listed in `template.json.files`, and must be excluded from the final ZIP.
 
-打包 ZIP 与模板目录平级：
+Place the packaged ZIP beside the template directory:
 
 ```text
 <template-id>-template.zip
 ```
 
-发布和预览产物可以输出到独立 artifact 目录：
+Publishing and preview outputs may be written to a separate artifact directory:
 
 ```text
 artifacts/<template-id>/
@@ -43,7 +43,7 @@ artifacts/<template-id>/
         └── ...
 ```
 
-## 2. 顶层结构
+## 2. Top-Level Structure
 
 ```json
 {
@@ -83,29 +83,29 @@ artifacts/<template-id>/
 }
 ```
 
-必填字段：
+Required fields:
 
-- `schema_version`：固定为 `"1.0"`。
-- `template_id`：模板 ID，必须匹配 `^PPT-[a-z0-9]+(?:-[a-z0-9]+)*$`。
-- `label.zh_CN`、`label.en_US`：中英文展示名称。
-- `description.zh_CN`、`description.en_US`：中英文模板描述。
-- `files`：模板设计说明、CSS、页面目录和本地资源目录。
-- `slides`：可复用页面列表，也是默认播放顺序。
-- `source`：来源类型、来源文件和画布尺寸。
-- `warnings`：转换或生成过程中的非致命问题。
+- `schema_version`: fixed to the value 1.0.
+- `template_id`: template ID matching `^PPT-[a-z0-9]+(?:-[a-z0-9]+)*$`.
+- `label.zh_CN` and `label.en_US`: Chinese and English display names.
+- `description.zh_CN` and `description.en_US`: Chinese and English template descriptions.
+- `files`: template design specification, CSS, slide directory, and local asset directory.
+- `slides`: reusable slide list and default playback order.
+- `source`: source kind, source file, and canvas dimensions.
+- `warnings`: non-fatal issues encountered during conversion or generation.
 
-可选字段：
+Optional fields:
 
-- `category_code`：模板分类。可以由平台侧或发布流程维护；如果写入模板，必须匹配 `^PPT-CATE-[a-z0-9]+(?:-[a-z0-9]+)*$`，并来自平台分类表。
-- `files.visual_spec`：模板视觉规范文件路径。PPTX 转换草稿可以暂时不写；最终发布前应由大模型根据转换后的页面风格分析生成 `visual-spec.md` 后再补入。
+- `category_code`: template category. It may be maintained by the platform or publishing workflow. If included, it must match `^PPT-CATE-[a-z0-9]+(?:-[a-z0-9]+)*$` and come from the platform category list.
+- `files.visual_spec`: path to the template visual specification. A PPTX conversion draft may omit it initially. Before final publishing, generate `visual-spec.md` from an AI analysis of the converted slide style, then add the path.
 
-禁止写入：
+Forbidden fields:
 
-- `template_dir`：由模板源码目录路径推导。
-- `package_type`：由发布流程或 `files.slides_dir` 推导。
-- `name`：展示名称使用 `label`。
-- `taxonomy`、`review_status`、`copyright_notice`。
-- `slides[].slots`、`slides[].source_slide`、`slides[].best_for`、`slides[].risks`。
+- `template_dir`: derive it from the template source directory path.
+- `package_type`: derive it from the publishing workflow or `files.slides_dir`.
+- `name`: use `label` for display names.
+- `taxonomy`, `review_status`, and `copyright_notice`.
+- `slides[].slots`, `slides[].source_slide`, `slides[].best_for`, and `slides[].risks`.
 
 ## 3. `files`
 
@@ -118,15 +118,15 @@ artifacts/<template-id>/
 }
 ```
 
-约束：
+Constraints:
 
-- `theme_css` 是模板共享视觉系统。
-- `slides_dir` 存放可复用页面模板，每页必须能加载 `../theme.css`。
-- `images_dir` 存放本地化资源。
-- `visual_spec` 可选。最终模板发布前应指向由大模型风格分析生成的 `visual-spec.md`。
-- `package_zip` 可选，只描述推荐打包输出位置。
-- 封面图、缩略图、拼接图等预览图不写入 `template.json.files`。
-- `magic.project.js` 不写入 `template.json.files`。它只允许作为 PPTX 转换草稿辅助文件，最终 ZIP 必须排除。
+- `theme_css` is the shared visual system for the template.
+- `slides_dir` contains reusable slide templates. Every slide must load `../theme.css`.
+- `images_dir` contains local assets.
+- `visual_spec` is optional. Before final publishing, it should point to `visual-spec.md` generated from an AI style analysis.
+- `package_zip` is optional and only describes the recommended package output location.
+- Do not list cover images, thumbnails, collages, or other preview images in `template.json.files`.
+- Do not list `magic.project.js` in `template.json.files`. It is allowed only as a PPTX conversion draft helper and must be excluded from the final ZIP.
 
 ## 4. `slides`
 
@@ -141,18 +141,18 @@ artifacts/<template-id>/
 ]
 ```
 
-约束：
+Constraints:
 
-- `file` 是模板目录内相对路径，格式为 `slides/<layout>.html`。
-- `title` 使用英文，描述默认页面内容。
-- `layout` 使用短横线命名，例如 `agenda-segments`、`kpi-chart-dashboard`。
-- `description` 使用英文，说明该页面展示的结构和组件。
-- `slides` 数组顺序表示默认播放顺序，不依赖文件名数字排序。
-- 每个 slide 文件必须采用不同布局或组件组合，不能复制同一结构后只改标题。
-- `slides` 必须以模板目录中当前存在的页面文件为准。用户修改模板草稿后，若某个页面文件被删除、改名或移动，必须同步更新 `template.json.slides`；已不存在的页面引用必须自动移除。
-- 打包、发布或继续编辑前，必须重新读取 `slides/` 目录和 `template.json.slides`，以用户最后修改后的文件状态为准。不要因为旧元数据还保留引用而恢复用户删除的页面。
+- `file` is a template-relative path in the form `slides/<layout>.html`.
+- `title` is English and describes the default slide content.
+- `layout` uses kebab-case, for example `agenda-segments` or `kpi-chart-dashboard`.
+- `description` is English and explains the slide structure and components.
+- The order of the `slides` array is the default playback order; do not depend on numeric filename sorting.
+- Every slide file must use a distinct layout or component composition. Do not duplicate the same structure and change only the title.
+- `slides` must reflect the slide files currently present in the template directory. After a user edits the draft, update `template.json.slides` when a slide is deleted, renamed, or moved, and remove references to files that no longer exist.
+- Before packaging, publishing, or further editing, re-read the `slides/` directory and `template.json.slides` and use the user latest file state. Do not restore a user-deleted slide merely because old metadata still references it.
 
-HTML 中可以保留少量 `data-slot`、`data-slot-type`、`data-slot-role` 作为大模型编辑提示。它们不进入 `template.json` 元数据契约。生成新 PPT 时，应根据 HTML 的真实结构、样式和内容判断如何替换或改写，而不是依赖 `template.json.slots`。
+Slide HTML may keep a small number of `data-slot`, `data-slot-type`, and `data-slot-role` attributes as editing hints for the model. They are not part of the `template.json` metadata contract. When generating a new deck, decide replacements and rewrites from the actual HTML structure, styles, and content rather than relying on `template.json.slots`.
 
 ## 5. `source`
 
@@ -167,16 +167,16 @@ HTML 中可以保留少量 `data-slot`、`data-slot-type`、`data-slot-role` 作
 }
 ```
 
-约束：
+Constraints:
 
-- `kind` 只能是 `original`、`converted` 或 `derived`。
-- `file` 记录来源文件名或空字符串。
-- `canvas.width` 固定为 `1920`。
-- `canvas.height` 固定为 `1080`。
+- `kind` must be `original`, `converted`, or `derived`.
+- `file` records the source filename or an empty string.
+- `canvas.width` is fixed to `1920`.
+- `canvas.height` is fixed to `1080`.
 
-## 6. 分类
+## 6. Categories
 
-分类可以不写入模板，由平台侧或发布流程维护。若写入 `category_code`，必须来自平台分类表。当前可用分类包括：
+Categories may be maintained outside the template by the platform or publishing workflow. If `category_code` is included, it must come from the platform category list. Current categories include:
 
 - `PPT-CATE-business-report`
 - `PPT-CATE-startup-pitch`
@@ -189,16 +189,16 @@ HTML 中可以保留少量 `data-slot`、`data-slot-type`、`data-slot-role` 作
 - `PPT-CATE-healthcare`
 - `PPT-CATE-culture-creative`
 
-## 7. 页面和资源要求
+## 7. Slide and Asset Requirements
 
-- 默认生成 9 个独立 slide 文件，必要时才扩展。
-- 每页固定 1920x1080，并加载 `../theme.css`。
-- 默认可见内容使用英文。
-- 页面布局写在当前 slide 的 `<style>` 中，`theme.css` 只放模板级视觉系统。
-- 页面必须使用原生 1920x1080 布局，不保留 `legacy-frame`、`legacy-stage`、`legacy-panel`、`composite-frame`、`preview-header`、`slides-grid` 或 `scale(3/5.3/6)` 缩略图放大结构。
-- 每页需要明确视觉锚点，例如图表、KPI、矩阵、图片区、色块、时间线或模板特色装饰。
-- 引用图片时只引用本地 `../images/...`。
-- 需要插图、照片、头像、Logo 或场景图的页面，必须把必要资源落到本地 `images/` 并在 HTML/CSS 中引用。
-- 不能保留空图片区、占位图 URL、占位文案或仅用于示意的灰框。
-- 不使用远程字体、远程图片或无关脚本。复杂图表页可以引入 ECharts CDN，但只用于图表渲染。
-- 制作过程中必须做轻量溢出检查，确认 `documentElement.scrollWidth/scrollHeight` 不超过 1920x1080，关键元素没有超出画布，文本没有明显被裁剪。
+- Generate 9 independent slide files by default; expand only when needed.
+- Every slide uses a fixed 1920x1080 canvas and loads `../theme.css`.
+- Visible content defaults to English.
+- Put slide-specific layout rules in the current slide style block. Keep only the template-level visual system in `theme.css`.
+- Slides must use a native 1920x1080 layout. Do not keep `legacy-frame`, `legacy-stage`, `legacy-panel`, `composite-frame`, `preview-header`, `slides-grid`, or thumbnail enlargement structures such as `scale(3/5.3/6)`.
+- Every slide needs a clear visual anchor, such as a chart, KPI, matrix, image area, color block, timeline, or template-specific decoration.
+- Reference images only through local `../images/...` paths.
+- When a slide needs illustrations, photos, avatars, logos, or scene images, store the required assets in local `images/` and reference them from HTML/CSS.
+- Do not leave empty image areas, placeholder URLs, placeholder copy, or gray boxes used only as mockups.
+- Do not use remote fonts, remote images, or unrelated scripts. Complex chart slides may load ECharts from a CDN only for chart rendering.
+- During authoring, run a lightweight overflow check: `documentElement.scrollWidth/scrollHeight` must not exceed 1920x1080, key elements must stay inside the canvas, and text must not be visibly clipped.

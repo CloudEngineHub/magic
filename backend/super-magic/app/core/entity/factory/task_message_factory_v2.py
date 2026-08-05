@@ -27,7 +27,7 @@ from agentlang.event.data import (
 )
 from agentlang.agent.state import AgentState
 from agentlang.event.event import Event, EventType
-from agentlang.llms.token_usage.models import TokenUsageCollection
+from agentlang.llms.token_usage.models import TokenUsage, TokenUsageCollection
 from agentlang.logger import get_logger
 from agentlang.utils.snowflake import Snowflake
 from app.core.context.agent_context import AgentContext
@@ -94,6 +94,40 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             pass
         return ""
 
+    @staticmethod
+    def _resolve_token_usage_max_context_tokens(agent_context: AgentContext, usage: TokenUsage) -> Optional[int]:
+        from agentlang.chat_history.chat_history_models import (
+            resolve_manual_context_window_limits,
+            resolve_user_facing_max_context_tokens,
+        )
+
+        try:
+            text_model_state = agent_context.model_context.resolve_text_model()
+            model_key = (text_model_state.resolved_model_id or text_model_state.model_id).strip()
+            user_manual_max_context_tokens = agent_context.horizon.get_user_manual_max_context_tokens(
+                model_key=model_key,
+            )
+            if user_manual_max_context_tokens is not None:
+                limits = resolve_manual_context_window_limits(
+                    max_context_tokens=text_model_state.max_context_tokens,
+                    max_output_tokens=text_model_state.max_output_tokens,
+                )
+                if limits.contains(user_manual_max_context_tokens):
+                    return user_manual_max_context_tokens
+        except Exception:
+            pass
+
+        if usage.model_id:
+            user_facing_max_context_tokens = resolve_user_facing_max_context_tokens(
+                usage.model_id,
+                resolved_model_id=usage.resolved_model_id,
+                model_name=usage.model_name,
+            )
+            if user_facing_max_context_tokens is not None:
+                return user_facing_max_context_tokens
+
+        return usage.max_context_tokens
+
     @classmethod
     def _build_inner_message(
         cls,
@@ -158,15 +192,11 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
         if token_usage_details and token_usage_details.usages:
             usage = token_usage_details.usages[0]
 
-            # max_context_tokens 不是 LLM 响应字段，需要由 super-magic 主动补全。
-            # 直接复用聊天压缩流程的同款查值口径（resolve_user_facing_max_context_tokens）：
-            # 命中「定价分区」时取 pricing_interval（200K/256K），未命中回退模型原始 max_context_tokens。
-            max_context_tokens = usage.max_context_tokens
-            if max_context_tokens is None and usage.model_id:
-                from agentlang.chat_history.chat_history_models import (
-                    resolve_user_facing_max_context_tokens,
-                )
-                max_context_tokens = resolve_user_facing_max_context_tokens(usage.model_id)
+            # 前端协议字段暂时仍叫 max_context_tokens，实际值是当前采用的上下文上限。
+            current_max_context_tokens = cls._resolve_token_usage_max_context_tokens(
+                agent_context=agent_context,
+                usage=usage,
+            )
 
             tu = {
                 "input_tokens": usage.input_tokens,
@@ -174,7 +204,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                 "total_tokens": usage.total_tokens,
                 "model_id": usage.model_id,
                 "input_tokens_details": usage.input_tokens_details.to_dict() if usage.input_tokens_details else None,
-                "max_context_tokens": max_context_tokens,
+                "max_context_tokens": current_max_context_tokens,
                 "request_id": correlation_id,
             }
             inner_message["token_usage"] = {k: v for k, v in tu.items() if v is not None}

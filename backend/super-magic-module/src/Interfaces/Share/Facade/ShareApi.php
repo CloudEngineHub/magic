@@ -186,6 +186,36 @@ class ShareApi extends AbstractApi
     }
 
     /**
+     * 获取严格按请求状态筛选的分享列表。
+     *
+     * @param RequestContext $requestContext 请求上下文
+     * @return array 分享列表
+     */
+    public function getShareListByStatusFilter(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $userAuthorization = $requestContext->getUserAuthorization();
+
+        $dto = ResourceListRequestDTO::fromRequest($this->request);
+        return $this->shareAppService->getShareListByStatusFilter($userAuthorization, $dto);
+    }
+
+    /**
+     * 按资源 ID 获取当前用户创建的有效分享.
+     *
+     * @param RequestContext $requestContext 请求上下文
+     * @param string $id 资源 ID
+     * @return array 分享信息
+     */
+    public function getShareByResourceId(RequestContext $requestContext, string $id): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $userAuthorization = $requestContext->getUserAuthorization();
+
+        return $this->shareAppService->getShareByResourceId($userAuthorization, $id)->toArray();
+    }
+
+    /**
      * 通过分享code获取分享信息.
      *
      * @param RequestContext $requestContext 请求上下文

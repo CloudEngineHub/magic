@@ -521,6 +521,15 @@ def setup_telemetry(
     logger.info(f"[OpenTelemetry] Sampling: errors=100%, normal={sample_ratio * 100:.0f}% (OTEL_SAMPLING_RATIO={sample_ratio})")
     trace.set_tracer_provider(_tracer_provider)
 
+    # Install non-invasive LLM cost tracking (best-effort)
+    try:
+        from .llm_cost_tracking import install_llm_cost_tracking
+
+        install_llm_cost_tracking()
+    except Exception:
+        # Never block telemetry setup, but log the error
+        logger.warning("[OpenTelemetry] Failed to install LLM cost tracking", exc_info=True)
+
     # Setup Metrics
     # Note: Langfuse only supports traces, not metrics. Detect and handle appropriately.
     disable_metrics_export = os.getenv("OTEL_DISABLE_METRICS_EXPORT", "false").lower() in ("true", "1", "yes")

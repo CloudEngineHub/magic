@@ -47,10 +47,6 @@
         "zh_CN": "删除文件",
         "en_US": "Delete file"
     },
-    "convert_pdf": {
-        "zh_CN": "转换PDF",
-        "en_US": "Convert PDF"
-    },
     "inspect_document": {
         "zh_CN": "探测文档",
         "en_US": "Inspect document"
@@ -324,28 +320,24 @@
         "en_US": "Deep write"
     },
     "call_subagent": {
-        "zh_CN": "调用数字员工",
-        "en_US": "Call sub-agent"
+        "zh_CN": "调用智能体",
+        "en_US": "Call Agent"
     },
     "call_subagent.crew": {
         "zh_CN": "调用数字员工",
-        "en_US": "Call digital employee"
+        "en_US": "Call Crew"
     },
-    "agent_list": {
+    "find_agents": {
         "zh_CN": "查找数字员工",
-        "en_US": "Find digital employees"
-    },
-    "prepare_agent": {
-        "zh_CN": "准备数字员工",
-        "en_US": "Prepare digital employee"
+        "en_US": "Find Crew"
     },
     "wait_for_subagents": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Wait for sub-agents"
+        "zh_CN": "等待智能体完成任务",
+        "en_US": "Wait for Agents"
     },
     "wait_for_subagents.crew": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Waiting for digital employee result"
+        "zh_CN": "等待数字员工完成任务",
+        "en_US": "Wait for Crew"
     },
     "compact_chat_history": {
         "zh_CN": "整理对话内容",
@@ -387,9 +379,17 @@
         "zh_CN": "上传技能",
         "en_US": "Upload skill"
     },
+    "get_sandbox_info": {
+        "zh_CN": "查看沙箱信息",
+        "en_US": "Inspect sandbox"
+    },
     "upgrade_sandbox": {
         "zh_CN": "升级沙箱",
         "en_US": "Upgrade sandbox"
+    },
+    "restart_sandbox": {
+        "zh_CN": "重启沙箱",
+        "en_US": "Restart sandbox"
     },
     "manage_cron": {
         "zh_CN": "管理定时任务",
@@ -654,5 +654,53 @@
     "call_simple_agent": {
         "zh_CN": "调用助理",
         "en_US": "Consult Agent"
+    },
+    "create_file_share": {
+        "zh_CN": "创建文件分享",
+        "en_US": "Create file share"
+    },
+    "inspect_file_share": {
+        "zh_CN": "检查分享文件",
+        "en_US": "Inspect share files"
+    },
+    "create_project_share": {
+        "zh_CN": "创建项目分享",
+        "en_US": "Create project share"
+    },
+    "create_topic_share": {
+        "zh_CN": "创建话题分享",
+        "en_US": "Create topic share"
+    },
+    "list_file_shares": {
+        "zh_CN": "查看文件分享",
+        "en_US": "List file shares"
+    },
+    "list_project_shares": {
+        "zh_CN": "查看项目分享",
+        "en_US": "List project shares"
+    },
+    "list_topic_shares": {
+        "zh_CN": "查看话题分享",
+        "en_US": "List topic shares"
+    },
+    "get_share": {
+        "zh_CN": "查看分享详情",
+        "en_US": "Get share details"
+    },
+    "update_file_share": {
+        "zh_CN": "更新文件分享",
+        "en_US": "Update file share"
+    },
+    "update_project_share": {
+        "zh_CN": "更新项目分享",
+        "en_US": "Update project share"
+    },
+    "update_topic_share": {
+        "zh_CN": "更新话题分享",
+        "en_US": "Update topic share"
+    },
+    "delete_share": {
+        "zh_CN": "删除分享",
+        "en_US": "Delete share"
     }
 }

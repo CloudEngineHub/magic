@@ -1,7 +1,8 @@
 """
-skill 脚本公共引导模块。
+Shared bootstrap module for skill scripts.
 
-提供项目根目录定位与运行环境初始化，供所有 agents/skills/<skill>/scripts/ 下的脚本使用。
+Provides project-root discovery and runtime initialization for scripts under
+agents/skills/<skill>/scripts/.
 """
 from __future__ import annotations
 
@@ -15,8 +16,8 @@ _project_root: Path | None = None
 
 def get_project_root() -> Path:
     """
-    返回项目根目录，首次调用时定位并加入 sys.path，后续返回缓存值。
-    以 .super-magic-project-root 文件作为标志，本地开发和生产环境均存在。
+    Return the project root, add it to sys.path on first use, then reuse the cache.
+    The .super-magic-project-root marker exists in both development and production.
     """
     global _project_root
     if _project_root is not None:
@@ -32,27 +33,27 @@ def get_project_root() -> Path:
 
 
 def get_workspace_dir() -> Path:
-    """工作区目录：project_root/.workspace（与 PathManager / agentlang 一致）。"""
+    """Workspace directory: project_root/.workspace, aligned with PathManager and agentlang."""
     return get_project_root() / ".workspace"
 
 
 def get_personal_env_file() -> Path:
-    """个人级环境变量文件路径：~/.magic/super-magic.env。"""
+    """Personal environment file path: ~/.magic/super-magic.env."""
     return Path.home() / ".magic" / "super-magic.env"
 
 
 def get_workspace_env_file() -> Path:
-    """工作区级环境变量文件路径：.workspace/.magic/.env。"""
+    """Workspace environment file path: .workspace/.magic/.env."""
     return get_workspace_dir() / ".magic" / ".env"
 
 
 def init_environment() -> Path:
     """
-    完整初始化 skill 脚本运行环境，返回项目根目录 Path。
+    Initialize the skill-script runtime environment and return the project root.
 
-    1. 定位项目根目录并加入 sys.path
-    2. 初始化 PathManager（避免 cwd 不在根目录时路径推断有误）
-    3. 提前触发 agentlang 初始化并将 loguru 静音至 WARNING（避免启动噪音）
+    1. Locate the project root and add it to sys.path.
+    2. Initialize PathManager so path inference is stable even when cwd is elsewhere.
+    3. Initialize agentlang early and quiet loguru to WARNING to reduce startup noise.
     """
     root = get_project_root()
 
@@ -80,5 +81,5 @@ def init_environment() -> Path:
     return root
 
 
-# 模块导入时自动执行，无需外部显式调用
+# Run on import so individual scripts do not need an explicit bootstrap call.
 init_environment()

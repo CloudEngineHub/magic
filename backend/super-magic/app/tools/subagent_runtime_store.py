@@ -1,6 +1,8 @@
 from dataclasses import asdict
 
+from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.logger import get_logger
+from app.core.horizon.store import HorizonStore
 from app.path_manager import PathManager
 from app.tools.subagent_runtime_models import (
     SubagentSessionConfigBlock,
@@ -15,7 +17,17 @@ logger = get_logger(__name__)
 
 
 class SubagentRuntimeStore:
-    """读取和写入会话级 subagent 运行态。"""
+    """读取和写入会话级 subagent 运行态。
+
+    本类只拥有 `.session.json` 中的 `subagent` 区域，不拥有整个文件：
+
+        load_document -> 拆出 last/current/subagent/extra_fields
+        save_state    -> 只替换 subagent
+        save_document -> 把四部分重新合并后写回
+
+    例如 Agent 新增一个 session 顶层字段时，即使本类暂时不认识它，也会放进
+    `extra_fields` 原样带回，不会因为记录一次 DONE 状态而丢掉该字段。
+    """
 
     @staticmethod
     def _default_session_document() -> SubagentSessionDocument:
@@ -109,9 +121,50 @@ class SubagentRuntimeStore:
 
     @classmethod
     async def save_state(cls, state: SubagentSessionState) -> None:
+        """更新 `subagent` 区域，同时保留 session 文档的其他 owner 数据。"""
         document = await cls.load_document(state.agent_name, state.agent_id)
         document.subagent = state
         await cls.save_document(state.agent_name, state.agent_id, document)
+
+    @classmethod
+    async def session_exists(cls, agent_name: str, agent_id: str) -> bool:
+        """任一正式上下文文件存在，都表示该会话已被占用。"""
+        chat_history_dir = PathManager.get_subagents_chat_history_dir()
+        paths = (
+            ChatHistory.history_path_for_session(agent_name, agent_id, chat_history_dir),
+            ChatHistory.session_path_for_session(agent_name, agent_id, chat_history_dir),
+            HorizonStore.path_for_session(agent_name, agent_id, chat_history_dir),
+        )
+        for path in paths:
+            if await async_exists(path):
+                return True
+        return False
+
+    @classmethod
+    async def list_agent_ids(cls) -> set[str]:
+        """列出正式上下文文件中出现过的全部 Agent ID。
+
+        不依赖 `.session.json` 的内容，因为 ChatHistory 或 Horizon 单独落盘时，
+        也已经足以阻止另一个 Agent 复用同一个 ID。
+        """
+        chat_history_dir = PathManager.get_subagents_chat_history_dir()
+        if not await async_exists(chat_history_dir):
+            return set()
+
+        agent_ids: set[str] = set()
+        suffixes = (".session.json", ".horizon.json", ".json")
+        for path in await async_iterdir(chat_history_dir):
+            name = path.name
+            for suffix in suffixes:
+                if not name.endswith(suffix):
+                    continue
+                session_name = name[:-len(suffix)]
+                if "<" not in session_name or not session_name.endswith(">"):
+                    break
+                # 文件名形如 `magic<market-research-2>.json`；只取尖括号内的最终 ID。
+                agent_ids.add(session_name.rsplit("<", 1)[1][:-1])
+                break
+        return agent_ids
 
     @classmethod
     async def find_states_by_agent_id(cls, agent_id: str) -> list[SubagentSessionState]:

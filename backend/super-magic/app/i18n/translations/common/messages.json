@@ -7,6 +7,26 @@
         "zh_CN": "当前对话上下文已过长，请点击输入框右侧的上下文占比圆环，在弹出的面板中选择“压缩上下文”后再继续。",
         "en_US": "The conversation context is too long. Click the context usage ring on the right side of the input box, choose \"Compact Context\" from the panel, and then continue."
     },
+    "messages.context_window_adjusted": {
+        "zh_CN": "上下文上限已调整为 {context_size}。当前模型最多可设置为 {max_allowed}。",
+        "en_US": "Context limit adjusted to {context_size}. The maximum allowed for the current model is {max_allowed}."
+    },
+    "messages.context_window_invalid_format": {
+        "zh_CN": "请输入要设置的上下文上限，例如 256k、800k 或 200000。",
+        "en_US": "Enter a context limit such as 256k, 800k, or 200000."
+    },
+    "messages.context_window_below_default": {
+        "zh_CN": "上下文上限不能小于系统默认值 {system_default}。",
+        "en_US": "The context limit cannot be smaller than the system default of {system_default}."
+    },
+    "messages.context_window_above_limit": {
+        "zh_CN": "上下文上限不能超过当前模型的可设置上限 {max_allowed}。",
+        "en_US": "The context limit cannot exceed the current model limit of {max_allowed}."
+    },
+    "messages.context_window_no_valid_range": {
+        "zh_CN": "当前模型没有可调整的上下文区间：系统默认值为 {system_default}，当前模型可设置上限为 {max_allowed}。",
+        "en_US": "The current model has no adjustable context range: the system default is {system_default}, while the model limit is {max_allowed}."
+    },
     "messages.agent_suspended": {
         "zh_CN": "当前任务已暂停，请稍后再试。",
         "en_US": "The current task has been suspended. Please try again later."

@@ -243,7 +243,7 @@ Update safety:
 
 ```javascript
 const basePath = await window.Magic.getAppBasePath();
-// "个人财务记账/" or "" (workspace root)
+// "personal-finance/" or "" (workspace root)
 ```
 
 - `fs.*` paths → relative to app root by default: `"data/file.json"`; project-root paths use a leading slash such as `"/shared/file.json"`.
@@ -372,7 +372,7 @@ const { topicId: t2 } = await window.Magic.project.createTopicAndSend(
       {
         type: "paragraph",
         content: [
-          { type: "text", text: "请阅读技能文件并执行：" },
+          { type: "text", text: "Read the skill file and execute it: " },
           {
             type: "mention",
             attrs: {
@@ -385,7 +385,7 @@ const { topicId: t2 } = await window.Magic.project.createTopicAndSend(
               },
             },
           },
-          { type: "text", text: "\n\n任务：生成报告" },
+          { type: "text", text: "\n\nTask: generate a report" },
         ],
       },
     ],

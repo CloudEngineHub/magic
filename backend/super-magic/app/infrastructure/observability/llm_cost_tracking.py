@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Guard to ensure idempotent installation
 _installed = False
 
-# Lazy singletons
+# Lazy singleton
 _model_pricing = None
 
 
@@ -37,15 +37,13 @@ def _get_model_pricing():
         return _model_pricing
 
     try:
-        from agentlang.config import config
-        from agentlang.llms.token_usage.pricing import ModelPricing
+        from agentlang.llms.factory import LLMFactory
 
-        models_config = config.get("models", {})
-        _model_pricing = ModelPricing(models_config=models_config)
+        _model_pricing = LLMFactory.pricing
     except ImportError as e:
-        logger.debug("ModelPricing module not available: %s", e)
+        logger.debug("LLMFactory module not available: %s", e)
         _model_pricing = None
-    except Exception as e:
+    except Exception:
         logger.warning("Failed to initialize ModelPricing for cost tracking", exc_info=True)
         _model_pricing = None
 
@@ -53,7 +51,7 @@ def _get_model_pricing():
 
 
 def _safe_int(v: Any) -> int:
-    """Safely convert value to int, returning 0 on failure"""
+    """Safely convert value to int, returning 0 on failure."""
     try:
         return int(v or 0)
     except (ValueError, TypeError):
@@ -76,7 +74,7 @@ def install_llm_cost_tracking() -> None:
     except ImportError as e:
         logger.debug("TokenUsageTracker module not available: %s", e)
         return
-    except Exception as e:
+    except Exception:
         logger.warning("Failed to import TokenUsageTracker for cost tracking", exc_info=True)
         return
 
@@ -84,41 +82,59 @@ def install_llm_cost_tracking() -> None:
     if not original:
         return
 
-    def patched(self: Any, response_usage: Any, model_id: str, user_id: Optional[str] = None, model_name: Optional[str] = None, resolved_model_id: Optional[str] = None, report_manager: Optional[Any] = None):
-        # Call original logic first
-        result = original(self, response_usage, model_id, user_id=user_id, model_name=model_name, resolved_model_id=resolved_model_id, report_manager=report_manager)
+    def patched(
+        self: Any,
+        response_usage: Any,
+        model_id: str,
+        user_id: Optional[str] = None,
+        model_name: Optional[str] = None,
+        resolved_model_id: Optional[str] = None,
+        report_manager: Optional[Any] = None,
+    ):
+        result = original(
+            self,
+            response_usage,
+            model_id,
+            user_id=user_id,
+            model_name=model_name,
+            resolved_model_id=resolved_model_id,
+            report_manager=report_manager,
+        )
 
         try:
-            # Get the last recorded TokenUsage (includes cache details & model info)
             token_usage = self.get_last_recorded_usage() if hasattr(self, "get_last_recorded_usage") else None
             if not token_usage:
                 return result
 
             tracer = otel_trace.get_tracer(__name__)
 
-            # Create span with OpenAI SDK instrumentation style naming
             # Example: "openai.chat (gpt-4o)" or "openai.chat (claude-4.5)"
             model_label = str(model_name or model_id or "").strip()
             span_name = f"openai.chat ({model_label})" if model_label else "openai.chat"
 
             span = tracer.start_span(name=span_name, kind=SpanKind.CLIENT)
             with otel_trace.use_span(span, end_on_exit=True):
-                # Mark as generation for Langfuse dashboards
                 span.set_attribute(OpenTelemetryAttributes.OBSERVATION_TYPE, ObservationType.GENERATION.value)
                 span.set_attribute(LangfuseAttributes.OBSERVATION_TYPE, ObservationType.GENERATION.value)
                 span.set_attribute(LangfuseAttributes.NAME, span_name)
 
-                # Model identifiers
                 span.set_attribute(OpenTelemetryAttributes.GEN_AI_SYSTEM, "openai")
                 span.set_attribute(OpenTelemetryAttributes.GEN_AI_REQUEST_MODEL, str(model_name or model_id))
                 span.set_attribute(OpenTelemetryAttributes.GEN_AI_RESPONSE_MODEL, str(model_name or model_id))
 
-                # Usage attributes
-                span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_INPUT_TOKENS, _safe_int(getattr(token_usage, "input_tokens", 0)))
-                span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_COMPLETION_TOKENS, _safe_int(getattr(token_usage, "output_tokens", 0)))
-                span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_TOTAL_TOKENS, _safe_int(getattr(token_usage, "total_tokens", 0)))
+                span.set_attribute(
+                    OpenTelemetryAttributes.GEN_AI_USAGE_INPUT_TOKENS,
+                    _safe_int(getattr(token_usage, "input_tokens", 0)),
+                )
+                span.set_attribute(
+                    OpenTelemetryAttributes.GEN_AI_USAGE_COMPLETION_TOKENS,
+                    _safe_int(getattr(token_usage, "output_tokens", 0)),
+                )
+                span.set_attribute(
+                    OpenTelemetryAttributes.GEN_AI_USAGE_TOTAL_TOKENS,
+                    _safe_int(getattr(token_usage, "total_tokens", 0)),
+                )
 
-                # Cost (USD)
                 pricing = _get_model_pricing()
                 if pricing is not None:
                     try:
@@ -129,15 +145,14 @@ def install_llm_cost_tracking() -> None:
                             span.set_attribute(OpenTelemetryAttributes.GEN_AI_USAGE_COST, float(cost))
                     except (ValueError, TypeError, AttributeError) as e:
                         logger.debug("Failed to calculate cost for model %s: %s", model_id, e)
-                    except Exception as e:
+                    except Exception:
                         logger.warning("Unexpected error calculating cost", exc_info=True)
 
-        except Exception as e:
-            # Never break main flow, but log unexpected errors
+        except Exception:
+            # Never break main flow, but log unexpected errors.
             logger.warning("Unexpected error in LLM cost tracking", exc_info=True)
 
         return result
 
-    # Patch the method
     TokenUsageTracker.record_llm_usage = patched  # type: ignore[assignment]
     _installed = True

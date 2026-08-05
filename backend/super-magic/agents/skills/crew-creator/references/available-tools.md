@@ -1,11 +1,3 @@
-<!--zh
-# 可用工具参考
-
-本文档列出 super-magic 项目中所有可在 TOOLS.md 中配置的工具。
-管理员工工具配置时，参考此列表选择合适的工具组合。
-
-工具名称必须与此列表中的名称完全匹配，否则编译时会报错。
--->
 # Available Tools Reference
 
 This document lists all tools available for TOOLS.md configuration in the super-magic project.
@@ -13,15 +5,10 @@ When managing employee tool configuration, refer to this list to select appropri
 
 Tool names must exactly match the names in this list; otherwise, compilation will fail.
 
+`run_python_snippet`, `run_sdk_snippet`, and `compact_chat_history` are runtime-managed tools. Do not list them in `tools`; the runtime provides them automatically unless code execution is explicitly disabled for the Agent.
+
 ---
 
-<!--zh
-## 按职能推荐的工具组合
-
-根据员工的核心职能，以下是推荐的工具组合方案：
-
-### 通用基础工具（建议所有员工都配置）
--->
 ## Recommended Tool Combinations by Function
 
 Based on the employee's core function, here are recommended tool combinations:
@@ -36,12 +23,8 @@ tools:
   - grep_search
   - write_file
   - edit_file
-  - compact_chat_history
 ```
 
-<!--zh
-### 研究分析型员工
--->
 ### Research & Analysis Employee
 
 ```yaml
@@ -50,14 +33,8 @@ tools:
   - read_webpages_as_markdown
   - visual_understanding
   - video_understanding
-  - run_python_snippet
-  - download_from_url
-  - download_from_urls
 ```
 
-<!--zh
-### 内容创作型员工
--->
 ### Content Creation Employee
 
 ```yaml
@@ -68,18 +45,13 @@ tools:
   - image_search
   - visual_understanding
   - video_understanding
-  - run_python_snippet
 ```
 
-<!--zh
-### 开发编程型员工
--->
 ### Development & Programming Employee
 
 ```yaml
 tools:
   - shell_exec
-  - run_python_snippet
   - web_search
   - read_webpages_as_markdown
   - edit_file_range
@@ -88,29 +60,18 @@ tools:
   - delete_files
 ```
 
-<!--zh
-### 数据分析型员工
--->
 ### Data Analysis Employee
 
 ```yaml
 tools:
-  - run_python_snippet
   - shell_exec
   - web_search
   - visual_understanding
   - video_understanding
-  - run_python_snippet
-  - download_from_url
 ```
 
 ---
 
-<!--zh
-## 完整工具列表
-
-### 文件操作类
--->
 ## Complete Tool List
 
 ### File Operations
@@ -130,22 +91,22 @@ tools:
 | `multi_edit_file_range` | Apply multiple edits within line ranges |
 | `delete_files` | Delete one or more files |
 
-<!--zh
-### 网络搜索与抓取类
--->
 ### Web Search & Fetch
 
 | Tool | Description |
 |------|-------------|
 | `web_search` | Search the internet for information |
 | `read_webpages_as_markdown` | Fetch webpages and convert to Markdown |
-| `download_from_url` | Download a file from a URL |
-| `download_from_urls` | Batch download files from multiple URLs |
 | `download_from_markdown` | Download files referenced in Markdown content |
 
-<!--zh
-### 视觉与图片类
--->
+External file downloads use the `download` system skill with `run_sdk_snippet`, including single-file downloads. Do not put `download_from_url` or the Code Mode-only `download_from_urls` tool in an Agent `tools:` list.
+
+```yaml
+skills:
+  system_skills:
+    - name: download
+```
+
 ### Vision & Image
 
 | Tool | Description |
@@ -156,29 +117,14 @@ tools:
 | `generate_images` | Batch generate images from text prompts or reference images |
 | `image_search` | Search for images by keyword |
 
-<!--zh
-### 代码执行类
--->
 ### Code Execution
 
 | Tool | Description |
 |------|-------------|
 | `shell_exec` | Execute shell commands |
-| `run_python_snippet` | Run Python code directly |
 
-<!--zh
-### 内容处理类
--->
-### Content Processing
+`run_python_snippet` and `run_sdk_snippet` are automatically available when `code_execution` is enabled. They are not TOOLS.md entries.
 
-| Tool | Description |
-|------|-------------|
-| `run_python_snippet` | Use Code Mode; document parsing services are called from the `document-converter` skill |
-| `convert_pdf` | Convert files to/from PDF format |
-
-<!--zh
-### 任务管理类
--->
 ### Task Management
 
 | Tool | Description |
@@ -187,9 +133,6 @@ tools:
 | `todo_read` | Read TODO items |
 | `todo_update` | Update a TODO item |
 
-<!--zh
-### Agent 协作类
--->
 ### Agent Collaboration
 
 | Tool | Description |
@@ -198,9 +141,6 @@ tools:
 | `call_subagent` | Call a sub-agent for a specific task |
 | `wait_for_subagents` | Wait for one or more background sub-agents to finish |
 
-<!--zh
-### 演示与幻灯片类
--->
 ### Presentation & Slides
 
 | Tool | Description |
@@ -209,9 +149,6 @@ tools:
 | `create_slide_project` | Create a new slide presentation project |
 | `analysis_slide_webpage` | Analyze a slide/presentation webpage |
 
-<!--zh
-### 音视频类
--->
 ### Audio & Video
 
 | Tool | Description |
@@ -226,34 +163,23 @@ tools:
 | `download_youtube_video_media` | Download YouTube video/audio |
 | `get_youtube_video_info` | Get YouTube video metadata |
 
-<!--zh
-### 浏览器操作类
--->
 ### Browser Operations
 
 | Tool | Description |
 |------|-------------|
 | `use_browser` | Perform browser automation actions |
 
-<!--zh
-### 其他工具
--->
 ### Other Tools
 
 | Tool | Description |
 |------|-------------|
-| `compact_chat_history` | Compress chat history to save context |
 | `reflection` | Trigger self-reflection for better reasoning |
 | `thinking` | Extended thinking for complex problems |
 | `summarize` | Summarize long content |
 | `deep_write` | Deep writing with multi-pass refinement |
 | `find_skills` | Search for skills by keyword across all sources |
 | `read_skills` | Read a skill's SKILL.md content |
-| `run_sdk_snippet` | Execute a Python code snippet with sdk.tool access (MCP capabilities exposed as mcp_* tools); intermediate results stay in the execution environment and do not flow through model context |
 
-<!--zh
-### IM 渠道类
--->
 ### IM Channel
 
 | Tool | Description |
@@ -263,9 +189,6 @@ tools:
 | `connect_wecom_bot` | Connect to a WeCom bot |
 | `get_im_channel_status` | Get IM channel connection status |
 
-<!--zh
-### 设计画布类
--->
 ### Design Canvas
 
 | Tool | Description |
@@ -275,9 +198,6 @@ tools:
 | `generate_canvas_videos` | Generate videos directly to canvas |
 | `search_images_to_canvas` | Search and add images to canvas |
 
-<!--zh
-### 数据看板类
--->
 ### Data Dashboard
 
 | Tool | Description |

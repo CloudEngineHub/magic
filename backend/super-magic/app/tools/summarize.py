@@ -177,7 +177,7 @@ class Summarize(BaseTool[SummarizeParams]):
                 model_id = get_ability_config(
                     AIAbility.SUMMARIZE,
                     "model_id",
-                    default="qwen-flash"
+                    default="qwen3.5-flash"
                 )
 
             # 在这里进行截断

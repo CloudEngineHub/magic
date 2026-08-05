@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import Field, field_validator
 
@@ -41,7 +41,7 @@ class InstallSlidesTemplateParams(BaseToolParams):
         return code
 
 
-@tool(name="install_slides_template")
+@tool(name="install_slides_template", code_mode_only=True)
 class InstallSlidesTemplate(WorkspaceTool[InstallSlidesTemplateParams]):
     """<!--zh
     根据幻灯片模板 code 下载模板包并解压到临时目录。
@@ -52,8 +52,6 @@ class InstallSlidesTemplate(WorkspaceTool[InstallSlidesTemplateParams]):
     Use this only when a skill or Code Mode already has an explicit template code and needs to inspect
     the template files. The returned data contains installed_directory as an absolute path; use that absolute path as the extraction root and inspect files there.
     """
-
-    code_mode_only: ClassVar[bool] = True
 
     def get_prompt_hint(self) -> str:
         return """<!--zh

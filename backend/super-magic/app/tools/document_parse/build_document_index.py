@@ -36,22 +36,17 @@ from .path_utils import (
 class BuildDocumentIndexParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要建立索引的文档绝对路径，不接受相对路径-->
-Absolute document path to index. Relative paths are not accepted"""
+        description="Absolute document path to index. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 输出目录的绝对路径，用于保存 document.index.json 和 document.outline.md-->
-Absolute output directory for document.index.json and document.outline.md"""
+        description="Absolute output directory for document.index.json and document.outline.md."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class BuildDocumentIndex(AbstractFileTool[BuildDocumentIndexParams], WorkspaceTool[BuildDocumentIndexParams]):
-    """<!--zh: 为文档生成机器可读索引和模型可读目录。-->
-    Build a machine-readable document index and model-readable outline."""
-
-    code_mode_only = True
+    """Build a machine-readable document index and model-readable outline."""
 
     async def execute(self, tool_context: ToolContext, params: BuildDocumentIndexParams) -> ToolResult:
         """Write an empty index/outline based on document structure only."""

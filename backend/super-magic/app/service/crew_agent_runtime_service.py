@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import ClassVar, Optional
 
 from agentlang.logger import get_logger
-from app.core.subagent_delegation import is_crew_agent_code
+from app.core.subagent_delegation import is_custom_agent_code
 from app.path_manager import PathManager
 from app.service.crew_agent_cache_manager import CrewAgentCacheManager
 from app.service.crew_agent_compiler import CrewAgentCompiler
@@ -53,6 +53,25 @@ class CrewAgentRuntimeService:
         lock = self._locks.setdefault(normalized_code, asyncio.Lock())
         async with lock:
             return await self._ensure_compiled_locked(normalized_code)
+
+    async def get_local_info(self, agent_code: str) -> Optional[CrewAgentRuntimeInfo]:
+        """只读取本地 Crew 元数据，不触发下载、编译或缓存失效。"""
+        normalized_code = self._normalize_agent_code(agent_code)
+        crew_dir = PathManager.get_crew_agent_dir(normalized_code)
+        agent_file = PathManager.get_compiled_agent_file(normalized_code)
+        identity_file = PathManager.get_crew_identity_file(normalized_code)
+
+        if not await async_exists(agent_file) or not await async_exists(identity_file):
+            return None
+
+        identity_meta = (await async_read_markdown(identity_file)).meta
+        return self._build_info(
+            normalized_code,
+            agent_file,
+            crew_dir,
+            identity_meta,
+            compiled=False,
+        )
 
     async def _ensure_compiled_locked(self, agent_code: str) -> CrewAgentRuntimeInfo:
         crew_dir = PathManager.get_crew_agent_dir(agent_code)
@@ -145,6 +164,6 @@ class CrewAgentRuntimeService:
         if not code:
             raise ValueError("agent_code is required")
         # 复用 Crew code 的唯一校验口径：要求 SMA-/SMA_ 前缀，天然排除 "." / ".." 等路径穿越输入。
-        if not is_crew_agent_code(code):
+        if not is_custom_agent_code(code):
             raise ValueError(f"Invalid agent_code: {agent_code}")
         return code

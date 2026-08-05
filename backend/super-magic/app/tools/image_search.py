@@ -940,7 +940,6 @@ Keyword Diversification Principles:
             download_params = DownloadFromUrlParams(
                 url=url,
                 file_path="",  # 空路径触发 cache_only 模式
-                override=True
             )
 
             task = self._download_image_group_with_semaphore(url, grouped_images, download_params, semaphore)
@@ -1082,7 +1081,7 @@ Keyword Diversification Principles:
                         # watermark/copyright issue, treat the marker as a hallucinated
                         # tail and keep the image instead of dropping it silently.
                         # Covers Chinese & English negation phrasings commonly produced
-                        # by lightweight vision models (e.g. qwen-flash).
+                        # by lightweight vision models (e.g. qwen3.5-flash).
                         result_without_marker = result.replace(reject_pattern, '')
                         negation_pattern = re.compile(
                             r'(无水印|没有水印|未见水印|不含水印|无版权(标识|信息)?|没有版权(标识|信息)?|未见版权(标识|信息)?|不含版权(标识|信息)?'

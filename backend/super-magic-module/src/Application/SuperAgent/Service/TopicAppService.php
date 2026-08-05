@@ -140,6 +140,32 @@ class TopicAppService extends AbstractAppService
         return TopicItemDTO::fromEntity($topicEntity);
     }
 
+    public function getTopicBySandboxId(RequestContext $requestContext, string $sandboxId): TopicItemDTO
+    {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $topicEntity = $this->topicDomainService->getTopicBySandboxId($sandboxId);
+
+        if (! $topicEntity && preg_match('/^[1-9][0-9]*$/D', $sandboxId) === 1) {
+            $topicId = (int) $sandboxId;
+            if ((string) $topicId === $sandboxId) {
+                $legacyTopicEntity = $this->topicDomainService->getTopicById($topicId);
+                if ($legacyTopicEntity && $legacyTopicEntity->getSandboxId() === '') {
+                    $topicEntity = $legacyTopicEntity;
+                }
+            }
+        }
+
+        if (! $topicEntity) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        if ($topicEntity->getUserId() !== $userAuthorization->getId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
+        }
+
+        return TopicItemDTO::fromEntity($topicEntity);
+    }
+
     public function getTopicStatuses(RequestContext $requestContext, BatchTopicStatusRequestDTO $requestDTO): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();

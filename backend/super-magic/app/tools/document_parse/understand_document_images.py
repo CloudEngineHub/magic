@@ -36,22 +36,20 @@ from .path_utils import (
 class UnderstandDocumentImagesParams(BaseToolParams):
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 文档解析输出目录的绝对路径，必须包含 document.index.json-->
-Absolute document output directory containing document.index.json"""
+        description="Absolute document output directory containing document.index.json."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选页码或 slide 范围，例如 `1-10`；为空时处理下一批未理解图片-->
-Optional page or slide range such as `1-10`. When omitted, process the next unread image batch"""
+        description=(
+            "Optional page or slide range, such as `1-10`. "
+            "When omitted, process the next unread image batch."
+        )
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class UnderstandDocumentImages(AbstractFileTool[UnderstandDocumentImagesParams], WorkspaceTool[UnderstandDocumentImagesParams]):
-    """<!--zh: 对文档图片进行视觉理解，并把结果写回 chunk。-->
-    Understand document image assets and write results back into chunks."""
-
-    code_mode_only = True
+    """Understand document image assets and write results back into chunks."""
 
     async def execute(self, tool_context: ToolContext, params: UnderstandDocumentImagesParams) -> ToolResult:
         """Run bounded visual understanding for document image assets."""

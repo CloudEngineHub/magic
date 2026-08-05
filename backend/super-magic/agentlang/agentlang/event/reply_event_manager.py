@@ -128,7 +128,7 @@ class ReplyEventManager:
                 token_usage.model_id = model_id
                 token_usage.model_name = model_name
                 try:
-                    from agentlang.llms.llm_factory import LLMFactory
+                    from agentlang.llms.factory import LLMFactory
                     _model_config = LLMFactory.get_model_config(model_id)
                     token_usage.resolved_model_id = _model_config.resolved_model_id or None
                     token_usage.max_context_tokens = _model_config.max_context_tokens or None

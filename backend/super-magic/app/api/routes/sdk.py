@@ -326,7 +326,7 @@ async def sdk_list_tools():
         from app.tools.core.tool_factory import tool_factory
 
         await tool_factory.ensure_definitions_initialized()
-        tool_names = tool_factory.get_tool_names()
+        tool_names = tool_factory.get_code_mode_tool_names()
 
         tools = []
         for name in tool_names:

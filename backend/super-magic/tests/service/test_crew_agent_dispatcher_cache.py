@@ -39,7 +39,7 @@ def _write_crew_files(crew_dir, identity_body="Initial identity."):
 
 def _write_template(template_path):
     template_path.write_text(
-        "---\nllm: main_llm\ntools: []\n---\n<identity>\nCREW_ROLE\n</identity>\nCREW_INSTRUCTIONS\nCREW_PERSONALITY\n",
+        "---\ntools: []\n---\n<identity>\nCREW_ROLE\n</identity>\nCREW_INSTRUCTIONS\nCREW_PERSONALITY\n",
         encoding="utf-8",
     )
 

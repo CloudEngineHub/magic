@@ -82,24 +82,35 @@ let showRawEvents = localStorage.getItem(RAW_EVENTS_TOGGLE_KEY) === 'true';
 // 消息列表懒加载：恢复/重渲染时只渲染最近一批，滚动到顶部时按需加载历史消息
 // 批次大小按可见消息（非 event 条目）计数，event 条目不计入但随区间一并渲染
 const LAZY_RENDER_BATCH_SIZE = 50;
+const LAZY_RENDER_TRIGGER_TOP_PX = 400;
 let lazyPrependTarget = null;
 const lazyRenderState = {
     renderedFromIndex: 0,
     loadMoreEl: null,
-    observer: null,
     isLoadingMore: false,
+    isAdjustingScroll: false,
+    lastScrollTop: 0,
 };
 
 // 从 beforeIndex 往前找，跳过 event 条目，数够 batchSize 条可见消息后返回起始下标
 function findLazyStartIndex(entries, beforeIndex, batchSize) {
     let count = 0;
+    let startIndex = 0;
     for (let i = beforeIndex - 1; i >= 0; i--) {
         if (entries[i].type !== 'event') {
             count++;
-            if (count >= batchSize) return i;
+            if (count >= batchSize) {
+                startIndex = i;
+                break;
+            }
         }
     }
-    return 0;
+
+    // 批次从完整用户轮次开始，避免同一次工具调用的前后状态被拆成两张卡片。
+    while (startIndex > 0 && entries[startIndex].type !== 'client') {
+        startIndex--;
+    }
+    return startIndex;
 }
 
 function getSystemMessageKey(text) {
@@ -2579,6 +2590,18 @@ function initMessageScrollControls() {
     window.addEventListener('resize', updateScrollButtonPosition);
 
     messagesContainer.addEventListener('scroll', () => {
+        const currentScrollTop = messagesContainer.scrollTop;
+        const isScrollingUp = currentScrollTop < lazyRenderState.lastScrollTop;
+        lazyRenderState.lastScrollTop = currentScrollTop;
+
+        if (
+            !isRestoring &&
+            !lazyRenderState.isAdjustingScroll &&
+            isScrollingUp &&
+            currentScrollTop <= LAZY_RENDER_TRIGGER_TOP_PX
+        ) {
+            loadMoreMessages();
+        }
         if (isMessageViewportAtBottom()) {
             hideScrollToLatestButton();
         }
@@ -2681,16 +2704,14 @@ function syncScrollAfterMessageChange(shouldStickToBottom, options = {}) {
 // ─── 消息列表懒加载 ──────────────────────────────────────────────────────────
 
 function resetLazyRenderState() {
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
     if (lazyRenderState.loadMoreEl && lazyRenderState.loadMoreEl.parentNode) {
         lazyRenderState.loadMoreEl.remove();
     }
     lazyRenderState.renderedFromIndex = 0;
     lazyRenderState.loadMoreEl = null;
     lazyRenderState.isLoadingMore = false;
+    lazyRenderState.isAdjustingScroll = false;
+    lazyRenderState.lastScrollTop = messagesContainer ? messagesContainer.scrollTop : 0;
 }
 
 function insertLoadMorePlaceholder(unrenderedCount) {
@@ -2701,16 +2722,31 @@ function insertLoadMorePlaceholder(unrenderedCount) {
     el.addEventListener('click', () => loadMoreMessages());
     messageList.prepend(el);
     lazyRenderState.loadMoreEl = el;
-    setupLoadMoreObserver();
 }
 
-function setupLoadMoreObserver() {
-    if (lazyRenderState.observer) lazyRenderState.observer.disconnect();
-    if (!lazyRenderState.loadMoreEl) return;
-    lazyRenderState.observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) loadMoreMessages();
-    }, { root: messagesContainer, rootMargin: '400px 0px 0px 0px' });
-    lazyRenderState.observer.observe(lazyRenderState.loadMoreEl);
+function captureLazyScrollAnchor() {
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    for (const node of messageList.children) {
+        if (node === lazyRenderState.loadMoreEl) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom > containerTop) {
+            return { node, offsetTop: rect.top - containerTop };
+        }
+    }
+    return null;
+}
+
+function restoreLazyScrollAnchor(anchor) {
+    if (!anchor || !anchor.node.isConnected) return;
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    const nextOffsetTop = anchor.node.getBoundingClientRect().top - containerTop;
+    lazyRenderState.isAdjustingScroll = true;
+    messagesContainer.scrollTop += nextOffsetTop - anchor.offsetTop;
+    lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+    requestAnimationFrame(() => {
+        lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+        lazyRenderState.isAdjustingScroll = false;
+    });
 }
 
 function loadMoreMessages() {
@@ -2726,62 +2762,55 @@ function loadMoreMessages() {
     const savedSystems = new Map(systemMessageRegistry);
     const savedEventTrace = eventTraceLog;
     const savedEventTraceSeen = eventTraceObjectSeen;
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = null;
-    eventTraceObjectSeen = new WeakSet();
+    const previousIsRestoring = isRestoring;
+    const previousPrependTarget = lazyPrependTarget;
+    const anchor = captureLazyScrollAnchor();
 
-    // 记录当前滚动高度
-    const prevScrollHeight = messagesContainer.scrollHeight;
+    try {
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = null;
+        eventTraceObjectSeen = new WeakSet();
 
-    // 移除旧的加载占位符（必须在捕获 firstChild 之前，否则锚点失效）
-    if (lazyRenderState.loadMoreEl) {
-        lazyRenderState.loadMoreEl.remove();
-        lazyRenderState.loadMoreEl = null;
+        if (lazyRenderState.loadMoreEl) {
+            lazyRenderState.loadMoreEl.remove();
+            lazyRenderState.loadMoreEl = null;
+        }
+        const firstChild = messageList.firstChild;
+
+        isRestoring = true;
+        lazyPrependTarget = document.createDocumentFragment();
+        for (let i = startIndex; i < endIndex; i++) {
+            renderLogEntry(chatLog[i]);
+        }
+        const fragment = lazyPrependTarget;
+        lazyPrependTarget = null;
+
+        messageList.insertBefore(fragment, firstChild);
+        lazyRenderState.renderedFromIndex = startIndex;
+        if (startIndex > 0) {
+            insertLoadMorePlaceholder(startIndex);
+        }
+        restoreLazyScrollAnchor(anchor);
+    } catch (error) {
+        console.error('加载历史消息失败:', error);
+        if (lazyRenderState.renderedFromIndex > 0 && !lazyRenderState.loadMoreEl) {
+            insertLoadMorePlaceholder(lazyRenderState.renderedFromIndex);
+        }
+    } finally {
+        isRestoring = previousIsRestoring;
+        lazyPrependTarget = previousPrependTarget;
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = savedEventTrace;
+        eventTraceObjectSeen = savedEventTraceSeen;
+        for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
+        for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
+        for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
+        lazyRenderState.isLoadingMore = false;
     }
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
-
-    // 占位符移除后再取插入锚点
-    const firstChild = messageList.firstChild;
-
-    // 渲染到临时 fragment
-    isRestoring = true;
-    lazyPrependTarget = document.createDocumentFragment();
-    for (let i = startIndex; i < endIndex; i++) {
-        renderLogEntry(chatLog[i]);
-    }
-    const fragment = lazyPrependTarget;
-    lazyPrependTarget = null;
-    isRestoring = false;
-
-    // 恢复原始注册表
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = savedEventTrace;
-    eventTraceObjectSeen = savedEventTraceSeen;
-    for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
-    for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
-    for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
-
-    // 插入旧消息到 messageList 头部
-    messageList.insertBefore(fragment, firstChild);
-    lazyRenderState.renderedFromIndex = startIndex;
-
-    // 如果还有更多历史消息，插入新的加载占位符
-    if (startIndex > 0) {
-        insertLoadMorePlaceholder(startIndex);
-    }
-
-    // 保持滚动位置不跳动：补偿新增高度
-    const heightDiff = messagesContainer.scrollHeight - prevScrollHeight;
-    messagesContainer.scrollTop += heightDiff;
-
-    lazyRenderState.isLoadingMore = false;
 }
 
 // ─── 滚动相关 ─────────────────────────────────────────────────────────────────

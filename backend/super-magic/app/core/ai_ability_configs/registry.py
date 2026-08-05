@@ -7,11 +7,13 @@ from agentlang.config.ai_abilities.ability_config import AIAbilityConfig
 from agentlang.logger import get_logger
 from app.core.ai_ability_configs.base import BaseAIAbilityConfig
 from app.core.ai_ability_configs.configs import (
+    AgentRerankAbilityConfig,
     AnalysisAudioAbilityConfig,
     CompactAbilityConfig,
     DeepWriteAbilityConfig,
     MemoryAbilityConfig,
     PurifyAbilityConfig,
+    SkillRerankAbilityConfig,
     SmartFilenameAbilityConfig,
     SummarizeAbilityConfig,
     VideoUnderstandingAbilityConfig,
@@ -30,6 +32,8 @@ _ABILITY_CONFIG_CLASSES: Dict[str, Type[BaseAIAbilityConfig]] = {
     AnalysisAudioAbilityConfig.ability_key_value: AnalysisAudioAbilityConfig,
     VideoUnderstandingAbilityConfig.ability_key_value: VideoUnderstandingAbilityConfig,
     MemoryAbilityConfig.ability_key_value: MemoryAbilityConfig,
+    SkillRerankAbilityConfig.ability_key_value: SkillRerankAbilityConfig,
+    AgentRerankAbilityConfig.ability_key_value: AgentRerankAbilityConfig,
 }
 
 

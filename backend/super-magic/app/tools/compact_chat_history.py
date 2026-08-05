@@ -5,36 +5,78 @@ from pydantic import Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.magic.compact_user_input_references import (
+    format_user_input_reference_block,
+    restore_preserved_user_inputs,
+)
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
+from app.tools.read_skills_hooks import (
+    SkillLoadedHookContext,
+    register_skill_loaded_hook,
+)
 from agentlang.logger import get_logger
 from app.core.context.agent_context import AgentContext
 
 logger = get_logger(__name__)
 
+COMPACT_USER_INPUT_REFERENCE_NOTIFICATION = "compact_user_input_reference_index"
+
 
 class CompactChatHistoryParams(BaseToolParams):
     summary: str = Field(
         ...,
-        description="The summary of the conversation"
+        description=(
+            "The complete structured summary that replaces the prior conversation. "
+            "Do not copy full user messages into the summary. To keep specific user "
+            "inputs verbatim, select their numbers in preserved_user_input_indexes; "
+            "the system will restore the exact text."
+        ),
+    )
+    preserved_user_input_indexes: list[int] = Field(
+        default_factory=list,
+        description=(
+            "1-based indexes from the User Input Reference Index. "
+            "List the user inputs that must be preserved exactly. "
+            "Pass an empty list if none are needed."
+        ),
     )
 
 
-@tool()
+@tool(auto_mount=AutoMount.ALWAYS)
 class CompactChatHistory(BaseTool[CompactChatHistoryParams]):
     """<!--zh: 当对话变得过长时压缩当前聊天历史，在用户告知你之前不要使用此工具-->
 Compress the current chat history when the conversation becomes too long, DO NOT use this tool before user tell you to do so."""
 
     async def execute(self, tool_context: ToolContext, params: CompactChatHistoryParams) -> ToolResult:
         """Execute chat history compaction"""
-        # Log compaction action
-        logger.info(f"Executing chat history compaction. Summary length: {len(params.summary)} chars")
+        if not params.summary or not params.summary.strip():
+            return ToolResult.error(
+                "Compaction summary is empty. Provide a non-empty summary before calling compact_chat_history."
+            )
+
+        agent_context = _get_agent_context(tool_context)
+        chat_history = getattr(agent_context, "chat_history", None) if agent_context is not None else None
+
+        logger.info(
+            "compaction.tool_execute: "
+            f"摘要字符数={len(params.summary or '')}, "
+            f"preserved_indexes={params.preserved_user_input_indexes}"
+        )
+
+        messages = getattr(chat_history, "messages", ()) if chat_history is not None else ()
+        final_summary = restore_preserved_user_inputs(
+            params.summary,
+            messages,
+            params.preserved_user_input_indexes,
+        )
 
         # Return with special system marker for Agent to process
         return ToolResult(
             content="Compact chat history done, this conversation is finished and should not be continued anymore.",
             system="COMPACT_HISTORY",  # Special system marker for compaction
             extra_info={
-                "summary": params.summary
+                "summary": final_summary,
+                "preserved_user_input_indexes": params.preserved_user_input_indexes,
             },
         )
 
@@ -91,3 +133,28 @@ Compress the current chat history when the conversation becomes too long, DO NOT
             "action": i18n.translate("compact_chat_history", category="tool.actions"),
             "remark": i18n.translate("compact_chat_history.remark", category="tool.messages", agent_name=agent_name)
         }
+
+
+def _get_agent_context(tool_context: ToolContext | None) -> AgentContext | None:
+    if tool_context is None:
+        return None
+    return tool_context.get_extension_typed("agent_context", AgentContext)
+
+
+def _push_user_input_reference_notification(context: SkillLoadedHookContext) -> None:
+    agent_context = context.agent_context
+    chat_history = getattr(agent_context, "chat_history", None)
+    horizon = getattr(agent_context, "horizon", None)
+    if agent_context is None or chat_history is None or horizon is None:
+        return
+
+    horizon.push_notification(
+        COMPACT_USER_INPUT_REFERENCE_NOTIFICATION,
+        format_user_input_reference_block(chat_history.messages),
+    )
+
+
+register_skill_loaded_hook(
+    "compact-chat-history",
+    _push_user_input_reference_notification,
+)

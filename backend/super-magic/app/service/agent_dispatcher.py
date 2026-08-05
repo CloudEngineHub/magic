@@ -17,14 +17,14 @@ from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import 
 from app.core.context.agent_context import AgentContext
 from app.core.context.execution_source import (
     ASK_USER_POLICY_HORIZON_SOURCE,
-    EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY,
     build_ask_user_policy_horizon_message,
     is_ask_user_allowed_source,
     remove_execution_source_from_dynamic_config,
     resolve_execution_source,
     stamp_execution_source,
 )
-from app.core.entity.final_task_state import FinalTaskStateCode, build_final_task_state
+from app.core.entity.final_task_state import FinalTaskState, FinalTaskStateCode, build_final_task_state
+from app.core.models.agent_runtime import AgentLifetime, AgentTarget
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
 from agentlang.chat_history.session_config import SessionConfig
@@ -55,6 +55,11 @@ from app.service.crew_downloader import (
     CrewPackageFetchError,
     CrewPackageInvalidError,
 )
+from app.service.agent_runtime import (
+    AgentDefinitionPrepareError,
+    AgentRuntime,
+    AgentTargetError,
+)
 from agentlang.logger import get_logger
 from app.core.base_service import Base
 
@@ -68,19 +73,6 @@ class AgentLoadFailureReason(StrEnum):
     UNKNOWN = "unknown"
 
 
-class AgentLoadFailedError(RuntimeError):
-    """Raised when a user-selected employee agent cannot be loaded."""
-
-    def __init__(
-        self,
-        agent_code: str,
-        reason: AgentLoadFailureReason = AgentLoadFailureReason.UNKNOWN,
-    ) -> None:
-        self.agent_code = agent_code
-        self.reason = reason
-        super().__init__(f"failed to load employee agent: {agent_code}, reason={reason.value}")
-
-
 _AGENT_LOAD_MESSAGE_KEYS = {
     AgentLoadFailureReason.ACCESS_DENIED: "messages.agent_load_access_denied",
     AgentLoadFailureReason.INVALID_PACKAGE: "messages.agent_load_invalid_package",
@@ -90,23 +82,29 @@ _AGENT_LOAD_MESSAGE_KEYS = {
 
 
 def _classify_agent_load_failure(error: Exception) -> AgentLoadFailureReason:
-    if isinstance(error, MagicServiceUnauthorizedException):
-        return AgentLoadFailureReason.ACCESS_DENIED
-    if isinstance(error, CrewPackageInvalidError):
-        return AgentLoadFailureReason.INVALID_PACKAGE
-    if isinstance(
-        error,
-        (CrewPackageFetchError, HttpRequestError, MagicServiceApiError),
-    ):
-        return AgentLoadFailureReason.FETCH_FAILED
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, MagicServiceUnauthorizedException):
+            return AgentLoadFailureReason.ACCESS_DENIED
+        if isinstance(current, CrewPackageInvalidError):
+            return AgentLoadFailureReason.INVALID_PACKAGE
+        if isinstance(
+            current,
+            (CrewPackageFetchError, HttpRequestError, MagicServiceApiError),
+        ):
+            return AgentLoadFailureReason.FETCH_FAILED
+        current = current.__cause__ or current.__context__
     return AgentLoadFailureReason.UNKNOWN
 
 
-def _build_agent_load_final_task_state(error: AgentLoadFailedError):
+def _build_agent_load_final_task_state(error: Exception, agent_code: str) -> FinalTaskState:
+    reason = _classify_agent_load_failure(error)
     message = i18n.translate(
-        _AGENT_LOAD_MESSAGE_KEYS[error.reason],
+        _AGENT_LOAD_MESSAGE_KEYS[reason],
         category="common.messages",
-        agent_code=error.agent_code,
+        agent_code=agent_code,
     )
     return build_final_task_state(
         FinalTaskStateCode.AGENT_LOAD_FAILED,
@@ -145,7 +143,6 @@ class AgentDispatcher(Base):
         self.http_streams: list[HTTPSubscriptionStream] = []
         self.is_workspace_initialized: bool = False  # 工作区初始化状态标志
         self.agent_service = AgentService()  # 创建AgentService实例
-        self.agents: Dict[str, Agent] = {}  # 用于存储不同类型的agent
 
         # 标记 init 事件是否已经发送过（用于沙箱预启动场景的延迟发送）
         self.init_event_dispatched: bool = False
@@ -249,6 +246,8 @@ class AgentDispatcher(Base):
         # 保存初始化消息到文件
         from app.utils.init_client_message_util import InitClientMessageUtil
         await InitClientMessageUtil.save_init_client_message(init_message)
+
+        self.agent_context.set_super_magic_product_context(init_message.super_magic_product_context)
 
         # 阶段二：init_client_message.json 已就绪，触发 magic-service 模型列表加载
         try:
@@ -362,68 +361,41 @@ class AgentDispatcher(Base):
             else:
                 logger.info("工作区初始化完成")
 
-    async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
-        """
-        根据agent_mode切换到相应的agent
+    @staticmethod
+    def _agent_mode_value(agent_mode: Union[AgentMode, str]) -> str:
+        """返回消息协议中的 Agent 模式值，不做跨领域别名转换。"""
+        if isinstance(agent_mode, AgentMode):
+            return agent_mode.value
+        return str(agent_mode).strip()
 
-        Args:
-            agent_mode: Agent模式，可以是AgentMode枚举或者自定义Agent的字符串ID
-            agent_code: (optional) crew agent code, used when agent_mode == "agent_creator"
+    def _build_agent_target(
+        self,
+        agent_mode: Union[AgentMode, str],
+        agent_code: Optional[str],
+    ) -> AgentTarget:
+        """将消息入口的 mode/code 归一化为 Runtime target。"""
+        return AgentTarget.from_mode(agent_mode, agent_code)
 
-        Returns:
-            Agent: 选择的Agent实例
-        """
-        # 如果是字符串，仅支持 agent_creator + agent_code 或内置 AgentMode
-        if isinstance(agent_mode, str):
-            normalized_mode = {
-                "custom_agent": "agent_creator",
-            }.get(agent_mode.strip(), agent_mode.strip())
+    @staticmethod
+    def _extract_message_agent_code(message: ChatClientMessage) -> Optional[str]:
+        dynamic_config = message.dynamic_config
+        if not dynamic_config:
+            return None
+        agent_code = dynamic_config.get("agent_code")
+        if not isinstance(agent_code, str):
+            return None
+        normalized = agent_code.strip()
+        return normalized or None
 
-            # 0. agent_creator + agent_code => compiled crew agent
-            if normalized_mode == "agent_creator":
-                if agent_code and agent_code.strip():
-                    agent_type = agent_code.strip()
-                    logger.info(f"使用编译后的 crew agent: {agent_type}.agent")
-                else:
-                    logger.warning("agent_creator 未提供 agent_code，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
-
-            # 0b. magiclaw + agent_code => compiled claw agent (from agents/claws/<claw_code>/)
-            elif normalized_mode == "magiclaw":
-                if agent_code and agent_code.strip():
-                    agent_type = agent_code.strip()
-                    logger.info(f"magiclaw 模式，使用编译后的 claw agent: {agent_type}.agent")
-                else:
-                    logger.warning("magiclaw 未提供 agent_code，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
-
-            else:
-                try:
-                    resolved_mode = AgentMode(normalized_mode)
-                    logger.info(f"识别为内置 AgentMode: {resolved_mode}")
-                    agent_type = resolved_mode.get_agent_type()
-                except ValueError:
-                    logger.warning(f"未识别的 agent_mode='{normalized_mode}'，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
-        else:
-            # 使用 AgentMode 的 get_agent_type 方法
-            agent_type = agent_mode.get_agent_type()
-
-        # 主 Agent 进程内常驻：命中缓存时直接复用，不重新创建。
-        # 产品上永远只有一个主 Agent，且选定后不会切换；切换约束由前端保证，后端暂不额外校验。
-        if agent_type in self.agents:
-            logger.info(f"复用已缓存的主 Agent: {agent_type}")
-            return self.agents[agent_type]
-
-        logger.info(f"首次创建主 Agent: {agent_type}")
-        agent = await self.agent_service.create_agent(agent_type, self.agent_context)
-        if agent is None:
-            if agent_code and agent_type == agent_code.strip():
-                raise AgentLoadFailedError(agent_code.strip())
-            raise RuntimeError(f"failed to create agent: {agent_type}")
-
-        self.agents[agent_type] = agent
-        return agent
+    async def switch_agent(self, target: AgentTarget) -> Agent:
+        """通过统一 Runtime 获取主 Agent。"""
+        if self.agent_context is None:
+            raise RuntimeError("AgentDispatcher is not initialized")
+        return await AgentRuntime.get_instance().acquire(
+            target=target,
+            lifetime=AgentLifetime.CACHED,
+            context=self.agent_context,
+        )
 
     async def run_agent(self, agent: Agent):
         """
@@ -437,89 +409,11 @@ class AgentDispatcher(Base):
         """
         await self.agent_service.run_agent(agent=agent)
 
-    def _invalidate_cached_crew_agent(self, agent_code: str, reason: str) -> None:
-        """Drop runtime caches that depend on the compiled crew agent file."""
-        from app.core.skill_utils.manager import GlobalSkillManager
-
-        removed = self.agents.pop(agent_code, None) is not None
-        GlobalSkillManager.reset()
-        logger.info(
-            f"Invalidated crew runtime cache: agent_code={agent_code}, "
-            f"reason={reason}, removed_agent={removed}"
-        )
-
-    async def _prepare_crew_agent(self, agent_code: str) -> None:
-        """Crew 运行时准备：按需下载定义文件、编译 .agent、设置当前会话的 AgentProfile。"""
-        from app.core.entity.agent_profile import AgentProfile
-        from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
-
-        info = await CrewAgentRuntimeService(
-            on_cache_invalidated=self._invalidate_cached_crew_agent,
-        ).ensure_compiled(agent_code)
-
-        name        = info.name
-        role        = info.role
-        description = info.description
-
-        if name:
-            profile = AgentProfile(name=name, role=role, description=description)
-            self.agent_context.set_agent_profile(profile)
-            logger.info(f"Set crew agent profile: name={name}, role={role}")
-
-    async def _prepare_claw_agent(self, claw_code: str) -> None:
-        """Claw 运行时准备：把模板同步到 .workspace/.magic、编译 .agent、设置 AgentProfile。
-
-        每次启动都重新编译（不缓存），保证 .agent 始终和最新模板一致。
-        """
-        from datetime import date
-        from app.path_manager import PathManager
-        from app.service.claw_agent_compiler import ClawAgentCompiler
-        from app.core.entity.agent_profile import AgentProfile
-        from app.utils.async_file_utils import async_copytree, async_exists, async_rename, async_unlink, CopyConflict
-
-        magic_dir = PathManager.get_magic_dir()
-        output_agent_file = PathManager.get_compiled_agent_file(claw_code)
-        claw_src = PathManager.get_claw_agent_dir(claw_code)
-
-        if await async_exists(output_agent_file):
-            # 已初始化：补全可能缺失的模板文件，但跳过 BOOTSTRAP.md
-            # （BOOTSTRAP 仅用于首次初始化，agent 处理完后会自行删除，不应重新写入）
-            await async_copytree(claw_src, magic_dir, on_conflict=CopyConflict.SKIP, exclude={"BOOTSTRAP.md", "memory"})
-            logger.info(f"Claw .agent already exists, refresh compile: {output_agent_file}")
-        else:
-            # 首次初始化：从模板复制全部文件（已有文件不会被覆盖）
-            await async_copytree(claw_src, magic_dir, on_conflict=CopyConflict.SKIP)
-
-            # Rename the placeholder memory file to today's date so the agent starts
-            # with a correctly named daily log file instead of the template sentinel.
-            placeholder = magic_dir / "memory" / "1900-01-01-none.md"
-            if await async_exists(placeholder):
-                today_file = magic_dir / "memory" / f"{date.today().isoformat()}.md"
-                if not await async_exists(today_file):
-                    await async_rename(placeholder, today_file)
-                    logger.info(f"Renamed memory placeholder to: {today_file.name}")
-                else:
-                    await async_unlink(placeholder)
-                    logger.info(f"Removed memory placeholder (today's file already exists: {today_file.name})")
-
-        # .agent 是从模板和 .magic 源文件派生出的可再生缓存。
-        # magiclaw 会话是长寿命的，必须在每次 prepare 时刷新编译结果，避免继续使用旧模板。
-        compiler = ClawAgentCompiler()
-        identity_meta = await compiler.compile(claw_code, magic_dir)
-
-        name        = identity_meta.get("name", "")
-        role        = identity_meta.get("role", "")
-        description = identity_meta.get("description", "")
-
-        if name:
-            self.agent_context.set_agent_profile(AgentProfile(name=name, role=role, description=description))
-            logger.info(f"Set claw agent profile: name={name}, role={role}")
-
     def _apply_chat_agent_config(self, message: ChatClientMessage) -> None:
         """从 chat 消息的 agent 字段设置 AgentProfile（基线配置）。
 
         优先从 agent.profile 读取，兜底从旧的 agent.name / agent.description 读取。
-        crew/claw 类型会在后续 _prepare_agent() 中被编译产物覆盖。
+        crew/claw 类型会在 Runtime 准备定义时被身份文件覆盖。
         """
         agent_config = message.agent
         if not agent_config:
@@ -557,32 +451,10 @@ class AgentDispatcher(Base):
         """Set a localized baseline profile for built-in creation modes."""
         from app.core.entity.agent_profile import get_builtin_agent_profile
 
-        normalized_mode = agent_mode.value if isinstance(agent_mode, AgentMode) else str(agent_mode)
+        normalized_mode = self._agent_mode_value(agent_mode)
         profile = get_builtin_agent_profile(normalized_mode)
         if profile is not None:
             self.agent_context.set_agent_profile(profile)
-
-    async def _prepare_agent(self, agent_mode: str, agent_code: Optional[str]) -> None:
-        """Compile + set AgentProfile for modes that need it (crew / magiclaw)."""
-        try:
-            normalized_mode = {
-                "custom_agent": "agent_creator",
-            }.get(agent_mode, agent_mode)
-
-            if normalized_mode == "agent_creator" and agent_code:
-                await self._prepare_crew_agent(agent_code)
-            elif normalized_mode == "magiclaw" and agent_code:
-                await self._prepare_claw_agent(agent_code)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            reason = _classify_agent_load_failure(e)
-            logger.error(
-                f"Agent preparation failed (mode={agent_mode}, code={agent_code}, reason={reason.value}): {e}"
-            )
-            if agent_code:
-                raise AgentLoadFailedError(agent_code, reason) from e
-            logger.info("Falling back to default agent profile")
 
     @staticmethod
     def _last_dispatch_message_file():
@@ -732,11 +604,15 @@ class AgentDispatcher(Base):
             await self.dispatch_message(message)
         except asyncio.CancelledError:
             raise
-        except AgentLoadFailedError as e:
+        except (AgentTargetError, AgentDefinitionPrepareError) as e:
             logger.error(f"[AgentDispatcher] agent load failed: {e}")
             try:
                 if self.agent_context:
-                    final_task_state = _build_agent_load_final_task_state(e)
+                    agent_code = (
+                        self._extract_message_agent_code(message)
+                        or AgentMode.resolve_agent_type(message.agent_mode)
+                    )
+                    final_task_state = _build_agent_load_final_task_state(e, agent_code)
                     self.agent_context.set_final_task_state(final_task_state)
                     await self.agent_context.dispatch_event(
                         EventType.ERROR,
@@ -824,31 +700,40 @@ class AgentDispatcher(Base):
         if message.agent_mode is None:
             message.agent_mode = AgentMode.GENERAL
 
+        # image_model_id：从 dynamic_config.image_model.model_id 读取并 set 进 context
+        image_model_config = (message.dynamic_config or {}).get("image_model")
+        if image_model_config and isinstance(image_model_config, dict):
+            image_model_id = image_model_config.get("model_id")
+            if image_model_id:
+                self.agent_context.set_dynamic_image_model_id(image_model_id)
+                logger.info(f"[AgentDispatcher] 从消息 dynamic_config 设置图片模型: {image_model_id}")
+
         self._apply_execution_source(message)
         self.agent_context.set_chat_client_message(message)
 
-        # Extract agent_code for crew agent dispatching
-        agent_code = None
-        if message.dynamic_config:
-            agent_code_val = message.dynamic_config.get("agent_code")
-            if agent_code_val and isinstance(agent_code_val, str) and agent_code_val.strip():
-                agent_code = agent_code_val.strip()
+        agent_code = self._extract_message_agent_code(message)
 
         # 先设置内置模式的本地化默认身份，再由 chat profile 和 crew/claw 编译产物覆盖。
+        previous_profile = self.agent_context.get_agent_profile().model_copy(deep=True)
         self._apply_builtin_mode_profile(message.agent_mode)
 
         # 从 chat 消息的 agent 字段设置 AgentProfile（显式配置）
-        # _prepare_agent() 中 crew/claw 编译可能会覆盖此设置
+        # Runtime 中的 crew/claw Provider 可能会用身份文件覆盖此设置。
         self._apply_chat_agent_config(message)
 
-        # Compile agent files and set AgentProfile before loading the agent instance
-        await self._prepare_agent(str(message.agent_mode), agent_code)
+        try:
+            target = self._build_agent_target(message.agent_mode, agent_code)
+            agent = await self.switch_agent(target)
+        except asyncio.CancelledError:
+            self.agent_context.set_agent_profile(previous_profile)
+            raise
+        except Exception:
+            self.agent_context.set_agent_profile(previous_profile)
+            raise
 
         # 保存本次 dispatch 的完整消息快照（存储全量，补全侧用白名单控制应用范围）
         await self._save_last_dispatch_message(message)
 
-        # 使用 agent_mode 进行 agent 选择
-        agent = await self.switch_agent(message.agent_mode, agent_code=agent_code)
         self._apply_model_selection(message, agent)
 
         # 摄取客户端 MCP 配置：增量持久化到 ChatMcpStore，有变更时通过 horizon 通知模型
@@ -914,7 +799,7 @@ class AgentDispatcher(Base):
         current_session_config = agent.chat_history.get_current_session_config()
         last_session_config = agent.chat_history.get_last_session_config()
         selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
-            configured_text_model_id=agent.llm_id,
+            configured_text_model_id=agent.agent_context.model_context.configured_text_model_id,
             request_text_model_id=message.model_id,
             session_text_model_id=current_session_config.model_id or last_session_config.model_id,
             request_image_model=self._dynamic_image_model(message.dynamic_config),
@@ -945,7 +830,10 @@ class AgentDispatcher(Base):
 
             agent_context = agent.agent_context
             model_context = agent_context.model_context
-            current_model_id = model_context.current_text_model_id or agent.llm_id
+            current_model_id = model_context.current_text_model_id
+            if not current_model_id:
+                raise ValueError("Text model id is not configured")
+
             current_image_model_id = model_context.image_model_id
             current_image_model_sizes = model_context.image.sizes_payload()
             current_video_model_id = model_context.video_model_id
@@ -962,11 +850,7 @@ class AgentDispatcher(Base):
                     except (ValueError, KeyError):
                         pass
 
-            current_agent_code = None
-            if message.dynamic_config:
-                agent_code_val = message.dynamic_config.get("agent_code")
-                if agent_code_val and isinstance(agent_code_val, str) and agent_code_val.strip():
-                    current_agent_code = agent_code_val.strip()
+            current_agent_code = self._extract_message_agent_code(message)
 
             agent.chat_history.save_session_config(
                 current_model_id,

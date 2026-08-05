@@ -38,8 +38,8 @@ class ShareUrlBuilder
 
     public function buildResourceShareUrl(ResourceType $resourceType, string $resourceId, ?string $password = null): ?string
     {
-        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
-        if ($frontendDomain === '') {
+        $magicWebUrl = $this->getMagicWebUrl();
+        if ($magicWebUrl === null) {
             return null;
         }
 
@@ -53,7 +53,7 @@ class ShareUrlBuilder
             return null;
         }
 
-        $shareUrl = $frontendDomain . $uri;
+        $shareUrl = $magicWebUrl . $uri;
         if ($password !== null && $password !== '') {
             $shareUrl .= '?password=' . rawurlencode($password);
         }
@@ -63,12 +63,12 @@ class ShareUrlBuilder
 
     public function buildMicroAppShareUrl(string $appId, ?string $password = null): ?string
     {
-        $frontendDomain = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
-        if ($frontendDomain === '') {
+        $magicWebUrl = $this->getMagicWebUrl();
+        if ($magicWebUrl === null) {
             return null;
         }
 
-        $shareUrl = $frontendDomain . '/micro-app/' . $appId;
+        $shareUrl = $magicWebUrl . '/micro-app/' . $appId;
         if ($password !== null && $password !== '') {
             $shareUrl .= '?password=' . rawurlencode($password);
         }
@@ -104,5 +104,11 @@ class ShareUrlBuilder
         $parts = explode('?', $remainder, 2);
 
         return $parts[0] ?: null;
+    }
+
+    private function getMagicWebUrl(): ?string
+    {
+        $magicWebUrl = rtrim((string) env('MAGIC_WEB_URL', ''), '/');
+        return $magicWebUrl !== '' ? $magicWebUrl : null;
     }
 }

@@ -56,3 +56,15 @@ class MemoryAbilityConfig(ModelIdRequiredAIAbilityConfig):
     """后续回合记忆提取使用的运行时配置。"""
 
     ability_key_value = "memory"
+
+
+class SkillRerankAbilityConfig(ModelIdRequiredAIAbilityConfig):
+    """始终启用的 Skill Candidate 选择能力运行时配置。"""
+
+    ability_key_value = "skill_rerank"
+
+
+class AgentRerankAbilityConfig(ModelIdRequiredAIAbilityConfig):
+    """始终启用的 Agent 搜索排序能力运行时配置。"""
+
+    ability_key_value = "agent_rerank"

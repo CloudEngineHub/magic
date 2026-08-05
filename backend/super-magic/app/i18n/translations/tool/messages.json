@@ -203,58 +203,6 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
-    "convert_pptx_to_slide_template.before": {
-        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
-        "en_US": "Converting {{file_name}} to a slide template"
-    },
-    "convert_pptx_to_slide_template.after_success": {
-        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
-        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
-    },
-    "convert_pptx_to_slide_template.error": {
-        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
-        "en_US": "PPTX to slide template conversion failed: {{error}}"
-    },
-    "convert_pptx_to_slide_template.detail_title": {
-        "zh_CN": "PPTX 转幻灯片模板",
-        "en_US": "PPTX to Slide Template"
-    },
-    "convert_pptx_to_slide_template.detail_error_title": {
-        "zh_CN": "PPTX 转幻灯片模板失败",
-        "en_US": "PPTX to Slide Template Failed"
-    },
-    "install_slides_template.before": {
-        "zh_CN": "正在安装模板 {{template_code}}",
-        "en_US": "Installing template {{template_code}}"
-    },
-    "install_slides_template.after_success": {
-        "zh_CN": "已安装模板 {{template_code}}",
-        "en_US": "Installed template {{template_code}}"
-    },
-    "install_slides_template.after_failed": {
-        "zh_CN": "模板 {{template_code}} 安装失败",
-        "en_US": "Failed to install template {{template_code}}"
-    },
-    "install_slides_template.detail_title": {
-        "zh_CN": "幻灯片模板安装结果",
-        "en_US": "Slide Template Install Result"
-    },
-    "install_slides_template.detail_code": {
-        "zh_CN": "模板 code",
-        "en_US": "Template code"
-    },
-    "install_slides_template.detail_label": {
-        "zh_CN": "模板名称",
-        "en_US": "Template name"
-    },
-    "install_slides_template.detail_directory": {
-        "zh_CN": "安装目录",
-        "en_US": "Installed directory"
-    },
-    "install_slides_template.detail_error": {
-        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
-        "en_US": "Install failed. Check the template code or try again later"
-    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"
@@ -555,6 +503,10 @@
         "zh_CN": "执行完毕",
         "en_US": "Completed"
     },
+    "run_sdk_snippet.fallback_purpose": {
+        "zh_CN": "执行 Python",
+        "en_US": "Run Python"
+    },
     "run_sdk_snippet.error": {
         "zh_CN": "代码模式执行失败: {{error}}",
         "en_US": "Code Mode execution failed: {{error}}"
@@ -628,12 +580,12 @@
         "en_US": "Unknown file"
     },
     "download_from_urls.partial_success": {
-        "zh_CN": "下载完成：{{success}}个成功，{{failed}}个失败",
-        "en_US": "Download completed: {{success}} succeeded, {{failed}} failed"
+        "zh_CN": "下载完成：{{success}}个成功，{{skipped}}个跳过，{{failed}}个失败",
+        "en_US": "Download completed: {{success}} succeeded, {{skipped}} skipped, {{failed}} failed"
     },
     "download_from_urls.success_count": {
-        "zh_CN": "成功下载{{count}}个文件",
-        "en_US": "Successfully downloaded {{count}} files"
+        "zh_CN": "成功下载{{count}}个文件，跳过{{skipped}}个已有文件",
+        "en_US": "Successfully downloaded {{count}} files and skipped {{skipped}} existing files"
     },
     "download_from_urls.batch_error": {
         "zh_CN": "批量下载资源失败: {{error}}",
@@ -642,6 +594,34 @@
     "download_from_urls.failed_count": {
         "zh_CN": "下载失败：{{count}}个文件",
         "en_US": "Download failed: {{count}} files"
+    },
+    "download_from_urls.progress_downloading": {
+        "zh_CN": "正在下载 {{file}}，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Downloading {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
+    "download_from_urls.progress_retrying": {
+        "zh_CN": "正在重试 {{file}}，第 {{retry_count}} 次重试，整体进度 {{progress}}%",
+        "en_US": "Retrying {{file}}. Retry {{retry_count}}. Overall progress: {{progress}}%"
+    },
+    "download_from_urls.progress_file_completed": {
+        "zh_CN": "{{file}} 下载完成，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Downloaded {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
+    "download_from_urls.progress_file_skipped": {
+        "zh_CN": "{{file}} 已存在，已跳过，整体进度 {{progress}}%，已完成 {{completed}}/{{total}}",
+        "en_US": "Skipped existing file {{file}}. Overall progress: {{progress}}%. Completed: {{completed}}/{{total}}"
+    },
+    "download_from_urls.progress_completed": {
+        "zh_CN": "下载任务已结束，已处理 {{completed}}/{{total}} 个文件",
+        "en_US": "Download task finished. Processed {{completed}}/{{total}} files"
+    },
+    "download_from_urls.progress_failed": {
+        "zh_CN": "{{file}} 下载失败，继续处理其他文件",
+        "en_US": "Failed to download {{file}}. Continuing with the remaining files"
+    },
+    "download_from_urls.progress_cancelled": {
+        "zh_CN": "下载已取消，未完成文件的可续传数据已保留",
+        "en_US": "Download cancelled. Resumable data for incomplete files was preserved"
     },
     "get_youtube_video_info.success": {
         "zh_CN": "获取视频信息成功 - {{title}}",
@@ -739,10 +719,6 @@
         "zh_CN": "不支持的音频文件格式: {{format}}",
         "en_US": "Unsupported audio file format: {{format}}"
     },
-    "audio_understanding.file_corrupted": {
-        "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
-        "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
-    },
     "audio_understanding.project_folder_not_exists": {
         "zh_CN": "需要创建项目文件夹，正在处理...",
         "en_US": "Folder creation needed, processing..."
@@ -756,8 +732,8 @@
         "en_US": "Unknown audio file"
     },
     "audio_understanding.unknown_status_code": {
-        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}。请使用相同参数重试音频转译一次；若再次失败再向用户说明。",
-        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}. Retry the audio transcription once with the same inputs; if it fails again, explain the situation to the user."
+        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}",
+        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}"
     },
     "audio_understanding.transcription_progress_message": {
         "zh_CN": "{{percentage}}%",
@@ -1014,22 +990,6 @@
     "create_slide_project.empty_project": {
         "zh_CN": "空项目",
         "en_US": "empty project"
-    },
-    "create_self_media_project.success": {
-        "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
-        "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
-    },
-    "create_self_media_project.exception": {
-        "zh_CN": "自媒体项目创建异常，请重试",
-        "en_US": "Self-media project creation failed, please retry"
-    },
-    "create_self_media_post.success": {
-        "zh_CN": "自媒体内容 {{post_name}}（{{post_id}}）就绪",
-        "en_US": "Self-media post {{post_name}} ({{post_id}}) ready"
-    },
-    "create_self_media_post.exception": {
-        "zh_CN": "自媒体内容创建异常，请重试",
-        "en_US": "Self-media post creation failed, please retry"
     },
     "create_slide.rewrite_success_with_file": {
         "zh_CN": "重写 {{file_name}} 成功",
@@ -1304,8 +1264,8 @@
         "en_US": "Calling sub-agent: {{agent_name}}"
     },
     "call_subagent.error": {
-        "zh_CN": "调用数字员工失败: {{error}}",
-        "en_US": "Sub-agent call failed: {{error}}"
+        "zh_CN": "调用智能体失败: {{error}}",
+        "en_US": "Agent call failed: {{error}}"
     },
     "call_subagent.assign": {
         "zh_CN": "{{agent_name}}",
@@ -1328,8 +1288,8 @@
         "en_US": "{{agent_name}} was interrupted"
     },
     "call_subagent.unknown_agent": {
-        "zh_CN": "未知子智能体",
-        "en_US": "Unknown sub-agent"
+        "zh_CN": "未知智能体",
+        "en_US": "Unknown Agent"
     },
     "call_subagent.status.accepted": {
         "zh_CN": "已接收任务",
@@ -1352,8 +1312,16 @@
         "en_US": "Interrupted"
     },
     "call_subagent.detail.sub_agent": {
-        "zh_CN": "子智能体",
-        "en_US": "Sub-agent"
+        "zh_CN": "智能体",
+        "en_US": "Agent"
+    },
+    "call_subagent.detail.crew": {
+        "zh_CN": "数字员工",
+        "en_US": "Crew"
+    },
+    "call_subagent.detail.task_label": {
+        "zh_CN": "任务标签",
+        "en_US": "Task label"
     },
     "call_subagent.detail.session_id": {
         "zh_CN": "会话 ID",
@@ -1395,41 +1363,89 @@
         "zh_CN": "下一步",
         "en_US": "Next step"
     },
-    "agent_list.searching": {
-        "zh_CN": "正在查找数字员工",
-        "en_US": "Looking for available digital employees"
+    "find_agents.searching": {
+        "zh_CN": "正在查找与「{{keywords}}」相关的数字员工",
+        "en_US": "Looking for Crew related to \"{{keywords}}\""
     },
-    "agent_list.done": {
-        "zh_CN": "已找到 {{count}} 个数字员工",
-        "en_US": "Found {{count}} digital employees"
+    "find_agents.searching_all": {
+        "zh_CN": "正在查找全部可用数字员工",
+        "en_US": "Looking for all available Crew"
     },
-    "agent_list.empty": {
+    "find_agents.done": {
+        "zh_CN": "已展示 {{count}} 个数字员工",
+        "en_US": "Crew shown: {{count}}"
+    },
+    "find_agents.done_ranked": {
+        "zh_CN": "共匹配 {{total}} 个数字员工；本次展示 {{count}} 个按需求排序的结果",
+        "en_US": "Crew matches found: {{total}}. Ranked results shown: {{count}}."
+    },
+    "find_agents.done_fallback": {
+        "zh_CN": "智能排序暂时不可用，已展示 {{count}} 个按关键词排序的数字员工",
+        "en_US": "AI ranking is temporarily unavailable. Keyword-ordered Crew shown: {{count}}."
+    },
+    "find_agents.empty": {
         "zh_CN": "没有找到匹配的数字员工",
-        "en_US": "No matching digital employees were found"
+        "en_US": "No matching Crew found"
     },
-    "agent_list.error": {
-        "zh_CN": "数字员工列表获取失败，请稍后重试",
-        "en_US": "Unable to load the digital employee list. Please try again later."
+    "find_agents.error": {
+        "zh_CN": "数字员工查找失败，请稍后重试",
+        "en_US": "Unable to find Crew. Please try again later."
     },
-    "prepare_agent.preparing": {
-        "zh_CN": "正在准备数字员工",
-        "en_US": "Preparing the digital employee"
+    "find_agents.detail_title": {
+        "zh_CN": "数字员工查找结果",
+        "en_US": "Crew search results"
     },
-    "prepare_agent.ready": {
-        "zh_CN": "数字员工 {{agent}} 已就绪",
-        "en_US": "Digital employee {{agent}} is ready"
+    "find_agents.detail_keywords": {
+        "zh_CN": "搜索关键词",
+        "en_US": "Search keywords"
     },
-    "prepare_agent.done": {
-        "zh_CN": "数字员工已准备完成",
-        "en_US": "The digital employee is ready"
+    "find_agents.detail_all": {
+        "zh_CN": "全部",
+        "en_US": "All"
     },
-    "prepare_agent.error": {
-        "zh_CN": "数字员工准备失败，请稍后重试",
-        "en_US": "Unable to prepare the digital employee. Please try again later."
+    "find_agents.detail_query": {
+        "zh_CN": "完整需求",
+        "en_US": "Full request"
+    },
+    "find_agents.detail_total_matches": {
+        "zh_CN": "匹配总数",
+        "en_US": "Total matches"
+    },
+    "find_agents.detail_considered_count": {
+        "zh_CN": "纳入处理的候选数",
+        "en_US": "Candidates considered"
+    },
+    "find_agents.detail_returned_count": {
+        "zh_CN": "实际展示数量",
+        "en_US": "Results shown"
+    },
+    "find_agents.detail_agent_header": {
+        "zh_CN": "数字员工",
+        "en_US": "Crew"
+    },
+    "find_agents.detail_description_header": {
+        "zh_CN": "简介",
+        "en_US": "Description"
+    },
+    "find_agents.detail_priority_match": {
+        "zh_CN": "优先匹配",
+        "en_US": "Top match"
+    },
+    "find_agents.detail_fallback_notice": {
+        "zh_CN": "智能排序暂时不可用，本次结果按关键词相关性排列。",
+        "en_US": "AI ranking is temporarily unavailable. These results are ordered by keyword relevance."
+    },
+    "find_agents.detail_truncated": {
+        "zh_CN": "本次仅展示前 {{count}} 个结果。",
+        "en_US": "Only the first {{count}} results are shown."
+    },
+    "find_agents.detail_no_results": {
+        "zh_CN": "没有找到匹配的数字员工。",
+        "en_US": "No matching Crew found."
     },
     "wait_for_subagents.error": {
-        "zh_CN": "等待子智能体失败: {{error}}",
-        "en_US": "Failed while waiting for sub-agents: {{error}}"
+        "zh_CN": "等待智能体失败: {{error}}",
+        "en_US": "Failed while waiting for Agents: {{error}}"
     },
     "compact_chat_history.remark": {
         "zh_CN": "当前对话内容过长，「{{agent_name}}」将整理自己的记忆，可能导致先前对话中的一些细节被遗忘；太长的对话会影响「{{agent_name}}」的工作效率",
@@ -1695,89 +1711,105 @@
         "zh_CN": "路径有误，将尝试解决...",
         "en_US": "Path error, attempting to resolve..."
     },
-    "find_skills.searching.local": {
-        "zh_CN": "正在查看本地可用技能",
-        "en_US": "Listing locally available skills"
+    "find_skills.fallback": {
+        "zh_CN": "智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
+        "en_US": "AI ranking is temporarily unavailable. Skills shown using basic ordering: {{count}}."
     },
-    "find_skills.searching.local_keyword": {
-        "zh_CN": "正在查看本地技能「{{keywords}}」",
-        "en_US": "Listing local skills for \"{{keywords}}\""
+    "find_skills.fallback_partial": {
+        "zh_CN": "部分来源和智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
+        "en_US": "Some sources and AI ranking are temporarily unavailable. Skills shown using basic ordering: {{count}}."
     },
-    "find_skills.searching.online": {
-        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
-        "en_US": "Searching online skills for \"{{keywords}}\""
+    "find_skills.empty": {
+        "zh_CN": "没有找到合适的 Skill",
+        "en_US": "No suitable Skills found"
     },
-    "find_skills.searching.auto": {
-        "zh_CN": "正在检索技能「{{keywords}}」",
-        "en_US": "Searching skills for \"{{keywords}}\""
+    "find_skills.error": {
+        "zh_CN": "Skill 搜索失败，请稍后重试",
+        "en_US": "Unable to search Skills. Please try again later."
     },
-    "find_skills.searched.local": {
-        "zh_CN": "已查看本地可用技能，共找到 {{total}} 个",
-        "en_US": "Listed locally available skills, {{total}} found"
+    "find_skills.partial": {
+        "zh_CN": "部分来源暂时不可用，已展示 {{count}} 个其他结果",
+        "en_US": "Some sources are temporarily unavailable. Other results shown: {{count}}."
     },
-    "find_skills.searched.local_keyword": {
-        "zh_CN": "已查看本地技能「{{keywords}}」，共找到 {{total}} 个",
-        "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
+    "find_skills.partial_empty": {
+        "zh_CN": "部分来源暂时不可用，其他来源也没有找到合适的 Skill",
+        "en_US": "Some sources are temporarily unavailable, and no suitable Skills were found from the other sources."
     },
-    "find_skills.searched.online": {
-        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+    "find_skills.partial_detail": {
+        "zh_CN": "部分来源暂时不可用，以下结果来自其他可用来源。",
+        "en_US": "Some sources are temporarily unavailable. The results below come from other available sources."
     },
-    "find_skills.searched.auto": {
-        "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched skills for \"{{keywords}}\", found {{total}} candidates"
+    "find_skills.detail_fallback_notice": {
+        "zh_CN": "智能排序暂时不可用，本次结果按基础规则排列。",
+        "en_US": "AI ranking is temporarily unavailable. These results use basic ordering."
     },
-    "find_skills.keywords_all": {
-        "zh_CN": "全部",
-        "en_US": "all"
+    "find_skills.detail_title": {
+        "zh_CN": "Skill 搜索结果",
+        "en_US": "Skill search results"
+    },
+    "find_skills.detail_query": {
+        "zh_CN": "完整需求",
+        "en_US": "Full request"
+    },
+    "find_skills.detail_candidate_count": {
+        "zh_CN": "纳入处理的候选数",
+        "en_US": "Candidates considered"
+    },
+    "find_skills.detail_returned_count": {
+        "zh_CN": "实际展示数量",
+        "en_US": "Candidates shown"
+    },
+    "find_skills.detail_no_results": {
+        "zh_CN": "没有找到合适的 Skill。",
+        "en_US": "No suitable Skills were found."
+    },
+    "find_skills.detail_skill_header": {
+        "zh_CN": "Skill",
+        "en_US": "Skill"
+    },
+    "find_skills.detail_source_header": {
+        "zh_CN": "来源",
+        "en_US": "Source"
+    },
+    "find_skills.detail_description_header": {
+        "zh_CN": "简介",
+        "en_US": "Description"
+    },
+    "find_skills.provider.system": {
+        "zh_CN": "系统内置",
+        "en_US": "Built-in"
+    },
+    "find_skills.provider.my_library": {
+        "zh_CN": "我的 Skill 库",
+        "en_US": "My library"
+    },
+    "find_skills.provider.market": {
+        "zh_CN": "Skill 市场",
+        "en_US": "Skill marketplace"
+    },
+    "find_skills.provider.skillhub": {
+        "zh_CN": "SkillHub",
+        "en_US": "SkillHub"
+    },
+    "find_skills.provider.clawhub": {
+        "zh_CN": "ClawHub",
+        "en_US": "ClawHub"
     },
     "install_skills.installing": {
-        "zh_CN": "正在安装技能：{{ids}}",
-        "en_US": "Installing skills: {{ids}}"
-    },
-    "install_skills.installing.workspace": {
-        "zh_CN": "正在往当前项目安装技能：{{ids}}",
-        "en_US": "Installing skills to current project: {{ids}}"
-    },
-    "install_skills.installing.personal": {
-        "zh_CN": "正在往个人目录安装技能：{{ids}}",
-        "en_US": "Installing skills to personal directory: {{ids}}"
+        "zh_CN": "正在安装：{{ids}}",
+        "en_US": "Installing: {{ids}}"
     },
     "install_skills.success": {
-        "zh_CN": "成功安装 {{count}} 个技能",
+        "zh_CN": "成功安装 {{count}} 个 skill",
         "en_US": "Installed {{count}} skill(s) successfully"
     },
-    "install_skills.success.workspace": {
-        "zh_CN": "成功安装 {{count}} 个技能到当前项目",
-        "en_US": "Installed {{count}} skill(s) to current project"
-    },
-    "install_skills.success.personal": {
-        "zh_CN": "成功安装 {{count}} 个技能到个人目录",
-        "en_US": "Installed {{count}} skill(s) to personal directory"
-    },
     "install_skills.upgraded": {
-        "zh_CN": "成功升级 {{count}} 个技能",
+        "zh_CN": "成功升级 {{count}} 个 skill",
         "en_US": "Upgraded {{count}} skill(s) successfully"
     },
-    "install_skills.upgraded.workspace": {
-        "zh_CN": "成功升级 {{count}} 个技能（当前项目）",
-        "en_US": "Upgraded {{count}} skill(s) in current project"
-    },
-    "install_skills.upgraded.personal": {
-        "zh_CN": "成功升级 {{count}} 个技能（个人目录）",
-        "en_US": "Upgraded {{count}} skill(s) in personal directory"
-    },
     "install_skills.mixed_success": {
-        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能",
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个 skill",
         "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s)"
-    },
-    "install_skills.mixed_success.workspace": {
-        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（当前项目）",
-        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in current project"
-    },
-    "install_skills.mixed_success.personal": {
-        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（个人目录）",
-        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in personal directory"
     },
     "install_skills.failed": {
         "zh_CN": "安装失败（共 {{count}} 个）",
@@ -1787,21 +1819,129 @@
         "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败",
         "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed"
     },
-    "install_skills.partial.workspace": {
-        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（当前项目）",
-        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (current project)"
+    "get_sandbox_info.before": {
+        "zh_CN": "正在查看当前沙箱信息",
+        "en_US": "Inspecting the current sandbox"
     },
-    "install_skills.partial.personal": {
-        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（个人目录）",
-        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (personal directory)"
+    "get_sandbox_info.success": {
+        "zh_CN": "已获取当前沙箱信息",
+        "en_US": "Current sandbox information retrieved"
     },
-    "upgrade_sandbox.success": {
-        "zh_CN": "沙箱升级请求已提交",
-        "en_US": "Sandbox upgrade initiated"
+    "get_sandbox_info.error": {
+        "zh_CN": "当前沙箱信息获取失败",
+        "en_US": "Failed to inspect the current sandbox"
+    },
+    "get_sandbox_info.detail_title": {
+        "zh_CN": "当前沙箱信息",
+        "en_US": "Current sandbox information"
+    },
+    "get_sandbox_info.detail_failed_title": {
+        "zh_CN": "沙箱信息获取失败",
+        "en_US": "Sandbox inspection failed"
+    },
+    "upgrade_sandbox.before": {
+        "zh_CN": "正在检查并安排当前沙箱升级",
+        "en_US": "Checking and scheduling an upgrade for the current sandbox"
+    },
+    "upgrade_sandbox.scheduled": {
+        "zh_CN": "当前沙箱升级已安排，将在 {{delay_seconds}} 秒后重启",
+        "en_US": "The current sandbox upgrade is scheduled and will restart in {{delay_seconds}} seconds"
+    },
+    "upgrade_sandbox.already_current": {
+        "zh_CN": "当前沙箱已是最新版本，无需重启",
+        "en_US": "The current sandbox is already up to date; no restart is needed"
     },
     "upgrade_sandbox.error": {
         "zh_CN": "沙箱升级失败",
         "en_US": "Sandbox upgrade failed"
+    },
+    "upgrade_sandbox.detail_title": {
+        "zh_CN": "沙箱升级结果",
+        "en_US": "Sandbox upgrade result"
+    },
+    "upgrade_sandbox.detail_failed_title": {
+        "zh_CN": "沙箱升级失败",
+        "en_US": "Sandbox upgrade failed"
+    },
+    "restart_sandbox.before": {
+        "zh_CN": "正在安排当前沙箱重启",
+        "en_US": "Scheduling a restart for the current sandbox"
+    },
+    "restart_sandbox.scheduled": {
+        "zh_CN": "当前沙箱重启已安排，将在 {{delay_seconds}} 秒后执行",
+        "en_US": "The current sandbox restart is scheduled and will begin in {{delay_seconds}} seconds"
+    },
+    "restart_sandbox.error": {
+        "zh_CN": "沙箱重启失败",
+        "en_US": "Sandbox restart failed"
+    },
+    "restart_sandbox.detail_title": {
+        "zh_CN": "沙箱重启结果",
+        "en_US": "Sandbox restart result"
+    },
+    "restart_sandbox.detail_failed_title": {
+        "zh_CN": "沙箱重启失败",
+        "en_US": "Sandbox restart failed"
+    },
+    "sandbox.detail.sandbox_id": {
+        "zh_CN": "沙箱 ID",
+        "en_US": "Sandbox ID"
+    },
+    "sandbox.detail.status": {
+        "zh_CN": "运行状态",
+        "en_US": "Status"
+    },
+    "sandbox.detail.current_version": {
+        "zh_CN": "当前 Agent 镜像版本",
+        "en_US": "Current Agent image version"
+    },
+    "sandbox.detail.latest_version": {
+        "zh_CN": "最新 Agent 镜像版本",
+        "en_US": "Latest Agent image version"
+    },
+    "sandbox.detail.needs_update": {
+        "zh_CN": "是否需要升级",
+        "en_US": "Update needed"
+    },
+    "sandbox.detail.operation": {
+        "zh_CN": "执行结果",
+        "en_US": "Operation"
+    },
+    "sandbox.detail.delay_seconds": {
+        "zh_CN": "预计延迟秒数",
+        "en_US": "Scheduled delay in seconds"
+    },
+    "sandbox.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "sandbox.detail.unknown": {
+        "zh_CN": "未知",
+        "en_US": "Unknown"
+    },
+    "sandbox.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "sandbox.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "sandbox.detail.service_error": {
+        "zh_CN": "沙箱服务暂时不可用，请稍后重试",
+        "en_US": "The sandbox service is temporarily unavailable. Please try again later."
+    },
+    "sandbox.operation.upgrade_scheduled": {
+        "zh_CN": "升级已安排",
+        "en_US": "Upgrade scheduled"
+    },
+    "sandbox.operation.already_current": {
+        "zh_CN": "已是最新版本，未重启",
+        "en_US": "Already current; no restart"
+    },
+    "sandbox.operation.restart_scheduled": {
+        "zh_CN": "重启已安排",
+        "en_US": "Restart scheduled"
     },
     "manage_cron.status": {
         "zh_CN": "查看定时任务状态",
@@ -2662,6 +2802,794 @@
     "oauth2.api_docs.remove_failed": {
         "zh_CN": "移除接口文档「{{operation_id}}」失败",
         "en_US": "Failed to remove API doc \"{{operation_id}}\""
+    },
+    "call_simple_tool.calling": {
+        "zh_CN": "正在调用工具流",
+        "en_US": "Calling tool flow"
+    },
+    "call_simple_tool.called": {
+        "zh_CN": "工具流调用完成",
+        "en_US": "Tool flow call completed"
+    },
+    "call_simple_tool.failed": {
+        "zh_CN": "工具流调用失败",
+        "en_US": "Tool flow call failed"
+    },
+    "call_simple_agent.calling": {
+        "zh_CN": "正在调用助理",
+        "en_US": "Consulting agent"
+    },
+    "call_simple_agent.called": {
+        "zh_CN": "已收到助理回复",
+        "en_US": "Agent reply received"
+    },
+    "call_simple_agent.failed": {
+        "zh_CN": "助理调用失败",
+        "en_US": "Agent consultation failed"
+    },
+    "share.create.before": {
+        "zh_CN": "正在为{{target}}创建或更新分享：{{subject}}",
+        "en_US": "Creating or updating a share for {{target}}: {{subject}}"
+    },
+    "share.inspect.before": {
+        "zh_CN": "正在检查{{file_name}}需要的分享文件",
+        "en_US": "Inspecting files required by {{file_name}}"
+    },
+    "share.inspect.after_success": {
+        "zh_CN": "分享文件检查完成",
+        "en_US": "Share file inspection completed"
+    },
+    "share.inspect.after_failed": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "Share file inspection failed"
+    },
+    "share.inspect.detail.inspect_success_title": {
+        "zh_CN": "分享文件检查结果",
+        "en_US": "Share File Inspection"
+    },
+    "share.inspect.detail.inspect_failed_title": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "Share File Inspection Failed"
+    },
+    "share.inspect.detail.entry_file": {
+        "zh_CN": "首页文件",
+        "en_US": "Entry File"
+    },
+    "share.inspect.detail.file_count": {
+        "zh_CN": "文件数量",
+        "en_US": "File Count"
+    },
+    "share.inspect.detail.total_bytes": {
+        "zh_CN": "总大小（字节）",
+        "en_US": "Total Bytes"
+    },
+    "share.inspect.detail.scan_complete": {
+        "zh_CN": "扫描完整",
+        "en_US": "Scan Complete"
+    },
+    "share.inspect.detail.dependency_paths": {
+        "zh_CN": "本地依赖",
+        "en_US": "Local Dependencies"
+    },
+    "share.inspect.detail.missing_paths": {
+        "zh_CN": "缺失引用",
+        "en_US": "Missing References"
+    },
+    "share.inspect.detail.unsynced_paths": {
+        "zh_CN": "未同步文件",
+        "en_US": "Unsynchronized Files"
+    },
+    "share.inspect.detail.dynamic_references": {
+        "zh_CN": "动态或不确定引用",
+        "en_US": "Dynamic or Uncertain References"
+    },
+    "share.inspect.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "share.inspect.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "share.inspect.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "share.inspect.error.unknown": {
+        "zh_CN": "分享文件检查失败",
+        "en_US": "The share file inspection failed"
+    },
+    "share.create.after_success": {
+        "zh_CN": "{{target}}分享已{{operation}}",
+        "en_US": "The {{target}} share was {{operation}}"
+    },
+    "share.create.after_failed": {
+        "zh_CN": "{{target}}分享失败：{{error}}",
+        "en_US": "Failed to share {{target}}: {{error}}"
+    },
+    "share.list.before": {
+        "zh_CN": "正在查看{{target}}分享",
+        "en_US": "Listing {{target}} shares"
+    },
+    "share.list.after_success": {
+        "zh_CN": "找到 {{count}} 条{{target}}分享",
+        "en_US": "Found {{count}} {{target}} share(s)"
+    },
+    "share.list.after_empty": {
+        "zh_CN": "没有找到符合条件的{{target}}分享",
+        "en_US": "No matching {{target}} shares were found"
+    },
+    "share.list.after_failed": {
+        "zh_CN": "查看{{target}}分享失败",
+        "en_US": "Failed to list {{target}} shares"
+    },
+    "share.list.detail_title": {
+        "zh_CN": "分享查询结果",
+        "en_US": "Share Query Results"
+    },
+    "share.list.detail_failed_title": {
+        "zh_CN": "分享查询失败",
+        "en_US": "Share Query Failed"
+    },
+    "share.list.target": {
+        "zh_CN": "分享目标",
+        "en_US": "Target"
+    },
+    "share.list.total": {
+        "zh_CN": "匹配数量",
+        "en_US": "Matches"
+    },
+    "share.list.resource_id": {
+        "zh_CN": "资源 ID",
+        "en_US": "Resource ID"
+    },
+    "share.list.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "share.list.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "share.list.url": {
+        "zh_CN": "分享链接",
+        "en_US": "Share URL"
+    },
+    "share.list.empty": {
+        "zh_CN": "没有符合条件的分享。",
+        "en_US": "No shares matched the query."
+    },
+    "share.list.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "share.list.no_detail": {
+        "zh_CN": "没有可展示的分享详情。",
+        "en_US": "No share details are available."
+    },
+    "share.get.before": {
+        "zh_CN": "正在读取分享「{{share_ref}}」的完整配置",
+        "en_US": "Loading the full configuration for share \"{{share_ref}}\""
+    },
+    "share.get.after_success": {
+        "zh_CN": "已读取分享「{{share_ref}}」的完整配置",
+        "en_US": "Loaded the full configuration for share \"{{share_ref}}\""
+    },
+    "share.get.after_failed": {
+        "zh_CN": "读取分享「{{share_ref}}」失败：{{error}}",
+        "en_US": "Failed to load share \"{{share_ref}}\": {{error}}"
+    },
+    "share.update.before": {
+        "zh_CN": "正在更新{{target}}分享「{{share_ref}}」",
+        "en_US": "Updating {{target}} share \"{{share_ref}}\""
+    },
+    "share.update.after_success": {
+        "zh_CN": "{{target}}分享「{{share_ref}}」已更新",
+        "en_US": "Updated {{target}} share \"{{share_ref}}\""
+    },
+    "share.update.after_failed": {
+        "zh_CN": "更新{{target}}分享「{{share_ref}}」失败：{{error}}",
+        "en_US": "Failed to update {{target}} share \"{{share_ref}}\": {{error}}"
+    },
+    "share.list.status.active": {
+        "zh_CN": "分享中",
+        "en_US": "Active"
+    },
+    "share.list.status.expired": {
+        "zh_CN": "已过期",
+        "en_US": "Expired"
+    },
+    "share.list.status.deleted": {
+        "zh_CN": "已删除",
+        "en_US": "Deleted"
+    },
+    "share.list.status.disabled": {
+        "zh_CN": "已停用",
+        "en_US": "Disabled"
+    },
+    "share.list.status.unknown": {
+        "zh_CN": "未知",
+        "en_US": "Unknown"
+    },
+    "share.delete.before": {
+        "zh_CN": "正在删除分享「{{share_ref}}」",
+        "en_US": "Deleting share \"{{share_ref}}\""
+    },
+    "share.delete.after_success": {
+        "zh_CN": "分享「{{share_ref}}」现在已不可访问，源内容未删除",
+        "en_US": "Share \"{{share_ref}}\" is now unavailable; the source content was not deleted"
+    },
+    "share.delete.after_failed": {
+        "zh_CN": "删除分享「{{share_ref}}」失败：{{error}}",
+        "en_US": "Failed to delete share \"{{share_ref}}\": {{error}}"
+    },
+    "share.target.files": {
+        "zh_CN": "文件",
+        "en_US": "file"
+    },
+    "share.target.project": {
+        "zh_CN": "项目",
+        "en_US": "project"
+    },
+    "share.target.topic": {
+        "zh_CN": "话题",
+        "en_US": "topic"
+    },
+    "share.target.share": {
+        "zh_CN": "分享",
+        "en_US": "share"
+    },
+    "share.access.password": {
+        "zh_CN": "密码访问",
+        "en_US": "password-protected"
+    },
+    "share.access.team": {
+        "zh_CN": "团队内访问",
+        "en_US": "team-only"
+    },
+    "share.access.public": {
+        "zh_CN": "公开访问",
+        "en_US": "public"
+    },
+    "share.access.unknown": {
+        "zh_CN": "未知",
+        "en_US": "unknown"
+    },
+    "share.operation.created": {
+        "zh_CN": "创建",
+        "en_US": "created"
+    },
+    "share.operation.updated": {
+        "zh_CN": "更新",
+        "en_US": "updated"
+    },
+    "share.operation.reused": {
+        "zh_CN": "复用已有分享",
+        "en_US": "reused"
+    },
+    "share.operation.create": {
+        "zh_CN": "处理",
+        "en_US": "processed"
+    },
+    "share.operation.unknown": {
+        "zh_CN": "处理",
+        "en_US": "processed"
+    },
+    "share.detail.create_success_title": {
+        "zh_CN": "分享已准备好",
+        "en_US": "Share Ready"
+    },
+    "share.detail.create_failed_title": {
+        "zh_CN": "分享创建失败",
+        "en_US": "Share Creation Failed"
+    },
+    "share.detail.delete_success_title": {
+        "zh_CN": "分享已不可访问",
+        "en_US": "Share Unavailable"
+    },
+    "share.detail.delete_failed_title": {
+        "zh_CN": "分享删除失败",
+        "en_US": "Share Deletion Failed"
+    },
+    "share.detail.get_success_title": {
+        "zh_CN": "分享详情",
+        "en_US": "Share Details"
+    },
+    "share.detail.get_failed_title": {
+        "zh_CN": "分享详情读取失败",
+        "en_US": "Share Details Unavailable"
+    },
+    "share.detail.update_success_title": {
+        "zh_CN": "分享已更新",
+        "en_US": "Share Updated"
+    },
+    "share.detail.update_failed_title": {
+        "zh_CN": "分享更新失败",
+        "en_US": "Share Update Failed"
+    },
+    "share.detail.name": {
+        "zh_CN": "分享名称",
+        "en_US": "Share Name"
+    },
+    "share.detail.entry_file": {
+        "zh_CN": "首页文件 ID",
+        "en_US": "Entry File ID"
+    },
+    "share.detail.file_count": {
+        "zh_CN": "分享文件数",
+        "en_US": "Shared Files"
+    },
+    "share.detail.allow_copy": {
+        "zh_CN": "允许复制",
+        "en_US": "Allow Copy"
+    },
+    "share.detail.allow_download": {
+        "zh_CN": "允许下载或导出",
+        "en_US": "Allow Download or Export"
+    },
+    "share.detail.show_file_list": {
+        "zh_CN": "展示文件列表",
+        "en_US": "Show File List"
+    },
+    "share.detail.show_original_info": {
+        "zh_CN": "展示原创信息",
+        "en_US": "Show Original Information"
+    },
+    "share.detail.hide_watermark": {
+        "zh_CN": "隐藏右下角水印",
+        "en_US": "Hide Bottom-right Watermark"
+    },
+    "share.detail.immersive": {
+        "zh_CN": "沉浸模式",
+        "en_US": "Immersive Mode"
+    },
+    "share.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "share.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "share.detail.target": {
+        "zh_CN": "分享目标",
+        "en_US": "Target"
+    },
+    "share.detail.resource_id": {
+        "zh_CN": "资源 ID",
+        "en_US": "Resource ID"
+    },
+    "share.detail.operation": {
+        "zh_CN": "操作",
+        "en_US": "Operation"
+    },
+    "share.detail.access": {
+        "zh_CN": "访问方式",
+        "en_US": "Access"
+    },
+    "share.detail.validity": {
+        "zh_CN": "有效期",
+        "en_US": "Validity"
+    },
+    "share.detail.url": {
+        "zh_CN": "分享链接",
+        "en_US": "Share URL"
+    },
+    "share.detail.password": {
+        "zh_CN": "访问密码",
+        "en_US": "Password"
+    },
+    "share.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "share.detail.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "share.detail.unavailable": {
+        "zh_CN": "不可访问",
+        "en_US": "Unavailable"
+    },
+    "share.detail.source_unchanged": {
+        "zh_CN": "源话题、文件或项目未被删除",
+        "en_US": "The source topic, files, or project were not deleted"
+    },
+    "share.detail.permanent": {
+        "zh_CN": "永久有效",
+        "en_US": "Permanent"
+    },
+    "share.detail.days": {
+        "zh_CN": "{{count}} 天",
+        "en_US": "{{count}} day(s)"
+    },
+    "share.detail.candidates": {
+        "zh_CN": "可选择的相似分享",
+        "en_US": "Similar Shares to Choose From"
+    },
+    "share.detail.candidate_id": {
+        "zh_CN": "资源 ID",
+        "en_US": "Resource ID"
+    },
+    "share.detail.candidate_name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "share.detail.candidate_access": {
+        "zh_CN": "访问方式",
+        "en_US": "Access"
+    },
+    "share.detail.candidate_expiry": {
+        "zh_CN": "有效期",
+        "en_US": "Expiry"
+    },
+    "share.error.confirmation_required": {
+        "zh_CN": "需要用户明确确认删除指定分享后才能执行",
+        "en_US": "Explicit user confirmation is required before deleting the specified share"
+    },
+    "share.error.update_confirmation_required": {
+        "zh_CN": "已有分享不会被静默修改；请先确认是否要更新，并明确选择资源 ID",
+        "en_US": "An existing share was found. Confirm the update and provide its resource_id before modifying it."
+    },
+    "share.error.existing_share_not_found": {
+        "zh_CN": "没有找到可更新的活动分享",
+        "en_US": "No active share was found to update."
+    },
+    "share.error.unsupported_access_type": {
+        "zh_CN": "已有分享的访问方式暂不支持安全更新",
+        "en_US": "The existing share uses an access type that cannot be updated safely."
+    },
+    "share.error.resource_id_required_for_update": {
+        "zh_CN": "更新分享前必须选择具体的资源 ID",
+        "en_US": "Choose a specific resource_id before updating a share."
+    },
+    "share.error.no_update_fields": {
+        "zh_CN": "没有提供需要修改的分享设置",
+        "en_US": "No share settings were provided to update."
+    },
+    "share.error.password_update_conflict": {
+        "zh_CN": "不能同时指定新密码和随机生成密码",
+        "en_US": "A specific password and password regeneration cannot be requested together."
+    },
+    "share.error.expiration_update_conflict": {
+        "zh_CN": "不能同时设置有效天数和永久有效",
+        "en_US": "Expiration days and permanent validity cannot be requested together."
+    },
+    "share.error.existing_password_unavailable": {
+        "zh_CN": "无法安全读取原密码，请指定新密码或选择随机生成",
+        "en_US": "The existing password is unavailable; provide a new password or request regeneration."
+    },
+    "share.error.wrong_share_type": {
+        "zh_CN": "所选分享类型与更新工具不匹配",
+        "en_US": "The selected share type does not match this update tool."
+    },
+    "share.error.unsupported_share_type": {
+        "zh_CN": "当前分享类型不支持通过 Agent 查看或修改",
+        "en_US": "This share type cannot be inspected or updated through the Agent tools."
+    },
+    "share.error.file_paths_require_entry": {
+        "zh_CN": "替换分享文件集合时必须同时指定首页文件",
+        "en_US": "Replacing the shared file set also requires an entry file."
+    },
+    "share.error.missing_share_project_id": {
+        "zh_CN": "分享记录缺少项目 ID，无法安全修改文件或首页",
+        "en_US": "The share has no project ID, so its files or entry page cannot be updated safely."
+    },
+    "share.error.share_name_required": {
+        "zh_CN": "分享名称不能为空",
+        "en_US": "The share name cannot be empty."
+    },
+    "share.error.exact_lookup_active_only": {
+        "zh_CN": "按文件精确查找只支持活动分享；查看历史记录时请不要传文件路径",
+        "en_US": "Exact file matching only supports active shares; omit file_paths to browse history."
+    },
+    "share.error.current_topic_active_only": {
+        "zh_CN": "当前话题精确查询只支持活动分享且不能带关键词；查看历史记录时请关闭 current_topic_only",
+        "en_US": "Current-topic lookup only supports the active share without a keyword; disable current_topic_only to browse history."
+    },
+    "share.error.missing_project_context": {
+        "zh_CN": "当前上下文缺少项目 ID",
+        "en_US": "The current context has no project ID"
+    },
+    "share.error.missing_topic_context": {
+        "zh_CN": "当前上下文缺少话题 ID",
+        "en_US": "The current context has no topic ID"
+    },
+    "share.error.invalid_project_id": {
+        "zh_CN": "当前项目 ID 格式不正确",
+        "en_US": "The current project ID is invalid"
+    },
+    "share.error.invalid_topic_id": {
+        "zh_CN": "当前话题 ID 格式不正确",
+        "en_US": "The current topic ID is invalid"
+    },
+    "share.error.file_paths_required": {
+        "zh_CN": "至少需要指定一个分享文件",
+        "en_US": "At least one file is required"
+    },
+    "share.error.file_path_required": {
+        "zh_CN": "文件路径不能为空",
+        "en_US": "A file path is required"
+    },
+    "share.error.file_not_found": {
+        "zh_CN": "没有找到指定的工作区文件",
+        "en_US": "The workspace file was not found"
+    },
+    "share.error.not_a_file": {
+        "zh_CN": "指定路径不是文件",
+        "en_US": "The selected path is not a file"
+    },
+    "share.error.file_id_missing": {
+        "zh_CN": "文件尚未同步到 MagicFS，暂时无法分享",
+        "en_US": "The file is not yet synchronized with MagicFS"
+    },
+    "share.error.invalid_file_id": {
+        "zh_CN": "文件 ID 格式不正确",
+        "en_US": "The file ID is invalid"
+    },
+    "share.error.entry_file_not_shared": {
+        "zh_CN": "首页文件必须包含在本次分享文件中",
+        "en_US": "The entry file must be included in the shared files"
+    },
+    "share.error.path_outside_workspace": {
+        "zh_CN": "分享路径必须位于当前工作区内",
+        "en_US": "Share paths must stay inside the current workspace"
+    },
+    "share.error.path_symlink_not_allowed": {
+        "zh_CN": "分享路径不能经过符号链接，请使用目标文件在工作区中的真实路径",
+        "en_US": "Share paths cannot use symbolic links; use the target file's workspace path"
+    },
+    "share.error.file_not_in_project": {
+        "zh_CN": "项目首页文件必须属于当前项目",
+        "en_US": "The project entry file must belong to the current project"
+    },
+    "share.error.file_project_unverified": {
+        "zh_CN": "无法确认首页文件属于当前项目，请使用已同步到当前项目的 MagicFS 文件",
+        "en_US": "The entry file could not be verified as part of the current project"
+    },
+    "share.error.team_settings_without_team_access": {
+        "zh_CN": "只有团队内分享可以设置成员或部门范围",
+        "en_US": "Team recipients can only be used with team access"
+    },
+    "share.error.password_without_password_access": {
+        "zh_CN": "只有密码分享可以设置密码",
+        "en_US": "A password can only be used with password access"
+    },
+    "share.error.team_targets_required": {
+        "zh_CN": "指定团队成员时，至少需要一个成员或部门 ID",
+        "en_US": "Designated team access requires at least one user or department ID"
+    },
+    "share.error.team_targets_not_allowed": {
+        "zh_CN": "指定成员或部门时需要将团队范围设为 designated",
+        "en_US": "User or department IDs require team_scope=designated"
+    },
+    "share.error.team_target_invalid": {
+        "zh_CN": "团队成员或部门 ID 格式不正确",
+        "en_US": "A team user or department ID is invalid"
+    },
+    "share.error.resource_id_not_found": {
+        "zh_CN": "指定的资源 ID 不属于当前可更新的相似分享",
+        "en_US": "The resource ID is not an active similar share"
+    },
+    "share.error.ambiguous_share": {
+        "zh_CN": "找到多个相似分享，需要先选择要更新的资源 ID",
+        "en_US": "Multiple similar shares were found; choose a resource ID first"
+    },
+    "share.error.invalid_generated_resource_id": {
+        "zh_CN": "分享服务没有生成有效的资源 ID",
+        "en_US": "The share service did not generate a valid resource ID"
+    },
+    "share.error.invalid_result_resource_id": {
+        "zh_CN": "分享服务返回的资源 ID 无效",
+        "en_US": "The share service returned an invalid resource ID"
+    },
+    "share.error.invalid_resource_id": {
+        "zh_CN": "资源 ID 格式不正确",
+        "en_US": "The resource ID is invalid"
+    },
+    "share.error.share_url_missing": {
+        "zh_CN": "分享已保存，但服务没有返回分享链接",
+        "en_US": "The share was saved, but no share URL was returned"
+    },
+    "share.error.invalid_share_ref": {
+        "zh_CN": "分享引用必须是资源 ID 或有效的分享链接",
+        "en_US": "The share reference must be a resource ID or valid share URL"
+    },
+    "share.error.authorization_failed": {
+        "zh_CN": "分享授权已失效，请刷新后重试",
+        "en_US": "Share authorization failed; refresh and retry"
+    },
+    "share.error.service_not_configured": {
+        "zh_CN": "当前沙箱没有配置分享服务",
+        "en_US": "The share service is not configured for this sandbox"
+    },
+    "share.error.service_unavailable": {
+        "zh_CN": "分享服务暂时不可用",
+        "en_US": "The share service is temporarily unavailable"
+    },
+    "share.error.service_error": {
+        "zh_CN": "分享服务请求失败",
+        "en_US": "The share service request failed"
+    },
+    "share.error.invalid_request": {
+        "zh_CN": "分享请求参数不正确",
+        "en_US": "The share request is invalid"
+    },
+    "share.error.vip_required_for_password": {
+        "zh_CN": "文件和项目使用密码分享需要 VIP，不会自动改为公开分享",
+        "en_US": "Password-protected file and project shares require VIP and will not fall back to public access"
+    },
+    "share.error.vip_required_for_watermark": {
+        "zh_CN": "隐藏右下角「由超级麦吉创造」水印需要 VIP",
+        "en_US": "VIP is required to hide the bottom-right Created by Super Magic watermark"
+    },
+    "share.error.vip_required_for_original_info": {
+        "zh_CN": "关闭原创信息需要 VIP",
+        "en_US": "VIP is required to disable original author information"
+    },
+    "share.error.permission_denied": {
+        "zh_CN": "当前用户没有管理此分享的权限",
+        "en_US": "The current user cannot manage this share"
+    },
+    "share.error.resource_not_found": {
+        "zh_CN": "分享资源不存在或不可分享",
+        "en_US": "The share resource was not found or is not shareable"
+    },
+    "share.error.service_rejected": {
+        "zh_CN": "分享服务拒绝了本次请求",
+        "en_US": "The share service rejected the request"
+    },
+    "share.error.unknown": {
+        "zh_CN": "分享操作失败",
+        "en_US": "The share operation failed"
+    },
+    "convert_pptx_to_slide_template.before": {
+        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
+        "en_US": "Converting {{file_name}} to a slide template"
+    },
+    "convert_pptx_to_slide_template.after_success": {
+        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
+        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
+    },
+    "convert_pptx_to_slide_template.error": {
+        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
+        "en_US": "PPTX to slide template conversion failed: {{error}}"
+    },
+    "convert_pptx_to_slide_template.detail_title": {
+        "zh_CN": "PPTX 转幻灯片模板",
+        "en_US": "PPTX to Slide Template"
+    },
+    "convert_pptx_to_slide_template.detail_error_title": {
+        "zh_CN": "PPTX 转幻灯片模板失败",
+        "en_US": "PPTX to Slide Template Failed"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
+    "audio_understanding.file_corrupted": {
+        "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
+        "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
+    },
+    "create_self_media_project.success": {
+        "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
+        "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
+    },
+    "create_self_media_project.exception": {
+        "zh_CN": "自媒体项目创建异常，请重试",
+        "en_US": "Self-media project creation failed, please retry"
+    },
+    "create_self_media_post.success": {
+        "zh_CN": "自媒体内容 {{post_name}}（{{post_id}}）就绪",
+        "en_US": "Self-media post {{post_name}} ({{post_id}}) ready"
+    },
+    "create_self_media_post.exception": {
+        "zh_CN": "自媒体内容创建异常，请重试",
+        "en_US": "Self-media post creation failed, please retry"
+    },
+    "find_skills.searching.local": {
+        "zh_CN": "正在查看本地可用技能",
+        "en_US": "Listing locally available skills"
+    },
+    "find_skills.searching.local_keyword": {
+        "zh_CN": "正在查看本地技能「{{keywords}}」",
+        "en_US": "Listing local skills for \"{{keywords}}\""
+    },
+    "find_skills.searching.online": {
+        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
+        "en_US": "Searching online skills for \"{{keywords}}\""
+    },
+    "find_skills.searching.auto": {
+        "zh_CN": "正在检索技能「{{keywords}}」",
+        "en_US": "Searching skills for \"{{keywords}}\""
+    },
+    "find_skills.searched.local": {
+        "zh_CN": "已查看本地可用技能，共找到 {{total}} 个",
+        "en_US": "Listed locally available skills, {{total}} found"
+    },
+    "find_skills.searched.local_keyword": {
+        "zh_CN": "已查看本地技能「{{keywords}}」，共找到 {{total}} 个",
+        "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
+    },
+    "find_skills.searched.online": {
+        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+    },
+    "find_skills.searched.auto": {
+        "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched skills for \"{{keywords}}\", found {{total}} candidates"
+    },
+    "find_skills.keywords_all": {
+        "zh_CN": "全部",
+        "en_US": "all"
+    },
+    "install_skills.installing.workspace": {
+        "zh_CN": "正在往当前项目安装技能：{{ids}}",
+        "en_US": "Installing skills to current project: {{ids}}"
+    },
+    "install_skills.installing.personal": {
+        "zh_CN": "正在往个人目录安装技能：{{ids}}",
+        "en_US": "Installing skills to personal directory: {{ids}}"
+    },
+    "install_skills.success.workspace": {
+        "zh_CN": "成功安装 {{count}} 个技能到当前项目",
+        "en_US": "Installed {{count}} skill(s) to current project"
+    },
+    "install_skills.success.personal": {
+        "zh_CN": "成功安装 {{count}} 个技能到个人目录",
+        "en_US": "Installed {{count}} skill(s) to personal directory"
+    },
+    "install_skills.upgraded.workspace": {
+        "zh_CN": "成功升级 {{count}} 个技能（当前项目）",
+        "en_US": "Upgraded {{count}} skill(s) in current project"
+    },
+    "install_skills.upgraded.personal": {
+        "zh_CN": "成功升级 {{count}} 个技能（个人目录）",
+        "en_US": "Upgraded {{count}} skill(s) in personal directory"
+    },
+    "install_skills.mixed_success.workspace": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（当前项目）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in current project"
+    },
+    "install_skills.mixed_success.personal": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（个人目录）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in personal directory"
+    },
+    "install_skills.partial.workspace": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（当前项目）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (current project)"
+    },
+    "install_skills.partial.personal": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（个人目录）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (personal directory)"
     },
     "scheduled_task.operation.running": {
         "zh_CN": "正在处理定时任务",

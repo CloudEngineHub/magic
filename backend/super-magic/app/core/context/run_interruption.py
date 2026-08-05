@@ -7,13 +7,56 @@ AgentContext 在每次新 run 开始前（reset_run_state）重置它们。
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TypeVar
 
 from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
+
+
+async def await_with_interruption(
+    awaitable: Awaitable[T],
+    interruption_event: asyncio.Event | None,
+) -> T:
+    """等待异步工作；收到当前 run 的中断信号时取消工作。"""
+
+    work_task = asyncio.ensure_future(awaitable)
+    if interruption_event is None:
+        return await work_task
+
+    if interruption_event.is_set():
+        work_task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await work_task
+        raise asyncio.CancelledError("Run interrupted")
+
+    interrupt_task = asyncio.create_task(interruption_event.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {work_task, interrupt_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if interrupt_task in done and interruption_event.is_set():
+            work_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await work_task
+            raise asyncio.CancelledError("Run interrupted")
+        return await work_task
+    except BaseException:
+        if not work_task.done():
+            work_task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await work_task
+        raise
+    finally:
+        interrupt_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await interrupt_task
 
 
 @dataclass

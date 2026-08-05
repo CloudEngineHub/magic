@@ -15,20 +15,18 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2CheckAuthorizationParams(BaseToolParams):
-    """检查 OAuth2 授权状态的参数。"""
+    """Parameters for checking OAuth2 authorization."""
 
-    app_name: str = Field(..., description="""<!--zh: 要检查授权状态的 OAuth2 app_name。-->
-OAuth2 app_name to check.""")
+    app_name: str = Field(..., description="Registered OAuth2 app name to check.")
     state: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选原始 state，仅调试时使用；通常不要传。-->
-Optional raw state for debugging. Usually leave empty so the latest pending session is used.""")
+        description="Raw OAuth2 state for debugging. Omit to use the latest pending session.",
+    )
 
 
 @tool(name="oauth2_check_authorization")
 class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
-    """<!--zh: 检查 OAuth2 授权是否完成，如果已完成则换取 token 并保存凭证。-->
-    Check whether OAuth2 authorization is complete. If complete, exchange the code for tokens and store them."""
+    """Check OAuth2 authorization and store tokens when it completes."""
 
     name = "oauth2_check_authorization"
 

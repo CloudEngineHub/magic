@@ -47,6 +47,10 @@ Router::addGroup(
 Router::addGroup(
     '/api/v1/open-api/sandbox',
     static function () {
+        // 获取当前沙箱状态及镜像版本信息
+        Router::get('/info', [InternalSandboxApi::class, 'getSandboxInfo']);
+        // 无条件重启当前沙箱
+        Router::put('/restart', [InternalSandboxApi::class, 'restartSandbox']);
         // 沙箱自我升级
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
@@ -85,6 +89,10 @@ Router::addGroup(
             Router::post('/create', [ShareApi::class, 'createShare']);
             // 查找相似分享（避免重复创建）
             Router::post('/find-similar', [ShareApi::class, 'findSimilarShare']);
+            // 获取当前用户的分享列表
+            Router::post('/list', [ShareApi::class, 'getShareListByStatusFilter']);
+            // 按资源 ID 获取当前用户的有效分享
+            Router::get('/{id}', [ShareApi::class, 'getShareByResourceId']);
             // 取消分享
             Router::post('/{id}/cancel', [ShareApi::class, 'cancelShareByResourceId']);
         });

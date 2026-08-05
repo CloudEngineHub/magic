@@ -4,6 +4,8 @@ Magic Service SDK
 A complete SDK for interacting with Magic Service APIs.
 """
 
+# ruff: noqa: I001 - this aggregate module keeps API-surface groups readable
+
 from .magic_service import MagicService
 from .factory import (
     create_magic_service_sdk,
@@ -34,9 +36,11 @@ from .parameter.message_schedule_parameter import (
 )
 from .parameter.oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .parameter.share_resource_id_parameter import ShareResourceIdParameter
-from .parameter.create_share_parameter import CreateShareParameter, TargetId
+from .parameter.create_share_parameter import CreateShareParameter, ShareExtraParameter, TargetId
 from .parameter.find_similar_share_parameter import FindSimilarShareParameter
 from .parameter.cancel_share_parameter import CancelShareParameter
+from .parameter.get_share_parameter import GetShareParameter
+from .parameter.list_share_parameter import ListShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
 from .parameter.create_magicbase_column_parameter import CreateMagicBaseColumnParameter
 from .parameter.create_magicbase_table_parameter import CreateMagicBaseTableParameter
@@ -66,6 +70,7 @@ from .result.share_result import (
     ShareResult,
     CancelShareResult,
     FindSimilarSharesResult,
+    ShareListResult,
 )
 from .result.ingest_third_party_message_result import IngestThirdPartyMessageResult
 from .result.magicbase_column_result import MagicBaseColumnResult
@@ -84,7 +89,7 @@ from app.infrastructure.sdk.base import AbstractApi, AbstractParameter, Abstract
 
 __version__ = '1.0.0'
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - 分组顺序属于此聚合模块的既有结构
     # Main API class
     'MagicService',
 
@@ -115,9 +120,12 @@ __all__ = [
     'OAuth2CallbackRelayParameter',
     'ShareResourceIdParameter',
     'CreateShareParameter',
+    'ShareExtraParameter',
     'TargetId',
     'FindSimilarShareParameter',
     'CancelShareParameter',
+    'GetShareParameter',
+    'ListShareParameter',
     'IngestThirdPartyMessageParameter',
     'CreateMagicBaseColumnParameter',
     'CreateMagicBaseTableParameter',
@@ -143,6 +151,7 @@ __all__ = [
     'ShareResult',
     'CancelShareResult',
     'FindSimilarSharesResult',
+    'ShareListResult',
     'IngestThirdPartyMessageResult',
     'MagicBaseColumnResult',
     'MagicBaseTableResult',

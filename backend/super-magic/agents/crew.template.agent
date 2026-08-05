@@ -1,5 +1,4 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - search_knowledge
@@ -7,13 +6,11 @@ tools:
   - visual_understanding
   - video_understanding
   - image_search
-  - download_from_urls
   - generate_images
   - list_dir
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - shell_await
   - write_file
@@ -27,6 +24,7 @@ skills:
   crew_skills: "*"
   system_skills:
     - name: using-mcp
+    - name: download
     - name: using-llm
     - name: env-manager
     - name: user-info

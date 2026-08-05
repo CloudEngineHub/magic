@@ -96,7 +96,8 @@ class StreamingState:
     MAX_INVALID_CHUNK_COUNT: int = 10
 
     # 流式内容字符数安全上限；模型单次输出不可能超过 ~50K tokens ≈ 200K chars，
-    # 超过即视为退化输出，提前终止流式接收
+    # 超过即视为退化输出，提前终止流式接收。
+    # 如需适配更大输出窗口，应单独评估退化保护、成本和上下文风险后再调整。
     STREAM_CONTENT_MAX_CHARS: int = 200_000
 
     def is_content_degenerate(self) -> bool:

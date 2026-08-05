@@ -19,57 +19,41 @@ logger = get_logger(__name__)
 class McpAddServerParams(BaseToolParams):
     name: str = Field(
         ...,
-        description="""<!--zh: MCP 服务器名称（同名会被覆盖）。-->
-MCP server name. An existing server with the same name will be overwritten.""",
+        description="MCP server name. Replaces an existing server with the same name.",
     )
     server_type: Literal["stdio", "http"] = Field(
         ...,
-        description="""<!--zh: 连接类型，仅支持 stdio 或 http。-->
-Connection type. Only 'stdio' or 'http' is supported.""",
+        description="Connection type: 'stdio' or 'http'.",
     )
     command: Optional[str] = Field(
         None,
-        description="""<!--zh: 启动命令（stdio 类型必填）。-->
-Launch command (required when server_type='stdio').""",
+        description="Launch command. Required for stdio servers.",
     )
     args: Optional[List[str]] = Field(
         None,
-        description="""<!--zh: 命令参数列表（stdio 类型可选）。-->
-Command argument list (optional for stdio).""",
+        description="Command arguments for a stdio server.",
     )
     url: Optional[str] = Field(
         None,
-        description="""<!--zh: 服务器 URL（http 类型必填）。-->
-Server URL (required when server_type='http').""",
+        description="Server URL. Required for HTTP servers.",
     )
     env: Optional[Dict[str, str]] = Field(
         None,
-        description="""<!--zh: 启动子进程使用的环境变量。-->
-Environment variables used when launching the stdio subprocess.""",
+        description="Environment variables for the stdio subprocess.",
     )
     headers: Optional[Dict[str, str]] = Field(
         None,
-        description="""<!--zh: HTTP MCP 请求头，可用 ${VAR_NAME} 引用 env-manager 中的敏感值。-->
-HTTP headers for HTTP MCP servers. Values may reference env-manager variables with ${VAR_NAME}.""",
+        description="HTTP headers. Values may reference env-manager secrets as ${VAR_NAME}.",
     )
     label_name: Optional[str] = Field(
         None,
-        description="""<!--zh: 服务器在前端展示的友好名称。-->
-Friendly label shown in UI.""",
+        description="Optional user-facing server label.",
     )
 
 
 @tool(name="mcp_add_server")
 class McpAddServer(BaseMcpTool[McpAddServerParams]):
-    """<!--zh
-    新增或更新一个 chat 维度的 MCP 服务器配置。仅写入持久化 store + 注入运行期 manager，
-    不会立即建连；首次调用其工具或显式 mcp_connect_server 时才会触发连接。
-    -->
-    Add or update a chat-scoped MCP server configuration. The config is
-    persisted to the chat store and injected into the runtime manager but
-    NOT connected immediately. The actual connection is established the
-    first time mcp_connect_server / mcp_call_tool is invoked against it.
-    """
+    """Add or update a chat-scoped MCP server configuration and connect it."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None

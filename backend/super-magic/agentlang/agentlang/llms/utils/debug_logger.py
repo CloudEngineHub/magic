@@ -22,6 +22,8 @@ ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
 
+_SENSITIVE_KEYWORDS = ("authorization", "api-key", "api_key", "token", "secret", "password", "cookie")
+
 
 def _sanitize_for_filename(value: str) -> str:
     """将输入字符串转换为可安全用于单个文件名片段的值。"""
@@ -187,7 +189,7 @@ def _build_log_content(
     log_lines.extend([
         "",
         "=== REQUEST PARAMETERS ===",
-        json.dumps(request_params, indent=2, ensure_ascii=False),
+        json.dumps(_sanitize_request_params(request_params), indent=2, ensure_ascii=False),
         ""
     ])
 
@@ -220,3 +222,19 @@ def _build_log_content(
     log_lines.append("=== END LOG ===")
 
     return '\n'.join(log_lines)
+
+
+def _sanitize_request_params(value: Any) -> Any:
+    """脱敏请求参数，避免失败日志把 header/token 类信息落盘。"""
+    if isinstance(value, dict):
+        result: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if any(keyword in key_text.lower() for keyword in _SENSITIVE_KEYWORDS):
+                result[key] = "<redacted>"
+            else:
+                result[key] = _sanitize_request_params(item)
+        return result
+    if isinstance(value, list):
+        return [_sanitize_request_params(item) for item in value]
+    return value

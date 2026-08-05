@@ -1,22 +1,22 @@
 """
-获取当前会话上下文（topic_id 和 model_id）
+Read current session context, including topic_id and model_id.
 
-- topic_id: 从 .credentials/init_client_message.json 的 metadata.topic_id 读取
-- model_id:  从本地 .chat_history/{agent_code 或 topic_pattern}<main>.session.json
-             的 current.model_id 读取，并兼容回退到 magic<main>.session.json
+- topic_id: read from metadata.topic_id in .credentials/init_client_message.json
+- model_id: read from current.model_id in .chat_history/{agent_code or topic_pattern}<main>.session.json,
+            falling back to .chat_history/magic<main>.session.json
 """
 import json
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
-# agents/skills/_shared/ 对所有 skill 脚本均在 parents[2] 下
+# agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import _shared.bootstrap  # noqa: F401 — 触发环境初始化
+import _shared.bootstrap  # noqa: F401 — initialize runtime environment
 
 
 def _get_topic_id() -> Optional[str]:
-    """从 init_client_message.json 读取 topic_id"""
+    """Read topic_id from init_client_message.json."""
     try:
         from app.utils.init_client_message_util import InitClientMessageUtil
         metadata = InitClientMessageUtil.get_metadata()
@@ -26,7 +26,7 @@ def _get_topic_id() -> Optional[str]:
 
 
 def _get_project_id() -> Optional[str]:
-    """从 init_client_message.json 读取 project_id"""
+    """Read project_id from init_client_message.json."""
     try:
         from app.utils.init_client_message_util import InitClientMessageUtil
         metadata = InitClientMessageUtil.get_metadata()
@@ -36,18 +36,18 @@ def _get_project_id() -> Optional[str]:
 
 
 def get_project_id() -> Optional[str]:
-    """返回当前会话的 project_id，供 list 等脚本使用"""
+    """Return the current session project_id for list-like scripts."""
     return _get_project_id()
 
 
 def _read_model_id(session_file: Path) -> Optional[str]:
-    """从本地 session 文件读取 model_id"""
+    """Read model_id from a local session file."""
     try:
         if not session_file.exists():
             return None
         with session_file.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        # 优先取 current，其次取 last
+        # Prefer current, then fall back to last.
         current = data.get("current") or {}
         model_id = current.get("model_id")
         if not model_id:
@@ -59,7 +59,7 @@ def _read_model_id(session_file: Path) -> Optional[str]:
 
 
 def _is_safe_session_name(value: str) -> bool:
-    """校验 session 文件名前缀，避免路径穿越。"""
+    """Validate a session filename prefix and reject path traversal."""
     return "/" not in value and "\\" not in value and ".." not in value
 
 
@@ -75,7 +75,7 @@ def _append_session_candidate(candidates: list[Path], chat_history_dir: Path, na
 
 
 def _get_model_id(topic_pattern: Optional[str] = None, agent_code: Optional[str] = None) -> Optional[str]:
-    """从当前 agent mode 对应 session 文件读取 model_id"""
+    """Read model_id from the session file for the current agent mode."""
     try:
         from app.path_manager import PathManager
 
@@ -99,8 +99,8 @@ def get_context(
     agent_code: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    返回 (topic_id, model_id)
+    Return (topic_id, model_id).
 
-    两者均可能为 None（文件不存在或字段缺失时）。
+    Either value may be None when source files are missing or fields are absent.
     """
     return _get_topic_id(), _get_model_id(topic_pattern=topic_pattern, agent_code=agent_code)

@@ -40,27 +40,21 @@ from .path_utils import (
 class ExtractDocumentContentParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要提取内容的文档绝对路径，不接受相对路径-->
-Absolute document path to extract from. Relative paths are not accepted"""
+        description="Absolute document path to extract from. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 输出目录的绝对路径，用于保存 document.index.json、document.outline.md 和 chunks/-->
-Absolute output directory for document.index.json, document.outline.md, and chunks/"""
+        description="Absolute output directory for document.index.json, document.outline.md, and chunks/."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选范围表达式，例如页码 `1-3,8`，也可表示 slides、sections、sheets 或 cells-->
-Optional range expression, e.g. pages `1-3,8`, slides, sections, sheets, or cells"""
+        description="Optional range expression for pages, slides, sections, sheets, or cells, such as `1-3,8`."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ExtractDocumentContent(AbstractFileTool[ExtractDocumentContentParams], WorkspaceTool[ExtractDocumentContentParams]):
-    """<!--zh: 按范围提取文档内容，输出 Markdown chunks 并更新文档索引。-->
-    Extract targeted document content into Markdown chunks and update the document index."""
-
-    code_mode_only = True
+    """Extract targeted document content into Markdown chunks and update the document index."""
 
     async def execute(self, tool_context: ToolContext, params: ExtractDocumentContentParams) -> ToolResult:
         """Extract selected document ranges into bounded Markdown chunks."""

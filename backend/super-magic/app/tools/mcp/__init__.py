@@ -3,7 +3,7 @@
 把原 sdk/mcp.py + /api/sdk/mcp/* 路由 + agents/skills/using-mcp/scripts 收敛到
 super-magic 的 @tool() 范式。
 
-这 6 个工具均带 `code_mode_only = True`，即"注册但不挂载"——
+这 7 个工具均通过 `@tool(code_mode_only=True)` 注册，即"注册但不挂载"——
 不会进入模型默认工具列表，仅供 run_sdk_snippet 子进程通过
 `from sdk.tool import tool; tool.call('mcp_xxx', {...})` 调用。
 

@@ -59,6 +59,42 @@ class Metadata(BaseModel):
     )
 
 
+class SuperMagicWorkspaceContext(BaseModel):
+    """当前项目所属工作区。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicProjectContext(BaseModel):
+    """当前项目。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicTopicContext(BaseModel):
+    """当前话题。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicSandboxContext(BaseModel):
+    """当前逻辑沙盒。"""
+
+    id: str
+
+
+class SuperMagicProductContext(BaseModel):
+    """Super Magic 产品位置上下文。"""
+
+    workspace: Optional[SuperMagicWorkspaceContext] = None
+    project: SuperMagicProjectContext
+    topic: SuperMagicTopicContext
+    sandbox: SuperMagicSandboxContext
+
+
 class ClientMessage(BaseModel):
     """任务消息模型"""
 
@@ -100,6 +136,7 @@ class AgentMode(str, Enum):
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
     MICRO_APP = "micro-app"  # 微应用开发模式，使用micro-app.agent
+    CUSTOM_AGENT = "custom_agent"  # 自定义 Agent 运行模式，需配合 agent_code
     MAGICLAW = "magiclaw"  # Magic Claw 模式，从 agents/claws/<claw_code>/ 编译运行
 
     def get_agent_type(self) -> str:
@@ -117,6 +154,7 @@ class AgentMode(str, Enum):
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",
             AgentMode.MICRO_APP: "micro-app",  # 微应用开发模式
+            AgentMode.CUSTOM_AGENT: "custom_agent",
             AgentMode.MAGICLAW: "magiclaw",
         }
         return agent_type_mapping.get(self, "magic")
@@ -158,14 +196,18 @@ class ChatClientMessage(ClientMessage):
     remark: Optional[str] = None  # 备注信息，用于中断消息等场景
     mcp_config: Optional[Dict[str, Any]] = None  # MCP 服务器配置，格式与 config/mcp.json 保持一致
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
+        default=None,
+        description="Current Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     channel_context: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Channel-specific payload, owned and interpreted by the originating channel plugin.",
     )
 
-    # 🔥 新增：动态模型选择和配置字段
+    # 文本模型与动态配置字段
     model_id: Optional[str] = Field(
-        default=None, description="动态模型选择：指定本次对话使用的模型ID，会覆盖Agent默认模型选择"
+        default=None, description="文本模型 ID：指定本次对话使用的模型；为空时由模型选择策略决定"
     )
     dynamic_config: Optional[Dict[str, Any]] = Field(
         default=None, description="动态配置（JSON格式），将转换为YAML格式写入config/dynamic_config.yaml"
@@ -288,6 +330,10 @@ class InitClientMessage(ClientMessage):
     )
     sts_token_refresh: Optional[STSTokenRefreshConfig] = None  # STS Token刷新配置，可选字段
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
+        default=None,
+        description="Initial Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     upload_config: Optional[Dict[str, Any]] = None  # 上传配置，可包含平台类型和临时凭证
     magic_service_host: Optional[str] = None  # Magic Service主机地址，可选字段
     magic_service_ws_host: Optional[str] = None  # Magic Service WebSocket主机地址，可选字段

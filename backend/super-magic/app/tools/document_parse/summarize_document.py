@@ -36,17 +36,16 @@ from .path_utils import (
 class SummarizeDocumentParams(BaseToolParams):
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 包含 document.index.json 和 chunks/ 的输出目录绝对路径，不接受相对路径-->
-Absolute output directory containing document.index.json and chunks/. Relative paths are not accepted"""
+        description=(
+            "Absolute output directory containing document.index.json and chunks/. "
+            "Relative paths are not accepted."
+        )
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class SummarizeDocument(AbstractFileTool[SummarizeDocumentParams], WorkspaceTool[SummarizeDocumentParams]):
-    """<!--zh: 基于文档索引和已提取 chunks 生成摘要草稿。-->
-    Summarize an indexed document from its chunks."""
-
-    code_mode_only = True
+    """Summarize an indexed document from its chunks."""
 
     async def execute(self, tool_context: ToolContext, params: SummarizeDocumentParams) -> ToolResult:
         """Generate a summary draft from the extracted chunk set."""

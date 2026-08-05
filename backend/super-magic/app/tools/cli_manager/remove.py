@@ -29,27 +29,21 @@ class CliManagerRemoveParams(BaseToolParams):
 
     name: Optional[str] = Field(
         None,
-        description="""<!--zh: 要移除的持久化 CLI 名称。-->
-要移除的持久化 CLI 名称。""",
+        description="Name of the persisted CLI to remove.",
     )
     remove_state: bool = Field(
         False,
-        description="""<!--zh: 是否同时删除该 CLI 的持久化配置状态目录。默认不删除。-->
-是否同时删除该 CLI 的持久化配置状态目录。默认不删除。""",
+        description="Whether to also delete the CLI's persisted configuration state directory. Defaults to false.",
     )
     confirmed: bool = Field(
         False,
-        description="""<!--zh: 只有用户明确同意移除后才传 true。-->
-只有用户明确同意移除后才传 true。""",
+        description="Set true only after the user explicitly approves removal.",
     )
 
 
-@tool(name="cli_manager_remove")
+@tool(name="cli_manager_remove", code_mode_only=True)
 class CliManagerRemove(BaseTool[CliManagerRemoveParams], CliManagerToolMixin):
-    """<!--zh: 移除第三方 CLI 的持久化命令入口和可选状态目录。-->
-    移除第三方 CLI 的持久化命令入口和可选状态目录。"""
-
-    code_mode_only = True
+    """Remove a third-party CLI's persisted command entry points and optional state directory."""
 
     async def execute(self, tool_context: ToolContext, params: CliManagerRemoveParams) -> ToolResult:
         """在用户明确确认后移除已持久化 CLI。"""
