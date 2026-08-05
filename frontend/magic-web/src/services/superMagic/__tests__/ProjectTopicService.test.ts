@@ -165,6 +165,18 @@ describe("ProjectTopicService", () => {
 		expect(localStorage.getItem(storeKey)).toBeNull()
 	})
 
+	it("returns the raw global choice without replacing an unavailable employee", () => {
+		seedStore({
+			"test-org/test-user-123": {
+				global: "unavailable-agent" as TopicMode,
+			},
+		})
+		const service = createService()
+
+		expect(service.getRawGlobalTopicMode()).toBe("unavailable-agent")
+		expect(service.getGlobalTopicMode()).toBe(TopicMode.General)
+	})
+
 	it("does not copy a global choice into the project cache", () => {
 		seedStore({
 			"test-org/test-user-123": {

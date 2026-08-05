@@ -65,6 +65,15 @@ class ProjectTopicService {
 	}
 
 	/**
+	 * 获取未经可用性校验的全局主题模式，仅用于区分用户选择与系统回退。
+	 */
+	getRawGlobalTopicMode(): TopicMode | undefined {
+		return DefaultTopicModeStorageService.getRawStoredMode({
+			userKey: this.getUserKey(),
+		})
+	}
+
+	/**
 	 * 设置全局主题模式
 	 * @param mode
 	 */
