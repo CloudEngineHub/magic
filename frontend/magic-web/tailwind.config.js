@@ -1,7 +1,6 @@
 import animate from "tailwindcss-animate"
 import colors from "tailwindcss/colors"
 import plugin from "tailwindcss/plugin"
-import { layoutContract } from "./config/layout-contract.mjs"
 
 function rgbColor(colorVar, alphaValue = "1") {
 	return `rgb(var(${colorVar}-rgb) / calc(${alphaValue} * <alpha-value>))`
@@ -36,9 +35,11 @@ const config = {
 		},
 		extend: {
 			screens: {
-				"desktop-compact": { raw: layoutContract.queries.desktopCompact },
-				"desktop-short": { raw: layoutContract.queries.desktopShort },
-				"desktop-narrow": { raw: layoutContract.queries.desktopNarrow },
+				"desktop-compact": {
+					raw: "(min-width: 768px) and (min-height: 721px) and (max-height: 800px)",
+				},
+				"desktop-short": { raw: "(min-width: 768px) and (max-height: 720px)" },
+				"desktop-narrow": { raw: "(min-width: 768px) and (max-width: 1199px)" },
 			},
 			zIndex: {
 				"context-menu": "var(--z-index-context-menu)",
