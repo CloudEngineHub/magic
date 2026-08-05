@@ -834,6 +834,29 @@ export interface GetConvertHightConfigResponse {
 	}
 }
 
+export interface ShareResourceSettings {
+	resource_id?: string
+	resource_name?: string
+	project_id?: string
+	project_name?: string
+	default_open_file_id?: string | null
+	file_ids?: string[]
+	share_type?: number
+	share_range?: string | null
+	target_ids?: Array<{ target_type: string; target_id: string }>
+	share_project?: boolean
+	password?: string
+	expire_days?: number | null
+	extra?: {
+		allow_copy_project_files?: boolean
+		view_file_list?: boolean
+		hide_created_by_super_magic?: boolean
+		show_original_info?: boolean
+		allow_download_project_file?: boolean
+		pure_mode?: boolean
+	}
+}
+
 export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
@@ -1601,7 +1624,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param code
 	 */
 	getShareInfoByCode({ code }: { code: string }) {
-		return fetch.get(`/api/v1/share/resources/${code}/setting`)
+		return fetch.get<ShareResourceSettings>(`/api/v1/share/resources/${code}/setting`)
 	},
 
 	/**

@@ -1,5 +1,5 @@
 import type { ChangeEventHandler, RefObject } from "react"
-import { Copy, ImagePlus, Loader2, RefreshCw, Rocket, Trash2, X } from "lucide-react"
+import { ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { PublishedMicroAppProjectItem } from "@/apis/modules/superMagic"
@@ -21,6 +21,7 @@ import type {
 	MicroAppPublishFormState,
 	MicroAppPublishValidationError,
 } from "./microAppPublishDialogUtils"
+import MicroAppPublishedSection from "./MicroAppPublishedSection"
 
 interface MicroAppPublishDialogContentProps {
 	mobile: boolean
@@ -30,6 +31,7 @@ interface MicroAppPublishDialogContentProps {
 	publishedAtText: string
 	accessUrl: string
 	hasPublished: boolean
+	hasUnsavedPublishedChanges: boolean
 	loading: boolean
 	saving: boolean
 	unpublishing: boolean
@@ -68,6 +70,7 @@ export default function MicroAppPublishDialogContent({
 	publishedAtText,
 	accessUrl,
 	hasPublished,
+	hasUnsavedPublishedChanges,
 	loading,
 	saving,
 	unpublishing,
@@ -104,11 +107,22 @@ export default function MicroAppPublishDialogContent({
 			data-mobile={mobile ? "true" : undefined}
 		>
 			<ScrollArea
-				className={cn("min-h-0", mobile ? "flex-1 px-4" : "pr-1")}
+				className={cn("min-h-0", mobile ? "flex-1 px-4" : "-mr-5")}
 				viewportClassName="touch-pan-y [&>div]:!block"
 				data-testid="micro-app-publish-scroll-area"
 			>
-				<div className={cn("flex flex-col gap-4", mobile && "pb-5 pt-1")}>
+				<div className={cn("flex flex-col gap-4", mobile ? "pb-5 pt-1" : "pr-5")}>
+					{!loading && hasPublished ? (
+						<MicroAppPublishedSection
+							mobile={mobile}
+							publishedAtText={publishedAtText}
+							accessUrl={accessUrl}
+							hasUnsavedPublishedChanges={hasUnsavedPublishedChanges}
+							onCopyAccessUrl={onCopyAccessUrl}
+							onCopyShareText={onCopyShareText}
+						/>
+					) : null}
+
 					<div
 						className="rounded-lg border border-border bg-muted/30 p-3"
 						data-testid="micro-app-publish-basic-settings"
@@ -208,85 +222,6 @@ export default function MicroAppPublishDialogContent({
 						</div>
 					) : (
 						<>
-							{hasPublished ? (
-								<div className="rounded-lg border border-border p-3">
-									<div className="flex items-center gap-2">
-										<Rocket className="size-4 text-primary" />
-										<p className="text-sm font-medium text-foreground">
-											{t("microAppPage.publish.published")}
-										</p>
-									</div>
-									{publishedAtText ? (
-										<p className="mt-1 text-xs text-muted-foreground">
-											{t("microAppPage.publish.publishedAt", {
-												time: publishedAtText,
-											})}
-										</p>
-									) : null}
-									{accessUrl ? (
-										<div
-											className="mt-3 rounded-md border border-border bg-muted/30 p-3"
-											data-testid="micro-app-publish-quick-share"
-										>
-											<div
-												className={cn(
-													"flex gap-3",
-													mobile
-														? "flex-col items-stretch"
-														: "items-center justify-between",
-												)}
-											>
-												<div className="min-w-0">
-													<p className="text-sm font-medium text-foreground">
-														{t("microAppPage.publish.quickShareTitle")}
-													</p>
-													<p className="mt-0.5 text-xs text-muted-foreground">
-														{t(
-															"microAppPage.publish.quickShareDescription",
-														)}
-													</p>
-												</div>
-												<div className="flex shrink-0 items-center gap-2">
-													<Button
-														type="button"
-														variant="outline"
-														size="sm"
-														className={cn(
-															"h-8 gap-1.5",
-															mobile && "flex-1",
-														)}
-														onClick={onCopyAccessUrl}
-														data-testid="micro-app-publish-copy-link"
-													>
-														<Copy className="size-3.5" />
-														{t("microAppPage.publish.copyLink")}
-													</Button>
-													<Button
-														type="button"
-														size="sm"
-														className={cn(
-															"h-8 gap-1.5",
-															mobile && "flex-1",
-														)}
-														onClick={onCopyShareText}
-														data-testid="micro-app-publish-copy-share-text"
-													>
-														<Copy className="size-3.5" />
-														{t("microAppPage.publish.copyShareText")}
-													</Button>
-												</div>
-											</div>
-											<Input
-												readOnly
-												value={accessUrl}
-												className="mt-3 h-9 min-w-0 bg-background"
-												data-testid="micro-app-publish-access-url"
-											/>
-										</div>
-									) : null}
-								</div>
-							) : null}
-
 							<ShareTypeField
 								value={formState.shareType as ShareType}
 								onChange={onShareTypeChange}

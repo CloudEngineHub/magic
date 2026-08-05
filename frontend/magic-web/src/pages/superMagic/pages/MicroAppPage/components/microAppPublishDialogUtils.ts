@@ -93,10 +93,43 @@ export function createFormStateFromPublishedItem(
 		shareType: item?.share_type || ShareType.Organization,
 		shareRange: item?.share_range || "all",
 		targets: item?.target_ids || [],
-		password: item?.password || generateSharePassword(),
+		// 已发布配置缺少明文密码时不能生成一个看似有效的新密码，否则会误导用户并可能在保存时覆盖原密码。
+		password: item ? item.password || "" : generateSharePassword(),
 		coverFileKey: item?.cover_file_key ?? undefined,
 		coverUrl: item?.cover_url || "",
 	}
+}
+
+function normalizePublishTargets(targets: MicroAppPublishTarget[]): string[] {
+	return targets
+		.map((target) => `${target.target_type}:${target.target_id}`)
+		.sort((left, right) => left.localeCompare(right))
+}
+
+export function hasMicroAppPublishFormChanged(
+	formState: MicroAppPublishFormState,
+	publishedFormState: MicroAppPublishFormState | null,
+): boolean {
+	if (!publishedFormState) return false
+	if (formState.appName.trim() !== publishedFormState.appName.trim()) return true
+	if (formState.shareType !== publishedFormState.shareType) return true
+	if ((formState.coverFileKey ?? null) !== (publishedFormState.coverFileKey ?? null)) return true
+	if (formState.coverUrl.trim() !== publishedFormState.coverUrl.trim()) return true
+
+	if (formState.shareType === ShareType.Organization) {
+		if (formState.shareRange !== publishedFormState.shareRange) return true
+		if (formState.shareRange === "designated") {
+			const currentTargets = normalizePublishTargets(formState.targets)
+			const publishedTargets = normalizePublishTargets(publishedFormState.targets)
+			if (currentTargets.join("|") !== publishedTargets.join("|")) return true
+		}
+	}
+
+	if (formState.shareType === ShareType.PasswordProtected) {
+		return formState.password.trim() !== publishedFormState.password.trim()
+	}
+
+	return false
 }
 
 export function formatMicroAppPublishedAt(value?: string): string {
@@ -111,6 +144,15 @@ export function buildMicroAppAccessUrl(item: PublishedMicroAppProjectItem | null
 	if (item.access_url) return item.access_url
 	if (item.app_id) return `${window.location.origin}/micro-app/${item.app_id}`
 	return ""
+}
+
+export function buildMicroAppCopyUrl(accessUrl: string, password?: string): string {
+	const normalizedPassword = password?.trim()
+	if (!normalizedPassword) return accessUrl
+
+	const url = new URL(accessUrl, window.location.origin)
+	url.searchParams.set("password", normalizedPassword)
+	return url.toString()
 }
 
 export function buildMicroAppShareText({

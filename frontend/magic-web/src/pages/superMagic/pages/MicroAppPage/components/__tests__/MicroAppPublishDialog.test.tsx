@@ -2,15 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import MicroAppPublishDialog, {
-	buildMicroAppAccessUrl,
-	buildMicroAppPublishPayload,
-	buildMicroAppShareText,
-	getMicroAppPublishValidationError,
-} from "../MicroAppPublishDialog"
+import MicroAppPublishDialog from "../MicroAppPublishDialog"
 
 const mocks = vi.hoisted(() => ({
 	getMicroAppProject: vi.fn(),
+	getShareInfoByCode: vi.fn(),
 	publishMicroAppProject: vi.fn(),
 	unpublishMicroAppProject: vi.fn(),
 	getFileUrl: vi.fn(),
@@ -20,8 +16,12 @@ const mocks = vi.hoisted(() => ({
 	writeText: vi.fn(),
 	confirmModal: vi.fn(),
 	useUploadOptions: undefined as Record<string, unknown> | undefined,
-	t: (key: string, options?: Record<string, string>) =>
-		options?.time ? `${key}:${options.time}` : key,
+	t: (key: string, options?: Record<string, string>) => {
+		if (options?.time) return `${key}:${options.time}`
+		if (options?.projectName) return `${key}:${options.projectName}`
+		if (options?.password) return `${key}:${options.password}`
+		return key
+	},
 }))
 
 vi.mock("@/apis", () => ({
@@ -30,6 +30,7 @@ vi.mock("@/apis", () => ({
 	},
 	SuperMagicApi: {
 		getMicroAppProject: mocks.getMicroAppProject,
+		getShareInfoByCode: mocks.getShareInfoByCode,
 		publishMicroAppProject: mocks.publishMicroAppProject,
 		unpublishMicroAppProject: mocks.unpublishMicroAppProject,
 	},
@@ -138,6 +139,23 @@ function renderDialog(props: Partial<ComponentProps<typeof MicroAppPublishDialog
 	)
 }
 
+function createPasswordProtectedDetail() {
+	return {
+		app_id: "app-1",
+		project_id: "project-1",
+		project: { id: "project-1", project_name: "Demo App" },
+		publish: {
+			app_id: "app-1",
+			app_name: "Demo App",
+			resource_id: "resource-1",
+			share_code: "share-code-1",
+			share_type: ShareType.PasswordProtected,
+			publish_status: "published",
+			access_url: "https://example.com/micro-app/app-1",
+		},
+	}
+}
+
 describe("MicroAppPublishDialog", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -156,6 +174,7 @@ describe("MicroAppPublishDialog", () => {
 			publish_status: "published",
 			access_url: "https://example.com/micro-app/app-1",
 		})
+		mocks.getShareInfoByCode.mockResolvedValue({ password: "" })
 		mocks.getFileUrl.mockResolvedValue({ url: "https://cdn.example.com/existing-cover.png" })
 		mocks.uploadAndGetFileUrl.mockResolvedValue({
 			fullfilled: [
@@ -168,37 +187,6 @@ describe("MicroAppPublishDialog", () => {
 			],
 		})
 		mocks.confirmModal.mockImplementation(({ onOk }: { onOk?: () => void }) => onOk?.())
-	})
-
-	it("builds the new app_name publish payload and optional cover", () => {
-		expect(
-			buildMicroAppPublishPayload({
-				appName: "  Demo App  ",
-				shareType: ShareType.Public,
-				shareRange: "all",
-				targets: [],
-				password: "123456",
-				coverFileKey: "micro-app/covers/demo.png",
-				coverUrl: "",
-			}),
-		).toEqual({
-			app_name: "Demo App",
-			share_type: ShareType.Public,
-			cover_file_key: "micro-app/covers/demo.png",
-		})
-	})
-
-	it("identifies incomplete publish information", () => {
-		expect(
-			getMicroAppPublishValidationError({
-				appName: "   ",
-				shareType: ShareType.Organization,
-				shareRange: "all",
-				targets: [],
-				password: "123456",
-				coverUrl: "",
-			}),
-		).toBe("projectNameRequired")
 	})
 
 	it("loads publish state through the app detail endpoint", async () => {
@@ -224,6 +212,91 @@ describe("MicroAppPublishDialog", () => {
 				"https://example.com/micro-app/app-1",
 			)
 		})
+
+		const publishedSection = screen.getByTestId("micro-app-published-section")
+		const basicSettings = screen.getByTestId("micro-app-publish-basic-settings")
+		expect(publishedSection).toHaveClass("border-emerald-200", "bg-emerald-50/60")
+		expect(publishedSection.nextElementSibling).toBe(basicSettings)
+	})
+
+	it("loads the published password before copying password-protected share text", async () => {
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+		mocks.getShareInfoByCode.mockResolvedValue({
+			password: "open1234",
+		})
+
+		renderDialog()
+
+		fireEvent.click(await screen.findByTestId("micro-app-publish-copy-share-text"))
+
+		await waitFor(() => {
+			expect(mocks.getShareInfoByCode).toHaveBeenCalledWith({ code: "share-code-1" })
+			expect(mocks.writeText).toHaveBeenCalledWith(
+				"microAppPage.publish.shareTextTitle:Demo App\n\nmicroAppPage.publish.shareTextAccessHint\nhttps://example.com/micro-app/app-1\n\nmicroAppPage.publish.shareTextPassword:open1234",
+			)
+		})
+	})
+
+	it("copies the published password in the standalone link query string", async () => {
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+		mocks.getShareInfoByCode.mockResolvedValue({ password: "open 1234" })
+
+		renderDialog()
+
+		fireEvent.click(await screen.findByTestId("micro-app-publish-copy-link"))
+
+		await waitFor(() => {
+			expect(mocks.writeText).toHaveBeenCalledWith(
+				"https://example.com/micro-app/app-1?password=open+1234",
+			)
+		})
+	})
+
+	it("does not copy incomplete share text when the published password is unavailable", async () => {
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+
+		renderDialog()
+
+		fireEvent.click(await screen.findByTestId("micro-app-publish-copy-share-text"))
+
+		expect(mocks.writeText).not.toHaveBeenCalled()
+		expect(mocks.errorToast).toHaveBeenCalledWith(
+			"microAppPage.publish.shareTextPasswordUnavailable",
+		)
+	})
+
+	it("disables quick sharing until changed publish settings are saved", async () => {
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+		mocks.getShareInfoByCode.mockResolvedValue({ password: "open1234" })
+		mocks.publishMicroAppProject.mockResolvedValue({
+			...createPasswordProtectedDetail().publish,
+			password: undefined,
+		})
+
+		renderDialog()
+
+		const copyLinkButton = await screen.findByTestId("micro-app-publish-copy-link")
+		const copyShareTextButton = screen.getByTestId("micro-app-publish-copy-share-text")
+		expect(copyLinkButton).toBeEnabled()
+		expect(copyShareTextButton).toBeEnabled()
+
+		fireEvent.change(screen.getByTestId("micro-app-publish-password"), {
+			target: { value: "next1234" },
+		})
+
+		expect(screen.getByTestId("micro-app-publish-settings-changed")).toHaveTextContent(
+			"microAppPage.publish.settingsChanged",
+		)
+		expect(copyLinkButton).toBeDisabled()
+		expect(copyShareTextButton).toBeDisabled()
+
+		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("micro-app-publish-settings-changed")).toBeNull()
+			expect(copyLinkButton).toBeEnabled()
+			expect(copyShareTextButton).toBeEnabled()
+		})
 	})
 
 	it("limits the content height and scrolls overflowing settings", async () => {
@@ -231,8 +304,11 @@ describe("MicroAppPublishDialog", () => {
 
 		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
 		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
-		expect(scrollArea).toHaveClass("min-h-0")
+		expect(scrollArea).toHaveClass("min-h-0", "-mr-5")
 		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		expect(screen.getByTestId("micro-app-publish-basic-settings").parentElement).toHaveClass(
+			"pr-5",
+		)
 		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveClass(
 			"grid",
 			"max-h-[80dvh]",
@@ -409,30 +485,5 @@ describe("MicroAppPublishDialog", () => {
 				cover_file_key: "micro-app/covers/new.png",
 			})
 		})
-	})
-
-	it("builds access and share text from the stable app link", () => {
-		expect(
-			buildMicroAppAccessUrl({ app_id: "app-1", access_url: "https://example.com/app-1" }),
-		).toBe("https://example.com/app-1")
-		expect(
-			buildMicroAppShareText({
-				accessUrl: "https://example.com/app-1",
-				shareTitle: "You're invited to use the micro app “Demo App”",
-				accessHint: "Open the link below to access it:",
-				passwordText: "Password: abcd1234",
-			}),
-		).toBe(
-			"You're invited to use the micro app “Demo App”\n\nOpen the link below to access it:\nhttps://example.com/app-1\n\nPassword: abcd1234",
-		)
-		expect(
-			buildMicroAppShareText({
-				accessUrl: "https://example.com/app-1",
-				shareTitle: "You're invited to use the micro app “Demo App”",
-				accessHint: "Open the link below to access it:",
-			}),
-		).toBe(
-			"You're invited to use the micro app “Demo App”\n\nOpen the link below to access it:\nhttps://example.com/app-1",
-		)
 	})
 })
