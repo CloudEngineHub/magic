@@ -132,13 +132,20 @@ readonly class KelingVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($exception, $action), $exception);
+            throw ProviderVideoException::fromHttpStatus(
+                $this->formatRequestExceptionMessage($exception, $action),
+                $exception->getResponse()?->getStatusCode(),
+                $exception,
+            );
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(sprintf('keling video %s failed: %s', $action, $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('keling video %s failed: %s', $action, $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(sprintf('keling video %s returned invalid json', $action));
+            throw ProviderVideoException::retriable(sprintf('keling video %s returned invalid json', $action));
         }
 
         return $data;

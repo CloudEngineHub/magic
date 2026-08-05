@@ -337,7 +337,7 @@ readonly class CloudswayVeoVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['name'] ?? null,
         );
         if ($operationName === null) {
-            throw new ProviderVideoException(
+            throw ProviderVideoException::nonRetriable(
                 $this->extractProviderMessage($response, 'cloudsway veo submit succeeded but operation name missing')
             );
         }

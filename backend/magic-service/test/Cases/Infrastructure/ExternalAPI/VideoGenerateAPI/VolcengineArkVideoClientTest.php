@@ -93,8 +93,6 @@ class VolcengineArkVideoClientTest extends TestCase
             ]),
         );
 
-        $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('视频生成失败，请检查输入内容或稍后重试。');
         try {
             $client->post(
                 'https://ark.cn-beijing.volces.com/api/v3',
@@ -103,6 +101,11 @@ class VolcengineArkVideoClientTest extends TestCase
                 ['model' => 'doubao-seedance-2-0-260128'],
                 ['operation_id' => 'op-ark-400'],
             );
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame('视频生成失败，请检查输入内容或稍后重试。', $exception->getMessage());
+            self::assertFalse($exception->isRetriable());
+            self::assertSame(400, $exception->getHttpStatus());
         } finally {
             $this->assertCount(2, $logger->records);
             $this->assertSame('volcengine ark video error', $logger->records[1]['message']);

@@ -104,7 +104,7 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationProviderAdapterI
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException($this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
+            throw ProviderVideoException::nonRetriable($this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
         }
 
         return $taskId;

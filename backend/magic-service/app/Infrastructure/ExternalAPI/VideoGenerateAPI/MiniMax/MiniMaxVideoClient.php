@@ -77,7 +77,11 @@ readonly class MiniMaxVideoClient
                 'error' => $body === '' ? $exception->getMessage() : $body,
             ]);
             $message = $body === '' ? $exception->getMessage() : $body;
-            throw new ProviderVideoException('MiniMax video request failed: ' . substr($message, 0, 1024), $exception);
+            throw ProviderVideoException::fromHttpStatus(
+                'MiniMax video request failed: ' . substr($message, 0, 1024),
+                $errorResponse?->getStatusCode(),
+                $exception,
+            );
         } catch (Throwable $exception) {
             $this->logger->error('minimax video error', [
                 'method' => $normalizedMethod,
@@ -85,7 +89,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => null,
                 'error' => $exception->getMessage(),
             ]);
-            throw new ProviderVideoException('MiniMax video request failed: ' . $exception->getMessage(), $exception);
+            throw ProviderVideoException::retriable('MiniMax video request failed: ' . $exception->getMessage(), $exception);
         }
 
         if (! is_array($data)) {
@@ -95,7 +99,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => $response->getStatusCode(),
                 'error' => 'MiniMax video returned invalid json',
             ]);
-            throw new ProviderVideoException('MiniMax video returned invalid json');
+            throw ProviderVideoException::retriable('MiniMax video returned invalid json');
         }
 
         $this->logger->info('minimax video response', [

@@ -225,7 +225,7 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(
+            throw ProviderVideoException::nonRetriable(
                 $this->extractProviderMessage($response, 'cloudsway keling submit succeeded but task id missing')
             );
         }

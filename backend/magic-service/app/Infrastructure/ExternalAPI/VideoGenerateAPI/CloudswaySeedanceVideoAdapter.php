@@ -204,7 +204,7 @@ readonly class CloudswaySeedanceVideoAdapter extends AbstractCloudswayVideoAdapt
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(
+            throw ProviderVideoException::nonRetriable(
                 $this->extractProviderMessage($response, 'cloudsway seedance submit succeeded but task id missing')
             );
         }

@@ -122,8 +122,6 @@ class MiniMaxVideoClientTest extends TestCase
 
         $client = new MiniMaxVideoClient($clientFactory, $loggerFactory);
 
-        $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('MiniMax video request failed: {"base_resp":{"status_msg":"rate limited"}}');
         try {
             $client->request(
                 'GET',
@@ -132,10 +130,48 @@ class MiniMaxVideoClientTest extends TestCase
                 '/v2/query/video_generation/task-429',
                 [],
             );
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame('MiniMax video request failed: {"base_resp":{"status_msg":"rate limited"}}', $exception->getMessage());
+            self::assertTrue($exception->isRetriable());
+            self::assertSame(429, $exception->getHttpStatus());
         } finally {
             $this->assertCount(2, $logger->records);
             $this->assertSame('minimax video error', $logger->records[1]['message']);
             $this->assertSame(429, $logger->records[1]['context']['http_status']);
+        }
+    }
+
+    public function testGetBadRequestIsNonRetriable(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('request')
+            ->willThrowException(new RequestException(
+                'bad request',
+                new Request('GET', 'https://api.minimaxi.com/v2/query/video_generation/task-400'),
+                new Response(400, [], '{"error":{"message":"invalid params"}}'),
+            ));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())
+            ->method('create')
+            ->willReturn($httpClient);
+
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())
+            ->method('get')
+            ->with(MiniMaxVideoClient::class)
+            ->willReturn(new MiniMaxRecordingLogger());
+
+        $client = new MiniMaxVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->request('GET', 'https://api.minimaxi.com', 'secret-api-key', '/v2/query/video_generation/task-400');
+            self::fail('Expected ProviderVideoException to be thrown');
+        } catch (ProviderVideoException $exception) {
+            self::assertFalse($exception->isRetriable());
+            self::assertSame(400, $exception->getHttpStatus());
         }
     }
 }

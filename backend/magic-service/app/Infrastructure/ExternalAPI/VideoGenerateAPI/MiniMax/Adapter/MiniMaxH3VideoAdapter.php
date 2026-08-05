@@ -101,7 +101,7 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationProviderAdapterIn
         $response = $this->transport->submit($config, $operation->getProviderPayload());
         $taskId = trim((string) ($response['task_id'] ?? ''));
         if ($taskId === '') {
-            throw new ProviderVideoException('MiniMax H3 submit succeeded but task_id is missing');
+            throw ProviderVideoException::nonRetriable('MiniMax H3 submit succeeded but task_id is missing');
         }
         return $taskId;
     }

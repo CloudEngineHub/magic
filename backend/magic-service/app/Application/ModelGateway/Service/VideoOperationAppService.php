@@ -281,7 +281,6 @@ readonly class VideoOperationAppService
             $dataIsolation,
             $operationId,
             $businessParams,
-            failOnProviderQueryException: false,
         );
         if ($operation === null) {
             return true;
@@ -342,7 +341,6 @@ readonly class VideoOperationAppService
                         [],
                         $newOperation->getOrganizationCode(),
                         $newOperation->getUserId(),
-                        false,
                     );
                 } catch (Throwable $throwable) {
                     $this->logger->warning('video active operation recovery query failed', [
@@ -407,7 +405,6 @@ readonly class VideoOperationAppService
         array $businessParams = [],
         ?string $organizationCode = null,
         ?string $userId = null,
-        bool $failOnProviderQueryException = true,
     ): ?VideoQueueOperationEntity {
         return $this->withOperationLock($operationId, function () use (
             $dataIsolation,
@@ -415,7 +412,6 @@ readonly class VideoOperationAppService
             $businessParams,
             $organizationCode,
             $userId,
-            $failOnProviderQueryException,
         ): ?VideoQueueOperationEntity {
             $operation = $this->videoQueueDomainService->findOperation($operationId);
             if ($operation === null) {
@@ -428,7 +424,7 @@ readonly class VideoOperationAppService
                 ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'video task not found');
             }
 
-            $this->syncOperationFromProvider($dataIsolation, $operation, $businessParams, $failOnProviderQueryException);
+            $this->syncOperationFromProvider($dataIsolation, $operation, $businessParams);
             return $operation;
         });
     }
@@ -437,7 +433,6 @@ readonly class VideoOperationAppService
         ModelGatewayDataIsolation $dataIsolation,
         VideoQueueOperationEntity $operation,
         array $businessParams = [],
-        bool $failOnProviderQueryException = true,
     ): void {
         $providerTaskId = $operation->getProviderTaskId();
         if (! is_string($providerTaskId) || $providerTaskId === '' || $operation->getStatus()->isDone()) {
@@ -488,7 +483,7 @@ readonly class VideoOperationAppService
                 $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
             }
         } catch (ProviderVideoException $throwable) {
-            if (! $failOnProviderQueryException) {
+            if ($throwable->isRetriable()) {
                 throw $throwable;
             }
             $this->logger->warning('video provider query failed', [

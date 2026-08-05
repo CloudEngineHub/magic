@@ -269,7 +269,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             ? ($validationConfig['explicit_resolution_errors'][$requestedResolution] ?? null)
             : null;
         if (is_array($resolutionErrorRule)) {
-            throw new ProviderVideoException($this->translateError(
+            throw ProviderVideoException::nonRetriable($this->translateError(
                 (string) ($resolutionErrorRule['key'] ?? 'model_resolution_not_supported'),
                 array_merge(
                     $resolutionErrorRule['replace'] ?? [],
@@ -398,7 +398,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException('volcengine ark seedance submit succeeded but task id missing');
+            throw ProviderVideoException::nonRetriable('volcengine ark seedance submit succeeded but task id missing');
         }
 
         return $taskId;
