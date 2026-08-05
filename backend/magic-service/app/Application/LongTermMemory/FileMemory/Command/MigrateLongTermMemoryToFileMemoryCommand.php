@@ -212,7 +212,7 @@ final class MigrateLongTermMemoryToFileMemoryCommand extends HyperfCommand
                 ->orderBy('id')
                 ->limit($batchSize)
                 ->get()
-                ->map(static fn (object $row): array => (array) $row)
+                ->map(static fn (array|object $row): array => (array) $row)
                 ->all();
             if ($rows === []) {
                 break;
