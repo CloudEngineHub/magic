@@ -5,9 +5,10 @@ import type {
 	VideoGenerationResultResponse,
 } from "../../../public/magic-types"
 import { VIDEO_CONFIG } from "../../elements/video/VideoElement.config"
-import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
+import { resolveCanvasGeneratedResourceStoragePath } from "../../shared/path/canvasResourcePath"
 import {
 	extractSmartNameFromFileName,
+	getGenerationResultStatusPatch,
 	isGenerationTaskNotFoundError,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
@@ -150,9 +151,20 @@ export class VideoPollingManager {
 	}
 
 	private buildResultPatch(result: VideoGenerationResultResponse): Partial<VideoElementData> {
+		const storagePath =
+			result.file_dir && result.file_name
+				? resolveCanvasGeneratedResourceStoragePath(
+						this.config.canvas,
+						result.file_dir,
+						result.file_name,
+					)
+				: undefined
 		const updateData: Partial<VideoElementData> = {
-			status: result.status,
-			errorMessage: result.error_message ?? undefined,
+			...getGenerationResultStatusPatch(
+				result.status,
+				result.error_message,
+				Boolean(storagePath),
+			),
 			videoGenerationResultMeta: {
 				billing: result.billing ?? null,
 				generation_info: result.generation_info ?? null,
@@ -160,8 +172,8 @@ export class VideoPollingManager {
 			},
 		}
 
-		if (result.file_dir && result.file_name) {
-			updateData.src = toCanvasUploadStoragePath(result.file_dir, result.file_name)
+		if (storagePath && result.file_name) {
+			updateData.src = storagePath
 			updateData.name = extractSmartNameFromFileName(result.file_name)
 		}
 

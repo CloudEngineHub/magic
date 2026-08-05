@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
 import { ElementTypeEnum, type ImageElement } from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
+import { INVALID_GENERATED_RESOURCE_PATH_ERROR } from "../polling/generationPollingUtils"
 import { ImagePollingManager } from "../polling/ImagePollingManager"
+
+const resolveResourceReference = createTestResourceReferenceResolver({
+	attachmentPathsByFileId: {
+		"file-image-task-1": "/画布A/images/image-task-1.png",
+		"file-image-task-2": "/画布A/images/image-task-2.png",
+	},
+})
 
 function createImageElement(overrides?: Partial<ImageElement>): ImageElement {
 	return {
@@ -54,7 +63,9 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getImageGenerationResult, getFileInfo } },
+				config: {
+					methods: { getImageGenerationResult, getFileInfo, resolveResourceReference },
+				},
 			},
 			elementManager: { update },
 			imageResourceManager: { primeCache },
@@ -73,13 +84,13 @@ describe("ImagePollingManager", () => {
 		expect(update).toHaveBeenCalledWith(
 			element.id,
 			{
-				src: "images/image-task-1.png",
+				src: "./images/image-task-1.png",
 				status: GenerationStatus.Completed,
 				errorMessage: undefined,
 			},
 			{ silent: false },
 		)
-		expect(primeCache).toHaveBeenCalledWith("images/image-task-1.png", {
+		expect(primeCache).toHaveBeenCalledWith("./images/image-task-1.png", {
 			src: "https://example.test/image-task-1.png",
 			fileName: "image-task-1.png",
 			resource_version: "generated:image-task-1.png",
@@ -96,7 +107,9 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getImageGenerationResult, getFileInfo } },
+				config: {
+					methods: { getImageGenerationResult, getFileInfo, resolveResourceReference },
+				},
 			},
 			elementManager: { update, delete: vi.fn() },
 			imageResourceManager: { primeCache: vi.fn() },
@@ -110,10 +123,53 @@ describe("ImagePollingManager", () => {
 		})
 		manager.start()
 
-		await vi.waitFor(() => expect(getFileInfo).toHaveBeenCalledTimes(8))
+		await vi.waitFor(() => expect(getFileInfo).toHaveBeenCalledTimes(4))
 		expect(getImageGenerationResult).not.toHaveBeenCalled()
 		expect(update).not.toHaveBeenCalled()
 		expect(manager.isActive()).toBe(false)
+	})
+
+	it("fails closed when Agent recovery matches current-canvas and workspace-root files", async () => {
+		const element = createImageElement({ status: GenerationStatus.Processing })
+		const ambiguousResolver = createTestResourceReferenceResolver({
+			attachmentPathsByFileId: {
+				"file-current": "/画布A/images/image-task-1.png",
+				"file-root": "/images/image-task-1.png",
+			},
+		})
+		const getFileInfo = vi.fn(async (path: string) => {
+			if (path === "images/image-task-1.png") {
+				return {
+					src: "https://example.test/image-task-1.png",
+					fileName: "image-task-1.png",
+				}
+			}
+			throw new Error("not found")
+		})
+		const update = vi.fn()
+		const primeCache = vi.fn()
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
+			},
+			magicConfigManager: {
+				config: { methods: { getFileInfo, resolveResourceReference: ambiguousResolver } },
+			},
+			elementManager: { update },
+			imageResourceManager: { primeCache },
+			eventEmitter: { emit: vi.fn() },
+		}
+
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+		manager.start()
+
+		await vi.waitFor(() => expect(manager.isActive()).toBe(false))
+		expect(update).not.toHaveBeenCalled()
+		expect(primeCache).not.toHaveBeenCalled()
 	})
 
 	it("discards an Agent recovery result when the element switches to another image_id", async () => {
@@ -129,7 +185,7 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getFileInfo } },
+				config: { methods: { getFileInfo, resolveResourceReference } },
 			},
 			elementManager: { update },
 			imageResourceManager: { primeCache: vi.fn() },
@@ -167,7 +223,7 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getFileInfo } },
+				config: { methods: { getFileInfo, resolveResourceReference } },
 			},
 			elementManager: { update },
 			imageResourceManager: { primeCache: vi.fn() },
@@ -203,7 +259,7 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getFileInfo } },
+				config: { methods: { getFileInfo, resolveResourceReference } },
 			},
 			elementManager: { update },
 			imageResourceManager: { primeCache: vi.fn() },
@@ -262,7 +318,7 @@ describe("ImagePollingManager", () => {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "agent"),
 			},
 			magicConfigManager: {
-				config: { methods: { getFileInfo } },
+				config: { methods: { getFileInfo, resolveResourceReference } },
 			},
 			elementManager: { update },
 			imageResourceManager: { primeCache: vi.fn() },
@@ -289,7 +345,7 @@ describe("ImagePollingManager", () => {
 			expect(update).toHaveBeenCalledWith(
 				element.id,
 				{
-					src: "images/image-task-2.png",
+					src: "./images/image-task-2.png",
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
 				},
@@ -312,7 +368,9 @@ describe("ImagePollingManager", () => {
 			elementDetailsRuntimeManager: {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "unknown"),
 			},
-			magicConfigManager: { config: { methods: { getImageGenerationResult } } },
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
 			elementManager: { update: vi.fn(), delete: vi.fn() },
 			imageResourceManager: { primeCache: vi.fn() },
 			eventEmitter: { emit: vi.fn() },
@@ -338,7 +396,7 @@ describe("ImagePollingManager", () => {
 		const getImageGenerationResult = vi.fn().mockResolvedValue({
 			image_id: "high-task-1",
 			status: GenerationStatus.Completed,
-			file_dir: "/images/",
+			file_dir: "/画布A/images/",
 			file_name: "high.png",
 			file_url: "https://example.test/high.png",
 			error_message: null,
@@ -350,7 +408,9 @@ describe("ImagePollingManager", () => {
 			elementDetailsRuntimeManager: {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "unknown"),
 			},
-			magicConfigManager: { config: { methods: { getImageGenerationResult } } },
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
 			elementManager: { update },
 			imageResourceManager: { primeCache: vi.fn() },
 			eventEmitter: { emit: vi.fn() },
@@ -365,6 +425,7 @@ describe("ImagePollingManager", () => {
 
 		await vi.waitFor(() => expect(update).toHaveBeenCalled())
 		expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "high-task-1" })
+		expect(element.src).toBe("./images/high.png")
 	})
 
 	it("primes generated image metadata and leaves loading to visibility scheduling", async () => {
@@ -390,6 +451,7 @@ describe("ImagePollingManager", () => {
 				config: {
 					methods: {
 						getImageGenerationResult,
+						resolveResourceReference,
 					},
 				},
 			},
@@ -417,7 +479,7 @@ describe("ImagePollingManager", () => {
 			expect(update).toHaveBeenCalled()
 		})
 
-		expect(primeCache).toHaveBeenCalledWith("images/generated.png", {
+		expect(primeCache).toHaveBeenCalledWith("/images/generated.png", {
 			src: "https://example.test/generated.png",
 			fileName: "generated.png",
 			resource_version: "generated:generated.png",
@@ -427,6 +489,53 @@ describe("ImagePollingManager", () => {
 			type: "element:image:resultUpdated",
 			data: { elementId: element.id },
 		})
+	})
+
+	it("fails a completed result when its workspace path cannot be resolved", async () => {
+		const element = createImageElement({ status: GenerationStatus.Processing })
+		const update = vi.fn((elementId: string, updates: Partial<ImageElement>) => {
+			if (elementId === element.id) Object.assign(element, updates)
+		})
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						resolveResourceReference: vi.fn(() => ({
+							status: "invalid",
+							rawReference: "/invalid/generated.png",
+							candidates: [],
+						})),
+						getImageGenerationResult: vi.fn().mockResolvedValue({
+							image_id: "image-task-1",
+							status: GenerationStatus.Completed,
+							file_dir: "/invalid/",
+							file_name: "generated.png",
+							file_url: null,
+							error_message: null,
+						}),
+					},
+				},
+			},
+			elementManager: { update },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter: { emit: vi.fn() },
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+
+		manager.start()
+
+		await vi.waitFor(() => expect(update).toHaveBeenCalled())
+		expect(element).toEqual(
+			expect.objectContaining({
+				status: GenerationStatus.Failed,
+				errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+			}),
+		)
+		expect(element.src).toBeUndefined()
 	})
 
 	it("clears a persisted image task when the backend confirms that exact task is missing", async () => {
@@ -444,6 +553,7 @@ describe("ImagePollingManager", () => {
 							code: 14000,
 							message: "image-task-1 未找到",
 						}),
+						resolveResourceReference,
 					},
 				},
 			},

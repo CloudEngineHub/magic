@@ -9,10 +9,11 @@ import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import type { ImageBatchPollingRegistry } from "./ImageBatchPollingRegistry"
 import {
 	extractSmartNameFromFileName,
+	getGenerationResultStatusPatch,
 	isGenerationTaskNotFoundError,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
-import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
+import { resolveCanvasGeneratedResourceStoragePath } from "../../shared/path/canvasResourcePath"
 import {
 	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
@@ -209,6 +210,11 @@ export class ImageBatchPollingManager {
 		}
 
 		if (result.status === "completed") {
+			const missingResourcePatch = getGenerationResultStatusPatch(
+				"completed",
+				result.error_message,
+				false,
+			)
 			this.elementIds.forEach((elementId, index) => {
 				const outputIndex = this.elementOutputIndexes[index]
 				if (this.syncedIndexes.has(outputIndex)) return
@@ -216,8 +222,7 @@ export class ImageBatchPollingManager {
 				this.canvas.elementManager.update(
 					elementId,
 					{
-						status: "completed",
-						errorMessage: undefined,
+						...missingResourcePatch,
 						imageGenerationTaskMeta: undefined,
 					} satisfies Partial<ImageElementData>,
 					{ silent: false },
@@ -233,19 +238,29 @@ export class ImageBatchPollingManager {
 		result: ImageGenerationResultsResponse,
 		image: GeneratedImageResultItem,
 	): Partial<ImageElementData> {
-		const updateData: Partial<ImageElementData> = {
+		const storagePath =
+			result.file_dir && image.file_name
+				? resolveCanvasGeneratedResourceStoragePath(
+						this.canvas,
+						result.file_dir,
+						image.file_name,
+					)
+				: undefined
+		if (!storagePath || !image.file_name) {
+			return {
+				...getGenerationResultStatusPatch("completed", result.error_message, false),
+				imageGenerationTaskMeta: undefined,
+			}
+		}
+
+		this.primeGeneratedImageResource(storagePath, image.file_url, image.file_name)
+		return {
 			status: "completed",
 			errorMessage: undefined,
 			imageGenerationTaskMeta: undefined,
+			src: storagePath,
+			name: extractSmartNameFromFileName(image.file_name),
 		}
-
-		if (result.file_dir && image.file_name) {
-			updateData.src = toCanvasUploadStoragePath(result.file_dir, image.file_name)
-			updateData.name = extractSmartNameFromFileName(image.file_name)
-			this.primeGeneratedImageResource(updateData.src, image.file_url, image.file_name)
-		}
-
-		return updateData
 	}
 
 	private primeGeneratedImageResource(

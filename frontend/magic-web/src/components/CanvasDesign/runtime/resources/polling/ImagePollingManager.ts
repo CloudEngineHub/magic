@@ -2,13 +2,18 @@ import type { Canvas } from "../../core/Canvas"
 import type { ImageElement as ImageElementData } from "../../document/types"
 import { GenerationStatus, type GetImageGenerationResultParams } from "../../../public/magic-types"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
-import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
+import {
+	getCanvasHostResourceReferenceResolver,
+	resolveCanvasStorageResourceReference,
+	resolveCanvasGeneratedResourceStoragePath,
+} from "../../shared/path/canvasResourcePath"
 import {
 	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
 } from "../image/imageGenerationTaskMeta"
 import {
 	extractSmartNameFromFileName,
+	getGenerationResultStatusPatch,
 	isGenerationTaskNotFoundError,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
@@ -278,15 +283,25 @@ export class ImagePollingManager {
 				return
 			}
 
-			// 构建更新数据
+			const storagePath =
+				result.file_dir && result.file_name
+					? resolveCanvasGeneratedResourceStoragePath(
+							this.config.canvas,
+							result.file_dir,
+							result.file_name,
+						)
+					: undefined
 			const updateData: Partial<ImageElementData> = {
-				status: result.status,
-				errorMessage: result.error_message ?? undefined,
+				...getGenerationResultStatusPatch(
+					result.status,
+					result.error_message,
+					Boolean(storagePath),
+				),
 			}
 
-			if (result.file_dir && result.file_name) {
-				updateData.src = toCanvasUploadStoragePath(result.file_dir, result.file_name)
-				this.primeGeneratedImageResource(updateData.src, result.file_url, result.file_name)
+			if (storagePath && result.file_name) {
+				updateData.src = storagePath
+				this.primeGeneratedImageResource(storagePath, result.file_url, result.file_name)
 
 				const elementData = this.config.getElementData()
 				const imageGenerationTaskMeta = getImageGenerationTaskMeta(elementData)
@@ -313,7 +328,7 @@ export class ImagePollingManager {
 			})
 
 			// 根据状态决定是否继续轮询
-			if (shouldContinueGenerationPolling(result.status)) {
+			if (shouldContinueGenerationPolling(updateData.status ?? result.status)) {
 				// 5 秒后继续轮询
 				this.pollingTimer = setTimeout(() => {
 					this.pollingTimer = undefined
@@ -345,58 +360,69 @@ export class ImagePollingManager {
 	 */
 	private async recoverAgentGeneratedFile(imageId: string, pollingRunId: number): Promise<void> {
 		const getFileInfo = this.config.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo) {
+		const resolveResourceReference = getCanvasHostResourceReferenceResolver(this.config.canvas)
+		if (!getFileInfo || !resolveResourceReference) {
 			this.stopIfCurrentRun(pollingRunId)
 			return
 		}
 
 		for (const extension of AGENT_IMAGE_RECOVERY_EXTENSIONS) {
-			for (const prefix of ["images", "./images"]) {
+			if (!this.canApplyAgentRecovery(pollingRunId, imageId)) {
+				this.syncIfCurrentRun(pollingRunId)
+				return
+			}
+
+			const fileName = `${imageId}.${extension}`
+			const candidatePath = `images/${fileName}`
+			try {
+				const result = await getFileInfo(candidatePath, {
+					useImageProcess: false,
+					forceRefresh: true,
+					priority: "background",
+				})
+				if (!result?.src) continue
 				if (!this.canApplyAgentRecovery(pollingRunId, imageId)) {
 					this.syncIfCurrentRun(pollingRunId)
 					return
 				}
 
-				const fileName = `${imageId}.${extension}`
-				const candidatePath = `${prefix}/${fileName}`
-				try {
-					const result = await getFileInfo(candidatePath, {
-						useImageProcess: false,
-						forceRefresh: true,
-						priority: "background",
-					})
-					if (!result?.src) continue
-					if (!this.canApplyAgentRecovery(pollingRunId, imageId)) {
-						this.syncIfCurrentRun(pollingRunId)
-						return
-					}
-
-					const resolvedFileName = result.fileName || fileName
-					const persistedPath = toCanvasUploadStoragePath("images", resolvedFileName)
-					this.primeGeneratedImageResource(persistedPath, result.src, resolvedFileName)
-					try {
-						this.config.canvas.elementManager.update(
-							this.config.elementId,
-							{
-								src: persistedPath,
-								status: GenerationStatus.Completed,
-								errorMessage: undefined,
-							},
-							{ silent: false },
-						)
-					} catch {
-						this.stopIfCurrentRun(pollingRunId)
-						return
-					}
-					this.config.canvas.eventEmitter.emit({
-						type: "element:image:resultUpdated",
-						data: { elementId: this.config.elementId },
-					})
-					this.stop()
-					return
-				} catch {
-					// 继续检查下一个扩展名/兼容路径；找不到文件不代表 Design 任务失败。
+				const resolution = resolveCanvasStorageResourceReference(
+					candidatePath,
+					resolveResourceReference,
+					{ requireAttachment: true },
+				)
+				if (
+					resolution.status !== "resolved" ||
+					resolution.resourceKind !== "workspace-file"
+				) {
+					continue
 				}
+
+				const persistedPath = resolution.storagePath
+				const resolvedFileName = result.fileName || fileName
+				this.primeGeneratedImageResource(persistedPath, result.src, resolvedFileName)
+				try {
+					this.config.canvas.elementManager.update(
+						this.config.elementId,
+						{
+							src: persistedPath,
+							status: GenerationStatus.Completed,
+							errorMessage: undefined,
+						},
+						{ silent: false },
+					)
+				} catch {
+					this.stopIfCurrentRun(pollingRunId)
+					return
+				}
+				this.config.canvas.eventEmitter.emit({
+					type: "element:image:resultUpdated",
+					data: { elementId: this.config.elementId },
+				})
+				this.stop()
+				return
+			} catch {
+				// 继续检查下一个扩展名；找不到文件不代表 Design 任务失败。
 			}
 		}
 

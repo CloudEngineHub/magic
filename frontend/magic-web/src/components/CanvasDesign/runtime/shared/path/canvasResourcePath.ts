@@ -200,8 +200,3 @@ export function getCanvasResourceFileName(rawPath: string | null | undefined): s
 	})()
 	return pathname.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? ""
 }
-
-/** @deprecated Removed after generation polling migrates to workspace namespace resolution. */
-export function toCanvasUploadStoragePath(fileDir: string, fileName: string): string {
-	return joinUploadResultPath(fileDir, fileName).replace(/^\/+/, "")
-}
