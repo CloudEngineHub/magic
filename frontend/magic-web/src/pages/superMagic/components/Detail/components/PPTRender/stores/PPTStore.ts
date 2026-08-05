@@ -73,6 +73,13 @@ export interface PPTStoreConfig {
 	enableCache?: boolean
 }
 
+function hasOwnConfigField<K extends keyof PPTStoreConfig>(
+	config: Partial<PPTStoreConfig>,
+	field: K,
+): boolean {
+	return Object.prototype.hasOwnProperty.call(config, field)
+}
+
 export interface PPTExportConfig extends PPTStoreConfig {}
 
 interface SlideLoadTarget {
@@ -478,15 +485,15 @@ export class PPTStore {
 	}
 
 	/**
-	 * Replace the queue when a deck is replaced so old, non-cooperative processing cannot
-	 * occupy slots needed by the new active slide. The generation guard also prevents late writes.
+	 * Invalidate deck-scoped work while retaining one physical concurrency budget for the whole
+	 * Store lifetime. Cancelled non-cooperative processing keeps its slot until it actually settles,
+	 * so a new deck cannot bypass the limit by creating a fresh scheduler.
 	 */
 	private beginContentGeneration(): number {
 		this.contentGeneration++
 		this.contentGenerationController.abort()
 		this.contentGenerationController = new AbortController()
-		this.contentScheduler.dispose()
-		this.contentScheduler = new PPTSlideContentScheduler(this.contentLoadConcurrency)
+		this.contentScheduler.cancelAll()
 		this.visiblePreviewKeys.clear()
 		this.fullscreenContentPriorities.clear()
 		this.activeContentKey = null
@@ -2197,23 +2204,40 @@ export class PPTStore {
 
 		const previousAttachmentList = this.attachmentListSnapshot
 		const previousMainFileId = this.config.mainFileId
-		const mainFileChanged =
-			config.mainFileId !== undefined && config.mainFileId !== previousMainFileId
+		const hasAttachmentListUpdate = hasOwnConfigField(config, "attachmentList")
+		const hasMainFileIdUpdate = hasOwnConfigField(config, "mainFileId")
+		const mainFileChanged = hasMainFileIdUpdate && config.mainFileId !== previousMainFileId
 		if (mainFileChanged) {
 			this.beginContentGeneration()
 			this.pathMappingService.clear()
 		}
 
 		this.config = { ...this.config, ...config }
+		const hasCacheConfigUpdate =
+			hasOwnConfigField(config, "organizationCode") ||
+			hasOwnConfigField(config, "selectedProjectId") ||
+			hasMainFileIdUpdate
+		if (hasCacheConfigUpdate) {
+			// Update identity before asynchronous slide reconciliation so a new deck cannot restore
+			// or debounce-save activeIndex state through the previous deck's cache key.
+			this.cacheManager.updateConfig({
+				organizationCode: this.config.organizationCode,
+				selectedProjectId: this.config.selectedProjectId,
+				mainFileId: this.config.mainFileId,
+			})
+		}
 
 		// Update processor service config
 		const processorConfig: Partial<SlideProcessorConfig> = {}
-		if (config.attachments !== undefined) processorConfig.attachments = config.attachments
-		if (config.attachmentList !== undefined)
+		if (hasOwnConfigField(config, "attachments"))
+			processorConfig.attachments = config.attachments
+		if (hasOwnConfigField(config, "attachmentList"))
 			processorConfig.attachmentList = config.attachmentList
-		if (config.mainFileId !== undefined) processorConfig.mainFileId = config.mainFileId
-		if (config.mainFileName !== undefined) processorConfig.mainFileName = config.mainFileName
-		if (config.displayConfig !== undefined) processorConfig.displayConfig = config.displayConfig
+		if (hasMainFileIdUpdate) processorConfig.mainFileId = config.mainFileId
+		if (hasOwnConfigField(config, "mainFileName"))
+			processorConfig.mainFileName = config.mainFileName
+		if (hasOwnConfigField(config, "displayConfig"))
+			processorConfig.displayConfig = config.displayConfig
 
 		if (Object.keys(processorConfig).length > 0) {
 			this.processorService.updateConfig(processorConfig)
@@ -2235,21 +2259,8 @@ export class PPTStore {
 			configUpdateVersion,
 		)
 		if (!this.isConfigUpdateCurrent(configUpdateVersion)) return
-		if (config.attachmentList !== undefined) {
+		if (hasAttachmentListUpdate) {
 			this.attachmentListSnapshot = this.snapshotAttachmentList(config.attachmentList)
-		}
-
-		// Update cache manager config if cache-related fields changed
-		if (
-			config.organizationCode !== undefined ||
-			config.selectedProjectId !== undefined ||
-			config.mainFileId !== undefined
-		) {
-			this.cacheManager.updateConfig({
-				organizationCode: config.organizationCode ?? this.config.organizationCode,
-				selectedProjectId: config.selectedProjectId ?? this.config.selectedProjectId,
-				mainFileId: config.mainFileId ?? this.config.mainFileId,
-			})
 		}
 
 		await this.settlePendingInitialization(configUpdateVersion)

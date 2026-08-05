@@ -636,6 +636,138 @@ describe("PPTStore content lazy loading", () => {
 		expect(store.loadingProgress).toBe(100)
 	})
 
+	it("treats an explicit mainFileId clear as a deck replacement", async () => {
+		const { store, paths } = createStore(2, { autoLoadAndGenerate: false })
+		stores.push(store)
+		const oldSlides = setIdleSlides(store, 2)
+		oldSlides[0].rawContent = "<main>old raw content</main>"
+		oldSlides[0].content = "<main>old processed content</main>"
+		oldSlides[0].loadingState = "loaded"
+		store.pathMappingService.setPathUrlMapping(paths[0], "https://old.example.com/slide-0")
+		store.pathMappingService.setPathUrlMapping(paths[1], "https://old.example.com/slide-1")
+
+		let oldSignal: AbortSignal | undefined
+		let resolveOldDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent.mockImplementationOnce(
+			(_url: string, options: { signal?: AbortSignal }) =>
+				new Promise<string>((resolve) => {
+					oldSignal = options.signal
+					resolveOldDownload = resolve
+				}),
+		)
+
+		const oldLoad = store.ensureSlideContent(1, "active")
+		await vi.waitFor(() => expect(oldSignal).toBeDefined())
+		const oldFirstSlide = store.slides[0]
+
+		await store.updateConfig({
+			attachments: undefined,
+			attachmentList: undefined,
+			mainFileId: undefined,
+			mainFileName: undefined,
+			displayConfig: { slides: [...paths] },
+		})
+
+		expect(oldSignal?.aborted).toBe(true)
+		await expect(oldLoad).resolves.toBe(false)
+		expect(store.slides[0]).not.toBe(oldFirstSlide)
+		expect(store.slides[0]).toMatchObject({
+			path: paths[0],
+			url: "",
+			loadingState: "idle",
+		})
+		expect(store.slides[0]?.rawContent).toBeUndefined()
+		expect(store.slides[0]?.content).toBeUndefined()
+		expect(store.pathMappingService.getAllFileIdMappings()).toEqual(new Map())
+		expect(store.pathMappingService.getAllUrlMappings()).toEqual(new Map())
+
+		const storeInternals = store as unknown as {
+			attachmentListSnapshot?: unknown
+			processorService: {
+				config: {
+					attachments?: unknown[]
+					attachmentList?: unknown[]
+					mainFileId?: string
+					mainFileName?: string
+				}
+			}
+			cacheManager: { mainFileId?: string }
+		}
+		expect(storeInternals.attachmentListSnapshot).toBeUndefined()
+		expect(storeInternals.processorService.config.attachments).toBeUndefined()
+		expect(storeInternals.processorService.config.attachmentList).toBeUndefined()
+		expect(storeInternals.processorService.config.mainFileId).toBeUndefined()
+		expect(storeInternals.processorService.config.mainFileName).toBeUndefined()
+		expect(storeInternals.cacheManager.mainFileId).toBeUndefined()
+
+		const processedCallCount = mockState.processHtmlContent.mock.calls.length
+		resolveOldDownload("<main>late old deck content</main>")
+		await vi.waitFor(() => expect(store.getContentLoadStats().active).toBe(0))
+		expect(mockState.processHtmlContent).toHaveBeenCalledTimes(processedCallCount)
+		expect(store.slides[0]?.content).toBeUndefined()
+	})
+
+	it("keeps one physical content budget across deck generations", async () => {
+		const { store } = createStore(1, {
+			autoLoadAndGenerate: false,
+			contentLoadConcurrency: 1,
+		})
+		stores.push(store)
+		setIdleSlides(store, 1)
+
+		let oldSignal: AbortSignal | undefined
+		let resolveOldDownload: (content: string) => void = () => undefined
+		mockState.downloadFileContent.mockImplementation(
+			(url: string, options: { signal?: AbortSignal }) => {
+				if (url.endsWith("file-0.html")) {
+					return new Promise<string>((resolve) => {
+						oldSignal = options.signal
+						resolveOldDownload = resolve
+					})
+				}
+				return Promise.resolve(`<main>${url}</main>`)
+			},
+		)
+
+		const oldLoad = store.ensureSlideContent(0, "active")
+		await vi.waitFor(() => expect(oldSignal).toBeDefined())
+
+		const deckUpdate = store.updateConfig({
+			autoLoadAndGenerate: true,
+			mainFileId: "new-main-file",
+			mainFileName: "index.html",
+			displayConfig: { slides: ["new-slide.html"] },
+			attachmentList: [
+				{
+					file_id: "new-main-file",
+					file_name: "index.html",
+					relative_file_path: "new-deck/index.html",
+				},
+				{
+					file_id: "new-slide-file",
+					file_name: "new-slide.html",
+					relative_file_path: "new-deck/new-slide.html",
+				},
+			],
+		})
+
+		await vi.waitFor(() => expect(oldSignal?.aborted).toBe(true))
+		await vi.waitFor(() => expect(store.slides[0]?.path).toBe("new-slide.html"))
+		const cacheManager = (store as unknown as { cacheManager: { mainFileId?: string } })
+			.cacheManager
+		expect(cacheManager.mainFileId).toBe("new-main-file")
+		expect(mockState.downloadFileContent).toHaveBeenCalledTimes(1)
+		expect(store.getContentLoadStats()).toEqual({ active: 1, queued: 1, total: 2 })
+		await expect(oldLoad).resolves.toBe(false)
+
+		resolveOldDownload("<main>late old content</main>")
+		await deckUpdate
+
+		expect(mockState.downloadFileContent).toHaveBeenCalledTimes(2)
+		expect(store.slides[0]?.content).toContain("new-slide-file")
+		expect(store.getContentLoadStats()).toEqual({ active: 0, queued: 0, total: 0 })
+	})
+
 	it("loads the configured initial page before page zero", async () => {
 		const { store, paths } = createStore(200, { initialActiveIndex: 100 })
 		stores.push(store)

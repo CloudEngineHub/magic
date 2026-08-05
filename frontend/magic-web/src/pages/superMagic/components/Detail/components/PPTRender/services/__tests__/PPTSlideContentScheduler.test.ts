@@ -58,8 +58,7 @@ describe("PPTSlideContentScheduler", () => {
 		expect(duplicateTargetPromise).toBe(firstTargetPromise)
 		blocker.resolve(true)
 		await blockerPromise
-		await Promise.resolve()
-		expect(runTarget).toHaveBeenCalledTimes(1)
+		await vi.waitFor(() => expect(runTarget).toHaveBeenCalledTimes(1))
 		expect(executionOrder).toEqual([])
 
 		target.resolve(true)
@@ -219,6 +218,45 @@ describe("PPTSlideContentScheduler", () => {
 		expect(previewSawAbort).toHaveBeenCalledTimes(1)
 	})
 
+	it("cancels only one lower-priority task while waiting for its physical slot", async () => {
+		const scheduler = new PPTSlideContentScheduler(3)
+		const previews = [createDeferred(), createDeferred()]
+		const previewAborts = [vi.fn(), vi.fn()]
+		const existingActive = createDeferred()
+		const nextActive = createDeferred()
+		const nextActiveRun = vi.fn(async () => nextActive.promise)
+
+		const previewResults = previews.map((deferred, index) =>
+			scheduler.schedule(`preview-${index}`, "preview", async (signal) => {
+				signal.addEventListener("abort", previewAborts[index])
+				return deferred.promise
+			}),
+		)
+		const existingActiveResult = scheduler.schedule(
+			"existing-active",
+			"active",
+			async () => existingActive.promise,
+		)
+		const nextActiveResult = scheduler.schedule("next-active", "active", nextActiveRun)
+
+		expect(previewAborts[0].mock.calls.length + previewAborts[1].mock.calls.length).toBe(1)
+		expect(nextActiveRun).not.toHaveBeenCalled()
+
+		const cancelledPreviewIndex = previewAborts[0].mock.calls.length === 1 ? 0 : 1
+		previews[cancelledPreviewIndex].resolve(false)
+		await vi.waitFor(() => expect(nextActiveRun).toHaveBeenCalledTimes(1))
+
+		previews[1 - cancelledPreviewIndex].resolve(true)
+		existingActive.resolve(true)
+		nextActive.resolve(true)
+
+		await expect(Promise.all(previewResults)).resolves.toEqual(
+			cancelledPreviewIndex === 0 ? [false, true] : [true, false],
+		)
+		await expect(existingActiveResult).resolves.toBe(true)
+		await expect(nextActiveResult).resolves.toBe(true)
+	})
+
 	it("starts a queued preview immediately when it is upgraded to active", async () => {
 		const scheduler = new PPTSlideContentScheduler(2)
 		const previewBlocker = createDeferred()
@@ -281,7 +319,7 @@ describe("PPTSlideContentScheduler", () => {
 		expect(sawAbort).toHaveBeenCalledTimes(1)
 	})
 
-	it("settles cancelled non-cooperative work as false and allows the same key again", async () => {
+	it("settles cancelled non-cooperative work but holds its slot until run finishes", async () => {
 		const scheduler = new PPTSlideContentScheduler(1)
 		const oldTask = createDeferred()
 		const oldResult = scheduler.schedule("slide", "active", async () => oldTask.promise)
@@ -289,11 +327,55 @@ describe("PPTSlideContentScheduler", () => {
 		scheduler.cancelAll()
 		await expect(oldResult).resolves.toBe(false)
 
-		const newResult = scheduler.schedule("slide", "active", async () => true)
-		await expect(newResult).resolves.toBe(true)
+		const newRun = vi.fn(async () => true)
+		const newResult = scheduler.schedule("slide", "active", newRun)
+		await Promise.resolve()
+
+		expect(newRun).not.toHaveBeenCalled()
+		expect(scheduler.getStats()).toEqual({ active: 1, queued: 1, total: 2 })
 
 		oldTask.resolve(true)
 		await expect(oldResult).resolves.toBe(false)
+		await expect(newResult).resolves.toBe(true)
+		expect(newRun).toHaveBeenCalledTimes(1)
+	})
+
+	it("never exceeds physical concurrency across repeated non-cooperative cancellation", async () => {
+		const scheduler = new PPTSlideContentScheduler(2)
+		const firstGeneration = [createDeferred(), createDeferred()]
+		const secondGeneration = [createDeferred(), createDeferred()]
+		let physicallyActive = 0
+		let maxPhysicallyActive = 0
+
+		const runDeferred = async (deferred: ReturnType<typeof createDeferred>) => {
+			physicallyActive++
+			maxPhysicallyActive = Math.max(maxPhysicallyActive, physicallyActive)
+			const result = await deferred.promise
+			physicallyActive--
+			return result
+		}
+
+		const firstResults = firstGeneration.map((deferred, index) =>
+			scheduler.schedule(`old-${index}`, "active", () => runDeferred(deferred)),
+		)
+		scheduler.cancelAll()
+		await expect(Promise.all(firstResults)).resolves.toEqual([false, false])
+
+		const secondResults = secondGeneration.map((deferred, index) =>
+			scheduler.schedule(`new-${index}`, "active", () => runDeferred(deferred)),
+		)
+		await Promise.resolve()
+		expect(physicallyActive).toBe(2)
+		expect(scheduler.getStats()).toEqual({ active: 2, queued: 2, total: 4 })
+
+		firstGeneration[0].resolve(true)
+		await vi.waitFor(() => expect(physicallyActive).toBe(2))
+		firstGeneration[1].resolve(true)
+		await vi.waitFor(() => expect(scheduler.getStats().queued).toBe(0))
+
+		secondGeneration.forEach((deferred) => deferred.resolve(true))
+		await expect(Promise.all(secondResults)).resolves.toEqual([true, true])
+		expect(maxPhysicallyActive).toBe(2)
 	})
 
 	it("normalizes fractional concurrency instead of leaving tasks queued forever", async () => {
