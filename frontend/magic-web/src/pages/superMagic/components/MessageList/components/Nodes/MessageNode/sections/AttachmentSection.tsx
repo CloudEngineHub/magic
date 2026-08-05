@@ -11,7 +11,6 @@ import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/
 import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
 import {
 	buildFilePathAttachments,
-	downloadFileByPath,
 	openFileByPath,
 	type FilePathAttachment,
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
@@ -19,6 +18,7 @@ import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils
 import { superMagicStore } from "@/pages/superMagic/stores"
 import projectFilesStore from "@/stores/projectFiles"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -85,6 +85,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 }: FilePathAttachmentListProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
+    const downloadFileByPath = useFilePathAttachmentDownload()
 
 	if (attachments.length === 0) return null
 

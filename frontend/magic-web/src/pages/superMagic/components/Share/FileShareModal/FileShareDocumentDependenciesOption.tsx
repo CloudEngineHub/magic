@@ -1,28 +1,31 @@
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import type { StaticDependencyFileType } from "@/pages/superMagic/utils/staticDependencies"
 
-interface FileShareHtmlDependenciesOptionProps {
+interface FileShareDocumentDependenciesOptionProps {
 	analysisError: Error | null
 	checked: boolean
 	dependencyFileCount: number
+	fileType: StaticDependencyFileType | null
 	onCheckedChange: (checked: boolean) => void
 	visible: boolean
 }
 
-export default function FileShareHtmlDependenciesOption({
+export default function FileShareDocumentDependenciesOption({
 	analysisError,
 	checked,
 	dependencyFileCount,
+	fileType,
 	onCheckedChange,
 	visible,
-}: FileShareHtmlDependenciesOptionProps) {
+}: FileShareDocumentDependenciesOptionProps) {
 	const { t } = useTranslation("super")
 
 	if (visible) {
 		return (
 			<label
 				className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5"
-				data-testid="file-share-html-dependencies-option"
+				data-testid="file-share-document-dependencies-option"
 			>
 				<Checkbox
 					checked={checked}
@@ -30,10 +33,12 @@ export default function FileShareHtmlDependenciesOption({
 				/>
 				<span className="flex min-w-0 flex-col gap-1">
 					<span className="text-sm font-medium leading-5 text-foreground">
-						{t("share.includeHtmlDependencies", { count: dependencyFileCount })}
+						{t("share.includeDocumentDependencies", { count: dependencyFileCount })}
 					</span>
 					<span className="text-xs leading-4 text-muted-foreground">
-						{t("share.includeHtmlDependenciesDescription")}
+						{t("share.includeDocumentDependenciesDescription", {
+							type: fileType === "markdown" ? "Markdown" : "HTML",
+						})}
 					</span>
 				</span>
 			</label>
@@ -45,9 +50,9 @@ export default function FileShareHtmlDependenciesOption({
 			<div
 				role="alert"
 				className="text-xs leading-4 text-destructive"
-				data-testid="file-share-html-dependencies-error"
+				data-testid="file-share-document-dependencies-error"
 			>
-				{t("share.htmlDependenciesAnalysisFailed")}
+				{t("share.documentDependenciesAnalysisFailed")}
 			</div>
 		)
 	}

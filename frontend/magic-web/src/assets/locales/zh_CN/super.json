@@ -406,6 +406,13 @@
 		"manage": "邀请",
 		"noPermissionCollaborationProject": "无权限查看项目",
 		"noPermissionCollaborationProjectContent": "您无权限查看该项目，请联系项目创建人",
+		"organizationSwitch": {
+			"action": "切换团队并进入项目",
+			"description": "您可在「{{organizationName}}」中访问此共享项目，切换团队后继续。",
+			"failed": "切换团队失败",
+			"switching": "切换中...",
+			"title": "切换团队以进入项目"
+		},
 		"people": "个人",
 		"remove": "移除",
 		"removeFailed": "移除协作者失败",
@@ -1827,6 +1834,10 @@
 			"editorComponentError": "Markdown组件错误",
 			"editorRenderError": "Markdown渲染错误"
 		}
+	},
+	"export": {
+		"generatedBy": "由{{platformName}}生成",
+		"platformFallback": "平台"
 	},
 	"fileTree": {
 		"collapseAll": "一键折叠",
@@ -4054,6 +4065,7 @@
 		"disableShare": "禁止分享",
 		"disableShareDescription": "关闭话题回放分享功能",
 		"disableTopicShareConfirm": "关闭当前话题分享后，已分享的回放链接将即时失效",
+		"documentDependenciesAnalysisFailed": "关联静态资源分析失败，将仅处理当前文件。",
 		"done": "完成",
 		"download": {
 			"copyLink": "复制链接",
@@ -4107,9 +4119,8 @@
 		"hideCreatorInfo": "隐藏\"由$t(common:platform.name)创造\"字样",
 		"hideCreatorInfoDescription": "开启后，将隐藏页面右下角悬浮水印",
 		"hidePassword": "隐藏密码",
-		"htmlDependenciesAnalysisFailed": "关联静态资源分析失败，将仅处理 HTML 文件",
-		"includeHtmlDependencies": "同时处理关联静态资源（{{count}} 个）",
-		"includeHtmlDependenciesDescription": "取消后，目标 HTML 中的图片、样式或脚本可能无法正常加载。",
+		"includeDocumentDependencies": "同时处理关联静态资源（{{count}} 个）",
+		"includeDocumentDependenciesDescription": "取消后，目标 {{type}} 中的关联资源可能无法正常加载。",
 		"includedFiles": "包含文件",
 		"internetFileShare": "互联网可访问",
 		"internetFileShareDescription": "任何获得链接的人可访问文件",

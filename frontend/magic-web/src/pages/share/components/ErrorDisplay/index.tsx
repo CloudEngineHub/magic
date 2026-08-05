@@ -7,13 +7,13 @@ import { useTranslation } from "react-i18next"
 
 interface ErrorDisplayProps {
 	errorMessage?: string
-	onRetry?: () => void
+	onBack?: () => void
 	isFileShare?: boolean
 }
 
 export default function ErrorDisplay({
 	errorMessage,
-	onRetry,
+	onBack,
 	isFileShare = false,
 }: ErrorDisplayProps) {
 	const { t } = useTranslation("super")
@@ -35,25 +35,24 @@ export default function ErrorDisplay({
 					<img src={icon} alt="" />
 				</div>
 				<div
-					className="text-center text-[32px] font-semibold text-muted-foreground"
+					className="text-center text-lg font-semibold leading-6 text-foreground/80"
 					data-testid="error-display-message"
 				>
 					{errorMessage || t("share.noPermissionToView")}
 				</div>
 				<span
-					className="mb-5 mt-1 text-center text-sm font-normal text-muted-foreground"
+					className="mb-5 mt-2.5 text-center text-sm font-normal leading-5 text-muted-foreground"
 					data-testid="error-display-description"
 				>
 					{description}
 				</span>
-				{onRetry && (
+				{onBack && (
 					<Button
 						type="button"
 						variant="default"
 						size="sm"
-						onClick={() => {
-							window.location.href = window.location.origin
-						}}
+						className="rounded-lg px-6 py-1.5"
+						onClick={onBack}
 						data-testid="error-display-retry-button"
 					>
 						{t("common.back")}

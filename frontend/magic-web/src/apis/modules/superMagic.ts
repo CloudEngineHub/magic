@@ -249,6 +249,11 @@ export interface BatchSavePayload {
 	}>
 }
 
+export interface ProjectAccessibilityResponse {
+	project_id: string | number
+	required_magic_organization_code: string
+}
+
 function getShareModeRequestConfig(temporaryToken?: string): RequestConfig | undefined {
 	if (!temporaryToken) return undefined
 	return {
@@ -911,6 +916,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	copyProject(params: CopyProjectRequest) {
 		return fetch.post<CopiedProjectResponse>(`/api/v1/super-agent/projects/fork`, params)
+	},
+	/**
+	 * @description 获取当前用户对项目的访问权限及其归属组织
+	 */
+	getProjectAccessibility(projectId: string, options?: Omit<RequestConfig, "url">) {
+		return fetch.get<ProjectAccessibilityResponse | null>(
+			`/api/v1/super-agent/projects/${projectId}/accessibility`,
+			options,
+		)
 	},
 
 	/**
