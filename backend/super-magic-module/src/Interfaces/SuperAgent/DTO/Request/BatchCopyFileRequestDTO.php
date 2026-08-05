@@ -42,6 +42,11 @@ class BatchCopyFileRequestDTO extends AbstractRequestDTO
      */
     public array $keepBothFileIds = [];
 
+    /**
+     * Whether to recreate the source parent directory chain in the target project.
+     */
+    public bool $preserveParentPath = false;
+
     public function getTargetParentId(): string
     {
         return $this->targetParentId;
@@ -72,6 +77,11 @@ class BatchCopyFileRequestDTO extends AbstractRequestDTO
         return $this->keepBothFileIds;
     }
 
+    public function shouldPreserveParentPath(): bool
+    {
+        return $this->preserveParentPath;
+    }
+
     /**
      * Get validation rules.
      */
@@ -86,6 +96,7 @@ class BatchCopyFileRequestDTO extends AbstractRequestDTO
             'target_project_id' => 'nullable|string',
             'keep_both_file_ids' => 'nullable|array',
             'keep_both_file_ids.*' => 'string',
+            'preserve_parent_path' => 'nullable|boolean',
         ];
     }
 
@@ -107,6 +118,7 @@ class BatchCopyFileRequestDTO extends AbstractRequestDTO
             'target_project_id.string' => 'Target project ID must be a string',
             'keep_both_file_ids.array' => 'Keep both file IDs must be an array',
             'keep_both_file_ids.*.string' => 'Each keep both file ID must be a string',
+            'preserve_parent_path.boolean' => 'Preserve parent path must be a boolean',
         ];
     }
 }

@@ -206,9 +206,17 @@ class ProjectDomainService
         int $page = 1,
         int $pageSize = 10,
         string $orderBy = 'updated_at',
-        string $orderDirection = 'desc'
+        string $orderDirection = 'desc',
+        bool $pinPriority = false
     ): array {
-        return $this->projectRepository->getProjectsByConditions($conditions, $page, $pageSize, $orderBy, $orderDirection);
+        return $this->projectRepository->getProjectsByConditions(
+            $conditions,
+            $page,
+            $pageSize,
+            $orderBy,
+            $orderDirection,
+            $pinPriority
+        );
     }
 
     /**

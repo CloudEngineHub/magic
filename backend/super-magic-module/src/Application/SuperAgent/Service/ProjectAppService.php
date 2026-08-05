@@ -785,7 +785,8 @@ class ProjectAppService extends AbstractAppService
             $requestDTO->getPage(),
             $requestDTO->getPageSize(),
             $requestDTO->getOrderBy(),
-            $requestDTO->getSort()
+            $requestDTO->getSort(),
+            $requestDTO->getPinPriority()
         );
 
         // 提取所有项目ID和工作区ID

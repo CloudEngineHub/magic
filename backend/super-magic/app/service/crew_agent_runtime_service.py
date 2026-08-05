@@ -13,7 +13,7 @@ from app.core.subagent_delegation import is_crew_agent_code
 from app.path_manager import PathManager
 from app.service.crew_agent_cache_manager import CrewAgentCacheManager
 from app.service.crew_agent_compiler import CrewAgentCompiler
-from app.service.crew_downloader import CrewDownloader
+from app.service.crew_downloader import CrewDownloader, CrewPackageInvalidError
 from app.utils.async_file_utils import (
     async_exists,
     async_read_markdown,
@@ -83,7 +83,7 @@ class CrewAgentRuntimeService:
             )
             await self._cache_manager.clear_compiled_cache(agent_code)
             self._invalidate_runtime_cache(agent_code, cache_state.reason)
-            identity_meta = await self._compiler.compile(agent_code, crew_dir)
+            identity_meta = await self._compile(agent_code, crew_dir)
             await self._cache_manager.write_manifest(agent_code, crew_dir, cache_state.source)
             return self._build_info(agent_code, agent_file, crew_dir, identity_meta, compiled=True)
 
@@ -94,9 +94,21 @@ class CrewAgentRuntimeService:
             await self._downloader.download_and_extract(agent_code, crew_dir)
 
         self._invalidate_runtime_cache(agent_code, "compiled_cache_missing")
-        identity_meta = await self._compiler.compile(agent_code, crew_dir)
+        identity_meta = await self._compile(agent_code, crew_dir)
         await self._cache_manager.write_manifest(agent_code, crew_dir)
         return self._build_info(agent_code, agent_file, crew_dir, identity_meta, compiled=True)
+
+    async def _compile(self, agent_code: str, crew_dir: Path) -> dict:
+        try:
+            return await self._compiler.compile(agent_code, crew_dir)
+        except asyncio.CancelledError:
+            raise
+        except CrewPackageInvalidError:
+            raise
+        except Exception as exc:
+            raise CrewPackageInvalidError(
+                f"Employee package compilation failed: {agent_code}"
+            ) from exc
 
     def _invalidate_runtime_cache(self, agent_code: str, reason: str) -> None:
         if self._on_cache_invalidated is not None:

@@ -50,6 +50,11 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
     public string $sort = 'desc';
 
     /**
+     * Whether pinned projects should be ordered before non-pinned projects.
+     */
+    public bool $pinPriority = false;
+
+    /**
      * Get page number.
      */
     public function getPage(): int
@@ -127,6 +132,16 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
         $this->sort = $this->normalizeSort($sort);
     }
 
+    public function getPinPriority(): bool
+    {
+        return $this->pinPriority;
+    }
+
+    public function setPinPriority(bool|int|string $pinPriority): void
+    {
+        $this->pinPriority = filter_var($pinPriority, FILTER_VALIDATE_BOOL);
+    }
+
     /**
      * Get validation rules.
      */
@@ -139,6 +154,7 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
             'project_name' => 'nullable|string|max:255',
             'order_by' => 'nullable|string|in:id,updated_at',
             'sort' => 'nullable|string|in:asc,desc',
+            'pin_priority' => 'nullable|boolean',
         ];
     }
 
@@ -160,6 +176,7 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
             'order_by.in' => 'Order by must be one of: id, updated_at',
             'sort.string' => 'Sort must be a string',
             'sort.in' => 'Sort must be either asc or desc',
+            'pin_priority.boolean' => 'Pin priority must be a boolean',
         ];
     }
 

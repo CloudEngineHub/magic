@@ -175,7 +175,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         int $page = 1,
         int $pageSize = 10,
         string $orderBy = 'updated_at',
-        string $orderDirection = 'desc'
+        string $orderDirection = 'desc',
+        bool $pinPriority = false
     ): array {
         $query = $this->projectModel::query()
             ->withoutGlobalScopes()
@@ -223,8 +224,10 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
                 Db::raw('COALESCE(pms.is_pinned, 0) as is_pinned'),
                 Db::raw('pms.pinned_at as pinned_at'),
             ]);
-            $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
-                ->orderByRaw('pms.pinned_at DESC');
+            if ($pinPriority) {
+                $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
+                    ->orderByRaw('pms.pinned_at DESC');
+            }
         }
 
         // 排序和分页

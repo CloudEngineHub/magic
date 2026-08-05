@@ -5,37 +5,35 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request;
+namespace Dtyq\SuperMagic\Interfaces\Share\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
 
-class CopyFileRequestDTO extends AbstractRequestDTO
+class BatchCopySharedFilesRequestDTO extends AbstractRequestDTO
 {
-    /**
-     * The ID of the target parent directory.
-     */
-    public string $targetParentId = '';
+    public array $fileIds = [];
 
-    /**
-     * The ID of the previous file for positioning, 0=first position, -1=last position (default).
-     */
-    public string $preFileId = '-1';
-
-    /**
-     * The ID of the target project (optional, for cross-project copy).
-     */
     public string $targetProjectId = '';
 
-    /**
-     * Array of source file IDs that should not overwrite when conflict occurs.
-     * If current file ID is in this list and target path exists, generate a new target filename.
-     */
+    public string $targetParentId = '';
+
+    public string $preFileId = '';
+
     public array $keepBothFileIds = [];
 
-    /**
-     * Whether to recreate the source parent directory chain in the target project.
-     */
     public bool $preserveParentPath = false;
+
+    public string $pwd = '';
+
+    public function getFileIds(): array
+    {
+        return $this->fileIds;
+    }
+
+    public function getTargetProjectId(): string
+    {
+        return $this->targetProjectId;
+    }
 
     public function getTargetParentId(): string
     {
@@ -45,11 +43,6 @@ class CopyFileRequestDTO extends AbstractRequestDTO
     public function getPreFileId(): string
     {
         return $this->preFileId;
-    }
-
-    public function getTargetProjectId(): string
-    {
-        return $this->targetProjectId;
     }
 
     public function getKeepBothFileIds(): array
@@ -62,33 +55,43 @@ class CopyFileRequestDTO extends AbstractRequestDTO
         return $this->preserveParentPath;
     }
 
-    /**
-     * Get validation rules.
-     */
+    public function getPassword(): string
+    {
+        return $this->pwd;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
+            'file_ids' => 'required|array|min:1',
+            'file_ids.*' => 'required|string',
+            'target_project_id' => 'required|string',
             'target_parent_id' => 'nullable|string',
-            'pre_file_id' => 'string', // -1表示末尾，0表示第一位，>0表示指定位置
-            'target_project_id' => 'nullable|string',
+            'pre_file_id' => 'nullable|string',
             'keep_both_file_ids' => 'nullable|array',
             'keep_both_file_ids.*' => 'string',
             'preserve_parent_path' => 'nullable|boolean',
+            'pwd' => 'nullable|string|max:100',
         ];
     }
 
-    /**
-     * Get custom error messages for validation failures.
-     */
     protected static function getHyperfValidationMessage(): array
     {
         return [
-            'target_parent_id.string' => 'Target parent ID must be a string',
-            'pre_file_id.string' => 'Pre file ID must be a string',
+            'file_ids.required' => 'File IDs are required',
+            'file_ids.array' => 'File IDs must be an array',
+            'file_ids.min' => 'At least one file ID is required',
+            'file_ids.*.required' => 'Each file ID is required',
+            'file_ids.*.string' => 'Each file ID must be a string',
+            'target_project_id.required' => 'Target project ID is required',
             'target_project_id.string' => 'Target project ID must be a string',
+            'target_parent_id.string' => 'Target parent ID must be a string',
+            'pre_file_id.string' => 'Previous file ID must be a string',
             'keep_both_file_ids.array' => 'Keep both file IDs must be an array',
             'keep_both_file_ids.*.string' => 'Each keep both file ID must be a string',
             'preserve_parent_path.boolean' => 'Preserve parent path must be a boolean',
+            'pwd.string' => 'Password must be a string',
+            'pwd.max' => 'Password cannot exceed 100 characters',
         ];
     }
 }

@@ -32,6 +32,7 @@ return [
     'temperature_value_range_error' => 'nilai temperature mestilah dalam julat 0-2',
     'ai_ability_not_found' => 'Keupayaan AI tidak dijumpai',
     'ai_ability_disabled' => 'Keupayaan AI tidak diaktifkan',
+    'ai_ability_model_unavailable' => 'Model keupayaan AI tidak tersedia',
     'config_disabled' => 'Konfigurasi penyedia perkhidmatan dilumpuhkan',
     'config_not_found' => 'Konfigurasi penyedia perkhidmatan tidak dijumpai',
     'config_load_failed' => 'Pemuatan konfigurasi gagal',

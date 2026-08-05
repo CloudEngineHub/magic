@@ -185,7 +185,8 @@ class FileApi extends AbstractApi
             (int) $id,
             (int) $requestDTO->getTargetParentId(),
             ! empty($requestDTO->getTargetProjectId()) ? (int) $requestDTO->getTargetProjectId() : null,
-            $requestDTO->getKeepBothFileIds()
+            $requestDTO->getKeepBothFileIds(),
+            $requestDTO->shouldPreserveParentPath()
         );
     }
 
@@ -224,7 +225,8 @@ class FileApi extends AbstractApi
             (int) $requestDTO->getTargetParentId(),
             (int) $requestDTO->getPreFileId(),
             ! empty($requestDTO->getTargetProjectId()) ? (int) $requestDTO->getTargetProjectId() : null,
-            $requestDTO->getKeepBothFileIds()
+            $requestDTO->getKeepBothFileIds(),
+            $requestDTO->shouldPreserveParentPath()
         );
     }
 

@@ -9,6 +9,7 @@ return [
     'file_exist' => 'File already exists',
     'illegal_file_key' => 'Illegal file key',
     'target_parent_not_directory' => 'Target parent is not a directory',
+    'preserve_parent_path_conflict' => 'Target path conflicts with an existing file: :path',
     'cannot_move_to_subdirectory' => 'Cannot move directory to its subdirectory',
     'file_move_failed' => 'Failed to move file',
     'file_copy_failed' => 'Failed to copy file',

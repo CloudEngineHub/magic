@@ -702,16 +702,13 @@ class FileManagementAppService extends AbstractAppService
 
         try {
             $projectId = (int) $requestDTO->getProjectId();
-            $fileIds = $requestDTO->getFileIds();
+            $fileIds = array_values(array_unique(array_map('intval', $requestDTO->getFileIds())));
 
             // Validate project ownership
             $this->getAccessibleProjectWithEditor($projectId, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
 
-            // Fetch file entities before deletion so the event carries complete data
-            $fileEntities = $this->taskFileDomainService->getProjectFilesByIds($projectId, $fileIds);
-
-            // 调用 MagicFS 统一的批量删除方法（软删除）
-            $this->magicFSFileDomainService->deleteFiles($fileIds);
+            // MagicFS 在项目作用域内加载并校验全部文件，返回删除前实体供事件使用。
+            $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',
@@ -809,6 +806,7 @@ class FileManagementAppService extends AbstractAppService
      * @param int $targetParentId Target parent directory ID
      * @param null|int $targetProjectId Target project ID (null means same project)
      * @param array $keepBothFileIds Array of source file IDs that should not overwrite when conflict occurs
+     * @param bool $preserveParentPath Whether to preserve source parent directories for cross-project moves
      * @return array Move result
      */
     public function moveFile(
@@ -816,7 +814,8 @@ class FileManagementAppService extends AbstractAppService
         int $fileId,
         int $targetParentId,
         ?int $targetProjectId = null,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
@@ -873,6 +872,7 @@ class FileManagementAppService extends AbstractAppService
 
             $isCrossProject = $sourceProject->getId() !== $targetProject->getId();
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
+            $preserveParentPath = $isCrossProject && $preserveParentPath;
             $hasKeepBoth = ! empty($keepBothFileIds);
             $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth;
 
@@ -905,7 +905,8 @@ class FileManagementAppService extends AbstractAppService
                     $sourceProject->getId(),
                     null,
                     $targetParentId,
-                    $keepBothFileIds
+                    $keepBothFileIds,
+                    $preserveParentPath
                 );
 
                 $this->logger->info(sprintf('Move directory request data, batchKey: %s', $batchKey), [
@@ -914,6 +915,7 @@ class FileManagementAppService extends AbstractAppService
                     'target_project_id' => $targetProjectLogId,
                     'target_parent_id' => $targetParentId,
                     'keep_both_file_ids' => $keepBothFileIds,
+                    'preserve_parent_path' => $preserveParentPath,
                 ]);
 
                 $publisher = new FileBatchMovePublisher($event);
@@ -990,6 +992,7 @@ class FileManagementAppService extends AbstractAppService
      * @param null|int $preFileId Previous file ID for positioning
      * @param null|int $targetProjectId Target project ID (null means same project)
      * @param array $keepBothFileIds Array of source file IDs that should not overwrite when conflict occurs
+     * @param bool $preserveParentPath Whether to preserve source parent directories for cross-project copies
      * @return array Copy result
      */
     public function copyFile(
@@ -998,7 +1001,8 @@ class FileManagementAppService extends AbstractAppService
         int $targetParentId,
         ?int $preFileId = null,
         ?int $targetProjectId = null,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
@@ -1054,6 +1058,7 @@ class FileManagementAppService extends AbstractAppService
 
             $isCrossProject = $sourceProject->getId() !== $targetProject->getId();
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
+            $preserveParentPath = $isCrossProject && $preserveParentPath;
             $shouldAsync = $fileEntity->getIsDirectory() || $isCrossProject || $isCrossOrganization;
 
             // 5. Directory/cross-project/cross-organization copy: use asynchronous processing
@@ -1086,7 +1091,8 @@ class FileManagementAppService extends AbstractAppService
                     $sourceProject->getId(),
                     $preFileId,
                     $targetParentId,
-                    $keepBothFileIds
+                    $keepBothFileIds,
+                    $preserveParentPath
                 );
 
                 $this->logger->info(sprintf('Copy directory request data, batchKey: %s', $batchKey), [
@@ -1099,6 +1105,7 @@ class FileManagementAppService extends AbstractAppService
                     'is_directory' => $fileEntity->getIsDirectory(),
                     'is_cross_project' => $isCrossProject,
                     'is_cross_organization' => $isCrossOrganization,
+                    'preserve_parent_path' => $preserveParentPath,
                 ]);
 
                 $publisher = new FileBatchCopyPublisher($event);
@@ -1459,7 +1466,8 @@ class FileManagementAppService extends AbstractAppService
             $isCrossOrganization = $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode();
             $hasKeepBoth = ! empty($requestDTO->getKeepBothFileIds());
             $hasPreFileId = ! empty($requestDTO->getPreFileId());
-            $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth || $hasPreFileId;
+            $preserveParentPath = $isCrossProject && $requestDTO->shouldPreserveParentPath();
+            $shouldAsync = $isCrossProject || $isCrossOrganization || $hasKeepBoth || $hasPreFileId || $preserveParentPath;
 
             if (! $shouldAsync) {
                 return $this->batchMoveFileSync(
@@ -1511,6 +1519,7 @@ class FileManagementAppService extends AbstractAppService
                 'target_parent_id' => $targetParentId,
                 'pre_file_id' => $requestDTO->getPreFileId(),
                 'keep_both_file_ids' => $requestDTO->getKeepBothFileIds(),
+                'preserve_parent_path' => $preserveParentPath,
             ]);
 
             // Create and publish batch move event
@@ -1524,7 +1533,8 @@ class FileManagementAppService extends AbstractAppService
                 $sourceProject->getId(),
                 $preFileId,
                 $targetParentId,
-                $requestDTO->getKeepBothFileIds()
+                $requestDTO->getKeepBothFileIds(),
+                $preserveParentPath
             );
             $publisher = new FileBatchMovePublisher($event);
             $this->producer->produce($publisher);
@@ -1563,7 +1573,6 @@ class FileManagementAppService extends AbstractAppService
     public function batchCopyFile(RequestContext $requestContext, BatchCopyFileRequestDTO $requestDTO): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createDataIsolation($userAuthorization);
         $sourceProject = null;
         $targetProject = null;
 
@@ -1583,16 +1592,8 @@ class FileManagementAppService extends AbstractAppService
                     $userAuthorization->getOrganizationCode()
                 )
                 : $sourceProject;
-
-            // Generate batch key for tracking
-            $fileIds = $requestDTO->getFileIds();
-            sort($fileIds); // Ensure consistent hash for same file IDs
-            $fileIdsHash = md5(implode(',', $fileIds));
-            $batchKey = $this->batchOperationStatusManager->generateBatchKey(
-                FileBatchOperationStatusManager::OPERATION_COPY,
-                $dataIsolation->getCurrentUserId(),
-                $fileIdsHash
-            );
+            $preserveParentPath = $sourceProject->getId() !== $targetProject->getId()
+                && $requestDTO->shouldPreserveParentPath();
 
             // Expand directory file IDs to include all nested files
             $expandedFileIds = $this->expandDirectoryFileIds(
@@ -1618,76 +1619,22 @@ class FileManagementAppService extends AbstractAppService
             }
 
             $this->logger->info('Expanded directory file IDs for batch copy', [
-                'batch_key' => $batchKey,
                 'original_file_ids' => $requestDTO->getFileIds(),
                 'expanded_file_ids' => $expandedFileIds,
                 'original_count' => count($requestDTO->getFileIds()),
                 'expanded_count' => count($expandedFileIds),
             ]);
 
-            // Initialize task status with expanded file count
-            $this->batchOperationStatusManager->initializeTask(
-                $batchKey,
-                FileBatchOperationStatusManager::OPERATION_COPY,
-                $dataIsolation->getCurrentUserId(),
-                count($expandedFileIds)
-            );
-
-            // Print request data
-            $this->logger->info(sprintf('Batch copy file request data, batchKey: %s', $batchKey), [
-                'file_ids' => $requestDTO->getFileIds(),
-                'expanded_file_ids' => $expandedFileIds,
-                'source_project_id' => $sourceProject->getId(),
-                'target_project_id' => $targetProject->getId(),
-                'target_parent_id' => $requestDTO->getTargetParentId(),
-                'pre_file_id' => $requestDTO->getPreFileId(),
-                'keep_both_file_ids' => $requestDTO->getKeepBothFileIds(),
-            ]);
-
-            // Create and publish batch copy event
-            $preFileId = ! empty($requestDTO->getPreFileId()) ? (int) $requestDTO->getPreFileId() : null;
-            if (empty($requestDTO->getTargetParentId())) {
-                $targetParentId = $this->taskFileDomainService->findOrCreateProjectRootDirectory(
-                    projectId: $targetProject->getId(),
-                    workDir: $targetProject->getWorkDir(),
-                    userId: $dataIsolation->getCurrentUserId(),
-                    organizationCode: $dataIsolation->getCurrentOrganizationCode(),
-                    projectOrganizationCode: $targetProject->getUserOrganizationCode()
-                );
-            } else {
-                $targetParentId = (int) $requestDTO->getTargetParentId();
-            }
-
-            $targetParentEntity = $this->taskFileDomainService->getById($targetParentId);
-            if ($targetParentEntity === null || ! $targetParentEntity->getIsDirectory()) {
-                ExceptionBuilder::throw(
-                    GenericErrorCode::ParameterValidationFailed,
-                    trans('file.target_parent_not_directory')
-                );
-            }
-            if ($targetParentEntity->getProjectId() !== $targetProject->getId()) {
-                ExceptionBuilder::throw(
-                    SuperAgentErrorCode::FILE_PERMISSION_DENIED,
-                    trans('file.target_parent_not_in_target_project')
-                );
-            }
-
-            $event = FileBatchCopyEvent::fromDTO(
-                $batchKey,
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode(),
+            return $this->batchCopyAuthorizedFiles(
+                $userAuthorization,
+                $sourceProject,
+                $targetProject,
                 $expandedFileIds,
-                $targetProject->getId(),
-                $sourceProject->getId(),
-                $preFileId,
-                $targetParentId,
-                $requestDTO->getKeepBothFileIds()
+                $requestDTO->getTargetParentId(),
+                $requestDTO->getPreFileId(),
+                $requestDTO->getKeepBothFileIds(),
+                $preserveParentPath
             );
-            $publisher = new FileBatchCopyPublisher($event);
-            $this->producer->produce($publisher);
-
-            // Return asynchronous response
-            return FileBatchOperationResponseDTO::createAsyncProcessing($batchKey)->toArray();
         } catch (BusinessException $e) {
             $this->logger->warning('Business logic error in batch copy file', [
                 'file_ids' => $requestDTO->getFileIds(),
@@ -1708,6 +1655,93 @@ class FileManagementAppService extends AbstractAppService
             ]);
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_COPY_FAILED, trans('file.batch_copy_failed'));
         }
+    }
+
+    /**
+     * Execute a batch copy for files whose source access has already been authorized.
+     *
+     * The caller remains responsible for authorizing the source project and every
+     * file ID. Target project and directory authorization must be completed before
+     * calling this method.
+     */
+    public function batchCopyAuthorizedFiles(
+        MagicUserAuthorization $userAuthorization,
+        ProjectEntity $sourceProject,
+        ProjectEntity $targetProject,
+        array $authorizedFileIds,
+        string $targetParentId = '',
+        string $preFileId = '',
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
+    ): array {
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+        $expandedFileIds = array_values(array_unique(array_map('intval', $authorizedFileIds)));
+        sort($expandedFileIds);
+
+        if (empty($expandedFileIds)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+
+        if (empty($targetParentId)) {
+            $resolvedTargetParentId = $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                projectId: $targetProject->getId(),
+                workDir: $targetProject->getWorkDir(),
+                userId: $dataIsolation->getCurrentUserId(),
+                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                projectOrganizationCode: $targetProject->getUserOrganizationCode()
+            );
+        } else {
+            $resolvedTargetParentId = (int) $targetParentId;
+        }
+
+        $targetParentEntity = $this->taskFileDomainService->getById($resolvedTargetParentId);
+        if ($targetParentEntity === null || ! $targetParentEntity->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                trans('file.target_parent_not_directory')
+            );
+        }
+        if ($targetParentEntity->getProjectId() !== $targetProject->getId()) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::FILE_PERMISSION_DENIED,
+                trans('file.target_parent_not_in_target_project')
+            );
+        }
+
+        $batchResourceId = sprintf(
+            '%d:%d:%d:%s',
+            $sourceProject->getId(),
+            $targetProject->getId(),
+            $resolvedTargetParentId,
+            implode(',', $expandedFileIds)
+        );
+        $batchKey = $this->batchOperationStatusManager->generateBatchKey(
+            FileBatchOperationStatusManager::OPERATION_COPY,
+            $dataIsolation->getCurrentUserId(),
+            md5($batchResourceId)
+        );
+        $this->batchOperationStatusManager->initializeTask(
+            $batchKey,
+            FileBatchOperationStatusManager::OPERATION_COPY,
+            $dataIsolation->getCurrentUserId(),
+            count($expandedFileIds)
+        );
+
+        $event = FileBatchCopyEvent::fromDTO(
+            $batchKey,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $expandedFileIds,
+            $targetProject->getId(),
+            $sourceProject->getId(),
+            ! empty($preFileId) ? (int) $preFileId : null,
+            $resolvedTargetParentId,
+            $keepBothFileIds,
+            $sourceProject->getId() !== $targetProject->getId() && $preserveParentPath
+        );
+        $this->producer->produce(new FileBatchCopyPublisher($event));
+
+        return FileBatchOperationResponseDTO::createAsyncProcessing($batchKey)->toArray();
     }
 
     /**
@@ -1815,10 +1849,13 @@ class FileManagementAppService extends AbstractAppService
                 : null;  // null means keep original filename
 
             // 5. Detect cross-type replace (for version creation and event)
-            if ($newFileName !== null) {
-                $newFileExtension = pathinfo($newFileName, PATHINFO_EXTENSION);
+            if ($newFileName === null || $newFileName === $fileEntity->getFileName()) {
+                // file_key is an opaque storage identifier and cannot represent the file name.
+                $newFileExtension = pathinfo($fileEntity->getFileName(), PATHINFO_EXTENSION);
             } else {
-                $newFileExtension = pathinfo($requestDTO->getFileKey(), PATHINFO_EXTENSION);
+                // A different file_name means replacing and renaming the current file.
+                // The domain service checks whether the target name conflicts with another file.
+                $newFileExtension = pathinfo($newFileName, PATHINFO_EXTENSION);
             }
             $oldFileExtension = $fileEntity->getFileExtension();
             $isCrossTypeReplace = ($oldFileExtension !== $newFileExtension);
