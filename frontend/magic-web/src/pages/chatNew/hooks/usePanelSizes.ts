@@ -10,7 +10,7 @@ import { calculatePanelSizes, LAYOUT_CONSTANTS, PanelIndex } from "../utils/pane
  * 面板尺寸管理Hook
  * 负责管理聊天界面的面板尺寸计算和状态更新
  */
-export function usePanelSizes() {
+export function usePanelSizes(previewInDrawer = false) {
 	const totalWidth = useRef(window.innerWidth - LAYOUT_CONSTANTS.WINDOW_MARGIN)
 	const [mainMinWidth, setMainMinWidth] = useState(
 		calculatePanelSizes.getMainMinWidth(conversationStore.topicOpen),
@@ -39,7 +39,7 @@ export function usePanelSizes() {
 					prevSizes[PanelIndex.Sider] ?? interfaceStore.chatSiderDefaultWidth
 
 				// 如果文件预览面板打开，重新计算三面板布局
-				if (MessageFilePreviewStore.open && prevSizes.length === 3) {
+				if (!previewInDrawer && MessageFilePreviewStore.open && prevSizes.length === 3) {
 					return calculatePanelSizes.getThreePanelSizes(
 						newTotalWidth,
 						currentSiderWidth,
@@ -55,7 +55,7 @@ export function usePanelSizes() {
 
 		window.addEventListener("resize", handleResize)
 		return () => window.removeEventListener("resize", handleResize)
-	}, [])
+	}, [previewInDrawer])
 
 	// 处理侧边栏调整
 	const handleSiderResize = useMemoizedFn((size: number[]) => {
@@ -119,7 +119,7 @@ export function usePanelSizes() {
 	// 处理文件预览面板开关的布局调整
 	useEffect(() => {
 		return autorun(() => {
-			if (MessageFilePreviewStore.open) {
+			if (MessageFilePreviewStore.open && !previewInDrawer) {
 				// 文件预览打开：使用默认比例分配
 				setSizes(
 					calculatePanelSizes.getFilePreviewOpenSizes(
@@ -137,7 +137,7 @@ export function usePanelSizes() {
 				)
 			}
 		})
-	}, [])
+	}, [previewInDrawer])
 
 	return {
 		sizes,

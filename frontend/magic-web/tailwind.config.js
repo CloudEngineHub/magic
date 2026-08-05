@@ -34,6 +34,13 @@ const config = {
 			},
 		},
 		extend: {
+			screens: {
+				"desktop-compact": {
+					raw: "(min-width: 768px) and (min-height: 721px) and (max-height: 800px)",
+				},
+				"desktop-short": { raw: "(min-width: 768px) and (max-height: 720px)" },
+				"desktop-narrow": { raw: "(min-width: 768px) and (max-width: 1199px)" },
+			},
 			zIndex: {
 				"context-menu": "var(--z-index-context-menu)",
 				"detail-fullscreen": "var(--z-index-detail-fullscreen)",
