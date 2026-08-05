@@ -201,7 +201,16 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
 
         // 应用查询条件
         foreach ($conditions as $field => $value) {
-            if (is_array($value)) {
+            if ($field === 'exclude_micro_apps') {
+                if ($value) {
+                    $query->whereNotExists(function ($microAppQuery): void {
+                        $microAppQuery->select(Db::raw(1))
+                            ->from('magic_super_agent_micro_apps as ma')
+                            ->whereColumn('ma.project_id', 'p.id')
+                            ->whereNull('ma.deleted_at');
+                    });
+                }
+            } elseif (is_array($value)) {
                 // 支持project_ids数组查询
                 $query->whereIn('p.id', $value);
             } elseif ($field === 'project_name_like') {
