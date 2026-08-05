@@ -46,10 +46,13 @@ export default function SuperRootRedirect() {
 			(cachedProjectId ? ProjectTopicMapCache.get(userInfo, cachedProjectId) : null) ||
 			null
 
+		const query = Object.fromEntries(new URL(window.location.href).searchParams)
+
 		if (cachedProjectId && topicIdResolved) {
 			navigate({
 				name: RouteName.SuperWorkspaceProjectTopicState,
 				params: { projectId: cachedProjectId, topicId: topicIdResolved },
+				query,
 				replace: true,
 				viewTransition: false,
 			})
@@ -60,6 +63,7 @@ export default function SuperRootRedirect() {
 			navigate({
 				name: RouteName.SuperWorkspaceProjectState,
 				params: { projectId: cachedProjectId },
+				query,
 				replace: true,
 				viewTransition: false,
 			})
@@ -70,6 +74,7 @@ export default function SuperRootRedirect() {
 			navigate({
 				name: RouteName.SuperWorkspaceState,
 				params: { workspaceId },
+				query,
 				replace: true,
 				viewTransition: false,
 			})
