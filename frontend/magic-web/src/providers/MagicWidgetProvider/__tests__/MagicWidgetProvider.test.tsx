@@ -187,13 +187,14 @@ describe("MagicWidgetProvider", () => {
 			createWidgetSearch({
 				layout: "desktop",
 				shell: { appSidebar: false },
-				conversation: { projectFiles: false, previewMode: "switchable" },
+				conversation: { projectFiles: false, autoHire: false, previewMode: "switchable" },
 				responsive: { mobileDetection: "viewport" },
 			}),
 		)
 
 		expect(screen.getByTestId("widget-context")).toHaveTextContent(INSTANCE_ID)
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"projectFiles":false')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"autoHire":false')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"switchable"')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent(
 			'"mobileDetection":"viewport"',
@@ -219,7 +220,11 @@ describe("MagicWidgetProvider", () => {
 						type: "config",
 						config: {
 							layout: "mobile",
-							conversation: { topicHistory: false, previewMode: "fullscreen" },
+							conversation: {
+								topicHistory: false,
+								autoHire: true,
+								previewMode: "fullscreen",
+							},
 							responsive: { mobileDetection: "device-and-viewport" },
 						},
 					},
@@ -229,6 +234,7 @@ describe("MagicWidgetProvider", () => {
 
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"layout":"mobile"')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"topicHistory":false')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"autoHire":true')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent('"previewMode":"fullscreen"')
 		expect(screen.getByTestId("widget-config")).toHaveTextContent(
 			'"mobileDetection":"device-and-viewport"',

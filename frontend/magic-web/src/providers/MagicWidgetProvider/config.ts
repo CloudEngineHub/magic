@@ -11,7 +11,12 @@ const MAGIC_WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
 const MAX_INITIAL_CONFIG_LENGTH = 4_096
 const CONFIG_KEYS = new Set(["layout", "shell", "conversation", "responsive"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
-const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+const CONVERSATION_CONFIG_KEYS = new Set([
+	"projectFiles",
+	"topicHistory",
+	"autoHire",
+	"previewMode",
+])
 const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
 type MagicWidgetPreviewMode = NonNullable<
 	NonNullable<MagicWidgetConfig["conversation"]>["previewMode"]
@@ -117,6 +122,7 @@ export function normalizeMagicWidgetConfig(value: unknown): MagicWidgetConfig {
 			"topicHistory",
 			"config.conversation",
 		)
+		const autoHire = readOptionalBoolean(conversationRecord, "autoHire", "config.conversation")
 		const previewMode = readOptionalPreviewMode(
 			conversationRecord,
 			"previewMode",
@@ -125,6 +131,7 @@ export function normalizeMagicWidgetConfig(value: unknown): MagicWidgetConfig {
 		conversation = {
 			...(projectFiles === undefined ? {} : { projectFiles }),
 			...(topicHistory === undefined ? {} : { topicHistory }),
+			...(autoHire === undefined ? {} : { autoHire }),
 			...(previewMode === undefined ? {} : { previewMode }),
 		}
 	}

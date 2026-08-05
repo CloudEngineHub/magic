@@ -32,7 +32,7 @@ const validOptions: MagicWidget.MountOptions = {
 	config: {
 		layout: "desktop",
 		shell: { appSidebar: false },
-		conversation: { projectFiles: false, topicHistory: true },
+		conversation: { projectFiles: false, topicHistory: true, autoHire: false },
 		responsive: { mobileDetection: "device-and-viewport" },
 	},
 }
@@ -86,7 +86,7 @@ void window.MagicWidget?.sendMessage("mock message")
 void window.MagicWidget?.newConversation()
 void window.MagicWidget?.updateConfig({
 	layout: "mobile",
-	conversation: { topicHistory: false },
+	conversation: { topicHistory: false, autoHire: true },
 	responsive: { mobileDetection: "viewport" },
 })
 

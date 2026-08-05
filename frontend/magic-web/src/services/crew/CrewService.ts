@@ -104,6 +104,13 @@ export interface MyCrewView {
 	organizationName?: string | null
 }
 
+/** Normalized access state consumed by Crew conversation initialization. */
+export interface AgentAccessCheckView {
+	code: string
+	exists: boolean
+	canUse: boolean
+}
+
 export interface AgentDetailView {
 	id: string
 	agentCode: string
@@ -194,6 +201,7 @@ export class CrewService {
 		}
 	}
 
+	/** Hires one market agent for the current user. */
 	hireAgent(code: string) {
 		return CrewApi.hireStoreAgent({ code })
 	}
@@ -293,6 +301,17 @@ export class CrewService {
 	async getAgentDetail(code: string): Promise<AgentDetailView> {
 		const data = await CrewApi.getAgentDetail({ code })
 		return this.mapAgentDetail(data)
+	}
+
+	/** Maps the agent access response for Crew conversation initialization. */
+	async checkAgentAccess(code: string): Promise<AgentAccessCheckView> {
+		const data = await CrewApi.checkAgentAccess({ code })
+
+		return {
+			code: data.code,
+			exists: data.exists,
+			canUse: data.can_use,
+		}
 	}
 
 	/** Returns raw API response for store hydration (preserves i18n structure). */

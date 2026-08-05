@@ -34,6 +34,7 @@ describe("Widget config", () => {
 				conversation: {
 					projectFiles: false,
 					topicHistory: true,
+					autoHire: false,
 					previewMode: "fullscreen",
 				},
 			}),
@@ -44,6 +45,7 @@ describe("Widget config", () => {
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
+				autoHire: false,
 				previewMode: "fullscreen",
 			},
 		})
@@ -59,7 +61,11 @@ describe("Widget config", () => {
 					conversation: { projectFiles: false },
 				},
 				{
-					conversation: { topicHistory: true, previewMode: "switchable" },
+					conversation: {
+						topicHistory: true,
+						autoHire: false,
+						previewMode: "switchable",
+					},
 					responsive: { mobileDetection: "device-and-viewport" },
 				},
 			),
@@ -70,6 +76,7 @@ describe("Widget config", () => {
 			conversation: {
 				projectFiles: false,
 				topicHistory: true,
+				autoHire: false,
 				previewMode: "switchable",
 			},
 		})
@@ -82,6 +89,9 @@ describe("Widget config", () => {
 		)
 		expect(() => normalizeWidgetConfig({ conversation: { projectFiles: "no" } })).toThrow(
 			/projectFiles/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { autoHire: "yes" } })).toThrow(
+			/autoHire/,
 		)
 		expect(() => normalizeWidgetConfig({ conversation: { previewMode: "overlay" } })).toThrow(
 			/previewMode/,

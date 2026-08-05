@@ -9,6 +9,7 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) =>
 			({
+				"crewConversation.unavailable": "Crew Unavailable Mock",
 				"crewConversation.back": "Back Mock",
 				"crewConversation.invalidCode": "Invalid Crew Mock",
 				"crewConversation.loadFailed": "Load Failed Mock",
@@ -65,5 +66,12 @@ describe("CrewStateView", () => {
 
 		expect(screen.getByText("Invalid Crew Mock")).toBeInTheDocument()
 		expect(screen.queryByRole("button", { name: "Relogin Mock" })).not.toBeInTheDocument()
+	})
+
+	it("shows the dedicated state when the Crew member is unavailable", () => {
+		render(<CrewStateView status="unavailable" />)
+
+		expect(screen.getByText("Crew Unavailable Mock")).toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: "Retry Mock" })).not.toBeInTheDocument()
 	})
 })

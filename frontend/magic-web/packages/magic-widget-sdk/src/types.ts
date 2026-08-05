@@ -58,6 +58,8 @@ export declare namespace MagicWidget {
 	export interface ConversationConfig {
 		projectFiles?: boolean
 		topicHistory?: boolean
+		/** Automatically hire a market crew when the embedded user cannot execute it. */
+		autoHire?: boolean
 		/** Selects split, host-container fullscreen, or user-switchable preview presentation. */
 		previewMode?: PreviewMode
 	}

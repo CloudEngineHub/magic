@@ -274,6 +274,7 @@ namespace MagicWidget {
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
+			autoHire?: boolean
 			previewMode?: "split" | "fullscreen" | "switchable"
 		}
 	}
@@ -287,6 +288,7 @@ namespace MagicWidget {
 | `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions.                                             |
 | `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
 | `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
+| `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.        | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                                                                        |
 | `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                                                              |
 
 `split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
@@ -301,6 +303,7 @@ await window.MagicWidget.updateConfig({
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
+		autoHire: false,
 		previewMode: "split",
 	},
 })

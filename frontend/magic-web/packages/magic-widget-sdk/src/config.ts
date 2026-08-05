@@ -2,7 +2,12 @@ import type { MagicWidget } from "./types"
 
 const CONFIG_KEYS = new Set(["layout", "shell", "conversation", "responsive"])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
-const CONVERSATION_CONFIG_KEYS = new Set(["projectFiles", "topicHistory", "previewMode"])
+const CONVERSATION_CONFIG_KEYS = new Set([
+	"projectFiles",
+	"topicHistory",
+	"autoHire",
+	"previewMode",
+])
 const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
 const PREVIEW_MODES = new Set<MagicWidget.PreviewMode>(["split", "fullscreen", "switchable"])
 const MOBILE_DETECTION_MODES = new Set<MagicWidget.MobileDetection>([
@@ -102,10 +107,12 @@ function normalizeConversationConfig(value: unknown): MagicWidget.ConversationCo
 	assertKnownKeys(record, CONVERSATION_CONFIG_KEYS, "config.conversation")
 	const projectFiles = readOptionalBoolean(record, "projectFiles", "config.conversation")
 	const topicHistory = readOptionalBoolean(record, "topicHistory", "config.conversation")
+	const autoHire = readOptionalBoolean(record, "autoHire", "config.conversation")
 	const previewMode = readOptionalPreviewMode(record, "previewMode", "config.conversation")
 	return {
 		...(projectFiles === undefined ? {} : { projectFiles }),
 		...(topicHistory === undefined ? {} : { topicHistory }),
+		...(autoHire === undefined ? {} : { autoHire }),
 		...(previewMode === undefined ? {} : { previewMode }),
 	}
 }

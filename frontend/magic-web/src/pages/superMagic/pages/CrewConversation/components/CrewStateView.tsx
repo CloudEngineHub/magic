@@ -53,7 +53,9 @@ export default function CrewStateView({ status, onRetry }: CrewStateViewProps) {
 			<p className="text-sm text-muted-foreground">
 				{status === "invalid"
 					? t("crewConversation.invalidCode")
-					: t("crewConversation.loadFailed")}
+					: status === "unavailable"
+						? t("crewConversation.unavailable")
+						: t("crewConversation.loadFailed")}
 			</p>
 			<div className="flex items-center gap-2">
 				<Button type="button" variant="outline" onClick={() => navigate({ delta: -1 })}>

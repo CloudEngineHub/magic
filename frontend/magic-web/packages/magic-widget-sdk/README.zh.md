@@ -274,6 +274,7 @@ namespace MagicWidget {
 		conversation?: {
 			projectFiles?: boolean
 			topicHistory?: boolean
+			autoHire?: boolean
 			previewMode?: "split" | "fullscreen" | "switchable"
 		}
 	}
@@ -287,6 +288,7 @@ namespace MagicWidget {
 | `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 默认使用 `viewport` 以兼容已有移动业务；需要窄 PC iframe 保持桌面交互时可配置为 `device-and-viewport`。                |
 | `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                                             |
 | `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                                             |
+| `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。        | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                                            |
 | `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                                  |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
@@ -301,6 +303,7 @@ await window.MagicWidget.updateConfig({
 	conversation: {
 		projectFiles: true,
 		topicHistory: false,
+		autoHire: false,
 		previewMode: "split",
 	},
 })

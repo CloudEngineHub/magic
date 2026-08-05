@@ -64,11 +64,7 @@ export type CrewI18nArrayText = Record<string, CrewI18nArrayValue> & {
 
 /** Publisher type for store agents */
 export type CrewPublisherType =
-	| "USER"
-	| "OFFICIAL"
-	| "OFFICIAL_BUILTIN"
-	| "VERIFIED_CREATOR"
-	| "PARTNER"
+	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
 
 /** Publisher info for store agents */
 export interface CrewPublisher {
@@ -273,11 +269,7 @@ export interface GetTeamSharedAgentsResponse extends GetCreatedAgentsResponse {}
 
 /** Scope filter for unified agent list query */
 export type UnifiedAgentScope =
-	| "all"
-	| "created"
-	| "team_shared"
-	| "market_installed"
-	| "collaborated"
+	"all" | "created" | "team_shared" | "market_installed" | "collaborated"
 
 /** Sort field for unified agent list query */
 export type UnifiedAgentSort = "updated_at" | "created_at"
@@ -341,11 +333,7 @@ export type AgentPublishToType = "INTERNAL" | "MARKET"
 export type AgentAllowedPublishTargetType = Exclude<AgentPublishTargetType, "MARKET">
 
 export type AgentVersionReviewStatus =
-	| "PENDING"
-	| "UNDER_REVIEW"
-	| "APPROVED"
-	| "REJECTED"
-	| "INVALIDATED"
+	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
 
 export type AgentVersionPublishStatus = "PUBLISHED" | "OFFLINE"
 
@@ -512,6 +500,13 @@ export interface AgentDetailResponse {
 	publish_type?: AgentPublishToType | null
 	publish_target_type?: AgentPublishTargetType | null
 	allowed_publish_target_types?: AgentAllowedPublishTargetType[]
+}
+
+/** Lightweight access result for one agent in the current organization. */
+export interface AgentAccessCheckResponse {
+	code: string
+	exists: boolean
+	can_use: boolean
 }
 
 // ======================== Agent Versions (API 18) ========================
@@ -755,6 +750,15 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 		)
 	},
 
+	/** Checks whether an agent exists and is usable by the current user. */
+	checkAgentAccess({ code }: { code: string }) {
+		return fetch.post<AgentAccessCheckResponse>(
+			genRequestUrl("/api/v2/super-magic/agents/access-check"),
+			{ code },
+			{ enableErrorMessagePrompt: false },
+		)
+	},
+
 	/**
 	 * Update agent basic display info.
 	 * Only allowed for non-MARKET agents.
@@ -891,11 +895,13 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	 * Validates that the agent is published and not already hired.
 	 * Also increments the store agent's install_count.
 	 * @param code Store agent code (magic_super_magic_store_agents.agent_code)
+	 * @param options Optional shared HTTP prompt behavior for this call.
 	 */
-	hireStoreAgent({ code }: { code: string }) {
+	hireStoreAgent({ code }: { code: string }, options?: { enableErrorMessagePrompt?: boolean }) {
 		return fetch.post<[]>(
 			genRequestUrl("/api/v2/super-magic/agent-market/${code}/hire", { code }),
 			{},
+			options,
 		)
 	},
 

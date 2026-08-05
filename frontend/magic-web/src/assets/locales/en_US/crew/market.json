@@ -25,6 +25,7 @@
 		"relogin": "Sign in again",
 		"retry": "Retry",
 		"topics": "Topics",
+		"unavailable": "This crew member is temporarily unavailable. Please try again later.",
 		"unknownCrew": "Digital Crew"
 	},
 	"detailDialog": {

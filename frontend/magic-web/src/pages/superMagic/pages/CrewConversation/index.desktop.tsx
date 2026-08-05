@@ -212,12 +212,7 @@ function CrewConversationDesktop({
 	)
 
 	if (store.status !== "ready" || !selectedProject) {
-		return (
-			<CrewStateView
-				status={store.status}
-				onRetry={() => void store.bootstrap(store.agentCode)}
-			/>
-		)
+		return <CrewStateView status={store.status} onRetry={() => void store.retryBootstrap()} />
 	}
 
 	return (

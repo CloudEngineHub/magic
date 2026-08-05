@@ -93,7 +93,10 @@ function CrewConversationPage() {
 	}
 
 	return (
-		<CrewConversationStoreProvider code={code}>
+		<CrewConversationStoreProvider
+			code={code}
+			autoHire={embedContext ? config.conversation?.autoHire !== false : undefined}
+		>
 			{embedContext && config.layout ? (
 				<CrewConversationLayoutContent
 					layout={config.layout}
