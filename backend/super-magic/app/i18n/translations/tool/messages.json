@@ -2842,5 +2842,73 @@
     "call_simple_agent.failed": {
         "zh_CN": "助理调用失败",
         "en_US": "Agent consultation failed"
+    },
+    "magicbase.current_micro_app": {
+        "zh_CN": "当前微应用",
+        "en_US": "Current micro-app"
+    },
+    "magicbase.table_count": {
+        "zh_CN": "{{count}} 个数据表",
+        "en_US": "{{count}} tables"
+    },
+    "magicbase.table_structure": {
+        "zh_CN": "表结构与权限",
+        "en_US": "Structure and permissions"
+    },
+    "magicbase.current_table": {
+        "zh_CN": "当前数据表",
+        "en_US": "Current table"
+    },
+    "magicbase.table_target": {
+        "zh_CN": "表 {{table}}",
+        "en_US": "Table {{table}}"
+    },
+    "magicbase.query_rows_page": {
+        "zh_CN": "第 {{page}} 页 · {{table}}",
+        "en_US": "Page {{page}} · {{table}}"
+    },
+    "magicbase.query_rows_filtered_page": {
+        "zh_CN": "{{fields}} 筛选 · 第 {{page}} 页 · {{table}}",
+        "en_US": "Filtered by {{fields}} · Page {{page}} · {{table}}"
+    },
+    "magicbase.query_rows_result": {
+        "zh_CN": "返回 {{returned}}/{{total}} 条 · {{table}}",
+        "en_US": "{{returned}}/{{total}} rows returned · {{table}}"
+    },
+    "magicbase.save_business_data": {
+        "zh_CN": "保存业务数据",
+        "en_US": "Save app data"
+    },
+    "magicbase.selected_record": {
+        "zh_CN": "指定记录",
+        "en_US": "Selected row"
+    },
+    "magicbase.permission_scope": {
+        "zh_CN": "读写范围",
+        "en_US": "Access scope"
+    },
+    "magicbase.selected_table": {
+        "zh_CN": "指定数据表",
+        "en_US": "Selected table"
+    },
+    "magicbase.selected_column": {
+        "zh_CN": "指定字段",
+        "en_US": "Selected field"
+    },
+    "magicbase.row_count": {
+        "zh_CN": "{{count}} 条记录",
+        "en_US": "{{count}} rows"
+    },
+    "update_html_app_memory.remark": {
+        "zh_CN": "记录最新功能与数据结构",
+        "en_US": "Record the latest features and data model"
+    },
+    "update_html_app_memory.detail_success": {
+        "zh_CN": "微应用信息已更新。",
+        "en_US": "Micro-app information updated."
+    },
+    "update_html_app_memory.detail_error": {
+        "zh_CN": "更新微应用信息失败，请稍后重试或检查参数。",
+        "en_US": "Failed to update micro-app information. Try again or check the parameters."
     }
 }

@@ -39,6 +39,13 @@ import mcpTempStorage from "../store/MCPTempStorage"
 import { FormValues } from "../types"
 import { getNextRunTime } from "../utils"
 import ProjectTopicItem from "./ProjectTopicItem"
+import { reaction } from "mobx"
+import {
+	isAgentSelectionAvailable,
+	resolveAgentSelection,
+	resolveDefaultAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 
 const formClassName = cn(
 	"[&_.magic-form-item]:mb-4",
@@ -75,7 +82,11 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 		const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 		const [loading, setLoading] = useState(mode === "edit" || !!initialValues)
 		const [promptRequired, setPromptRequired] = useState(false)
-		const [topicMode, setTopicMode] = useState<TopicMode>(TopicMode.General)
+		const [topicMode, setTopicMode] = useState<TopicMode>(
+			() => resolveDefaultAgentSelection().modeIdentifier as TopicMode,
+		)
+		const [agentCode, setAgentCode] = useState<string>()
+		const [agentValidationTick, setAgentValidationTick] = useState(0)
 		const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null)
 		const [selectedProject, setSelectedProject] = useState<ProjectListItem | null>(null)
 		const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
@@ -129,6 +140,16 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			? t("accountPanel.timedTasks.promptRequired")
 			: undefined
 
+		const isAgentUnavailable = useMemo(() => {
+			if (superMagicModeService.modeList.length === 0) return false
+
+			return !isAgentSelectionAvailable(topicMode, agentCode)
+		}, [topicMode, agentCode, agentValidationTick])
+
+		const agentUnavailableMessage = isAgentUnavailable
+			? t("accountPanel.timedTasks.agentUnavailable")
+			: undefined
+
 		const customRequiredMark = (label: ReactNode, { required }: { required: boolean }) => (
 			<div className="flex items-center gap-1">
 				{label}
@@ -138,6 +159,11 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 
 		const onOk = useMemoizedFn(async () => {
 			try {
+				if (isAgentUnavailable) {
+					magicToast.error(t("accountPanel.timedTasks.agentUnavailable"))
+					return
+				}
+
 				const values = await form.validateFields()
 				if (!tiptapEditorRef.current?.editor?.getText()) {
 					setPromptRequired(true)
@@ -147,6 +173,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 
 				setPromptRequired(false)
 				const content = tiptapEditorRef.current?.editor?.getJSON() ?? {}
+				const selection = resolveAgentSelection(topicMode, agentCode)
 				const messageContent = {
 					content: typeof content === "string" ? content : JSON.stringify(content),
 					extra: {
@@ -154,8 +181,15 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 							mentions: tiptapEditorRef.current?.mentionItems,
 							input_mode: "plan",
 							chat_mode: "normal",
-							topic_pattern: topicMode,
+							topic_pattern: selection.topicPattern,
+							...(selection.agentCode && { agent_code: selection.agentCode }),
 							model: tiptapEditorRef.current?.selectedModel,
+							...(tiptapEditorRef.current?.selectedImageModel && {
+								image_model: tiptapEditorRef.current.selectedImageModel,
+							}),
+							...(tiptapEditorRef.current?.selectedVideoModel && {
+								video_model: tiptapEditorRef.current.selectedVideoModel,
+							}),
 						},
 					},
 				}
@@ -215,6 +249,22 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 		}, [initialValues, mode])
 
 		useEffect(() => {
+			if (mode === "edit" || initialValues) return
+
+			return reaction(
+				() => resolveDefaultAgentSelection().modeIdentifier,
+				(modeIdentifier) => setTopicMode(modeIdentifier as TopicMode),
+			)
+		}, [initialValues, mode])
+
+		useEffect(() => {
+			return reaction(
+				() => superMagicModeService.modeList.length,
+				() => setAgentValidationTick((tick) => tick + 1),
+			)
+		}, [])
+
+		useEffect(() => {
 			if (loading || !tiptapEditorRef.current || !initialValues?.message_content) return
 			const content = parseContent(initialValues.message_content.content)
 			if (content) tiptapEditorRef.current.setContent?.(content)
@@ -222,10 +272,19 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			tiptapEditorRef.current.setSelectedModel?.(
 				initialValues.message_content.extra?.super_agent?.model || null,
 			)
-			setTopicMode(
-				(initialValues.message_content.extra?.super_agent?.topic_pattern as TopicMode) ||
-					TopicMode.General,
+			tiptapEditorRef.current.setSelectedImageModel?.(
+				initialValues.message_content.extra?.super_agent?.image_model || null,
 			)
+			tiptapEditorRef.current.setSelectedVideoModel?.(
+				initialValues.message_content.extra?.super_agent?.video_model || null,
+			)
+			const initialTopicPattern = initialValues.message_content.extra?.super_agent
+				?.topic_pattern as TopicMode | undefined
+			const initialAgentCode =
+				initialValues.message_content.extra?.super_agent?.agent_code?.trim() || undefined
+			const selection = resolveAgentSelection(initialTopicPattern, initialAgentCode)
+			setAgentCode(selection.agentCode)
+			setTopicMode(selection.modeIdentifier as TopicMode)
 		}, [initialValues, loading])
 
 		useUpdateEffect(() => {
@@ -288,6 +347,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				current_project_id: null,
 				workspace_status: WorkspaceStatus.WAITING,
 				project_count: 0,
+				workspace_type: "default",
 			})
 		})
 
@@ -301,7 +361,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				id: item.value,
 				project_name: item.label,
 				project_status: ProjectStatus.WAITING,
-				project_mode: TopicMode.General,
+				project_mode: topicMode,
 				workspace_id: workspaceId ?? "",
 				work_dir: "",
 				workspace_name: selectedWorkspace?.name ?? "",
@@ -309,9 +369,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				current_topic_status: "",
 				created_at: "",
 				updated_at: "",
-				is_recycled: false,
-				task_count: 0,
-				member_list: [],
+				tag: "",
 			})
 		})
 
@@ -335,6 +393,11 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				workspace_id: workspaceId ?? "",
 				token_used: null,
 			})
+		})
+
+		const handleTopicModeChange = useMemoizedFn((nextMode: TopicMode) => {
+			setTopicMode(nextMode)
+			setAgentCode(undefined)
 		})
 
 		return (
@@ -379,8 +442,14 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								</div>
 							}
 							className={promptFormItemClassName}
-							validateStatus={promptRequired ? "error" : undefined}
-							help={promptErrorMessage}
+							validateStatus={
+								promptRequired
+									? "error"
+									: isAgentUnavailable
+										? "warning"
+										: undefined
+							}
+							help={promptErrorMessage || agentUnavailableMessage}
 						>
 							<MessageEditor
 								ref={tiptapEditorRef}
@@ -393,7 +462,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								selectedProject={selectedProject}
 								selectedWorkspace={selectedWorkspace}
 								topicMode={topicMode}
-								setTopicMode={setTopicMode}
+								agentCode={agentCode}
+								setTopicMode={handleTopicModeChange}
 								showModeToggle
 								enableAiCompletion
 								allowChangeMode
@@ -493,7 +563,11 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 							>
 								{t("accountPanel.timedTasks.cancel")}
 							</Button>
-							<Button onClick={onOk} data-testid="scheduled-task-submit">
+							<Button
+								onClick={onOk}
+								disabled={isAgentUnavailable}
+								data-testid="scheduled-task-submit"
+							>
 								{mode === "create"
 									? t("accountPanel.timedTasks.create")
 									: t("accountPanel.timedTasks.save")}

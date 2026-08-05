@@ -9,6 +9,7 @@ import { ScheduledTask } from "@/types/scheduledTask"
 import mcpTempStorage from "../store/MCPTempStorage"
 import { useScheduledTasksModifyModal } from "./useScheduledTasksModifyModal"
 import { JSONContent } from "@tiptap/react"
+import type { ScheduledTasksModifyModalController } from "../types/ScheduledTasksModify"
 
 interface UseScheduleTaskProps {
 	options?: Partial<ScheduledTask.GetListParams>
@@ -16,10 +17,24 @@ interface UseScheduleTaskProps {
 	siderTaskRef?: React.RefObject<HTMLDivElement>
 }
 
+interface UseScheduleTaskWithModalProps extends UseScheduleTaskProps {
+	modifyModal: ScheduledTasksModifyModalController
+}
+
 const preloadDeleteDangerModal = () => import("@/components/business/DeleteDangerModal")
 const preloadRunningRecordModal = () => import("../components/RunningRecordModal")
 
 export function useScheduleTask({ options, isScroll = false, siderTaskRef }: UseScheduleTaskProps) {
+	const modifyModal = useScheduledTasksModifyModal()
+	return useScheduleTaskWithModal({ options, isScroll, siderTaskRef, modifyModal })
+}
+
+export function useScheduleTaskWithModal({
+	options,
+	isScroll = false,
+	siderTaskRef,
+	modifyModal,
+}: UseScheduleTaskWithModalProps) {
 	const { t } = useTranslation("interface")
 	const [tasks, setTasks] = useState<ScheduledTask.Task[]>([])
 	const [total, setTotal] = useState(0)
@@ -29,7 +44,7 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 		...options,
 	})
 
-	const { state, openCreateModal, openEditModal, content } = useScheduledTasksModifyModal()
+	const { state, openCreateModal, openEditModal, content } = modifyModal
 
 	const { run, loading } = useRequest(
 		(args: ScheduledTask.GetListParams) => ScheduledTaskApi.getScheduledTaskList(args),
@@ -127,7 +142,11 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 			...task,
 			enabled: checked ? 1 : 0,
 		}).then(() => {
-			setTasks((prevTasks) => prevTasks.map((item) => (item.id === task.id ? { ...item, enabled: checked ? 1 : 0 } : item)))
+			setTasks((prevTasks) =>
+				prevTasks.map((item) =>
+					item.id === task.id ? { ...item, enabled: checked ? 1 : 0 } : item,
+				),
+			)
 			magicToast.success(
 				checked
 					? t("accountPanel.timedTasks.taskEnabled")
@@ -138,7 +157,7 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 
 	const runNow = async (task: ScheduledTask.Task) => {
 		const detail = await ScheduledTaskApi.getScheduledTaskDetails(task.id)
-		if(!detail) return
+		if (!detail) return
 
 		const { message_content } = detail
 		const content = JSON.parse(message_content.content) as JSONContent

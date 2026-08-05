@@ -720,7 +720,9 @@
 				"updatedAt": "Updated on {{date}}"
 			},
 			"preview": {
+				"collapse": "Collapse preview",
 				"empty": "No preview configuration",
+				"expand": "Expand preview",
 				"home": "Home",
 				"title": "Preview",
 				"topic": "Topic page"

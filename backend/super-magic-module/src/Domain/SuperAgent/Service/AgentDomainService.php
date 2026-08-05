@@ -790,7 +790,7 @@ class AgentDomainService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param string $sandboxId 沙箱ID
-     * @param string $name 工具名称（如 ask_user）
+     * @param string $name 工具名称（如 ask_user、plan）
      * @param string $toolCallId 工具调用ID
      * @param array $detail 工具特定的回复数据，结构由各工具自行约定
      */
@@ -1758,6 +1758,9 @@ class AgentDomainService
         return match ($agentMode) {
             ProjectMode::MAGICLAW->value => $this->buildMagicClawProfile($dataIsolation, $agentCode),
             ProjectMode::CUSTOM_AGENT->value => $this->buildCustomAgentProfile($dataIsolation, $agentCode, $language),
+            // micro-app is backed by the built-in micro-app.agent file. Its localized
+            // profile is supplied by the Python runtime, not the digital employee table.
+            ProjectMode::MICRO_APP->value => [],
             default => $this->buildOfficialAgentProfile($agentMode, $language),
         };
     }

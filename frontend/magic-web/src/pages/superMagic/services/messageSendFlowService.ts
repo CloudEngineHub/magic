@@ -41,6 +41,7 @@ import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
 import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
+import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 
 const logger = Logger.createLogger("messageSendService")
@@ -103,6 +104,7 @@ export interface SendRuntimeContext {
 	selectedWorkspace?: Workspace | null
 	workspaceId?: string
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
+	refreshProjectAfterTopicRename?: boolean
 	renameProject?: (
 		projectId: string,
 		projectName: string,
@@ -189,28 +191,29 @@ class MessageSendService {
 
 		const sendOptions = stripTempOptions(options)
 
-		// 话题名为空时根据内容自动命名
-		if (currentProject && currentTopic) {
-			const userQuestion = generateTextFromJSONContent(resolvedJson)
-
-			void smartRenameTopicIfUnnamed({
-				topic: currentTopic,
-				userQuestion,
-				updateTopicName: context?.updateTopicName,
-			})
-				.then((topicName) => {
-					if (!topicName) return
-
-					this.handleSmartProjectRename({
-						project: currentProject,
-						topicName,
-						context,
+		// 话题名为空时根据内容自动命名，消息发送不等待该任务。
+		// 首页创建场景会登记任务，详情页在任务完成后按需刷新一次项目详情。
+		const renameTask =
+			currentProject && currentTopic
+				? startMessageSendRenameTask({
+						topicId: currentTopic.id,
+						renameTopic: () =>
+							smartRenameTopicIfUnnamed({
+								topic: currentTopic,
+								userQuestion: generateTextFromJSONContent(resolvedJson),
+								updateTopicName: context?.updateTopicName,
+							}),
+						syncProjectName: (topicName) =>
+							this.handleSmartProjectRename({
+								project: currentProject,
+								topicName,
+								context,
+							}),
+						onError: (error) => {
+							this.deps.logger.error("Smart topic rename failed", error)
+						},
 					})
-				})
-				.catch((error) => {
-					this.deps.logger.error("Smart topic rename failed", error)
-				})
-		}
+				: undefined
 
 		const mergedSendOptions = merge({}, sendOptions, {
 			extra: {
@@ -291,6 +294,9 @@ class MessageSendService {
 		}
 
 		sendMessage()
+		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
+			trackProjectRenameTask(currentProject.id, renameTask.completion)
+		}
 		if (hasRevokedMessages) {
 			this.deps.pubsub.publish(PubSubEvents.Refresh_Topic_Messages)
 		}
@@ -465,7 +471,7 @@ class MessageSendService {
 		}
 	}
 
-	private handleSmartProjectRename({
+	private async handleSmartProjectRename({
 		project,
 		topicName,
 		context,
@@ -478,7 +484,7 @@ class MessageSendService {
 
 		// Chat conversations: topic was already renamed by smartRenameTopic; mirror name on project.
 		if (shouldSyncChatConversationName(project)) {
-			void syncChatProjectNameOnly({
+			await syncChatProjectNameOnly({
 				projectId: project.id,
 				name: topicName,
 			})
@@ -490,7 +496,7 @@ class MessageSendService {
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""
 			if (workspaceId) {
-				void context?.renameProject?.(project.id, topicName, workspaceId)
+				await context?.renameProject?.(project.id, topicName, workspaceId)
 			}
 		}
 	}

@@ -14,6 +14,7 @@ from .factory import (
 # API classes
 from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
+from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
@@ -37,6 +38,14 @@ from .parameter.create_share_parameter import CreateShareParameter, TargetId
 from .parameter.find_similar_share_parameter import FindSimilarShareParameter
 from .parameter.cancel_share_parameter import CancelShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
+from .parameter.create_magicbase_column_parameter import CreateMagicBaseColumnParameter
+from .parameter.create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .parameter.delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from .parameter.delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
+from .parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
+from .parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from .parameter.update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from .parameter.update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
 
 # Result classes
 from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
@@ -59,6 +68,8 @@ from .result.share_result import (
     FindSimilarSharesResult,
 )
 from .result.ingest_third_party_message_result import IngestThirdPartyMessageResult
+from .result.magicbase_column_result import MagicBaseColumnResult
+from .result.magicbase_table_result import MagicBaseTableResult, MagicBaseTablesResult
 
 # Kernel classes
 from .kernel.magic_service_exception import (
@@ -85,6 +96,7 @@ __all__ = [
     # API classes
     'AiAbilityApi',
     'AgentApi',
+    'MagicBaseApi',
     'MessageScheduleApi',
     'OAuth2CallbackRelayApi',
     'ShareApi',
@@ -107,6 +119,14 @@ __all__ = [
     'FindSimilarShareParameter',
     'CancelShareParameter',
     'IngestThirdPartyMessageParameter',
+    'CreateMagicBaseColumnParameter',
+    'CreateMagicBaseTableParameter',
+    'DeleteMagicBaseColumnParameter',
+    'DeleteMagicBaseTableParameter',
+    'GetMagicBaseTableParameter',
+    'QueryMagicBaseTablesParameter',
+    'UpdateMagicBaseColumnParameter',
+    'UpdateMagicBaseTablePermissionsParameter',
 
     # Result classes
     'AiAbilityRuntimeConfigResult',
@@ -124,6 +144,9 @@ __all__ = [
     'CancelShareResult',
     'FindSimilarSharesResult',
     'IngestThirdPartyMessageResult',
+    'MagicBaseColumnResult',
+    'MagicBaseTableResult',
+    'MagicBaseTablesResult',
 
     # Kernel classes
     'MagicServiceException',

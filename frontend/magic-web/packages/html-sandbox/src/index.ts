@@ -475,6 +475,36 @@ declare global {
 		/** 由 full-content.ts 注入的初始语言代码，供 MagicI18nApi 读取 */
 		__MAGIC_INITIAL_LANG__?: string
 		Magic: {
+			db?: {
+				getTables?: () => Promise<unknown[]>
+				getProjectAdminAccess?: () => Promise<{
+					project_id: string
+					is_admin: boolean
+				}>
+				getTable?: (tableId: string) => Promise<unknown>
+				createRow?: (
+					tableId: string,
+					data: Record<string, unknown>,
+					select?: string[],
+				) => Promise<unknown>
+				updateRow?: (
+					tableId: string,
+					rowId: string,
+					data: Record<string, unknown>,
+				) => Promise<unknown>
+				deleteRow?: (tableId: string, rowId: string) => Promise<unknown>
+			}
+			context?: {
+				getContext?: () => Promise<{
+					userId: string
+					userName: string
+					user: {
+						user_id: string
+						magic_id?: string
+						organization_code?: string
+					}
+				}>
+			}
 			// ─── 新命名空间 ──────────────────────────────────────────────
 			agent?: {
 				getAgents?: () => Promise<
@@ -504,6 +534,24 @@ declare global {
 			/** 返回应用在 workspace 中的根目录路径（例如 "个人财务记账/"） */
 			getAppBasePath?: () => Promise<string>
 			// ─── 向后兼容（deprecated）────────────────────────────────────
+			getContext?: () => Promise<{
+				userId: string
+				userName: string
+				user: {
+					user_id: string
+					magic_id?: string
+					organization_code?: string
+					nickname?: string
+					real_name?: string
+					avatar_url?: string
+					phone?: string
+					email?: string | null
+					job_title?: string
+					path_nodes?: unknown[]
+				}
+				organizationCode: string
+				language: string
+			}>
 			reload?: () => void
 			setInputMessage?: (message: string) => void
 			/** @deprecated 使用 window.Magic.project.uploadFiles */

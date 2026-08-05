@@ -1,0 +1,13 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#create_table_bg)"/>
+<rect x="4.5" y="5" width="9" height="10" rx="1.25" stroke="white"/>
+<path d="M4.5 8H13.5M8.75 5V15" stroke="white"/>
+<circle cx="14" cy="6" r="2.5" fill="#17A45B" stroke="white"/>
+<path d="M14 4.75V7.25M12.75 6H15.25" stroke="white" stroke-linecap="round"/>
+<defs>
+<linearGradient id="create_table_bg" x1="1" y1="2" x2="19" y2="18" gradientUnits="userSpaceOnUse">
+<stop stop-color="#43D477"/>
+<stop offset="1" stop-color="#078C54"/>
+</linearGradient>
+</defs>
+</svg>

@@ -7,6 +7,7 @@ declare(strict_types=1);
 use App\Interfaces\Middleware\Auth\OptionalUserAuthMiddleware;
 use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
 use Dtyq\SuperMagic\Interfaces\Share\Facade\ShareApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MicroAppProjectApi;
 use Hyperf\HttpServer\Router\Router;
 
 // 需要登录的分享管理接口
@@ -55,6 +56,7 @@ Router::addGroup(
 Router::addGroup(
     '/api/v1/share',
     static function () {
+        Router::get('/micro-apps/{appId}', [MicroAppProjectApi::class, 'resolvePublished']);
         Router::addGroup('/resources', static function () {
             // 查看是否需要密码
             Router::post('/{shareCode}/check', [ShareApi::class, 'checkShare']);

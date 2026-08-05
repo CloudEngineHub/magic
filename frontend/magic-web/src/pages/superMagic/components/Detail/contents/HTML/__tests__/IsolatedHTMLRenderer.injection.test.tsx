@@ -9,6 +9,24 @@ const hookState = vi.hoisted(() => ({
 	shouldApplyScaling: false,
 }))
 
+const virtualStorageMocks = vi.hoisted(() => ({
+	buildNamespace: vi.fn(() => "magic-html-storage:test"),
+	createContext: vi.fn(async () => ({
+		protocol: "magic-html-virtual-storage",
+		renderId: "render-1",
+		token: "token-1",
+		namespace: "magic-html-storage:test",
+		targetOrigin: "*",
+		snapshot: {
+			localStorage: {},
+			sessionStorage: {},
+			cookies: {},
+			indexedDB: {},
+		},
+	})),
+	getFullContent: vi.fn((content: string) => `<!doctype html>${content}`),
+}))
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: {
 		type: "3rdParty",
@@ -256,20 +274,8 @@ vi.mock("../hooks/useFetchInterceptionCache", () => ({
 }))
 
 vi.mock("../utils/virtual-storage", () => ({
-	buildHtmlVirtualStorageNamespace: () => "magic-html-storage:test",
-	createVirtualStorageContext: vi.fn(async () => ({
-		protocol: "magic-html-virtual-storage",
-		renderId: "render-1",
-		token: "token-1",
-		namespace: "magic-html-storage:test",
-		targetOrigin: "*",
-		snapshot: {
-			localStorage: {},
-			sessionStorage: {},
-			cookies: {},
-			indexedDB: {},
-		},
-	})),
+	buildHtmlVirtualStorageNamespace: virtualStorageMocks.buildNamespace,
+	createVirtualStorageContext: virtualStorageMocks.createContext,
 	virtualStorageRegistry: {
 		register: vi.fn(),
 		unregister: vi.fn(),
@@ -278,7 +284,7 @@ vi.mock("../utils/virtual-storage", () => ({
 
 vi.mock("../utils/full-content", () => ({
 	decodeHTMLEntities: (content: string) => content,
-	getFullContent: (content: string) => `<!doctype html>${content}`,
+	getFullContent: virtualStorageMocks.getFullContent,
 }))
 
 vi.mock("../hooks/useCurrentHtmlFileInfo", () => ({
@@ -393,6 +399,7 @@ async function flushReactEffects() {
 describe("IsolatedHTMLRenderer iframe injection", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		vi.clearAllMocks()
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
@@ -450,6 +457,36 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		await flushReactEffects()
 		expect(getScrollableContent()).not.toBeInTheDocument()
+	})
+
+	it("uses the MicroApp entry marker for storage across html file switches", async () => {
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				fileId="student-file"
+				virtualStorageMarkerId="index-file"
+				selectedProject={{ id: "project-1", current_topic_id: "topic-1" }}
+			/>,
+		)
+
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicId: "topic-1",
+			fileId: "index-file",
+		})
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		vi.spyOn(iframe.contentWindow as Window, "postMessage").mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.getFullContent).toHaveBeenCalledWith(
+			defaultProps.content,
+			"index-file",
+			expect.any(Object),
+		)
 	})
 
 	it("does not inject content into a sibling iframe from another iframeReady message", async () => {

@@ -2233,7 +2233,11 @@ registerMagicCanvasPlugin({
 							lastGeneratableStyleIndex = index
 						}
 					})
-					for (let styleIndex = 0; styleIndex < state.styleItems.length; styleIndex += 1) {
+					for (
+						let styleIndex = 0;
+						styleIndex < state.styleItems.length;
+						styleIndex += 1
+					) {
 						const styleItem = state.styleItems[styleIndex]
 						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
 						if (!resolvedSize?.genW || !resolvedSize?.genH) {

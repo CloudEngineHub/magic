@@ -15,6 +15,7 @@ import { getSceneThemePreviewStyle } from "../../../common/sceneThemePreview"
 
 interface SceneRowProps {
 	scene: SceneItem
+	readOnly?: boolean
 	selected: boolean
 	onSelect: (id: string, checked: boolean) => void
 	onToggleEnabled: (id: string) => void
@@ -27,10 +28,12 @@ export const SceneRow = observer(function SceneRow({
 	onSelect,
 	onToggleEnabled,
 	onAction,
+	readOnly = false,
 }: SceneRowProps) {
 	const { t, i18n } = useTranslation("crew/create")
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id: scene.id,
+		disabled: readOnly,
 	})
 	const sceneThemeStyle = getSceneThemePreviewStyle(scene.theme_color)
 
@@ -43,23 +46,27 @@ export const SceneRow = observer(function SceneRow({
 				isDragging && "opacity-50",
 			)}
 		>
-			<button
-				type="button"
-				className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
-				aria-label="drag"
-				data-testid={`playbook-scene-drag-${scene.id}`}
-				{...attributes}
-				{...listeners}
-			>
-				<GripVertical className="h-4 w-4" />
-			</button>
+			{readOnly ? null : (
+				<button
+					type="button"
+					className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
+					aria-label="drag"
+					data-testid={`playbook-scene-drag-${scene.id}`}
+					{...attributes}
+					{...listeners}
+				>
+					<GripVertical className="h-4 w-4" />
+				</button>
+			)}
 
 			<div className="flex shrink-0 items-center justify-center pt-1">
-				<Checkbox
-					checked={selected}
-					onCheckedChange={(checked) => onSelect(scene.id, !!checked)}
-					data-testid={`playbook-scene-checkbox-${scene.id}`}
-				/>
+				{readOnly ? null : (
+					<Checkbox
+						checked={selected}
+						onCheckedChange={(checked) => onSelect(scene.id, !!checked)}
+						data-testid={`playbook-scene-checkbox-${scene.id}`}
+					/>
+				)}
 			</div>
 
 			<div
@@ -95,57 +102,61 @@ export const SceneRow = observer(function SceneRow({
 				</div>
 			</div>
 
-			<Switch
-				checked={scene.enabled}
-				onCheckedChange={() => onToggleEnabled(scene.id)}
-				data-testid={`playbook-scene-switch-${scene.id}`}
-				className="mt-1 shrink-0"
-			/>
+			{readOnly ? null : (
+				<Switch
+					checked={scene.enabled}
+					onCheckedChange={() => onToggleEnabled(scene.id)}
+					data-testid={`playbook-scene-switch-${scene.id}`}
+					className="mt-1 shrink-0"
+				/>
+			)}
 
-			<MagicDropdown
-				placement="bottomRight"
-				menu={{
-					items: [
-						{
-							key: "edit",
-							icon: <PenLine className="h-4 w-4" />,
-							label: t("playbook.actions.edit"),
-							onClick: () => onAction(scene.id, "edit"),
-						},
-						{
-							key: scene.enabled ? "disable" : "enable",
-							icon: scene.enabled ? (
-								<Pause className="h-4 w-4" />
-							) : (
-								<Play className="h-4 w-4" />
-							),
-							label: scene.enabled
-								? t("playbook.actions.disable")
-								: t("playbook.actions.enable"),
-							onClick: () => onToggleEnabled(scene.id),
-						},
-						{ type: "divider" },
-						{
-							key: "delete",
-							icon: <Trash2 className="h-4 w-4" />,
-							label: t("playbook.actions.delete"),
-							danger: true,
-							onClick: () => onAction(scene.id, "delete"),
-						},
-					],
-				}}
-			>
-				<span>
-					<Button
-						variant="ghost"
-						size="icon"
-						className={cn("mt-0.5 size-5 shrink-0 rounded-md")}
-						data-testid={`playbook-scene-more-${scene.id}`}
-					>
-						<MoreHorizontal className="h-4 w-4" />
-					</Button>
-				</span>
-			</MagicDropdown>
+			{readOnly ? null : (
+				<MagicDropdown
+					placement="bottomRight"
+					menu={{
+						items: [
+							{
+								key: "edit",
+								icon: <PenLine className="h-4 w-4" />,
+								label: t("playbook.actions.edit"),
+								onClick: () => onAction(scene.id, "edit"),
+							},
+							{
+								key: scene.enabled ? "disable" : "enable",
+								icon: scene.enabled ? (
+									<Pause className="h-4 w-4" />
+								) : (
+									<Play className="h-4 w-4" />
+								),
+								label: scene.enabled
+									? t("playbook.actions.disable")
+									: t("playbook.actions.enable"),
+								onClick: () => onToggleEnabled(scene.id),
+							},
+							{ type: "divider" },
+							{
+								key: "delete",
+								icon: <Trash2 className="h-4 w-4" />,
+								label: t("playbook.actions.delete"),
+								danger: true,
+								onClick: () => onAction(scene.id, "delete"),
+							},
+						],
+					}}
+				>
+					<span>
+						<Button
+							variant="ghost"
+							size="icon"
+							className={cn("mt-0.5 size-5 shrink-0 rounded-md")}
+							data-testid={`playbook-scene-more-${scene.id}`}
+						>
+							<MoreHorizontal className="h-4 w-4" />
+						</Button>
+					</span>
+				</MagicDropdown>
+			)}
 		</div>
 	)
 })

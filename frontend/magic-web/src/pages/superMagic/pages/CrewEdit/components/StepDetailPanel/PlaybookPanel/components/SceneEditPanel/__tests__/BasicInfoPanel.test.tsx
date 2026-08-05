@@ -24,11 +24,13 @@ vi.mock("../components/LocaleTextInput", () => ({
 		value,
 		onChange,
 		multiline,
+		disabled,
 		"data-testid": testId,
 	}: {
 		value: { default?: string } | string
 		onChange: (nextValue: { default?: string } | string) => void
 		multiline?: boolean
+		disabled?: boolean
 		"data-testid"?: string
 	}) => {
 		const resolvedValue = typeof value === "string" ? value : (value.default ?? "")
@@ -47,6 +49,7 @@ vi.mock("../components/LocaleTextInput", () => ({
 					data-testid={testId}
 					value={resolvedValue}
 					onChange={(event) => handleChange(event.target.value)}
+					disabled={disabled}
 				/>
 			)
 		}
@@ -56,6 +59,7 @@ vi.mock("../components/LocaleTextInput", () => ({
 				data-testid={testId}
 				value={resolvedValue}
 				onChange={(event) => handleChange(event.target.value)}
+				disabled={disabled}
 			/>
 		)
 	},
@@ -94,6 +98,26 @@ function renderPanel(store: SceneEditStore) {
 }
 
 describe("BasicInfoPanel", () => {
+	it("keeps basic info scrollable when the edit panel is shorter than its content", () => {
+		const store = new SceneEditStore(createScene(), vi.fn().mockResolvedValue(undefined))
+
+		renderPanel(store)
+
+		expect(screen.getByTestId("basic-info-scroll-container")).toHaveClass(
+			"min-h-0",
+			"overflow-y-auto",
+		)
+	})
+	it("disables editing and hides save actions in read-only mode", () => {
+		const store = new SceneEditStore(createScene(), undefined, true)
+		renderPanel(store)
+
+		expect(screen.getByTestId("basic-info-name-input")).toBeDisabled()
+		expect(screen.getByTestId("basic-info-description-textarea")).toBeDisabled()
+		expect(screen.getByTestId("basic-info-enable-switch")).toBeDisabled()
+		expect(screen.queryByTestId("basic-info-save-button")).not.toBeInTheDocument()
+	})
+
 	it("keeps saved basic info when the panel is mounted again", async () => {
 		const handleSave = vi.fn().mockResolvedValue(undefined)
 		const store = new SceneEditStore(createScene(), handleSave)

@@ -45,7 +45,7 @@ export const LongTremMemorySider = memo(function LongTremMemorySider({
 					</span>
 				</div>
 			) : null}
-			<div className="min-h-0 flex-1">
+			<div className="min-h-0 flex-1" data-slot="project-panel-content">
 				<MemoryFileTreePanel
 					projectId={projectId}
 					selectedProject={selectedProject}

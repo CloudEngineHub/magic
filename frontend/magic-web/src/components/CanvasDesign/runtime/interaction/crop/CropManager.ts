@@ -36,8 +36,7 @@ export class CropManager {
 
 	// 进入裁剪前的原始元素状态(用于取消恢复)
 	private originalImageState:
-		| Pick<ImageElement, "x" | "y" | "width" | "height" | "crop">
-		| undefined = undefined
+		Pick<ImageElement, "x" | "y" | "width" | "height" | "crop"> | undefined = undefined
 
 	// 裁剪渲染器(由裁剪器绘制，与 ImageElement 解耦)
 	private cropRenderer: CropRenderer | null = null

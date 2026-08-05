@@ -443,6 +443,66 @@
         "zh_CN": "向用户提问",
         "en_US": "Ask user"
     },
+    "micro_app_plan": {
+        "zh_CN": "确认开发计划",
+        "en_US": "Review implementation plan"
+    },
+    "update_html_app_memory": {
+        "zh_CN": "更新微应用信息",
+        "en_US": "Update micro-app details"
+    },
+    "query_magicbase_tables": {
+        "zh_CN": "查询数据表",
+        "en_US": "Query tables"
+    },
+    "get_magicbase_table": {
+        "zh_CN": "查看数据表",
+        "en_US": "View table"
+    },
+    "query_magicbase_rows": {
+        "zh_CN": "查询数据记录",
+        "en_US": "Query rows"
+    },
+    "create_magicbase_row": {
+        "zh_CN": "新增数据记录",
+        "en_US": "Create row"
+    },
+    "batch_create_magicbase_rows": {
+        "zh_CN": "批量新增数据记录",
+        "en_US": "Batch create rows"
+    },
+    "delete_magicbase_row": {
+        "zh_CN": "删除数据记录",
+        "en_US": "Delete row"
+    },
+    "batch_delete_magicbase_rows": {
+        "zh_CN": "批量删除数据记录",
+        "en_US": "Batch delete rows"
+    },
+    "create_magicbase_table": {
+        "zh_CN": "创建数据表",
+        "en_US": "Create table"
+    },
+    "create_magicbase_column": {
+        "zh_CN": "创建字段",
+        "en_US": "Create field"
+    },
+    "update_magicbase_table_permissions": {
+        "zh_CN": "更新数据表权限",
+        "en_US": "Update table permissions"
+    },
+    "delete_magicbase_table": {
+        "zh_CN": "删除数据表",
+        "en_US": "Delete table"
+    },
+    "update_magicbase_column": {
+        "zh_CN": "更新字段",
+        "en_US": "Update field"
+    },
+    "delete_magicbase_column": {
+        "zh_CN": "删除字段",
+        "en_US": "Delete field"
+    },
     "search_knowledge": {
         "zh_CN": "知识检索",
         "en_US": "Search knowledge"

@@ -1,6 +1,7 @@
 import {
 	Bot,
 	Box,
+	AppWindow,
 	FileText,
 	Folder,
 	LibraryBig,
@@ -24,6 +25,7 @@ export type MobileResourceTypeKind =
 	| "folder"
 	| "crew"
 	| "skill"
+	| "microApp"
 
 export interface MobileResourceTypeIconConfig {
 	Icon: LucideIcon
@@ -88,6 +90,11 @@ export const MOBILE_RESOURCE_TYPE_ICON_CONFIG: Record<
 		Icon: Sparkles,
 		boxClass: "bg-icon-app-bookmarks/8",
 		iconClass: "text-icon-app-bookmarks",
+	},
+	microApp: {
+		Icon: AppWindow,
+		boxClass: "bg-icon-app-cloud/8",
+		iconClass: "text-icon-app-cloud",
 	},
 }
 

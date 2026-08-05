@@ -48,6 +48,7 @@ import { useSceneEditStore } from "../store"
 export const QuickStartPanel = observer(function QuickStartPanel() {
 	const { t, i18n } = useTranslation("crew/create")
 	const store = useSceneEditStore()
+	const readOnly = store.readOnly
 	const quickStartConfig = store.quickStart
 
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -112,6 +113,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 	}
 
 	function handleBatchDelete() {
+		if (readOnly) return
 		confirm({
 			title: t("playbook.edit.quickStart.batchDeleteConfirm.title"),
 			description: t("playbook.edit.quickStart.batchDeleteConfirm.description", {
@@ -128,6 +130,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 
 	const handleDeleteWithConfirm = useCallback(
 		(key: string) => {
+			if (readOnly) return
 			confirm({
 				title: t("playbook.edit.quickStart.deleteItemConfirm.title"),
 				description: t("playbook.edit.quickStart.deleteItemConfirm.description"),
@@ -138,42 +141,48 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 				},
 			})
 		},
-		[confirm, store, t],
+		[confirm, readOnly, store, t],
 	)
 
 	const handleToggleEnabled = useCallback(
 		(key: string, enabled: boolean) => {
+			if (readOnly) return
 			setEnabledMap((prev) => ({ ...prev, [key]: enabled }))
 			store.editQuickStartItem(key, { enabled })
 			void store.save()
 		},
-		[store],
+		[readOnly, store],
 	)
 
 	function handleOpenEdit(item: GuideItem) {
+		if (readOnly) return
 		setEditingItem(item)
 		setIsCreating(false)
 		setIsDialogOpen(true)
 	}
 
 	function handleOpenCreate() {
+		if (readOnly) return
 		setEditingItem(undefined)
 		setIsCreating(true)
 		setIsDialogOpen(true)
 	}
 
 	function handleDialogConfirm(data: Partial<GuideItem>) {
+		if (readOnly) return
 		if (isCreating) store.createQuickStartItem(data)
 		else if (editingItem) store.editQuickStartItem(editingItem.key, data)
 		void store.save()
 	}
 
 	function handleConfigConfirm(data: { title: LocaleText }) {
+		if (readOnly) return
 		store.updateQuickStartConfig(data)
 		void store.save()
 	}
 
 	function handleDragEnd(orderedKeys: string[]) {
+		if (readOnly) return
 		store.reorderQuickStartItems(orderedKeys)
 		void store.save()
 	}
@@ -185,39 +194,43 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 				<p className="min-w-0 flex-1 truncate text-lg font-medium text-foreground">
 					{panelTitle}
 				</p>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-9 shrink-0"
-					onClick={() => setIsConfigOpen(true)}
-					data-testid="quickstart-edit-section-button"
-					aria-label={t("playbook.edit.quickStart.config.title")}
-				>
-					<PencilLine className="h-4 w-4" />
-				</Button>
+				{readOnly ? null : (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-9 shrink-0"
+						onClick={() => setIsConfigOpen(true)}
+						data-testid="quickstart-edit-section-button"
+						aria-label={t("playbook.edit.quickStart.config.title")}
+					>
+						<PencilLine className="h-4 w-4" />
+					</Button>
+				)}
 			</div>
 
 			{/* Control bar */}
 			<div className="flex shrink-0 items-center justify-between">
-				<div className="flex items-center gap-2">
-					<Checkbox
-						checked={allSelected}
-						onCheckedChange={handleSelectAll}
-						data-testid="quickstart-select-all-checkbox"
-					/>
-					<label
-						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
-						onClick={handleSelectAll}
-						data-testid="handle-select-all"
-					>
-						{t("playbook.edit.filter.selectAll")}
-					</label>
-				</div>
-				{selectedKeys.size > 0 ? (
+				{readOnly ? null : (
+					<div className="flex items-center gap-2">
+						<Checkbox
+							checked={allSelected}
+							onCheckedChange={handleSelectAll}
+							data-testid="quickstart-select-all-checkbox"
+						/>
+						<label
+							className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
+							onClick={() => handleSelectAll(!allSelected)}
+							data-testid="handle-select-all"
+						>
+							{t("playbook.edit.filter.selectAll")}
+						</label>
+					</div>
+				)}
+				{!readOnly && selectedKeys.size > 0 ? (
 					<div className="flex items-center gap-2">
 						<Button
 							variant="outline"
-							className="shadow-xs h-9"
+							className="h-9 shadow-xs"
 							onClick={handleCancelSelection}
 							data-testid="quickstart-cancel-selection-button"
 						>
@@ -225,7 +238,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 						</Button>
 						<Button
 							variant="destructive"
-							className="shadow-xs h-9 gap-2"
+							className="h-9 gap-2 shadow-xs"
 							onClick={handleBatchDelete}
 							data-testid="quickstart-batch-delete-button"
 						>
@@ -243,27 +256,29 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 								value={searchValue}
 								onChange={(e) => setSearchValue(e.target.value)}
 								placeholder={t("playbook.edit.filter.search")}
-								className="shadow-xs h-9 w-[280px] pl-9"
+								className="h-9 w-[280px] pl-9 shadow-xs"
 								data-testid="quickstart-search-input"
 							/>
 						</div>
 						<Button
 							variant="outline"
-							className="shadow-xs h-9"
+							className="h-9 shadow-xs"
 							onClick={handleReset}
 							data-testid="quickstart-reset-button"
 						>
 							{t("playbook.edit.filter.reset")}
 						</Button>
-						<Separator orientation="vertical" className="!h-5" />
-						<Button
-							className="shadow-xs h-9"
-							onClick={handleOpenCreate}
-							data-testid="quickstart-create-button"
-						>
-							<CirclePlus className="h-4 w-4" />
-							{t("playbook.edit.filter.create")}
-						</Button>
+						{readOnly ? null : <Separator orientation="vertical" className="!h-5" />}
+						{readOnly ? null : (
+							<Button
+								className="h-9 shadow-xs"
+								onClick={handleOpenCreate}
+								data-testid="quickstart-create-button"
+							>
+								<CirclePlus className="h-4 w-4" />
+								{t("playbook.edit.filter.create")}
+							</Button>
+						)}
 					</div>
 				)}
 			</div>
@@ -275,7 +290,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 						title={t("playbook.edit.quickStart.empty.title")}
 						description={t("playbook.edit.quickStart.empty.description")}
 						createLabel={t("playbook.edit.quickStart.empty.create")}
-						onCreate={handleOpenCreate}
+						onCreate={readOnly ? undefined : handleOpenCreate}
 					/>
 				) : (
 					<GuideItemList
@@ -289,23 +304,28 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 						onEdit={handleOpenEdit}
 						onDelete={handleDeleteWithConfirm}
 						onReorder={handleDragEnd}
+						readOnly={readOnly}
 					/>
 				)}
 			</div>
 
 			{/* Edit / Create dialog */}
-			<GuideItemEditDialog
-				item={isCreating ? undefined : editingItem}
-				open={isDialogOpen}
-				onOpenChange={setIsDialogOpen}
-				onConfirm={handleDialogConfirm}
-			/>
-			<QuickStartConfigDialog
-				config={quickStartConfig}
-				open={isConfigOpen}
-				onOpenChange={setIsConfigOpen}
-				onConfirm={handleConfigConfirm}
-			/>
+			{readOnly ? null : (
+				<GuideItemEditDialog
+					item={isCreating ? undefined : editingItem}
+					open={isDialogOpen}
+					onOpenChange={setIsDialogOpen}
+					onConfirm={handleDialogConfirm}
+				/>
+			)}
+			{readOnly ? null : (
+				<QuickStartConfigDialog
+					config={quickStartConfig}
+					open={isConfigOpen}
+					onOpenChange={setIsConfigOpen}
+					onConfirm={handleConfigConfirm}
+				/>
+			)}
 
 			{confirmDialog}
 		</div>
@@ -315,6 +335,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 // ─── GuideItemList ────────────────────────────────────────────────────────────
 
 interface GuideItemListProps {
+	readOnly?: boolean
 	items: GuideItem[]
 	selectedKeys: Set<string>
 	enabledMap: Record<string, boolean>
@@ -338,6 +359,7 @@ function GuideItemList({
 	onEdit,
 	onDelete,
 	onReorder,
+	readOnly = false,
 }: GuideItemListProps) {
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -371,6 +393,7 @@ function GuideItemList({
 							onToggleEnabled={onToggleEnabled}
 							onEdit={onEdit}
 							onDelete={onDelete}
+							readOnly={readOnly}
 						/>
 					))}
 				</div>
@@ -382,6 +405,7 @@ function GuideItemList({
 // ─── GuideItemRow ─────────────────────────────────────────────────────────────
 
 interface GuideItemRowProps {
+	readOnly?: boolean
 	item: GuideItem
 	isSelected: boolean
 	isEnabled: boolean
@@ -403,6 +427,7 @@ function GuideItemRow({
 	onToggleEnabled,
 	onEdit,
 	onDelete,
+	readOnly = false,
 }: GuideItemRowProps) {
 	const { t } = useTranslation("crew/create")
 	const title = resolveLocalText(item.title, lang)
@@ -463,35 +488,44 @@ function GuideItemRow({
 			{...attributes}
 		>
 			{/* Checkbox */}
-			<div className="flex size-6 shrink-0 items-center justify-center">
-				<Checkbox
-					checked={isSelected}
-					onCheckedChange={(checked) => onSelect(item.key, !!checked)}
-				/>
-			</div>
+			{readOnly ? null : (
+				<div className="flex size-6 shrink-0 items-center justify-center">
+					<Checkbox
+						checked={isSelected}
+						onCheckedChange={(checked) => onSelect(item.key, !!checked)}
+					/>
+				</div>
+			)}
 
 			{/* Drag handle */}
-			<button
-				ref={setActivatorNodeRef}
-				className={cn(
-					"flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground",
-					isDragDisabled
-						? "cursor-not-allowed opacity-30"
-						: "cursor-grab active:cursor-grabbing",
-				)}
-				aria-label="drag"
-				data-testid={`guide-item-drag-${item.key}`}
-				{...(isDragDisabled ? {} : listeners)}
-			>
-				<GripVertical className="h-4 w-4" />
-			</button>
+			{readOnly ? null : (
+				<button
+					ref={setActivatorNodeRef}
+					className={cn(
+						"flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground",
+						isDragDisabled
+							? "cursor-not-allowed opacity-30"
+							: "cursor-grab active:cursor-grabbing",
+					)}
+					aria-label="drag"
+					data-testid={`guide-item-drag-${item.key}`}
+					{...(isDragDisabled ? {} : listeners)}
+				>
+					<GripVertical className="h-4 w-4" />
+				</button>
+			)}
 
 			{/* Content */}
 			<div className="flex min-w-0 flex-1 items-start gap-2">
 				{/* Icon container */}
 				<div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent">
 					{item.icon ? (
-						<img src={item.icon} alt={title} className="size-5 object-cover"  data-testid="quick-start-panel-image"/>
+						<img
+							src={item.icon}
+							alt={title}
+							className="size-5 object-cover"
+							data-testid="quick-start-panel-image"
+						/>
 					) : (
 						<MousePointerClick className="h-4 w-4 text-muted-foreground" />
 					)}
@@ -525,8 +559,8 @@ function GuideItemRow({
 							<MousePointerClick className="h-3 w-3" />
 							{item.click_action
 								? t(
-									`playbook.edit.quickStart.form.clickActions.${toCamelKey(item.click_action)}`,
-								)
+										`playbook.edit.quickStart.form.clickActions.${toCamelKey(item.click_action)}`,
+									)
 								: t("playbook.edit.quickStart.action.noAction")}
 						</Badge>
 					</div>
@@ -534,27 +568,31 @@ function GuideItemRow({
 			</div>
 
 			{/* Switch */}
-			<div className="flex shrink-0 items-start">
-				<Switch
-					checked={isEnabled}
-					onCheckedChange={(checked) => onToggleEnabled(item.key, checked)}
-					data-testid={`guide-item-switch-${item.key}`}
-				/>
-			</div>
+			{readOnly ? null : (
+				<div className="flex shrink-0 items-start">
+					<Switch
+						checked={isEnabled}
+						onCheckedChange={(checked) => onToggleEnabled(item.key, checked)}
+						data-testid={`guide-item-switch-${item.key}`}
+					/>
+				</div>
+			)}
 
 			{/* More options via MagicDropdown */}
-			<MagicDropdown placement="bottomRight" menu={{ items: dropdownItems }}>
-				<span>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-5 shrink-0 self-center"
-						data-testid={`guide-item-more-${item.key}`}
-					>
-						<Ellipsis className="h-4 w-4" />
-					</Button>
-				</span>
-			</MagicDropdown>
+			{readOnly ? null : (
+				<MagicDropdown placement="bottomRight" menu={{ items: dropdownItems }}>
+					<span>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-5 shrink-0 self-center"
+							data-testid={`guide-item-more-${item.key}`}
+						>
+							<Ellipsis className="h-4 w-4" />
+						</Button>
+					</span>
+				</MagicDropdown>
+			)}
 		</div>
 	)
 }

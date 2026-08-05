@@ -13,6 +13,8 @@ interface QuickActionCardsProps {
 	publishStatus: SkillEditPublishStatus
 	isPublishPrepareLoading?: boolean
 	canPublish?: boolean
+	hideSettings?: boolean
+	hidePublish?: boolean
 	activeAction?: "publish" | "settings" | null
 	onSettingsClick?: () => void
 	onPublishClick?: () => void
@@ -26,12 +28,18 @@ function QuickActionCards({
 	publishStatus,
 	isPublishPrepareLoading = false,
 	canPublish = true,
+	hideSettings = false,
+	hidePublish = false,
 	activeAction = null,
 	onSettingsClick,
 	onPublishClick,
 	extraContent,
 }: QuickActionCardsProps) {
 	const { t } = useTranslation("crew/market")
+	const hasActionRows = !hideSettings || !hidePublish
+	const hasVisibleContent = Boolean(extraContent) || hasActionRows
+
+	if (!hasVisibleContent) return null
 
 	return (
 		<div
@@ -41,55 +49,59 @@ function QuickActionCards({
 			{extraContent ? (
 				<>
 					{extraContent}
-					<Separator />
+					{hasActionRows ? <Separator /> : null}
 				</>
 			) : null}
-			<ActionRow
-				icon={<Settings2 className="size-4" />}
-				label={settingsLabel}
-				testId="skill-edit-settings-button"
-				isActive={activeAction === "settings"}
-				onClick={onSettingsClick}
-			/>
-			<Separator />
-			<ActionRow
-				icon={<Upload className="size-4" />}
-				label={publishLabel}
-				trailing={
-					!canPublish ? (
-						<span
-							className="text-xs text-muted-foreground"
-							data-testid="skill-edit-publish-no-permission"
-						>
-							{t("skillEditPage.actions.noPublishPermission")}
-						</span>
-					) : isPublishPrepareLoading || publishStatus === "draft" ? (
-						<span className="flex shrink-0 items-center gap-1.5">
-							{isPublishPrepareLoading ? (
-								<Loader2
-									className="size-4 shrink-0 animate-spin text-muted-foreground"
-									aria-hidden
-									data-testid="skill-edit-publish-preparing-loader"
-								/>
-							) : null}
-							{publishStatus === "draft" ? (
-								<Badge
-									variant="secondary"
-									className="border-transparent bg-amber-50 px-2 py-0.5 text-[12px] font-normal leading-4 text-amber-500"
-								>
-									{unpublishedChangesLabel}
-								</Badge>
-							) : null}
-						</span>
-					) : null
-				}
-				testId="skill-edit-publish-button"
-				isActive={activeAction === "publish"}
-				ariaBusy={isPublishPrepareLoading}
-				disabled={!canPublish}
-				hideChevron={!canPublish}
-				onClick={onPublishClick}
-			/>
+			{hideSettings ? null : (
+				<ActionRow
+					icon={<Settings2 className="size-4" />}
+					label={settingsLabel}
+					testId="skill-edit-settings-button"
+					isActive={activeAction === "settings"}
+					onClick={onSettingsClick}
+				/>
+			)}
+			{hideSettings || hidePublish ? null : <Separator />}
+			{hidePublish ? null : (
+				<ActionRow
+					icon={<Upload className="size-4" />}
+					label={publishLabel}
+					trailing={
+						!canPublish ? (
+							<span
+								className="text-xs text-muted-foreground"
+								data-testid="skill-edit-publish-no-permission"
+							>
+								{t("skillEditPage.actions.noPublishPermission")}
+							</span>
+						) : isPublishPrepareLoading || publishStatus === "draft" ? (
+							<span className="flex shrink-0 items-center gap-1.5">
+								{isPublishPrepareLoading ? (
+									<Loader2
+										className="size-4 shrink-0 animate-spin text-muted-foreground"
+										aria-hidden
+										data-testid="skill-edit-publish-preparing-loader"
+									/>
+								) : null}
+								{publishStatus === "draft" ? (
+									<Badge
+										variant="secondary"
+										className="border-transparent bg-amber-50 px-2 py-0.5 text-[12px] font-normal leading-4 text-amber-500"
+									>
+										{unpublishedChangesLabel}
+									</Badge>
+								) : null}
+							</span>
+						) : null
+					}
+					testId="skill-edit-publish-button"
+					isActive={activeAction === "publish"}
+					ariaBusy={isPublishPrepareLoading}
+					disabled={!canPublish}
+					hideChevron={!canPublish}
+					onClick={onPublishClick}
+				/>
+			)}
 		</div>
 	)
 }

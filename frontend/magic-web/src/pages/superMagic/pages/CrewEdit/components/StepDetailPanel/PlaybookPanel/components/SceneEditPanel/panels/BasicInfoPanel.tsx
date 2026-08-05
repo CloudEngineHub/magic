@@ -26,6 +26,7 @@ function isLocaleTextEqual(a: LocaleText, b: LocaleText): boolean {
 export const BasicInfoPanel = observer(function BasicInfoPanel() {
 	const { t } = useTranslation("crew/create")
 	const store = useSceneEditStore()
+	const readOnly = store.readOnly
 	const { scene } = store
 
 	const initialForm = useMemo<FormState>(
@@ -49,10 +50,12 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 		form.icon !== initialForm.icon
 
 	function handleReset() {
+		if (readOnly) return
 		setForm(initialForm)
 	}
 
 	async function handleSave() {
+		if (readOnly) return
 		store.updateBasicInfo({
 			name: form.name,
 			description: form.description,
@@ -64,7 +67,10 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 	}
 
 	return (
-		<div className="flex h-full flex-col gap-3.5">
+		<div
+			className="flex h-full min-h-0 flex-col gap-3.5 overflow-y-auto pr-1"
+			data-testid="basic-info-scroll-container"
+		>
 			{/* Content header */}
 			<div className="flex shrink-0 items-center">
 				<p className="flex-1 truncate text-lg font-medium text-foreground">
@@ -82,21 +88,27 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 								{t("playbook.edit.basicInfo.icon")}
 							</span>
 						</div>
-						<IconPickerPanel
-							value={form.icon}
-							onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
-						>
-							<span>
-								<Button
-									variant="outline"
-									className="h-9 gap-2 px-4 shadow-xs"
-									data-testid="basic-info-icon-picker"
-								>
-									<LucideLazyIcon icon={form.icon} size={24} />
-									<ChevronDown className="h-4 w-4" />
-								</Button>
-							</span>
-						</IconPickerPanel>
+						{readOnly ? (
+							<Button variant="outline" className="h-9 gap-2 px-4 shadow-xs" disabled>
+								<LucideLazyIcon icon={form.icon} size={24} />
+							</Button>
+						) : (
+							<IconPickerPanel
+								value={form.icon}
+								onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
+							>
+								<span>
+									<Button
+										variant="outline"
+										className="h-9 gap-2 px-4 shadow-xs"
+										data-testid="basic-info-icon-picker"
+									>
+										<LucideLazyIcon icon={form.icon} size={24} />
+										<ChevronDown className="h-4 w-4" />
+									</Button>
+								</span>
+							</IconPickerPanel>
+						)}
 					</div>
 
 					{/* Title row */}
@@ -112,6 +124,7 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 							localizeLabel={t("playbook.edit.basicInfo.name")}
 							placeholder={t("playbook.edit.basicInfo.namePlaceholder")}
 							data-testid="basic-info-name-input"
+							disabled={readOnly}
 						/>
 					</div>
 
@@ -132,6 +145,7 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 							multiline
 							className="min-h-[120px]"
 							data-testid="basic-info-description-textarea"
+							disabled={readOnly}
 						/>
 					</div>
 
@@ -142,26 +156,35 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 								{t("playbook.edit.basicInfo.color")}
 							</span>
 						</div>
-						<ColorPickerPopover
-							value={form.theme_color}
-							onChange={(color) =>
-								setForm((prev) => ({ ...prev, theme_color: color }))
-							}
-						>
-							<span>
-								<Button
-									variant="outline"
-									className="h-9 gap-2 px-4 shadow-xs"
-									data-testid="basic-info-color-picker"
-								>
-									<div
-										className="h-6 w-6 rounded-sm border border-border"
-										style={{ backgroundColor: form.theme_color }}
-									/>
-									<ChevronDown className="h-4 w-4" />
-								</Button>
-							</span>
-						</ColorPickerPopover>
+						{readOnly ? (
+							<Button variant="outline" className="h-9 gap-2 px-4 shadow-xs" disabled>
+								<div
+									className="h-6 w-6 rounded-sm border border-border"
+									style={{ backgroundColor: form.theme_color }}
+								/>
+							</Button>
+						) : (
+							<ColorPickerPopover
+								value={form.theme_color}
+								onChange={(color) =>
+									setForm((prev) => ({ ...prev, theme_color: color }))
+								}
+							>
+								<span>
+									<Button
+										variant="outline"
+										className="h-9 gap-2 px-4 shadow-xs"
+										data-testid="basic-info-color-picker"
+									>
+										<div
+											className="h-6 w-6 rounded-sm border border-border"
+											style={{ backgroundColor: form.theme_color }}
+										/>
+										<ChevronDown className="h-4 w-4" />
+									</Button>
+								</span>
+							</ColorPickerPopover>
+						)}
 					</div>
 
 					{/* Enable row */}
@@ -177,30 +200,33 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 								setForm((prev) => ({ ...prev, enabled: checked }))
 							}
 							data-testid="basic-info-enable-switch"
+							disabled={readOnly}
 						/>
 					</div>
 				</div>
 			</div>
 
 			{/* Footer actions */}
-			<div className="flex shrink-0 items-center justify-end gap-1.5">
-				<Button
-					variant="outline"
-					className="h-9 shadow-xs"
-					onClick={handleReset}
-					data-testid="basic-info-reset-button"
-				>
-					{t("playbook.edit.basicInfo.reset")}
-				</Button>
-				<Button
-					className="h-9 shadow-xs"
-					onClick={handleSave}
-					disabled={!isDirty}
-					data-testid="basic-info-save-button"
-				>
-					{t("playbook.edit.basicInfo.save")}
-				</Button>
-			</div>
+			{readOnly ? null : (
+				<div className="flex shrink-0 items-center justify-end gap-1.5">
+					<Button
+						variant="outline"
+						className="h-9 shadow-xs"
+						onClick={handleReset}
+						data-testid="basic-info-reset-button"
+					>
+						{t("playbook.edit.basicInfo.reset")}
+					</Button>
+					<Button
+						className="h-9 shadow-xs"
+						onClick={handleSave}
+						disabled={!isDirty}
+						data-testid="basic-info-save-button"
+					>
+						{t("playbook.edit.basicInfo.save")}
+					</Button>
+				</div>
+			)}
 		</div>
 	)
 })

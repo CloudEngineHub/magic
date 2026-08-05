@@ -8,6 +8,7 @@ import { TopicMode } from "../pages/Workspace/TopicMode"
 import { RequestConfig } from "@/apis/core/HttpClient"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -289,6 +290,13 @@ class TopicService {
 
 		const patchSource = this.resolveManualFrontendModeSource(topic, mode)
 		this.rememberFrontendModePatch(topic.id, patchSource)
+		const currentAgentCode = topic.agent_code?.trim() || undefined
+		if (
+			topic.topic_mode === patchSource.topic_mode &&
+			currentAgentCode === patchSource.agent_code
+		) {
+			return
+		}
 		runInAction(() => {
 			this.topicStore.mergeTopic(topic.id, {
 				topic_mode: patchSource.topic_mode,
@@ -303,8 +311,7 @@ class TopicService {
 	): Pick<Topic, "project_id" | "topic_mode" | "agent_code"> {
 		const modeIdentifier = String(mode).trim()
 
-		// ModeToggle 选择自定义员工时传出的是 agent_code。只有 SMA 前缀才按员工归一化；
-		// 其他 identifier 仍是普通 topic_mode，避免把普通模式误写成 custom_agent。
+		// Only legacy SMA crews use custom_agent; other identifiers are plain topic_mode.
 		if (modeIdentifier.startsWith("SMA")) {
 			return {
 				project_id: topic.project_id,
@@ -373,7 +380,10 @@ class TopicService {
 
 	private isFrontendModePatchUsable(topic: Topic, patch?: TopicFrontendModePatch) {
 		if (!patch) return false
-		return patch.project_id === topic.project_id && patch.expiresAt > Date.now()
+		if (patch.project_id !== topic.project_id || patch.expiresAt <= Date.now()) return false
+
+		// Drop stale patches when the selected employee is no longer available.
+		return superMagicModeService.isModeValid(patch.topic_mode, patch.agent_code)
 	}
 
 	private canApplyFrontendModePatch(topic: Topic) {

@@ -146,7 +146,7 @@ function TopicMessagePanel({
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -349,6 +349,7 @@ function TopicMessagePanel({
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 						size={detailPanelVisible ? "small" : "default"}
 					/>

@@ -23,6 +23,8 @@ from app.tools.workspace_tool import WorkspaceTool
 from app.utils.line_number_handler import LineNumberHandler
 from app.utils.diff_generator import DiffGenerator
 from app.utils.punctuation_matcher import PunctuationMatcher
+from app.service.html_app_memory_service import is_html_app_memory_path
+from app.utils.async_file_utils import async_exists
 
 logger = get_logger(__name__)
 
@@ -120,8 +122,10 @@ Never include the line number + tab in any old_string or new_string.
             resolved = self.resolve_path_fuzzy(params.file_path)
             file_path = resolved.path
             fuzzy_warning = resolved.warning
+            if is_html_app_memory_path(file_path):
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of multi_edit_file so MagicBase data model records are not overwritten.")
             # Check if file exists
-            if not file_path.exists():
+            if not await async_exists(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_not_exist")
                 return ToolResult(
                     error=f"File does not exist: {file_path}\n"

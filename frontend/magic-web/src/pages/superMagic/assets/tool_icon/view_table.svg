@@ -1,0 +1,14 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#view_table_bg)"/>
+<rect x="4.5" y="5" width="11" height="9.5" rx="1.25" stroke="white"/>
+<path d="M4.5 8H15.5M8.25 5V14.5" stroke="white"/>
+<circle cx="13" cy="13" r="2.75" fill="#1688B7" stroke="white"/>
+<path d="M11.55 13C12.05 12.35 12.55 12.05 13 12.05C13.45 12.05 13.95 12.35 14.45 13C13.95 13.65 13.45 13.95 13 13.95C12.55 13.95 12.05 13.65 11.55 13Z" stroke="white" stroke-linejoin="round"/>
+<circle cx="13" cy="13" r="0.45" fill="white"/>
+<defs>
+<linearGradient id="view_table_bg" x1="1" y1="1" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+<stop stop-color="#23D5AB"/>
+<stop offset="1" stop-color="#1688B7"/>
+</linearGradient>
+</defs>
+</svg>

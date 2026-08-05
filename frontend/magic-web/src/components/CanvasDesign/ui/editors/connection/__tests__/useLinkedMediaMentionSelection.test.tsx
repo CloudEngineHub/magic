@@ -150,8 +150,7 @@ describe("useLinkedMediaMentionSelection", () => {
 
 		expect(removeMentionItems).toHaveBeenCalledTimes(1)
 		const matcher = removeMentionItems.mock.calls[0]?.[0] as
-			| MessageEditorMentionMatcher
-			| undefined
+			MessageEditorMentionMatcher | undefined
 		expect(
 			matcher?.(createReferenceResourcePanelItemFromPath("/images/source.png", "source.png")),
 		).toBe(true)

@@ -478,6 +478,7 @@
 		"notFound": "未找到相关",
 		"onlineEdit": "在线编辑",
 		"onlySupportUploadImage": "仅支持上传png/jpg/gif格式的图片",
+		"open": "打开",
 		"pinned": "置顶",
 		"pptMode": "PPT 模式",
 		"projectNotSelected": "请先选择项目",
@@ -642,9 +643,7 @@
 				"defaultModel": "默认模型",
 				"defaultVideoModel": "默认视频模型",
 				"editTitle": "编辑配置",
-				"enableSchedule": "启用定时执行",
-				"enableScheduleHint": "开启后将按设定频率自动更新卡片",
-				"generate": "生成卡片",
+				"generate": "生成观察结果",
 				"imageModel": "生图模型",
 				"languageModel": "语言模型",
 				"modelSection": "模型配置",
@@ -657,27 +656,129 @@
 			"createDialog": {
 				"cancel": "取消",
 				"cardName": "卡片名称",
-				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
-				"confirm": "创建卡片",
+				"cardNamePlaceholder": "例如：竞品雷达、热点观察、经营异常观察",
+				"confirm": "创建 AI 卡片",
 				"creating": "创建中...",
-				"description": "AI 将自动创建可视化卡片，并设置定时任务定期获取最新数据更新。",
-				"prompt": "分析指令",
-				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
-				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
-				"template": "卡片模板",
+				"description": "创建一个会持续观察目标、生成判断和可视化结果的 AI 卡片。也可以切换为固定计划，保留普通定时执行方式。",
+				"prompt": "观察目标",
+				"promptHint": "告诉 AI 需要观察什么、如何判断重要性，以及出现变化时应该给出什么行动建议。",
+				"promptPlaceholder": "告诉 AI 需要持续观察什么。\n例如：持续观察竞品 A 的企业版定价、功能发布和客户案例变化，发现重要变化时给出影响判断和销售建议。",
+				"template": "展示模板",
+				"templates": {
+					"collapseForm": "收起编辑",
+					"description": "选择一个常见观察场景，系统会预填观察目标、展示模板、执行频率和 AI 调整权限。",
+					"expandForm": "展开编辑",
+					"summary": "当前模板",
+					"summaryAutonomy": "AI 调整权限",
+					"summaryGoal": "观察目标",
+					"summaryName": "名称",
+					"summarySchedule": "执行频率",
+					"template": {
+						"brandSentiment": {
+							"description": "观察社交平台热点、用户反馈、负面苗头和可借势话题。",
+							"scenario": "适合品牌、公关、市场和内容运营团队。",
+							"title": "品牌舆情与热点机会观察"
+						},
+						"businessAnomaly": {
+							"description": "观察经营指标、转化、库存、销售或服务指标中的异常波动。",
+							"scenario": "适合运营、数据分析、增长和业务负责人。",
+							"title": "经营数据异常观察"
+						},
+						"campaignMaterial": {
+							"description": "观察投放渠道、广告素材、落地页和转化成本变化。",
+							"scenario": "适合增长、投放、市场和创意团队。",
+							"title": "渠道投放与素材观察"
+						},
+						"competitorPricing": {
+							"description": "观察竞品定价、版本发布、客户案例和企业版能力变化。",
+							"scenario": "适合销售、产品、战略和行业研究团队。",
+							"title": "竞品产品与定价观察"
+						},
+						"contentPerformance": {
+							"description": "观察已发布内容的数据表现、评论反馈和二次分发机会。",
+							"scenario": "适合自媒体、内容运营和增长团队。",
+							"title": "内容发布后表现观察"
+						},
+						"custom": {
+							"description": "从空白配置开始，按当前观察目标自行填写。",
+							"scenario": "适合还没有固定场景，或需要完全自定义的观察任务。",
+							"title": "自定义"
+						},
+						"inventoryRisk": {
+							"description": "观察库存水位、补货周期、缺货预警和滞销风险。",
+							"scenario": "适合电商、供应链、门店和商品运营团队。",
+							"title": "库存与供应风险观察"
+						},
+						"policyChange": {
+							"description": "观察行业政策、平台规则、监管公告和合规要求变化。",
+							"scenario": "适合法务、合规、平台运营和行业研究团队。",
+							"title": "政策法规变化观察"
+						},
+						"productReviews": {
+							"description": "观察应用商店、电商平台、社区和测评内容中的体验反馈。",
+							"scenario": "适合产品、体验、增长和用户研究团队。",
+							"title": "产品体验与评论观察"
+						},
+						"renewalRisk": {
+							"description": "观察客户活跃度、工单、合同周期和续费风险信号。",
+							"scenario": "适合销售、客户成功、运营和业务负责人。",
+							"title": "客户续费与流失风险观察"
+						},
+						"serviceQuality": {
+							"description": "观察社群、客服和售后中的问题集中度与服务风险。",
+							"scenario": "适合客服、社群、运营和服务管理团队。",
+							"title": "社群问题与服务质量观察"
+						},
+						"talentHiring": {
+							"description": "观察竞品招聘、组织扩张、人才流动和岗位能力变化。",
+							"scenario": "适合 HR、战略、业务负责人和组织发展团队。",
+							"title": "招聘与人才动向观察"
+						},
+						"userFeedback": {
+							"description": "观察客服、问卷、社群和评论中的高频需求与阻塞点。",
+							"scenario": "适合产品、用户研究、客服和增长团队。",
+							"title": "用户反馈与需求观察"
+						}
+					},
+					"title": "选择观察模板"
+				},
 				"title": "创建 AI 卡片"
 			},
 			"createMessage": {
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "所有调度变更都需要确认",
+						"destructiveOnly": "暂停、归档、删除和外部通知需要确认",
+						"highRisk": "高风险、提频、删除、归档和外部通知需要确认"
+					},
+					"approvalPolicy": "审批策略：{{policy}}",
+					"budgetNote": "预算说明：{{budget}}",
+					"guardrails": "安全边界：{{guardrails}}",
+					"level": "自治级别：{{level}}",
+					"levels": {
+						"bounded": "有限自治",
+						"goalDriven": "目标驱动",
+						"suggested": "只建议调整"
+					},
+					"limits": "调度上限：最多 {{maxWatchTasks}} 个观察任务，每天最多 {{maxRunsPerDay}} 次执行"
+				},
+				"cardDomain": "卡片域名：{{domain}}",
 				"cardId": "卡片编号：{{cardId}}",
 				"cardLink": "卡片链接：{{cardLink}}",
 				"customTemplate": "自定义模板要求：{{customTemplate}}",
 				"location": "创建位置：{{cardDir}}/",
+				"mode": "模式：{{mode}}",
+				"modes": {
+					"observer": "AI 观察",
+					"scheduled": "固定计划"
+				},
 				"notificationChannels": {
 					"dingtalk": "钉钉",
 					"lark": "飞书",
 					"wecom": "企业微信"
 				},
 				"notificationTargetLine": "{{channel}}：{{targetDescription}}",
+				"observerContract": "AI 观察契约：请将当前观察状态写入 state/signals.json、state/evidence.json、state/judgement.json、state/run-summary.json、state/observation-plan.json 和 state/notification-log.json，并用 state/index.html 或本次 runs/{run_id}/ 产物可视化同一份结构化情报数据。",
 				"schedule": {
 					"daily": "每天 {{time}} 执行",
 					"default": "{{time}} 执行",
@@ -691,15 +792,19 @@
 				"sectionTitle": "━━━ {{title}} ━━━",
 				"sections": {
 					"analysisInstruction": "分析指令",
+					"autonomyPolicy": "AI 调整权限",
 					"cardData": "卡片数据",
 					"createRequirement": "创建需求",
 					"notificationTargets": "通知目标"
 				},
 				"template": "模板：{{template}}",
 				"title": "请创建一个 AI 卡片「{{cardName}}」。",
+				"titleScheduled": "请创建一个固定计划卡片「{{cardName}}」。",
 				"topicName": "[AI卡片] {{cardName}}",
+				"topicNameScheduled": "[AI卡片] {{cardName}}",
 				"update": {
 					"defaultScheduled": "更新方式：默认定时更新",
+					"observerAutoPlan": "调度规划：根据观察目标选择下一次最需要执行的观察任务，创建 1 个 message_schedule 定时任务；后续运行再评估是否需要新增或调整观察任务。",
 					"once": "更新方式：一次性生成",
 					"scheduled": "定时：{{schedule}}{{enabledText}}"
 				}
@@ -708,21 +813,21 @@
 				"archived": "归档",
 				"configure": "配置",
 				"current": "当前",
-				"empty": "暂无卡片内容，等待定时任务生成",
+				"empty": "暂无观察结果，等待下一次执行生成",
 				"historyCount": "{{count}} 个版本",
-				"historyEmpty": "暂无历史版本，后续自动更新后会在这里沉淀记录",
-				"historyPreviewDescription": "首页仅展示版本摘要，打开后再加载完整卡片内容。",
+				"historyEmpty": "暂无历史版本，后续自动更新后会显示在这里",
+				"historyPreviewDescription": "首页仅展示版本摘要，打开后再加载完整观察结果。",
 				"historyPreviewTitle": "历史快照",
 				"historySectionDescription": "按生成时间回看每一次归档版本",
 				"historySectionTitle": "历史版本时间线",
 				"historyVersion": "🕰 历史版本",
-				"latestSectionDescription": "当前生效的卡片版本，点击可查看完整内容",
+				"latestSectionDescription": "当前生效的观察结果，点击可查看完整内容",
 				"latestSectionTitle": "最新版本",
 				"latestVersion": "✨ 最新版本",
 				"loading": "AI 卡片加载中...",
-				"loadingDescription": "正在解析卡片数据",
+				"loadingDescription": "正在解析观察数据",
 				"modelSummary": "模型 {{model}}",
-				"openHistoryVersion": "打开完整版本",
+				"openHistoryVersion": "打开完整结果",
 				"runNow": "立即运行",
 				"running": "运行中...",
 				"scheduleCustom": "{{time}} 执行",
@@ -747,21 +852,65 @@
 				"loadingCard": "正在加载卡片",
 				"nextVersion": "较早版本",
 				"nextVersionDisabled": "已是最早版本",
-				"noContent": "暂无卡片内容，等待下次定时任务生成",
+				"noContent": "暂无观察结果，等待下次执行生成",
 				"previousVersion": "较新版本",
 				"previousVersionDisabled": "已是最新版本"
 			},
 			"form": {
 				"advancedSettings": "高级设置",
 				"aiPolish": "AI 润色",
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "任何变更都先问我",
+						"destructiveOnly": "暂停、归档、删除或外部通知先问我",
+						"highRisk": "高风险、提频、删除或外部通知先问我"
+					},
+					"approvalPolicy": "哪些变更需要确认",
+					"budgetNote": "优先观察什么",
+					"budgetPlaceholder": "例如：优先观察负面反馈和高影响客户，每天最多 4 次深度观察",
+					"description": "设置 AI 能否自动调整观察任务；超出范围时会先让你确认。",
+					"guardrails": "不能自动做什么",
+					"guardrailsPlaceholder": "每行一条，例如：\n不要自动回复用户或关闭工单\n用户原文引用必须脱敏\n升级建议必须说明原因和影响范围",
+					"levels": {
+						"bounded": {
+							"description": "低风险观察调整可自动执行，提频、删除等动作会先问你",
+							"title": "低风险可自动执行"
+						},
+						"goalDriven": {
+							"description": "AI 可围绕观察目标调整计划，影响较大或超出边界时再确认",
+							"title": "按目标主动优化"
+						},
+						"suggested": {
+							"description": "AI 只列出调整建议，确认后才会变更观察任务",
+							"title": "只给建议，不自动改"
+						}
+					},
+					"maxRunsPerDay": "每天最多执行几次",
+					"maxWatchTasks": "最多同时观察几项",
+					"title": "AI 可调整范围"
+				},
 				"cardName": "卡片名称",
-				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
+				"cardNamePlaceholder": "例如：竞品雷达、热点观察、经营异常观察",
 				"customTemplatePlaceholder": "描述你想要的卡片样式和布局。\n例如：左侧展示趋势折线图，右侧以卡片列表形式展示 Top 10 热点，整体采用深色风格。",
+				"errors": {
+					"projectRequired": "请先选择一个有效的项目"
+				},
+				"mode": "运行模式",
+				"modes": {
+					"observer": {
+						"description": "持续观察信号，生成判断、证据、工作记录和观察计划",
+						"title": "AI 观察"
+					},
+					"scheduled": {
+						"description": "按设定频率更新可视化结果，保留普通定时执行方式",
+						"title": "固定计划"
+					}
+				},
 				"polishModel": "润色模型",
-				"prompt": "分析指令",
-				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
-				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
-				"template": "卡片模板",
+				"prompt": "观察目标",
+				"promptHint": "AI 将根据观察目标获取最新数据，判断重要变化，并生成可视化结果。",
+				"promptPlaceholder": "告诉 AI 需要持续观察什么。\n例如：观察今日抖音、微博、小红书热搜榜 Top 20，判断趋势变化、机会窗口和建议动作。",
+				"template": "展示模板",
 				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后输入模板需求",
 				"templateOptions": {
 					"analyticsPanel": "数据面板",
@@ -772,10 +921,11 @@
 				"voiceInput": "语音输入"
 			},
 			"history": {
+				"artifactCount": "{{count}} 个产物",
 				"back": "返回",
 				"empty": "暂无历史记录",
 				"selectHint": "← 选择一个历史版本查看",
-				"title": "历史版本"
+				"title": "{{cardName}} — 历史版本"
 			},
 			"notification": {
 				"channels": {
@@ -783,7 +933,7 @@
 					"lark": "飞书",
 					"wecom": "企业微信"
 				},
-				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
+				"description": "观察结果生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
 				"placeholders": {
 					"dingtalk": "例如：发到「运营日报群」，或发给某个人",
 					"lark": "例如：发到「增长日报群」，或发给某个人",
@@ -806,6 +956,301 @@
 				"error": "运行失败，请稍后重试",
 				"success": "任务已触发运行",
 				"successSwitched": "任务已触发运行，已切换到对应话题"
+			},
+			"scheduleDecisionMessage": {
+				"action": "动作：{{action}}",
+				"cardId": "卡片编号：{{cardId}}",
+				"cardLink": "卡片链接：{{cardLink}}",
+				"cardName": "卡片：{{cardName}}",
+				"cronDay": "定时任务日期：{{day}}",
+				"cronDeadline": "定时任务截止时间：{{deadline}}",
+				"cronEnabled": "定时任务启用状态：{{enabled}}",
+				"cronMessageContent": "定时任务消息内容：{{messageContent}}",
+				"cronScheduleId": "定时任务编号：{{scheduleId}}",
+				"cronTaskName": "定时任务名称：{{taskName}}",
+				"cronTime": "定时任务时间：{{time}}",
+				"cronType": "定时任务类型：{{type}}",
+				"decisionId": "决策编号：{{decisionId}}",
+				"impact": "影响：{{impact}}",
+				"instruction": "请先加载 ai-card-generator Skill，并调用 apply_ai_card_schedule_decision 执行这条已确认的 scheduleDecisions 决策。只执行一次；如果因为 autonomy_config、权限、风险或参数缺失无法执行，请说明跳过原因、风险和建议的替代动作。",
+				"previousCadence": "原频率：{{previousCadence}}",
+				"proposedCadence": "建议频率：{{proposedCadence}}",
+				"reason": "原因：{{reason}}",
+				"scheduleCommand": "调度命令：{{command}}",
+				"scheduleId": "定时任务编号：{{scheduleId}}",
+				"sections": {
+					"context": "上下文",
+					"decision": "调度决策",
+					"instruction": "执行要求"
+				},
+				"targetTask": "目标任务：{{targetTask}}",
+				"title": "请执行 AI 卡片「{{cardName}}」的这条调度决策。"
+			},
+			"signalDesk": {
+				"accepted": "有效来源",
+				"actionQueue": "行动队列",
+				"actionTypes": {
+					"action": "建议动作",
+					"createTask": "创建任务",
+					"deepDive": "深入分析",
+					"feedback": "反馈处理",
+					"generateDoc": "生成文档",
+					"notify": "设置通知",
+					"typeLabel": "类型：{{type}}",
+					"watch": "继续观察"
+				},
+				"aiStrategy": "AI 策略",
+				"autonomousLoop": "持续观察中",
+				"autonomyLevel": "AI 调整权限",
+				"autonomyLevels": {
+					"bounded": "低风险自动处理",
+					"configured": "按配置执行",
+					"fixed": "固定计划",
+					"goal_driven": "按目标自动调整",
+					"suggested": "只给建议"
+				},
+				"categories": {
+					"action": "行动",
+					"competitor": "竞品",
+					"feedback": "反馈",
+					"opportunity": "机会",
+					"risk": "风险",
+					"trend": "趋势"
+				},
+				"change": "变化",
+				"changeLabels": {
+					"disappeared": "已消失",
+					"new": "首次出现",
+					"repeated": "持续出现",
+					"reversed": "结论反转",
+					"updated": "内容更新"
+				},
+				"confidenceLabels": {
+					"high": "高可信",
+					"low": "低可信",
+					"medium": "中可信"
+				},
+				"confirmDecision": "确认执行",
+				"currentSignals": "新发现信号",
+				"decisionQueue": "调度决策",
+				"decisionSent": "已发送调度确认，AI 将按授权边界执行或说明原因",
+				"defaultGoal": "持续关注关键变化",
+				"defaultGuardrails": "按当前任务配置执行，涉及高风险调整时回到任务总览确认。",
+				"defaultScope": "定价页 / 官博 / 招聘 / 社媒 / 行业媒体",
+				"editStrategy": "调整策略",
+				"empty": {
+					"actionQueue": "暂无待处理动作",
+					"description": "运行后会生成信号、证据、判断和观察计划。",
+					"filteredSignals": "当前筛选下没有信号",
+					"judgement": "判断结果",
+					"noSchedule": "请先配置执行计划或绑定可运行任务。",
+					"notificationStrategy": "暂无通知策略数据",
+					"notificationStrategyDescription": "当前运行还没有写入可展示的通知规则。",
+					"observationPlan": "观察计划",
+					"signalList": "暂无信号",
+					"signals": "信号列表",
+					"title": "暂无观察结果"
+				},
+				"evidence": "证据来源",
+				"evidenceCount": "证据 · {{count}}",
+				"evidenceDrawer": {
+					"title": "证据详情"
+				},
+				"eyebrow": "AI 卡片",
+				"filtered": "过滤",
+				"filters": {
+					"all": "全部",
+					"cooling": "关注下降",
+					"new": "新发现",
+					"rising": "关注上升"
+				},
+				"finishedAt": "完成于",
+				"goalPrefix": "目标：",
+				"heroDescriptionJoiner": "和",
+				"heroDescriptionPrefix": "。只推送",
+				"heroDescriptionSuffix": "。",
+				"heroTitleFirst": "让 AI 替你",
+				"heroTitleSecond": "持续观察一个问题",
+				"historyNarrative": "历史变化",
+				"historyRecords": "历史记录",
+				"impact": "影响",
+				"impactAndSuggestion": "影响与建议",
+				"impactScore": "影响指数",
+				"importance": "重要度",
+				"importantChanges": "重要变化",
+				"intelCore": "情报核心",
+				"keyPoints": "关键点",
+				"lastScan": "上次扫描",
+				"lowTrustWarning": "低可信信号，请结合更多来源判断",
+				"manualTask": {
+					"message": "任务说明",
+					"messagePlaceholder": "写清楚这次定时任务每次运行要观察什么、更新什么。",
+					"name": "任务名称",
+					"namePlaceholder": "AI Card: 竞品招聘页观察",
+					"reason": "创建原因",
+					"reasonPlaceholder": "为什么需要单独创建这个观察任务。",
+					"schedule": "执行周期",
+					"submit": "发送给 Agent 创建",
+					"title": "手动添加观察任务"
+				},
+				"mode": "模式",
+				"mustKnow": "要点",
+				"needsDecision": "需要决策",
+				"needsHumanDecision": "需要人工决策",
+				"nextActions": "下一步行动",
+				"nextRun": "下次观察",
+				"nextRunWithTime": "下次运行：{{time}}",
+				"nextStep": "下一步",
+				"noEvidence": "暂无证据",
+				"noImportantNotification": "当前还没有重要变化通知。",
+				"noJudgement": "等待判断",
+				"noKeyChanges": "暂无关键变化",
+				"noLinkedEvidence": "暂无关联证据",
+				"noObservationPlanSummary": "等待 AI 生成观察计划摘要。",
+				"noSignal": "选择信号",
+				"none": "无",
+				"notification": "通知",
+				"notificationDelivered": "通知送达",
+				"notificationDeliveredDefault": "观察结果已送达",
+				"notificationLog": "通知回执",
+				"notificationOnlyHighValue": "高价值才提醒。",
+				"notificationPreview": "通知预览",
+				"notificationRule": "规则",
+				"notificationStrategy": "通知策略",
+				"observationGuardrails": "观察边界",
+				"observationPlan": "观察计划",
+				"observationScope": "观察范围",
+				"ongoingObservation": "持续观察",
+				"openCard": "完整结果",
+				"openSource": "打开来源",
+				"pendingActionCount": "{{count}} 待处理",
+				"pendingActions": "待处理建议",
+				"phaseStatus": {
+					"failed": "失败",
+					"partial": "部分完成",
+					"running": "运行中",
+					"success": "完成"
+				},
+				"phases": "执行过程",
+				"publishedAt": "发布 {{time}}",
+				"quietHours": "静默时段",
+				"ready": "可执行",
+				"recommendedActions": "建议动作",
+				"requiresConfirmation": "需确认",
+				"reviewPlan": "检查配置",
+				"run": "运行",
+				"runStatus": {
+					"failed": "运行异常",
+					"running": "观察中",
+					"watching": "持续观察中"
+				},
+				"runSummaryDescription": "AI 扫描 {{scanned}} 个来源，采用 {{accepted}} 个，排除 {{filtered}} 个，提炼出 {{signals}} 个信号。",
+				"runSummaryEmpty": "暂无运行统计，下一次观察完成后会展示来源处理过程。",
+				"runSummarySources": "来源处理：扫描 {{scanned}} · 采用 {{accepted}} · 排除 {{filtered}}",
+				"runSummaryTitle": "本次运行",
+				"scanProcess": "扫描流程",
+				"scanned": "扫描来源",
+				"scheduleSuggestionCount": "{{count}} 条调度建议",
+				"scheduleSuggestions": "调度建议",
+				"signalMap": "信号地图",
+				"signalMapCanvas": {
+					"fit": "适应视图",
+					"grabHint": "拖拽移动 · 滚轮缩放",
+					"reset": "重置视图",
+					"zoomIn": "放大",
+					"zoomOut": "缩小"
+				},
+				"signalMapCountHint": "{{count}} 个信号 · 可拖拽缩放 · 缩小时精简显示",
+				"signalMapHint": "按类型、重要度和状态展示。",
+				"signalMapViews": {
+					"list": "列表",
+					"map": "地图"
+				},
+				"signals": "信号",
+				"taskOverview": {
+					"actions": {
+						"create": "新增任务",
+						"delete": "删除任务",
+						"pause": "暂停任务",
+						"update": "调整任务"
+					},
+					"addManualTask": "手动添加任务",
+					"confirm": {
+						"create": "确认设置",
+						"delete": "确认删除",
+						"pause": "确认暂停",
+						"update": "确认调整"
+					},
+					"currentTasks": "当前任务",
+					"emptyPendingAdjustments": "暂无待确认调整",
+					"emptyTasks": "暂无已分配任务",
+					"expiresAt": "过期时间",
+					"lastDecision": "最近决策",
+					"mainTask": "主观察任务",
+					"mainTaskSource": "主任务",
+					"menu": {
+						"delete": "删除任务",
+						"edit": "编辑任务",
+						"records": "运行记录",
+						"runNow": "立即执行"
+					},
+					"nextRun": "下次执行",
+					"noCadence": "未设置频率",
+					"pendingAdjustments": "待确认调整",
+					"pendingCount": "{{count}} 个待确认",
+					"schedule": {
+						"daily": "每天 {{time}}",
+						"monthly": "每月 {{day}} 日 {{time}}",
+						"weekly": "每周 {{day}} {{time}}"
+					},
+					"status": {
+						"accelerated": "已提速",
+						"active": "进行中",
+						"archived": "已归档",
+						"error": "异常",
+						"paused": "已暂停",
+						"pending": "待执行"
+					},
+					"taskCount": "{{count}} 个任务",
+					"taskId": "任务 ID",
+					"title": "任务总览"
+				},
+				"todayFocus": "今日重点",
+				"todayJudgement": "今日判断",
+				"trust": "可信度",
+				"unread": "未读",
+				"velocityLabels": {
+					"cooling": "关注下降",
+					"new": "新发现",
+					"resolved": "已结束",
+					"rising": "关注上升",
+					"stable": "保持稳定"
+				},
+				"viewFullReport": "查看完整报告",
+				"waitingImpact": "等待 AI 形成影响判断。",
+				"waitingJudgement": "等待下一次观察生成判断",
+				"waitingNotificationStrategy": "等待通知策略触发",
+				"watchTaskCount": "{{count}} 个观察任务",
+				"watchTasks": "观察任务",
+				"workLog": "AI 工作记录"
+			},
+			"supplementInput": {
+				"file": "文件",
+				"hint": "补充问题、观察方向或材料，AI 会结合当前卡片继续处理",
+				"mention": "引用",
+				"placeholder": "继续追问，或补充你的目标、判断标准、参考材料",
+				"send": "发送",
+				"sent": "已发送给 AI 卡片",
+				"title": "继续提问"
+			},
+			"supplementMessage": {
+				"currentGoal": "当前观察目标：",
+				"instruction": "请先加载 ai-card-generator Skill。把用户内容作为当前 AI 卡片的补充输入处理。先回答用户问题；随后在这个 AI 卡片范围内，根据实际情况更新观察目标、范围、边界、观察任务、定时任务、通知策略、当前状态或生成卡片。所有变更必须遵守 autonomy_config 和风险规则；允许的低风险变更可以直接执行，需要审批、超出授权或需要用户确认的变更写入 scheduleDecisions。",
+				"projectPath": "项目路径：{{path}}",
+				"sections": {
+					"userInput": "用户补充内容"
+				},
+				"title": "请根据这条补充问题更新 AI 卡片「{{cardName}}」。"
 			},
 			"tile": {
 				"history": "历史",
@@ -1614,7 +2059,7 @@
 			"opsRefresh": {
 				"missingSourceUrl": "请先绑定发布后的文章链接",
 				"prompt": {
-					"instruction": "按 Skill 内置的发布后运营流程执行，并使用固定 ops schema。读取并更新当前文章目录下 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；本消息里的真实文章链接仅作为兜底目标；保留 history 快照，更新 fetchStatus，不要创建 AI Card 产物。",
+					"instruction": "按 Skill 内置的发布后运营流程执行，并使用固定 ops schema。读取并更新当前文章目录下 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；本消息里的真实文章链接仅作为兜底目标；保留 history 快照，更新 fetchStatus，不要创建 AI 卡片产物。",
 					"metadata": "平台：{{platform}}\n标题：{{title}}\n真实文章链接：{{publishedUrl}}",
 					"opening": "请加载并执行 self-media-composer Skill，对 {{mention}} 进行发布入盘 / 发布后数据同步。",
 					"topicName": "[真实数据刷新] {{title}}",
@@ -2300,8 +2745,10 @@
 			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
 			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
 			"deny": "拒绝",
+			"durationLabel": "选择本次授权的有效期",
 			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
 			"missingScope": "「{{appName}}」未在 app.json 的 permissions.scopes 中声明「{{scope}}」（{{rawScope}}），请求已拒绝。",
+			"scopeSeparator": "、",
 			"scopes": {
 				"fsProjectRead": "读取应用目录外的项目文件",
 				"fsProjectWrite": "修改应用目录外的项目文件",
@@ -2327,6 +2774,55 @@
 				"once": "本次操作"
 			}
 		},
+		"permissionManager": {
+			"appRoot": "应用目录",
+			"askWhenUsed": "应用实际使用此能力时会请求授权。",
+			"currentTab": "仅当前标签页生效",
+			"declared": "已声明",
+			"declaredCount": "已声明 {{count}} 项",
+			"defaultAppName": "HTML 微应用",
+			"description": "查看此 HTML 应用声明的权限，以及当前标签页内的授权状态和有效期。",
+			"diagnostics": {
+				"manifestAbsent": "未找到 app.json，当前应用按旧版方式申请短期授权。",
+				"manifestLoadError": "app.json 读取失败，当前应用按旧版方式申请短期授权：{{error}}",
+				"scopeDuplicate": "权限声明重复：{{scope}}",
+				"scopeInvalid": "permissions.scopes 中包含非字符串权限，已忽略。",
+				"scopeUnsupported": "当前主站不支持权限：{{scope}}",
+				"scopesInvalid": "permissions.scopes 格式错误，应为字符串数组。"
+			},
+			"diagnosticsTitle": "权限声明需要检查",
+			"durationLabel": "有效期（从现在起）",
+			"durationSelect": "调整「{{scope}}」的授权时长",
+			"entry": "入口文件",
+			"expiresAt": "有效至 {{time}}（{{remaining}}）",
+			"granted": "已授权",
+			"grantedAt": "授权于 {{time}}",
+			"grantedCount": "已授权 {{count}} 项",
+			"loadFailed": "授权信息加载失败",
+			"noDeclaredPermissions": "app.json 未声明可管理的权限。",
+			"noReason": "应用未提供用途说明。",
+			"notDeclared": "未声明",
+			"notGranted": "未授权",
+			"open": "授权管理",
+			"permissionsTitle": "权限列表",
+			"remainingExpired": "已过期",
+			"remainingHours": "剩余 {{count}} 小时",
+			"remainingLessThanMinute": "剩余不足 1 分钟",
+			"remainingMinutes": "剩余 {{count}} 分钟",
+			"revoke": "撤销",
+			"revokeAll": "撤销全部授权",
+			"revokeAllSuccess": "已撤销此应用的全部授权",
+			"revokeFailed": "撤销授权失败",
+			"revokeNote": "撤销只影响后续调用。应用已经读取的数据和正在执行的请求不会自动删除或中止。",
+			"revokeNoteTitle": "撤销后的影响",
+			"revokeSuccess": "已撤销授权",
+			"title": "HTML 应用授权",
+			"unsupported": "不支持",
+			"updateDuration": "更新",
+			"updateDurationFailed": "授权时长更新失败",
+			"updateDurationSuccess": "授权时长已更新",
+			"version": "应用版本"
+		},
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
 			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",
@@ -2350,6 +2846,12 @@
 			"contentWithoutReason": "「{{appName}}」请求读取：{{fields}}。该应用未提供用途说明。",
 			"deny": "拒绝",
 			"fieldSeparator": "、",
+			"fields": {
+				"identity": "用户 ID、Magic ID",
+				"name": "昵称、真实姓名",
+				"organization": "组织编码"
+			},
+			"legacyContent": "该 HTML 微应用未声明权限，正在按旧版方式请求读取：{{fields}}。只在当前标签页短时生效。",
 			"title": "授权用户信息访问"
 		}
 	},
@@ -2486,7 +2988,7 @@
 			"remainingTitle": "剩余 {{count}} 项",
 			"title": "提及列表"
 		},
-		"modeNotAvailableMessage": "当前模式暂不可用，请\"新建话题\" 并选择可用的模式后继续",
+		"modeNotAvailableMessage": "当前员工暂不可用，请\"新建话题\" 并选择可用的员工后继续",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
 			"collapseDescription": "收起模型描述",
@@ -2609,6 +3111,461 @@
 	"messageRenderError": {
 		"retry": "重试",
 		"title": "这条消息暂时无法显示"
+	},
+	"microAppPage": {
+		"conversation": {
+			"emptyDescription": "描述需求，我会直接修改这个微应用。",
+			"emptyTitle": "说说你想改什么"
+		},
+		"databasePanel": {
+			"accessPermissions": "访问权限",
+			"addFilterCondition": "添加条件",
+			"applyFilters": "应用",
+			"backToData": "返回数据列表",
+			"clearFilters": "清除筛选",
+			"collapseTableList": "收起表列表",
+			"columnKey": "字段 Key",
+			"columnName": "字段名称",
+			"columnPermission": "列级权限",
+			"columns": "列",
+			"contextMenu": {
+				"clearSelection": "清除选择",
+				"columnPermission": "按列设置权限",
+				"deleteRows": "删除选中行",
+				"editRow": "编辑行",
+				"rowPermission": "按行设置权限",
+				"tablePermission": "设置表级权限"
+			},
+			"dataSettings": "数据设置",
+			"dataTab": "数据",
+			"dataType": "类型",
+			"description": "这里保存了微应用运行过程中产生的数据，你可以像使用表格一样查看和管理。",
+			"dismissIntro": "关闭数据说明",
+			"dynamicAction": {
+				"rowDelete": "删除记录",
+				"rowDeleteDescription": "控制用户可以删除哪些记录",
+				"rowEdit": "编辑记录",
+				"rowEditDescription": "控制用户可以修改哪些记录",
+				"rowRead": "读取记录",
+				"rowReadDescription": "控制用户可以查看哪些记录",
+				"tableInsert": "新增记录",
+				"tableInsertDescription": "控制哪些用户可以向该表提交数据",
+				"tableRead": "访问数据表",
+				"tableReadDescription": "控制哪些用户可以读取该表"
+			},
+			"dynamicAdminNotice": "项目编辑者、管理员和所有者属于数据管理员，可读取、编辑和删除全部记录；只有管理员和所有者可以修改此处权限。",
+			"dynamicColumnCount": "{{total}} 个动态字段",
+			"dynamicColumnSection": "字段权限",
+			"dynamicContinueEditing": "继续编辑",
+			"dynamicDescription": "动态权限按记录创建人、部门或组织实时判断，是普通用户访问数据时的基础权限边界。",
+			"dynamicDiscardChanges": "放弃修改",
+			"dynamicEdit": "编辑动态权限",
+			"dynamicPermissions": "动态权限",
+			"dynamicPermissionsHint": "定义默认访问范围",
+			"dynamicRowSection": "记录权限",
+			"dynamicSave": "保存配置",
+			"dynamicSaveFailed": "动态权限保存失败",
+			"dynamicSaveSuccess": "动态权限已更新",
+			"dynamicScope": {
+				"disabled": "禁止访问",
+				"private_department": "创建人所在部门",
+				"private_org": "创建人所在组织",
+				"private_user": "仅创建人",
+				"public": "所有可访问用户"
+			},
+			"dynamicSystemFields": "{{total}} 个系统字段由系统自动维护，不参与字段动态权限配置。",
+			"dynamicTableSection": "数据表权限",
+			"dynamicTitle": "动态权限配置",
+			"dynamicUnsavedDescription": "当前权限配置有尚未保存的修改。关闭后这些修改将丢失。",
+			"dynamicUnsavedTitle": "权限修改尚未保存",
+			"editorTarget": "目标数量：{{total}}",
+			"editorTitle": {
+				"column": "设置列级权限",
+				"row": "设置行级权限",
+				"table": "设置表级权限"
+			},
+			"expandTableList": "展开表列表",
+			"fieldSettings": "字段设置",
+			"filterCount": "{{total}} 个条件",
+			"filterData": "筛选",
+			"filterField": "选择字段",
+			"filterHint": "可以按字段组合筛选。包含搜索至少输入 2 个字符。",
+			"filterListValuePlaceholder": "多个值用逗号分隔",
+			"filterMatchAll": "同时满足全部条件",
+			"filterMatchAllSummary": "同时满足",
+			"filterMatchAny": "满足任意一个条件",
+			"filterMatchAnySummary": "任意满足",
+			"filterMatchMode": "匹配方式",
+			"filterOperator": "筛选方式",
+			"filterOperatorContains": "包含",
+			"filterOperatorEq": "等于",
+			"filterOperatorGt": "大于",
+			"filterOperatorGte": "大于等于",
+			"filterOperatorIn": "属于其中任意值",
+			"filterOperatorLt": "小于",
+			"filterOperatorLte": "小于等于",
+			"filterTitle": "筛选数据",
+			"filterValue": "筛选值",
+			"filterValuePlaceholder": "输入筛选值",
+			"intro": "一个数据表保存一类数据，每一行代表一条记录。",
+			"loadProgress": "已加载 {{loaded}} / {{total}} 条，继续向下滚动加载更多",
+			"loadProgressUnknown": "已加载 {{loaded}} 条，继续向下滚动加载更多",
+			"loadRowsFailed": "数据加载失败",
+			"loadTableFailed": "表结构加载失败",
+			"loadTablesFailed": "表列表加载失败",
+			"loadedAll": "已加载全部 {{total}} 条数据",
+			"loadedRows": "已加载 {{total}} 条",
+			"loading": "加载中",
+			"loadingMore": "正在加载更多数据",
+			"loadingTable": "加载表结构",
+			"next": "下一页",
+			"no": "否",
+			"noColumns": "暂无字段",
+			"noMatchedTables": "没有匹配的表",
+			"noRows": "暂无数据",
+			"noTables": "暂无数据表",
+			"pageInfo": "第 {{page}} / {{totalPages}} 页",
+			"permission": "权限",
+			"permissionAction": {
+				"delete": "删除",
+				"edit": "编辑",
+				"read": "读取"
+			},
+			"permissionAddSubject": "添加",
+			"permissionCurrent": "当前已有授权",
+			"permissionCurrentEmpty": "当前对象暂无用户或部门授权",
+			"permissionDelete": "删除权限",
+			"permissionDeleteFailed": "删除权限失败",
+			"permissionDeleteSuccess": "权限已删除",
+			"permissionEmpty": "请选择要保存的权限",
+			"permissionEmptyList": "暂无静态权限",
+			"permissionExisting": "已有静态权限",
+			"permissionGrant": "新增授权",
+			"permissionGrantDescription": "选择授权对象和允许的操作",
+			"permissionLevel": {
+				"insert": "新增",
+				"manage": "管理",
+				"read": "读取"
+			},
+			"permissionNoDynamicColumns": "选区内没有可授权的动态字段",
+			"permissionRemoveSubject": "移除授权对象",
+			"permissionSave": "保存权限",
+			"permissionSaveFailed": "保存权限失败",
+			"permissionSaveSuccess": "权限已保存",
+			"permissionSelectSubject": "选择人员/部门",
+			"permissionSelectSubjectFailed": "请选择匹配的授权对象",
+			"permissionSubject": "授权对象",
+			"permissionSubjectCount": "已选择 {{total}} 个对象",
+			"permissionSubjectEmpty": "请添加需要授权的人员或部门",
+			"permissionSubjectRequired": "请选择授权对象",
+			"permissionType": {
+				"column": "列",
+				"row": "行",
+				"table": "表"
+			},
+			"permissionUnknownDepartment": "未知部门",
+			"permissionUnknownUser": "未知用户",
+			"permissionsTab": "访问权限",
+			"previous": "上一页",
+			"refresh": "刷新",
+			"removeFilterCondition": "移除筛选条件",
+			"required": "必填",
+			"retry": "重试",
+			"rowCreate": "添加数据",
+			"rowCreateFailed": "新增行失败",
+			"rowCreateSuccess": "行已新增",
+			"rowCreateTitle": "添加一条数据",
+			"rowDelete": "删除",
+			"rowDeleteConfirm": "删除",
+			"rowDeleteDescription": "将删除当前选中的 {{total}} 行。删除后不可在此面板恢复。",
+			"rowDeleteFailed": "删除行失败",
+			"rowDeleteSuccess": "已删除 {{total}} 行",
+			"rowDeleteTitle": "删除选中行",
+			"rowEdit": "编辑",
+			"rowEditTitle": "编辑数据",
+			"rowFieldRequired": "{{field}} 不能为空",
+			"rowJsonInvalid": "{{field}} 不是合法 JSON",
+			"rowNoEditableColumns": "当前表没有可编辑的动态字段",
+			"rowPermission": "行级权限",
+			"rowSave": "保存",
+			"rowUpdateFailed": "更新行失败",
+			"rowUpdateSuccess": "行已更新",
+			"schemaField": "动态字段",
+			"searchTables": "搜索表",
+			"selectCurrentPage": "选择当前页",
+			"selectRow": "选择行",
+			"selectedRows": "已选 {{total}} 条",
+			"showSystemFields": "显示系统字段",
+			"source": "来源",
+			"staticPermissions": "静态授权",
+			"staticPermissionsHint": "为指定人员或部门补充权限",
+			"status": "状态",
+			"structureTab": "字段设置",
+			"subjectAnonymous": "匿名访问者",
+			"subjectType": {
+				"anonymous": "匿名",
+				"department": "部门",
+				"organization": "组织",
+				"user": "用户"
+			},
+			"systemField": "系统字段",
+			"systemFieldName": {
+				"createdAt": "创建时间",
+				"createdBy": "创建人",
+				"id": "记录 ID",
+				"organizationCode": "组织编码",
+				"updatedAt": "更新时间"
+			},
+			"tableCount": "{{total}} 个",
+			"tableListTitle": "数据表",
+			"tablePermission": "表级权限",
+			"title": "应用数据",
+			"totalRows": "{{total}} 条数据",
+			"yes": "是"
+		},
+		"edit": {
+			"button": "编辑微应用信息",
+			"captureCover": "生成页面封面",
+			"captureFailed": "封面截取失败，请重试",
+			"captureSuccess": "已从微应用首页生成封面",
+			"capturing": "正在截取",
+			"clearCover": "移除封面",
+			"coverDescription": "支持上传或粘贴图片，也可以一键将微应用首页生成封面。建议使用 16:10 横图。",
+			"coverEmpty": "暂未设置封面",
+			"coverInvalidType": "请选择图片文件",
+			"coverLabel": "微应用封面",
+			"coverPreviewAlt": "微应用封面预览",
+			"coverTooLarge": "封面图片不能超过 10MB",
+			"coverUploadFailed": "封面上传失败，请重试",
+			"description": "修改用户在微应用列表和分享页面看到的名称与封面。",
+			"failed": "微应用信息保存失败，请重试",
+			"loadFailed": "微应用信息加载失败，请重试",
+			"nameLabel": "微应用名称",
+			"namePlaceholder": "请输入微应用名称",
+			"success": "微应用信息已更新",
+			"title": "编辑微应用信息",
+			"uploadCover": "上传图片",
+			"uploading": "正在上传"
+		},
+		"errors": {
+			"loadFailed": "微应用加载失败，请稍后重试"
+		},
+		"header": {
+			"backToApps": "返回微应用列表",
+			"codeFiles": "代码文件",
+			"entryLabel": "入口",
+			"entryPlaceholder": "选择入口 HTML",
+			"hideConversation": "隐藏对话面板",
+			"hideDatabase": "隐藏数据库",
+			"hideFiles": "隐藏文件列表",
+			"showConversation": "展开对话面板",
+			"showDatabase": "展开数据库",
+			"showFiles": "展开文件列表"
+		},
+		"issuePrompts": {
+			"empty": "没有找到相关问题，换个关键词试试。",
+			"featured": "常用问题",
+			"searchPlaceholder": "搜索你遇到的现象",
+			"subtitle": "选择你看到的现象，AI 会检查原因并给出修复。",
+			"title": "常见问题",
+			"trigger": "常见问题"
+		},
+		"loading": {
+			"description": "正在读取页面和项目数据",
+			"title": "正在打开微应用"
+		},
+		"mobileConversation": {
+			"noTopics": "当前项目暂无可切换的话题。",
+			"open": "打开对话",
+			"switchTopic": "点击切换话题",
+			"title": "微应用对话",
+			"topicCount": "共 {{count}} 个话题"
+		},
+		"mobileDatabase": {
+			"backToTables": "返回数据表列表",
+			"readOnlyHint": "移动端当前支持查看数据、结构和权限摘要；新增、编辑和权限配置请在桌面端完成。"
+		},
+		"mobileTabs": {
+			"ariaLabel": "微应用页面",
+			"conversation": "对话",
+			"files": "文件",
+			"preview": "预览"
+		},
+		"navigation": {
+			"ariaLabel": "微应用编辑区域",
+			"database": "数据",
+			"files": "文件",
+			"longMemory": "长期记忆",
+			"preview": "预览",
+			"scheduledTasks": "定时任务",
+			"shareManagement": "分享管理"
+		},
+		"preview": {
+			"buildingDescription": "页面生成后会自动显示在这里。",
+			"buildingTitle": "正在制作微应用",
+			"emptyDescription": "请在项目根目录添加 HTML 文件，或从右上角选择入口文件。",
+			"emptyTitle": "未找到入口 HTML"
+		},
+		"previewDialog": {
+			"description": "文件预览弹窗",
+			"title": "文件预览"
+		},
+		"previewMode": {
+			"default": "默认预览",
+			"phone": "手机预览",
+			"source": "源码预览"
+		},
+		"previewToolbar": {
+			"address": "当前预览地址",
+			"aiEdit": "AI 编辑",
+			"desktop": "电脑端预览",
+			"disableDebug": "关闭调试",
+			"enableDebug": "开启调试",
+			"exitFullscreen": "退出全屏",
+			"fullscreen": "全屏预览",
+			"more": "更多",
+			"noHtml": "暂无可预览的 HTML 文件",
+			"phone": "手机端预览",
+			"refresh": "刷新预览",
+			"title": "预览"
+		},
+		"publish": {
+			"button": "发布",
+			"buttonTooltip": "发布给别人使用",
+			"copyLink": "复制链接",
+			"copyShareText": "复制分享文案",
+			"copySuccess": "链接已复制",
+			"cover": "应用封面",
+			"coverClear": "清除封面",
+			"coverDescription": "上传一张图片作为列表中的应用封面。",
+			"coverEmpty": "暂未设置封面",
+			"coverInvalidType": "只能上传图片文件",
+			"coverSet": "已设置封面",
+			"coverTooLarge": "封面图片不能超过 10 MB",
+			"coverUpload": "上传封面",
+			"coverUploadFailed": "封面上传失败，请重试",
+			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
+			"loadFailed": "发布信息加载失败",
+			"password": "访问密码",
+			"passwordHint": "密码长度 4-32 位。",
+			"passwordInvalid": "密码长度需为 4-32 位",
+			"projectName": "微应用名称",
+			"projectNameRequired": "请输入微应用名称",
+			"projectNameTooLong": "微应用名称不能超过 100 个字符",
+			"publish": "发布",
+			"published": "已发布",
+			"publishedAt": "发布时间：{{time}}",
+			"quickShareDescription": "复制链接可直接发送，密码访问时会自动携带密码；复制分享文案会包含应用名称、访问链接和密码（如有）。",
+			"quickShareTitle": "快捷分享",
+			"resetPassword": "重置密码",
+			"saveFailed": "发布失败，请重试",
+			"saveSuccess": "发布设置已保存",
+			"settingsChanged": "参数信息已变更，请重新保存后再复制",
+			"shareTextAccessHint": "打开下面的链接即可访问：",
+			"shareTextCopySuccess": "分享文案已复制",
+			"shareTextPassword": "访问密码：{{password}}",
+			"shareTextPasswordUnavailable": "未能获取当前访问密码，请刷新后重试或重新设置密码",
+			"shareTextTitle": "邀请你使用微应用「{{projectName}}」",
+			"title": "发布微应用",
+			"unpublish": "下架",
+			"unpublishConfirmContent": "下架后，其他人将无法继续通过发布链接使用这个微应用。",
+			"unpublishConfirmTitle": "确定下架这个微应用吗？",
+			"unpublishFailed": "下架失败，请重试",
+			"unpublishSuccess": "微应用已下架",
+			"update": "保存设置"
+		}
+	},
+	"microAppShare": {
+		"errorTitle": "微应用不可访问",
+		"login": "登录",
+		"noEntryDescription": "发布内容中没有可运行的根目录 HTML 文件。",
+		"noEntryTitle": "未找到入口 HTML",
+		"organization": "切换组织",
+		"passwordDescription": "请输入发布者设置的访问密码。",
+		"passwordTitle": "访问微应用",
+		"safetyAppLabel": "即将访问",
+		"safetyContinue": "我已了解，继续访问",
+		"safetyCoverAlt": "微应用「{{appName}}」的封面",
+		"safetyDescription": "此微应用由用户发布，平台无法保证其中的内容、链接或操作安全。确认来源可信后再继续访问。",
+		"safetyDisclaimer": "点击继续不代表平台已验证此微应用安全。",
+		"safetyEyebrow": "访问前安全提醒",
+		"safetyLeave": "暂不访问",
+		"safetyPermissions": "谨慎授权摄像头、麦克风、位置，以及下载或安装文件。",
+		"safetySensitiveData": "警惕仿冒登录页，不要输入账号密码、验证码或支付信息。",
+		"safetyTitle": "请仔细甄别",
+		"safetyVerifyPublisher": "遇到转账、登录或异常跳转时，先退出并联系发布者核实。",
+		"safetyWarningTitle": "继续前请确认",
+		"title": "微应用",
+		"user": "已登录用户"
+	},
+	"microAppsPage": {
+		"actions": {
+			"deleteApp": "删除应用",
+			"deleteDescription": "「{{name}}」及对应项目将移入回收站，30 天内可以恢复。",
+			"deleteFailed": "删除应用失败，请重试。",
+			"deleteSuccess": "应用已移入回收站",
+			"deleteTitle": "删除应用",
+			"deleting": "删除中...",
+			"more": "更多操作",
+			"openInNewWindow": "新窗口打开",
+			"rename": "重命名",
+			"renameDescription": "修改微应用在列表和详情页显示的名称。",
+			"renameFailed": "重命名失败，请重试。",
+			"renamePlaceholder": "请输入应用名称",
+			"renameSuccess": "应用名称已更新",
+			"renameTitle": "重命名应用",
+			"renaming": "保存中..."
+		},
+		"backToCreate": "返回创建微应用",
+		"createProject": "新建项目",
+		"createProjectFailed": "新建项目失败，请重试。",
+		"draftBadge": "开发中",
+		"emptyDescription": "在上方描述你的想法，创建第一个微应用。",
+		"emptyTitle": "暂无微应用项目",
+		"errorDescription": "项目列表加载失败，请重试。",
+		"errorTitle": "加载失败",
+		"galleryDescription": "继续开发已有项目，或打开已经发布的应用。",
+		"galleryTitle": "应用空间",
+		"heroCapabilityAgent": "Agent",
+		"heroCapabilityData": "Database",
+		"heroCapabilityMcp": "MCP",
+		"heroCapabilityProduct": "Micro App",
+		"heroCapabilitySkill": "Skill",
+		"heroDescription": "它能读文件、用数据库，也能连接更多应用。",
+		"heroDescriptionMobile": "它能读文件、用数据库，也能连接更多应用。",
+		"heroPlaceholder": "例如：做一个适合销售团队使用的客户跟进看板，可以记录阶段、负责人和下次联系时间……",
+		"heroPromptAccept": "接受",
+		"heroPromptApply": "将当前案例填入输入框",
+		"heroPromptSwitch": "切换案例",
+		"heroTitle": "一句话，做出好用的微应用",
+		"heroTitleBetween": "做出好用的",
+		"heroTitlePrefix": "一句话，",
+		"heroTitleProduct": "微应用",
+		"heroTitleProductHint": "Micro App",
+		"loadMore": "加载更多",
+		"noSearchResults": "没有匹配的微应用",
+		"noSearchResultsDescription": "换个关键词试试。",
+		"openGallery": "查看微应用列表",
+		"publishedEmptyDescription": "发布者把微应用分享给你后，会显示在这里。",
+		"publishedEmptyTitle": "暂无可访问的微应用",
+		"refresh": "刷新",
+		"scopeAll": "全部",
+		"scopeCollaborated": "我协作的",
+		"scopeCreated": "我创建的",
+		"searchPlaceholder": "搜索微应用",
+		"shareType": {
+			"organization": "团队可见",
+			"password": "密码访问",
+			"public": "公开访问"
+		},
+		"statusPublished": "已发布",
+		"statusUnpublished": "开发中",
+		"subtitle": "当前工作区下的项目",
+		"tabProjects": "我的项目",
+		"tabPublished": "已发布微应用",
+		"title": "微应用",
+		"unnamedApp": "未命名微应用",
+		"updatedAt": "更新于 {{date}}"
 	},
 	"mobile": {
 		"apps": {
@@ -2937,6 +3894,7 @@
 				"type": {
 					"file": "文件",
 					"folder": "文件夹",
+					"microApp": "微应用",
 					"project": "项目",
 					"topic": "话题",
 					"workspace": "工作区"
@@ -2959,6 +3917,7 @@
 				"title": "部分内容无法直接还原"
 			},
 			"pathScopes": {
+				"microApps": "微应用",
 				"workspaces": "工作空间"
 			},
 			"purge": {
@@ -3019,6 +3978,7 @@
 			"tabs": {
 				"all": "全部 ({{count}})",
 				"files": "文件 ({{count}})",
+				"microApps": "微应用 ({{count}})",
 				"projects": "项目 ({{count}})",
 				"topics": "话题 ({{count}})",
 				"workspaces": "工作区 ({{count}})"
@@ -3034,6 +3994,7 @@
 			"navApps": "应用",
 			"navChats": "对话",
 			"navMagiClaw": "超级龙虾",
+			"navMicroApps": "微应用",
 			"navMyCrew": "数字员工",
 			"navRecording": "录音与纪要",
 			"navSuper": "首页",
@@ -3051,6 +4012,7 @@
 		"createNewChat": "创建新对话",
 		"createNewTopic": "创建新话题",
 		"emptySearchResult": "没有匹配的数字员工",
+		"hiddenCrew": "被隐藏的员工",
 		"searchPlaceholder": "搜索数字员工",
 		"selectCrew": "选择数字员工",
 		"selectMode": "选择模式"
@@ -3112,6 +4074,15 @@
 		"invalidManifest": "宠物配置文件无效",
 		"noWorkspace": "请先选择一个工作区",
 		"projectName": "我的 Codex 宠物",
+		"quickAsk": {
+			"clear": "清空",
+			"emptyResult": "暂时没有结果",
+			"error": "查询失败，请稍后重试",
+			"loading": "正在查询",
+			"placeholder": "快速问点什么",
+			"selectModel": "选择模型",
+			"send": "发送"
+		},
 		"regenerate": "重新生成宠物",
 		"resize": "调整宠物大小",
 		"setCurrent": "设为宠物",
@@ -3126,6 +4097,43 @@
 			"untitledTopic": "新对话",
 			"waitingForUser": "等待用户回复",
 			"waitingForUserHint": "等待回复"
+		}
+	},
+	"plan": {
+		"actions": {
+			"approve": "确认并开始开发",
+			"back": "返回",
+			"cancel": "取消",
+			"collapse": "折叠计划卡片",
+			"expand": "展开计划卡片",
+			"requestRevision": "提出修改",
+			"submitRevision": "提交修改意见"
+		},
+		"fields": {
+			"unnamedTable": "未命名数据表"
+		},
+		"revisionPlaceholder": "告诉 Agent 你希望怎么调整这个计划",
+		"sections": {
+			"acceptanceCriteria": "验收标准",
+			"assumptions": "默认假设",
+			"dataModel": "数据模型",
+			"files": "文件结构",
+			"implementationSteps": "实现步骤",
+			"requirements": "核心需求",
+			"userFeedback": "你的反馈"
+		},
+		"status": {
+			"approved": "已确认",
+			"cancelled": "已取消",
+			"generating": "生成中",
+			"pending": "待确认",
+			"revisionRequested": "需修改",
+			"submitFailed": "提交失败，请稍后重试",
+			"timeout": "已超时"
+		},
+		"title": "开发计划",
+		"validation": {
+			"revisionRequired": "请先填写修改意见"
 		}
 	},
 	"playbackControl": {
@@ -3826,6 +4834,7 @@
 			"type": {
 				"file": "文件",
 				"folder": "文件夹",
+				"microApp": "微应用",
 				"project": "项目",
 				"topic": "话题",
 				"workspace": "工作区"
@@ -3907,6 +4916,7 @@
 		"tabs": {
 			"all": "全部 ({{count}})",
 			"files": "文件 ({{count}})",
+			"microApps": "微应用 ({{count}})",
 			"projects": "项目 ({{count}})",
 			"topics": "话题 ({{count}})",
 			"workspaces": "工作区 ({{count}})"
@@ -3916,25 +4926,37 @@
 	"scheduleTask": {
 		"clearSearch": "清空搜索",
 		"configTask": "任务配置",
+		"contextLoading": "正在加载当前微应用上下文…",
 		"createScheduleTask": "创建定时任务",
 		"createTask": "创建任务",
+		"dailyAt": "每天 {{time}} 执行",
 		"deleteTask": "删除",
 		"disableTask": "停用",
+		"disabled": "已停用",
 		"editTask": "编辑",
 		"emptyDescription": "支持创建多个定时任务，灵活应对各类工作场景",
 		"emptyTitle": "暂无定时任务",
 		"enableTask": "启用",
+		"enabled": "运行中",
 		"manageTasks": "管理任务",
+		"monthlyAt": "每月 {{day}} 日 · {{time}} 执行",
+		"moreActions": "更多操作",
+		"noSchedule": "未设置执行时间",
 		"noTask": "暂无任务",
+		"onceAt": "{{day}} · {{time}} 执行一次",
 		"pauseTask": "停用任务",
 		"playTask": "启用任务",
+		"projectScope": "当前微应用",
 		"runLogs": "运行记录",
 		"runTask": "直接运行",
 		"runningRecord": "运行记录",
 		"searchTasks": "搜索任务",
 		"searchTasksEmpty": "没有匹配的定时任务",
 		"searchTasksPlaceholder": "搜索定时任务",
-		"title": "定时任务"
+		"title": "定时任务",
+		"toggleTask": "切换任务「{{name}}」状态",
+		"weeklyAt": "每周 {{day}} · {{time}} 执行",
+		"workspaceDescription": "让工作按计划自动执行，随时查看任务状态"
 	},
 	"search": {
 		"internetSearch": "互联网搜索",
@@ -4410,6 +5432,7 @@
 		"lineBreak": "消息内容换行",
 		"openMCPConfig": "打开 MCP 配置",
 		"operation": "操作",
+		"quickEdit": "快速编辑",
 		"sendMessage": "发送消息",
 		"shortcutKeys": "快捷键",
 		"switchTopicDown": "切换至下一个话题",
@@ -4456,6 +5479,9 @@
 			"agentNetworkErrorTitle": "[HTML应用网络请求错误]",
 			"agentNetworkFixPrompt": "请分析此网络错误原因并修复HTML应用中的问题。",
 			"agentRuntimeErrorTitle": "[HTML应用运行时错误]",
+			"apiRequest": "请求",
+			"apiResponse": "响应",
+			"apiResultTruncated": "响应过大，已截断显示",
 			"clear": "清空",
 			"consolePlaceholder": "输入 JavaScript 表达式…",
 			"deps": {
@@ -4476,6 +5502,9 @@
 				"total": "共 {{count}} 项"
 			},
 			"deselectAll": "取消全选",
+			"dockSide": "停靠侧",
+			"dockToBottom": "将面板移到底部",
+			"dockToRight": "将面板移到右侧",
 			"error": "错误",
 			"errorTypeConsole": "控制台错误",
 			"errorTypeUncaught": "未捕获的错误",
@@ -4842,8 +5871,8 @@
 			"copyPathFailed": "复制路径失败",
 			"copyPathSuccess": "已复制路径",
 			"copyTo": "复制至",
-			"createAICardFailed": "创建 AI 卡片项目失败",
-			"createAICardSuccess": "创建 AI 卡片项目成功",
+			"createAICardFailed": "创建 AI 卡片失败",
+			"createAICardSuccess": "AI 卡片创建成功",
 			"createDesignFailed": "创建画布项目失败",
 			"createDesignSuccess": "创建画布项目成功",
 			"createFile": "新建文件",
@@ -5014,6 +6043,7 @@
 			"message": "此位置已经存在名为 “{{folderName}}” 的文件夹。您想合并内容，还是保留两个文件夹？",
 			"title": "已存在同名文件夹"
 		},
+		"editorGenerationLockDescription": "请稍候片刻，更新完成后会自动恢复编辑",
 		"elementSelector": "元素选择器：",
 		"elementText": "元素文本：",
 		"emptyState": {
@@ -5152,6 +6182,8 @@
 		},
 		"fileLayoutCorrectionPrompt": "现在这里面的内容有布局问题，请帮我进行修正，我所观察到的问题是：",
 		"fileModify": "我需要修改文件",
+		"fileModifyElementPrefix": "里的这个元素：",
+		"fileModifyElementSuffix": "",
 		"fileModifyElements": "里的这个元素：",
 		"fileReadContentPrompt": "的内容，",
 		"fileReadPrompt": "请读取",

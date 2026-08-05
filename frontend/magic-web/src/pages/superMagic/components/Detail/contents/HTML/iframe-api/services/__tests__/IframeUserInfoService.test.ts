@@ -9,8 +9,7 @@ function createService(overrides?: Partial<IframeUserInfoConfig>) {
 		getUserInfo: () => null,
 		...overrides,
 	}
-	const service = new IframeUserInfoService(cfg)
-	return { service, postToIframe }
+	return { service: new IframeUserInfoService(cfg), postToIframe }
 }
 
 describe("IframeUserInfoService", () => {
@@ -30,13 +29,12 @@ describe("IframeUserInfoService", () => {
 		})
 
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-user-info",
+			requestId: "req-display",
 		})
 
 		expect(postToIframe).toHaveBeenCalledWith({
 			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-user-info",
+			requestId: "req-display",
 			success: true,
 			userInfo: {
 				name: "Display Name",
@@ -45,286 +43,101 @@ describe("IframeUserInfoService", () => {
 		})
 	})
 
-	it("rejects sensitive scopes that are not declared in app config", async () => {
+	it("delegates all sensitive scopes to the shared permission controller", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
 		const { service, postToIframe } = createService({
 			getUserInfo: () => fullUserInfo,
 			authorizeUserInfo,
-			appConfig: {
-				name: "Unsafe App",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.DISPLAY],
-					},
-				},
-			},
 		})
 
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-identity",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		expect(authorizeUserInfo).not.toHaveBeenCalled()
-		expect(postToIframe).toHaveBeenCalledWith({
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-identity",
-			success: false,
-			error: "User info scope is not declared by this app: user.profile.identity",
-		})
-	})
-
-	it("prompts for sensitive scopes when app config failed to load", async () => {
-		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		const { service, postToIframe } = createService({
-			getUserInfo: () => fullUserInfo,
-			authorizeUserInfo,
-			appConfigState: { status: "error", error: "HTTP 500" },
-		})
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-identity-config-error",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
+			requestId: "req-profile",
+			scopes: [USER_INFO_SCOPES.NAME, USER_INFO_SCOPES.IDENTITY],
+			reason: "Build a profile card",
 		})
 
 		expect(authorizeUserInfo).toHaveBeenCalledWith({
-			appName: "HTML 微应用",
-			fields: ["用户 ID", "Magic ID"],
-			reason: "",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-			appConfigLoadError: "HTTP 500",
+			scopes: [USER_INFO_SCOPES.NAME, USER_INFO_SCOPES.IDENTITY],
+			reason: "Build a profile card",
 		})
 		expect(postToIframe).toHaveBeenCalledWith({
 			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-identity-config-error",
+			requestId: "req-profile",
 			success: true,
 			userInfo: {
 				name: "Display Name",
 				avatar: "https://example.com/avatar.png",
+				nickname: "Nick",
+				real_name: "Real Name",
 				user_id: "user-1",
 				magic_id: "magic-1",
 			},
 		})
 	})
 
-	it("rejects sensitive scopes while app config is loading", async () => {
+	it("does not keep a second authorization cache inside the user info service", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		const { service, postToIframe } = createService({
+		const { service } = createService({
 			getUserInfo: () => fullUserInfo,
 			authorizeUserInfo,
-			appConfigState: { status: "loading" },
 		})
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-identity-config-loading",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		expect(authorizeUserInfo).not.toHaveBeenCalled()
-		expect(postToIframe).toHaveBeenCalledWith({
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-identity-config-loading",
-			success: false,
-			error: "App config is still loading",
-		})
-	})
-
-	it("prompts once for declared sensitive scopes and returns scoped fields", async () => {
-		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		const { service, postToIframe } = createService({
-			getUserInfo: () => fullUserInfo,
-			authorizeUserInfo,
-			appConfig: {
-				name: "Profile Card",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.IDENTITY],
-						reason: "展示个人名片",
-					},
-				},
-			},
-		})
-
 		const request = {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
 			requestId: "req-identity",
 			scopes: [USER_INFO_SCOPES.IDENTITY],
 		}
+
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, request)
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
 			...request,
 			requestId: "req-identity-again",
 		})
 
-		expect(authorizeUserInfo).toHaveBeenCalledOnce()
-		expect(authorizeUserInfo).toHaveBeenCalledWith({
-			appName: "Profile Card",
-			fields: ["用户 ID", "Magic ID"],
-			reason: "展示个人名片",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-		expect(postToIframe).toHaveBeenNthCalledWith(1, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-identity",
-			success: true,
-			userInfo: {
-				name: "Display Name",
-				avatar: "https://example.com/avatar.png",
-				user_id: "user-1",
-				magic_id: "magic-1",
-			},
-		})
-		expect(postToIframe).toHaveBeenNthCalledWith(2, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-identity-again",
-			success: true,
-			userInfo: {
-				name: "Display Name",
-				avatar: "https://example.com/avatar.png",
-				user_id: "user-1",
-				magic_id: "magic-1",
-			},
-		})
-	})
-
-	it("does not reuse sensitive authorization after the app identity changes", async () => {
-		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		const cfg: IframeUserInfoConfig = {
-			postToIframe: vi.fn(),
-			getUserInfo: () => fullUserInfo,
-			authorizeUserInfo,
-			appConfig: {
-				name: "Profile Card A",
-				entry: "apps/profile-a/index.html",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.IDENTITY],
-					},
-				},
-			},
-		}
-		const service = new IframeUserInfoService(cfg)
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-app-a",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		cfg.appConfig = {
-			name: "Profile Card B",
-			entry: "apps/profile-b/index.html",
-			permissions: {
-				userInfo: {
-					scopes: [USER_INFO_SCOPES.IDENTITY],
-				},
-			},
-		}
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-app-b",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		expect(authorizeUserInfo).toHaveBeenCalledTimes(2)
-		expect(authorizeUserInfo).toHaveBeenNthCalledWith(
-			2,
-			expect.objectContaining({
-				appName: "Profile Card B",
-				scopes: [USER_INFO_SCOPES.IDENTITY],
-			}),
-		)
-	})
-
-	it("does not reuse sensitive authorization across app instances with the same manifest", async () => {
-		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		const cfg: IframeUserInfoConfig = {
-			postToIframe: vi.fn(),
-			getUserInfo: () => fullUserInfo,
-			authorizeUserInfo,
-			appInstanceKey: "project-a:apps/profile/index.html",
-			appConfig: {
-				type: "html",
-				name: "Profile Card",
-				version: "1.0.0",
-				entry: "index.html",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.IDENTITY],
-					},
-				},
-			},
-		}
-		const service = new IframeUserInfoService(cfg)
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-project-a",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		cfg.appInstanceKey = "project-b:apps/profile/index.html"
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-project-b",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
 		expect(authorizeUserInfo).toHaveBeenCalledTimes(2)
 	})
 
-	it("does not reuse sensitive authorization after the current user changes", async () => {
+	it("rejects invalid user info scopes before authorization", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
-		let currentUserInfo = fullUserInfo
 		const { service, postToIframe } = createService({
-			getUserInfo: () => currentUserInfo,
+			getUserInfo: () => fullUserInfo,
 			authorizeUserInfo,
-			appConfig: {
-				name: "Profile Card",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.IDENTITY],
-					},
-				},
-			},
 		})
 
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-user-a",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
+			requestId: "req-invalid",
+			scopes: ["user.profile.unknown"],
 		})
 
-		currentUserInfo = {
-			...fullUserInfo,
-			user_id: "user-2",
-			magic_id: "magic-2",
-		}
-
-		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-user-b",
-			scopes: [USER_INFO_SCOPES.IDENTITY],
-		})
-
-		expect(authorizeUserInfo).toHaveBeenCalledTimes(2)
-		expect(postToIframe).toHaveBeenNthCalledWith(2, {
+		expect(authorizeUserInfo).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
 			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-user-b",
-			success: true,
-			userInfo: expect.objectContaining({
-				user_id: "user-2",
-				magic_id: "magic-2",
-			}),
+			requestId: "req-invalid",
+			success: false,
+			error: "Invalid user info scope",
 		})
 	})
 
-	it("rejects sensitive user info when the current user changes during authorization", async () => {
+	it("rejects sensitive access when stable user identity is unavailable", async () => {
+		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
+		const { service, postToIframe } = createService({
+			getUserInfo: () => ({ ...fullUserInfo, user_id: "", magic_id: "" }),
+			authorizeUserInfo,
+		})
+
+		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
+			requestId: "req-no-identity",
+			scopes: [USER_INFO_SCOPES.IDENTITY],
+		})
+
+		expect(authorizeUserInfo).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
+			requestId: "req-no-identity",
+			success: false,
+			error: "User identity is not available",
+		})
+	})
+
+	it("rejects when the current user changes during authorization", async () => {
 		let currentUserInfo = fullUserInfo
 		const authorizeUserInfo = vi.fn().mockImplementation(async () => {
 			currentUserInfo = {
@@ -337,53 +150,35 @@ describe("IframeUserInfoService", () => {
 		const { service, postToIframe } = createService({
 			getUserInfo: () => currentUserInfo,
 			authorizeUserInfo,
-			appConfig: {
-				name: "Profile Card",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.IDENTITY],
-					},
-				},
-			},
 		})
 
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-user-switch-during-auth",
+			requestId: "req-user-switch",
 			scopes: [USER_INFO_SCOPES.IDENTITY],
 		})
 
 		expect(postToIframe).toHaveBeenCalledWith({
 			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-user-switch-during-auth",
+			requestId: "req-user-switch",
 			success: false,
 			error: "User identity changed during authorization",
 		})
 	})
 
-	it("rejects when the user denies authorization", async () => {
+	it("rejects when the shared permission controller denies access", async () => {
 		const { service, postToIframe } = createService({
 			getUserInfo: () => fullUserInfo,
 			authorizeUserInfo: vi.fn().mockResolvedValue(false),
-			appConfig: {
-				name: "Profile Card",
-				permissions: {
-					userInfo: {
-						scopes: [USER_INFO_SCOPES.ORGANIZATION],
-					},
-				},
-			},
 		})
 
 		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
-			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
-			requestId: "req-org",
+			requestId: "req-denied",
 			scopes: [USER_INFO_SCOPES.ORGANIZATION],
 		})
 
 		expect(postToIframe).toHaveBeenCalledWith({
 			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
-			requestId: "req-org",
+			requestId: "req-denied",
 			success: false,
 			error: "User denied access to requested profile fields",
 		})
