@@ -182,8 +182,9 @@ export class SensitiveMasker {
 			const sanitized: Record<string, any> = {}
 
 			for (const [key, value] of Object.entries(data)) {
-				// eventKey 是结构化日志的归类标识，不能被通用的 "key" 规则误脱敏。
+				// 仅字符串协议标识可跳过字段名脱敏，复合值仍需递归处理内部敏感字段。
 				if (
+					typeof value === "string" &&
 					SensitiveMasker.config.whitelistKeys?.some(
 						(whitelistKey) => key.toLowerCase() === whitelistKey.toLowerCase(),
 					)
