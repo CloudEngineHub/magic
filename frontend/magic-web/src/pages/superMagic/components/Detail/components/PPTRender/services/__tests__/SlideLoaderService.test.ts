@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { SlideLoaderService } from "../SlideLoaderService"
-import * as api from "@/opensource/pages/superMagic/utils/api"
+import * as api from "@/pages/superMagic/utils/api"
 
 // Mock the API module
-vi.mock("@/opensource/pages/superMagic/utils/api", () => ({
+vi.mock("@/pages/superMagic/utils/api", () => ({
 	downloadFileContent: vi.fn(),
 }))
 
@@ -23,11 +23,32 @@ describe("SlideLoaderService", () => {
 			const result = await service.loadSlide("https://example.com/slide1.html")
 
 			expect(result).toBe(mockContent)
-			expect(api.downloadFileContent).toHaveBeenCalledWith("https://example.com/slide1.html")
+			expect(api.downloadFileContent).toHaveBeenCalledWith(
+				"https://example.com/slide1.html",
+				{
+					signal: undefined,
+				},
+			)
+		})
+
+		it("should forward the abort signal to the download request", async () => {
+			const controller = new AbortController()
+			vi.mocked(api.downloadFileContent).mockResolvedValue("<html></html>")
+
+			await service.loadSlide("https://example.com/slide1.html", {
+				signal: controller.signal,
+			})
+
+			expect(api.downloadFileContent).toHaveBeenCalledWith(
+				"https://example.com/slide1.html",
+				{
+					signal: controller.signal,
+				},
+			)
 		})
 
 		it("should return empty string when content is not a string", async () => {
-			vi.mocked(api.downloadFileContent).mockResolvedValue({} as any)
+			vi.mocked(api.downloadFileContent).mockResolvedValue(new ArrayBuffer(0))
 
 			const result = await service.loadSlide("https://example.com/slide1.html")
 
@@ -99,6 +120,43 @@ describe("SlideLoaderService", () => {
 			const result = await service.loadSlides([])
 
 			expect(result.size).toBe(0)
+		})
+
+		it("should forward a shared abort signal to every slide request", async () => {
+			const controller = new AbortController()
+			vi.mocked(api.downloadFileContent).mockResolvedValue("<html></html>")
+
+			await service.loadSlides(
+				["https://example.com/slide1.html", "https://example.com/slide2.html"],
+				{ signal: controller.signal },
+			)
+
+			expect(api.downloadFileContent).toHaveBeenCalledTimes(2)
+			expect(api.downloadFileContent).toHaveBeenNthCalledWith(
+				1,
+				"https://example.com/slide1.html",
+				{ signal: controller.signal },
+			)
+			expect(api.downloadFileContent).toHaveBeenNthCalledWith(
+				2,
+				"https://example.com/slide2.html",
+				{ signal: controller.signal },
+			)
+		})
+
+		it("should propagate cancellation instead of converting it to empty content", async () => {
+			const controller = new AbortController()
+			const abortError = new DOMException("The operation was aborted", "AbortError")
+			vi.mocked(api.downloadFileContent).mockImplementation(async () => {
+				controller.abort()
+				throw abortError
+			})
+
+			await expect(
+				service.loadSlides(["https://example.com/slide1.html"], {
+					signal: controller.signal,
+				}),
+			).rejects.toBe(abortError)
 		})
 	})
 })

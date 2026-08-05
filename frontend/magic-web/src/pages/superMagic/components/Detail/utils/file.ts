@@ -1,7 +1,13 @@
 import { AttachmentItem } from "../../TopicFilesButton/hooks/types"
+import { DetailType } from "../types"
 
 export const hasPPTMetadata = (attachmentItem: AttachmentItem) => {
 	return attachmentItem?.display_config?.type === "slide"
+}
+
+/** Keep PPTRootRender routing consistent across the renderer and FilesViewer portal boundary. */
+export const shouldUsePPTRootRender = (type: unknown, data: unknown): boolean => {
+	return type === DetailType.Html && hasPPTMetadata(data as AttachmentItem)
 }
 
 /** Detect if a folder/file carries self-media metadata */

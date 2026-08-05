@@ -55,7 +55,13 @@ export interface FolderUploadState {
 	progress: number
 
 	currentPhase:
-		"preparing" | "creating_folders" | "uploading" | "saving" | "paused" | "completed" | "error"
+		| "preparing"
+		| "creating_folders"
+		| "uploading"
+		| "saving"
+		| "paused"
+		| "completed"
+		| "error"
 
 	// Folder directory creation progress.
 	directoryTotal?: number

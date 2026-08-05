@@ -308,6 +308,7 @@ interface DownloadFileContentOptions {
 	responseType?: "text" | "arrayBuffer" | "blob"
 	/** 浏览器请求缓存策略 */
 	cache?: RequestCache
+	signal?: AbortSignal
 }
 
 // 从URL下载文件内容并返回指定格式的数据
@@ -320,6 +321,7 @@ export const downloadFileContent = async (
 
 		const response = await fetch(url, {
 			method: "GET",
+			signal: options.signal,
 			cache,
 		})
 
