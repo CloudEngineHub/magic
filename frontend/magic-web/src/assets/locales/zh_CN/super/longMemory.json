@@ -59,9 +59,10 @@
 			"title": "文件内容已更新",
 			"useLatest": "使用最新内容"
 		},
+		"create": "新增",
 		"editLoadFailed": "无法获取最新内容，请稍后重试",
-		"emptyDescription": "当前还没有 global/MEMORY.md。该文件生成后，可以在这里查看和编辑。",
-		"emptyTitle": "尚未生成全局长期记忆",
+		"emptyDescription": "点击新增，记录需要在不同任务中长期保留的信息。",
+		"emptyTitle": "还没有全局长期记忆",
 		"guide": {
 			"description": "这里保存会在不同任务中长期生效的个人信息。系统会在需要时读取这些内容，以便按你的习惯和背景提供回答。",
 			"notRecommendedDescription": "密码、验证码、访问令牌等敏感信息，只对当前任务有效的临时要求，以及未经确认或已经过期的信息。",

@@ -1,4 +1,4 @@
-import { FileText, Pencil, RefreshCw, Save, X } from "lucide-react"
+import { FilePlus2, Pencil, RefreshCw, Save, X } from "lucide-react"
 import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -36,6 +36,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 	const [enteringEdit, setEnteringEdit] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [conflictState, setConflictState] = useState<MemoryConflictState | null>(null)
+	const isMemoryEmpty = content.trim() === ""
 
 	/** 加载固定路径 global/MEMORY.md 的最新内容。 */
 	const loadGlobalMemory = useCallback(async () => {
@@ -88,26 +89,35 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 	/** 使用指定编辑基准保存当前草稿。 */
 	const saveGlobalMemory = useCallback(
 		async (expectedRevision: number | null = baseRevision) => {
-			if (!memoryFile || expectedRevision === null) return
-
 			setSaving(true)
+			let targetFile = memoryFile
+			let targetRevision = expectedRevision
 			try {
+				if (!targetFile || targetRevision === null) {
+					const snapshot = await memoryFileService.ensureGlobalMemoryFile()
+					targetFile = snapshot.file
+					targetRevision = snapshot.revision
+					setMemoryFile(snapshot.file)
+
+					if (snapshot.content !== baseContent) {
+						setConflictState({ latestSnapshot: snapshot })
+						return
+					}
+				}
+
 				const result = await memoryFileService.saveFileContent(
-					memoryFile.id,
+					targetFile.id,
 					draft,
-					expectedRevision,
+					targetRevision,
 				)
-				setMemoryFile((current) =>
-					current
-						? {
-								...current,
-								version: result.revision,
-							}
-						: current,
-				)
+				setMemoryFile({
+					...targetFile,
+					version: result.revision,
+				})
 				setContent(draft)
 				setBaseContent(draft)
 				setBaseRevision(result.revision)
+				setLoadState("ready")
 				setConflictState(null)
 				setIsEditing(false)
 				magicToast.success(t("globalEditor.saveSuccess"))
@@ -115,7 +125,11 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 				console.error("保存全局长期记忆失败", error)
 				if (error instanceof MemoryFileConcurrentModificationError) {
 					try {
-						await loadConflictSnapshot(memoryFile.id)
+						if (targetFile) {
+							await loadConflictSnapshot(targetFile.id)
+						} else {
+							magicToast.error(t("globalEditor.editLoadFailed"))
+						}
 					} catch (snapshotError) {
 						console.error("加载冲突后的最新长期记忆失败", snapshotError)
 						magicToast.error(t("globalEditor.editLoadFailed"))
@@ -127,7 +141,7 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 				setSaving(false)
 			}
 		},
-		[baseRevision, draft, loadConflictSnapshot, memoryFile, t],
+		[baseContent, baseRevision, draft, loadConflictSnapshot, memoryFile, t],
 	)
 
 	/** 取消编辑并恢复最后一次成功加载或保存的内容。 */
@@ -139,7 +153,14 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 
 	/** 拉取最新稳定快照后进入 Markdown 源码编辑模式。 */
 	const startEditing = useCallback(async () => {
-		if (!memoryFile) return
+		if (!memoryFile) {
+			setDraft(content)
+			setBaseContent(content)
+			setBaseRevision(null)
+			setConflictState(null)
+			setIsEditing(true)
+			return
+		}
 
 		setEnteringEdit(true)
 		try {
@@ -157,21 +178,32 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 		} finally {
 			setEnteringEdit(false)
 		}
-	}, [memoryFile, t])
+	}, [content, memoryFile, t])
 
 	/** 主动获取并展示服务器上的最新长期记忆内容。 */
 	const refreshLatestContent = useCallback(async () => {
-		if (!memoryFile) return
-
 		setRefreshing(true)
 		try {
-			const snapshot = await memoryFileService.readStableSnapshot(memoryFile.id)
+			const latestFile = memoryFile ?? (await memoryFileService.findGlobalMemoryFile())
+			if (!latestFile) {
+				setContent("")
+				setDraft("")
+				setBaseContent("")
+				setBaseRevision(null)
+				setConflictState(null)
+				setLoadState("empty")
+				magicToast.success(t("globalEditor.refreshSuccess"))
+				return
+			}
+
+			const snapshot = await memoryFileService.readStableSnapshot(latestFile.id)
 			setMemoryFile(snapshot.file)
 			setContent(snapshot.content)
 			setDraft(snapshot.content)
 			setBaseContent(snapshot.content)
 			setBaseRevision(snapshot.revision)
 			setConflictState(null)
+			setLoadState("ready")
 			magicToast.success(t("globalEditor.refreshSuccess"))
 		} catch (error) {
 			console.error("刷新全局长期记忆失败", error)
@@ -232,22 +264,6 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 			<div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
 				<RefreshCw className="mr-2 size-4 animate-spin" />
 				{t("loading")}
-			</div>
-		)
-	}
-
-	if (loadState === "empty") {
-		return (
-			<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-				<FileText className="size-10 text-muted-foreground" />
-				<div className="text-base font-medium">{t("globalEditor.emptyTitle")}</div>
-				<div className="max-w-md text-sm text-muted-foreground">
-					{t("globalEditor.emptyDescription")}
-				</div>
-				<Button variant="outline" size="sm" onClick={() => void loadGlobalMemory()}>
-					<RefreshCw size={16} />
-					{t("fileTree.refresh")}
-				</Button>
 			</div>
 		)
 	}
@@ -319,10 +335,12 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 								>
 									{enteringEdit ? (
 										<RefreshCw className="animate-spin" size={16} />
-									) : (
+									) : !isMemoryEmpty ? (
 										<Pencil size={16} />
+									) : (
+										<FilePlus2 size={16} />
 									)}
-									{t("edit")}
+									{t(!isMemoryEmpty ? "edit" : "globalEditor.create")}
 								</Button>
 							</>
 						)}
@@ -330,24 +348,44 @@ export const GlobalMemoryEditor = memo(function GlobalMemoryEditor() {
 				</div>
 				<GlobalMemoryUsageGuide />
 				<div className="min-h-0 flex-1 overflow-hidden">
-					<EditorBody
-						isLoading={false}
-						viewMode={isEditing ? "code" : "markdown"}
-						language="markdown"
-						content={content}
-						processedContent={content}
-						className={
-							isEditing
-								? "h-full min-h-0 overflow-hidden"
-								: "h-full overflow-auto px-5 py-4 [&_.simple-editor]:!p-0"
-						}
-						isEditMode={isEditing}
-						editContent={draft}
-						setEditContent={setDraft}
-						onSave={() => void saveGlobalMemory()}
-						placeholder={t("globalEditor.placeholder")}
-						data-testid="global-memory-editor"
-					/>
+					{isMemoryEmpty && !isEditing ? (
+						<div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
+							<div className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+								<FilePlus2 size={24} />
+							</div>
+							<div>
+								<div className="text-sm font-medium">
+									{t("globalEditor.emptyTitle")}
+								</div>
+								<div className="mt-1 text-sm text-muted-foreground">
+									{t("globalEditor.emptyDescription")}
+								</div>
+							</div>
+							<Button size="sm" onClick={() => void startEditing()}>
+								<FilePlus2 size={16} />
+								{t("globalEditor.create")}
+							</Button>
+						</div>
+					) : (
+						<EditorBody
+							isLoading={false}
+							viewMode={isEditing ? "code" : "markdown"}
+							language="markdown"
+							content={content}
+							processedContent={content}
+							className={
+								isEditing
+									? "h-full min-h-0 overflow-hidden"
+									: "h-full overflow-auto px-5 py-4 [&_.simple-editor]:!p-0"
+							}
+							isEditMode={isEditing}
+							editContent={draft}
+							setEditContent={setDraft}
+							onSave={() => void saveGlobalMemory()}
+							placeholder={t("globalEditor.placeholder")}
+							data-testid="global-memory-editor"
+						/>
+					)}
 				</div>
 			</div>
 			<MemoryEditConflictDialog

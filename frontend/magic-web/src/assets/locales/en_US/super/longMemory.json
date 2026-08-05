@@ -59,9 +59,10 @@
 			"title": "File content has changed",
 			"useLatest": "Use latest content"
 		},
+		"create": "Add",
 		"editLoadFailed": "Unable to load the latest content. Please try again.",
-		"emptyDescription": "global/MEMORY.md does not exist yet. You can view and edit it here after it is generated.",
-		"emptyTitle": "Global memory has not been generated",
+		"emptyDescription": "Add information that should remain useful across different tasks.",
+		"emptyTitle": "No global memory yet",
 		"guide": {
 			"description": "This file stores personal information that should remain useful across tasks. The system reads it when relevant to respond with your preferences and background in mind.",
 			"notRecommendedDescription": "Passwords, verification codes, access tokens, temporary instructions for a single task, or unverified and outdated information.",

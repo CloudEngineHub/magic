@@ -64,6 +64,59 @@ export class MemoryFileService {
 		)
 	}
 
+	/** 确保固定的全局记忆文件存在，并返回可用于编辑的稳定快照。 */
+	async ensureGlobalMemoryFile(): Promise<MemoryFileSnapshot> {
+		const roots = await this.listDirectory()
+		const memoryRoot = roots.find((file) => file.is_directory && file.name === "memory")
+		if (!memoryRoot) {
+			throw new Error("Memory root directory is missing")
+		}
+
+		let memoryChildren = await this.listDirectory(memoryRoot.id)
+		let globalDirectory = memoryChildren.find(
+			(file) => file.is_directory && file.name === GLOBAL_MEMORY_DIRECTORY_NAME,
+		)
+
+		if (!globalDirectory) {
+			try {
+				globalDirectory = await this.createNode({
+					name: GLOBAL_MEMORY_DIRECTORY_NAME,
+					parentId: memoryRoot.id,
+					isDirectory: true,
+				})
+			} catch (error) {
+				memoryChildren = await this.listDirectory(memoryRoot.id)
+				globalDirectory = memoryChildren.find(
+					(file) => file.is_directory && file.name === GLOBAL_MEMORY_DIRECTORY_NAME,
+				)
+				if (!globalDirectory) throw error
+			}
+		}
+
+		let globalChildren = await this.listDirectory(globalDirectory.id)
+		let memoryFile = globalChildren.find(
+			(file) => !file.is_directory && file.name === MEMORY_ENTRY_FILE_NAME,
+		)
+
+		if (!memoryFile) {
+			try {
+				memoryFile = await this.createNode({
+					name: MEMORY_ENTRY_FILE_NAME,
+					parentId: globalDirectory.id,
+					isDirectory: false,
+				})
+			} catch (error) {
+				globalChildren = await this.listDirectory(globalDirectory.id)
+				memoryFile = globalChildren.find(
+					(file) => !file.is_directory && file.name === MEMORY_ENTRY_FILE_NAME,
+				)
+				if (!memoryFile) throw error
+			}
+		}
+
+		return this.readStableSnapshot(memoryFile.id)
+	}
+
 	/** 读取指定记忆文件的文本正文。 */
 	async readFileContent(fileId: string): Promise<string> {
 		return getFileContentById(fileId, {
