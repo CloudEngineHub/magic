@@ -120,9 +120,8 @@ readonly class VolcengineArkVideoClient
             } catch (Throwable $throwable) {
             }
 
-            throw ProviderVideoException::fromHttpStatus(
+            throw ProviderVideoException::retriable(
                 $this->formatRequestExceptionMessage($errorMessage),
-                $response?->getStatusCode(),
                 $exception,
             );
         } catch (ProviderVideoException $exception) {

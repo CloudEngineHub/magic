@@ -22,6 +22,8 @@ readonly class MiniMaxVideoClient
 
     private const int REQUEST_TIMEOUT_SECONDS = 30;
 
+    private const array NON_RETRIABLE_HTTP_STATUSES = [400, 401, 402, 422];
+
     public function __construct(
         private ClientFactory $clientFactory,
         ?LoggerFactory $loggerFactory = null,
@@ -77,7 +79,7 @@ readonly class MiniMaxVideoClient
                 'error' => $body === '' ? $exception->getMessage() : $body,
             ]);
             $message = $body === '' ? $exception->getMessage() : $body;
-            throw ProviderVideoException::fromHttpStatus(
+            throw $this->createHttpStatusException(
                 'MiniMax video request failed: ' . substr($message, 0, 1024),
                 $errorResponse?->getStatusCode(),
                 $exception,
@@ -100,17 +102,6 @@ readonly class MiniMaxVideoClient
                 'error' => 'MiniMax video returned invalid json',
             ]);
             throw ProviderVideoException::retriable('MiniMax video returned invalid json');
-        }
-
-        $providerException = $this->resolveProviderError($data);
-        if ($providerException instanceof ProviderVideoException) {
-            $this->logger->error('minimax video error', [
-                'method' => $normalizedMethod,
-                'path' => $normalizedPath,
-                'http_status' => $providerException->getHttpStatus(),
-                'error' => $providerException->getMessage(),
-            ]);
-            throw $providerException;
         }
 
         $this->logger->info('minimax video response', [
@@ -145,19 +136,16 @@ readonly class MiniMaxVideoClient
         return null;
     }
 
-    private function resolveProviderError(array $data): ?ProviderVideoException
+    private function createHttpStatusException(
+        string $message,
+        ?int $httpStatus,
+        Throwable $previous,
+    ): ProviderVideoException
     {
-        if (strtolower(trim((string) ($data['type'] ?? ''))) !== 'error') {
-            return null;
+        if (in_array($httpStatus, self::NON_RETRIABLE_HTTP_STATUSES, true)) {
+            return ProviderVideoException::nonRetriable($message, $previous, $httpStatus);
         }
 
-        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
-        $message = trim((string) ($error['message'] ?? 'MiniMax video provider returned an error'));
-        $httpStatus = is_numeric($error['http_code'] ?? null) ? (int) $error['http_code'] : null;
-        $exceptionMessage = 'MiniMax video request failed: ' . $message;
-
-        return $httpStatus === null
-            ? ProviderVideoException::fromProviderError($exceptionMessage, $error['type'] ?? null)
-            : ProviderVideoException::fromHttpStatus($exceptionMessage, $httpStatus);
+        return ProviderVideoException::retriable($message, $previous, $httpStatus);
     }
 }

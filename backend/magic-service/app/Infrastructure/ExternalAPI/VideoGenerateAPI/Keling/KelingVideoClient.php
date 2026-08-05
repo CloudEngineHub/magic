@@ -132,9 +132,8 @@ readonly class KelingVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::fromHttpStatus(
+            throw ProviderVideoException::retriable(
                 $this->formatRequestExceptionMessage($exception, $action),
-                $exception->getResponse()?->getStatusCode(),
                 $exception,
             );
         } catch (Throwable $throwable) {

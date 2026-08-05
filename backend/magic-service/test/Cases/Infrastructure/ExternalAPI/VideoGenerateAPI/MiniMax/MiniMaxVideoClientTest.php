@@ -175,41 +175,6 @@ class MiniMaxVideoClientTest extends TestCase
         }
     }
 
-    public function testSuccessfulHttpResponseWithErrorEnvelopeIsNonRetriable(): void
-    {
-        $httpClient = $this->createMock(Client::class);
-        $httpClient->expects($this->once())
-            ->method('request')
-            ->willReturn(new Response(200, [], json_encode([
-                'type' => 'error',
-                'error' => [
-                    'type' => 'bad_request_error',
-                    'message' => 'invalid task_id',
-                    'http_code' => '400',
-                ],
-            ], JSON_THROW_ON_ERROR)));
-
-        $clientFactory = $this->createMock(ClientFactory::class);
-        $clientFactory->expects($this->once())
-            ->method('create')
-            ->willReturn($httpClient);
-
-        $loggerFactory = $this->createMock(LoggerFactory::class);
-        $loggerFactory->expects($this->once())
-            ->method('get')
-            ->willReturn(new MiniMaxRecordingLogger());
-
-        $client = new MiniMaxVideoClient($clientFactory, $loggerFactory);
-
-        try {
-            $client->request('GET', 'https://api.minimaxi.com', 'secret-api-key', '/v2/query/video_generation/task-invalid');
-            self::fail('Expected ProviderVideoException to be thrown');
-        } catch (ProviderVideoException $exception) {
-            self::assertFalse($exception->isRetriable());
-            self::assertSame(400, $exception->getHttpStatus());
-            self::assertSame('MiniMax video request failed: invalid task_id', $exception->getMessage());
-        }
-    }
 }
 
 final class MiniMaxRecordingLogger extends AbstractLogger

@@ -100,6 +100,8 @@ class CloudswayVideoClientTest extends TestCase
 
         $client = new CloudswayVideoClient($clientFactory, $loggerFactory);
 
+        $this->expectException(ProviderVideoException::class);
+        $this->expectExceptionMessage('durationSeconds must be one of [4,6,8]');
         try {
             $client->post(
                 'https://localhost',
@@ -108,11 +110,6 @@ class CloudswayVideoClientTest extends TestCase
                 ['prompt' => 'test'],
                 ['video_id' => 'video-err-1', 'operation_id' => 'op-err-1'],
             );
-            self::fail('Expected ProviderVideoException to be thrown');
-        } catch (ProviderVideoException $exception) {
-            self::assertSame('durationSeconds must be one of [4,6,8]', $exception->getMessage());
-            self::assertFalse($exception->isRetriable());
-            self::assertSame(400, $exception->getHttpStatus());
         } finally {
             $this->assertCount(2, $logger->records);
             $this->assertSame('cloudsway video post error', $logger->records[1]['message']);

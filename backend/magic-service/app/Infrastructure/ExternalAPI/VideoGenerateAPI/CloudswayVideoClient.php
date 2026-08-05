@@ -136,9 +136,8 @@ readonly class CloudswayVideoClient
                 ],
             ]);
         } catch (RequestException $exception) {
-            throw ProviderVideoException::fromHttpStatus(
+            throw ProviderVideoException::retriable(
                 $this->formatRequestExceptionMessage($exception, 'download media'),
-                $exception->getResponse()?->getStatusCode(),
                 $exception,
             );
         } catch (Throwable $throwable) {
@@ -181,9 +180,8 @@ readonly class CloudswayVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::fromHttpStatus(
+            throw ProviderVideoException::retriable(
                 $this->formatRequestExceptionMessage($exception, $action),
-                $exception->getResponse()?->getStatusCode(),
                 $exception,
             );
         } catch (Throwable $throwable) {
