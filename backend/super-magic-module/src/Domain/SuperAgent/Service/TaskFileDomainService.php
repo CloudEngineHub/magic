@@ -3593,8 +3593,10 @@ class TaskFileDomainService
 
         $updatedFile = $this->taskFileRepository->updateById($originalFile);
 
-        // 文件正文发生变化后，从文件自身开始更新完整版本链，确保 MagicFS 刷新文件内容缓存。
-        $this->incrementVersionChain((string) $updatedFile->getFileId());
+        $parentId = $originalFile->getParentId();
+        if ($parentId !== null) {
+            $this->incrementVersionChain((string) $parentId);
+        }
 
         return $updatedFile;
     }
