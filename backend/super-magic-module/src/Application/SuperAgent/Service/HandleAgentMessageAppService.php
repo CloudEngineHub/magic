@@ -525,6 +525,12 @@ class HandleAgentMessageAppService extends AbstractAppService
                 $dataIsolation->getCurrentOrganizationCode()
             );
 
+            $this->fileProcessAppService->processToolDetailFileReference(
+                $messageData['tool'],
+                $task,
+                $dataIsolation
+            );
+
             // Process tool attachments
             if (! empty($messageData['tool']['attachments'])) {
                 $toolProcessedEntities = $this->processToolAttachments($messageData['tool'], $taskContext, $projectEntity);

@@ -1,19 +1,30 @@
 import asyncio
-from dataclasses import dataclass, field
 import json
 import os
-import shutil
-import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from app.core.entity.aigc_metadata import AigcMetadataParams
-from app.service.file_convert.base_convert_service import BaseConvertService
-from agentlang.logger import get_logger
-from magic_use.magic_browser import MagicBrowser
 from playwright.async_api import ConsoleMessage, Request
+
+from agentlang.logger import get_logger
+from app.core.entity.aigc_metadata import AigcMetadataParams
+from app.service.browser.browser_playwright_runtime import (
+    SharedBrowserRuntime,
+    close_shared_browser_runtime,
+    create_shared_browser_runtime,
+)
+from app.service.file_convert.base_convert_service import BaseConvertService
+from app.utils.async_file_utils import (
+    async_exists,
+    async_mkdir,
+    async_realpath,
+    async_rmtree,
+    async_which,
+    async_write_text,
+)
 
 logger = get_logger(__name__)
 
@@ -107,20 +118,23 @@ class SyntaxChecker:
         if not file_path:
             return SyntaxCheckResult(is_valid=False, errors=["HTML浏览器检查失败: 缺少源文件路径，无法加载依赖资源"])
 
-        html_path = Path(file_path).resolve()
-        if not html_path.exists():
+        html_path = await async_realpath(file_path)
+        if not await async_exists(html_path):
             return SyntaxCheckResult(is_valid=False, errors=[f"HTML浏览器检查失败: 源文件不存在: {html_path}"])
 
         console_errors: List[str] = []
         page_errors: List[str] = []
         request_failures: List[str] = []
-        browser = await MagicBrowser.create_for_scraping()
+        browser_runtime: SharedBrowserRuntime | None = None
+        page = None
 
         try:
-            page_id = await browser.new_page()
-            page = await browser.get_page_by_id(page_id)
-            if page is None:
-                return SyntaxCheckResult(is_valid=False, errors=["HTML浏览器检查失败: 无法创建页面"])
+            browser_runtime = await create_shared_browser_runtime(
+                str(html_path.parent),
+                browser_args=(),
+                viewport={"width": 1920, "height": 1080},
+            )
+            page = await browser_runtime.context.new_page()
 
             # 复用已有 CDN->本地映射，减少外网请求导致的卡住问题。
             await SyntaxChecker._get_cdn_route_service()._setup_local_cdn_route(page, debug_info="syntaxCheck")
@@ -148,9 +162,9 @@ class SyntaxChecker:
 
             await page.goto(html_path.as_uri(), wait_until="domcontentloaded", timeout=12000)
 
-            # 优先复用 MagicBrowser 的网络稳定等待逻辑，避免固定 sleep 带来的额外延迟。
+            # 使用浏览器原生 load state 等待网络稳定，失败时保留短采样窗口。
             try:
-                await browser._wait_for_stable_network(page, wait_time=0.1, max_wait_time=0.8)
+                await page.wait_for_load_state("networkidle", timeout=800)
             except Exception as wait_error:
                 logger.debug(f"HTML 网络稳定等待失败，降级为短采样: {wait_error}")
 
@@ -170,7 +184,13 @@ class SyntaxChecker:
             logger.error(f"HTML 浏览器检查异常: {e}", exc_info=True)
             return SyntaxCheckResult(is_valid=False, errors=[f"HTML浏览器检查异常: {e!s}"])
         finally:
-            await browser.close()
+            try:
+                if page is not None:
+                    await page.close()
+            finally:
+                cleanup_errors = await close_shared_browser_runtime(browser_runtime)
+                if cleanup_errors:
+                    logger.warning("HTML 语法检查清理浏览器资源失败: %s", "; ".join(cleanup_errors))
 
     @staticmethod
     def check_json_syntax(content: str) -> SyntaxCheckResult:
@@ -204,7 +224,7 @@ class SyntaxChecker:
         if file_extension == ".jsx":
             return await SyntaxChecker.check_typescript_syntax(content, ".jsx")
 
-        node_path = shutil.which("node")
+        node_path = await async_which("node")
         if node_path is None:
             return SyntaxCheckResult(is_valid=False, errors=["JavaScript语法检查失败: 未找到 node 命令"])
 
@@ -255,7 +275,7 @@ class SyntaxChecker:
         if not content.strip():
             return SyntaxCheckResult(is_valid=True)
 
-        python_cmd = sys.executable or shutil.which("python3") or shutil.which("python")
+        python_cmd = sys.executable or await async_which("python3") or await async_which("python")
         if not python_cmd:
             return SyntaxCheckResult(is_valid=False, errors=["Python语法检查失败: 未找到 Python 可执行文件"])
 
@@ -290,7 +310,7 @@ class SyntaxChecker:
         if not content.strip():
             return SyntaxCheckResult(is_valid=True)
 
-        tsc_path = shutil.which("tsc")
+        tsc_path = await async_which("tsc")
         if tsc_path is None:
             return SyntaxCheckResult(is_valid=False, errors=["TypeScript语法检查失败: 未找到 tsc 命令"])
 
@@ -406,25 +426,18 @@ class SyntaxChecker:
     @staticmethod
     async def _create_temp_source(content: str, suffix: str) -> Tuple[str, str]:
         """创建临时源码文件。"""
-
-        def _create() -> Tuple[str, str]:
-            temp_dir = tempfile.mkdtemp(prefix="syntax_checker_")
-            file_path = Path(temp_dir) / f"check{suffix}"
-            file_path.write_text(content, encoding="utf-8")
-            return temp_dir, str(file_path)
-
-        return await asyncio.to_thread(_create)
+        temp_dir = Path(tempfile.gettempdir()) / f"syntax_checker_{os.urandom(8).hex()}"
+        await async_mkdir(temp_dir, parents=True, exist_ok=False)
+        file_path = temp_dir / f"check{suffix}"
+        await async_write_text(file_path, content)
+        return str(temp_dir), str(file_path)
 
     @staticmethod
     async def _write_text_file(file_path: str, content: str) -> None:
         """异步写入文本文件。"""
-
-        def _write() -> None:
-            Path(file_path).write_text(content, encoding="utf-8")
-
-        await asyncio.to_thread(_write)
+        await async_write_text(file_path, content)
 
     @staticmethod
     async def _cleanup_temp_dir(temp_dir: str) -> None:
         """异步清理临时目录。"""
-        await asyncio.to_thread(shutil.rmtree, temp_dir, True)
+        await async_rmtree(temp_dir)

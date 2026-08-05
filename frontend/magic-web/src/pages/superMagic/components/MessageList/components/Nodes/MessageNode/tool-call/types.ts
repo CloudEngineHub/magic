@@ -7,6 +7,10 @@ export interface ToolDetail {
 	[key: string]: unknown
 }
 
+export interface ToolAttachment extends FileItem {
+	file_url?: string
+}
+
 export interface ToolCallItem {
 	id: string
 	type: "function"
@@ -22,7 +26,7 @@ export interface ToolCallItem {
 		status?: string
 		remark?: string
 		detail?: ToolDetail
-		attachments?: FileItem[] | null
+		attachments?: ToolAttachment[] | null
 		[key: string]: unknown
 	}
 }
@@ -34,7 +38,7 @@ export interface ToolCallViewModel {
 	action?: string | ReactNode
 	remark?: string
 	status?: string
-	attachments: FileItem[]
+	attachments: ToolAttachment[]
 	rawArguments?: string
 	detail?: ToolDetail
 }

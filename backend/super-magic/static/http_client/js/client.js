@@ -3875,7 +3875,7 @@ function handleWebSocketMessage(event) {
             }
         } else if (eventType === 'before_tool_call' || eventType === 'after_tool_call') {
             // 工具调用事件 → 紧凑的工具调用块，detail 默认折叠
-            const tool = payload && payload.tool;
+            const tool = payload && normalizeToolAttachments(payload.tool, payload.attachments);
             if (tool) {
                 showToolCallMessage(tool, eventType, payload.send_timestamp, false, {
                     correlationId: payload.correlation_id,
@@ -4232,19 +4232,53 @@ function isMainAgentFinished(payload) {
 function collectToolsFromSuperMagicMessage(smsg, payload) {
     const tools = [];
     if (smsg.tool) {
-        tools.push({ tool: smsg.tool, toolCallId: smsg.tool_call_id || smsg.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(smsg.tool, smsg.attachments, payload && payload.attachments),
+            toolCallId: smsg.tool_call_id || smsg.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     if (Array.isArray(smsg.tool_calls)) {
         for (const toolCall of smsg.tool_calls) {
             if (toolCall && toolCall.tool) {
-                tools.push({ tool: toolCall.tool, toolCallId: toolCall.id || toolCall.tool.id, modelContent: toolCall.content || '' });
+                tools.push({
+                    tool: normalizeToolAttachments(
+                        toolCall.tool,
+                        toolCall.attachments,
+                        smsg.attachments,
+                        payload && payload.attachments,
+                    ),
+                    toolCallId: toolCall.id || toolCall.tool.id,
+                    modelContent: toolCall.content || '',
+                });
             }
         }
     }
     if (payload && payload.tool) {
-        tools.push({ tool: payload.tool, toolCallId: payload.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(payload.tool, payload.attachments, smsg.attachments),
+            toolCallId: payload.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     return tools;
+}
+
+function normalizeToolAttachments(tool, ...attachmentSources) {
+    if (!tool || typeof tool !== 'object') return tool;
+    const merged = [];
+    const seen = new Set();
+    for (const source of [tool.attachments, ...attachmentSources]) {
+        if (!Array.isArray(source)) continue;
+        for (const attachment of source) {
+            if (!attachment || typeof attachment !== 'object') continue;
+            const identity = attachment.file_key || attachment.file_url || attachment.filename;
+            if (identity && seen.has(identity)) continue;
+            if (identity) seen.add(identity);
+            merged.push(attachment);
+        }
+    }
+    return merged.length ? { ...tool, attachments: merged } : tool;
 }
 
 // 将文本片段用 marked 渲染为 markdown，marked 不可用时降级为纯文本
@@ -5238,6 +5272,11 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         return;
     }
 
+    if (detail && detail.type === 'browser' && detail.data) {
+        renderBrowserToolDetail(toolState, detail.data, tool);
+        return;
+    }
+
     if (!detail && toolState.detailEl.textContent) {
         toolState.arrow.style.display = '';
         return;
@@ -5253,6 +5292,107 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         toolState.detailEl.style.display = 'none';
         toolState.arrow.textContent = '▶';
     }
+}
+
+function renderBrowserToolDetail(toolState, data, tool) {
+    const attachments = Array.isArray(tool.attachments) ? tool.attachments : [];
+    const attachment = attachments.find(item => item && item.file_key === data.file_key);
+    let imageUrl = typeof data.file_url === 'string' ? data.file_url : '';
+    if (!imageUrl && attachment && typeof attachment.file_url === 'string') {
+        imageUrl = attachment.file_url;
+    }
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const summary = browserDetailSummary(data, action, pageTitle);
+    const target = data.target || '';
+    const pageUrl = data.url || '';
+
+    toolState.detailEl.classList.add('tool-call-detail-browser');
+    toolState.detailEl.replaceChildren();
+
+    const meta = document.createElement('div');
+    meta.className = 'browser-tool-detail-meta';
+    const heading = document.createElement('div');
+    heading.className = 'browser-tool-detail-title';
+    heading.textContent = title;
+    meta.appendChild(heading);
+    if (summary) {
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'browser-tool-detail-summary';
+        summaryEl.textContent = summary;
+        meta.appendChild(summaryEl);
+    }
+    if (target) {
+        const targetEl = document.createElement('div');
+        targetEl.className = 'browser-tool-detail-target';
+        targetEl.textContent = `操作对象：${target}`;
+        meta.appendChild(targetEl);
+    }
+    if (pageUrl) {
+        const link = document.createElement('a');
+        link.className = 'browser-tool-detail-url';
+        link.href = pageUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = `页面地址：${pageUrl}`;
+        link.addEventListener('click', event => event.stopPropagation());
+        meta.appendChild(link);
+    }
+    toolState.detailEl.appendChild(meta);
+
+    if (imageUrl) {
+        const image = document.createElement('img');
+        image.className = 'browser-tool-detail-image';
+        image.src = imageUrl;
+        image.alt = title;
+        image.addEventListener('error', () => {
+            image.replaceWith(createBrowserSnapshotPlaceholder('截图已过期或暂时无法加载'));
+        });
+        toolState.detailEl.appendChild(image);
+    }
+
+    const previewMarkdown = buildBrowserDetailMarkdown(data, imageUrl);
+    toolState.arrow.style.display = '';
+    toolState.openDetailPreview = () => openToolDetailPreview(tool, detailFromBrowserData(data), previewMarkdown, toolState.modelContent || '');
+    toolState.detailEl.style.display = 'none';
+    toolState.arrow.textContent = '▶';
+}
+
+function browserDetailSummary(data, action, pageTitle) {
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+    if (summary) return summary;
+    if (data.status === 'failed') return `${action}未完成，请查看错误信息。`;
+    if (data.target) return `${action}已完成：${data.target}`;
+    if (pageTitle) return `${action}已完成，当前页面为「${pageTitle}」`;
+    if (data.status === 'succeeded') return `${action}已完成。`;
+    return '';
+}
+
+function createBrowserSnapshotPlaceholder(text) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'browser-tool-detail-placeholder';
+    placeholder.textContent = text;
+    return placeholder;
+}
+
+function detailFromBrowserData(data) {
+    return { type: 'browser', data };
+}
+
+function buildBrowserDetailMarkdown(data, imageUrl) {
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const lines = [`## ${title}`];
+    const summary = browserDetailSummary(data, action, pageTitle);
+    if (summary) lines.push('', summary);
+    if (data.target) lines.push('', `操作对象：${data.target}`);
+    if (data.url) lines.push('', `<a href="${escapeHtml(data.url)}" target="_blank" rel="noreferrer">${escapeHtml(data.url)}</a>`);
+    if (imageUrl) {
+        lines.push('', `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" style="max-height:720px;max-width:100%;height:auto">`);
+    }
+    return lines.join('\n');
 }
 
 function formatToolDetail(detail) {
@@ -5293,6 +5433,9 @@ function openToolDetailPreview(tool, detail, detailText, modelContent = '') {
 }
 
 function buildToolDetailMarkdown(detail, detailText) {
+    if (detail && typeof detail === 'object' && detail.type === 'browser') {
+        return detailText;
+    }
     if (detail && typeof detail === 'object' && detail.type === 'md') {
         return detailText;
     }
@@ -5319,14 +5462,15 @@ function showEventLog(data, _noLog = false) {
         if (eventLogObjectSeen.has(data)) return;
         eventLogObjectSeen.add(data);
     }
-    if (!_noLog) pushLog({ type: 'event', data });
+    const displayData = sanitizeDebugValue(data);
+    if (!_noLog) pushLog({ type: 'event', data: displayData });
     if (!showRawEvents) return;
     if (data && typeof data === 'object') {
         if (eventTraceObjectSeen.has(data)) return;
         eventTraceObjectSeen.add(data);
     }
-    const eventLabel = getEventTraceLabel(data);
-    const timeStr = getEventTraceTime(data);
+    const eventLabel = getEventTraceLabel(displayData);
+    const timeStr = getEventTraceTime(displayData);
     const shouldStickToBottom = isMessageViewportAtBottom();
 
     const trace = ensureEventTraceLog();
@@ -5349,7 +5493,7 @@ function showEventLog(data, _noLog = false) {
     const detail = document.createElement('pre');
     detail.className = 'event-log-detail';
     detail.style.display = 'none';
-    detail.textContent = JSON.stringify(data, null, 2);
+    detail.textContent = JSON.stringify(displayData, null, 2);
     trace.rawTexts.push(detail.textContent);
     attachCopyButton(summary, () => detail.textContent, { compact: true });
 
@@ -5359,6 +5503,32 @@ function showEventLog(data, _noLog = false) {
     trace.body.scrollTop = trace.body.scrollHeight;
     keepAssistantActivityLast();
     syncScrollAfterMessageChange(shouldStickToBottom, { showLatestButton: true });
+}
+
+function sanitizeDebugValue(value, seen = new WeakSet()) {
+    if (typeof value === 'string') {
+        const marker = ';base64,';
+        const markerIndex = value.indexOf(marker);
+        if (value.startsWith('data:') && markerIndex >= 0) {
+            const prefixEnd = markerIndex + marker.length;
+            return `${value.slice(0, prefixEnd)}<omitted ${value.length - prefixEnd} chars>`;
+        }
+        return value;
+    }
+    if (!value || typeof value !== 'object') return value;
+    if (seen.has(value)) return '<circular>';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        const items = value.map(item => sanitizeDebugValue(item, seen));
+        seen.delete(value);
+        return items;
+    }
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+        result[key] = sanitizeDebugValue(item, seen);
+    }
+    seen.delete(value);
+    return result;
 }
 
 function ensureEventTraceLog() {

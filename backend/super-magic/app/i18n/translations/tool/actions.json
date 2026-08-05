@@ -119,10 +119,6 @@
         "zh_CN": "互联网搜索",
         "en_US": "Web search"
     },
-    "use_browser": {
-        "zh_CN": "使用浏览器",
-        "en_US": "Use browser"
-    },
     "read_webpages_as_markdown": {
         "zh_CN": "深度阅读多个网页内容",
         "en_US": "Webpages deep read"

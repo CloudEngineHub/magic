@@ -17,25 +17,25 @@ import json
 import re
 import shlex
 import uuid
-
 from pathlib import Path
-from pydantic import Field
-
 from typing import Any, Dict
 
+from pydantic import Field
+
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import (
-    ToolResult,
     TOOL_RESULT_SYSTEM_DISPATCHED,
     TOOL_RESULT_SYSTEM_EARLY_AFTER,
+    ToolResult,
 )
-from agentlang.logger import get_logger
 from app.core.context.agent_context import AgentContext
 from app.i18n import i18n
 from app.path_manager import PathManager
+from app.service.sdk_call_registry import SdkCallRegistry, SdkCallStatus, SdkCallSummary
+from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import AutoMount, BaseToolParams, tool
 from app.tools.core.base_tool import ToolForwardRequest
-from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
@@ -407,6 +407,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             # 使服务端能精确路由到正确的 Agent 上下文。
             extra_env = self._build_snippet_extra_env(project_root)
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            extra_env["PYTHONUNBUFFERED"] = "1"
             # i18n 使用 ContextVar，子进程与后续 SDK HTTP 请求不会自动继承。
             extra_env["SUPER_MAGIC_LANGUAGE"] = i18n.get_language()
             SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
@@ -417,7 +418,6 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
             # 注册 cleanup：主 run 中断时先取消本轮服务端 in-flight 请求，
             # 再由 ProcessExecutor 中断子进程
-            from app.service.sdk_call_registry import SdkCallRegistry
             registry = SdkCallRegistry.get_instance()
             cleanup_key = f"sdk_execution_{sdk_execution_id}"
 
@@ -448,6 +448,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                 )
                 early_after_sent = True
 
+            timeout_status = ""
             try:
                 terminal_result = await ProcessExecutor.execute_command(
                     command=command,
@@ -458,7 +459,13 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                     timeout=effective_timeout,
                     extra_env=extra_env,
                     interruption_event=agent_ctx.get_interruption_event(),
+                    detect_interactive_prompt=False,
                 )
+                if terminal_result.extra_info.get("timed_out") is True:
+                    before_cancel = registry.snapshot_execution(agent_ctx.context_id, sdk_execution_id)
+                    registry.cancel_by_execution(agent_ctx.context_id, sdk_execution_id)
+                    after_cancel = registry.snapshot_execution(agent_ctx.context_id, sdk_execution_id)
+                    timeout_status = self._format_timeout_status(before_cancel, after_cancel)
             finally:
                 # 正常完成后清理残留的 in-flight 记录（容错）
                 try:
@@ -468,13 +475,18 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                         f"清理 SDK in-flight 记录失败: execution_id={sdk_execution_id}, "
                         f"错误: {cleanup_error}"
                     )
+                finally:
+                    registry.clear_execution(agent_ctx.context_id, sdk_execution_id)
 
             # early_after_sent=True 时外层 after_tool_call 应被屏蔽（已提前发出）
             system = TOOL_RESULT_SYSTEM_DISPATCHED if early_after_sent else None
+            content = terminal_result.content
+            if timeout_status:
+                content = f"{content}\n\n{timeout_status}"
             if terminal_result.ok:
-                return ToolResult(content=terminal_result.content, system=system)
+                return ToolResult(content=content, system=system)
             else:
-                return ToolResult.error(terminal_result.content, system=system)
+                return ToolResult.error(content, system=system)
 
         except asyncio.CancelledError:
             # 中断信号，直接向上传播，不要降级为普通错误
@@ -495,6 +507,41 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                         f"删除 SDK 代码片段脚本失败: {script_file_path}, "
                         f"错误: {cleanup_error}"
                     )
+
+    @classmethod
+    def _format_timeout_status(
+        cls,
+        before_cancel: tuple[SdkCallSummary, ...],
+        after_cancel: tuple[SdkCallSummary, ...],
+    ) -> str:
+        if not before_cancel:
+            return "SDK call status at timeout: no inner tool call reached the server."
+        lines = ["SDK call status at timeout:"]
+        for item in before_cancel:
+            lines.append(cls._format_call_summary(item))
+        cancelled_ids = {
+            item.tool_call_id
+            for item in after_cancel
+            if item.status is SdkCallStatus.CANCELLED
+        }
+        if cancelled_ids:
+            lines.append("Cancelled after timeout: " + ", ".join(sorted(cancelled_ids)))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_call_summary(item: SdkCallSummary) -> str:
+        started = item.started_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        finished = (
+            item.finished_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if item.finished_at is not None
+            else "not finished"
+        )
+        details = f"; {item.summary}" if item.summary else ""
+        error = f"; error_code={item.error_code}" if item.error_code else ""
+        return (
+            f"- {item.tool_name} ({item.tool_call_id}): status={item.status.value}, "
+            f"started={started}, finished={finished}{error}{details}"
+        )
 
     async def get_after_tool_call_friendly_action_and_remark(
         self,

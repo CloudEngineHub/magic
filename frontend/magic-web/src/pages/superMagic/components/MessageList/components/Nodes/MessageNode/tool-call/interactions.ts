@@ -32,7 +32,11 @@ export function handleToolCallInteraction({
 	onSelectDetail,
 }: HandleToolCallInteractionOptions) {
 	const toolInfo = pick(toolData, ["name", "url", "action", "remark", "id"])
-	const newDetail = { ...toolData.detail, ...toolInfo }
+	const newDetail = {
+		...toolData.detail,
+		...toolInfo,
+		attachments: toolData.attachments,
+	}
 
 	if (
 		(toolData.name && DisabledDetailToolTypes.includes(toolData.name)) ||

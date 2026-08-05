@@ -1503,6 +1503,66 @@
         "zh_CN": "操作浏览器",
         "en_US": "Use Browser"
     },
+    "browser.list_sessions": {
+        "zh_CN": "查看浏览器会话",
+        "en_US": "List browser sessions"
+    },
+    "browser.list_pages": {
+        "zh_CN": "查看浏览器页面",
+        "en_US": "List browser pages"
+    },
+    "browser.close_page": {
+        "zh_CN": "关闭网页",
+        "en_US": "Close webpage"
+    },
+    "browser.activate_page": {
+        "zh_CN": "切换网页",
+        "en_US": "Activate webpage"
+    },
+    "browser.wait": {
+        "zh_CN": "等待网页状态",
+        "en_US": "Wait for webpage"
+    },
+    "browser.keep_alive": {
+        "zh_CN": "保持网页可继续操作",
+        "en_US": "Keep webpage available"
+    },
+    "browser.screenshot": {
+        "zh_CN": "截取网页",
+        "en_US": "Capture webpage"
+    },
+    "browser.press": {
+        "zh_CN": "在网页中按键",
+        "en_US": "Press key in webpage"
+    },
+    "browser.hover": {
+        "zh_CN": "悬停网页元素",
+        "en_US": "Hover webpage element"
+    },
+    "browser.select": {
+        "zh_CN": "选择网页选项",
+        "en_US": "Select webpage option"
+    },
+    "browser.check": {
+        "zh_CN": "设置网页选中状态",
+        "en_US": "Set webpage checked state"
+    },
+    "browser.upload_file": {
+        "zh_CN": "向网页上传文件",
+        "en_US": "Upload file to webpage"
+    },
+    "browser.evaluate": {
+        "zh_CN": "执行网页脚本",
+        "en_US": "Evaluate webpage script"
+    },
+    "browser.read_console": {
+        "zh_CN": "查看网页控制台",
+        "en_US": "Read webpage console"
+    },
+    "browser.read_network": {
+        "zh_CN": "查看网页网络请求",
+        "en_US": "Read webpage network activity"
+    },
     "browser.click": {
         "zh_CN": "点击元素",
         "en_US": "Click element"
@@ -1538,6 +1598,278 @@
     "browser.visual_query": {
         "zh_CN": "阅读网页内容",
         "en_US": "Read webpage content"
+    },
+    "browser.remark.running": {
+        "zh_CN": "正在{{action}}",
+        "en_US": "{{action}} in progress"
+    },
+    "browser.remark.running_target": {
+        "zh_CN": "正在{{action}}：{{target}}",
+        "en_US": "{{action}}: {{target}}"
+    },
+    "browser.remark.recovering_navigation": {
+        "zh_CN": "页面暂时没有响应，AI 正在继续尝试",
+        "en_US": "The page is temporarily unresponsive; AI is continuing with another attempt"
+    },
+    "browser.detail.succeeded": {
+        "zh_CN": "{{action}}已完成",
+        "en_US": "{{action}} completed"
+    },
+    "browser.detail.succeeded_target": {
+        "zh_CN": "{{action}}已完成：{{target}}",
+        "en_US": "{{action}} completed: {{target}}"
+    },
+    "browser.detail.succeeded_page": {
+        "zh_CN": "{{action}}已完成，当前页面为「{{page}}」",
+        "en_US": "{{action}} completed on {{page}}"
+    },
+    "browser.detail.page_title": {
+        "zh_CN": "页面标题：{{title}}",
+        "en_US": "Page title: {{title}}"
+    },
+    "browser.detail.url": {
+        "zh_CN": "网址：{{url}}",
+        "en_US": "URL: {{url}}"
+    },
+    "browser.detail.target": {
+        "zh_CN": "操作对象：{{target}}",
+        "en_US": "Target: {{target}}"
+    },
+    "browser.detail.failed": {
+        "zh_CN": "{{action}}失败：{{error}}",
+        "en_US": "{{action}} failed: {{error}}"
+    },
+    "browser.detail.failed_target": {
+        "zh_CN": "未能{{action}}「{{target}}」：{{error}}",
+        "en_US": "Could not {{action}} {{target}}: {{error}}"
+    },
+    "browser.detail.pages": {
+        "zh_CN": "找到 {{count}} 个打开的网页",
+        "en_US": "Found {{count}} open webpages"
+    },
+    "browser.detail.snapshot": {
+        "zh_CN": "找到 {{count}} 个可交互元素{{suffix}}",
+        "en_US": "Found {{count}} interactive elements{{suffix}}"
+    },
+    "browser.detail.truncated": {
+        "zh_CN": "，页面结构过大，仅展示部分结果",
+        "en_US": "; the page structure was truncated"
+    },
+    "browser.detail.console": {
+        "zh_CN": "读取到 {{count}} 条控制台记录，其中 {{errors}} 条错误、{{warnings}} 条警告",
+        "en_US": "Read {{count}} console entries, including {{errors}} errors and {{warnings}} warnings"
+    },
+    "browser.detail.network": {
+        "zh_CN": "读取到 {{count}} 条网络请求，其中 {{failed}} 条失败、{{pending}} 条尚未完成",
+        "en_US": "Read {{count}} network requests, including {{failed}} failed and {{pending}} pending"
+    },
+    "browser.detail.sensitive_value": {
+        "zh_CN": "敏感内容（已隐藏）",
+        "en_US": "Sensitive value (hidden)"
+    },
+    "browser.detail.read_scope": {
+        "zh_CN": "读取范围：{{scope}}",
+        "en_US": "Read scope: {{scope}}"
+    },
+    "browser.detail.scope_viewport": {
+        "zh_CN": "当前可见区域",
+        "en_US": "the visible area"
+    },
+    "browser.detail.scope_full": {
+        "zh_CN": "整个网页",
+        "en_US": "the full webpage"
+    },
+    "browser.detail.no_readable_content": {
+        "zh_CN": "当前范围内没有读取到可展示的网页正文。",
+        "en_US": "No readable webpage content was found in the selected scope."
+    },
+    "browser.detail.content_truncated": {
+        "zh_CN": "网页内容较长，这里仅展示前 {{limit}} 个字符。",
+        "en_US": "The webpage content is long; only the first {{limit}} characters are shown here."
+    },
+    "browser.detail.interactive_preview": {
+        "zh_CN": "主要可交互内容：\n{{items}}",
+        "en_US": "Main interactive content:\n{{items}}"
+    },
+    "browser.detail.no_interactive_preview": {
+        "zh_CN": "没有可展示的交互元素摘要。",
+        "en_US": "No interactive element summary is available."
+    },
+    "browser.detail.wait_condition": {
+        "zh_CN": "等待{{condition}}：{{expected}}",
+        "en_US": "Waiting for {{condition}}: {{expected}}"
+    },
+    "browser.detail.condition_url": {
+        "zh_CN": "页面地址变化",
+        "en_US": "the page address to change"
+    },
+    "browser.detail.condition_text": {
+        "zh_CN": "页面出现指定文字",
+        "en_US": "the page to show the specified text"
+    },
+    "browser.detail.condition_load_state": {
+        "zh_CN": "网页完成加载",
+        "en_US": "the webpage to finish loading"
+    },
+    "browser.detail.condition_ref": {
+        "zh_CN": "指定元素出现",
+        "en_US": "the specified element to appear"
+    },
+    "browser.detail.condition_time": {
+        "zh_CN": "指定时间",
+        "en_US": "the specified time"
+    },
+    "browser.detail.condition_generic": {
+        "zh_CN": "页面状态",
+        "en_US": "the page state"
+    },
+    "browser.detail.state_load": {
+        "zh_CN": "页面及资源加载完成",
+        "en_US": "the page and its resources to finish loading"
+    },
+    "browser.detail.state_dom_content_loaded": {
+        "zh_CN": "页面结构加载完成",
+        "en_US": "the page structure to finish loading"
+    },
+    "browser.detail.wait_default": {
+        "zh_CN": "达到指定状态",
+        "en_US": "the requested state"
+    },
+    "browser.detail.console_error_preview": {
+        "zh_CN": "主要控制台错误：\n{{items}}",
+        "en_US": "Main console errors:\n{{items}}"
+    },
+    "browser.detail.no_console_errors": {
+        "zh_CN": "本次返回的控制台记录中没有错误。",
+        "en_US": "No errors were found in the returned console entries."
+    },
+    "browser.detail.network_error_preview": {
+        "zh_CN": "主要失败请求：\n{{items}}",
+        "en_US": "Main failed requests:\n{{items}}"
+    },
+    "browser.detail.no_network_errors": {
+        "zh_CN": "本次返回的网络记录中没有失败请求。",
+        "en_US": "No failed requests were found in the returned network entries."
+    },
+    "browser.detail.network_failed": {
+        "zh_CN": "请求失败",
+        "en_US": "request failed"
+    },
+    "browser.detail.input_value": {
+        "zh_CN": "输入内容：{{value}}",
+        "en_US": "Input: {{value}}"
+    },
+    "browser.detail.pressed_key": {
+        "zh_CN": "按键：{{key}}",
+        "en_US": "Key: {{key}}"
+    },
+    "browser.detail.selected_value": {
+        "zh_CN": "选择内容：{{value}}",
+        "en_US": "Selected value: {{value}}"
+    },
+    "browser.detail.checked_state": {
+        "zh_CN": "设置状态：{{state}}",
+        "en_US": "State: {{state}}"
+    },
+    "browser.detail.checked": {
+        "zh_CN": "已选中",
+        "en_US": "checked"
+    },
+    "browser.detail.unchecked": {
+        "zh_CN": "未选中",
+        "en_US": "unchecked"
+    },
+    "browser.detail.uploaded_files": {
+        "zh_CN": "上传文件：{{count}} 个",
+        "en_US": "Uploaded files: {{count}}"
+    },
+    "browser.attachment.snapshot": {
+        "zh_CN": "网页操作截图",
+        "en_US": "Browser snapshot"
+    },
+    "browser.error.invalid_config": {
+        "zh_CN": "浏览器配置不完整或不正确",
+        "en_US": "Browser configuration is incomplete or invalid"
+    },
+    "browser.error.backend_unavailable": {
+        "zh_CN": "当前环境不支持所选浏览器后端",
+        "en_US": "The selected browser backend is unavailable"
+    },
+    "browser.error.connection_failed": {
+        "zh_CN": "无法连接浏览器，请检查浏览器或连接通道",
+        "en_US": "Could not connect to the browser"
+    },
+    "browser.error.version_mismatch": {
+        "zh_CN": "浏览器服务与当前客户端版本不匹配",
+        "en_US": "The browser service version is incompatible with this client"
+    },
+    "browser.error.session_closed": {
+        "zh_CN": "浏览器会话已关闭或不可用",
+        "en_US": "The browser session is closed or unavailable"
+    },
+    "browser.error.page_not_found": {
+        "zh_CN": "找不到指定的浏览器页面",
+        "en_US": "The requested browser page was not found"
+    },
+    "browser.error.page_closed": {
+        "zh_CN": "浏览器页面已经关闭",
+        "en_US": "The browser page is already closed"
+    },
+    "browser.error.page_expired": {
+        "zh_CN": "浏览器页面因长时间未操作已经关闭",
+        "en_US": "The browser page expired after being idle"
+    },
+    "browser.error.resource_limit": {
+        "zh_CN": "浏览器资源已达到上限，请先关闭不用的页面",
+        "en_US": "Browser resources reached the limit; close unused pages first"
+    },
+    "browser.error.navigation_failed": {
+        "zh_CN": "页面暂时没有响应或未能完成加载，当前浏览器页面会尽量保留",
+        "en_US": "The page did not respond or finish loading; the current browser page will be preserved when possible"
+    },
+    "browser.error.capability_unavailable": {
+        "zh_CN": "当前浏览器不支持这项操作",
+        "en_US": "This browser does not support the requested operation"
+    },
+    "browser.error.script_not_found": {
+        "zh_CN": "浏览器页面脚本缺失",
+        "en_US": "A required browser page script is missing"
+    },
+    "browser.error.script_injection_failed": {
+        "zh_CN": "无法在当前网页中运行所需脚本",
+        "en_US": "A required script could not run on this page"
+    },
+    "browser.error.snapshot_failed": {
+        "zh_CN": "无法读取当前网页结构",
+        "en_US": "The current page structure could not be read"
+    },
+    "browser.error.ref_not_found": {
+        "zh_CN": "找不到指定的网页元素，请重新读取页面结构",
+        "en_US": "The requested page element was not found"
+    },
+    "browser.error.stale_ref": {
+        "zh_CN": "网页已经变化，请重新读取页面结构后再操作",
+        "en_US": "The page changed; read a new snapshot before acting"
+    },
+    "browser.error.ambiguous_ref": {
+        "zh_CN": "网页元素无法唯一确定，请重新读取页面结构",
+        "en_US": "The page element can no longer be identified uniquely"
+    },
+    "browser.error.action_failed": {
+        "zh_CN": "网页操作没有完成，请重新读取页面状态",
+        "en_US": "The browser action did not complete"
+    },
+    "browser.error.screenshot_failed": {
+        "zh_CN": "网页截图失败",
+        "en_US": "The browser screenshot could not be captured"
+    },
+    "browser.error.invalid_request": {
+        "zh_CN": "浏览器操作参数不正确",
+        "en_US": "The browser request parameters are invalid"
+    },
+    "browser.error.unexpected": {
+        "zh_CN": "浏览器操作遇到未知问题",
+        "en_US": "The browser operation encountered an unexpected problem"
     },
     "design.error_download_failed": {
         "zh_CN": "图片下载失败",

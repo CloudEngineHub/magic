@@ -22,6 +22,7 @@ tools:
 skills:
   system_skills:
     - name: subagents
+    - name: browser
     - name: download
     - name: share
     - name: skill-vetter

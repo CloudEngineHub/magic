@@ -448,6 +448,16 @@ async def async_readlink(path: Union[str, Path]) -> str:
         raise
 
 
+async def async_realpath(path: Union[str, Path], *, strict: bool = False) -> Path:
+    """异步解析路径中的软链，返回规范化绝对路径。"""
+    try:
+        resolved = await asyncio.to_thread(os.path.realpath, str(path), strict=strict)
+        return Path(resolved)
+    except Exception as e:
+        logger.error(f"异步解析真实路径失败 {path}: {e}")
+        raise
+
+
 async def async_write_json(file_path: Union[str, Path], data: Dict[str, Any], **kwargs) -> None:
     """
     异步写入JSON文件

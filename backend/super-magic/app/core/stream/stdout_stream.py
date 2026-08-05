@@ -9,8 +9,9 @@ import os
 import sys
 from typing import Optional, TextIO
 
-from app.core.stream import Stream
 from agentlang.logger import get_logger
+from agentlang.utils.security import sanitize_log_value
+from app.core.stream import Stream
 
 logger = get_logger(__name__)
 
@@ -84,12 +85,12 @@ class StdoutStream(Stream):
             return data
 
     def _truncate_tool_detail_for_log(self, data: str) -> str:
-        """Truncate payload.tool.detail field for log printing only.
+        """精简消息日志中的详情和内嵌二进制数据。
 
         The tool.detail field can be very long (e.g. web search results),
         which makes logs hard to read. We replace it with a short preview
-        when printing to the logger. The original ``data`` is NOT modified;
-        actual stream output and debug file still get the full content.
+        and summarize embedded data URLs. The original ``data`` is NOT modified;
+        only logger and debug-file copies are sanitized.
         """
         try:
             parsed = json.loads(data)
@@ -100,29 +101,22 @@ class StdoutStream(Stream):
             return data
 
         payload = parsed.get("payload")
-        if not isinstance(payload, dict):
-            return data
+        if isinstance(payload, dict):
+            tool = payload.get("tool")
+            if isinstance(tool, dict) and "detail" in tool:
+                detail = tool.get("detail")
+                try:
+                    detail_str = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    detail_str = str(detail)
 
-        tool = payload.get("tool")
-        if not isinstance(tool, dict) or "detail" not in tool:
-            return data
-
-        detail = tool.get("detail")
+                if len(detail_str) > _TOOL_DETAIL_LOG_MAX_LEN:
+                    tool["detail"] = (
+                        detail_str[:_TOOL_DETAIL_LOG_MAX_LEN]
+                        + f"...(truncated, total {len(detail_str)} chars)"
+                    )
         try:
-            detail_str = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
-        except (TypeError, ValueError):
-            detail_str = str(detail)
-
-        if len(detail_str) <= _TOOL_DETAIL_LOG_MAX_LEN:
-            return data
-
-        truncated = (
-            detail_str[:_TOOL_DETAIL_LOG_MAX_LEN]
-            + f"...(truncated, total {len(detail_str)} chars)"
-        )
-        tool["detail"] = truncated
-        try:
-            return json.dumps(parsed, ensure_ascii=False)
+            return json.dumps(sanitize_log_value(parsed), ensure_ascii=False)
         except (TypeError, ValueError):
             return data
 
@@ -132,9 +126,9 @@ class StdoutStream(Stream):
             parsed = json.loads(data)
             # If payload field exists, only format and return payload
             if isinstance(parsed, dict) and "payload" in parsed:
-                return json.dumps(parsed["payload"], indent=2, ensure_ascii=False)
+                return json.dumps(sanitize_log_value(parsed["payload"]), indent=2, ensure_ascii=False)
             # If no payload field, return formatted full data
-            return json.dumps(parsed, indent=2, ensure_ascii=False)
+            return json.dumps(sanitize_log_value(parsed), indent=2, ensure_ascii=False)
         except (json.JSONDecodeError, TypeError):
             # Not valid JSON, return original data
             return data

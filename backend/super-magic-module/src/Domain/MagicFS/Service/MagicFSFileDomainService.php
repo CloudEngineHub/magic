@@ -103,6 +103,13 @@ class MagicFSFileDomainService
                 ['project_id' => $projectId]
             );
         }
+        if ($rootDir->getStorageType() !== StorageType::WORKSPACE) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_NOT_FOUND,
+                'magicfs.project_not_found',
+                ['project_id' => $projectId]
+            );
+        }
 
         return $rootDir->getFileId();
     }

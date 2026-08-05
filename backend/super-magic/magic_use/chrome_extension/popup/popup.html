@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Magic Use Browser Connector</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Browser Connector</h1>
+        <span id="status" class="status">Disconnected</span>
+      </header>
+
+      <section id="pairing">
+        <label>Temporary relay endpoint<input id="endpoint" type="url" placeholder="wss://..."></label>
+        <label>Session ID<input id="sessionId" type="text" autocomplete="off"></label>
+        <label>Pairing code<input id="pairingToken" type="password" autocomplete="off"></label>
+        <button id="connect">Connect</button>
+      </section>
+
+      <section id="tabs">
+        <div class="section-title"><h2>Authorized tabs</h2><button id="refresh" class="secondary">Refresh</button></div>
+        <label>Agent session<select id="ownerSession"></select></label>
+        <div id="tabList" class="list"></div>
+      </section>
+
+      <p id="error" class="error" hidden></p>
+      <button id="disconnect" class="danger" hidden>Disconnect browser</button>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
