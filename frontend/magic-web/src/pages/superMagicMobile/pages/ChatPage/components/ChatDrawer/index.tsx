@@ -12,7 +12,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { roleStore } from "@/pages/superMagic/stores"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { resolveProjectModeForCreate } from "@/services/superMagic/DefaultAgentSelectionService"
 import type { Workspace, ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { useSharedWorkspace } from "@/pages/superMagic/hooks/useSharedWorkspace"
 import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
@@ -208,7 +208,7 @@ function ChatDrawer({
 	const handleNewChat = useMemoizedFn(async () => {
 		try {
 			const createdProject = await createProjectInChatWorkspace({
-				projectMode: currentRole || TopicMode.General,
+				projectMode: resolveProjectModeForCreate(currentRole),
 			})
 
 			if (!createdProject?.project || !createdProject.topic) {

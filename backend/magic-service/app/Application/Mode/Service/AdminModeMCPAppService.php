@@ -86,6 +86,15 @@ class AdminModeMCPAppService extends AbstractModeAppService
                 ExceptionBuilder::throw(ModeErrorCode::SYSTEM_MODE_CANNOT_BE_MODIFIED);
             }
 
+            if ($this->isSystemDefaultAgent($existingMode->getIdentifier())) {
+                if ($savingMode->getIdentifier() !== $existingMode->getIdentifier()) {
+                    ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+                }
+                if (! empty($savingMode->getVisibilityWhitelist()['organizations'] ?? [])) {
+                    ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+                }
+            }
+
             // 使用 savingMode 中的值更新现有模式
             $existingMode->setNameI18n($savingMode->getNameI18n());
             $existingMode->setIdentifier($savingMode->getIdentifier());
@@ -94,9 +103,7 @@ class AdminModeMCPAppService extends AbstractModeAppService
 
             // 如果有组织白名单，则更新
             $visibilityWhitelist = $savingMode->getVisibilityWhitelist();
-            if (! empty($visibilityWhitelist)) {
-                $existingMode->setVisibilityWhitelist($visibilityWhitelist);
-            }
+            $existingMode->setVisibilityWhitelist($visibilityWhitelist);
 
             // 保存更新
             $savedMode = $this->modeDomainService->updateMode($dataIsolation, $existingMode);

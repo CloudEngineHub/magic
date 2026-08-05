@@ -63,6 +63,7 @@ import {
 	createPastedTextFile,
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -269,6 +270,7 @@ export const MessageEditorContainer = observer(
 				if (isEditingQueueItem) {
 					return isAllFilesUploaded && !isSending && !sendButtonLoading
 				}
+				if (!store.topicModelStore.isLanguageModelReady) return false
 				const hasContent = !isEmptyJSONContent(store.editorStore.value)
 				return hasContent && isAllFilesUploaded && !isSending && !sendButtonLoading
 			}, [
@@ -279,6 +281,7 @@ export const MessageEditorContainer = observer(
 				isSending,
 				sendButtonLoading,
 				sendEnabled,
+				store.topicModelStore.isLanguageModelReady,
 			])
 
 			const sendButtonDisabled = !canSendMessage
@@ -406,12 +409,16 @@ export const MessageEditorContainer = observer(
 
 			const handleSendMessageByContent = useMemoizedFn(
 				(data: SendMessageByContentPayload) => {
+					const { isLanguageModelReady, selectedLanguageModel } = store.topicModelStore
+					if (!isLanguageModelReady || !selectedLanguageModel) {
+						magicToast.error(t("messageEditor.pleaseSelectModel"))
+						return
+					}
 					onSend?.({
 						value: data.jsonContent,
 						mentionItems:
 							data.mentionItems ?? collectMentionItemsFromContent(data.jsonContent),
-						selectedModel:
-							data.selectedModel ?? store.topicModelStore.selectedLanguageModel,
+						selectedModel: data.selectedModel ?? selectedLanguageModel,
 						selectedImageModel:
 							data.selectedImageModel ?? store.topicModelStore.selectedImageModel,
 						selectedVideoModel:

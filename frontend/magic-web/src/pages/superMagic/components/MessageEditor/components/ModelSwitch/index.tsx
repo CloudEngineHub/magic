@@ -471,8 +471,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<DropdownMenuContent
 						side={getSide()}
 						align="start"
-						className="z-dropdown w-[380px] overflow-visible p-0"
+						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-[380px] overflow-hidden p-0"
 						sideOffset={4}
+						collisionPadding={12}
 						onInteractOutside={(event) => {
 							const target = event.target
 							if (!(target instanceof HTMLElement)) return
@@ -490,7 +491,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 							{tabSwitcher}
 							<div
 								ref={desktopScrollContainerRef}
-								className="scrollbar-y-thin flex max-h-[420px] flex-col gap-2.5 overflow-y-auto px-4 pr-2"
+								className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
 							>
 								{mainContent}
 							</div>

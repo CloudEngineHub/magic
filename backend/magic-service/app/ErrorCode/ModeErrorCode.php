@@ -43,4 +43,10 @@ enum ModeErrorCode: int
 
     #[ErrorMessage('mode.system_mode_cannot_be_modified')]
     case SYSTEM_MODE_CANNOT_BE_MODIFIED = 34009;
+
+    #[ErrorMessage('mode.system_default_agent_invalid')]
+    case SYSTEM_DEFAULT_AGENT_INVALID = 34010;
+
+    #[ErrorMessage('mode.system_default_agent_protected')]
+    case SYSTEM_DEFAULT_AGENT_PROTECTED = 34011;
 }

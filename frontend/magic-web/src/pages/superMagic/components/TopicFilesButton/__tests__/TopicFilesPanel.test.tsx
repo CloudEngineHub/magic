@@ -1,11 +1,15 @@
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
+import { createRef } from "react"
 import { describe, expect, it, vi } from "vitest"
-import TopicFilesPanel from "../TopicFilesPanel"
+import TopicFilesPanel, { type TopicFilesPanelRef } from "../TopicFilesPanel"
 
 const selectDirectoryModalSpy = vi.fn()
 const executeMoveOperationSpy = vi.fn()
 const crossProjectOperationOptionsSpy = vi.fn()
 const executeCopyOperationSpy = vi.fn()
+const uploadFileSpy = vi.fn()
+const uploadFolderSpy = vi.fn()
+const batchMoveByFileIdsSpy = vi.fn()
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -64,8 +68,8 @@ vi.mock("../hooks/useUploadWithModal", () => ({
 		uploadModalVisible: false,
 		selectedUploadFiles: [],
 		isUploadingFolder: false,
-		handleCustomUploadFile: vi.fn(),
-		handleCustomUploadFolder: vi.fn(),
+		handleCustomUploadFile: uploadFileSpy,
+		handleCustomUploadFolder: uploadFolderSpy,
 		handleUploadModalSubmit: vi.fn(),
 		handleUploadModalClose: vi.fn(),
 	}),
@@ -144,6 +148,7 @@ vi.mock("../hooks/useProjectDetailFilesController", () => ({
 		batchMove: vi.fn(),
 		batchCopy: vi.fn(),
 		batchDelete: vi.fn(),
+		batchMoveByFileIds: batchMoveByFileIdsSpy,
 		resetMobileSelection: vi.fn(),
 	}),
 }))
@@ -207,6 +212,33 @@ vi.mock("@/pages/superMagicMobile/components/ProjectShareSheet", () => ({
 }))
 
 describe("TopicFilesPanel", () => {
+	it("只读场景下命令式 API 不触发上传或移动写操作", () => {
+		uploadFileSpy.mockClear()
+		uploadFolderSpy.mockClear()
+		batchMoveByFileIdsSpy.mockClear()
+		const ref = createRef<TopicFilesPanelRef>()
+
+		render(
+			<TopicFilesPanel
+				ref={ref}
+				attachments={[]}
+				projectId="project-1"
+				allowEdit={false}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		act(() => {
+			ref.current?.uploadFile()
+			ref.current?.uploadFolder()
+			ref.current?.openBatchMoveByFileIds(["file-1"])
+		})
+
+		expect(uploadFileSpy).not.toHaveBeenCalled()
+		expect(uploadFolderSpy).not.toHaveBeenCalled()
+		expect(batchMoveByFileIdsSpy).not.toHaveBeenCalled()
+	})
+
 	it("在项目详情移动端跨项目确认时带上待移动文件 ID 执行移动", async () => {
 		selectDirectoryModalSpy.mockClear()
 		executeMoveOperationSpy.mockClear()

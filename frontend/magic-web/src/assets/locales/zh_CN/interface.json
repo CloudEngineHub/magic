@@ -11,6 +11,7 @@
 			"addProject": "创建新项目",
 			"addTopic": "新增话题",
 			"addWorkspace": "新增工作区",
+			"agentUnavailable": "当前选中的员工已失效，请重新选择可用员工后再保存",
 			"cancel": "取消",
 			"clawPromptPlaceholder": "描述你的需求，例如：总结今天的新闻。",
 			"clear": "清空",

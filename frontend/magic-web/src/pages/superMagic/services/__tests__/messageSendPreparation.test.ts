@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
-import { preparePanelSend } from "@/pages/superMagic/services/messageSendPreparation"
+import {
+	ensureProjectForMessageContext,
+	preparePanelSend,
+} from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 vi.mock("@/apis", () => ({
@@ -39,8 +42,22 @@ vi.mock("@/services/superMagic/topicModel", () => ({
 	superMagicTopicModelService: {},
 }))
 
+const { modeServiceMock, isModeValidMock, isModeVisibleMock } = vi.hoisted(() => {
+	const isModeValid = vi.fn(() => false)
+	const isModeVisible = vi.fn(() => true)
+	return {
+		modeServiceMock: {
+			defaultAgentCode: undefined as string | undefined,
+			isModeValid,
+			isModeVisible,
+		},
+		isModeValidMock: isModeValid,
+		isModeVisibleMock: isModeVisible,
+	}
+})
+
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
-	default: {},
+	default: modeServiceMock,
 }))
 
 vi.mock("@/pages/superMagic/services/topicService", () => ({
@@ -57,6 +74,166 @@ vi.mock("@/pages/superMagic/services", () => ({
 }))
 
 describe("messageSendPreparation", () => {
+	beforeEach(() => {
+		modeServiceMock.defaultAgentCode = undefined
+		isModeValidMock.mockReset()
+		isModeValidMock.mockReturnValue(false)
+		isModeVisibleMock.mockReset()
+		isModeVisibleMock.mockReturnValue(true)
+	})
+
+	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {
+		modeServiceMock.defaultAgentCode = "agent-default"
+		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
+		const setSelectedTopic = vi.fn()
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+			topic_mode: TopicMode.General,
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: "agent-default" as TopicMode,
+			},
+			context: {
+				selectedProject,
+				selectedTopic,
+				setSelectedTopic,
+			},
+			tabPattern: "agent-default" as TopicMode,
+			messagesLength: 0,
+		})
+
+		expect(result?.currentTopic).toEqual(
+			expect.objectContaining({
+				topic_mode: "agent-default",
+				agent_code: undefined,
+			}),
+		)
+		expect(result?.params).toEqual(
+			expect.objectContaining({
+				topicMode: "agent-default",
+				extra: undefined,
+			}),
+		)
+	})
+
+	it("clears the previous agent_code when switching to a built-in mode", async () => {
+		modeServiceMock.defaultAgentCode = "agent-default"
+		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+			topic_mode: "agent-default" as TopicMode,
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.Chat,
+				extra: { agent_code: "agent-default", source: "retry" },
+			},
+			context: { selectedProject, selectedTopic },
+			tabPattern: TopicMode.Chat,
+			messagesLength: 1,
+		})
+
+		expect(result?.currentTopic?.topic_mode).toBe(TopicMode.Chat)
+		expect(result?.currentTopic?.agent_code).toBeUndefined()
+		expect(result?.params.extra).toEqual({ source: "retry" })
+	})
+
+	it("sends a configured built-in default as topic_pattern without agent_code", async () => {
+		modeServiceMock.defaultAgentCode = TopicMode.PPT
+		isModeValidMock.mockImplementation((mode) => mode === TopicMode.PPT)
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+			topic_mode: TopicMode.General,
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.PPT,
+				extra: { agent_code: "stale-agent" },
+			},
+			context: { selectedProject, selectedTopic },
+			tabPattern: TopicMode.PPT,
+			messagesLength: 0,
+		})
+
+		expect(result?.currentTopic).toEqual(
+			expect.objectContaining({
+				topic_mode: TopicMode.PPT,
+				agent_code: undefined,
+			}),
+		)
+		expect(result?.params.topicMode).toBe(TopicMode.PPT)
+		expect(result?.params.extra).toBeUndefined()
+	})
+
+	it("keeps the employee identifier as project_mode while initializing topic state", async () => {
+		modeServiceMock.defaultAgentCode = "agent-default"
+		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
+		const createProject = vi.fn().mockResolvedValue({
+			project: { id: "project-1", workspace_id: "workspace-1" },
+			topic: { id: "topic-1", project_id: "project-1" },
+		})
+		const setSelectedTopic = vi.fn()
+
+		const result = await ensureProjectForMessageContext({
+			context: {
+				createProject,
+				setSelectedProject: vi.fn(),
+				setSelectedTopic,
+			},
+			tabPattern: "agent-default" as TopicMode,
+		})
+
+		expect(createProject).toHaveBeenCalledWith(
+			expect.objectContaining({ projectMode: "agent-default" }),
+		)
+		expect(result?.currentTopic).toEqual(
+			expect.objectContaining({
+				topic_mode: "agent-default",
+				agent_code: undefined,
+			}),
+		)
+	})
+
 	it("should create a fresh topic when the selected topic belongs to another project", async () => {
 		const createTopic = vi.fn().mockResolvedValue({
 			id: "topic-b",

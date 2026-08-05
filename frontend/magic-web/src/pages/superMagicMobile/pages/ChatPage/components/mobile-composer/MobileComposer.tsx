@@ -24,6 +24,7 @@ import MobileComposerHeader from "./MobileComposerHeader"
 import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
 import useMobileComposerLogic from "./useMobileComposerLogic"
+import { useInvalidTopicModeFallback } from "@/pages/superMagic/components/MessageEditor/hooks/useInvalidTopicModeFallback"
 
 interface MobileComposerProps {
 	editorContext: SceneEditorContext
@@ -213,6 +214,8 @@ function MobileComposerComponent({
 	scenes,
 	enableReEditMessageFromPubSub = false,
 }: MobileComposerProps) {
+	const { isActive, InvalidModeFallback, onCreateTopic } =
+		useInvalidTopicModeFallback(editorContext)
 	const [isAddSheetOpen, setIsAddSheetOpen] = useState(false)
 	const [isVoicePanelActive, setIsVoicePanelActive] = useState(false)
 	const [isVoiceRecording, setIsVoiceRecording] = useState(false)
@@ -651,6 +654,20 @@ function MobileComposerComponent({
 			{logic.uploadModal}
 		</div>
 	)
+
+	if (isActive && InvalidModeFallback) {
+		return (
+			<div
+				className="flex w-full shrink-0 flex-col gap-1.5 bg-mobile-background px-2 pb-3 pt-1.5"
+				data-testid="mobile-composer"
+			>
+				{taskAndQueueNodes}
+				<div className="overflow-hidden rounded-3xl bg-card px-4 py-6 shadow-mobile-dock-surface">
+					<InvalidModeFallback onCreateTopic={onCreateTopic} />
+				</div>
+			</div>
+		)
+	}
 
 	return (
 		<MessageEditorStoreProvider store={logic.store}>

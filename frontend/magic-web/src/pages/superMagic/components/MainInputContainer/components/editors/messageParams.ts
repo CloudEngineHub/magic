@@ -6,6 +6,8 @@ export function buildQueueMessageInput(
 	params: HandleSendParams,
 	fallbackContent: JSONContent,
 ): QueueMessageInput {
+	const agentCode = params.extra?.agent_code
+
 	return {
 		content: params.value ?? fallbackContent,
 		mentionItems: params.mentionItems,
@@ -13,5 +15,6 @@ export function buildQueueMessageInput(
 		selectedImageModel: params.selectedImageModel,
 		selectedVideoModel: params.selectedVideoModel,
 		topicMode: params.topicMode,
+		agentCode: typeof agentCode === "string" ? agentCode : null,
 	}
 }

@@ -76,4 +76,6 @@ return [
     'page_size_min' => 'Page size must be greater than or equal to 1',
     'page_size_max' => 'Page size cannot exceed 100',
     'keyword_max' => 'Keyword cannot exceed 100 characters',
+    'system_default_agent_invalid' => 'The system default agent configuration is invalid',
+    'system_default_agent_protected' => 'The system default agent cannot perform this operation',
 ];

@@ -50,7 +50,11 @@ vi.mock("@/pages/superMagic/hooks/useSharedProjectMode", () => ({
 }))
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
-	default: { getModePlaceholderWithLegacy: () => "" },
+	default: {
+		defaultAgentCode: undefined,
+		getModePlaceholderWithLegacy: () => "",
+		isModeValid: () => true,
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm", () => ({
@@ -193,6 +197,7 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 			selectedImageModel: undefined,
 			selectedVideoModel: undefined,
 			topicMode: TopicMode.MicroApp,
+			agentCode: null,
 		})
 	})
 

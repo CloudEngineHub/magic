@@ -1159,19 +1159,24 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $builtinAgentCodes
         );
 
-        $frequentCodes = $this->normalizeOrderCodes($orderConfig['frequent'] ?? []);
+        $featuredOrderGroups = $this->resolveFeaturedOrderGroups($orderConfig);
+        $frequentCodes = $featuredOrderGroups['frequent'];
+        $allCodes = $featuredOrderGroups['all'];
+        $configuredCodes = $featuredOrderGroups['query'];
 
-        if ($frequentCodes !== []) {
-            // frequent 一旦存在，Featured 区就严格只围绕 frequent 构建，保持首页顺序稳定。
+        if ($configuredCodes !== []) {
+            // featured 同时返回显示中和隐藏员工，显示状态由排序分组决定。
             $builtinAgents = array_values(array_filter(
                 $builtinAgents,
-                static fn (SuperMagicAgentEntity $agent): bool => in_array($agent->getCode(), $frequentCodes, true)
+                static fn (SuperMagicAgentEntity $agent): bool => in_array($agent->getCode(), $configuredCodes, true)
             ));
-            $builtinAgentCodes = array_map(fn ($agent) => $agent->getCode(), $builtinAgents);
-            $queryAgentCodes = array_values(array_diff($frequentCodes, $builtinAgentCodes));
+            $builtinAgentCodes = array_map(
+                static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(),
+                $builtinAgents
+            );
+            $queryAgentCodes = array_values(array_diff($configuredCodes, $builtinAgentCodes));
         } else {
-            // 正常情况下 helper 已经会把 frequent 补出来。
-            // 这里保留兜底逻辑，避免后续规则变更时首页数据直接为空。
+            // 保留兜底逻辑，避免后续排序规则变更时首页数据直接为空。
             $queryAgentCodes = array_values(array_unique(array_diff(
                 array_merge($usableAgentResult['codes'], $builtinAgentCodes),
                 $builtinAgentCodes
@@ -1203,29 +1208,14 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $agentVersionIds = array_map(fn ($agentEntity) => $agentEntity->getId(), $versionEntities);
         $agentCodeMapPlaybookEntities = $this->getAgentPlaybooksByAgentVersionIds($agentVersionIds);
 
-        if ($frequentCodes !== []) {
-            $agentMap = [];
-            foreach ($result['list'] as $agentEntity) {
-                $agentMap[$agentEntity->getCode()] = $agentEntity;
-            }
-
-            $frequentAgents = [];
-            foreach ($frequentCodes as $code) {
-                if (isset($agentMap[$code])) {
-                    // 按 frequentCodes 的顺序回填，确保返回顺序与配置完全一致。
-                    $agentMap[$code]->setCategory('frequent');
-                    $frequentAgents[] = $agentMap[$code];
-                }
-            }
-
-            $featuredAgentResult = [
-                'frequent' => $frequentAgents,
-                'all' => [],
-                'total' => count($frequentAgents),
-            ];
-        } else {
-            $featuredAgentResult = $this->categorizeAgents($result['list'], $result['total'], null);
-        }
+        $featuredAgentResult = $this->categorizeAgents(
+            $result['list'],
+            $result['total'],
+            [
+                'frequent' => $frequentCodes,
+                'all' => $allCodes,
+            ]
+        );
 
         $featuredAgentResult['playbooks'] = $agentCodeMapPlaybookEntities;
         return $featuredAgentResult;
@@ -2001,6 +1991,26 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
 
         return $normalizedCodes;
+    }
+
+    /**
+     * @param array{frequent?: array<string>, all?: array<string>} $orderConfig
+     * @return array{frequent: array<string>, all: array<string>, query: array<string>}
+     */
+    private function resolveFeaturedOrderGroups(array $orderConfig): array
+    {
+        $frequentCodes = $this->normalizeOrderCodes($orderConfig['frequent'] ?? []);
+        $frequentCodeSet = array_fill_keys($frequentCodes, true);
+        $allCodes = array_values(array_filter(
+            $this->normalizeOrderCodes($orderConfig['all'] ?? []),
+            static fn (string $code): bool => ! isset($frequentCodeSet[$code])
+        ));
+
+        return [
+            'frequent' => $frequentCodes,
+            'all' => $allCodes,
+            'query' => array_merge($frequentCodes, $allCodes),
+        ];
     }
 
     /**

@@ -29,9 +29,9 @@ import { useOptionalSceneStateStore } from "../../stores"
 import { cn } from "@/lib/utils"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { buildQueueMessageInput } from "./messageParams"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -207,6 +207,18 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			params.value,
 			sceneStateStore?.presetSuffixContent,
 		)
+		const sendSelection = resolveAgentSelection(effectiveTopicMode, editorContext?.agentCode)
+		const extra = { ...(params.extra ?? {}) }
+		delete extra.agent_code
+		const normalizedParams: HandleSendParams = {
+			...params,
+			topicMode: sendSelection.topicPattern,
+			extra: sendSelection.agentCode
+				? { ...extra, agent_code: sendSelection.agentCode }
+				: Object.keys(extra).length > 0
+					? extra
+					: undefined,
+		}
 
 		if (queueContext?.editingQueueItem) {
 			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
@@ -227,15 +239,8 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		// 队列发送和直接发送必须使用同一份业务参数。微应用、Skill、员工等场景会通过
 		// mergeSendParams 修正 topicMode / extra；如果在加入队列后才合并，队列消息会退回默认模式。
 		const defaultParams: HandleSendParams = {
-			...params,
+			...normalizedParams,
 			value: nextValue ?? params.value,
-			extra:
-				effectiveTopicMode === TopicMode.CustomAgent && editorContext?.agentCode
-					? {
-							...params.extra,
-							agent_code: editorContext.agentCode,
-						}
-					: params.extra,
 		}
 		const customParamsPatch = editorContext?.mergeSendParams?.({
 			defaultParams,

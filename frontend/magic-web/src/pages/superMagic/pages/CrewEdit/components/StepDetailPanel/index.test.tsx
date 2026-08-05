@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import StepDetailPanel from "./index"
 
 const { crewEditStep, mockStore, sceneEditMountSpy } = vi.hoisted(() => ({
@@ -18,6 +18,11 @@ const { crewEditStep, mockStore, sceneEditMountSpy } = vi.hoisted(() => ({
 			activePlaybookId: "scene-1",
 			closePlaybook: vi.fn(),
 			closePlaybookEditor: vi.fn(),
+		},
+		conversation: {
+			selectedProject: {
+				user_role: "owner",
+			},
 		},
 	},
 	sceneEditMountSpy: vi.fn(),
@@ -50,6 +55,10 @@ vi.mock("./PublishingPanel", () => ({
 	default: () => <div data-testid="publishing-panel" />,
 }))
 
+vi.mock("./KnowledgeDetailView", () => ({
+	default: () => <div data-testid="knowledge-detail-view" />,
+}))
+
 vi.mock("./SkillsPanel", () => ({
 	default: () => <div data-testid="skills-panel" />,
 }))
@@ -62,10 +71,18 @@ vi.mock("./PlaybookPanel/components/SceneEditPanel", async () => {
 	const React = await import("react")
 
 	return {
-		SceneEditPanel: ({ playbookId, onClose }: { playbookId: string; onClose: () => void }) => {
+		SceneEditPanel: ({
+			playbookId,
+			onClose,
+			readOnly,
+		}: {
+			playbookId: string
+			onClose: () => void
+			readOnly?: boolean
+		}) => {
 			React.useEffect(() => {
-				sceneEditMountSpy(playbookId)
-			}, [])
+				sceneEditMountSpy(playbookId, readOnly)
+			}, [playbookId, readOnly])
 
 			return (
 				<div data-testid="scene-edit-panel">
@@ -83,24 +100,37 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+vi.mock("react-router-dom", () => ({
+	useSearchParams: () => [new URLSearchParams()],
+}))
+
 vi.mock("./IdentityPanel/identity-panel-bg.svg", () => ({
 	default: "identity-panel-bg.svg",
 }))
 
 describe("StepDetailPanel", () => {
+	beforeEach(() => {
+		mockStore.layout.activeDetailKey = "Playbook"
+		mockStore.layout.activePlaybookId = "scene-1"
+		mockStore.conversation.selectedProject.user_role = "owner"
+		sceneEditMountSpy.mockClear()
+		mockStore.layout.closePlaybook.mockClear()
+		mockStore.layout.closePlaybookEditor.mockClear()
+	})
+
 	it("remounts scene editor when active playbook changes", () => {
 		const { rerender } = render(<StepDetailPanel />)
 
 		expect(screen.getByTestId("scene-edit-panel")).toHaveTextContent("scene-1")
 		expect(sceneEditMountSpy).toHaveBeenCalledTimes(1)
-		expect(sceneEditMountSpy).toHaveBeenLastCalledWith("scene-1")
+		expect(sceneEditMountSpy).toHaveBeenLastCalledWith("scene-1", false)
 
 		mockStore.layout.activePlaybookId = "scene-2"
 		rerender(<StepDetailPanel />)
 
 		expect(screen.getByTestId("scene-edit-panel")).toHaveTextContent("scene-2")
 		expect(sceneEditMountSpy).toHaveBeenCalledTimes(2)
-		expect(sceneEditMountSpy).toHaveBeenLastCalledWith("scene-2")
+		expect(sceneEditMountSpy).toHaveBeenLastCalledWith("scene-2", false)
 	})
 
 	it("closes the editor without collapsing the playbook section", () => {
@@ -111,4 +141,25 @@ describe("StepDetailPanel", () => {
 		expect(mockStore.layout.closePlaybookEditor).toHaveBeenCalledTimes(1)
 		expect(mockStore.layout.closePlaybook).not.toHaveBeenCalled()
 	})
+
+	it("passes read-only state to the scene editor for viewers", () => {
+		mockStore.conversation.selectedProject.user_role = "viewer"
+
+		render(<StepDetailPanel />)
+
+		expect(sceneEditMountSpy).toHaveBeenLastCalledWith("scene-1", true)
+	})
+
+	it.each([crewEditStep.RunAndDebug, crewEditStep.Publishing])(
+		"does not render %s for viewers",
+		(step) => {
+			mockStore.layout.activePlaybookId = null
+			mockStore.layout.activeDetailKey = step
+			mockStore.conversation.selectedProject.user_role = "viewer"
+
+			const { container } = render(<StepDetailPanel />)
+
+			expect(container).toBeEmptyDOMElement()
+		},
+	)
 })

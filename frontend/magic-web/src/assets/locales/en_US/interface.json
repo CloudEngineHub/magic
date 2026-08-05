@@ -11,6 +11,7 @@
 			"addProject": "Create New Project",
 			"addTopic": "Add Topic",
 			"addWorkspace": "Add Workspace",
+			"agentUnavailable": "The selected agent is no longer available. Please choose another agent before saving.",
 			"cancel": "Cancel",
 			"clawPromptPlaceholder": "Describe your needs, e.g. \"Organize today's news\".",
 			"clear": "Clear",

@@ -6,7 +6,10 @@ import {
 	MessageEditorStore,
 	MessageEditorStoreProvider,
 } from "@/pages/superMagic/components/MessageEditor/stores"
-import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import {
+	ModelStatusEnum,
+	type ModelItem,
+} from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import type {
 	MessageEditorLayoutConfig,
 	MessageEditorModules,
@@ -21,13 +24,36 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { TopicMode as TopicModeEnum } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
 import { cn } from "@/lib/utils"
 
+type StoredModelItem = Partial<ModelItem> & Pick<ModelItem, "model_id">
+
+function normalizeStoredModel(model: StoredModelItem | null): ModelItem | null {
+	if (!model?.model_id) return null
+
+	return {
+		id: model.id || model.model_id,
+		group_id: model.group_id || "",
+		model_id: model.model_id,
+		model_name: model.model_name || model.model_id,
+		provider_model_id: model.provider_model_id || model.model_id,
+		model_description: model.model_description || "",
+		model_icon: model.model_icon || "",
+		model_status: model.model_status ?? ModelStatusEnum.Normal,
+		sort: model.sort ?? 0,
+		...(model.tags && { tags: model.tags }),
+	}
+}
+
 export type MessageEditorRef = BaseMessageEditorRef & {
 	selectedModel: ModelItem | null
+	selectedImageModel: ModelItem | null
+	selectedVideoModel: ModelItem | null
 	setSelectedModel: (model: ModelItem | null) => void
+	setSelectedImageModel: (model: StoredModelItem | null) => void
+	setSelectedVideoModel: (model: StoredModelItem | null) => void
 	mentionItems: MentionListItem[]
 }
 
@@ -40,6 +66,7 @@ export interface MessageEditorProps {
 	selectedWorkspace?: Workspace | null
 	topicMode?: TopicMode
 	setTopicMode?: (mode: TopicMode) => void
+	agentCode?: string
 	size?: MessageEditorSize
 	modules?: MessageEditorModules
 	layoutConfig?: MessageEditorLayoutConfig
@@ -50,6 +77,8 @@ export interface MessageEditorProps {
 	allowChangeMode?: boolean
 	enableAiCompletion?: boolean
 	selectedModel?: ModelItem | null
+	selectedImageModel?: StoredModelItem | null
+	selectedVideoModel?: StoredModelItem | null
 	value?: JSONContent
 	onChange?: (content: JSONContent | undefined) => void
 }
@@ -71,8 +100,9 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 		selectedTopic = null,
 		selectedProject = null,
 		selectedWorkspace = null,
-		topicMode = TopicModeEnum.General,
+		topicMode,
 		setTopicMode,
+		agentCode,
 		size = "default",
 		modules,
 		layoutConfig,
@@ -83,6 +113,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 		allowChangeMode = true,
 		enableAiCompletion = false,
 		selectedModel: selectedModelProp = null,
+		selectedImageModel: selectedImageModelProp = null,
+		selectedVideoModel: selectedVideoModelProp = null,
 		value,
 		onChange,
 	},
@@ -92,10 +124,23 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 	const [editorStore] = useState(
 		() => new MessageEditorStore({ mentionPanelStore, projectFilesStore }),
 	)
+	const resolvedTopicMode = topicMode ?? getFallbackTopicModeIdentifier()
 
 	useEffect(() => {
 		editorStore.topicModelStore.setSelectedLanguageModel(selectedModelProp)
 	}, [editorStore, selectedModelProp])
+
+	useEffect(() => {
+		editorStore.topicModelStore.setSelectedImageModel(
+			normalizeStoredModel(selectedImageModelProp),
+		)
+	}, [editorStore, selectedImageModelProp])
+
+	useEffect(() => {
+		editorStore.topicModelStore.setSelectedVideoModel(
+			normalizeStoredModel(selectedVideoModelProp),
+		)
+	}, [editorStore, selectedVideoModelProp])
 
 	useEffect(() => {
 		const timer = setTimeout(() => {
@@ -120,8 +165,9 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			selectedTopic,
 			selectedProject,
 			selectedWorkspace,
-			topicMode,
+			topicMode: resolvedTopicMode,
 			setTopicMode,
+			agentCode,
 			size,
 			attachments,
 			mentionPanelStore,
@@ -148,6 +194,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			containerClassName: cn(containerClassName, className),
 		}),
 		[
+			agentCode,
 			allowChangeMode,
 			attachments,
 			className,
@@ -166,7 +213,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			setTopicMode,
 			showModeToggle,
 			size,
-			topicMode,
+			resolvedTopicMode,
 		],
 	)
 
@@ -220,10 +267,30 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 			get selectedModel() {
 				return editorStore.topicModelStore.selectedLanguageModel
 			},
+			get selectedImageModel() {
+				return editorStore.topicModelStore.selectedImageModel
+			},
+			get selectedVideoModel() {
+				return editorStore.topicModelStore.selectedVideoModel
+			},
 			setSelectedModel(model: ModelItem | null) {
 				editorStore.topicModelStore.setSelectedLanguageModel(model)
 				innerRef.current?.setModels({
 					languageModel: model,
+				})
+			},
+			setSelectedImageModel(model: StoredModelItem | null) {
+				const normalizedModel = normalizeStoredModel(model)
+				editorStore.topicModelStore.setSelectedImageModel(normalizedModel)
+				innerRef.current?.setModels({
+					imageModel: normalizedModel,
+				})
+			},
+			setSelectedVideoModel(model: StoredModelItem | null) {
+				const normalizedModel = normalizeStoredModel(model)
+				editorStore.topicModelStore.setSelectedVideoModel(normalizedModel)
+				innerRef.current?.setModels({
+					videoModel: normalizedModel,
 				})
 			},
 			get mentionItems() {
@@ -238,7 +305,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 				{showModeToggle ? (
 					<ModeToggle
 						size={size}
-						topicMode={topicMode}
+						topicMode={resolvedTopicMode}
+						agentCode={agentCode}
 						allowChangeMode={allowChangeMode}
 						onModeChange={setTopicMode}
 					/>

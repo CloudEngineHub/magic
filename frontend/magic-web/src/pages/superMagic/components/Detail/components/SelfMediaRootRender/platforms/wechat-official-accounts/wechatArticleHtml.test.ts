@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { SelfMediaAttachmentNode } from "../../types"
-import { CARD_IMAGE_PROCESS } from "../../constants/imageProcess"
+import { WECHAT_ARTICLE_IMAGE_PROCESS } from "../../constants/imageProcess"
 import { loadWechatArticleHtml } from "./wechatArticleHtml"
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
@@ -87,7 +87,7 @@ describe("loadWechatArticleHtml", () => {
 		expect(result.content).toContain('data-original-path="assets/cover.png"')
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
 			file_ids: ["article-cover"],
-			options: { xMagicImageProcess: CARD_IMAGE_PROCESS },
+			options: { xMagicImageProcess: WECHAT_ARTICLE_IMAGE_PROCESS },
 		})
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
 			file_ids: ["article-css"],

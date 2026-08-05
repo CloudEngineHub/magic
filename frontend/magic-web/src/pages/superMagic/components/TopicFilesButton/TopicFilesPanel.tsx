@@ -405,29 +405,35 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		// 处理添加文件功能 - 打开创建文件菜单
 		const handleAddFile = (extraType?: PresetFileType) => {
+			if (!allowEdit) return
 			// 触发第一个文件创建选项（txt）
 			coreRef.current?.createVirtualFile(extraType || "txt")
 		}
 
 		const handleAddDesign = () => {
+			if (!allowEdit) return
 			coreRef.current?.createDesignProject()
 		}
 
 		const handleAddSelfMedia = () => {
+			if (!allowEdit) return
 			coreRef.current?.createSelfMediaProject()
 		}
 
 		const handleAddAICard = () => {
+			if (!allowEdit) return
 			coreRef.current?.createAICardProject()
 		}
 
 		// 处理添加文件夹功能
 		const handleAddFolder = () => {
+			if (!allowEdit) return
 			coreRef.current?.createVirtualFolder()
 		}
 
 		// 处理从其他项目导入
 		const handleImportFromOtherProject = () => {
+			if (!allowEdit) return
 			coreRef.current?.handleImportFromOtherProject()
 		}
 
@@ -518,9 +524,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		useImperativeHandle(ref, () => ({
 			addFile: handleAddFile,
 			addFolder: handleAddFolder,
-			uploadFile: handleCustomUploadFile,
-			uploadFolder: handleCustomUploadFolder,
+			uploadFile: handleUploadFile,
+			uploadFolder: handleUploadFolder,
 			openBatchMoveByFileIds: (fileIds: string[]) => {
+				if (!allowEdit) return
 				if (shouldUseProjectDetailMobileView) {
 					projectDetailFilesController.batchMoveByFileIds(fileIds)
 					return
@@ -548,9 +555,17 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							setUserSelectDetail={setUserSelectDetail}
 							onFileOpen={onFileClick}
 							onSelectionModeChange={setIsSelectMode}
-							onCreateFile={projectDetailFilesController.createFile}
-							onCreateFolder={projectDetailFilesController.createFolder}
-							onUploadFile={projectDetailFilesController.handleCustomUploadFile}
+							onCreateFile={
+								allowEdit ? projectDetailFilesController.createFile : undefined
+							}
+							onCreateFolder={
+								allowEdit ? projectDetailFilesController.createFolder : undefined
+							}
+							onUploadFile={
+								allowEdit
+									? projectDetailFilesController.handleCustomUploadFile
+									: undefined
+							}
 							allowDownload={mobileProjectFilesDownload.allowDownload}
 							getSingleFileDownloadMenuItems={
 								mobileProjectFilesDownload.getSingleFileDownloadMenuItems

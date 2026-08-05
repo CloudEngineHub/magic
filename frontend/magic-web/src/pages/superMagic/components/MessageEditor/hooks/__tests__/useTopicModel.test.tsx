@@ -37,6 +37,7 @@ describe("useTopicModel", () => {
 		selectedImageModel: null,
 		selectedVideoModel: null,
 		isLoading: false,
+		isLanguageModelReady: false,
 		currentTopicId: "default",
 		currentProjectId: "",
 		currentTopicMode: defaultTopicMode,
