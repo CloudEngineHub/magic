@@ -6,6 +6,7 @@ import { useMemoizedFn, useSize } from "ahooks"
 import Detail from "@/pages/superMagic/components/Detail"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
@@ -18,6 +19,7 @@ import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
+import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 
 import MicroAppDesktopConversationPanels from "./components/MicroAppDesktopConversationPanels"
 import MicroAppHeader from "./components/MicroAppHeader"
@@ -179,6 +181,16 @@ function MicroAppPageInner({
 	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
 		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
+	})
+	/** 微应用的长期记忆占满主工作区，文件点击使用弹窗预览，避免打开到不可见的 FilesViewer。 */
+	const handleLongMemoryFileClick = useMemoizedFn((fileItem: AttachmentItem) => {
+		if (!fileItem.file_id || fileItem.is_directory) return
+		setPreviewDetail({
+			type: getFileType(fileItem.file_extension || ""),
+			currentFileId: String(fileItem.file_id),
+			// 保留记忆 scope、项目 ID 和文件 key，确保预览与编辑都使用记忆文件空间。
+			data: fileItem,
+		} as PreviewDetail)
 	})
 
 	useMicroAppMessageFileOpen({
@@ -411,6 +423,7 @@ function MicroAppPageInner({
 							workspaceName={selectedProject?.workspace_name}
 							projectName={selectedProject?.project_name}
 							topicId={selectedTopic?.id}
+							onLongMemoryFileClick={handleLongMemoryFileClick}
 						/>
 					</main>
 
