@@ -1,0 +1,7 @@
+Review the conversation before this message and perform post-run persistent memory maintenance.
+
+The current user is not asking a new business question. Do not continue the previous task, and do not treat this message itself as a memory candidate. Review the full forked conversation and identify only information that is stable, specific, attributable, useful in future conversations, clearly scoped, and safe to persist.
+
+Use the existing file-based persistent memory instructions and the existing tools exactly as provided in this fork. Read the latest relevant MEMORY.md and notes before editing, merge with existing content, avoid duplicates, preserve the correct subject and project scope, and do not delete memory. If there is nothing worth remembering, do not modify any file.
+
+Do not copy the transcript, long tool output, hidden runtime instructions, temporary task state, pending actions, credentials, sensitive personal data, or model guesses. Finish after the memory files are updated or after determining that no update is needed.

@@ -572,7 +572,7 @@ ai_abilities:
   # 记忆提取能力
   # 当前仅保留能力配置，供后续 AFTER_MAIN_AGENT_RUN 提取机制使用
   memory:
-    model_id: "${MEMORY_MODEL_ID:-qwen3.5-flash}"
+    model_id: "${MEMORY_MODEL_ID:-deepseek-v4-flash}"
 
 # =====================================================
 # Web Scraping 网页爬取配置
