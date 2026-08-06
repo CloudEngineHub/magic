@@ -38,36 +38,36 @@ function UploadFileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeV
 	return (
 		<NodeViewWrapper
 			as="span"
+			// The atomic wrapper only defines the ProseMirror boundary. Visual padding on this
+			// element makes the native caret appear inside the mention background at line end.
 			className={cn(
-				"magic-mention relative inline-flex max-w-full px-0.5 align-middle",
-				!isMobile && isUploading && "!bg-muted !text-muted-foreground",
-				!isMobile && isError && "!bg-destructive/10 !text-destructive",
-				!isMobile && selected && "ring-1 ring-primary/40",
+				"magic-mention relative !inline-flex max-w-full !overflow-visible !bg-transparent !p-0",
+				isMobile ? "align-middle" : "!align-baseline",
 			)}
 			contentEditable={false}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
 			onMouseDown={handleMouseDown}
 		>
-			{!isMobile && isUploading && (
-				<span
-					className="pointer-events-none absolute inset-y-0 left-0 bg-primary/15 transition-[width] duration-200 ease-out"
-					style={{ width: `${progress}%` }}
-					data-testid="upload-file-mention-progress-background"
-				/>
-			)}
 			<span
 				className={cn(
-					"relative z-10 inline-flex min-w-0 max-w-[220px] items-baseline gap-1 overflow-hidden text-foreground",
-					isMobile && "mb-1 items-center rounded-full bg-muted py-0.5 pl-2 pr-1 text-sm",
-					!isMobile && isUploading && "text-muted-foreground",
-					selected && isMobile && "ring-1 ring-primary/40",
-					isError && (isMobile ? "bg-destructive/10" : "text-destructive"),
+					"relative inline-flex min-w-0 max-w-[220px] gap-1 overflow-hidden",
+					isMobile &&
+						"mb-1 items-center rounded-full bg-muted py-0.5 pl-2 pr-1 text-sm text-foreground",
+					!isMobile &&
+						"h-[18px] items-center rounded bg-primary-10 px-1 leading-none text-primary",
+					!isMobile && isUploading && "bg-muted text-muted-foreground",
+					selected && "ring-1 ring-primary/40",
+					isError && "bg-destructive/10 text-destructive",
 				)}
+				data-testid="upload-file-mention-visual"
 			>
-				{isMobile && isUploading && (
+				{isUploading && (
 					<span
-						className="absolute inset-y-0 left-0 bg-primary/10 transition-[width] duration-200 ease-out"
+						className={cn(
+							"pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-200 ease-out",
+							isMobile ? "bg-primary/10" : "bg-primary/15",
+						)}
 						style={{ width: `${progress}%` }}
 						data-testid="upload-file-mention-progress-background"
 					/>

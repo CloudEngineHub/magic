@@ -77,7 +77,23 @@ describe("UploadFileMentionNodeView", () => {
 
 		const fileName = screen.getByText("@demo.mov")
 		expect(fileName).toBeInTheDocument()
-		expect(fileName.closest(".magic-mention")).toHaveClass("!bg-muted")
+		const mention = fileName.closest(".magic-mention")
+		const visual = screen.getByTestId("upload-file-mention-visual")
+		expect(mention).toHaveClass(
+			"!inline-flex",
+			"!overflow-visible",
+			"!bg-transparent",
+			"!p-0",
+			"!align-baseline",
+		)
+		expect(visual).toHaveClass(
+			"h-[18px]",
+			"items-center",
+			"overflow-hidden",
+			"rounded",
+			"bg-muted",
+			"leading-none",
+		)
 		expect(screen.getByTestId("upload-file-mention-progress")).toHaveTextContent("42%")
 		expect(screen.getByTestId("upload-file-mention-progress-background")).toHaveStyle({
 			width: "42%",
@@ -96,7 +112,10 @@ describe("UploadFileMentionNodeView", () => {
 
 		const mention = screen.getByText("@demo.mov").closest(".magic-mention")
 		expect(mention).toHaveClass("magic-mention")
-		expect(mention).not.toHaveClass("!bg-muted")
+		expect(screen.getByTestId("upload-file-mention-visual")).toHaveClass(
+			"bg-primary-10",
+			"text-primary",
+		)
 		expect(screen.queryByTestId("upload-file-mention-progress")).not.toBeInTheDocument()
 		expect(
 			screen.queryByTestId("upload-file-mention-progress-background"),
