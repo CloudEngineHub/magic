@@ -134,7 +134,7 @@ class AgentService(Base):
             logger.info(f"已更新本地项目存档信息文件: {project_archive_info_file}")
         return True
 
-    async def download_and_extract_workspace(self, agent_context: AgentContext) -> None:
+    async def download_and_extract_chat_history_and_checkpoints(self, agent_context: AgentContext) -> None:
         """
         Download and extract workspace with separated archive support
 
@@ -484,7 +484,7 @@ class AgentService(Base):
         await StorageFactory.get_storage(sts_token_refresh=sts_token_refresh, metadata=metadata, platform=platform_type)
 
         if fetch_history:
-            await self.download_and_extract_workspace(agent_context)
+            await self.download_and_extract_chat_history_and_checkpoints(agent_context)
         else:
             logger.info("fetch_history disabled, skip downloading remote chat history and checkpoints")
 
