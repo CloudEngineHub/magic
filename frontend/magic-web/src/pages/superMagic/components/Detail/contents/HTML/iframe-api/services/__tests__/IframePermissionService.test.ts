@@ -117,7 +117,6 @@ describe("IframePermissionService", () => {
 		expect(confirmPermission).toHaveBeenCalledTimes(1)
 		expect(grantStore.save).toHaveBeenCalledTimes(1)
 		expect(grantStore.getAppGrants).toHaveBeenCalled()
-		expect(grantStore.list).not.toHaveBeenCalled()
 	})
 
 	it("prompts legacy apps with bounded ttl options", async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
 		deleteAccountStore: vi.fn(),
 		logout: vi.fn(),
 		setClusterCode: vi.fn(),
+		clearHtmlPermissionGrants: vi.fn(),
 		userStore: {
 			user: {
 				setAuthorization: vi.fn(),
@@ -64,6 +65,15 @@ vi.mock("@/utils/log", () => ({
 	},
 }))
 
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/HtmlPermissionGrantStore",
+	() => ({
+		LocalStorageHtmlPermissionGrantStore: vi.fn().mockImplementation(() => ({
+			clear: mocks.clearHtmlPermissionGrants,
+		})),
+	}),
+)
+
 import { AccountService } from "../AccountService"
 
 describe("AccountService.deleteAccount", () => {
@@ -99,6 +109,7 @@ describe("AccountService.deleteAccount", () => {
 		expect(mocks.setAuthorization).toHaveBeenCalledWith("")
 		expect(mocks.userStore.user.setAuthorization).toHaveBeenCalledWith(null)
 		expect(mocks.clearAccount).toHaveBeenCalled()
+		expect(mocks.clearHtmlPermissionGrants).toHaveBeenCalledTimes(1)
 	})
 
 	it("clears current cluster after removing the last cached account", async () => {
@@ -123,5 +134,23 @@ describe("AccountService.deleteAccount", () => {
 		expect(mocks.deleteAccountStore).toHaveBeenCalledWith("current-account")
 		expect(mocks.setClusterCode).toHaveBeenCalledWith("")
 		expect(mocks.clearAccount).toHaveBeenCalled()
+		expect(mocks.clearHtmlPermissionGrants).toHaveBeenCalledTimes(1)
+	})
+
+	it("clears permission grants when removing a cached account without switching accounts", async () => {
+		mocks.userStore.account.accounts = [
+			{ magic_id: "current-account" },
+			{ magic_id: "other-account" },
+		]
+		mocks.deleteAccountStore.mockImplementation(() => {
+			mocks.userStore.account.accounts = [{ magic_id: "current-account" }]
+		})
+		const service = { get: vi.fn() }
+		const accountService = new AccountService({} as never, service as never)
+
+		await accountService.deleteAccount("other-account")
+
+		expect(mocks.clearHtmlPermissionGrants).toHaveBeenCalledTimes(1)
+		expect(service.get).not.toHaveBeenCalled()
 	})
 })

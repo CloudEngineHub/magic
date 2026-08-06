@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { HTML_PERMISSION_GRANTS_CHANGED_EVENT } from "../../iframe-api/services/HtmlPermissionGrantStore"
 import { useHtmlAppPermissions } from "../useHtmlAppPermissions"
 
 const mocks = vi.hoisted(() => ({
@@ -166,6 +167,26 @@ describe("useHtmlAppPermissions", () => {
 					newValue: "[]",
 				}),
 			)
+		})
+
+		await waitFor(() => {
+			expect(result.current.permissionRevision).not.toBe(initialRevision)
+		})
+	})
+
+	it("refreshes the permission revision when the current tab clears local grants", async () => {
+		const { result } = renderHook(() =>
+			useHtmlAppPermissions({
+				content: "<html></html>",
+				relativeFilePath: "app/index.html",
+				projectId: "project-1",
+				fileList: [],
+			}),
+		)
+		const initialRevision = result.current.permissionRevision
+
+		act(() => {
+			window.dispatchEvent(new Event(HTML_PERMISSION_GRANTS_CHANGED_EVENT))
 		})
 
 		await waitFor(() => {

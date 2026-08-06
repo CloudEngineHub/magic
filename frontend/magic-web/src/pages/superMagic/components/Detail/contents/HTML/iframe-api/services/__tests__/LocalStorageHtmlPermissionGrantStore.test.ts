@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { htmlMicroAppPreviewLogger } from "../../../utils/htmlMicroAppPreviewLogger"
 import {
 	createHtmlPermissionAppKey,
+	HTML_PERMISSION_GRANTS_CHANGED_EVENT,
 	LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
 	LocalStorageHtmlPermissionGrantStore,
 	MAX_HTML_PERMISSION_GRANTS,
@@ -39,14 +40,13 @@ function persistGrants(grants: HtmlPermissionGrant[]) {
 	const apps: Record<
 		string,
 		{
-			identity: HtmlPermissionGrantIdentity
 			grants: Record<string, { grantedAt: number; expiresAt: number | null }>
 		}
 	> = {}
 	for (const item of grants) {
 		const identity = toIdentity(item)
 		const appKey = createHtmlPermissionAppKey(identity)
-		const app = apps[appKey] || { identity, grants: {} }
+		const app = apps[appKey] || { grants: {} }
 		app.grants[item.scope] = { grantedAt: item.grantedAt, expiresAt: item.expiresAt }
 		apps[appKey] = app
 	}
@@ -54,6 +54,18 @@ function persistGrants(grants: HtmlPermissionGrant[]) {
 		LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
 		JSON.stringify({ version: 2, apps }),
 	)
+}
+
+function readStoredApps() {
+	return JSON.parse(
+		localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) || "{}",
+	) as {
+		version: 2
+		apps: Record<
+			string,
+			{ grants: Record<string, { grantedAt: number; expiresAt: number | null }> }
+		>
+	}
 }
 
 describe("LocalStorageHtmlPermissionGrantStore", () => {
@@ -86,6 +98,20 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 		expect(createHtmlPermissionAppKey(identity)).toBe(appKey)
 	})
 
+	it("does not persist plaintext grant identity", () => {
+		const item = grant()
+		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
+
+		store.save(item)
+
+		const raw = localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) || ""
+		expect(raw).not.toContain(item.userId)
+		expect(raw).not.toContain(item.projectId)
+		expect(raw).not.toContain(item.appRootDir)
+		expect(raw).not.toContain(item.entryPath)
+		expect(raw).not.toContain(item.appFingerprint)
+	})
+
 	it("removes one scope or all scopes for one app without affecting another app", () => {
 		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
 		const firstIdentity = toIdentity(grant())
@@ -103,30 +129,6 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 		store.remove(firstIdentity)
 		expect(store.getAppGrants(firstIdentity)).toEqual([])
 		expect(store.getAppGrants(toIdentity(otherAppGrant))).toEqual([otherAppGrant])
-	})
-
-	it("removes matching scopes or apps by partial identity", () => {
-		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
-		const firstAppGrant = grant({ scope: "llm.use" })
-		const firstAppMessageGrant = grant({ scope: "project.message.write" })
-		const secondAppGrant = grant({ entryPath: "second/index.html" })
-		const otherProjectGrant = grant({
-			projectId: "project-2",
-			entryPath: "other/index.html",
-		})
-		store.save(firstAppGrant)
-		store.save(firstAppMessageGrant)
-		store.save(secondAppGrant)
-		store.save(otherProjectGrant)
-
-		store.remove({ projectId: "project-1" }, "llm.use")
-		expect(store.getAppGrants(toIdentity(firstAppGrant))).toEqual([firstAppMessageGrant])
-		expect(store.getAppGrants(toIdentity(secondAppGrant))).toEqual([])
-		expect(store.getAppGrants(toIdentity(otherProjectGrant))).toEqual([otherProjectGrant])
-
-		store.remove({ projectId: "project-1" })
-		expect(store.getAppGrants(toIdentity(firstAppGrant))).toEqual([])
-		expect(store.getAppGrants(toIdentity(otherProjectGrant))).toEqual([otherProjectGrant])
 	})
 
 	it("reads one app through its index without writing unchanged data", () => {
@@ -147,7 +149,6 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 			localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) || "{}",
 		) as { apps: Record<string, unknown> }
 		stored.apps.invalid = {
-			identity: toIdentity(grant({ entryPath: "invalid/index.html" })),
 			grants: { "future.scope": { grantedAt: 1000, expiresAt: 3000 } },
 		}
 		localStorage.setItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY, JSON.stringify(stored))
@@ -156,7 +157,7 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 		expect(store.getAppGrants(toIdentity(firstAppGrant))).toEqual([firstAppGrant])
 		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).not.toBeNull()
 
-		expect(store.list()).toEqual([])
+		store.prune(1000)
 		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).toBeNull()
 	})
 
@@ -172,14 +173,16 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 			grant({ scope: "project.message.write", expiresAt: 2500 }),
 			grant({ scope: "user.profile.name", expiresAt: null }),
 		])
-		expect(store.list()).toHaveLength(2)
+		expect(
+			Object.values(readStoredApps().apps).flatMap((app) => Object.values(app.grants)),
+		).toHaveLength(2)
 	})
 
 	it("clears corrupted or structurally invalid stored data", () => {
 		localStorage.setItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY, "{bad json")
 		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
 
-		expect(store.list()).toEqual([])
+		store.prune(1000)
 		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).toBeNull()
 
 		localStorage.setItem(
@@ -194,7 +197,30 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 				},
 			}),
 		)
-		expect(store.list()).toEqual([])
+		store.prune(1000)
+		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).toBeNull()
+	})
+
+	it("discards the previous v2 shape containing plaintext identity", () => {
+		const item = grant()
+		const identity = toIdentity(item)
+		localStorage.setItem(
+			LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
+			JSON.stringify({
+				version: 2,
+				apps: {
+					[createHtmlPermissionAppKey(identity)]: {
+						identity,
+						grants: {
+							[item.scope]: { grantedAt: item.grantedAt, expiresAt: item.expiresAt },
+						},
+					},
+				},
+			}),
+		)
+		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
+
+		expect(store.getAppGrants(identity)).toEqual([])
 		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).toBeNull()
 	})
 
@@ -214,10 +240,14 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 
 		store.save(grant({ entryPath: "app/new.html", grantedAt: 2000, expiresAt: null }))
 
-		const stored = store.list()
-		expect(stored).toHaveLength(MAX_HTML_PERMISSION_GRANTS)
-		expect(stored.some((item) => item.entryPath === "app/0.html")).toBe(false)
-		expect(stored.some((item) => item.entryPath === "app/new.html")).toBe(true)
+		const stored = readStoredApps()
+		expect(Object.keys(stored.apps)).toHaveLength(MAX_HTML_PERMISSION_GRANTS)
+		expect(stored.apps[createHtmlPermissionAppKey(toIdentity(grants[0]))]).toBeUndefined()
+		expect(
+			stored.apps[
+				createHtmlPermissionAppKey(toIdentity(grant({ entryPath: "app/new.html" })))
+			],
+		).toBeDefined()
 		expect(warning).toHaveBeenCalledWith("Permission grant limit exceeded", {
 			limit: MAX_HTML_PERMISSION_GRANTS,
 			evictedCount: 1,
@@ -234,10 +264,27 @@ describe("LocalStorageHtmlPermissionGrantStore", () => {
 
 		store.save(grant({ entryPath: "app/new.html", grantedAt: 2000, expiresAt: null }))
 
-		const stored = store.list()
-		expect(stored).toHaveLength(MAX_HTML_PERMISSION_GRANTS)
-		expect(stored.some((item) => item.entryPath === "app/0.html")).toBe(false)
-		expect(stored.some((item) => item.entryPath === "app/new.html")).toBe(true)
+		const stored = readStoredApps()
+		expect(Object.keys(stored.apps)).toHaveLength(MAX_HTML_PERMISSION_GRANTS)
+		expect(stored.apps[createHtmlPermissionAppKey(toIdentity(grants[0]))]).toBeUndefined()
+		expect(
+			stored.apps[
+				createHtmlPermissionAppKey(toIdentity(grant({ entryPath: "app/new.html" })))
+			],
+		).toBeDefined()
+	})
+
+	it("clears grants and notifies the current tab", () => {
+		const store = new LocalStorageHtmlPermissionGrantStore(undefined, () => 1000)
+		const listener = vi.fn()
+		window.addEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, listener)
+		store.save(grant())
+
+		store.clear()
+
+		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)).toBeNull()
+		expect(listener).toHaveBeenCalledTimes(1)
+		window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, listener)
 	})
 
 	it("clears old grants without blocking the current call when persistence fails", () => {

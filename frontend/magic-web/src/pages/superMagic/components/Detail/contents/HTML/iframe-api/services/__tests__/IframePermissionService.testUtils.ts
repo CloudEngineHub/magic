@@ -33,10 +33,6 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 				isHtmlPermissionGrantActive(grant, this.getNow()),
 		)
 	})
-	list = vi.fn(() => {
-		this.removeExpired(this.getNow())
-		return [...this.grants]
-	})
 	save = vi.fn((grant: HtmlPermissionGrant) => {
 		this.grants = this.grants.filter(
 			(item) =>
@@ -52,17 +48,17 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 		)
 		this.grants.push(grant)
 	})
-	remove = vi.fn(
-		(identity: Partial<HtmlPermissionGrantIdentity>, scope?: HtmlPermissionScope) => {
-			this.grants = this.grants.filter(
-				(grant) =>
-					!matchesPartialIdentity(grant, identity) ||
-					(scope !== undefined && grant.scope !== scope),
-			)
-		},
-	)
+	remove = vi.fn((identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope) => {
+		this.grants = this.grants.filter(
+			(grant) =>
+				!matchesIdentity(grant, identity) || (scope !== undefined && grant.scope !== scope),
+		)
+	})
 	prune = vi.fn((now: number) => {
 		this.removeExpired(now)
+	})
+	clear = vi.fn(() => {
+		this.grants = []
 	})
 
 	private removeExpired(now: number) {
@@ -78,20 +74,6 @@ function matchesIdentity(grant: HtmlPermissionGrant, identity: HtmlPermissionGra
 		grant.appRootDir === identity.appRootDir &&
 		grant.entryPath === identity.entryPath &&
 		grant.appFingerprint === identity.appFingerprint
-	)
-}
-
-function matchesPartialIdentity(
-	grant: HtmlPermissionGrant,
-	identity: Partial<HtmlPermissionGrantIdentity>,
-) {
-	return (
-		(identity.mode === undefined || grant.mode === identity.mode) &&
-		(identity.userId === undefined || grant.userId === identity.userId) &&
-		(identity.projectId === undefined || grant.projectId === identity.projectId) &&
-		(identity.appRootDir === undefined || grant.appRootDir === identity.appRootDir) &&
-		(identity.entryPath === undefined || grant.entryPath === identity.entryPath) &&
-		(identity.appFingerprint === undefined || grant.appFingerprint === identity.appFingerprint)
 	)
 }
 

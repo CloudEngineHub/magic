@@ -14,6 +14,7 @@ import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
 import {
+	HTML_PERMISSION_GRANTS_CHANGED_EVENT,
 	LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
 	LocalStorageHtmlPermissionGrantStore,
 } from "../iframe-api/services/HtmlPermissionGrantStore"
@@ -261,13 +262,18 @@ export function useHtmlAppPermissions({
 	}, [htmlPermissionGrantStore])
 
 	useEffect(() => {
-		// storage 只通知其他标签页；当前标签页的增删改由 onGrantsChanged 同步 revision。
+		// storage 只通知其他标签页；退出清理由业务服务通过自定义事件通知当前标签页。
 		const handlePermissionStorageChange = (event: StorageEvent) => {
 			if (event.key !== LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) return
 			notifyGrantsChanged()
 		}
+		const handlePermissionChange = () => notifyGrantsChanged()
 		window.addEventListener("storage", handlePermissionStorageChange)
-		return () => window.removeEventListener("storage", handlePermissionStorageChange)
+		window.addEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+		return () => {
+			window.removeEventListener("storage", handlePermissionStorageChange)
+			window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+		}
 	}, [notifyGrantsChanged])
 
 	const htmlPermissionService = useMemo(

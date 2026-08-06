@@ -4,6 +4,7 @@ import type { HtmlPermissionScope } from "../types"
 import { isSupportedHtmlPermissionScope } from "./htmlPermissionPolicy"
 
 export const LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY = "magic:html-app-permissions:v2"
+export const HTML_PERMISSION_GRANTS_CHANGED_EVENT = "magic:html-app-permissions:changed"
 export const MAX_HTML_PERMISSION_GRANTS = 1000
 
 export interface HtmlPermissionGrantIdentity {
@@ -27,7 +28,6 @@ interface StoredHtmlPermissionGrant {
 }
 
 interface StoredHtmlPermissionApp {
-	identity: HtmlPermissionGrantIdentity
 	grants: Partial<Record<HtmlPermissionScope, StoredHtmlPermissionGrant>>
 }
 
@@ -47,10 +47,10 @@ export interface HtmlPermissionGrantStore {
 		scope: HtmlPermissionScope,
 	): HtmlPermissionGrant | undefined
 	getAppGrants(identity: HtmlPermissionGrantIdentity): HtmlPermissionGrant[]
-	list(): HtmlPermissionGrant[]
 	save(grant: HtmlPermissionGrant): void
-	remove(identity: Partial<HtmlPermissionGrantIdentity>, scope?: HtmlPermissionScope): void
+	remove(identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope): void
 	prune(now: number): void
+	clear(): void
 }
 
 export function isHtmlPermissionGrantActive(grant: HtmlPermissionGrant, now: number): boolean {
@@ -69,19 +69,6 @@ export function createHtmlPermissionAppKey(identity: HtmlPermissionGrantIdentity
 	return sha256(source).toString()
 }
 
-function isValidIdentity(value: unknown): value is HtmlPermissionGrantIdentity {
-	if (!isRecord(value)) return false
-	const identity = value as Record<string, unknown>
-	return (
-		(identity.mode === "manifest" || identity.mode === "legacy") &&
-		typeof identity.userId === "string" &&
-		typeof identity.projectId === "string" &&
-		typeof identity.appRootDir === "string" &&
-		typeof identity.entryPath === "string" &&
-		typeof identity.appFingerprint === "string"
-	)
-}
-
 function isValidStoredGrant(value: unknown): value is StoredHtmlPermissionGrant {
 	if (!isRecord(value)) return false
 	const grant = value as Record<string, unknown>
@@ -96,7 +83,8 @@ function isValidStoredGrant(value: unknown): value is StoredHtmlPermissionGrant 
 function isValidStoredApp(value: unknown): value is StoredHtmlPermissionApp {
 	if (!isRecord(value)) return false
 	const app = value as Record<string, unknown>
-	if (!isValidIdentity(app.identity) || !isRecord(app.grants)) {
+	// The previous v2 shape stored identity in plaintext. Reject it instead of migrating sensitive data.
+	if ("identity" in app || !isRecord(app.grants)) {
 		return false
 	}
 	return Object.entries(app.grants).every(
@@ -113,52 +101,15 @@ function isValidStoredDataHeader(value: unknown): value is StoredHtmlPermissionD
 function isValidStoredData(value: unknown): value is StoredHtmlPermissionData {
 	if (!isValidStoredDataHeader(value)) return false
 	const data = value as StoredHtmlPermissionDataHeader
-	return Object.entries(data.apps).every(
-		([appKey, app]) =>
-			isValidStoredApp(app) && createHtmlPermissionAppKey(app.identity) === appKey,
-	)
+	return Object.values(data.apps).every(isValidStoredApp)
+}
+
+function containsPlaintextIdentity(data: StoredHtmlPermissionDataHeader): boolean {
+	return Object.values(data.apps).some((app) => isRecord(app) && "identity" in app)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-function identitiesEqual(a: HtmlPermissionGrantIdentity, b: HtmlPermissionGrantIdentity) {
-	return (
-		a.mode === b.mode &&
-		a.userId === b.userId &&
-		a.projectId === b.projectId &&
-		a.appRootDir === b.appRootDir &&
-		a.entryPath === b.entryPath &&
-		a.appFingerprint === b.appFingerprint
-	)
-}
-
-function isCompleteIdentity(
-	identity: Partial<HtmlPermissionGrantIdentity>,
-): identity is HtmlPermissionGrantIdentity {
-	return (
-		(identity.mode === "manifest" || identity.mode === "legacy") &&
-		typeof identity.userId === "string" &&
-		typeof identity.projectId === "string" &&
-		typeof identity.appRootDir === "string" &&
-		typeof identity.entryPath === "string" &&
-		typeof identity.appFingerprint === "string"
-	)
-}
-
-function identityMatches(
-	identity: HtmlPermissionGrantIdentity,
-	match: Partial<HtmlPermissionGrantIdentity>,
-): boolean {
-	return (
-		(match.mode === undefined || identity.mode === match.mode) &&
-		(match.userId === undefined || identity.userId === match.userId) &&
-		(match.projectId === undefined || identity.projectId === match.projectId) &&
-		(match.appRootDir === undefined || identity.appRootDir === match.appRootDir) &&
-		(match.entryPath === undefined || identity.entryPath === match.entryPath) &&
-		(match.appFingerprint === undefined || identity.appFingerprint === match.appFingerprint)
-	)
 }
 
 function getStoredGrantEntries(
@@ -181,10 +132,10 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		const data = this.readData(false)
 		const appKey = createHtmlPermissionAppKey(identity)
 		const app = this.getValidatedApp(data, appKey)
-		if (!app || !identitiesEqual(app.identity, identity)) return undefined
+		if (!app) return undefined
 		const storedGrant = app.grants[scope]
 		if (!storedGrant) return undefined
-		const grant = this.toGrant(app.identity, scope, storedGrant)
+		const grant = this.toGrant(identity, scope, storedGrant)
 		if (isHtmlPermissionGrantActive(grant, this.getNow())) return grant
 
 		delete app.grants[scope]
@@ -197,13 +148,13 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		const data = this.readData(false)
 		const appKey = createHtmlPermissionAppKey(identity)
 		const app = this.getValidatedApp(data, appKey)
-		if (!app || !identitiesEqual(app.identity, identity)) return []
+		if (!app) return []
 
 		const grants: HtmlPermissionGrant[] = []
 		const now = this.getNow()
 		let changed = false
 		for (const [scope, storedGrant] of getStoredGrantEntries(app)) {
-			const grant = this.toGrant(app.identity, scope, storedGrant)
+			const grant = this.toGrant(identity, scope, storedGrant)
 			if (isHtmlPermissionGrantActive(grant, now)) grants.push(grant)
 			else {
 				delete app.grants[scope]
@@ -218,41 +169,12 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		return grants
 	}
 
-	list(): HtmlPermissionGrant[] {
-		const data = this.readData()
-		const grants: HtmlPermissionGrant[] = []
-		const now = this.getNow()
-		let changed = false
-		for (const [appKey, app] of Object.entries(data.apps)) {
-			for (const [scope, storedGrant] of getStoredGrantEntries(app)) {
-				const grant = this.toGrant(app.identity, scope, storedGrant)
-				if (isHtmlPermissionGrantActive(grant, now)) grants.push(grant)
-				else {
-					delete app.grants[scope]
-					changed = true
-				}
-			}
-			if (Object.keys(app.grants).length === 0) {
-				delete data.apps[appKey]
-				changed = true
-			}
-		}
-		if (changed) this.write(data)
-		return grants
-	}
-
 	save(grant: HtmlPermissionGrant): void {
 		const data = this.readData()
 		const now = this.getNow()
 		this.removeExpiredFromData(data, now)
 		const appKey = createHtmlPermissionAppKey(grant)
-		const existingApp = data.apps[appKey]
-		if (existingApp && !identitiesEqual(existingApp.identity, grant)) {
-			htmlMicroAppPreviewLogger.error("Permission app key collision", { appKey })
-			return
-		}
-		const app = existingApp || { identity: this.toIdentity(grant), grants: {} }
-		app.identity = this.toIdentity(grant)
+		const app = data.apps[appKey] || { grants: {} }
 		app.grants[grant.scope] = {
 			grantedAt: grant.grantedAt,
 			expiresAt: grant.expiresAt,
@@ -262,23 +184,18 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		this.write(data)
 	}
 
-	remove(identity: Partial<HtmlPermissionGrantIdentity>, scope?: HtmlPermissionScope): void {
+	remove(identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope): void {
 		const data = this.readData()
-		const appKeys = isCompleteIdentity(identity)
-			? [createHtmlPermissionAppKey(identity)]
-			: Object.entries(data.apps)
-					.filter(([, app]) => identityMatches(app.identity, identity))
-					.map(([appKey]) => appKey)
+		const appKey = createHtmlPermissionAppKey(identity)
+		const app = data.apps[appKey]
+		if (!app) return
 		let changed = false
-		for (const appKey of appKeys) {
-			const app = data.apps[appKey]
-			if (!app || !identityMatches(app.identity, identity)) continue
-			if (scope) {
-				if (!app.grants[scope]) continue
-				delete app.grants[scope]
-			} else {
-				delete data.apps[appKey]
-			}
+		if (scope) {
+			if (!app.grants[scope]) return
+			delete app.grants[scope]
+			changed = true
+		} else {
+			delete data.apps[appKey]
 			changed = true
 		}
 		if (scope && changed) {
@@ -292,15 +209,21 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		if (this.removeExpiredFromData(data, now)) this.write(data)
 	}
 
+	clear(): void {
+		this.clearStorage()
+		this.notifySameTabChange()
+	}
+
 	private readData(validateAllApps = true): StoredHtmlPermissionData {
 		try {
 			const raw = globalThis.localStorage?.getItem(this.storageKey)
 			if (!raw) return { version: 2, apps: {} }
 			const parsed = JSON.parse(raw)
-			const valid = validateAllApps
-				? isValidStoredData(parsed)
-				: isValidStoredDataHeader(parsed)
-			if (!valid) {
+			if (!isValidStoredDataHeader(parsed) || containsPlaintextIdentity(parsed)) {
+				this.discardCorruptedStorage()
+				return { version: 2, apps: {} }
+			}
+			if (validateAllApps && !isValidStoredData(parsed)) {
 				this.discardCorruptedStorage()
 				return { version: 2, apps: {} }
 			}
@@ -320,7 +243,7 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 	): StoredHtmlPermissionApp | undefined {
 		const app = data.apps[appKey]
 		if (app === undefined) return undefined
-		if (!isValidStoredApp(app) || createHtmlPermissionAppKey(app.identity) !== appKey) {
+		if (!isValidStoredApp(app)) {
 			this.discardCorruptedStorage()
 			return undefined
 		}
@@ -331,8 +254,7 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		let changed = false
 		for (const [appKey, app] of Object.entries(data.apps)) {
 			for (const [scope, storedGrant] of getStoredGrantEntries(app)) {
-				const grant = this.toGrant(app.identity, scope, storedGrant)
-				if (!isHtmlPermissionGrantActive(grant, now)) {
+				if (storedGrant.expiresAt !== null && storedGrant.expiresAt <= now) {
 					delete app.grants[scope]
 					changed = true
 				}
@@ -387,17 +309,6 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 		return { ...identity, scope, ...grant }
 	}
 
-	private toIdentity(grant: HtmlPermissionGrant): HtmlPermissionGrantIdentity {
-		return {
-			mode: grant.mode,
-			userId: grant.userId,
-			projectId: grant.projectId,
-			appRootDir: grant.appRootDir,
-			entryPath: grant.entryPath,
-			appFingerprint: grant.appFingerprint,
-		}
-	}
-
 	private discardCorruptedStorage() {
 		htmlMicroAppPreviewLogger.error("Corrupted permission grants in localStorage", {
 			storageKey: this.storageKey,
@@ -410,6 +321,18 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 			globalThis.localStorage?.removeItem(this.storageKey)
 		} catch (error) {
 			htmlMicroAppPreviewLogger.warn("Failed to clear permission grants from localStorage", {
+				error: error instanceof Error ? error.message : String(error),
+			})
+		}
+	}
+
+	private notifySameTabChange() {
+		try {
+			const target = globalThis.window
+			if (!target) return
+			target.dispatchEvent(new target.Event(HTML_PERMISSION_GRANTS_CHANGED_EVENT))
+		} catch (error) {
+			htmlMicroAppPreviewLogger.warn("Failed to notify permission grant change", {
 				error: error instanceof Error ? error.message : String(error),
 			})
 		}
