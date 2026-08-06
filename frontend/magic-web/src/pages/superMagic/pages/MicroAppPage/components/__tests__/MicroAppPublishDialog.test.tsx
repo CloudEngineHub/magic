@@ -1,200 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ComponentProps, ReactNode } from "react"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { userStore } from "@/models/user"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import MicroAppPublishDialog from "../MicroAppPublishDialog"
+import {
+	createPasswordProtectedDetail,
+	getPublishDialogMocks,
+	renderDialog,
+	resetPublishDialogMocks,
+} from "./MicroAppPublishDialog.testUtils"
 
-const mocks = vi.hoisted(() => ({
-	getMicroAppProject: vi.fn(),
-	getShareInfoByCode: vi.fn(),
-	publishMicroAppProject: vi.fn(),
-	unpublishMicroAppProject: vi.fn(),
-	getFileUrl: vi.fn(),
-	uploadAndGetFileUrl: vi.fn(),
-	successToast: vi.fn(),
-	errorToast: vi.fn(),
-	writeText: vi.fn(),
-	confirmModal: vi.fn(),
-	useUploadOptions: undefined as Record<string, unknown> | undefined,
-	t: (key: string, options?: Record<string, string>) => {
-		if (options?.time) return `${key}:${options.time}`
-		if (options?.projectName) return `${key}:${options.projectName}`
-		if (options?.password) return `${key}:${options.password}`
-		return key
-	},
-}))
-
-vi.mock("@/apis", () => ({
-	FileApi: {
-		getFileUrl: mocks.getFileUrl,
-	},
-	SuperMagicApi: {
-		getMicroAppProject: mocks.getMicroAppProject,
-		getShareInfoByCode: mocks.getShareInfoByCode,
-		publishMicroAppProject: mocks.publishMicroAppProject,
-		unpublishMicroAppProject: mocks.unpublishMicroAppProject,
-	},
-}))
-
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ t: mocks.t }),
-}))
-
-vi.mock("@/hooks/useUploadFiles", () => ({
-	useUpload: (options: Record<string, unknown>) => {
-		mocks.useUploadOptions = options
-		return {
-			uploadAndGetFileUrl: mocks.uploadAndGetFileUrl,
-			uploading: false,
-		}
-	},
-}))
-
-vi.mock("@/components/base/MagicToaster/utils", () => ({
-	default: {
-		success: mocks.successToast,
-		error: mocks.errorToast,
-	},
-}))
-
-vi.mock("@/utils/clipboard-helpers", () => ({
-	clipboard: { writeText: mocks.writeText },
-}))
-
-vi.mock("@/components/base/MagicModal", async () => {
-	const React = await import("react")
-	const MagicModal = Object.assign(
-		({
-			open,
-			children,
-			title,
-		}: {
-			open?: boolean
-			children?: React.ReactNode
-			title?: React.ReactNode
-		}) =>
-			open
-				? React.createElement(
-						"div",
-						{ "data-testid": "mock-magic-modal" },
-						React.createElement("h2", null, title),
-						children,
-					)
-				: null,
-		{ confirm: mocks.confirmModal },
-	)
-	return { default: MagicModal }
-})
-
-vi.mock("@/components/base-mobile/MagicPopup", () => ({
-	default: ({
-		children,
-		visible,
-		position,
-		className,
-	}: {
-		children: ReactNode
-		visible?: boolean
-		position?: string
-		className?: string
-	}) =>
-		visible ? (
-			<div data-testid="mobile-publish-popup" data-position={position} className={className}>
-				{children}
-			</div>
-		) : null,
-}))
-
-vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
-	const React = await import("react")
-	return {
-		ShareTypeField: ({
-			value,
-			onChange,
-		}: {
-			value: ShareType
-			onChange: (type: ShareType) => void
-		}) =>
-			React.createElement(
-				"div",
-				{ "data-testid": "share-type-field", "data-value": value },
-				React.createElement(
-					"button",
-					{
-						type: "button",
-						"data-testid": "share-type-public",
-						onClick: () => onChange(4),
-					},
-					"public",
-				),
-			),
-		ShareRangeField: () => React.createElement("div", { "data-testid": "share-range-field" }),
-	}
-})
-
-function renderDialog(props: Partial<ComponentProps<typeof MicroAppPublishDialog>> = {}) {
-	return render(
-		<MicroAppPublishDialog
-			open
-			appId="app-1"
-			projectName="Demo App"
-			onProjectNameChange={vi.fn()}
-			onOpenChange={vi.fn()}
-			{...props}
-		/>,
-	)
-}
-
-function createPasswordProtectedDetail() {
-	return {
-		app_id: "app-1",
-		project_id: "project-1",
-		project: { id: "project-1", project_name: "Demo App" },
-		publish: {
-			app_id: "app-1",
-			app_name: "Demo App",
-			resource_id: "resource-1",
-			share_code: "share-code-1",
-			share_type: ShareType.PasswordProtected,
-			publish_status: "published",
-			access_url: "https://example.com/micro-app/app-1",
-		},
-	}
-}
+const mocks = getPublishDialogMocks()
 
 describe("MicroAppPublishDialog", () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
-		userStore.user.setIsPersonalOrganization(false)
-		mocks.useUploadOptions = undefined
-		mocks.getMicroAppProject.mockResolvedValue({
-			app_id: "app-1",
-			project_id: "project-1",
-			project: { id: "project-1", project_name: "Demo App" },
-			publish: null,
-		})
-		mocks.publishMicroAppProject.mockResolvedValue({
-			app_id: "app-1",
-			app_name: "Demo App",
-			resource_id: "resource-1",
-			share_type: ShareType.Public,
-			publish_status: "published",
-			access_url: "https://example.com/micro-app/app-1",
-		})
-		mocks.getShareInfoByCode.mockResolvedValue({ password: "" })
-		mocks.getFileUrl.mockResolvedValue({ url: "https://cdn.example.com/existing-cover.png" })
-		mocks.uploadAndGetFileUrl.mockResolvedValue({
-			fullfilled: [
-				{
-					value: {
-						path: "micro-app/covers/new.png",
-						url: "https://cdn.example.com/cover.png",
-					},
-				},
-			],
-		})
-		mocks.confirmModal.mockImplementation(({ onOk }: { onOk?: () => void }) => onOk?.())
+		resetPublishDialogMocks()
 	})
 
 	it("loads publish state through the app detail endpoint", async () => {
@@ -312,16 +131,40 @@ describe("MicroAppPublishDialog", () => {
 
 		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
 		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
-		expect(scrollArea).toHaveClass("min-h-0", "-mr-5")
+		expect(scrollArea).toHaveClass("min-h-0")
 		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
 		expect(screen.getByTestId("micro-app-publish-basic-settings").parentElement).toHaveClass(
-			"pr-5",
+			"p-5",
 		)
 		expect(screen.getByTestId("micro-app-publish-dialog")).toHaveClass(
 			"grid",
 			"max-h-[80dvh]",
 			"grid-rows-[minmax(0,1fr)_auto_auto]",
 		)
+	})
+
+	it("disables saving when published settings have not changed", async () => {
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				share_type: ShareType.Public,
+				publish_status: "published",
+			},
+		})
+
+		renderDialog()
+
+		const saveButton = await screen.findByTestId("micro-app-publish-save")
+		expect(saveButton).toBeDisabled()
+
+		fireEvent.change(screen.getByTestId("micro-app-publish-project-name"), {
+			target: { value: "Updated App" },
+		})
+		expect(saveButton).toBeEnabled()
 	})
 
 	it("uses a fixed-height mobile bottom popup with a scrollable form area", async () => {
@@ -428,7 +271,11 @@ describe("MicroAppPublishDialog", () => {
 
 		const shareTypeField = await screen.findByTestId("share-type-field")
 		expect(shareTypeField).toHaveAttribute("data-value", String(ShareType.Public))
+		expect(screen.queryByTestId("share-type-organization")).toBeNull()
 		expect(screen.queryByTestId("share-range-field")).toBeNull()
+
+		fireEvent.click(screen.getByTestId("force-share-type-organization"))
+		expect(shareTypeField).toHaveAttribute("data-value", String(ShareType.Public))
 
 		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
 
@@ -438,6 +285,59 @@ describe("MicroAppPublishDialog", () => {
 				share_type: ShareType.Public,
 			})
 		})
+	})
+
+	it("requires personal organizations to save historical organization sharing as public", async () => {
+		userStore.user.setIsPersonalOrganization(true)
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				resource_id: "resource-1",
+				share_type: ShareType.Organization,
+				share_range: "all",
+				publish_status: "published",
+				access_url: "https://example.com/micro-app/app-1",
+			},
+		})
+
+		renderDialog()
+
+		const shareTypeField = await screen.findByTestId("share-type-field")
+		expect(shareTypeField).toHaveAttribute("data-value", String(ShareType.Public))
+		expect(screen.getByTestId("micro-app-publish-settings-changed")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
+
+		await waitFor(() => {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
+				app_name: "Demo App",
+				share_type: ShareType.Public,
+			})
+		})
+	})
+
+	it("generates an initial password for an unpublished protected share", async () => {
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				share_type: ShareType.PasswordProtected,
+				publish_status: "unpublished",
+			},
+		})
+
+		renderDialog()
+
+		const passwordInput = await screen.findByTestId("micro-app-publish-password")
+		expect((passwordInput as HTMLInputElement).value).toMatch(/^[A-Z0-9]{6}$/)
+		expect(screen.getByTestId("micro-app-publish-save")).toBeEnabled()
 	})
 
 	it("clears an existing cover by sending null", async () => {
@@ -512,5 +412,40 @@ describe("MicroAppPublishDialog", () => {
 				cover_file_key: "micro-app/covers/new.png",
 			})
 		})
+	})
+
+	it("uploads a pasted image cover", async () => {
+		renderDialog()
+		await screen.findByTestId("share-type-field")
+
+		const file = new File(["pasted cover"], "pasted-cover.png", { type: "image/png" })
+		fireEvent.paste(screen.getByTestId("micro-app-publish-dialog"), {
+			clipboardData: { files: [file], items: [] },
+		})
+
+		await waitFor(() => {
+			expect(mocks.uploadAndGetFileUrl).toHaveBeenCalledWith([
+				{ name: "pasted-cover.png", file, status: "init" },
+			])
+			expect(screen.getByTestId("micro-app-cover-preview")).toHaveAttribute(
+				"src",
+				"https://cdn.example.com/cover.png",
+			)
+		})
+	})
+
+	it("keeps normal text paste behavior in publish fields", async () => {
+		renderDialog()
+		await screen.findByTestId("share-type-field")
+
+		const file = new File(["clipboard image"], "clipboard.png", { type: "image/png" })
+		const pasteEvent = new Event("paste", { bubbles: true, cancelable: true })
+		Object.defineProperty(pasteEvent, "clipboardData", {
+			value: { files: [file], items: [] },
+		})
+		screen.getByTestId("micro-app-publish-project-name").dispatchEvent(pasteEvent)
+
+		expect(pasteEvent.defaultPrevented).toBe(false)
+		expect(mocks.uploadAndGetFileUrl).not.toHaveBeenCalled()
 	})
 })

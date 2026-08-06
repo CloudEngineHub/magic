@@ -23,13 +23,25 @@ export type MicroAppPublishValidationError =
 	| "projectNameTooLong"
 	| "passwordInvalid"
 
+export function normalizeMicroAppPublishShareType(
+	shareType: MicroAppPublishShareType,
+	isPersonalOrganization = false,
+): MicroAppPublishShareType {
+	return isPersonalOrganization && shareType === ShareType.Organization
+		? ShareType.Public
+		: shareType
+}
+
 export function createDefaultMicroAppPublishFormState(
 	appName = "",
 	isPersonalOrganization = false,
 ): MicroAppPublishFormState {
 	return {
 		appName,
-		shareType: isPersonalOrganization ? ShareType.Public : ShareType.Organization,
+		shareType: normalizeMicroAppPublishShareType(
+			ShareType.Organization,
+			isPersonalOrganization,
+		),
 		shareRange: "all",
 		targets: [],
 		password: generateSharePassword(),
@@ -40,17 +52,19 @@ export function createDefaultMicroAppPublishFormState(
 
 export function buildMicroAppPublishPayload(
 	formState: MicroAppPublishFormState,
+	isPersonalOrganization = false,
 ): PublishMicroAppProjectBody {
+	const shareType = normalizeMicroAppPublishShareType(formState.shareType, isPersonalOrganization)
 	const payload: PublishMicroAppProjectBody = {
 		app_name: formState.appName.trim(),
-		share_type: formState.shareType,
+		share_type: shareType,
 	}
 
 	if (formState.coverFileKey !== undefined) {
 		payload.cover_file_key = formState.coverFileKey
 	}
 
-	if (formState.shareType === ShareType.Organization) {
+	if (shareType === ShareType.Organization) {
 		payload.share_range = formState.shareRange
 		if (formState.shareRange === "designated") {
 			payload.target_ids = formState.targets.map((target) => ({
@@ -60,7 +74,7 @@ export function buildMicroAppPublishPayload(
 		}
 	}
 
-	if (formState.shareType === ShareType.PasswordProtected) {
+	if (shareType === ShareType.PasswordProtected) {
 		payload.password = formState.password.trim()
 	}
 
@@ -96,13 +110,15 @@ export function createFormStateFromPublishedItem(
 ): MicroAppPublishFormState {
 	return {
 		appName: item?.app_name || appName || "",
-		shareType:
-			item?.share_type ||
-			(isPersonalOrganization ? ShareType.Public : ShareType.Organization),
+		shareType: normalizeMicroAppPublishShareType(
+			item?.share_type || ShareType.Organization,
+			isPersonalOrganization,
+		),
 		shareRange: item?.share_range || "all",
 		targets: item?.target_ids || [],
-		// 已发布配置缺少明文密码时不能生成一个看似有效的新密码，否则会误导用户并可能在保存时覆盖原密码。
-		password: item ? item.password || "" : generateSharePassword(),
+		// 只有后端明确标记为已发布时才保留空密码，未发布的密码分享需要可直接编辑的初始密码。
+		password:
+			item?.password || (item?.publish_status === "published" ? "" : generateSharePassword()),
 		coverFileKey: item?.cover_file_key ?? undefined,
 		coverUrl: item?.cover_url || "",
 	}

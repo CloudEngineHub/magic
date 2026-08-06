@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
+import { observer } from "mobx-react-lite"
 import { FileApi, SuperMagicApi } from "@/apis"
 import type {
 	MicroAppPublishShareType,
@@ -10,7 +11,6 @@ import type {
 import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { useUpload } from "@/hooks/useUploadFiles"
 import { userStore } from "@/models/user"
 import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
@@ -28,9 +28,11 @@ import {
 	getMicroAppPublishValidationError,
 	getPublishedItemFromResponse,
 	hasMicroAppPublishFormChanged,
+	normalizeMicroAppPublishShareType,
 	type MicroAppPublishFormState,
 } from "./microAppPublishDialogUtils"
 import MicroAppPublishDialogContent from "./MicroAppPublishDialogContent"
+import useMicroAppPublishCover from "./useMicroAppPublishCover"
 
 export {
 	buildMicroAppAccessUrl,
@@ -50,9 +52,7 @@ interface MicroAppPublishDialogProps {
 	onOpenChange: (open: boolean) => void
 }
 
-const MAX_COVER_FILE_SIZE = 10 * 1024 * 1024
-
-export default function MicroAppPublishDialog({
+function MicroAppPublishDialog({
 	open,
 	appId,
 	projectName,
@@ -63,8 +63,6 @@ export default function MicroAppPublishDialog({
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
 	const isPersonalOrganization = userStore.user.isPersonalOrganization
-	const coverInputRef = useRef<HTMLInputElement>(null)
-	const coverObjectUrlRef = useRef<string | null>(null)
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
 		createDefaultFormState("", isPersonalOrganization),
 	)
@@ -75,12 +73,16 @@ export default function MicroAppPublishDialog({
 	const [loading, setLoading] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [unpublishing, setUnpublishing] = useState(false)
-	const [coverUploadError, setCoverUploadError] = useState(false)
-
-	const { uploadAndGetFileUrl, uploading } = useUpload({
-		storageType: "public",
-		useSnowflakeId: true,
-	})
+	const {
+		coverInputRef,
+		coverUploading,
+		coverUploadError,
+		clearCoverUploadError,
+		resetCoverUploadState,
+		handleCoverFile,
+		handleCoverChange,
+		handleClearCover,
+	} = useMicroAppPublishCover(setFormState)
 
 	const publishedAtText = useMemo(
 		() => formatPublishedAt(publishedItem?.published_at),
@@ -92,14 +94,8 @@ export default function MicroAppPublishDialog({
 		() => hasPublished && hasMicroAppPublishFormChanged(formState, publishedFormState),
 		[formState, hasPublished, publishedFormState],
 	)
-	const coverUploading = uploading
 	const validationError = useMemo(() => getMicroAppPublishValidationError(formState), [formState])
 	const validationMessage = validationError ? t(`microAppPage.publish.${validationError}`) : ""
-
-	const revokeCoverObjectUrl = useCallback(() => {
-		if (coverObjectUrlRef.current) URL.revokeObjectURL(coverObjectUrlRef.current)
-		coverObjectUrlRef.current = null
-	}, [])
 
 	useEffect(() => {
 		if (!open || !appId) return
@@ -108,7 +104,7 @@ export default function MicroAppPublishDialog({
 
 		async function loadPublishedInfo() {
 			setLoading(true)
-			setCoverUploadError(false)
+			clearCoverUploadError()
 			try {
 				const detail = await SuperMagicApi.getMicroAppProject(appId)
 				if (ignore) return
@@ -135,12 +131,19 @@ export default function MicroAppPublishDialog({
 					detail.project?.project_name || projectName,
 					isPersonalOrganization,
 				)
+				const nextPublishedFormState = nextItem
+					? createFormStateFromPublishedItem(
+							nextItem,
+							detail.project?.project_name || projectName,
+						)
+					: null
 
 				if (nextItem?.cover_file_key && !nextFormState.coverUrl) {
 					try {
 						const fileUrl = await FileApi.getFileUrl(nextItem.cover_file_key)
 						if (ignore) return
 						nextFormState.coverUrl = fileUrl.url
+						if (nextPublishedFormState) nextPublishedFormState.coverUrl = fileUrl.url
 					} catch (error) {
 						console.error("Failed to resolve micro app cover url:", error)
 					}
@@ -149,7 +152,7 @@ export default function MicroAppPublishDialog({
 				if (ignore) return
 				setPublishedItem(nextItem)
 				setFormState(nextFormState)
-				setPublishedFormState(nextItem ? nextFormState : null)
+				setPublishedFormState(nextPublishedFormState)
 			} catch (error) {
 				if (ignore) return
 				console.error("Failed to load micro app publish info:", error)
@@ -167,92 +170,47 @@ export default function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [appId, isPersonalOrganization, open, projectName, t])
+	}, [appId, clearCoverUploadError, isPersonalOrganization, open, projectName, t])
 
 	useEffect(() => {
 		if (open) return
 		setLoading(false)
 		setSaving(false)
 		setUnpublishing(false)
-		setCoverUploadError(false)
-		revokeCoverObjectUrl()
-	}, [open, revokeCoverObjectUrl])
+		resetCoverUploadState()
+	}, [open, resetCoverUploadState])
 
-	useEffect(() => () => revokeCoverObjectUrl(), [revokeCoverObjectUrl])
-
-	const handleShareTypeChange = useCallback((shareType: ShareType) => {
+	useEffect(() => {
+		if (!isPersonalOrganization) return
 		setFormState((prev) => {
-			const nextShareType = shareType as MicroAppPublishShareType
-			return {
-				...prev,
-				shareType: nextShareType,
-				password:
-					nextShareType === ShareType.PasswordProtected && !prev.password
-						? generateSharePassword()
-						: prev.password,
-			}
+			if (prev.shareType !== ShareType.Organization) return prev
+			return { ...prev, shareType: ShareType.Public }
 		})
-	}, [])
+	}, [isPersonalOrganization])
+
+	const handleShareTypeChange = useCallback(
+		(shareType: ShareType) => {
+			setFormState((prev) => {
+				const nextShareType = normalizeMicroAppPublishShareType(
+					shareType as MicroAppPublishShareType,
+					isPersonalOrganization,
+				)
+				return {
+					...prev,
+					shareType: nextShareType,
+					password:
+						nextShareType === ShareType.PasswordProtected && !prev.password
+							? generateSharePassword()
+							: prev.password,
+				}
+			})
+		},
+		[isPersonalOrganization],
+	)
 
 	const handleAppNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
 		setFormState((prev) => ({ ...prev, appName: event.target.value }))
 	}, [])
-
-	const uploadCoverFile = useCallback(
-		async (file: File) => {
-			const { fullfilled } = await uploadAndGetFileUrl([
-				{ name: file.name, file, status: "init" },
-			])
-			const uploadedFile = fullfilled[0]?.value
-			if (!uploadedFile?.path) {
-				setCoverUploadError(true)
-				magicToast.error(t("microAppPage.publish.coverUploadFailed"))
-				return
-			}
-
-			setCoverUploadError(false)
-			setFormState((prev) => ({
-				...prev,
-				coverFileKey: uploadedFile.path,
-				coverUrl: uploadedFile.url || prev.coverUrl,
-			}))
-			if (uploadedFile.url) revokeCoverObjectUrl()
-		},
-		[revokeCoverObjectUrl, t, uploadAndGetFileUrl],
-	)
-
-	const handleCoverChange = useCallback(
-		(event: React.ChangeEvent<HTMLInputElement>) => {
-			const file = event.target.files?.[0]
-			event.target.value = ""
-			if (!file) return
-			if (!file.type.startsWith("image/")) {
-				magicToast.error(t("microAppPage.publish.coverInvalidType"))
-				return
-			}
-			if (file.size > MAX_COVER_FILE_SIZE) {
-				magicToast.error(t("microAppPage.publish.coverTooLarge"))
-				return
-			}
-
-			revokeCoverObjectUrl()
-			setCoverUploadError(false)
-			coverObjectUrlRef.current = URL.createObjectURL(file)
-			setFormState((prev) => ({
-				...prev,
-				coverFileKey: undefined,
-				coverUrl: coverObjectUrlRef.current || "",
-			}))
-			void uploadCoverFile(file)
-		},
-		[revokeCoverObjectUrl, t, uploadCoverFile],
-	)
-
-	const handleClearCover = useCallback(() => {
-		revokeCoverObjectUrl()
-		setCoverUploadError(false)
-		setFormState((prev) => ({ ...prev, coverFileKey: null, coverUrl: "" }))
-	}, [revokeCoverObjectUrl])
 
 	const handleShareRangeChange = useCallback((shareRange: ShareRange) => {
 		setFormState((prev) => ({
@@ -337,15 +295,20 @@ export default function MicroAppPublishDialog({
 		try {
 			const response = await SuperMagicApi.publishMicroAppProject(
 				appId,
-				buildMicroAppPublishPayload(formState),
+				buildMicroAppPublishPayload(formState, isPersonalOrganization),
 			)
 			const nextItem = getPublishedItemFromResponse(response)
 			const savedAppName = nextItem.app_name || nextAppName
 			const savedCoverFileKey = nextItem.cover_file_key ?? formState.coverFileKey
 			const savedCoverUrl = nextItem.cover_url || formState.coverUrl
+			const savedShareType = normalizeMicroAppPublishShareType(
+				nextItem.share_type || formState.shareType,
+				isPersonalOrganization,
+			)
 			const savedFormState: MicroAppPublishFormState = {
 				...formState,
 				appName: savedAppName,
+				shareType: savedShareType,
 				coverFileKey: savedCoverFileKey,
 				coverUrl: savedCoverUrl,
 			}
@@ -355,7 +318,7 @@ export default function MicroAppPublishDialog({
 				app_name: savedAppName,
 				cover_file_key: savedCoverFileKey,
 				cover_url: savedCoverUrl,
-				share_type: nextItem.share_type || formState.shareType,
+				share_type: savedShareType,
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
 				password: nextItem.password || formState.password,
@@ -376,6 +339,7 @@ export default function MicroAppPublishDialog({
 		coverUploadError,
 		coverUploading,
 		formState,
+		isPersonalOrganization,
 		onProjectNameChange,
 		onPublishStatusChange,
 		saving,
@@ -437,6 +401,7 @@ export default function MicroAppPublishDialog({
 			coverInputRef={coverInputRef}
 			onAppNameChange={handleAppNameChange}
 			onCoverChange={handleCoverChange}
+			onCoverFile={handleCoverFile}
 			onClearCover={handleClearCover}
 			onShareTypeChange={handleShareTypeChange}
 			onShareRangeChange={handleShareRangeChange}
@@ -484,9 +449,12 @@ export default function MicroAppPublishDialog({
 			onCancel={closeDialog}
 			footer={null}
 			width={560}
+			classNames={{ body: "!p-0" }}
 			destroyOnClose
 		>
 			{content}
 		</MagicModal>
 	)
 }
+
+export default observer(MicroAppPublishDialog)
