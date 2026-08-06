@@ -13,7 +13,6 @@ import {
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { useStyles } from "../CommonPopup/styles"
 import { useDetailActions } from "@/pages/superMagic/components/Detail/hooks/useDetailActions"
 import { isEmpty } from "lodash-es"
 import { useLocation } from "react-router"
@@ -45,6 +44,22 @@ const MOBILE_PREVIEW_SHEET_CLASSNAME = cn(
 /** Body must stay flex + hidden overflow so Render fills the sheet below actionHeader. */
 const MOBILE_PREVIEW_BODY_CLASSNAME =
 	"flex min-h-0 flex-1 flex-col !max-h-none overflow-hidden !overflow-hidden bg-background p-0"
+const PREVIEW_MOBILE_FULLSCREEN_CLASSNAME =
+	"!h-[100dvh] !max-h-none !rounded-none data-[vaul-drawer-direction=bottom]:!mt-0"
+
+const PREVIEW_SHARE_CONTAINER_CLASSNAME = "w-full overflow-hidden"
+const PREVIEW_SHARE_IMMERSIVE_CLASSNAME =
+	"fixed inset-0 z-[1101] !mt-0 h-[100dvh] w-screen overflow-hidden bg-transparent"
+const PREVIEW_MODAL_CLASSNAME = "!w-[80vw]"
+const PREVIEW_MODAL_FULLSCREEN_CLASSNAME =
+	"!top-0 !left-0 !right-0 !m-0 !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !pb-0"
+const PREVIEW_MODAL_CONTENT_FULLSCREEN_CLASSNAME =
+	"!flex !h-[100dvh] !max-h-[100dvh] flex-col overflow-hidden !rounded-none"
+const PREVIEW_MODAL_BODY_CLASSNAME = "!h-[80vh] !w-[80vw] !p-0 overflow-hidden rounded-b-xl"
+const PREVIEW_MODAL_BODY_FULLSCREEN_CLASSNAME = "!h-full !w-full !max-h-none !rounded-none"
+const PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME =
+	"flex h-full flex-auto flex-col overflow-x-hidden overflow-y-auto"
+const PREVIEW_MOBILE_BOTTOM_GAP_CLASSNAME = "!pb-[calc(56px+var(--safe-area-inset-bottom))]"
 import { getPreviewDetailDisplayName, isKnowledgeSearchPreviewDetail } from "./headerMeta"
 
 const OFFICE_DETAIL_TYPES: DetailType[] = [
@@ -127,7 +142,6 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		return urlSearchParams.get("hideHeader") === "true"
 	}, [hideHeaderProp, search])
 
-	const { styles, cx } = useStyles({ hideHeader })
 	const { t } = useTranslation("super")
 	const [previewDetail, setPreviewDetail] = useState<PreviewDetail>()
 	const [visible, setVisible] = useState(false)
@@ -227,12 +241,6 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 
 	const { setUserSelectDetail, onClose } = props
 
-	/** Close mobile preview drawer and notify parent listeners. */
-	const handleClose = useCallback(() => {
-		onClose?.()
-		setVisible(false)
-	}, [onClose])
-
 	const {
 		isFullscreen,
 		isFromNode,
@@ -243,12 +251,20 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		allFiles,
 		currentIndex,
 		effectiveAttachments,
+		setIsFullscreen,
 	} = useDetailActions({
 		disPlayDetail: previewDetail,
 		setUserSelectDetail,
 		attachments,
 	})
 	const effectiveIsFullscreen = Boolean(forceFullscreenMode) || isFullscreen
+
+	/** Close preview and clear local fullscreen state before the next open. */
+	const handleClose = useCallback(() => {
+		setIsFullscreen(false)
+		onClose?.()
+		setVisible(false)
+	}, [onClose, setIsFullscreen])
 
 	const isShareRoute = useMemo(() => {
 		// 检查是否在分享场景，如果是分享场景则不显示下载全部文件按钮
@@ -420,10 +436,14 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	if (isFileShare) {
 		return (
 			<div
-				className={cx(styles.renderContainer, {
-					[styles.immersiveRenderContainer]:
-						enableImmersiveShareChrome && isImmersiveFullscreen,
-				})}
+				className={cn(
+					PREVIEW_SHARE_CONTAINER_CLASSNAME,
+					hideHeader ? "h-full" : "mt-[52px] h-[calc(100%_-_52px)]",
+					{
+						[PREVIEW_SHARE_IMMERSIVE_CLASSNAME]:
+							enableImmersiveShareChrome && isImmersiveFullscreen,
+					},
+				)}
 				style={
 					documentFlowFullscreen
 						? { height: "auto", minHeight: "100dvh", marginTop: 0, overflow: "visible" }
@@ -455,11 +475,16 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 								testId: "file-preview-popup-close-button",
 							}
 				}
-				hideDefaultHandle={hideHeader}
-				className={MOBILE_PREVIEW_SHEET_CLASSNAME}
+				hideDefaultHandle={hideHeader || effectiveIsFullscreen}
+				className={cn(
+					MOBILE_PREVIEW_SHEET_CLASSNAME,
+					effectiveIsFullscreen && PREVIEW_MOBILE_FULLSCREEN_CLASSNAME,
+				)}
 				bodyClassName={cn(
 					MOBILE_PREVIEW_BODY_CLASSNAME,
-					isShareRoute && previewDetail?.isFromNode ? styles.bottomGap : styles.popupBody,
+					isShareRoute && previewDetail?.isFromNode
+						? PREVIEW_MOBILE_BOTTOM_GAP_CLASSNAME
+						: "rounded-xl rounded-b-none",
 				)}
 				maskClosable
 				data-testid="file-preview-detail-popup-root"
@@ -477,19 +502,33 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			maskClosable
 			mask
 			onCancel={() => {
-				setVisible(false)
+				if (effectiveIsFullscreen && !forceFullscreenMode) {
+					setIsFullscreen(false)
+					return
+				}
+				handleClose()
 			}}
 			destroyOnClose={isOfficePreview}
-			closable
+			closable={!effectiveIsFullscreen}
 			footer={null}
-			title="文件预览"
+			title={effectiveIsFullscreen ? undefined : "文件预览"}
 			classNames={{
-				body: styles.modalBody,
+				header: effectiveIsFullscreen ? "hidden" : undefined,
+				content: effectiveIsFullscreen
+					? PREVIEW_MODAL_CONTENT_FULLSCREEN_CLASSNAME
+					: undefined,
+				body: cn(
+					PREVIEW_MODAL_BODY_CLASSNAME,
+					effectiveIsFullscreen && PREVIEW_MODAL_BODY_FULLSCREEN_CLASSNAME,
+				),
 			}}
-			className={styles.modal}
-			centered
+			className={cn(
+				PREVIEW_MODAL_CLASSNAME,
+				effectiveIsFullscreen && PREVIEW_MODAL_FULLSCREEN_CLASSNAME,
+			)}
+			centered={!effectiveIsFullscreen}
 		>
-			<div className={cx(styles.body)}>
+			<div className={PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME}>
 				{!!previewDetail && visible && <>{RenderComponent}</>}
 			</div>
 		</MagicModal>
