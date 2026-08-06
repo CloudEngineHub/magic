@@ -2806,6 +2806,7 @@
 			"grantedAt": "Granted at {{time}}",
 			"grantedCount": "{{count}} granted",
 			"loadFailed": "Failed to load authorization information",
+			"noActivePermissions": "There are no saved authorizations.",
 			"noDeclaredPermissions": "app.json does not declare any manageable permissions.",
 			"noReason": "The app did not provide a purpose.",
 			"notDeclared": "Not declared",

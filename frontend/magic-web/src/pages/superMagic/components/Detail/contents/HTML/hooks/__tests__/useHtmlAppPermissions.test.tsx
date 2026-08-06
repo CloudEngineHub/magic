@@ -100,6 +100,19 @@ describe("useHtmlAppPermissions", () => {
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
+	it("marks apps without app.json as legacy permission mode", () => {
+		const { result } = renderHook(() =>
+			useHtmlAppPermissions({
+				content: "<html></html>",
+				relativeFilePath: "app/index.html",
+				projectId: "project-1",
+				fileList: [],
+			}),
+		)
+
+		expect(result.current.isLegacyHtmlPermissionMode).toBe(true)
+	})
+
 	it("reloads app config when app.json changes", async () => {
 		const appConfigFile = {
 			file_id: "app-config",

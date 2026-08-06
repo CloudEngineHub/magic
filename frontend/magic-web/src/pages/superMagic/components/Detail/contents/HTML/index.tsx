@@ -407,6 +407,7 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 	const {
 		hasHtmlPermissionDeclarations,
+		isLegacyHtmlPermissionMode,
 		getPermissionSnapshot,
 		preauthorizeHtmlPermission,
 		revokeHtmlPermission,
@@ -415,7 +416,9 @@ export default memo(function HTML(props: HTMLProps) {
 		permissionRevision,
 	} = htmlPermissionController
 	const canManageHtmlPermissions = Boolean(
-		!isDataAnalysis && !htmlIsDeleted && hasHtmlPermissionDeclarations,
+		!isDataAnalysis &&
+		!htmlIsDeleted &&
+		(hasHtmlPermissionDeclarations || isLegacyHtmlPermissionMode),
 	)
 	const {
 		open: permissionManagerOpen,
@@ -1614,7 +1617,7 @@ export default memo(function HTML(props: HTMLProps) {
 					radius: 8,
 				}}
 			/>
-			{permissionManagerOpen && hasHtmlPermissionDeclarations ? (
+			{permissionManagerOpen && canManageHtmlPermissions ? (
 				<Suspense fallback={null}>
 					<HtmlPermissionManagerDialog
 						open={permissionManagerOpen}

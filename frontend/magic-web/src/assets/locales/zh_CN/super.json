@@ -2807,6 +2807,7 @@
 			"grantedAt": "授权于 {{time}}",
 			"grantedCount": "已授权 {{count}} 项",
 			"loadFailed": "授权信息加载失败",
+			"noActivePermissions": "当前没有已保存的授权。",
 			"noDeclaredPermissions": "app.json 未声明可管理的权限。",
 			"noReason": "应用未提供用途说明。",
 			"notDeclared": "未声明",

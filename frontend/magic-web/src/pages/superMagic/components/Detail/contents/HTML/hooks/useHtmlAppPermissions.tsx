@@ -400,6 +400,8 @@ export function useHtmlAppPermissions({
 	return {
 		htmlAppConfig,
 		htmlAppConfigState,
+		isLegacyHtmlPermissionMode:
+			htmlAppConfigState.status === "absent" || htmlAppConfigState.status === "error",
 		hasHtmlPermissionDeclarations,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,

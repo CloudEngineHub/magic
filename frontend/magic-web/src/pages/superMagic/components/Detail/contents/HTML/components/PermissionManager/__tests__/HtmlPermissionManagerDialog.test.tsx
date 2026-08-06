@@ -131,6 +131,41 @@ describe("HtmlPermissionManagerDialog", () => {
 		expect(document.querySelector('[data-slot="tooltip-content"]')).toHaveClass("text-wrap")
 	})
 
+	it("renders only active grants for legacy apps", async () => {
+		const snapshot = createSnapshot()
+		snapshot.configStatus = "absent"
+		snapshot.mode = "legacy"
+		snapshot.permissions = [
+			{
+				...snapshot.permissions[0],
+				declarationStatus: "notDeclared",
+				grant: { ...activeGrant, mode: "legacy" },
+			},
+			{
+				...snapshot.permissions[1],
+				grant: undefined,
+			},
+		]
+
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={vi.fn().mockResolvedValue(snapshot)}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
+				onRevoke={vi.fn().mockResolvedValue(snapshot)}
+				onUpdateTtl={vi.fn().mockResolvedValue(snapshot)}
+				onRevokeAll={vi.fn().mockResolvedValue(snapshot)}
+			/>,
+		)
+
+		expect(
+			await screen.findByText("htmlEditor.permissionAuthorizationConfirm.scopes.llmUse"),
+		).toBeInTheDocument()
+		expect(screen.queryByText("project.message.write")).not.toBeInTheDocument()
+	})
+
 	it("authorizes a declared permission before the app uses it", async () => {
 		const onAuthorize = vi.fn().mockResolvedValue(true)
 		const getPermissionSnapshot = vi

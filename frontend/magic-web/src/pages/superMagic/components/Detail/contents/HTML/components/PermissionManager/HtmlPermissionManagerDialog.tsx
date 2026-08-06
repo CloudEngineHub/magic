@@ -153,9 +153,17 @@ export default function HtmlPermissionManagerDialog({
 		snapshot?.permissions.filter((item) => item.declarationStatus === "declared").length ?? 0
 	const visiblePermissions = useMemo(
 		() =>
-			snapshot?.permissions.filter((item) => item.declarationStatus !== "notDeclared") ?? [],
+			snapshot?.permissions.filter((item) =>
+				snapshot.mode === "legacy"
+					? Boolean(item.grant)
+					: item.declarationStatus !== "notDeclared",
+			) ?? [],
 		[snapshot],
 	)
+	const emptyPermissionsMessage =
+		snapshot?.mode === "legacy"
+			? t("htmlEditor.permissionManager.noActivePermissions")
+			: t("htmlEditor.permissionManager.noDeclaredPermissions")
 	const permissionMutationInProgress = Boolean(
 		authorizingScope || revokingScope || updatingScope || revokingAll,
 	)
@@ -289,9 +297,7 @@ export default function HtmlPermissionManagerDialog({
 									<div className="overflow-hidden rounded-lg border">
 										{visiblePermissions.length === 0 ? (
 											<div className="px-4 py-10 text-center text-sm text-muted-foreground">
-												{t(
-													"htmlEditor.permissionManager.noDeclaredPermissions",
-												)}
+												{emptyPermissionsMessage}
 											</div>
 										) : null}
 										{visiblePermissions.map((item, index) => {
