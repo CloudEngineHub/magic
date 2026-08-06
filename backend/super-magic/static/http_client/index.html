@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=browser-merge-20260731-1">
+    <link rel="stylesheet" href="css/styles.css?v=debug-file-edit-20260806-2">
 </head>
 
 <body>
@@ -88,8 +88,18 @@
             <!-- 工作区文件树 -->
             <div class="filetree-panel">
                 <div class="filetree-header">
-                    <span class="filetree-title">工作区文件</span>
+                    <div class="filetree-title-group">
+                        <span class="filetree-title" id="filetreeTitle">工作区文件</span>
+                        <div class="filetree-scope-tabs" role="tablist" aria-label="文件根目录">
+                            <button type="button" class="filetree-scope-tab active" data-file-scope="workspace" role="tab"
+                                aria-selected="true">工作区</button>
+                            <button type="button" class="filetree-scope-tab" data-file-scope="memory" role="tab"
+                                aria-selected="false">长期记忆</button>
+                        </div>
+                    </div>
                     <div class="filetree-actions">
+                        <button id="expandAllTreeBtn" class="filetree-text-btn" type="button" title="展开全部目录">全展开</button>
+                        <button id="collapseAllTreeBtn" class="filetree-text-btn" type="button" title="收起全部目录">全折叠</button>
                         <button id="uploadWorkspaceBtn" class="icon-btn" title="上传文件到 .workspace 根目录" aria-label="上传文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M12 16V5" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -134,6 +144,12 @@
                 <div class="file-preview-tabbar">
                     <div id="filePreviewTabs" class="file-preview-tabs" role="tablist" aria-label="文件预览"></div>
                     <div class="file-preview-actions">
+                        <button id="filePreviewEditBtn" class="file-preview-action-btn" title="编辑文本文件"
+                            style="display:none">编辑</button>
+                        <button id="filePreviewSaveBtn" class="file-preview-action-btn file-preview-save-btn"
+                            title="保存文件" style="display:none">保存</button>
+                        <button id="filePreviewCancelBtn" class="file-preview-action-btn" title="取消编辑"
+                            style="display:none">取消</button>
                         <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览"
                             style="display:none">渲染预览</button>
                         <button id="filePreviewOpenBtn" class="file-preview-action-btn" title="在新窗口打开">新窗口打开</button>
@@ -381,7 +397,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
-    <script src="js/client.js?v=browser-merge-20260731-1"></script>
+    <script src="js/client.js?v=debug-file-edit-20260806-1"></script>
 </body>
 
 </html>
