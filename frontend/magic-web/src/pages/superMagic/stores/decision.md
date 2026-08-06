@@ -2475,7 +2475,7 @@ corepack pnpm exec vitest run \
 
 | 决策  | 当前有效规则                                                                                                                                                                                                                                                                                                      |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FG-01 | Tab 进入 hidden 时记录最新 durable committed anchor，身份固定为 `app_message_id + super_message_id + seq_id`；活动 `StreamState` 和 optimistic 消息不得成为分页停止锚点。                                                                                                                                         |
+| FG-01 | Tab 进入 hidden 时记录最新 durable committed anchor：User 以 `app_message_id` 作为稳定身份，Assistant/Tool 以 `super_message_id` 作为逻辑身份；`seq_id` 只保留为持久化顺序水位，不作为锚点严格相等条件。活动 `StreamState` 和 optimistic 消息不得成为分页停止锚点。                                               |
 | FG-02 | visible 恢复固定每页 100 条，按服务端 `page_token` 向更早历史逐页查找 anchor；命中立即停止，不按离开时长估算页数，也不预设“固定拉 2 页/100 页”。                                                                                                                                                                  |
 | FG-03 | 有 durable anchor 的前台恢复上限为 50 页/5000 条；没有 anchor 时最多拉最近 3 页并使用 `merge`。完整 recovery 上限为 500 页/50000 条，只保留给 checkpoint 等显式完整恢复。重复 token、空 token、无效 `items`、请求失败、超预算或 generation 失效都必须整轮失败，禁止提交 partial snapshot。                        |
 | FG-04 | 命中 anchor 时使用 `replace_tail`，保留本地 anchor 及其之前的前缀，只权威替换 anchor 之后的 membership；HTTP membership 只提交“最新消息至 anchor”区间，不把 anchor 之后的更老响应重复写入。                                                                                                                       |
@@ -2506,6 +2506,8 @@ corepack pnpm exec vitest run \
 ### 验收边界
 
 - message2 离开、message500 返回：客户端逐页查找 message2；命中页即停止，只替换 message2 之后的权威尾部。
+- User 在发送阶段的本地 `seq_id` 与 HTTP 持久化 `seq_id` 不同，且 HTTP User 不包含 `super_message_id`：只要 `app_message_id` 相同就必须在当前页停止。
+- Assistant Final 修订更换 `app_message_id/seq_id` 但保持同一 `super_message_id`：必须视为命中同一逻辑锚点，不继续向历史翻页。
 - 本地没有 durable anchor：只允许最近 3 页 `merge`，即使服务端仍返回 `has_more=true` 也不得继续扫描完整历史。
 - visible 与 watchdog 同时恢复：相同首屏/分页参数只产生一条 HTTP 请求；已有 Topic sync 时不得建立第二条 generation 分页链路。
 - HTTP `progress_snapshot` + running：本地流式正文不消失，StreamState 仍存在，后续 Chunk 可继续推进，且不发布 canonical stream-ended 事件。

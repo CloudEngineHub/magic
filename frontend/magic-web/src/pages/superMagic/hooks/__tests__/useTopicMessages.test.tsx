@@ -2005,6 +2005,133 @@ describe("useTopicMessages", () => {
 		)
 	})
 
+	it("stops foreground recovery at a User anchor when HTTP omits super_message_id and changes seq_id", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.superMagicStoreMock.messages.set("chat-topic-1", [
+			{
+				app_message_id: "foreground-user-anchor",
+				role: "user",
+				seq_id: "local-optimistic-seq",
+			},
+		])
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		const userAnchor = createUserMessageEnvelope(
+			"foreground-user-anchor",
+			"server-persisted-seq",
+			"read",
+		)
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [userAnchor],
+			has_more: true,
+			page_token: "page-2-must-not-be-requested",
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			[userAnchor],
+			expect.objectContaining({
+				mode: "replace_tail",
+				anchorSuperMessageId: "foreground-user-anchor",
+			}),
+		)
+	})
+
+	it("stops foreground recovery at the same Assistant super_message_id across revisions", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.superMagicStoreMock.messages.set("chat-topic-1", [
+			{
+				app_message_id: "assistant-old-revision",
+				role: "assistant",
+				super_message_id: "assistant-logical-anchor",
+				seq_id: "10",
+			},
+		])
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		const assistantRevision = createMessageEnvelope("assistant-new-revision", "20")
+		assistantRevision.seq.message.super_magic_message.super_message_id =
+			"assistant-logical-anchor"
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [assistantRevision],
+			has_more: true,
+			page_token: "page-2-must-not-be-requested",
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			[assistantRevision],
+			expect.objectContaining({
+				mode: "replace_tail",
+				anchorSuperMessageId: "assistant-logical-anchor",
+			}),
+		)
+	})
+
 	it("pulls fixed 100-message pages until the fifth page reaches the durable anchor", async () => {
 		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
 			items: [],

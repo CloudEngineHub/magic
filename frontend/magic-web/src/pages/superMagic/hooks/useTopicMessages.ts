@@ -150,7 +150,9 @@ interface AuthoritativeTailPullResult extends PullMessageResult {
 
 interface ForegroundRecoveryAnchor {
 	appMessageId: string
+	role?: "user" | "assistant" | "tool"
 	superMessageId?: string
+	/** 仅保留为恢复水位元数据，不参与逻辑消息身份的严格相等判断。 */
 	seqId?: string
 }
 
@@ -223,21 +225,27 @@ function compareMessageSeqId(left: string, right: string) {
 	return normalizedLeft.localeCompare(normalizedRight)
 }
 
+function getRecoveryAnchorRole(role: unknown): ForegroundRecoveryAnchor["role"] {
+	return role === "user" || role === "assistant" || role === "tool" ? role : undefined
+}
+
 /**
  * 判断前台恢复是否命中离开前的 durable anchor。
- * 只有 anchor 的三元身份都对上，才允许停止向更早分页扩展。
+ * User 的协议身份由 app_message_id 唯一确定；Assistant/Tool 的 Final revision
+ * 可能更换 app_message_id，因此优先使用稳定的 super_message_id。seq_id 只描述
+ * 持久化顺序，发送阶段本地临时值不能成为继续扫描历史的硬条件。
  */
 function getFetchedRecoveryAnchor(item: any): ForegroundRecoveryAnchor | undefined {
 	const message = item?.seq?.message
 	const appMessageId = String(message?.app_message_id || "")
 	if (!appMessageId) return undefined
 	const node = message?.type ? message?.[message.type] || message?.general_agent_card : undefined
-	const superMessageId = String(
-		node?.super_message_id || (node?.role === "user" ? appMessageId : ""),
-	)
+	const role = getRecoveryAnchorRole(node?.role)
+	const superMessageId = role === "user" ? "" : String(node?.super_message_id || appMessageId)
 	const seqId = String(item?.seq?.seq_id || "")
 	return {
 		appMessageId,
+		...(role ? { role } : {}),
 		...(superMessageId ? { superMessageId } : {}),
 		...(seqId ? { seqId } : {}),
 	}
@@ -246,11 +254,15 @@ function getFetchedRecoveryAnchor(item: any): ForegroundRecoveryAnchor | undefin
 function matchesForegroundRecoveryAnchor(item: any, anchor?: ForegroundRecoveryAnchor): boolean {
 	if (!anchor?.appMessageId) return false
 	const fetchedAnchor = getFetchedRecoveryAnchor(item)
-	if (!fetchedAnchor || fetchedAnchor.appMessageId !== anchor.appMessageId) return false
-	if (anchor.superMessageId && fetchedAnchor.superMessageId !== anchor.superMessageId)
-		return false
-	if (anchor.seqId && fetchedAnchor.seqId !== anchor.seqId) return false
-	return true
+	if (!fetchedAnchor) return false
+	if (anchor.role === "user") {
+		return fetchedAnchor.role === "user" && fetchedAnchor.appMessageId === anchor.appMessageId
+	}
+	if (anchor.role && fetchedAnchor.role && fetchedAnchor.role !== anchor.role) return false
+	if (anchor.superMessageId && fetchedAnchor.superMessageId) {
+		return fetchedAnchor.superMessageId === anchor.superMessageId
+	}
+	return fetchedAnchor.appMessageId === anchor.appMessageId
 }
 
 /**
@@ -306,9 +318,16 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				return compareMessageSeqId(messageSeqId, latestSeqId) > 0 ? message : latest
 			}, undefined)
 			if (!latestMessage?.app_message_id) return undefined
+			const role = getRecoveryAnchorRole(latestMessage.role || latestMessage.debug?.role)
 			return {
 				appMessageId: String(latestMessage.app_message_id),
-				superMessageId: getStoredMessageSuperMessageId(latestMessage) || undefined,
+				...(role ? { role } : {}),
+				...(role !== "user"
+					? {
+							superMessageId:
+								getStoredMessageSuperMessageId(latestMessage) || undefined,
+						}
+					: {}),
 				seqId: String(latestMessage.seq_id || "") || undefined,
 			}
 		},
