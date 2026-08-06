@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react"
 
 import { SuperMagicApi } from "@/apis"
+import { isProjectAccessDeniedError } from "@/pages/superMagic/constants/apiErrorCodes"
 import { isMicroAppPublished } from "../utils/microAppPublish"
 
 const MAX_DISPLAY_ERROR_LENGTH = 240
-// 微应用详情接口以 51202 表示项目访问被拒绝，使用业务码避免依赖多语言错误文案。
-const PROJECT_ACCESS_DENIED_CODE = 51202
 
 export interface MicroAppProjectError {
 	kind: "load" | "permission"
@@ -29,13 +28,7 @@ function readDisplayErrorMessage(error: unknown): string {
 export function normalizeMicroAppProjectError(error: unknown): MicroAppProjectError {
 	const message = readDisplayErrorMessage(error)
 	const isTechnicalValue = /^\[object\s.+\]$/i.test(message) || /^</.test(message)
-	const code =
-		typeof error === "object" &&
-		error !== null &&
-		typeof (error as { code?: unknown }).code === "number"
-			? (error as { code: number }).code
-			: null
-	const kind = code === PROJECT_ACCESS_DENIED_CODE ? "permission" : "load"
+	const kind = isProjectAccessDeniedError(error) ? "permission" : "load"
 
 	if (!message || message.length > MAX_DISPLAY_ERROR_LENGTH || isTechnicalValue) {
 		return { kind, message: "" }
