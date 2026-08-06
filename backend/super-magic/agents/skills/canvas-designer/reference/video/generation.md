@@ -2,6 +2,8 @@
 
 ## Video Request Guidance
 
+Use the single video tool `generate_canvas_videos` (exact spelling, plural `videos`) for canvas video requests. Do not substitute `generate_canvas_video`, `generate_videos_to_canvas`, or any other tool, and do not create a canvas or run code just to handle a video request. When a pre-generation estimate is useful, call `generate_canvas_videos` with `action="estimate_points"`; after a suitable confirmation, call the same tool with `action="generate"` for that request.
+
 - Turn a vague video request into a clear, executable prompt. When important details or choices are missing, reuse the existing `ask_user` as appropriate.
 - For copyright or IP, real-person, sexual, political, violent, or similar risk, explain the concern and offer at least two choices/options. The choices should, when relevant, include (1) keeping the user's original request and attempting it as written, and (2) a risk-reduced adjustment; add other reasonable directions when useful. Do not force the user to accept a rewrite. Reuse the existing `ask_user` or another suitable interaction when useful; use your judgment about when to ask and how to proceed.
 - When the request calls for a pre-generation review, use `generate_canvas_videos` with `action="estimate_points"`, present the final prompt, main generation parameters, and estimated points, and seek the user's confirmation. If estimation fails, explain it and let the user choose whether to continue or revise.
