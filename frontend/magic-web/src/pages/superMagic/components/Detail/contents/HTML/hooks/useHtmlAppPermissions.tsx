@@ -127,9 +127,13 @@ export function useHtmlAppPermissions({
 			content: rawSourceCode || content || "",
 			runtimeFingerprint: JSON.stringify(
 				fileList
-					.filter((file) =>
-						isFileInsideHtmlApp(file?.relative_file_path || "", appRootDir),
-					)
+					.filter((file) => {
+						const filePath = file?.relative_file_path || ""
+						return (
+							isFileInsideHtmlApp(filePath, appRootDir) &&
+							isHtmlOrJavaScriptFile(filePath)
+						)
+					})
 					.map((file) => ({
 						fileId: file.file_id,
 						path: file.relative_file_path.replace(/^\/+/, ""),
@@ -477,6 +481,11 @@ export function useHtmlAppPermissions({
 function isFileInsideHtmlApp(path: string, appRootDir: string): boolean {
 	const normalizedPath = path.replace(/^\/+/, "")
 	return normalizedPath.startsWith(appRootDir)
+}
+
+function isHtmlOrJavaScriptFile(path: string): boolean {
+	// 只有会执行 Magic API 的 HTML/JS 文件影响运行时指纹，资源、配置和数据文件变化不应使授权失效。
+	return /\.(?:html?|(?:c|m)?js)$/i.test(path.split(/[?#]/, 1)[0])
 }
 
 function hasUnversionedExternalRuntimeResources(content: string): boolean {

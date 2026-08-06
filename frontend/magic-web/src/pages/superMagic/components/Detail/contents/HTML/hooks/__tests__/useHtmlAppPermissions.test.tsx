@@ -123,6 +123,63 @@ describe("useHtmlAppPermissions", () => {
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
+	it("only fingerprints HTML and JavaScript files", async () => {
+		const initialFileList = [
+			{
+				file_id: "entry-file",
+				relative_file_path: "app/index.html",
+				updated_at: "2026-08-05 10:00:00",
+			},
+			{
+				file_id: "script-file",
+				relative_file_path: "app/runtime.js",
+				updated_at: "2026-08-05 10:00:00",
+			},
+			{
+				file_id: "data-file",
+				relative_file_path: "app/data.json",
+				updated_at: "2026-08-05 10:00:00",
+			},
+		]
+		const { rerender } = renderHook(
+			({ fileList }) =>
+				useHtmlAppPermissions({
+					content: "<html></html>",
+					relativeFilePath: "app/index.html",
+					projectId: "project-1",
+					fileList,
+				}),
+			{ initialProps: { fileList: initialFileList } },
+		)
+
+		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
+		const initialFingerprint = mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]
+		mocks.grantStore.getAppGrants.mockClear()
+
+		rerender({
+			fileList: initialFileList.map((file) =>
+				file.file_id === "data-file"
+					? { ...file, updated_at: "2026-08-05 10:01:00" }
+					: file,
+			),
+		})
+
+		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
+		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).toEqual(initialFingerprint)
+
+		mocks.grantStore.getAppGrants.mockClear()
+		rerender({
+			fileList: initialFileList.map((file) =>
+				file.file_id === "script-file"
+					? { ...file, updated_at: "2026-08-05 10:01:00" }
+					: file,
+			),
+		})
+
+		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
+		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).not.toEqual(initialFingerprint)
+	})
+
 	it("does not expose manageable grants for legacy apps without saved authorization", async () => {
 		const { result } = renderHook(() =>
 			useHtmlAppPermissions({
