@@ -9,9 +9,7 @@ Covers all canvas design fundamentals: project management, multimedia principles
 
 ## Video Request Guidance
 
-For video requests, use `reference/video/generation.md` as the business guidance. When the user needs to provide details or choose among options, reuse `ask_user` as appropriate. Estimate points, seek confirmation, and generate according to those principles when appropriate, while adapting the interaction to the conversation.
-
-Use only the `generate_canvas_videos` tool for video requests (exact spelling, plural `videos`). Do not substitute a singular alias, `create_canvas`, or `run_sdk_snippet`; reuse the existing `project_path`, and call `create_canvas` only when the user explicitly requests a new project.
+**Mandatory context loading:** When the user asks to generate a video, animation, shot, clip, or other dynamic media, your first tool call must directly read `reference/video/generation.md` using the file-reading capability. Use the exact reference path; do not call `list_dir`, `shell_exec`, `run_sdk_snippet`, or any canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all video-specific tools, parameters, and interaction rules are defined in that reference.
 
 ---
 
@@ -56,14 +54,14 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 **Correct approach:**
 - Image content changes → `generate_canvas_images` (creates new element; keep original)
 - Web image search for canvas → read [reference/image/image-search.md](reference/image/image-search.md) first, then `search_canvas_images`
-- Video generation → follow [reference/video/generation.md](reference/video/generation.md) when applicable; adapt its guidance to the conversation
+- Video generation → read [reference/video/generation.md](reference/video/generation.md) before proceeding
 - Recover missing canvas layers from local project media files → only use `restore_canvas_media` when the user explicitly asks to restore/rebuild canvas layers or `magic.project.js` from existing `images/` / `videos/` files
 - Original elements and media files must remain unchanged
 
 **Tool priority:**
 - Static output (poster, illustration, cover, still image) → image tools
 - Web/internet images to place on canvas → `search_canvas_images` (read reference first)
-- Dynamic output (video, animation, shot, clip) → video tools (see [Video Generation](#video-generation) below)
+- Dynamic output (video, animation, shot, clip) → read [reference/video/generation.md](reference/video/generation.md) before proceeding
 
 ---
 
@@ -576,22 +574,6 @@ Processing steps:
 
 ---
 
-## Video Generation
-
-> For full video generation workflow, read the matching reference before proceeding:
->
-> - **Generation** → [reference/video/generation.md](reference/video/generation.md)
-> - **Parameter selection / error handling** → [reference/video/parameters-and-errors.md](reference/video/parameters-and-errors.md)
-
-**Use video tools when:**
-- User wants dynamic output on canvas: video, animation, shot, clip, short film, motion poster
-- User provides reference images or start/end frames and wants a video element on canvas
-
-**Do not use video tools for:**
-- Static output such as poster, cover, screenshot, or illustration → use image workflow above
-- Follow-up/status sync for an existing canvas video task → frontend tracks status by video_id
-- Only adjusting element position, size, or layer → use canvas element editing tools
-
 ---
 
 ## Tool Selection Decision Tree
@@ -609,8 +591,7 @@ Generate AI images?
 └─ No → continue
 
 Generate video?
-├─ Yes → follow reference/video/generation.md for the video-generation guidance
-│   └─ Follow up? → do not call another video tool; video status is tracked by the frontend using video_id
+├─ Yes → read reference/video/generation.md before proceeding
 └─ No → continue
 
 Search web images?
