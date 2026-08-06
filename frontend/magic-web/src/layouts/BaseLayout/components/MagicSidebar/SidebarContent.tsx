@@ -73,7 +73,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 	return (
 		<div
-			className="flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+			className="no-scrollbar flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
 			data-testid="sidebar-content-root"
 		>
 			<SidebarGroup className="w-full shrink-0 p-2" data-testid="sidebar-content-apps-group">
