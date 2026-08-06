@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react"
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router"
 import { vi } from "vitest"
 import MicroAppSharePage from "../index"
@@ -36,6 +36,7 @@ interface TestHtmlPreviewProps {
 	data: TestPreviewFile
 	openFileTab?: (file: TestPreviewFile) => void
 	virtualStorageMarkerId?: string
+	onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
 }
 
 interface TestMagicDropdownProps {
@@ -54,6 +55,8 @@ const mocks = vi.hoisted(() => ({
 	getTemporaryDownloadUrl: vi.fn(),
 	historyReplace: vi.fn(),
 	openOrganizationSwitch: vi.fn(),
+	openHtmlPermissionManager: vi.fn(),
+	hasHtmlPermissionDeclarations: { current: false },
 	isMobile: { current: false },
 	authorization: { current: "" },
 	userInfo: { current: null as TestUserInfo | null },
@@ -213,8 +216,19 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		data,
 		openFileTab,
 		virtualStorageMarkerId,
+		onHtmlPermissionManagerChange,
 	}: TestHtmlPreviewProps) {
 		const [mountedFileId] = useState(data.file_id)
+
+		useEffect(() => {
+			const hasPermissionDeclarations = mocks.hasHtmlPermissionDeclarations.current
+			onHtmlPermissionManagerChange?.(
+				hasPermissionDeclarations ? { open: mocks.openHtmlPermissionManager } : null,
+			)
+			return () => {
+				onHtmlPermissionManagerChange?.(null)
+			}
+		}, [onHtmlPermissionManagerChange])
 
 		return (
 			<div
@@ -268,6 +282,7 @@ export function resetMicroAppSharePageMocks() {
 	vi.clearAllMocks()
 	mocks.authorization.current = ""
 	mocks.isMobile.current = false
+	mocks.hasHtmlPermissionDeclarations.current = false
 	mocks.userInfo.current = null
 	mocks.organizationMeta.current = {
 		organizations: [],

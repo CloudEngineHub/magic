@@ -92,11 +92,11 @@ export function useHtmlAppPermissions({
 	const appConfigFileId = appConfigFile?.file_id || ""
 	const appConfigFileUpdatedAt = appConfigFile?.updated_at || ""
 
+	const info = userStore.user.userInfo
+	const magicId = info?.magic_id?.trim()
+	const userId = info?.user_id?.trim()
+	const userKey = magicId ? `magic_id:${magicId}` : userId ? `user_id:${userId}` : ""
 	const htmlAppInstance = useMemo(() => {
-		const info = userStore.user.userInfo
-		const magicId = info?.magic_id?.trim()
-		const userId = info?.user_id?.trim()
-		const userKey = magicId ? `magic_id:${magicId}` : userId ? `user_id:${userId}` : ""
 		return {
 			userKey,
 			projectId: projectId || "",
@@ -104,7 +104,7 @@ export function useHtmlAppPermissions({
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
 		}
-	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode])
+	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode, userKey])
 
 	const htmlPermissionGrantStore = useMemo(() => new SessionStorageHtmlPermissionGrantStore(), [])
 
