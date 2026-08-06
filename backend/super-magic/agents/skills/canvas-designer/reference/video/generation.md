@@ -2,12 +2,12 @@
 
 ## Video Request Guidance
 
-Use the single video tool `generate_canvas_videos` (exact spelling, plural `videos`) for canvas video requests. Do not substitute `generate_canvas_video`, `generate_videos_to_canvas`, or any other tool, and do not create a canvas or run code just to handle a video request. **The default confirmation gate is mandatory:** on the first turn of every video request, do not call `action="generate"`; call `action="estimate_points"` first, present the final prompt, main generation parameters, and estimated points, then end the turn and wait for a new user message. Only a later user confirmation, or an explicit first-turn request to generate immediately, generate directly, or skip confirmation, permits `action="generate"`.
+Use only `generate_canvas_videos` for canvas video requests; do not substitute another video tool, create a canvas, or run code just for video generation.
 
-- Turn a vague video request into a clear, executable prompt. When important details or choices are missing, reuse the existing `ask_user` as appropriate.
-- For copyright or IP, real-person, sexual, political, violent, or similar risk, explain the concern and offer at least two choices/options. The choices should, when relevant, include (1) keeping the user's original request and attempting it as written, and (2) a risk-reduced adjustment; add other reasonable directions when useful. Do not force the user to accept a rewrite. Reuse the existing `ask_user` or another suitable interaction when useful; use your judgment about when to ask and how to proceed.
-- After every estimate, show the final prompt, main generation parameters, and estimated points, and end the current turn. Wait for the user's confirmation unless the user has clearly requested immediate generation or no confirmation. The user may confirm, request changes, keep the original request, or cancel. Do not call `action="generate"` in the same turn as the initial request or estimate; only a later confirmation or explicit immediate-generation intent permits it. If estimation fails, explain it and let the user choose whether to continue or revise.
-- Only after the user confirms a direction—or explicitly requests immediate generation—use `action="generate"` for that request. If generation fails, briefly explain the reason and a useful modification, offer choices such as continuing to revise or ending, note that failure does not deduct points, and avoid automatic retries.
+- Clarify vague requests into executable prompts; ask the user when important choices are missing.
+- By default, first call `action="estimate_points"`, then show the final prompt, main parameters, and estimated points and wait for the user's next message. Call `action="generate"` only after confirmation. A first-turn request to generate immediately or skip confirmation may generate directly.
+- For IP, real-person, sexual, political, violent, or similar risks, explain the concern and offer at least two choices, including the original request and a risk-reduced alternative where relevant. Let the user decide.
+- If estimation or generation fails, briefly explain the reason and suggested change, offer continuing or revising, do not retry automatically, and note that failure does not deduct points.
 
 ## Timeout
 
@@ -48,10 +48,21 @@ Use these tokens next to the subject, action, or source media they control. Do n
 - infer optional generation parameters only when the current model rules make a legal choice clear for the user's request
 
 ## Recommended Prompt Content
-- subject
-- action
-- camera language
-- lighting, style, pacing
+Use this general formula and fill only the parts supported by the user's request:
+
+```text
+[video goal] + [subject and key traits] + [action or change] + [scene/environment]
++ [composition/viewpoint] + [camera movement] + [lighting/style/mood]
++ [duration/aspect ratio/sound/constraints, optional]
+```
+
+The core should normally include **subject, action, scene, and camera**. Add the other parts when useful; do not invent details just to complete every field. For image-to-video requests, focus on motion and camera changes while preserving the referenced subject and style.
+
+### General Examples
+
+- Product ad: `A matte white skincare bottle on a marble table, water droplets sliding down the bottle as the cap slowly opens, close-up push-in, soft side light, clean premium commercial style.`
+- Human action: `A person in a yellow raincoat walks through a neon-lit city street at night, medium rear tracking shot, reflections on the wet pavement, realistic cinematic mood.`
+- Animal/nature: `An orange cat calmly swims across a clear pond, low-angle medium shot following its movement, gentle ripples on the water, warm afternoon natural light, realistic documentary style.`
 
 ## Parameter Examples
 
