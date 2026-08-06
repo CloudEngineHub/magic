@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agentlang.logger import get_logger
-from app.utils.async_file_utils import async_read_text
+from app.service.memory.runtime.extraction.memory_extraction_prompt_provider import (
+    MemoryExtractionPromptProvider,
+)
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -20,10 +21,12 @@ logger = get_logger(__name__)
 class MemoryExtractionService:
     """为每个已提交回合独立创建后台 fork 记忆提取任务。"""
 
-    _PROMPT_PATH = Path(__file__).with_name("memory_after_run_extraction.prompt")
-
-    def __init__(self) -> None:
-        """初始化后台任务强引用集合。"""
+    def __init__(
+        self,
+        prompt_provider: MemoryExtractionPromptProvider | None = None,
+    ) -> None:
+        """初始化提示词提供者和后台任务强引用集合。"""
+        self._prompt_provider = prompt_provider or MemoryExtractionPromptProvider()
         self._tasks: set[asyncio.Task[None]] = set()
 
     def submit(
@@ -61,7 +64,7 @@ class MemoryExtractionService:
             )
 
             source = snapshot.source
-            prompt = (await async_read_text(self._PROMPT_PATH)).strip()
+            prompt = await self._prompt_provider.load(source.target)
             await run_isolated_agent(
                 IsolatedAgentRunRequest(
                     target=source.target,

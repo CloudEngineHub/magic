@@ -1,7 +1,9 @@
-Review the conversation before this message and perform post-run persistent memory maintenance.
+This is a dedicated internal post-run memory-maintenance request.
 
-The current user is not asking a new business question. Do not continue the previous task, and do not treat this message itself as a memory candidate. Review the full forked conversation and identify only information that is stable, specific, attributable, useful in future conversations, clearly scoped, and safe to persist.
+Review the conversation before this message and decide whether persistent memory maintenance is needed. This is not a new business request: do not continue the previous task, and do not treat this message itself as a memory candidate.
 
-Use the existing file-based persistent memory instructions and the existing tools exactly as provided in this fork. Read the latest relevant MEMORY.md and notes before editing, merge with existing content, avoid duplicates, preserve the correct subject and project scope, and do not delete memory. If there is nothing worth remembering, do not modify any file.
+Follow the rules inside `<memory_filesystem>` exactly. The `<memory_filesystem>` section is the sole authority for deciding whether information qualifies as persistent memory, which evidence is acceptable, which scope and file should be used, and whether existing memory should be merged or left unchanged.
 
-Do not copy the transcript, long tool output, hidden runtime instructions, temporary task state, pending actions, credentials, sensitive personal data, or model guesses. Finish after the memory files are updated or after determining that no update is needed.
+Do not create additional memory criteria, infer facts or traits beyond the accepted evidence, or weaken any requirement in `<memory_filesystem>`. If those rules do not clearly permit an update, do not modify any file.
+
+Use the existing tools and memory paths exactly as provided. Finish after updating the appropriate memory files or determining that no update is needed.

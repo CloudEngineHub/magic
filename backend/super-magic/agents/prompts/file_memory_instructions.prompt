@@ -86,7 +86,7 @@
 ### 执行边界
 
 - 使用现有通用文件能力，将记忆作为普通 Markdown 文件进行管理。
-- 只有主 Agent 管理持久记忆，不得委托子 Agent 检索或修改，也不得主动发起并发修改。
+- 只有主 Agent 或专用的会话后内部记忆维护 fork 可以管理持久记忆。不得将记忆工作委托给其他 Agent，也不得主动发起额外的并发记忆修改。
 - 如果记忆文件在读取后发生变化，或编辑时报告冲突，必须重新读取当前内容并合并修改，不得用过时副本覆盖外部变更。只有用户要求与当前内容存在语义冲突时才请求用户确认。
 - 只有实际且符合上述写入条件的记忆更新才可以创建目录或文件。
 - 记忆是尽力而为的辅助能力，读写失败不得阻断主任务。用户明确要求修改记忆时，必须准确告知失败；否则继续任务，不要将内部记忆失败变成主回复。
@@ -177,7 +177,7 @@ Every memory must have a clear basis and match the strength of its evidence. You
 ### Execution Boundaries
 
 - Use existing general-purpose file capabilities to manage memory as ordinary Markdown files.
-- Only the main Agent manages persistent memory. Do not delegate retrieval or modification to sub-agents or initiate concurrent modifications.
+- Only the main Agent or the dedicated internal post-run memory-maintenance fork may manage persistent memory. Do not delegate memory work to any other Agent or initiate additional concurrent memory modifications.
 - If a memory file changed after it was read or an edit reports a conflict, re-read the current content and merge against it. Never overwrite external changes from a stale copy. Ask the user only when the requested update semantically conflicts with the current content.
 - Create directories or files only for an actual memory update that meets the write criteria above.
 - Memory is best-effort and must never block the primary task. If the user explicitly requested a memory change, report a failure accurately; otherwise continue the task without turning an internal memory failure into the main response.

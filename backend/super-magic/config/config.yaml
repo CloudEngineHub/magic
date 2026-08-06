@@ -490,6 +490,14 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
+# 文件记忆运行时配置
+memory:
+  after_run:
+    # 累计达到指定数量的有效主任务后触发一次完整 fork 提取
+    extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-3}
+    # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
+    extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
+
 # =====================================================
 # AI Ability Configuration (AI能力配置)
 # =====================================================
