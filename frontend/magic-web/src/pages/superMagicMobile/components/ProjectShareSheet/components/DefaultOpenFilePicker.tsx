@@ -292,14 +292,15 @@ export default function DefaultOpenFilePicker({
 				data-testid="project-share-default-file-picker"
 			>
 				<div className="relative flex h-14 shrink-0 items-center justify-center px-16">
+					{/* Match the project share sheet action size so mobile close targets stay consistent. */}
 					<button
 						type="button"
-						className="absolute left-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-sm active:opacity-75"
+						className="absolute left-2.5 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-[0_8px_25px_rgba(0,0,0,0.10)] active:opacity-70"
 						onClick={resetAndClose}
 						aria-label={t("common.close")}
 						data-testid="project-share-default-file-picker-close"
 					>
-						<X className="size-[20px] text-foreground" />
+						<X className="h-[22px] w-[22px] text-foreground" strokeWidth={2} />
 					</button>
 					<div className="truncate text-[18px] font-semibold leading-6 text-foreground">
 						{t("projectShare.defaultOpenFileLabel")}

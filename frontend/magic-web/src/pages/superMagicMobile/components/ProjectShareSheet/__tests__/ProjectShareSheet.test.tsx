@@ -362,6 +362,31 @@ describe("ProjectShareSheet", () => {
 		expect(container.querySelectorAll(".h-1.w-20.rounded-full")).toHaveLength(1)
 	})
 
+	it("默认文件选择器关闭按钮与分享弹窗保持相同尺寸并触发关闭", () => {
+		const onClose = vi.fn()
+
+		render(
+			<DefaultOpenFilePicker
+				open
+				candidateTree={[]}
+				onClose={onClose}
+				onSelectFile={vi.fn()}
+			/>,
+		)
+
+		const closeButton = screen.getByTestId("project-share-default-file-picker-close")
+		const closeIcon = closeButton.querySelector("svg")
+
+		expect(closeButton).toHaveClass("h-12", "w-12", "left-2.5")
+		expect(closeButton.className).toContain("shadow-[0_8px_25px_rgba(0,0,0,0.10)]")
+		expect(closeIcon).toHaveClass("h-[22px]", "w-[22px]")
+		expect(closeIcon).toHaveAttribute("stroke-width", "2")
+
+		fireEvent.click(closeButton)
+
+		expect(onClose).toHaveBeenCalledTimes(1)
+	})
+
 	it("默认文件选择器按话题文件弹窗样式固定高度并将搜索栏放在底部", () => {
 		render(
 			<DefaultOpenFilePicker
