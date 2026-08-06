@@ -13,6 +13,7 @@ import {
 } from "./htmlPermissionDeclarations"
 import {
 	getDefaultHtmlPermissionTtl,
+	getHtmlPermissionOnceTtlOption,
 	getSharedHtmlPermissionTtlOptions,
 	SUPPORTED_HTML_PERMISSION_SCOPES,
 	type HtmlPermissionMode,
@@ -151,16 +152,20 @@ export class IframePermissionService {
 		}
 
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		if (options.allowOnce === false && !this.canPersistGrant(identity)) return false
+		const persistenceAvailable =
+			this.canPersistGrant(identity) && (await this.cfg.grantStore.isPersistentAvailable())
+		if (options.allowOnce === false && !persistenceAvailable) return false
 		const existingScopes = new Set(
 			(await this.cfg.grantStore.getAppGrants(identity)).map((grant) => grant.scope),
 		)
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
 		if (missingScopes.length === 0) return true
 
-		const ttlOptions = getSharedHtmlPermissionTtlOptions(missingScopes, mode).filter(
-			(option) => options.allowOnce !== false || option.ttlMs !== 0,
-		)
+		const ttlOptions = persistenceAvailable
+			? getSharedHtmlPermissionTtlOptions(missingScopes, mode).filter(
+					(option) => options.allowOnce !== false || option.ttlMs !== 0,
+				)
+			: [getHtmlPermissionOnceTtlOption()]
 		const result = await this.cfg.confirmPermission({
 			appName: appConfig?.name || "",
 			mode,
@@ -187,16 +192,19 @@ export class IframePermissionService {
 			})
 			return false
 		}
-		if (result.ttlMs !== 0 && this.canPersistGrant(identity)) {
+		if (result.ttlMs !== 0 && persistenceAvailable) {
+			let persisted = true
 			for (const scope of missingScopes) {
-				await this.cfg.grantStore.save({
+				const saved = await this.cfg.grantStore.save({
 					...identity,
 					scope,
 					grantedAt: now,
 					expiresAt: result.ttlMs === null ? null : now + result.ttlMs,
 				})
+				persisted = saved && persisted
 			}
-			this.cfg.onGrantsChanged?.()
+			if (persisted) this.cfg.onGrantsChanged?.()
+			else if (options.allowOnce === false) return false
 		}
 		return true
 	}
@@ -257,12 +265,13 @@ export class IframePermissionService {
 		const existingGrant = await this.cfg.grantStore.getGrant(identity, scope)
 		if (!existingGrant) throw new Error("Active permission grant was not found")
 
-		await this.cfg.grantStore.save({
+		const saved = await this.cfg.grantStore.save({
 			...identity,
 			scope,
 			grantedAt: now,
 			expiresAt: ttlMs === null ? null : now + ttlMs,
 		})
+		if (!saved) throw new Error("Permission grant could not be persisted")
 		this.cfg.onGrantsChanged?.()
 		return this.getPermissionSnapshot()
 	}

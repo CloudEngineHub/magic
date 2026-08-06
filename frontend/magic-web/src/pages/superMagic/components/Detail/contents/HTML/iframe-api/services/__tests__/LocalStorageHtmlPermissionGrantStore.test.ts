@@ -10,6 +10,10 @@ import {
 	type HtmlPermissionGrantIdentity,
 } from "../HtmlPermissionGrantStore"
 import { IndexedDbHtmlPermissionGrantStore } from "../IndexedDbHtmlPermissionGrantStore"
+import {
+	closeHtmlPermissionGrantDatabaseForTest,
+	installWebLocksMock,
+} from "./IframePermissionService.testUtils"
 
 function grant(overrides: Partial<HtmlPermissionGrant> = {}): HtmlPermissionGrant {
 	return {
@@ -40,6 +44,7 @@ function toIdentity(value: HtmlPermissionGrant): HtmlPermissionGrantIdentity {
 describe("IndexedDbHtmlPermissionGrantStore", () => {
 	beforeEach(() => {
 		vi.stubGlobal("indexedDB", new IDBFactory())
+		installWebLocksMock()
 		localStorage.clear()
 		sessionStorage.clear()
 		vi.restoreAllMocks()
@@ -136,6 +141,36 @@ describe("IndexedDbHtmlPermissionGrantStore", () => {
 		expect(await store.getAppGrants(toIdentity(grant()))).toEqual([])
 		expect(listener).toHaveBeenCalledTimes(1)
 		window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, listener)
+	})
+
+	it("keeps existing grants invalid after IndexedDB clear fails and the database reopens", async () => {
+		let now = 1000
+		const store = new IndexedDbHtmlPermissionGrantStore(() => now)
+		const identity = toIdentity(grant({ expiresAt: null }))
+		await store.save(grant({ expiresAt: null }))
+		await closeHtmlPermissionGrantDatabaseForTest(store)
+
+		now = 2000
+		await expect(store.clear()).resolves.toBeUndefined()
+
+		const reopenedStore = new IndexedDbHtmlPermissionGrantStore(() => now)
+		expect(await reopenedStore.getAppGrants(identity)).toEqual([])
+
+		now = 3000
+		const newGrant = grant({ grantedAt: now, expiresAt: null })
+		await reopenedStore.save(newGrant)
+		expect(await reopenedStore.getAppGrants(identity)).toEqual([newGrant])
+	})
+
+	it("reports a revoke failure when the IndexedDB transaction cannot start", async () => {
+		const store = new IndexedDbHtmlPermissionGrantStore(() => 1000)
+		const identity = toIdentity(grant({ expiresAt: null }))
+		await store.save(grant({ expiresAt: null }))
+		await closeHtmlPermissionGrantDatabaseForTest(store)
+
+		await expect(store.remove(identity, "llm.use")).rejects.toMatchObject({
+			name: "InvalidStateError",
+		})
 	})
 
 	it("does not restore a stale save after another store clears the session", async () => {

@@ -2,6 +2,8 @@ import sha256 from "crypto-js/sha256"
 import type { HtmlPermissionScope } from "../types"
 
 export const LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY = "magic:html-app-permissions:v2"
+export const LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY =
+	"magic:html-app-permissions:fallback:v1"
 export const HTML_PERMISSION_GRANTS_CHANGED_EVENT = "magic:html-app-permissions:changed"
 export const HTML_PERMISSION_GRANTS_CHANNEL_NAME = "magic:html-app-permissions"
 export const MAX_HTML_PERMISSION_GRANTS = 1000
@@ -27,7 +29,8 @@ export interface HtmlPermissionGrantStore {
 		scope: HtmlPermissionScope,
 	): Promise<HtmlPermissionGrant | undefined>
 	getAppGrants(identity: HtmlPermissionGrantIdentity): Promise<HtmlPermissionGrant[]>
-	save(grant: HtmlPermissionGrant): Promise<void>
+	isPersistentAvailable(): Promise<boolean>
+	save(grant: HtmlPermissionGrant): Promise<boolean>
 	remove(identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope): Promise<void>
 	prune(now: number): Promise<void>
 	clear(): Promise<void>

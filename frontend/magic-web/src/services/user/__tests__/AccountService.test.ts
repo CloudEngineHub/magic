@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
 		logout: vi.fn(),
 		setClusterCode: vi.fn(),
 		clearHtmlPermissionGrants: vi.fn(),
+		accountLoggerError: vi.fn(),
 		userStore: {
 			user: {
 				setAuthorization: vi.fn(),
@@ -59,7 +60,7 @@ vi.mock("@/utils/log", () => ({
 	logger: {
 		createLogger: () => ({
 			report: vi.fn(),
-			error: vi.fn(),
+			error: mocks.accountLoggerError,
 			log: vi.fn(),
 		}),
 	},
@@ -110,6 +111,32 @@ describe("AccountService.deleteAccount", () => {
 		expect(mocks.userStore.user.setAuthorization).toHaveBeenCalledWith(null)
 		expect(mocks.clearAccount).toHaveBeenCalled()
 		expect(mocks.clearHtmlPermissionGrants).toHaveBeenCalledTimes(1)
+	})
+
+	it("continues logging out when permission grant cleanup fails", async () => {
+		mocks.clearHtmlPermissionGrants.mockRejectedValueOnce(new Error("IndexedDB failed"))
+		const service = {
+			get: vi.fn((key: string) => {
+				if (key === "loginService") return { logout: mocks.logout }
+				if (key === "configService") return { setClusterCode: mocks.setClusterCode }
+				if (key === "userService")
+					return {
+						setUserInfo: mocks.setUserInfo,
+						removeOrganization: mocks.removeOrganization,
+					}
+				throw new Error(`Unexpected service lookup: ${key}`)
+			}),
+		}
+		const accountService = new AccountService({} as never, service as never)
+
+		await accountService.deleteAccount()
+
+		expect(mocks.logout).toHaveBeenCalled()
+		expect(mocks.clearAccount).toHaveBeenCalled()
+		expect(mocks.accountLoggerError).toHaveBeenCalledWith(
+			"Failed to clear HTML permission grants during account removal",
+			expect.any(Error),
+		)
 	})
 
 	it("clears current cluster after removing the last cached account", async () => {

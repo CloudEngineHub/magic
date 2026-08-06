@@ -13,7 +13,10 @@ import {
 import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
-import { HTML_PERMISSION_GRANTS_CHANGED_EVENT } from "../iframe-api/services/HtmlPermissionGrantStore"
+import {
+	HTML_PERMISSION_GRANTS_CHANGED_EVENT,
+	LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY,
+} from "../iframe-api/services/HtmlPermissionGrantStore"
 import { createHtmlPermissionGrantBroadcastChannel } from "../iframe-api/services/HtmlPermissionGrantNotifications"
 import { getHtmlPermissionGrantStore } from "../iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import {
@@ -124,7 +127,9 @@ export function useHtmlAppPermissions({
 			content: rawSourceCode || content || "",
 			runtimeFingerprint: JSON.stringify(
 				fileList
-					.filter((file) => isFileInsideHtmlApp(file.relative_file_path, appRootDir))
+					.filter((file) =>
+						isFileInsideHtmlApp(file?.relative_file_path || "", appRootDir),
+					)
 					.map((file) => ({
 						fileId: file.file_id,
 						path: file.relative_file_path.replace(/^\/+/, ""),
@@ -290,11 +295,18 @@ export function useHtmlAppPermissions({
 	useEffect(() => {
 		// 当前标签页用自定义事件，其他标签页用 BroadcastChannel；两者只刷新 UI，不承担互斥。
 		const handlePermissionChange = () => notifyGrantsChanged()
+		const handlePermissionStorageChange = (event: StorageEvent) => {
+			if (event.key === LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY) {
+				handlePermissionChange()
+			}
+		}
 		window.addEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+		window.addEventListener("storage", handlePermissionStorageChange)
 		const channel = createHtmlPermissionGrantBroadcastChannel()
 		channel?.addEventListener("message", handlePermissionChange)
 		return () => {
 			window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+			window.removeEventListener("storage", handlePermissionStorageChange)
 			channel?.removeEventListener("message", handlePermissionChange)
 			channel?.close()
 		}

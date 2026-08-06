@@ -3,7 +3,6 @@ import type { HtmlPermissionScope } from "../types"
 import {
 	createHtmlPermissionAppKey,
 	isHtmlPermissionGrantActive,
-	LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
 	MAX_HTML_PERMISSION_GRANTS,
 	type HtmlPermissionGrant,
 	type HtmlPermissionGrantIdentity,
@@ -12,50 +11,95 @@ import {
 import {
 	EPOCH_META_KEY,
 	GRANTS_STORE_NAME,
-	HTML_PERMISSION_DB_NAME,
-	HTML_PERMISSION_DB_VERSION,
 	META_STORE_NAME,
-	REVISION_META_KEY,
 	REVOCATION_META_PREFIX,
+	compareHtmlPermissionGrantEvictionPriority,
 	getRequestResult,
-	getStoredEpoch,
-	getStoredRevision,
 	getStoredRevocation,
-	getTransactionError,
 	grantRecordKey,
 	isValidStoredGrant,
+	openHtmlPermissionGrantDatabase,
+	putHtmlPermissionGrantRevision,
+	readHtmlPermissionAppRecords,
+	readHtmlPermissionGrantState,
+	readHtmlPermissionGrantStateInTransaction,
 	revocationMetaKey,
+	runHtmlPermissionGrantWriteTransaction,
+	toHtmlPermissionGrant,
 	type HtmlPermissionGrantState,
 	type HtmlPermissionGrantChange,
 	type StoredHtmlPermissionEpoch,
 	type StoredHtmlPermissionGrant,
-	type StoredHtmlPermissionRevision,
 	type StoredHtmlPermissionRevocation,
 } from "./IndexedDbHtmlPermissionGrantStore.utils"
+import {
+	clearLegacyHtmlPermissionGrantStorage,
+	LocalStorageHtmlPermissionGrantStore,
+} from "./LocalStorageHtmlPermissionGrantStore"
 import {
 	notifyPermissionGrantChange,
 	registerHtmlPermissionGrantChangeListener,
 } from "./HtmlPermissionGrantNotifications"
+import {
+	HtmlPermissionFallbackRecoveryError,
+	recoverHtmlPermissionFallback,
+} from "./HtmlPermissionGrantFallbackRecovery"
 
 let defaultPermissionGrantStore: IndexedDbHtmlPermissionGrantStore | null = null
 
 export class IndexedDbHtmlPermissionGrantStore implements HtmlPermissionGrantStore {
 	private readonly dbPromise: Promise<IDBDatabase | null>
-	private sessionEpochPromise: Promise<number>
-	private sessionRevisionPromise: Promise<number>
+	private readonly fallbackStore: LocalStorageHtmlPermissionGrantStore
+	private fallbackActive = false
+	private sessionEpochPromise: Promise<number> = Promise.resolve(0)
+	private sessionRevisionPromise: Promise<number> = Promise.resolve(0)
 
 	constructor(private readonly getNow: () => number = () => Date.now()) {
 		// Remove the previous localStorage cache so old grants cannot survive the storage migration.
-		this.clearLegacyLocalStorage()
-		this.dbPromise = this.openDatabase()
-		const statePromise = this.dbPromise.then((db) =>
-			db
-				? this.readState(db).catch(() => ({ epoch: 0, revision: 0 }))
-				: { epoch: 0, revision: 0 },
-		)
+		clearLegacyHtmlPermissionGrantStorage()
+		this.fallbackStore = new LocalStorageHtmlPermissionGrantStore(getNow)
+		this.dbPromise = openHtmlPermissionGrantDatabase((message, error) =>
+			this.logStorageError(message, error),
+		).then((db) => {
+			if (!db) {
+				this.fallbackActive = true
+				return null
+			}
+			return db
+		})
+		const statePromise = this.dbPromise.then(async (db) => {
+			if (!db) return { epoch: 0, revision: 0 }
+			try {
+				return await this.withIndexedDbAuthority(db, () => readHtmlPermissionGrantState(db))
+			} catch (error) {
+				this.activateFallbackForError(
+					error,
+					"Failed to read permission grant IndexedDB state",
+					db,
+				)
+				return { epoch: 0, revision: 0 }
+			}
+		})
 		this.sessionEpochPromise = statePromise.then((state) => state.epoch)
 		this.sessionRevisionPromise = statePromise.then((state) => state.revision)
 		registerHtmlPermissionGrantChangeListener((change) => this.handleExternalChange(change))
+	}
+
+	async isPersistentAvailable(): Promise<boolean> {
+		await this.sessionEpochPromise
+		const db = await this.dbPromise
+		if (db && !this.fallbackActive) {
+			try {
+				return await this.withIndexedDbAuthority(db, async () => true)
+			} catch (error) {
+				this.activateFallbackForError(
+					error,
+					"Failed to verify permission grant IndexedDB availability",
+					db,
+				)
+			}
+		}
+		return this.fallbackStore.isPersistentAvailable()
 	}
 
 	async getGrant(
@@ -68,96 +112,104 @@ export class IndexedDbHtmlPermissionGrantStore implements HtmlPermissionGrantSto
 
 	async getAppGrants(identity: HtmlPermissionGrantIdentity): Promise<HtmlPermissionGrant[]> {
 		const db = await this.dbPromise
-		if (!db) return []
+		if (!db || this.fallbackActive) return this.fallbackStore.getAppGrants(identity)
+		await this.sessionEpochPromise
+		if (this.fallbackActive) return this.fallbackStore.getAppGrants(identity)
 		try {
-			const appKey = createHtmlPermissionAppKey(identity)
-			const { epoch, records } = await this.readAppRecords(db, appKey)
-			return records
-				.filter(
-					(record) =>
-						isValidStoredGrant(record) &&
-						record.epoch === epoch &&
-						isHtmlPermissionGrantActive(this.toGrant(identity, record), this.getNow()),
-				)
-				.map((record) => this.toGrant(identity, record))
+			return await this.withIndexedDbAuthority(db, async () => {
+				const appKey = createHtmlPermissionAppKey(identity)
+				const { epoch, records } = await readHtmlPermissionAppRecords(db, appKey)
+				return records
+					.filter(
+						(record) =>
+							isValidStoredGrant(record) &&
+							record.epoch === epoch &&
+							isHtmlPermissionGrantActive(
+								toHtmlPermissionGrant(identity, record),
+								this.getNow(),
+							),
+					)
+					.map((record) => toHtmlPermissionGrant(identity, record))
+			})
 		} catch (error) {
-			this.logStorageError("Failed to read permission grants from IndexedDB", error)
-			return []
+			this.activateFallbackForError(
+				error,
+				"Failed to read permission grants from IndexedDB",
+				db,
+			)
+			return this.fallbackStore.getAppGrants(identity)
 		}
 	}
 
-	async save(grant: HtmlPermissionGrant): Promise<void> {
+	async save(grant: HtmlPermissionGrant): Promise<boolean> {
 		const db = await this.dbPromise
-		if (!db) return
-		const expectedEpoch = await this.sessionEpochPromise
-		const expectedRevision = await this.sessionRevisionPromise
-		let nextRevision: number | undefined
+		if (!db || this.fallbackActive) return this.fallbackStore.save(grant)
 		try {
-			await this.runWriteTransaction(db, async (transaction) => {
-				const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
-				const metaStore = transaction.objectStore(META_STORE_NAME)
-				const state = await this.readStateInTransaction(transaction)
-				if (state.epoch !== expectedEpoch) return
-				const currentEpoch = state.epoch
+			return await this.withIndexedDbAuthority(db, async () => {
+				const expectedEpoch = await this.sessionEpochPromise
+				const expectedRevision = await this.sessionRevisionPromise
+				let nextRevision: number | undefined
+				await runHtmlPermissionGrantWriteTransaction(db, async (transaction) => {
+					const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
+					const metaStore = transaction.objectStore(META_STORE_NAME)
+					const state = await readHtmlPermissionGrantStateInTransaction(transaction)
+					if (state.epoch !== expectedEpoch) return
+					const currentEpoch = state.epoch
 
-				const appKey = createHtmlPermissionAppKey(grant)
-				const key = grantRecordKey(appKey, grant.scope)
-				if (state.revision !== expectedRevision) {
-					const revocation = getStoredRevocation(
-						await getRequestResult(metaStore.get(revocationMetaKey(key))),
-					)
-					if (
-						revocation?.value.epoch === currentEpoch &&
-						revocation.value.revision > expectedRevision
-					) {
-						return
+					const appKey = createHtmlPermissionAppKey(grant)
+					const key = grantRecordKey(appKey, grant.scope)
+					if (state.revision !== expectedRevision) {
+						const revocation = getStoredRevocation(
+							await getRequestResult(metaStore.get(revocationMetaKey(key))),
+						)
+						if (
+							revocation?.value.epoch === currentEpoch &&
+							revocation.value.revision > expectedRevision
+						) {
+							return
+						}
 					}
-				}
-				const record: StoredHtmlPermissionGrant = {
-					key,
-					appKey,
-					scope: grant.scope,
-					grantedAt: grant.grantedAt,
-					expiresAt: grant.expiresAt,
-					epoch: currentEpoch,
-				}
-				await getRequestResult(grantsStore.put(record))
+					const record: StoredHtmlPermissionGrant = {
+						key,
+						appKey,
+						scope: grant.scope,
+						grantedAt: grant.grantedAt,
+						expiresAt: grant.expiresAt,
+						epoch: currentEpoch,
+					}
+					await getRequestResult(grantsStore.put(record))
 
-				const currentRecords = (await getRequestResult(
-					grantsStore.index("epoch").getAll(currentEpoch),
-				)) as unknown[]
-				const validCurrentRecords = currentRecords.filter(isValidStoredGrant)
-				const allRecords = validCurrentRecords.filter((item) => item.key !== record.key)
-				allRecords.push(record)
-				if (allRecords.length > MAX_HTML_PERMISSION_GRANTS) {
-					const overflow = allRecords
-						.sort((a, b) => {
-							if (a.expiresAt === null && b.expiresAt !== null) return 1
-							if (a.expiresAt !== null && b.expiresAt === null) return -1
-							return (
-								(a.expiresAt ?? Number.POSITIVE_INFINITY) -
-									(b.expiresAt ?? Number.POSITIVE_INFINITY) ||
-								a.grantedAt - b.grantedAt
-							)
+					const currentRecords = (await getRequestResult(
+						grantsStore.index("epoch").getAll(currentEpoch),
+					)) as unknown[]
+					const validCurrentRecords = currentRecords.filter(isValidStoredGrant)
+					const allRecords = validCurrentRecords.filter((item) => item.key !== record.key)
+					allRecords.push(record)
+					if (allRecords.length > MAX_HTML_PERMISSION_GRANTS) {
+						const overflow = allRecords
+							.sort(compareHtmlPermissionGrantEvictionPriority)
+							.slice(0, allRecords.length - MAX_HTML_PERMISSION_GRANTS)
+						for (const item of overflow)
+							await getRequestResult(grantsStore.delete(item.key))
+						htmlMicroAppPreviewLogger.warn("Permission grant limit exceeded", {
+							limit: MAX_HTML_PERMISSION_GRANTS,
+							evictedCount: overflow.length,
 						})
-						.slice(0, allRecords.length - MAX_HTML_PERMISSION_GRANTS)
-					for (const item of overflow)
-						await getRequestResult(grantsStore.delete(item.key))
-					htmlMicroAppPreviewLogger.warn("Permission grant limit exceeded", {
-						limit: MAX_HTML_PERMISSION_GRANTS,
-						evictedCount: overflow.length,
-					})
+					}
+					nextRevision = state.revision + 1
+					await putHtmlPermissionGrantRevision(metaStore, nextRevision)
+					await getRequestResult(metaStore.delete(revocationMetaKey(key)))
+				})
+				if (nextRevision !== undefined) {
+					this.sessionRevisionPromise = Promise.resolve(nextRevision)
+					notifyPermissionGrantChange({ epoch: expectedEpoch, revision: nextRevision })
+					return true
 				}
-				nextRevision = state.revision + 1
-				await this.putRevision(metaStore, nextRevision)
-				await getRequestResult(metaStore.delete(revocationMetaKey(key)))
+				return false
 			})
-			if (nextRevision !== undefined) {
-				this.sessionRevisionPromise = Promise.resolve(nextRevision)
-				notifyPermissionGrantChange({ epoch: expectedEpoch, revision: nextRevision })
-			}
 		} catch (error) {
-			this.logStorageError("Failed to save permission grant to IndexedDB", error)
+			this.activateFallbackForError(error, "Failed to save permission grant to IndexedDB", db)
+			return this.fallbackStore.save(grant)
 		}
 	}
 
@@ -166,274 +218,243 @@ export class IndexedDbHtmlPermissionGrantStore implements HtmlPermissionGrantSto
 		scope?: HtmlPermissionScope,
 	): Promise<void> {
 		const db = await this.dbPromise
-		if (!db) return
-		const expectedEpoch = await this.sessionEpochPromise
-		let nextRevision: number | undefined
+		if (!db || this.fallbackActive) return this.fallbackStore.remove(identity, scope)
 		try {
-			await this.runWriteTransaction(db, async (transaction) => {
-				const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
-				const metaStore = transaction.objectStore(META_STORE_NAME)
-				const state = await this.readStateInTransaction(transaction)
-				if (state.epoch !== expectedEpoch) return
+			await this.withIndexedDbAuthority(db, async () => {
+				const expectedEpoch = await this.sessionEpochPromise
+				let nextRevision: number | undefined
+				await runHtmlPermissionGrantWriteTransaction(db, async (transaction) => {
+					const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
+					const metaStore = transaction.objectStore(META_STORE_NAME)
+					const state = await readHtmlPermissionGrantStateInTransaction(transaction)
+					if (state.epoch !== expectedEpoch) return
 
-				const appKey = createHtmlPermissionAppKey(identity)
-				const removedKeys: string[] = []
-				if (scope) {
-					const key = grantRecordKey(appKey, scope)
-					const existing = await getRequestResult(grantsStore.get(key))
-					if (!existing) return
-					removedKeys.push(key)
-					await getRequestResult(grantsStore.delete(key))
-				} else {
-					const records = (await getRequestResult(
-						grantsStore.index("appKey").getAll(appKey),
-					)) as StoredHtmlPermissionGrant[]
-					if (records.length === 0) return
-					for (const record of records) {
-						removedKeys.push(record.key)
-						await getRequestResult(grantsStore.delete(record.key))
+					const appKey = createHtmlPermissionAppKey(identity)
+					const removedKeys: string[] = []
+					if (scope) {
+						const key = grantRecordKey(appKey, scope)
+						const existing = await getRequestResult(grantsStore.get(key))
+						if (!existing) return
+						removedKeys.push(key)
+						await getRequestResult(grantsStore.delete(key))
+					} else {
+						const records = (await getRequestResult(
+							grantsStore.index("appKey").getAll(appKey),
+						)) as StoredHtmlPermissionGrant[]
+						if (records.length === 0) return
+						for (const record of records) {
+							removedKeys.push(record.key)
+							await getRequestResult(grantsStore.delete(record.key))
+						}
 					}
-				}
-				nextRevision = state.revision + 1
-				await this.putRevision(metaStore, nextRevision)
-				for (const key of removedKeys) {
-					await getRequestResult(
-						metaStore.put({
-							key: revocationMetaKey(key),
-							value: { epoch: state.epoch, revision: nextRevision },
-						} satisfies StoredHtmlPermissionRevocation),
-					)
+					nextRevision = state.revision + 1
+					await putHtmlPermissionGrantRevision(metaStore, nextRevision)
+					for (const key of removedKeys) {
+						await getRequestResult(
+							metaStore.put({
+								key: revocationMetaKey(key),
+								value: { epoch: state.epoch, revision: nextRevision },
+							} satisfies StoredHtmlPermissionRevocation),
+						)
+					}
+				})
+				if (nextRevision !== undefined) {
+					this.sessionRevisionPromise = Promise.resolve(nextRevision)
+					notifyPermissionGrantChange({ epoch: expectedEpoch, revision: nextRevision })
 				}
 			})
-			if (nextRevision !== undefined) {
-				this.sessionRevisionPromise = Promise.resolve(nextRevision)
-				notifyPermissionGrantChange({ epoch: expectedEpoch, revision: nextRevision })
-			}
 		} catch (error) {
-			this.logStorageError("Failed to remove permission grant from IndexedDB", error)
+			this.activateFallbackForError(
+				error,
+				"Failed to remove permission grant from IndexedDB",
+				db,
+			)
+			throw error
 		}
 	}
 
 	async prune(now: number): Promise<void> {
 		const db = await this.dbPromise
-		if (!db) return
-		let nextRevision: number | undefined
-		let currentEpoch = 0
+		if (!db || this.fallbackActive) return this.fallbackStore.prune(now)
+		await this.sessionEpochPromise
+		if (this.fallbackActive) return this.fallbackStore.prune(now)
 		try {
-			await this.runWriteTransaction(db, async (transaction) => {
-				const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
-				const metaStore = transaction.objectStore(META_STORE_NAME)
-				const state = await this.readStateInTransaction(transaction)
-				const epoch = state.epoch
-				currentEpoch = epoch
-				const records = (await getRequestResult(
-					grantsStore.index("epoch").getAll(epoch),
-				)) as unknown[]
-				let changed = false
-				for (const record of records) {
-					if (
-						!isValidStoredGrant(record) ||
-						(record.expiresAt !== null && record.expiresAt <= now)
-					) {
-						await getRequestResult(grantsStore.delete(record.key))
-						changed = true
+			await this.withIndexedDbAuthority(db, async () => {
+				let nextRevision: number | undefined
+				let currentEpoch = 0
+				await runHtmlPermissionGrantWriteTransaction(db, async (transaction) => {
+					const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
+					const metaStore = transaction.objectStore(META_STORE_NAME)
+					const state = await readHtmlPermissionGrantStateInTransaction(transaction)
+					const epoch = state.epoch
+					currentEpoch = epoch
+					const records = (await getRequestResult(
+						grantsStore.index("epoch").getAll(epoch),
+					)) as unknown[]
+					let changed = false
+					for (const record of records) {
+						if (
+							!isValidStoredGrant(record) ||
+							(record.expiresAt !== null && record.expiresAt <= now)
+						) {
+							await getRequestResult(grantsStore.delete(record.key))
+							changed = true
+						}
 					}
-				}
-				if (changed) {
-					nextRevision = state.revision + 1
-					await this.putRevision(metaStore, nextRevision)
+					if (changed) {
+						nextRevision = state.revision + 1
+						await putHtmlPermissionGrantRevision(metaStore, nextRevision)
+					}
+				})
+				if (nextRevision !== undefined) {
+					this.sessionRevisionPromise = Promise.resolve(nextRevision)
+					notifyPermissionGrantChange({ epoch: currentEpoch, revision: nextRevision })
 				}
 			})
-			if (nextRevision !== undefined) {
-				this.sessionRevisionPromise = Promise.resolve(nextRevision)
-				notifyPermissionGrantChange({ epoch: currentEpoch, revision: nextRevision })
-			}
 		} catch (error) {
-			this.logStorageError("Failed to prune permission grants from IndexedDB", error)
+			this.activateFallbackForError(
+				error,
+				"Failed to prune permission grants from IndexedDB",
+				db,
+			)
+			await this.fallbackStore.prune(now)
 		}
 	}
 
 	async clear(): Promise<void> {
 		const db = await this.dbPromise
-		if (!db) {
+		if (!db || this.fallbackActive) return this.fallbackStore.clear()
+		await this.sessionEpochPromise
+		if (this.fallbackActive) return this.fallbackStore.clear()
+
+		const result = await this.fallbackStore.withAuthorityLock(() =>
+			this.clearWithRecoveryMarker(db),
+		)
+		if (result.acquired) return
+		await this.clearWithRecoveryMarker(db)
+	}
+
+	private async clearWithRecoveryMarker(db: IDBDatabase): Promise<void> {
+		const fallbackClearPersisted = this.fallbackStore.clearForRecoveryUnlocked()
+		let state: HtmlPermissionGrantState
+		try {
+			state = await this.clearIndexedDb(db)
+		} catch (error) {
+			this.activateFallback("Failed to clear permission grants from IndexedDB", error, db)
 			notifyPermissionGrantChange()
+			if (!fallbackClearPersisted) {
+				throw new Error("HTML permission fallback clear could not be persisted")
+			}
 			return
 		}
-		let nextEpoch: number | undefined
-		let nextRevision: number | undefined
+
+		this.updateSessionState(state)
 		try {
-			await this.runWriteTransaction(db, async (transaction) => {
-				const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
-				const metaStore = transaction.objectStore(META_STORE_NAME)
-				const state = await this.readStateInTransaction(transaction)
-				nextEpoch = state.epoch + 1
-				nextRevision = state.revision + 1
-				await getRequestResult(grantsStore.clear())
-				const metaKeys = (await getRequestResult(metaStore.getAllKeys())) as IDBValidKey[]
-				for (const key of metaKeys) {
-					if (typeof key === "string" && key.startsWith(REVOCATION_META_PREFIX)) {
-						await getRequestResult(metaStore.delete(key))
-					}
-				}
-				await getRequestResult(
-					metaStore.put({
-						key: EPOCH_META_KEY,
-						value: nextEpoch,
-					} satisfies StoredHtmlPermissionEpoch),
-				)
-				await this.putRevision(metaStore, nextRevision)
-			})
-			if (nextEpoch !== undefined && nextRevision !== undefined) {
-				this.sessionEpochPromise = Promise.resolve(nextEpoch)
-				this.sessionRevisionPromise = Promise.resolve(nextRevision)
-			}
+			this.fallbackStore.discardRecoverySnapshotUnlocked()
 		} catch (error) {
-			this.logStorageError("Failed to clear permission grants from IndexedDB", error)
-		} finally {
-			notifyPermissionGrantChange(
-				nextEpoch !== undefined && nextRevision !== undefined
-					? { epoch: nextEpoch, revision: nextRevision, cleared: true }
-					: undefined,
+			this.logStorageError("Failed to remove recovered HTML permission fallback", error)
+		}
+		notifyPermissionGrantChange({ ...state, cleared: true })
+	}
+
+	private async clearIndexedDb(db: IDBDatabase): Promise<HtmlPermissionGrantState> {
+		let nextState: HtmlPermissionGrantState | undefined
+		await runHtmlPermissionGrantWriteTransaction(db, async (transaction) => {
+			const grantsStore = transaction.objectStore(GRANTS_STORE_NAME)
+			const metaStore = transaction.objectStore(META_STORE_NAME)
+			const state = await readHtmlPermissionGrantStateInTransaction(transaction)
+			nextState = { epoch: state.epoch + 1, revision: state.revision + 1 }
+			await getRequestResult(grantsStore.clear())
+			const metaKeys = (await getRequestResult(metaStore.getAllKeys())) as IDBValidKey[]
+			for (const key of metaKeys) {
+				if (typeof key === "string" && key.startsWith(REVOCATION_META_PREFIX)) {
+					await getRequestResult(metaStore.delete(key))
+				}
+			}
+			await getRequestResult(
+				metaStore.put({
+					key: EPOCH_META_KEY,
+					value: nextState.epoch,
+				} satisfies StoredHtmlPermissionEpoch),
 			)
-		}
-	}
-
-	private openDatabase(): Promise<IDBDatabase | null> {
-		if (typeof indexedDB === "undefined" || !indexedDB) return Promise.resolve(null)
-		return new Promise((resolve) => {
-			let request: IDBOpenDBRequest
-			try {
-				request = indexedDB.open(HTML_PERMISSION_DB_NAME, HTML_PERMISSION_DB_VERSION)
-			} catch (error) {
-				this.logStorageError("Failed to open permission grant IndexedDB", error)
-				resolve(null)
-				return
-			}
-			request.onupgradeneeded = () => {
-				const db = request.result
-				if (!db.objectStoreNames.contains(GRANTS_STORE_NAME)) {
-					const grantsStore = db.createObjectStore(GRANTS_STORE_NAME, { keyPath: "key" })
-					grantsStore.createIndex("appKey", "appKey", { unique: false })
-					grantsStore.createIndex("epoch", "epoch", { unique: false })
-				}
-				if (!db.objectStoreNames.contains(META_STORE_NAME)) {
-					db.createObjectStore(META_STORE_NAME, { keyPath: "key" })
-				}
-			}
-			request.onsuccess = () => {
-				const db = request.result
-				db.onversionchange = () => db.close()
-				resolve(db)
-			}
-			request.onerror = () => {
-				this.logStorageError("Failed to open permission grant IndexedDB", request.error)
-				resolve(null)
-			}
-			request.onblocked = () => {
-				this.logStorageError("Permission grant IndexedDB open was blocked", request.error)
-				resolve(null)
-			}
+			await putHtmlPermissionGrantRevision(metaStore, nextState.revision)
 		})
+		if (!nextState) throw new Error("HTML permission IndexedDB clear did not complete")
+		return nextState
 	}
 
-	private async readState(db: IDBDatabase): Promise<HtmlPermissionGrantState> {
-		const transaction = db.transaction(META_STORE_NAME, "readonly")
-		return this.readStateInTransaction(transaction)
-	}
-
-	private async readStateInTransaction(
-		transaction: IDBTransaction,
-	): Promise<HtmlPermissionGrantState> {
-		const metaStore = transaction.objectStore(META_STORE_NAME)
-		const [epochRecord, revisionRecord] = await Promise.all([
-			getRequestResult(metaStore.get(EPOCH_META_KEY)),
-			getRequestResult(metaStore.get(REVISION_META_KEY)),
-		])
-		return {
-			epoch: getStoredEpoch(epochRecord),
-			revision: getStoredRevision(revisionRecord),
-		}
-	}
-
-	private putRevision(metaStore: IDBObjectStore, revision: number): Promise<unknown> {
-		return getRequestResult(
-			metaStore.put({
-				key: REVISION_META_KEY,
-				value: revision,
-			} satisfies StoredHtmlPermissionRevision),
-		)
-	}
-
-	private readAppRecords(
+	private async withIndexedDbAuthority<T>(
 		db: IDBDatabase,
-		appKey: string,
-	): Promise<{ epoch: number; records: StoredHtmlPermissionGrant[] }> {
-		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([GRANTS_STORE_NAME, META_STORE_NAME], "readonly")
-			const grantsRequest = transaction
-				.objectStore(GRANTS_STORE_NAME)
-				.index("appKey")
-				.getAll(appKey)
-			const epochRequest = transaction.objectStore(META_STORE_NAME).get(EPOCH_META_KEY)
-			let records: StoredHtmlPermissionGrant[] | undefined
-			let epoch: number | undefined
-			grantsRequest.onsuccess = () => {
-				records = grantsRequest.result as StoredHtmlPermissionGrant[]
-			}
-			epochRequest.onsuccess = () => {
-				epoch = getStoredEpoch(epochRequest.result)
-			}
-			transaction.oncomplete = () => resolve({ epoch: epoch ?? 0, records: records ?? [] })
-			transaction.onerror = () => reject(getTransactionError(transaction))
-			transaction.onabort = () => reject(getTransactionError(transaction))
+		operation: () => Promise<T>,
+	): Promise<T> {
+		const result = await this.fallbackStore.withAuthorityLock(async () => {
+			await this.recoverPendingFallbackUnlocked(db)
+			return operation()
 		})
+		if (result.acquired) return result.value
+
+		// Fallback writes are disabled without Web Locks, so recovery cannot race a writer.
+		await this.recoverPendingFallbackUnlocked(db)
+		return operation()
 	}
 
-	private runWriteTransaction(
-		db: IDBDatabase,
-		operation: (transaction: IDBTransaction) => Promise<void>,
-	): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([GRANTS_STORE_NAME, META_STORE_NAME], "readwrite")
-			let operationError: unknown
-			operation(transaction).catch((error) => {
-				operationError = error
-				try {
-					transaction.abort()
-				} catch {
-					// The transaction may already be completing.
-				}
-			})
-			transaction.oncomplete = () => {
-				if (operationError) reject(operationError)
-				else resolve()
-			}
-			transaction.onerror = () => reject(operationError || getTransactionError(transaction))
-			transaction.onabort = () => reject(operationError || getTransactionError(transaction))
-		})
-	}
-
-	private toGrant(
-		identity: HtmlPermissionGrantIdentity,
-		record: StoredHtmlPermissionGrant,
-	): HtmlPermissionGrant {
-		return {
-			...identity,
-			scope: record.scope,
-			grantedAt: record.grantedAt,
-			expiresAt: record.expiresAt,
-		}
-	}
-
-	private clearLegacyLocalStorage() {
+	private async recoverPendingFallbackUnlocked(db: IDBDatabase): Promise<void> {
+		let snapshot
 		try {
-			globalThis.localStorage?.removeItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY)
+			snapshot = this.fallbackStore.readRecoverySnapshotUnlocked()
 		} catch (error) {
-			this.logStorageError(
-				"Failed to remove legacy permission grants from localStorage",
+			throw new HtmlPermissionFallbackRecoveryError(
+				"Failed to read HTML permission fallback recovery snapshot",
 				error,
 			)
 		}
+		if (!snapshot) return
+
+		let state: HtmlPermissionGrantState
+		try {
+			state = await recoverHtmlPermissionFallback(db, snapshot, this.getNow())
+		} catch (error) {
+			throw new HtmlPermissionFallbackRecoveryError(
+				"Failed to apply HTML permission fallback recovery",
+				error,
+			)
+		}
+		try {
+			this.fallbackStore.discardRecoverySnapshotUnlocked()
+		} catch (error) {
+			throw new HtmlPermissionFallbackRecoveryError(
+				"Failed to remove recovered HTML permission fallback",
+				error,
+			)
+		}
+		this.updateSessionState(state)
+		notifyPermissionGrantChange({
+			...state,
+			cleared: snapshot.clearedAtRevision !== null,
+		})
+	}
+
+	private updateSessionState(state: HtmlPermissionGrantState): void {
+		this.sessionEpochPromise = Promise.resolve(state.epoch)
+		this.sessionRevisionPromise = Promise.resolve(state.revision)
+	}
+
+	private activateFallback(message: string, error: unknown, db: IDBDatabase): void {
+		this.logStorageError(message, error)
+		this.fallbackActive = true
+		db.close()
+	}
+
+	private activateFallbackForError(
+		error: unknown,
+		defaultMessage: string,
+		db: IDBDatabase,
+	): void {
+		if (error instanceof HtmlPermissionFallbackRecoveryError) {
+			this.activateFallback(error.logMessage, error.originalError, db)
+			return
+		}
+		this.activateFallback(defaultMessage, error, db)
 	}
 
 	private logStorageError(message: string, error: unknown) {

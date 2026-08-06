@@ -11,11 +11,36 @@ import {
 	type HtmlPermissionGrantStore,
 } from "../HtmlPermissionGrantStore"
 import type { HtmlPermissionScope } from "../../types"
+import type { IndexedDbHtmlPermissionGrantStore } from "../IndexedDbHtmlPermissionGrantStore"
+
+export async function closeHtmlPermissionGrantDatabaseForTest(
+	store: IndexedDbHtmlPermissionGrantStore,
+) {
+	const db = await (store as unknown as { dbPromise: Promise<IDBDatabase | null> }).dbPromise
+	db?.close()
+}
+
+export function installWebLocksMock() {
+	let tail = Promise.resolve<unknown>(undefined)
+	const request = vi.fn((name: string, callback: (lock: Lock) => unknown) => {
+		const result = tail.then(() => callback({ name, mode: "exclusive" } as Lock))
+		tail = result.then(
+			() => undefined,
+			() => undefined,
+		)
+		return result
+	})
+	Object.defineProperty(globalThis.navigator, "locks", {
+		configurable: true,
+		value: { request },
+	})
+}
 
 export class MemoryGrantStore implements HtmlPermissionGrantStore {
 	constructor(private readonly getNow: () => number = () => 1_000_000) {}
 
 	grants: HtmlPermissionGrant[] = []
+	isPersistentAvailable = vi.fn(async () => true)
 	getGrant = vi.fn(async (identity: HtmlPermissionGrantIdentity, scope: HtmlPermissionScope) => {
 		this.removeExpired(this.getNow())
 		return this.grants.find(
@@ -47,6 +72,7 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 				),
 		)
 		this.grants.push(grant)
+		return true
 	})
 	remove = vi.fn(async (identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope) => {
 		this.grants = this.grants.filter(

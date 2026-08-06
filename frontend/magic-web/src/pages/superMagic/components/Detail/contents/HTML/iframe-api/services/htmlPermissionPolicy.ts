@@ -106,6 +106,10 @@ export function getSharedHtmlPermissionTtlOptions(
 	)
 }
 
+export function getHtmlPermissionOnceTtlOption(): HtmlPermissionTtlOption {
+	return TTL_OPTIONS.once
+}
+
 export function getDefaultHtmlPermissionTtl(
 	scopes: HtmlPermissionScope[],
 	mode: HtmlPermissionMode,

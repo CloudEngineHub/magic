@@ -142,7 +142,12 @@ export class AccountService {
 		logger.report("deleteAccount", new Error())
 		// Account removal is a security lifecycle event. Clear the shared consent cache even
 		// when another cached account remains, because stored grants intentionally have no plaintext owner ID.
-		await getHtmlPermissionGrantStore().clear()
+		try {
+			await getHtmlPermissionGrantStore().clear()
+		} catch (error) {
+			// Permission storage cleanup is best effort and must not prevent token removal or logout.
+			logger.error("Failed to clear HTML permission grants during account removal", error)
+		}
 		const allClean = async () => {
 			MessageService.destroy()
 
