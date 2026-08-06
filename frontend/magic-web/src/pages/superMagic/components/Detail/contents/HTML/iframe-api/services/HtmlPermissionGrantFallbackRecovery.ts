@@ -10,6 +10,7 @@ import {
 	compareHtmlPermissionGrantEvictionPriority,
 	getRequestResult,
 	getStoredEpoch,
+	getStoredRevocation,
 	getStoredRevision,
 	getTransactionError,
 	grantRecordKey,
@@ -123,6 +124,12 @@ async function applyFallbackSnapshot(
 
 	for (const grant of Object.values(snapshot.grants)) {
 		if (!isFallbackGrantEffective(snapshot, grant) || !isGrantActive(grant, now)) continue
+		// Fallback v1 and IndexedDB revisions are independent. Preserve a current-epoch revoke
+		// instead of deleting its marker because recovery cannot prove which mutation is newer.
+		const revocation = getStoredRevocation(
+			await getRequestResult(metaStore.get(revocationMetaKey(grant.key))),
+		)
+		if (revocation?.value.epoch === targetEpoch) continue
 		await getRequestResult(
 			grantsStore.put({
 				key: grant.key,

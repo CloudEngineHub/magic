@@ -6,7 +6,14 @@ import {
 	type HtmlPermissionGrant,
 } from "../HtmlPermissionGrantStore"
 import { IndexedDbHtmlPermissionGrantStore } from "../IndexedDbHtmlPermissionGrantStore"
+import { recoverHtmlPermissionFallback } from "../HtmlPermissionGrantFallbackRecovery"
 import { LocalStorageHtmlPermissionGrantStore } from "../LocalStorageHtmlPermissionGrantStore"
+import {
+	getRequestResult,
+	putHtmlPermissionGrantRevision,
+	runHtmlPermissionGrantWriteTransaction,
+	revocationMetaKey,
+} from "../IndexedDbHtmlPermissionGrantStore.utils"
 import {
 	closeHtmlPermissionGrantDatabaseForTest,
 	createService,
@@ -176,6 +183,48 @@ describe("HTML permission storage fallback", () => {
 
 		expect(await indexedDbStore.getAppGrants(permanentGrant)).toEqual([])
 		expect(localStorage.getItem(LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY)).toBeNull()
+	})
+
+	it("does not restore a fallback grant over an IndexedDB revocation marker", async () => {
+		const indexedDbFactory = new IDBFactory()
+		vi.stubGlobal("indexedDB", indexedDbFactory)
+		const indexedDbStore = new IndexedDbHtmlPermissionGrantStore(() => 1_000_000)
+		const permanentGrant = grant({ expiresAt: null })
+		await indexedDbStore.save(permanentGrant)
+
+		vi.stubGlobal("indexedDB", undefined)
+		const fallbackStore = new LocalStorageHtmlPermissionGrantStore(() => 1_000_000)
+		await fallbackStore.save(permanentGrant)
+		const snapshot = fallbackStore.readRecoverySnapshotUnlocked()
+		expect(snapshot).not.toBeNull()
+
+		vi.stubGlobal("indexedDB", indexedDbFactory)
+		const db = await (indexedDbStore as unknown as { dbPromise: Promise<IDBDatabase> })
+			.dbPromise
+		const key = Object.keys(snapshot!.grants)[0]
+		await runHtmlPermissionGrantWriteTransaction(db, async (transaction) => {
+			const grantsStore = transaction.objectStore("grants")
+			const metaStore = transaction.objectStore("meta")
+			await getRequestResult(grantsStore.delete(key))
+			await putHtmlPermissionGrantRevision(metaStore, 2)
+			await getRequestResult(
+				metaStore.put({
+					key: revocationMetaKey(key),
+					value: { epoch: 0, revision: 2 },
+				}),
+			)
+		})
+
+		await recoverHtmlPermissionFallback(db, snapshot!, 1_000_000)
+
+		expect(await indexedDbStore.getGrant(permanentGrant, "llm.use")).toBeUndefined()
+		const revocation = await getRequestResult(
+			db.transaction("meta", "readonly").objectStore("meta").get(revocationMetaKey(key)),
+		)
+		expect(revocation).toEqual({
+			key: revocationMetaKey(key),
+			value: { epoch: 0, revision: 2 },
+		})
 	})
 
 	it("keeps the fallback snapshot when IndexedDB recovery fails", async () => {
