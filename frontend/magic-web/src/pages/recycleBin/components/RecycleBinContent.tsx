@@ -3,11 +3,17 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useRequest } from "ahooks"
 import { RecycleBinApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { createRecycleBinTabCounts, RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID } from "../tab-config"
+import {
+	createRecycleBinTabCounts,
+	RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID,
+	type RecycleBinTab,
+	useRecycleBinTabLabel,
+} from "../tab-config"
 import { RecycleBinList } from "./RecycleBinList"
 import { RecycleBinModals } from "./RecycleBinModals"
 import { RecycleBinToolbar } from "./RecycleBinToolbar"
 import {
+	getResourceTypeByTabId,
 	mapRecycleBinItem as mapRecycleBinItemFromDomain,
 	type RecycleBinItem,
 } from "./recycle-bin-domain"
@@ -15,16 +21,9 @@ import { useRecycleBinActions } from "./useRecycleBinActions"
 import { useRecycleBinSelection } from "./useRecycleBinSelection"
 
 const RECYCLE_BIN_PAGE_SIZE = 50
-const TAB_ID_TO_RESOURCE_TYPE: Record<string, number | undefined> = {
-	all: undefined,
-	workspaces: 1,
-	projects: 2,
-	topics: 3,
-	files: 4,
-}
-
 export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
+	const getTabLabel = useRecycleBinTabLabel("pc")
 	const [searchValue, setSearchValue] = useState("")
 	const [items, setItems] = useState<RecycleBinItem[]>([])
 	const [hasError, setHasError] = useState(false)
@@ -34,18 +33,16 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 
 	const activeTabId = activeTab?.id
 	const trimmedSearchValue = searchValue.trim()
-	const queryParams = useMemo(
-		() => ({
-			...(activeTabId && TAB_ID_TO_RESOURCE_TYPE[activeTabId] !== undefined
-				? { resource_type: TAB_ID_TO_RESOURCE_TYPE[activeTabId] }
-				: {}),
+	const queryParams = useMemo(() => {
+		const resourceType = getResourceTypeByTabId(activeTabId)
+		return {
+			...(resourceType ? { resource_type: resourceType } : {}),
 			keyword: trimmedSearchValue ? trimmedSearchValue : undefined,
 			order: "desc" as const,
 			page: 1,
 			page_size: RECYCLE_BIN_PAGE_SIZE,
-		}),
-		[activeTabId, trimmedSearchValue],
-	)
+		}
+	}, [activeTabId, trimmedSearchValue])
 
 	const refreshTabCounts = useMemoizedFn(async () => {
 		if (!onTabCountChange) return
@@ -132,7 +129,7 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 
 	const hasItems = selection.visibleItems.length > 0
 	const shouldShowEmpty = !loading && !hasError && !hasItems
-	const title = activeTab ? t(activeTab.labelKey, { count: activeTab.count }) : ""
+	const title = activeTab ? getTabLabel(activeTab.id, activeTab.count) : ""
 
 	return (
 		<div className="flex min-w-0 flex-1 flex-col gap-3.5" data-testid="recycle-bin-content">
@@ -204,10 +201,4 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 interface RecycleBinContentProps {
 	activeTab: RecycleBinTab | undefined
 	onTabCountChange?: (tabId: string, count: number) => void
-}
-
-interface RecycleBinTab {
-	id: string
-	labelKey: string
-	count: number
 }

@@ -62,13 +62,14 @@ describe("superMagicSlidesTemplateRoutes", () => {
 		expect(legacyRoute?.path).toBe("/:clusterCode/super/slides-templates")
 	})
 
-	it("places the slide template route before dynamic project routes", () => {
-		const superRoute = findRouteByName(registerRoutes(), RouteName.Super)
+	it("keeps static slide routes separate from guarded dynamic project routes", () => {
+		const routes = registerRoutes()
+		const superRoute = findRouteByName(routes, RouteName.Super)
+		const projectRoute = findRouteByName(routes, RouteName.SuperWorkspaceProjectState)
 		const childNames = superRoute?.children?.map((route) => route.name)
 
-		expect(childNames?.indexOf(RouteName.SuperSlidesTemplates)).toBeGreaterThanOrEqual(0)
-		expect(childNames?.indexOf(RouteName.SuperSlidesTemplates)).toBeLessThan(
-			childNames?.indexOf(RouteName.SuperWorkspaceProjectState) ?? -1,
-		)
+		expect(childNames).toContain(RouteName.SuperSlidesTemplates)
+		expect(childNames).not.toContain(RouteName.SuperWorkspaceProjectState)
+		expect(projectRoute?.children?.[0]?.index).toBe(true)
 	})
 })

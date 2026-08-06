@@ -44,6 +44,7 @@ interface MessageEditorViewProps {
 	outsideBottomContent?: ReactNode
 	outsideTopContent?: ReactNode
 	uploadModal?: ReactNode
+	promptCarouselNode?: ReactNode
 	taskDataNode?: ReactNode
 	messageQueueNode?: ReactNode
 	showAiCompletion: boolean
@@ -67,6 +68,7 @@ function MessageEditorView({
 	outsideBottomContent,
 	outsideTopContent,
 	uploadModal,
+	promptCarouselNode,
 	showAiCompletion,
 }: MessageEditorViewProps) {
 	const isMobile = useIsMobile()
@@ -123,6 +125,7 @@ function MessageEditorView({
 								data-testid="super-message-editor-content"
 								id={SummaryGuideDOMId.MessageEditorContent}
 							/>
+							{promptCarouselNode}
 						</div>
 						{showAiCompletion && <AiCompletionTip icon={TabIcon as string} />}
 						<div

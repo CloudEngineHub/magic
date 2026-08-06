@@ -8,6 +8,7 @@ import {
 	SquareCheckBig,
 } from "lucide-react"
 import { memo } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -15,6 +16,7 @@ import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
 import { cn } from "@/lib/utils"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface NormalModeHeaderProps {
 	title?: string
@@ -33,6 +35,7 @@ interface NormalModeHeaderProps {
 	onUploadFolder?: () => void
 	onImportFromOtherProject?: () => void
 	onEnterSelectMode?: () => void
+	headerTrailingAction?: ReactNode
 	className?: string
 }
 
@@ -53,18 +56,25 @@ function NormalModeHeader({
 	onUploadFolder,
 	onImportFromOtherProject,
 	onEnterSelectMode,
+	headerTrailingAction,
 	className,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
 	return (
-		<div className={cn("flex h-8 w-full items-center justify-between pl-4 pr-2", className)}>
-			<p className="whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
+		<div
+			className={cn(
+				"relative flex h-8 w-full items-center pl-4",
+				headerTrailingAction ? "pr-10" : "pr-2",
+				className,
+			)}
+		>
+			<p className="shrink-0 whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
 				{title || t("topicFiles.title")}
 			</p>
-			<div className="flex items-center gap-1">
-				{allowEdit && onSearch && (
+			<div className="ml-auto flex min-w-0 items-center justify-end gap-1 overflow-hidden">
+				{onSearch && (
 					<MagicTooltip title={t("topicFiles.search")}>
 						<button
 							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
@@ -165,6 +175,9 @@ function NormalModeHeader({
 					</MagicTooltip>
 				)}
 			</div>
+			{headerTrailingAction ? (
+				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
+			) : null}
 		</div>
 	)
 }

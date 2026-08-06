@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import i18n from "i18next"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 
 const MENTION_PREVIEW_FALLBACKS: Record<string, string> = {
@@ -6,6 +7,8 @@ const MENTION_PREVIEW_FALLBACKS: Record<string, string> = {
 	cloud_file: "Cloud File",
 	design_marker: "Marker",
 	mcp: "MCP",
+	memory_directory: "Memory Folder",
+	memory_file: "Memory File",
 	project_directory: "Folder",
 	project_file: "File",
 	skill: "Skill",
@@ -26,8 +29,15 @@ function getMentionPreviewText(node: JSONContent) {
 		node.attrs?.label ||
 		node.attrs?.name ||
 		MENTION_PREVIEW_FALLBACKS[mentionType]
+	const memoryPrefix = i18n.t("super/longMemory:mentionPrefix", {
+		defaultValue: "Memory",
+	})
 
-	return typeof displayName === "string" && displayName ? `@${displayName}` : ""
+	if (typeof displayName !== "string" || !displayName) return ""
+	if (mentionType === "memory_file" || mentionType === "memory_directory") {
+		return `@${memoryPrefix}:${displayName}`
+	}
+	return `@${displayName}`
 }
 
 /** Walk TipTap JSON content so mobile previews avoid importing the full editor runtime. */

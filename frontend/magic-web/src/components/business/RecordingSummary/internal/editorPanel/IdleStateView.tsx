@@ -23,6 +23,7 @@ interface IdleStateViewProps {
 	iconSize: number
 	selectedProjectId?: string
 	isStartingRecord: boolean
+	isModelReady: boolean
 	uploading: boolean
 	uploadProgress: number
 	leftToolbar: ReactNode
@@ -41,6 +42,7 @@ export function IdleStateView({
 	iconSize,
 	selectedProjectId,
 	isStartingRecord,
+	isModelReady,
 	uploading,
 	uploadProgress,
 	leftToolbar,
@@ -128,7 +130,7 @@ export function IdleStateView({
 				>
 					<StartRecordingButton
 						isLoading={isStartingRecord}
-						disabled={isStartingRecord || uploading}
+						disabled={isStartingRecord || uploading || !isModelReady}
 						allowSelectProject={!selectedProjectId}
 						onClick={handleStartRecording}
 					/>

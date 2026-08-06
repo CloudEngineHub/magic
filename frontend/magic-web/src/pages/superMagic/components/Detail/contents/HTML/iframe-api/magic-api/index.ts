@@ -14,6 +14,8 @@ import { MagicI18nApi } from "./MagicI18nApi"
 import { MagicAgentApi } from "./MagicAgentApi"
 import { MagicWorkspaceApi } from "./MagicWorkspaceApi"
 import { MagicUserApi } from "./MagicUserApi"
+import { MagicDatabaseApi } from "./MagicDatabaseApi"
+import { MagicContextApi } from "./MagicContextApi"
 
 /**
  * Magic API 插件包。由 runtime 的 composition root 注册安装，
@@ -28,4 +30,6 @@ export const magicApiPlugins: RuntimePluginClass[] = [
 	MagicWorkspaceApi,
 	MagicAgentApi,
 	MagicUserApi,
+	MagicContextApi,
+	MagicDatabaseApi,
 ]

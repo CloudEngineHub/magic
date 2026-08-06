@@ -61,4 +61,7 @@ enum ServiceProviderErrorCode: int
 
     #[ErrorMessage('service_provider.original_model_id_already_exists')]
     case OriginalModelIdAlreadyExists = 44017;
+
+    #[ErrorMessage('service_provider.ai_ability_model_unavailable')]
+    case AI_ABILITY_MODEL_UNAVAILABLE = 44018;
 }

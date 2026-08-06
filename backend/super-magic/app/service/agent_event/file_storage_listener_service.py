@@ -974,8 +974,7 @@ class FileStorageListenerService:
         过滤规则:
         - 跳过目录快照 (版本与 attachment 都只针对文件)
         - 跳过 DELETED 操作 (文件已不存在，无法构造 attachment)
-        - 跳过任一路径段以 "." 开头的隐藏路径 (等价于原 BROWSER + 隐藏文件过滤，
-          覆盖 .browser_screenshots / .magic / .agent 等自动产物目录)
+        - 跳过任一路径段以 "." 开头的隐藏路径，覆盖工具和 Agent 生成的隐藏目录
         - 同一路径同一 checkpoint 内只取第一次出现 (file_snapshots 已是按顺序追加
           的操作流，保留首次即可)
 
@@ -1084,8 +1083,7 @@ class FileStorageListenerService:
         """
         判断路径是否属于隐藏路径 (任一路径段以 "." 开头)。
 
-        用于过滤诸如 .browser_screenshots/* 这类由工具自动生成、不应出现在
-        "本轮变更附件" 列表里的产物。
+        用于过滤由工具或 Agent 自动生成、不应出现在"本轮变更附件"列表里的隐藏产物。
         """
         normalized = path.replace("\\", "/").lstrip("/")
         if not normalized:

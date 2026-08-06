@@ -69,7 +69,7 @@ const parseExecutionResult = (content: string) => {
 
 function MCPToolCallNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const plugins = (tool?.detail?.data?.server_results || []) as Array<MCPToolResult>
 
@@ -166,7 +166,11 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.parameters")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"
@@ -186,7 +190,11 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.result")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy-2">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy-2"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"

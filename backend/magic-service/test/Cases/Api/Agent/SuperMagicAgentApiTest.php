@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Agent;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
@@ -825,6 +824,106 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertSame('MARKET', $marketItem['source_type']);
         $this->assertSame('7.0.0', $marketItem['latest_version_code']);
         $this->assertTrue($marketItem['allow_delete']);
+    }
+
+    public function testCheckAgentAccessEndpoint(): void
+    {
+        $this->switchUserTest2();
+        $publisherHeaders = $this->getCommonHeaders();
+        $sharedAgentCode = $this->createTestAgent();
+        $this->shareAgentWithUser($sharedAgentCode, $publisherHeaders['user-id'], env('TEST1_USER_ID'));
+
+        $marketAgentCode = 'market_' . IdGenerator::getUniqueId32();
+        $this->createPublishedAgentVersionRecord($marketAgentCode, '8.0.0', $publisherHeaders, true);
+
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+        $createdAgentCode = $this->createTestAgent();
+
+        $createdResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => ' ' . $createdAgentCode . ' '],
+            $headers
+        );
+        $this->assertEquals(1000, $createdResponse['code'], $createdResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $createdAgentCode,
+            'exists' => true,
+            'can_use' => true,
+        ], $createdResponse['data']);
+
+        $sharedResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $sharedAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $sharedResponse['code'], $sharedResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $sharedAgentCode,
+            'exists' => true,
+            'can_use' => false,
+        ], $sharedResponse['data']);
+
+        $unknownAgentCode = 'unknown_' . IdGenerator::getUniqueId32();
+        $unknownResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $unknownAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $unknownResponse['code'], $unknownResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $unknownAgentCode,
+            'exists' => false,
+            'can_use' => false,
+        ], $unknownResponse['data']);
+
+        // 市场已上架但未雇佣：存在但不可用（市场上架与本地/雇佣关系是“或”的关系）。
+        $marketBeforeHireResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $marketAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $marketBeforeHireResponse['code'], $marketBeforeHireResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $marketAgentCode,
+            'exists' => true,
+            'can_use' => false,
+        ], $marketBeforeHireResponse['data']);
+
+        $hireResponse = $this->post(
+            '/api/v2/super-magic/agent-market/' . $marketAgentCode . '/hire',
+            [],
+            $headers
+        );
+        $this->assertEquals(1000, $hireResponse['code'], $hireResponse['message'] ?? '');
+
+        $marketResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $marketAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $marketResponse['code'], $marketResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $marketAgentCode,
+            'exists' => true,
+            'can_use' => true,
+        ], $marketResponse['data']);
+    }
+
+    public function testCheckAgentAccessEndpointValidatesCode(): void
+    {
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+
+        foreach ([
+            [],
+            ['code' => '   '],
+            ['code' => str_repeat('A', 51)],
+            ['code' => ['invalid']],
+        ] as $payload) {
+            $response = $this->post(self::BASE_URI . '/access-check', $payload, $headers);
+            $this->assertNotEquals(1000, $response['code'], $response['message'] ?? '');
+        }
     }
 
     public function testQueryAgentMarketReturnsLatestVersionAndAllowDelete(): void

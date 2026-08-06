@@ -289,9 +289,10 @@ interface TaskFileRepositoryInterface
      * @param int $projectId Project ID
      * @param int $parentId Parent directory ID
      * @param int $limit Maximum number of files to return
+     * @param null|string $storageType Optional storage type filter
      * @return TaskFileEntity[] File entity list
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500): array;
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array;
 
     /**
      * Get children files by multiple parent_ids and project_id (batch query).
@@ -317,8 +318,9 @@ interface TaskFileRepositoryInterface
      *
      * @param array $fileIds 文件ID数组
      * @param bool $forceDelete 是否强制删除（物理删除），默认为true，false为软删除
+     * @param null|int $projectId 可选项目作用域
      */
-    public function deleteByIds(array $fileIds, bool $forceDelete = true): void;
+    public function deleteByIds(array $fileIds, bool $forceDelete = true, ?int $projectId = null): void;
 
     /**
      * 根据文件Keys批量删除文件.

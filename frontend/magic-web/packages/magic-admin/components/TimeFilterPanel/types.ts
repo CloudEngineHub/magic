@@ -28,17 +28,27 @@ export enum TimeFilterPrecision {
 	day = "day",
 }
 
+export type TimeFilterPrecisionValue = TimeFilterPrecision | readonly RelativeUnit[]
+
 export enum TimePresetKey {
+	last_1_second = "last_1_second",
+	last_5_seconds = "last_5_seconds",
+	last_10_seconds = "last_10_seconds",
+	last_15_seconds = "last_15_seconds",
+	last_30_seconds = "last_30_seconds",
+	last_45_seconds = "last_45_seconds",
 	last_1_minute = "last_1_minute",
 	last_5_minutes = "last_5_minutes",
 	last_10_minutes = "last_10_minutes",
 	last_15_minutes = "last_15_minutes",
 	last_30_minutes = "last_30_minutes",
+	last_45_minutes = "last_45_minutes",
 	last_1_hour = "last_1_hour",
 	last_3_hours = "last_3_hours",
 	last_6_hours = "last_6_hours",
 	last_12_hours = "last_12_hours",
 	last_24_hours = "last_24_hours",
+	last_48_hours = "last_48_hours",
 	last_1_day = "last_1_day",
 	today = "today",
 	yesterday = "yesterday",
@@ -101,7 +111,7 @@ export interface BuildCustomRelativeRangeArgs {
 	value: number
 	unit: RelativeUnit
 	alignToUnit: boolean
-	precision?: TimeFilterPrecision
+	precision?: TimeFilterPrecisionValue
 }
 
 export interface CommonAbsolutePresetRange {
@@ -117,5 +127,6 @@ export type TimeFilterLocale = {
 		day: string
 		hour: string
 		minute: string
+		second: string
 	}
 }

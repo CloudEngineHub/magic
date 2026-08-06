@@ -81,12 +81,6 @@ from .analyze_audio_project_prompts import (
 )
 
 
-# 默认模型（代码兜底，优先从 ai_abilities 配置读取）
-DEFAULT_MODEL_ID = "qwen3.5-flash"
-
-# 标签提取模型（使用快速模型）
-TAG_EXTRACTION_MODEL_ID = "qwen-flash"
-
 # 分析任务名称映射（中文 -> 英文）
 ANALYSIS_TASK_NAME_MAP = analysis_task_name_map()
 
@@ -656,6 +650,7 @@ class AnalyzeAudioProject(AbstractFileTool[AnalyzeAudioProjectParams], Workspace
                 try:
                     logger.info("开始从 summary 提取精炼标签")
                     tags = await self._extract_tags_from_summary(
+                        model_id=model_id,
                         summary_content=summary_content,
                         audio_title=analysis_context.metadata.get("name", ""),
                         output_language=params.output_language
@@ -1258,20 +1253,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 
             logger.info(f"开始调用大模型进行 {analysis_name} 分析")
 
-            response = await LLMFactory.call_with_tool_support(
-                model_id=model_id,
-                messages=messages,
-                tools=None,
-                stop=None
-            )
-
-            if not response or not response.choices or len(response.choices) == 0:
-                raise Exception(f"大模型返回空响应")
-
-            content = response.choices[0].message.content
-
-            # 清理可能的代码块包裹（兜底处理）
-            content = self._clean_markdown_wrapper(content)
+            content = await self._call_analysis_llm(model_id, messages)
 
             logger.info(f"{analysis_name} 分析完成，内容长度: {len(content)}")
 
@@ -1313,6 +1295,35 @@ if (typeof window.magicProjectConfigure === 'function') {{
             "将指导视为事实并直接执行，若指导写明“未发现明显错误”，则保持原文语义，不额外猜测纠错；",
             ""
         ]
+
+    async def _call_analysis_llm(self, model_id: str, messages: List[Dict[str, str]]) -> str:
+        """
+        统一的分析 LLM 调用入口
+
+        封装 thinking_budget 限制、响应校验、markdown 清理等通用逻辑。
+        thinking_budget=4096 防止思考模型将 max_output_tokens 预算耗尽在内部推理上，
+        导致实际输出被截断（曾出现 thinking 消耗 16383/16384 tokens，输出仅 1 字符）。
+
+        Args:
+            model_id: 模型 ID（从 ai_abilities 获取）
+            messages: 消息列表（system + user）
+
+        Returns:
+            清理后的模型输出文本
+        """
+        response = await LLMFactory.call_with_tool_support(
+            model_id=model_id,
+            messages=messages,
+            tools=None,
+            stop=None,
+            extra_body={"thinking_budget": 4096}
+        )
+
+        if not response or not response.choices or len(response.choices) == 0:
+            raise Exception("模型返回空响应")
+
+        content = response.choices[0].message.content
+        return self._clean_markdown_wrapper(content)
 
     def _clean_markdown_wrapper(self, content: str) -> str:
         """
@@ -1417,21 +1428,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
                 {"role": "user", "content": user_message}
             ]
 
-            # 调用大模型
-            response = await LLMFactory.call_with_tool_support(
-                model_id=model_id,
-                messages=messages,
-                tools=None,
-                stop=None
-            )
-
-            if not response or not response.choices or len(response.choices) == 0:
-                raise Exception("模型返回空响应")
-
-            content = response.choices[0].message.content
-
-            # 清理可能的代码块包裹（兜底处理）
-            content = self._clean_markdown_wrapper(content)
+            content = await self._call_analysis_llm(model_id, messages)
 
             logger.info(f"第一段输出长度: {len(content)} 字符")
 
@@ -1643,20 +1640,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
             ]
 
             # 调用大模型
-            response = await LLMFactory.call_with_tool_support(
-                model_id=model_id,
-                messages=messages,
-                tools=None,
-                stop=None
-            )
-
-            if not response or not response.choices or len(response.choices) == 0:
-                raise Exception("模型返回空响应")
-
-            content = response.choices[0].message.content
-
-            # 清理可能的代码块包裹（兜底处理）
-            content = self._clean_markdown_wrapper(content)
+            content = await self._call_analysis_llm(model_id, messages)
 
             # 解析结果
             topic_detail = self._parse_single_topic_detail(content, topic)
@@ -2255,6 +2239,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 
     async def _extract_tags_from_summary(
         self,
+        model_id: str,
         summary_content: str,
         audio_title: str,
         output_language: str = "中文"
@@ -2346,19 +2331,7 @@ Please output tags:
 
             logger.info(f"开始从纪要提取标签，纪要长度: {len(summary_content)} 字符")
 
-            # 调用 LLM（使用快速模型）
-            response = await LLMFactory.call_with_tool_support(
-                model_id=TAG_EXTRACTION_MODEL_ID,
-                messages=messages,
-                tools=None,
-                stop=None
-            )
-
-            if not response or not response.choices or len(response.choices) == 0:
-                logger.warning("标签提取失败：模型返回空响应")
-                return []
-
-            result = response.choices[0].message.content.strip()
+            result = (await self._call_analysis_llm(model_id, messages)).strip()
             logger.info(f"模型返回标签: {result}")
 
             # 解析标签（按逗号分割）

@@ -13,6 +13,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\Agent\Service\ImportAgentAppService;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
@@ -20,6 +21,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Interfaces\Agent\Assembler\MentionSkillAssembler;
 use Dtyq\SuperMagic\Interfaces\Agent\Assembler\SuperMagicAgentAssembler;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CheckAgentAccessRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\PublishAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentListRequestDTO;
@@ -41,6 +43,9 @@ class SuperMagicAgentApi extends AbstractApi
     protected SuperMagicAgentAppService $superMagicAgentAppService;
 
     #[Inject]
+    protected SuperMagicAgentAccessAppService $superMagicAgentAccessAppService;
+
+    #[Inject]
     protected ImportAgentAppService $importAgentAppService;
 
     #[Inject]
@@ -56,6 +61,18 @@ class SuperMagicAgentApi extends AbstractApi
     public function getFeatured(): array
     {
         return $this->modeAppService->getFeaturedAgent($this->getAuthorization());
+    }
+
+    public function checkAccess(): array
+    {
+        $authorization = $this->getAuthorization();
+        $requestDTO = CheckAgentAccessRequestDTO::fromRequest($this->request);
+
+        return $this->superMagicAgentAccessAppService->checkUsableAgentCode(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+            $requestDTO->getCode()
+        );
     }
 
     /**

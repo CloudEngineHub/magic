@@ -17,6 +17,7 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Mode\DTO\Request\CreateModeRequest;
 use App\Interfaces\Mode\DTO\Request\QueryModesRequest;
 use App\Interfaces\Mode\DTO\Request\UpdateModeRequest;
+use App\Interfaces\Mode\DTO\Request\UpdateSystemDefaultAgentRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
@@ -24,8 +25,25 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 class AdminModeApi extends AbstractApi
 {
     public function __construct(
-        private AdminModeAppService $adminModeAppService
+        private AdminModeAppService $adminModeAppService,
     ) {
+    }
+
+    #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_OFFICIAL, MagicResourceEnum::ADMIN_AI_MODE], MagicOperationEnum::QUERY)]
+    public function getSystemDefaultAgent(): array
+    {
+        return [
+            'default_agent_code' => $this->adminModeAppService->getSystemDefaultAgentCode(),
+        ];
+    }
+
+    #[CheckPermission([MagicResourceEnum::ADMIN_AI_MODE], MagicOperationEnum::EDIT)]
+    public function updateSystemDefaultAgent(UpdateSystemDefaultAgentRequest $request): array
+    {
+        $request->validated();
+        return [
+            'default_agent_code' => $this->adminModeAppService->updateSystemDefaultAgent($request->getDefaultAgentCode()),
+        ];
     }
 
     /**

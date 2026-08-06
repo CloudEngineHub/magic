@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react"
 import { createPPTEventBus, type PPTEventBus } from "../events/PPTEventBus"
 import { createPPTStore, type PPTStore, type PPTStoreConfig } from "../stores"
+import { usePPTStoreDisposal } from "./usePPTStoreDisposal"
 
 interface PPTContextValue {
 	eventBus: PPTEventBus
@@ -28,6 +29,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		storeRef.current = createPPTStore(storeConfig)
 	}
 	const store = storeRef.current
+	usePPTStoreDisposal(store)
 
 	const value = useMemo(() => ({ eventBus, store }), [eventBus, store])
 

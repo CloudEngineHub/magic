@@ -3,23 +3,26 @@
 通过浏览器加载网页并执行 JavaScript 脚本分析页面中所有元素的尺寸、位置和内容
 """
 
-from app.i18n import i18n
 import asyncio
+import stat
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
-from datetime import datetime
 
 from pydantic import Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.llms.factory import LLMFactory
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from agentlang.llms.factory import LLMFactory
 from agentlang.utils.token_estimator import truncate_text_by_token
+from app.i18n import i18n
+from app.service.browser.browser_config_adapter import BrowserConfigAdapter
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
-from magic_use.magic_browser import MagicBrowser, MagicBrowserConfig
+from app.utils.async_file_utils import async_exists, async_read_text, async_stat
+from magic_use import BrowserClient, create_browser
 
 logger = get_logger(__name__)
 
@@ -145,20 +148,20 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
         logger.debug(f"本地文件转换为URL: {file_path} -> {file_url}")
         return file_url
 
-    async def _create_browser(self) -> MagicBrowser:
+    async def _create_browser(self) -> BrowserClient:
         """创建浏览器实例"""
         # 创建适合页面分析的浏览器实例
-        browser = await MagicBrowser.create_for_scraping()
+        config = await BrowserConfigAdapter.build_playwright(str(self.base_dir))
+        browser = await create_browser(config)
         logger.debug("创建浏览器实例用于网页元素分析")
         return browser
 
-    def _get_analyzer_script(self) -> str:
+    async def _get_analyzer_script(self) -> str:
         """获取网页元素分析脚本"""
         # Read the external JavaScript file
         script_path = Path(__file__).parent / "magic_slide" / "analysis_slide_webpage.js"
         try:
-            with open(script_path, 'r', encoding='utf-8') as f:
-                return f.read()
+            return await async_read_text(script_path)
         except FileNotFoundError:
             logger.error(f"Analysis script not found: {script_path}")
             raise FileNotFoundError(f"Required analysis script not found: {script_path}")
@@ -166,23 +169,12 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
             logger.error(f"Failed to read analysis script: {e}")
             raise
 
-    async def _get_page_html(self, browser: MagicBrowser, page_id: str) -> str:
+    async def _get_page_html(self, browser: BrowserClient, page_id: str) -> str:
         """获取页面HTML内容"""
         try:
             # Get the full HTML content of the page
-            html_result = await browser.evaluate_js(
-                page_id=page_id,
-                js_code="document.documentElement.outerHTML"
-            )
-
-            if hasattr(html_result, 'error'):
-                logger.warning(f"Failed to get page HTML: {html_result.error}")
-                return ""
-
-            if hasattr(html_result, 'result') and html_result.result:
-                return str(html_result.result)
-
-            return ""
+            html_result = await browser.evaluate(page_id, "document.documentElement.outerHTML")
+            return str(html_result) if html_result else ""
 
         except Exception as e:
             logger.warning(f"Exception getting page HTML: {e}")
@@ -204,7 +196,7 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
                 model_id = get_ability_config(
                     AIAbility.ANALYSIS_SLIDE,
                     "model_id",
-                    default="deepseek-chat"
+                    default="deepseek-v4-flash"
                 )
 
             # Truncate HTML content to avoid token limits
@@ -306,9 +298,9 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
             else:
                 # 验证本地文件是否存在
                 local_file_path = self.base_dir / target
-                if not local_file_path.exists():
+                if not await async_exists(local_file_path):
                     return ToolResult.error(f"本地文件不存在: {target}")
-                if not local_file_path.is_file():
+                if not stat.S_ISREG((await async_stat(local_file_path)).st_mode):
                     return ToolResult.error(f"指定路径不是文件: {target}")
 
                 target_url = self._prepare_file_url(str(local_file_path))
@@ -316,39 +308,30 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
 
             # 导航到目标页面
             logger.debug(f"导航到页面: {target_url}")
-            goto_result = await browser.goto(page_id=None, url=target_url)
-
-            if hasattr(goto_result, 'error'):
-                return ToolResult.error(f"页面导航失败: {goto_result.error}")
+            pages = await browser.list_pages()
+            if not pages:
+                return ToolResult.error("无法获取活跃页面ID")
+            page_id = pages[0].id
+            await browser.navigate(page_id, target_url)
 
             # 等待页面加载完成
             await asyncio.sleep(2)
 
             # 获取活跃页面ID
-            page_id = await browser.get_active_page_id()
-            if not page_id:
-                return ToolResult.error("无法获取活跃页面ID")
-
             # 注入并执行分析脚本
-            analyzer_script = self._get_analyzer_script()
+            analyzer_script = await self._get_analyzer_script()
             logger.debug("执行网页元素分析脚本")
 
             # 替换占位符为实际参数值
             full_script = analyzer_script.replace('{MAX_WIDTH}', str(params.max_width)).replace('{MAX_HEIGHT}', str(params.max_height)).replace('{TOP_ELEMENTS_OFFSET}', str(params.top_elements_offset)).replace('{TOP_ELEMENTS_LIMIT}', str(params.top_elements_limit))
 
-            analysis_result = await browser.evaluate_js(
-                page_id=page_id,
-                js_code=full_script
-            )
+            analysis_result = await browser.evaluate(page_id, full_script)
 
-            if hasattr(analysis_result, 'error'):
-                return ToolResult.error(f"执行分析失败: {analysis_result.error}")
-
-            if not hasattr(analysis_result, 'result') or not analysis_result.result:
+            if not analysis_result:
                 return ToolResult.error("分析结果为空")
 
             # 获取浏览器分析结果
-            browser_analysis = str(analysis_result.result)
+            browser_analysis = str(analysis_result)
 
             # 获取页面HTML内容
             logger.debug("获取页面HTML内容")

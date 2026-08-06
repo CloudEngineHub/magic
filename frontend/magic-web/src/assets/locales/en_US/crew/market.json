@@ -41,6 +41,7 @@
 		},
 		"buttons": {
 			"cancel": "Cancel",
+			"close": "Close",
 			"confirm": "Save"
 		},
 		"done": "Crew updated successfully!",
@@ -50,7 +51,8 @@
 		"fields": {
 			"avatar": "Avatar"
 		},
-		"title": "Edit Crew"
+		"title": "Edit Crew",
+		"viewTitle": "Crew Details"
 	},
 	"editSkill": {
 		"buttons": {
@@ -280,7 +282,8 @@
 		"subtitle": "Manage your own digital crew.",
 		"teamSharedCreatedBy": "Created by {{name}}",
 		"title": "My Crew",
-		"upgradeAvailable": "Upgrade available. Tap to update."
+		"upgradeAvailable": "Upgrade available. Tap to update.",
+		"view": "View"
 	},
 	"mySkills": {
 		"badges": {

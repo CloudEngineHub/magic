@@ -172,6 +172,27 @@ export async function copyWechatArticleSelection(
 	}
 }
 
+/**
+ * Only use copy mechanisms that finish inside the current user-activation task.
+ * Cross-origin postMessage copying is intentionally excluded because awaiting
+ * its result would make a later Clipboard API fallback lose click activation.
+ */
+export function copyWechatArticleSelectionSynchronously(
+	iframe: HTMLIFrameElement | null | undefined,
+): boolean {
+	if (!iframe) return false
+	const ownerPageState = captureOwnerPageState(iframe)
+	try {
+		const sourceDocument = iframe.contentDocument
+		if (!sourceDocument?.body) return false
+		return copyWechatArticleSelectionFromDocument(sourceDocument, iframe.contentWindow)
+	} catch {
+		return false
+	} finally {
+		restoreOwnerPageState(ownerPageState)
+	}
+}
+
 export const wechatNativeClipboardInternals = {
 	COMMENTS_SELECTOR,
 	COPY_ARTICLE_SELECTION_MESSAGE,

@@ -24,7 +24,7 @@ const toggleButton = cn(
 
 function TodoWrite(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 
 	const isCreateMode = tool?.detail?.data?.type === "create"
@@ -63,7 +63,11 @@ function TodoWrite(props: NodeProps) {
 						</div>
 					</div>
 					{tool.status !== "error" && (
-						<div className={cn(toggleButton, "mr-1.5")} onClick={toggle} data-testid="toggle">
+						<div
+							className={cn(toggleButton, "mr-1.5")}
+							onClick={toggle}
+							data-testid="toggle"
+						>
 							{open ? (
 								<ChevronUp
 									size={16}

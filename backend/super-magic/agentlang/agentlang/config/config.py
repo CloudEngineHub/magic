@@ -13,11 +13,10 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class Config(Generic[T]):
-    """配置管理器，支持 YAML 配置文件、Pydantic 模型验证和 Agent 模式切换"""
+    """配置管理器，支持 YAML 配置文件和 Pydantic 模型验证"""
 
     _instance = None
     _config: Dict[str, Any] = {}
-    _model_aliases: Dict[str, str] = {}
     _model: Optional[T] = None
     _logger = get_logger("agentlang.config.config_manager")
     _config_loaded = False
@@ -50,9 +49,6 @@ class Config(Generic[T]):
         for key in keys[:-1]:
             current = current.setdefault(key, {})
         current[keys[-1]] = value
-
-        # 重新加载模型别名，因为相关配置可能已更改
-        self._load_model_aliases()
 
         # 如果有模型类，重新验证
         if self._model is not None:
@@ -104,7 +100,6 @@ class Config(Generic[T]):
                 self._logger.warning("无法确定配置文件路径，将使用空配置")
             self._config = {}
             self._raw_config = {}
-            self._model_aliases = {}
             self._config_loaded = True
             return
 
@@ -116,7 +111,6 @@ class Config(Generic[T]):
             self._logger.error(f"加载或解析配置文件失败 {config_path}: {e}")
             self._config = {}
             self._raw_config = {}
-            self._model_aliases = {}
             self._config_loaded = True
             return
 
@@ -127,23 +121,18 @@ class Config(Generic[T]):
         self._config = self._process_env_placeholders(self._raw_config)
         self._config_loaded = True
 
-        # 加载模型别名（基于处理后的配置，特别是 active_agent_mode）
-        self._load_model_aliases()
-
         # 如果提供了模型类，进行验证
         if model is not None:
             try:
                 self._model = model(**self._config)
                 # 更新配置字典，确保所有默认值都被包含
                 self._config = self._model.model_dump()
-                # 重新加载别名以防 Pydantic 模型有影响
-                self._load_model_aliases()
             except Exception as e:
                 self._logger.error(f"使用 Pydantic 模型验证配置失败: {e}")
                 self._model = None
 
     def _merge_local_model_config(self, config_path: str, base_config: Any) -> Any:
-        """合并同目录 config.local.yaml 中的本地模型配置"""
+        """合并同目录 config.local.yaml 中的本地 provider/profile 配置"""
         if not isinstance(base_config, dict):
             return base_config
 
@@ -162,94 +151,78 @@ class Config(Generic[T]):
             self._logger.warning(f"本地配置文件 {local_config_path} 不是字典格式，将忽略本地模型配置")
             return base_config
 
-        local_models = local_config.get("models")
-        if local_models is None:
-            return base_config
-        if not isinstance(local_models, dict):
-            self._logger.warning(f"本地配置文件 {local_config_path} 的 'models' 不是字典格式，将忽略")
-            return base_config
-
-        base_models = base_config.get("models")
-        if base_models is None:
-            base_config["models"] = dict(local_models)
-            return base_config
-        if not isinstance(base_models, dict):
-            self._logger.warning("默认配置中的 'models' 不是字典格式，将忽略本地模型配置")
-            return base_config
-
-        base_models.update(local_models)
+        self._merge_local_dict_section(
+            base_config=base_config,
+            local_config=local_config,
+            section="providers",
+            local_config_path=local_config_path,
+        )
+        self._merge_local_dict_section(
+            base_config=base_config,
+            local_config=local_config,
+            section="model_profiles",
+            local_config_path=local_config_path,
+        )
+        self._merge_local_default_model(
+            base_config=base_config,
+            local_config=local_config,
+            local_config_path=local_config_path,
+        )
         self._logger.info(f"已合并本地模型配置: {local_config_path}")
         return base_config
 
-    def _load_model_aliases(self) -> None:
-        """根据当前激活的模式加载和解析模型别名"""
-        if not self._config:
-            self._logger.debug("配置尚未加载，无法加载模型别名。")
-            self._model_aliases = {}
+    def _merge_local_dict_section(
+        self,
+        *,
+        base_config: Dict[str, Any],
+        local_config: Dict[str, Any],
+        section: str,
+        local_config_path: Path,
+    ) -> None:
+        """按顶层 section 合并本地字典配置，同名叶子节点由本地配置覆盖。"""
+        local_section = local_config.get(section)
+        if local_section is None:
+            return
+        if not isinstance(local_section, dict):
+            self._logger.warning(f"本地配置文件 {local_config_path} 的 '{section}' 不是字典格式，将忽略")
             return
 
-        # 获取激活模式名称，默认为 'apex'
-        active_mode_name = self.get('active_agent_mode', 'apex')
-        self._logger.info(f"当前活动的 Agent 模式: {active_mode_name}")
+        base_section = base_config.get(section)
+        if base_section is None:
+            base_config[section] = dict(local_section)
+            return
+        if not isinstance(base_section, dict):
+            self._logger.warning(f"默认配置中的 '{section}' 不是字典格式，将忽略本地配置")
+            return
 
-        agent_modes_config = self.get('agent_modes', {})
-        if not isinstance(agent_modes_config, dict):
-            self._logger.warning("'agent_modes' 配置不是字典格式，将忽略模式配置。")
-            agent_modes_config = {}
+        self._merge_dict(base_section, local_section)
 
-        active_mode_data = agent_modes_config.get(active_mode_name, {})
-        if not isinstance(active_mode_data, dict):
-             self._logger.warning(f"模式 '{active_mode_name}' 的配置不是字典格式，将忽略。")
-             active_mode_data = {}
-
-        if not active_mode_data and active_mode_name != 'apex': # 如果指定模式不存在且不是默认的apex
-            self._logger.warning(f"未找到名为 '{active_mode_name}' 的 Agent 模式配置。将检查是否存在全局默认别名。")
-
-        # 从激活的模式中获取别名配置
-        mode_aliases = active_mode_data.get('model_aliases', {})
-        if not isinstance(mode_aliases, dict):
-            self._logger.warning(f"模式 '{active_mode_name}' 中的 'model_aliases' 不是字典格式，将忽略。")
-            mode_aliases = {}
-
-        # (可选) 获取全局默认别名作为基础
-        fallback_aliases = self.get('model_aliases', {})
-        if not isinstance(fallback_aliases, dict):
-             self._logger.warning("全局 'model_aliases' 配置不是字典格式，将忽略。")
-             fallback_aliases = {}
-
-        # 合并：模式别名优先于全局别名
-        combined_aliases = {**fallback_aliases, **mode_aliases}
-
-        final_aliases = {}
-        # 处理环境变量覆盖
-        for alias_key, model_in_config in combined_aliases.items():
-            # 构造对应的环境变量名 (e.g., main_llm -> MAIN_LLM)
-            env_var_name = alias_key.upper()
-            env_value = os.getenv(env_var_name)
-
-            if env_value:
-                resolved_model = self._convert_value_type(env_value)
-                final_aliases[alias_key] = resolved_model
-                if resolved_model != model_in_config:
-                     self._logger.debug(f"模型别名 '{alias_key}' (模式 '{active_mode_name}') 被环境变量 '{env_var_name}' 覆盖为 '{resolved_model}' (原为 '{model_in_config}')")
-                else:
-                     self._logger.debug(f"模型别名 '{alias_key}' (模式 '{active_mode_name}') 由环境变量 '{env_var_name}' 确认为 '{resolved_model}'")
+    def _merge_dict(self, base: Dict[str, Any], override: Dict[str, Any]) -> None:
+        """递归合并字典，保留默认 provider 字段并允许本地补充 models。"""
+        for key, value in override.items():
+            current = base.get(key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                self._merge_dict(current, value)
             else:
-                final_aliases[alias_key] = model_in_config # 使用配置文件中的值
-                self._logger.debug(f"模型别名 '{alias_key}' 使用模式 '{active_mode_name}' (或默认) 配置为 '{model_in_config}'")
+                base[key] = value
 
-        # 检查是否有仅通过环境变量定义的别名 (例如，如果设置了 FOO_LLM 但配置文件没有 foo_llm)
-        for env_key, env_val in os.environ.items():
-            # 简单的启发式检查，可能需要根据实际命名调整
-            if env_key.endswith("_LLM") and not env_key.startswith("_"):
-                potential_alias_key = env_key.lower()
-                if potential_alias_key not in final_aliases:
-                    resolved_model = self._convert_value_type(env_val)
-                    final_aliases[potential_alias_key] = resolved_model
-                    self._logger.debug(f"模型别名 '{potential_alias_key}' 直接从环境变量 '{env_key}' 添加，值为 '{resolved_model}'")
+    def _merge_local_default_model(
+        self,
+        *,
+        base_config: Dict[str, Any],
+        local_config: Dict[str, Any],
+        local_config_path: Path,
+    ) -> None:
+        """允许本地私有模型把 default_model 指向本地 provider 中的模型入口。"""
+        if "default_model" not in local_config:
+            return
 
-        self._model_aliases = final_aliases
-        self._logger.info(f"最终加载的模型别名 ({active_mode_name} 模式): {self._model_aliases}")
+        value = local_config.get("default_model")
+        if not isinstance(value, str) or not value.strip():
+            self._logger.warning(f"本地配置文件 {local_config_path} 的 'default_model' 不是非空字符串，将忽略")
+            return
+
+        base_config["default_model"] = value
 
     def get_model(self) -> Optional[T]:
         """获取验证后的 Pydantic 模型实例"""
@@ -257,7 +230,7 @@ class Config(Generic[T]):
         return self._model
 
     def get(self, key_path: str, default: Any = None) -> Any:
-        """获取配置值，支持点号路径，并考虑模式覆盖
+        """获取配置值，支持点号路径。
 
         Args:
             key_path: 配置键路径，例如 'openai.api_key'
@@ -271,86 +244,23 @@ class Config(Generic[T]):
         if not key_path:
             return default
 
-        keys = key_path.split(".")
-
-        # 优先尝试从当前激活模式获取值
-        active_mode_name = self._config.get('active_agent_mode', 'apex')
-        mode_config = self._config.get('agent_modes', {}).get(active_mode_name, {})
-
-        current_mode = mode_config
-        found_in_mode = True
+        current = self._config
         try:
-            for key in keys:
-                if isinstance(current_mode, dict) and key in current_mode:
-                    current_mode = current_mode[key]
-                elif isinstance(current_mode, list):
-                     index = int(key)
-                     if 0 <= index < len(current_mode):
-                         current_mode = current_mode[index]
-                     else:
-                        found_in_mode = False
-                        break
-                else:
-                    found_in_mode = False
-                    break
-        except (TypeError, ValueError, IndexError):
-            found_in_mode = False
-
-        if found_in_mode:
-             return current_mode
-
-        # 如果模式中没找到，再从全局配置查找
-        current_global = self._config
-        found_in_global = True
-        try:
-             for key in keys:
-                if isinstance(current_global, dict) and key in current_global:
-                    current_global = current_global[key]
-                elif isinstance(current_global, list):
+            for key in key_path.split("."):
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                elif isinstance(current, list):
                     index = int(key)
-                    if 0 <= index < len(current_global):
-                        current_global = current_global[index]
+                    if 0 <= index < len(current):
+                        current = current[index]
                     else:
-                        found_in_global = False
-                        break
+                        return default
                 else:
-                    found_in_global = False
-                    break
+                    return default
         except (TypeError, ValueError, IndexError):
-             found_in_global = False
+            return default
 
-        if found_in_global:
-            return current_global
-
-        return default
-
-    def resolve_model_alias(self, alias_or_model_name: str) -> str:
-        """解析模型别名或返回原始名称
-
-        Args:
-            alias_or_model_name: 模型别名或实际模型名称
-
-        Returns:
-            解析后的实际模型名称
-        """
-        self._ensure_config_loaded() # 确保别名已加载
-        resolved_name = self._model_aliases.get(alias_or_model_name, alias_or_model_name)
-
-        if resolved_name != alias_or_model_name:
-            self._logger.debug(f"模型别名 '{alias_or_model_name}' 解析为 '{resolved_name}'")
-
-        # 直接检查模型定义是否存在于 self._config['models']
-        models_dict = self._config.get('models', {}) # 直接获取 models 字典
-        if not isinstance(models_dict, dict):
-             self._logger.error("配置结构错误: 'models' 键丢失或不是字典格式。")
-             # 返回一个明确的错误标识，方便下游处理
-             return "error-config-models-missing"
-        if resolved_name not in models_dict:
-             self._logger.error(f"致命错误：解析或直接使用的模型名称 '{resolved_name}' (来自别名 '{alias_or_model_name}') 在 config.models 中没有定义！请检查配置文件。")
-             # 返回一个明确的错误标识
-             return "error-model-not-defined"
-
-        return resolved_name
+        return current
 
     def reload_config(self) -> None:
         """重新加载配置，会重新处理环境变量和模式"""

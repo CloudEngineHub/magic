@@ -109,10 +109,9 @@ class CorrelationIdManager:
         # 同一个全局 manager 内，不同 AgentContext 的事件互不消费。
         # 注意：由于 asyncio 是单线程模型，不需要线程锁
         self._active_correlations: Dict[Tuple[str, EventPairType], str] = {}
-        # V2 流式中断降级时保存的 correlation_id：
-        # V2 流式 chunk 以 request_id 作为 correlation_id 推送前端，
-        # 流式中断降级非流式时需沿用，否则前端会将 chunk 和最终消息视为两条消息。
-        self._stream_fallback_cid: Optional[str] = None
+        # 按 AgentContext scope 保存 V2 流式降级 correlation_id，
+        # 避免并发主 Agent、子 Agent 或其他上下文互相覆盖。
+        self._stream_fallback_cids: Dict[str, str] = {}
 
     def generate_for_before_event(
         self,
@@ -231,23 +230,30 @@ class CorrelationIdManager:
     def _active_key(event_pair_type: EventPairType, scope_id: str) -> Tuple[str, EventPairType]:
         return scope_id, event_pair_type
 
-    def set_stream_fallback_cid(self, cid: Optional[str]) -> None:
-        """保存 V2 流式中断后的降级 correlation_id
+    def set_stream_fallback_cid(self, cid: Optional[str], scope_id: Optional[str] = None) -> None:
+        """按上下文保存或清除 V2 流式降级 correlation_id。
 
         Args:
             cid: 流式请求的 request_id（将作为降级后非流式消息的 correlation_id），传 None 表示清除
+            scope_id: AgentContext 唯一标识；未传时使用全局 scope
         """
-        self._stream_fallback_cid = cid
+        normalized_scope_id = self._normalize_scope_id(scope_id)
+        if cid:
+            self._stream_fallback_cids[normalized_scope_id] = cid
+            return
+        self._stream_fallback_cids.pop(normalized_scope_id, None)
 
-    def pop_stream_fallback_cid(self) -> Optional[str]:
-        """取出并清除 V2 流式降级 correlation_id（仅使用一次）
+    def pop_stream_fallback_cid(self, scope_id: Optional[str] = None) -> Optional[str]:
+        """按上下文取出并清除一次性 V2 流式降级 correlation_id。
+
+        Args:
+            scope_id: AgentContext 唯一标识；未传时使用全局 scope
 
         Returns:
             Optional[str]: 已保存的 correlation_id，如果没有则返回 None
         """
-        cid = self._stream_fallback_cid
-        self._stream_fallback_cid = None
-        return cid
+        normalized_scope_id = self._normalize_scope_id(scope_id)
+        return self._stream_fallback_cids.pop(normalized_scope_id, None)
 
 
 # 全局单例实例

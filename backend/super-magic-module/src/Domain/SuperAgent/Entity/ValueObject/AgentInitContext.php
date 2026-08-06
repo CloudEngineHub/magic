@@ -108,16 +108,17 @@ class AgentInitContext
     /**
      * Create a new instance.
      */
-    public function __construct()
-    {
+    private function __construct(
+        private SuperMagicProductContext $superMagicProductContext,
+    ) {
     }
 
     /**
      * Create default instance (factory method).
      */
-    public static function createDefault(): self
+    public static function createDefault(SuperMagicProductContext $superMagicProductContext): self
     {
-        return new self();
+        return new self($superMagicProductContext);
     }
 
     /**
@@ -426,6 +427,17 @@ class AgentInitContext
         return $this;
     }
 
+    public function getSuperMagicProductContext(): SuperMagicProductContext
+    {
+        return $this->superMagicProductContext;
+    }
+
+    public function setSuperMagicProductContext(SuperMagicProductContext $superMagicProductContext): self
+    {
+        $this->superMagicProductContext = $superMagicProductContext;
+        return $this;
+    }
+
     /**
      * Convert to array format matching generateInitializationInfo return structure.
      */
@@ -449,6 +461,7 @@ class AgentInitContext
             'work_dir' => $this->workDir,
             'model_id' => $this->modelId,
             'fetch_history' => $this->fetchHistory,
+            'super_magic_product_context' => $this->superMagicProductContext->toArray(),
         ];
         if ($this->dynamicConfig !== null) {
             $data['dynamic_config'] = $this->dynamicConfig;

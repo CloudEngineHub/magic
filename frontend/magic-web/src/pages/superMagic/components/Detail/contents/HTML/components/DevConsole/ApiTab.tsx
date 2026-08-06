@@ -1,10 +1,11 @@
-import { useRef, useEffect, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ApiCallEntry } from "./types"
+import { ObjectInspector, toSerializedValue } from "./ObjectInspector"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,58 @@ const STATUS_CONFIG = {
 		bg: "bg-orange-500/10 border-orange-300",
 	},
 } as const
+
+const ApiCallDetails = memo(function ApiCallDetails({ entry }: { entry: ApiCallEntry }) {
+	const { t } = useTranslation("super")
+	const hasResult = Object.prototype.hasOwnProperty.call(entry, "result")
+	const requestValue = useMemo(
+		() => (entry.details ? toSerializedValue(entry.details) : null),
+		[entry.details],
+	)
+	const resultValue = useMemo(
+		() => (hasResult ? toSerializedValue(entry.result) : null),
+		[entry.result, hasResult],
+	)
+
+	return (
+		<div className="space-y-2 bg-muted/30 px-6 py-2">
+			{entry.error && (
+				<div className="text-red-500">
+					<span className="font-medium">{t("stylePanel.devConsole.error")}:</span>{" "}
+					{entry.error}
+				</div>
+			)}
+			{entry.details && (
+				<div>
+					<div className="mb-0.5 text-[10px] font-medium text-muted-foreground">
+						{t("stylePanel.devConsole.apiRequest")}
+					</div>
+					<div className="max-h-48 overflow-auto rounded bg-muted/50 p-1.5 text-[10px] text-muted-foreground">
+						{requestValue && <ObjectInspector value={requestValue} />}
+					</div>
+				</div>
+			)}
+			{hasResult && (
+				<div>
+					<div className="mb-0.5 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+						<span>{t("stylePanel.devConsole.apiResponse")}</span>
+						{entry.resultTruncated && (
+							<Badge
+								variant="outline"
+								className="h-4 border-orange-300 px-1 text-[9px] font-normal text-orange-600"
+							>
+								{t("stylePanel.devConsole.apiResultTruncated")}
+							</Badge>
+						)}
+					</div>
+					<div className="max-h-72 overflow-auto rounded bg-muted/50 p-1.5 text-[10px] text-foreground">
+						{resultValue && <ObjectInspector value={resultValue} />}
+					</div>
+				</div>
+			)}
+		</div>
+	)
+})
 
 // ─── ApiTab ──────────────────────────────────────────────────────────────────
 
@@ -99,7 +152,12 @@ export function ApiTab({ entries }: ApiTabProps) {
 	}
 
 	return (
-		<div ref={scrollRef} className="h-full overflow-y-auto text-xs" onScroll={handleScroll} data-testid="handle-scroll">
+		<div
+			ref={scrollRef}
+			className="h-full overflow-y-auto text-xs"
+			onScroll={handleScroll}
+			data-testid="handle-scroll"
+		>
 			<div
 				style={{
 					height: `${virtualizer.getTotalSize()}px`,
@@ -173,22 +231,8 @@ export function ApiTab({ entries }: ApiTabProps) {
 								</span>
 							</div>
 
-							{/* Detail section */}
-							{isExpanded && entry.details && (
-								<div className="space-y-1 bg-muted/30 px-6 py-2">
-									{entry.error && (
-										<div className="text-red-500">
-											<span className="font-medium">
-												{t("stylePanel.devConsole.error")}:
-											</span>{" "}
-											{entry.error}
-										</div>
-									)}
-									<pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 p-1.5 font-mono text-[10px] text-muted-foreground">
-										{JSON.stringify(entry.details, null, 2)}
-									</pre>
-								</div>
-							)}
+							{/* Detail section: response JSON is formatted only after expansion. */}
+							{isExpanded && <ApiCallDetails entry={entry} />}
 						</div>
 					)
 				})}

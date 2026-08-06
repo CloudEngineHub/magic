@@ -1,5 +1,13 @@
 import { memo } from "react"
-import { CircleArrowUp, Ellipsis, MessageCircleMore, Rocket, Settings2, Trash2 } from "lucide-react"
+import {
+	CircleArrowUp,
+	Ellipsis,
+	Eye,
+	MessageCircleMore,
+	Rocket,
+	Settings2,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -14,6 +22,7 @@ import { CardFooterBadge } from "@/pages/superMagic/components/CardFooterBadge"
 import { CardFooterLabel } from "@/pages/superMagic/components/CardFooterLabel"
 import { cn } from "@/lib/utils"
 import type { MyCrewView } from "@/services/crew/CrewService"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { MyCrewCardMainSection } from "./MyCrewCardMainSection"
 import {
 	isInsideMyCrewCardInteractiveTarget,
@@ -66,6 +75,9 @@ function HiredCrewCard({
 			})
 		: null
 	const { canDelete, canEdit, canPublish } = resolveTeamSharedCrewPermissions(employee.userRole)
+	const isViewer = isReadOnlyProject(employee.userRole)
+	const actionLabel = isViewer ? t("myCrewPage.view") : t("myCrewPage.edit")
+	const ActionIcon = isViewer ? Eye : Settings2
 	const canOpenCardByRootClick = isCollaboratedCard || !isTeamSharedCard || canEdit
 	const canRenderSharedEditorActions = isTeamSharedCard && canEdit && onEdit
 	const canRenderSharedMenu =
@@ -141,8 +153,8 @@ function HiredCrewCard({
 					}}
 					data-testid="my-crew-card-edit-button"
 				>
-					<Settings2 className="size-4 shrink-0" aria-hidden />
-					{t("myCrewPage.edit")}
+					<ActionIcon className="size-4 shrink-0" aria-hidden />
+					{actionLabel}
 				</Button>
 				{canRenderSharedMenu ? (
 					<DropdownMenu>
@@ -220,8 +232,8 @@ function HiredCrewCard({
 					}}
 					data-testid="my-crew-card-edit-button"
 				>
-					<Settings2 className="size-4 shrink-0" aria-hidden />
-					{t("myCrewPage.edit")}
+					<ActionIcon className="size-4 shrink-0" aria-hidden />
+					{actionLabel}
 				</Button>
 			</div>
 		)

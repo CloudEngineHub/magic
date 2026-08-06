@@ -38,6 +38,25 @@ class AdminModeAppService extends AbstractModeAppService
     #[Inject]
     protected SuperMagicAgentDomainService $superMagicAgentDomainService;
 
+    public function getSystemDefaultAgentCode(): string
+    {
+        return $this->modeDomainService->getSystemDefaultAgent($this->createSystemDefaultAgentModeDataIsolation());
+    }
+
+    public function updateSystemDefaultAgent(string $code): string
+    {
+        $code = trim($code);
+        if ($code === '') {
+            ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_INVALID);
+        }
+
+        $modeDataIsolation = $this->createSystemDefaultAgentModeDataIsolation();
+        $mode = $this->modeDomainService->validateSystemDefaultAgent($modeDataIsolation, $code);
+
+        $this->modeDomainService->setSystemDefaultAgent($modeDataIsolation, $mode);
+        return $code;
+    }
+
     /**
      * 获取模式列表 (管理后台用，包含完整i18n字段).
      */
@@ -151,6 +170,15 @@ class AdminModeAppService extends AbstractModeAppService
             ExceptionBuilder::throw(ModeErrorCode::MODE_NOT_FOUND);
         }
 
+        if ($this->isSystemDefaultAgent($existingMode->getIdentifier())) {
+            if ($request->getIdentifier() !== $existingMode->getIdentifier()) {
+                ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+            }
+            if ($request->getOrganizationWhitelist() !== []) {
+                ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+            }
+        }
+
         Db::beginTransaction();
         try {
             // 将更新请求应用到现有实体（只更新允许修改的字段）
@@ -182,6 +210,13 @@ class AdminModeAppService extends AbstractModeAppService
     {
         $dataIsolation = $this->getModeDataIsolation($authorization);
 
+        if (! $status) {
+            $mode = $this->modeDomainService->getModeById($dataIsolation, $id);
+            if ($mode && $this->isSystemDefaultAgent($mode->getIdentifier())) {
+                ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+            }
+        }
+
         try {
             return $this->modeDomainService->updateModeStatus($dataIsolation, $id, $status);
         } catch (Exception $exception) {
@@ -212,6 +247,21 @@ class AdminModeAppService extends AbstractModeAppService
     public function saveModeConfig(MagicUserAuthorization $authorization, AdminModeAggregateDTO $modeAggregateDTO): AdminModeAggregateDTO
     {
         $dataIsolation = $this->getModeDataIsolation($authorization);
+
+        $existingMode = $this->modeDomainService->getModeById($dataIsolation, $modeAggregateDTO->getMode()->getId());
+        if (! $existingMode) {
+            ExceptionBuilder::throw(ModeErrorCode::MODE_NOT_FOUND);
+        }
+        if ($this->isSystemDefaultAgent($existingMode->getIdentifier())) {
+            $modeDTO = $modeAggregateDTO->getMode();
+            if (
+                $modeDTO->getIdentifier() !== $existingMode->getIdentifier()
+                || ! $modeDTO->isEnabled()
+                || trim($modeDTO->getOrganizationWhitelist()) !== ''
+            ) {
+                ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_PROTECTED);
+            }
+        }
 
         Db::beginTransaction();
         try {

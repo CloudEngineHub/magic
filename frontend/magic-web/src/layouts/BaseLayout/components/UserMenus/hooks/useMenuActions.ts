@@ -9,7 +9,6 @@ import { AccountSettingPage } from "@/components/business/AccountSetting/types"
 import showOnlineFeedbackModal from "@/components/business/OnlineFeedbackModal"
 import { openShareManagementModal } from "@/pages/superMagic/components/ShareManagement/stores/globalShareManagement"
 import { openLongTremMemoryModal } from "@/pages/superMagic/components/LongTremMemory"
-import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { openAboutUsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
 interface UseMenuActionsProps {
@@ -38,9 +37,7 @@ function useMenuActions({ onClose }: UseMenuActionsProps) {
 				openAccountSetting({ defaultActiveKey: AccountSettingPage.SCHEDULED_TASKS })
 				break
 			case UserMenuKey.LongTermMemory:
-				openLongTremMemoryModal({
-					onWorkspaceStateChange: routeManageService.navigateToState,
-				})
+				openLongTremMemoryModal()
 				break
 			case UserMenuKey.ConsumptionDetails:
 				break

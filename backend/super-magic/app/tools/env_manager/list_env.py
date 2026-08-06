@@ -18,17 +18,13 @@ from .service import SCOPE_PERSONAL, EnvManagerError, EnvManagerService
 class ListEnvParams(BaseToolParams):
     scope: str = Field(
         SCOPE_PERSONAL,
-        description="""<!--zh: 查看范围，personal、workspace 或 all，默认 personal-->
-List scope: personal, workspace, or all. Defaults to personal.""",
+        description="List scope: personal, workspace, or all. Defaults to personal.",
     )
 
 
-@tool(name="list_env")
+@tool(name="list_env", code_mode_only=True)
 class ListEnv(BaseTool[ListEnvParams]):
-    """<!--zh: 查看已持久化环境变量，值会脱敏。-->
-    List persisted environment variables with masked values."""
-
-    code_mode_only = True
+    """List persisted environment variables with masked values."""
 
     async def execute(self, tool_context: ToolContext, params: ListEnvParams) -> ToolResult:
         try:

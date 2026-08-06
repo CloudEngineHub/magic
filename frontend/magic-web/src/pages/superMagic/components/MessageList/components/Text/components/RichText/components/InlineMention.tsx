@@ -136,7 +136,9 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		[data, handleMarkerClick, isMobile, onFileClick],
 	)
 
-	const label = data.type === MentionItemType.FOLDER ? `@${displayName}/` : `@${displayName}`
+	const isDirectory =
+		data.type === MentionItemType.FOLDER || data.type === MentionItemType.MEMORY_DIRECTORY
+	const label = isDirectory ? `@${displayName}/` : `@${displayName}`
 
 	return (
 		<MentionTooltipWrapper

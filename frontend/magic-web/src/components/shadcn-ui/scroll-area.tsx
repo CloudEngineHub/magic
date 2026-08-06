@@ -7,33 +7,50 @@ type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
 	viewportClassName?: string
 	viewportRef?: React.Ref<HTMLDivElement>
 	viewportId?: string
+	scrollbarOrientation?: React.ComponentProps<
+		typeof ScrollAreaPrimitive.ScrollAreaScrollbar
+	>["orientation"]
 }
 
 const ScrollArea = React.forwardRef<
 	React.ElementRef<typeof ScrollAreaPrimitive.Root>,
 	ScrollAreaProps
->(({ className, children, viewportClassName, viewportRef, viewportId, ...props }, ref) => (
-	<ScrollAreaPrimitive.Root
-		ref={ref}
-		data-slot="scroll-area"
-		className={cn("relative", className)}
-		{...props}
-	>
-		<ScrollAreaPrimitive.Viewport
-			id={viewportId}
-			ref={viewportRef}
-			data-slot="scroll-area-viewport"
-			className={cn(
-				"size-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50",
-				viewportClassName,
-			)}
+>(
+	(
+		{
+			className,
+			children,
+			viewportClassName,
+			viewportRef,
+			viewportId,
+			scrollbarOrientation = "vertical",
+			...props
+		},
+		ref,
+	) => (
+		<ScrollAreaPrimitive.Root
+			ref={ref}
+			data-slot="scroll-area"
+			className={cn("relative", className)}
+			{...props}
 		>
-			{children}
-		</ScrollAreaPrimitive.Viewport>
-		<ScrollBar />
-		<ScrollAreaPrimitive.Corner />
-	</ScrollAreaPrimitive.Root>
-))
+			<ScrollAreaPrimitive.Viewport
+				id={viewportId}
+				ref={viewportRef}
+				data-slot="scroll-area-viewport"
+				className={cn(
+					"size-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+					viewportClassName,
+				)}
+			>
+				{children}
+			</ScrollAreaPrimitive.Viewport>
+			{/* Radix enables scrolling on an axis only when its matching scrollbar is mounted. */}
+			<ScrollBar orientation={scrollbarOrientation} />
+			<ScrollAreaPrimitive.Corner />
+		</ScrollAreaPrimitive.Root>
+	),
+)
 
 // @ts-expect-error - displayName is not in the type definition but is valid in runtime
 ScrollArea.displayName = "ScrollArea"

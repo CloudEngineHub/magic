@@ -36,15 +36,15 @@ readonly class SandboxVersionDomainService
      *
      * @return array{current_version: string, latest_version: string, needs_update: bool}
      */
-    public function checkSandboxVersion(int $topicId, bool $useCache = true): array
+    public function checkSandboxVersion(int $topicId, bool $useCache = true, string $effectiveSandboxId = ''): array
     {
         $topicEntity = $this->topicDomainService->getTopicById($topicId);
         if (! $topicEntity) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
         }
 
-        // 沙箱尚未创建（无 sandbox_id）时不需要升级
-        if (empty($topicEntity->getSandboxId())) {
+        // 持久化映射为空时，仅接受与 topic_id 完全一致的 legacy 沙箱身份。
+        if ($topicEntity->getSandboxId() === '' && $effectiveSandboxId !== (string) $topicId) {
             return $this->buildSandboxVersionResult('', '');
         }
 

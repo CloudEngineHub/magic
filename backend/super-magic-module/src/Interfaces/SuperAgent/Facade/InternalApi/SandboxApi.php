@@ -35,16 +35,24 @@ class SandboxApi extends AbstractApi
     public function checkSandboxVersion(RequestContext $requestContext): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
-        $sandboxId = $this->request->input('sandbox_id', '');
+        $sandboxId = $this->getRequiredSandboxId();
+        $topic = $this->topicAppService->getTopicBySandboxId($requestContext, $sandboxId);
 
-        if (empty($sandboxId)) {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'sandbox_id is required');
-        }
+        return $this->agentAppService->checkSandboxVersion((int) $topic->getId(), true, $sandboxId);
+    }
 
-        // sandbox_id 即 topic_id，直接复用 getTopic（含权限校验）
-        $this->topicAppService->getTopic($requestContext, (int) $sandboxId);
+    /**
+     * 获取当前沙箱状态及镜像版本信息.
+     */
+    public function getSandboxInfo(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $sandboxId = $this->getRequiredSandboxId();
+        $topic = $this->topicAppService->getTopicBySandboxId($requestContext, $sandboxId);
 
-        return $this->agentAppService->checkSandboxVersion((int) $sandboxId);
+        return $this->agentAppService
+            ->getSandboxInfo((int) $topic->getId(), $sandboxId)
+            ->toArray();
     }
 
     /**
@@ -55,20 +63,49 @@ class SandboxApi extends AbstractApi
     {
         $authorization = $this->getAuthorization();
         $requestContext->setUserAuthorization($authorization);
-        $sandboxId = $this->request->input('sandbox_id', '');
+        $sandboxId = $this->getRequiredSandboxId();
+        $topic = $this->topicAppService->getTopicBySandboxId($requestContext, $sandboxId);
+        $dataIsolation = $this->createDataIsolation($requestContext);
 
-        if (empty($sandboxId)) {
+        $newSandboxId = $this->agentAppService->upgradeSandbox($dataIsolation, (int) $topic->getId());
+
+        return ['sandbox_id' => $newSandboxId];
+    }
+
+    /**
+     * 无条件重启当前沙箱.
+     */
+    public function restartSandbox(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $sandboxId = $this->getRequiredSandboxId();
+        $topic = $this->topicAppService->getTopicBySandboxId($requestContext, $sandboxId);
+        $dataIsolation = $this->createDataIsolation($requestContext);
+
+        $newSandboxId = $this->agentAppService->restartSandbox($dataIsolation, (int) $topic->getId());
+
+        return ['sandbox_id' => $newSandboxId];
+    }
+
+    private function getRequiredSandboxId(): string
+    {
+        $sandboxId = trim((string) $this->request->input('sandbox_id', ''));
+        if ($sandboxId === '') {
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'sandbox_id is required');
         }
 
-        // sandbox_id 即 topic_id，直接复用 getTopic（含权限校验）
-        $this->topicAppService->getTopic($requestContext, (int) $sandboxId);
+        return $sandboxId;
+    }
 
-        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
+    private function createDataIsolation(RequestContext $requestContext): DataIsolation
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $dataIsolation = DataIsolation::create(
+            $authorization->getOrganizationCode(),
+            $authorization->getId()
+        );
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
-        $newSandboxId = $this->agentAppService->upgradeSandbox($dataIsolation, (int) $sandboxId);
-
-        return ['sandbox_id' => $newSandboxId];
+        return $dataIsolation;
     }
 }

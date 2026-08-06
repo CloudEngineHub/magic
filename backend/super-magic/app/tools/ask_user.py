@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import Field
 
@@ -376,22 +376,9 @@ def build_ask_user_timeout_answer_builder(parsed_questions: List[dict]):
     return timeout_answer_builder
 
 
-def _humanize_single(
-    index: int,
-    question: str,
-    interaction_type: str,
-    answer: Union[str, list],
-) -> str:
-    """Format a single sub-question answer into a clearly delimited line.
-
-    Uses >>> and <<< as answer delimiters to avoid ambiguity when the answer
-    itself contains quotes, dots, or other punctuation.
-    """
-    if interaction_type == "multi_select":
-        ans_str = ", ".join(answer) if isinstance(answer, list) else str(answer)
-    else:
-        ans_str = str(answer)
-    return f"Q{index}: {question}\nA{index}: {ans_str}"
+def _xml_escape(text: str) -> str:
+    """转义 XML 特殊字符，确保用户输入不破坏标签结构。"""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _humanize_batch(
@@ -399,62 +386,43 @@ def _humanize_batch(
     response_status: str,
     answers: dict,
 ) -> str:
-    """Convert multiple sub-question answers into a natural language paragraph
-    that the model can directly reason about.
+    """将用户回答转换为 XML 结构化文本，供模型推理。
 
-    answers is a {sub_id: answer_str} dict.
+    answer 标签按 question 原始顺序一一对应（与模型发出的 questions 位置匹配），
+    不重复 question 文本和 type，模型通过上下文中的 questions 获取对应关系。
+
+    answers 格式为 {sub_id: answer_str}。
     """
-    if response_status == "timeout":
-        parts = []
+    if response_status in ("timeout", "skipped"):
+        lines = [f'<ask_user_result status="{response_status}">']
+        has_no_default = False
         for q in questions:
-            name = q.get("question", "")
             dv = q.get("default_value") or q.get("default")
             if dv is not None:
-                parts.append(f'"{name}" (timed out, used default: {dv})')
+                lines.append(f"<answer>{_xml_escape(str(dv))}</answer>")
             else:
-                parts.append(f'"{name}" (timed out, no default)')
-        has_no_default = any(
-            (q.get("default_value") or q.get("default")) is None for q in questions
-        )
-        summary = "; ".join(parts)
+                has_no_default = True
+                lines.append('<answer missing="true"/>')
+        lines.append("</ask_user_result>")
         if has_no_default:
-            return (
-                f"The following questions timed out: {summary}. "
-                "Some have no default value — decide whether to abort the related operation."
-            )
-        return f"The following questions timed out and defaults were applied: {summary}. Continue with the next steps."
-
-    if response_status == "skipped":
-        parts = []
-        for q in questions:
-            name = q.get("question", "")
-            dv = q.get("default_value") or q.get("default")
-            if dv is not None:
-                parts.append(f'"{name}" (used default: {dv})')
-            else:
-                parts.append(f'"{name}" (no default)')
-        has_no_default = any(
-            (q.get("default_value") or q.get("default")) is None for q in questions
-        )
-        summary = "; ".join(parts)
-        if has_no_default:
-            return (
-                f"The user skipped the following questions: {summary}. "
-                "Some have no default value — decide whether to abort the related operation."
-            )
-        return f"The user skipped the following questions and defaults were applied: {summary}. Continue with the next steps."
+            lines.append("Some answers are missing with no default value. Decide whether to abort the related operation.")
+        return "\n".join(lines)
 
     # answered
-    parts = []
+    lines = ['<ask_user_result status="answered">']
     for i, q in enumerate(questions):
-        name = q.get("question", "")
-        interaction_type = q.get("interaction_type", "input")
+        itype = q.get("interaction_type", "input")
         sub_id = q.get("sub_id", "")
-        default = [] if interaction_type == "multi_select" else ""
+        default = [] if itype == "multi_select" else ""
         # 优先用 sub_id（UUID，新前端）查找；找不到时 fallback 到 q-{index}（旧前端兼容格式）
         ans = answers.get(sub_id)
         if ans is None:
             ans = answers.get(f"q-{i}", default)
-        parts.append(_humanize_single(i + 1, name, interaction_type, ans))
-    summary = "\n".join(parts)
-    return f"The user answered the questions (each line after 'An:' is the user's exact raw input):\n{summary}"
+
+        if itype == "multi_select" and isinstance(ans, list):
+            items = ", ".join(_xml_escape(str(a)) for a in ans)
+            lines.append(f"<answer>{items}</answer>")
+        else:
+            lines.append(f"<answer>{_xml_escape(str(ans))}</answer>")
+    lines.append("</ask_user_result>")
+    return "\n".join(lines)

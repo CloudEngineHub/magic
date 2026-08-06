@@ -38,11 +38,12 @@ interface EditorLayoutProps {
 }
 
 function EditorLayout({
-	mode = TopicMode.General,
+	mode,
 	sceneStateStore = defaultSceneStateStore,
 	autoFocus = false,
 	onAutoFocusHandled,
 }: EditorLayoutProps) {
+	const resolvedMode = mode ?? roleStore.currentRole
 	const editorContainerRef = useRef<HTMLDivElement>(null)
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [mcpModalOpen, setMcpModalOpen] = useState(false)
@@ -52,7 +53,7 @@ function EditorLayout({
 	const selectedWorkspace = workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace
 
 	const scenes = superMagicModeService.getModeConfigWithLegacy(
-		mode,
+		resolvedMode,
 		undefined,
 		false,
 		selectedTopic?.agent_code,
@@ -71,9 +72,10 @@ function EditorLayout({
 			selectedWorkspace,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			setSelectedProject: projectStore.setSelectedProject,
-			topicMode: mode,
+			topicMode: resolvedMode,
 			setTopicMode: roleStore.setCurrentRole,
-			topicExamplesMode: mode,
+			recoverTopicMode: roleStore.applyResolvedRole,
+			topicExamplesMode: resolvedMode,
 			enableMessageSendByContent: true,
 			autoFocus,
 			onEditorFocus: onAutoFocusHandled,
@@ -93,7 +95,14 @@ function EditorLayout({
 				},
 			},
 		}),
-		[mode, selectedTopic, selectedProject, selectedWorkspace, autoFocus, onAutoFocusHandled],
+		[
+			resolvedMode,
+			selectedTopic,
+			selectedProject,
+			selectedWorkspace,
+			autoFocus,
+			onAutoFocusHandled,
+		],
 	)
 
 	// Automatically scroll to scene panel when scene config loaded
@@ -128,12 +137,12 @@ function EditorLayout({
 	useEffect(() => {
 		sceneStateStore.setInputScopeKey(
 			buildTopicInputScopeKey(
-				String(mode),
+				String(resolvedMode),
 				selectedTopic?.id ?? "",
 				selectedTopic?.agent_code ?? "",
 			),
 		)
-	}, [mode, selectedTopic?.id, selectedTopic?.agent_code, sceneStateStore])
+	}, [resolvedMode, selectedTopic?.id, selectedTopic?.agent_code, sceneStateStore])
 
 	const { currentScene: selectedScene, shouldShowCurrentSceneBadge } = useSceneSelection({
 		scenes,
@@ -184,7 +193,7 @@ function EditorLayout({
 					data-testid="home-scene-config-container"
 					className={cn(
 						"w-full transition-all duration-200 ease-in-out",
-						mode !== TopicMode.PPT && "max-w-4xl",
+						resolvedMode !== TopicMode.PPT && "max-w-4xl",
 						shouldShowSelfMediaConfig ? "px-2 pb-8 pt-0" : "p-2 pb-[40px]",
 					)}
 					style={{

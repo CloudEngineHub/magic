@@ -70,7 +70,7 @@ import { useCreateWorkspace } from "../../hooks/useCreateWorkspace"
 import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
-import { useSingleHtmlStaticDependencies } from "@/pages/superMagic/hooks/useSingleHtmlStaticDependencies"
+import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 
@@ -118,8 +118,8 @@ function ProjectResourceSelectorModal({
 }: ProjectResourceSelectorModalProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
-	const [includeHtmlDependencies, setIncludeHtmlDependencies] = useState(true)
-	const htmlStaticDependencies = useSingleHtmlStaticDependencies({
+	const [includeDocumentDependencies, setIncludeDocumentDependencies] = useState(true)
+	const documentStaticDependencies = useSingleDocumentStaticDependencies({
 		active: visible,
 		fileIds,
 		attachments: sourceAttachments,
@@ -127,7 +127,7 @@ function ProjectResourceSelectorModal({
 	const selectedFileIdForDependencyReset = fileIds.length === 1 ? fileIds[0] : ""
 
 	useEffect(() => {
-		if (visible) setIncludeHtmlDependencies(true)
+		if (visible) setIncludeDocumentDependencies(true)
 	}, [visible, selectedFileIdForDependencyReset])
 
 	// 判断是否为龙虾场景
@@ -931,8 +931,8 @@ function ProjectResourceSelectorModal({
 				sourceAttachments,
 				selection: firstSelection,
 				selections: selectedResources,
-				includeHtmlDependencies,
-				htmlDependencyFileIds: htmlStaticDependencies.dependencyTransferFileIds,
+				includeDocumentDependencies,
+				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
 			})
 			if (closeOnSubmit) onClose?.()
 			return
@@ -953,6 +953,8 @@ function ProjectResourceSelectorModal({
 				targetPath,
 				targetAttachments,
 				sourceAttachments: sourceAttachments,
+				includeDocumentDependencies,
+				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
 			})
 		if (closeOnSubmit) onClose && onClose()
 	})
@@ -1140,7 +1142,9 @@ function ProjectResourceSelectorModal({
 		onOk: submit,
 		onCancel: handleCancel,
 		okDisabled:
-			(isMentionMode ? false : isSearch) || !canSubmit || htmlStaticDependencies.isLoading,
+			(isMentionMode ? false : isSearch) ||
+			!canSubmit ||
+			documentStaticDependencies.isLoading,
 	}
 
 	const handleKeyDown = useMemoizedFn((event: KeyboardEvent) => {
@@ -1722,24 +1726,31 @@ function ProjectResourceSelectorModal({
 				isMobile && "h-[calc(100%-141px)]",
 			)}
 		>
-			{htmlStaticDependencies.isHtml &&
-				htmlStaticDependencies.dependencyFileIds.length > 0 && (
+			{documentStaticDependencies.fileType &&
+				documentStaticDependencies.dependencyFileIds.length > 0 && (
 					<label
 						className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
-						data-testid="cross-project-file-html-dependencies-option"
+						data-testid="cross-project-file-document-dependencies-option"
 					>
 						<Checkbox
-							checked={includeHtmlDependencies}
-							onChange={(event) => setIncludeHtmlDependencies(event.target.checked)}
+							checked={includeDocumentDependencies}
+							onChange={(event) =>
+								setIncludeDocumentDependencies(event.target.checked)
+							}
 						/>
 						<span className="flex flex-col gap-1 text-left">
 							<span className="text-sm font-medium leading-5 text-foreground">
-								{t("share.includeHtmlDependencies", {
-									count: htmlStaticDependencies.dependencyFileIds.length,
+								{t("share.includeDocumentDependencies", {
+									count: documentStaticDependencies.dependencyFileIds.length,
 								})}
 							</span>
 							<span className="text-xs leading-4 text-muted-foreground">
-								{t("share.includeHtmlDependenciesDescription")}
+								{t("share.includeDocumentDependenciesDescription", {
+									type:
+										documentStaticDependencies.fileType === "markdown"
+											? "Markdown"
+											: "HTML",
+								})}
 							</span>
 						</span>
 					</label>

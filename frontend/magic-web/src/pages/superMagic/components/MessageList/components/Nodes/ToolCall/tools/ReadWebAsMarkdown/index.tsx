@@ -13,7 +13,7 @@ import { MonitorPlay } from "lucide-react"
 
 function ReadWebAsMarkdown(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 
 	const { t } = useTranslation("super")
@@ -41,7 +41,11 @@ function ReadWebAsMarkdown(props: NodeProps) {
 			<>
 				<VerticalLine height={28} className="text-input" />
 				<Tooltip title={t("playbackControl.viewProcess")}>
-					<div className={cx(styles.button)} onClick={onClick} data-testid="read-web-as-markdown">
+					<div
+						className={cx(styles.button)}
+						onClick={onClick}
+						data-testid="read-web-as-markdown"
+					>
 						<MonitorPlay size={16} className="text-foreground" />
 					</div>
 				</Tooltip>

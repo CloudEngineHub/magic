@@ -15,6 +15,7 @@ import shutil
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from collections.abc import AsyncIterable
 from typing import Any, Callable, Dict, Optional, Union
 
 import aiofiles
@@ -52,12 +53,11 @@ async def async_copy2(src: Union[str, Path], dst: Union[str, Path]) -> None:
         # 确保目标目录存在
         await async_mkdir(dst_path.parent, parents=True, exist_ok=True)
 
-        # 异步复制文件内容
+        # 分块复制，避免大文件一次性读入内存
         async with aiofiles.open(src_path, 'rb') as src_file:
-            content = await src_file.read()
-
-        async with aiofiles.open(dst_path, 'wb') as dst_file:
-            await dst_file.write(content)
+            async with aiofiles.open(dst_path, 'wb') as dst_file:
+                while chunk := await src_file.read(1024 * 1024):
+                    await dst_file.write(chunk)
 
         # 复制文件元数据（时间戳、权限）
         stat = await aiofiles.os.stat(str(src_path))
@@ -448,6 +448,16 @@ async def async_readlink(path: Union[str, Path]) -> str:
         raise
 
 
+async def async_realpath(path: Union[str, Path], *, strict: bool = False) -> Path:
+    """异步解析路径中的软链，返回规范化绝对路径。"""
+    try:
+        resolved = await asyncio.to_thread(os.path.realpath, str(path), strict=strict)
+        return Path(resolved)
+    except Exception as e:
+        logger.error(f"异步解析真实路径失败 {path}: {e}")
+        raise
+
+
 async def async_write_json(file_path: Union[str, Path], data: Dict[str, Any], **kwargs) -> None:
     """
     异步写入JSON文件
@@ -748,6 +758,26 @@ async def async_write_bytes(
     except Exception as e:
         logger.error(f"异步写入二进制文件失败 {path_obj}: {e}")
         raise
+
+
+async def async_write_bytes_iter(
+    file_path: Union[str, Path],
+    chunks: AsyncIterable[bytes],
+    *,
+    append: bool = False,
+) -> int:
+    """将异步字节流分块写入文件，返回本次写入的字节数。"""
+    path = Path(file_path)
+    await async_mkdir(path.parent, parents=True, exist_ok=True)
+    mode = "ab" if append else "wb"
+    written = 0
+
+    async with aiofiles.open(path, mode) as file:
+        async for chunk in chunks:
+            await file.write(chunk)
+            written += len(chunk)
+
+    return written
 
 
 async def async_read_text(file_path: Union[str, Path], encoding: str = 'utf-8', errors: Optional[str] = None) -> str:

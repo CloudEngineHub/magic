@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
 	copyWechatArticleSelection,
 	copyWechatArticleSelectionFromDocument,
+	copyWechatArticleSelectionSynchronously,
 	wechatNativeClipboardInternals,
 } from "./wechatNativeClipboard"
 
@@ -122,5 +123,19 @@ describe("wechatNativeClipboard", () => {
 
 		expect(request.type).toBe(wechatNativeClipboardInternals.COPY_ARTICLE_SELECTION_MESSAGE)
 		await expect(copyPromise).resolves.toBe(true)
+	})
+
+	it("does not start the async sandbox bridge in the synchronous copy path", () => {
+		const postMessage = vi.fn()
+		const iframe = { contentWindow: { postMessage } } as unknown as HTMLIFrameElement
+		Object.defineProperty(iframe, "contentDocument", {
+			configurable: true,
+			get: () => {
+				throw new DOMException("Blocked", "SecurityError")
+			},
+		})
+
+		expect(copyWechatArticleSelectionSynchronously(iframe)).toBe(false)
+		expect(postMessage).not.toHaveBeenCalled()
 	})
 })

@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Magic Use Browser Connector",
+  "version": "1.0.0",
+  "description": "Connect user-authorized Chrome tabs to a temporary Magic Use browser session.",
+  "minimum_chrome_version": "116",
+  "permissions": ["debugger", "tabs", "activeTab", "storage", "downloads"],
+  "host_permissions": ["http://*/*", "https://*/*", "file://*/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Magic Use Browser Connector",
+    "default_popup": "popup/popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws: wss:"
+  }
+}

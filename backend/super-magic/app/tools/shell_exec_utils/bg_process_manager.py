@@ -398,13 +398,13 @@ class BackgroundProcessManager:
         self,
         task_id: str,
         pattern: Optional[re.Pattern],
-        timeout: float,
+        timeout: Optional[float],
     ) -> tuple[str, str, Optional[int]]:
         """
         轮询日志文件，等待以下任意条件触发：
             1. pattern 在新增内容中命中
             2. 进程已结束（status 非 RUNNING）
-            3. timeout 到期
+            3. timeout 到期（timeout=None 时永不超时）
 
         返回 (full_output, reason, exit_code)
             reason: "completed" | "killed" | "error" | "pattern_matched" | "timeout" | "running"
@@ -414,7 +414,7 @@ class BackgroundProcessManager:
             return "", "not_found", None
 
         loop = asyncio.get_event_loop()
-        deadline = loop.time() + timeout
+        deadline = None if timeout is None else loop.time() + timeout
         offset = 0
 
         while True:
@@ -429,13 +429,15 @@ class BackgroundProcessManager:
                 content = await self._store.read_full(task_id)
                 return content, "pattern_matched", None
 
-            # 超时检查
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                content = await self._store.read_full(task_id)
-                return content, "timeout", None
-
-            await asyncio.sleep(min(0.5, remaining))
+            # 超时检查（deadline=None 时永不超时）
+            if deadline is not None:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    content = await self._store.read_full(task_id)
+                    return content, "timeout", None
+                await asyncio.sleep(min(0.5, remaining))
+            else:
+                await asyncio.sleep(0.5)
 
 
 # ── 进程优雅终止工具函数 ──────────────────────────────────────────────────────

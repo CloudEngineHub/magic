@@ -40,6 +40,8 @@ export const MentionBusinessItemType = {
 	TOOL: "tool",
 	PROJECT: "project",
 	PROJECT_FILE: "project_file",
+	MEMORY_FILE: "memory_file",
+	MEMORY_DIRECTORY: "memory_directory",
 	UPLOAD_FILE: "upload_file",
 	CLOUD_FILE: "cloud_file",
 	DESIGN_MARKER: "design_marker",
@@ -115,6 +117,21 @@ export interface ProjectFileMentionData {
 	source_file_id?: string
 	/** Internal: marks a project-file mention that must be copied before sending. */
 	pending_project_copy?: boolean
+}
+
+/** 记忆文件 mention 数据。 */
+export interface MemoryFileMentionData {
+	file_id: string
+	file_name: string
+	file_path: string
+	file_extension: string
+}
+
+/** 记忆目录 mention 数据。 */
+export interface MemoryDirectoryMentionData {
+	directory_id: string
+	directory_name: string
+	directory_path: string
 }
 
 export interface DirectoryMentionData {
@@ -214,6 +231,8 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData
 	[MentionBusinessItemType.PROJECT_FILE]: ProjectFileMentionData
+	[MentionBusinessItemType.MEMORY_FILE]: MemoryFileMentionData
+	[MentionBusinessItemType.MEMORY_DIRECTORY]: MemoryDirectoryMentionData
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData
 	[MentionBusinessItemType.CLOUD_FILE]: CloudFileMentionData
 	[MentionBusinessItemType.DESIGN_MARKER]: CanvasMarkerMentionData

@@ -32,6 +32,7 @@ return [
     'temperature_value_range_error' => 'temperature 值必须在 0-2 范围内',
     'ai_ability_not_found' => 'AI能力不存在',
     'ai_ability_disabled' => 'AI能力未启用',
+    'ai_ability_model_unavailable' => 'AI能力模型不可用',
     'config_disabled' => '服务商配置已禁用',
     'config_not_found' => '服务商配置不存在',
     'config_load_failed' => '配置加载失败',

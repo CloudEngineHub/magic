@@ -15,11 +15,17 @@
 ## 使用方式
 
 ```tsx
-import { TimeFilterPanel, type TimeRangeValue } from "@admin-components"
+import { RelativeUnit, TimeFilterPanel, type TimeRangeValue } from "@admin-components"
 
 function Example() {
 	return (
 		<TimeFilterPanel
+			precision={[
+				RelativeUnit.second,
+				RelativeUnit.minute,
+				RelativeUnit.hour,
+				RelativeUnit.day,
+			]}
 			onChange={(value: TimeRangeValue | null) => {
 				console.log(value?.startDate, value?.endDate, value?.label)
 			}}
@@ -30,11 +36,12 @@ function Example() {
 
 ## Props
 
-| 属性 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `defaultPresetKey` | `TimePresetKey` | 无 | 非受控模式下，挂载后自动应用对应预设 |
-| `value` | `TimeRangeValue \| null` | 无 | 受控值；传 `null` 表示清空 |
-| `onChange` | `(value: TimeRangeValue \| null) => void` | - | 时间范围变更回调；清空时返回 `null` |
+| 属性               | 类型                                             | 默认值                | 说明                                         |
+| ------------------ | ------------------------------------------------ | --------------------- | -------------------------------------------- |
+| `defaultPresetKey` | `TimePresetKey`                                  | 无                    | 非受控模式下，挂载后自动应用对应预设         |
+| `precision`        | `TimeFilterPrecision \| readonly RelativeUnit[]` | `[minute, hour, day]` | 相对时间支持的粒度；绝对时间固定按自然日选择 |
+| `value`            | `TimeRangeValue \| null`                         | 无                    | 受控值；传 `null` 表示清空                   |
+| `onChange`         | `(value: TimeRangeValue \| null) => void`        | -                     | 时间范围变更回调；清空时返回 `null`          |
 
 ## 输出结构
 
@@ -47,6 +54,8 @@ interface TimeRangeValue {
 	mode: "relative" | "absolute" | "monthly" | "custom"
 }
 ```
+
+绝对时间始终输出所选首日的 `00:00:00` 至末日的 `23:59:59`，面板和历史记录中仅显示日期。
 
 ## 多语言
 

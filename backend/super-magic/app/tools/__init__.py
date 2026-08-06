@@ -6,19 +6,17 @@
 # 导出工具类
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
+from app.tools.micro_app_plan import MicroAppPlanTool
 from app.tools.web_search import WebSearch
-from app.tools.agent_list import AgentList
-from app.tools.prepare_agent import PrepareAgent
+from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
-from app.tools.create_memory import CreateMemory
 from app.tools.create_slide_project import CreateSlideProject
 
 from app.tools.delete_files import DeleteFiles
-from app.tools.delete_memory import DeleteMemory
 from app.tools.download_from_markdown import DownloadFromMarkdown
 from app.tools.download_from_url import DownloadFromUrl
 from app.tools.download_from_urls import DownloadFromUrls
@@ -28,6 +26,7 @@ from app.tools.multi_edit_file import MultiEditFile
 from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
+from app.tools.get_sandbox_info import GetSandboxInfo
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
@@ -49,15 +48,39 @@ from app.tools.thinking import Thinking
 from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
 from app.tools.todo_update import TodoUpdate
-from app.tools.update_memory import UpdateMemory
+from app.tools.restart_sandbox import RestartSandbox
 from app.tools.upgrade_sandbox import UpgradeSandbox
-from app.tools.use_browser import UseBrowser
+from app.tools.browser import (
+    BrowserActivatePage,
+    BrowserCheck,
+    BrowserClick,
+    BrowserClosePage,
+    BrowserEvaluate,
+    BrowserFill,
+    BrowserFindVisual,
+    BrowserHover,
+    BrowserKeepAlive,
+    BrowserListPages,
+    BrowserListSessions,
+    BrowserNavigate,
+    BrowserOpenPage,
+    BrowserPress,
+    BrowserReadConsole,
+    BrowserReadNetwork,
+    BrowserReadPage,
+    BrowserScreenshot,
+    BrowserScroll,
+    BrowserSelect,
+    BrowserSnapshot,
+    BrowserUploadFile,
+    BrowserVisualQuery,
+    BrowserWait,
+)
 from app.tools.write_file import WriteFile
 from app.tools.manage_cron import ManageCron
 from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.append_to_file import AppendToFile
-from app.tools.convert_pdf import ConvertPdf
 from app.tools.pptx_to_slide_template.tool import ConvertPptxToSlideTemplate
 from app.tools.document_parse import (
     BuildDocumentIndex,
@@ -72,6 +95,20 @@ from app.tools.document_parse import (
 )
 from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
+from app.tools.share import (
+    CreateFileShare,
+    CreateProjectShare,
+    CreateTopicShare,
+    DeleteShare,
+    GetShare,
+    InspectFileShare,
+    ListFileShares,
+    ListProjectShares,
+    ListTopicShares,
+    UpdateFileShare,
+    UpdateProjectShare,
+    UpdateTopicShare,
+)
 from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
 from app.tools.video_understanding import VideoUnderstanding
@@ -117,6 +154,12 @@ from app.tools.design.tools import (
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+from app.tools.magicbase_tools import (
+    CreateMagicColumn,
+    CreateMagicTable,
+    GetMagicTable,
+    QueryMagicTables,
+)
 
 # Skill 管理工具
 from app.tools.find_skills import FindSkillsTool
@@ -126,7 +169,7 @@ from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
 from app.tools.install_slides_template import InstallSlidesTemplate
 
-# MCP 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# MCP 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (
     McpAddServer,
     McpCallTool,
@@ -136,7 +179,7 @@ from app.tools.mcp import (
     McpListTools,
 )
 
-# OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# OAuth2 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.oauth2 import (
     OAuth2CheckAuthorization,
     OAuth2GetApiDoc,
@@ -174,6 +217,7 @@ import app.tools.design
 __all__ = [
     "DummyTool",
     "AskUserTool",
+    "MicroAppPlanTool",
 
     # 核心组件
     "BaseTool",
@@ -186,8 +230,7 @@ __all__ = [
     "AnalysisSlideWebpage",
     "AppendToFile",
     "WebSearch",
-    "AgentList",
-    "PrepareAgent",
+    "FindAgentsTool",
     "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",
@@ -196,7 +239,6 @@ __all__ = [
     "ConnectWechatBot",
     "WaitWechatLogin",
     "CompactChatHistory",
-    "ConvertPdf",
     "ConvertPptxToSlideTemplate",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",
@@ -214,12 +256,22 @@ __all__ = [
     "ListEnv",
     "SetEnv",
     "UnsetEnv",
+    "CreateFileShare",
+    "CreateProjectShare",
+    "CreateTopicShare",
+    "DeleteShare",
+    "GetShare",
+    "InspectFileShare",
+    "ListFileShares",
+    "ListProjectShares",
+    "ListTopicShares",
+    "UpdateFileShare",
+    "UpdateProjectShare",
+    "UpdateTopicShare",
     "CreateSlide",
     "CreateSlideProject",
-    "CreateMemory",
     "DeepWrite",
     "DeleteFiles",
-    "DeleteMemory",
     "DownloadFromMarkdown",
     "DownloadFromUrl",
     "DownloadFromUrls",
@@ -229,12 +281,17 @@ __all__ = [
     "MultiEditFileRange",
     "FileSearch",
     "GetJsCdnAddress",
+    "GetSandboxInfo",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",
+    "QueryMagicTables",
+    "GetMagicTable",
+    "CreateMagicTable",
+    "CreateMagicColumn",
     "InstallSkillsTool",
     "ListDir",
     "Purify",
@@ -254,8 +311,32 @@ __all__ = [
     "TodoRead",
     "TodoCreate",
     "TodoUpdate",
-    "UpdateMemory",
-    "UseBrowser",
+    "RestartSandbox",
+    "UpgradeSandbox",
+    "BrowserActivatePage",
+    "BrowserCheck",
+    "BrowserClick",
+    "BrowserClosePage",
+    "BrowserEvaluate",
+    "BrowserFill",
+    "BrowserFindVisual",
+    "BrowserHover",
+    "BrowserKeepAlive",
+    "BrowserListPages",
+    "BrowserListSessions",
+    "BrowserNavigate",
+    "BrowserOpenPage",
+    "BrowserPress",
+    "BrowserReadConsole",
+    "BrowserReadNetwork",
+    "BrowserReadPage",
+    "BrowserScreenshot",
+    "BrowserScroll",
+    "BrowserSelect",
+    "BrowserSnapshot",
+    "BrowserUploadFile",
+    "BrowserVisualQuery",
+    "BrowserWait",
     "VisualUnderstanding",
     "VisualUnderstandingWebpage",
     "VideoUnderstanding",

@@ -17,6 +17,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Repository\Facade\RecycleBinRepositoryInte
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
@@ -47,6 +48,7 @@ class RecycleBinRestoreDomainService
         protected TopicRepositoryInterface $topicRepository,
         protected TaskFileRepositoryInterface $taskFileRepository,
         protected ProjectMemberRepositoryInterface $projectMemberRepository,
+        protected MicroAppRepositoryInterface $microAppRepository,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -583,6 +585,7 @@ class RecycleBinRestoreDomainService
             RecycleBinResourceType::Project => $this->restoreProject($entity, $userId),
             RecycleBinResourceType::Topic => $this->restoreTopic($entity, $userId),
             RecycleBinResourceType::File => $this->restoreFile($entity, $userId, $conflictResolutions),
+            RecycleBinResourceType::MicroApp => $this->restoreMicroApp($entity, $userId),
             default => throw new RuntimeException(
                 trans('recycle_bin.restore.unsupported_resource_type', ['type' => $resourceType->value])
             ),
@@ -677,6 +680,36 @@ class RecycleBinRestoreDomainService
             }
 
             $this->restoreProjectWithoutParentCheck($projectId, $userId);
+            $this->recycleBinRepository->deleteById($entity->getId());
+        });
+    }
+
+    private function restoreMicroApp(RecycleBinEntity $entity, string $userId): void
+    {
+        $appId = (int) $entity->getResourceId();
+
+        Db::transaction(function () use ($appId, $entity, $userId) {
+            $microApp = $this->microAppRepository->findByIdWithTrashed($appId);
+            if ($microApp === null) {
+                throw new RuntimeException(trans('recycle_bin.restore.micro_app_not_found_or_permanently_deleted'));
+            }
+
+            $projectId = $microApp->getProjectId();
+            $project = $this->projectRepository->findByIdWithTrashed($projectId);
+            if ($project === null) {
+                throw new RuntimeException(trans('recycle_bin.restore.project_not_found_or_permanently_deleted'));
+            }
+
+            $workspaceId = $project->getWorkspaceId();
+            if ($workspaceId !== null && ! $this->workspaceRepository->existsAndNotDeleted($workspaceId)) {
+                throw new RuntimeException(trans('recycle_bin.restore.parent_workspace_missing'));
+            }
+
+            $this->restoreProjectWithoutParentCheck($projectId, $userId);
+            if (! $this->microAppRepository->restoreById($appId)) {
+                throw new RuntimeException(trans('recycle_bin.restore.micro_app_failed'));
+            }
+
             $this->recycleBinRepository->deleteById($entity->getId());
         });
     }

@@ -299,7 +299,7 @@ class WorkDirectoryUtilTest extends TestCase
 
         $filePatterns = [
             // Common file types
-            'readme.md',
+            'README.md',
             'package.json',
             'composer.lock',
             'Dockerfile.prod',

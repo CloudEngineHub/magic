@@ -12,7 +12,7 @@ import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/c
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
 					name?: string
@@ -103,7 +103,7 @@ function ToolCall(props: NodeProps) {
 		const toolInfo = pick(tool, ["name", "url", "action", "remark", "id"])
 		const newDetail = { ...tool?.detail, ...toolInfo }
 		console.log("往上传递数据", newDetail, toolInfo, node)
-		if (!filterClickableMessageWithoutRevoked(node) || isEmpty(tool?.detail)) {
+		if (!filterClickableMessageWithoutRevoked(node, props?.node) || isEmpty(tool?.detail)) {
 			return
 		}
 

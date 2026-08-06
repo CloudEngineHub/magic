@@ -35,10 +35,17 @@ import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
+import {
+	tryAcceptPromptCarouselShortcut,
+	tryNavigatePromptCarouselShortcut,
+} from "../utils/promptCarousel"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
 	placeholder?: string
+	ariaLabel?: string
+	onPromptCarouselAccept?: () => boolean
+	onPromptCarouselNavigate?: (direction: "previous" | "next") => boolean
 	onSend?: (content: JSONContent | undefined) => void
 	onMentionsInsert?: (item: TiptapMentionAttributes) => void
 	onMentionInsertItems?: (items: TiptapMentionAttributes[]) => void
@@ -116,6 +123,9 @@ export const useMessageEditor = ({
 	value,
 	onSend,
 	placeholder,
+	ariaLabel,
+	onPromptCarouselAccept,
+	onPromptCarouselNavigate,
 	onMentionsInsert,
 	onMentionInsertItems,
 	onMentionRemove,
@@ -218,8 +228,17 @@ export const useMessageEditor = ({
 			updateAiCompletionState(editor)
 		},
 		editorProps: {
+			attributes: ariaLabel ? { "aria-label": ariaLabel } : {},
 			handleKeyDown: (_, event) => {
 				event.stopPropagation()
+
+				if (tryNavigatePromptCarouselShortcut(event, onPromptCarouselNavigate)) {
+					return true
+				}
+
+				if (tryAcceptPromptCarouselShortcut(event, onPromptCarouselAccept)) {
+					return true
+				}
 
 				// 其他实际内容输入键触发停止语音录制
 				const isContentKey =
@@ -351,16 +370,24 @@ export const useMessageEditor = ({
 	AiCompletionService.setInstance({ editor: tiptapEditor })
 
 	// Handle AI completion based on mobile, aiCompletionEnabled, and focus position
+	const previousAiCompletionEnabledRef = useRef<boolean | null>(null)
+
 	useEffect(() => {
 		if (!tiptapEditor) return
 
 		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(tiptapEditor)
 		isFocusOnPlaceholderRef.current = isFocusOnPlaceholder
+		const wasEnabled = previousAiCompletionEnabledRef.current
+		const shouldEnable = !isMobile && aiCompletionEnabled && !isFocusOnPlaceholder
+		previousAiCompletionEnabledRef.current = shouldEnable
 
-		if (isMobile || !aiCompletionEnabled || isFocusOnPlaceholder) {
+		if (!shouldEnable) {
 			AiCompletionService.disable()
 		} else {
 			AiCompletionService.enable()
+			if (wasEnabled === false && !tiptapEditor.isEmpty) {
+				AiCompletionService.triggerFetchSuggestion()
+			}
 		}
 
 		return () => {

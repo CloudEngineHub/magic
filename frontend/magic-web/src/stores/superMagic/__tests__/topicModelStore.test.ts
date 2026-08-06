@@ -90,6 +90,22 @@ describe("SuperMagicTopicModelStore", () => {
 		})
 	})
 
+	describe("isLanguageModelReady", () => {
+		it("should require both a valid model and completed loading", () => {
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
+
+			topicModelStore.setSelectedLanguageModel(mockLanguageModel)
+			topicModelStore.setLoading(true)
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
+
+			topicModelStore.setLoading(false)
+			expect(topicModelStore.isLanguageModelReady).toBe(true)
+
+			topicModelStore.setSelectedLanguageModel(null)
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
+		})
+	})
+
 	describe("setCurrentContext", () => {
 		it("should set all context values", () => {
 			topicModelStore.setCurrentContext("topic-123", "project-456", "chat", "agent_x")
@@ -167,14 +183,57 @@ describe("SuperMagicTopicModelStore", () => {
 			expect(topicModelStore.isLoading).toBe(true)
 		})
 
-		it("should not affect models when updating context", () => {
+		it("should clear stale models when workspace-home mode changes", () => {
+			topicModelStore.setCurrentContext(undefined, undefined, "data_analysis")
 			topicModelStore.setSelectedLanguageModel(mockLanguageModel)
 			topicModelStore.setSelectedImageModel(mockImageModel)
+			topicModelStore.setLoading(false)
+
+			topicModelStore.setCurrentContext(undefined, undefined, "summary")
+
+			expect(topicModelStore.selectedLanguageModel).toBeNull()
+			expect(topicModelStore.selectedImageModel).toBeNull()
+			expect(topicModelStore.selectedVideoModel).toBeNull()
+			expect(topicModelStore.isLoading).toBe(true)
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
+		})
+
+		it("should mark a non-home context change as loading without clearing its model", () => {
+			topicModelStore.setCurrentContext("topic-2", "project-2", "general")
+			topicModelStore.setSelectedLanguageModel(mockLanguageModel)
+			topicModelStore.setSelectedImageModel(mockImageModel)
+			topicModelStore.setLoading(false)
+
+			topicModelStore.setCurrentContext("topic-3", "project-2", "general")
+
+			expect(topicModelStore.selectedLanguageModel).toEqual(mockLanguageModel)
+			expect(topicModelStore.selectedImageModel).toEqual(mockImageModel)
+			expect(topicModelStore.isLoading).toBe(true)
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
+		})
+
+		it("should preserve readiness when setting the same non-home context", () => {
+			topicModelStore.setCurrentContext("topic-2", "project-2", "general")
+			topicModelStore.setSelectedLanguageModel(mockLanguageModel)
+			topicModelStore.setSelectedImageModel(mockImageModel)
+			topicModelStore.setLoading(false)
 
 			topicModelStore.setCurrentContext("topic-2", "project-2", "general")
 
 			expect(topicModelStore.selectedLanguageModel).toEqual(mockLanguageModel)
 			expect(topicModelStore.selectedImageModel).toEqual(mockImageModel)
+			expect(topicModelStore.isLoading).toBe(false)
+		})
+
+		it("should mark a same-topic agent change as loading", () => {
+			topicModelStore.setCurrentContext("topic-2", "project-2", "custom_agent", "agent-a")
+			topicModelStore.setSelectedLanguageModel(mockLanguageModel)
+			topicModelStore.setLoading(false)
+
+			topicModelStore.setCurrentContext("topic-2", "project-2", "custom_agent", "agent-b")
+
+			expect(topicModelStore.isLoading).toBe(true)
+			expect(topicModelStore.isLanguageModelReady).toBe(false)
 		})
 	})
 })

@@ -11,6 +11,7 @@ use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
@@ -25,6 +26,7 @@ use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAudioProjectRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateMicroAppProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\GetAudioProjectListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\ImportAudioFilesRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectMetadataRequestDTO;
@@ -39,6 +41,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Service\RecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MicroAppEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectForkEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
@@ -63,6 +66,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectsBatchDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectsBatchMovedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectUpdatedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\StopRunningTaskEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageScheduleDomainService;
@@ -141,6 +145,7 @@ class ProjectAppService extends AbstractAppService
         private readonly WorkspaceDomainService $workspaceDomainService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly ProjectRepositoryInterface $projectRepository,
+        private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
         private readonly TopicDomainService $topicDomainService,
@@ -149,6 +154,7 @@ class ProjectAppService extends AbstractAppService
         private readonly ChatAppService $chatAppService,
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
+        private readonly MagicUserDomainService $magicUserDomainService,
         private readonly MagicDepartmentUserDomainService $magicDepartmentUserDomainService,
         private readonly Producer $producer,
         private readonly EventDispatcherInterface $eventDispatcher,
@@ -460,7 +466,7 @@ class ProjectAppService extends AbstractAppService
         $projectId = (int) $requestDTO->getId();
 
         // 获取项目信息，项目所有者和协作管理者均可更新项目基础信息
-        $projectEntity = $this->getAccessibleProjectWithManager(
+        $projectEntity = $this->getAccessibleProjectWithEditor(
             $projectId,
             $dataIsolation->getCurrentUserId(),
             $dataIsolation->getCurrentOrganizationCode()
@@ -536,10 +542,14 @@ class ProjectAppService extends AbstractAppService
 
         // 先获取项目实体用于事件发布和回收站记录
         $projectEntity = $this->projectDomainService->getProject($projectId, $dataIsolation->getCurrentUserId());
+        $microAppRecord = $this->microAppRepository->findByProjectId($projectId);
 
-        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity) {
+        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity, $microAppRecord) {
             // 删除项目
             $result = $this->projectDomainService->deleteProject($projectId, $dataIsolation->getCurrentUserId());
+
+            // 微应用映射和稳定分享链接与项目保持同一删除事务。
+            $this->deleteMicroAppResources($projectId, $microAppRecord);
 
             // 删除项目协作关系
             $this->projectMemberDomainService->deleteByProjectId($projectId);
@@ -550,18 +560,24 @@ class ProjectAppService extends AbstractAppService
 
             // 记录到回收站表
             $this->recycleBinDomainService->recordDeletion(
-                resourceType: RecycleBinResourceType::Project,
-                resourceId: $projectId,
+                resourceType: $microAppRecord === null ? RecycleBinResourceType::Project : RecycleBinResourceType::MicroApp,
+                resourceId: $microAppRecord?->getId() ?? $projectId,
                 resourceName: $projectEntity->getProjectName(),
                 ownerId: $projectEntity->getUserId(),
                 deletedBy: (string) $dataIsolation->getCurrentUserId(),
                 parentId: $projectEntity->getWorkspaceId(),
-                extraData: [
+                extraData: array_filter([
                     'parent_info' => [
                         'workspace_id' => $workspaceId,
                         'workspace_name' => $workspace ? $workspace->getName() : '',
                     ],
-                ]
+                    'micro_app' => $microAppRecord === null ? null : [
+                        'app_id' => (string) $microAppRecord->getId(),
+                        'project_id' => (string) $projectId,
+                        'organization_code' => $microAppRecord->getOrganizationCode(),
+                        'resource_id' => $microAppRecord->getResourceId(),
+                    ],
+                ], static fn (mixed $value): bool => $value !== null)
             );
 
             return $result;
@@ -636,6 +652,7 @@ class ProjectAppService extends AbstractAppService
                 Db::transaction(function () use ($projectId, $userId, $dataIsolation, $orgCode) {
                     // Delete project and members
                     $this->projectDomainService->deleteProject($projectId, $userId);
+                    $this->deleteMicroAppResources($projectId);
                     $this->projectMemberDomainService->deleteByProjectId($projectId);
 
                     // Delete topics
@@ -770,6 +787,7 @@ class ProjectAppService extends AbstractAppService
         $conditions['user_organization_code'] = $dataIsolation->getCurrentOrganizationCode();
         // Exclude hidden projects from the list by default
         $conditions['is_hidden'] = 0;
+        $conditions['exclude_micro_apps'] = true;
 
         if ($requestDTO->getWorkspaceId()) {
             $conditions['workspace_id'] = $requestDTO->getWorkspaceId();
@@ -785,7 +803,8 @@ class ProjectAppService extends AbstractAppService
             $requestDTO->getPage(),
             $requestDTO->getPageSize(),
             $requestDTO->getOrderBy(),
-            $requestDTO->getSort()
+            $requestDTO->getSort(),
+            $requestDTO->getPinPriority()
         );
 
         // 提取所有项目ID和工作区ID
@@ -1862,6 +1881,85 @@ class ProjectAppService extends AbstractAppService
     }
 
     // ========================================
+    // Micro App Project Methods
+    // ========================================
+
+    /**
+     * Create micro app project in the current user's micro app workspace.
+     */
+    public function createMicroAppProject(
+        RequestContext $requestContext,
+        CreateMicroAppProjectRequestDTO $requestDTO
+    ): array {
+        $this->logger->info('Starting micro app project creation');
+
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+
+        $workspaceId = $requestDTO->getWorkspaceId();
+        if ($workspaceId !== '') {
+            if (! ctype_digit($workspaceId)) {
+                ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid workspace_id');
+            }
+            $workspaceIdInt = (int) $workspaceId;
+            $workspaceEntity = $this->validateWorkspaceAccess($dataIsolation, $workspaceIdInt);
+            $this->validateWorkspaceType($workspaceEntity, WorkspaceType::MicroApp, $workspaceIdInt);
+        } else {
+            $workspaceEntity = $this->workspaceDomainService->getOrCreateWorkspaceByType(
+                $dataIsolation,
+                WorkspaceType::MicroApp
+            );
+        }
+
+        Db::beginTransaction();
+        try {
+            $projectEntity = $this->projectDomainService->createProject(
+                $workspaceEntity->getId(),
+                $requestDTO->getProjectName(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                '',
+                '',
+                ProjectMode::GENERAL->value
+            );
+            $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
+
+            $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
+            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+
+            $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                projectId: $projectEntity->getId(),
+                workDir: $projectEntity->getWorkDir(),
+                userId: $dataIsolation->getCurrentUserId(),
+                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+            );
+
+            $microAppRecord = $this->microAppRepository->ensureByProjectId(
+                $projectEntity->getId(),
+                $projectEntity->getUserOrganizationCode(),
+                $projectEntity->getUserId(),
+                $projectEntity->getCreatedUid(),
+            );
+
+            Db::commit();
+
+            $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
+            $this->eventDispatcher->dispatch($projectCreatedEvent);
+
+            return [
+                'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
+                'app_id' => (string) $microAppRecord->getId(),
+            ];
+        } catch (Throwable $e) {
+            Db::rollBack();
+            $this->logger->error('Create Micro App Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
+            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
+        }
+    }
+
+    // ========================================
     // Audio Project Methods
     // ========================================
 
@@ -2405,6 +2503,65 @@ class ProjectAppService extends AbstractAppService
 
         // Delete core project
         $this->projectDomainService->deleteProject($projectId, $project->getUserId());
+    }
+
+    private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
+    {
+        $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
+        if ($microAppRecord === null) {
+            return;
+        }
+
+        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
+            $microAppRecord->getResourceId(),
+            ResourceType::Project->value
+        )) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app share for project %d',
+                $projectId
+            ));
+        }
+
+        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app record for project %d',
+                $projectId
+            ));
+        }
+    }
+
+    /**
+     * 项目可访问性与资源侧上下文.
+     */
+    public function getProjectAccessibility(RequestContext $requestContext, int $projectId): ?ProjectEntity
+    {
+        $project = $this->projectDomainService->findProjectByIdOrNull($projectId);
+        if ($project === null) {
+            return null;
+        }
+
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $projectOrgCode = $project->getUserOrganizationCode();
+        $magicId = trim($userAuthorization->getMagicId());
+        $currentOrgCode = $userAuthorization->getOrganizationCode();
+
+        if ($currentOrgCode === $projectOrgCode) {
+            $effectiveUserId = $userAuthorization->getId();
+        } else {
+            $userInProjectOrg = $this->magicUserDomainService->getUserByMagicIdInOrganization($magicId, $projectOrgCode);
+            if ($userInProjectOrg === null) {
+                return null;
+            }
+            $effectiveUserId = $userInProjectOrg->getUserId();
+        }
+
+        try {
+            $project = $this->getAccessibleProject($projectId, $effectiveUserId, $projectOrgCode);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $project;
     }
 
     /**
@@ -2987,9 +3144,14 @@ class ProjectAppService extends AbstractAppService
         int $workspaceId
     ): void {
         if ($workspaceEntity->getWorkspaceType() !== $expectedType->value) {
+            $messageKey = match ($expectedType) {
+                WorkspaceType::MicroApp => 'super_agent.invalid_workspace_type_for_micro_app_project',
+                default => 'super_agent.invalid_workspace_type_for_audio_project',
+            };
+
             ExceptionBuilder::throw(
                 SuperAgentErrorCode::INVALID_WORKSPACE_TYPE,
-                trans('super_agent.invalid_workspace_type_for_audio_project'),
+                trans($messageKey),
                 [
                     'workspace_id' => $workspaceId,
                     'expected_type' => $expectedType->value,

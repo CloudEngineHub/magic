@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
@@ -42,6 +43,121 @@ class VideoModelState:
     config: dict = field(default_factory=dict)  # video_generation_config 原始 dict
 
 
+@dataclass(frozen=True)
+class SuperMagicWorkspaceContextState:
+    """模型上次看到的 Super Magic 工作区信息。"""
+
+    id: str
+    name: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+@dataclass(frozen=True)
+class SuperMagicProjectContextState:
+    """模型上次看到的 Super Magic 项目信息。"""
+
+    id: str
+    name: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+@dataclass(frozen=True)
+class SuperMagicTopicContextState:
+    """模型上次看到的 Super Magic 话题信息。"""
+
+    id: str
+    name: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+@dataclass(frozen=True)
+class SuperMagicSandboxContextState:
+    """模型上次看到的 Super Magic 逻辑沙盒信息。"""
+
+    id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"id": self.id}
+
+
+@dataclass(frozen=True)
+class SuperMagicProductContextState:
+    """模型上次看到的 Super Magic 产品上下文。"""
+
+    workspace: Optional[SuperMagicWorkspaceContextState]
+    project: SuperMagicProjectContextState
+    topic: SuperMagicTopicContextState
+    sandbox: SuperMagicSandboxContextState
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "workspace": self.workspace.to_dict() if self.workspace is not None else None,
+            "project": self.project.to_dict(),
+            "topic": self.topic.to_dict(),
+            "sandbox": self.sandbox.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: object) -> Optional["SuperMagicProductContextState"]:
+        if not isinstance(data, dict):
+            return None
+        project = data.get("project")
+        topic = data.get("topic")
+        sandbox = data.get("sandbox")
+        if not isinstance(project, dict) or not isinstance(topic, dict) or not isinstance(sandbox, dict):
+            return None
+
+        project_id = project.get("id")
+        project_name = project.get("name")
+        topic_id = topic.get("id")
+        topic_name = topic.get("name")
+        sandbox_id = sandbox.get("id")
+        if not all(
+            isinstance(value, str)
+            for value in (project_id, project_name, topic_id, topic_name, sandbox_id)
+        ):
+            return None
+
+        workspace_data = data.get("workspace")
+        workspace = None
+        if workspace_data is not None:
+            if not isinstance(workspace_data, dict):
+                return None
+            workspace_id = workspace_data.get("id")
+            workspace_name = workspace_data.get("name")
+            if not isinstance(workspace_id, str) or not isinstance(workspace_name, str):
+                return None
+            workspace = SuperMagicWorkspaceContextState(
+                id=workspace_id,
+                name=workspace_name,
+            )
+        return cls(
+            workspace=workspace,
+            project=SuperMagicProjectContextState(
+                id=project_id,
+                name=project_name,
+            ),
+            topic=SuperMagicTopicContextState(
+                id=topic_id,
+                name=topic_name,
+            ),
+            sandbox=SuperMagicSandboxContextState(id=sandbox_id),
+        )
+
+
+@dataclass
+class ManualContextWindowState:
+    """用户对单个真实模型手动设置的上下文上限。"""
+
+    user_manual_max_context_tokens: int = 0
+
+
 @dataclass
 class ContextUsage:
     """当前 LLM 上下文窗口使用情况，由 AgentHorizon.get_context_usage() 返回。"""
@@ -66,14 +182,17 @@ class HorizonState:
     loaded_skills: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)
     video_model: VideoModelState = field(default_factory=VideoModelState)
+    manual_context_windows: dict[str, ManualContextWindowState] = field(default_factory=dict)
     # LLM 模型 baseline：与 image_model/video_model 对齐，持久化避免重启后误判为"模型变更"
     llm_model_id: str = ""
     llm_model_name: str = ""
     # 以下字段表示模型上次已经看到的 baseline，而不是"本轮刚采集到的最新值"
+    process_started_at_ns: int = 0  # 上次注入给 LLM 的 Python 进程启动时间（纳秒）
+    super_magic_product_context: Optional[SuperMagicProductContextState] = None
     user_preferred_language: str = ""
     workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
     workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目
-    memory: str = ""               # 上次注入给 LLM 的 memory
+    memory: str = ""               # 上次注入给 LLM 的完整记忆上下文字符串
     client_context: str = ""          # 上次注入给 LLM 的客户端页面上下文
     cli_status: str = ""              # 上次注入给 LLM 的本地已登录 CLI 状态片段
     context_usage_baseline_used: int = 0       # 上次注入给 LLM 的 used tokens

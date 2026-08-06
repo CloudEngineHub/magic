@@ -603,12 +603,14 @@ class DownloadFromMarkdown(AbstractFileTool[DownloadFromMarkdownParams], Workspa
         download_params = DownloadFromUrlParams(
             url=resource.url,
             file_path=str(target_path),
-            override=OVERRIDE_EXISTING
         )
 
         try:
             # Use download tool
-            result = await self._download_tool.execute_purely(download_params)
+            result = await self._download_tool.execute_purely(
+                download_params,
+                overwrite=OVERRIDE_EXISTING,
+            )
 
             if result.ok:
                 logger.info(f"成功下载: {filename}")

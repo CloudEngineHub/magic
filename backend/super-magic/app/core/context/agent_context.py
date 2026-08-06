@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 from app.core.context.pending_reply_state import PendingReplyState
 
 if TYPE_CHECKING:
-    from app.core.horizon.agent_horizon import AgentHorizon
     from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
+    from app.core.entity.message.client_message import SuperMagicProductContext
+    from app.core.horizon.agent_horizon import AgentHorizon
 from datetime import datetime, timedelta
 
 from agentlang.context.base_agent_context import BaseAgentContext
@@ -22,7 +23,7 @@ from agentlang.context.shared_context import create_agent_shared_context
 from app.core.config.communication_config import STSTokenRefreshConfig
 from app.core.entity.agent_profile import AgentProfile, DEFAULT_AGENT_PROFILE
 from app.core.entity.attachment import Attachment
-from app.core.entity.message.client_message import ChatClientMessage, InitClientMessage, Metadata, User
+from app.core.entity.message.client_message import AgentMode, ChatClientMessage, InitClientMessage, Metadata, User
 from app.core.entity.project_archive import ProjectArchiveInfo
 from agentlang.event.event import Event, EventType, StoppableEvent
 from agentlang.event.common import BaseEventData
@@ -32,6 +33,7 @@ from app.path_manager import PathManager
 from app.core.context.run_interruption import RunCancelState, RunCleanupRegistry, RunCancellationHandle
 from app.core.entity.final_task_state import FinalTaskState
 from app.core.models.agent_model_context import AgentModelContext
+from app.core.models.agent_runtime import AgentProviderType, AgentTarget
 from app.core.context.execution_source import SuperMagicExecutionSource
 from loguru import logger
 from app.infrastructure.storage.types import PlatformType
@@ -140,6 +142,8 @@ class AgentContext(BaseAgentContext):
         self._agent_id: Optional[str] = None
         # horizon_agent_id 用于 Horizon 持久化文件名。
         self._horizon_agent_id: Optional[str] = None
+        # Runtime 完成定义准备后写入的确定运行目标。
+        self._agent_target: Optional[AgentTarget] = None
 
         # 设置工作空间目录
         try:
@@ -192,7 +196,7 @@ class AgentContext(BaseAgentContext):
 
     def is_interactive_main_agent_context(self) -> bool:
         """当前上下文是否可以直接向终端用户发起交互。"""
-        return bool(getattr(self, "is_main_agent", False)) and not self.is_subagent_context()
+        return self.is_main_agent_context() and not self.is_subagent_context()
 
     def set_subagent_parent_agent_name(self, agent_name: Optional[str]) -> None:
         """记录调用当前子 Agent 的父 Agent 名称。"""
@@ -264,17 +268,22 @@ class AgentContext(BaseAgentContext):
 
     def _init_shared_fields(self):
         """初始化共享字段并注册到 shared_context"""
+        # 基础字段可能随版本新增，必须先让父类补注册缺失字段。
+        is_initialized = (
+            hasattr(self.shared_context, 'is_initialized')
+            and self.shared_context.is_initialized()
+        )
+        super()._init_shared_fields()
+
         # 检查是否已经初始化
-        if hasattr(self.shared_context, 'is_initialized') and self.shared_context.is_initialized():
+        if is_initialized:
             logger.debug("SharedContext 已经初始化，跳过重复初始化")
             return
-
-        super()._init_shared_fields()
 
         # 使用 register_fields 一次性注册所有字段
         from typing import Dict, List, Optional, Any
         from app.core.entity.attachment import Attachment
-        from app.core.entity.message.client_message import ChatClientMessage
+        from app.core.entity.message.client_message import ChatClientMessage, SuperMagicProductContext
         from app.core.entity.project_archive import ProjectArchiveInfo
         from app.core.stream import Stream
         import asyncio
@@ -286,6 +295,7 @@ class AgentContext(BaseAgentContext):
             "streams": ({}, Dict[str, Stream]),
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
+            "super_magic_product_context": (None, Optional[SuperMagicProductContext]),
             "task_id": (None, Optional[str]),
             "interrupt_queue": (None, Optional[asyncio.Queue]),
             "sandbox_id": ("", str),
@@ -317,8 +327,6 @@ class AgentContext(BaseAgentContext):
             "user_tool_call_pending_id": (None, Optional[str]),
             # 当前 Agent run 的触发来源，供 ask_user 等运行态策略读取
             "execution_source": (SuperMagicExecutionSource.HUMAN_CHAT, SuperMagicExecutionSource),
-            # Agent Master 管理
-            "agent_code": (None, Optional[str]),  # 当前自定义 Agent 的 agent_code
             # 消息版本协商（v1 / v2），由 set_chat_client_message 提取 dynamic_config.message_version 写入
             "message_version": ("v2", str),
             # v2 批量 tool_calls 暂存状态
@@ -364,22 +372,66 @@ class AgentContext(BaseAgentContext):
         """
         return self.shared_context.get_field("interrupt_queue")
 
-    def set_agent_code(self, agent_code: str) -> None:
-        """设置当前自定义 Agent 的 agent_code
+    def set_agent_target(self, target: Optional[AgentTarget]) -> None:
+        """绑定 Runtime 已确认的 Agent 运行目标。"""
+        self._agent_target = target
 
-        Args:
-            agent_code: Agent 编码（如 sma-xxxxx）
-        """
-        self.shared_context.update_field("agent_code", agent_code)
-        logger.debug(f"已更新 agent_code: {agent_code}")
+    def get_agent_target(self) -> Optional[AgentTarget]:
+        """获取当前 Agent 运行目标，尚未 acquire 时返回 None。"""
+        return self._agent_target
 
     def get_agent_code(self) -> Optional[str]:
-        """获取当前自定义 Agent 的 agent_code
+        """返回当前场景需要使用的 Agent 编号。
 
-        Returns:
-            Optional[str]: agent_code
+        同一个 `agent_code` 字段在不同模式下用途不同。本方法统一处理这些
+        差异，调用方不用自己判断应该从运行目标还是从当前消息中取值：
+
+        | 当前场景 | 从哪里取编号 | 返回什么 |
+        | --- | --- | --- |
+        | 正在运行数字员工或 Claw | 当前实际运行的 Agent | 它自己的编号 |
+        | 正在使用 crew-creator 编辑员工 | 当前聊天消息 | 被编辑员工的编号 |
+        | 正在使用 skill-creator | 不需要 Agent 编号 | `None` |
+        | 其他内置模式 | 不需要 Agent 编号 | `None` |
+
+        `crew-creator` 的员工编号不会另外保存到共享状态中，而是每次从当前消息
+        读取。这样切换到其他模式，或者新消息没有指定员工时，就不会误用上一次
+        编辑过的员工编号。
+
+        注意：这个方法返回的是“当前功能需要使用的编号”，不一定是系统正在运行
+        的 Agent 编号。例如运行 `crew-creator` 时，它返回的是被编辑员工的编号。
+        如果要判断系统此刻真正运行的是谁，应使用 `get_agent_target()`。
         """
-        return self.shared_context.get_field("agent_code")
+        target = self.get_agent_target()
+        if target is None:
+            return None
+
+        # 如果当前实际运行的是数字员工或 Claw，它的编号已经记录在运行目标中，
+        # 直接返回即可，不需要再从聊天消息里找一次。
+        if target.provider_type != AgentProviderType.BUILTIN:
+            return target.agent_name
+
+        # 内置 Agent 中只有 crew-creator 会使用 agent_code，含义是“正在编辑哪个
+        # 员工”。skill-creator 编辑的是 Skill，使用的是 Skill 自己的编号。
+        if target.agent_name != AgentMode.CREW_CREATOR.get_agent_type():
+            return None
+
+        # 当前运行目标和当前消息必须都是 crew-creator。这样即使消息中残留了旧的
+        # agent_code，也不会在切换模式时把它误认为正在编辑的员工。
+        message = self.get_chat_client_message()
+        if (
+            message is None
+            or AgentMode.resolve_agent_type(message.agent_mode) != target.agent_name
+        ):
+            return None
+
+        # 这里只读取当前消息，不把编号复制到其他状态。没有编号、编号为空或类型
+        # 不正确，都表示这次没有指定要编辑的员工。
+        dynamic_config = message.dynamic_config or {}
+        agent_code = dynamic_config.get("agent_code")
+        if not isinstance(agent_code, str):
+            return None
+        normalized_code = agent_code.strip()
+        return normalized_code or None
 
     def set_execution_source(self, source: SuperMagicExecutionSource) -> None:
         """设置当前 Agent run 的触发来源。"""
@@ -394,8 +446,15 @@ class AgentContext(BaseAgentContext):
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
+        target = self.get_agent_target()
+        if target is not None:
+            return target.provider_type == AgentProviderType.CLAW
         msg = self.get_chat_client_message()
-        return msg is not None and str(getattr(msg, "agent_mode", "")) == "magiclaw"
+        if msg is None:
+            return False
+        if isinstance(msg.agent_mode, AgentMode):
+            return msg.agent_mode == AgentMode.MAGICLAW
+        return str(msg.agent_mode or "").strip() == AgentMode.MAGICLAW.value
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """设置沙盒ID
@@ -591,6 +650,9 @@ class AgentContext(BaseAgentContext):
             self.shared_context.update_field("message_version", version)
             logger.debug(f"消息版本已设置为: {version}")
 
+        if chat_client_message.super_magic_product_context is not None:
+            self.set_super_magic_product_context(chat_client_message.super_magic_product_context)
+
     def get_chat_client_message(self) -> Optional[ChatClientMessage]:
         """获取聊天客户端消息
 
@@ -598,6 +660,34 @@ class AgentContext(BaseAgentContext):
             Optional[ChatClientMessage]: 聊天客户端消息
         """
         return self.shared_context.get_field("chat_client_message")
+
+    def get_project_id(self) -> Optional[str]:
+        """优先从当前聊天消息获取项目 ID，缺失时回退到初始化消息。"""
+        chat_client_message = self.get_chat_client_message()
+        if chat_client_message is not None and chat_client_message.metadata is not None:
+            project_id = str(chat_client_message.metadata.project_id or "").strip()
+            if project_id:
+                return project_id
+
+        try:
+            init_metadata = self.get_init_client_message_metadata()
+        except Exception as error:
+            logger.debug(f"从初始化消息读取项目 ID 失败: {error}")
+            return None
+
+        if init_metadata is None:
+            return None
+
+        project_id = str(init_metadata.project_id or "").strip()
+        return project_id or None
+
+    def set_super_magic_product_context(self, context: Optional["SuperMagicProductContext"]) -> None:
+        """设置本轮业务消息提供的 Super Magic 产品上下文。"""
+        self.shared_context.update_field("super_magic_product_context", context)
+
+    def get_super_magic_product_context(self) -> Optional["SuperMagicProductContext"]:
+        """获取本轮最新的 Super Magic 产品上下文。"""
+        return self.shared_context.get_field("super_magic_product_context")
 
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流
@@ -834,6 +924,7 @@ class AgentContext(BaseAgentContext):
         from app.utils.init_client_message_util import InitClientMessageUtil
         from app.i18n import i18n
         metadata = dict(InitClientMessageUtil.get_metadata())
+        metadata.update(self._metadata)
         metadata["language"] = i18n.get_language()
         return metadata
 

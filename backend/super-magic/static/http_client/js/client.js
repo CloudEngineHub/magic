@@ -82,24 +82,35 @@ let showRawEvents = localStorage.getItem(RAW_EVENTS_TOGGLE_KEY) === 'true';
 // 消息列表懒加载：恢复/重渲染时只渲染最近一批，滚动到顶部时按需加载历史消息
 // 批次大小按可见消息（非 event 条目）计数，event 条目不计入但随区间一并渲染
 const LAZY_RENDER_BATCH_SIZE = 50;
+const LAZY_RENDER_TRIGGER_TOP_PX = 400;
 let lazyPrependTarget = null;
 const lazyRenderState = {
     renderedFromIndex: 0,
     loadMoreEl: null,
-    observer: null,
     isLoadingMore: false,
+    isAdjustingScroll: false,
+    lastScrollTop: 0,
 };
 
 // 从 beforeIndex 往前找，跳过 event 条目，数够 batchSize 条可见消息后返回起始下标
 function findLazyStartIndex(entries, beforeIndex, batchSize) {
     let count = 0;
+    let startIndex = 0;
     for (let i = beforeIndex - 1; i >= 0; i--) {
         if (entries[i].type !== 'event') {
             count++;
-            if (count >= batchSize) return i;
+            if (count >= batchSize) {
+                startIndex = i;
+                break;
+            }
         }
     }
-    return 0;
+
+    // 批次从完整用户轮次开始，避免同一次工具调用的前后状态被拆成两张卡片。
+    while (startIndex > 0 && entries[startIndex].type !== 'client') {
+        startIndex--;
+    }
+    return startIndex;
 }
 
 function getSystemMessageKey(text) {
@@ -369,6 +380,7 @@ function renderClientEntry(entry, options = {}) {
 
 // DOM 元素
 const serverUrlInput = document.getElementById('serverUrl');
+const authTokenInput = document.getElementById('authToken');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -2578,6 +2590,18 @@ function initMessageScrollControls() {
     window.addEventListener('resize', updateScrollButtonPosition);
 
     messagesContainer.addEventListener('scroll', () => {
+        const currentScrollTop = messagesContainer.scrollTop;
+        const isScrollingUp = currentScrollTop < lazyRenderState.lastScrollTop;
+        lazyRenderState.lastScrollTop = currentScrollTop;
+
+        if (
+            !isRestoring &&
+            !lazyRenderState.isAdjustingScroll &&
+            isScrollingUp &&
+            currentScrollTop <= LAZY_RENDER_TRIGGER_TOP_PX
+        ) {
+            loadMoreMessages();
+        }
         if (isMessageViewportAtBottom()) {
             hideScrollToLatestButton();
         }
@@ -2680,16 +2704,14 @@ function syncScrollAfterMessageChange(shouldStickToBottom, options = {}) {
 // ─── 消息列表懒加载 ──────────────────────────────────────────────────────────
 
 function resetLazyRenderState() {
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
     if (lazyRenderState.loadMoreEl && lazyRenderState.loadMoreEl.parentNode) {
         lazyRenderState.loadMoreEl.remove();
     }
     lazyRenderState.renderedFromIndex = 0;
     lazyRenderState.loadMoreEl = null;
     lazyRenderState.isLoadingMore = false;
+    lazyRenderState.isAdjustingScroll = false;
+    lazyRenderState.lastScrollTop = messagesContainer ? messagesContainer.scrollTop : 0;
 }
 
 function insertLoadMorePlaceholder(unrenderedCount) {
@@ -2700,16 +2722,31 @@ function insertLoadMorePlaceholder(unrenderedCount) {
     el.addEventListener('click', () => loadMoreMessages());
     messageList.prepend(el);
     lazyRenderState.loadMoreEl = el;
-    setupLoadMoreObserver();
 }
 
-function setupLoadMoreObserver() {
-    if (lazyRenderState.observer) lazyRenderState.observer.disconnect();
-    if (!lazyRenderState.loadMoreEl) return;
-    lazyRenderState.observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) loadMoreMessages();
-    }, { root: messagesContainer, rootMargin: '400px 0px 0px 0px' });
-    lazyRenderState.observer.observe(lazyRenderState.loadMoreEl);
+function captureLazyScrollAnchor() {
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    for (const node of messageList.children) {
+        if (node === lazyRenderState.loadMoreEl) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom > containerTop) {
+            return { node, offsetTop: rect.top - containerTop };
+        }
+    }
+    return null;
+}
+
+function restoreLazyScrollAnchor(anchor) {
+    if (!anchor || !anchor.node.isConnected) return;
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    const nextOffsetTop = anchor.node.getBoundingClientRect().top - containerTop;
+    lazyRenderState.isAdjustingScroll = true;
+    messagesContainer.scrollTop += nextOffsetTop - anchor.offsetTop;
+    lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+    requestAnimationFrame(() => {
+        lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+        lazyRenderState.isAdjustingScroll = false;
+    });
 }
 
 function loadMoreMessages() {
@@ -2725,62 +2762,55 @@ function loadMoreMessages() {
     const savedSystems = new Map(systemMessageRegistry);
     const savedEventTrace = eventTraceLog;
     const savedEventTraceSeen = eventTraceObjectSeen;
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = null;
-    eventTraceObjectSeen = new WeakSet();
+    const previousIsRestoring = isRestoring;
+    const previousPrependTarget = lazyPrependTarget;
+    const anchor = captureLazyScrollAnchor();
 
-    // 记录当前滚动高度
-    const prevScrollHeight = messagesContainer.scrollHeight;
+    try {
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = null;
+        eventTraceObjectSeen = new WeakSet();
 
-    // 移除旧的加载占位符（必须在捕获 firstChild 之前，否则锚点失效）
-    if (lazyRenderState.loadMoreEl) {
-        lazyRenderState.loadMoreEl.remove();
-        lazyRenderState.loadMoreEl = null;
+        if (lazyRenderState.loadMoreEl) {
+            lazyRenderState.loadMoreEl.remove();
+            lazyRenderState.loadMoreEl = null;
+        }
+        const firstChild = messageList.firstChild;
+
+        isRestoring = true;
+        lazyPrependTarget = document.createDocumentFragment();
+        for (let i = startIndex; i < endIndex; i++) {
+            renderLogEntry(chatLog[i]);
+        }
+        const fragment = lazyPrependTarget;
+        lazyPrependTarget = null;
+
+        messageList.insertBefore(fragment, firstChild);
+        lazyRenderState.renderedFromIndex = startIndex;
+        if (startIndex > 0) {
+            insertLoadMorePlaceholder(startIndex);
+        }
+        restoreLazyScrollAnchor(anchor);
+    } catch (error) {
+        console.error('加载历史消息失败:', error);
+        if (lazyRenderState.renderedFromIndex > 0 && !lazyRenderState.loadMoreEl) {
+            insertLoadMorePlaceholder(lazyRenderState.renderedFromIndex);
+        }
+    } finally {
+        isRestoring = previousIsRestoring;
+        lazyPrependTarget = previousPrependTarget;
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = savedEventTrace;
+        eventTraceObjectSeen = savedEventTraceSeen;
+        for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
+        for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
+        for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
+        lazyRenderState.isLoadingMore = false;
     }
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
-
-    // 占位符移除后再取插入锚点
-    const firstChild = messageList.firstChild;
-
-    // 渲染到临时 fragment
-    isRestoring = true;
-    lazyPrependTarget = document.createDocumentFragment();
-    for (let i = startIndex; i < endIndex; i++) {
-        renderLogEntry(chatLog[i]);
-    }
-    const fragment = lazyPrependTarget;
-    lazyPrependTarget = null;
-    isRestoring = false;
-
-    // 恢复原始注册表
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = savedEventTrace;
-    eventTraceObjectSeen = savedEventTraceSeen;
-    for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
-    for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
-    for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
-
-    // 插入旧消息到 messageList 头部
-    messageList.insertBefore(fragment, firstChild);
-    lazyRenderState.renderedFromIndex = startIndex;
-
-    // 如果还有更多历史消息，插入新的加载占位符
-    if (startIndex > 0) {
-        insertLoadMorePlaceholder(startIndex);
-    }
-
-    // 保持滚动位置不跳动：补偿新增高度
-    const heightDiff = messagesContainer.scrollHeight - prevScrollHeight;
-    messagesContainer.scrollTop += heightDiff;
-
-    lazyRenderState.isLoadingMore = false;
 }
 
 // ─── 滚动相关 ─────────────────────────────────────────────────────────────────
@@ -3375,7 +3405,21 @@ function connectWebSocket() {
     }
 
     // 构建WebSocket URL
-    const wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+    let wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+
+    // 浏览器 WebSocket 无法设置自定义 header，通过 ?token= 携带鉴权凭证。
+    // 优先取输入框的值，留空时回落到上传配置中的 authorization
+    let authToken = authTokenInput ? authTokenInput.value.trim() : '';
+    if (!authToken) {
+        const uploadedConfig = typeof getUploadedConfig === 'function' ? getUploadedConfig() : null;
+        if (uploadedConfig) {
+            const metadata = uploadedConfig.metadata || {};
+            authToken = uploadedConfig.authorization || metadata.authorization || '';
+        }
+    }
+    if (authToken) {
+        wsUrl += '?token=' + encodeURIComponent(authToken);
+    }
 
     try {
         updateSubscribeButtonState('connecting');
@@ -3831,7 +3875,7 @@ function handleWebSocketMessage(event) {
             }
         } else if (eventType === 'before_tool_call' || eventType === 'after_tool_call') {
             // 工具调用事件 → 紧凑的工具调用块，detail 默认折叠
-            const tool = payload && payload.tool;
+            const tool = payload && normalizeToolAttachments(payload.tool, payload.attachments);
             if (tool) {
                 showToolCallMessage(tool, eventType, payload.send_timestamp, false, {
                     correlationId: payload.correlation_id,
@@ -4188,19 +4232,53 @@ function isMainAgentFinished(payload) {
 function collectToolsFromSuperMagicMessage(smsg, payload) {
     const tools = [];
     if (smsg.tool) {
-        tools.push({ tool: smsg.tool, toolCallId: smsg.tool_call_id || smsg.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(smsg.tool, smsg.attachments, payload && payload.attachments),
+            toolCallId: smsg.tool_call_id || smsg.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     if (Array.isArray(smsg.tool_calls)) {
         for (const toolCall of smsg.tool_calls) {
             if (toolCall && toolCall.tool) {
-                tools.push({ tool: toolCall.tool, toolCallId: toolCall.id || toolCall.tool.id, modelContent: toolCall.content || '' });
+                tools.push({
+                    tool: normalizeToolAttachments(
+                        toolCall.tool,
+                        toolCall.attachments,
+                        smsg.attachments,
+                        payload && payload.attachments,
+                    ),
+                    toolCallId: toolCall.id || toolCall.tool.id,
+                    modelContent: toolCall.content || '',
+                });
             }
         }
     }
     if (payload && payload.tool) {
-        tools.push({ tool: payload.tool, toolCallId: payload.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(payload.tool, payload.attachments, smsg.attachments),
+            toolCallId: payload.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     return tools;
+}
+
+function normalizeToolAttachments(tool, ...attachmentSources) {
+    if (!tool || typeof tool !== 'object') return tool;
+    const merged = [];
+    const seen = new Set();
+    for (const source of [tool.attachments, ...attachmentSources]) {
+        if (!Array.isArray(source)) continue;
+        for (const attachment of source) {
+            if (!attachment || typeof attachment !== 'object') continue;
+            const identity = attachment.file_key || attachment.file_url || attachment.filename;
+            if (identity && seen.has(identity)) continue;
+            if (identity) seen.add(identity);
+            merged.push(attachment);
+        }
+    }
+    return merged.length ? { ...tool, attachments: merged } : tool;
 }
 
 // 将文本片段用 marked 渲染为 markdown，marked 不可用时降级为纯文本
@@ -5194,6 +5272,11 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         return;
     }
 
+    if (detail && detail.type === 'browser' && detail.data) {
+        renderBrowserToolDetail(toolState, detail.data, tool);
+        return;
+    }
+
     if (!detail && toolState.detailEl.textContent) {
         toolState.arrow.style.display = '';
         return;
@@ -5209,6 +5292,107 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         toolState.detailEl.style.display = 'none';
         toolState.arrow.textContent = '▶';
     }
+}
+
+function renderBrowserToolDetail(toolState, data, tool) {
+    const attachments = Array.isArray(tool.attachments) ? tool.attachments : [];
+    const attachment = attachments.find(item => item && item.file_key === data.file_key);
+    let imageUrl = typeof data.file_url === 'string' ? data.file_url : '';
+    if (!imageUrl && attachment && typeof attachment.file_url === 'string') {
+        imageUrl = attachment.file_url;
+    }
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const summary = browserDetailSummary(data, action, pageTitle);
+    const target = data.target || '';
+    const pageUrl = data.url || '';
+
+    toolState.detailEl.classList.add('tool-call-detail-browser');
+    toolState.detailEl.replaceChildren();
+
+    const meta = document.createElement('div');
+    meta.className = 'browser-tool-detail-meta';
+    const heading = document.createElement('div');
+    heading.className = 'browser-tool-detail-title';
+    heading.textContent = title;
+    meta.appendChild(heading);
+    if (summary) {
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'browser-tool-detail-summary';
+        summaryEl.textContent = summary;
+        meta.appendChild(summaryEl);
+    }
+    if (target) {
+        const targetEl = document.createElement('div');
+        targetEl.className = 'browser-tool-detail-target';
+        targetEl.textContent = `操作对象：${target}`;
+        meta.appendChild(targetEl);
+    }
+    if (pageUrl) {
+        const link = document.createElement('a');
+        link.className = 'browser-tool-detail-url';
+        link.href = pageUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = `页面地址：${pageUrl}`;
+        link.addEventListener('click', event => event.stopPropagation());
+        meta.appendChild(link);
+    }
+    toolState.detailEl.appendChild(meta);
+
+    if (imageUrl) {
+        const image = document.createElement('img');
+        image.className = 'browser-tool-detail-image';
+        image.src = imageUrl;
+        image.alt = title;
+        image.addEventListener('error', () => {
+            image.replaceWith(createBrowserSnapshotPlaceholder('截图已过期或暂时无法加载'));
+        });
+        toolState.detailEl.appendChild(image);
+    }
+
+    const previewMarkdown = buildBrowserDetailMarkdown(data, imageUrl);
+    toolState.arrow.style.display = '';
+    toolState.openDetailPreview = () => openToolDetailPreview(tool, detailFromBrowserData(data), previewMarkdown, toolState.modelContent || '');
+    toolState.detailEl.style.display = 'none';
+    toolState.arrow.textContent = '▶';
+}
+
+function browserDetailSummary(data, action, pageTitle) {
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+    if (summary) return summary;
+    if (data.status === 'failed') return `${action}未完成，请查看错误信息。`;
+    if (data.target) return `${action}已完成：${data.target}`;
+    if (pageTitle) return `${action}已完成，当前页面为「${pageTitle}」`;
+    if (data.status === 'succeeded') return `${action}已完成。`;
+    return '';
+}
+
+function createBrowserSnapshotPlaceholder(text) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'browser-tool-detail-placeholder';
+    placeholder.textContent = text;
+    return placeholder;
+}
+
+function detailFromBrowserData(data) {
+    return { type: 'browser', data };
+}
+
+function buildBrowserDetailMarkdown(data, imageUrl) {
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const lines = [`## ${title}`];
+    const summary = browserDetailSummary(data, action, pageTitle);
+    if (summary) lines.push('', summary);
+    if (data.target) lines.push('', `操作对象：${data.target}`);
+    if (data.url) lines.push('', `<a href="${escapeHtml(data.url)}" target="_blank" rel="noreferrer">${escapeHtml(data.url)}</a>`);
+    if (imageUrl) {
+        lines.push('', `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" style="max-height:720px;max-width:100%;height:auto">`);
+    }
+    return lines.join('\n');
 }
 
 function formatToolDetail(detail) {
@@ -5249,6 +5433,9 @@ function openToolDetailPreview(tool, detail, detailText, modelContent = '') {
 }
 
 function buildToolDetailMarkdown(detail, detailText) {
+    if (detail && typeof detail === 'object' && detail.type === 'browser') {
+        return detailText;
+    }
     if (detail && typeof detail === 'object' && detail.type === 'md') {
         return detailText;
     }
@@ -5275,14 +5462,15 @@ function showEventLog(data, _noLog = false) {
         if (eventLogObjectSeen.has(data)) return;
         eventLogObjectSeen.add(data);
     }
-    if (!_noLog) pushLog({ type: 'event', data });
+    const displayData = sanitizeDebugValue(data);
+    if (!_noLog) pushLog({ type: 'event', data: displayData });
     if (!showRawEvents) return;
     if (data && typeof data === 'object') {
         if (eventTraceObjectSeen.has(data)) return;
         eventTraceObjectSeen.add(data);
     }
-    const eventLabel = getEventTraceLabel(data);
-    const timeStr = getEventTraceTime(data);
+    const eventLabel = getEventTraceLabel(displayData);
+    const timeStr = getEventTraceTime(displayData);
     const shouldStickToBottom = isMessageViewportAtBottom();
 
     const trace = ensureEventTraceLog();
@@ -5305,7 +5493,7 @@ function showEventLog(data, _noLog = false) {
     const detail = document.createElement('pre');
     detail.className = 'event-log-detail';
     detail.style.display = 'none';
-    detail.textContent = JSON.stringify(data, null, 2);
+    detail.textContent = JSON.stringify(displayData, null, 2);
     trace.rawTexts.push(detail.textContent);
     attachCopyButton(summary, () => detail.textContent, { compact: true });
 
@@ -5315,6 +5503,32 @@ function showEventLog(data, _noLog = false) {
     trace.body.scrollTop = trace.body.scrollHeight;
     keepAssistantActivityLast();
     syncScrollAfterMessageChange(shouldStickToBottom, { showLatestButton: true });
+}
+
+function sanitizeDebugValue(value, seen = new WeakSet()) {
+    if (typeof value === 'string') {
+        const marker = ';base64,';
+        const markerIndex = value.indexOf(marker);
+        if (value.startsWith('data:') && markerIndex >= 0) {
+            const prefixEnd = markerIndex + marker.length;
+            return `${value.slice(0, prefixEnd)}<omitted ${value.length - prefixEnd} chars>`;
+        }
+        return value;
+    }
+    if (!value || typeof value !== 'object') return value;
+    if (seen.has(value)) return '<circular>';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        const items = value.map(item => sanitizeDebugValue(item, seen));
+        seen.delete(value);
+        return items;
+    }
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+        result[key] = sanitizeDebugValue(item, seen);
+    }
+    seen.delete(value);
+    return result;
 }
 
 function ensureEventTraceLog() {
@@ -5424,7 +5638,10 @@ function handleWebSocketClose(event) {
     updateSubscribeButtonState('disconnected');
     hideAssistantActivity();
 
-    if (event.wasClean) {
+    if (event.code === 4401 || event.code === 4503) {
+        // 服务端鉴权拒绝：4401 未授权（凭证缺失或不一致），4503 sandbox 未绑定 metadata.json
+        showConnectionStatusMessage(`WebSocket连接被服务端拒绝 (code: ${event.code}): ${event.reason || '鉴权失败'}`);
+    } else if (event.wasClean) {
         showConnectionStatusMessage("WebSocket连接正常关闭");
     } else {
         showConnectionStatusMessage(`WebSocket连接意外断开 (code: ${event.code})`);

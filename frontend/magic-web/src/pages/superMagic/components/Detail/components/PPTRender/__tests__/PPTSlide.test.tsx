@@ -14,6 +14,9 @@ const mockState = vi.hoisted(() => ({
 	onDeactivate: vi.fn(),
 	saveEditContent: vi.fn(),
 	renderedIsolatedProps: vi.fn(),
+	fileVersion: undefined as number | undefined,
+	versionContent: undefined as string | null | undefined,
+	isLoadingVersion: false,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -137,13 +140,14 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 
 vi.mock("../hooks/usePPTVersionManager", () => ({
 	usePPTVersionManager: () => ({
-		fileVersion: undefined,
+		fileVersion: mockState.fileVersion,
 		changeFileVersion: vi.fn(),
 		fileVersionsList: [],
 		fetchFileVersions: vi.fn(),
 		handleVersionRollback: vi.fn(),
 		isNewestVersion: true,
-		versionContent: undefined,
+		versionContent: mockState.versionContent ?? null,
+		isLoadingVersion: mockState.isLoadingVersion,
 		getVersionContentForCompare: vi.fn(),
 	}),
 }))
@@ -361,6 +365,9 @@ describe("PPTSlide", () => {
 		mockState.saveEditContent.mockResolvedValue(undefined)
 		mockState.onDeactivate.mockReset()
 		mockState.renderedIsolatedProps.mockReset()
+		mockState.fileVersion = undefined
+		mockState.versionContent = undefined
+		mockState.isLoadingVersion = false
 	})
 
 	it("向 HTML renderer 传入 PPT 固定缩放尺寸", () => {
@@ -392,6 +399,33 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("registers its toolbar model for a shared host without mounting a duplicate toolbar", () => {
+		const onToolbarModelChange = vi.fn()
+		const { unmount } = renderPPTSlide({
+			toolbarOwnerKey: "deck::slide-1",
+			onToolbarModelChange,
+		})
+
+		expect(screen.queryByTestId("ppt-edit-toolbar")).toBeNull()
+		expect(onToolbarModelChange).toHaveBeenCalledWith(
+			"deck::slide-1",
+			expect.objectContaining({
+				props: expect.objectContaining({ fileId: "slide-1" }),
+			}),
+			expect.any(Object),
+		)
+
+		const registrationToken = onToolbarModelChange.mock.calls[0]?.[2]
+		expect(onToolbarModelChange.mock.calls[0]?.[1]?.token).toBe(registrationToken)
+		unmount()
+
+		expect(onToolbarModelChange).toHaveBeenLastCalledWith(
+			"deck::slide-1",
+			null,
+			registrationToken,
+		)
+	})
+
 	it("向 HTML renderer 传入竖版 PPT 的缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1080" data-height="1920"></div>',
@@ -416,7 +450,7 @@ describe("PPTSlide", () => {
 		)
 	})
 
-	it("向 HTML renderer 传入当前 slide 激活状态用于选中框挂载", () => {
+	it("only exposes the presented live iframe while a target prepares in the background", () => {
 		const { rerender } = renderPPTSlide({ isActive: true })
 
 		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
@@ -450,6 +484,152 @@ describe("PPTSlide", () => {
 				isVisible: false,
 			}),
 		)
+
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				isPresented={false}
+				content="<div>slide</div>"
+				rawContent="<div>slide</div>"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: false,
+				isTabActive: false,
+			}),
+		)
+		expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveStyle({
+			visibility: "hidden",
+			pointerEvents: "none",
+		})
+
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={false}
+				isPresented={true}
+				content="<div>slide</div>"
+				rawContent="<div>slide</div>"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveStyle({
+			visibility: "visible",
+			pointerEvents: "none",
+		})
+		expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveAttribute(
+			"data-interactive",
+			"false",
+		)
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: true,
+				isTabActive: false,
+			}),
+		)
+	})
+
+	it("reports real iframe readiness to the double-buffer owner", async () => {
+		const onRenderReadyChange = vi.fn()
+		renderPPTSlide({ onRenderReadyChange, renderRevision: "slide-1:1" })
+
+		await waitFor(() => {
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		})
+
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			| { onRenderReady?: () => void }
+			| undefined
+		act(() => isolatedProps?.onRenderReady?.())
+
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+	})
+
+	it("does not promote a hidden target from the four-second local loading fallback", () => {
+		vi.useFakeTimers()
+		try {
+			const onRenderReadyChange = vi.fn()
+			renderPPTSlide({
+				isActive: true,
+				isPresented: false,
+				onRenderReadyChange,
+				renderRevision: "slide-1:slow",
+			})
+
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+			act(() => {
+				vi.advanceTimersByTime(4000)
+			})
+
+			expect(onRenderReadyChange).not.toHaveBeenCalledWith(true)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("waits for the selected history version content before mounting its iframe", async () => {
+		mockState.fileVersion = 2
+		mockState.isLoadingVersion = true
+		const { rerender } = renderPPTSlide()
+
+		expect(screen.getByTestId("ppt-slide-content-updating")).toBeInTheDocument()
+		expect(mockState.renderedIsolatedProps).not.toHaveBeenCalled()
+
+		mockState.isLoadingVersion = false
+		mockState.versionContent = "<div>history version 2</div>"
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<div>slide</div>"
+				rawContent="<div>slide</div>"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+				expect.objectContaining({
+					content: "<div>history version 2</div>",
+					rawSourceCode: "<div>history version 2</div>",
+				}),
+			)
+		})
 	})
 
 	it("点击保存后保持编辑态", async () => {

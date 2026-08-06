@@ -74,8 +74,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -147,7 +146,7 @@ function TopicMessagePanel({
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -194,7 +193,7 @@ function TopicMessagePanel({
 		}
 
 		const retryPayload = resolveRetryMessagePayload(
-			superMagicStore.getMessageNode(appMessageId),
+			superMagicStore.getMessageNode(message.super_message_id),
 		)
 		if (!retryPayload) return
 		if (!sendRetryMessageRef.current) return
@@ -299,11 +298,12 @@ function TopicMessagePanel({
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={trailingActions}
 			/>
+			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			{selectedTopic && (
 				<div
 					className={cn(
 						"flex h-full w-full flex-col",
-						isConversationPanelCollapsed && "hidden",
+						isConversationPanelCollapsed && "invisible",
 					)}
 				>
 					<MessageListProvider value={value}>
@@ -349,6 +349,7 @@ function TopicMessagePanel({
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 						size={detailPanelVisible ? "small" : "default"}
 					/>

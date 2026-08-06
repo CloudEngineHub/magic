@@ -29,6 +29,7 @@ import { RouteName } from "@/routes/constants"
 import { useCrewEditStore } from "../../../../context"
 import { CREW_EDIT_STEP } from "../../../../store"
 import { DOCUMENT_TYPE, FRAGMENT_MODE } from "../constants/document-constants"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 /** 小于此宽度隐藏 Badge（拖拽变窄详情区时） */
 const HEADER_SHOW_BADGES_MIN_PX = 560
@@ -44,7 +45,8 @@ interface DocumentHeaderProps {
 function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: DocumentHeaderProps) {
 	const { t } = useTranslation("crew/create")
 	const navigate = useNavigate()
-	const { crewCode, knowledge } = useCrewEditStore()
+	const { crewCode, knowledge, conversation } = useCrewEditStore()
+	const readOnly = isReadOnlyProject(conversation.selectedProject?.user_role)
 	const [isEditing, setIsEditing] = useState(false)
 	const [editingBaseName, setEditingBaseName] = useState(
 		getDocumentNameParts(document?.name || "")?.baseName || "",
@@ -138,6 +140,7 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 	const chunkingModeBadge = getChunkingModeBadge(document.fragment_config?.mode || 0)
 
 	const handleSaveTitle = useCallback(async () => {
+		if (readOnly) return
 		if (!editingBaseName.trim()) {
 			magicToast.error(t("knowledgeDetail.titleRequired"))
 			return
@@ -173,7 +176,7 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 		} finally {
 			setUpdating(false)
 		}
-	}, [editingBaseName, document, documentExtension, knowledgeCode, knowledge, t])
+	}, [editingBaseName, document, documentExtension, knowledgeCode, knowledge, readOnly, t])
 
 	/**
 	 * 获取文档类型字符串（用于路由导航）
@@ -194,6 +197,7 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 	}, [])
 
 	const handleOpenSegmentationSettings = useCallback(() => {
+		if (readOnly) return
 		if (!crewCode) return
 		const documentTypeString = getDocumentTypeString(document.doc_type)
 		navigate({
@@ -207,9 +211,18 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 				docCode: document.code,
 			},
 		})
-	}, [navigate, crewCode, knowledgeCode, document.code, document.doc_type, getDocumentTypeString])
+	}, [
+		navigate,
+		crewCode,
+		knowledgeCode,
+		document.code,
+		document.doc_type,
+		getDocumentTypeString,
+		readOnly,
+	])
 
 	const handleConfirmDelete = useCallback(async () => {
+		if (readOnly) return
 		setDeleting(true)
 		try {
 			const success = await knowledge.deleteDocument(knowledgeCode, document.code)
@@ -224,7 +237,7 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 		} finally {
 			setDeleting(false)
 		}
-	}, [knowledgeCode, document.code, knowledge, t])
+	}, [knowledgeCode, document.code, knowledge, readOnly, t])
 
 	return (
 		<>
@@ -268,7 +281,7 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 								{document.name}
 							</h3>
 							{/* 项目文件和企业知识库类型不显示重命名按钮 */}
-							{!isProjectOrWikiType && (
+							{!readOnly && !isProjectOrWikiType && (
 								<Button
 									variant="ghost"
 									size="icon"
@@ -321,19 +334,21 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 			</div> */}
 
 				{/* 分段配置按钮 - 所有类型都支持 */}
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					className="size-6 shrink-0"
-					aria-label={t("knowledgeDetail.segmentationSettingsAria")}
-					onClick={handleOpenSegmentationSettings}
-				>
-					<SlidersHorizontal className="size-4" aria-hidden />
-				</Button>
+				{readOnly ? null : (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="size-6 shrink-0"
+						aria-label={t("knowledgeDetail.segmentationSettingsAria")}
+						onClick={handleOpenSegmentationSettings}
+					>
+						<SlidersHorizontal className="size-4" aria-hidden />
+					</Button>
+				)}
 
 				{/* 项目文件和企业知识库类型不显示删除按钮 */}
-				{!isProjectOrWikiType && (
+				{!readOnly && !isProjectOrWikiType && (
 					<Button
 						type="button"
 						variant="ghost"
@@ -347,31 +362,37 @@ function DocumentHeader({ knowledgeCode, document, knowledgeSourceType }: Docume
 				)}
 			</div>
 
-			<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-				<AlertDialogContent size="sm" className="gap-0 p-0">
-					<AlertDialogHeader className="gap-1.5 px-4 py-4 text-left">
-						<AlertDialogTitle>{t("knowledgeDetail.deleteDocument")}</AlertDialogTitle>
-						<AlertDialogDescription>
-							{t("knowledgeDetail.deleteDocumentConfirm", { name: document.name })}
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter className="mx-0 mb-0 flex flex-row justify-end gap-2 rounded-b-xl border-t bg-muted p-4">
-						<AlertDialogCancel size="sm" className="min-w-0" disabled={deleting}>
-							{t("common.cancel")}
-						</AlertDialogCancel>
-						<Button
-							type="button"
-							size="sm"
-							variant="destructive"
-							className="min-w-0"
-							disabled={deleting}
-							onClick={() => void handleConfirmDelete()}
-						>
-							{t("common.delete")}
-						</Button>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			{readOnly ? null : (
+				<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+					<AlertDialogContent size="sm" className="gap-0 p-0">
+						<AlertDialogHeader className="gap-1.5 px-4 py-4 text-left">
+							<AlertDialogTitle>
+								{t("knowledgeDetail.deleteDocument")}
+							</AlertDialogTitle>
+							<AlertDialogDescription>
+								{t("knowledgeDetail.deleteDocumentConfirm", {
+									name: document.name,
+								})}
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter className="mx-0 mb-0 flex flex-row justify-end gap-2 rounded-b-xl border-t bg-muted p-4">
+							<AlertDialogCancel size="sm" className="min-w-0" disabled={deleting}>
+								{t("common.cancel")}
+							</AlertDialogCancel>
+							<Button
+								type="button"
+								size="sm"
+								variant="destructive"
+								className="min-w-0"
+								disabled={deleting}
+								onClick={() => void handleConfirmDelete()}
+							>
+								{t("common.delete")}
+							</Button>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			)}
 		</>
 	)
 }

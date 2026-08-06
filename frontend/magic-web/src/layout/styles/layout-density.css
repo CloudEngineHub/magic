@@ -1,0 +1,57 @@
+:root {
+	--global-sidebar-width: 240px;
+	--global-sidebar-min-width: 200px;
+	--global-header-height: 72px;
+	--global-content-gutter: 20px;
+	--global-panel-gap: 20px;
+	--global-modal-max-height: calc(100dvh - 64px);
+	--chat-files-width: 240px;
+	--chat-files-min-width: 220px;
+	--chat-main-min-width: 560px;
+	--chat-preview-width: 480px;
+	--chat-preview-min-width: 360px;
+	--chat-header-height: 60px;
+	--chat-preview-header-height: 40px;
+	--chat-composer-min-height: 200px;
+	--chat-composer-max-height: 50%;
+}
+
+@media (min-width: 768px) and (min-height: 721px) and (max-height: 800px) {
+	:root {
+		--global-sidebar-width: 220px;
+		--global-sidebar-min-width: 180px;
+		--global-header-height: 56px;
+		--global-content-gutter: 12px;
+		--global-panel-gap: 12px;
+		--global-modal-max-height: calc(100dvh - 40px);
+		--chat-files-width: 220px;
+		--chat-files-min-width: 200px;
+		--chat-main-min-width: 520px;
+		--chat-preview-width: 420px;
+		--chat-preview-min-width: 340px;
+		--chat-header-height: 48px;
+		--chat-preview-header-height: 36px;
+		--chat-composer-min-height: 180px;
+		--chat-composer-max-height: 45%;
+	}
+}
+
+@media (min-width: 768px) and (max-height: 720px) {
+	:root {
+		--global-sidebar-width: 200px;
+		--global-sidebar-min-width: 160px;
+		--global-header-height: 48px;
+		--global-content-gutter: 8px;
+		--global-panel-gap: 8px;
+		--global-modal-max-height: calc(100dvh - 24px);
+		--chat-files-width: 200px;
+		--chat-files-min-width: 180px;
+		--chat-main-min-width: 480px;
+		--chat-preview-width: 380px;
+		--chat-preview-min-width: 320px;
+		--chat-header-height: 44px;
+		--chat-preview-header-height: 32px;
+		--chat-composer-min-height: 160px;
+		--chat-composer-max-height: 42%;
+	}
+}
