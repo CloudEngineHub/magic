@@ -3909,7 +3909,13 @@ function handleSuperMagicChunkMessage(data) {
     if (!envelope || !envelope.chunk) return false;
 
     const chunk = envelope.chunk;
-    const messageKey = envelope.appMessageId || chunk.id || chunk.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    );
     const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
     for (const choice of choices) {
         const delta = choice && choice.delta ? choice.delta : {};
@@ -3948,12 +3954,13 @@ function isDuplicateSuperMagicChunkDelta(envelope, choice, deltaType) {
     const chunkIndex = chunk.i ?? chunk.chunk_id ?? chunk.index;
     if (chunkIndex === undefined || chunkIndex === null) return false;
 
-    const messageKey =
-        envelope.appMessageId ||
-        chunk.id ||
-        chunk.correlation_id ||
-        chunk.app_message_id ||
-        'unknown';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    ) || 'unknown';
     const choiceIndex = choice && choice.index !== undefined ? choice.index : 0;
     const dedupeKey = `${messageKey}:${choiceIndex}:${deltaType}:${chunkIndex}`;
 
@@ -4168,8 +4175,26 @@ function extractSuperMagicChunkEnvelope(data) {
     };
 }
 
+/**
+ * 解析 V2 流式消息与最终消息共享的稳定标识。
+ *
+ * super_message_id 由 Super Magic 生成并由下游透传，不会因消息落库而被覆盖；
+ * 其余标识仅用于兼容旧消息和未携带 super_message_id 的数据。
+ */
+function resolveSuperMagicMessageKey(superMessageId, ...fallbackIds) {
+    const messageId = [superMessageId, ...fallbackIds]
+        .find(value => value !== undefined && value !== null && value !== '');
+    return messageId === undefined ? '' : String(messageId);
+}
+
 function handleSuperMagicMessage(smsg, payload) {
-    const messageKey = smsg.message_id || payload.message_id || smsg.correlation_id || payload.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        smsg.super_message_id,
+        smsg.message_id,
+        payload.message_id,
+        smsg.correlation_id,
+        payload.correlation_id,
+    );
     const isToolRole = smsg.role === 'tool';
     let hasVisibleContent = false;
     let hasReplyContent = false;
@@ -4179,6 +4204,7 @@ function handleSuperMagicMessage(smsg, payload) {
         showThinkingMessage(smsg.reasoning_content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
@@ -4187,6 +4213,7 @@ function handleSuperMagicMessage(smsg, payload) {
         showAIMessage(smsg.content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
@@ -4514,7 +4541,7 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
         toggleBtn.textContent = showingRaw ? 'MD' : '原文';
     });
 
-    messageState = { messageDiv, renderedView, rawView, content: '' };
+    messageState = { messageDiv, renderedView, rawView, content: '', finalized: false };
     attachCopyButton(actions, () => messageState.content);
     updateAIMessageState(messageState, content, options);
     if (registryKey) {
@@ -4524,11 +4551,20 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateAIMessageState(messageState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(messageState, options)) return;
     const nextContent = options.append ? messageState.content + content : content;
     messageState.content = nextContent;
+    if (options.finalize) messageState.finalized = true;
     messageState.renderedView.replaceChildren(buildRenderedView(nextContent));
     messageState.rawView.textContent = nextContent;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
+}
+
+/**
+ * 判断是否应忽略权威最终消息到达后的迟到流式片段。
+ */
+function shouldIgnoreLateStreamAppend(messageState, options = {}) {
+    return messageState.finalized === true && options.append === true;
 }
 
 // 显示思考过程（折叠展示）
@@ -4565,7 +4601,7 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 
     wrapper.appendChild(summary);
     wrapper.appendChild(detail);
-    thinkingState = { wrapper, detail, content: '' };
+    thinkingState = { wrapper, detail, content: '', finalized: false };
     attachCopyButton(summary, () => thinkingState.content, { compact: true });
     updateThinkingMessageState(thinkingState, content, options);
     if (registryKey) {
@@ -4575,7 +4611,9 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateThinkingMessageState(thinkingState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(thinkingState, options)) return;
     thinkingState.content = options.append ? thinkingState.content + content : content;
+    if (options.finalize) thinkingState.finalized = true;
     thinkingState.detail.textContent = thinkingState.content;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
 }
